@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, win32 } from "node:path";
 import test from "node:test";
 
 import {
@@ -10,6 +10,7 @@ import {
   assertLocalCiCleanupTarget,
   createLocalCiSlotManifest,
   localCiSlotEnvironment,
+  resolveLocalCiRootClone,
 } from "./local-ci-slot-manifest.mjs";
 
 function fixture() {
@@ -23,6 +24,58 @@ function fixture() {
 test("derives declared capacity from the closed physical slot manifest", () => {
   assert.deepEqual(LOCAL_CI_SLOT_KEYS, ["slot-0", "slot-1"]);
   assert.equal(LOCAL_CI_DECLARED_CAPACITY, 2);
+});
+
+test("normal and bare-common-dir repositories share one canonical root resolver", () => {
+  const normal = fixture();
+  assert.equal(resolveLocalCiRootClone(normal.gitCommonDir), normal.rootClone);
+
+  const bareCommonDir = join(dirname(normal.rootClone), ".opendigitalproductfactory.git");
+  assert.equal(resolveLocalCiRootClone(bareCommonDir), bareCommonDir);
+
+  const gateManifest = createLocalCiSlotManifest({
+    ...normal,
+    rootClone: resolveLocalCiRootClone(bareCommonDir),
+    gitCommonDir: bareCommonDir,
+    slotKey: "slot-0",
+  });
+  const runnerManifest = createLocalCiSlotManifest({
+    ...normal,
+    rootClone: resolveLocalCiRootClone(bareCommonDir),
+    gitCommonDir: bareCommonDir,
+    slotKey: "slot-0",
+  });
+  assert.equal(gateManifest.scratch.workspace, runnerManifest.scratch.workspace);
+  assert.equal(
+    gateManifest.scratch.workspace,
+    join(dirname(bareCommonDir), `${bareCommonDir.split(/[\\/]/).at(-1)}-worktrees`, ".local-ci-runner"),
+  );
+  assert.throws(
+    () => createLocalCiSlotManifest({
+      ...normal,
+      rootClone: dirname(bareCommonDir),
+      gitCommonDir: bareCommonDir,
+      slotKey: "slot-0",
+    }),
+    /rootClone must match the canonical Git common-dir root/,
+  );
+});
+
+test("Windows bare-common-dir layout does not grow a duplicate worktrees suffix", () => {
+  const commonDir = String.raw`D:\DPF-worktrees\.opendigitalproductfactory.git`;
+  assert.equal(resolveLocalCiRootClone(commonDir), win32.normalize(commonDir));
+  assert.notEqual(
+    resolveLocalCiRootClone(commonDir),
+    String.raw`D:\DPF-worktrees`,
+  );
+});
+
+test("POSIX common-dir paths retain POSIX separators", () => {
+  assert.equal(
+    resolveLocalCiRootClone("/tmp/dpf-worktrees/.opendigitalproductfactory.git"),
+    "/tmp/dpf-worktrees/.opendigitalproductfactory.git",
+  );
+  assert.equal(resolveLocalCiRootClone("/tmp/dpf/.git"), "/tmp/dpf");
 });
 
 test("slot manifests are versioned and every mutable identity is isolated", () => {

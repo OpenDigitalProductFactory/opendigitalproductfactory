@@ -1,5 +1,5 @@
 import { prisma } from "@dpf/db";
-import { ensureCapsuleWorkItemAnchorNonFatal, ensureCapsuleWorkItemAnchorWithPrisma } from "@/lib/work-capsules/capsule-workitem-anchor.server";
+import { ensureCapsuleWorkItemAnchorNonFatal } from "@/lib/work-capsules/capsule-workitem-anchor.server";
 import { computeChangeImpactContract } from "@/lib/build/gate-context-bridge";
 import type { ToolResult } from "@/lib/mcp-tools";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
@@ -31,7 +31,6 @@ import {
 } from "@/lib/work-capsules";
 import {
   adoptWorktreeCapsule,
-  claimBacklogItemWorkspace,
   claimWorkCapsuleScope,
   createWorkCapsule,
   heartbeatWorkCapsule,
@@ -41,13 +40,15 @@ import {
   recordWorkCapsuleEvidence,
   recordAgentActivity,
   updateWorkCapsuleStatus,
+  WorkCapsuleCompletionDeniedError,
   ScopeOverlapError,
   type CapsuleDb,
   type WorkCapsuleActor,
 } from "./work-capsule-store";
 import { listLocalBranches } from "./git-scanner";
-import { providerToExecutorKind, ensureExternalSessionCapsule } from "./external-session-capture";
+import { ensureExternalSessionCapsule } from "./external-session-capture";
 import { branchOccupiedResult, invalidScopeResult } from "./mcp-result-errors";
+import { claimBacklogItemForWork } from "./claim-backlog-item-handler";
 type ToolContext = {
   routeContext?: string;
   agentId?: string;
@@ -329,96 +330,7 @@ export async function claimBacklogItemForWorkTool(
   userId: string,
   context: ToolContext,
 ): Promise<ToolResult> {
-  const itemId = stringParam(params, "itemId");
-  const worktreePath = stringParam(params, "worktreePath");
-  const branchName = stringParam(params, "branchName");
-  const provider = stringParam(params, "provider");
-  const sessionRef = stringParam(params, "sessionRef");
-
-  if (!itemId || !worktreePath || !branchName || !provider || !sessionRef) {
-    return {
-      success: false,
-      error: "invalid_input",
-      message: "itemId, worktreePath, branchName, provider, and sessionRef are required.",
-    };
-  }
-
-  const repositoryFullName =
-    stringParam(params, "repositoryFullName") ??
-    process.env.DPF_REPO_FULL_NAME?.trim() ??
-    "OpenDigitalProductFactory/opendigitalproductfactory";
-  const baseBranch = stringParam(params, "baseBranch") ?? "main";
-  const executorKind = providerToExecutorKind(provider);
-
-  try {
-    const result = await claimBacklogItemWorkspace({
-      db: workCapsuleDb(),
-      input: {
-        backlogItemId: itemId,
-        repositoryFullName,
-        headBranch: branchName,
-        worktreePath,
-        baseBranch,
-        executorKind,
-        executorRef: sessionRef,
-      },
-      actor: await actor(userId, context),
-    });
-
-    // EP-WORK-CONVERGENCE (BI-650994D7): anchor the capsule to the single canonical
-    // WorkItem for its backlog item, NON-FATALLY — the claim stands even if this fails,
-    // so capsule and case never split into two rows for one job.
-    try {
-      await ensureCapsuleWorkItemAnchorWithPrisma({
-        capsuleId: result.capsuleId,
-        backlogItemId: result.backlogItemId,
-        title: `Work on ${result.backlogItemId}`,
-      });
-    } catch (anchorError) {
-      console.warn(
-        `[work-convergence] WorkItem anchor skipped for ${result.capsuleId}: ${
-          anchorError instanceof Error ? anchorError.message : "unknown"
-        }`,
-      );
-    }
-
-    const base = `Bound ${result.backlogItemId} to ${result.headBranch} (${result.capsuleId}).`;
-    let message: string;
-    if (result.conflict) {
-      const parts: string[] = [];
-      if (result.conflict.backlogClaim) {
-        const age = result.conflict.backlogClaim.claimAgeMinutes;
-        parts.push(
-          `${result.backlogItemId} already has an ACTIVE claim by another session` +
-            (age != null ? ` (${age}m ago)` : "") +
-            " — this call did NOT steal it",
-        );
-      }
-      for (const loc of result.conflict.otherLocations) {
-        parts.push(`also in flight on ${loc.headBranch ?? "?"} (${loc.capsuleId})`);
-      }
-      message =
-        `${base} ADVISORY: ${result.backlogItemId} already has active work elsewhere — ${parts.join("; ")}. ` +
-        "Claim-at-start is a soft signal, not a lock: coordinate with the other session before pushing.";
-    } else {
-      message = `${base} Claim-at-start recorded for this session.`;
-    }
-
-    return {
-      success: true,
-      entityId: result.capsuleId,
-      message,
-      data: result,
-    };
-  } catch (error) {
-    const occupied = branchOccupiedResult(error);
-    if (occupied) return occupied;
-    const detail = error instanceof Error ? error.message : "Unknown failure";
-    if (/not found/i.test(detail)) {
-      return { success: false, error: "not_found", message: detail };
-    }
-    throw error;
-  }
+  return claimBacklogItemForWork({ params, userId, context, db: workCapsuleDb(), resolveActor: actor });
 }
 
 export async function claimCapsuleScopeTool(
@@ -494,18 +406,31 @@ export async function updateWorkCapsuleStatusTool(
   }
 
   const db = workCapsuleDb();
-  const renewedCapsule = await runAutoRenewedCapsuleWrite({
-    capsuleId,
-    userId,
-    context,
-    write: (currentActor) => updateWorkCapsuleStatus({
-      db,
+  let renewedCapsule;
+  try {
+    renewedCapsule = await runAutoRenewedCapsuleWrite({
       capsuleId,
-      status,
-      reason,
-      actor: currentActor,
-    }),
-  });
+      userId,
+      context,
+      write: (currentActor) => updateWorkCapsuleStatus({
+        db,
+        capsuleId,
+        status,
+        reason,
+        actor: currentActor,
+      }),
+    });
+  } catch (error) {
+    if (error instanceof WorkCapsuleCompletionDeniedError) {
+      return {
+        success: false,
+        error: "initiative_not_ready",
+        message: `Work Capsule completion is blocked by ${error.result.code}.`,
+        data: { code: error.result.code, readiness: error.result.decision },
+      };
+    }
+    throw error;
+  }
 
   return {
     success: true,

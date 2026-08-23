@@ -1090,6 +1090,9 @@
     "apps/web/lib/work-management/room-participation.ts": [
       "docs/user-guide/workspace/work-rooms.md"
     ],
+    "apps/web/lib/work-management/room-posture.ts": [
+      "docs/architecture/work-shapes-and-the-decision-gate.md"
+    ],
     "apps/web/lib/work-management/room-types.ts": [
       "docs/architecture/work-shapes-and-the-decision-gate.md"
     ],
@@ -2442,6 +2445,7 @@
       "apps/web/lib/tak/decision-routing-governance-hook.ts",
       "apps/web/lib/work-capsules.ts",
       "apps/web/lib/work-management/autonomy-envelope.ts",
+      "apps/web/lib/work-management/room-posture.ts",
       "apps/web/lib/work-management/room-types.ts"
     ],
     "docs/architecture/workroom-vocabulary-boundary.md": [

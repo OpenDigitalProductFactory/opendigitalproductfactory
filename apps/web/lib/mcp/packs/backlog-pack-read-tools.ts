@@ -192,7 +192,8 @@ export async function listEpics(params: Record<string, unknown>): Promise<ToolRe
         priority: e.priority,
         ...scopeData(e),
         itemCount: { total, triaging, open, inProgress, deferred, done, retired },
-        hasSpec: refIndex.specs.has(e.epicId) || refIndex.plans.has(e.epicId),
+        hasSpec: refIndex.specs.has(e.epicId),
+        hasPlan: refIndex.plans.has(e.epicId),
         updatedAt: e.updatedAt.toISOString(),
         _hasOpen: triaging + open + inProgress + deferred > 0,
       };
@@ -239,6 +240,7 @@ export async function listBacklogItems(params: Record<string, unknown>): Promise
     take: limit,
     orderBy: [{ priority: "asc" }, { updatedAt: "desc" }],
     select: {
+      id: true,
       itemId: true,
       title: true,
       status: true,
@@ -256,11 +258,42 @@ export async function listBacklogItems(params: Record<string, unknown>): Promise
       triageOutcome: true,
       ...deferralSelect,
       epic: { select: { epicId: true } },
-      activeBuild: { select: { phase: true, draftApprovedAt: true } },
+      activeBuild: { select: { phase: true, draftApprovedAt: true, kind: true } },
+      activities: {
+        where: { kind: { in: ["initiative_gate_receipt", "initiative_scope_baseline", "plan_backlog_coverage"] } },
+        orderBy: [{ recordedAt: "desc" }, { id: "desc" }],
+        take: 100,
+        select: { id: true, kind: true, gateKey: true, recordedAt: true, payload: true },
+      },
     },
   });
   const { deriveLifecycleLabel } = await import("@/lib/governed-backlog-workflow");
-  const data = items.map((i) => ({
+  const { buildSpecPlanReferenceIndex } = await import("@/lib/backlog/spec-plan-search");
+  const { projectBacklogItemReadinessSummary } = await import("@/lib/backlog/initiative-readiness/entry-adapter");
+  const refIndex = await buildSpecPlanReferenceIndex();
+  const evaluatedAt = new Date().toISOString();
+  const data = items.map((i) => {
+    const semanticEpic = i.epic?.epicId ?? null;
+    const hasSpec = refIndex.specs.has(i.itemId) || Boolean(semanticEpic && refIndex.specs.has(semanticEpic));
+    const hasPlan = refIndex.plans.has(i.itemId) || Boolean(semanticEpic && refIndex.plans.has(semanticEpic));
+    const readiness = projectBacklogItemReadinessSummary({
+      item: {
+        id: i.id,
+        itemId: i.itemId,
+        type: i.type,
+        source: i.source,
+        workType: i.workType,
+        scopeKind: i.scopeKind,
+        archetypeCategories: i.archetypeCategories,
+        archetypeIds: i.archetypeIds,
+        activeBuildKind: i.activeBuild?.kind ?? null,
+      },
+      activities: (i.activities ?? []).map((activity) => ({ ...activity, gateKey: activity.gateKey ?? null })),
+      hasSpec,
+      hasPlan,
+      evaluatedAt,
+    });
+    return ({
     itemId: i.itemId,
     title: i.title,
     status: i.status,
@@ -277,6 +310,9 @@ export async function listBacklogItems(params: Record<string, unknown>): Promise
     deferral: deferralData(i),
     epicId: i.epic?.epicId ?? null,
     hasActiveBuild: i.activeBuildId != null,
+    hasSpec,
+    hasPlan,
+    readiness,
     lifecycleLabel: deriveLifecycleLabel({
       backlogItem: { status: i.status, triageOutcome: i.triageOutcome, activeBuildId: i.activeBuildId },
       featureBuild: i.activeBuild
@@ -285,7 +321,8 @@ export async function listBacklogItems(params: Record<string, unknown>): Promise
       governedBacklogEnabled: true,
     }),
     updatedAt: i.updatedAt.toISOString(),
-  }));
+  });
+  });
   return {
     success: true,
     message: `Listed ${data.length} of ${matching} backlog item(s).`,
@@ -314,6 +351,7 @@ export async function getBacklogItem(params: Record<string, unknown>): Promise<T
       activeBuild: {
         select: {
           buildId: true,
+          kind: true,
           phase: true,
           draftApprovedAt: true,
           sandboxId: true,
@@ -322,7 +360,7 @@ export async function getBacklogItem(params: Record<string, unknown>): Promise<T
       },
       activities: {
         orderBy: { recordedAt: "desc" },
-        take: 10,
+        take: 100,
       },
     },
   });
@@ -337,6 +375,28 @@ export async function getBacklogItem(params: Record<string, unknown>): Promise<T
   });
   const { mapDemandRows } = await import("@/lib/demand/demand-data");
   const demandView = mapDemandRows([item])[0]!;
+  const { projectBacklogItemReadinessSummary } = await import("@/lib/backlog/initiative-readiness/entry-adapter");
+  const hasSpec = specPlanRefs.some((entry) => entry.kind === "spec");
+  const hasPlan = specPlanRefs.some((entry) => entry.kind === "plan");
+  const readiness = projectBacklogItemReadinessSummary({
+    item: {
+      id: item.id,
+      itemId: item.itemId,
+      type: item.type,
+      source: item.source,
+      workType: item.workType,
+      scopeKind: item.scopeKind,
+      archetypeCategories: item.archetypeCategories,
+      archetypeIds: item.archetypeIds,
+      activeBuildKind: item.activeBuild?.kind ?? null,
+    },
+    activities: item.activities
+      .filter((activity) => ["initiative_gate_receipt", "initiative_scope_baseline", "plan_backlog_coverage"].includes(activity.kind))
+      .map((activity) => ({ ...activity, gateKey: activity.gateKey ?? null })),
+    hasSpec,
+    hasPlan,
+    evaluatedAt: new Date().toISOString(),
+  });
   return {
     success: true,
     message: `Loaded ${item.itemId}`,
@@ -391,13 +451,14 @@ export async function getBacklogItem(params: Record<string, unknown>): Promise<T
             sandboxId: item.activeBuild.sandboxId,
           }
         : null,
+      readiness,
       specPlanFiles: specPlanRefs.map((r) => ({
         path: r.path,
         kind: r.kind,
         title: r.title,
         date: r.date,
       })),
-      recentActivity: item.activities.map((a) => ({
+      recentActivity: item.activities.slice(0, 10).map((a) => ({
         id: a.id,
         kind: a.kind,
         summary: a.summary,

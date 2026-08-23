@@ -32,6 +32,7 @@ export {
 } from "./principal-sensitivity";
 export * from "./healthcare-patient-authority";
 export * from "./healthcare-care-intake";
+export * from "./subject-reference";
 
 // Quality-issue lifecycle governance (BI-0B420A1D): the registry is the
 // compile-time contract; the drift sweep is the runtime half.
@@ -544,6 +545,7 @@ export * from "./device-catalog";
 // `./discovery-fingerprint-catalog` in tests, not via the barrel.
 export * from "./discovery-fingerprint-store";
 export * from "./installation-operating-intent";
+export * from "./installation-instance-stance";
 
 // Contributor-inventory-sync ScheduledJob constants — shared between the
 // seed helper and the apps/web Inngest runner so the heartbeat row's name +

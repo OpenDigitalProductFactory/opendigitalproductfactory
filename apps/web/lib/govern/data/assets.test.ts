@@ -98,6 +98,18 @@ describe("field resolution", () => {
 });
 
 describe("seeded registry", () => {
+  it("governs external channel bindings as local metadata without copied content or credentials", () => {
+    expect(lookupAsset(DATA_ASSET_REGISTRY, "data:external-channel-projection")).toMatchObject({
+      physical: { prismaModel: "ExternalChannelProjection" },
+      domain: "external-channel",
+      sensitivity: "internal",
+      criticality: "high",
+      lifecycleClass: "operational",
+      residencyClass: "local-only",
+      projectionClass: "metadata",
+    });
+  });
+
   it("governs operational scene geometry as confidential local operator configuration", () => {
     expect(lookupAsset(DATA_ASSET_REGISTRY, "data:operational-scene-layout")).toMatchObject({
       physical: { prismaModel: "OperationalSceneLayout" },

@@ -165,6 +165,25 @@ describe("item product-line disclosure", () => {
     expect(html).toContain("Salon services");
     expect(html).toContain("Hair-care products");
   });
+
+  it("uses programme language for a nonprofit with multiple offerings", () => {
+    const html = renderToStaticMarkup(
+      <ItemFormDialog
+        {...baseProps}
+        archetypeCategory="nonprofit-community"
+        productLines={[
+          { id: "line-adoption", name: "Adoption programme" },
+          { id: "line-foster", name: "Foster programme" },
+        ]}
+      />,
+    );
+
+    expect(html).toContain("Programme");
+    expect(html).toContain("Choose a programme");
+    expect(html).toContain("Supporter-facing description");
+    expect(html).not.toContain("Product line");
+    expect(html).not.toContain("business sells");
+  });
 });
 
 describe("section editor mobile UX", () => {

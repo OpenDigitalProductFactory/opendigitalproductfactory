@@ -54,7 +54,8 @@ import {
   formatResumeImplementationOutcomeMessage,
 } from "@/lib/build/build-actions-core";
 import { admitRuntimeGuardedWork } from "@/lib/platform-runtime/work-admission";
-
+import { assertBuildPhaseInitiativeReadiness } from "@/lib/build/build-entry-gate";
+import { assertFeatureBuildCompletion } from "@/lib/backlog/initiative-readiness/build-terminal-transition";
 // ─── Auth Guard ──────────────────────────────────────────────────────────────
 
 async function requireBuildAccess(): Promise<string> {
@@ -428,6 +429,9 @@ export async function advanceBuildPhase(
     throw new Error(`Cannot transition from ${currentPhase} to ${targetPhase}`);
   }
 
+  if (targetPhase === "complete") await assertFeatureBuildCompletion({ buildId, expectedPhase: currentPhase });
+  else await assertBuildPhaseInitiativeReadiness({ buildId, currentPhase, targetPhase });
+
   if (currentPhase === "ideate" && targetPhase === "plan") {
     const businessBrief = await prisma.businessBuildBrief.findUnique({
       where: { featureBuildId: build.id },
@@ -600,10 +604,12 @@ export async function advanceBuildPhase(
     }
   }
 
-  await prisma.featureBuild.update({
-    where: { buildId },
-    data: { phase: targetPhase },
-  });
+  if (targetPhase !== "complete") {
+    await prisma.featureBuild.update({
+      where: { buildId },
+      data: { phase: targetPhase },
+    });
+  }
   revalidatePortalContextForBuild(buildId);
 
   // Ephemeral ship-phase token lifecycle (BI-9866659C AC #4). Reduces
@@ -924,7 +930,6 @@ export async function retryBuildExecution(buildId: string): Promise<void> {
     throw new Error("Build is not in a failed state. Cannot retry.");
   }
 
-  // Reset phase back to build if it was set to failed
   if (build.phase === "failed") {
     await prisma.featureBuild.update({
       where: { buildId },
@@ -1201,6 +1206,7 @@ export async function updateSandboxInfo(
   const build = await prisma.featureBuild.findUnique({ where: { buildId } });
   if (!build) throw new Error("Build not found");
   if (build.createdById !== userId) throw new Error("Forbidden");
+  await assertBuildPhaseInitiativeReadiness({ buildId, currentPhase: build.phase, targetPhase: "complete" });
 
   await prisma.featureBuild.update({
     where: { buildId },
@@ -1513,8 +1519,6 @@ export async function shipBuild(input: {
   };
 }
 
-// ─── Complete Build — mark phase as complete after all ship steps ────────────
-
 export async function completeBuild(buildId: string): Promise<void> {
   const userId = await requireBuildAccess();
 
@@ -1522,15 +1526,11 @@ export async function completeBuild(buildId: string): Promise<void> {
   if (!build) throw new Error("Build not found");
   if (build.createdById !== userId) throw new Error("Forbidden");
 
-  await prisma.featureBuild.update({
-    where: { buildId },
-    data: { phase: "complete" },
-  });
+  await assertFeatureBuildCompletion({ buildId, expectedPhase: build.phase });
   revalidatePortalContextForBuild(buildId);
   await recordReadyDependentsAfterCompletion({ db: prisma, buildId }).catch((err) => {
     console.error("[completeBuild] dependency readiness check failed:", err);
   });
-  // BI-8BD61C30: drop sandbox .builds/<id> when the build completes (best-effort).
   void import("@/lib/build/sandbox/sandbox-build-gc")
     .then((m) => m.releaseSandboxForTerminalBuild(buildId, { deleteBranch: false }))
     .catch(() => {});

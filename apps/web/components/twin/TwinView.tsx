@@ -137,7 +137,7 @@ export function TwinView({
       ) : null}
 
       {snapshot.outcomes && snapshot.outcomes.length > 0 ? (
-        <OutcomesStrip outcomes={snapshot.outcomes} />
+        <OutcomesStrip outcomes={snapshot.outcomes} heading={snapshot.outcomesHeading} />
       ) : null}
 
       <PresenceRow members={snapshot.presence} />

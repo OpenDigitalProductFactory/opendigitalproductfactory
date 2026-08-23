@@ -1,0 +1,31 @@
+{
+  "version": "1",
+  "decidedOption": "extend the existing workspace panel: identity statement as the lead band, four stance rows carrying the resolver's own rationale, and the change form plus impact preview behind one disclosure",
+  "scope": {
+    "files": [
+      "apps/web/components/workspace/InstallationIdentityPanel.tsx"
+    ]
+  },
+  "notes": {
+    "measurementScope": "The panel, not the whole page. /workspace carries sweepEligible:false (wall-clock-collection) in apps/web/lib/ux-budget/route-purpose.generated.json, so the rendered route sweep never measures it and it has no row in route-budget-baseline.json. baselineComparison is 'new-route' in that gate's sense — absent from the committed baseline — not a claim that /workspace is a new route.",
+    "howMeasured": "apps/web/components/workspace/InstallationIdentityPanel.uxbudget.test.tsx renders the panel's heaviest honest arrival state in jsdom and runs lib/ux-budget's measureUxBudget on the resulting DOM, the same code the sweep runs. The test also asserts the cockpit budget at routeStatus 'net-new', so the absolute text budgets are blocking rather than advisory for this surface.",
+    "axeCaveat": "axe-core 4.12.1 against the jsdom render with color-contrast disabled, because that rule needs real layout and would report 'incomplete' rather than a pass. Token and theme contrast stay covered by the style-drift and primitive-adoption guards.",
+    "reading": "readingGradeLevel 8, inside the high-school tier the cockpit shell requires."
+  },
+  "evidence": {
+    "kind": "sweep-measurement",
+    "baselineComparison": "new-route",
+    "measured": {
+      "/workspace": {
+        "defaultVisibleWords": 178,
+        "leadBandWords": 39,
+        "primaryActions": 0,
+        "visibleFields": 0,
+        "maxChoicesPerControl": 0,
+        "subLegibleControls": 0,
+        "buriedPrimaryAction": 0,
+        "axeViolations": 0
+      }
+    }
+  }
+}

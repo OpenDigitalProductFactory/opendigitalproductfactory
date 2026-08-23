@@ -4,7 +4,7 @@ import { getErrorMessage } from "@/lib/shared/get-error-message";
 // barrier, so a local copy would leave js/log-injection unbroken.
 import { sanitizeForLog } from "@/lib/security/safe-log";
 import {
-  assertLocalProviderCapacityAvailable,
+  assertShortCallLocalCapacityAvailable,
   LocalProviderCapacityDeferredError,
 } from "@/lib/routing/local-provider-capacity";
 // apps/web/lib/embedding.ts
@@ -108,7 +108,10 @@ export async function generateEmbeddingDetailed(text: string): Promise<Embedding
   ];
 
   try {
-    await assertLocalProviderCapacityAvailable();
+    // BI-0AA939DF / DI-405E6765ED90: the short-call policy — defer only on an
+    // ACTIVE lease, after a bounded wait. A queued gate has not taken the host,
+    // and a 30ms embedding does not take the window away from it.
+    await assertShortCallLocalCapacityAvailable();
 
     for (let attempt = 0; attempt < lengths.length; attempt++) {
       const limit = lengths[attempt]!;

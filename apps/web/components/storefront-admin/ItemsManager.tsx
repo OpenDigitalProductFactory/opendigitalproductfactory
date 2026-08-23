@@ -37,6 +37,7 @@ type Props = {
   storefrontId: string;
   items: Item[];
   vocabulary: ArchetypeVocabulary;
+  archetypeCategory?: string;
   categorySuggestions: string[];
   defaultCtaType: string;
   defaultCurrency?: string;
@@ -57,6 +58,7 @@ export function ItemsManager({
   storefrontId,
   items: initial,
   vocabulary,
+  archetypeCategory = "",
   categorySuggestions,
   defaultCtaType,
   defaultCurrency,
@@ -411,6 +413,7 @@ export function ItemsManager({
         onSave={handleSave}
         initial={editingItem ? itemToFormData(editingItem) : undefined}
         vocabulary={vocabulary}
+        archetypeCategory={archetypeCategory}
         categorySuggestions={categorySuggestions}
         defaultCtaType={defaultCtaType}
         defaultPriceCurrency={defaultCurrency}

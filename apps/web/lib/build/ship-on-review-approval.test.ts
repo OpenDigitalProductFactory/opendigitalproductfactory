@@ -120,6 +120,9 @@ vi.mock("@/lib/agent-event-bus", () => ({
 vi.mock("@/lib/build/auto-accept", () => ({
   autoAcceptBuildOnEvidence: vi.fn(async () => ({ accepted: false as const, reason: "flag-off" })),
 }));
+vi.mock("@/lib/build/build-entry-gate", () => ({
+  enforceBuildInitiativeReadiness: vi.fn(async () => ({ allowed: true, message: "allowed" })),
+}));
 
 import {
   dispatchShipForVerifiedBuild,

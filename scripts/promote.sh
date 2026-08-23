@@ -43,30 +43,71 @@ done
 
 if [[ $_readiness -eq 1 ]]; then
   _readiness_failures=()
+  # A bare failure code cost hours of live diagnosis on SUR-C45B5F4B: readiness
+  # reported `capability_projection_failed` while discarding the one line that
+  # named the cause (`capability_state_stale`). Every probe below now carries its
+  # own error text out with it. No temp files - the acceptance gate runs this
+  # container `--read-only`, so the node probes report failure as data on stdout
+  # rather than as a stream the shell would have to spool.
+  _readiness_details=()
+  _readiness_fail() { _readiness_failures+=("$1"); _readiness_details+=("$(printf '%s' "${2-}" | tr -d '\000\r' | tr '\n' ' ' | cut -c1-400)"); }
   _contract="${DPF_PROMOTER_CONTRACT:-/app/promoter-contract.json}"
-  [[ -r "$_contract" ]] || _readiness_failures+=(contract_unreadable)
+  [[ -r "$_contract" ]] || _readiness_fail contract_unreadable "no readable promoter contract at $_contract"
   if [[ -r "$_contract" ]]; then
     while IFS= read -r _required_file; do
-      [[ -r "$_required_file" ]] || _readiness_failures+=(required_file_unreadable)
+      [[ -r "$_required_file" ]] || _readiness_fail required_file_unreadable "contract requires unreadable file: $_required_file"
     done < <(jq -r '.requiredFiles[]? // empty' "$_contract" 2>/dev/null)
   fi
-  [[ -x "$_promoter_dir/promote.sh" ]] || _readiness_failures+=(entrypoint_unavailable)
+  [[ -x "$_promoter_dir/promote.sh" ]] || _readiness_fail entrypoint_unavailable "$_promoter_dir/promote.sh is not executable"
   if [[ "${DPF_PROMOTER_DOCKER_PREFLIGHT:-}" != "ready" ]] || ! command -v docker >/dev/null 2>&1 || ! docker --version >/dev/null 2>&1; then
-    _readiness_failures+=(docker_unavailable)
+    _readiness_fail docker_unavailable "docker preflight=${DPF_PROMOTER_DOCKER_PREFLIGHT:-<unset>} and no usable docker CLI"
   fi
-  [[ -d "${PROMOTE_SOURCE:-}" && -r "${PROMOTE_SOURCE:-}" ]] || _readiness_failures+=(source_mount_unreadable)
-  [[ -n "${PROMOTE_TARGET_SHA:-}" ]] || _readiness_failures+=(target_sha_missing)
-  [[ -n "${PROMOTE_HEALTH_URL:-}" ]] || _readiness_failures+=(health_url_missing)
+  [[ -d "${PROMOTE_SOURCE:-}" && -r "${PROMOTE_SOURCE:-}" ]] || _readiness_fail source_mount_unreadable "candidate source mount ${PROMOTE_SOURCE:-<unset>} is not a readable directory"
+  [[ -n "${PROMOTE_TARGET_SHA:-}" ]] || _readiness_fail target_sha_missing "PROMOTE_TARGET_SHA is unset"
+  [[ -n "${PROMOTE_HEALTH_URL:-}" ]] || _readiness_fail health_url_missing "PROMOTE_HEALTH_URL is unset"
   _state_dir="${DPF_PROMOTER_STATE_DIR:-/dpf-state}"
   _state_file="$_state_dir/install-state.json"
-  [[ -d "$_state_dir" && -r "$_state_dir" ]] || _readiness_failures+=(state_mount_unreadable)
+  [[ -d "$_state_dir" && -r "$_state_dir" ]] || _readiness_fail state_mount_unreadable "state mount $_state_dir is not a readable directory"
   _state_validator="$_promoter_dir/installer/validate-install-state.mjs"
-  if [[ ! -r "$_state_file" ]] || [[ ! -f "$_state_validator" ]] || ! node "$_state_validator" "$_state_file" >/dev/null 2>&1; then
-    _readiness_failures+=(install_state_invalid)
+  if [[ ! -r "$_state_file" ]] || [[ ! -f "$_state_validator" ]]; then
+    _readiness_fail install_state_invalid "no readable install-state at $_state_file"
+  elif ! _state_error="$(node "$_state_validator" "$_state_file" 2>&1 >/dev/null)"; then
+    _readiness_fail install_state_invalid "$_state_error"
+  fi
+  # Build-context completeness. The candidate promoter image is built FROM the
+  # host source tree, so every COPY source in Dockerfile.promoter must exist
+  # there. When one does not, BuildKit reports it as an opaque cache-key
+  # checksum failure naming a single path, hours after the useful moment:
+  #
+  #   promoter_candidate_build_failed: ... failed to compute cache key:
+  #   "/scripts/installer/install-release-assets.mjs": not found
+  #
+  # Observed on SUR-75DAF829 and SUR-0C221FD3 (2026-08-22). The file was present
+  # in git and absent from the host WORKING TREE, because the host install path
+  # was checked out to a feature branch 44 commits behind main that predated it.
+  # Nothing in that error says "your host tree is stale", which is the only
+  # thing the operator needed to know.
+  #
+  # This probe reads the COPY sources out of the candidate's own
+  # Dockerfile.promoter, so it stays correct as that file changes, and names
+  # EVERY missing path at once rather than the first one BuildKit trips over.
+  _promoter_dockerfile="${PROMOTE_SOURCE:-}/Dockerfile.promoter"
+  if [[ -n "${PROMOTE_SOURCE:-}" && -r "$_promoter_dockerfile" ]]; then
+    _missing_context=()
+    while IFS= read -r _copy_src; do
+      [[ -n "$_copy_src" ]] || continue
+      [[ -e "${PROMOTE_SOURCE}/${_copy_src}" ]] || _missing_context+=("$_copy_src")
+    done < <(awk '/^COPY /{ for (i = 2; i < NF; i++) if ($i !~ /^--/) print $i }' "$_promoter_dockerfile")
+    if [[ ${#_missing_context[@]} -gt 0 ]]; then
+      _readiness_fail promoter_build_context_incomplete \
+        "host source tree ${PROMOTE_SOURCE} is missing ${#_missing_context[@]} file(s) the promoter image COPYs: ${_missing_context[*]} - if these exist in git, the host install path is checked out to a stale branch or has an incomplete working tree"
+    fi
   fi
   _profile_adapter="${PROMOTE_SOURCE:-}/scripts/lib/resolve-capability-compose-profiles.mjs"
-  if [[ ! -f "$_profile_adapter" ]] || ! node "$_profile_adapter" --state "$_state_file" --overlay promote --migrate >/dev/null 2>&1; then
-    _readiness_failures+=(capability_projection_failed)
+  if [[ ! -f "$_profile_adapter" ]]; then
+    _readiness_fail capability_projection_failed "candidate source has no profile adapter at $_profile_adapter"
+  elif ! _profile_error="$(node "$_profile_adapter" --state "$_state_file" --overlay promote --migrate 2>&1 >/dev/null)"; then
+    _readiness_fail capability_projection_failed "$_profile_error"
   fi
   # Host identity is resolved by the shipped resolver, not read raw from the caller's env.
   # The promoter is candidate-owned but launched by the DEPLOYED portal, so an N-1 caller
@@ -74,35 +115,47 @@ if [[ $_readiness -eq 1 ]]; then
   # since the upgrade that teaches the caller to send it IS the blocked upgrade. The
   # resolver still prefers explicit env, falls back to the installer-owned identity in the
   # mounted install-state, and fails closed on contradictory or unverifiable evidence.
+  # Both probes report refusal as `{"error":...}` on stdout instead of dying on
+  # stderr, so the reason survives into the readiness report.
   _migration_projection=""
+  _readiness_error() { printf '%s' "$1" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{let v;try{v=JSON.parse(s)}catch{return process.stdout.write(s?`unparseable probe output: ${s}`:"probe produced no output")}process.stdout.write(typeof v?.error==="string"?v.error:"")})' 2>/dev/null; }
   _host_identity="$(STATE_FILE="$_state_file" PROMOTER_DIR="$_promoter_dir" node --input-type=module -e '
     import { readFile } from "node:fs/promises"; import { pathToFileURL } from "node:url";
-    const { resolveHostIdentity } = await import(pathToFileURL(process.env.PROMOTER_DIR + "/installer/resolve-host-identity.mjs").href);
-    const state=JSON.parse((await readFile(process.env.STATE_FILE)).toString("utf8").replace(/^\uFEFF/,""));
-    process.stdout.write(JSON.stringify(resolveHostIdentity({state,env:process.env})));
-  ' 2>/dev/null)" || _host_identity=""
-  if [[ -n "$_host_identity" ]]; then
+    try {
+      const { resolveHostIdentity } = await import(pathToFileURL(process.env.PROMOTER_DIR + "/installer/resolve-host-identity.mjs").href);
+      const state=JSON.parse((await readFile(process.env.STATE_FILE)).toString("utf8").replace(/^\uFEFF/,""));
+      process.stdout.write(JSON.stringify(resolveHostIdentity({state,env:process.env})));
+    } catch (error) { process.stdout.write(JSON.stringify({error:String(error?.message ?? error)})); }
+  ' 2>&1)" || _host_identity=""
+  _host_identity_error="$(_readiness_error "$_host_identity")"
+  if [[ -n "$_host_identity" && -z "$_host_identity_error" ]]; then
     _migration_projection="$(STATE_FILE="$_state_file" PROMOTER_DIR="$_promoter_dir" DPF_HOST_IDENTITY="$_host_identity" node --input-type=module -e '
       import { readFile } from "node:fs/promises"; import { pathToFileURL } from "node:url";
-      const { projectInstallState } = await import(pathToFileURL(process.env.PROMOTER_DIR + "/installer/migrate-install-state.mjs").href);
-      const bytes=await readFile(process.env.STATE_FILE); const source=JSON.parse(bytes.toString("utf8").replace(/^\uFEFF/,"")); const catalog=JSON.parse(await readFile(process.env.PROMOTER_DIR+"/capability-service-catalog.generated.json","utf8"));
-      const hostIdentity=JSON.parse(process.env.DPF_HOST_IDENTITY);
-      const r=await projectInstallState({bytes,hostIdentity,catalog}); process.stdout.write(JSON.stringify({sourceHash:r.sourceHash,projectionHash:r.projectionHash,migrationRequired:r.migrationRequired,fromSchemaVersion:source.schemaVersion??1,toSchemaVersion:r.projectedState.schemaVersion}));
-    ' 2>/dev/null)" || _readiness_failures+=(install_state_projection_failed)
+      try {
+        const { projectInstallState } = await import(pathToFileURL(process.env.PROMOTER_DIR + "/installer/migrate-install-state.mjs").href);
+        const bytes=await readFile(process.env.STATE_FILE); const source=JSON.parse(bytes.toString("utf8").replace(/^\uFEFF/,"")); const catalog=JSON.parse(await readFile(process.env.PROMOTER_DIR+"/capability-service-catalog.generated.json","utf8"));
+        const hostIdentity=JSON.parse(process.env.DPF_HOST_IDENTITY);
+        const r=await projectInstallState({bytes,hostIdentity,catalog}); process.stdout.write(JSON.stringify({sourceHash:r.sourceHash,projectionHash:r.projectionHash,migrationRequired:r.migrationRequired,fromSchemaVersion:source.schemaVersion??1,toSchemaVersion:r.projectedState.schemaVersion}));
+      } catch (error) { process.stdout.write(JSON.stringify({error:String(error?.message ?? error)})); }
+    ' 2>&1)" || _migration_projection=""
+    _projection_error="$(_readiness_error "$_migration_projection")"
+    if [[ -n "$_projection_error" ]]; then
+      _migration_projection=""
+      _readiness_fail install_state_projection_failed "$_projection_error"
+    fi
   else
-    _readiness_failures+=(host_identity_missing)
+    _readiness_fail host_identity_missing "${_host_identity_error:-the shipped resolver produced no host identity}"
   fi
-  [[ -n "${PROMOTE_COMPOSE_PROJECT:-}" ]] || _readiness_failures+=(compose_identity_missing)
-  [[ -n "${PROMOTE_BACKUP_PATH:-}" && -d "$(dirname "${PROMOTE_BACKUP_PATH:-/missing}")" ]] || _readiness_failures+=(recovery_parent_unavailable)
-  [[ -d "$_state_dir" ]] || _readiness_failures+=(transition_secret_parent_unavailable)
+  [[ -n "${PROMOTE_COMPOSE_PROJECT:-}" ]] || _readiness_fail compose_identity_missing "PROMOTE_COMPOSE_PROJECT is unset"
+  [[ -n "${PROMOTE_BACKUP_PATH:-}" && -d "$(dirname "${PROMOTE_BACKUP_PATH:-/missing}")" ]] || _readiness_fail recovery_parent_unavailable "no writable parent for PROMOTE_BACKUP_PATH=${PROMOTE_BACKUP_PATH:-<unset>}"
+  [[ -d "$_state_dir" ]] || _readiness_fail transition_secret_parent_unavailable "state dir $_state_dir is not a directory"
   if [[ ${#_readiness_failures[@]} -gt 0 ]]; then
-    printf '{"stage":"preflight","result":"failed","quiescenceBegan":false,"failures":['
-    _sep=""
-    for _failure in "${_readiness_failures[@]}"; do
-      printf '%s{"code":"%s","message":"Promoter readiness check failed: %s"}' "$_sep" "$_failure" "$_failure"
-      _sep=,
-    done
-    printf ']}\n'
+    _failures_json="$(
+      for _index in "${!_readiness_failures[@]}"; do
+        printf '%s\n%s\n' "${_readiness_failures[$_index]}" "${_readiness_details[$_index]-}"
+      done | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const l=s.split("\n"),o=[];for(let i=0;i+1<l.length;i+=2){const code=l[i],detail=(l[i+1]||"").trim();o.push({code,message:`Promoter readiness check failed: ${code}${detail?`: ${detail}`:""}`})}process.stdout.write(JSON.stringify(o))})'
+    )"
+    printf '{"stage":"preflight","result":"failed","quiescenceBegan":false,"failures":%s}\n' "$_failures_json"
     exit 78
   fi
   printf '%s\n' "$_migration_projection" | jq -c '. + {stage:"preflight",result:"ready",quiescenceBegan:false,failures:[]}'
@@ -117,6 +170,13 @@ _missing=()
 [[ -n "${PROMOTE_TARGET_SHA:-}"  ]] || _missing+=(PROMOTE_TARGET_SHA)
 [[ -n "${PROMOTE_BACKUP_PATH:-}" ]] || _missing+=(PROMOTE_BACKUP_PATH)
 [[ -n "${PROMOTE_HEALTH_URL:-}"  ]] || _missing+=(PROMOTE_HEALTH_URL)
+
+_release_mode=0
+if [[ "${DPF_PROMOTION_MODE:-source}" == "release" ]]; then
+  _release_mode=1
+  [[ "${DPF_RELEASE_TAG:-}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-+][A-Za-z0-9.-]+)?$ ]] || _missing+=(DPF_RELEASE_TAG)
+  [[ "${GHCR_OWNER:-}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,254}$ ]] || _missing+=(GHCR_OWNER)
+fi
 
 if [[ ${#_missing[@]} -gt 0 ]]; then
   printf 'error: missing required variables: %s\n' "${_missing[*]}" >&2
@@ -141,7 +201,32 @@ fi
 # A stale catalog/state pair fails before Docker mutation. Copy the snapshot to
 # the recovery point and restore it atomically if any later promotion step fails.
 _install_state="${DPF_PROMOTER_STATE_DIR:-/dpf-state}/install-state.json"
-_profile_adapter="$PROMOTE_SOURCE/scripts/lib/resolve-capability-compose-profiles.mjs"
+_compose_root="$PROMOTE_SOURCE"
+_release_assets=""
+_candidate_portal=""
+if [[ $_release_mode -eq 1 && $_dry_run -eq 0 ]]; then
+  _candidate_portal="ghcr.io/${GHCR_OWNER}/dpf-portal:${DPF_RELEASE_TAG}"
+  docker pull "$_candidate_portal" >/dev/null
+  _candidate_revision="$(docker image inspect "$_candidate_portal" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' | tr -d '[:space:]')"
+  [[ "$_candidate_revision" == "$PROMOTE_TARGET_SHA" ]] || {
+    printf 'error: release portal revision %s does not match promote target %s\n' "${_candidate_revision:-missing}" "$PROMOTE_TARGET_SHA" >&2
+    exit 1
+  }
+  mkdir -p "$PROMOTE_BACKUP_PATH"
+  _release_assets="$(mktemp -d "$PROMOTE_BACKUP_PATH/candidate-release-assets.XXXXXX")"
+  _asset_container="$(docker create "$_candidate_portal")"
+  if ! docker cp "${_asset_container}:/dpf-release-assets/." "$_release_assets"; then
+    docker rm -f "$_asset_container" >/dev/null 2>&1 || true
+    exit 1
+  fi
+  docker rm "$_asset_container" >/dev/null
+  _asset_container=""
+  (cd "$_release_assets" && sha256sum -c SHA256SUMS >/dev/null)
+  _compose_root="$_release_assets"
+  export DPF_IMAGE_TAG="$DPF_RELEASE_TAG"
+  export GHCR_OWNER
+fi
+_profile_adapter="$_compose_root/scripts/lib/resolve-capability-compose-profiles.mjs"
 [[ -f "$_install_state" && -f "$_profile_adapter" ]] || { printf 'error: capability_state_stale\n' >&2; exit 1; }
 _capability_projection="$(node "$_profile_adapter" --state "$_install_state" --overlay promote --migrate)" || exit $?
 export COMPOSE_PROFILES="$(printf '%s' "$_capability_projection" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).composeProfiles.join(",")))')"
@@ -173,7 +258,7 @@ _project="${PROMOTE_COMPOSE_PROJECT:-dpf}"
 _compose_files=(${PROMOTE_COMPOSE_FILES:-docker-compose.yml})
 _f_args=()
 for _f in "${_compose_files[@]}"; do
-  _f_args+=(-f "$PROMOTE_SOURCE/$_f")
+  _f_args+=(-f "$_compose_root/$_f")
 done
 _env_args=()
 if [[ -n "${PROMOTE_COMPOSE_ENV_FILE:-}" ]]; then
@@ -231,7 +316,7 @@ services:
     volumes: !override
       - ${_datavol}:/var/lib/postgresql/data
 YAML
-  docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
+  docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
     "${_f_args[@]}" -f "$_ov" up -d --no-deps --force-recreate "$_svc" || _rc=1
   rm -f "$_ov"
   return "$_rc"
@@ -270,19 +355,22 @@ if [[ $_dry_run -eq 0 ]]; then
   _migration_field() {
     printf '%s' "$_migration_envelope" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const v=JSON.parse(s);const p=process.argv[1].split(".");let x=v;for(const k of p)x=x?.[k];if(typeof x!=="string"&&typeof x!=="number")process.exit(2);process.stdout.write(String(x))})' "$1"
   }
-  _migration_from="$(_migration_field fromSchemaVersion)"
-  _migration_to="$(_migration_field toSchemaVersion)"
-  if [[ "$_migration_from" != "$_migration_to" ]]; then
-    node "$_promoter_dir/installer/migrate-install-state.mjs" \
-      --state "$_install_state" \
-      --catalog "$_promoter_dir/capability-service-catalog.generated.json" \
-      --host-platform "$(_migration_field hostIdentity.platform)" \
-      --host-arch "$(_migration_field hostIdentity.arch)" \
-      --expected-source-hash "$(_migration_field sourceHash)" \
-      --expected-projection-hash "$(_migration_field projectionHash)" \
-      --recovery-path "$_capability_recovery" \
-      --write >/dev/null
-  fi
+  # The migrator itself decides whether there is anything to write - it no-ops
+  # unless its own projection reports migrationRequired, under the same lock and
+  # CAS the expected-hash flags below bind. Gating the call on a schema-version
+  # bump duplicated that decision in the shell and got it wrong: a capability
+  # catalog that moves WITHIN schema v2 is a real migration, and skipping the
+  # write left every install re-deriving the same restamp on every upgrade,
+  # never persisting it (BI-AA6FBAD0).
+  node "$_promoter_dir/installer/migrate-install-state.mjs" \
+    --state "$_install_state" \
+    --catalog "$_promoter_dir/capability-service-catalog.generated.json" \
+    --host-platform "$(_migration_field hostIdentity.platform)" \
+    --host-arch "$(_migration_field hostIdentity.arch)" \
+    --expected-source-hash "$(_migration_field sourceHash)" \
+    --expected-projection-hash "$(_migration_field projectionHash)" \
+    --recovery-path "$_capability_recovery" \
+    --write >/dev/null
 fi
 
 # Real platform version from the source's git release tags, baked into the new
@@ -291,6 +379,10 @@ fi
 # not root, so git refuses to read it without this.
 export DPF_PLATFORM_VERSION=""
 if [[ $_dry_run -eq 0 ]]; then
+  if [[ $_release_mode -eq 1 ]]; then
+    DPF_PLATFORM_VERSION="${DPF_RELEASE_TAG#v}"
+    export DPF_PLATFORM_VERSION
+  else
   git config --global --add safe.directory '*' 2>/dev/null || true
   # BI-145214F0 — refresh tags before describe (same root cause as
   # install-dpf.sh). PROMOTE_SOURCE is the host source mount inside the
@@ -301,6 +393,7 @@ if [[ $_dry_run -eq 0 ]]; then
   git -C "$PROMOTE_SOURCE" fetch --tags --force origin 2>/dev/null || true
   DPF_PLATFORM_VERSION="$(git -C "$PROMOTE_SOURCE" describe --tags --always 2>/dev/null | sed 's/^v//' || true)"
   export DPF_PLATFORM_VERSION
+  fi
 fi
 
 # --- Step 3: docker-build ---
@@ -323,6 +416,14 @@ fi
 # the same build.
 emit_step docker-build
 if [[ $_dry_run -eq 0 ]]; then
+  if [[ $_release_mode -eq 1 ]]; then
+    _built_sha="$PROMOTE_TARGET_SHA"
+    export DPF_VERSION="$_built_sha"
+    docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
+      "${_f_args[@]}" pull portal postgres
+    _built_hash=$(docker run --rm "$_candidate_portal" cat /app/.dpf-source-content-hash 2>/dev/null | tr -d '[:space:]' || true)
+    [[ -n "$_built_hash" ]] || { printf 'error: candidate release image has no source content hash\n' >&2; exit 1; }
+  else
   _built_sha=$(git -C "$PROMOTE_SOURCE" rev-parse HEAD 2>/dev/null | tr -d '[:space:]' || true)
   [[ -n "$_built_sha" ]] || {
     printf 'error: cannot resolve HEAD of build source %s\n' "$PROMOTE_SOURCE" >&2
@@ -347,7 +448,7 @@ if [[ $_dry_run -eq 0 ]]; then
   # build context is streamed to the daemon so it works from /host-source where
   # a host bind mount could not. The build is a single COPY over the cached
   # pgvector base — negligible cost.
-  docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
+  docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
     "${_f_args[@]}" build portal postgres
   # Capture the source content hash baked into the FRESHLY BUILT image. It is
   # computed from the actual bundled source bytes (Dockerfile) independent of
@@ -359,6 +460,7 @@ if [[ $_dry_run -eq 0 ]]; then
     printf 'error: freshly built image has no /app/.dpf-source-content-hash\n' >&2
     exit 1
   }
+  fi
 fi
 
 # --- Step 3a: ensure Postgres provides pgvector ---
@@ -400,7 +502,7 @@ if [[ $_dry_run -eq 0 ]]; then
   # Scoped to this single migration, which fails at its first statement (CREATE EXTENSION), so
   # nothing was applied and rolling it back is a no-op on data. Best-effort (`|| true`): a
   # clean install has no such record and this is a harmless miss.
-  docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
+  docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
     "${_f_args[@]}" run --rm -T --no-deps --entrypoint sh portal \
     -c 'cd /app && pnpm --filter @dpf/db exec prisma migrate resolve --rolled-back 20260714110000_bet5_pgvector_foundation' >/dev/null 2>&1 || true
 
@@ -411,7 +513,7 @@ if [[ $_dry_run -eq 0 ]]; then
   # migration bytes. Only that state may be rolled back so normal deploy can
   # apply the preparation migration first and then retry the immutable backfill.
   _human_principal_recovery="$(
-    docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
+    docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
       "${_f_args[@]}" run --rm -T --no-deps --entrypoint sh portal \
       -c 'cd /app && node packages/db/scripts/recover-human-principal-backfill-migration.mjs'
   )" || {
@@ -421,10 +523,10 @@ if [[ $_dry_run -eq 0 ]]; then
   case "$_human_principal_recovery" in
     recover:*)
       _human_principal_migration_id="${_human_principal_recovery#recover:}"
-      docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
+      docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
         "${_f_args[@]}" run --rm -T --no-deps --entrypoint sh portal \
         -c 'cd /app && pnpm --filter @dpf/db exec prisma migrate resolve --rolled-back 20260812110000_backfill_missing_human_principals'
-      docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
+      docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
         "${_f_args[@]}" run --rm -T --no-deps --entrypoint sh portal \
         -c 'cd /app && node packages/db/scripts/recover-human-principal-backfill-migration.mjs --verify-rolled-back "$1"' \
         sh "$_human_principal_migration_id"
@@ -443,7 +545,7 @@ if [[ $_dry_run -eq 0 ]]; then
   # the exact pre-snapshot quarantine guard. Any mismatch aborts before the
   # portal swap.
   _inventory_snapshot_recovery="$(
-    docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
+    docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
       "${_f_args[@]}" run --rm -T --no-deps --entrypoint sh portal \
       -c 'cd /app && node packages/db/scripts/recover-inventory-snapshot-migration.mjs'
   )" || {
@@ -453,10 +555,10 @@ if [[ $_dry_run -eq 0 ]]; then
   case "$_inventory_snapshot_recovery" in
     recover:*)
       _inventory_snapshot_migration_id="${_inventory_snapshot_recovery#recover:}"
-      docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
+      docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
         "${_f_args[@]}" run --rm -T --no-deps --entrypoint sh portal \
         -c 'cd /app && pnpm --filter @dpf/db exec prisma migrate resolve --rolled-back 20260728115900_snapshot_inventory_observation_facts'
-      docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
+      docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
         "${_f_args[@]}" run --rm -T --no-deps --entrypoint sh portal \
         -c 'cd /app && node packages/db/scripts/recover-inventory-snapshot-migration.mjs --verify-rolled-back "$1"' \
         sh "$_inventory_snapshot_migration_id"
@@ -488,7 +590,7 @@ fi
 # deploy is idempotent. Step 3b is still needed as the pre-swap schema guard.
 emit_step migrate
 if [[ $_dry_run -eq 0 ]]; then
-  docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
+  docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
     "${_f_args[@]}" run --rm -T --no-deps --entrypoint sh portal \
     -c 'cd /app && pnpm --filter @dpf/db exec prisma migrate deploy'
 fi
@@ -500,7 +602,7 @@ fi
 # SHA of the code it is running at /api/health/sha.
 emit_step docker-up
 if [[ $_dry_run -eq 0 ]]; then
-  docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
+  docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
     "${_f_args[@]}" up -d --no-deps --force-recreate portal
 fi  # DPF_PLATFORM_VERSION stays exported from above so any rebuild keeps the stamp
 
@@ -527,7 +629,7 @@ fi  # DPF_PLATFORM_VERSION stays exported from above so any rebuild keeps the st
 # pseudo-tty so structured log output reaches the promoter's stdout cleanly.
 emit_step seed
 if [[ $_dry_run -eq 0 ]]; then
-  docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
+  docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
     "${_f_args[@]}" run --rm -T --no-deps --entrypoint /docker-entrypoint.sh portal
 fi
 
@@ -591,13 +693,36 @@ fi
 # is capable of failing.
 emit_step content-verify
 if [[ $_dry_run -eq 0 ]]; then
-  _running_hash=$(docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
+  _running_hash=$(docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
     "${_f_args[@]}" exec -T portal cat /app/.dpf-source-content-hash 2>/dev/null | tr -d '[:space:]' || true)
   [[ -n "$_running_hash" && "$_running_hash" == "$_built_hash" ]] || {
     printf 'error: running content hash %s does not match freshly built %s — recreate did not deploy the new image\n' \
       "${_running_hash:-unknown}" "$_built_hash" >&2
     exit 1
   }
+fi
+
+# A verified release runtime and its restart identity are one transaction. Only
+# commit the candidate's manifest-covered lifecycle assets, .env tag, and
+# install-state after the running portal proves both health and source/content
+# identity. The installer helper restores every managed byte on failure; then
+# compose is rerun against the restored old tag to put the portal back too.
+emit_step release-identity-commit
+if [[ $_release_mode -eq 1 && $_dry_run -eq 0 ]]; then
+  if ! node "$_promoter_dir/installer/install-release-assets.mjs" \
+    --source "$_release_assets" \
+    --install "$PROMOTE_SOURCE" \
+    --state "$_install_state" \
+    --tag "$DPF_RELEASE_TAG" \
+    --owner "$GHCR_OWNER" \
+    --recovery "$PROMOTE_BACKUP_PATH/release-identity"; then
+    printf 'error: release identity commit failed; restoring the prior portal tag\n' >&2
+    _rollback_f_args=()
+    for _f in "${_compose_files[@]}"; do _rollback_f_args+=(-f "$PROMOTE_SOURCE/$_f"); done
+    docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
+      "${_rollback_f_args[@]}" up -d --no-deps --force-recreate portal || true
+    exit 1
+  fi
 fi
 
 # --- Step 7b: sandbox-refresh ---
@@ -642,11 +767,16 @@ if [[ $_dry_run -eq 0 ]]; then
     fi
   fi
   if [[ $_sandbox_ok -eq 1 ]]; then
-    docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
-      "${_f_args[@]}" build sandbox || _sandbox_ok=0
+    if [[ $_release_mode -eq 1 ]]; then
+      docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
+        "${_f_args[@]}" pull sandbox || _sandbox_ok=0
+    else
+      docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
+        "${_f_args[@]}" build sandbox || _sandbox_ok=0
+    fi
   fi
   if [[ $_sandbox_ok -eq 1 ]]; then
-    docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
+    docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
       "${_f_args[@]}" up -d --no-deps --force-recreate sandbox || _sandbox_ok=0
   fi
   if [[ $_sandbox_ok -eq 0 ]]; then

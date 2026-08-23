@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 624,
+  "routeCount": 625,
   "routes": [
     {
       "routePath": "/",
@@ -5415,6 +5415,16 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/ops/stack-currency/page.tsx"
+    },
+    {
+      "routePath": "/ops/teardown",
+      "kind": "page",
+      "segments": [
+        "ops",
+        "teardown"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/ops/teardown/page.tsx"
     },
     {
       "routePath": "/performance",

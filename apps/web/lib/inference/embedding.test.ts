@@ -3,10 +3,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/routing/local-provider-capacity", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/routing/local-provider-capacity")>()),
   assertLocalProviderCapacityAvailable: vi.fn(),
+  // BI-0AA939DF: embedding moved to the short-call policy, which ignores a
+  // merely queued claim and waits briefly for an active one.
+  assertShortCallLocalCapacityAvailable: vi.fn(),
 }));
 
 import {
-  assertLocalProviderCapacityAvailable,
+  assertShortCallLocalCapacityAvailable,
   LocalProviderCapacityDeferredError,
 } from "@/lib/routing/local-provider-capacity";
 import { generateEmbedding, generateEmbeddingDetailed, isOversizeRejection } from "./embedding";
@@ -24,12 +27,12 @@ function okEmbedding(vec: number[]): Response {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(assertLocalProviderCapacityAvailable).mockResolvedValue(undefined);
+  vi.mocked(assertShortCallLocalCapacityAvailable).mockResolvedValue(undefined);
 });
 
 describe("generateEmbedding local-CI arbitration", () => {
   it("does not contact the local embedding provider while local CI owns capacity", async () => {
-    vi.mocked(assertLocalProviderCapacityAvailable).mockRejectedValue(
+    vi.mocked(assertShortCallLocalCapacityAvailable).mockRejectedValue(
       new LocalProviderCapacityDeferredError("local-ci-active-capacity-reservation"),
     );
     const fetchSpy = vi.spyOn(globalThis, "fetch");
@@ -47,7 +50,7 @@ describe("generateEmbedding local-CI arbitration", () => {
     );
 
     await expect(generateEmbedding("durable knowledge")).resolves.toEqual([0.1, 0.2]);
-    expect(assertLocalProviderCapacityAvailable).toHaveBeenCalledOnce();
+    expect(assertShortCallLocalCapacityAvailable).toHaveBeenCalledOnce();
   });
 });
 
@@ -141,7 +144,7 @@ describe("generateEmbeddingDetailed reports WHY it produced no vector (BI-339C44
     // The regression this closes: the deferral was caught alongside real
     // errors and collapsed to null, so a colleague's pre-PR gate read as a
     // broken embedding model across the whole install.
-    vi.mocked(assertLocalProviderCapacityAvailable).mockRejectedValue(
+    vi.mocked(assertShortCallLocalCapacityAvailable).mockRejectedValue(
       new LocalProviderCapacityDeferredError("local-ci-active-capacity-reservation"),
     );
 
@@ -154,7 +157,7 @@ describe("generateEmbeddingDetailed reports WHY it produced no vector (BI-339C44
   });
 
   it("reports a genuine backend error as failed, not deferred", async () => {
-    vi.mocked(assertLocalProviderCapacityAvailable).mockResolvedValue(undefined);
+    vi.mocked(assertShortCallLocalCapacityAvailable).mockResolvedValue(undefined);
     vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("connect ECONNREFUSED"));
 
     const result = await generateEmbeddingDetailed("anything");
@@ -163,7 +166,7 @@ describe("generateEmbeddingDetailed reports WHY it produced no vector (BI-339C44
   });
 
   it("keeps generateEmbedding null-returning, so its existing callers are untouched", async () => {
-    vi.mocked(assertLocalProviderCapacityAvailable).mockRejectedValue(
+    vi.mocked(assertShortCallLocalCapacityAvailable).mockRejectedValue(
       new LocalProviderCapacityDeferredError("local-ci-active-capacity-reservation"),
     );
 

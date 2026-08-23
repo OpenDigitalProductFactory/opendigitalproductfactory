@@ -37,10 +37,17 @@ describe("workspace tile derivation", () => {
     expect(typeof loadPlatformWorkspaceHomeData).toBe("function");
   });
 
-  it("mounts installation-purpose confirmation in Workspace behind platform authority", () => {
+  it("mounts installation-identity declaration in Workspace behind platform authority", () => {
     const source = readFileSync(new URL("./page.tsx", import.meta.url), "utf8");
 
-    expect(source).toContain("<InstallationPurposePanel");
+    expect(source).toContain("<InstallationIdentityPanel");
     expect(source).toContain('"manage_platform"');
+  });
+
+  it("feeds the identity panel from the composed view, not a raw intent read", () => {
+    const source = readFileSync(new URL("./page.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("loadInstallationIdentityView");
+    expect(source).not.toContain("loadInstallationOperatingIntent");
   });
 });

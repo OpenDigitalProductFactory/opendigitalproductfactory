@@ -17,6 +17,29 @@ export type ArchetypeVocabulary = {
   agentName: string;
 };
 
+export type StorefrontPresentation = {
+  entityNoun: "business" | "organization";
+  productMix: {
+    legend: string;
+    help: string;
+    primaryLabel: string;
+    adjacentLabel: string;
+    addedLabel: string;
+    anotherLabel: string;
+    addLabel: string;
+    removeFallback: string;
+    placeholder: string;
+    lineLabel: string;
+    chooseLineLabel: string;
+    multiLineHelp: string;
+    publicDescriptionPlaceholder: string;
+  };
+  publish: {
+    readyTitle: string;
+    description: string;
+  };
+};
+
 const VOCABULARY: Record<string, ArchetypeVocabulary> = {
   "food-hospitality": {
     itemsLabel: "Menu", singleItemLabel: "Item", addButtonLabel: "Add to menu",
@@ -193,6 +216,76 @@ export function getVocabulary(
     ...(customVocabulary.teamLabel && { teamLabel: customVocabulary.teamLabel }),
     ...(customVocabulary.inboxLabel && { inboxLabel: customVocabulary.inboxLabel }),
     ...(customVocabulary.agentName && { agentName: customVocabulary.agentName }),
+  };
+}
+
+/**
+ * Resolve the surrounding operator copy from the same archetype vocabulary
+ * authority as the portal and stakeholder labels. The product-line data model
+ * stays canonical; this projection only changes the words people see.
+ */
+export function getStorefrontPresentation(
+  category: string | null | undefined,
+  customVocabulary?: Record<string, string> | null,
+): StorefrontPresentation {
+  const vocabulary = getVocabulary(category, customVocabulary);
+  const stakeholders = vocabulary.stakeholderLabel.toLowerCase();
+
+  if (category === "nonprofit-community") {
+    return {
+      entityNoun: "organization",
+      productMix: {
+        legend: "What does your organization offer?",
+        help:
+          `Start with the main programme below. Add another only if ${stakeholders} ` +
+          "or the people you serve engage with something meaningfully different.",
+        primaryLabel: "Main programme",
+        adjacentLabel: "Also offer",
+        addedLabel: "Added programme",
+        anotherLabel: "Another programme",
+        addLabel: "Add programme",
+        removeFallback: "programme",
+        placeholder: "e.g. Community education",
+        lineLabel: "Programme",
+        chooseLineLabel: "Choose a programme",
+        multiLineHelp:
+          "Shown because this organization offers more than one programme.",
+        publicDescriptionPlaceholder: "Supporter-facing description",
+      },
+      publish: {
+        readyTitle: `Your ${vocabulary.portalLabel} is ready — publish it now`,
+        description: `It is not live yet, so the public link returns a 404. Publish it so ${stakeholders} can find you.`,
+      },
+    };
+  }
+
+  const publicPortal =
+    vocabulary.portalLabel === "Storefront"
+      ? "storefront"
+      : vocabulary.portalLabel;
+  return {
+    entityNoun: "business",
+    productMix: {
+      legend: "What does your business sell?",
+      help:
+        "Start with the main line below. Add another only if customers buy something meaningfully different from you.",
+      primaryLabel: "Main product line",
+      adjacentLabel: "Also sell",
+      addedLabel: "Added product line",
+      anotherLabel: "Another product line",
+      addLabel: "Add product line",
+      removeFallback: "product line",
+      placeholder: "e.g. Conferences and events",
+      lineLabel: "Product line",
+      chooseLineLabel: "Choose a product line",
+      multiLineHelp:
+        "Shown because this business sells through more than one product line.",
+      publicDescriptionPlaceholder: "Customer-facing description",
+    },
+    publish: {
+      readyTitle: `Your ${publicPortal} is ready — publish it now`,
+      description: `It is not live yet, so the public link returns a 404. Publish it so ${stakeholders} can find you.`,
+    },
   };
 }
 

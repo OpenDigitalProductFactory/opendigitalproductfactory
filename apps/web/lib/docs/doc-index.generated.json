@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 673,
+  "pageCount": 675,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -919,6 +919,29 @@
         "11-changelog"
       ]
     },
+    "docs/architecture/archetype-operating-model-audit.md": {
+      "publicHref": "/architecture/archetype-operating-model-audit/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "archetype-operating-model-audit",
+        "purpose",
+        "the-failure-this-exists-to-prevent",
+        "study-unit",
+        "method",
+        "step-1-write-the-operating-day-before-touching-the-platform",
+        "step-2-extract-operational-nouns-and-verbs",
+        "step-3-classify-each-noun-against-the-substrate",
+        "step-4-hunt-the-canonical-analogue",
+        "step-5-score-then-file",
+        "coverage-score",
+        "traps",
+        "definition-of-done",
+        "standards-basis-do-not-re-derive",
+        "change-control"
+      ]
+    },
     "docs/architecture/archetype-owner-positioning.md": {
       "publicHref": "/architecture/archetype-owner-positioning/",
       "portalHref": null,
@@ -1451,6 +1474,7 @@
         "purpose",
         "maturity-labels-closed-set",
         "finance-matrix-snapshot",
+        "payroll-absorption-stance-reversal-2026-08-22",
         "finance-doc-reconciliation-rules",
         "workforce-matrix-snapshot",
         "workforce-doc-reconciliation-rules",
@@ -4993,6 +5017,8 @@
         "what-the-installer-does",
         "login",
         "day-to-day",
+        "declare-what-the-installation-is-for",
+        "work-created-on-an-installation-lives-only-there",
         "docker-memory",
         "llm-provider",
         "voice-stt-tts",
@@ -5076,6 +5102,18 @@
         "progress",
         "checklist",
         "areas-in-scope-and-what-automates-them"
+      ]
+    },
+    "docs/maintenance/obligation-cadence-coverage.md": {
+      "publicHref": "/maintenance/obligation-cadence-coverage/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "obligation-cadence-coverage",
+        "common-applies-whatever-the-business-is",
+        "archetype-coverage",
+        "trigger-classes-across-every-pack"
       ]
     },
     "docs/maintenance/staleness-coverage.md": {
@@ -8514,6 +8552,7 @@
         "runbook-bet-5-self-upgrade-on-a-pre-bet-5-install-windows-any-host",
         "what-bet-5-does",
         "why-this-box-needs-a-one-time-bootstrap",
+        "consumer-release-installs-artifact-native-upgrades",
         "preconditions-capture-current-state-first",
         "step-1-bootstrap-the-promoter-from-current-main",
         "step-2-trigger-the-upgrade",
@@ -8521,6 +8560,8 @@
         "step-4-verify-postgres-only-done-criteria",
         "if-it-fails-anyway-recovery",
         "failure-class-host-out-of-memory-candidate-build-enomem",
+        "failure-class-promoter-context-n1-a-new-copy-made-the-candidate-unbuildable",
+        "failure-class-capability-state-stale-a-release-moved-the-capability-catalog",
         "failure-class-migration-unique-violation-p3018-23505",
         "references"
       ]
@@ -10590,6 +10631,7 @@
         "agent-authority-overview",
         "tool-execution-log",
         "effective-permissions",
+        "reading-decision-separation",
         "living-playbook-experiments",
         "tool-evaluation-pipeline",
         "development-surfaces"
@@ -10955,6 +10997,7 @@
         "decisions-and-consequences",
         "what-runs-on-its-own",
         "what-it-does",
+        "not-every-obligation-is-on-a-schedule",
         "when-it-runs",
         "how-it-stays-current",
         "what-it-will-not-do",
@@ -11818,6 +11861,8 @@
         "operations-and-performance",
         "spatial-operations-for-tables-and-rooms",
         "confirming-an-operational-suggestion",
+        "what-this-installation-is",
+        "correcting-the-identity",
         "key-concepts",
         "what-you-can-do"
       ]
@@ -11833,6 +11878,7 @@
         "activity-and-participants",
         "access-and-other-channels",
         "finite-and-standing-rooms",
+        "pace-and-priority",
         "incomplete-or-unavailable-rooms"
       ]
     },

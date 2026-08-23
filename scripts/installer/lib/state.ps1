@@ -235,22 +235,31 @@ function Get-DpfStateValue {
     return $state.$Key
 }
 
-# Write a top-level key to the state file. Creates the file if missing.
-# `$Value` is serialized with ConvertTo-Json so objects/arrays/booleans round-trip.
-function Set-DpfStateValue {
-    param(
-        [Parameter(Mandatory)][string]$Key,
-        [Parameter(Mandatory, ValueFromPipeline = $true)]$Value
-    )
-
+# Atomically converge a related set of top-level identity values in one lock,
+# CAS, schema validation, and replace. This avoids exposing half-updated release
+# identity (for example imageTag=new while composeFiles still describe old).
+function Set-DpfStateValues {
+    param([Parameter(Mandatory)][System.Collections.IDictionary]$Values)
     $path = Get-DpfStatePath
     if (-not (Test-Path -LiteralPath $path)) { Initialize-DpfState }
     Enter-DpfStateLock $path
     try {
         $sourceSha256 = Get-DpfStateSha256 $path
-        $state = Read-DpfState; $hashtable = @{}; foreach ($prop in $state.PSObject.Properties) { $hashtable[$prop.Name] = $prop.Value }; $hashtable[$Key] = $Value
+        $state = Read-DpfState
+        $hashtable = @{}
+        foreach ($prop in $state.PSObject.Properties) { $hashtable[$prop.Name] = $prop.Value }
+        foreach ($key in $Values.Keys) { $hashtable[[string]$key] = $Values[$key] }
         Write-DpfStateCandidate -Path $path -Json ($hashtable | ConvertTo-Json -Depth 20) -SourceSha256 $sourceSha256
     } finally { Exit-DpfStateLock $path }
+}
+
+# Back-compatible one-key facade over the multi-key transaction.
+function Set-DpfStateValue {
+    param(
+        [Parameter(Mandatory)][string]$Key,
+        [Parameter(Mandatory, ValueFromPipeline = $true)]$Value
+    )
+    Set-DpfStateValues -Values @{ $Key = $Value }
 }
 
 # Resolve and, for a previous-release state, atomically persist the canonical

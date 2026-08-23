@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { access, readFile } from "node:fs/promises";
 import { dirname, join, posix, resolve } from "node:path";
 
+import { readPromoterBuildContextSources } from "./lib/promoter-build-context-sources.mjs";
+
 const root = resolve(dirname(new URL(import.meta.url).pathname.replace(/^\/(.:\/)/, "$1")), "..");
 const validatorAssets = [
   "scripts/installer/validate-install-state.mjs",
@@ -53,12 +55,47 @@ test("promoter COPY parser fails closed on forms the contract does not support",
 });
 
 test("promoter image contains the install-state validator at its import-resolved paths", async () => {
-  const dockerfile = await readFile(join(root, "Dockerfile.promoter"), "utf8");
+  const staged = new Set(await readPromoterBuildContextSources(root));
   for (const asset of validatorAssets) {
-    assert.ok(dockerfile.includes(`COPY ${asset} /promoter/installer/${posix.basename(asset)}`), asset);
+    assert.ok(staged.has(asset), `${asset} must be staged into the promoter context`);
     await access(join(root, asset));
   }
-  assert.match(dockerfile, /COPY scripts\/rotate-runtime-transition-secret\.mjs \/promoter\/rotate-runtime-transition-secret\.mjs/);
+  assert.ok(staged.has("scripts/rotate-runtime-transition-secret.mjs"));
+});
+
+test("Dockerfile.promoter never enumerates individual script files", async () => {
+  // The build context is staged by the DEPLOYED (N-1) portal from a list baked
+  // into ITS image, while this Dockerfile is candidate-owned. A per-file COPY
+  // therefore makes the candidate unbuildable by every already-deployed portal,
+  // because the older caller cannot stage a file that did not exist when it was
+  // built — and the upgrade that would teach it IS the blocked upgrade.
+  // Live: SUR-75DAF829 died on `install-release-assets.mjs: not found` after
+  // #4462 added one COPY. Copy directories; let the caller choose the contents.
+  const dockerfile = await readFile(join(root, "Dockerfile.promoter"), "utf8");
+  const enumerated = parseSimpleLocalCopySources(dockerfile)
+    .filter((source) => source.startsWith("scripts/") && !source.endsWith("/"));
+  assert.deepEqual(enumerated, [], "COPY scripts/<file> re-wedges every deployed install — copy the directory instead");
+});
+
+test("every staged source is covered by a Dockerfile.promoter COPY, and every contract requiredFile is staged", async () => {
+  const [dockerfile, contract, staged] = await Promise.all([
+    readFile(join(root, "Dockerfile.promoter"), "utf8"),
+    readFile(join(root, "promoter-contract.json"), "utf8").then(JSON.parse),
+    readPromoterBuildContextSources(root),
+  ]);
+  const copySources = parseSimpleLocalCopySources(dockerfile);
+  const covers = (source) => copySources.some((copy) => (copy.endsWith("/") ? source.startsWith(copy) : copy === source));
+  for (const source of staged) {
+    assert.ok(covers(source), `${source} is staged but no Dockerfile.promoter COPY brings it into the image`);
+  }
+  // Correctness does not rest on "whatever happened to be staged": readiness
+  // refuses on requiredFiles, so every hard dependency must be in the closure.
+  const stagedInImage = new Set(staged.map((source) => source.startsWith("scripts/")
+    ? `/promoter/${source.slice("scripts/".length)}`
+    : source === "Dockerfile" ? "/promoter/portal.Dockerfile" : "/app/promoter-contract.json"));
+  for (const required of contract.requiredFiles ?? []) {
+    assert.ok(stagedInImage.has(required), `contract requires ${required}, which nothing in the staged closure provides`);
+  }
 });
 
 test("portal and release images retain the validator's complete transitive asset set", async () => {
@@ -70,13 +107,12 @@ test("portal and release images retain the validator's complete transitive asset
   }
 });
 
-test("portal-baked JIT context includes every local Dockerfile.promoter COPY source", async () => {
-  const [promoterDockerfile, portalDockerfile, promoterSource] = await Promise.all([
-    readFile(join(root, "Dockerfile.promoter"), "utf8"),
+test("portal-baked JIT context includes every staged promoter closure source", async () => {
+  const [portalDockerfile, promoterSource, localCopySources] = await Promise.all([
     readFile(join(root, "Dockerfile"), "utf8"),
     readFile(join(root, "apps", "web", "lib", "self-upgrade", "promoter.ts"), "utf8"),
+    readPromoterBuildContextSources(root),
   ]);
-  const localCopySources = parseSimpleLocalCopySources(promoterDockerfile);
   const portalDockerfileLines = new Set(portalDockerfile.split(/\r?\n/).map((line) => line.trim()));
   const jitScriptSource = promoterSource.replaceAll('\\"', '"');
 
@@ -104,12 +140,9 @@ test("portal-baked JIT context includes every local Dockerfile.promoter COPY sou
   );
 });
 
-test("Dockerfile.promoter.dockerignore allowlist matches the promoter COPY sources exactly", async () => {
-  const [promoterDockerfile, dockerignore] = await Promise.all([
-    readFile(join(root, "Dockerfile.promoter"), "utf8"),
-    readFile(join(root, "Dockerfile.promoter.dockerignore"), "utf8"),
-  ]);
-  const copySources = new Set(parseSimpleLocalCopySources(promoterDockerfile));
+test("Dockerfile.promoter.dockerignore allowlist matches the staged promoter closure exactly", async () => {
+  const dockerignore = await readFile(join(root, "Dockerfile.promoter.dockerignore"), "utf8");
+  const copySources = new Set(await readPromoterBuildContextSources(root));
   const allowlisted = new Set(
     dockerignore
       .split(/\r?\n/)
@@ -133,20 +166,21 @@ test("Dockerfile.promoter.dockerignore allowlist matches the promoter COPY sourc
   }
 });
 
-test("shared PROMOTER_BUILD_CONTEXT_SOURCES equals Dockerfile.promoter's local COPY sources exactly", async () => {
+test("shared PROMOTER_BUILD_CONTEXT_SOURCES is a well-formed, present staged closure", async () => {
   const [promoterDockerfile, contextSource] = await Promise.all([
     readFile(join(root, "Dockerfile.promoter"), "utf8"),
     readFile(join(root, "apps", "web", "lib", "self-upgrade", "promoter-build-context.ts"), "utf8"),
   ]);
-  const copySources = parseSimpleLocalCopySources(promoterDockerfile);
   const shared = parseExportedStringArray(contextSource, "PROMOTER_BUILD_CONTEXT_SOURCES");
-
   assert.ok(shared.length > 0, "PROMOTER_BUILD_CONTEXT_SOURCES must not be empty");
   assert.deepEqual(
     [...shared].sort(),
-    [...copySources].sort(),
-    "the shared build-context source-of-truth must match Dockerfile.promoter's COPY sources exactly (no drift)",
+    [...new Set(shared)].sort(),
+    "the staged closure must not contain duplicates",
   );
+  // Every staged file must exist in the tree, or the candidate cannot build.
+  for (const source of shared) await access(join(root, source));
+  assert.ok(promoterDockerfile.includes("COPY scripts/ /promoter/"), "the Dockerfile must copy the script closure as a directory");
   // The Dockerfile that builds the image is not a COPY source but must also be
   // staged so `-f <ctx>/Dockerfile.promoter` resolves inside the minimal context.
   assert.ok(

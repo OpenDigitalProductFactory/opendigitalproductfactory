@@ -7,6 +7,12 @@ const NO_LOCAL_CHANGES: LocalChangesResult = { available: true, changes: [] };
 function baseInput(overrides: Partial<OwnerReleaseInput> = {}): OwnerReleaseInput {
   return {
     enabled: true,
+    support: {
+      supported: true,
+      targetKind: "git-source",
+      reason: "enabled",
+      message: null,
+    },
     isFresh: true,
     targetSha: null,
     deployedSha: "abc1234def",
@@ -43,6 +49,30 @@ function allCopy(s: ReturnType<typeof buildOwnerReleaseSummary>): string {
 }
 
 describe("buildOwnerReleaseSummary", () => {
+  it("reports an unidentified install as unavailable instead of up to date", () => {
+    const s = buildOwnerReleaseSummary(
+      baseInput({
+        enabled: false,
+        isFresh: false,
+        targetSha: null,
+        support: {
+          supported: false,
+          targetKind: "unknown",
+          reason: "install-identity-unverified",
+          message: "Automatic updates are unavailable until this install’s identity is verified.",
+        },
+      }),
+      NO_LOCAL_CHANGES,
+    );
+
+    expect(s.state).toBe("unavailable");
+    expect(s.tone).toBe("warning");
+    expect(s.headline).toBe("Automatic updates are unavailable until this install’s identity is verified");
+    expect(s.recommendedAction.label).toBe("No automatic update action");
+    expect(s.ifYouDoNothing).toContain("current release keeps running");
+    expect(s.riskNotice).toBeNull();
+  });
+
   it("reports up-to-date when the build is fresh with no target", () => {
     const s = buildOwnerReleaseSummary(baseInput({ isFresh: true, targetSha: null }), NO_LOCAL_CHANGES);
     expect(s.state).toBe("up-to-date");
@@ -50,6 +80,33 @@ describe("buildOwnerReleaseSummary", () => {
     expect(s.availableVersion).toBeNull();
     expect(s.riskNotice).toBeNull();
     expect(s.recommendedAction.label).toBe("No action needed");
+  });
+
+  it("does not surface a stale no-target skip after release discovery proves the install is current", () => {
+    const sha = "f".repeat(40);
+    const s = buildOwnerReleaseSummary(
+      baseInput({
+        support: {
+          supported: true,
+          targetKind: "release-artifact",
+          reason: "enabled",
+          message: null,
+        },
+        isFresh: true,
+        targetSha: sha,
+        deployedSha: sha,
+        latestRun: {
+          status: "skipped",
+          reason: "no-target",
+          targetSha: null,
+        },
+      }),
+      NO_LOCAL_CHANGES,
+    );
+
+    expect(s.state).toBe("up-to-date");
+    expect(s.recommendedAction.detail).toBe("You're running the latest version. Nothing to install.");
+    expect(allCopy(s)).not.toContain("No target build could be resolved");
   });
 
   it("reports update-available with a consequence/reversibility risk notice", () => {

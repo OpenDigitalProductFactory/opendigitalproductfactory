@@ -38,6 +38,7 @@ import { MCP_ASSETS } from "./mcp-assets";
 import { INITIATIVE_GOVERNANCE_ASSETS } from "./initiative-governance-assets";
 import { FEDERATION_INTRODUCTION_ASSETS } from "./federation-introduction-assets";
 import { BUSINESS_PERFORMANCE_ASSETS } from "./business-performance-assets";
+import { EXTERNAL_CHANNEL_ASSETS } from "./external-channel-assets";
 
 // ─── Definitions (spec §6.1) ─────────────────────────────────────────────────
 export type FieldResolution = "inherited" | "governed" | "not-applicable";
@@ -733,6 +734,7 @@ const SEED_ASSETS: readonly DataAssetDefinition[] = [
   ...MCP_ASSETS,
   ...INITIATIVE_GOVERNANCE_ASSETS,
   ...FEDERATION_INTRODUCTION_ASSETS,
+  ...EXTERNAL_CHANNEL_ASSETS,
    {
     id: "data:agent-conversation",
     physical: { prismaModel: "AgentMessage" },

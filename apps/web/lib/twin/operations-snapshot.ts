@@ -42,6 +42,7 @@ export interface OperationsSummarySlice {
   capacityChips: CapacityChipData[];
   stageFlow?: TwinStageFlow[];
   outcomes?: TwinOutcome[];
+  outcomesHeading?: string;
   quests: QuestData[];
   utility: UtilityMeterData[];
 }
@@ -157,6 +158,7 @@ export function createVersionedOperationsSnapshot(
       capacityChips: input.twin.capacityChips,
       stageFlow: input.twin.stageFlow,
       outcomes: input.twin.outcomes,
+      outcomesHeading: input.twin.outcomesHeading,
       quests: input.twin.quests,
       utility: input.twin.utility,
     },
@@ -200,6 +202,7 @@ export function toLivingBusinessSnapshot(snapshot: VersionedOperationsSnapshot):
     capacityChips: snapshot.summary.capacityChips,
     stageFlow: snapshot.summary.stageFlow,
     outcomes: snapshot.summary.outcomes,
+    outcomesHeading: snapshot.summary.outcomesHeading,
     zones: snapshot.scene.zones,
     workItems: snapshot.scene.workItems,
     queues: snapshot.queue.queues,

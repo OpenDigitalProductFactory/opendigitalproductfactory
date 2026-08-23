@@ -37,6 +37,29 @@ hit on the Mac: (1) `dpf-postgres-1` left in `Created` state (DB offline) becaus
 wedged at `[bet5-backfill] done.` never serving, because the old boot backfill never exits. Both are
 already fixed in `main` — the rebuild is what delivers those fixes to this box.
 
+## Consumer release installs — artifact-native upgrades
+
+A consumer install has release assets and tagged container images, but intentionally has no Git
+checkout. Do **not** use the source-install bootstrap in Step 1 for that shape. The first release that
+contains artifact-native self-upgrade still needs one governed installer/bootstrap run because the
+currently running portal cannot acquire capabilities that are not already in its image. After that
+bootstrap, use **Ops → Self-Upgrade → Upgrade now** for later releases.
+
+The consumer path:
+
+- resolves the next target only from a verified published release and the canonical install state;
+- pulls the portal and promoter for that exact tag and verifies the portal OCI revision and baked
+  source-content identity before swapping;
+- verifies `SHA256SUMS`, replaces only installer-managed lifecycle files, and preserves operator-owned
+  files and environment settings;
+- commits the release tag and install identity only after migration, health, SHA, and content checks
+  pass; and
+- restores the prior managed files, install state, and runtime tag if the identity commit fails.
+
+If the Upgrade Center reports that install identity is unverified, re-run the current consumer
+installer once to converge the canonical state; do not create a Git checkout beside the install.
+`self-upgrade.no-target` is safe and non-mutating: it means no newer verified release was available.
+
 ## Preconditions — capture current state first
 
 Run these and record the output before doing anything:
@@ -181,6 +204,88 @@ wedge upgrades on a host whose meminfo cannot be read.
 let the next cron tick retry. The `build-failure-classifier` now labels this class `host-out-of-memory`
 (environment), so the failure surfaces as retryable rather than the old generic
 `promoter-readiness-failed (unclassified)`.
+
+## Failure class: promoter-context-n1 (a new COPY made the candidate unbuildable)
+
+The candidate promoter build fails at **preflight**, before quiescence, with a docker checksum error
+naming a file that plainly exists in the candidate tree:
+
+```
+promoter-readiness-failed: promoter_candidate_build_failed: release-assets.mjs
+ERROR: failed to compute cache key: "/scripts/installer/install-release-assets.mjs": not found
+```
+
+Canonical case **SUR-75DAF829 (2026-08-22)**: the file existed in the candidate checkout *and* in the
+upgrade workspace, which is what makes this one confusing. It was missing from the **build context**.
+
+**Why.** The promoter's docker build context is staged by the **deployed (N-1) portal** from a file list
+baked into its own image, while `Dockerfile.promoter` is **candidate-owned**. A release that added one
+`COPY` therefore made its own candidate unbuildable by every already-deployed portal — the older caller
+cannot stage a file that did not exist when it was built, and the upgrade that would teach it is the
+blocked upgrade. Same self-wedging shape as the capability-catalog class above.
+
+**Fixed.** `Dockerfile.promoter` now copies `scripts/` as a **directory**, so the caller decides the
+contents and the candidate never demands a file an older caller could not supply. Staging is still
+minimal, so the SUR-BF75ED2A OOM fix is intact. A CI step rebuilds the candidate promoter from a context
+staged by the *previous* release's closure, so an N-1-unbuildable promoter change cannot merge again.
+
+**Diagnosing a recurrence.** Compare what the deployed portal stages against what the candidate needs:
+
+```bash
+docker exec dpf-portal-1 grep -c '^COPY' /promoter/Dockerfile.promoter   # what the deployed caller knows
+docker exec dpf-portal-1 ls -R /promoter/scripts                          # the files it can stage
+```
+
+**Recovery:** none needed — nothing was deployed. Upgrade to a build carrying the directory COPY.
+
+## Failure class: capability-state-stale (a release moved the capability catalog)
+
+Promoter **readiness** refuses before quiescence with:
+
+```
+promoter-readiness-failed: Promoter readiness check failed: capability_projection_failed
+failures: [capability_projection_failed, install_state_projection_failed]
+```
+
+Canonical case **SUR-C45B5F4B (2026-08-22)**: the install was healthy and already at install-state
+`schemaVersion: 2`. The candidate simply carried a capability service catalog in which `inngest` and
+`redis` had moved from `runtime:durable-automation` into `runtime:core`. That legitimately moves
+`catalogHash`, so the install's recorded `capabilityCatalogHash` was one release behind and every
+projection refused with `capability_state_stale`.
+
+Like the OOM class above, this dies **before any portal swap** — a safe refusal, not a bad deploy.
+
+**This was a platform defect, now fixed.** The install-state migrator treated migration as purely a
+*schema-version* edge, so a schema-2 state could never have its capability snapshot re-projected. The
+first release to move the catalog therefore wedged every existing install, and the upgrade that would
+have restamped the state *was* the blocked upgrade. A catalog that moves within schema 2 is now a
+first-class migration: readiness re-projects it, and the promoter persists the restamp under the same
+lock and compare-and-swap binding as a schema migration. See
+[the design amendment](../superpowers/specs/2026-07-18-install-state-readiness-migration-design.md) §7.
+
+**Recovery for a run that already failed this way:** none needed — nothing was deployed. Upgrade to a
+build carrying the fix and re-trigger; the run restamps the install-state itself.
+
+**A refusal still means something.** These two codes fail closed for causes that are *not* the
+platform's doing, and they still do:
+
+- the enabled capability set was edited without restamping (`capabilityStateVersion` disagrees with an
+  **unchanged** catalog);
+- the state names a capability the candidate catalog no longer defines
+  (`unknown_runtime_capability:<id>`).
+
+To tell them apart, read the failure `message`, not just the code — every readiness probe now carries
+its underlying error, e.g. `capability_projection_failed: capability_state_stale`. Reproduce a refusal
+by hand against the mounted state with:
+
+```bash
+docker run --rm --read-only -v "$PWD:/host-source:ro" -v "$HOME/.dpf:/dpf-state:ro" \
+  -e DPF_PROMOTER_STATE_DIR=/dpf-state -e DPF_PROMOTER_DOCKER_PREFLIGHT=ready \
+  -e PROMOTE_SOURCE=/host-source -e PROMOTE_TARGET_SHA="<target>" \
+  -e PROMOTE_HEALTH_URL=http://host.docker.internal:3000/api/health \
+  -e PROMOTE_COMPOSE_PROJECT=dpf -e PROMOTE_BACKUP_PATH=/backups/recovery \
+  dpf-promoter:<target> --readiness
+```
 
 ## Failure class: migration-unique-violation (P3018 + 23505)
 

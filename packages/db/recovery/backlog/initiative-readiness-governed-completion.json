@@ -1,0 +1,766 @@
+{
+  "schemaVersion": 1,
+  "bundleId": "initiative-readiness-governed-completion",
+  "description": "Operator-invoked recovery input for the initiative-readiness and governed-completion enforcement epic.",
+  "source": {
+    "capturedAt": "2026-08-23T00:54:15.000Z",
+    "repository": "OpenDigitalProductFactory/opendigitalproductfactory",
+    "planPath": "docs/superpowers/plans/2026-08-08-initiative-readiness-and-goal-completion-reconciliation-implementation.md"
+  },
+  "epic": {
+    "epicId": "EP-129D11FD",
+    "title": "Initiative Readiness and Governed Completion Enforcement",
+    "description": "Complete the approved initiative-readiness and goal-completion reconciliation design so underspecified feature, archetype, and cross-domain initiatives cannot enter implementation or be declared complete without canonical design, review, dependency, claim, objective, and evidence gates. This epic supersedes missing live coordination anchors from the 2026-08-08 source plan; it does not replace or alter the approved design.",
+    "status": "in-progress",
+    "scopeKind": "platform",
+    "scopeRationale": "Universal DPF process-spine enforcement across backlog, Build Studio, Workroom, TaskRun, and existing operational UX; not customer-business logic.",
+    "priority": 1,
+    "createdAt": "2026-08-22T05:57:30.794Z"
+  },
+  "items": [
+    {
+      "itemId": "BI-0996913C",
+      "epicId": "EP-129D11FD",
+      "title": "Make plan-coverage baseline remediation reachable and live-anchor safe",
+      "body": "## Problem\n\n`record_plan_backlog_coverage` rejects a provider-verified immutable plan with `traceability-incomplete` when its BacklogItem lacks an `initiative_scope_baseline`, but reports that the only writer is not reachable from an MCP session. The same diagnostic instructs contributors to cite a blocker ID that `get_backlog_item` and the repository doc-anchor guard report as not found, leaving two governed gates with no jointly valid representation.\n\n## Scope\n\nIn scope: make initiative-scope baseline creation/remediation reachable for governed external Workrooms, keep plan coverage bound to immutable provider artifacts, and ensure every prescribed blocked-receipt anchor resolves through the live backlog. Add integration tests spanning the MCP recorder response and repository-compatible citation contract.\n\nOut of scope: weakening four-way traceability, bypassing plan coverage, or changing the subject-agnostic scheduling implementation in BI-2C80E6EA.\n\n## Acceptance criteria\n\n- A governed external Workroom can establish or reach the initiative scope baseline required by `record_plan_backlog_coverage`.\n- When remediation is temporarily blocked, the recorder returns a live BacklogItem ID visible to `get_backlog_item` and the doc-anchor existence guard.\n- The recorder and repository plan/doc guards accept the same honest blocked-receipt representation.\n- Regression tests cover the missing-baseline path, external MCP caller path, and stale/nonexistent blocker-anchor path.\n- Existing immutable-artifact provenance and four-way traceability checks remain enforced.\n\n## Dependencies\n\nBlocks compliant plan-coverage receipt recording for BI-2C80E6EA and other externally authored plans that lack an initiative scope baseline.\n\n## Evidence\n\nObserved 2026-08-22 in Work Capsule WC-E97AF089: provider blob resolution succeeded for commit c4a0cc1682f2502cc4f2e1d7f008bd05ff494601, then the recorder returned `traceability-incomplete`; the prescribed blocker lookup returned `not_found`, and `pnpm run pregate:preflight` failed Doc Anchor Existence on that citation.",
+      "status": "open",
+      "type": "product",
+      "workType": "bug",
+      "source": "automated-detection",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [],
+      "effortSize": "medium",
+      "triageOutcome": "build",
+      "scopeRationale": "The defect is in the cross-cutting plan-coverage recorder, initiative spec-approval baseline path, and repository governance guards used by every DPF contributor.",
+      "priority": 1,
+      "createdAt": "2026-08-22T19:26:55.793Z"
+    },
+    {
+      "itemId": "BI-441BECAC",
+      "epicId": "EP-129D11FD",
+      "title": "Converge governed TaskRun success through one objective-aware completion boundary",
+      "body": "## Problem\n\nGoverned TaskRun success is written directly from many scheduler, thread, MCP, queue, deliberation, pattern, integration, AIOps, and skill-curator paths. These writers can mark work completed without resolving the governed subject, canonical objective baseline, ToolExecution evidence, or terminal-transition policy.\n\n## Scope\n\n- Re-inventory every production TaskRun success update and already-completed creation; encode it in a source invariant.\n- Test-drive one `completeTaskRun` boundary.\n- Resolve governance through active Workroom, FeatureBuild origin, or explicit governed-subject envelope.\n- Treat `Workroom.taskRunId` as semantic `TaskRun.taskRunId`, never the row id.\n- Map execution objectives to current baseline IDs and join ToolExecution evidence by semantic taskRunId.\n- Delegate governed terminal success to the canonical TERM repository.\n- Persist canonical `input-required` and MCP wire `input_required` when subject/objective evidence is unresolved.\n- Preserve ordinary ungoverned conversational completion.\n- Migrate every inventoried writer and prohibit direct success writes elsewhere.\n\n## Acceptance criteria\n\n- Governed remote/child/scheduled/queue success cannot become completed without subject and objective reconciliation.\n- Ordinary conversational runs preserve their current completion behavior.\n- Every known direct success update and already-completed creation is migrated.\n- The production-source invariant detects a newly introduced bypass.\n- Focused tests for all migrated writers, typecheck/build, canonical runtime governed/ungoverned paths, docs impact, and independent semantic review pass.\n\n## Dependencies\n\n- Child of BI-CF5A1078.\n- Blocked by BI-B770A083 (canonical terminal-transition repository).\n- Shared foundation already merged in PR #4348.\n- Blocks UX.\n\n## Approved source\n\n- Design: `docs/superpowers/specs/2026-08-08-initiative-readiness-and-goal-completion-reconciliation-design.md`\n- Plan §6 and verified writer inventory §2.1.\n- Supersession decision: DI-3F25CDF8D0E0.",
+      "status": "open",
+      "type": "product",
+      "workType": "refactor",
+      "source": "user-request",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-441becac-cmt4mgcgr04d201pjzw7uudo3",
+          "kind": "initiative_readiness_decision",
+          "summary": "implementation readiness: input-required",
+          "recordedAt": "2026-08-22T16:57:56.763Z",
+          "payload": {
+            "unmet": [
+              {
+                "code": "CANONICAL_DESIGN_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-checklist-reviewer"
+              },
+              {
+                "code": "RESEARCH_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-author"
+              },
+              {
+                "code": "SPEC_APPROVAL_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-checklist-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "architecture-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "data-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "ux-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "security-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "compliance-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "domain-reviewer"
+              },
+              {
+                "code": "OBJECTIVE_BASELINE_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-checklist-reviewer"
+              },
+              {
+                "code": "ARTIFACT_AUTHOR_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "artifact-resolver"
+              },
+              {
+                "code": "PLAN_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "implementation-planner"
+              },
+              {
+                "code": "PLAN_REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "plan-reviewer"
+              },
+              {
+                "code": "PLAN_COVERAGE_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              },
+              {
+                "code": "TRACEABILITY_INCOMPLETE",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              }
+            ],
+            "target": "implementation",
+            "profile": "cross-domain",
+            "subject": {
+              "id": "BI-441BECAC",
+              "kind": "backlog-item"
+            },
+            "verdict": "input-required",
+            "blockers": [],
+            "authority": {
+              "actionKey": "claim_backlog_item_for_work",
+              "enforcementState": "enforced"
+            },
+            "satisfied": [
+              {
+                "code": "CLASSIFICATION_REQUIRED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "product-owner"
+              },
+              {
+                "code": "AUTHORIZATION_DENIED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "platform-governance"
+              },
+              {
+                "code": "DEPENDENCY_UNRESOLVED",
+                "state": "not-applicable",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              },
+              {
+                "code": "CAPSULE_IDENTITY_MISMATCH",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "delivery-coordinator"
+              }
+            ],
+            "decisionId": "IRD-D9A749A6B959",
+            "workIntent": "implementation",
+            "evaluatedAt": "2026-08-22T16:57:56.757Z",
+            "factsDigest": "56393a7fa7081de63174242d5888c5a5a5976cdcf213819140470fd80e468047",
+            "stableCodes": {
+              "unmet": [
+                "CANONICAL_DESIGN_REQUIRED",
+                "RESEARCH_REQUIRED",
+                "SPEC_APPROVAL_REQUIRED",
+                "REVIEW_REQUIRED",
+                "REVIEW_REQUIRED",
+                "REVIEW_REQUIRED",
+                "REVIEW_REQUIRED",
+                "REVIEW_REQUIRED",
+                "REVIEW_REQUIRED",
+                "OBJECTIVE_BASELINE_REQUIRED",
+                "ARTIFACT_AUTHOR_REQUIRED",
+                "PLAN_REQUIRED",
+                "PLAN_REVIEW_REQUIRED",
+                "PLAN_COVERAGE_REQUIRED",
+                "TRACEABILITY_INCOMPLETE"
+              ],
+              "blockers": [],
+              "satisfied": [
+                "CLASSIFICATION_REQUIRED",
+                "AUTHORIZATION_DENIED",
+                "DEPENDENCY_UNRESOLVED",
+                "CAPSULE_IDENTITY_MISMATCH"
+              ]
+            },
+            "policyVersion": "initiative-readiness.v1",
+            "schemaVersion": 1,
+            "transitionObject": {
+              "id": "OpenDigitalProductFactory/opendigitalproductfactory#feat/initiative-readiness-task",
+              "kind": "work-capsule",
+              "targetState": "implementation",
+              "expectedVersion": "claim.v1"
+            }
+          }
+        }
+      ],
+      "effortSize": "xlarge",
+      "triageOutcome": "build",
+      "scopeRationale": "Universal TaskRun completion contract across every DPF delivery and coworker execution surface.",
+      "priority": 3,
+      "createdAt": "2026-08-22T05:58:28.301Z"
+    },
+    {
+      "itemId": "BI-812AC0D8",
+      "epicId": "EP-129D11FD",
+      "title": "Expose initiative readiness recovery UX and complete enforcement rollout",
+      "body": "## Problem\n\nThe platform lacks a user-facing, existing-route presentation of provisional, ready, failed, stale, restricted, and legacy-unverified initiative states. Even after adapters enforce the policy, users and coworkers need one plain state and one accountable recovery action, plus activation evidence proving every adapter is enforced.\n\n## Scope\n\n- Add pure presenter/component tests first for every readiness and failure state.\n- Extend only existing `BacklogItemRow`, /ops detail/action seams, Build Studio action/banner/readiness/timeline/drawer components, and /build/work control/status region.\n- Consume bounded sanitized projections for list views and authorize focused evidence detail.\n- Show one lifecycle state and one enabled primary recovery action; hide unavailable implementation actions.\n- Require explicit preview/confirmation before dispatch and guarantee zero dispatch for disclosure/view actions.\n- Add accessible text/icon supplements, focus restoration, live reevaluation status, 44px targets, narrow-viewport recovery visibility, and theme/org-token compliance.\n- Record per-adapter ENTRY, TERM, TASK, and UI activation/rollback evidence.\n- Update MCP, backlog, Build Studio, TaskRun, contributor/external-agent, archetype, route help, and architecture documentation without duplicating doctrine.\n- Verify /ops, /build, and /build/work at desktop/narrow viewports, axe, themes, route budgets, and zero-dispatch behavior.\n\n## Acceptance criteria\n\n- No new route, dashboard, card system, or status narrator is introduced.\n- Provisional and denied work cannot look implementation-ready.\n- Restricted evidence is not mislabeled missing.\n- Each recovery action is plain, specific, and accountable.\n- ENTRY, TERM, TASK, and UI activation records are enforced; observation mode never labels work ready.\n- Served-DOM UX verification, accessibility, theme scans, affected tests, build, docs impact, and independent semantic review pass.\n- Parent BI-CF5A1078 remains incomplete until this slice and all dependencies are merged and runtime-verified.\n\n## Dependencies\n\n- Child of BI-CF5A1078.\n- Blocked by BI-4D756545, BI-B770A083, and BI-441BECAC.\n\n## Approved source\n\n- Design: `docs/superpowers/specs/2026-08-08-initiative-readiness-and-goal-completion-reconciliation-design.md`\n- Plan §7.\n- Supersession decision: DI-3F25CDF8D0E0.",
+      "status": "open",
+      "type": "product",
+      "workType": "feature",
+      "source": "user-request",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-812ac0d8-cmt3ywkud0k9j01pe7wz0j172",
+          "kind": "intake_origin",
+          "summary": "Possible existing implementation: apps/web/lib/mcp/packs/initiative-readiness-pack.ts",
+          "recordedAt": "2026-08-22T05:58:43.333Z",
+          "payload": {
+            "advisory": true,
+            "createdBy": "implementation-scan",
+            "candidates": [
+              {
+                "path": "apps/web/lib/mcp/packs/initiative-readiness-pack.ts",
+                "score": 5,
+                "matchedTerms": [
+                  "initiative",
+                  "readi"
+                ]
+              },
+              {
+                "path": "apps/web/lib/tak/initiative-readiness-tool-grants.ts",
+                "score": 5,
+                "matchedTerms": [
+                  "initiative",
+                  "readi"
+                ]
+              },
+              {
+                "path": "apps/web/lib/backlog/initiative-readiness/artifact-resolver.ts",
+                "score": 3,
+                "matchedTerms": [
+                  "initiative",
+                  "readi"
+                ]
+              },
+              {
+                "path": "apps/web/lib/backlog/initiative-readiness/baseline-manifest.ts",
+                "score": 3,
+                "matchedTerms": [
+                  "initiative",
+                  "readi"
+                ]
+              },
+              {
+                "path": "apps/web/lib/backlog/initiative-readiness/baseline-repository.ts",
+                "score": 3,
+                "matchedTerms": [
+                  "initiative",
+                  "readi"
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "effortSize": "large",
+      "triageOutcome": "build",
+      "scopeRationale": "Universal recovery UX and rollout evidence for the shared DPF process-spine enforcement.",
+      "priority": 4,
+      "createdAt": "2026-08-22T05:58:43.229Z"
+    },
+    {
+      "itemId": "BI-CF5A1078",
+      "epicId": "EP-129D11FD",
+      "title": "Complete initiative readiness and governed completion enforcement",
+      "body": "## Problem\n\nDPF currently has the approved initiative-readiness policy substrate, but authoritative entry, terminal, TaskRun, and UX adapters are not wired. An agent can therefore still treat underspecified feature or archetype work as implementation-ready or complete outside the shared evaluator.\n\nThe original live anchors (EP-PROCESS-SPINE, BI-94B4AB38 and its unfinished children) are absent from this replacement install. DI-3F25CDF8D0E0 selected an explicit superseding live graph instead of restoring database history or coding without a Workroom.\n\n## Existing delivered substrate\n\n- Approved design/plan/audit: PR #4146.\n- Workroom abandoned/foreign-claim guard: PR #4169.\n- Shared readiness policy, canonical baselines, receipts, retention, objective mapping, plan coverage v2, migration, projection and MCP writer pack: PR #4348.\n\n## Scope\n\nDeliver four separate ready PRs in dependency order:\n\n1. ENTRY — recommendation, claim, and Build Studio phase enforcement.\n2. TERM — canonical BacklogItem/Epic/FeatureBuild/Workroom terminal-transition boundary.\n3. TASK — governed TaskRun success-writer convergence.\n4. UX — existing-route recovery UX, activation records, docs, and runtime verification.\n\n## Acceptance criteria\n\n- Every implementation ingress and terminal writer routes through the shared initiative-readiness contract.\n- Underspecified feature/archetype work stays provisional and receives an actionable next gate.\n- Governed completion reconciles the current canonical baseline, live reviews, dependencies, authority, exact Workroom identity, objectives, and evidence.\n- No direct governed terminal or TaskRun-success writer remains outside the sanctioned boundary.\n- Existing /ops, /build, and /build/work surfaces expose plain recovery actions without new routes or hardcoded colors.\n- Each child has TDD evidence, affected tests, build/typecheck, independent semantic review, DCO, ready PR, and runtime evidence where applicable.\n- The veterinary incident regression is refused without rewriting its historical record.\n- Parent completion occurs only after all four child BIs are terminal with merged/runtime evidence.\n\n## Governance\n\n- Approved source: `docs/superpowers/specs/2026-08-08-initiative-readiness-and-goal-completion-reconciliation-design.md`\n- Approved plan: `docs/superpowers/plans/2026-08-08-initiative-readiness-and-goal-completion-reconciliation-implementation.md`\n- Supersession decision: DI-3F25CDF8D0E0\n- Historical IDs are provenance only; this live graph owns execution.",
+      "status": "in-progress",
+      "type": "portfolio",
+      "workType": "feature",
+      "source": "user-request",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-cf5a1078-cmt4nqbjp05pi01pjrlv76jjd",
+          "kind": "initiative_readiness_decision",
+          "summary": "implementation readiness: input-required",
+          "recordedAt": "2026-08-22T17:33:41.749Z",
+          "payload": {
+            "unmet": [
+              {
+                "code": "CANONICAL_DESIGN_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-checklist-reviewer"
+              },
+              {
+                "code": "RESEARCH_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-author"
+              },
+              {
+                "code": "SPEC_APPROVAL_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-checklist-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "architecture-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "data-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "ux-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "security-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "compliance-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "domain-reviewer"
+              },
+              {
+                "code": "OBJECTIVE_BASELINE_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-checklist-reviewer"
+              },
+              {
+                "code": "ARTIFACT_AUTHOR_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "artifact-resolver"
+              },
+              {
+                "code": "PLAN_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "implementation-planner"
+              },
+              {
+                "code": "PLAN_REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "plan-reviewer"
+              },
+              {
+                "code": "PLAN_COVERAGE_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              },
+              {
+                "code": "TRACEABILITY_INCOMPLETE",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              }
+            ],
+            "target": "implementation",
+            "profile": "cross-domain",
+            "subject": {
+              "id": "BI-CF5A1078",
+              "kind": "backlog-item"
+            },
+            "verdict": "input-required",
+            "blockers": [],
+            "authority": {
+              "actionKey": "claim_backlog_item_for_work",
+              "enforcementState": "enforced"
+            },
+            "satisfied": [
+              {
+                "code": "CLASSIFICATION_REQUIRED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "product-owner"
+              },
+              {
+                "code": "AUTHORIZATION_DENIED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "platform-governance"
+              },
+              {
+                "code": "DEPENDENCY_UNRESOLVED",
+                "state": "not-applicable",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              },
+              {
+                "code": "CAPSULE_IDENTITY_MISMATCH",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "delivery-coordinator"
+              }
+            ],
+            "decisionId": "IRD-36480F91763F",
+            "workIntent": "implementation",
+            "evaluatedAt": "2026-08-22T17:33:41.744Z",
+            "factsDigest": "674d796819db72ef60caca10e7b319fe5b86bac29ef903619326171a3718f934",
+            "stableCodes": {
+              "unmet": [
+                "CANONICAL_DESIGN_REQUIRED",
+                "RESEARCH_REQUIRED",
+                "SPEC_APPROVAL_REQUIRED",
+                "REVIEW_REQUIRED",
+                "REVIEW_REQUIRED",
+                "REVIEW_REQUIRED",
+                "REVIEW_REQUIRED",
+                "REVIEW_REQUIRED",
+                "REVIEW_REQUIRED",
+                "OBJECTIVE_BASELINE_REQUIRED",
+                "ARTIFACT_AUTHOR_REQUIRED",
+                "PLAN_REQUIRED",
+                "PLAN_REVIEW_REQUIRED",
+                "PLAN_COVERAGE_REQUIRED",
+                "TRACEABILITY_INCOMPLETE"
+              ],
+              "blockers": [],
+              "satisfied": [
+                "CLASSIFICATION_REQUIRED",
+                "AUTHORIZATION_DENIED",
+                "DEPENDENCY_UNRESOLVED",
+                "CAPSULE_IDENTITY_MISMATCH"
+              ]
+            },
+            "policyVersion": "initiative-readiness.v1",
+            "schemaVersion": 1,
+            "transitionObject": {
+              "id": "OpenDigitalProductFactory/opendigitalproductfactory#doc/initiative-readiness-traceability",
+              "kind": "work-capsule",
+              "targetState": "implementation",
+              "expectedVersion": "claim.v1"
+            }
+          }
+        }
+      ],
+      "effortSize": "xlarge",
+      "triageOutcome": "build",
+      "scopeRationale": "Cross-cutting DPF process-spine control that governs every archetype and delivery surface.",
+      "priority": 1,
+      "createdAt": "2026-08-22T05:57:48.058Z"
+    },
+    {
+      "itemId": "BI-F0715C9C",
+      "epicId": "EP-129D11FD",
+      "title": "Claimed external Workroom cannot stamp its head SHA, blocking immutable plan coverage",
+      "body": "## Observed\nFor BI-F50B1E46, claim_backlog_item_for_work created WC-587EA55D bound to repository OpenDigitalProductFactory/opendigitalproductfactory and branch doc/design-and-plan-wordpress-channel-projection. The pushed DCO commit is 233536d7aaa315f10e8588ed3a9a79ee66bd6645. Two adopt_worktree calls supplied that exact headSha and baseSha; both returned the same Workroom with headSha=null.\n\nTwo record_plan_backlog_coverage attempts against canonical plan blob 04bc8d9826f1ec27a6e35ea45adce83b6dcdab4a then failed plan-artifact-invalid: \"Repository artifact ownership is missing or ambiguous for this subject.\"\n\n## Evidence-backed cause\nThe live resolver in apps/web/lib/backlog/initiative-readiness/repository-artifact.ts requires exactly one nonarchived subject-bound Workroom whose recorded headSha equals the immutable commit. The exposed claim tool creates a subject-bound room without headSha, and the exposed adopt tool did not update it. An external Codex session therefore cannot satisfy the accepted provenance shape even with a pushed, DCO-signed immutable blob.\n\nAfter this is fixed, a newly filed xlarge umbrella may next fail for missing initiative_scope_baseline; no initiative/spec-approval or baseline writer is exposed in the current MCP tool surface. The remediation must provide an attainable governed path for both prerequisites or make the recorder return the precise next governed action.\n\n## Independent reproduction — BI-CF5A1078 (2026-08-22)\nPR #4487 merged the corrected canonical design and plan through the protected merge queue at commit 8c56af22783403ac8037fe31c23d22ffb98d6ef6. The immutable design blob is b184c865e1947ce4a60d0411a248ec758f37d640 and the immutable plan blob is 4704bde1f057f99f165434327d9697df54d8dffe.\n\nA clean external worktree was adopted successfully as WC-2912EF2A with repository, branch, base SHA, head SHA, worktree, and outcomeAnchor BI-CF5A1078. record_plan_backlog_coverage still returned plan-artifact-invalid: \"No live workroom for this subject is bound to OpenDigitalProductFactory/opendigitalproductfactory.\" The adopted Workroom has backlogItemId=null even though its outcome anchor is the BI.\n\nFollowing that error's exact next action, claim_backlog_item_for_work on BI-CF5A1078 refused implementation because PLAN_COVERAGE_REQUIRED and TRACEABILITY_INCOMPLETE (among the other independent design/review prerequisites) are missing. Coverage therefore requires a subject-bound claim, while the claim requires coverage: a bootstrap deadlock after recovery.\n\nThe independent reviewer path is also unreachable in this desktop context. Both summon_coworker and request_coworker against the designated reviewer agents returned missing_threadId, although the current task has a stable Codex task id. The designated reviewer agents expose no coworker-service offers, and the current principal correctly lacks their review grants. This prevents restoring CANONICAL_DESIGN_REQUIRED, SPEC_APPROVAL_REQUIRED, the six REVIEW_REQUIRED lanes, OBJECTIVE_BASELINE_REQUIRED, PLAN_REQUIRED, and PLAN_REVIEW_REQUIRED without bypassing separation of duties.\n\n## Acceptance\n1. Claim/adopt of an existing branch atomically binds backlog item, canonical repository, branch, current head SHA, owner principal, and worktree, or returns a precise actionable conflict.\n2. Re-adopt updates headSha after commit/amend/rebase and returns the updated row.\n3. An external human-principal Codex/Claude/Grok session with a single DCO trailer can resolve its immutable artifact without fabricating an agent.\n4. The same flow can create/approve the required initiative scope baseline through an exposed governed tool, or the coverage recorder no longer requires an unreachable artifact for ordinary decomposed xlarge BIs.\n5. Regression test reproduces WC-587EA55D shape and proceeds to validate the submitted coverage mapping rather than plan-artifact-invalid.\n6. Existing ambiguity/multiple-workroom/DCO-mismatch protections remain fail-closed.\n7. summon_coworker/request_coworker receive or accept the current Codex task context through the supported host integration, and a regression test proves an external task can route immutable design, specialist, domain, and plan reviews without inheriting reviewer grants.\n8. A recovered parent initiative can record plan coverage before implementation claim, with no claim↔coverage circular dependency.\n\n## Independent reproduction — veterinary recovery fixture (2026-08-22)\nA separate fixture task restored canonical EP-55AF36AC and xlarge BI-79449954, filed five child BIs, and wrote the draft plan at docs/superpowers/plans/2026-08-22-veterinary-archetype-acceptance-fixture.md on branch doc/write-the-governed-oak-prairie-acceptance-fixtur. plan intent refused with IRD-EF7FE6E00C13 for canonical design, research, spec approval, six specialist reviews, objective baseline, and artifact author even though the merged design exists at docs/superpowers/specs/2026-08-08-veterinary-clinic-operating-system-design.md with historical research and architecture/data/UX review. design intent correctly succeeded and created repository-bound WC-A31DBE53. This confirms that source files and historical review prose do not substitute for live governed receipts after recovery; the supported external-session route must let designated reviewers re-materialize receipts from immutable artifacts without bypass or fabricated authority.",
+      "status": "open",
+      "type": "portfolio",
+      "workType": "bug",
+      "source": "automated-detection",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-f0715c9c-cmt52up8b002f01rmezipbfg0",
+          "kind": "initiative_readiness_decision",
+          "summary": "implementation readiness: input-required",
+          "recordedAt": "2026-08-23T00:37:00.347Z",
+          "payload": {
+            "unmet": [
+              {
+                "code": "CANONICAL_DESIGN_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-checklist-reviewer"
+              },
+              {
+                "code": "RESEARCH_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-author"
+              },
+              {
+                "code": "SPEC_APPROVAL_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-checklist-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "architecture-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "data-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "ux-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "security-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "compliance-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "domain-reviewer"
+              },
+              {
+                "code": "OBJECTIVE_BASELINE_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-checklist-reviewer"
+              },
+              {
+                "code": "ARTIFACT_AUTHOR_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "artifact-resolver"
+              },
+              {
+                "code": "PLAN_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "implementation-planner"
+              },
+              {
+                "code": "PLAN_REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "plan-reviewer"
+              },
+              {
+                "code": "PLAN_COVERAGE_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              },
+              {
+                "code": "TRACEABILITY_INCOMPLETE",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              }
+            ],
+            "target": "implementation",
+            "profile": "cross-domain",
+            "subject": {
+              "id": "BI-F0715C9C",
+              "kind": "backlog-item"
+            },
+            "verdict": "input-required",
+            "blockers": [],
+            "authority": {
+              "actionKey": "claim_backlog_item_for_work",
+              "enforcementState": "enforced"
+            },
+            "satisfied": [
+              {
+                "code": "CLASSIFICATION_REQUIRED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "product-owner"
+              },
+              {
+                "code": "AUTHORIZATION_DENIED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "platform-governance"
+              },
+              {
+                "code": "DEPENDENCY_UNRESOLVED",
+                "state": "not-applicable",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              },
+              {
+                "code": "CAPSULE_IDENTITY_MISMATCH",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "delivery-coordinator"
+              }
+            ],
+            "decisionId": "IRD-5FE40CA19BEF",
+            "workIntent": "implementation",
+            "evaluatedAt": "2026-08-23T00:37:00.341Z",
+            "factsDigest": "a96182ba2f7f6e1f86354978c6aa23df0ec224c73a53570f66a5210f5f4bb9fa",
+            "stableCodes": {
+              "unmet": [
+                "CANONICAL_DESIGN_REQUIRED",
+                "RESEARCH_REQUIRED",
+                "SPEC_APPROVAL_REQUIRED",
+                "REVIEW_REQUIRED",
+                "REVIEW_REQUIRED",
+                "REVIEW_REQUIRED",
+                "REVIEW_REQUIRED",
+                "REVIEW_REQUIRED",
+                "REVIEW_REQUIRED",
+                "OBJECTIVE_BASELINE_REQUIRED",
+                "ARTIFACT_AUTHOR_REQUIRED",
+                "PLAN_REQUIRED",
+                "PLAN_REVIEW_REQUIRED",
+                "PLAN_COVERAGE_REQUIRED",
+                "TRACEABILITY_INCOMPLETE"
+              ],
+              "blockers": [],
+              "satisfied": [
+                "CLASSIFICATION_REQUIRED",
+                "AUTHORIZATION_DENIED",
+                "DEPENDENCY_UNRESOLVED",
+                "CAPSULE_IDENTITY_MISMATCH"
+              ]
+            },
+            "policyVersion": "initiative-readiness.v1",
+            "schemaVersion": 1,
+            "transitionObject": {
+              "id": "OpenDigitalProductFactory/opendigitalproductfactory#fix/initiative-readiness-bootstrap",
+              "kind": "work-capsule",
+              "targetState": "implementation",
+              "expectedVersion": "claim.v1"
+            }
+          }
+        },
+        {
+          "recoveryKey": "bi-f0715c9c-cmt52wz5z003b01rmqi770axo",
+          "kind": "initiative_readiness_decision",
+          "summary": "design readiness: allowed",
+          "recordedAt": "2026-08-23T00:38:46.535Z",
+          "payload": {
+            "unmet": [],
+            "target": "design",
+            "profile": "cross-domain",
+            "subject": {
+              "id": "BI-F0715C9C",
+              "kind": "backlog-item"
+            },
+            "verdict": "allowed",
+            "blockers": [],
+            "authority": {
+              "actionKey": "claim_backlog_item_for_work",
+              "enforcementState": "enforced"
+            },
+            "satisfied": [
+              {
+                "code": "CLASSIFICATION_REQUIRED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "product-owner"
+              },
+              {
+                "code": "AUTHORIZATION_DENIED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "platform-governance"
+              }
+            ],
+            "decisionId": "IRD-D729776E9556",
+            "workIntent": "design",
+            "evaluatedAt": "2026-08-23T00:38:46.489Z",
+            "factsDigest": "4f250e6353d018dd3362c54b6f89bef238087dc5c76009cc1cd8371c52cd5865",
+            "stableCodes": {
+              "unmet": [],
+              "blockers": [],
+              "satisfied": [
+                "CLASSIFICATION_REQUIRED",
+                "AUTHORIZATION_DENIED"
+              ]
+            },
+            "policyVersion": "initiative-readiness.v1",
+            "schemaVersion": 1,
+            "transitionObject": {
+              "id": "OpenDigitalProductFactory/opendigitalproductfactory#fix/initiative-readiness-bootstrap",
+              "kind": "work-capsule",
+              "targetState": "design",
+              "expectedVersion": "claim.v1"
+            }
+          }
+        },
+        {
+          "recoveryKey": "bi-f0715c9c-cmt539yek00e401rmud2bybkw",
+          "kind": "epic_link",
+          "summary": "(no epic) → EP-129D11FD",
+          "recordedAt": "2026-08-23T00:48:52.076Z",
+          "payload": {
+            "toEpicId": "EP-129D11FD",
+            "fromEpicId": null
+          }
+        }
+      ],
+      "effortSize": "medium",
+      "triageOutcome": "build",
+      "scopeRationale": "Cross-cutting DPF planning and external-contributor governance defect; not specific to WordPress.",
+      "priority": 1,
+      "createdAt": "2026-08-22T04:23:15.674Z"
+    }
+  ]
+}

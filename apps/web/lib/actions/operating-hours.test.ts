@@ -36,6 +36,13 @@ function makeTxMocks() {
       deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
       createMany: vi.fn().mockResolvedValue({ count: 1 }),
     },
+    resource: {
+      upsert: vi.fn().mockResolvedValue({ id: "resource-1" }),
+    },
+    resourceAvailability: {
+      deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+      createMany: vi.fn().mockResolvedValue({ count: 1 }),
+    },
   };
 }
 
@@ -243,7 +250,22 @@ describe("saveOperatingHours", () => {
     const txMocks = makeTxMocks();
     txMocks.serviceProvider.findMany.mockResolvedValue([{ id: "sp-table" }] as never);
     txMocks.hospitalityResource.findMany.mockResolvedValue([
-      { id: "table-1", organizationId: "org-1" },
+      {
+        id: "table-1",
+        resourceId: "HR-TABLE1",
+        organizationId: "org-1",
+        storefrontId: "storefront-1",
+        kind: "table",
+        label: "Table 1",
+        status: "active",
+        capacity: 4,
+        capacityUnit: "seats",
+        serviceArea: "Dining room",
+        blockedReason: null,
+        attributes: {},
+        version: 1,
+        legacyServiceProviderId: "sp-table",
+      },
     ] as never);
     vi.mocked(prisma.$transaction).mockImplementation(
       (async (fn: unknown) => (fn as (tx: typeof txMocks) => Promise<unknown>)(txMocks)) as never,
@@ -256,12 +278,42 @@ describe("saveOperatingHours", () => {
     });
     expect(txMocks.hospitalityResourceAvailability.createMany).toHaveBeenCalledWith({
       data: [expect.objectContaining({
+        id: expect.any(String),
         organizationId: "org-1",
         resourceId: "table-1",
         kind: "available",
         days: [1, 2, 3, 4, 5],
         startTime: "09:00",
         endTime: "17:00",
+      })],
+    });
+    expect(txMocks.resource.upsert).toHaveBeenCalledWith({
+      where: { sourceRef: "HospitalityResource:table-1" },
+      create: expect.objectContaining({
+        resourceKey: "HR-TABLE1",
+        organizationId: "org-1",
+        domain: "hospitality",
+        kindSlug: "table",
+      }),
+      update: expect.objectContaining({
+        resourceKey: "HR-TABLE1",
+        organizationId: "org-1",
+        domain: "hospitality",
+        kindSlug: "table",
+      }),
+    });
+    expect(txMocks.resourceAvailability.deleteMany).toHaveBeenCalledWith({
+      where: { resourceId: "resource-1", organizationId: "org-1" },
+    });
+    expect(txMocks.resourceAvailability.createMany).toHaveBeenCalledWith({
+      data: [expect.objectContaining({
+        organizationId: "org-1",
+        resourceId: "resource-1",
+        windowKind: "available",
+        days: [1, 2, 3, 4, 5],
+        startTime: "09:00",
+        endTime: "17:00",
+        sourceRef: expect.stringMatching(/^HospitalityResourceAvailability:/),
       })],
     });
   });

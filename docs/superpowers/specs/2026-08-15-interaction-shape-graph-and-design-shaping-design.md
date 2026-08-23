@@ -1,3 +1,6 @@
+---
+status: draft
+---
 # Interaction Shape Graph & design shaping — design
 
 **Status:** draft for operator review · 2026-08-15
@@ -5,6 +8,7 @@
 **Companion:** [Portfolio-shaped information architecture](2026-08-14-portfolio-shaped-information-architecture-design.md)
 **Origin:** UX surface & navigation analysis, 2026-08-14 — four owner flows break the same way; six rail sections don't map to the four-portfolio model.
 **Amended:** 2026-08-15 — §3.2 `delegate` + `lexicon`, §3.3 `entry-gated-by-setup` + `spine-stage-inert`, §4 `prerequisitesToEntry`, §10 ordering note. Source: competitive read of a consumer agent product (Grokbot) whose entire differentiator is ease of use, tested against this model for what it fails to catch. Rationale inline at each amendment.
+**Amended:** 2026-08-16 — §3.4 rebuilt onto three vocabulary classes after the first draft's binary was found to endanger the GAID/TAK standards corpus; §3.3 `guarantee-unnamed`. Operator correction, 2026-08-16.
 
 ---
 
@@ -67,7 +71,7 @@ Every human-reachable surface carries a shape binding:
 | `jobLane` | derived from `route-audience` + `page-purpose.primaryUser` | Whose job path this sits on. |
 | `stepRole` | `entry · progress · decide · delegate · complete · reference` | What the surface does *within* a flow — the field that makes "arrives but cannot continue" detectable. |
 | `continuesTo` | nav graph edges + `page-purpose.findability` | The next surface(s) in the job path. |
-| `lexicon` | approved operator vocabulary, extending `page-purpose` | Which words this surface is permitted to say. See §3.4. |
+| `lexicon` | operator vocabulary + the normative standards corpus, extending `page-purpose` | Which words this surface must not say, and which it must. Three classes in §3.4. |
 
 `stepRole` is the load-bearing addition. A `progress` or `decide` node with no `continuesTo` is a **dead end** — the exact defect found in sales-orders (read-only, no detail), recruiting (no candidate→employee convert), and the bill detail (no approve control).
 
@@ -85,7 +89,8 @@ Emitted as conformance findings on the existing EA canvas and into blast-radius 
 | `spine-stage-orphaned` | An OVS stage has no surface bound to it — the business has a stage the UI cannot serve. |
 | `entry-gated-by-setup` | A job path's `entry` requires configuration, connection, or permission that could have been requested in-flow at the step that needs it. |
 | `spine-stage-inert` | A stage is bound to surfaces and traversable, but no job path reached a `complete` node on it within the observation window. |
-| `lexicon-leak` | A user-visible string on the surface names an internal primitive (§3.4). |
+| `lexicon-leak` | A user-visible string on the surface names an implementation detail (§3.4). |
+| `guarantee-unnamed` | A surface performs a governed action without naming the guarantee that makes it governed — the standard-bearing term is absent at the point the promise is made (§3.4). |
 
 `spine-stage-orphaned` is the inverse check, and valuable: it detects *missing* shape, not just malformed shape. Two of the additions extend that inverse logic to the two blind spots the structural findings cannot see:
 
@@ -94,15 +99,27 @@ Emitted as conformance findings on the existing EA canvas and into blast-radius 
 
 ### 3.4 Lexicon — the shape has a vocabulary, not only a structure
 
-§1.1 requires that implementation complexity stay hidden and that design semantics never be promoted into human semantics. Today that requirement is asserted for *structure* and enforced for structure only. Nothing checks the **words**, and words are how machinery leaks first: `capsule`, `decomposition`, `projection`, `extractor`, `gear`, `pregate`, `backlog item`, `epic` are all builder primitives that have appeared, or can appear, in copy an owner reads.
+§1.1 requires that implementation complexity stay hidden and that design semantics never be promoted into human semantics. Today that requirement is asserted for *structure* and enforced for structure only. Nothing checks the **words**.
 
 The cost of leaving this unenforced is already measurable. Retiring one leaked primitive — `WorkCapsule` → `Workroom` — took four coordinated PRs (#4338 model rename, #4339 doctrine, #4340 view vocabulary, #4342 MCP tool aliases) and a database model rename. That is the correct instinct executed by hand, and by hand it does not survive the next surface.
 
-**Rule.** A surface's user-visible strings draw from the approved operator lexicon. A string naming an internal primitive emits `lexicon-leak`, graded and ratcheted exactly as §5 grades every other finding: pre-existing leaks are baselined and may only improve, net-new leaks block.
+#### Three classes, sorted by what the term names
 
-**Mechanism (no new machinery).** `ux-route-sweep` already drives every route in a real portal and already captures an ARIA snapshot for drift detection, so the visible strings are in hand at the moment the sweep runs. The lexicon itself extends `page-purpose`, which already carries `job` and `successOutcome` in operator language. The net-new cost is a word list and a check, not a subsystem.
+The first draft of this section (2026-08-15) treated vocabulary as a binary — operator words good, technical words bad — and that was wrong in a way that would have damaged the platform. Sorting by *how technical a word sounds* puts `GAID`, `AIDoc`, and `TAK-JSI qualification` in the same bucket as `extractor` and `pregate`, and a diligent implementer would soften them all away. Softening those away deletes the guarantee. The correct axis is what the term **names**:
 
-**Boundary.** This governs what a surface *says*, never what the model *is*. Internal names stay internal and stay precise; the rule only stops them reaching a reader who did not build the system.
+| Class | Rule | Examples |
+|---|---|---|
+| **Implementation detail** — names how the system is built | **Hide.** Never reaches a reader who did not build the system. | `capsule`, `decomposition`, `projection`, `extractor`, `gear`, `pregate`, `backlog item`, `epic` |
+| **Operator vocabulary** — names the work | **Use.** The default register for job, action, and outcome copy. | the words already carried in `page-purpose.job` / `successOutcome` |
+| **Standard-bearing** — names a guarantee the customer is buying | **Teach.** Must appear, must match the normative document, first-use explained rather than removed. | `GAID`, `Agent Identity Document` / `AIDoc`, `TAK-JSI qualification`, assurance claim, chain of custody, action receipt, clearance |
+
+An AI coworker **has** an agent identity; the two are different objects, not two names for one thing. The identity is the GAID record — how the agent is named, badged, authorised, and traced across system boundaries. Hiding that vocabulary would hide precisely what an enterprise is paying for. **Hide the machinery; teach the standard.**
+
+**Rule.** A user-visible string naming an implementation detail emits `lexicon-leak`. A surface that performs a governed action *without* naming the guarantee behind it emits `guarantee-unnamed` — the inverse finding, and the one that protects the standards corpus from this spec's own ease-of-use push. Both are graded and ratcheted exactly as §5 grades every other finding: pre-existing baselined and improving-only, net-new blocking.
+
+**Mechanism (no new machinery).** `ux-route-sweep` already drives every route in a real portal and already captures an ARIA snapshot for drift detection, so the visible strings are in hand at the moment the sweep runs. The lexicon extends `page-purpose`, which already carries `job` and `successOutcome` in operator language. The standard-bearing list is **derived from the normative corpus** — `docs/architecture/GAID.md`, the TAK and TAK-JSI standards and their conformance-test suites — rather than hand-maintained, so the check cannot drift from the published text. The net-new cost is a derivation and a check, not a subsystem.
+
+**Boundary.** This governs what a surface *says*, never what the model *is*. Implementation names stay internal and stay precise; standard-bearing names stay visible and stay exact.
 
 ## 4. Flow-level cognitive load *(operator-selected: flow-level, complementing the page budget)*
 
@@ -172,7 +189,7 @@ Practical consequences:
 - **No new job model.** Reuses `route-audience` + `page-purpose` generators.
 - **No new CI machinery.** Reuses the sweep + ratchet + baseline pattern already running for UX budgets.
 - **No new autonomy model.** References the Reduction Gear's `CalibrationKey`→`AutonomyTier` ladder; does not extend the deliberately cadence-only proactivity module.
-- **No new copy pipeline.** The §3.4 lexicon check reads the strings `ux-route-sweep` already captures and extends the `page-purpose` record already generated; it adds a word list and a check, not a subsystem.
+- **No new copy pipeline, and no new glossary.** The §3.4 check reads the strings `ux-route-sweep` already captures and extends the `page-purpose` record already generated. The standard-bearing list is derived from the existing normative corpus (`docs/architecture/GAID.md`, the TAK / TAK-JSI standards and their conformance tests); authoring a second glossary would be exactly the drift this spec exists to prevent.
 - **No new delegation model.** `delegate` types a surface that already exists; the coworker side is owned by the coworker epic referenced in the companion spec §4.4.
 
 ## 10. Phasing
@@ -182,7 +199,7 @@ Practical consequences:
 | 0 | Shape node contract (`spineStage`, `jobLane`, `stepRole` **incl. `delegate`**, `continuesTo`, **`lexicon`**) + extractor enrichment emitting `shape-off-spine` / `spine-stage-orphaned` as **advisory** | M |
 | 1 | `job-path-broken` detection (dead-end + group-exit) across the four analyzed flows; validate it reproduces the known defects | M |
 | 2 | Flow-load metrics incl. `prerequisitesToEntry` + baseline + ratchet CI policy (advisory legacy / blocking net-new) | M |
-| 2b | `lexicon-leak` word list + check on the existing sweep, baselined against the current estate | S |
+| 2b | Three-class lexicon (§3.4) — implementation list, plus a standard-bearing list derived from the normative corpus — emitting `lexicon-leak` and `guarantee-unnamed` on the existing sweep, baselined against the current estate | M |
 | 3 | Proactivity ↔ Reduction Gear coupling; per-stage "who runs this" rendering | L |
 | 3b | `spine-stage-inert` — completion observation per stage over a rolling window | M |
 | 4 | Shape lens on the EA canvas as an operator-facing view | M |
@@ -197,6 +214,7 @@ Practical consequences:
 - The detector independently reproduces the four known flow breaks (bill approval dead-end, recruiting→hire gap, sales-order dead end, product→build discontinuity).
 - A net-new surface introducing a dead end or lacking a shape binding fails CI; pre-existing violations ratchet.
 - The EA canvas renders the shape lens with per-stage human/AI attribution sourced from gear autonomy tiers.
-- No design semantics leak into end-user surfaces — the shape informs navigation and impact analysis, it is not shown as a model to the user. This is asserted for **words as well as structure**: no user-visible string names an internal primitive without a baselined exception (§3.4).
+- No design semantics leak into end-user surfaces — the shape informs navigation and impact analysis, it is not shown as a model to the user. This is asserted for **words as well as structure**: no user-visible string names an implementation detail without a baselined exception (§3.4).
+- Standard-bearing vocabulary survives the ease-of-use push. The check derives its list from the normative corpus, and a surface performing a governed action without naming the guarantee behind it is reported (`guarantee-unnamed`) — the lexicon can never be used to soften GAID / TAK / TAK-JSI terms out of the product.
 - Handing a job to a coworker registers as a `delegate` node and does not increase `stepsToOutcome`; a stage cannot pass by delegating work that never completes (`spine-stage-inert`).
 - Every job path reports `prerequisitesToEntry`, so setup cost is visible rather than invisible-by-construction.

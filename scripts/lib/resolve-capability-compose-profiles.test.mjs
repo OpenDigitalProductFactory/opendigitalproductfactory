@@ -57,6 +57,38 @@ test("stale catalog or state hash fails closed", async () => {
   assert.match(staleState.stderr, /^capability_state_stale\s*$/);
 });
 
+test("a platform catalog change migrates instead of wedging the install", async () => {
+  // The regression this guards: shipping a release that adds or moves a service
+  // moves `catalogHash`, so every already-installed state carries the previous
+  // one. Refusing that under --migrate wedges every pre-existing install,
+  // because the upgrade that would restamp the state IS the blocked upgrade.
+  // Observed live as promoter readiness `capability_projection_failed`.
+  const previousRelease = { ...snapshot(["runtime:core"]), capabilityCatalogHash: "0".repeat(64) };
+
+  const withoutMigrate = await run(previousRelease);
+  assert.equal(withoutMigrate.status, 2, "still fails closed without --migrate");
+  assert.match(withoutMigrate.stderr, /^capability_state_stale\s*$/);
+
+  const migrated = await run(previousRelease, "--migrate");
+  assert.equal(migrated.status, 0, migrated.stderr);
+  const projection = JSON.parse(migrated.stdout);
+  // The operator's chosen capabilities survive the migration untouched; only
+  // the platform's own version stamp moves.
+  assert.ok(projection.enabledRuntimeCapabilities.includes("runtime:core"));
+  assert.notEqual(projection.capabilityCatalogHash, "0".repeat(64));
+});
+
+test("an edited enabled-set is NOT papered over by --migrate", async () => {
+  // Opposite cause, identical-looking symptom. The catalog is unchanged, so a
+  // mismatched state version means the enabled set was edited without
+  // restamping. Migration must never accept that.
+  const base = snapshot(["runtime:core"]);
+  const tampered = { ...base, capabilityStateVersion: "0".repeat(64) };
+  const result = await run(tampered, "--migrate");
+  assert.equal(result.status, 2, "an unstamped edit must still fail closed under --migrate");
+  assert.match(result.stderr, /^capability_state_stale\s*$/);
+});
+
 test("a partial legacy capability snapshot fails closed instead of receiving defaults", async () => {
   const result = await run({ schemaVersion: 1, enabledRuntimeCapabilities: ["runtime:core"] }, "--migrate");
   assert.equal(result.status, 2);

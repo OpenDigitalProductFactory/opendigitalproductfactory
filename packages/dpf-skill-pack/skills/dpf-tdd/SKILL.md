@@ -9,7 +9,7 @@ allowed-tools: Bash Read Grep Glob mcp__dpf__get_work_capsule mcp__dpf__find_rel
 
 # DPF coworker fields (Surface B — in-portal seed loader)
 category: build
-assignTo: ["*"]
+assignTo: ["build-specialist", "platform-engineer", "external-coding-agent", "software-engineer"]
 capability: null
 taskType: workflow
 triggerPattern: "tdd|test.first|test.driven|write the test first|red.green|failing test|regression test before"

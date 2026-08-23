@@ -23,6 +23,7 @@ import {
 } from "@/lib/mcp/build-tool-helpers";
 import type { ReviewBranchInput } from "@/lib/build/build-reviewers";
 import { triggerDesignReviewAutoRepair } from "@/lib/build/pre-build-review-auto-repair";
+import { enforceBuildInitiativeReadiness } from "@/lib/build/build-entry-gate";
 import { toFailureResult } from "./build-review-handlers";
 
 type HandlerContext = Parameters<ToolPackHandler>[2];
@@ -67,7 +68,10 @@ export async function reviewDesignDoc(params: Record<string, unknown>, userId: s
         try {
           const fixPlan = (build.plan as Record<string, unknown> | null);
           const gate = checkPhaseGate("ideate", "plan", { kind: "fix", processSize: fixProcessSize, deliverableSensitivity: fixPlan?.deliverableSensitivity, qualityFirst: fixPlan?.qualityFirst === true, fixContext: fc, designReview: review });
-          if (gate.allowed) {
+          const readiness = gate.allowed
+            ? await enforceBuildInitiativeReadiness({ buildId, target: "plan", targetPhase: "plan", expectedPhase: "ideate" })
+            : null;
+          if (gate.allowed && readiness?.allowed) {
             const { completeBuildPhaseRun, startBuildPhaseRun } = await import("@/lib/build/build-phase-run");
             void completeBuildPhaseRun(buildId, "ideate");
             void startBuildPhaseRun(buildId, "plan").catch(() => {}); // swallow QuiescingError thrown during a self-upgrade drain (BI-QUIESCE-005)
@@ -79,8 +83,9 @@ export async function reviewDesignDoc(params: Record<string, unknown>, userId: s
             if (context?.threadId) agentEventBus.emit(context.threadId, { type: "phase:change", buildId, phase: "plan" });
             logBuildActivity(buildId, "phase:advance", "Phase advanced: ideate → plan (fix)");
           } else {
-            logBuildActivity(buildId, "phase:gate-blocked", gate.reason ?? "unknown");
-            fixPhaseGateBlocker = gate.reason ?? null;
+            const reason = gate.reason ?? readiness?.message ?? "Initiative readiness is incomplete.";
+            logBuildActivity(buildId, "phase:gate-blocked", reason);
+            fixPhaseGateBlocker = reason;
           }
         } catch (err) {
           console.error("[reviewDesignDoc:fix] auto-advance failed:", err);
@@ -557,7 +562,10 @@ export async function reviewDesignDoc(params: Record<string, unknown>, userId: s
             designReview: updatedBuild.designReview,
             happyPathState,
           });
-          if (gate.allowed) {
+          const readiness = gate.allowed
+            ? await enforceBuildInitiativeReadiness({ buildId, target: "plan", targetPhase: "plan", expectedPhase: "ideate" })
+            : null;
+          if (gate.allowed && readiness?.allowed) {
             // EP-COST Phase 3: record ideate-phase cost rollup, start plan tracking, and compact thread
             const { completeBuildPhaseRun, startBuildPhaseRun } = await import("@/lib/build/build-phase-run");
             void completeBuildPhaseRun(buildId, "ideate");
@@ -577,14 +585,15 @@ export async function reviewDesignDoc(params: Record<string, unknown>, userId: s
                 .catch(err => console.error("[plan-on-approval] auto-dispatch failed:", err))
             );
           } else {
-            logBuildActivity(buildId, "phase:gate-blocked", gate.reason ?? "unknown");
+            const reason = gate.reason ?? readiness?.message ?? "Initiative readiness is incomplete.";
+            logBuildActivity(buildId, "phase:gate-blocked", reason);
             // Surface the blocker to the agent so it can self-correct on the next
             // turn. Without this, the agent sees "review passed" and assumes
             // ideate is done — but the phase silently stays in ideate forever
             // because intake anchors (taxonomy, constrainedGoal) weren't set.
             // The agent has the tools (confirm_taxonomy_placement,
             // update_feature_brief) — it just didn't know they were required.
-            phaseGateBlocker = gate.reason ?? null;
+            phaseGateBlocker = reason;
           }
         }
       } catch (err) {

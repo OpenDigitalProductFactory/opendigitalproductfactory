@@ -809,7 +809,7 @@ export default function SelfUpgradeClient({
         </div>
       )}
 
-      <UpgradeImpactPanel enabled={enabled} initialSummary={initialImpactSummary} />
+      <UpgradeImpactPanel enabled={enabled && !isFresh && Boolean(targetSha)} initialSummary={initialImpactSummary} />
 
       {enabled && !latestRun && (
         <div className="p-3 rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] text-xs text-[var(--dpf-muted)]">
@@ -934,7 +934,7 @@ export default function SelfUpgradeClient({
                   {explanation.remedy && (
                     <div className="text-[var(--dpf-muted)]">{explanation.remedy}</div>
                   )}
-                  {(latestRun.reason ?? "").startsWith("promoter-unavailable") && (
+                  {enabled && (latestRun.reason ?? "").startsWith("promoter-unavailable") && (
                     <div className="pt-1 space-y-1">
                       <button
                         type="button"

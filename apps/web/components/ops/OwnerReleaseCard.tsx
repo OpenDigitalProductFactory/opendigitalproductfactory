@@ -67,9 +67,20 @@ export function OwnerReleaseCard({
         <StatCard
           label="Update ready"
           value={
-            <span className="text-base font-semibold">{summary.availableVersion ?? "You're current"}</span>
+            <span className="text-base font-semibold">
+              {summary.availableVersion ??
+                (summary.state === "unavailable"
+                  ? "Not available on this install"
+                  : "You're current")}
+            </span>
           }
-          intent={summary.state === "update-available" ? TONE_INTENT.info : "success"}
+          intent={
+            summary.state === "update-available"
+              ? TONE_INTENT.info
+              : summary.state === "unavailable"
+                ? TONE_INTENT.warning
+                : "success"
+          }
         />
       </div>
 

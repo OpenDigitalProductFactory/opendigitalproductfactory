@@ -17,6 +17,11 @@ import {
   roomText,
 } from "./room-projection-utils";
 import {
+  resolveWorkroomPosture,
+  type WorkroomPostureContext,
+} from "./room-posture";
+import { readWorkroomPostureClaim } from "./workroom-posture-claim";
+import {
   getWorkCaseSourceEntry,
   type WorkCaseSourceRegistryEntry,
 } from "./source-registry";
@@ -51,6 +56,21 @@ export interface BuildWorkroomViewInput {
    * `resolveWorkroomStructure` (kept out of this pure build, like `sourceHealth`).
    */
   structure?: WorkroomView["structure"];
+  /**
+   * EP-WORK-POSTURE Slice D (BI-4F468192). The asynchronous half of the posture
+   * — the org's operating clock, the archetype's value stream, the inherited
+   * coworker posture — pre-resolved by the loader so this build stays DB-free,
+   * exactly like `structure`. Absent means the room has no posture (inert).
+   */
+  postureContext?: WorkroomPostureContext | null;
+  /** The room's declared collaboration shape, read from the capsule's scopeClaims. */
+  shapeKey?: string | null;
+  /** The room's activityKind, from the anchored Workroom. */
+  activityKind?: string | null;
+  /** Raw scopeClaims of the anchored Workroom, for the declared-posture claim. */
+  scopeClaims?: unknown;
+  /** The instant the view is built. Passed in so the build stays deterministic. */
+  now?: Date;
 }
 
 function primarySourceRef(detail: WorkCaseDetail): WorkCaseSourceRef {
@@ -133,6 +153,18 @@ export function buildWorkroomView(
   const mode = source?.roomProjection.mode ?? "finite";
   const health = sourceHealth(input, source);
   const standingIdle = mode === "standing" && !input.currentCycle;
+  const posture = resolveWorkroomPosture(
+    {
+      shapeKey: input.shapeKey ?? null,
+      activityKind: input.activityKind ?? null,
+      mode,
+      cycleActive: Boolean(input.currentCycle),
+      dueAt: boundary.timeBoundary.dueAt,
+      declaration: readWorkroomPostureClaim(input.scopeClaims),
+    },
+    input.postureContext ?? null,
+    input.now ?? new Date(),
+  );
   const sourceRefs = dedupeRoomSourceRefs(input.detail.summary.sourceRefs);
   const activeCapsuleRefs = dedupeRoomSourceRefs(
     input.detail.timeline
@@ -171,6 +203,7 @@ export function buildWorkroomView(
       sourceRefs,
     },
     context,
+    posture,
     receipts: [...(input.receipts ?? [])],
     sourceRefs,
     structure: input.structure ?? null,

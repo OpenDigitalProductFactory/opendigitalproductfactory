@@ -1,0 +1,42 @@
+{
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "affectedCopies": [
+    "OutboundPublication remains the immutable external-action receipt; the change permits a create receipt and later update receipts to reference the same bound remote resource.",
+    "ExternalChannelProjection remains the single current source-to-remote identity and duplicate-prevention contract.",
+    "No content, credential, or existing row is copied, rewritten, or deleted."
+  ],
+  "migration": {
+    "name": "20260822062000_allow_external_update_receipts",
+    "backfill": "Data-safe index-only change: drops the channelId/externalId uniqueness assertion and creates a lookup index over the same columns. Existing receipt rows are unchanged; rollback requires first confirming no remote resource has multiple immutable update receipts."
+  },
+  "tests": [
+    "apps/web/lib/integrations/wordpress/publication-receipt-schema.test.ts",
+    "apps/web/lib/integrations/external-channel-publication.test.ts",
+    "packages/db/scripts/schema-regression-guard.test.ts",
+    "packages/db/scripts/migration-safety-guard.mjs",
+    "scripts/check-data-impact.mjs"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:outbound-publication#external-update-receipts",
+      "prismaModel": "OutboundPublication",
+      "lifecycleDisposition": "Receipts remain append-only audit evidence under the existing OutboundPublication lifecycle and retention contract; this change widens event cardinality without changing row content or disposal behavior.",
+      "fields": [
+        {
+          "fieldId": "data:outbound-publication#channel-remote-identity",
+          "resolution": "governed",
+          "reason": "channelId and externalId identify which customer-owned channel resource each immutable create or update receipt affected; uniqueness now belongs to the current ExternalChannelProjection binding rather than the event ledger.",
+          "provenance": "BI-D2AA1064; DI-BC2255C06EC5; ExternalChannelProjection source and remote binding constraints"
+        }
+      ]
+    },
+    {
+      "kind": "projection",
+      "derivedContractId": "projection:wordpress-approved-content",
+      "cleanupTest": "apps/web/lib/integrations/wordpress/connection-operations.test.ts proves disconnect preserves projection identity while removing the stored secret and disabling public publication",
+      "reconciliationTest": "apps/web/lib/integrations/external-channel-publication.test.ts and apps/web/lib/integrations/wordpress/observe.test.ts prove ambiguous outcomes block blind retry and remote edits become drift evidence without overwriting canonical DPF sources"
+    }
+  ]
+}

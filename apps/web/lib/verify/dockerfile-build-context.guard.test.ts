@@ -28,6 +28,7 @@ import { extractStaticImports } from "./bundle-boundary";
 const REPO_ROOT = resolve(__dirname, "..", "..", "..", "..");
 const APPS_WEB = join(REPO_ROOT, "apps", "web");
 const DOCKERFILE = join(REPO_ROOT, "Dockerfile");
+const DOCKER_ENTRYPOINT = join(REPO_ROOT, "docker-entrypoint.sh");
 
 type Stage = { name: string; parent: string | null; body: string[] };
 
@@ -53,19 +54,19 @@ function parseStages(dockerfile: string): Stage[] {
  * FROMs (filesystem is inherited down the chain). `--from=<stage>` COPYs pull
  * from other image stages, not the build context, so they're excluded.
  */
-function copyAllowlistForBuildStage(stages: Stage[]): {
+function copyAllowlistForStage(stages: Stage[], stageName: string): {
   dirPrefixes: string[];
   exactFiles: string[];
 } {
   const byName = new Map(stages.map((s) => [s.name, s]));
-  const buildStage = stages.find((s) => s.body.some((l) => /\bnext build\b/.test(l)));
-  if (!buildStage) {
-    throw new Error("Dockerfile: could not find the stage that runs `next build`");
+  const targetStage = byName.get(stageName);
+  if (!targetStage) {
+    throw new Error(`Dockerfile: could not find stage \`${stageName}\``);
   }
 
   // Walk the FROM chain from the build stage up to the base image.
   const chain: Stage[] = [];
-  let cursor: Stage | undefined = buildStage;
+  let cursor: Stage | undefined = targetStage;
   const seen = new Set<string>();
   while (cursor && !seen.has(cursor.name)) {
     seen.add(cursor.name);
@@ -97,6 +98,17 @@ function copyAllowlistForBuildStage(stages: Stage[]): {
   return { dirPrefixes, exactFiles };
 }
 
+function copyAllowlistForBuildStage(stages: Stage[]): {
+  dirPrefixes: string[];
+  exactFiles: string[];
+} {
+  const buildStage = stages.find((s) => s.body.some((l) => /\bnext build\b/.test(l)));
+  if (!buildStage) {
+    throw new Error("Dockerfile: could not find the stage that runs `next build`");
+  }
+  return copyAllowlistForStage(stages, buildStage.name);
+}
+
 function isCovered(
   repoRelPath: string,
   allow: { dirPrefixes: string[]; exactFiles: string[] },
@@ -125,6 +137,27 @@ function collectSourceFiles(dir: string, acc: string[] = []): string[] {
   return acc;
 }
 
+function escapingImportViolations(
+  files: string[],
+  allow: { dirPrefixes: string[]; exactFiles: string[] },
+): string[] {
+  const violations: string[] = [];
+  for (const file of files) {
+    const specs = extractStaticImports(readFileSync(file, "utf8"));
+    for (const spec of specs) {
+      if (!spec.startsWith(".")) continue;
+      const resolved = resolve(join(file, ".."), spec);
+      const repoRel = relative(REPO_ROOT, resolved);
+      if (repoRel.startsWith("..")) continue;
+      if (isCovered(repoRel, allow)) continue;
+      violations.push(
+        `${relative(REPO_ROOT, file)} imports "${spec}" → ${repoRel} (not COPYed into the stage)`,
+      );
+    }
+  }
+  return violations;
+}
+
 describe("Dockerfile build context covers every escaping build-time import", () => {
   const allow = copyAllowlistForBuildStage(parseStages(readFileSync(DOCKERFILE, "utf8")));
   const files = collectSourceFiles(APPS_WEB);
@@ -136,25 +169,43 @@ describe("Dockerfile build context covers every escaping build-time import", () 
   });
 
   it("every static import that escapes apps/web resolves inside a COPYed path", () => {
-    const violations: string[] = [];
-    for (const file of files) {
-      const specs = extractStaticImports(readFileSync(file, "utf8"));
-      for (const spec of specs) {
-        if (!spec.startsWith(".")) continue; // bare/package specifiers, not context files
-        const resolved = resolve(join(file, ".."), spec);
-        const repoRel = relative(REPO_ROOT, resolved);
-        // In-tree (under apps/web) is covered by the `apps/web/` prefix; escaping
-        // imports must land inside another COPYed prefix.
-        if (repoRel.startsWith("..")) continue; // outside the repo entirely — ignore
-        if (isCovered(repoRel, allow)) continue;
-        violations.push(
-          `${relative(REPO_ROOT, file)} imports "${spec}" → ${repoRel} (not COPYed into the build stage)`,
-        );
-      }
-    }
+    const violations = escapingImportViolations(files, allow);
     expect(
       violations,
       `These build-time imports point at repo paths the production Dockerfile never COPYs into the \`next build\` stage, so the Docker image build fails "Module not found" at self-upgrade/deploy even though plain \`next build\` (CI) passes. Fix by adding a COPY for the containing directory to the build stage of the Dockerfile:\n  ${violations.join("\n  ")}`,
     ).toEqual([]);
+  });
+});
+
+describe("Docker runtime source bundle is complete for Build Studio", () => {
+  const dockerfile = readFileSync(DOCKERFILE, "utf8");
+  const stages = parseStages(dockerfile);
+  const initAllow = copyAllowlistForStage(stages, "init");
+  const files = collectSourceFiles(APPS_WEB);
+
+  it("packages every repo-relative dependency imported by the web source", () => {
+    const violations = escapingImportViolations(files, initAllow);
+    expect(
+      violations,
+      `These imports are present in apps/web-src but absent from the init stage copied into the runner, so a fresh Build Studio sandbox exits with \"Module not found\":\n  ${violations.join("\n  ")}`,
+    ).toEqual([]);
+  });
+
+  it("bootstraps profession data and maps it back to its image source", () => {
+    const entrypoint = readFileSync(DOCKER_ENTRYPOINT, "utf8");
+    expect(entrypoint).toContain('cp -r /app/docs/professions/. "$WORKSPACE/docs/professions/"');
+    expect(entrypoint).toContain('docs/professions/*)');
+    expect(entrypoint).toContain("${1#docs/professions/}");
+  });
+
+  it("bootstraps root configuration and version metadata into the managed workspace", () => {
+    const entrypoint = readFileSync(DOCKER_ENTRYPOINT, "utf8");
+    expect(entrypoint).toContain('cp -r /app/config/. "$WORKSPACE/config/"');
+    expect(entrypoint).toContain('cp /app/version.json "$WORKSPACE/"');
+    expect(entrypoint).toContain('config/*)');
+    expect(entrypoint).toContain("${1#config/}");
+    expect(entrypoint).toContain('version.json)');
+    expect(dockerfile).toMatch(/find \/app\/apps\/web-src[^\n]*\/app\/config/);
+    expect(dockerfile).toMatch(/sha256sum[^\n]*\/app\/version\.json/);
   });
 });

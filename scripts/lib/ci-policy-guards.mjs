@@ -81,7 +81,11 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("installer-state-contract", "Installer State Contract", [
       // Drives real bash: install-dpf.sh runs under `set -euo pipefail`, and the
       // failure mode here is shell exit-status semantics, not source text.
-      node("--test", "scripts/installer/lib/state-cleanup-temps.test.mjs"),
+      node(
+        "--test",
+        "scripts/installer/lib/state-cleanup-temps.test.mjs",
+        "scripts/installer/install-release-assets.test.mjs",
+      ),
     ]),
     guard("fresh-install-reliability", "Fresh Install Reliability", [
       node(
@@ -90,6 +94,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/installer/powershell-compose-chain.test.mjs",
         "scripts/salvage-sweep.test.mjs",
       ),
+    ]),
+    guard("governed-teardown-guard", "Governed Teardown Contract", [
+      node("--test", "scripts/check-governed-teardown-contract.test.mjs", "scripts/governed-teardown.test.mjs"),
+      node("scripts/check-governed-teardown-contract.mjs"),
     ]),
     guard("published-image-freshness", "Published Image Freshness", [
       // Decision logic only — the live registry check needs Docker and runs on a
@@ -422,6 +430,11 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // parsing and scoring are tested here because a mis-parsed registry
         // under-reports gaps, and an under-reported gap reads as an all-clear.
         "scripts/measure-capability-completeness.test.mjs",
+        // Archetype obligation coverage: same rule again, plus a lockstep check
+        // that this measure classifies a frequency exactly as the runtime sweep
+        // does — a report that disagrees with the ledger it reports on is worse
+        // than no report.
+        "scripts/measure-obligation-cadence-coverage.test.mjs",
       ),
       node("scripts/gen-doc-impact.mjs", "--check"),
       node("scripts/check-docs-impact.mjs"),
@@ -469,6 +482,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node(
         "--test",
         "packages/dpf-skill-pack/hooks/uncommitted-work-guard.test.mjs",
+      ),
+      node(
+        "--test",
+        "packages/dpf-skill-pack/hooks/shared-clone-occupancy.test.mjs",
       ),
       node(
         "--test",

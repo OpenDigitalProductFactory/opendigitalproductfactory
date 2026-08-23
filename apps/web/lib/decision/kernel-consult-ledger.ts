@@ -10,6 +10,7 @@
 // outcome is always observable in the tool response (`ledger.recorded`),
 // per make-silent-failures-observable.
 
+import type { RetryAttemptRecord } from "@/lib/decision/uncertain-retry";
 import {
   readVerdict,
   VERDICT_RETRY_HINTS,
@@ -208,6 +209,11 @@ export async function recordKernelConsultInteraction(input: {
    * `now` is injected for determinism in tests.
    */
   seal?: boolean;
+  /**
+   * BI-60B3D270: attempts from a bounded retry out of the uncertain band, when
+   * the caller ran one. Absent means the decision was reached first-pass.
+   */
+  retryAttempts?: RetryAttemptRecord[] | null;
   now?: Date;
 }): Promise<KernelConsultLedgerOutcome> {
   try {
@@ -343,6 +349,10 @@ export async function recordKernelConsultInteraction(input: {
         bandUpper: recordedVerdict?.bands.upper ?? null,
         bandLower: recordedVerdict?.bands.lower ?? null,
         bandStakes: recordedVerdict?.bands.stakes ?? null,
+        // BI-60B3D270: when the caller ran a bounded retry, record what it
+        // changed on each attempt. A later histogram can then separate a
+        // first-pass assurance from one that took two tries to reach.
+        retryAttempts: input.retryAttempts ?? null,
         insufficientSignal: input.result.flags.insufficientSignal === true,
         commandmentConflictPrinciples: input.result.flags.commandmentConflictPrinciples,
         structuredCoverage: input.result.flags.structuredCoverage,

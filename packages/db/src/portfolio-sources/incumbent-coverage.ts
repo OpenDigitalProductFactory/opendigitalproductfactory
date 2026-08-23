@@ -15,7 +15,17 @@
 
 import type { PrismaClient } from "../../generated/client/client";
 import { ABSORPTION_VERDICTS, type AbsorptionVerdict } from "./absorption-posture";
+import {
+  normalizeAbsorptionIdentityKey,
+  postureIdentityFromObservation,
+  resolveAbsorptionPosture,
+} from "./absorption-posture-resolver";
 import { CATEGORY_BUSINESS_CAPABILITY_PERSPECTIVES } from "../business-capability-category-corpus";
+
+export {
+  normalizeAbsorptionIdentityKey,
+  resolveAbsorptionPosture,
+} from "./absorption-posture-resolver";
 
 /** How a verdict was reached — provenance (spec §5.2). Closed enum. */
 export const ASSESSMENT_VIA_METHODS = [
@@ -35,18 +45,9 @@ export function isCoverageVerdict(value: string): value is CoverageVerdict {
   return (ABSORPTION_VERDICTS as readonly string[]).includes(value);
 }
 
-/** ReDoS-safe slug (single-pass collapse) for a stable assessmentId. */
-function slug(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-/, "")
-    .replace(/-$/, "");
-}
-
 /** One current assessment per incumbent — stable, deterministic id. */
 export function assessmentIdFor(digitalProductId: string): string {
-  return `assess-${slug(digitalProductId)}`;
+  return `assess-${normalizeAbsorptionIdentityKey(digitalProductId)}`;
 }
 
 /** The provider an incumbent DigitalProduct represents: the intake-recorded
@@ -93,26 +94,30 @@ export async function assessIncumbentsViaPostureMatrix(
 
   for (const incumbent of incumbents) {
     const provider = providerOfIncumbent(incumbent);
-    const posture = await db.absorptionPosture.findFirst({
-      where: { providerName: { equals: provider, mode: "insensitive" } },
-      select: {
-        verdict: true,
-        coveringPrimitive: true,
-        confidence: true,
-        providerName: true,
-        integrationCategory: true,
-      },
-    });
+    const resolution = await resolveAbsorptionPosture(db, postureIdentityFromObservation({
+      providerName: provider,
+      observationConfig: incumbent.observationConfig,
+    }));
+    const posture = resolution.status === "matched" ? resolution.posture : null;
 
     const verdict: CoverageVerdict = posture ? (posture.verdict as CoverageVerdict) : "gap";
     const assessmentId = assessmentIdFor(incumbent.productId);
+    const resolutionEvidence = resolution.status === "matched" ? {} : resolution.evidence;
     const evidence = posture
       ? {
           via: "posture_matrix",
           provider,
           matchedPosture: `${posture.providerName}/${posture.integrationCategory}`,
         }
-      : { via: "posture_matrix", provider, note: "no posture named this provider — gap" };
+      : {
+          via: "posture_matrix",
+          provider,
+          note: resolution.status === "ambiguous"
+            ? "multiple postures matched this provider — explicit identity/category required"
+            : "no posture named this provider — gap",
+          resolution: resolution.status,
+          ...resolutionEvidence,
+        };
 
     const existing = await db.incumbentCoverageAssessment.findUnique({
       where: { assessmentId },
@@ -257,11 +262,11 @@ export async function assessIncumbentsViaRule(db: PrismaClient): Promise<RuleSta
   });
 
   for (const incumbent of incumbents) {
-    const provider = providerOfIncumbent(incumbent);
-    const posture = await db.absorptionPosture.findFirst({
-      where: { providerName: { equals: provider, mode: "insensitive" } },
-      select: { archetypeIds: true },
-    });
+    const resolution = await resolveAbsorptionPosture(db, postureIdentityFromObservation({
+      providerName: providerOfIncumbent(incumbent),
+      observationConfig: incumbent.observationConfig,
+    }));
+    const posture = resolution.status === "matched" ? resolution.posture : null;
     if (!posture || posture.archetypeIds.length === 0) {
       result.skipped += 1;
       continue;

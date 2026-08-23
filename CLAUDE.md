@@ -1,3 +1,5 @@
 # DPF — Pointer to AGENTS.md
 
-Read [/AGENTS.md](AGENTS.md) at the repo root before any work in this project. It is the canonical rulebook; tool-specific files in this repo are pointers to it.
+@AGENTS.md
+
+That import loads the canonical rulebook. Other tool files here are pointers to it.

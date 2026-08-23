@@ -5,6 +5,8 @@
   "packageManager": "pnpm@10.33.2",
   "scripts": {
     "dev": "pnpm --filter web dev",
+    "measure:obligation-cadence": "node scripts/measure-obligation-cadence-coverage.mjs",
+    "measure:obligation-cadence:check": "node scripts/check-obligation-cadence-coverage.mjs",
     "measure:doc-cadence": "node scripts/measure-doc-cadence-coverage.mjs",
     "measure:doc-cadence:check": "node scripts/measure-doc-cadence-coverage.mjs --check",
     "measure:capability-completeness": "node scripts/measure-capability-completeness.mjs",
@@ -115,6 +117,6 @@
     "@playwright/test": "^1.62.0",
     "docx": "^9.7.1",
     "puppeteer": "^25.7.0",
-    "tsx": "^4.23.1"
+    "tsx": "^4.23.12"
   }
 }

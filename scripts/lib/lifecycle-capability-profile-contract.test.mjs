@@ -205,6 +205,31 @@ test("consumer release assets are integrity-bound and execute the canonical adap
   }
 });
 
+test("Windows installer converges release identity as one multi-key state transaction", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "dpf-win-state-identity-"));
+  try {
+    const stateDir = join(dir, "state");
+    const install = join(dir, "install");
+    await mkdir(install, { recursive: true });
+    const command = [
+      `$env:DPF_STATE_DIR='${stateDir}'`,
+      `. '${join(root, "scripts", "installer", "lib", "state.ps1")}'`,
+      `Initialize-DpfState -InstallerVersion 'old' -InstallPath '${install}'`,
+      `Set-DpfStateValues -Values @{ installerVersion='v2.0.0'; lastSuccessfulInstallVersion='v2.0.0'; installPath='${install}'; installMode='consumer'; composeFiles=@('docker-compose.yml','docker-compose.release.yml'); imageTag='v2.0.0' }`,
+    ].join("; ");
+    const result = spawnSync("pwsh", ["-NoProfile", "-Command", command], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr);
+    const state = JSON.parse(await readFile(join(stateDir, "install-state.json"), "utf8"));
+    assert.equal(state.installerVersion, "v2.0.0");
+    assert.equal(state.lastSuccessfulInstallVersion, "v2.0.0");
+    assert.equal(state.installMode, "consumer");
+    assert.equal(state.imageTag, "v2.0.0");
+    assert.deepEqual(state.composeFiles, ["docker-compose.yml", "docker-compose.release.yml"]);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("generated Windows start script executes the canonical adapter before Compose", async () => {
   const dir = await mkdtemp(join(tmpdir(), "dpf-win-start-"));
   try {

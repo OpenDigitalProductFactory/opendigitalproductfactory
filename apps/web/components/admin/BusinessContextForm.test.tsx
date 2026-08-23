@@ -85,4 +85,22 @@ describe("BusinessContextForm", () => {
     expect(html).toContain("<button");
     expect(html).toContain("Continue");
   });
+
+  it("keeps a nonprofit mission unanswered while offering an archetype-aware starter", () => {
+    const html = renderToStaticMarkup(
+      <BusinessContextForm
+        initial={baseInitial}
+        archetypeSummary={{ name: "Pet Rescue", category: "nonprofit-community" }}
+        missionSuggestion="At Second Chance, we exist to give every animal time and care."
+      />,
+    );
+
+    expect(html).toContain("What does your organization do?");
+    expect(html).toContain("Why does your organization exist?");
+    expect(html).toContain("Suggest a starter");
+    expect(html).toMatch(/name="mission"[^>]*>\s*<\/textarea>/);
+    expect(html).not.toContain(
+      ">At Second Chance, we exist to give every animal time and care.</textarea>",
+    );
+  });
 });

@@ -181,6 +181,14 @@ model AiProviderFinanceProfile {
     expect(found[0]).toMatch(/@@unique/);
   });
 
+  it("allows only an exact steward-reviewed model attribute removal", () => {
+    const dropped = BASE.replace(/  @@unique\(\[name, ownerId\]\)\n/, "");
+    const exact = new Set(["Widget.@@unique([name, ownerId])"]);
+    expect(diffSchemas(parseSchema(BASE), parseSchema(dropped), new Set(), new Map(), exact)).toEqual([]);
+    expect(diffSchemas(parseSchema(BASE), parseSchema(dropped), new Set(), new Map(), new Set(["Widget.@@index([name])"])))
+      .toEqual(["model Widget: removed `@@unique([name, ownerId])`"]);
+  });
+
   it("flags a removed model entirely", () => {
     const dropped = BASE.replace(/model Widget \{[\s\S]*?\n\}\n/, "");
     const found = regressions(BASE, dropped);

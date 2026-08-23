@@ -91,7 +91,8 @@ export async function retireBacklogItemTool(
   const deferral = outcome === "defer" ? normalizeDeferralInput(params["deferral"]) : null;
   if (deferral && !deferral.ok) return { success: false, error: deferral.error, message: deferral.message };
 
-  return prisma.$transaction(async (tx) => {
+  let epicToClose: string | null = null;
+  const result = await prisma.$transaction(async (tx) => {
     const item = await tx.backlogItem.findUnique({ where: { itemId } });
     if (!item) return { success: false, error: "not_found", message: `Item ${itemId} not found` } satisfies ToolResult;
     if ("activeBuildId" in item && item.activeBuildId) {
@@ -163,12 +164,7 @@ export async function retireBacklogItemTool(
       },
     });
 
-    if (item.epicId && nextStatus === "retired") {
-      const remainingOpenItems = await tx.backlogItem.count({
-        where: { epicId: item.epicId, status: { notIn: ["done", "retired"] }, id: { not: item.id } },
-      });
-      if (remainingOpenItems === 0) await tx.epic.update({ where: { id: item.epicId }, data: { status: "done" } });
-    }
+    if (item.epicId && nextStatus === "retired") epicToClose = item.epicId;
     return {
       success: true,
       entityId: updated.itemId,
@@ -176,4 +172,43 @@ export async function retireBacklogItemTool(
       data: { itemId: updated.itemId, status: nextStatus, outcome, duplicateOfId: outcome === "duplicate" ? duplicateOfId : null },
     } satisfies ToolResult;
   });
+  if (result.success && epicToClose) {
+    const remainingOpenItems = await prisma.backlogItem.count({
+      where: { epicId: epicToClose, status: { notIn: ["done", "retired"] } },
+    });
+    const epic = remainingOpenItems === 0
+      ? await prisma.epic.findUnique({ where: { id: epicToClose }, select: { epicId: true, status: true } })
+      : null;
+    if (epic && epic.status !== "done") {
+      const { completeEpicTransition } = await import(
+        "@/lib/backlog/initiative-readiness/epic-terminal-transition"
+      );
+      await completeEpicTransition({
+        epicId: epic.epicId,
+        expectedStatus: epic.status,
+        actor: {
+          actorType: context?.agentId ? "agent" : "human",
+          actorRef: context?.agentId ?? userId,
+          humanContextRef: userId,
+          agentContextRef: context?.agentId ?? null,
+        },
+        authority: {
+          organizationId: null,
+          actionKey: "auto_close_epic",
+          objectRef: epic.epicId,
+          rationale: { capability: "manage_backlog", grant: "backlog_write", source: "backlog-retirement" },
+          authoritySnapshot: {
+            decision: "allow",
+            effectiveHumanCapability: "manage_backlog",
+            effectiveAgentGrant: "backlog_write",
+            tokenScope: "organization",
+            organizationId: "platform",
+            actionKey: "auto_close_epic",
+            policyVersion: "coworker-authority.v1",
+          },
+        },
+      });
+    }
+  }
+  return result;
 }

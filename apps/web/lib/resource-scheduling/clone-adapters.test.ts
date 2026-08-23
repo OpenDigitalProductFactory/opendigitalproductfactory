@@ -75,6 +75,18 @@ describe("fromHospitalityResource", () => {
     expect(draft.subjectRef).toBe("ServiceProvider:sp9");
     expect(draft.sourceRef).toBe("HospitalityResource:br1");
   });
+
+  it("keeps a blocked table active with its blocked reason", () => {
+    const { draft, warnings } = fromHospitalityResource({
+      ...resourceRow,
+      status: "blocked",
+      blockedReason: "Private event",
+    });
+    expect(warnings).toEqual([]);
+    expect(draft.lifecycle).toBe("active");
+    expect(draft.blockedReason).toBe("Private event");
+    expect(draft.lifecycleReason).toBeNull();
+  });
 });
 
 describe("fromHospitalityCapacityPool", () => {

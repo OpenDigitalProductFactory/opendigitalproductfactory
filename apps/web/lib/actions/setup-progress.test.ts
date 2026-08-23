@@ -114,8 +114,16 @@ describe("setup-progress", () => {
     it("blocks advancing past the storefront step until a StorefrontConfig exists", async () => {
       const mockProgress = {
         id: "test-id",
+        organizationId: "org-1",
         currentStep: "storefront",
-        steps: Object.fromEntries(SETUP_STEPS.map((s) => [s, "pending"])),
+        steps: Object.fromEntries(
+          SETUP_STEPS.map((step) => [
+            step,
+            SETUP_STEPS.indexOf(step) < SETUP_STEPS.indexOf("storefront")
+              ? "completed"
+              : "pending",
+          ]),
+        ),
         context: {},
       };
       (prisma.platformSetupProgress.findUniqueOrThrow as any).mockResolvedValue(mockProgress);
@@ -130,8 +138,16 @@ describe("setup-progress", () => {
     it("advances past the storefront step once a StorefrontConfig exists", async () => {
       const mockProgress = {
         id: "test-id",
+        organizationId: "org-1",
         currentStep: "storefront",
-        steps: Object.fromEntries(SETUP_STEPS.map((s) => [s, "pending"])),
+        steps: Object.fromEntries(
+          SETUP_STEPS.map((step) => [
+            step,
+            SETUP_STEPS.indexOf(step) < SETUP_STEPS.indexOf("storefront")
+              ? "completed"
+              : "pending",
+          ]),
+        ),
         context: {},
       };
       (prisma.platformSetupProgress.findUniqueOrThrow as any).mockResolvedValue(mockProgress);
@@ -143,6 +159,10 @@ describe("setup-progress", () => {
 
       await advanceStep("test-id");
 
+      expect(prisma.storefrontConfig.findFirst).toHaveBeenCalledWith({
+        where: { organizationId: "org-1" },
+        select: { id: true },
+      });
       expect(prisma.platformSetupProgress.update).toHaveBeenCalledWith({
         where: { id: "test-id" },
         data: expect.objectContaining({ currentStep: "platform-development" }),

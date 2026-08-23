@@ -80,6 +80,8 @@ export interface TwinSnapshot {
   /** Realized customer outcomes — revenue in, work delivered (workstream D).
    *  Optional; omitted when there is no outcome data. */
   outcomes?: TwinOutcome[];
+  /** Archetype-owned label for the outcome strip (for example Mission impact). */
+  outcomesHeading?: string;
   zones: TwinZoneSnapshot[];
   workItems: WorkItemData[];
   queues: TwinQueueSnapshot[];

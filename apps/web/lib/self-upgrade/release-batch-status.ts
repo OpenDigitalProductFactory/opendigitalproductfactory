@@ -13,13 +13,22 @@ import { defaultGitRunner } from "./prepare-source";
 import type { GitRunner } from "./prepare-source";
 import { buildFetchCommand } from "./version";
 import {
+  readSelfUpgradeSupport,
+  type SelfUpgradeSupport,
+} from "./support";
+import {
   countPendingUpstreamCommits,
   evaluateReleaseBatch,
   describeReleaseBatch,
   type ReleaseBatchDecision,
 } from "./release-batch";
 
-export type ReleaseBatchStatus = ReleaseBatchDecision & {
+export type ReleaseBatchStatus = Omit<ReleaseBatchDecision, "reason"> & {
+  reason:
+    | ReleaseBatchDecision["reason"]
+    | "release-artifact"
+    | "install-identity-unverified";
+  support: SelfUpgradeSupport;
   /** False when the install does not track an upstream (local sourceMode) — batching does not apply. */
   applicable: boolean;
   /** The upstream lineage marker the tally counts from, or null before the first succeeded run. */
@@ -40,12 +49,44 @@ export async function resolveReleaseBatchStatus(
     fresh?: boolean;
     now?: Date;
     config?: SelfUpgradeConfig;
+    support?: SelfUpgradeSupport;
     gitRun?: GitRunner;
   } = {},
 ): Promise<ReleaseBatchStatus> {
   const now = opts.now ?? new Date();
   const config = opts.config ?? (await getSelfUpgradeConfig());
   const gitRun = opts.gitRun ?? defaultGitRunner;
+  const support = opts.support ?? (await readSelfUpgradeSupport(config.enabled));
+
+  if (!support.supported) {
+    return {
+      applicable: false,
+      eligible: false,
+      reason: support.reason,
+      pendingCount: null,
+      minPendingPrs: config.batchMinPendingPrs,
+      maxWaitHours: config.batchMaxWaitHours,
+      oldestPendingAt: null,
+      lineageSha: null,
+      summary: support.message,
+      support,
+    };
+  }
+
+  if (support.targetKind === "release-artifact") {
+    return {
+      applicable: false,
+      eligible: true,
+      reason: "release-artifact",
+      pendingCount: null,
+      minPendingPrs: config.batchMinPendingPrs,
+      maxWaitHours: config.batchMaxWaitHours,
+      oldestPendingAt: null,
+      lineageSha: null,
+      summary: "Published releases are already verified as a complete batch; Git commit batching does not apply.",
+      support,
+    };
+  }
 
   const hostSourcePath =
     config.hostSourceMountPath ??
@@ -88,6 +129,7 @@ export async function resolveReleaseBatchStatus(
 
   return {
     ...decision,
+    support,
     applicable,
     lineageSha,
     summary: applicable

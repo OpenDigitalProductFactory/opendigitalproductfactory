@@ -196,7 +196,7 @@ export const backlogPackDefinitions: ToolDefinition[] = [
   },
   {
     name: "update_epic",
-    description: "Update a generic backlog epic's editable fields through the governed MCP surface. Use this for title, description, and status changes; status=done stamps completedAt, and reopening clears it.",
+    description: "Update a generic backlog epic through the governed MCP surface. status=done is allowed only after the canonical receipt anchor, child delivery, and objective evidence reconcile.",
     inputSchema: {
       type: "object",
       properties: {
@@ -209,6 +209,7 @@ export const backlogPackDefinitions: ToolDefinition[] = [
         specPath: { type: "string", description: "Optional related spec path for audit/index context" },
         planPath: { type: "string", description: "Optional related implementation plan path for audit/index context" },
         rationale: { type: "string", description: "Optional short rationale captured by ToolExecution" },
+        originatingBacklogItemId: { type: "string", description: "Optional BI-* or row id to converge as this Epic's canonical readiness-receipt anchor. Existing conflicting anchors are refused." },
       },
       required: ["epicId"],
     },
@@ -296,7 +297,7 @@ export const backlogPackDefinitions: ToolDefinition[] = [
   {
     name: "get_next_recommended_work",
     description:
-      "Return a short ranked list of backlog items the caller could pick up next. Ranks by spec/plan presence, triage outcome, effort size, priority, and active-build state. Read-only. " +
+      "Return a short ranked list of backlog items the caller could pick up next. Design-candidate mode keeps provisional work visible with Continue design; implementation-ready mode returns only initiatives allowed by the canonical readiness policy. Textual spec/plan references are hints, never proof of implementation readiness. Read-only. " +
       "Call once at session start (or after finishing a BI); pass excludeItemIds for rejected candidates instead of re-polling without filters.",
     inputSchema: {
       type: "object",
@@ -305,6 +306,7 @@ export const backlogPackDefinitions: ToolDefinition[] = [
         epicId: { type: "string", description: "Restrict to one epic" },
         forAgentId: { type: "string", description: "Only items grant-claimable by this agent" },
         excludeItemIds: { type: "array", items: { type: "string" }, description: "Items to skip (already considered or rejected)" },
+        mode: { type: "string", enum: ["design-candidate", "implementation-ready"], description: "Recommendation intent. Defaults to design-candidate; implementation-ready fails closed to policy-allowed initiatives only." },
       },
       required: [],
     },

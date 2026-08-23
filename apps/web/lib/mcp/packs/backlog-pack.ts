@@ -32,6 +32,7 @@ import {
   normalizeDeferralInput,
 } from "@/lib/backlog/deferral-contract";
 import { retireBacklogItemTool, triageBacklogItemTool } from "@/lib/mcp/backlog-retirement-handlers";
+import { completeBacklogItemTransitionTool } from "@/lib/backlog/mcp-terminal-status";
 // ── Handlers (case bodies moved verbatim) ───────────────────────────────────
 
 async function createBacklogItem(
@@ -238,9 +239,13 @@ async function createEpic(
   return createEpicTool(params, userId, context);
 }
 
-async function updateEpic(params: Record<string, unknown>): Promise<ToolResult> {
+async function updateEpic(
+  params: Record<string, unknown>,
+  userId: string,
+  context?: Parameters<ToolPackHandler>[2],
+): Promise<ToolResult> {
   const { updateEpicTool } = await import("@/lib/backlog/mcp-epic-tools");
-  return updateEpicTool(params);
+  return updateEpicTool(params, userId, context);
 }
 
 async function updateBacklogItemStatus(
@@ -292,6 +297,7 @@ async function updateBacklogItemStatus(
       claimedByAgentId: true,
       claimedAt: true,
       deferredAt: true,
+      organizationId: true,
     },
   });
   if (!item)
@@ -358,6 +364,17 @@ async function updateBacklogItemStatus(
     };
   }
 
+  if (target === "done") {
+    return completeBacklogItemTransitionTool({
+      item,
+      itemId: itemIdRaw,
+      resolution: resolution!,
+      completionEvidence: params["completionEvidence"],
+      userId,
+      agentId: context?.agentId,
+    });
+  }
+
   let forcedClaimAcquired = false;
   if (target === "in-progress") {
     const claimResult = await tryAcquireBacklogClaimAtomic({
@@ -391,9 +408,8 @@ async function updateBacklogItemStatus(
       where: { id: item.id },
       data: {
         status: target,
-        ...(target === "done" ? { completedAt: new Date(), resolution } : {}),
         ...(target === "retired" ? { completedAt: transitionedAt } : {}),
-        ...(target !== "done" && target !== "retired" && (item.status === "done" || item.status === "retired")
+        ...(target !== "retired" && (item.status === "done" || item.status === "retired")
           ? { completedAt: null }
           : {}),
         ...(deferral?.ok
@@ -460,23 +476,6 @@ async function updateBacklogItemStatus(
         recordedByAgentId: context?.agentId ?? null,
       },
     });
-    // Deferred work remains wanted and keeps the epic open. Only delivered or
-    // explicitly retired siblings are terminal for epic completion.
-    if (target === "done" && item.epicId) {
-      const remaining = await tx.backlogItem.count({
-        where: {
-          epicId: item.epicId,
-          id: { not: item.id },
-          status: { notIn: ["done", "retired"] },
-        },
-      });
-      if (remaining === 0) {
-        await tx.epic.update({
-          where: { id: item.epicId },
-          data: { status: "done", completedAt: new Date() },
-        });
-      }
-    }
     return next;
   });
   // Advisory: flipping a build item to in-progress is not the same as
@@ -634,6 +633,7 @@ async function getNextRecommendedWork(params: Record<string, unknown>): Promise<
   const { prisma } = await import("@dpf/db");
   const { rankCandidates } = await import("@/lib/backlog/recommend");
   const { buildSpecPlanReferenceIndex } = await import("@/lib/backlog/spec-plan-search");
+  const { projectBacklogItemReadinessSummary } = await import("@/lib/backlog/initiative-readiness/entry-adapter");
 
   const count = typeof params["count"] === "number" ? params["count"] : undefined;
   const epicIdRaw = typeof params["epicId"] === "string" ? params["epicId"].trim() : "";
@@ -641,6 +641,9 @@ async function getNextRecommendedWork(params: Record<string, unknown>): Promise<
   const excludeItemIds = Array.isArray(params["excludeItemIds"])
     ? (params["excludeItemIds"] as unknown[]).filter((x): x is string => typeof x === "string")
     : [];
+  const mode = params["mode"] === "implementation-ready"
+    ? "implementation-ready"
+    : "design-candidate";
 
   const where: Record<string, unknown> = {
     status: { in: ["open", "triaging"] },
@@ -671,11 +674,24 @@ async function getNextRecommendedWork(params: Record<string, unknown>): Promise<
       demandScore: true,
       effortSize: true,
       triageOutcome: true,
+      type: true,
+      source: true,
+      workType: true,
+      scopeKind: true,
+      archetypeCategories: true,
+      archetypeIds: true,
       activeBuildId: true,
       claimedById: true,
       claimedByAgentId: true,
       updatedAt: true,
       epic: { select: { epicId: true, status: true } },
+      activeBuild: { select: { kind: true } },
+      activities: {
+        where: { kind: { in: ["initiative_gate_receipt", "initiative_scope_baseline", "plan_backlog_coverage"] } },
+        orderBy: [{ recordedAt: "desc" }, { id: "desc" }],
+        take: 100,
+        select: { id: true, kind: true, gateKey: true, recordedAt: true, payload: true },
+      },
     },
   });
 
@@ -686,6 +702,23 @@ async function getNextRecommendedWork(params: Record<string, unknown>): Promise<
       refIndex.specs.has(i.itemId) || (semanticEpic ? refIndex.specs.has(semanticEpic) : false);
     const hasPlan =
       refIndex.plans.has(i.itemId) || (semanticEpic ? refIndex.plans.has(semanticEpic) : false);
+    const readiness = projectBacklogItemReadinessSummary({
+      item: {
+        id: i.itemId,
+        itemId: i.itemId,
+        type: i.type,
+        source: i.source,
+        workType: i.workType,
+        scopeKind: i.scopeKind,
+        archetypeCategories: i.archetypeCategories,
+        archetypeIds: i.archetypeIds,
+        activeBuildKind: i.activeBuild?.kind ?? null,
+      },
+      activities: (i.activities ?? []).map((activity) => ({ ...activity, gateKey: activity.gateKey ?? null })),
+      hasSpec,
+      hasPlan,
+      evaluatedAt: new Date().toISOString(),
+    });
     return {
       itemId: i.itemId,
       title: i.title,
@@ -701,6 +734,7 @@ async function getNextRecommendedWork(params: Record<string, unknown>): Promise<
       epicStatus: i.epic?.status ?? null,
       hasSpec,
       hasPlan,
+      implementationReadinessVerdict: readiness.decisions.implementation.verdict,
       updatedAt: i.updatedAt,
     };
   });
@@ -709,12 +743,15 @@ async function getNextRecommendedWork(params: Record<string, unknown>): Promise<
     excludeItemIds,
     forAgentId,
     count,
+    mode,
   });
 
   return {
     success: true,
-    message: `Recommending ${ranked.length} item(s).`,
-    data: { recommendations: ranked },
+    message: mode === "implementation-ready"
+      ? `Recommending ${ranked.length} implementation-ready item(s).`
+      : `Recommending ${ranked.length} design candidate(s).`,
+    data: { mode, recommendations: ranked },
   };
 }
 
@@ -728,7 +765,7 @@ const handlers: Record<string, ToolPackHandler> = {
     handleUpdateBacklogItem(params, userId, context),
   query_backlog: (params) => queryBacklog(params),
   create_epic: (params, userId, context) => createEpic(params, userId, context),
-  update_epic: (params) => updateEpic(params),
+  update_epic: (params, userId, context) => updateEpic(params, userId, context),
   list_epics: (params) => listEpics(params),
   list_backlog_items: (params) => listBacklogItems(params),
   get_backlog_item: (params) => getBacklogItem(params),

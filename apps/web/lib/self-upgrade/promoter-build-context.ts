@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 /**
  * Single source of truth for the MINIMAL Docker build context that
  * `Dockerfile.promoter` needs — exactly its local `COPY <src> <dest>` sources
- * (repo-relative paths). This is a tiny ~21-file set, NOT the whole workspace.
+ * (repo-relative paths). This is a tiny ~23-file set, NOT the whole workspace.
  *
  * Both promoter build paths stage ONLY these files (plus the Dockerfile itself)
  * so `docker build` never enumerates apps/packages/docs:
@@ -15,7 +15,7 @@ import { dirname, join } from "node:path";
  *     (`buildCandidatePromoterArtifactImage` in ./promoter-artifact.ts), staging
  *     from the target-sha source checkout.
  *
- * Walking the whole upgrade workspace to build a 21-file image was the
+ * Walking the whole upgrade workspace to build a small finalizer image was the
  * `readdirent … cannot allocate memory` OOM that bricked SUR-BF75ED2A on a lean
  * host (PR #4199). Trimming via `Dockerfile.promoter.dockerignore` is
  * belt-and-suspenders; staging a minimal context is the root-cause fix — docker
@@ -28,6 +28,8 @@ export const PROMOTER_BUILD_CONTEXT_SOURCES: readonly string[] = [
   "promoter-contract.json",
   "Dockerfile",
   "scripts/promote.sh",
+  "scripts/governed-teardown.mjs",
+  "scripts/salvage-sweep.mjs",
   "scripts/apply-runtime-capability-transition.mjs",
   "scripts/runtime-transition-authority.mjs",
   "scripts/rotate-runtime-transition-secret.mjs",
@@ -37,6 +39,7 @@ export const PROMOTER_BUILD_CONTEXT_SOURCES: readonly string[] = [
   "scripts/installer/migrate-install-state.mjs",
   "scripts/installer/resolve-host-identity.mjs",
   "scripts/installer/install-state-transaction.mjs",
+  "scripts/installer/install-release-assets.mjs",
   "scripts/installer/install-state-lock-contract.json",
   "scripts/installer/install-state-schema-registry.mjs",
   "scripts/installer/install-state.schema.json",

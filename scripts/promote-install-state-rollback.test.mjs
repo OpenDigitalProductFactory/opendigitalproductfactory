@@ -92,6 +92,8 @@ docker() {
   printf 'docker:%s\\n' "$*" >> '${bashPath(events)}'
   if [[ '${stage}' == build && "$*" == *"build portal postgres"* ]]; then printf 'failure-injected:build\\n' >> '${bashPath(events)}'; return 91; fi
   if [[ '${stage}' == swap && "$*" == *"force-recreate portal"* ]]; then printf 'failure-injected:swap\\n' >> '${bashPath(events)}'; return 92; fi
+  if [[ "$*" == *"recover-human-principal-backfill-migration.mjs"* ]]; then printf 'not-needed\\n'; return 0; fi
+  if [[ "$*" == *"recover-inventory-snapshot-migration.mjs"* ]]; then printf 'not-needed\\n'; return 0; fi
   if [[ "$1" == run ]]; then printf 'candidate-content-hash\\n'; fi
   if [[ "$1" == exec && "$*" == *"pg_available_extensions"* ]]; then printf '1\\n'; fi
   return 0

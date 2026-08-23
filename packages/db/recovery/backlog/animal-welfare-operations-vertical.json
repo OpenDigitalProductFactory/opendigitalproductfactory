@@ -1,0 +1,632 @@
+{
+  "schemaVersion": 1,
+  "bundleId": "animal-welfare-operations-vertical",
+  "description": "Operator-invoked recovery input for the animal-welfare operations vertical epic (pet-rescue archetype operating model).",
+  "source": {
+    "capturedAt": "2026-08-23T00:54:15.000Z",
+    "repository": "OpenDigitalProductFactory/opendigitalproductfactory",
+    "planPath": "docs/architecture/archetype-operating-model-audit.md"
+  },
+  "epic": {
+    "epicId": "EP-5102F494",
+    "title": "Animal-welfare operations vertical: the pet-rescue archetype ships a catalog, not an operating model",
+    "description": "Driving a from-scratch install as a fictitious pet rescue exposed that the `nonprofit-community` / `pet-rescue` archetype ships a **storefront listing, not an operating model**. The public site is correct and the vocabulary is nonprofit-shaped, but nothing behind it runs a shelter.\n\n## What already exists (verified against the schema, not assumed)\n\n- `AdoptableAnimal` — a genuinely decent **catalog** row: name, species, breed, age, sex, size, description, `primaryPhotoAssetId`, `status` (available|pending|adopted|hold), and `attributes` JSON already carrying spayed/neutered and good-with-kids/dogs/cats.\n- `StorefrontInquiry` (contact form), `StorefrontDonation`.\n- **Canonical scheduling substrate**: `Resource`, `ResourceAvailability`, `ResourceCapacityPool`, `ResourceCapacityAllocation` — `Resource.capacityUnit` already defaults to `\"units\"`.\n- **A proven vertical pattern**: `verticals-care.prisma` (CareAppointment + Participant + Resource + StatusEvent; CareIntakePacket/Response/AccessGrant/Exception/StatusEvent), `verticals-beauty-hospitality.prisma` (tables, `capacityUnit: \"seats\"`), `verticals-community.prisma` (governance), `verticals-storefront.prisma`.\n- `StaffingShift`, `CalendarEvent`, `StorefrontBooking`, `BookingHold`.\n\n## The gap\n\n**There is no animal-welfare vertical.** Animals exist only as a listing inside `verticals-storefront.prisma`. Everything a shelter actually does each day is absent: where an animal is housed, who feeds it and when, what supplies that consumes, when the adopter is coming, which vet is treating it, what happened at intake, and what an open-house event is.\n\n## The architectural finding underneath it\n\n`ArchetypeVocabulary` is **eleven label strings** — itemsLabel, singleItemLabel, addButtonLabel, categoryLabel, priceLabel, portalLabel, stakeholderLabel, teamLabel, inboxLabel, agentName. It relabels one fixed process: priced items sold to customers. Note that every archetype must supply a `priceLabel`; `nonprofit-community` sets `itemsLabel: \"Campaigns & Appeals\"` and `priceLabel: \"Goal\"`.\n\n**Processes are not abstracted across archetypes — they are re-implemented per vertical.** `CareAppointment` cannot schedule a vet visit for a dog because it requires `patientProfileId`. `hospitality-resources` cannot model a kennel because it hardcodes `kind: \"table\"` and `capacityUnit: \"seats\"` over an otherwise-generic `Resource`.\n\nThat is the decision this epic exists to force: **generalise the existing substrate to be subject-agnostic, or clone it per vertical.** The recommendation is to generalise, because the same question returns for every future archetype with a tended, housed, scheduled subject — equipment servicing, vehicle fleets, childcare, storage facilities. A kennel really is a restaurant table with a different `capacityUnit`, and that is an argument for finishing the canonical element rather than writing a third copy of it.\n\n## Scope of the child items\n\nHousing/occupancy; care scheduling; supplies; adoption appointments; vet coordination; intake pipeline including spay/neuter; events; funding beyond ad-hoc donations; and the vocabulary/process-abstraction decision that governs all of them.\n\nProvenance: from-scratch reset/dogfood cycle 3, operator-directed deepening after the archetype was found to be catalog-only.\n\n---\n\n## Operating-model coverage: 0.28 (assessed 2026-08-22)\n\nWorked example for the method in `docs/architecture/archetype-operating-model-audit.md`. Scoring: **2** = canonical or vertical-native model exists and the archetype uses it; **1** = exists but unreachable (vertical-bound) or partial; **0** = absent.\n\n| Operational noun | Substrate finding | Class | Score |\n|---|---|---|---|\n| animal | `AdoptableAnimal` - species, breed, age, sex, size, photo, status | Canonical | 2 |\n| donation | `StorefrontDonation`, wired to the storefront | Canonical | 2 |\n| kennel | `Resource.capacityUnit` defaults to \"units\"; only the hospitality route consumes it | Vertical-bound | 1 |\n| meet-and-greet | `CareAppointment` - good model, bound to `patientProfileId` | Vertical-bound | 1 |\n| intake | `CareIntakePacket/Response/AccessGrant/Exception/StatusEvent`, patient-bound | Vertical-bound | 1 |\n| adopter | `StorefrontInquiry` captures contact + message only; no profile or screening | Partial | 1 |\n| event | `CalendarEvent` exists generically, not wired to the archetype | Partial | 1 |\n| restricted fund | `FundBudgetLine` (verticals-community) is HOA member-equity shaped | Partial | 1 |\n| foster home | absent | Absent | 0 |\n| care round | absent | Absent | 0 |\n| medication course | absent | Absent | 0 |\n| supply stock | absent - a search for a Supply model returns nothing | Absent | 0 |\n| application | absent | Absent | 0 |\n| home check | absent | Absent | 0 |\n| vet practice | absent | Absent | 0 |\n| procedure | absent - searches for Procedure and MedicalRecord models return nothing | Absent | 0 |\n| hold period | absent | Absent | 0 |\n| grant | absent | Absent | 0 |\n\n**18 nouns, 10 of a possible 36 = 0.28.**\n\n**Decoys, recorded so nobody wires to them:** `InventoryEntity`, `InventoryRelationship`, `ContributorInventorySyncRun`, `ContributorInventorySnapshot` are the *codebase* inventory used for contributor source-graph sync, unrelated to physical stock.\n\nAn archetype below 0.6 should not be described as supported in external material. Re-score when this epic closes; the delta is the evidence the archetype improved.",
+    "status": "open",
+    "scopeKind": "unknown",
+    "createdAt": "2026-08-22T04:37:56.571Z"
+  },
+  "items": [
+    {
+      "itemId": "BI-2C80E6EA",
+      "epicId": "EP-5102F494",
+      "title": "Archetype vocabulary is 11 labels over one fixed process — decide: generalise the substrate or clone it per vertical",
+      "body": "**This is the decision item. The other children of this epic depend on how it is answered.**\n\n## The finding\n\n`apps/web/lib/storefront/archetype-vocabulary.ts` defines `ArchetypeVocabulary` as **eleven label strings**:\n\n```\nitemsLabel, singleItemLabel, addButtonLabel, categoryLabel, priceLabel,\nportalLabel, stakeholderLabel, teamLabel, inboxLabel, agentName\n```\n\nThat is relabelling, not abstraction. It renames the surfaces of **one fixed process** — priced items sold to customers, with an inbox and a team. Every archetype must supply a `priceLabel`; `nonprofit-community` sets `itemsLabel: \"Campaigns & Appeals\"`, `priceLabel: \"Goal\"`.\n\nAn animal is not an item with a price. A kennel is not a menu category. No amount of label substitution expresses that.\n\n## Where it bites, concretely\n\nTwo capabilities the platform **already has** cannot be reused by a rescue, for reasons that are incidental rather than fundamental:\n\n1. **`CareAppointment`** (`verticals-care.prisma`) is a genuinely good appointment model — participants, resources, prep/recovery minutes, overbooking authorisation, recall, status events. It cannot schedule a vet visit for a dog because it requires `patientProfileId`. The subject is hardcoded to a human patient.\n\n2. **`Resource`** (`resource-scheduling.prisma`) is already generic — `capacityUnit` defaults to `\"units\"`. But `apps/web/app/api/storefront/admin/hospitality-resources/route.ts` filters `kind: \"table\"`, writes `capacityUnit: \"seats\"`, and imports `restaurant-table-attributes`. A kennel is a `Resource` with `capacityUnit: \"animals\"` and nothing more exotic than that — the canonical element exists and only the vertical wiring is missing.\n\n## The decision\n\n**Generalise the substrate to be subject-agnostic, or clone it per vertical?**\n\nRecommendation: **generalise.** The same question returns for every future archetype whose subject is housed, tended, and scheduled — equipment servicing, vehicle fleets, childcare, self-storage, plant nurseries. Cloning `CareAppointment` for animals means writing it a third time for the next one.\n\nConcretely that means:\n- A subject-polymorphic appointment (subjectType + subjectId, or a thin `AppointmentSubject` join) so the same engine serves patients, animals, vehicles.\n- Finishing `Resource` as the canonical housing/capacity element and moving `kind`/`capacityUnit` into vertical config rather than route code.\n- Extending `ArchetypeVocabulary` beyond labels into a **process profile**: does this archetype price its items; is its subject a person, an animal, or an asset; does it house subjects; does it schedule against them.\n\n## Scope boundary\n\nThis item delivers the abstraction and migrates the two existing consumers (care, hospitality) without behaviour change. The rescue-specific work rides on it in the sibling items. Do not let it grow into building the rescue features themselves.\n\n## Counter-argument worth recording\n\nGeneralising a clinical appointment model risks producing something that serves no vertical well. If the migration cannot keep `CareAppointment`'s clinical specifics (recall, overbooking authorisation) intact, cloning is the honest answer and this item should say so rather than force a bad abstraction.\n\nProvenance: reset/dogfood cycle 3.\n\n\n---\n\n## DECISION MADE — start here\n\nRun through the governed decision surface (`principle_decide`, 40 principles, governing profile `platform`, ledger **`DI-F289DBB51DCB`**):\n\n| Option | Composite |\n|---|---|\n| **generalise-subject-agnostic** | **8.334** (winner, high confidence, autonomy-eligible) |\n| hybrid-canonical-resource-first | 7.901 |\n| clone-per-vertical | 5.136 |\n\n**Generalise.** Clone is clearly last and should not be pursued.\n\n**But the margin over the hybrid is 0.433**, only just above the 0.2 tie threshold. Treat the hybrid as a live fallback, not a rejected option: finish `Resource` as the canonical housing element first (it is already generic — `capacityUnit` defaults to `\"units\"`, and only `hospitality-resources` route code hardcodes `kind: \"table\"`), then attempt the appointment/intake generalisation.\n\nIf migrating `CareAppointment` cannot preserve its clinical specifics — recall, overbooking authorisation, prep/recovery footprints — **stop and take the hybrid**. Say so in the PR rather than forcing an abstraction that serves neither vertical. That failure mode is the entire reason the hybrid scored within half a point.\n\n## Sequencing this implies\n\n1. `Resource` as canonical housing/capacity; move `kind`/`capacityUnit` out of route code into vertical config; migrate `hospitality-resources` with no behaviour change.\n2. Subject-polymorphic appointment + intake; migrate `verticals-care` with no behaviour change.\n3. Only then the animal-welfare vertical rides on both.\n\nSteps 1 and 2 are refactors with zero new user-facing behaviour. If either grows a feature, it has drifted.",
+      "status": "in-progress",
+      "type": "portfolio",
+      "workType": "chore",
+      "source": "automated-detection",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-2c80e6ea-cmt52zuxx004r01rm94ht53f9",
+          "kind": "evidence",
+          "summary": "PR #4494 squash-merged with all 40 checks terminal and green",
+          "recordedAt": "2026-08-23T00:41:01.029Z",
+          "payload": {
+            "url": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/4494",
+            "body": "Ready non-draft PR #4494 merged at 2026-08-23T00:04:34Z as squash commit a2a1630dfd662ef990b89eb1636da86d71ad0fc7. The commit has one parent. GitHub reported zero failing or pending checks, zero comments/reviews, and zero unresolved review threads.",
+            "evidenceKind": "external_link",
+            "toolExecutionId": null
+          }
+        },
+        {
+          "recoveryKey": "bi-2c80e6ea-cmt52zuzp004u01rmf57i2h3y",
+          "kind": "evidence",
+          "summary": "Fresh PostgreSQL migration replay and physical constraint checks passed",
+          "recordedAt": "2026-08-23T00:41:01.093Z",
+          "payload": {
+            "url": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/4494",
+            "body": "Replayed 540 base migrations, loaded the representative legacy fixture, applied both BI migrations, and passed all post-migration SQL assertions. pg_catalog confirmed both optional patient FKs validated and appointment, intake, and supersession indexes present by physical name. GitHub Migration Safety and Schema Regression checks also passed.",
+            "evidenceKind": "migration_pass",
+            "toolExecutionId": null
+          }
+        },
+        {
+          "recoveryKey": "bi-2c80e6ea-cmt5304uw004w01rmjxvdcck5",
+          "kind": "evidence",
+          "summary": "Exact-tree local integration CI passed for 06ff56c49d70",
+          "recordedAt": "2026-08-23T00:41:13.880Z",
+          "payload": {
+            "url": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/4494",
+            "body": "Governed local-integration-ci lease NPEL-0B48E7CE48 merged candidate 06ff56c49d709729b13bfa3686641f8228ee8c05 with base 7a4fc46fa09828c9205ab556bab7becb745fb34d and passed Prisma generation/deploy, docs and policy guards, typecheck, full Vitest, and production Docker build. Local-CI evidence activity: cmt4sju6q08y701pjwnq7qvq8; synthesized tree f55c316ae74a0621593bf32199f1a0ce1f936b1c.",
+            "evidenceKind": "build_pass",
+            "toolExecutionId": null
+          }
+        },
+        {
+          "recoveryKey": "bi-2c80e6ea-cmt5304vs004y01rmulkgaz73",
+          "kind": "evidence",
+          "summary": "High-assurance semantic review recorded no issues for final committed tree",
+          "recordedAt": "2026-08-23T00:41:13.912Z",
+          "payload": {
+            "url": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/4494",
+            "body": "Semantic receipt cmt4rtbrf08fr01pjmwrueh6z covered base tree e0e34d2313afc57a63faba30518a28b909b90c81, head tree 3ac6073a7cbbcc9ae5c329fec647f529eb29afc7, and diff digest 87e1e2285a071122657af872106507adcb5aa5dd18aeab09b4fd1ba3b635ab22. Result was shadow-mode inconclusive only because local CI held host capacity; issues=[] and mayPublish=true.",
+            "evidenceKind": "source_verified",
+            "toolExecutionId": null
+          }
+        },
+        {
+          "recoveryKey": "bi-2c80e6ea-cmt5315ha005f01rmg4mgel7n",
+          "kind": "status_change",
+          "summary": "open → in-progress — Implementation is already complete and squash-merged as PR #4494; this transition reconciles the live lifecycle before terminal completion evidence is applied.",
+          "recordedAt": "2026-08-23T00:42:01.342Z",
+          "payload": {
+            "to": "in-progress",
+            "from": "open",
+            "reason": "Implementation is already complete and squash-merged as PR #4494; this transition reconciles the live lifecycle before terminal completion evidence is applied.",
+            "resolution": null,
+            "claimAction": "acquired",
+            "forcedClaim": false
+          }
+        },
+        {
+          "recoveryKey": "bi-2c80e6ea-cmt531bza005m01rm1qxhd94d",
+          "kind": "initiative_readiness_decision",
+          "summary": "completion readiness: input-required",
+          "recordedAt": "2026-08-23T00:42:09.766Z",
+          "payload": {
+            "unmet": [
+              {
+                "code": "CANONICAL_DESIGN_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-checklist-reviewer"
+              },
+              {
+                "code": "RESEARCH_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-author"
+              },
+              {
+                "code": "SPEC_APPROVAL_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-checklist-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "architecture-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "data-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "ux-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "security-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "compliance-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "domain-reviewer"
+              },
+              {
+                "code": "OBJECTIVE_BASELINE_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-checklist-reviewer"
+              },
+              {
+                "code": "ARTIFACT_AUTHOR_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "artifact-resolver"
+              },
+              {
+                "code": "PLAN_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "implementation-planner"
+              },
+              {
+                "code": "PLAN_REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "plan-reviewer"
+              },
+              {
+                "code": "PLAN_COVERAGE_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              },
+              {
+                "code": "TRACEABILITY_INCOMPLETE",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              },
+              {
+                "code": "DELIVERY_EVIDENCE_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [
+                  "cmt52zuzp004u01rmf57i2h3y",
+                  "cmt52zuxx004r01rm94ht53f9",
+                  "cmt5304uw004w01rmjxvdcck5",
+                  "cmt5304vs004y01rmulkgaz73"
+                ],
+                "accountableRole": "delivery-coordinator"
+              },
+              {
+                "code": "ACCEPTANCE_EVIDENCE_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "acceptance-reviewer"
+              },
+              {
+                "code": "OBJECTIVE_RECONCILIATION_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "acceptance-reviewer"
+              }
+            ],
+            "target": "completion",
+            "profile": "cross-domain",
+            "subject": {
+              "id": "BI-2C80E6EA",
+              "kind": "backlog-item"
+            },
+            "verdict": "input-required",
+            "blockers": [],
+            "satisfied": [
+              {
+                "code": "CLASSIFICATION_REQUIRED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "product-owner"
+              },
+              {
+                "code": "AUTHORIZATION_DENIED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "platform-governance"
+              },
+              {
+                "code": "DEPENDENCY_UNRESOLVED",
+                "state": "not-applicable",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              },
+              {
+                "code": "CAPSULE_IDENTITY_MISMATCH",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "delivery-coordinator"
+              }
+            ],
+            "decisionId": "IRD-FBC7661071D3",
+            "evaluatedAt": "2026-08-23T00:42:09.748Z",
+            "factsDigest": "sha256:08bd51df4a52ad450f4b8732e0c5405f19feb96add5a6dc4fa8528d7d2d5a8d1",
+            "stableCodes": [
+              "CANONICAL_DESIGN_REQUIRED",
+              "RESEARCH_REQUIRED",
+              "SPEC_APPROVAL_REQUIRED",
+              "REVIEW_REQUIRED",
+              "REVIEW_REQUIRED",
+              "REVIEW_REQUIRED",
+              "REVIEW_REQUIRED",
+              "REVIEW_REQUIRED",
+              "REVIEW_REQUIRED",
+              "OBJECTIVE_BASELINE_REQUIRED",
+              "ARTIFACT_AUTHOR_REQUIRED",
+              "PLAN_REQUIRED",
+              "PLAN_REVIEW_REQUIRED",
+              "PLAN_COVERAGE_REQUIRED",
+              "TRACEABILITY_INCOMPLETE",
+              "DELIVERY_EVIDENCE_REQUIRED",
+              "ACCEPTANCE_EVIDENCE_REQUIRED",
+              "OBJECTIVE_RECONCILIATION_REQUIRED"
+            ],
+            "policyVersion": "initiative-readiness.v1",
+            "schemaVersion": 1,
+            "enforcementState": "enforced",
+            "transitionObject": {
+              "id": "cmt3w1j190hsw01peoi2dlzu9",
+              "kind": "backlog-item",
+              "targetState": "done",
+              "expectedVersion": "in-progress"
+            },
+            "authoritySnapshot": {
+              "decision": "allow",
+              "actionKey": "update_backlog_item_status",
+              "policyVersion": "coworker-authority.v1",
+              "organizationId": "platform",
+              "effectiveAgentGrant": "backlog_write",
+              "effectiveHumanCapability": "manage_backlog"
+            },
+            "authorityDecisionId": "DI-53F32B2D1241"
+          }
+        },
+        {
+          "recoveryKey": "bi-2c80e6ea-cmt531tau006301rmm1hxglg5",
+          "kind": "initiative_readiness_decision",
+          "summary": "completion readiness: input-required",
+          "recordedAt": "2026-08-23T00:42:32.214Z",
+          "payload": {
+            "unmet": [
+              {
+                "code": "CANONICAL_DESIGN_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-checklist-reviewer"
+              },
+              {
+                "code": "RESEARCH_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-author"
+              },
+              {
+                "code": "SPEC_APPROVAL_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-checklist-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "architecture-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "data-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "ux-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "security-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "compliance-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "domain-reviewer"
+              },
+              {
+                "code": "OBJECTIVE_BASELINE_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-checklist-reviewer"
+              },
+              {
+                "code": "ARTIFACT_AUTHOR_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "artifact-resolver"
+              },
+              {
+                "code": "PLAN_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "implementation-planner"
+              },
+              {
+                "code": "PLAN_REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "plan-reviewer"
+              },
+              {
+                "code": "PLAN_COVERAGE_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              },
+              {
+                "code": "TRACEABILITY_INCOMPLETE",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              },
+              {
+                "code": "DELIVERY_EVIDENCE_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "delivery-coordinator"
+              },
+              {
+                "code": "ACCEPTANCE_EVIDENCE_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "acceptance-reviewer"
+              },
+              {
+                "code": "OBJECTIVE_RECONCILIATION_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "acceptance-reviewer"
+              }
+            ],
+            "target": "completion",
+            "profile": "cross-domain",
+            "subject": {
+              "id": "BI-2C80E6EA",
+              "kind": "backlog-item"
+            },
+            "verdict": "input-required",
+            "blockers": [],
+            "satisfied": [
+              {
+                "code": "CLASSIFICATION_REQUIRED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "product-owner"
+              },
+              {
+                "code": "AUTHORIZATION_DENIED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "platform-governance"
+              },
+              {
+                "code": "DEPENDENCY_UNRESOLVED",
+                "state": "not-applicable",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              },
+              {
+                "code": "CAPSULE_IDENTITY_MISMATCH",
+                "state": "pass",
+                "evidenceRefs": [
+                  "WC-E97AF089"
+                ],
+                "accountableRole": "delivery-coordinator"
+              }
+            ],
+            "decisionId": "IRD-007FECC4C80C",
+            "evaluatedAt": "2026-08-23T00:42:32.201Z",
+            "factsDigest": "sha256:776b7b0baa66652bc39e3a38c80dde0acadc84b6fc3b354aac705f911aebe280",
+            "stableCodes": [
+              "CANONICAL_DESIGN_REQUIRED",
+              "RESEARCH_REQUIRED",
+              "SPEC_APPROVAL_REQUIRED",
+              "REVIEW_REQUIRED",
+              "REVIEW_REQUIRED",
+              "REVIEW_REQUIRED",
+              "REVIEW_REQUIRED",
+              "REVIEW_REQUIRED",
+              "REVIEW_REQUIRED",
+              "OBJECTIVE_BASELINE_REQUIRED",
+              "ARTIFACT_AUTHOR_REQUIRED",
+              "PLAN_REQUIRED",
+              "PLAN_REVIEW_REQUIRED",
+              "PLAN_COVERAGE_REQUIRED",
+              "TRACEABILITY_INCOMPLETE",
+              "DELIVERY_EVIDENCE_REQUIRED",
+              "ACCEPTANCE_EVIDENCE_REQUIRED",
+              "OBJECTIVE_RECONCILIATION_REQUIRED"
+            ],
+            "policyVersion": "initiative-readiness.v1",
+            "schemaVersion": 1,
+            "enforcementState": "enforced",
+            "transitionObject": {
+              "id": "cmt3yrfkf0k6901pedxq3dwt4",
+              "kind": "work-capsule",
+              "targetState": "complete",
+              "expectedVersion": "working"
+            },
+            "authoritySnapshot": {
+              "decision": "allow",
+              "actionKey": "complete_work_capsule",
+              "policyVersion": "coworker-authority.v1",
+              "organizationId": "platform",
+              "effectiveAgentGrant": "update_work_capsule_status",
+              "effectiveHumanCapability": "manage_backlog"
+            },
+            "authorityDecisionId": "DI-F4D81BFF7C5D"
+          }
+        }
+      ],
+      "effortSize": "large",
+      "triageOutcome": "build",
+      "createdAt": "2026-08-22T04:38:35.422Z"
+    },
+    {
+      "itemId": "BI-5A25EC37",
+      "epicId": "EP-5102F494",
+      "title": "No daily care schedule: feeding, medication and welfare rounds are unmodelled",
+      "body": "Animals must be fed, watered, medicated, walked, cleaned up after, and observed — on a schedule, every day, whether or not anyone is thinking about them. None of that exists.\n\n## What exists to build on\n\n- `StaffingShift` — who is working when.\n- `Resource` / `ResourceAvailability` — the housing units the work happens in (see the housing item in this epic).\n- `CareAppointment` + `CareAppointmentStatusEvent` (`verticals-care.prisma`) — a strong model for scheduled, status-tracked events, but bound to `patientProfileId`.\n\n## What is missing\n\nA recurring care task tied to a subject, a time, and a person:\n\n- **Task templates per animal or cohort** — feed twice daily, medicate at 08:00 and 20:00 for 10 days, walk, weigh weekly, clean the run.\n- **Generation into a day's work list**, assigned to shifts, so the board a volunteer opens in the morning is the actual list of what must happen.\n- **Completion with evidence and exceptions** — \"ate nothing\", \"refused medication\", \"limping\" are the observations that trigger a vet consult. A care log that only records completion is a compliance artifact, not an operational one.\n- **Escalation**: a missed medication on a post-operative animal is a welfare incident, not a skipped chore. The `Cautious` autonomy stance a rescue is likely to pick should mean these escalate to a human rather than auto-close.\n\n## Why this is the highest-welfare-risk item in the epic\n\nEvery other gap in this epic costs efficiency. This one costs animal welfare directly: an unfed animal or a missed post-op medication is the failure a shelter exists to prevent. It is also the work that volunteers — not staff — usually perform, which makes an unambiguous, assignable, checkable daily list the difference between a functioning rota and a WhatsApp group.\n\n## Dependency\n\nDepends on the housing item (tasks are located) and on the appointment-abstraction decision (a medication round is closer to a recurring appointment than to a to-do).\n\nProvenance: reset/dogfood cycle 3.",
+      "status": "triaging",
+      "type": "portfolio",
+      "workType": "feature",
+      "source": "automated-detection",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [],
+      "createdAt": "2026-08-22T04:39:14.376Z"
+    },
+    {
+      "itemId": "BI-5E74E48C",
+      "epicId": "EP-5102F494",
+      "title": "No supplies inventory: food, litter, bedding and medication stock are unmodelled",
+      "body": "Animals consume food, litter, bedding, cleaning materials and medication daily. There is no model for any of it.\n\n## Confirm before building: the existing Inventory models are unrelated\n\n`grep '^model .*Inventory'` returns `InventoryEntity`, `InventoryRelationship`, `ContributorInventorySyncRun`, `ContributorInventorySnapshot`. These are the **codebase/contributor inventory** — the platform's own source-graph concept, nothing to do with physical stock. Do not attach physical supplies to them; the name collision is a trap.\n\n`grep '^model .*Supply'` returns nothing.\n\n## What to build\n\n- **Consumables** with unit and current stock — dry food (kg), litter (bags), a specific medication (doses).\n- **Consumption** driven by the care schedule rather than hand-counted: a feeding round for 40 animals depletes stock predictably, and the care tasks already know how many animals of what size were fed.\n- **Reorder thresholds and alerts** — running out of a prescribed medication is a welfare incident, not a procurement inconvenience, and should escalate accordingly.\n- **Donated goods in kind.** A rescue receives much of its supply as donations, which arrive unpredictably and are not purchases. Stock that only increments via purchase orders will be wrong on day one.\n- **Cost per animal per week**, which feeds the sponsorship and funding picture.\n\n## Scope note\n\nThis should be a modest, honest inventory — stock levels, consumption, reorder points. It is explicitly **not** a warehouse management system, and should not grow lot tracking, bin locations or barcode workflows in its first pass.\n\nProvenance: reset/dogfood cycle 3.",
+      "status": "open",
+      "type": "portfolio",
+      "workType": "feature",
+      "source": "automated-detection",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [],
+      "effortSize": "large",
+      "triageOutcome": "build",
+      "createdAt": "2026-08-22T04:40:31.678Z"
+    },
+    {
+      "itemId": "BI-7111AF0C",
+      "epicId": "EP-5102F494",
+      "title": "No intake pipeline: animals start 'available', and spay/neuter is a JSON boolean not a tracked procedure",
+      "body": "`AdoptableAnimal.status` starts at `\"available\"`. An animal that has just been surrendered is not available — it is unassessed, unvaccinated, possibly unneutered, and possibly contagious. The model has no way to say so.\n\n## What is missing\n\nThe intake pipeline is the safety-critical spine of a shelter:\n\n```\nsurrender / stray intake -> quarantine & observation -> health assessment\n  -> vaccination, microchip, parasite treatment -> spay/neuter -> behaviour assessment\n  -> ready for adoption\n```\n\nToday an animal is created directly as `available` with `attributes` JSON optionally noting spayed/neutered as a **boolean fact**, not a **tracked procedure** with a date, a provider, and an outcome.\n\n## Why the boolean is not sufficient\n\n`attributes: { spayed: true }` cannot answer: when, by which vet, at what cost, was there a complication, is the animal still in post-operative recovery, and is it therefore adoptable this week. Spay/neuter is simultaneously a legal precondition for adoption in many jurisdictions, a scheduled surgical appointment, a cost line, and a recovery period that blocks placement. It is a procedure record, not a checkbox.\n\n## What exists to build on\n\n`verticals-care.prisma` already has the right shape and it is close to reusable:\n\n- `CareIntakePacket`, `CareIntakeResponse`, `CareIntakeAccessGrant`, `CareIntakeException`, `CareIntakeStatusEvent` — a full intake apparatus with exceptions and an auditable status trail.\n- `CareAppointment` for the surgical/vet events themselves.\n\nBoth are bound to `patientProfileId`. See the abstraction decision item in this epic — this is the strongest argument in the epic for generalising rather than cloning, because the intake apparatus here is genuinely good and rewriting it for animals would be waste.\n\n## Also in scope\n\n- **Intake source** — owner surrender, stray, transfer from another shelter, born in care. Each carries different legal holds: a stray typically has a statutory hold period before it can be rehomed, which the platform must be able to represent or it will let a shelter break the law.\n- **Capacity check at intake** — accepting an animal you cannot house is the decision this connects to the housing item.\n\nProvenance: reset/dogfood cycle 3.",
+      "status": "triaging",
+      "type": "portfolio",
+      "workType": "feature",
+      "source": "automated-detection",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [],
+      "createdAt": "2026-08-22T04:39:52.241Z"
+    },
+    {
+      "itemId": "BI-7A38F667",
+      "epicId": "EP-5102F494",
+      "title": "Workspace answers commercial questions on a shelter: no animals in care, capacity, care rounds or welfare exceptions",
+      "body": "The completed Workspace for a rescue answers commercial questions. A shelter's questions are different, and none of them are on the screen.\n\n## What it shows today\n\n**REVENUE IN $0**, **DELIVERED 0 jobs**, and a value chain of ATTRACT & DISCOVER -> CAPTURE DEMAND -> QUALIFY & SCHEDULE -> DELIVER THE VALUE -> SETTLE & ACCOUNT -> RETAIN & GROW -> TRUST & COMPLIANCE -> OPERATE & IMPROVE.\n\nThe header is right — *\"LIVING BUSINESS — Pet Rescue: which mission commitment needs attention today?\"* — and **LAPSING DONORS** is a genuinely archetype-specific panel. So the surface can already carry archetype-shaped content; it just mostly does not.\n\n## What a shelter operator actually needs on opening the screen\n\n- **Animals in care**, by status: intake/quarantine, in assessment, awaiting spay/neuter, ready for adoption, on hold, in foster.\n- **Capacity** — units free by type and size. This is the number that decides whether the shelter can say yes to today's surrender call.\n- **Care rounds outstanding today**, and any missed medication — the welfare-critical exception.\n- **Today's appointments** — vet, meet-and-greets, home checks.\n- **Animals with no adoption interest for N days** — the ones at risk of becoming long-stay.\n- **Funds**: donations this month, restricted balances, cost per animal.\n\n## The worker home already gets closer\n\nThe archetype's worker home is `Mission operations home` — *\"which mission commitment needs attention today?\"* — with Volunteer Program Board, Case Board, Communication Exceptions, Handoff Queue. Those boards are the right instinct, but nothing operational backs them: `verticals-community.prisma` holds only `GovernanceMeeting`, `RecordsRequest`, `FundBudgetLine`, `MemberEquityEntry` (HOA governance), so there is no volunteer or case substrate behind the labels.\n\n## Dependency\n\nThis item is the **last** in the epic, not the first. Every tile above reads from a model that does not exist yet. Building the dashboard before the domain would produce a screen of zeros — which is precisely what it shows today.\n\nRelationship to the copy item: the separate archetype-vocabulary finding (BI-D49C7245) covers renaming REVENUE/jobs. This item is not renaming — it is replacing the questions.\n\nProvenance: reset/dogfood cycle 3.",
+      "status": "triaging",
+      "type": "portfolio",
+      "workType": "feature",
+      "source": "automated-detection",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [],
+      "createdAt": "2026-08-22T04:41:38.634Z"
+    },
+    {
+      "itemId": "BI-7E3F4D4F",
+      "epicId": "EP-5102F494",
+      "title": "No events: open houses, adoption drives and fundraisers have no model",
+      "body": "Open houses, adoption drives, vaccination clinics and fundraisers are how a rescue moves animals and raises money. There is no event model for them.\n\n## What exists\n\n`CalendarEvent` exists generically. `StorefrontBooking` and `BookingHold` exist for slot-based booking. Neither is wired to anything a rescue would run.\n\n## What is missing\n\n- A **public event** on the storefront — date, location, description, capacity — that supporters can see and register for. The generated rescue site has *Hero*, *Animals Available for Adoption*, *Support Us*, *About Us*, *Make a Donation*, *Get in Touch*, but no events section.\n- **Registration / RSVP**, so the organisation knows attendance before committing volunteers and stock.\n- **Animals attending** — an adoption drive takes a subset of animals off-site. That affects their location (housing item), their care rounds that day (care item), and their availability for meet-and-greets.\n- **Volunteer roster for the event** — `StaffingShift` exists and is the likely substrate.\n- **Outcome capture** — adoptions initiated, funds raised, new volunteers or fosters recruited. Without it there is no way to tell which events are worth repeating.\n\n## Scope note\n\nThis is deliberately the lowest-priority item in the epic. It is genuinely valuable but it is the only one whose absence does not compromise animal welfare, legal compliance, or the organisation's ability to know where its animals are. Sequence it after housing, care, intake and adoption.\n\nProvenance: reset/dogfood cycle 3.",
+      "status": "triaging",
+      "type": "portfolio",
+      "workType": "feature",
+      "source": "automated-detection",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [],
+      "createdAt": "2026-08-22T04:41:07.475Z"
+    },
+    {
+      "itemId": "BI-97290291",
+      "epicId": "EP-5102F494",
+      "title": "No veterinary coordination: no partner practices, procedures, medical history or cost-per-animal",
+      "body": "A rescue's largest controllable cost and its main external dependency is veterinary care. Neither is modelled.\n\n## What is missing\n\n- **Partner practices** as external providers — which practice, what is the arrangement (charity rate, account, credit limit), who is the contact.\n- **Appointments at an external provider** — spay/neuter surgery, vaccination, dental, emergency. These are appointments whose location is not the shelter and whose performer is not staff.\n- **Medical history per animal** — procedures, medications with courses and end dates, allergies, chronic conditions, weight trend. An adopter is entitled to this at handover, and a shelter is exposed without it.\n- **Cost attribution** — veterinary spend against a specific animal is what makes sponsorship (\"Sponsor an Animal\" already exists as a storefront item) honest, and what tells the organisation whether a given intake was affordable.\n\n## What exists to build on\n\n`CareAppointment` already carries `locationId`, participants, resources, prep/recovery minutes, and status events — a good fit for a surgical booking. Bound to `patientProfileId`. See the abstraction decision item.\n\nNo medical-record or procedure model exists anywhere in the schema (`grep '^model .*\\(Procedure\\|MedicalRecord\\)'` returns nothing), so this is net-new regardless of the abstraction decision — which makes it worth designing subject-agnostically from the start rather than as animal-only.\n\n## Connects to\n\nPost-operative recovery blocks adoption (intake item) and generates medication rounds (care-schedule item). A vet appointment is therefore not an isolated calendar entry; it changes the animal's adoptability and its daily care for days afterward.\n\nProvenance: reset/dogfood cycle 3.",
+      "status": "triaging",
+      "type": "portfolio",
+      "workType": "feature",
+      "source": "automated-detection",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [],
+      "createdAt": "2026-08-22T04:40:31.218Z"
+    },
+    {
+      "itemId": "BI-A442F129",
+      "epicId": "EP-5102F494",
+      "title": "Adoption is a contact form: no application, screening, meet-and-greet, reservation or return",
+      "body": "Adoption is the shelter's core transaction, and today it is a contact form.\n\n## What exists\n\n`StorefrontInquiry` — name, email, phone, message, `status`. The public site's *Adopt a Pet* renders as **Free / Enquire**, which is correct, and the enquiry lands here.\n\n## What is missing\n\nEverything between the enquiry and the animal leaving:\n\n- **Application** — housing situation, other pets, children, landlord permission, experience with the breed. A rescue screens; a form that only captures a message cannot screen.\n- **Meet-and-greet appointment** — a scheduled visit, against the animal, at a location, with a staff member or volunteer. This is an appointment in every sense the platform already models for patients and salon clients.\n- **Home check** — a visit, often by a volunteer, with an outcome.\n- **Decision and reservation** — `AdoptableAnimal.status` has `pending` and `hold`, but nothing links a hold to *who* it is held for or *until when*. Two adopters can currently be told the same dog is theirs.\n- **Adoption record** — adopter identity, date, fee (a donation, not a price), and the post-adoption follow-up a rescue commits to.\n- **Return** — the operator's own recorded stance is *\"we take the animal back, always, no time limit, no fee.\"* The platform has no way to represent a returned animal re-entering the pipeline, which makes the organisation's defining promise unrecordable.\n\n## Note on the fee\n\nThe adoption fee is a **donation toward that animal's care**, not a purchase price. It must not be modelled as `StorefrontItem.price`, or the accounting and the public copy both become wrong. `StorefrontDonation` already exists and is the right home.\n\n## Dependency\n\nMeet-and-greets and home checks are appointments against a non-human subject — see the abstraction decision item.\n\nProvenance: reset/dogfood cycle 3.",
+      "status": "triaging",
+      "type": "portfolio",
+      "workType": "feature",
+      "source": "automated-detection",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [],
+      "createdAt": "2026-08-22T04:39:52.740Z"
+    },
+    {
+      "itemId": "BI-D2A51B36",
+      "epicId": "EP-5102F494",
+      "title": "Animals have no housing: model kennels/foster placements as canonical Resource occupancy",
+      "body": "An `AdoptableAnimal` has no location. A shelter's first operational question — *where is this animal, and is there room for another* — cannot be asked.\n\n## The canonical element already exists\n\n`resource-scheduling.prisma` defines `Resource`, `ResourceAvailability`, `ResourceCapacityPool`, `ResourceCapacityAllocation`, and `Resource.capacityUnit` already defaults to `\"units\"`.\n\n`apps/web/app/api/storefront/admin/hospitality-resources/route.ts` builds restaurant floor management on exactly that: it filters `kind: \"table\"`, writes `capacityUnit: \"seats\"`, tracks `isBlocked` for out-of-service tables, and layers `restaurant-table-attributes`.\n\n**A kennel is that same shape**: a named unit, in a zone, with a capacity, that can be occupied, blocked for cleaning or quarantine, and reported on. The operator's own observation was that kennel layout resembles restaurant floor layout — the schema agrees.\n\n## What to build\n\n- Housing units as `Resource` rows with `kind: \"housing\"` (or per-vertical `kennel`/`run`/`pen`/`foster-home`) and `capacityUnit: \"animals\"`, grouped into zones/wards.\n- An occupancy link from `AdoptableAnimal` to its current unit, with history — animals move (intake pen → quarantine → adoption floor → foster).\n- **Foster homes are housing too.** A rescue's capacity is largely off-site; a foster placement is an occupancy in a unit that happens to be someone's house. Modelling foster as a separate concept would fragment the capacity picture.\n- Blocked/unavailable state with a reason (deep clean, quarantine, maintenance) — `isBlocked` already exists on the hospitality path.\n- Capacity readout: units free by type and size, which is the number that decides whether the shelter can accept an intake today.\n\n## Do not\n\nDo not clone `hospitality-resources` into an `animal-resources` route. Lift the shared behaviour to a generic resource surface parameterised by `kind`/`capacityUnit` and have both restaurants and shelters consume it — see the vocabulary/abstraction decision item in this epic, which this depends on.\n\n## Why it is first among the operational items\n\nCare scheduling, intake, and capacity-to-accept all reference where the animal is. Housing is the spine the rest attach to.\n\nProvenance: reset/dogfood cycle 3.",
+      "status": "open",
+      "type": "portfolio",
+      "workType": "feature",
+      "source": "automated-detection",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [],
+      "effortSize": "large",
+      "triageOutcome": "build",
+      "createdAt": "2026-08-22T04:39:13.864Z"
+    },
+    {
+      "itemId": "BI-E861E8B8",
+      "epicId": "EP-5102F494",
+      "title": "Nonprofit funding is donations only: no grants, restricted funds, municipal contracts or animal sponsorship links",
+      "body": "The rescue's funding model is represented by `StorefrontDonation` alone. That covers one-off and monthly giving, which the storefront already renders correctly (*One-off Donation*, *Monthly Giving*, *Sponsor an Animal*). It does not cover how most shelters are actually funded.\n\n## Missing income shapes\n\n- **Grants** — applied for, awarded, restricted to a purpose, reported on, with a deadline. Restricted funds are the important part: money awarded for veterinary care cannot lawfully be spent on a van, and an organisation that cannot represent the restriction will breach it eventually.\n- **Municipal / animal-control contracts** — many shelters receive per-animal or per-year public funding to accept strays from a local authority. This is a contract with obligations (statutory hold periods, intake acceptance, reporting), not a donation.\n- **Sponsorship attached to a specific animal** — `Sponsor an Animal` exists as a storefront item, but no link ties a recurring sponsorship to the animal it sponsors, so the platform cannot tell the sponsor how their animal is doing, or stop billing when it is adopted.\n- **Fundraising events** and their proceeds (see the events item in this epic).\n- **Adoption fees** — a donation toward that animal's care, not a sale (see the adoption item).\n\n## Also missing: the nonprofit's obligations\n\n- Charitable registration / tax-exempt status held on the organisation.\n- Donation receipting to the standard donors need for tax purposes.\n- Restricted-vs-unrestricted fund segregation, which is the core accounting distinction of a nonprofit and has no representation today.\n\n`verticals-community.prisma` has `FundBudgetLine` and `MemberEquityEntry` for HOA governance — worth reviewing as prior art for restricted funds before designing new, though the HOA framing is member-equity-shaped rather than grant-shaped.\n\n## Open question for the operator\n\nThe founder raised municipal funding as a possibility rather than a certainty. Before building, decide which funding mixes the archetype should support out of the box: pure donation, grant-funded, municipal-contract, or all three. The answer changes whether restricted-fund accounting is core or optional.\n\nProvenance: reset/dogfood cycle 3.",
+      "status": "triaging",
+      "type": "portfolio",
+      "workType": "feature",
+      "source": "automated-detection",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [],
+      "createdAt": "2026-08-22T04:41:07.065Z"
+    }
+  ]
+}

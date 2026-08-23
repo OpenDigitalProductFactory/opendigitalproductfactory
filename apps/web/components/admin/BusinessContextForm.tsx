@@ -125,6 +125,7 @@ function AutoFillHint({ field, editedFields }: { field: string; editedFields: Se
 
 export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFilledFields, missionSuggestion }: BusinessContextFormProps) {
   const archetypeState = resolveArchetypeSummaryState(archetypeSummary);
+  const entityNoun = archetypeSummary?.category === "nonprofit-community" ? "organization" : "business";
   const [data, setData] = useState<BusinessContextData>(initial);
   const [submitting, setSubmitting] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -271,9 +272,9 @@ export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFil
     <div style={{ maxWidth: 560, color: "var(--dpf-text)" }}>
       {!isEdit && (
         <>
-          <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>Tell us about your business</h2>
+          <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>Tell us about your {entityNoun}</h2>
           <p style={{ fontSize: 13, color: "var(--dpf-muted)", marginBottom: 20 }}>
-            This helps the platform and your AI coworker understand what you do, who you serve, and how your business operates.
+            This helps the platform and your AI coworker understand what you do, who you serve, and how your {entityNoun} operates.
           </p>
         </>
       )}
@@ -329,17 +330,17 @@ export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFil
 
         {/* Description */}
         <label style={labelStyle}>
-          <div style={fieldLabelStyle}>What does your business do?</div>
+          <div style={fieldLabelStyle}>What does your {entityNoun} do?</div>
           <textarea
             name="description"
             value={data.description}
             onChange={(e) => update("description", e.target.value)}
-            placeholder="Describe what your business does in 1-2 sentences"
+            placeholder={`Describe what your ${entityNoun} does in 1-2 sentences`}
             rows={2}
             style={{ ...inputStyle, resize: "none" }}
           />
           <div style={hintStyle}>
-            Your AI coworker uses this to understand your business when building features and providing guidance.
+            Your AI coworker uses this to understand your {entityNoun} when building features and providing guidance.
           </div>
           {autoFilledFields?.includes("description") && <AutoFillHint field="description" editedFields={editedFields} />}
         </label>
@@ -347,7 +348,7 @@ export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFil
         {/* Mission */}
         <label style={labelStyle}>
           <div style={{ ...fieldLabelStyle, display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
-            <span>Why does your business exist?</span>
+            <span>Why does your {entityNoun} exist?</span>
             {missionSuggestion && data.mission.trim() === "" && (
               <button
                 type="button"
@@ -375,7 +376,7 @@ export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFil
             style={{ ...inputStyle, resize: "none" }}
           />
           <div style={hintStyle}>
-            Your company mission. Every AI coworker keeps this in mind, and it seeds what your
+            Your {entityNoun} mission. Every AI coworker keeps this in mind, and it seeds what your
             organization &quot;would do&quot; when a decision comes up.
           </div>
         </label>
@@ -398,7 +399,7 @@ export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFil
             style={inputStyle}
           />
           <div style={hintStyle}>
-            Your stakeholders — the people who interact with your business. These aren't always "customers."
+            Your stakeholders — the people who interact with your {entityNoun}. These aren&apos;t always &quot;customers.&quot;
           </div>
         </label>
 
@@ -421,9 +422,9 @@ export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFil
         {/* Market & competitive context (optional) */}
         <MarketContextFields />
 
-        {/* Company size */}
+        {/* Organization size (stored in the canonical companySize field). */}
         <div style={labelStyle}>
-          <div style={fieldLabelStyle}>Company size</div>
+          <div style={fieldLabelStyle}>{entityNoun === "organization" ? "Organization" : "Company"} size</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 6 }}>
             {COMPANY_SIZE_OPTIONS.map((o) => (
               <button
@@ -480,7 +481,7 @@ export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFil
             local presence, and (via country + US state) a state-accurate timezone
             the operator confirms in Operating Hours — never typed (§12/§17). */}
         <div style={{ borderTop: "1px solid var(--dpf-border)", paddingTop: 14 }}>
-          <div style={fieldLabelStyle}>Business address</div>
+          <div style={fieldLabelStyle}>{entityNoun === "organization" ? "Organization" : "Business"} address</div>
           <div style={hintStyle}>
             Used for your invoices, local presence, and to set your timezone. We work the timezone
             out from your address — you never have to type one.
@@ -620,16 +621,16 @@ export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFil
         <div style={{ borderTop: "1px solid var(--dpf-border)", paddingTop: 14 }}>
           <div style={fieldLabelStyle}>Compliance &amp; regulatory scope</div>
           <div style={hintStyle}>
-            Where you do business decides which rules each AI coworker applies — taxes and marketing
+            Where your {entityNoun} operates decides which rules each AI coworker applies — taxes and marketing
             consent follow your customers, employment law follows your staff.
           </div>
 
-          {renderScopeChips("operatesIn", "Where is your business based / where do you operate?")}
+          {renderScopeChips("operatesIn", `Where is your ${entityNoun} based / where do you operate?`)}
 
           <DataHandlingChips
             value={data.dataHandling}
             onToggle={togglePredicate}
-            label="What does your business do with data? (pick all that apply — this decides which privacy, AI, marketing and accessibility rules apply)"
+            label={`What does your ${entityNoun} do with data? (pick all that apply — this decides which privacy, AI, marketing and accessibility rules apply)`}
           />
 
           <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, fontSize: 13 }}>
@@ -689,7 +690,7 @@ export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFil
               onClick={() => setShowCrossBorder(true)}
               style={{ marginTop: 10, fontSize: 12, color: "var(--dpf-accent)", background: "none", border: "none", cursor: "pointer", padding: 0 }}
             >
-              + We sell to, employ in, or store data in other regions
+              + We serve people, employ staff, or store data in other regions
             </button>
           )}
         </div>

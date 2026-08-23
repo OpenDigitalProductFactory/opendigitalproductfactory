@@ -15,10 +15,8 @@
 // DPF is single-org-per-deployment: "the org" is the one `StorefrontConfig` row.
 
 import {
-  ALL_ARCHETYPES,
   deriveTwinProfile,
   deriveTwinValueStreamBinding,
-  type ArchetypeDefinition,
   type TwinProfile,
 } from "@dpf/storefront-templates";
 
@@ -50,6 +48,15 @@ import {
   restaurantCapacityChips,
   restaurantFloorResourceUnits,
 } from "./restaurant-operations-projection";
+import {
+  buildOutcomeProjectionFromFacts,
+  loadArchetypeOutcomeFacts,
+  type ArchetypeOutcomeFactsClient,
+} from "./archetype-outcome-facts";
+import {
+  resolveTemplateDefinition,
+  templateOperatingWindows,
+} from "./archetype-operating-profile";
 
 import {
   deriveRestaurantCapacity,
@@ -57,7 +64,6 @@ import {
   type CapacityBookingInput,
   type CapacityAllocationInput,
   type CapacityResourceInput,
-  type OperatingWindow,
   type RestaurantCapacitySnapshot,
 } from "@/lib/storefront/restaurant-capacity";
 
@@ -80,7 +86,6 @@ import type {
   ResourceUnitData,
   TwinActor,
   TwinCogSnapshot,
-  TwinOutcome,
   TwinQueueSnapshot,
   TwinZoneSnapshot,
   UtilityMeterData,
@@ -89,20 +94,22 @@ import type {
 
 // ── Structural client (satisfied by the real PrismaClient and by test fakes) ──
 type FindMany = (args: unknown) => Promise<unknown>;
-export type LivingBusinessClient = WorkforceRosterClient & OrgLocaleClient & {
-  storefrontConfig: { findFirst: (args: unknown) => Promise<unknown> };
-  bill: { findMany: FindMany };
-  /** Optional — outcomes (paid-invoice revenue) degrade to empty if absent. */
-  invoice?: { findMany: FindMany };
-  taxObligationPeriod: { findMany: FindMany };
-  obligation: { findMany: FindMany };
-  storefrontBooking: { findMany: FindMany };
-  serviceProvider: { findMany: FindMany };
-  hospitalityResource: { findMany: FindMany };
-  hospitalityCapacityAllocation: { findMany: FindMany };
-  /** Optional — live workforce-activity read (BI-FB233706); degrades if absent. */
-  taskRun?: { findMany: FindMany };
-};
+export type LivingBusinessClient = WorkforceRosterClient &
+  OrgLocaleClient &
+  ArchetypeOutcomeFactsClient & {
+    storefrontConfig: { findFirst: (args: unknown) => Promise<unknown> };
+    bill: { findMany: FindMany };
+    /** Optional — outcomes (paid-invoice revenue) degrade to empty if absent. */
+    invoice?: { findMany: FindMany };
+    taxObligationPeriod: { findMany: FindMany };
+    obligation: { findMany: FindMany };
+    storefrontBooking: { findMany: FindMany };
+    serviceProvider: { findMany: FindMany };
+    hospitalityResource: { findMany: FindMany };
+    hospitalityCapacityAllocation: { findMany: FindMany };
+    /** Optional — live workforce-activity read (BI-FB233706); degrades if absent. */
+    taskRun?: { findMany: FindMany };
+  };
 
 // ── Row shapes we select (kept narrow; amounts may arrive as Prisma.Decimal) ──
 type Money = number | string | { toString(): string } | null;
@@ -401,21 +408,6 @@ export function bookingsToFeed(bookings: BookingRow[], workNoun: string, limit =
 
 // ─────────────────────────────── the loader ────────────────────────────────
 
-function resolveTemplateDef(archetypeId: string): ArchetypeDefinition | undefined {
-  return ALL_ARCHETYPES.find((a) => a.archetypeId === archetypeId);
-}
-
-/** Operating windows from the archetype template — the service-period source for
- *  the workspace readiness answer (the confirmed-hours refinement lives in the
- *  Tables page loader, which also reads BusinessProfile). */
-function floorWindows(def: ArchetypeDefinition): OperatingWindow[] {
-  return (def.schedulingDefaults?.defaultOperatingHours ?? []).map((h) => ({
-    day: h.day,
-    start: h.start,
-    end: h.end,
-  }));
-}
-
 export interface LivingBusinessLoadOptions {
   db?: LivingBusinessClient;
   now?: Date;
@@ -441,10 +433,12 @@ export async function loadLivingBusinessProjection(
 
   const config = (await db.storefrontConfig.findFirst({
     select: {
+      id: true,
       timezone: true,
       archetype: { select: { archetypeId: true, name: true } },
     },
   })) as {
+    id: string;
     timezone: string;
     archetype: { archetypeId: string; name: string } | null;
   } | null;
@@ -452,7 +446,7 @@ export async function loadLivingBusinessProjection(
 
   const archetypeId = config?.archetype?.archetypeId;
   if (!archetypeId) return null;
-  const def = resolveTemplateDef(archetypeId);
+  const def = resolveTemplateDefinition(archetypeId);
   if (!def) return null;
 
   const profile: TwinProfile = deriveTwinProfile(def);
@@ -470,6 +464,7 @@ export async function loadLivingBusinessProjection(
     hospitalityAllocations,
     paidInvoices,
     orgLocale,
+    outcomeFacts,
   ] = await Promise.all([
     runtime.read(
       "workforce",
@@ -589,6 +584,13 @@ export async function loadLivingBusinessProjection(
         localeReadFailed = true;
       },
     }),
+    loadArchetypeOutcomeFacts({
+      archetypeId,
+      storefrontId: config.id,
+      since: in90,
+      db,
+      runtime,
+    }),
   ]);
   if (localeReadFailed) runtime.degrade("locale");
   else runtime.observe("locale");
@@ -627,7 +629,7 @@ export async function loadLivingBusinessProjection(
           ),
           allocations: hospitalityAllocations,
           now,
-          nextPeriod: resolveServicePeriod(floorWindows(def), now),
+          nextPeriod: resolveServicePeriod(templateOperatingWindows(def), now),
           timeZone: config.timezone,
         })
       : null;
@@ -710,25 +712,18 @@ export async function loadLivingBusinessProjection(
   }
   const stageFlow = buildStageFlow(binding, stageDemand);
 
-  // Customer outcomes (workstream D): revenue realized in the last 90 days + the
-  // count of settled+paid work — the proof the business is producing.
+  // Outcomes (workstream D): the archetype decides what proof of value means.
+  // Rescue aggregates come only from canonical donation/adoption records; the
+  // missing foster source remains explicitly unavailable rather than fabricated.
   const paidRevenue = paidInvoices.reduce((sum, inv) => sum + moneyToNumber(inv.totalAmount), 0);
-  const outcomes: TwinOutcome[] = [
-    {
-      key: "revenue",
-      label: "Revenue in",
-      value: formatMoney(paidRevenue, orgCurrency, orgLocaleStr),
-      intent: "success",
-      hint: "Paid · 90 days",
-    },
-    {
-      key: "delivered",
-      label: "Delivered",
-      value: `${paidInvoices.length} job${paidInvoices.length === 1 ? "" : "s"}`,
-      intent: "info",
-      hint: "Settled & paid",
-    },
-  ];
+  const outcomeProjection = buildOutcomeProjectionFromFacts({
+    archetypeId,
+    currency: orgCurrency,
+    locale: orgLocaleStr,
+    paidRevenue,
+    deliveredJobs: paidInvoices.length,
+    facts: outcomeFacts,
+  });
 
   // For a restaurant, the headline answers "are we ready for the next service
   // period?" with capacity in its own words + one next action ahead of the
@@ -766,7 +761,8 @@ export async function loadLivingBusinessProjection(
           longestWaitMs: longestWaitMs(bookings, now),
         }),
     stageFlow,
-    outcomes,
+    outcomes: outcomeProjection.outcomes,
+    outcomesHeading: outcomeProjection.heading,
     zones,
     workItems: bookingsToWorkItems(bookings, profile.workItemNoun.singular),
     queues,

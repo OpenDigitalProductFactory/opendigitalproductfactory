@@ -8,7 +8,12 @@
 
 import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
-import { findDurableArtifactDrift, buildWarning } from "./uncommitted-work-scan.mjs";
+import {
+  attributeWork,
+  buildAttributedWarning,
+  buildUnattributedWarning,
+  findLosableWork,
+} from "./uncommitted-work-scan.mjs";
 
 function skipGuard(env = process.env) {
   return env.DPF_SKIP_UNCOMMITTED_WORK_GUARD === "1";
@@ -55,10 +60,26 @@ function main() {
   const rootArgIdx = argv.indexOf("--repo-root");
   const baseDir = repoRoot(rootArgIdx >= 0 ? argv[rootArgIdx + 1] : null);
 
-  const drift = findDurableArtifactDrift(gitPorcelain(baseDir));
-  if (drift.length === 0) process.exit(0);
+  // BI-910C37B1: every losable modification, not only spec/plan paths. The
+  // 2026-08-21 loss was source edits this guard never mentioned.
+  const context = isGitHook ? "post-checkout" : "session-end";
+  const losable = findLosableWork(gitPorcelain(baseDir));
+  if (losable.length === 0) process.exit(0);
 
-  const warning = buildWarning(drift, { context: isGitHook ? "post-checkout" : "session-end" });
+  // Attribution: a hook cannot see which files THIS session wrote, so it must
+  // not claim ownership either way. When a caller supplies the touched set
+  // (newline- or colon-separated paths), the message splits by author; without
+  // it, the message says plainly that some of this may be another session's —
+  // because advising "stash it" over someone else's in-flight work is how the
+  // guard turns into the thing it exists to prevent.
+  const touched = String(process.env.DPF_SESSION_TOUCHED_PATHS ?? "")
+    .split(/[\n:]/)
+    .map((t) => t.trim())
+    .filter(Boolean);
+
+  const warning = touched.length > 0
+    ? buildAttributedWarning(attributeWork(losable, touched), { context })
+    : buildUnattributedWarning(losable, { context });
 
   if (isGitHook) {
     process.stderr.write(`\n${warning}\n\n`);

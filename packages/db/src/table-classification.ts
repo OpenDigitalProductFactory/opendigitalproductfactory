@@ -137,6 +137,9 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   McpCatalogSync: "internal",
   // Per-customer incumbent coverage verdicts — operational, no PII (BI-548060D5).
   IncumbentCoverageAssessment: "internal",
+  // Compact source/remote identity, fingerprints, timestamps, and lifecycle
+  // only; the service rejects secrets and full content payloads (BI-93507D83).
+  ExternalChannelProjection: "internal",
   StorefrontConfig: "internal",
   StorefrontSection: "internal",
   StorefrontItem: "internal",
@@ -349,6 +352,24 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   // Payroll pay records (recruiting→hiring→paying seam) — pay amounts + PII.
   PayRun: "confidential",
   Payslip: "confidential",
+  // -- payroll component lines (BI-EAC670F1) --
+  // Both carry regulated employee financial detail: individual pay components
+  // and standing deduction instructions (including garnishments).
+  PayComponentLine: "confidential",
+  EmployeeDeductionElection: "confidential",
+  // -- mileage absorption (EP-MILEAGE-ABSORB) --
+  // Trip carries precise personal location for an identified employee — the most
+  // sensitive data this substrate holds. Vehicle and the consent record bind to a
+  // named driver; a commute-exclusion rule's predicate can embed a home radius,
+  // so the rule table is PII-bearing too and is classified with the rest.
+  Vehicle: "confidential",
+  Trip: "confidential",
+  TripClassificationRule: "confidential",
+  DriverLocationConsent: "confidential",
+  // Rate tables are org configuration, not personal data.
+  MileageRatePlan: "internal",
+  MileageRate: "internal",
+
 };
 
 /** Fallback for tables not yet classified — defaults to confidential (obfuscate). */

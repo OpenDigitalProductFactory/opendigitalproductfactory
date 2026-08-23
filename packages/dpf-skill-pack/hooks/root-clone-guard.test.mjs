@@ -275,3 +275,82 @@ test("the junction install block honors the existing root-mutation escape hatch"
     false,
   );
 });
+
+// ── BI-D471606A: the shell surface, which bypassed every file-tool guard ──────
+//
+// On 2026-08-21 a session edited the shared root clone for hours through
+// heredocs and `sed -i`, because bypass-permissions mode instructs exactly that.
+// decideFileWrite never saw a single edit. These assert the shell surface now
+// reaches the same verdict as the file surface.
+
+const shellIn = (command, cwd) =>
+  decide({ command, cwd, env: {}, isSymlink: noSym, isDir: mainGit });
+
+test("blocks a heredoc write into the shared root clone", () => {
+  const v = shellIn("cat > apps/web/lib/thing.ts <<'EOF'", MAIN);
+  assert.equal(v.block, true);
+  assert.match(v.reason, /root clone/i);
+});
+
+test("blocks a redirect and an append into the shared root clone", () => {
+  assert.equal(shellIn("echo x > packages/db/src/seed.ts", MAIN).block, true);
+  assert.equal(shellIn("echo x >> packages/db/src/seed.ts", MAIN).block, true);
+});
+
+test("blocks sed -i in the shared root clone, but not a read-only sed", () => {
+  assert.equal(shellIn("sed -i '' 's/a/b/' apps/web/app/page.tsx", MAIN).block, true);
+  assert.equal(shellIn("sed -n '1,20p' apps/web/app/page.tsx", MAIN).block, false);
+});
+
+test("blocks tee, cp and mv destinations in the shared root clone", () => {
+  assert.equal(shellIn("echo x | tee apps/web/lib/a.ts", MAIN).block, true);
+  assert.equal(shellIn("cp /tmp/a.ts apps/web/lib/a.ts", MAIN).block, true);
+  assert.equal(shellIn("mv /tmp/a.ts apps/web/lib/a.ts", MAIN).block, true);
+});
+
+test("blocks an interpreter one-liner that plainly writes from the clone root", () => {
+  assert.equal(shellIn(`python3 - <<'PY'\nopen("x.ts","w").write("y")\nPY`, MAIN).block, true);
+  assert.equal(shellIn('node -e \'require("fs").writeFileSync("x","y")\'', MAIN).block, true);
+});
+
+test("leaves a read-only interpreter one-liner alone — a guard that blocks reads gets disabled", () => {
+  assert.equal(shellIn('python3 -c "import json;print(json.load(open(\'a.json\')))"', MAIN).block, false);
+  assert.equal(shellIn("node -e 'console.log(1)'", MAIN).block, false);
+});
+
+test("does not touch writes inside a session's own worktree", () => {
+  const inWorktree = (command) =>
+    decide({ command, cwd: SIBLING, env: {}, isSymlink: noSym, isDir: noGit });
+  assert.equal(inWorktree("cat > apps/web/lib/thing.ts <<'EOF'").block, false);
+  assert.equal(inWorktree("sed -i '' 's/a/b/' apps/web/app/page.tsx").block, false);
+  assert.equal(inWorktree(`python3 - <<'PY'\nopen("x","w").write("y")\nPY`).block, false);
+});
+
+test("never blocks a write to /dev/null", () => {
+  assert.equal(shellIn("pnpm run build > /dev/null", MAIN).block, false);
+});
+
+test("honours the documented emergency bypass", () => {
+  const v = decide({
+    command: "cat > apps/web/lib/a.ts <<'EOF'",
+    cwd: MAIN,
+    env: { DPF_ALLOW_ROOT_CLONE_MUTATION: "1" },
+    isSymlink: noSym,
+    isDir: mainGit,
+  });
+  assert.equal(v.block, false);
+});
+
+test("the shell surface and the file surface agree — the bypass is what this closes", () => {
+  const target = "apps/web/lib/same-file.ts";
+  const fileVerdict = decideFileWrite({
+    toolName: "Write",
+    toolInput: { file_path: target },
+    cwd: MAIN,
+    env: {},
+    isDir: mainGit,
+  });
+  const shellVerdict = shellIn(`cat > ${target} <<'EOF'`, MAIN);
+  assert.equal(fileVerdict.block, shellVerdict.block);
+  assert.equal(fileVerdict.block, true);
+});

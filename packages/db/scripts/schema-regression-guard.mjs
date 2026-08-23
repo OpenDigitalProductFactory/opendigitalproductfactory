@@ -259,6 +259,34 @@ export const INTENTIONAL_FIELD_REMOVALS = new Set([
   "FeatureBuild.uxVerificationStatus",
   "Workroom.decisionScope",
   "Workroom.portfolioRole",
+  // 2026-08-22 BI-2C80E6EA / DI-F289DBB51DCB: generic intake evidence
+  // now joins its packet by tenant-safe packet identity. Nullable direct
+  // patient provenance remains on the rows; consent and coverage deliberately
+  // retain their stronger packet+organization+patient relations. Migration:
+  // 20260822164000_subject_agnostic_scheduling_and_resources. The reviewed
+  // architecture plan owns the cardinality change and hybrid fallback.
+  "CareIntakeResponse.packet",
+  "CareIntakeResponse.supersedesResponse",
+  "CareIntakeAccessGrant.packet",
+  "CareIntakeException.packet",
+  "CareIntakeStatusEvent.packet",
+]);
+
+// Model attributes intentionally removed through a steward-reviewed migration.
+// Attribute exceptions are exact normalized lines rather than broad model or
+// field exemptions, so allowing one retired index cannot conceal another.
+// Prune each entry after the migration has shipped fleet-wide.
+export const INTENTIONAL_MODEL_ATTRIBUTE_REMOVALS = new Set([
+  // 2026-08-22 BI-2C80E6EA / DI-F289DBB51DCB: the supersession relation now
+  // joins by response+organization, so its tenant-safe composite index strictly
+  // subsumes the former single-column index. Migration:
+  // 20260822164000_subject_agnostic_scheduling_and_resources.
+  "CareIntakeResponse.@@index([supersedesResponseId])",
+  // 2026-08-22 BI-D2AA1064: OutboundPublication is an immutable event receipt,
+  // so create and later update receipts may reference the same remote resource.
+  // Current remote-identity uniqueness is enforced by ExternalChannelProjection.
+  // Migration: 20260822062000_allow_external_update_receipts.
+  "OutboundPublication.@@unique([channelId, externalId])",
 ]);
 
 // Models intentionally RENAMED via a steward-reviewed change (AGENTS.md §11).
@@ -304,6 +332,7 @@ export function diffSchemas(
   head,
   allowlist = INTENTIONAL_FIELD_REMOVALS,
   renames = INTENTIONAL_MODEL_RENAMES,
+  attributeAllowlist = INTENTIONAL_MODEL_ATTRIBUTE_REMOVALS,
 ) {
   const regressions = [];
 
@@ -342,6 +371,7 @@ export function diffSchemas(
         // (accidental drops) still regresses.
         const parsed = parseModelFieldLine(line);
         if (parsed && allowlist.has(`${name}.${parsed.name}`)) continue;
+        if (!parsed && attributeAllowlist.has(`${name}.${line}`)) continue;
         regressions.push(`model ${label}: removed \`${line}\``);
       }
     }

@@ -23,6 +23,7 @@ const obligation = (over: Partial<DeadlineHorizonInput["obligations"][number]> =
   frequency: "annual" as string | null,
   reviewDate: null as Date | null,
   status: "active",
+  appliesToInstall: true,
   ...over,
 });
 
@@ -215,5 +216,123 @@ describe("the declared budget stop condition", () => {
     const result = sweepDeadlineHorizon({ ...empty, obligations: many });
     expect(result.findings).toHaveLength(200);
     expect(result.stoppedBy?.kind).toBe("budget");
+  });
+});
+
+// ── the live-install regression: 88 of 141 findings were false ──────────────
+
+describe("frequency classes that are CORRECTLY dateless", () => {
+  it("says nothing about a continuous obligation with no review date", () => {
+    const result = sweepDeadlineHorizon({
+      ...empty,
+      obligations: [obligation({ frequency: "continuous" })],
+    });
+    // A standing control is in force every day. It is not overdue.
+    expect(result.findings).toEqual([]);
+  });
+
+  it("says nothing about an event-driven obligation with no review date", () => {
+    const result = sweepDeadlineHorizon({
+      ...empty,
+      obligations: [obligation({ frequency: "event-driven" })],
+    });
+    expect(result.findings).toEqual([]);
+  });
+
+  it("says nothing about a continuous CONTROL with no review dates", () => {
+    const result = sweepDeadlineHorizon({
+      ...empty,
+      controls: [control({ reviewFrequency: "continuous" })],
+      obligations: [obligation({ frequency: "continuous" })],
+    });
+    expect(result.findings).toEqual([]);
+  });
+
+  it("reproduces the live mix and reports ONLY the genuine recurrences", () => {
+    // The exact shape of the live install: 46 continuous, 42 event-driven,
+    // 27 annual, 7 monthly — all dateless. Only the 34 real recurrences are
+    // defects; the first sweep reported all 122.
+    const mix = [
+      ...Array.from({ length: 46 }, (_, i) => obligation({ obligationId: `C-${i}`, frequency: "continuous" })),
+      ...Array.from({ length: 42 }, (_, i) => obligation({ obligationId: `E-${i}`, frequency: "event-driven" })),
+      ...Array.from({ length: 27 }, (_, i) => obligation({ obligationId: `A-${i}`, frequency: "annual" })),
+      ...Array.from({ length: 7 }, (_, i) => obligation({ obligationId: `M-${i}`, frequency: "monthly" })),
+    ];
+    const result = sweepDeadlineHorizon({ ...empty, obligations: mix });
+    expect(result.findings).toHaveLength(34);
+    for (const f of result.findings) {
+      expect(f.evidence.triggerClass).toBe("cadence");
+    }
+  });
+});
+
+describe("a frequency nothing can compute", () => {
+  it("is its own low finding, not a guessed date", () => {
+    const result = sweepDeadlineHorizon({
+      ...empty,
+      obligations: [obligation({ frequency: "whenever the board meets" })],
+    });
+    expect(result.findings).toHaveLength(1);
+    expect(result.findings[0].evidence.reason).toBe("uncomputable-frequency");
+    expect(result.findings[0].policySeverity).toBe("low");
+    expect(result.findings[0].remediationHint.suggestedReviewDate).toBeNull();
+  });
+
+  it("says nothing when no frequency is recorded at all", () => {
+    const result = sweepDeadlineHorizon({
+      ...empty,
+      obligations: [obligation({ frequency: null })],
+      controls: [control({ reviewFrequency: null })],
+    });
+    expect(result.findings).toEqual([]);
+  });
+});
+
+// ── the live-install defect: obligations that do not bind on this business ───
+
+describe("obligations whose regulation does not apply to this install", () => {
+  it("are never findings, however overdue they look", () => {
+    // What this prevents, observed live: a software-platform install was told
+    // its bank supervision filings, its municipal water testing, and its UK
+    // premium-listing declaration were overdue. Compliance packs seed
+    // unconditionally and are filtered at READ time; the sweep is a reader and
+    // must filter too.
+    const result = sweepDeadlineHorizon({
+      ...empty,
+      obligations: [
+        obligation({ obligationId: "IN", reviewDate: days(-5) }),
+        obligation({ obligationId: "OUT", reviewDate: days(-5), appliesToInstall: false }),
+      ],
+    });
+    expect(result.findings).toHaveLength(1);
+    expect(result.findings[0].evidence.obligationId).toBe("IN");
+  });
+
+  it("counts what it skipped, so the number is visible rather than assumed", () => {
+    const result = sweepDeadlineHorizon({
+      ...empty,
+      obligations: [
+        obligation({ obligationId: "IN", reviewDate: days(1) }),
+        obligation({ obligationId: "OUT-1", frequency: "annual", appliesToInstall: false }),
+        obligation({ obligationId: "OUT-2", frequency: "annual", appliesToInstall: false }),
+      ],
+    });
+    expect(result.scanned.obligations).toBe(1);
+    expect(result.scanned.obligationsOutOfScope).toBe(2);
+  });
+
+  it("treats 'read fine, nothing in scope' as a clean sweep, not a failure", () => {
+    // The distinction matters: reporting this as a failure would train the
+    // operator to ignore the one signal that means the sweep is really broken.
+    const result = sweepDeadlineHorizon({
+      ...empty,
+      obligations: [obligation({ frequency: "annual", appliesToInstall: false })],
+    });
+    expect(result.findings).toEqual([]);
+    expect(result.stoppedBy).toBeNull();
+  });
+
+  it("still fails closed when it read nothing at all", () => {
+    expect(sweepDeadlineHorizon(empty).stoppedBy?.kind).toBe("failure");
   });
 });

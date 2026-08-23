@@ -7,6 +7,12 @@
 // compliance sweep rather than a scanner.
 
 import { persistAssuranceFindings } from "@/lib/assurance/finding-persistence";
+import {
+  classifyRegulationForInstall,
+  resolveComplianceLibraryContext,
+  type ComplianceLibraryClient,
+  type ComplianceLibraryContext,
+} from "@/lib/compliance-library";
 import { OBLIGATION_ASSURANCE_WATCH_SHAPE_KEY } from "@/lib/work-management/work-shapes";
 import {
   DEADLINE_HORIZON_ADAPTER_KEY,
@@ -24,7 +30,12 @@ export const DEADLINE_HORIZON_SCOPE_ID = "organization";
 
 type FindManyDelegate = { findMany(args: unknown): Promise<unknown[]> };
 
-export type DeadlineHorizonDb = {
+/**
+ * The client this runner needs. It includes ComplianceLibraryClient because the
+ * sweep must know which regimes bind on THIS install — unless the caller passes
+ * a resolved `context`, which is how the tests avoid a database.
+ */
+export type DeadlineHorizonDb = Partial<ComplianceLibraryClient> & {
   obligation: FindManyDelegate;
   control: FindManyDelegate;
   licenseRequirementReference: FindManyDelegate;
@@ -50,14 +61,32 @@ export type DeadlineHorizonRunResult = DeadlineHorizonResult & {
  */
 export async function runDeadlineHorizonSweep(
   db: DeadlineHorizonDb,
-  options: { now: Date; horizonDays?: number; runKey?: string },
+  options: {
+    now: Date;
+    horizonDays?: number;
+    runKey?: string;
+    /** Test seam — production resolves this from the install. */
+    context?: ComplianceLibraryContext;
+  },
 ): Promise<DeadlineHorizonRunResult> {
   const horizonDays = options.horizonDays ?? DEFAULT_HORIZON_DAYS;
 
   const [obligations, controls, licenseReferences] = await Promise.all([
     db.obligation.findMany({
       where: { status: "active" },
-      select: { obligationId: true, title: true, frequency: true, reviewDate: true, status: true },
+      select: {
+        obligationId: true, title: true, frequency: true, reviewDate: true, status: true,
+        // Compliance packs seed unconditionally and are filtered at READ time.
+        // The sweep is a reader, so it must carry the regulation through and
+        // filter too — otherwise a software business is told its bank
+        // supervision filings are overdue.
+        regulation: {
+          select: {
+            regulationId: true, name: true, shortName: true, jurisdiction: true,
+            industry: true, sourceType: true, sourceUrl: true, applicability: true,
+          },
+        },
+      },
       orderBy: { reviewDate: "asc" },
       take: MAX_ROWS_PER_TABLE,
     }),
@@ -80,10 +109,24 @@ export async function runDeadlineHorizonSweep(
     }),
   ]);
 
+  // Resolve once for the whole run: the archetype, business context, and
+  // confirmed processing activities that decide which regimes bind here.
+  const context =
+    options.context ?? (await resolveComplianceLibraryContext(db as ComplianceLibraryClient));
+
+  const scopedObligations = (obligations as Array<Record<string, unknown>>).map((row) => {
+    const regulation = row.regulation as Parameters<typeof classifyRegulationForInstall>[0] | null;
+    // No regulation row is not "applies by default" — an obligation whose
+    // regulation cannot be read cannot be shown to bind, and defaulting it in
+    // would reintroduce exactly the noise this filter removes.
+    const scope = regulation ? classifyRegulationForInstall(regulation, context).scope : "reference";
+    return { ...row, appliesToInstall: scope === "applies" };
+  });
+
   const swept = sweepDeadlineHorizon({
     now: options.now,
     horizonDays,
-    obligations: obligations as never,
+    obligations: scopedObligations as never,
     controls: controls as never,
     licenseReferences: licenseReferences as never,
   });
@@ -104,6 +147,7 @@ export async function runDeadlineHorizonSweep(
       summary: {
         horizonDays: swept.horizonDays,
         scanned: swept.scanned,
+        installArchetype: context.archetype?.category ?? context.businessContext.industry ?? null,
         findings: swept.findings.length,
         stoppedBy: swept.stoppedBy,
         shape: `${OBLIGATION_ASSURANCE_WATCH_SHAPE_KEY}@1.0.0`,

@@ -23,6 +23,8 @@ import {
   selectCurrentWorkroomCycle,
 } from "./room-cycle";
 import type { WorkroomStructure } from "./room-structure";
+import type { WorkroomPostureContext } from "./room-posture";
+import { readWorkroomShapeClaim } from "./workroom-shape-claim";
 import type { WorkroomParticipantView, WorkroomView } from "./room-types";
 import { getWorkCaseSourceEntry } from "./source-registry";
 import { fromWorkItemMessage } from "./receipt-envelope";
@@ -94,6 +96,11 @@ export type WorkspaceWorkCapsuleRecord = {
   capsuleId: string;
   status: string;
   title: string;
+  // EP-WORK-POSTURE Slice D (BI-4F468192). Optional so existing test fakes and
+  // callers that select only the original three fields keep compiling; a record
+  // without them simply yields no shape and no declared posture.
+  scopeClaims?: unknown;
+  activityKind?: string | null;
 };
 
 export type WorkspaceCasePrismaClient = {
@@ -121,6 +128,18 @@ export type WorkspaceRoomAuthContext = {
  * off the CRM models — the caller wires a full-prisma resolver
  * (`resolveWorkroomStructureForCase`). Returns null for subjects with no binding.
  */
+/**
+ * EP-WORK-POSTURE Slice D (BI-4F468192). Resolves the parts of the room's
+ * posture that need I/O, so `buildWorkroomView` stays pure — the same split
+ * `WorkroomStructureLoader` already uses.
+ */
+export type WorkroomPostureContextLoader = (ref: {
+  sourceType: string;
+  sourceId: string;
+  assignedToAgentId: string | null;
+  now: Date;
+}) => Promise<WorkroomPostureContext | null>;
+
 export type WorkroomStructureLoader = (ref: {
   sourceType: string;
   sourceId: string;
@@ -413,6 +432,7 @@ export async function loadWorkspaceWorkCaseDetail({
   authContext,
   participantLoader,
   structureLoader,
+  postureContextLoader,
   now = new Date(),
 }: {
   prismaClient: WorkspaceCasePrismaClient;
@@ -421,6 +441,13 @@ export async function loadWorkspaceWorkCaseDetail({
   authContext?: WorkspaceRoomAuthContext;
   participantLoader?: WorkspaceRoomParticipantLoader;
   structureLoader?: WorkroomStructureLoader;
+  /**
+   * EP-WORK-POSTURE Slice D (BI-4F468192). Resolves the asynchronous half of the
+   * room's posture (operating clock, archetype value stream, inherited coworker
+   * posture). Optional: when absent the room has no posture and every surface
+   * behaves exactly as it did before this slice.
+   */
+  postureContextLoader?: WorkroomPostureContextLoader;
   now?: Date;
 }): Promise<WorkspaceWorkCaseDetailView | null> {
   const decoded = decodeWorkCaseKey(caseKey);
@@ -466,7 +493,17 @@ export async function loadWorkspaceWorkCaseDetail({
     // so a coding carrier surfaces in its case instead of as a disjoint row.
     prismaClient.workroom.findMany({
       where: { workItemId: item.id },
-      select: { capsuleId: true, status: true, title: true },
+      // EP-WORK-POSTURE Slice D (BI-4F468192): scopeClaims carries the room's
+      // declared collaboration shape AND its declared posture; activityKind is
+      // one of the four shape axes. Both ride the existing query — no extra
+      // round trip for the posture.
+      select: {
+        capsuleId: true,
+        status: true,
+        title: true,
+        scopeClaims: true,
+        activityKind: true,
+      },
       orderBy: [{ updatedAt: "desc" }],
     }),
   ]);
@@ -508,10 +545,24 @@ export async function loadWorkspaceWorkCaseDetail({
   const structure = structureLoader
     ? await structureLoader({ sourceType: source.sourceType, sourceId: source.sourceId })
     : null;
+  const anchoredCapsule = capsules[0] ?? null;
+  const postureContext = postureContextLoader
+    ? await postureContextLoader({
+        sourceType: source.sourceType,
+        sourceId: source.sourceId,
+        assignedToAgentId: item.assignedToAgentId ?? null,
+        now,
+      })
+    : null;
   const room = buildWorkroomView({
     caseKey,
     detail,
     structure,
+    postureContext,
+    shapeKey: readWorkroomShapeClaim(anchoredCapsule?.scopeClaims),
+    activityKind: anchoredCapsule?.activityKind ?? null,
+    scopeClaims: anchoredCapsule?.scopeClaims,
+    now,
     boundary: {
       purpose: item.description,
       outcome: null,

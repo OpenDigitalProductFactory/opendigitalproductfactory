@@ -1,3 +1,6 @@
+---
+status: draft
+---
 # Portfolio-shaped information architecture — design
 
 **Status:** draft for operator review · 2026-08-14
@@ -105,11 +108,15 @@ How comparable business platforms bind a domain model to primary navigation:
 | 3b | **Connections cockpit (§4.5)** — unified external-dependency registry + one Foundation surface + uniform cost/billing + in-dialog provisioning (BI-2A0180A9); first concrete instance of the §4.4 capability | L |
 | 4 | *(referenced, separate epic)* coworker navigate-and-act capability | L |
 
-### 7.1 Open question on the phase-2 label pass *(raised 2026-08-15, unresolved)*
+### 7.1 Resolved — the phase-2 label pass is correct as written *(raised 2026-08-15, resolved 2026-08-16)*
 
-Phase 2 lists `"AI Coworkers"` → `"Agent Identities"` as a quick win. Under the lexicon rule proposed in the companion spec (§3.4, *Interaction Shape Graph*), that rename runs the wrong way: *AI Coworkers* is the operator's word for the thing, *Agent Identities* is the machinery's. Rail labels are among the most expensive strings in the product to change twice, because operators learn them.
+Phase 2 lists `"AI Coworkers"` → `"Agent Identities"`. This was queried on the grounds that it renamed an operator word into a machinery word. **That objection was wrong and is withdrawn.**
 
-If the rename exists to disambiguate the identity **record** from the coworker — a real distinction — then the record is what should be renamed or kept off the rail, not the surface the owner reads. **This needs an answer before phase 2 lands.** Flagged rather than edited, because the disambiguation it is solving may be load-bearing in a way not visible from this document.
+An AI coworker *has* an agent identity; they are two objects, not two names for one. The identity is the GAID record — the `Agent Identity Document` (AIDoc), badging and assurance claims, portable authorization classes, and the chain-of-custody receipts that make a coworker's actions attributable. That is specified normatively in `docs/architecture/GAID.md` alongside TAK and TAK-JSI, each with a conformance-test suite, and it is the platform's central claim rather than an implementation detail. A surface that manages those records is correctly labelled **Agent Identities**, and the rail should say so.
+
+The companion spec's lexicon rule has been corrected accordingly (*Interaction Shape Graph* §3.4): standard-bearing vocabulary is **taught, not hidden**, and the check derives that list from the normative corpus so ease-of-use work cannot soften it away.
+
+## 8. Acceptance
 
 - Every `shellNav` entry resolves — via a checked-in test — to exactly one FPAW portfolio key or an explicitly declared cross-cut; none is silently unclassified.
 - People, AI Workforce, and Coworker Decisions are reachable under one Workforce section without violating section-scoped nav or the breadcrumb guarantee.

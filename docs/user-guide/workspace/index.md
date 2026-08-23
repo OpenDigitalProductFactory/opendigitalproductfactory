@@ -94,6 +94,42 @@ business action until the durable operations provider confirms it.
   was applied.
 - A rejected or failed command leaves the business state unchanged.
 
+## What this installation is
+
+Platform operators see a panel at the top of Operations that states what this
+installation is and what your AI coworkers may do here. Nothing else in the
+platform changes it, and it never grants access — access still comes from roles,
+grants, and approved links.
+
+The panel shows four stances, each with the reason it resolved that way:
+
+- **Credentials** — whether an agent may generate and rotate local test
+  credentials, or whether you enter every credential yourself.
+- **Teardown** — whether this installation may be destroyed, only after its work
+  is captured, or never.
+- **Source changes** — whether platform source may be edited from a governed
+  worktree, or not from this directory at all.
+- **Paired installation** — whether a paired installation may be read, written
+  through an approved link, or is absent.
+
+An installation that has not said what it is counts as production, so every
+brake stays on until someone declares otherwise.
+
+### Correcting the identity
+
+Open **Change what this installation is** to set its main job, its environment,
+and the production installation it is paired with.
+
+Choose **Show me the impact** first. The preview lists the fields you are
+changing, what each stance becomes, any brake that gets looser, and the evidence
+that stops describing this install. Nothing is saved until you confirm that
+preview, and editing a field afterwards asks you to look again.
+
+The installer owns the environment for this host. If the installer already set
+one, your choice here is recorded but the installer's value stays in force, the
+panel says so, and the record is marked **Needs review** until the two agree.
+Re-run the installer with `--environment-class` to change the value in force.
+
 ## Key Concepts
 
 - **Tiles** — Summary cards for each platform area showing the metrics most relevant to your role. Tiles update in real time and act as shortcuts into the area they represent.
@@ -110,6 +146,7 @@ business action until the durable operations provider confirms it.
 - Review recent activity from colleagues and digital coworkers without leaving your workspace
 - Access your calendar for today's events and upcoming deadlines
 - Open [Managed Documents](documents.md) to review document state, versions, and references
-- Open [My Work and Workrooms](work-rooms.md) to see the outcome, accountable participants, current attention, activity, and next action for active company work. Room access is checked before internal context loads; participant details explain each person or AI coworker's role, current work, authority, and sponsorship. Connected communication channels link back to the same canonical room and cannot treat message delivery as completed work.
+- Open [My Work and Workrooms](work-rooms.md) to see the outcome, accountable participants, current attention, activity, and next action for active company work. Room access is checked before internal context loads; participant details explain each person or AI coworker's role, current work, authority, and sponsorship. Connected communication channels link back to the same canonical room and cannot treat message delivery as completed work. Each room also states the pace it works at — how persistently the coworker follows up, whether it asks before acting, and why — which quietens outside your operating hours without ever changing what the coworker is allowed to do.
 - Use your digital coworker to get a personalized briefing on what needs your attention
+- Open **Change what this installation is** to declare this installation's job, environment, and paired installation, and to see the impact before you confirm it
 - Open the ["Needs you" inbox](attention-inbox.md) to review plain-language decision cards, weekly batches, and the full technical record when needed

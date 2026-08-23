@@ -17,6 +17,7 @@ import {
   updateBuildHappyPathState,
 } from "@/lib/mcp/build-tool-helpers";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { enforceBuildInitiativeReadiness } from "@/lib/build/build-entry-gate";
 import { resolveIdeateBuildForToolPure } from "@/lib/build/ideate-build-resolution";
 import { formatUpdateFeatureBriefError } from "./update-feature-brief-error";
 
@@ -211,6 +212,12 @@ export async function verificationPreflight(params: Record<string, unknown>, use
 export async function startBuild(params: Record<string, unknown>, userId: string, context?: HandlerContext): Promise<ToolResult> {
   const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
   if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
+  const readiness = await enforceBuildInitiativeReadiness({
+    buildId, target: "implementation", targetPhase: "build", expectedPhase: "plan",
+  });
+  if (!readiness.allowed) {
+    return { success: false, error: "initiative_not_ready", message: readiness.message, data: { readiness: readiness.decision } };
+  }
 
   try {
     const { assertFeatureBuildDependenciesSatisfied } = await import("@/lib/build/feature-build-dependencies");
@@ -483,4 +490,3 @@ export async function startScoutResearch(params: Record<string, unknown>, userId
     data: { urlCount: externalUrls.length },
   };
 }
-

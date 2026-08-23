@@ -19,11 +19,13 @@
 # Ignore the entire context first.
 **
 
-# Re-include only what Dockerfile.promoter COPYs.
+# Re-include only the staged promoter build closure.
 !promoter-contract.json
 !Dockerfile
 !Dockerfile.promoter
 !scripts/promote.sh
+!scripts/governed-teardown.mjs
+!scripts/salvage-sweep.mjs
 !scripts/apply-runtime-capability-transition.mjs
 !scripts/runtime-transition-authority.mjs
 !scripts/rotate-runtime-transition-secret.mjs
@@ -33,6 +35,7 @@
 !scripts/installer/migrate-install-state.mjs
 !scripts/installer/resolve-host-identity.mjs
 !scripts/installer/install-state-transaction.mjs
+!scripts/installer/install-release-assets.mjs
 !scripts/installer/install-state-lock-contract.json
 !scripts/installer/install-state-schema-registry.mjs
 !scripts/installer/install-state.schema.json

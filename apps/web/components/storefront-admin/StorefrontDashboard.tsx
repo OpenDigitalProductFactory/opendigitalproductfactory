@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 type DashboardConfig = {
   id: string;
@@ -11,6 +12,8 @@ type DashboardConfig = {
   ctaType: string;
   sectionCount: number;
   itemCount: number;
+  portalLabel?: string;
+  stakeholderLabel?: string;
 };
 
 type Counts = { inquiries: number; bookings: number; orders: number; donations: number };
@@ -18,6 +21,9 @@ type Counts = { inquiries: number; bookings: number; orders: number; donations: 
 export function StorefrontDashboard({ config, counts }: { config: DashboardConfig; counts: Counts }) {
   const [published, setPublished] = useState(config.isPublished);
   const [toggling, setToggling] = useState(false);
+  const router = useRouter();
+  const portalLabel = config.portalLabel ?? "storefront";
+  const stakeholderLabel = (config.stakeholderLabel ?? "customers").toLowerCase();
 
   async function togglePublish() {
     setToggling(true);
@@ -27,7 +33,11 @@ export function StorefrontDashboard({ config, counts }: { config: DashboardConfi
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: config.id, isPublished: !published }),
       });
-      if (res.ok) setPublished((p) => !p);
+      if (res.ok) {
+        const nextPublished = !published;
+        setPublished(nextPublished);
+        if (nextPublished) router.refresh();
+      }
     } finally {
       setToggling(false);
     }
@@ -63,16 +73,16 @@ export function StorefrontDashboard({ config, counts }: { config: DashboardConfi
         >
           <div style={{ flex: 1, minWidth: 220 }}>
             <div className="text-[var(--dpf-text)]" style={{ fontSize: 14, fontWeight: 700 }}>
-              Your storefront is ready — publish it now
+              Your {portalLabel} is ready — publish it now
             </div>
             <div className="text-[var(--dpf-muted)]" style={{ marginTop: 2, fontSize: 13 }}>
-              It is not live yet, so the public link returns a 404. Publish it so customers can find you.
+              It is not live yet, so the public link returns a 404. Publish it so {stakeholderLabel} can find you.
             </div>
           </div>
           <button
             onClick={togglePublish}
             disabled={toggling}
-            className="bg-[var(--dpf-accent)] text-white"
+            className="bg-[var(--dpf-accent)] text-[var(--dpf-on-accent)]"
             style={{
               padding: "8px 18px",
               borderRadius: 6,
@@ -99,7 +109,9 @@ export function StorefrontDashboard({ config, counts }: { config: DashboardConfi
           View Live ↗
         </a>
         <button onClick={togglePublish} disabled={toggling}
-          className={published ? "bg-[var(--dpf-error)] text-white" : "bg-[var(--dpf-accent)] text-white"}
+          className={published
+            ? "bg-[var(--dpf-error)] text-[var(--dpf-on-accent)]"
+            : "bg-[var(--dpf-accent)] text-[var(--dpf-on-accent)]"}
           style={{ padding: "6px 14px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
           {toggling ? "..." : published ? "Unpublish" : "Publish"}
         </button>

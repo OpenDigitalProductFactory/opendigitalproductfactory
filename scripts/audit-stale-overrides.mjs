@@ -122,10 +122,16 @@ export function classifyFloors(entries, lookup) {
 
 // ---- I/O layer (network; not exercised by unit tests) --------------------
 
+// The Dependabot alerts endpoint is CURSOR-paginated (before/after) and rejects
+// `page=` outright: HTTP 400 "Pagination using the `page` parameter is not
+// supported." This loop used to pass `page`, so EVERY cross-check threw on the
+// first request and the audit silently degraded to tag-coverage-only — reporting
+// "cross-check SKIPPED" as if it were merely offline. Follow the `Link: rel=next`
+// header instead, which is the correct form for this endpoint.
 async function fetchAllDependabotAlerts({ repo, token }) {
   const alerts = [];
-  for (let page = 1; page <= 20; page++) {
-    const url = `${API}/repos/${repo}/dependabot/alerts?per_page=100&state=all&page=${page}`;
+  let url = `${API}/repos/${repo}/dependabot/alerts?per_page=100&state=all`;
+  for (let hop = 0; hop < 20 && url; hop++) {
     const res = await fetch(url, {
       headers: {
         accept: "application/vnd.github+json",
@@ -133,11 +139,20 @@ async function fetchAllDependabotAlerts({ repo, token }) {
         "x-github-api-version": "2022-11-28",
       },
     });
+    // 403 here is the default GITHUB_TOKEN, which cannot read Dependabot alerts —
+    // name it explicitly so the remedy (set DEPENDABOT_ALERTS_TOKEN) is obvious
+    // rather than looking like a generic outage.
+    if (res.status === 403) {
+      throw new Error(
+        "GitHub API 403 reading Dependabot alerts — the default GITHUB_TOKEN cannot read this surface. " +
+          "Set the DEPENDABOT_ALERTS_TOKEN repository secret to a token with the security_events scope.",
+      );
+    }
     if (!res.ok) throw new Error(`GitHub API ${res.status} ${res.statusText}`);
     const batch = await res.json();
-    if (!Array.isArray(batch) || batch.length === 0) break;
+    if (!Array.isArray(batch)) throw new Error("GitHub API returned a non-array alert payload");
     alerts.push(...batch);
-    if (batch.length < 100) break;
+    url = /<([^>]+)>;\s*rel="next"/.exec(res.headers.get("link") ?? "")?.[1] ?? null;
   }
   return alerts;
 }

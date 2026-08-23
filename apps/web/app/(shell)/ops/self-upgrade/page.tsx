@@ -16,6 +16,7 @@ import { hasGovernedRecoveryPoint } from "@/lib/self-upgrade/rollback";
 import { NAV_MODE_COOKIE, resolveNavModeFromCookie, isSimpleNavMode } from "@/lib/navigation/nav-mode";
 import { SelfUpgradeLiveProvider } from "@/components/ops/SelfUpgradeLiveProvider";
 import type { SelfUpgradeStatusSnapshot } from "@/lib/self-upgrade/status-snapshot";
+import { UNKNOWN_SELF_UPGRADE_SUPPORT } from "@/lib/self-upgrade/support";
 
 export default async function SelfUpgradePage() {
   // BI-D43EB266: Self-Upgrade is the single operator entry point for "update
@@ -59,6 +60,7 @@ export default async function SelfUpgradePage() {
 
   const fallbackStatus = {
     enabled: false,
+    support: UNKNOWN_SELF_UPGRADE_SUPPORT,
     channel: "stable",
     inMaintenanceWindow: false,
     windowConfigured: false,
@@ -140,6 +142,7 @@ export default async function SelfUpgradePage() {
   const ownerSummary = buildOwnerReleaseSummary(
     {
       enabled: effectiveStatus.enabled,
+      support: effectiveStatus.support,
       isFresh: effectiveStatus.isFresh,
       targetSha: effectiveStatus.targetSha,
       deployedSha: effectiveStatus.deployedSha,
@@ -195,6 +198,9 @@ export default async function SelfUpgradePage() {
           primaryAction={
             <SelfUpgradeTriggerControl
               enabled={clientProps.enabled}
+              unavailableReason={
+                clientProps.support.supported ? null : clientProps.support.message
+              }
               channel={clientProps.channel}
               latestRun={clientProps.latestRun}
               quiescence={clientProps.quiescence}

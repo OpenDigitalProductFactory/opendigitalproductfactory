@@ -31,7 +31,7 @@ export default async function ItemDetailPage({
 
   if (!storefront || !item) notFound();
 
-  const trust = resolveTrustProfile(storefront.archetypeCategory);
+  const trust = resolveTrustProfile(storefront.archetypeCategory, storefront.archetypeId);
   const nextLine = whatHappensNext(item.ctaType, trust.bookingNoun);
 
   return (
@@ -65,10 +65,10 @@ export default async function ItemDetailPage({
       </div>
 
       <p style={{ marginTop: 16, fontSize: 13, color: "var(--dpf-muted)" }}>
-        Questions before you book?{" "}
+        {trust.contactPrompt}{" "}
         <Link href={`/s/${slug}/inquire`} style={{ color: "var(--dpf-accent)" }}>Contact {storefront.orgName}</Link>
         {" · "}
-        <Link href={`/s/${slug}/policies`} style={{ color: "var(--dpf-accent)" }}>Booking &amp; cancellation policy</Link>
+        <Link href={`/s/${slug}/policies`} style={{ color: "var(--dpf-accent)" }}>{trust.policyLinkLabel} policy</Link>
       </p>
     </div>
   );

@@ -4,13 +4,20 @@ const mocks = vi.hoisted(() => ({
   count: vi.fn(),
   findMany: vi.fn(),
   findEpic: vi.fn(),
+  countEpics: vi.fn(),
+  findEpics: vi.fn(),
+  buildReferenceIndex: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({
   prisma: {
     backlogItem: { count: mocks.count, findMany: mocks.findMany },
-    epic: { findFirst: mocks.findEpic },
+    epic: { findFirst: mocks.findEpic, count: mocks.countEpics, findMany: mocks.findEpics },
   },
+}));
+
+vi.mock("@/lib/backlog/spec-plan-search", () => ({
+  buildSpecPlanReferenceIndex: mocks.buildReferenceIndex,
 }));
 
 import { listBacklogItems } from "./backlog-pack-read-tools";
@@ -44,6 +51,39 @@ describe("backlog deferral read projection", () => {
     vi.clearAllMocks();
     mocks.count.mockResolvedValue(1);
     mocks.findMany.mockResolvedValue([]);
+    mocks.buildReferenceIndex.mockResolvedValue({ specs: new Set(), plans: new Set() });
+    mocks.countEpics.mockResolvedValue(0);
+    mocks.findEpics.mockResolvedValue([]);
+  });
+
+  it("does not report a plan-only epic as having a spec", async () => {
+    mocks.countEpics.mockResolvedValue(1);
+    mocks.findEpics.mockResolvedValue([{
+      id: "epic-row",
+      epicId: "EP-PLAN-ONLY",
+      title: "Plan only",
+      status: "open",
+      priority: 1,
+      updatedAt: new Date("2026-08-22T00:00:00.000Z"),
+      scopeKind: "platform",
+      archetypeCategories: [],
+      archetypeIds: [],
+      scopeRationale: null,
+      lifecycleTags: [],
+      items: [],
+    }]);
+    mocks.buildReferenceIndex.mockResolvedValue({
+      specs: new Set(),
+      plans: new Set(["EP-PLAN-ONLY"]),
+    });
+
+    const { listEpics } = await import("./backlog-pack-read-tools");
+    const result = await listEpics({});
+
+    expect((result.data as { epics: unknown[] }).epics[0]).toMatchObject({
+      hasSpec: false,
+      hasPlan: true,
+    });
   });
 
   it("builds the nonconformant filter from the canonical projection fields", async () => {

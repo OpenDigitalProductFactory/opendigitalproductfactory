@@ -22,6 +22,9 @@ import {
   resolveStanceVectors,
   type StanceVectorKey,
 } from "@/lib/onboarding/archetype-business-context";
+import {
+  ensureOrgDecisionPerspectiveProfile,
+} from "@/lib/onboarding/ensure-org-decision-perspective-profile";
 import { STANCE_VECTOR_BUNDLES, stanceVectorSlug } from "@/lib/onboarding/seed-org-wwwd-corpus";
 import {
   classesCoveredByVectors,
@@ -65,6 +68,15 @@ export async function confirmStanceVectors(input: {
   });
 
   try {
+    // `how-you-decide` is valid before the full setup-completion seed chain.
+    // Materialize only the profile/version container this write path needs;
+    // the final corpus seeder remains responsible for starter pages/materials.
+    await ensureOrgDecisionPerspectiveProfile({
+      organizationId: org.id,
+      organizationName: org.name,
+      db: prisma,
+    });
+
     for (const vector of v.vectors) {
       const slug = stanceVectorSlug(vector.key);
       const title = defaults[vector.key].title;
@@ -149,7 +161,7 @@ export async function confirmStanceVectors(input: {
       if (!promoted.ok) {
         return {
           ok: false,
-          error: "Your stances were saved, but the decision profile is missing — finish business setup first.",
+          error: "Your stances were saved, but their decision profile could not be prepared. Please try again.",
         };
       }
     }

@@ -5,7 +5,7 @@ disable-model-invocation: false
 user-invocable: true
 allowed-tools: Grep Glob mcp__dpf__wiki_query mcp__dpf__search_knowledge mcp__dpf__search_code_graph mcp__dpf__doc_save mcp__dpf__save_build_notes
 category: governance
-assignTo: ["*"]
+assignTo: ["documentation-specialist", "doc-specialist", "platform-engineer", "external-coding-agent"]
 capability: null
 taskType: elicitation
 triggerPattern: "interview me|grill me|pick my brain|debrief me|extract (what|everything) I know|capture my (knowledge|thinking)|brain ?dump|knowledge dump|get .* out of my head|it's all in my head|tacit knowledge|elicit|onboard .* (domain|business) (knowledge|context)|why did we (decide|choose)"

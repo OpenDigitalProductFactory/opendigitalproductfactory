@@ -83,6 +83,45 @@ In a standing room, the **Current cycle** panel shows the objective, trigger, re
 
 **Completed cycles** are ordered by completion time. Open a completed cycle to read its Outcome Packet, durable-record count, verification state, and unresolved work. Each unresolved item has an explicit disposition: carry it into the next cycle, open a separate case, defer it, or accept it. Retrying carry-over does not create duplicate work.
 
+## Pace and Priority
+
+Every room shows the pace it is working at, in a **Pace and priority** section that stays
+closed until you open it. It answers one question: why is the coworker in this room
+behaving the way it is.
+
+Inside, the room states:
+
+- **Pace** — whether the coworker stays quiet, follows up, or pushes and escalates, and
+  whether it advises, asks first, or acts alone.
+- **Where that came from** — a policy floor, the room's own choice, the shape of the work,
+  the coworker's own setting, or the platform default.
+- **Priority** — whether this work leans toward quality, cost, or speed.
+- **Checking** — whether work here is verified before it counts as done.
+- **Why** — the specific reason for each change, in plain terms.
+
+The pace is worked out from the room, not just from the coworker. Three things move it:
+
+- **The shape of the work.** An escalation pushes harder because someone is waiting. Work
+  that faces outward — anything leaving the business under its own name — is verified
+  before it goes. Standing corpus curation stays in the background.
+- **What the business does.** A business whose demand is emergency-driven, or whose
+  capacity is lost rather than delayed when it goes unused, warrants earlier attention.
+- **The clock.** When the business is closed, follow-up quietens down. When an obligation
+  is due soon, it speeds up.
+
+Two rules keep this safe.
+
+**Closing time changes how loudly a coworker follows up. It never changes what a coworker
+is allowed to do.** An out-of-hours room is quieter; its approval requirements are exactly
+what they were during the day.
+
+**Some work is never quietened.** Security incidents, platform and queue health, and a
+field appointment already running late keep their pace when the business is closed,
+because those problems get worse while nobody is looking.
+
+If a room has nothing of its own to say about pace, it says so — "Running on defaults" —
+rather than implying a decision nobody made.
+
 ## Incomplete or Unavailable Rooms
 
 If a room boundary is incomplete, the page identifies the missing elements instead of inventing them. If the source is unavailable, the last available projection is marked clearly and the page gives one recovery direction. If an AI coworker's current status is unavailable, the participant panel says so and directs you back to the room's next action instead of implying that the coworker is still working.

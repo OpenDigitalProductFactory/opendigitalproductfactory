@@ -54,6 +54,10 @@ apps/mobile/coverage/
 .claude/settings.local.json
 .claude/autonomous-e2e-progress.md
 .claude/worktrees/
+# Browser-pane / preview launch config — machine-local ports and URLs, same
+# family as settings.local.json above. Never tracked; without this line it
+# shows as untracked work in every session's end-of-session guard.
+.claude/launch.json
 
 # Local verification and handoff artifacts
 output/

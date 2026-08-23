@@ -96,9 +96,17 @@ COPY scripts/set-hooks-path.mjs ./scripts/
 COPY scripts/lib/resolve-capability-compose-profiles.mjs ./scripts/lib/
 COPY scripts/lib/govern-capability-compose-args.mjs ./scripts/lib/
 COPY scripts/lib/capability-state-hash.mjs ./scripts/lib/
+# apps/web-src is copied from this stage into the runner for Build Studio's
+# first-install sandbox. Keep every repo-relative import used by that source in
+# the same source bundle; otherwise the production portal can be healthy while
+# the sandbox's `next dev` exits with "Module not found".
+COPY scripts/lib/capability-service-projection.mjs ./scripts/lib/
+COPY scripts/lib/transition-signing.mjs ./scripts/lib/
+COPY scripts/installer/resolve-host-identity.mjs ./scripts/installer/
 COPY scripts/capability-service-catalog.generated.json ./scripts/
 COPY scripts/installer/validate-install-state.mjs ./scripts/installer/
 COPY scripts/installer/install-state-transaction.mjs ./scripts/installer/
+COPY scripts/installer/install-release-assets.mjs ./scripts/installer/
 COPY scripts/installer/install-state-lock-contract.json ./scripts/installer/
 COPY scripts/installer/install-state-schema-registry.mjs ./scripts/installer/
 COPY scripts/installer/install-state.schema.json ./scripts/installer/
@@ -120,6 +128,7 @@ COPY monitoring/ ./monitoring/
 COPY scripts/backup-postgres.sh ./scripts/
 COPY scripts/restore-postgres.sh ./scripts/
 COPY scripts/postgres-trial-restore.sh ./scripts/
+COPY scripts/salvage-sweep.mjs ./scripts/
 # Work Capsule change-impact planning executes the canonical gate-context CLI
 # at runtime. Package its exact transitive source closure into the image so a
 # mutable /host-dpf checkout can never substitute different rule bytes.
@@ -187,13 +196,14 @@ RUN mkdir -p /dpf-release-assets/scripts/lib /dpf-release-assets/scripts/install
     cp scripts/lib/resolve-capability-compose-profiles.mjs scripts/lib/govern-capability-compose-args.mjs scripts/lib/capability-state-hash.mjs /dpf-release-assets/scripts/lib/ && \
     cp scripts/capability-service-catalog.generated.json /dpf-release-assets/scripts/ && \
     cp scripts/installer/validate-install-state.mjs /dpf-release-assets/scripts/installer/ && \
-    cp scripts/installer/install-state-transaction.mjs scripts/installer/install-state-lock-contract.json /dpf-release-assets/scripts/installer/ && \
+    cp scripts/installer/install-state-transaction.mjs scripts/installer/install-release-assets.mjs scripts/installer/install-state-lock-contract.json /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/install-state-schema-registry.mjs /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/install-state.schema.json /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/install-state.v1.schema.json /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/install-state.v2.schema.json /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/native-edge-host.ps1 /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/lib/state.ps1 scripts/installer/lib/compose-chain.ps1 /dpf-release-assets/scripts/installer/lib/ && \
+    cp config/consumer-install/agent-pointer.md /dpf-release-assets/AGENTS.md && \
     mkdir -p /dpf-release-assets/scripts/safety && \
     cp scripts/safety/dpf-shell-guard.ps1 scripts/safety/dpf-shell-guard.sh \
        scripts/safety/dpf-shell-guard-fallback-patterns.json \
@@ -295,14 +305,14 @@ COPY version.json ./version.json
 # Decoupling it from DPF_VERSION is the fix for BI-C8E90A79 — a stamped label
 # can no longer mask which source was built. Exclusions keep it reproducible
 # across builds of the same source (node_modules / .next / generated / tsbuildinfo).
-RUN (find /app/apps/web-src /app/packages-src /app/scripts /app/docs/professions /app/patches -type f \
+RUN (find /app/apps/web-src /app/packages-src /app/scripts /app/config /app/docs/professions /app/patches -type f \
       -not -path '*/node_modules/*' \
       -not -path '*/.pnpm-store/*' \
       -not -path '*/.next/*' \
       -not -path '*/generated/*' \
       -not -name '*.tsbuildinfo' \
       -exec sha256sum {} +; \
-     sha256sum /app/pnpm-workspace.yaml /app/pnpm-lock.yaml /app/package.json /app/tsconfig.base.json /app/.gitignore) \
+     sha256sum /app/pnpm-workspace.yaml /app/pnpm-lock.yaml /app/package.json /app/tsconfig.base.json /app/.gitignore /app/version.json) \
       | sort -k 2 | sha256sum | cut -d ' ' -f 1 > /app/.dpf-source-content-hash
 
 # Operator-facing image version baked in at build time. The explicit
@@ -335,6 +345,8 @@ RUN if [ -n "$DPF_PLATFORM_VERSION" ]; then \
 COPY Dockerfile.promoter /promoter/Dockerfile.promoter
 COPY promoter-contract.json /promoter/promoter-contract.json
 COPY scripts/promote.sh /promoter/scripts/promote.sh
+COPY scripts/governed-teardown.mjs /promoter/scripts/governed-teardown.mjs
+COPY scripts/salvage-sweep.mjs /promoter/scripts/salvage-sweep.mjs
 COPY Dockerfile /promoter/Dockerfile
 COPY scripts/apply-runtime-capability-transition.mjs /promoter/scripts/apply-runtime-capability-transition.mjs
 COPY scripts/runtime-transition-authority.mjs /promoter/scripts/runtime-transition-authority.mjs
@@ -343,6 +355,7 @@ COPY scripts/lib/transition-signing.mjs /promoter/scripts/lib/transition-signing
 COPY scripts/promoter-migration-envelope.mjs /promoter/scripts/promoter-migration-envelope.mjs
 COPY scripts/installer/validate-install-state.mjs /promoter/scripts/installer/validate-install-state.mjs
 COPY scripts/installer/install-state-transaction.mjs /promoter/scripts/installer/install-state-transaction.mjs
+COPY scripts/installer/install-release-assets.mjs /promoter/scripts/installer/install-release-assets.mjs
 COPY scripts/installer/install-state-lock-contract.json /promoter/scripts/installer/install-state-lock-contract.json
 COPY scripts/installer/migrate-install-state.mjs /promoter/scripts/installer/migrate-install-state.mjs
 COPY scripts/installer/resolve-host-identity.mjs /promoter/scripts/installer/resolve-host-identity.mjs

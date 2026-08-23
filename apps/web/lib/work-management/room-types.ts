@@ -8,6 +8,7 @@ import type {
 } from "./case-types";
 import type { ReceiptEnvelope } from "./receipt-envelope";
 import type { WorkroomStructure } from "./room-structure";
+import type { WorkroomPostureView } from "./room-posture";
 
 export type WorkroomMode = "finite" | "standing";
 
@@ -203,6 +204,16 @@ export interface WorkroomView {
    * the loader via `resolveWorkroomStructure` and passed pre-resolved (DB-free build).
    */
   structure: WorkroomStructure | null;
+  /**
+   * EP-WORK-POSTURE Slice D (BI-4F468192): the posture this room actually runs
+   * at — proactivity, action boundary and cost/quality/time priority, derived
+   * from the room's shape, its archetype's value stream and the business clock,
+   * with the layer that supplied each value and the reason for every clamp.
+   *
+   * Null when the loader supplied no posture context, which is the inert
+   * default: a surface must say "we don't know" rather than imply a decision.
+   */
+  posture: WorkroomPostureView | null;
   projection: {
     confidence: WorkCaseProjectionConfidence;
     incompleteBoundary: boolean;

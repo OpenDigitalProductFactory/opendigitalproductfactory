@@ -28,6 +28,7 @@ import { useOptionalSelfUpgradeLive } from "@/components/ops/SelfUpgradeLiveProv
 
 type Props = {
   enabled: boolean;
+  unavailableReason?: string | null;
   channel: string;
   latestRun: LatestRun | null;
   quiescence?: QuiescenceActivity | null;
@@ -36,6 +37,7 @@ type Props = {
 
 export default function SelfUpgradeTriggerControl({
   enabled,
+  unavailableReason,
   channel,
   latestRun: initialLatestRun,
   quiescence: initialQuiescence,
@@ -196,9 +198,10 @@ export default function SelfUpgradeTriggerControl({
     return (
       <div
         className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2 text-sm text-[var(--dpf-muted)]"
-        data-upgrade-status="disabled"
+        data-upgrade-status={unavailableReason ? "unavailable" : "disabled"}
       >
-        Self-upgrade is disabled. Enable it in settings to allow automated upgrades.
+        {unavailableReason ??
+          "Self-upgrade is disabled. Enable it in settings to allow automated upgrades."}
       </div>
     );
   }

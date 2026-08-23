@@ -1,0 +1,25 @@
+{
+  "version": "1",
+  "decidedOption": "collapsed-section",
+  "decisionInteractionId": "DI-BA4568C889D6",
+  "scope": {
+    "files": [
+      "apps/web/components/workspace/workroom/WorkroomPosture.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "decisionInteractionId": "DI-BA4568C889D6",
+    "consideredOptions": [
+      "collapsed-section",
+      "always-visible-band",
+      "separate-page"
+    ]
+  },
+  "rationale": {
+    "collapsed-section": "CHOSEN. Kernel composite 8.622, margin 3.382, high confidence. A collapsed 'Pace and priority' section composed from the shared Surface primitive, alongside the existing Work / Context / Decisions sections. Lowest human_cognitive_load of the three (0.2): closed by default, so the room's first viewport is unchanged and default-visible words do not grow, while still answering 'why is this coworker behaving like this' on demand.",
+    "always-visible-band": "REJECTED. Kernel composite 5.240. A permanent band pinned to every room scores worst on human_cognitive_load (0.8) \u2014 the room already carries participants, work, context, decisions, cycles and receipts, so a always-on band taxes every visit to serve a question most visits do not ask. Scores negative against 'Preserve the model; disclose complexity progressively'.",
+    "separate-page": "REJECTED. Kernel composite 4.899. Worst operator_effort (0.75) and slowest speed_to_value (0.2) \u2014 a navigation hop to answer a question asked while looking at the room, plus a new route to keep coherent. The rich layer-by-layer provenance it would host stays scoped to BI-4EB2F1D0."
+  },
+  "notes": "EP-WORK-POSTURE Slice D (BI-4F468192). Closed by default, so measured default-visible words on /workspace/cases/[caseKey] are unchanged by this change. Deliberately minimal: states the effective posture and the reason for each clamp, then stops; the full layer-by-layer provenance surface is BI-4EB2F1D0. Rendering is asserted by WorkroomPosture.test.tsx, including that the markup carries no hardcoded colour and uses --dpf-* tokens only. The measured-sweep path was not available: it needs the served DOM on the Contributor preview, and the shared :3001 lease was held throughout by another active session (feat/scheduled-work-register)."
+}

@@ -1,6 +1,9 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
-import type { ArchetypeVocabulary } from "@/lib/storefront/archetype-vocabulary";
+import {
+  getStorefrontPresentation,
+  type ArchetypeVocabulary,
+} from "@/lib/storefront/archetype-vocabulary";
 import { DEFAULT_CTA_LABELS } from "@/lib/storefront/cta-labels";
 import { getCurrencySymbol } from "@/lib/finance/currency-symbol";
 import {
@@ -60,6 +63,7 @@ type Props = {
   onSave: (data: ItemFormData) => Promise<void>;
   initial?: Partial<ItemFormData>;
   vocabulary: ArchetypeVocabulary;
+  archetypeCategory?: string;
   categorySuggestions: string[];
   defaultCtaType: string;
   /** Workspace base currency; defaults to USD when not provided. */
@@ -76,6 +80,7 @@ export function ItemFormDialog({
   onSave,
   initial,
   vocabulary,
+  archetypeCategory = "",
   categorySuggestions,
   defaultCtaType,
   defaultPriceCurrency = "USD",
@@ -83,6 +88,7 @@ export function ItemFormDialog({
   editingItemId,
   productLines = [],
 }: Props) {
+  const copy = getStorefrontPresentation(archetypeCategory).productMix;
   const [form, setForm] = useState<ItemFormData>(() => ({
     ...EMPTY_FORM,
     productLineId:
@@ -189,7 +195,7 @@ export function ItemFormDialog({
               <textarea
                 value={form.description}
                 onChange={(e) => set("description", e.target.value)}
-                placeholder="Customer-facing description"
+                placeholder={copy.publicDescriptionPlaceholder}
                 rows={2}
                 className="w-full px-3 py-1.5 text-sm rounded-md bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] text-[var(--dpf-text)] outline-none focus:border-[var(--dpf-accent)] resize-none"
               />
@@ -210,20 +216,20 @@ export function ItemFormDialog({
             </Field>
 
             {!isEditing && productLines.length > 1 && (
-              <Field label="Product line" required>
+              <Field label={copy.lineLabel} required>
                 <select
                   value={form.productLineId}
                   onChange={(e) => set("productLineId", e.target.value)}
                   required
                   className="w-full px-3 py-1.5 text-sm rounded-md bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] text-[var(--dpf-text)] outline-none focus:border-[var(--dpf-accent)]"
                 >
-                  <option value="">Choose a product line</option>
+                  <option value="">{copy.chooseLineLabel}</option>
                   {productLines.map((line) => (
                     <option key={line.id} value={line.id}>{line.name}</option>
                   ))}
                 </select>
                 <span className="mt-1 block text-dpf-caption text-[var(--dpf-muted)]">
-                  Shown because this business sells through more than one product line.
+                  {copy.multiLineHelp}
                 </span>
               </Field>
             )}

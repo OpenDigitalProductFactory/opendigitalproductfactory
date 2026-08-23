@@ -248,6 +248,45 @@ describe("connector credential store", () => {
     expect(database.transactions).toEqual(["begin", "commit"]);
   });
 
+  it("records health evidence without exposing provider-local row mutation", async () => {
+    const now = new Date("2026-08-22T06:00:00.000Z");
+    const database = repository(row({ lastErrorAt: new Date(), lastErrorMsg: "old" }));
+    const store = createConnectorCredentialStore({ repository: database.repo, crypto: crypto(), now: () => now });
+
+    await store.recordHealthProbe("acme", { succeeded: true });
+
+    expect(database.tx.update).toHaveBeenCalledWith({
+      integrationId: "acme",
+      data: { status: "connected", lastTestedAt: now, lastErrorAt: null, lastErrorMsg: null },
+    });
+  });
+
+  it("updates only the encrypted safe projection while preserving secrets and lifecycle timestamps", async () => {
+    const fields = {
+      schemaVersion: 1,
+      reconnectFields: { tenant: "north" },
+      secretFields: { password: "secret" },
+      safeProjection: { accountName: "North", publicPublicationEnabled: false },
+    };
+    const prior = row({
+      fieldsEnc: `encrypted:${JSON.stringify(fields)}`,
+      tokenCacheEnc: `encrypted:${JSON.stringify({ schemaVersion: 1, tokenEnvelope: {} })}`,
+    });
+    const database = repository(prior);
+    const crypt = crypto();
+    const store = createConnectorCredentialStore({ repository: database.repo, crypto: crypt });
+
+    await store.updateSafeProjection("acme", (projection) => ({ ...projection, publicPublicationEnabled: true }));
+
+    expect(database.current()).toMatchObject({
+      status: prior.status,
+      lastTestedAt: prior.lastTestedAt,
+      lastErrorAt: prior.lastErrorAt,
+      lastErrorMsg: prior.lastErrorMsg,
+    });
+    expect(crypt.encryptJson).toHaveBeenCalledWith({ ...fields, safeProjection: { accountName: "North", publicPublicationEnabled: true } });
+  });
+
   it("returns only safe setup state and derives degraded without persisting it", async () => {
     const database = repository(row({
       fieldsEnc: `encrypted:${JSON.stringify({

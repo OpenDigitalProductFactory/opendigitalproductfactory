@@ -114,6 +114,7 @@ model CustomerAccount {
   // because an MSP is routinely BOTH a customer (buys its own install) and a
   // partner (resells). Schema audit: docs/superpowers/specs/2026-07-23-partner-identity-schema-audit.md
   partnerEnrollment       PartnerProgramEnrollment?
+  trips Trip[] @relation("TripCustomerAccount")
 
   @@index([status])
   @@index([parentAccountId])

@@ -9,7 +9,7 @@ allowed-tools: Grep Glob mcp__dpf__search_code_graph mcp__dpf__wiki_query mcp__d
 
 # DPF coworker fields (Surface B — in-portal seed loader)
 category: design
-assignTo: ["*"]
+assignTo: ["build-specialist", "platform-engineer", "external-coding-agent", "software-engineer"]
 capability: null
 taskType: deliberation
 triggerPattern: "brainstorm|explore options|candidate approaches|how might we|design options|ideate|what are the ways|possible approaches"

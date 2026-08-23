@@ -92,6 +92,10 @@ const { mockGetQuiescenceLevel } = vi.hoisted(() => ({
   mockGetQuiescenceLevel: vi.fn(),
 }));
 
+const { mockEnforceBuildInitiativeReadiness } = vi.hoisted(() => ({
+  mockEnforceBuildInitiativeReadiness: vi.fn(),
+}));
+const mockAssertFeatureBuildCompletion = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/auth", () => ({
   auth: mockAuth,
 }));
@@ -127,17 +131,16 @@ vi.mock("@/lib/build/decision-service", () => ({
   evaluateBuildStudioDecision: mockEvaluateBuildStudioDecision,
 }));
 
+vi.mock("@/lib/build/build-entry-gate", () => ({
+  enforceBuildInitiativeReadiness: mockEnforceBuildInitiativeReadiness,
+  assertBuildPhaseInitiativeReadiness: mockEnforceBuildInitiativeReadiness,
+}));
+vi.mock("@/lib/backlog/initiative-readiness/build-terminal-transition", () => ({ assertFeatureBuildCompletion: mockAssertFeatureBuildCompletion }));
+
 vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
 }));
 
-// `resumeBuildImplementation` / `advanceBuildPhase` fire `autoExecuteBuild`
-// fire-and-forget (build.ts). That background chain dynamically imports the
-// real build pipeline and event bus, whose console.log calls land AFTER the
-// test resolves — leaving an onUserConsoleLog RPC pending at worker teardown
-// (EnvironmentTeardownError, 0 failed tests, exit 1). Mocking both modules
-// makes the dispatch a silent no-op so the run is deterministic. These tests
-// assert governed-action behavior, not pipeline execution.
 vi.mock("@/lib/build-pipeline", () => ({
   runBuildPipeline: mockRunBuildPipeline,
 }));
@@ -157,10 +160,6 @@ vi.mock("@/lib/agent-event-bus", () => ({
   },
 }));
 
-// createFeatureBuild fires `void startBuildPhaseRun(...)` (cost tracking) which
-// throws QuiescingError whenever the portal is draining for a self-upgrade.
-// Mock the level reader so the test can drive that drain, and mirror the real
-// QuiescingError shape so `instanceof`/`.level` behave like production.
 vi.mock("@/lib/self-upgrade/quiescence", () => ({
   getQuiescenceLevel: mockGetQuiescenceLevel,
   QuiescingError: class QuiescingError extends Error {
@@ -224,6 +223,7 @@ describe("governed build start approvals", () => {
         confidenceScore: 0.9,
       },
     });
+    mockEnforceBuildInitiativeReadiness.mockResolvedValue({ allowed: true, message: "allowed" });
     mockEvaluateBuildStudioDecision.mockResolvedValue({
       status: "recommended",
       recommendation: { optionId: "start-implementation", confidence: "high", margin: 0.8 },
@@ -992,9 +992,9 @@ describe("governed build start approvals", () => {
 
     await completeBuild("FB-READ");
 
-    expect(mockPrisma.featureBuild.update).toHaveBeenCalledWith({
-      where: { buildId: "FB-READ" },
-      data: { phase: "complete" },
+    expect(mockAssertFeatureBuildCompletion).toHaveBeenCalledWith({
+      buildId: "FB-READ",
+      expectedPhase: undefined,
     });
     expect(mockPrisma.buildActivity.create).toHaveBeenCalledWith(
       expect.objectContaining({

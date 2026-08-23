@@ -1,9 +1,37 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 import { Prisma } from "../generated/client/client";
 import { prisma } from "./client";
 
 describe("healthcare care appointment Prisma substrate", () => {
+  it("models one typed subject while retaining conditional clinical relations", () => {
+    const schema = readFileSync(
+      resolve(process.cwd(), "prisma/schema/verticals-care.prisma"),
+      "utf8",
+    );
+    const appointment = schema.slice(
+      schema.indexOf("model CareAppointment {"),
+      schema.indexOf("model CareAppointmentParticipant {"),
+    );
+
+    expect(appointment).toContain("subjectKindSlug");
+    expect(appointment).toContain("subjectRef");
+    expect(appointment).toMatch(/patientProfileId\s+String\?/);
+    expect(appointment).toMatch(/visitTypeId\s+String\?/);
+    expect(appointment).toMatch(/locationId\s+String\?/);
+    expect(appointment).toContain(
+      '@@index([organizationId, subjectKindSlug, subjectRef, scheduledStart], map: "CareAppointment_organizationId_subjectKindSlug_subjectRef_idx")',
+    );
+    expect(appointment).toContain("recallAt");
+    expect(appointment).toContain("overbookAuthorizedByPrincipalId");
+    expect(appointment).toContain("preparationMinutes");
+    expect(appointment).toContain("recoveryMinutes");
+    expect(appointment).toContain("footprintStart");
+    expect(appointment).toContain("footprintEnd");
+  });
+
   it("exposes the tenant-safe scheduling authority and evidence streams", () => {
     expect(Prisma.ModelName.CareVisitType).toBe("CareVisitType");
     expect(Prisma.ModelName.CareLocation).toBe("CareLocation");

@@ -25,6 +25,7 @@
 // Once operators have reviewed a few cycles, this gate can be made opt-out.
 
 import { prisma } from "@dpf/db";
+import { enforceBuildInitiativeReadiness } from "@/lib/build/build-entry-gate";
 
 import { resolveShippedFilePaths } from "@/lib/decision-perspective/planned-file-paths";
 
@@ -285,6 +286,13 @@ export async function advanceReviewedBuildToShip(
   );
   if (!canTransitionPhase("review", "ship")) {
     return { kind: "skipped", reason: "transition not allowed" };
+  }
+  const readiness = await enforceBuildInitiativeReadiness({
+    buildId, target: "implementation", targetPhase: "ship", expectedPhase: "review",
+  });
+  if (!readiness.allowed) {
+    await log(`Not advanced — ${readiness.message}`);
+    return { kind: "skipped", reason: readiness.message };
   }
 
   const brief = build.brief as { fixContext?: unknown } | null;

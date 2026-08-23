@@ -56,15 +56,54 @@ describe("worktree-session-heartbeat behavior", () => {
     assert.equal((r.stdout || "").trim(), "");
   });
 
-  it("does NOT write a marker at the root/main clone (only linked worktrees get one)", () => {
-    // The repo root here is not a linked worktree; the hook must skip it.
-    const root = join(here, "../../..");
-    const marker = join(root, ".dpf-session-heartbeat.json");
-    const preexisting = existsSync(marker);
-    const r = runHook({ hookEventName: "Stop", cwd: root });
-    assert.equal(r.status, 0);
-    if (!preexisting) {
+  it("does NOT write a marker at the root/main clone (only linked worktrees get one)", (t) => {
+    // BI-D26E8A08. This used to point at `join(here, "../../..")` — the AMBIENT
+    // checkout — and assert no marker appeared. That is only the root clone when
+    // the tests happen to run there. This repo mandates worktree-per-session, so
+    // in practice it ran inside a LINKED worktree, where the hook correctly
+    // writes a marker and the assertion failed.
+    //
+    // Worse, it was self-poisoning: the failing run left the marker behind, so
+    // the next run saw `preexisting` and skipped the assertion entirely. Fail,
+    // then pass, which reads as flake. CI never saw it because CI checks out a
+    // plain clone.
+    //
+    // Build a throwaway MAIN clone instead, mirroring how the sibling test
+    // builds a throwaway linked worktree. Nothing outside the temp dir is
+    // touched, so the result no longer depends on where the suite is run.
+    let base;
+    try {
+      base = mkdtempSync(join(tmpdir(), "dpf-hb-root-"));
+      const git = (args, cwd) => {
+        const r = spawnSync("git", args, { cwd, encoding: "utf8", windowsHide: true, timeout: 30_000 });
+        if (r.status !== 0) throw new Error(`git ${args.join(" ")}: ${r.stderr}`);
+        return r;
+      };
+      git(["init", "-q", "-b", "main"], base);
+      git(["config", "user.email", "t@example.com"], base);
+      git(["config", "user.name", "t"], base);
+      writeFileSync(join(base, "f.txt"), "x\n");
+      git(["add", "-A"], base);
+      git(["commit", "-q", "-m", "init"], base);
+
+      const marker = join(base, ".dpf-session-heartbeat.json");
+      const r = runHook(
+        { hookEventName: "Stop", cwd: base },
+        { DPF_GUARDS_WORKSPACE_ANY: "1" }, // temp dir is not a DPF checkout
+      );
+
+      assert.equal(r.status, 0);
       assert.equal(existsSync(marker), false, "must not heartbeat the root/main clone");
+    } catch (err) {
+      t.skip(`git setup unavailable: ${err.message}`);
+    } finally {
+      if (base) {
+        try {
+          rmSync(base, { recursive: true, force: true });
+        } catch {
+          // best-effort cleanup
+        }
+      }
     }
   });
 

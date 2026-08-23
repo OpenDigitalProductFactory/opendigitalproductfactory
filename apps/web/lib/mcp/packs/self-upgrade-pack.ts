@@ -116,6 +116,14 @@ async function requestSelfUpgradeTool(
     };
   }
 
+  if (result.status === "unsupported_install_mode") {
+    return {
+      success: true,
+      message: result.message,
+      data: result as unknown as Record<string, unknown>,
+    };
+  }
+
   return {
     success: false,
     error: result.message,
@@ -125,11 +133,32 @@ async function requestSelfUpgradeTool(
 }
 
 async function repairPromoterImageTool(): Promise<ToolResult> {
-  const [{ ensurePromoterImage }, { getSelfUpgradeConfig }] = await Promise.all([
-    import("@/lib/self-upgrade/promoter"),
+  const [{ getSelfUpgradeConfig }, { readSelfUpgradeSupport }] = await Promise.all([
     import("@/lib/self-upgrade/config"),
+    import("@/lib/self-upgrade/support"),
   ]);
   const config = await getSelfUpgradeConfig();
+  const support = await readSelfUpgradeSupport(config.enabled);
+  if (!support.supported) {
+    return {
+      success: true,
+      message: support.message,
+      data: support as unknown as Record<string, unknown>,
+    };
+  }
+
+  if (support.targetKind === "release-artifact") {
+    return {
+      success: true,
+      message: "Release installs pull the promoter that belongs to the verified target release; no source-built promoter repair is needed.",
+      data: {
+        ...support,
+        repairMode: "release-managed",
+      } as unknown as Record<string, unknown>,
+    };
+  }
+
+  const { ensurePromoterImage } = await import("@/lib/self-upgrade/promoter");
   const image = config.promoterImage ?? "dpf-promoter";
   const result = await ensurePromoterImage(config.promoterImage);
 
@@ -164,7 +193,11 @@ async function repairPromoterImageTool(): Promise<ToolResult> {
 }
 
 async function getSelfUpgradeQueueStatusTool(): Promise<ToolResult> {
-  const [{ resolveReleaseBatchStatus }, { getSelfUpgradeConfig }, { getLatestRun }] =
+  const [
+    { resolveReleaseBatchStatus },
+    { getSelfUpgradeConfig },
+    { getLatestRun },
+  ] =
     await Promise.all([
       import("@/lib/self-upgrade/release-batch-status"),
       import("@/lib/self-upgrade/config"),
@@ -175,15 +208,19 @@ async function getSelfUpgradeQueueStatusTool(): Promise<ToolResult> {
     resolveReleaseBatchStatus({ fresh: true, config }),
     getLatestRun(),
   ]);
+  const support = batch.support;
   return {
     success: true,
-    message: batch.summary,
+    message: support.message ?? batch.summary,
     data: {
-      enabled: config.enabled,
+      configuredEnabled: support.configuredEnabled,
+      supported: support.supported,
+      enabled: support.enabled,
+      targetKind: support.targetKind,
       sourceMode: config.sourceMode,
-      batchingApplicable: batch.applicable,
-      routineUpgradeEligible: batch.eligible,
-      reason: batch.reason,
+      batchingApplicable: support.supported && batch.applicable,
+      routineUpgradeEligible: support.enabled && batch.eligible,
+      reason: support.supported ? batch.reason : support.reason,
       pendingPrCount: batch.pendingCount,
       batchMinPendingPrs: batch.minPendingPrs,
       batchMaxWaitHours: batch.maxWaitHours,

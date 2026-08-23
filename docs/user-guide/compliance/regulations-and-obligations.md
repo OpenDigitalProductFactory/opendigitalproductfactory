@@ -82,9 +82,16 @@ controls when reviewing inactive history. The scope is retained in the URL.
 
 ### What it does
 
-The **obligation assurance watch** reads every active obligation's recorded
-review date and frequency and raises a finding on the assurance ledger for each
-one falling due. The coworker reviews what the sweep raised and reports it to you in plain
+The **obligation assurance watch** reads the recorded review date and frequency
+of every obligation **that applies to your business**, and raises a finding on
+the assurance ledger for each one falling due.
+
+That scoping matters more than it sounds. Compliance packs are loaded for every
+business type and then filtered to yours, so your database holds obligations
+from regimes that do not bind on you — bank supervision, municipal water
+testing, police training. The watch only ever reports the ones that apply. An
+obligation the platform cannot confirm applies to you is left alone: deciding
+whether a regime binds is your call, and a due-date reminder would pre-empt it. The coworker reviews what the sweep raised and reports it to you in plain
 language: what is overdue, oldest first, with the recorded owner; what
 falls due in the next 30 days; and — most important — any obligation that
 declares a recurrence with **no next date**.
@@ -93,6 +100,25 @@ That last case is why the watch exists. An obligation with `frequency: annual`
 and no review date reads on screen as a control that is in force, and behaves as
 one that is not: nothing will ever fall due, so nobody will ever be told about
 it again. The watch reports it as a defect rather than as configuration.
+
+### Not every obligation is on a schedule
+
+The **Frequency** you record is one of three different kinds of thing, and the
+watch treats them differently:
+
+| Frequency | What it means | Needs a review date? |
+|---|---|---|
+| `annual`, `quarterly`, `monthly`, … | It recurs. A date can be computed. | **Yes** — without one, nothing falls due |
+| `continuous` | A standing duty, in force every day | **No** — correctly has no next date |
+| `event-driven` | Started by an occurrence, not the calendar | **No** — the trigger is the event |
+
+Only the first kind is reported when it has no date. A continuous duty is
+operating, not overdue, and the watch says nothing about it.
+
+If you record a frequency in words the platform cannot turn into a date (say
+"whenever the board meets"), it tells you that too — as its own low-priority
+finding. It will **not** guess a period. A due date invented by the platform and
+put in front of you is worse than a missing one.
 
 ### When it runs
 
@@ -124,6 +150,15 @@ thing.
   the platform requires an explicit governed decision to record it.
 - It does not read your regulator. It only reads what is recorded here, so an
   obligation nobody entered is an obligation nobody is watching.
+- It does not decide that a regime applies to you. Where applicability cannot be
+  confirmed from what you have recorded, the obligation shows as needing review
+  and the watch stays silent on its dates rather than assuming. **This is the
+  biggest limit on the page.** Obligations arrive from a compliance pack matched
+  to your business type, and today packs exist for 3 of the 25 business
+  categories the platform supports. If yours is not one of them, this screen
+  starts empty — and an empty screen looks exactly like a clean one. See
+  `docs/maintenance/obligation-cadence-coverage.md` for which categories are
+  covered.
 - It never estimates a due date. Every date it reports traces to a recorded
   column, named in the finding's evidence.
 
@@ -131,6 +166,10 @@ thing.
 
 - Give every recurring obligation a **review date**, not just a frequency. The
   frequency alone schedules nothing.
+- **Enter the obligations nobody shipped you.** If no pack covers your business
+  type, the recurring duties you already know about — your licence renewal, your
+  insurance, your annual filing — have to be recorded here before anything can
+  watch them.
 - Name an accountable owner. A finding with no owner still gets raised, but it
   arrives addressed to nobody.
 - Decide the response when a finding lands. That step requires human approval

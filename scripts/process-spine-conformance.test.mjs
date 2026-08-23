@@ -1,6 +1,6 @@
 // BI-EF42607A — versioned process spine + conformance test (spec §6.1).
 import assert from "node:assert/strict";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync, statSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
@@ -15,6 +15,19 @@ test("PROCESS_SPINE_VERSION is a dated semver-ish string", () => {
 test("surface pointers reference AGENTS.md", () => {
   const claudeMd = readFileSync(join(repoRoot, "CLAUDE.md"), "utf8");
   assert.match(claudeMd, /AGENTS\.md/);
+});
+
+// BI-C6308D90: a markdown link to AGENTS.md is inert prose — the harness auto-loads
+// CLAUDE.md only, and whether the rulebook entered context depended on the model
+// choosing to follow the pointer. It silently stopped. `@AGENTS.md` is the harness's
+// own import directive and inlines the rulebook deterministically; assert it stays.
+test("CLAUDE.md imports AGENTS.md rather than only linking to it", () => {
+  const claudeMd = readFileSync(join(repoRoot, "CLAUDE.md"), "utf8");
+  assert.match(
+    claudeMd,
+    /^@AGENTS\.md\s*$/m,
+    "CLAUDE.md must contain a bare `@AGENTS.md` import line — a markdown link does not load the rulebook",
+  );
 });
 
 test("plugin hooks.json wires uncommitted-work guard on SessionEnd and Stop", () => {
@@ -98,4 +111,112 @@ test("typecheck gates include the bootstrap planning library", () => {
       "@dpf/bootstrap must define a typecheck script for the recursive sweep to pick it up",
     );
   }
+});
+
+test("every direct protected FeatureBuild phase writer references the canonical initiative gate", () => {
+  const root = join(repoRoot, "apps/web/lib");
+  const files = [];
+  const visit = (dir) => {
+    for (const name of readdirSync(dir)) {
+      const path = join(dir, name);
+      if (statSync(path).isDirectory()) visit(path);
+      else if (name.endsWith(".ts") && !name.endsWith(".test.ts")) files.push(path);
+    }
+  };
+  visit(root);
+  const directWriter = /featureBuild\.(?:update|updateMany)\s*\([\s\S]{0,300}?data:\s*\{[\s\S]{0,160}?phase:\s*(?:"plan"|"build"|"ship"|"complete"|targetPhase)/;
+  const writers = files
+    .map((path) => ({
+      path,
+      repoPath: path.slice(repoRoot.length + 1).replaceAll("\\", "/"),
+    }))
+    .filter(({ path, repoPath }) =>
+      !repoPath.startsWith("apps/web/lib/backlog/initiative-readiness/")
+      && directWriter.test(readFileSync(path, "utf8")))
+    .map(({ repoPath }) => repoPath)
+    .sort();
+  assert.deepEqual(writers, [
+    "apps/web/lib/actions/build.ts",
+    "apps/web/lib/build/build-on-plan-approval.ts",
+    "apps/web/lib/build/plan-to-build-transition.ts",
+    "apps/web/lib/build/ship-on-review-approval.ts",
+    "apps/web/lib/mcp/build-design-review-handler.ts",
+  ]);
+  for (const path of writers) {
+    const source = readFileSync(join(repoRoot, path), "utf8");
+    assert.match(source, /from "@\/lib\/build\/build-entry-gate"/);
+    assert.match(source, /(?:enforceBuildInitiativeReadiness|assertBuildPhaseInitiativeReadiness)/);
+  }
+});
+
+test("protected terminal success rows are written only by initiative terminal repositories", () => {
+  const root = join(repoRoot, "apps/web");
+  const files = [];
+  const visit = (dir) => {
+    for (const name of readdirSync(dir)) {
+      if (name === "node_modules" || name === ".next") continue;
+      const path = join(dir, name);
+      if (statSync(path).isDirectory()) visit(path);
+      else if (name.endsWith(".ts") && !name.endsWith(".test.ts")) files.push(path);
+    }
+  };
+  visit(root);
+
+  const contracts = [
+    {
+      label: "BacklogItem done",
+      pattern: /backlogItem\.(?:update|updateMany)\s*\([\s\S]{0,500}?data:\s*\{[\s\S]{0,260}?status:\s*"done"/,
+      allowed: ["apps/web/lib/backlog/initiative-readiness/backlog-terminal-transition.ts"],
+    },
+    {
+      label: "Epic done",
+      pattern: /epic\.(?:update|updateMany)\s*\([\s\S]{0,500}?data:\s*\{[\s\S]{0,260}?status:\s*"done"/,
+      allowed: ["apps/web/lib/backlog/initiative-readiness/epic-terminal-transition.ts"],
+    },
+    {
+      label: "FeatureBuild complete",
+      pattern: /featureBuild\.(?:update|updateMany)\s*\([\s\S]{0,500}?data:\s*\{[\s\S]{0,260}?phase:\s*"complete"/,
+      allowed: ["apps/web/lib/backlog/initiative-readiness/build-terminal-transition.ts"],
+    },
+    {
+      label: "Workroom complete",
+      pattern: /workroom\.(?:update|updateMany)\s*\([\s\S]{0,500}?data:\s*\{[\s\S]{0,260}?status:\s*"complete"/,
+      allowed: ["apps/web/lib/backlog/initiative-readiness/work-capsule-terminal-transition.ts"],
+    },
+  ];
+
+  for (const contract of contracts) {
+    const writers = files
+      .filter((path) => contract.pattern.test(readFileSync(path, "utf8")))
+      .map((path) => path.slice(repoRoot.length + 1).replaceAll("\\", "/"))
+      .sort();
+    assert.deepEqual(writers, contract.allowed, `${contract.label} bypassed the canonical terminal boundary`);
+  }
+
+  const routedSurfaces = [
+    "apps/web/app/api/v1/ops/backlog/[id]/route.ts",
+    "apps/web/app/api/v1/ops/epics/[id]/route.ts",
+    "apps/web/lib/actions/backlog.ts",
+    "apps/web/lib/mcp/packs/backlog-pack.ts",
+    "apps/web/lib/backlog/mcp-epic-tools.ts",
+    "apps/web/lib/build-flow-state.ts",
+    "apps/web/lib/actions/build.ts",
+    "apps/web/lib/mcp/packs/build-evidence-extra-pack.ts",
+    "apps/web/lib/work-capsules/work-capsule-store.ts",
+  ];
+  for (const path of routedSurfaces) {
+    assert.match(
+      readFileSync(join(repoRoot, path), "utf8"),
+      /(?:complete(?:BacklogItem|Epic|FeatureBuild|WorkCapsule)Transition|assertFeatureBuildCompletion|completeGovernedWorkCapsuleStatus)/,
+      `${path} must route terminal success through the canonical repository`,
+    );
+  }
+
+  const backlogActions = readFileSync(join(repoRoot, "apps/web/lib/actions/backlog.ts"), "utf8");
+  const epicTools = readFileSync(join(repoRoot, "apps/web/lib/backlog/mcp-epic-tools.ts"), "utf8");
+  const capsuleStore = readFileSync(join(repoRoot, "apps/web/lib/work-capsules/work-capsule-store.ts"), "utf8");
+  assert.match(backlogActions, /input\.status === "done"[\s\S]{0,180}?Create the item as open/);
+  assert.match(backlogActions, /input\.status === "done"[\s\S]{0,180}?Create the Epic as open/);
+  assert.match(epicTools, /statusResult\.status === "done"[\s\S]{0,220}?Create the Epic as open/);
+  assert.match(capsuleStore, /input\.status === "complete"[\s\S]{0,220}?non-terminal state/);
 });

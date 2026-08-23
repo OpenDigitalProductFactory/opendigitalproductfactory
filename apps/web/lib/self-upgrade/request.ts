@@ -2,11 +2,15 @@ import { inngest } from "@/lib/queue/inngest-client";
 import { SELF_UPGRADE_EVENT } from "@/lib/queue/functions/self-upgrade";
 import { resolveOperatingScheduleForSystem } from "@/lib/operating-hours-read";
 import { resolveAutoUpgradeWindow } from "@/lib/self-upgrade/auto-window";
-import { getSelfUpgradeConfig } from "@/lib/self-upgrade/config";
+import {
+  getSelfUpgradeConfig,
+  type SelfUpgradeConfig,
+} from "@/lib/self-upgrade/config";
 import { isUpgradeWindowOpen } from "@/lib/self-upgrade/window";
 import { resolveReleaseBatchStatus } from "@/lib/self-upgrade/release-batch-status";
 import { createRun, failRun, getLatestRun } from "@/lib/self-upgrade/run-store";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { readSelfUpgradeSupport } from "@/lib/self-upgrade/support";
 
 type RequestActorKind = "human" | "agent";
 
@@ -49,6 +53,13 @@ export type RequestSelfUpgradeResult =
       oldestPendingAt: string | null;
     }
   | {
+      success: true;
+      status: "unsupported_install_mode";
+      reason: "install-identity-unverified";
+      targetKind: "unknown";
+      message: string;
+    }
+  | {
       success: false;
       status: "dispatch_failed";
       runId: string;
@@ -59,11 +70,11 @@ const ACTIVE_RUN_STATUSES = new Set(["running", "queued", "pending"]);
 
 async function agentWindowGate(
   now: Date,
+  config: SelfUpgradeConfig,
 ): Promise<
   | { allowed: true }
   | { allowed: false; reason: "outside-window" | "no-window-needs-timezone" }
 > {
-  const config = await getSelfUpgradeConfig();
   const { schedule, timezone, timezoneKnown, lowTrafficWindows } =
     await resolveOperatingScheduleForSystem();
   const auto =
@@ -116,8 +127,20 @@ export async function requestSelfUpgrade(
     };
   }
 
+  const config = await getSelfUpgradeConfig();
+  const support = await readSelfUpgradeSupport(config.enabled);
+  if (!support.supported) {
+    return {
+      success: true,
+      status: "unsupported_install_mode",
+      reason: support.reason,
+      targetKind: support.targetKind,
+      message: support.message,
+    };
+  }
+
   if (input.actorKind === "agent") {
-    const gate = await agentWindowGate(input.now ?? new Date());
+    const gate = await agentWindowGate(input.now ?? new Date(), config);
     if (!gate.allowed) {
       return {
         success: true,
@@ -132,7 +155,12 @@ export async function requestSelfUpgrade(
     // portal on its own. Answer with the tally so the agent knows more PRs are
     // still to be tallied and can defer live validation until the batch
     // deploys (or an operator overrides via /ops/self-upgrade).
-    const batch = await resolveReleaseBatchStatus({ fresh: true, now: input.now });
+    const batch = await resolveReleaseBatchStatus({
+      fresh: true,
+      now: input.now,
+      config,
+      support,
+    });
     if (batch.applicable && !batch.eligible) {
       return {
         success: true,

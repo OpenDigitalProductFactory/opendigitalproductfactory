@@ -1,0 +1,93 @@
+# Backlog recovery bundles
+
+Version-controlled snapshots of unfinished backlog work, so a reset or teardown
+that replaces the coordination database does not destroy identified work.
+
+Git is the durable store. The installation database is not.
+
+## The invariant
+
+**Every epic with at least one not-done item must have a current bundle in this
+directory, and that bundle must be merged to `main`.**
+
+Two things follow from it, and both have already cost this project work:
+
+1. **A bundle on an unmerged branch is not a backup.** The branch lives in a
+   worktree that teardown deletes. Only `main` survives.
+2. **A stale bundle is more dangerous than no bundle.** Bundles are snapshots,
+   not live views. An epic that gained five items since its last capture still
+   *looks* protected — the file is right there — while exactly those five items
+   are the ones that vanish. Absence of a bundle is a visible gap; staleness is
+   an invisible one. Re-capture before teardown, never assume.
+
+Items with **no epic** cannot be bundled at all: the bundle format is
+epic-scoped and `epicId` is required on every item. Link them to an epic first
+(`link_backlog_item_to_epic`), or accept that they are preserved only as the
+non-reconcilable record described below.
+
+## Files
+
+| File | What it is |
+| --- | --- |
+| `<slug>.json` | One reconcilable bundle per epic. Restorable. |
+| `unassigned-items.json` | Not-done items with no epic. Preserved verbatim, **not** restorable. |
+| `manifest.json` | Capture counts, so coverage is checked against evidence rather than assumption. |
+
+`manifest.json` must satisfy `capturedItemCount + unassignedItemCount ==
+unfinishedItemCount`. When that arithmetic does not close, an item is
+unaccounted for and teardown is not safe.
+
+## Capture
+
+```bash
+pnpm --filter @dpf/db backlog:capture -- --out packages/db/recovery/backlog
+```
+
+Captures `triaging`, `open`, and `in-progress` items. Pass `--all` to include
+`done`, `deferred`, and `retired`.
+
+Do not hand-write a bundle. `buildBacklogRecoveryBundle` round-trips its output
+through `parseBacklogRecoveryBundle`, so a bundle that builds is guaranteed to
+reconcile; hand-written JSON fails on details the validator cares about and the
+eye does not (`null` where a key must be *absent*, timestamps without `Z`).
+
+Capture only what is not done. Completed work is recorded in git as merged PRs,
+and re-importing it resurrects closed records.
+
+## Restore
+
+```bash
+pnpm --filter @dpf/db backlog:reconcile -- packages/db/recovery/backlog/<slug>.json
+pnpm --filter @dpf/db backlog:reconcile -- packages/db/recovery/backlog/<slug>.json --apply
+```
+
+Dry-run first. Apply runs in one transaction, creates missing records, and skips
+existing epics and items wholesale, so it cannot regress newer status or
+evidence. Never import bundles from `packages/db/src/seed.ts` — customer installs
+do not inherit DPF's internal roadmap.
+
+## What is deliberately not bundled
+
+`unassigned-items.json` holds not-done items that have no epic. Their bodies are
+preserved in version control, but they are **not** reconcilable — restoring them
+requires re-filing under an epic by hand.
+
+Two classes currently sit there by decision, not by oversight:
+
+- **`BI-MCP-EFF-*` (automated MCP efficiency observations).** These are derived
+  from tool-call telemetry by the "MCP call efficiency — AI Ops review" agent
+  task. Their finding identity is deterministic (`high_volume:<tool>`), but each
+  filing mints a *random* item id and is bound to an `ImprovementSignal` row that
+  the bundle format does not carry. Reconciling them would therefore create
+  signal-orphaned duplicates alongside whatever the next review files. Re-running
+  the review regenerates the findings from telemetry. Note the scheduled task is
+  currently **inactive** and was one-shot, so regeneration is a deliberate act,
+  not something that simply happens.
+- **Raw `source: self-upgrade-failure` traces.** Machine-captured failure traces
+  whose evidence (`SelfUpgradeRun` rows, stderr tails) is install-local and does
+  not survive a reset anyway. `self-upgrade-failure` is also outside the bundle
+  `SOURCES` vocabulary, so these cannot be represented without rewriting the
+  field. Where a trace has been analysed into a human-authored finding, that
+  finding is bundled and carries the durable knowledge.
+
+Anything else with no epic should be linked to one and captured, not left here.

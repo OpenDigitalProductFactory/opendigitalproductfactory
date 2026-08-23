@@ -1,0 +1,435 @@
+{
+  "schemaVersion": 1,
+  "bundleId": "reset-cycle-3-platform-findings",
+  "description": "Operator-invoked recovery input for the platform findings from from-scratch reset/dogfood cycle 3 (install, lifecycle, agent-host and CI-gate).",
+  "source": {
+    "capturedAt": "2026-08-23T00:54:15.000Z",
+    "repository": "OpenDigitalProductFactory/opendigitalproductfactory",
+    "planPath": "docs/architecture/archetype-operating-model-audit.md"
+  },
+  "epic": {
+    "epicId": "EP-56AE0F69",
+    "title": "Reset/dogfood cycle 3: install, lifecycle, agent-host and CI-gate findings",
+    "description": "Container for the platform findings produced by from-scratch reset/dogfood cycle 3 (2026-08-21/22) that are not archetype-domain work. Filed so the set has a durable, version-controlled recovery bundle under `packages/db/recovery/backlog/` and survives the next teardown.\n\nCycle 3 drove a machine from zero DPF footprint through install, onboarding, and archetype configuration as a fictitious pet rescue. These items are the platform defects and process gaps that surfaced along the way: install and lifecycle (no uninstaller, no consumer upgrade path, stale published image, Windows installer has no unattended mode), agent interaction on a sourceless install, CI and gate ergonomics (a guard that rewrites git identity, DCO author/trailer mismatch, a docs PR gated on a portal boot), accessibility debt, and the salvage-sweep precision that protects the teardown step itself.\n\nThe archetype-domain work lives separately under EP-5102F494.\n\nRecorded here because the coordination database is replaced on every reset cycle and cross-instance sync is not currently working — the same loss BI-4A833B6D exists to prevent, which already destroyed four items filed earlier in this cycle.",
+    "status": "open",
+    "scopeKind": "unknown",
+    "createdAt": "2026-08-22T14:30:30.556Z"
+  },
+  "items": [
+    {
+      "itemId": "BI-11D611B3",
+      "epicId": "EP-56AE0F69",
+      "title": "A consumer install gives an external agent 248 MCP tools and zero orientation — no AGENTS.md, no README, no skills",
+      "body": "**Investigation and design decision, not a defect fix.** The operator's question is the right frame: *what is an external agent supposed to do when the source is not installed?*\n\n## What a consumer install actually contains\n\nVerified on a fresh consumer install: runtime configuration, compose files, startup/stop scripts, monitoring, safety tools, and MCP configuration are present. Source-oriented guidance is absent.\n\n- No `AGENTS.md`, README, or source-agent skill directories.\n- `.mcp.json` is present and correctly references the bearer token without embedding it.\n- A connecting agent receives a broad MCP surface and no compact statement of the business-operating contract.\n\nThe source repository carries contributor doctrine for worktrees, gates, PRs, and DCO. That doctrine does not belong wholesale on a production business install.\n\n## The decision\n\nChoose the source-free orientation shape:\n\n- a static install file;\n- a versioned, principal/tier/install-aware served contract;\n- or both, with a generated local file only as a pointer to the served contract.\n\nThe external-agent operating-contract design selected the third shape in `DI-C75C83499B57`: the served runtime contract is canonical; the tiny generated pointer exists only for local discovery and carries a version/digest and fail-closed stop rule.\n\n## Constraints\n\n- install-mode aware;\n- token-tier and principal aware;\n- reachable before first action;\n- no copied contributor doctrine, static tool catalog, secret, or business record;\n- compatible with MCP/A2A clients that never inspect local files;\n- implemented without competing with the broader umbrella `BI-9549EE48`.\n\nProvenance: from-scratch reset/dogfood cycle 3, automated consumer-install finding.",
+      "status": "open",
+      "type": "portfolio",
+      "workType": "chore",
+      "source": "automated-detection",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-11d611b3-cmt4h2yr90inh01pk9x6ky7oh",
+          "kind": "epic_link",
+          "summary": "(no epic) → EP-1FABA22D",
+          "recordedAt": "2026-08-22T14:27:34.389Z",
+          "payload": {
+            "toEpicId": "EP-1FABA22D",
+            "fromEpicId": null
+          }
+        },
+        {
+          "recoveryKey": "bi-11d611b3-cmt4hj5q10iwr01pkqqidysru",
+          "kind": "epic_link",
+          "summary": "EP-1FABA22D → (no epic)",
+          "recordedAt": "2026-08-22T14:40:09.913Z",
+          "payload": {
+            "toEpicId": null,
+            "fromEpicId": "EP-1FABA22D"
+          }
+        },
+        {
+          "recoveryKey": "bi-11d611b3-cmt52y3va003q01rm4hb602gm",
+          "kind": "initiative_readiness_decision",
+          "summary": "implementation readiness: input-required",
+          "recordedAt": "2026-08-23T00:39:39.286Z",
+          "payload": {
+            "unmet": [
+              {
+                "code": "CANONICAL_DESIGN_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-checklist-reviewer"
+              },
+              {
+                "code": "RESEARCH_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-author"
+              },
+              {
+                "code": "SPEC_APPROVAL_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-checklist-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "architecture-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "data-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "ux-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "security-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "compliance-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "domain-reviewer"
+              },
+              {
+                "code": "OBJECTIVE_BASELINE_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-checklist-reviewer"
+              },
+              {
+                "code": "ARTIFACT_AUTHOR_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "artifact-resolver"
+              },
+              {
+                "code": "PLAN_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "implementation-planner"
+              },
+              {
+                "code": "PLAN_REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "plan-reviewer"
+              },
+              {
+                "code": "PLAN_COVERAGE_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              },
+              {
+                "code": "TRACEABILITY_INCOMPLETE",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              }
+            ],
+            "target": "implementation",
+            "profile": "cross-domain",
+            "subject": {
+              "id": "BI-11D611B3",
+              "kind": "backlog-item"
+            },
+            "verdict": "input-required",
+            "blockers": [],
+            "authority": {
+              "actionKey": "claim_backlog_item_for_work",
+              "enforcementState": "enforced"
+            },
+            "satisfied": [
+              {
+                "code": "CLASSIFICATION_REQUIRED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "product-owner"
+              },
+              {
+                "code": "AUTHORIZATION_DENIED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "platform-governance"
+              },
+              {
+                "code": "DEPENDENCY_UNRESOLVED",
+                "state": "not-applicable",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              },
+              {
+                "code": "CAPSULE_IDENTITY_MISMATCH",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "delivery-coordinator"
+              }
+            ],
+            "decisionId": "IRD-63FCDCDFFEA2",
+            "workIntent": "implementation",
+            "evaluatedAt": "2026-08-23T00:39:39.281Z",
+            "factsDigest": "9198db49f14d64c11a87fd05473d490a35a891f7fdc939c9148186946d1abc81",
+            "stableCodes": {
+              "unmet": [
+                "CANONICAL_DESIGN_REQUIRED",
+                "RESEARCH_REQUIRED",
+                "SPEC_APPROVAL_REQUIRED",
+                "REVIEW_REQUIRED",
+                "REVIEW_REQUIRED",
+                "REVIEW_REQUIRED",
+                "REVIEW_REQUIRED",
+                "REVIEW_REQUIRED",
+                "REVIEW_REQUIRED",
+                "OBJECTIVE_BASELINE_REQUIRED",
+                "ARTIFACT_AUTHOR_REQUIRED",
+                "PLAN_REQUIRED",
+                "PLAN_REVIEW_REQUIRED",
+                "PLAN_COVERAGE_REQUIRED",
+                "TRACEABILITY_INCOMPLETE"
+              ],
+              "blockers": [],
+              "satisfied": [
+                "CLASSIFICATION_REQUIRED",
+                "AUTHORIZATION_DENIED",
+                "DEPENDENCY_UNRESOLVED",
+                "CAPSULE_IDENTITY_MISMATCH"
+              ]
+            },
+            "policyVersion": "initiative-readiness.v1",
+            "schemaVersion": 1,
+            "transitionObject": {
+              "id": "OpenDigitalProductFactory/opendigitalproductfactory#feat/external-agent-operating-profile",
+              "kind": "work-capsule",
+              "targetState": "implementation",
+              "expectedVersion": "claim.v1"
+            }
+          }
+        },
+        {
+          "recoveryKey": "bi-11d611b3-cmt52yci7004001rmldgbdxj2",
+          "kind": "initiative_readiness_decision",
+          "summary": "design readiness: allowed",
+          "recordedAt": "2026-08-23T00:39:50.479Z",
+          "payload": {
+            "unmet": [],
+            "target": "design",
+            "profile": "cross-domain",
+            "subject": {
+              "id": "BI-11D611B3",
+              "kind": "backlog-item"
+            },
+            "verdict": "allowed",
+            "blockers": [],
+            "authority": {
+              "actionKey": "claim_backlog_item_for_work",
+              "enforcementState": "enforced"
+            },
+            "satisfied": [
+              {
+                "code": "CLASSIFICATION_REQUIRED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "product-owner"
+              },
+              {
+                "code": "AUTHORIZATION_DENIED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "platform-governance"
+              }
+            ],
+            "decisionId": "IRD-39A0B68A2FEB",
+            "workIntent": "design",
+            "evaluatedAt": "2026-08-23T00:39:50.458Z",
+            "factsDigest": "13db392727232a8cae62863dd88224fd47a6a652c23dfcd4f8ee5c9f4ba9075a",
+            "stableCodes": {
+              "unmet": [],
+              "blockers": [],
+              "satisfied": [
+                "CLASSIFICATION_REQUIRED",
+                "AUTHORIZATION_DENIED"
+              ]
+            },
+            "policyVersion": "initiative-readiness.v1",
+            "schemaVersion": 1,
+            "transitionObject": {
+              "id": "OpenDigitalProductFactory/opendigitalproductfactory#feat/external-agent-operating-profile",
+              "kind": "work-capsule",
+              "targetState": "design",
+              "expectedVersion": "claim.v1"
+            }
+          }
+        },
+        {
+          "recoveryKey": "bi-11d611b3-cmt539xum00dy01rmjf9daa1s",
+          "kind": "epic_link",
+          "summary": "(no epic) → EP-56AE0F69",
+          "recordedAt": "2026-08-23T00:48:51.358Z",
+          "payload": {
+            "toEpicId": "EP-56AE0F69",
+            "fromEpicId": null
+          }
+        }
+      ],
+      "effortSize": "medium",
+      "triageOutcome": "build",
+      "scopeRationale": "Universal DPF interaction and governance contract for external agents across all archetypes, business portfolios, installation topologies, and Hive.",
+      "createdAt": "2026-08-22T05:31:18.228Z"
+    },
+    {
+      "itemId": "BI-52FF87E2",
+      "epicId": "EP-56AE0F69",
+      "title": "Self-upgrade is blocked on a consumer release install by capability_state_stale",
+      "body": "A consumer release install (D:\\\\DPF, environmentClass development) cannot self-upgrade. Every governed run fails in the promoter capability preflight with `error: capability_state_stale`, so the instance had to be moved onto a new release out-of-band (DPF_IMAGE_TAG bump plus compose recreate).\n\nEvidence from run SUR / SelfUpgradeRun rows on 2026-08-23:\n1. First failure was `promoter-unavailable`: PlatformConfig self_upgrade sets promoterImage to the bare name `dpf-promoter`, so `docker run` resolved it against Docker Hub and got `pull access denied`. The image IS published to GHCR at every release tag. Providing a local `dpf-promoter:latest` alias got past this.\n2. Second and third failures were `capability_state_stale`, with the promoter image matched to the running portal version, ruling out promoter/launcher version skew.\n\nRoot cause evidence: `resolveCapabilityServiceProjection` in scripts/lib/capability-service-projection.mjs throws capability_state_stale when the live active capability set differs from install-state.enabledRuntimeCapabilities. On this install PlatformCapability has SEVEN active rows (runtime:core, runtime:build, runtime:browser-automation, runtime:deep-observability, runtime:durable-automation, runtime:external-ai, runtime:local-speech) while install-state.json records only [\\\"runtime:core\\\"]. Capabilities were activated in the portal without install-state being restamped.\n\nscripts/installer/migrate-install-state.mjs restamps hashes when the CATALOG moves; it does not reconcile install-state to the databases active capability set, so it does not repair this drift.\n\nNotes: the /dpf-state mount was verified working (the Windows host path mounts fine and install-state.json is readable inside a container), so this is not the #3262 mounts-denied class. DPF_STATE_DIR_HOST is set correctly on the portal.\n\nSuggested fix: make capability activation write through to install-state, or give the promoter preflight a governed reconcile path that restamps enabledRuntimeCapabilities from the live set instead of failing closed.",
+      "status": "triaging",
+      "type": "portfolio",
+      "workType": "bug",
+      "source": "automated-detection",
+      "scopeKind": "unknown",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-52ff87e2-cmt539y7k00e201rm8jljd5p7",
+          "kind": "epic_link",
+          "summary": "(no epic) → EP-56AE0F69",
+          "recordedAt": "2026-08-23T00:48:51.824Z",
+          "payload": {
+            "toEpicId": "EP-56AE0F69",
+            "fromEpicId": null
+          }
+        }
+      ],
+      "createdAt": "2026-08-23T00:30:54.324Z"
+    },
+    {
+      "itemId": "BI-89887875",
+      "epicId": "EP-56AE0F69",
+      "title": "Consumer self-upgrade skips because release installs have no Git target",
+      "body": "## Problem\n\nA Windows consumer/release install can expose self-upgrade as enabled while its configured target source is `/host-dpf`, mapped from `DPF_HOST_INSTALL_PATH`. Consumer installs intentionally contain verified release assets and no `.git` checkout, so manual self-upgrade target resolution repeatedly executes `git -C /host-dpf rev-parse origin/main` and records `skipped / no-target` instead of advancing or reporting that no newer release artifact exists.\n\nObserved on 2026-08-22:\n- `.install-mode` is `consumer`; `D:\\DPF` has no `.git`.\n- `SelfUpgradeRun` rows `SUR-16B67995` and `SUR-16E9F749` are both `skipped`, reason `no-target`, with null current/target/deployed SHA.\n- Portal logs report `target-resolution-failed`: `fatal: not a git repository` for `/host-dpf`.\n- Platform config stores `hostSourceMountPath: /host-dpf` and defaults `sourceMode` to `upstream`.\n- The running image is `821a3f1ca1e5189a01d7a526434c73e650e8ddc6`; upstream main was `6902cb01a6bb2286ca3ac0b5fe4f33a3f2a280d2`; registry `latest` still matched the local digest, so a plain pull could not advance it.\n- Installer state was incomplete/stale (`installPath=D:\\DPF-cycle2`, empty composeFiles/imageTag/version), making an ad-hoc source-build workaround unsafe.\n\n## Scope\n\nIn scope:\n- Give consumer/release installs an explicit release-artifact upgrade contract that does not require Git metadata in the install directory.\n- Make installer/seed configuration choose the correct source/target resolver for consumer versus contributor installs.\n- Preserve the recorded consumer Compose chain and immutable image identity through target resolution, preflight, promotion, and rollback.\n- Add an invariant test using a non-Git consumer release-assets fixture.\n\nOut of scope:\n- Changing contributor/local source-based self-upgrade behavior.\n- Converting consumer install directories into mutable source checkouts.\n- Publishing a release artifact as part of this BI.\n\n## Acceptance criteria\n\n- [ ] On a consumer install with no `.git`, manual self-upgrade never runs Git target resolution against `/host-dpf`.\n- [ ] When a newer compatible release artifact exists, the governed path reaches preflight and advances using that immutable artifact while retaining the consumer Compose overlays.\n- [ ] When no newer compatible artifact exists, the operator sees an explicit up-to-date/no-published-target result rather than `skipped / no-target`.\n- [ ] Installer state contains a valid current install path, compose chain, image tag/version, and deployed identity before self-upgrade is enabled.\n- [ ] A regression test covers Windows consumer mode with release assets only and fails if upstream Git mode is selected.\n- [ ] Existing contributor upstream/local upgrade tests remain green.\n\n## Dependencies\n\nIndependent. Coordinate with PR #4436 (fresh-install reliability) because it also changes installer identity and Compose-chain recording, but do not fold this separate self-upgrade contract into that PR without an explicit scope decision.",
+      "status": "open",
+      "type": "product",
+      "workType": "bug",
+      "source": "user-request",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-89887875-cmt539y0200e001rmg149ou5u",
+          "kind": "epic_link",
+          "summary": "(no epic) → EP-56AE0F69",
+          "recordedAt": "2026-08-23T00:48:51.554Z",
+          "payload": {
+            "toEpicId": "EP-56AE0F69",
+            "fromEpicId": null
+          }
+        }
+      ],
+      "effortSize": "medium",
+      "triageOutcome": "build",
+      "scopeRationale": "Cross-platform installation and governed runtime lifecycle defect affecting every consumer/release install.",
+      "createdAt": "2026-08-22T05:29:13.810Z"
+    },
+    {
+      "itemId": "BI-C3B0B2EA",
+      "epicId": "EP-56AE0F69",
+      "title": "Registry acquisition strategy: let consumer installs upgrade from a published tag using the existing quiesce/rollback lifecycle",
+      "body": "The implementation item for the gap identified in `BI-DD7DC141`. Filed now, deliberately, because the design thread on `fix/consumer-agent-host` is correctly scoping itself to making self-upgrade *honest* (fail closed, report ineligible) and defers the actual mechanism to \"a future artifact-upgrade BI\". This is that item — an unfiled future BI is how a gap becomes invisible again.\n\n## The insight\n\nSelf-upgrade conflates two separable things:\n\n```\nacquisition:  git fetch -> merge -> docker build a candidate\nlifecycle:    quiesce -> recovery point -> swap -> health check -> auto-rollback\n```\n\n**The lifecycle half is install-mode agnostic and already good.** The operator panel advertises it — *\"If an update fails, the platform restores the previous version on its own\"* — and it already schedules against maintenance windows in the operating-hours timezone (*\"next scheduled check: Aug 23, 2:00 AM CDT\"*). None of that cares how the artifact arrived.\n\nOnly acquisition is source-specific. So this is a third acquisition strategy, not a rewrite.\n\n## Scope\n\n| Step | Source-backed | Consumer (this item) |\n|---|---|---|\n| Discover target | `git ls-remote` -> upstream SHA | registry: digest of the published tag |\n| Obtain artifact | merge + `docker build` | `docker pull` |\n| Deploy | quiesce -> swap -> health -> rollback | **identical, reused unchanged** |\n\nThe seam already exists: `apps/web/lib/queue/functions/self-upgrade.ts` branches on `if (config.sourceMode === \"upstream\")`, and `sourceMode` already carries several values. Add the strategy beside the existing ones.\n\nEverything required is already present on a consumer install: it authenticates to ghcr (it pulls on every start), and it knows its own identity precisely — `v2026.08.22`, commit `a1184f557`, built 06:30Z. `Available: unknown` in the UI is one registry call away from being answerable.\n\n## Pin to dated tags, not `:latest`\n\n`v<YYYY.MM.DD>` is immutable and auditable. `:latest` moves underneath the install and makes *\"what am I running, and what do I roll back to\"* unanswerable — which the recovery-point machinery depends on. `daily-checkpoint-tag.yml` already cuts the dated tag and dispatches `publish-image.yml`, so the immutable identity exists; use it.\n\n## Why not the alternatives\n\n**Ship a git clone with consumer installs.** Turns every operator into a customizer — disk, git, and network they did not sign up for — reintroduces merge conflicts on an install nobody edits, and puts the memory-heavy candidate `docker build` on the operator's machine (it already needs a host-headroom guard on contributor installs).\n\n**Leave consumer self-upgrade permanently disabled.** Honest, and it is the correct interim state, but it concedes that the GA install mode can never update itself. Given a fully automated daily publish already exists, that discards a working product story: *the platform updates itself overnight* currently benefits only contributors.\n\n## Acceptance\n\n- A consumer install resolves `Available` and `Target` from the registry rather than reporting `unknown`.\n- An upgrade runs end-to-end through the existing quiescence, recovery-point, health-evidence and rollback path, with no new deploy machinery.\n- Rollback restores a specific prior dated tag, not \"whatever `:latest` was\".\n- The maintenance-window scheduling that already exists starts producing real runs on consumer installs.\n- The manual `docker compose pull && docker compose up -d` currently required in the install directory becomes unnecessary.\n\nDepends on `BI-DD7DC141` landing its fail-closed/honest-status change first, so the two do not fight over the same status surface.\n\nProvenance: from-scratch reset/dogfood cycle 3; design reasoning recorded on BI-DD7DC141 with operator-facing evidence.",
+      "status": "triaging",
+      "type": "portfolio",
+      "workType": "feature",
+      "source": "automated-detection",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-c3b0b2ea-cmt4h9m800ipy01pkvohzl2rq",
+          "kind": "epic_link",
+          "summary": "(no epic) → EP-56AE0F69",
+          "recordedAt": "2026-08-22T14:32:44.736Z",
+          "payload": {
+            "toEpicId": "EP-56AE0F69",
+            "fromEpicId": null
+          }
+        }
+      ],
+      "createdAt": "2026-08-22T14:20:41.399Z"
+    },
+    {
+      "itemId": "BI-C8973E09",
+      "epicId": "EP-56AE0F69",
+      "title": "A docs-only PR boots a full portal: UX Route Sweep Runtime runs when the gate itself says it should skip",
+      "body": "A documentation-only PR (#4441 — one new architecture doc, one cross-reference paragraph, and the regenerated doc index) was blocked for ~30 minutes by `UX Route Sweep Runtime`, `UX Route Budget Sweep`, and `Merge Readiness`.\n\n## The gate knows it should have skipped\n\nFrom the failing job's own output:\n\n```\n::error::Exact-tree reuse expected UX runtime to be skipped\n::error::Non-portal UX runtime concluded $RUNTIME_RESULT instead of skipped\n::error::UX Route Sweep Runtime concluded failure\nRUNTIME_RESULT: failure\n```\n\nThe sweep gate correctly classified the change as **exact-tree reuse / non-portal** and expected the runtime to be skipped. The runtime ran anyway, booted a full portal, and failed — and the gate then failed *because* the thing it expected to skip did not skip.\n\nSo the skip decision and the job's actual trigger condition disagree. Every docs-only PR currently pays for a portal boot it was explicitly supposed to bypass.\n\n## The runtime is also flaky when it does run\n\nFirst attempt:\n\n```\nportal did not become ready within 120s\n[runtime-capabilities] Startup reconciliation requires recovery:\n  Error: ENOENT: no such file or directory, open '/dpf-state/runtime-transition.secret'\n[embedding] Failed: fetch failed        (repeated, many)\n```\n\nA rerun of the same commit cleared all three failures with no code change, which is the definition of flake. Two separate defects therefore sit on top of each other:\n\n1. **Mis-trigger** — a heavyweight runtime job runs for changes the gate has already classified as exempt.\n2. **Flaky boot** — when it does run, the portal intermittently fails to become ready inside the 120s window, and the missing `/dpf-state/runtime-transition.secret` suggests state the CI environment does not provision.\n\nFixing (1) makes (2) far less costly, because docs and other non-portal changes stop depending on a portal boot at all.\n\n## Why this matters beyond one PR\n\nThe required-check set for `main` is `DCO`, `Merge Readiness`, `UX Route Budget Sweep`. Because `UX Route Budget Sweep` fails whenever the runtime fails, **a flaky portal boot can block any PR**, including ones that touch no product code. Documentation, guard scripts, and CI config all inherit a runtime dependency they do not have.\n\nThe failure also presents badly: `Merge Readiness: FAILURE` is what an author sees first, which points at the merge gate rather than at a portal that would not start.\n\n## Possibly related\n\nThe runtime log is full of `[embedding] Failed: fetch failed`, and PR #4440 (*\"fix(embedding): a capacity deferral is not a model failure\"*) is open against that same area. Worth checking whether the embedding failures are the cause of the slow boot or merely noise alongside it.\n\nProvenance: observed on PR #4441 during reset/dogfood cycle 3; failure and clean rerun both on commit `92a4ffffd`.",
+      "status": "triaging",
+      "type": "portfolio",
+      "workType": "bug",
+      "source": "automated-detection",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-c8973e09-cmt4h9mdm0iq001pkr5z67alc",
+          "kind": "epic_link",
+          "summary": "(no epic) → EP-56AE0F69",
+          "recordedAt": "2026-08-22T14:32:44.938Z",
+          "payload": {
+            "toEpicId": "EP-56AE0F69",
+            "fromEpicId": null
+          }
+        }
+      ],
+      "createdAt": "2026-08-22T06:03:39.335Z"
+    },
+    {
+      "itemId": "BI-DD7DC141",
+      "epicId": "EP-56AE0F69",
+      "title": "Consumer installs have no upgrade path: self-upgrade builds from source, and there is no registry-based mechanism",
+      "body": "Every self-upgrade run on a consumer install skips. Verified on a fresh install:\n\n```\nlatestRun: { runId: \"SUR-16E9F749\", status: \"skipped\", reason: \"no-target\" }\nlineageSha: null,  pendingPrCount: null,  reason: \"tally-uncomputable\"\nenabled: true, sourceMode: \"upstream\", routineUpgradeEligible: true\n```\n\n## Correction to the original framing of this item\n\nThis was first filed as *\"target resolution requires a git source\"*, implying the fix is to resolve the target from the registry instead. **That understates it.** Self-upgrade does not pull images at all — it **builds** them:\n\n```\ngit fetch -> merge -> docker build a candidate locally -> swap\n```\n\nThat is why the flow handles `merge-conflict` during prep, compares a `builtStamp` rather than a registry digest for its nothing-newer guard (`skipAttempt(\"up-to-date\", ...builtStamp)`), and carries a host-memory-headroom guard because the candidate build is memory-heavy.\n\n**The registry is not an input to self-upgrade.** So this is not a broken lookup to repoint; build-from-source and pull-a-published-digest share almost nothing, and a consumer install needs a *different mechanism*, not a patched one.\n\n## Root cause — structural\n\n`apps/web/lib/queue/functions/self-upgrade.ts`:\n\n```js\nif (config.sourceMode === \"upstream\") {\n  await gitRun(buildFetchCommand({ hostSourcePath, remote, branch }).slice(1));\n  const head = await gitRun(buildRemoteHeadCommand({ hostSourcePath, remote, branch }).slice(1));\n  upstreamSha = head.code === 0 ? head.stdout.trim() : null;\n  if (!upstreamSha) return await skipAttempt(\"no-target\");\n```\n\nConfirmed on this install: `.install-mode` = `consumer`; no `DPF_HOST_SOURCE_PATH` in `.env`; `ls -d /host-source/.git` inside `dpf-portal-1` returns nothing.\n\nNote the two distinct skip reasons — `no-target` (line 344, could not resolve what to upgrade **to**) versus `up-to-date` (lines 349 and 470, resolved a target and already have it). We hit `no-target`, so the run never reaches a comparison. This is a failure, not an idle no-op, and should not be read as \"nothing to do\".\n\n## The consumer install has NO upgrade path at all\n\nNot a broken one — an absent one:\n\n- `dpf-start.ps1` contains no `pull`.\n- `/d/DPF/scripts/` holds `bootstrap-organization-pki.ps1`, `capability-service-catalog.generated.json`, `installer`, `lib`, `pki`, `safety` — nothing that updates the install.\n- The only way to move a consumer install forward is a manual `docker compose pull && docker compose up -d`.\n\n## The publish chain is separate, and it works\n\nWorth separating so this item is not mistaken for the cause of a stale server. `publish-image.yml` triggers on `push: tags: [\"v*\"]` or `workflow_dispatch`, and runs daily by dispatch:\n\n```\n2026-08-21T07:26  workflow_dispatch  v2026.08.21  success\n2026-08-20T07:25  workflow_dispatch  v2026.08.20  success\n2026-08-19T07:22  workflow_dispatch  v2026.08.19  success\n```\n\nAt time of writing the published `:latest` digest is byte-identical to the running image (`sha256:63eb23fd...`), so `docker compose pull` would be a no-op — while `main` sits **21 commits** ahead of `v2026.08.21`. Publishing is a daily batch, not continuous; that is a separate question from this item.\n\n## What to decide\n\nConsumer installs have an image tag, not a git lineage. They need a first-class **registry-based** upgrade: compare the running image digest against the published tag, pull, and swap under the same quiescence/recovery-point/evidence discipline the source path already has. That is a sibling mechanism to self-upgrade, not a branch inside it.\n\nMinimum acceptable outcome if that is out of scope now: the status surface must stop reporting `enabled: true` and `routineUpgradeEligible: true` on an install where no upgrade can ever occur, and say plainly that self-upgrade requires a source-backed install.\n\n## Related — one architectural question, not two bugs\n\nThe consumer-install agent-orientation item (`BI-11D611B3`) is the second surface where the GA/recommended install mode was not built for. Treat them together: the question is whether a sourceless consumer install is a first-class citizen — for upgrading itself and for hosting an external agent — and today two independent surfaces assume it is not.\n\nProvenance: from-scratch reset/dogfood cycle 3, operator-reported; framing corrected after tracing the build path.\n\n---\n\n## Operator-facing evidence (2026-08-22, after a manual image upgrade)\n\nThe self-upgrade panel, on a consumer install now running `v2026.08.22`:\n\n```\nSelf-Upgrade: Enabled (stable)              [ Upgrade now ]\nRunning:          a1184f557e35...\nAvailable:        unknown\nPlatform version: v2026.08.22\nDeployed:         a1184f557e358371a8ee9817ecece0a8eec26636 (commit)\nTarget:           unknown\n\nLatest Run  SKIPPED  SUR-C0E89C42   Triggered by: manual\n  No upgrade target — upgrade did not run.\n  No target build could be resolved from the upstream source, so there was nothing to deploy.\n\nWhat's in this update?\n  Could not resolve the upstream target SHA.\n  Confirm the host clone has a fresh fetch of the configured remote/branch.\n```\n\nThree problems visible in one screen:\n\n1. **The button cannot work.** `Self-Upgrade: Enabled (stable)` sits beside an `Upgrade now` control that produces `SKIPPED / no-target` every time it is pressed. This run was operator-triggered, not scheduled — someone deliberately asked, and got a non-answer.\n\n2. **The remediation text is impossible to follow.** *\"Confirm the host clone has a fresh fetch of the configured remote/branch\"* instructs a consumer operator to repair something that does not and should not exist on their install. There is no host clone. The advice is correct for the customizer path and actively misleading here.\n\n3. **`Available: unknown` and `Target: unknown` are the actual gap.** The install knows precisely what it is running — `v2026.08.22`, commit `a1184f557`, built 06:30Z — and cannot discover what is available, because the only discovery path it has is git. The registry, which holds exactly that answer and which the install already authenticates against to pull, is never consulted.\n\nThe upgrade that produced this state was performed by hand (`docker compose pull && up -d`) after the daily `v2026.08.22` publish. The platform moved forward; its self-upgrade feature had no part in it.\n\n## Trap for whoever implements this\n\n`/workspace/.git` **does** exist inside `dpf-portal-1`, and it is not a source clone. It is the Build Studio sandbox: branch `my-changes`, **no remotes configured**, `git ls-remote origin` fails with *\"'origin' does not appear to be a git repository\"*.\n\nDo not resolve the \"no host clone\" problem by pointing `hostSourcePath` at it. That would either fail differently or, worse, attempt to upgrade the platform from an agent's scratch branch. The absence of a fetchable upstream is real; a repo being present is not the same as a source of truth being present.\n",
+      "status": "open",
+      "type": "portfolio",
+      "workType": "bug",
+      "source": "automated-detection",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-dd7dc141-cmt4h9m3a0ipw01pkgq6c57u6",
+          "kind": "epic_link",
+          "summary": "(no epic) → EP-56AE0F69",
+          "recordedAt": "2026-08-22T14:32:44.566Z",
+          "payload": {
+            "toEpicId": "EP-56AE0F69",
+            "fromEpicId": null
+          }
+        }
+      ],
+      "effortSize": "medium",
+      "triageOutcome": "build",
+      "createdAt": "2026-08-22T05:30:37.359Z"
+    }
+  ]
+}

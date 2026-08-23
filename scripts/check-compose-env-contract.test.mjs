@@ -5,6 +5,7 @@ import {
   hostPartOf,
   varRefs,
   findComposeEnvViolations,
+  findReleaseRuntimeContextViolations,
 } from "./check-compose-env-contract.mjs";
 
 test("hostPartOf keeps ${A:-B} colons out of the split", () => {
@@ -53,4 +54,22 @@ test("ignores named volumes and non-interpolated mounts", () => {
   const compose = "      - pgdata:/var/lib/postgresql/data\n      - ./local:/app";
   const v = findComposeEnvViolations("docker-compose.yml", compose, new Set());
   assert.equal(v.length, 0);
+});
+
+test("catches a portal that cannot see the registry owner used by release Compose", () => {
+  const broken = [
+    "services:",
+    "  portal:",
+    "    environment:",
+    "      DPF_IMAGE_TAG: ${DPF_IMAGE_TAG:-}",
+    "  postgres:",
+    "    image: postgres:16",
+  ].join("\n");
+  const valid = broken.replace(
+    "      DPF_IMAGE_TAG: ${DPF_IMAGE_TAG:-}",
+    "      DPF_IMAGE_TAG: ${DPF_IMAGE_TAG:-}\n      GHCR_OWNER: ${GHCR_OWNER:-opendigitalproductfactory}",
+  );
+
+  assert.match(findReleaseRuntimeContextViolations(broken)[0]?.message ?? "", /falls back to Git/);
+  assert.deepEqual(findReleaseRuntimeContextViolations(valid), []);
 });

@@ -1,0 +1,252 @@
+{
+  "schemaVersion": 1,
+  "bundleId": "external-website-channels-cms-interoperability",
+  "description": "Operator-invoked recovery input for the external website channels and CMS interoperability epic (WordPress projection).",
+  "source": {
+    "capturedAt": "2026-08-23T00:54:15.000Z",
+    "repository": "OpenDigitalProductFactory/opendigitalproductfactory",
+    "planPath": "docs/superpowers/plans/2026-08-21-wordpress-channel-projection.md"
+  },
+  "epic": {
+    "epicId": "EP-31C5A6C8",
+    "title": "External Website Channels and CMS Interoperability",
+    "description": "Make DPF the canonical governed business/content operating layer while projecting approved content and structured business facts to externally hosted website/CMS channels. WordPress is the first provider; the architecture remains provider-neutral and does not bundle hosting, public URL, CDN, theme, or plugin-runtime operations.",
+    "status": "open",
+    "scopeKind": "platform",
+    "scopeRationale": "Cross-archetype platform connector, publication, authority, security, and UX substrate; individual organizations opt in to provider connections.",
+    "createdAt": "2026-08-22T04:05:04.075Z"
+  },
+  "items": [
+    {
+      "itemId": "BI-28185C18",
+      "epicId": "EP-31C5A6C8",
+      "title": "Publish WordPress interoperability architecture, claims, runbook, and adoption evidence",
+      "body": "Parent BI-F50B1E46. Complete the operator/admin guide, connection/revocation/recovery runbook, supported-capability matrix, product-positioning claims, EA/SysML interfaces/allocations/verification cases, and adoption/quality measurement. Allowed claim: DPF operates behind an existing WordPress site and can publish governed content. Prohibit full CMS/hosting/plugin/two-way-sync claims. Acceptance: docs are linked/indexed; architecture parity is green; runbook covers 401/403/404/429/5xx, drift, queued actions, and disconnect; telemetry reports connection/publication/drift/recovery without content/secret labels; first reference-install exercise has receipts. Depends on executable slices for final evidence, but documentation skeleton and claim guardrails may ship earlier. Reserve ~20% for consolidating duplicate connector/publication documentation.",
+      "status": "open",
+      "type": "product",
+      "workType": "doc",
+      "source": "user-request",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [],
+      "effortSize": "medium",
+      "triageOutcome": "build",
+      "scopeRationale": "Provider-neutral DPF website-channel substrate with WordPress as the first implementation.",
+      "createdAt": "2026-08-22T04:11:08.638Z"
+    },
+    {
+      "itemId": "BI-8D98C5E6",
+      "epicId": "EP-31C5A6C8",
+      "title": "Deliver the WordPress connection, health, preview, and drift UX",
+      "body": "Parent BI-F50B1E46. Add WordPress to the existing /platform/tools/integrations family and one provider detail route; add contextual Publish to website actions only in eligible Marketing/Storefront surfaces. First viewport shows site, status, supported actions, authority sentence, and exactly one next action. Connection form asks URL/username/Application Password, checks before save, then previews capabilities and draft-vs-live policy. Acceptance: shared form/report-kit/token primitives; no new global nav/dashboard/KPIs; credentials never redisplayed; fresh/permission/REST/credential/drift/disconnected states each have one honest recovery; preview+confirmation for writes; desktop/narrow browser task, accessibility, route budgets, style/theme scans, and measured ux-fit manifest. Depends on connector and first publication path. Reserve ~20% to extract/converge repeated integration connection-state UI.",
+      "status": "open",
+      "type": "product",
+      "workType": "feature",
+      "source": "user-request",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-8d98c5e6-cmt4reyd6083g01pj05rr3n1e",
+          "kind": "initiative_readiness_decision",
+          "summary": "implementation readiness: input-required",
+          "recordedAt": "2026-08-22T19:16:49.914Z",
+          "payload": {
+            "unmet": [
+              {
+                "code": "CANONICAL_DESIGN_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-checklist-reviewer"
+              },
+              {
+                "code": "RESEARCH_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-author"
+              },
+              {
+                "code": "SPEC_APPROVAL_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-checklist-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "architecture-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "data-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "ux-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "security-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "compliance-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "domain-reviewer"
+              },
+              {
+                "code": "OBJECTIVE_BASELINE_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-checklist-reviewer"
+              },
+              {
+                "code": "ARTIFACT_AUTHOR_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "artifact-resolver"
+              },
+              {
+                "code": "PLAN_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "implementation-planner"
+              },
+              {
+                "code": "PLAN_REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "plan-reviewer"
+              },
+              {
+                "code": "PLAN_COVERAGE_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              },
+              {
+                "code": "TRACEABILITY_INCOMPLETE",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              }
+            ],
+            "target": "implementation",
+            "profile": "cross-domain",
+            "subject": {
+              "id": "BI-8D98C5E6",
+              "kind": "backlog-item"
+            },
+            "verdict": "input-required",
+            "blockers": [],
+            "authority": {
+              "actionKey": "claim_backlog_item_for_work",
+              "enforcementState": "enforced"
+            },
+            "satisfied": [
+              {
+                "code": "CLASSIFICATION_REQUIRED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "product-owner"
+              },
+              {
+                "code": "AUTHORIZATION_DENIED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "platform-governance"
+              },
+              {
+                "code": "DEPENDENCY_UNRESOLVED",
+                "state": "not-applicable",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              },
+              {
+                "code": "CAPSULE_IDENTITY_MISMATCH",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "delivery-coordinator"
+              }
+            ],
+            "decisionId": "IRD-616DC71DEB3F",
+            "workIntent": "implementation",
+            "evaluatedAt": "2026-08-22T19:16:49.910Z",
+            "factsDigest": "26844f07eea5e6afc96f3cdef414966bc6699402606f12ecd568402bfa75e3d9",
+            "stableCodes": {
+              "unmet": [
+                "CANONICAL_DESIGN_REQUIRED",
+                "RESEARCH_REQUIRED",
+                "SPEC_APPROVAL_REQUIRED",
+                "REVIEW_REQUIRED",
+                "REVIEW_REQUIRED",
+                "REVIEW_REQUIRED",
+                "REVIEW_REQUIRED",
+                "REVIEW_REQUIRED",
+                "REVIEW_REQUIRED",
+                "OBJECTIVE_BASELINE_REQUIRED",
+                "ARTIFACT_AUTHOR_REQUIRED",
+                "PLAN_REQUIRED",
+                "PLAN_REVIEW_REQUIRED",
+                "PLAN_COVERAGE_REQUIRED",
+                "TRACEABILITY_INCOMPLETE"
+              ],
+              "blockers": [],
+              "satisfied": [
+                "CLASSIFICATION_REQUIRED",
+                "AUTHORIZATION_DENIED",
+                "DEPENDENCY_UNRESOLVED",
+                "CAPSULE_IDENTITY_MISMATCH"
+              ]
+            },
+            "policyVersion": "initiative-readiness.v1",
+            "schemaVersion": 1,
+            "transitionObject": {
+              "id": "OpenDigitalProductFactory/opendigitalproductfactory#feat/deliver-wordpress-operator-ux-and-adoption-evide",
+              "kind": "work-capsule",
+              "targetState": "implementation",
+              "expectedVersion": "claim.v1"
+            }
+          }
+        }
+      ],
+      "effortSize": "large",
+      "triageOutcome": "build",
+      "scopeRationale": "Provider-neutral DPF website-channel substrate with WordPress as the first implementation.",
+      "createdAt": "2026-08-22T04:11:08.516Z"
+    },
+    {
+      "itemId": "BI-F50B1E46",
+      "epicId": "EP-31C5A6C8",
+      "title": "Deliver governed WordPress channel projection without making DPF a public CMS host",
+      "body": "## Problem\nMany adopting organizations already run WordPress. DPF currently has no governed way to discover that site, assess which WordPress capabilities are absorbed versus retained, import inventory/read-only context, or project approved DPF content and structured business facts into it.\n\n## Outcome\nDeliver WordPress as the first external website channel on DPF's unified connector and outbound-publication substrate. DPF remains canonical for business facts, content intent, approval, audit, and scheduling. WordPress remains canonical for public presentation: themes, blocks/layout, permalink/SEO settings, hosting, CDN, and plugin-rendered behavior.\n\n## Architectural guardrails\n- No bundled WordPress/PHP/database runtime, public DPF URL, CDN, theme engine, or general-purpose CMS data model.\n- Start one-way: DPF -> WordPress for approved publication; authenticated polling for discovery/drift. Webhooks and a thin WordPress plugin are optional later increments.\n- Reuse IntegrationCredential custody, connector definitions/checkpoints/audit, OutboundDraft/Approval/ScheduledOutboundAction/OutboundPublication, media storage, and owning domain records.\n- Resolve incumbent posture by normalized provider identity plus integration category/capability; never arbitrary provider-name-only findFirst.\n- Per-resource authority and conflict behavior are explicit. No silent two-way merge and no WordPress content overwriting DPF operational truth.\n- User-supplied site URLs require SSRF/DNS-rebinding defenses, HTTPS, bounded redirects, content sanitization, least privilege, safe errors, and auditable external writes.\n- Reserve approximately 20% of every implementation slice for convergence/refactoring and invariant coverage.\n\n## Initial scope\n1. Provider/category identity and absorption-posture correctness.\n2. WordPress REST discovery, health, auth, bounded incremental read.\n3. Approved posts/pages/media publication with idempotent external identity mapping.\n4. Structured storefront/catalog projection with preview, drift, and authority rules.\n5. Setup/health/publication UX in the existing Integrations route family plus contextual Marketing/Storefront actions.\n6. EA/parity evidence, positioning claims, operational docs, and adoption measurement.\n\n## Acceptance\nA founder/operator can connect a supported HTTPS WordPress site with a dedicated application password, see a truthful capability/authority preview, publish an approved DPF item as a WordPress draft or scheduled/public post, see its external URL and audit receipt, detect later external modification without silent overwrite, and disconnect/revoke credentials. Fresh install/unavailable/permission/plugin-conflict states provide one honest recovery action. Tests prove idempotency, approval enforcement, pagination/cursors, SSRF controls, sanitization, authority, and no duplicate publication.",
+      "status": "open",
+      "type": "portfolio",
+      "workType": "feature",
+      "source": "user-request",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [],
+      "effortSize": "xlarge",
+      "triageOutcome": "build",
+      "scopeRationale": "Provider-neutral platform channel projection with WordPress as first provider; reused by every archetype.",
+      "createdAt": "2026-08-22T04:05:24.562Z"
+    }
+  ]
+}

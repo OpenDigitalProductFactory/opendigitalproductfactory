@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { readPromoterBuildContextSources } from "./lib/promoter-build-context-sources.mjs";
 
 const root = resolve(new URL("..", import.meta.url).pathname.replace(/^\/(.:\/)/, "$1"));
 
@@ -69,12 +70,12 @@ test("portal-owned candidate builds have Buildx and cannot fall back to the lega
   );
 });
 
-test("every promoter Docker COPY input is mechanically closed by portal baking and JIT staging", async () => {
-  const [promoterDockerfile, portalDockerfile, promoterSource] = await Promise.all([
-    readFile(resolve(root, "Dockerfile.promoter"), "utf8"), readFile(resolve(root, "Dockerfile"), "utf8"),
+test("every staged promoter input is mechanically closed by portal baking and JIT staging", async () => {
+  const [portalDockerfile, promoterSource, sources] = await Promise.all([
+    readFile(resolve(root, "Dockerfile"), "utf8"),
     readFile(resolve(root, "apps/web/lib/self-upgrade/promoter.ts"), "utf8"),
+    readPromoterBuildContextSources(root),
   ]);
-  const sources = [...promoterDockerfile.matchAll(/^COPY\s+(\S+)\s+\S+/gm)].map((match) => match[1]);
   for (const source of sources) {
     const baked = source === "promoter-contract.json" ? "/promoter/promoter-contract.json" : `/promoter/${source}`;
     assert.match(portalDockerfile, new RegExp(`^COPY\\s+${escapeRegex(source)}\\s+${escapeRegex(baked)}$`, "m"), `portal image does not bake ${source}`);
