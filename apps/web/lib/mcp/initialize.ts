@@ -23,16 +23,11 @@ type InitializeAuthority = {
  */
 async function composeInstanceStance() {
   try {
-    const [{ loadInstanceStance }, { prisma }] = await Promise.all([
+    const [{ loadInstanceStance, prismaInstanceStanceStore }, { prisma }] = await Promise.all([
       import("@/lib/install/instance-stance"),
       import("@dpf/db"),
     ]);
-    return await loadInstanceStance({
-      readConfig: async (key) =>
-        (await prisma.platformConfig.findUnique({ where: { key } }))?.value ?? null,
-      countBacklogItemsByStatus: (statuses) =>
-        prisma.backlogItem.count({ where: { status: { in: [...statuses] } } }),
-    });
+    return await loadInstanceStance(prismaInstanceStanceStore(prisma));
   } catch (error) {
     console.warn("[mcp/initialize] instance-stance compose failed (fail-open):", error);
     return undefined;

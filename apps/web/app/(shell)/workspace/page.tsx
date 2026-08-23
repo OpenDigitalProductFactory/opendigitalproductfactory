@@ -10,9 +10,10 @@ import { WorkspaceStorefrontAttention } from "@/components/owner-first/Workspace
 import { WorkspaceTwinHero } from "@/components/workspace-home/WorkspaceTwinHero";
 import { LocalOnlyProviderNotice } from "@/components/workspace-home/LocalOnlyProviderNotice";
 import { UnconfiguredWorkspaceHomeNotice } from "@/components/workspace-home/UnconfiguredWorkspaceHomeNotice";
-import { InstallationPurposePanel } from "@/components/workspace/InstallationPurposePanel";
+import { InstallationIdentityPanel } from "@/components/workspace/InstallationIdentityPanel";
 import { can } from "@/lib/permissions";
-import { loadInstallationOperatingIntent } from "@/lib/installation-journey/operating-intent";
+import { prismaInstanceStanceStore } from "@/lib/install/instance-stance";
+import { loadInstallationIdentityView } from "@/lib/installation-journey/installation-identity-view";
 import { loadPlatformWorkspaceHomeData } from "@/lib/workspace-home/platform-loader";
 import { resolveWorkspaceHomeContribution } from "@/lib/workspace-home/registry";
 import { loadWorkspaceTwinPresentation } from "@/lib/workspace-home/twin-panel-data";
@@ -92,7 +93,9 @@ export default async function WorkspacePage() {
   return (
     <div data-nav-mode={navMode}>
       {canManageInstallation ? (
-        <InstallationPurposePanel loaded={await loadInstallationOperatingIntent(prisma)} />
+        <InstallationIdentityPanel
+          view={await loadInstallationIdentityView(prisma, prismaInstanceStanceStore(prisma))}
+        />
       ) : null}
       {workspaceHomeResolution.mode === "unconfigured" && <UnconfiguredWorkspaceHomeNotice />}
       {workspaceHomeResolution.mode !== "unconfigured" && !hasCloudProvider && (

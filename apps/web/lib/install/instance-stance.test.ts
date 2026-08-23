@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { ENVIRONMENT_CLASS_CONFIG_KEY } from "./environment-class";
 import {
   BACKLOG_CAPTURE_CONFIG_KEY,
   OPERATING_INTENT_CONFIG_KEY,
@@ -31,6 +32,14 @@ function store(overrides: Partial<InstanceStanceStore> = {}): InstanceStanceStor
     ...overrides,
   };
 }
+
+const consumerHost = async () => ({
+  kind: "consumer" as const,
+  installMode: "consumer",
+  sourceCapable: false,
+  releaseImage: true,
+  reason: "consumer-release-install" as const,
+});
 
 function stateText(environmentClass?: string) {
   return async () =>
@@ -191,5 +200,59 @@ describe("loadInstanceStance", () => {
     expect(stance.teardown).toBe("forbidden");
     expect(stance.credentials).toBe("operator-only");
     expect(stance.holdsIrreplaceableWork).toBe(true);
+  });
+
+  // The portal declaration is what an operator sets from the workspace panel.
+  // These two cases are the proof that the panel changes what agents may do —
+  // and that it cannot overrule the installer while doing so.
+  it("honours a portal environment declaration when the installer declared nothing", async () => {
+    const portalDeclaresDevelopment = {
+      schemaVersion: 1,
+      environmentClass: "development",
+      declaredAt: "2026-08-22T12:00:00.000Z",
+      declaredByPrincipalId: "PRN-1",
+    };
+    const stance = await loadInstanceStance(
+      store({
+        readConfig: async (key) => {
+          if (key === OPERATING_INTENT_CONFIG_KEY) return CONFIRMED_DEV_INTENT;
+          if (key === ENVIRONMENT_CLASS_CONFIG_KEY) return portalDeclaresDevelopment;
+          return null;
+        },
+        countBacklogItemsByStatus: async () => 0,
+      }),
+      { readText: stateText(), env: {}, readHostProfile: consumerHost },
+    );
+
+    expect(stance.environmentClass).toBe("development");
+    expect(stance.teardown).toBe("permitted");
+    expect(stance.credentials).toBe("local-permitted");
+  });
+
+  it("keeps installer state above a portal declaration that disagrees", async () => {
+    const stance = await loadInstanceStance(
+      store({
+        readConfig: async (key) => {
+          if (key === OPERATING_INTENT_CONFIG_KEY) return CONFIRMED_DEV_INTENT;
+          if (key === ENVIRONMENT_CLASS_CONFIG_KEY) {
+            return {
+              schemaVersion: 1,
+              environmentClass: "development",
+              declaredAt: "2026-08-22T12:00:00.000Z",
+              declaredByPrincipalId: "PRN-1",
+            };
+          }
+          return null;
+        },
+        countBacklogItemsByStatus: async () => 0,
+      }),
+      { readText: stateText("production"), env: {}, readHostProfile: consumerHost },
+    );
+
+    // A portal write must never be the reason a production install becomes
+    // disposable.
+    expect(stance.environmentClass).toBe("production");
+    expect(stance.teardown).toBe("forbidden");
+    expect(stance.credentials).toBe("operator-only");
   });
 });
