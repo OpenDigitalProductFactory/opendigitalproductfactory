@@ -228,6 +228,96 @@ export function fallbackNext(phase: BuildPhase): string {
 }
 
 
+
+/** Title-length budget. A heading is a name, not a paragraph. */
+export const OUTCOME_TITLE_MAX = 96;
+
+/**
+ * True when two operator-facing strings say the same thing.
+ *
+ * An owner who types their request into the plain-language intake gets that one
+ * sentence stored as the build's title AND its description, so the first
+ * viewport rendered it three times — as the heading, as the sub-paragraph, and
+ * again in "What we're building". Each slot was individually correct and the
+ * aggregate was noise. Callers use this to render a slot only when it adds
+ * something.
+ */
+export function isSameStatement(a: string | null | undefined, b: string | null | undefined): boolean {
+  const norm = (v: string | null | undefined) =>
+    (v ?? "")
+      .toLowerCase()
+      .replace(/[\s\u2026]+/g, " ")
+      .replace(/[^a-z0-9 ]/g, "")
+      .trim();
+  const left = norm(a);
+  const right = norm(b);
+  if (!left || !right) return false;
+  if (left === right) return true;
+  // One is a clamped form of the other (ellipsis/word-boundary truncation).
+  const [shorter, longer] = left.length <= right.length ? [left, right] : [right, left];
+  return shorter.length >= 24 && longer.startsWith(shorter);
+}
+
+/**
+ * The heading an owner reads for a build.
+ *
+ * When someone types their request into the plain-language intake, that whole
+ * sentence is stored as the build title — and rendered as a six-line heading.
+ * A heading is a name, not a paragraph.
+ */
+export function toOwnerHeading(title: string): string {
+  return clampStatement(toProseStatement(title), OUTCOME_TITLE_MAX);
+}
+
+/**
+ * The detail paragraph beneath the heading, or null when it would merely repeat
+ * it. Intake stores one sentence as BOTH title and description, so the first
+ * viewport rendered it three times — heading, sub-paragraph, and again in
+ * "What we're building". Each slot was individually correct; the aggregate was
+ * noise. Deciding this here keeps presentation components free of the judgement.
+ */
+export function outcomeDetailFor(
+  title: string,
+  outcome: string | null | undefined,
+): string | null {
+  if (!outcome) return null;
+  return isSameStatement(outcome, title) ? null : outcome;
+}
+
+/**
+ * Operator-facing summary copy for a secondary card, or null when it would only
+ * repeat the heading. Shared so a new surface cannot reintroduce the wall by
+ * writing its own normalizer.
+ */
+export function summaryCopyFor(
+  primary: string | null,
+  title: string | null | undefined,
+  maxLength: number,
+): string | null {
+  if (!primary) return null;
+  const compacted = clampStatement(
+    toProseStatement(primary).replace(/\s+/g, " ").trim(),
+    maxLength,
+  );
+  return isSameStatement(compacted, title) ? null : compacted;
+}
+
+/**
+ * True when the proof packet has something an owner can actually read.
+ *
+ * Early in a build every check is "not applicable" or "not recorded", so the
+ * Preview-and-proof section rendered a heading and three cards that all said,
+ * in effect, "nothing yet" — a whole region of the first viewport costing
+ * attention and returning none. Governance is not weakened by staying quiet
+ * until it has a result: the checks still run, and the section appears the
+ * moment any of them has an answer.
+ */
+export function hasReadableProof(proof: OwnerProofPacket): boolean {
+  return proof.checks.some(
+    (check) => check.state !== "not-applicable" && check.state !== "not-recorded",
+  );
+}
+
 /** Longest an outcome statement may be before it is clamped. */
 export const OUTCOME_STATEMENT_MAX = 240;
 

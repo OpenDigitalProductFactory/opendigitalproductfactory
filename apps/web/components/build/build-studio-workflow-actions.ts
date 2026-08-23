@@ -751,13 +751,14 @@ export function deriveBuildStudioWorkflowAction({
 
   // BI-F0005EB0 — a failed AI call (inference errored) in a coworker-chat
   // deliberation phase must surface as a distinct danger "Retry the AI call"
-  // affordance, NOT fall through to the phase's advance gate (which reads as the
-  // benign "Waiting on evidence"). Scoped to ideate/plan so it never shadows the
-  // richer exec-state recovery paths in build/review. Checked before the phase
-  // branches so it takes priority over "advance gate not met".
+  // affordance, NOT the benign "Waiting on evidence". Scoped to ideate/plan so it
+  // never shadows the richer exec-state recovery paths in build/review, and taken
+  // ONLY while the next gate is unmet — a satisfied gate means the failed call
+  // already did its work, so retry must not be the owner's only move.
   if (
     (build.phase === "ideate" || build.phase === "plan")
     && progressVisibility?.inferenceFailure?.failed === true
+    && getPhaseGateReason(build, build.phase === "ideate" ? "plan" : "build") !== null
   ) {
     return buildRetryInferenceAction(build.phase, progressVisibility.inferenceFailure.kind ?? null);
   }

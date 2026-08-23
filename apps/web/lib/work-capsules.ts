@@ -410,6 +410,8 @@ export type WorkCapsuleOutcomeAnchor = {
 
 export type WorkCapsuleScopeInput = {
   decisionScope?: unknown;
+  /** EP-WORK-POSTURE (BI-8C54B216): the collaboration shape the room is convened WITH. */
+  workroomShape?: unknown;
   portfolioRole?: unknown;
   servedPersona?: unknown;
   activityKind?: unknown;
@@ -420,6 +422,7 @@ export type WorkCapsuleScopeInput = {
 
 export type NormalizedWorkCapsuleScope = {
   decisionScope: WorkCapsuleDecisionScope | null;
+  workroomShape: WorkroomShapeKey | null;
   portfolioRole: WorkCapsulePortfolioRole | null;
   servedPersona: string | null;
   activityKind: WorkCapsuleScopeActivityKind | null;
@@ -493,9 +496,41 @@ function normalizeOutcomeAnchor(value: unknown): WorkCapsuleOutcomeAnchor | null
   return anchor;
 }
 
+/**
+ * EP-WORK-POSTURE (BI-8C54B216). The collaboration-shape keys, mirrored from
+ * WORKROOM_SHAPE_KEYS in lib/work-management/room-shapes.ts. Mirrored rather
+ * than imported because work-capsules is the lower layer; a conformance test
+ * asserts the two lists cannot drift apart.
+ */
+export const WORK_CAPSULE_WORKROOM_SHAPES = [
+  "specialist-alignment",
+  "approval-sign-off",
+  "outward-review",
+  "change-consequential",
+  "escalation",
+  "craft-stewardship",
+] as const;
+export type WorkroomShapeKey = (typeof WORK_CAPSULE_WORKROOM_SHAPES)[number];
+
+export function isWorkroomShapeKey(value: unknown): value is WorkroomShapeKey {
+  return typeof value === "string"
+    && (WORK_CAPSULE_WORKROOM_SHAPES as readonly string[]).includes(value);
+}
+
+function normalizeWorkroomShape(value: unknown): WorkroomShapeKey | null {
+  if (value === undefined || value === null || value === "") return null;
+  if (!isWorkroomShapeKey(value)) {
+    throw new Error(
+      `workroomShape must be one of: ${WORK_CAPSULE_WORKROOM_SHAPES.join(", ")}.`,
+    );
+  }
+  return value;
+}
+
 export function normalizeWorkCapsuleScopeInput(input?: WorkCapsuleScopeInput | null): NormalizedWorkCapsuleScope {
   return {
     decisionScope: normalizeDecisionScope(input?.decisionScope),
+    workroomShape: normalizeWorkroomShape(input?.workroomShape),
     portfolioRole: normalizePortfolioRole(input?.portfolioRole, "portfolioRole"),
     servedPersona: optionalString(input?.servedPersona),
     activityKind: normalizeScopeActivityKind(input?.activityKind),

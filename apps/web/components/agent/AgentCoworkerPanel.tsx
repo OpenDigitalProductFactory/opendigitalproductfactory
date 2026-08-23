@@ -61,6 +61,12 @@ type Props = {
   onClose: () => void;
   onDragStart: (e: React.MouseEvent) => void;
   pendingAutoMessage?: string | null;
+  /**
+   * What the OWNER sees for an auto-sent nudge whose sent text is
+   * machine-precise. Sending stays exact; the transcript stays plain, so a
+   * nudge naming tools does not read as if the owner typed it.
+   */
+  pendingAutoMessageDisplay?: string | null;
   onAutoMessageConsumed?: () => void;
   onConversationCleared?: () => void;
   /** When set, overrides pathname for agent routing and message routeContext.
@@ -126,6 +132,7 @@ export function AgentCoworkerPanel({
   onClose,
   onDragStart,
   pendingAutoMessage,
+  pendingAutoMessageDisplay,
   onAutoMessageConsumed,
   onConversationCleared,
   routeContextOverride,
@@ -627,7 +634,8 @@ export function AgentCoworkerPanel({
   // Auto-send a message when triggered by build creation or other events
   useEffect(() => {
     if (pendingAutoMessage && threadId) {
-      submitMessage(pendingAutoMessage);
+      const shown = pendingAutoMessageDisplay ?? pendingAutoMessage;
+      submitMessage(pendingAutoMessage, createOptimisticUserMessage(shown, effectiveRoute));
       onAutoMessageConsumed?.();
     }
   }, [pendingAutoMessage, threadId]); // eslint-disable-line react-hooks/exhaustive-deps

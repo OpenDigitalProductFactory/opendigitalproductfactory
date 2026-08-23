@@ -83,9 +83,15 @@ vi.mock("./AgentCoworkerPanel", () => ({
   },
 }));
 
-vi.mock("./agent-auto-message", () => ({
+// Spread the real module so a new export cannot silently break every test in
+// this file; override only what these tests mean to control -- send auto
+// messages straight through, never suppress and never queue.
+vi.mock("./agent-auto-message", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./agent-auto-message")>()),
   shouldDispatchAutoMessageImmediately: () => true,
   shouldSuppressAutoMessage: () => false,
+  planAutoMessage: ({ message, targetBuildId }: { message: string; targetBuildId: string | null }) =>
+    ({ send: true, message, targetBuildId, routeContext: null }),
 }));
 
 vi.mock("./agent-panel-layout", () => ({

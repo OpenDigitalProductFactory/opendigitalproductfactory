@@ -77,6 +77,15 @@ arities) and [`workbooks-pack`](../../apps/web/lib/mcp/packs/workbooks-pack.ts) 
 followed on the same lazy pattern as the third and fourth packs — **every sibling-module
 domain (static + lazy) is now extracted.**
 
+`work-capsules-pack` shares one `scopeProperties` block across `create_workroom` and
+`adopt_worktree`, so a field added there reaches both convene paths at once. That is how
+`workroomShape` landed ⟦runtime: `BI-8C54B216`, 2026-08-23⟧ — the room's collaboration
+shape is part of the scope it is convened with, validated against `WORK_CAPSULE_WORKROOM_SHAPES`
+and **rejected** rather than dropped when unknown, because a silently dropped shape convenes
+a room the caller believes is shaped. Its enum is mirrored from `room-shapes.ts` (the lower
+layer must not import from `work-management`) and `shape-key-parity.test.ts` is what keeps
+the mirror honest.
+
 ## Fifth pack — first inline extraction
 
 [`feedback-pack`](../../apps/web/lib/mcp/packs/feedback-pack.ts) is the first pack whose

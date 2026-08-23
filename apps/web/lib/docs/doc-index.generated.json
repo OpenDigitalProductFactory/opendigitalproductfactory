@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 675,
+  "pageCount": 678,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -1425,6 +1425,19 @@
       "publishedPortal": false,
       "anchors": [
         "enforced-ci-gates-trigger-trailer-mechanics"
+      ]
+    },
+    "docs/architecture/external-channel-projection.md": {
+      "publicHref": "/architecture/external-channel-projection/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "external-channel-projection-architecture",
+        "context-and-allocation",
+        "canonical-contracts",
+        "requirements-and-verification",
+        "wordpress-specialization"
       ]
     },
     "docs/architecture/external-planning-reference-boundary.md": {
@@ -8596,6 +8609,22 @@
         "pr-3480-reference-pattern"
       ]
     },
+    "docs/runbooks/wordpress-self-hosted.md": {
+      "publicHref": "/runbooks/wordpress-self-hosted/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "wordpress-self-hosted-connector-runbook",
+        "security-boundary",
+        "healthy-connection",
+        "authentication-or-permission-failure",
+        "rest-api-unavailable",
+        "drift-or-ambiguous-outcome",
+        "disconnect-and-revoke",
+        "evidence-to-capture"
+      ]
+    },
     "docs/security/2026-05-24-shift-left-rollout.md": {
       "publicHref": "/security/2026-05-24-shift-left-rollout/",
       "portalHref": null,
@@ -11635,6 +11664,19 @@
         "what-to-watch"
       ]
     },
+    "docs/user-guide/platform/wordpress-self-hosted.md": {
+      "publicHref": "/user-guide/platform/wordpress-self-hosted/",
+      "portalHref": "/docs/platform/wordpress-self-hosted",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "wordpress-self-hosted",
+        "before-you-connect",
+        "capability-matrix",
+        "publish-an-approved-item",
+        "what-dpf-can-honestly-claim"
+      ]
+    },
     "docs/user-guide/portfolios/index.md": {
       "publicHref": "/user-guide/portfolios/",
       "portalHref": "/docs/portfolios/index",
@@ -11880,6 +11922,7 @@
         "access-and-other-channels",
         "finite-and-standing-rooms",
         "pace-and-priority",
+        "giving-a-room-its-shape",
         "incomplete-or-unavailable-rooms"
       ]
     },

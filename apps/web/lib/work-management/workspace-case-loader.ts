@@ -25,6 +25,7 @@ import {
 import type { WorkroomStructure } from "./room-structure";
 import type { WorkroomPostureContext } from "./room-posture";
 import { readWorkroomShapeClaim } from "./workroom-shape-claim";
+import { deriveWorkroomShape } from "./derive-workroom-shape";
 import type { WorkroomParticipantView, WorkroomView } from "./room-types";
 import { getWorkCaseSourceEntry } from "./source-registry";
 import { fromWorkItemMessage } from "./receipt-envelope";
@@ -101,6 +102,7 @@ export type WorkspaceWorkCapsuleRecord = {
   // without them simply yields no shape and no declared posture.
   scopeClaims?: unknown;
   activityKind?: string | null;
+  decisionScope?: string | null;
 };
 
 export type WorkspaceCasePrismaClient = {
@@ -503,6 +505,7 @@ export async function loadWorkspaceWorkCaseDetail({
         title: true,
         scopeClaims: true,
         activityKind: true,
+        decisionScope: true,
       },
       orderBy: [{ updatedAt: "desc" }],
     }),
@@ -559,7 +562,18 @@ export async function loadWorkspaceWorkCaseDetail({
     detail,
     structure,
     postureContext,
-    shapeKey: readWorkroomShapeClaim(anchoredCapsule?.scopeClaims),
+    // A DECLARED shape always wins. Most rooms have never declared one
+    // (0 of 330 on the reference install), so fall back to deriving from what
+    // the room already is — and accept null when it does not say enough,
+    // rather than inventing a shape the posture would then act on.
+    shapeKey:
+      readWorkroomShapeClaim(anchoredCapsule?.scopeClaims)
+      ?? deriveWorkroomShape({
+        activityKind: anchoredCapsule?.activityKind ?? null,
+        decisionScope: anchoredCapsule?.decisionScope ?? null,
+        mode: sourceEntry?.roomProjection.mode ?? "finite",
+      })?.shape
+      ?? null,
     activityKind: anchoredCapsule?.activityKind ?? null,
     scopeClaims: anchoredCapsule?.scopeClaims,
     now,

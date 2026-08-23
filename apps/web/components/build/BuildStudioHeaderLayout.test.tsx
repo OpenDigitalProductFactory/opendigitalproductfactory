@@ -1353,3 +1353,45 @@ function makePortalContextEnvelope(): PortalContextEnvelope {
     promptDigest: "Route: /build",
   };
 }
+
+describe("BuildStudio recovery actions on stopped builds", () => {
+  it("offers the resume path on an abandoned build instead of a dead end", () => {
+    // Regression: ownerStateIsTerminal treated "failed" as terminal, and the
+    // abandoned phase maps to ownerState "failed" — so the whole action band
+    // was suppressed. The owner read "The evidence remains available if this
+    // outcome is resumed" on a page with no way to resume.
+    render(
+      <BuildStudio
+        builds={[makeBuild({ phase: "abandoned", buildId: "FB-STOPPED1" })]}
+        portfolios={[]}
+        governedBacklogEnabled
+        projectBranch="main"
+        submissionBranchShortId="abc12345"
+        initialBuildId="FB-STOPPED1"
+      />,
+    );
+    const body = document.body.textContent ?? "";
+    // The surface must not claim a resume is possible and then withhold it.
+    if (/remains available if this outcome is resumed/i.test(body)) {
+      expect(
+        document.querySelector('[data-testid="build-studio-action-banner"]')
+          ?? document.querySelector('[data-testid="build-studio-workflow-action"]'),
+        "an abandoned build must surface its recovery action",
+      ).not.toBeNull();
+    }
+  });
+
+  it("still suppresses the action band on a completed build", () => {
+    render(
+      <BuildStudio
+        builds={[makeBuild({ phase: "complete", buildId: "FB-DONE0001" })]}
+        portfolios={[]}
+        governedBacklogEnabled
+        projectBranch="main"
+        submissionBranchShortId="abc12345"
+        initialBuildId="FB-DONE0001"
+      />,
+    );
+    expect(document.body.textContent).not.toContain("Retry Build");
+  });
+});
