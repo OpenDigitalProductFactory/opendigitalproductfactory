@@ -1,0 +1,29 @@
+# owner: platform-architecture
+# expiry: 2026-11-22
+# Twin-artifact baseline (BI-788EC51A). Shrink-only: files leave by gaining
+# their sh/ps1 twin or being removed, never by expanding the baseline.
+# Each entry is a repo-relative path of a script inside a twin-norm directory
+# (scripts/hooks, scripts/installer, scripts/safety) that was single-sided
+# when the guard landed (2026-08-22). New single-sided files in these dirs
+# need either a twin or a deliberate, reasoned addition here.
+# Duplicate entries fail the guard closed (see scripts/check-no-twin-artifact-drift.mjs).
+
+# sh-only hook-plane helper; no ps1 counterpart existed at guard introduction.
+scripts/hooks/lib/session-reaper-path.sh
+
+# POSIX installer library decomposition; the Windows installer does not mirror
+# lib/ file-for-file (state.* is its only same-basename shared lib piece).
+scripts/installer/lib/autostart.sh
+scripts/installer/lib/compose.sh
+scripts/installer/lib/diagnostics.sh
+scripts/installer/lib/docker.sh
+scripts/installer/lib/doctor.sh
+scripts/installer/lib/github-cli.sh
+scripts/installer/lib/logging.sh
+scripts/installer/lib/platform.sh
+scripts/installer/lib/preflight.sh
+scripts/installer/lib/prompts.sh
+
+# ps1-only compose invocation chain; no compose-chain.sh existed at guard
+# introduction.
+scripts/installer/lib/compose-chain.ps1
