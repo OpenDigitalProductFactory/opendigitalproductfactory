@@ -6,7 +6,7 @@ status: draft
 
 **Date:** 2026-08-23
 
-**Status:** Revised after independent review of `19552b0849c2`; ready for fresh re-review
+**Status:** Revised after independent review of `d0a658eacd2c`; ready for fresh re-review
 
 **Backlog:** `BI-11D611B3`
 
@@ -107,13 +107,12 @@ type ExternalAgentOperatingProfileV1 = {
     sourceCapable: boolean;
   };
   principal: {
-    sessionId: string;
     delegatingPrincipalId: string;
     actingAgentId: string;
     sponsorRef: string;
     tokenTier: "observer" | "employee" | "development" | "admin";
     authorityDigest: Sha256Digest;
-    expiresAt: string;
+    profileExpiresAt: string;
   };
   organization: {
     organizationId: string;
@@ -181,8 +180,8 @@ The four digests have separate owners and preimages:
 | Digest | Visibility | Preimage |
 | --- | --- | --- |
 | `compatibility.profileSchema.digest` | MCP, public A2A, pointer | The RFC 8785 canonical UTF-8 bytes of the checked-in V1 JSON Schema object. The schema object contains neither this digest nor release/principal data. `compatibility.profileSchema` is the sole owner of schema version, digest, and digest algorithm. |
-| `profileDigest` | Authenticated profile only | The RFC 8785 canonical UTF-8 bytes of the complete profile after removing only `profileDigest`. `generatedAt` and `principal.expiresAt` remain in the preimage, so this identifies the exact response. |
-| `authorityDigest` | Authenticated profile only | The RFC 8785 bytes of the exact `AuthorityDigestPreimageV1` below. Token id/version, raw token scopes, and effective grant ids are not returned. Allow-listed `delegatingPrincipalId`, `actingAgentId`, and `sponsorRef` remain explicit authenticated profile fields and are excluded from public A2A output. |
+| `profileDigest` | Authenticated profile only | The RFC 8785 canonical UTF-8 bytes of the complete profile after removing only `profileDigest`. `generatedAt` and `principal.profileExpiresAt` remain in the preimage, so this identifies the exact response. |
+| `authorityDigest` | Authenticated profile only | The RFC 8785 bytes of the exact `AuthorityDigestPreimageV1` below. Raw credential claims/scopes and effective grant ids are not returned. Allow-listed `delegatingPrincipalId`, `actingAgentId`, and `sponsorRef` remain explicit authenticated profile fields and are excluded from public A2A output. |
 | `releaseImageDigest` | Pointer and release metadata | The OCI/release identity already owned by installer/self-upgrade. It is not a profile or schema digest. |
 
 `sha256-rfc8785-v1` means RFC 8785 JCS, UTF-8 encoding, then SHA-256 rendered as lower-case hexadecimal with the `sha256:` prefix. Object members follow JCS lexical ordering. Arrays whose semantics are sets are sorted by their canonical string id before they enter the canonicalizer; ordered protocol arrays retain declared order.
@@ -192,40 +191,58 @@ The authority preimage is not an informal concatenation. Its literal domain tag 
 ```ts
 type AuthorityDigestPreimageV1 = {
   domain: "dpf.external-agent-operating-profile.authority/v1";
-  token: {
-    id: string;
-    version: number;
-    scope: string[]; // sorted canonical scope ids
-    expiresAt: string;
-  };
+  credential:
+    | {
+        kind: "pat";
+        tokenId: string;
+        scope: string[]; // sorted canonical scope ids
+        expiresAt: string | null;
+      }
+    | {
+        kind: "session-jwt";
+        subject: string;
+        actingAgentId: string | null;
+        scope: string[]; // sorted canonical scope ids
+        issuedAtUnixSeconds: number;
+        expiresAtUnixSeconds: number;
+      };
   sponsorId: string;
   actingAgentId: string;
   effectiveGrantIds: string[]; // sorted canonical grant ids
 };
 ```
 
-The implementation ships three fixed vectors. The first proves the shared JCS/SHA-256 primitive:
+The PAT adapter selects the existing `McpApiToken.id` and nullable `expiresAt` into the resolved authority DTO. The internal adapter retains the already-signed and verified JWT `sub`, `iat`, and `exp` claims instead of inventing a row id; verification rejects an internal credential when either NumericDate claim is missing or invalid. Neither adapter adds persistence or a token-version field.
+
+The implementation ships four fixed vectors. The first proves the shared JCS/SHA-256 primitive:
 
 ```text
 canonical bytes: {"compatibility":{"protocols":["a2a","mcp"]},"principal":{"tokenTier":"observer"},"schemaVersion":"dpf.external-agent-operating-profile/1"}
 sha256:          c1085222f991336a52915886d41373b8e4f03b98a3b4b1a7ef8cf5a635e5eef2
 ```
 
-The second proves authority domain separation and set ordering:
+The second proves authority domain separation, set ordering, and the canonical nullable expiry for a never-expiring PAT:
 
 ```text
-canonical bytes: {"actingAgentId":"AGT-TEST","domain":"dpf.external-agent-operating-profile.authority/v1","effectiveGrantIds":["grant:a","grant:z"],"sponsorId":"USR-TEST","token":{"expiresAt":"2030-01-01T00:00:00.000Z","id":"TOK-TEST","scope":["mcp:read","work:read"],"version":3}}
-sha256:          f67850ae4da9c41141f2da39d0234141e86311003872b0a85b3107e9fb03f618
+canonical bytes: {"actingAgentId":"AGT-TEST","credential":{"expiresAt":null,"kind":"pat","scope":["mcp:read","work:read"],"tokenId":"TOK-TEST"},"domain":"dpf.external-agent-operating-profile.authority/v1","effectiveGrantIds":["grant:a","grant:z"],"sponsorId":"USR-TEST"}
+sha256:          29ae4e2fb5b1fdeff172dc7f313bdc6dc2b3bdaf9e941aec41f4d10a12ecfdf9
 ```
 
-The third is a complete V1 profile fixture after removing only `profileDigest`. Optional `archetypeRef` and `agentCard` are absent by design; all other V1 fields are present:
+The third proves the verified session-JWT branch and its NumericDate claims:
 
 ```text
-canonical bytes: {"compatibility":{"profileSchema":{"digest":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","digestAlgorithm":"sha256-rfc8785-v1","version":"dpf.external-agent-operating-profile/1"},"protocols":["a2a","mcp"]},"entry":{"attention":{"backlogItemId":"BI-D4C110BC","recovery":"Wait for the attention slice.","status":"deferred"},"capabilityDiscovery":{"protocol":"mcp","status":"available","tool":"load_tools"},"workCatalog":{"backlogItemId":"BI-D4C110BC","recovery":"Wait for the work-catalog slice.","status":"deferred"}},"generatedAt":"2030-01-01T00:00:00.000Z","installation":{"environmentClass":"test","instanceId":"INST-TEST","primaryPurpose":"evolve-dpf","relationshipIntents":[],"sourceCapable":false},"organization":{"locale":"en-US","organizationId":"ORG-TEST","purposeSummary":"Test purpose","timezone":"UTC"},"policy":{"activeBrakes":["source-authority-none","work-policy-unresolved"],"instanceBrakes":{"credentials":"local-permitted","peerWrite":"none","sourceAuthority":"none","teardown":"permitted"},"invalidatesOn":["authority-revoked","profile-expired"],"workPolicy":{"instruction":"Resolve a Work Case before action.","owner":"WorkCasePolicyEnvelope","status":"requires-work-context"}},"principal":{"actingAgentId":"AGT-TEST","authorityDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","delegatingPrincipalId":"USR-TEST","expiresAt":"2030-01-01T00:00:00.000Z","sessionId":"SESSION-TEST","sponsorRef":"USR-TEST","tokenTier":"observer"}}
-sha256:          e5b358408760dc8ba69a3535361569693c6f349a6ecbc6fdc118af4a7dd7aabd
+canonical bytes: {"actingAgentId":"AGT-TEST","credential":{"actingAgentId":"AGT-TEST","expiresAtUnixSeconds":1893456300,"issuedAtUnixSeconds":1893456000,"kind":"session-jwt","scope":["mcp:read","work:read"],"subject":"USR-TEST"},"domain":"dpf.external-agent-operating-profile.authority/v1","effectiveGrantIds":["grant:a","grant:z"],"sponsorId":"USR-TEST"}
+sha256:          8998a5a5d4e2012d8c41a08802319d36176d808f3cc7b80750746e67a7427d93
 ```
 
-This follows RFC 8785's signature guidance: derive the integrity value from canonical content before adding the integrity property, and remove that property before verification. The profile is immutable for the response lifetime. Refresh recompiles every authority-bearing field; it never extends or copies a previous profile.
+The fourth is a complete V1 profile fixture after removing only `profileDigest`. Optional `archetypeRef` and `agentCard` are absent by design; all other V1 fields are present:
+
+```text
+canonical bytes: {"compatibility":{"profileSchema":{"digest":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","digestAlgorithm":"sha256-rfc8785-v1","version":"dpf.external-agent-operating-profile/1"},"protocols":["a2a","mcp"]},"entry":{"attention":{"backlogItemId":"BI-D4C110BC","recovery":"Wait for the attention slice.","status":"deferred"},"capabilityDiscovery":{"protocol":"mcp","status":"available","tool":"load_tools"},"workCatalog":{"backlogItemId":"BI-D4C110BC","recovery":"Wait for the work-catalog slice.","status":"deferred"}},"generatedAt":"2030-01-01T00:00:00.000Z","installation":{"environmentClass":"test","instanceId":"INST-TEST","primaryPurpose":"evolve-dpf","relationshipIntents":[],"sourceCapable":false},"organization":{"locale":"en-US","organizationId":"ORG-TEST","purposeSummary":"Test purpose","timezone":"UTC"},"policy":{"activeBrakes":["source-authority-none","work-policy-unresolved"],"instanceBrakes":{"credentials":"local-permitted","peerWrite":"none","sourceAuthority":"none","teardown":"permitted"},"invalidatesOn":["authority-revoked","profile-expired"],"workPolicy":{"instruction":"Resolve a Work Case before action.","owner":"WorkCasePolicyEnvelope","status":"requires-work-context"}},"principal":{"actingAgentId":"AGT-TEST","authorityDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","delegatingPrincipalId":"USR-TEST","profileExpiresAt":"2030-01-01T00:05:00.000Z","sponsorRef":"USR-TEST","tokenTier":"observer"}}
+sha256:          3922bcd8ccbaebbc6a5a22bfb58ccdd4a7d062f569b4a7c799decaed8ef944ae
+```
+
+This follows RFC 8785's signature guidance: derive the integrity value from canonical content before adding the integrity property, and remove that property before verification. The profile is immutable for the response lifetime. `PROFILE_TTL_MS` is a compiler-owned constant of 300,000 ms. `profileExpiresAt` is `min(generatedAt + PROFILE_TTL_MS, credential expiry)` when the authenticated credential has an expiry and otherwise `generatedAt + PROFILE_TTL_MS`. A never-expiring PAT therefore still produces a five-minute profile; a shorter-lived PAT or session JWT cannot yield a profile that outlives it. Refresh recompiles every authority-bearing field; it never extends or copies a previous profile.
 
 The profile contains references and safe summaries. It must not contain bearer tokens, credential material, raw policy documents, full tool definitions, the complete work catalog, private A2A offers, customer records, or error text from lower layers.
 
@@ -239,7 +256,9 @@ The parent design's §6.1 shape was intentionally provisional. This P0 slice is 
 | `contractDigest` | Split into `compatibility.profileSchema.digest`, `profileDigest`, `principal.authorityDigest`, and installer-owned `releaseImageDigest`; no digest is reused across preimages or visibility classes. |
 | `installation.instanceId`, `environmentClass`, `primaryPurpose` | Preserved. `sourceCapable` is added from the canonical install host profile; it is not inferred from purpose. |
 | `installation.topology` | Replaced by canonical `FederationRelationshipPreset[]` without a lossy label mapping. Cross-install topology is owned by `BI-AE128860`. |
-| `principal.sessionId`, `actingAgentId`, `sponsorRef`, `tokenTier`, `authorityDigest`, `expiresAt` | Preserved, with the authority digest preimage closed above. |
+| `principal.actingAgentId`, `sponsorRef`, `tokenTier`, `authorityDigest` | Preserved, with the authority digest preimage closed above. |
+| `principal.sessionId` | Omitted from P0 because external PAT requests have no canonical session lifecycle or identifier. Session identity is deferred to the Work Packet/session/lease owner `BI-D4C110BC`; P0 does not synthesize it from a request id or token id. |
+| `principal.expiresAt` | Refined to `profileExpiresAt`, a compiler-owned five-minute profile lifetime capped by canonical `McpApiToken.expiresAt` or the verified internal JWT `exp` claim. It is not represented as the credential's expiry. |
 | `principal.delegatingUserId` | Renamed to `delegatingPrincipalId`; the authenticated delegator may be a non-user principal, and the identity/authority substrate owns resolution. |
 | `organization.organizationId`, `purposeSummary`, `archetypeRef`, `locale`, `timezone` | Preserved as bounded organization context. |
 | `organization.operatingProfileRef`, `decisionProfileRef` | Omitted: P0 projects the bounded facts needed for orientation and does not expose unresolved policy-document references. Organization doctrine remains in its canonical WWWD/organization owners. |
@@ -292,7 +311,7 @@ The compiler must:
 1. require a resolved installation identity and environment class;
 2. require organization, sponsor, delegating principal, and acting agent;
 3. derive token tier through the existing authority-tier function;
-4. compute schema, profile, and authority digests from their separate preimages, consume release identity only in the installer-owned pointer projection, and never expose token id/version, raw scopes, or effective grant ids;
+4. compute schema, profile, and authority digests from their separate preimages, consume release identity only in the installer-owned pointer projection, and never expose raw credential claims/scopes or effective grant ids;
 5. project the existing relationship-intent registry unchanged, map installation stance to `ExternalAgentProfileActiveBrakeCode`, attach the closed `ExternalAgentProfileInvalidatorCode` refresh events, and return an `OperatingProfileGetError` for failure-only states;
 6. mark `workCatalog` and `attention` as `deferred` to `BI-D4C110BC` until their authenticated targets exist, while advertising the already-resolvable `load_tools` capability entry;
 7. omit `agentCard` when no access-appropriate card route is resolvable, and otherwise emit only the route already selected by the A2A exposure owner;
@@ -310,6 +329,7 @@ The allocation is deterministic:
 | installation brakes | `InstanceStanceProfile` closed registries | preserve the cautious resolved stance. |
 | sponsor/delegating/acting identity | authenticated MCP context and canonical `Principal`/`PrincipalAlias` resolution | `external_agent_not_sponsored` or `operating_profile_unavailable`; never use caller arguments. |
 | token tier | `resolveAgentAuthorityTier` over server-resolved scope/grants | `external_agent_not_authorized`. Tier is descriptive and does not create allowed actions. |
+| profile/credential expiry | compiler `PROFILE_TTL_MS` plus canonical nullable `McpApiToken.expiresAt` for PATs or verified JWT `exp` for internal sessions, retained in the resolved MCP authority DTO | five-minute profile for null PAT expiry; cap at a nearer PAT/JWT expiry; reject an already-expired credential through existing authentication. No token version or request-derived session id is invented. |
 | work autonomy/confirmation | `WorkCasePolicyEnvelope` after a work context is selected | emit `requires-work-context` and `work-policy-unresolved`; no global default is guessed. |
 | consequence gating | action/source registries and the work policy evaluator at action time | no allowed-tier projection in P0. Existing `ConsequenceTier` remains local to the coordination action family until a universal registry exists. |
 | organization summary/locale | the existing organization-context bundle and locale resolver | `operating_profile_unavailable` when organization identity or locale is absent. |
@@ -399,7 +419,7 @@ The served authenticated profile always wins. A correct local pointer cannot mak
 - Profile loading fails closed for action orientation. Compatibility initialize prose may still render, but it must direct the client to stop rather than infer authority.
 - Safe failures name the missing contract class and one recovery action; they do not include database, filesystem, credential, or policy internals.
 - Public A2A output is allow-listed and receives negative tests for private profile fields.
-- Authority revocation or token expiry invalidates the next refresh and any later action independently of a previously returned profile.
+- Authority revocation or credential expiry invalidates the next refresh and any later action independently of a previously returned profile.
 - Rollback removes the core tool advertisement and restores the prior initialize wording. It leaves installation intent, organization records, tokens, A2A cards, and runtime business records unchanged.
 
 ## 10. Scale envelope
@@ -413,8 +433,8 @@ P0 does not claim cross-install fan-out, Work Packet throughput, lease throughpu
 Write failing tests before production changes for:
 
 1. pure compilation for all four token tiers;
-2. missing/contradictory identity and authority inputs plus exhaustive rejection of every invalid failure-code/recovery cross-pair;
-3. RFC 8785 primitive, authority-preimage, and complete-profile vectors; separation of all four digest identities; exact profile-integrity field removal; and secret-field absence;
+2. missing/contradictory identity and authority inputs; external PAT and internal session-JWT paths; expiring and never-expiring PATs; rejection of JWTs without verified `iat`/`exp`; five-minute/capped profile expiry; absence of fabricated token version/session id; and exhaustive rejection of every invalid failure-code/recovery cross-pair;
+3. RFC 8785 primitive, PAT-authority, session-JWT-authority, and complete-profile vectors; separation of all four digest identities; exact profile-integrity field removal; and secret-field absence;
 4. MCP tool definition and output schema, authenticated context resolution, core-tier listing, backwards-compatible text plus structured content, and bounded result;
 5. initialize instructions pointing to the profile before `load_tools`, plus conformance with the mechanically amended consumer-host contract;
 6. exhaustive stance-to-`activeBrakes` mapping, `invalidatesOn` behavior, failure-only unverified installation, `requires-work-context` behavior, and absence of invented autonomy/consequence/egress policy;
@@ -466,7 +486,14 @@ The independent review of `19552b0849c2` returned **revise / do not approve** on
 | --- | --- |
 | stale generic stop-code owner | remove the undefined umbrella registry and name the active-brake, invalidator, and failure owners independently. |
 | failure code/recovery cross-product | replace independent unions with one exhaustive discriminated `OperatingProfileGetError` union and require negative cross-pair tests. |
-| privacy statement contradicted returned principal refs | name only token id/version, raw scopes, and effective grant ids as hidden preimage fields; retain allow-listed authenticated principal refs and keep them out of public A2A. |
+| privacy statement contradicted returned principal refs | name only raw credential claims/scopes and effective grant ids as hidden preimage fields; retain allow-listed authenticated principal refs and keep them out of public A2A. |
+
+The independent review of `d0a658eacd2c` returned **revise / do not approve** after closing the prior three findings because its final substrate audit found two additional projection assumptions. This revision disposes them:
+
+| Finding | Disposition |
+| --- | --- |
+| authority preimage required nonexistent token version and non-null expiry | remove version; use a discriminated PAT/session-JWT credential preimage; make PAT expiry nullable from canonical `McpApiToken.expiresAt`; retain verified JWT `iat`/`exp`; add a null-expiry PAT vector; and cap a separate five-minute profile lifetime when credential expiry is present. |
+| mandatory session id had no external-PAT owner | remove `sessionId` from P0, explicitly defer the parent field to `BI-D4C110BC`, and test external PAT and internal session-JWT paths without synthesizing a session. |
 
 The revised design extends the existing install, authority, Work Case policy, MCP tier, and A2A extension seams and adds no persistence. The profile is a read model with one compiler, while durable facts remain in their canonical owners. Schema, profile, authority, and release identities have non-overlapping preimages and visibility. Response size is bounded independently of estate and tool cardinality. Deferred entries cannot masquerade as live references. The local pointer is a release projection and never a second authority.
 
