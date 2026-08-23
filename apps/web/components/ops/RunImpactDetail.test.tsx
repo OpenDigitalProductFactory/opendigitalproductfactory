@@ -148,4 +148,28 @@ describe("RunImpactDetail", () => {
     expect(screen.queryByText(/Portal is restarting/)).toBeNull();
     vi.useRealTimers();
   });
+
+  it("does not re-fetch on collapse+re-expand while reconnecting — the retry owns it", async () => {
+    vi.useFakeTimers();
+    getSelfUpgradeRunImpactMock.mockRejectedValue(
+      new Error("An unexpected response was received from the server."),
+    );
+    render(<RunImpactDetail runId="SUR-AAAA0001" digest={DIGEST} />);
+
+    fireEvent.click(screen.getByText("View changes"));
+    await vi.waitFor(() =>
+      expect(screen.getByText(/Portal is restarting to finish this upgrade/)).toBeTruthy(),
+    );
+    expect(getSelfUpgradeRunImpactMock).toHaveBeenCalledTimes(1);
+
+    // Collapsing stops the retry; re-expanding must not fire a second fetch
+    // alongside it — the retry effect is the only thing that re-attempts.
+    fireEvent.click(screen.getByText("Hide changes"));
+    fireEvent.click(screen.getByText("View changes"));
+    expect(getSelfUpgradeRunImpactMock).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(RUN_IMPACT_RETRY_MS + 50);
+    expect(getSelfUpgradeRunImpactMock).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
+  });
 });
