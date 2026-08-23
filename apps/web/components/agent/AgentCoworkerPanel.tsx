@@ -684,7 +684,17 @@ export function AgentCoworkerPanel({
     appendOptimistic = true,
     sendOptions?: MessageSendOptions,
   ) {
-    if (!threadId) return;
+    // BI-6D7DDE9F: the composer clears its input the moment send fires, so a
+    // bare `return` here DESTROYS the message — no request, no row, no error.
+    // Fail it like a network error instead, so the words stay on screen and
+    // handleRetry can resend them once the thread connects.
+    if (!threadId) {
+      console.warn("[submitMessage] not sent: conversation is not connected yet (no threadId)");
+      if (appendOptimistic) {
+        setMessages((prev) => [...prev, failOptimisticMessage(optimisticMessage)]);
+      }
+      return;
+    }
     const formAssistContext = activeFormAssistRef.current
       ? buildAgentFormAssistContext(activeFormAssistRef.current)
       : undefined;
