@@ -753,6 +753,34 @@ imports at runtime. If `toBeInTheDocument`-style assertions regress on a future
 bump, restore the pin or extend the workaround. Upstream:
 [testing-library/jest-dom#662](https://github.com/testing-library/jest-dom/issues/662).
 
+## Degenerate-environment fixtures
+
+Modules that probe their environment (does `.git` exist? is `package.json`
+readable? did the remote answer?) must be unit-tested against the world
+production actually is — **partial, stale, absent, empty, plural** — not only
+the healthy fixture. The dominant late-defect escape class (~30%, BI-927D64C0)
+is a probe whose every test fixture modelled the healthy world: an image-synced
+partial tree passed the availability probe and true citations were "refuted"
+(BI-EE2B243D); a federation guard "only ever passed because unit tests reused
+one linkId fixture" (BI-AF675A20); a >1MB diff crashed the default exec
+maxBuffer (BI-DC6BE37C); a transient failure was collapsed to a terminal state
+(BI-2B9E16CC).
+
+Use the shared, dependency-free fixture kit
+[`apps/web/lib/testing/degenerate-env/`](../../apps/web/lib/testing/degenerate-env/index.ts)
+(importable as `@/lib/testing/degenerate-env`): `partialSourceTree()`,
+`twoInstallIdentities()`, `oversizedPayload(bytes)`,
+`flakySucceedsOnAttempt(n)`, `emptyAndNullRows(shape)` — each named after the
+incident it models. An injected degraded resolver/stub that produces the same
+shapes counts as equivalent.
+
+The conformance registry
+[`probe-conformance.test.ts`](../../apps/web/lib/testing/degenerate-env/probe-conformance.test.ts)
+enumerates the known availability-probe modules and walks `apps/web/lib/**`
+for the probe signature: a new probe module fails the suite until it is either
+mapped to a test file carrying degenerate coverage or given an explicit
+reasoned waiver there.
+
 ## Common drift, and how to stay on-script
 
 These are the failure modes that recur across sessions, clients, and machines.
