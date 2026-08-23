@@ -17,3 +17,4 @@ export * from "./receipt-repository";
 export * from "./receipt-schema";
 export * from "./repository-artifact";
 export * from "./types";
+export * from "./reviewer-identity";
