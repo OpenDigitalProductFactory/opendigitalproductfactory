@@ -1342,6 +1342,9 @@ model EmployeeDeductionElection {
 
   // FK-leading (employeeProfileId): resolve an employee's live elections for a run date.
   @@index([employeeProfileId, lifecycle, effectiveFrom])
+}
+
+// ---------------------------------------------------------------------------
 // Mileage capture (EP-MILEAGE-ABSORB, BI-6D98AD8A)
 //
 // Absorbs the MileIQ-class job: a driver's business trips are captured without
