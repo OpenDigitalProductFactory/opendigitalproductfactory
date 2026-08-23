@@ -31,6 +31,7 @@ authorizes implementation intent.
 | `AC-UI-TARGET` | exact-target and stale-target launcher tests | recovery action / coworker launcher |
 | `AC-REVIEW-SEPARATION` | external no-thread request tests and receipt separation tests | coworker pack -> `submitRemoteCoworkerTask` |
 | `AC-SPEC-AUTHORITY` | authority writer and exact spec-approval traversal tests | subject derivation, authority decision log, baseline repository |
+| `AC-RECEIPT-FRESHNESS` | pre-baseline and post-baseline supersession tests | readiness entry adapter / receipt projection |
 | `AC-HEAD-RECONCILE`, `AC-REPLAY` | provider, handler, capture/adopt tests | external evidence and external session capture |
 | `AC-AUTHOR-AFTER-SYNC`, `AC-FAIL-CLOSED` | repository-artifact positive/negative fixtures | existing artifact resolver |
 
@@ -102,7 +103,18 @@ authority path:
 4. Prove missing item, missing organization, conflicting authenticated context,
    wrong reviewer grant, and author/reviewer collision remain denied.
 
-## Task 7 - Red/green provider-verified head reconciliation
+## Task 7 - Red/green receipt artifact freshness
+
+1. Reproduce the live pre-baseline defect: an `e89f362` specialist receipt must
+   not satisfy an `ad873ed` proposed design.
+2. Derive the pre-baseline candidate digest only from the latest valid
+   `design-spec` receipt.
+3. Mark different-digest specialist receipts stale while retaining their audit
+   rows.
+4. Prove malformed/absent design-spec evidence is fail-closed and that an
+   approved baseline digest remains authoritative after approval.
+
+## Task 8 - Red/green provider-verified head reconciliation
 
 1. Explicit head plus matching provider branch passes SHA to capture.
 2. A single full SHA in `commits` is inferred for compatibility.
@@ -117,21 +129,21 @@ Refactoring allocation: share canonical provider identity/header/full-SHA
 helpers where contracts truly match. Keep branch-head verification separate
 from blob/DCO verification because their failure semantics differ.
 
-## Task 8 - Artifact-author and fail-closed integration
+## Task 9 - Artifact-author and fail-closed integration
 
 Start with a subject Workroom whose head is null. Reconcile it through external
 evidence, resolve the immutable artifact/author, then repeat with mismatched
 head, unsigned commit, conflicting DCO principal, ambiguous Workrooms, and
 provider failure. No artifact-author relaxation belongs in production code.
 
-## Task 9 - Verification and reviews
+## Task 10 - Verification and reviews
 
 Run focused suites after every Red/Green slice, then related projection,
 baseline, receipt, Workroom, coworker, MCP task/route, and external-evidence
 suites; typecheck; blast-radius analysis; independent architecture review; UX
 review of model-facing recovery copy; and `pnpm run pregate:preflight`.
 
-## Task 10 - Governed publication
+## Task 11 - Governed publication
 
 Commit with one DCO trailer, synchronize WC-2ABA65F7 to the stable commit,
 obtain fresh independent semantic review, run shared-lease exact-tree local CI
@@ -139,7 +151,7 @@ and full pregate, push only green reviewed SHA, open a ready PR, read bot
 findings, run `pnpm pr:health`, and use the protected merge queue. Verify the
 live install before closing BI-F0715C9C.
 
-## Task 11 - Existing blocked-Workroom recovery proof
+## Task 12 - Existing blocked-Workroom recovery proof
 
 After merge/live deployment:
 

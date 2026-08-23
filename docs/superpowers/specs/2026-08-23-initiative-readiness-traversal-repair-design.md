@@ -57,6 +57,7 @@ correctly but does not expose a governed path to satisfy the denial.
 | Workforce routing | WC-B0DD2B2F exhausted native discovery and the workforce UI opened a default/ineligible coworker | Handoff intent and exact eligible reviewer identity are not carried end to end. |
 | Eligible reviewers | The live agent/grant registry has separate design, architecture, data, UX, security, compliance, domain, and evidence agents | The existing roster is not joined to unmet receipt authority. |
 | Spec-approval authority | `writeAuthorizationDecision` persists `organizationId=null`; `deriveCoworkerAuthoritySubject` ignores `itemId`; the baseline repository requires an allow decision bound to the initiative organization | The generic authority gate discards the canonical initiative subject and organization before the independently authorized reviewer reaches receipt persistence. |
+| Receipt freshness | With no approved baseline, `entry-adapter.ts` passes `canonicalDigest=null`, so specialist receipts bound to superseded commit `e89f362` still project as satisfied against the current `ad873ed` design | Pre-baseline review evidence has no canonical proposed-design digest anchor. |
 | Workroom synchronization | `adoptWorktreeCapsule` already updates `baseSha`, `headSha`, and `lastSyncedAt` | External evidence never verifies a provider branch head or passes a SHA to adoption. |
 | Artifact author | `resolveRepositoryArtifact` requires one subject Workroom whose head equals the immutable commit | `ARTIFACT_AUTHOR_REQUIRED` is downstream of the missing head sync. |
 
@@ -77,6 +78,8 @@ resolution. No new table, receipt type, grant, or reviewer role is needed.
   and author resolver.
 - Branch ambiguity, subject mismatch, reviewer/author separation, provider
   failure, and DCO mismatch remain fail-closed.
+- Superseded receipts remain immutable audit history but never satisfy a newer
+  proposed or approved artifact.
 
 ## Decision
 
@@ -197,7 +200,22 @@ This lets an independently granted design reviewer traverse the existing
 `spec-approval` repository checks. It does not relax the checks, grant the
 author review authority, or manufacture an organization for platform scope.
 
-### 6. Reconcile provider-verified external evidence through adoption
+### 6. Anchor pre-baseline receipts to the proposed design
+
+The approved baseline digest remains authoritative after spec approval. Before
+a baseline exists, derive one proposed-design digest from the latest valid
+`design-spec` receipt for the subject. Project all other artifact-bound receipts
+against that digest; a different digest is `stale`, not satisfied. A malformed
+or absent `design-spec` receipt provides no permissive fallback: dependent
+review lanes remain missing or stale.
+
+This uses the existing receipt artifact digest and chronological append-only
+log. It adds no candidate table or mutable pointer. Re-reviewing a revised
+design appends a new `design-spec` receipt, making prior specialist receipts
+stale while preserving them for audit. Atomic spec approval then pins that same
+digest as the baseline.
+
+### 7. Reconcile provider-verified external evidence through adoption
 
 Extend `record_external_development_evidence` with optional `headSha`.
 
@@ -218,7 +236,7 @@ The response reports `reconciled`, `not-requested`, or `not-reconciled`, the
 Workroom when known, accepted SHA when verified, and one next action. No parallel
 Workroom writer is introduced.
 
-### 7. Existing Workroom reconciliation is replay, not migration
+### 8. Existing Workroom reconciliation is replay, not migration
 
 No schema migration is needed. Replay the canonical external-development
 evidence call with the same BI, branch, worktree, session, commit list, and
@@ -235,6 +253,7 @@ Unverified, mismatched, ambiguous, or foreign artifacts remain blocked.
 | Developer -> reviewer | The caller cannot load or borrow reviewer tools; an eligible agent executes with its own grant. |
 | PAT -> TaskRun | User, token capability, clearance, lifecycle, idempotency, and risk class use the existing task checks. |
 | Receipt call -> authority log | The server derives the backlog subject and organization; caller-supplied organization claims are ignored. |
+| Proposed design -> receipts | Latest valid design-spec digest anchors pre-baseline reviews; superseded artifact digests are stale. |
 | Evidence -> Workroom | Only a full provider branch-head match reaches adoption. |
 | Workroom -> author | Exact subject/repo/head, provider blob, one DCO identity, and accountable owner remain required. |
 
@@ -249,6 +268,7 @@ Unverified, mismatched, ambiguous, or foreign artifacts remain blocked.
 | `AC-UI-TARGET` | Following a recovery action preserves the exact eligible agent identity or fails visibly; it never opens a default coworker. | Recovery-action/launcher component test. |
 | `AC-REVIEW-SEPARATION` | External fallback executes as target reviewer and never grants caller authority. | Coworker/task and receipt separation tests. |
 | `AC-SPEC-AUTHORITY` | A correctly granted independent reviewer gets an organization-bound allow decision for the governed item; missing/mismatched subjects fail closed. | Authority-gate and exact spec-approval traversal tests. |
+| `AC-RECEIPT-FRESHNESS` | Superseded specialist receipts never satisfy a newer proposed or approved design, including before the first baseline. | Entry-adapter tests shaped from the e89f362 -> ad873ed reproduction. |
 | `AC-HEAD-RECONCILE` | Provider-verified evidence updates the existing subject Workroom through adoption. | Provider, evidence handler, and capture tests. |
 | `AC-AUTHOR-AFTER-SYNC` | Artifact author resolves after synchronization. | Repository-artifact integration fixture. |
 | `AC-FAIL-CLOSED` | Unverified, mismatched, ambiguous, foreign, unsigned, or DCO-conflicting artifacts do not resolve. | Negative tests. |
