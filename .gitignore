@@ -54,6 +54,10 @@ apps/mobile/coverage/
 .claude/settings.local.json
 .claude/autonomous-e2e-progress.md
 .claude/worktrees/
+# Written on demand by the Claude Code Browser pane (preview_start); it is
+# machine-local (ports, commands, localhost URLs). Untracked AND unignored,
+# it made uncommitted-work-guard fire on every session end — BI-58F514AC.
+.claude/launch.json
 
 # Local verification and handoff artifacts
 output/
