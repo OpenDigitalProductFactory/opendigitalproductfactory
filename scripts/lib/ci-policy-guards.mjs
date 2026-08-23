@@ -235,6 +235,14 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/check-doc-anchor-existence.test.mjs"),
       node("scripts/check-doc-anchor-existence.mjs"),
     ]),
+    // BI-38A353B2: doc-anchor-existence proves a cited id EXISTS; nothing
+    // proved it was still OPEN. A closed id cited from user-facing runtime
+    // text names a fixed defect as a live blocker. Same diff scope, same
+    // grandfather baseline, same warn-pass degradation.
+    guard("live-blocker-references", "Live Blocker References", [
+      node("--test", "scripts/check-live-blocker-references.test.mjs"),
+      node("scripts/check-live-blocker-references.mjs"),
+    ]),
     // BI-79BCE3F2: ONE status/supersession frontmatter convention across
     // docs/superpowers/{specs,plans} — new/changed files must carry
     // status: draft|active|binding|superseded; supersededBy only on superseded.
