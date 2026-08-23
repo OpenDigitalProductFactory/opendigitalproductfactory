@@ -240,7 +240,22 @@ claim_lease() {
     [ -n "$BRANCH" ] || die "resolved an empty branch for contributor-preview worktree $WORKTREE_PATH"
   fi
   expires_at="$(node -e 'process.stdout.write(new Date(Date.now() + Number(process.argv[1]) * 60000).toISOString())' "$EXPIRES_MINUTES")"
-  base_claim_key="dev-portal:${OWNER_SESSION_ID}:${BRANCH}"
+  # BI-D45898C0: the claim key identifies the RESOURCE, not the claimant.
+  #
+  # It used to be "dev-portal:${OWNER_SESSION_ID}:${BRANCH}", and
+  # OWNER_SESSION_ID defaults to dev-portal-$$ — the shell PID. Every
+  # invocation therefore minted a DIFFERENT key for the same worktree and
+  # branch, so the queue could never recognise a re-claim as the same claim. A
+  # supervisor restarting this script enqueued an unbounded set of distinct
+  # claims for one preview: 2026-08-23 saw ~35 waiting, arriving every ~31s,
+  # starving three unrelated pre-PR gates behind them (165 arrivals against 11
+  # admissions, 19m median wait).
+  #
+  # Keyed on (worktree, branch) a re-claim is idempotent: the caller re-enters
+  # its own claim instead of joining the back of the queue. Ownership still
+  # travels separately as ownerSessionId, which is where claimant identity
+  # belongs.
+  base_claim_key="dev-portal:${WORKTREE_PATH}:${BRANCH}"
   claim_key="$base_claim_key"
   terminal_claim_attempt_sequence=0
   while :; do

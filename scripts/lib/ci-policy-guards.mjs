@@ -490,6 +490,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       ),
       node(
         "--test",
+        "scripts/lib/dev-portal-lease-claim-key.test.mjs",
+      ),
+      node(
+        "--test",
         "scripts/process-spine-conformance.test.mjs",
         "scripts/lib/ensure-post-checkout-hook.test.mjs",
       ),
