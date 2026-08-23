@@ -40,7 +40,7 @@ normal-user feature.
 2. `docs/superpowers/specs/2026-06-14-sysml-architecture-substrate-design.md`
 3. `docs/superpowers/specs/2026-06-14-design-implementation-parity-engine-design.md`
 4. `docs/superpowers/specs/2026-06-06-data-architecture-self-maintenance-design.md`
-5. `packages/db/prisma/schema.prisma` around the EA models
+5. `packages/db/prisma/schema/ea-architecture.prisma` (the schema is split across `packages/db/prisma/schema/*.prisma`; there is no monolithic `schema.prisma`)
 6. Relevant Build Studio/design spec or implementation plan under review
 
 ## Modeling Stance
