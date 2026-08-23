@@ -393,7 +393,7 @@ function flattenDesignDocField(value: unknown): unknown {
  * model. Non-required fields (e.g. dataModel, acceptanceCriteria[]) are left
  * untouched so their own schema still applies.
  */
-export function coerceDesignDocTextFields(
+function coerceDesignDocTextFields(
   doc: Record<string, unknown>,
 ): Record<string, unknown> {
   const REQUIRED_TEXT_FIELDS = [
