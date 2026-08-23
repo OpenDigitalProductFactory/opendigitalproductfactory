@@ -76,7 +76,7 @@ const ACTIVITY_ROUTING_FIXTURE: OperationsMapActivityRouting = {
 
 function readWorkbenchSource(): string {
   return readFileSync(
-    join(process.cwd(), "components", "platform", "ActivityRoutingWorkbench.tsx"),
+    join(__dirname, "ActivityRoutingWorkbench.tsx"),
     "utf8",
   );
 }
