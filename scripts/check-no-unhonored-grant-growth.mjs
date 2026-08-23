@@ -41,7 +41,6 @@ import { formatTxtBudgetHeader, parseTxtBudgetHeader } from "./lib/baseline-budg
 const SCRIPTS_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(SCRIPTS_DIR, "..");
 const BASELINE_PATH = join(REPO_ROOT, "scripts", "unhonored-grant-baseline.txt");
-const REGISTRY_PATH = join(REPO_ROOT, "packages/db/data/agent_registry.json");
 
 // The composed TOOL_TO_GRANTS sources. Must stay in step with the audit
 // script's loadToolToGrants (apps/web/scripts/audit-coworker-tool-grants.ts):
