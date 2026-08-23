@@ -61,15 +61,24 @@ correctly but does not expose a governed path to satisfy the denial.
 | Workroom synchronization | `adoptWorktreeCapsule` already updates `baseSha`, `headSha`, and `lastSyncedAt` | External evidence never verifies a provider branch head or passes a SHA to adoption. |
 | Artifact author | `resolveRepositoryArtifact` requires one subject Workroom whose head equals the immutable commit | `ARTIFACT_AUTHOR_REQUIRED` is downstream of the missing head sync. |
 | Plan coverage persistence | WC-A31DBE53 now resolves plan blob `8f933b3c9312f0a3b2f01794f421ac4b9cace01e` and validates five mappings, but commit attempts expire at 5,532 ms and 8,431 ms against Prisma's 5,000 ms interactive-transaction limit | `recordPlanBacklogCoverage` performs provider commit, DCO, blob, alias, and Workroom resolution while holding a serializable parent-row lock. |
+| Policy-to-authority bridge | `DecisionInteraction` seals the owning WWMD/WWWD/WSID judgment, profile version, evidence, scores, and outcome. `AuthorizationDecisionLog`, `DelegationGrant`, and `CoworkerActionEnvelope` already carry human-rooted, scoped, expiring action authority. Workroom evidence `cmt5wqbft0j8c01rm8l54p0g5` records `DI-053D69EADEDC`: `policy-authority-bridge`, high confidence, composite `15.883`, margin `5.984`, `autonomyEligible=true`, and no commandment conflict. | The judgment and action-authority substrates are not connected by one canonical projector. A raw DecisionInteraction reference is currently treated as presence evidence, not as a verified bounded authority decision, so a valid policy “yes” cannot authorize the exact action and a normal identity receives no lawful next step. |
 
 The defect is a combination of profile derivation, per-profile policy,
 progressive disclosure/recovery, external reviewer dispatch, authority-decision
 subject binding, Workroom head synchronization, and downstream artifact-author
-resolution. No new table, receipt type, grant, or reviewer role is needed.
+resolution, plus the missing policy-to-authority projection. No new table,
+receipt type, grant, or reviewer role is needed.
 
 ## Existing substrate to preserve
 
 - `BacklogItemActivity` remains the receipt and decision audit log.
+- `DecisionInteraction` remains the judgment system of record; it is never
+  queried directly as RBAC.
+- `DecisionPerspectiveProfileVersion` and its promoting principal remain the
+  versioned, human-rooted standing-policy provenance.
+- `DelegationGrant`, `AuthorizationDecisionLog`, and `CoworkerActionEnvelope`
+  remain the delegation, decision-audit, expiry, and execution substrates. No
+  policy-authorization or standing-order table is introduced.
 - Initiative lane tools and grants remain the only receipt authority.
 - `AuthorizationDecisionLog` remains the reviewer allow-decision audit record.
 - The agent registry plus live `Agent.toolGrants` remains reviewer authority.
@@ -276,6 +285,132 @@ expiry/conflict returns a typed, actionable retry response for the same
 immutable packet; it is never reported as `plan-artifact-invalid` and never
 implies a partial receipt.
 
+### 10. Project owning policy judgments into bounded action authority
+
+This repair exposed a general gap, not a reason for a BI-specific exception.
+DPF can decide what should happen through WWMD, WWWD, and WSID, and it can
+enforce action authority, but it cannot yet translate a high-quality owning
+policy judgment into the exact authority envelope that the action gate
+consumes.
+
+The existing substrate audit considered four shapes:
+
+| Shape | Disposition |
+|---|---|
+| Read `DecisionInteraction` as RBAC | Reject. A judgment record is evidence, not a reusable grant; direct reads would omit expiry, subject/action/artifact binding, delegation provenance, and consumption. |
+| Require fresh human approval for every work item | Reject. It defeats approved trusted autonomy and is non-traversable on an install with one human principal. Independent human or specialist review remains mandatory only where the risk policy requires it. |
+| Add a policy-authorization or standing-order table | Reject. Versioned policy, human promotion, delegation, authorization logging, expiry, and action-envelope lifecycle already exist. |
+| Add one policy-authority bridge | Select. Keep judgment and enforcement separate, then project only an explicit eligible “yes” into the existing bounded authority substrate. |
+
+`DI-053D69EADEDC` selected `policy-authority-bridge` with high confidence,
+composite `15.883`, margin `5.984`, `autonomyEligible=true`, and no commandment
+conflict. Workroom activity `cmt5wqbft0j8c01rm8l54p0g5` preserves the
+recommendation and contribution evidence. It supersedes the earlier
+BI-specific two-human binding recommendation `DI-F7361DD540E2`; the earlier
+row remains immutable audit history.
+
+#### Judgment input
+
+The bridge is universal across the three owning policy gates:
+
+- WWMD governs platform/founder policy;
+- WWWD governs the subject organization's business policy;
+- WSID governs the owning profession's practice policy.
+
+The caller supplies only the intended action envelope. The server resolves the
+owning gate and loads the sealed `DecisionInteraction`, its current
+`DecisionPerspectiveProfileVersion`, promoting principal, evidence bundle,
+scored options, weighting/contribution ledger, signal-quality flags, human
+outcome, and commandment-conflict state. The closed action registry maps the
+action to the affirmative option identifier; the bridge never treats arbitrary
+free text, confidence alone, or a caller-provided interpretation as “yes.”
+
+An unattended allow requires all of these facts:
+
+1. The owning decision is final and explicitly selects the registered
+   affirmative option. A `no`, `decline`, `revise`, `defer`, `escalate`, null,
+   ambiguous, or unregistered outcome cannot authorize the action.
+2. The recorded signal is usable, high-confidence, sensitivity-stable,
+   strongly covered, `autonomyEligible=true`, and free of commandment conflict.
+3. The policy profile/version is current for the owning subject and its human
+   approval provenance is resolvable. For WWMD, Mark's approval of the WWMD
+   criteria is the human-rooted standing delegation; WWWD and WSID must resolve
+   their own organization/profession owner and may not inherit WWMD authority.
+4. Any required `DelegationGrant` is active, unexpired, within risk, workflow,
+   subject, object, action, and use-count limits, and rooted in that human
+   principal.
+5. The exact actor, organization, BI/Workroom or other subject, action key,
+   repository/branch, immutable artifact digest, route, constraints, and
+   current policy version match the decision context.
+
+Missing or stale evidence, a superseded policy version, revoked delegation,
+wrong gate, cross-organization or cross-profession reuse, artifact drift, or a
+non-affirmative result returns deny or escalate. It never falls back to a
+generic platform subject, superuser authority, or per-work approval proxy.
+
+The projected standing-policy version is the existing
+`DecisionPerspectiveProfileVersion.versionId`, with
+`promotedByPrincipalId` as its human approval provenance. “Standing order” in
+the authority receipt names that versioned policy relationship; it does not
+introduce the deferred `StandingOrder` model described by capacity-continuity
+designs.
+
+#### Authority projection and consumption
+
+On an eligible affirmative judgment, one transactional projector appends an
+`AuthorizationDecisionLog` and creates or advances the existing exact-call
+`CoworkerActionEnvelope` to the approved state under the standing delegation.
+The log and envelope record:
+
+- the `DecisionInteraction.interactionId`, owning gate, profile and version;
+- standing-policy approval provenance and any `DelegationGrant` or
+  `DelegationChain` reference;
+- evidence references, scored options, weights/contribution digest,
+  signal-quality result, confidence, and conflict flags;
+- human root plus acting agent, organization, subject, action, route,
+  immutable artifact/input fingerprint, and constraints;
+- issue/expiry times, bounded use count, rationale, and projector policy
+  version.
+
+The action gate consumes the projected authorization, not the
+`DecisionInteraction`. It re-derives the same server-owned binding, requires an
+unexpired approved envelope and matching allow log, retains every intrinsic
+role/grant and reviewer-author check, and atomically records execution success
+or failure. The projection cannot create a reviewer grant, satisfy an
+initiative receipt, widen the original delegation, or authorize a different
+action. Retry is idempotent for the same decision and fingerprint; a changed
+artifact or action requires a new owning judgment.
+
+#### Actionable recovery
+
+When no authorization can be projected, a normal development identity receives
+one executable next step instead of an impossible checklist:
+
+- `deny`: show the owning gate's explicit reason and stop;
+- `defer` or `escalate`: route to that gate's existing human decision surface;
+- missing or stale judgment: return the exact WWMD, WWWD, or WSID evaluation
+  packet for the current subject/action/artifact;
+- eligible “yes” but unavailable reviewer receipt authority: dispatch or name
+  the independently eligible reviewer through the recovery route in section 3.
+
+The bridge does not remove independent review. It removes the unrelated demand
+for a second human to ratify every policy decision that already falls within a
+human-approved standing autonomy envelope.
+
+#### Current implementation stop
+
+The live install has one active human principal and no deployed
+policy-authority projector. The former makes the superseded two-human bootstrap
+shape impossible; it does not invalidate Mark's human-rooted standing WWMD
+criteria. The latter is the current fail-closed boundary: `DI-053D69EADEDC` is
+an architecture decision about which bridge to build, not an action
+authorization for production implementation of BI-F0715C9C. Design and plan
+evidence may be published. Production mutation begins only after the owning
+WWMD action judgment for the exact implementation envelope yields an eligible
+affirmative result and the governed bridge can emit the scoped authorization;
+until then, no direct DB write, synthetic principal, reused human, AI proxy,
+superuser fallback, or fabricated receipt is valid.
+
 ## Trust boundaries
 
 | Boundary | Fail-closed rule |
@@ -285,6 +420,7 @@ implies a partial receipt.
 | Developer -> reviewer | The caller cannot load or borrow reviewer tools; an eligible agent executes with its own grant. |
 | PAT -> TaskRun | User, token capability, clearance, lifecycle, idempotency, and risk class use the existing task checks. |
 | Receipt call -> authority log | The server derives the backlog subject and organization; caller-supplied organization claims are ignored. |
+| Policy judgment -> action authority | Only a current, explicit, autonomy-eligible owning-policy “yes” with human-rooted version/delegation provenance can project a scoped, expiring authorization; the runtime never treats DecisionInteraction itself as RBAC. |
 | Proposed design -> receipts | Latest valid design-spec digest anchors pre-baseline reviews; superseded artifact digests are stale. |
 | Evidence -> Workroom | Only a full provider branch-head match reaches adoption. |
 | Workroom -> author | Exact subject/repo/head, provider blob, one DCO identity, and accountable owner remain required. |
@@ -307,12 +443,19 @@ implies a partial receipt.
 | `AC-FAIL-CLOSED` | Unverified, mismatched, ambiguous, foreign, unsigned, or DCO-conflicting artifacts do not resolve. | Negative tests. |
 | `AC-REPLAY` | Replaying evidence reconciles null/stale heads idempotently, and blocked Workrooms receive an exact reviewer route. | WC-E8275570- and WC-B0DD2B2F-shaped regression tests. |
 | `AC-COVERAGE-TX` | A slow provider preflight does not consume the interactive transaction window; five valid mappings commit, while changed bindings or transaction expiry write no receipt and return an exact retry action. | WC-A31DBE53-shaped timing, race, and failure tests. |
+| `AC-POLICY-BRIDGE-YES` | A current explicit WWMD/WWWD/WSID affirmative result with eligible signal and human-rooted standing provenance projects one scoped, expiring authorization that cites the complete decision evidence. | Pure projector plus authorization-log/envelope integration tests for all three gates. |
+| `AC-POLICY-BRIDGE-DENY` | No, revise, defer, escalate, ambiguous, unusable, advisory-only, conflicted, or missing judgments never authorize and return the owning gate's exact route. | Table-driven negative and recovery tests. |
+| `AC-POLICY-BRIDGE-SCOPE` | Subject, organization, action, actor, route, policy version, delegation, artifact, expiry, and use limits are revalidated; cross-scope, stale, revoked, expired, or replayed authority fails closed. | Binding mutation, expiry, revocation, reuse, and cross-WWMD/WWWD/WSID tests. |
+| `AC-POLICY-NOT-RBAC` | A DecisionInteraction id alone never grants access, and projection never creates a role/grant or marks an initiative receipt satisfied. | Prohibition tests at the policy and governed-execution gates. |
+| `AC-POLICY-RECOVERY` | A developer receives the exact owning evaluation/escalation or eligible independent-reviewer route rather than an impossible receipt checklist. | Claim-response and recovery-action tests. |
 
 ## Non-goals
 
 - No fabricated/proxy receipts for BI-A45D744A.
 - No mutation of the WordPress repair branch.
 - No new receipt type, reviewer role, grant, session table, or workflow engine.
+- No reusable readiness bypass, direct DecisionInteraction-as-RBAC, or generic
+  break-glass authority.
 - No automatic dispatch merely because readiness was read.
 - No weakening of cross-domain, archetype, immutable artifact, DCO, semantic
   review, pregate, exact-tree CI, or PR health gates.

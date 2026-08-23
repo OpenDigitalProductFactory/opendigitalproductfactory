@@ -10,9 +10,10 @@ status: draft
 
 ## Delivery contract
 
-The repair has six testable slices: profile/policy, actionable reviewer
-routing, organization-bound reviewer authority, provider-verified Workroom
-reconciliation, existing-Workroom replay, and bounded plan-coverage persistence.
+The repair has seven testable slices: universal policy-authority projection,
+profile/policy, actionable reviewer routing, organization-bound reviewer
+authority, provider-verified Workroom reconciliation, existing-Workroom replay,
+and bounded plan-coverage persistence.
 Production implementation starts only after governed implementation intent is
 allowed; design/plan work proceeds under design intent.
 
@@ -35,6 +36,37 @@ authorizes implementation intent.
 | `AC-HEAD-RECONCILE`, `AC-REPLAY` | provider, handler, capture/adopt tests | external evidence and external session capture |
 | `AC-AUTHOR-AFTER-SYNC`, `AC-FAIL-CLOSED` | repository-artifact positive/negative fixtures | existing artifact resolver |
 | `AC-COVERAGE-TX` | slow-preflight, five-mapping commit, stale-binding, and transaction-expiry tests | plan coverage recorder and repository binding recheck |
+| `AC-POLICY-BRIDGE-YES`, `AC-POLICY-BRIDGE-DENY` | affirmative, non-affirmative, signal-quality, conflict, and owning-gate fixtures | policy-authority projector, decision ledger, authorization log/envelope |
+| `AC-POLICY-BRIDGE-SCOPE`, `AC-POLICY-NOT-RBAC`, `AC-POLICY-RECOVERY` | policy/delegation/artifact/expiry/replay, direct-DI prohibition, and exact-route tests | governed authority gate, delegation, envelope lifecycle, readiness recovery |
+
+## Task 0 - Establish the policy-authority boundary
+
+Before any production source or test mutation:
+
+1. Commit and publish this design/plan-only tree with DCO.
+2. Record `DI-053D69EADEDC` and Workroom evidence
+   `cmt5wqbft0j8c01rm8l54p0g5` as the selected architecture decision, including
+   signal quality and contribution evidence. Mark the earlier
+   `DI-F7361DD540E2` two-human bootstrap recommendation superseded, without
+   deleting it.
+3. Bind the design-only commit, design blob, plan blob, BI, Workroom,
+   repository, and branch in durable Workroom evidence. Do not treat that
+   evidence as implementation authority or an initiative receipt.
+4. Resolve the owning WWMD evaluation for the exact BI-F0715C9C production
+   implementation envelope. The action is allowed only if the deployed bridge
+   can project a current, explicit, autonomy-eligible affirmative judgment into
+   the existing scoped authorization substrate.
+5. If the bridge is unavailable, or the judgment is no/defer/escalate,
+   ambiguous, stale, or advisory-only, stop and return that exact reason and
+   owning decision route. Do not use direct DecisionInteraction reads, a
+   second-human proxy, an AI reviewer, superuser execution, direct DB writes,
+   or the null-organization spec-approval writer.
+
+The current live audit reaches step 5. `DI-053D69EADEDC` decides the bridge
+architecture; it is not the production-action judgment, and the projector is
+not deployed. The one-human roster proves the superseded per-work dual-approval
+shape is non-traversable, but it does not weaken independent specialist review
+or invalidate the human-rooted standing WWMD criteria.
 
 ## Task 1 - Rebase and refresh Workroom scope
 
@@ -80,6 +112,39 @@ budget and may not broaden untested behavior.
    stale targets fail visibly and refresh, never fall back to a default agent.
 7. Centralize lane metadata in the existing initiative tool-grant module and
    make the receipt pack consume it.
+8. When policy authority cannot be projected, return the exact owning WWMD,
+   WWWD, or WSID evaluation/escalation packet. When the remaining gap is an
+   independent receipt, return the exact eligible reviewer route. Neither path
+   is a receipt or a grant.
+
+## Task 4A - Red/green universal policy-authority bridge
+
+This task may begin only after Task 0 yields a scoped implementation
+authorization through the governing policy path.
+
+1. Add a pure, closed projector input that combines the server-resolved action
+   binding with the sealed DecisionInteraction, current profile/version and
+   promoter, signal-quality/contribution evidence, and active delegation.
+2. Red-test all three owning gates. Only their registered affirmative option
+   with usable, high, stable, strongly covered, autonomy-eligible,
+   conflict-free signal may return `allow`; no/revise/defer/escalate/null,
+   arbitrary text, and advisory recommendations deny or escalate.
+3. Red-test human-rooted provenance and isolation: WWMD uses the approved
+   platform criteria; WWWD and WSID resolve their own owner/profile and cannot
+   inherit platform authority. Superseded policy versions, missing promoters,
+   revoked/expired delegation, wrong organization/profession, and risk excess
+   fail closed.
+4. Append the existing `AuthorizationDecisionLog` and create or advance the
+   exact `CoworkerActionEnvelope` transactionally. Record DI, profile/policy
+   version, human provenance, evidence refs, scored options/weights digest,
+   subject/action/artifact fingerprint, constraints, issue/expiry, and use
+   limits. Reuse `DelegationGrant`/`DelegationChain`; add no table or grant.
+5. Make governed execution consume only that projected, unexpired, matching
+   authorization. Prove a DI id by itself grants nothing, the projector cannot
+   satisfy a receipt or create a role/grant, and replay/artifact drift fails.
+6. Add the exact recovery output for owning evaluation, human escalation, or
+   independently eligible reviewer dispatch. Reuse existing decision and
+   readiness surfaces; add no policy-specific top-level queue.
 
 ## Task 5 - Red/green external reviewer dispatch
 
