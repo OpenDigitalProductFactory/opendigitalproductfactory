@@ -1,9 +1,9 @@
 # Directory Service Identity Absorption — Implementation Plan
 
-- **Umbrella BI:** `BI-C7362CA5`
+- **Umbrella item:** BI-C7362CA5 (xlarge, decomposed)
 - **Epic:** EP-24741BBF
 - **Design:** `docs/superpowers/specs/2026-08-23-directory-service-identity-absorption-design.md`
-- **Workroom:** WC-94429637
+- **Workroom:** WC-94429637 (design) · WC-D43197FD (branch binding)
 
 > **Deferred work lives in backlog items, not in this file.** Every independently
 > shippable deliverable below is a live `BI-*` with a coverage receipt. This plan
@@ -159,3 +159,47 @@ Per the change-impact contract for this branch and AGENTS.md §4:
 SAML, OIDC, SCIM, and LDAP write operations. Each is its own surface and its own
 decision. Attempting all four at once is how the predecessor plan reached 111 tasks
 and shipped nothing.
+
+## Backlog coverage
+
+Decision: `decomposed`. Umbrella: `BI-C7362CA5`. Every independently shippable
+deliverable maps to a live backlog item — none is stored as a checkbox.
+
+| Phase | Deliverable | Independently shippable | BI | Depends on |
+|---|---|---|---|---|
+| 0 | authentik tool evaluation on record | yes | `BI-27E462BA` | — |
+| 1 | Service-account primitive, owner-less refusable | yes | `BI-3181909E` | — |
+| 2 | Projection contract: DN, object classes, groups, withhold allowlist | yes | `BI-DCE49BA9` | 0, 1 |
+| 3 | LDAP listener over org-PKI TLS | yes | `BI-F7317D65` | 2 |
+| 4 | Principal becomes the authentication root | yes | `BI-CEACBD0D` | 2 |
+| 5 | Supersede the 2026-04-22 plan across 10 documents | yes | `BI-5167932D` | 0 |
+
+**Governed coverage receipt: blocked by `BI-72F368BC`.**
+
+`record_plan_backlog_coverage` (v2) was submitted for this plan from workroom
+WC-D43197FD on branch `feat/directory-service-absorption-identity-model-desi`
+and refused:
+
+| # | Error | State at submission |
+|---|---|---|
+| 1 | `plan-artifact-invalid` — "No live workroom for this subject is bound to OpenDigitalProductFactory/opendigitalproductfactory" | workroom created via `create_workroom` + `plan_workroom_worktree`, which leave `repositoryFullName` null |
+| 2 | `plan-artifact-invalid` — "…has no recorded head" | branch claimed via `claim_backlog_item_for_work`; capsule bound to the repo but `headSha` unset |
+| 3 | `traceability-incomplete` — "BacklogItem BI-C7362CA5 has no initiative scope baseline" | `headSha` synced to `58126dce0` via `adopt_worktree`; plan blob `77e1faf42f` pushed and confirmed on the remote |
+
+Failure 3 is the live blocker and is not surface-specific: per `BI-72F368BC`,
+**zero `initiative_scope_baseline` activities exist install-wide**, and the only
+writer (`approveInitiativeBaseline`, reachable through `record_initiative_design_review`
+gate `spec-approval`) hard-codes `requiresIndependentReviewer: true`. This install
+has one human principal, so the author can never be independent of the reviewer and
+the baseline can never be written — by any surface, Build Studio included.
+
+Failures 1 and 2 were self-inflicted sequencing and are recorded because the
+ordering is not obvious: a workroom must be **repository-bound and head-synced**
+before a receipt is attempted, and `create_workroom` alone does neither.
+
+> **Note for whoever fixes `BI-72F368BC`:** the `traceability-incomplete` error text
+> instructs the caller to "cite BI-B9403248 for the blocked receipt", but
+> `BI-B9403248` was closed 2026-08-21 by PR #4422. The live blocker is
+> `BI-72F368BC`. The message should be repointed when the gate is fixed.
+
+Restore the governed receipt on this plan when `BI-72F368BC` ships.
