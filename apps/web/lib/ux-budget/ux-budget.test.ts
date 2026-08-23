@@ -197,11 +197,23 @@ describe("budget axes", () => {
   });
 
   it("scores the route's own copy, not the shell chrome around it", () => {
-    const dense = `<main><h1>Infrastructure Optimization</h1><p>Administrative documentation.</p></main>`;
+    const dense = `<main><h1>Infrastructure Optimization</h1>
+      <p>Administrative documentation of organizational infrastructure.</p>
+      <ul><li>Authorization</li><li>Diagnostics</li><li>Provisioning</li><li>Observability</li></ul>
+      <p>Reconciliation of heterogeneous configuration repositories.</p></main>`;
     const chrome = `<header><a>Home</a><a>Work</a><a>Money</a></header><nav><ul><li>Jobs</li><li>Bills</li></ul></nav>`;
     // Adding a rail of short, easy nav labels must not dilute the page's grade.
     expect(measureUxBudget(chrome + dense).readingGradeLevel).toBe(
       measureUxBudget(dense).readingGradeLevel,
+    );
+  });
+
+  it("keeps the whole surface when <main> does not hold the page's words", () => {
+    // A landmark wrapped around a client shell or a mocked subtree carries a
+    // word or two. Grading THAT would be worse than grading the chrome too.
+    const scrap = `<header><h1>Date</h1><p>Route</p><p>Miles</p><p>Sorted</p></header><main><div>Infrastructure</div></main>`;
+    expect(measureUxBudget(scrap).readingGradeLevel).toBe(
+      measureUxBudget(scrap.replace(/<\/?main>/g, "")).readingGradeLevel,
     );
   });
 

@@ -296,5 +296,17 @@ export function countDisclosureRegions(html: string): number {
  */
 export function routeContentHtml(html: string): string {
   const mains = extractSubtrees(html, (tag) => tag.name === "main");
-  return mains.length > 0 ? mains.join("\n") : html;
+  if (mains.length === 0) return html;
+  const scoped = mains.join("\n");
+  // A `<main>` that does not actually hold the page's words is not the route's
+  // content — it is a landmark wrapped around a client shell, a portal target, or
+  // (in a component test) a mocked-out subtree. Scoping to it would grade a
+  // scrap: /platform/ai/skills renders a one-word <main> under test and would
+  // have been graded on that single word. Below half the surface's words, keep
+  // the whole scope; a diluted grade beats a grade of the wrong thing.
+  return words(scoped) * 2 >= words(html) ? scoped : html;
+}
+
+function words(html: string): number {
+  return (html.replace(/<[^>]*>/g, " ").match(/[a-zA-Z0-9]+/g) ?? []).length;
 }
