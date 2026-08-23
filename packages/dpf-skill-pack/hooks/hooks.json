@@ -84,6 +84,15 @@
         "hooks": [
           {
             "type": "command",
+            "command": "work-shape-banner.mjs",
+            "description": "SessionStart: state the five-step work shape and the live status of each step; the readable face of hooks/lib/thread-conformance.mjs"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/process-spine-health-check.mjs\" --hook"
           }
         ]
