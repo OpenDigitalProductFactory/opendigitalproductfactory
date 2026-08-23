@@ -364,7 +364,7 @@ the reader exists (BI-B1065D41):
 
 | Signal | How it lies |
 | --- | --- |
-| The **exit code** | `pregate …; echo $?; tail …` reports *tail's* status. And a run that gave up while queued exits 0 having gated nothing (BI-2C7F51BA). |
+| The **exit code** | `pregate …; echo $?; tail …` reports *tail's* status. A run that gives up while queued, or reports 0 with no PASS record at HEAD, now exits **7** instead of 0 (BI-A9CF0D69; the historical exit-0 lie was BI-2C7F51BA) — but a chained/piped reading still surfaces someone else's status, so the record remains the verdict. |
 | The **log tail** | A *tolerated* `GuardRuntimeEnvironmentError` prints `Error:` and a red ✖ ~28,000 lines before a **passing** verdict. A watcher grepping `Error:` fabricates a failure. |
 | **`gate passed`** | True about the run you watched; silent about whether HEAD has moved since. `pregate:status` compares. |
 
@@ -753,6 +753,34 @@ imports at runtime. If `toBeInTheDocument`-style assertions regress on a future
 bump, restore the pin or extend the workaround. Upstream:
 [testing-library/jest-dom#662](https://github.com/testing-library/jest-dom/issues/662).
 
+## Degenerate-environment fixtures
+
+Modules that probe their environment (does `.git` exist? is `package.json`
+readable? did the remote answer?) must be unit-tested against the world
+production actually is — **partial, stale, absent, empty, plural** — not only
+the healthy fixture. The dominant late-defect escape class (~30%, BI-927D64C0)
+is a probe whose every test fixture modelled the healthy world: an image-synced
+partial tree passed the availability probe and true citations were "refuted"
+(BI-EE2B243D); a federation guard "only ever passed because unit tests reused
+one linkId fixture" (BI-AF675A20); a >1MB diff crashed the default exec
+maxBuffer (BI-DC6BE37C); a transient failure was collapsed to a terminal state
+(BI-2B9E16CC).
+
+Use the shared, dependency-free fixture kit
+[`apps/web/lib/testing/degenerate-env/`](../../apps/web/lib/testing/degenerate-env/index.ts)
+(importable as `@/lib/testing/degenerate-env`): `partialSourceTree()`,
+`twoInstallIdentities()`, `oversizedPayload(bytes)`,
+`flakySucceedsOnAttempt(n)`, `emptyAndNullRows(shape)` — each named after the
+incident it models. An injected degraded resolver/stub that produces the same
+shapes counts as equivalent.
+
+The conformance registry
+[`probe-conformance.test.ts`](../../apps/web/lib/testing/degenerate-env/probe-conformance.test.ts)
+enumerates the known availability-probe modules and walks `apps/web/lib/**`
+for the probe signature: a new probe module fails the suite until it is either
+mapped to a test file carrying degenerate coverage or given an explicit
+reasoned waiver there.
+
 ## Common drift, and how to stay on-script
 
 These are the failure modes that recur across sessions, clients, and machines.
@@ -766,7 +794,7 @@ Name them so you catch yourself.
 | Reaching for `DPF_SKIP_*` to get past a hook | Bypasses are for verified false positives only | Fix the underlying error; CI gates it anyway |
 | Verifying UX against worktree `next dev` | Not the production-bundled runtime | Use the canonical install or sandbox lease (AGENTS.md §13) |
 | Treating a local green as the merge gate | The binding gate is the CI **Unit Tests** check | Local pass = evidence; CI pass = the gate |
-| Reading a `pregate` exit code as the verdict | A run killed while queued exits 0 without running | `pnpm run pregate:status` — it reads the SHA-bound record and exits 0 only for a PASS at HEAD |
+| Reading a `pregate` exit code as the verdict | A pipeline surfaces the last command's status, not pregate's (an abandoned/uncorroborated run itself now exits 7, not 0 — BI-A9CF0D69) | `pnpm run pregate:status` — it reads the SHA-bound record and exits 0 only for a PASS at HEAD |
 | Piping `pregate` to `head`/`grep` | The verdict is the LAST line, so a truncating reader removes exactly what you wanted (and it used to SIGPIPE-kill the run mid-install) | Let it print its ~30 lines; open the log path it prints for detail |
 | Backgrounding `pregate` (`&` / `run_in_background`) | The harness caps and kills a backgrounded run mid-install | Run it in the FOREGROUND — on timeout the harness migrates it and it continues |
 | Wrapping `pregate` in `timeout` | Cuts it off mid-queue and manufactures a false green | Run it unbounded in the foreground |

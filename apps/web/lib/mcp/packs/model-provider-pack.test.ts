@@ -40,12 +40,14 @@ import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 const EXPECTED_TOOLS = [
   "resolve_model_selection",
   "describe_model",
+  "describe_committed_model",
   "add_provider",
   "update_provider_category",
 ];
 
 const EXPECTED_GRANTS: Record<string, string[]> = {
   resolve_model_selection: ["work_capsule_read"],
+  describe_committed_model: ["file_read"],
   describe_model: ["sandbox_execute"],
   add_provider: ["agent_control_read"],
   update_provider_category: ["agent_control_read"],
@@ -56,7 +58,7 @@ beforeEach(() => {
 });
 
 describe("model-provider pack — registration", () => {
-  it("exposes exactly the four model & provider tools", () => {
+  it("exposes exactly the five model & provider tools", () => {
     expect(modelProviderPack.definitions.map((d) => d.name).sort()).toEqual([...EXPECTED_TOOLS].sort());
     expect(Object.keys(modelProviderPack.handlers).sort()).toEqual([...EXPECTED_TOOLS].sort());
     expect(modelProviderPack.packId).toBe("model-provider");

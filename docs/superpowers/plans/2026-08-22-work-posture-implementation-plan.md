@@ -21,6 +21,18 @@ status: active
 | G | `BI-BEDAFF57` | small | Archetype posture conformance test over the whole catalogue |
 | H | `BI-4EB2F1D0` | medium | Room surface renders the posture and its provenance |
 
+## Status ⟦runtime: 2026-08-23⟧
+
+Seven of eight slices have landed across five PRs (#4488, #4492, #4569, and the
+posture-governs branch). **H — the rich layer-by-layer provenance surface — has not.**
+The minimal "Pace and priority" section shipped with D; H is the full provenance chain.
+
+Two items outside the original eight were found and closed on the way: the workroom shape
+had no write path at all (`BI-8C54B216`), and the posture was display-only
+(`BI-06C41FDC`). Two more were found and filed, not built: the semantic-review
+self-classification gap (`BI-888825F6`) and the preview/gate lease contention
+(`BI-8FF00C3B`).
+
 ## Ordering and why
 
 The ordering is chosen so that **nothing changes behaviour until D**, and D is a single,

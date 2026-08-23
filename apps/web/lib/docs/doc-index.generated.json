@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 678,
+  "pageCount": 679,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -1099,6 +1099,7 @@
         "authority-flow",
         "profiles-and-host-filtering",
         "capability-transitions",
+        "retiring-a-capability",
         "install-upgrade-consumer-assets-and-rollback",
         "backup-and-health-semantics",
         "observation-and-diagnostics-boundary",
@@ -1294,6 +1295,7 @@
         "5-where-a-weight-comes-from-sourcing-classes",
         "51-the-revealed-class-in-detail",
         "52-confidence-is-discounted-before-any-of-this-is-acted-on",
+        "53-the-high-stakes-hold-and-how-it-is-released",
         "6-what-the-registry-currently-gets-wrong",
         "7-crowd-validation-and-hive-intake",
         "71-what-exists-today",
@@ -8731,6 +8733,25 @@
         "approval-and-probe-work-still-required"
       ]
     },
+    "docs/security/tool-evaluations/2026-08-23-authentik.md": {
+      "publicHref": "/security/tool-evaluations/2026-08-23-authentik/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "tool-evaluation-authentik",
+        "corrections-to-claims-previously-asserted-in-dpf-documents",
+        "verified-facts",
+        "cosai-security-findings",
+        "compliance",
+        "architecture-fit",
+        "integration-evidence",
+        "verdict",
+        "conditions",
+        "re-evaluation",
+        "sources"
+      ]
+    },
     "docs/specs/device-identification-and-portfolio-placement-spec.md": {
       "publicHref": "/specs/device-identification-and-portfolio-placement-spec/",
       "portalHref": null,
@@ -10359,6 +10380,7 @@
         "test-runner-pins-must-hold",
         "appsmobile-jest-must-stay-on-29x",
         "appsweb-and-packagesdb-vitest",
+        "degenerate-environment-fixtures",
         "common-drift-and-how-to-stay-on-script",
         "label-association-guard-ratchet",
         "what-this-gate-is-not"

@@ -8,7 +8,7 @@ apps/web/app/api/mcp/v1/route.ts	860
 apps/web/app/api/v1/edge/discovery-runs/route.test.ts	982
 apps/web/components/admin/BusinessModelBuilder.tsx	821
 apps/web/components/admin/McpTokenManager.tsx	1326
-apps/web/components/agent/AgentCoworkerPanel.tsx	1305
+apps/web/components/agent/AgentCoworkerPanel.tsx	1315
 apps/web/components/agent/AgentMessageInput.tsx	1034
 apps/web/components/ea/EaCanvas.tsx	1047
 apps/web/components/inventory/TopologyGraph.tsx	973
@@ -56,7 +56,7 @@ apps/web/lib/self-upgrade/quiescence.test.ts	951
 apps/web/lib/self-upgrade/quiescence.ts	1621
 apps/web/lib/skills/evidence-search.ts	803
 apps/web/lib/tak/agent-grants.test.ts	940
-apps/web/lib/tak/agent-grants.ts	986
+apps/web/lib/tak/agent-grants.ts	991
 apps/web/lib/tak/agent-routing.ts	1168
 apps/web/lib/tak/agentic-loop.test.ts	2501
 apps/web/lib/tak/agentic-loop.ts	2809

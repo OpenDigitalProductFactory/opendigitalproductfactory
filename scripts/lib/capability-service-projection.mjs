@@ -51,6 +51,20 @@ function normalizeInputs({ substrate, capabilities }) {
     if (typeof id !== "string" || !id) throw new Error("invalid_runtime_capability_id");
     if (capabilityById.has(id)) throw new Error(`duplicate_runtime_capability:${id}`);
     if (record.state !== "active" && record.state !== "disabled") throw new Error(`invalid_runtime_state:${id}`);
+    // `state` is the ENABLEMENT axis (is this capability turned on for this
+    // install; tracked per-install in the DB). `lifecycle` is a separate
+    // LIFECYCLE axis (does the platform still offer it at all). Conflating them
+    // would make "the operator turned it off" indistinguishable from "the
+    // platform retired it", which is the ambiguity that matters here.
+    //
+    // Retirement must be DECLARED, not inferred from a capability vanishing from
+    // the seed: an install that still lists a vanished id cannot be told apart
+    // from a tampered one, so it fails closed and can never upgrade again
+    // (BI-5AA0345E). Retiring is therefore two-phase — mark it `retired` and
+    // leave the entry in place for at least one release so every install can
+    // migrate past it, and only then delete the entry.
+    if (record.lifecycle !== undefined && record.lifecycle !== "active" && record.lifecycle !== "retired") throw new Error(`invalid_runtime_lifecycle:${id}`);
+    if (record.lifecycle === "retired" && record.state === "active") throw new Error(`retired_capability_still_active:${id}`);
     const runtime = record.manifest?.runtime;
     if (!runtime || !Array.isArray(runtime.dependencies) || !ACTIVATION_POLICIES.has(runtime.activation?.policy)) throw new Error(`invalid_runtime_manifest:${id}`);
     if (!runtime.dependencies.every((item) => typeof item === "string") || new Set(runtime.dependencies).size !== runtime.dependencies.length) throw new Error(`invalid_runtime_dependencies:${id}`);
@@ -118,6 +132,10 @@ export function compileCapabilityServiceCatalog(input) {
     const record = capabilityById.get(capabilityId);
     return {
       capabilityId,
+      // Emitted only when it carries information: absent means active. Keeping
+      // it out of the common case avoids moving catalogHash — and therefore
+      // forcing a migration on every install — for a field nothing is using yet.
+      ...(record.lifecycle === "retired" ? { lifecycle: "retired" } : {}),
       dependencies: [...record.manifest.runtime.dependencies].sort(compare),
       activationPolicy: record.manifest.runtime.activation.policy,
       workGuards: sortedStrings(record.manifest.runtime.workGuards ?? []),
