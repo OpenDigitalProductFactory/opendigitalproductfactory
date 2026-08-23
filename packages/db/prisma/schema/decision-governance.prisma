@@ -346,6 +346,10 @@ model PerspectiveMaterial {
   confidenceWeight Float                              @default(0.5)
   reviewStatus     String                             @default("draft")
   promotionState   String                             @default("candidate")
+  // Who released this row from the high-stakes review hold, and when
+  // (BI-5F3BFD13). Null for material that was never held.
+  reviewedByUserId String?
+  reviewedAt       DateTime?
   summary          String?                            @db.Text
   createdAt        DateTime                           @default(now())
   updatedAt        DateTime                           @updatedAt

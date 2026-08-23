@@ -11,7 +11,8 @@
 import { prisma, Prisma } from "@dpf/db";
 import { revalidatePath } from "next/cache";
 
-import { requireUserId } from "@/lib/actions/shared/guards";
+import { requireCapability, requireUserId } from "@/lib/actions/shared/guards";
+import { approveHeldProfessionMaterial } from "@/lib/decision-perspective/held-material-store";
 import { captureOrgBusinessAnswer } from "@/lib/wiki/capture-org-answer";
 import { createProductionInference } from "@/lib/wiki/inference-adapter";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
@@ -123,4 +124,48 @@ export async function ruleWeightProposal(input: {
         ? "Accepted. Recorded at the ruled tier — this does not yet change any live decision score."
         : "Rejected. This proposal won't resurface.",
   };
+}
+
+/**
+ * Release one profession family's craft doctrine from the high-stakes review
+ * hold (BI-5F3BFD13).
+ *
+ * `manage_platform` rather than a bare session: this promotes doctrine that
+ * then governs how a coworker decides, which is a platform-governance act, not
+ * ordinary workspace editing. Failures are returned as data — a thrown server
+ * action is redacted in production, so the operator would see nothing.
+ */
+export async function approveHeldMaterial(input: {
+  profileId: string;
+}): Promise<{ ok: boolean; message: string }> {
+  const { userId } = await requireCapability("manage_platform");
+
+  const profileId = (input.profileId ?? "").trim();
+  if (!profileId) {
+    return { ok: false, message: "No craft area was named." };
+  }
+
+  try {
+    const result = await approveHeldProfessionMaterial(prisma, {
+      profileId,
+      approvedByUserId: userId,
+    });
+
+    if (!result.ok) {
+      return {
+        ok: false,
+        message: "Nothing is waiting for approval here — it may already be approved.",
+      };
+    }
+
+    revalidatePath("/coworker-decisions/review");
+    return {
+      ok: true,
+      message: `Approved. This coworker now decides with its own craft doctrine (${result.approved} ${
+        result.approved === 1 ? "page" : "pages"
+      }).`,
+    };
+  } catch (error) {
+    return { ok: false, message: getErrorMessage(error) };
+  }
 }
