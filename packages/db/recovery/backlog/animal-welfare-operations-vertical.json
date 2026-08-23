@@ -3,7 +3,7 @@
   "bundleId": "animal-welfare-operations-vertical",
   "description": "Operator-invoked recovery input for the animal-welfare operations vertical epic (pet-rescue archetype operating model).",
   "source": {
-    "capturedAt": "2026-08-23T01:31:32.616Z",
+    "capturedAt": "2026-08-23T02:00:56.767Z",
     "repository": "OpenDigitalProductFactory/opendigitalproductfactory",
     "planPath": "docs/architecture/archetype-operating-model-audit.md"
   },

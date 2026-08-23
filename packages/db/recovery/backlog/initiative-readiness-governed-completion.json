@@ -3,7 +3,7 @@
   "bundleId": "initiative-readiness-governed-completion",
   "description": "Operator-invoked recovery input for the initiative-readiness and governed-completion enforcement epic.",
   "source": {
-    "capturedAt": "2026-08-23T01:31:32.616Z",
+    "capturedAt": "2026-08-23T02:00:56.767Z",
     "repository": "OpenDigitalProductFactory/opendigitalproductfactory",
     "planPath": "docs/superpowers/plans/2026-08-08-initiative-readiness-and-goal-completion-reconciliation-implementation.md"
   },
