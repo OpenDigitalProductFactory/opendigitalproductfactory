@@ -33,17 +33,36 @@ function Get-DPFComposeArgs {
 
     $chain = @("-f", "docker-compose.yml")
     if ($Purpose -eq "Stop") {
-        # Down must name every overlay that may have created resources. Docker
-        # Compose safely ignores services that were never started.
+        # Down should name every overlay that may have created resources, BUT an
+        # overlay is only safe to name if its required variables are set.
+        #
+        # Compose ignores services that were never started; it does NOT ignore
+        # variable interpolation. Every file handed to `compose down` is parsed and
+        # interpolated first, so an overlay declaring `${VAR:?msg}` aborts the whole
+        # command when that feature was never configured:
+        #
+        #   error while interpolating services.portal.volumes.[]: required variable
+        #   DPF_EDGE_ACTION_SIGNING_PRIVATE_KEY_FILE is missing a value
+        #
+        # That made `uninstall-dpf.ps1 -Purge` fail on every plain consumer install --
+        # the default configuration -- before it removed anything. Three overlays
+        # declare required variables (edge-actions, organization-trust, pki), so they
+        # get the SAME guards the Start path already applies.
         foreach ($overlay in @(
             "docker-compose.release.yml",
             "docker-compose.override.yml",
             "docker-compose.edge.yml",
-            "docker-compose.edge-actions.yml",
-            "docker-compose.organization-trust.yml",
-            "docker-compose.pki.yml",
             "docker-compose.tls.yml"
         )) { $chain = Add-DPFComposeFile -ComposeArgs $chain -InstallDir $InstallDir -Name $overlay }
+        if (Test-DPFEnvFlag -InstallDir $InstallDir -Name "DPF_EDGE_ACTION_DISPATCH_CONFIGURED") {
+            $chain = Add-DPFComposeFile -ComposeArgs $chain -InstallDir $InstallDir -Name "docker-compose.edge-actions.yml"
+        }
+        if (Test-DPFEnvFlag -InstallDir $InstallDir -Name "DPF_ORGANIZATION_TRUST_ENABLED") {
+            $chain = Add-DPFComposeFile -ComposeArgs $chain -InstallDir $InstallDir -Name "docker-compose.organization-trust.yml"
+        }
+        if (Test-DPFEnvFlag -InstallDir $InstallDir -Name "DPF_PKI_ENABLED") {
+            $chain = Add-DPFComposeFile -ComposeArgs $chain -InstallDir $InstallDir -Name "docker-compose.pki.yml"
+        }
         return $chain
     }
 

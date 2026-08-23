@@ -155,16 +155,25 @@ function Write-DPFImageIdentity {
     }
 }
 
-function Import-DPFComposeChain {
+# Returns the compose-chain module PATH for the caller to dot-source itself.
+#
+# It deliberately does NOT dot-source here. Dot-sourcing inside a function scopes
+# every definition to that function, so the caller never sees them: the module
+# defines three interdependent helpers (Test-DPFEnvFlag, Add-DPFComposeFile,
+# Get-DPFComposeArgs) and all three vanish when this returns. Callers must write
+#
+#     . (Resolve-DPFComposeChainModule -InstallDir $Dir)
+#
+# which is the same script-scope pattern the already-working call sites use.
+function Resolve-DPFComposeChainModule {
     param([Parameter(Mandatory)][string]$InstallDir)
-    if (Get-Command Get-DPFComposeArgs -ErrorAction SilentlyContinue) { return }
     $candidates = @(
         (Join-Path $InstallDir "scripts\installer\lib\compose-chain.ps1"),
         (Join-Path $PSScriptRoot "scripts\installer\lib\compose-chain.ps1")
     )
     $module = $candidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
     if (-not $module) { throw "compose_chain_helper_missing" }
-    . $module
+    return $module
 }
 
 function Get-Progress {
@@ -725,7 +734,7 @@ function Invoke-DPFEdgeNodeConvergence {
 
     $edgeModule = Resolve-DPFNativeEdgeModulePath -InstallDir $InstallDir
     . $edgeModule
-    Import-DPFComposeChain -InstallDir $InstallDir
+    . (Resolve-DPFComposeChainModule -InstallDir $InstallDir)
     $edgeComposeArgs = Get-DPFComposeArgs -InstallDir $InstallDir -IncludeEdge:$false
 
     Write-Action "Converging this installation's Edge Node..."
@@ -780,7 +789,7 @@ function Invoke-DPFEdgeNodeConvergence {
         Write-OK "Existing Edge enrollment found; preserving its machine identity"
     }
     if (Install-DPFNativeEdgeNode -InstallDir $InstallDir -BootstrapToken $edgeToken -Version $Version) {
-        Import-DPFComposeChain -InstallDir $InstallDir
+        . (Resolve-DPFComposeChainModule -InstallDir $InstallDir)
         $legacyComposeArgs = Get-DPFComposeArgs -InstallDir $InstallDir -IncludeEdge:$true
         docker compose @legacyComposeArgs stop edge-node 2>&1 | Out-Null
         return $true
@@ -1746,7 +1755,7 @@ if (-not (Test-StepDone "started")) {
     }
     $capabilityProjection = Resolve-DpfCapabilityComposeProfiles -InstallDir $DPF_DIR
     $env:COMPOSE_PROFILES = (@($capabilityProjection.composeProfiles) -join ',')
-    Import-DPFComposeChain -InstallDir $DPF_DIR
+    . (Resolve-DPFComposeChainModule -InstallDir $DPF_DIR)
     $coreComposeArgs = Get-DPFComposeArgs -InstallDir $DPF_DIR -IncludeEdge:$false -IncludeRelease:($InstallMode -eq "consumer")
     $recordedComposeFiles = @()
     for ($i = 0; $i -lt $coreComposeArgs.Count; $i++) {
