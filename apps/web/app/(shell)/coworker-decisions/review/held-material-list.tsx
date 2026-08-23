@@ -47,9 +47,6 @@ function HeldFamily({ family }: { family: HeldFamilyView }) {
   return (
     <Surface as="li" level={1} padding="sm" rounded="md">
       <div className="flex items-center gap-3 flex-wrap">
-        <span className="rounded px-2 py-0.5 text-dpf-caption font-medium uppercase tracking-wide border border-[var(--dpf-warning)] text-[var(--dpf-warning)]">
-          Held for review
-        </span>
         <span className="text-dpf-body font-medium text-[var(--dpf-text)] min-w-0 flex-1">
           {family.professionKey}
         </span>
@@ -57,11 +54,6 @@ function HeldFamily({ family }: { family: HeldFamilyView }) {
           {family.rows.length} {family.rows.length === 1 ? "page" : "pages"}
         </span>
       </div>
-
-      <p className="mt-1 text-dpf-caption text-[var(--dpf-muted)]">
-        Until you approve it, this coworker uses general platform doctrine
-        instead of its own craft judgement.
-      </p>
 
       {result ? (
         <p
@@ -79,6 +71,10 @@ function HeldFamily({ family }: { family: HeldFamilyView }) {
         </div>
       ) : (
         <div className="mt-2 ml-1">
+          <p className="mb-2 text-dpf-caption text-[var(--dpf-muted)]">
+            Until you approve it, this coworker uses general platform doctrine
+            instead of its own craft judgement.
+          </p>
           <ul className="mb-2 flex flex-col gap-1">
             {family.rows.map((row) => (
               <li key={row.materialId} className="text-dpf-caption text-[var(--dpf-text)]">
@@ -117,7 +113,7 @@ export function HeldMaterialList({ families }: { families: HeldFamilyView[] }) {
       </h2>
       <p className="mb-2 text-dpf-caption text-[var(--dpf-muted)]">
         These areas are high-stakes, so their doctrine was written but not
-        switched on. It stays inactive until you approve it.
+        switched on until you approve it.
       </p>
       <ul className="flex flex-col gap-2">
         {families.map((family) => (
