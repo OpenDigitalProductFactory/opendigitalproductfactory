@@ -89,9 +89,10 @@ Per AGENTS.md §7. Facts below were verified on 2026-08-23; licence claims come 
 
 ### 4.1 authentik
 
-- **Licence: MIT, with a carve-out.** The repository `LICENSE` states MIT, and explicitly: "All content that resides under the `authentik/enterprise/` directory of this repository, if that directory exists, is licensed under the license defined in `authentik/enterprise/LICENSE`." Website content is CC BY-SA 4.0. **The epic's MIT claim is confirmed, and so is the tier split.**
+- **Licence: MIT, with a carve-out.** The repository `LICENSE` states MIT, and explicitly: "All content that resides under the `authentik/enterprise/` directory of this repository, if that directory exists, is licensed under the license defined in `authentik/enterprise/LICENSE`." Website content is CC BY-SA 4.0. **The epic's MIT claim is confirmed.** The Enterprise licence forbids copying, merging, publishing, distributing or selling without a subscription, so that directory is off-limits for absorption — not merely unused.
 - Provides OAuth2/OIDC, SAML, LDAP and SCIM in one platform; its LDAP provider serves users and groups from authentik's own database.
-- **Non-human identity accounts are an Enterprise-tier, per-seat feature.** DPF already models non-human identity natively (`Principal(kind: "agent"|"service")` plus GAID) and machine trust via org PKI.
+- **Pricing, corrected.** The epic asserted that non-human identity accounts are Enterprise-only at $5/user/month. **That is false:** the pricing page states "No cost for service accounts." Enterprise is $5/user/month (annual) plus $0.02/external user/month for *human* seats; Enterprise Plus starts at $20k/year. The LDAP provider carries no Enterprise restriction either. **Adoption is therefore cheaper and more capable than the epic assumed**, and the decision must not rest on a cost argument that does not hold.
+- **The LDAP provider is an outpost — a separate container written in Go.** DPF's runtime is TypeScript, so authentik's protocol implementation is not liftable source. What is absorbable is design: object-class mapping, attribute naming, and bind/search semantics.
 - **Fit:** as a *runtime*, poor — it is a separate Python/Django service with its own user store, which is the appendage this epic forbids. As a *source of absorbable design*, good: object-class mapping and protocol handling are worth studying, MIT-licensed, and attributable.
 
 ### 4.2 Keycloak
@@ -134,8 +135,18 @@ The argument, in order of weight:
 1. **Adoption cannot deliver the outcome.** The requirement is that DPF *be* the directory. An adopted IdP with its own user store makes DPF a *source* that provisions into someone else's directory. The install still depends on a second identity system; we would have moved the dependency, not removed it.
 2. **A second store re-creates the problem we already have.** §3 shows DPF is already paying the cost of two identity roots internally. Adding a third — with a network hop and a sync protocol between them — compounds a defect we are trying to retire.
 3. **There is no adoptable in-process option.** §4.4: no maintained Node LDAP server exists. Adoption necessarily means a separate process.
-4. **The tier split makes adoption expensive precisely where DPF is strongest.** authentik charges per-seat for non-human identity accounts. DPF already models agents and service accounts natively with GAID and org-PKI mTLS. We would be paying per-seat to import a weaker model of a capability we own.
+4. **Data residency.** To be useful, authentik must hold a copy of the install's workforce identities — the 2026-04-22 design provisions them outward via SCIM. That is a second copy of personal data with its own retention, backup and breach surface.
 5. **Licence permits absorption cleanly.** authentik core is MIT (verified); `ldapjs` is MIT (verified). Attribution is required and cheap. The Enterprise tier is off-limits and nothing from it is used.
+
+**What this argument deliberately does not claim.** An earlier draft argued that
+adoption would mean paying per-seat for non-human identity, capability DPF already
+owns. **That was wrong** — service accounts are free in authentik, and so is the
+LDAP provider. Adoption is cheaper and more capable than the epic assumed, and it
+would deliver working LDAP far sooner than building one. The case for absorbing
+does not depend on authentik being expensive or weak, and is not improved by
+pretending it is. It rests on points 1–4 above, which are architectural and hold
+regardless of price. The full reasoning and correction are on record in the tool
+evaluation (§15).
 
 ### 5.1 The honest cost
 
@@ -328,4 +339,5 @@ Phases 1 and 4 are the ~80% convergence. Phase 3 is the ~20% new feature.
 
 - **Supersedes** the 2026-04-22 enterprise-auth spec and plan (§6).
 - **Depends on, is not consumed by,** PR #4474 (installation identity and agent stance) and PR #4555 (zero-touch same-organization federation enrolment). Those solved **machine** trust — install-to-install, certificate-based. This epic solves **human, agent and service** identity. A development companion and its production peer sharing one identity scope without copying credentials is this epic's job; PKI does not deliver it.
+- **Evidence:** `docs/security/tool-evaluations/2026-08-23-authentik.md` (`BI-27E462BA`) — the evaluation this reversal cites. It rejects adoption as a runtime and conditionally approves bounded source absorption, and corrects three claims that circulated in DPF documents, including the pricing claim struck from §4.1 and §5 above.
 - **Consumed by** TAK/GAID governance (EP-1C37C089) and coworker authority (EP-31815F97), both of which already assume the spine this design makes authoritative.
