@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 678,
+  "pageCount": 680,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -1099,6 +1099,7 @@
         "authority-flow",
         "profiles-and-host-filtering",
         "capability-transitions",
+        "retiring-a-capability",
         "install-upgrade-consumer-assets-and-rollback",
         "backup-and-health-semantics",
         "observation-and-diagnostics-boundary",
@@ -1294,6 +1295,7 @@
         "5-where-a-weight-comes-from-sourcing-classes",
         "51-the-revealed-class-in-detail",
         "52-confidence-is-discounted-before-any-of-this-is-acted-on",
+        "53-the-high-stakes-hold-and-how-it-is-released",
         "6-what-the-registry-currently-gets-wrong",
         "7-crowd-validation-and-hive-intake",
         "71-what-exists-today",
@@ -8731,6 +8733,25 @@
         "approval-and-probe-work-still-required"
       ]
     },
+    "docs/security/tool-evaluations/2026-08-23-authentik.md": {
+      "publicHref": "/security/tool-evaluations/2026-08-23-authentik/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "tool-evaluation-authentik",
+        "corrections-to-claims-previously-asserted-in-dpf-documents",
+        "verified-facts",
+        "cosai-security-findings",
+        "compliance",
+        "architecture-fit",
+        "integration-evidence",
+        "verdict",
+        "conditions",
+        "re-evaluation",
+        "sources"
+      ]
+    },
     "docs/specs/device-identification-and-portfolio-placement-spec.md": {
       "publicHref": "/specs/device-identification-and-portfolio-placement-spec/",
       "portalHref": null,
@@ -10359,6 +10380,7 @@
         "test-runner-pins-must-hold",
         "appsmobile-jest-must-stay-on-29x",
         "appsweb-and-packagesdb-vitest",
+        "degenerate-environment-fixtures",
         "common-drift-and-how-to-stay-on-script",
         "label-association-guard-ratchet",
         "what-this-gate-is-not"
@@ -10580,6 +10602,7 @@
       "anchors": [
         "what-this-covers",
         "how-the-defaults-are-set",
+        "this-page-sets-a-starting-point-not-the-final-answer",
         "the-levels",
         "the-two-hard-floors",
         "what-you-can-do",
@@ -10636,6 +10659,27 @@
         "related-specs"
       ]
     },
+    "docs/user-guide/ai-workforce/how-governed-work-runs.md": {
+      "publicHref": "/user-guide/ai-workforce/how-governed-work-runs/",
+      "portalHref": "/docs/ai-workforce/how-governed-work-runs",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "what-this-covers",
+        "the-one-sentence-version",
+        "1-the-workroom-holds-the-work",
+        "2-the-shape-bounds-what-may-happen",
+        "3-the-posture-sets-the-pace",
+        "the-two-rules-that-make-this-safe",
+        "the-priority-half",
+        "4-the-corpus-decides-the-question",
+        "5-the-gate-checks-the-tool",
+        "the-floors-nothing-crosses",
+        "6-the-receipt-is-what-you-review",
+        "known-limits",
+        "related"
+      ]
+    },
     "docs/user-guide/ai-workforce/index.md": {
       "publicHref": "/user-guide/ai-workforce/",
       "portalHref": "/docs/ai-workforce/index",
@@ -10643,6 +10687,7 @@
       "publishedPortal": true,
       "anchors": [
         "overview",
+        "start-with-the-end-to-end-picture",
         "find-and-work-with-a-coworker",
         "reading-a-coworkers-shape",
         "key-concepts",

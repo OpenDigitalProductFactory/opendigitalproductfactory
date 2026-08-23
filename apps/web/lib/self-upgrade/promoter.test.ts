@@ -429,7 +429,7 @@ describe("promoter launch idempotency (SUR-E2BF265E)", () => {
 
 describe("runtime transition promoter entrypoint", () => {
   it("recognizes the mode and fails closed without protocol secret material", async () => {
-    const script = resolve(process.cwd(), "../../scripts/promote.sh");
+    const script = resolve(__dirname, "../../../../scripts/promote.sh");
     const stateDir = await mkdtemp(join(tmpdir(), "dpf-promoter-test-"));
     try {
       vi.stubEnv("DPF_PROMOTER_STATE_DIR", stateDir);

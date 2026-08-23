@@ -686,6 +686,9 @@
     "apps/web/lib/govern/auth-redirect.ts": [
       "docs/install/platform-support-watchlist.md"
     ],
+    "apps/web/lib/govern/auth.ts": [
+      "docs/security/tool-evaluations/2026-08-23-authentik.md"
+    ],
     "apps/web/lib/govern/data/field-classification.ts": [
       "docs/architecture/backlog-and-planning-runbook.md"
     ],
@@ -758,7 +761,8 @@
     ],
     "apps/web/lib/mcp-governed-execute.ts": [
       "docs/architecture/ai-agent-meta-model.md",
-      "docs/architecture/mcp-tool-surface-ergonomics-audit.md"
+      "docs/architecture/mcp-tool-surface-ergonomics-audit.md",
+      "docs/user-guide/ai-workforce/how-governed-work-runs.md"
     ],
     "apps/web/lib/mcp/load-tools.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md"
@@ -1022,6 +1026,9 @@
     "apps/web/lib/tak/compaction-digest.ts": [
       "docs/architecture/context-engineering-standards.md"
     ],
+    "apps/web/lib/tak/consequential-tool-policy.ts": [
+      "docs/user-guide/ai-workforce/how-governed-work-runs.md"
+    ],
     "apps/web/lib/tak/context-arbitrator.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md"
     ],
@@ -1058,6 +1065,12 @@
       "docs/architecture/agent-standards-dpf-conformance.md",
       "docs/architecture/context-engineering-standards.md"
     ],
+    "apps/web/lib/testing/degenerate-env/index.ts": [
+      "docs/testing/pre-pr-gate.md"
+    ],
+    "apps/web/lib/testing/degenerate-env/probe-conformance.test.ts": [
+      "docs/testing/pre-pr-gate.md"
+    ],
     "apps/web/lib/tool-description-hygiene.test.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md",
       "docs/architecture/context-engineering-standards.md",
@@ -1076,7 +1089,8 @@
       "docs/architecture/work-shapes-and-the-decision-gate.md"
     ],
     "apps/web/lib/work-management/autonomy-envelope.ts": [
-      "docs/architecture/work-shapes-and-the-decision-gate.md"
+      "docs/architecture/work-shapes-and-the-decision-gate.md",
+      "docs/user-guide/ai-workforce/how-governed-work-runs.md"
     ],
     "apps/web/lib/work-management/room-channel-continuity.ts": [
       "docs/user-guide/workspace/work-rooms.md"
@@ -1091,10 +1105,12 @@
       "docs/user-guide/workspace/work-rooms.md"
     ],
     "apps/web/lib/work-management/room-posture.ts": [
-      "docs/architecture/work-shapes-and-the-decision-gate.md"
+      "docs/architecture/work-shapes-and-the-decision-gate.md",
+      "docs/user-guide/ai-workforce/how-governed-work-runs.md"
     ],
     "apps/web/lib/work-management/room-shapes.ts": [
-      "docs/architecture/work-shapes-and-the-decision-gate.md"
+      "docs/architecture/work-shapes-and-the-decision-gate.md",
+      "docs/user-guide/ai-workforce/how-governed-work-runs.md"
     ],
     "apps/web/lib/work-management/room-types.ts": [
       "docs/architecture/work-shapes-and-the-decision-gate.md"
@@ -1107,6 +1123,12 @@
     ],
     "apps/web/lib/work-management/workspace-room-access.ts": [
       "docs/user-guide/workspace/work-rooms.md"
+    ],
+    "apps/web/lib/work-posture/derive.ts": [
+      "docs/user-guide/ai-workforce/how-governed-work-runs.md"
+    ],
+    "apps/web/lib/work-posture/temporal-band.ts": [
+      "docs/user-guide/ai-workforce/how-governed-work-runs.md"
     ],
     "apps/web/lib/workbooks/backlog-adapter-mapping.ts": [
       "docs/architecture/backlog-archetype-scope.md"
@@ -1304,6 +1326,9 @@
       "docs/architecture/operational-precedent-corpus.md"
     ],
     "packages/db/src/profession-local-axes.ts": [
+      "docs/architecture/decision-vectors.md"
+    ],
+    "packages/db/src/profession-material-promotion.ts": [
       "docs/architecture/decision-vectors.md"
     ],
     "packages/db/src/provider-compliance-source-registry.ts": [
@@ -2284,7 +2309,8 @@
     "docs/architecture/decision-vectors.md": [
       "apps/web/lib/decision-perspective/material.ts",
       "packages/db/src/dimension-scope.ts",
-      "packages/db/src/profession-local-axes.ts"
+      "packages/db/src/profession-local-axes.ts",
+      "packages/db/src/profession-material-promotion.ts"
     ],
     "docs/architecture/delivery-ia.md": [
       "apps/web/app/(shell)/delivery/page.tsx",
@@ -2755,6 +2781,9 @@
     "docs/security/tool-evaluations/2026-08-01-marketing-media-stack.md": [
       "scripts/probes/marketing-media/local-render-receipt.json"
     ],
+    "docs/security/tool-evaluations/2026-08-23-authentik.md": [
+      "apps/web/lib/govern/auth.ts"
+    ],
     "docs/specs/device-identification-and-portfolio-placement-spec.md": [
       "apps/web/lib/queue/functions/hive-scout-ingest.ts",
       "packages/db/src/discovery-fingerprint-redaction.ts",
@@ -2851,6 +2880,8 @@
       ".github/workflows/ci.yml",
       ".github/workflows/codeql.yml",
       ".github/workflows/policy-guards-recheck.yml",
+      "apps/web/lib/testing/degenerate-env/index.ts",
+      "apps/web/lib/testing/degenerate-env/probe-conformance.test.ts",
       "docker-compose.local-ci.yml",
       "packages/dpf-skill-pack/hooks/pregate-evidence-guard.mjs",
       "scripts/check-guards.mjs",
@@ -2885,6 +2916,15 @@
     "docs/user-guide/ai-workforce/decision-perspective.md": [
       "apps/web/lib/founder-review/queue.ts",
       "apps/web/lib/tak/route-context.ts"
+    ],
+    "docs/user-guide/ai-workforce/how-governed-work-runs.md": [
+      "apps/web/lib/mcp-governed-execute.ts",
+      "apps/web/lib/tak/consequential-tool-policy.ts",
+      "apps/web/lib/work-management/autonomy-envelope.ts",
+      "apps/web/lib/work-management/room-posture.ts",
+      "apps/web/lib/work-management/room-shapes.ts",
+      "apps/web/lib/work-posture/derive.ts",
+      "apps/web/lib/work-posture/temporal-band.ts"
     ],
     "docs/user-guide/ai-workforce/model-routing-lifecycle.md": [
       "docker-entrypoint.sh"

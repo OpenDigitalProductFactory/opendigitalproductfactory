@@ -119,10 +119,18 @@ describe("loadInstallationIdentityView", () => {
       "teardown",
       "sourceAuthority",
       "peerWrite",
+      "workSync",
     ]);
     const peer = view.stances.find((row) => row.stance === "peerWrite");
     expect(peer).toMatchObject({ valueLabel: "Read only", intent: "warning" });
-    expect(peer?.rationale).toContain("never write to it");
+    expect(peer?.rationale).toContain("never mutate a record it owns");
+    // Mirroring work we own is not a peer write, so it reads as its own row.
+    const workSync = view.stances.find((row) => row.stance === "workSync");
+    expect(workSync).toMatchObject({
+      valueLabel: "Mirrored to the organization",
+      intent: "neutral",
+    });
+    expect(workSync?.rationale).toContain("only this side may change");
   });
 
   it("reports the resolved class, not the class a portal declaration asked for", async () => {

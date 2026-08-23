@@ -18,6 +18,7 @@ import {
   verdictForRoute,
   type BaselineFile,
   type RouteMeasurement,
+  findNotReproducibleBlocking,
 } from "./ratchet";
 import { measureUxBudget } from "./measure";
 
@@ -479,5 +480,49 @@ describe("structural diff reporting", () => {
       `- main:\n${wide(2100)}`,
     );
     expect(diff.join(" ")).toMatch(/first divergence|too large/);
+  });
+});
+
+describe("findNotReproducibleBlocking (BI-69FE5504)", () => {
+  it("clears a blocking verdict that did not survive the second measurement", () => {
+    // The live case: a route rendering from unpinned DB state blocked a PR that
+    // touched only a Dockerfile and shell scripts, then passed on re-run.
+    expect(
+      findNotReproducibleBlocking({
+        firstPassBlocking: ["/storefront/settings/operations"],
+        confirmPassBlocking: [],
+        unmeasuredOnConfirm: [],
+      }),
+    ).toEqual(["/storefront/settings/operations"]);
+  });
+
+  it("keeps a verdict that reproduces — a real regression is deterministic", () => {
+    expect(
+      findNotReproducibleBlocking({
+        firstPassBlocking: ["/platform/tools/integrations"],
+        confirmPassBlocking: ["/platform/tools/integrations"],
+        unmeasuredOnConfirm: [],
+      }),
+    ).toEqual([]);
+  });
+
+  it("keeps a verdict when the route could not be re-measured — silence is not stability", () => {
+    expect(
+      findNotReproducibleBlocking({
+        firstPassBlocking: ["/timeouts"],
+        confirmPassBlocking: [],
+        unmeasuredOnConfirm: ["/timeouts"],
+      }),
+    ).toEqual([]);
+  });
+
+  it("separates the flaky from the real in one mixed run, deterministically ordered", () => {
+    expect(
+      findNotReproducibleBlocking({
+        firstPassBlocking: ["/b-flaky", "/a-real", "/c-flaky", "/a-real"],
+        confirmPassBlocking: ["/a-real"],
+        unmeasuredOnConfirm: [],
+      }),
+    ).toEqual(["/b-flaky", "/c-flaky"]);
   });
 });

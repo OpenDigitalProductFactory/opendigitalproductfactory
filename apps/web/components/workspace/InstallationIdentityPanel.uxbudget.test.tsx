@@ -45,6 +45,7 @@ const VIEW: InstallationIdentityView = {
     teardown: "capture-required",
     sourceAuthority: "governed-worktree",
     peerWrite: "read-only",
+    workSync: "same-organization",
     pairedProductionInstallationRef: "dpf-prod-acme",
     rationale: {
       credentials:
@@ -55,6 +56,8 @@ const VIEW: InstallationIdentityView = {
         "A Git checkout is present, so source changes belong in a governed worktree behind the usual review gates.",
       peerWrite:
         "This development installation is paired with dpf-prod-acme, so read from that peer for realistic context but never write to it.",
+      workSync:
+        "Mirror the backlog this installation owns to dpf-prod-acme so the work survives a teardown; only this side may change those records.",
     },
   },
   environment: {

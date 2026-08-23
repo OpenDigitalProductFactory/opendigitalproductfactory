@@ -23,6 +23,14 @@ identity sits in the workforce hierarchy. A coworker appears in one of the four
 areas only when an active service is assigned there. Unassigned work remains in
 **Other** instead of being guessed from a title or team.
 
+## Start With the End-to-End Picture
+
+If you are new to how coworkers are governed, read
+[How Governed Work Actually Runs](how-governed-work-runs.md) first. It walks one piece of work
+from convening a room to reading the receipt, and names which control acts at each step — the
+room's shape, the pace it sets, the corpus it consults, the gate on the tool, and where the
+outcome is reviewed. The pages in this area own the detail for each of those steps.
+
 ## Find and Work With a Coworker
 
 1. Open `/platform/ai/overview`.

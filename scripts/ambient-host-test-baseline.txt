@@ -1,0 +1,5 @@
+# owner: platform-architecture
+# expiry: 2026-11-16
+# Ambient-host-state test baseline (BI-95A83B47). Shrink-only: files leave by
+# injecting the seam / mocking the probe / self-gating, never by expanding
+# the baseline. Regenerate with: node scripts/check-no-ambient-host-tests.mjs --update

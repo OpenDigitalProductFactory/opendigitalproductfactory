@@ -11,6 +11,11 @@ export const FEDERATED_RECORD_TYPES = [
   "service-ticket",
   "organization-crosswalk",
   "demand-envelope",
+  // Work coordination across same-organization installs. A development
+  // companion is created and destroyed repeatedly; without these two types the
+  // backlog it produced dies with it.
+  "backlog-item",
+  "epic",
 ] as const;
 export type FederatedRecordType = (typeof FEDERATED_RECORD_TYPES)[number];
 

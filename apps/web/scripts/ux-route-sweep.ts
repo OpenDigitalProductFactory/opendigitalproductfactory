@@ -31,6 +31,7 @@ import {
 import AxeBuilder from "@axe-core/playwright";
 
 import { measureUxBudget } from "../lib/ux-budget/measure";
+import { confirmBlockingRoutes } from "./ux-sweep-reproducibility";
 import {
   evaluateSweep,
   formatSweepReport,
@@ -576,6 +577,8 @@ async function main(): Promise<void> {
   let browser: Browser | undefined;
   let contexts: BrowserContext[] = [];
   let routeRun: RouteWorkResult<MeasuredRoute> | undefined;
+  /** Routes whose blocking verdict did not reproduce on a second measurement (BI-69FE5504). */
+  let notReproducible: string[] = [];
   if (!existsSync(statePath)) {
     console.error(
       `[ux-sweep] WARNING: no storage state at ${storageState} — authenticated route measurement will fail.`,
@@ -606,6 +609,32 @@ async function main(): Promise<void> {
           }
         }),
     );
+    // A blocking verdict must be attributable to a real defect: some routes
+    // render from state the sweep does not pin, so a delta can be noise. Only
+    // block if it reproduces (BI-69FE5504 — see findNotReproducibleBlocking).
+    if (!updateBaseline && routeRun) {
+      const firstPass = routeRun.outcomes.flatMap((o) => (o.status === "measured" ? [o.value.measurement] : []));
+      const provisional = evaluateSweep(firstPass, loadBaseline(join(ROOT, BASELINE_REL)));
+      notReproducible = await confirmBlockingRoutes({
+        rows,
+        firstPassBlocking: provisional.blocked ? provisional.verdicts.filter((v) => !v.ok).map((v) => v.routePath) : [],
+        onConfirmStart: (count) =>
+          console.error(`[ux-sweep] confirming ${count} blocking route(s) with a second measurement (BI-69FE5504)`),
+        remeasure: async (confirmRows) => {
+          const run = await runBoundedRouteWork(
+            [...confirmRows],
+            Math.min(workerCount, confirmRows.length),
+            async (row, workerIndex) =>
+              withIsolatedSweepPage(contexts[workerIndex], async (page) => measureRoute(page, row, baseUrl)),
+          );
+          const measured = run.outcomes.flatMap((o) => (o.status === "measured" ? [o.value.measurement] : []));
+          return {
+            blocking: evaluateSweep(measured, loadBaseline(join(ROOT, BASELINE_REL))).verdicts.filter((v) => !v.ok).map((v) => v.routePath),
+            unmeasured: run.outcomes.filter((o) => o.status !== "measured").map((o) => o.routePath),
+          };
+        },
+      });
+    }
   } finally {
     await Promise.all(contexts.map((context) => context.close().catch(() => {})));
     await browser?.close();
@@ -627,6 +656,9 @@ async function main(): Promise<void> {
       excluded,
     },
     accounting: routeRun.accounting,
+    // Recorded so an unreliable gate cannot hide: these routes produced a
+    // blocking verdict that did not survive a second measurement (BI-69FE5504).
+    notReproducibleBlockingRoutes: notReproducible,
     routes: routeRun.outcomes.map(executionOutcome),
   };
   const executionPath = join(ROOT, EXECUTION_REL);
@@ -710,14 +742,27 @@ async function main(): Promise<void> {
   writeFileSync(join(ROOT, REPORT_REL), `${JSON.stringify(sweep, null, 2)}\n`, "utf8");
   console.error(formatSweepReport(sweep));
 
-  if (sweep.blocked) {
+  if (notReproducible.length > 0) {
+    console.error(
+      `\n[ux-sweep] NOT REPRODUCIBLE — ${notReproducible.length} route(s) produced a blocking verdict that did not survive a second measurement:`,
+    );
+    for (const routePath of notReproducible) console.error(`  - ${routePath}`);
+    console.error(
+      "These are NOT blocking this run, because a gate must attribute its refusal to a real defect (BI-69FE5504).\n" +
+        "They ARE a defect in their own right: the route renders from state the sweep does not pin, so its measurement\n" +
+        "is not a measurement. Fix the route's fixture determinism rather than re-running until it passes.",
+    );
+  }
+  const blockedRoutes = sweep.verdicts.filter((v) => !v.ok && !notReproducible.includes(v.routePath));
+
+  if (sweep.blocked && blockedRoutes.length > 0) {
     console.error(
       "\n[ux-sweep] BLOCKED — a route regressed against its frozen baseline, or a net-new route exceeded its shell budget.",
     );
     // BI-26DA1AEB residual: structureChanged failures used to strand authors who
     // did not know the sanctioned re-freeze path exists (workflow_dispatch +
     // update_baseline artifact, not a silent CI commit).
-    if (sweep.verdicts.some((v) => !v.ok && v.structureChanged)) {
+    if (blockedRoutes.some((v) => v.structureChanged)) {
       console.error(
         "\n[ux-sweep] structureChanged recovery (BI-26DA1AEB):\n" +
           "  1. gh workflow run ux-route-sweep.yml --ref <branch> -f update_baseline=true\n" +

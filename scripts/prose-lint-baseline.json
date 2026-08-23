@@ -735,6 +735,14 @@
     "longSentences": 0,
     "textMass": 28
   },
+  "apps/web/app/(shell)/coworker-decisions/review/held-material-list.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 52
+  },
   "apps/web/app/(shell)/coworker-decisions/review/page.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
@@ -2053,7 +2061,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 302
+    "textMass": 300
   },
   "apps/web/app/(shell)/platform/tools/integrations/quickbooks/page.tsx": {
     "vocabulary": 0,
@@ -2078,6 +2086,14 @@
     "readability": 0,
     "longSentences": 1,
     "textMass": 139
+  },
+  "apps/web/app/(shell)/platform/tools/integrations/wordpress/page.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 134
   },
   "apps/web/app/(shell)/platform/tools/inventory/page.tsx": {
     "vocabulary": 0,
@@ -2182,13 +2198,6 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 69
-  },
-  "apps/web/app/(shell)/platform/tools/integrations/wordpress/page.tsx": {
-    "vocabulary": 0,
-    "genericLabels": 0,
-    "readability": 0,
-    "longSentences": 0,
-    "textMass": 134
   },
   "apps/web/app/(shell)/portfolio/product/[id]/inventory/page.tsx": {
     "vocabulary": 0,
@@ -5176,6 +5185,7 @@
   },
   "apps/web/components/customer-marketing/ExternalPublicationControl.tsx": {
     "vocabulary": 0,
+    "retiredVocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
@@ -5196,14 +5206,6 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 59
-  },
-  "apps/web/components/customer-marketing/PublishLinkedInButton.tsx": {
-    "vocabulary": 0,
-    "retiredVocabulary": 0,
-    "genericLabels": 0,
-    "readability": 0,
-    "longSentences": 0,
-    "textMass": 81
   },
   "apps/web/components/customer-marketing/marketing-nav.ts": {
     "vocabulary": 0,
@@ -6389,6 +6391,14 @@
     "longSentences": 0,
     "textMass": 42
   },
+  "apps/web/components/integrations/IntegrationCoverageDisclosure.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
   "apps/web/components/integrations/IntegrationReadinessPanel.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
@@ -6447,10 +6457,11 @@
   },
   "apps/web/components/integrations/WordPressConnectPanel.tsx": {
     "vocabulary": 0,
+    "retiredVocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 130
+    "textMass": 124
   },
   "apps/web/components/inventory/AddDiscoveryConnection.tsx": {
     "vocabulary": 0,
@@ -9843,13 +9854,5 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 0
-  },
-  "apps/web/components/integrations/IntegrationCoverageDisclosure.tsx": {
-    "vocabulary": 0,
-    "retiredVocabulary": 0,
-    "genericLabels": 0,
-    "readability": 0,
-    "longSentences": 0,
-    "textMass": 2
   }
 }

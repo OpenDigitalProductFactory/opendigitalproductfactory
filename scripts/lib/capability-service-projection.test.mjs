@@ -178,3 +178,45 @@ test("host projection excludes services unsupported by the target host", () => {
   assert.ok(linux.requiredServices.includes("dpf-stt"));
   assert.throws(() => resolveCapabilityServiceProjection({ substrate, capabilities: fixtureCapabilities, enabledRuntimeCapabilities: [...enabled], hostPlatform: "plan9" }), /invalid_host_platform:plan9/);
 });
+
+test("retirement is a declared lifecycle, kept honest against the enablement axis (BI-5AA0345E)", async () => {
+  const substrate = JSON.parse(await readFile(new URL("../platform-substrate-manifest.json", import.meta.url), "utf8"));
+  const seed = JSON.parse(await readFile(new URL("../../packages/db/data/platform-runtime-capabilities.json", import.meta.url), "utf8"));
+  const withLifecycle = (id, patch) => ({
+    ...seed,
+    capabilities: seed.capabilities.map((c) => (c.capabilityId === id ? { ...c, ...patch } : c)),
+  });
+
+  // `state` is ENABLEMENT, `lifecycle` is LIFECYCLE. A capability the platform
+  // withdrew cannot simultaneously be enabled — that contradiction is what would
+  // make "operator turned it off" and "platform retired it" indistinguishable.
+  assert.throws(
+    () => compileCapabilityServiceCatalog({ substrate, capabilities: withLifecycle("runtime:local-speech", { lifecycle: "retired", state: "active" }).capabilities }),
+    /retired_capability_still_active:runtime:local-speech/,
+  );
+
+  // The lifecycle axis is a closed set.
+  assert.throws(
+    () => compileCapabilityServiceCatalog({ substrate, capabilities: withLifecycle("runtime:local-speech", { lifecycle: "sunset" }).capabilities }),
+    /invalid_runtime_lifecycle:runtime:local-speech/,
+  );
+
+  // A correctly declared retirement compiles and SURVIVES in the catalog, so an
+  // install that still lists it can be migrated off rather than refused. If the
+  // entry vanished instead, nothing could tell it from a tampered snapshot.
+  const retired = compileCapabilityServiceCatalog({
+    substrate,
+    capabilities: withLifecycle("runtime:local-speech", { lifecycle: "retired", state: "disabled" }).capabilities,
+  });
+  const entry = retired.capabilities.find((c) => c.capabilityId === "runtime:local-speech");
+  assert.ok(entry, "a retired capability must remain in the catalog for at least one release");
+  assert.equal(entry.lifecycle, "retired");
+});
+
+test("lifecycle is emitted only when it carries information, so nothing is retired = no catalog churn", async () => {
+  const substrate = JSON.parse(await readFile(new URL("../platform-substrate-manifest.json", import.meta.url), "utf8"));
+  const seed = JSON.parse(await readFile(new URL("../../packages/db/data/platform-runtime-capabilities.json", import.meta.url), "utf8"));
+  const catalog = compileCapabilityServiceCatalog({ substrate, capabilities: seed.capabilities });
+  assert.ok(catalog.capabilities.every((c) => c.lifecycle === undefined),
+    "no capability is retired today, so no entry should carry the field — a needless catalogHash move forces a migration on every install");
+});

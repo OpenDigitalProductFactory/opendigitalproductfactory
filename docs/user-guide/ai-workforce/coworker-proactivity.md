@@ -16,6 +16,34 @@ relatedCode:
 
 You don't start from a blank slate. Each coworker's default level is **derived from your industry's risk posture** — a plumbing company and a hospital get different starting points. A row marked *"From your industry"* is running that derived default; *"You set this"* means you changed it.
 
+## This Page Sets a Starting Point, Not the Final Answer
+
+The level on this page is the coworker's **own** setting. It is one layer of a ladder, and
+inside a Workroom it is not usually the layer that wins.
+
+When a coworker works in a room, the pace is resolved from the **work** rather than from the
+coworker's identity — because the same coworker drafting a note on a Saturday evening and
+releasing a payroll run on its due date should not behave the same way. The ladder, strongest
+first:
+
+1. **Hard policy** — residency, sensitivity, and regulated ceilings. Never relaxed.
+2. **The room's own declaration**, if one was made when the room was convened.
+3. **Derived** from the shape of the work, what your business does, and the clock.
+4. **This page** — the coworker's own saved level.
+5. **Organization or activity-family default.**
+6. **Platform default** — Balanced.
+
+The rule that keeps this predictable: **a derivation can only tighten.** A room can make a
+coworker more careful or more urgent than the level you set here. It can never make one act
+more freely than you allowed. If your setting did not apply, the room's **Pace and priority**
+panel names the layer that overrode it and why.
+
+Outside a room — in a direct conversation, or on a coworker's own standing work — the level
+on this page is the one that applies.
+
+→ [How Governed Work Actually Runs](how-governed-work-runs.md) walks the whole ladder;
+[My Work and Workrooms](../workspace/work-rooms.md) covers the per-room panel.
+
 ## The Levels
 
 - **Quiet** — asks you before most things. You see the most.
@@ -66,6 +94,15 @@ A self-driving coworker runs **weekly at Balanced** and **daily at Assertive**,
 each at its own off-peak time so they do not contend. At **Quiet** it does not
 self-drive at all. Changing the level takes effect on the coworker's next
 scheduled run, not immediately.
+
+**Your operating hours are read, not guessed.** When the business is closed, follow-up
+quietens down and the channel drops to in-app; when an obligation's deadline is approaching,
+it speeds up. This changes **cadence and channel only** — an out-of-hours coworker is quieter,
+and its approval requirements are exactly what they were during the day.
+
+**Some work is never quietened.** Security incidents, platform and queue health, and a field
+appointment already running late keep their pace when the business is closed, because those
+problems get worse while nobody is looking.
 
 ### How it stays current
 
