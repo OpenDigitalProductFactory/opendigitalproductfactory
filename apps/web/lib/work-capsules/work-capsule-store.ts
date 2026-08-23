@@ -149,6 +149,11 @@ export async function createWorkCapsule(args: {
           outcomeAnchor: scope.outcomeAnchor ?? {},
           servesPortfolioRoles: scope.servesPortfolioRoles,
           dependsOnPortfolioRoles: scope.dependsOnPortfolioRoles,
+          // BI-8C54B216: convened WITH a shape. Rides scopeClaims (the home
+          // workroom-shape-claim.ts reads) — no migration, invisible to readers.
+          scopeClaims: scope.workroomShape
+            ? [{ workroomShape: scope.workroomShape, recordedAt: now.toISOString() }]
+            : [],
           workspaceState: args.input.workspaceState ?? {},
           idempotencyKey: args.input.idempotencyKey,
           leaseHolderPrincipalId: isExternalLeaseExecutor(args.input.executorKind)

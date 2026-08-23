@@ -122,6 +122,34 @@ because those problems get worse while nobody is looking.
 If a room has nothing of its own to say about pace, it says so — "Running on defaults" —
 rather than implying a decision nobody made.
 
+## Giving a Room Its Shape
+
+A room can be opened **with a shape** — a short statement of how decisions inside it are
+meant to route. The shape is what sets the room's pace and priority, so it is the single
+most useful thing to get right when the room is created.
+
+| Shape | Use it when |
+| --- | --- |
+| **Specialist alignment** | a qualified specialist should check the work before the accountable person sees it |
+| **Approval sign-off** | someone prepares the evidence and an accountable person signs it off |
+| **Outward review** | the result leaves the business under its own name, so it is reviewed and verified first |
+| **Change, consequential** | a change is confirmed before it takes effect |
+| **Escalation** | something is blocked and needs the accountable owner to unblock it |
+| **Craft stewardship** | ongoing background curation by people who know the craft |
+
+Setting the shape changes how the room behaves. An **escalation** room pushes harder,
+because someone is waiting. An **outward review** room verifies before anything leaves. A
+**craft stewardship** room stays quiet, because it is background work.
+
+If a room is not given a shape, the platform will work one out where the room says enough
+about itself — a standing profession room is craft stewardship, a readiness check is an
+approval sign-off. Where the room does not say enough, it stays **unshaped** and simply
+runs on defaults. It will not invent a shape, because a made-up shape would change how the
+room behaves for reasons nobody chose.
+
+Most rooms created before this existed are unshaped. Giving them a shape is worthwhile for
+any room where pace or verification actually matters.
+
 ## Incomplete or Unavailable Rooms
 
 If a room boundary is incomplete, the page identifies the missing elements instead of inventing them. If the source is unavailable, the last available projection is marked clearly and the page gives one recovery direction. If an AI coworker's current status is unavailable, the participant panel says so and directs you back to the room's next action instead of implying that the coworker is still working.

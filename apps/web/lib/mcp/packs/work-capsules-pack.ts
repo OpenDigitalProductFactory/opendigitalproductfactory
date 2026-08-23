@@ -19,6 +19,12 @@ const scopeProperties = {
   portfolioRole: { type: "string", enum: ENUMS.portfolioRoles, description: "Primary portfolio role coordinated by the capsule." },
   servedPersona: { type: "string", description: "Human-readable persona served by the activity." },
   activityKind: { type: "string", enum: ENUMS.scopeActivityKinds, description: "Kind of outcome activity coordinated by the capsule." },
+  workroomShape: {
+    type: "string",
+    enum: ENUMS.workroomShapes,
+    description:
+      "How a gate inside this room routes. Sets the room's action envelope and its posture: outward-review and approval-sign-off require verification before an action leaves, escalation raises urgency, craft-stewardship stays quiet. Omit when the room genuinely has no gate pattern — an unshaped room is reported as unshaped rather than guessed.",
+  },
   outcomeAnchor: {
     type: "object",
     additionalProperties: true,
