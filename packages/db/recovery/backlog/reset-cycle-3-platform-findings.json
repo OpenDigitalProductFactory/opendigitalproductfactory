@@ -3,7 +3,7 @@
   "bundleId": "reset-cycle-3-platform-findings",
   "description": "Operator-invoked recovery input for the platform findings from from-scratch reset/dogfood cycle 3 (install, lifecycle, agent-host and CI-gate).",
   "source": {
-    "capturedAt": "2026-08-23T00:54:15.000Z",
+    "capturedAt": "2026-08-23T01:31:32.616Z",
     "repository": "OpenDigitalProductFactory/opendigitalproductfactory",
     "planPath": "docs/architecture/archetype-operating-model-audit.md"
   },
@@ -289,6 +289,30 @@
             "toEpicId": "EP-56AE0F69",
             "fromEpicId": null
           }
+        },
+        {
+          "recoveryKey": "bi-11d611b3-cmt549dyi011w01rmiu93xjq6",
+          "kind": "evidence",
+          "summary": "Canonical P0 design source is published at immutable commit af2f4085198a",
+          "recordedAt": "2026-08-23T01:16:25.194Z",
+          "payload": {
+            "url": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/af2f4085198a59d3c078c316928fdd9f7bdcec50/docs/superpowers/specs/2026-08-23-external-agent-operating-profile-design.md",
+            "body": "Author-owned source provenance only; this is not an independent approval receipt. The specification defines OBJ-01..OBJ-05 and AC-01..AC-09 for the compiler, core MCP discovery, A2A compatibility advertisement, generated pointer, failure semantics, scale bounds, and tests.",
+            "evidenceKind": "source_verified",
+            "toolExecutionId": null
+          }
+        },
+        {
+          "recoveryKey": "bi-11d611b3-cmt54r3vu01fa01rmeepltiwg",
+          "kind": "evidence",
+          "summary": "Independent P0 review rejected af2f4085198a; digest, A2A, policy, and deferred-entry findings require revision",
+          "recordedAt": "2026-08-23T01:30:11.946Z",
+          "payload": {
+            "url": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/af2f4085198a59d3c078c316928fdd9f7bdcec50/docs/superpowers/specs/2026-08-23-external-agent-operating-profile-design.md",
+            "body": "Reviewer task /root/p0_spec_review inspected immutable commit af2f4085198a and returned REVISE / DO NOT APPROVE. Critical: profile digest self-reference and conflated schema/profile/authority/release identities (AC-P0-04/06/07). Important: no A2A 0.3 AgentCapabilities.extensions placement (AC-P0-04/05/09); policy fields lacked canonical owners and closed types (AC-P0-02/03); mandatory workCatalogRef/attentionRef were dead references to P1 capabilities (AC-P0-01/08); parent vocabulary changes lacked a refinement mapping. No initiative approval or baseline was recorded.",
+            "evidenceKind": "spec_review",
+            "toolExecutionId": null
+          }
         }
       ],
       "effortSize": "medium",
@@ -321,6 +345,24 @@
         }
       ],
       "createdAt": "2026-08-23T00:30:54.324Z"
+    },
+    {
+      "itemId": "BI-6804F720",
+      "epicId": "EP-56AE0F69",
+      "title": "External MCP coworker handoff drops caller thread context and cannot engage an independent reviewer",
+      "body": "## Problem\n\nAn authenticated external Codex desktop task can discover `request_coworker` and `summon_coworker`, but both calls fail before dispatch with `missing_threadId`. The MCP adapter does not propagate the caller task/thread identity required by the coworker-interaction owner. This makes independent initiative review unreachable even when the operator explicitly authorizes delegation.\n\n## Scope\n\nIn scope: carry a verified external task identity through the MCP request context into named-coworker handoff/summon, preserve the visible interaction/audit contract, and fail with actionable typed diagnostics only when no verifiable task identity exists. Cover Codex desktop plus the peer external MCP hosts through the shared adapter.\n\nOut of scope: weakening independent-review requirements, self-approving initiative artifacts, inventing synthetic human principals, or creating a second coworker-routing mechanism.\n\n## Acceptance criteria\n\n- `request_coworker` and `summon_coworker` invoked from an authenticated external MCP task receive a server-verified caller thread/task identity and dispatch exactly one visible peer interaction.\n- The caller cannot spoof another task identity through ordinary tool arguments.\n- Missing or invalid identity returns a typed, actionable failure that identifies the host-adapter/configuration repair path.\n- Claude, Codex, Grok, embedded, and generic MCP compatibility behavior is covered without duplicating the coordination contract per host.\n- Tests reproduce the current `missing_threadId` failure and prove the fixed end-to-end context propagation.\n\n## Dependencies and impact\n\nBlocks: `BI-11D611B3` independent spec approval and any external-agent initiative that requires a distinct reviewer principal.\n\nObserved from Codex task `01a027e8-73a3-74f1-aa45-0a347fb5d414` on 2026-08-23. Both named routes failed identically; no coworker offer exists for an alternate engagement route.",
+      "status": "open",
+      "type": "product",
+      "workType": "bug",
+      "source": "automated-detection",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [],
+      "effortSize": "medium",
+      "triageOutcome": "build",
+      "scopeRationale": "The defect is in the universal MCP coordination adapter and blocks governed coworker delegation for external Codex/Claude/Grok sessions across every installation and archetype.",
+      "createdAt": "2026-08-23T01:22:50.225Z"
     },
     {
       "itemId": "BI-89887875",
