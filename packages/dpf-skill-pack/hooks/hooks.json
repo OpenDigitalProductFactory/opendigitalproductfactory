@@ -93,6 +93,15 @@
         "hooks": [
           {
             "type": "command",
+            "command": "doctrine-injection.mjs",
+            "description": "SessionStart: inject the canonical rulebook from the root clone when this branch's CLAUDE.md pointer does not import it"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/process-spine-health-check.mjs\" --hook"
           }
         ]

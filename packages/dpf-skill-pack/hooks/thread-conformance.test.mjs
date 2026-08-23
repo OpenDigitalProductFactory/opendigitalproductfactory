@@ -64,12 +64,24 @@ test("tool-native .claude/worktrees nesting is refused (AGENTS.md section 12)", 
   assert.match(stepOf(r, "worktree").detail, /tool-native nesting/);
 });
 
-test("a prose pointer is reported as NO doctrine loaded (the 70-of-80 defect)", async () => {
-  const dir = makeTree({ pointer: "See [AGENTS.md](AGENTS.md) for the rules.\n" });
+test("a prose pointer no longer starves the thread — doctrine is injected instead", async () => {
+  // The 70-of-80 defect: "Read [/AGENTS.md](AGENTS.md)" loads nothing. Before
+  // BI-E659ED37 that meant no doctrine at all. Now the rulebook is injected, so
+  // the step passes AND says why, rather than silently passing.
+  const dir = makeTree({ pointer: "Read [/AGENTS.md](AGENTS.md) at the repo root before any work.\n" });
   const r = await evaluateThreadConformance({ cwd: dir, env: ENV, git: gitFor(dir), mcpCall: mcpFor() });
-  const s = stepOf(r, "doctrine");
-  assert.equal(s.status, "fail");
-  assert.match(s.detail, /NO doctrine is loaded/);
+  const s2 = stepOf(r, "doctrine");
+  assert.equal(s2.status, "pass");
+  assert.match(s2.detail, /injected/);
+  assert.match(s2.detail, /pointer/);
+});
+
+test("a prose pointer WITH no reachable rulebook still fails — injection is not assumed", async () => {
+  const dir = makeTree({ pointer: "Read the rules somewhere.\n", withAgents: false });
+  const r = await evaluateThreadConformance({ cwd: dir, env: ENV, git: gitFor(dir), mcpCall: mcpFor() });
+  const s2 = stepOf(r, "doctrine");
+  assert.equal(s2.status, "fail");
+  assert.equal(r.governed, false);
 });
 
 test("an @AGENTS.md import passes doctrine", async () => {

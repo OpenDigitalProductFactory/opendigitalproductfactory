@@ -27,6 +27,8 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 
+import { doctrineDelivery } from "./doctrine-source.mjs";
+
 /** Ordered — the work shape is a sequence, and the first unmet step is the only one that matters. */
 export const STEP_KEYS = ["worktree", "doctrine", "mcp", "workroom", "backlog"];
 
@@ -115,28 +117,35 @@ function isGitFile(p) {
 }
 
 /**
- * Doctrine is loaded when the pointer actually imports the rulebook.
- * A prose link loads nothing — that is the 70-of-80 defect. Phase 3
- * (BI-E659ED37) replaces this proxy with an assertion on injected content.
+ * Doctrine is loaded when the rulebook actually reaches context — by the
+ * per-branch pointer OR by hook injection (BI-E659ED37 / DI-48014BCBA44F).
+ *
+ * This replaced a CLAUDE.md-content proxy. The proxy was right about the
+ * defect but wrong as an assertion: it failed a worktree whose pointer is
+ * stale even though the injection hook now supplies doctrine there. Asserting
+ * on delivery rather than on one delivery mechanism is the whole point of the
+ * kernel decision.
  */
 function checkDoctrine({ cwd, git }) {
-  const top = git(["rev-parse", "--show-toplevel"], cwd) || cwd;
-  const pointer = join(top, "CLAUDE.md");
-  const rulebook = join(top, "AGENTS.md");
-  if (!existsSync(rulebook)) {
-    return step("doctrine", "doctrine", "fail", "AGENTS.md missing from this tree", "Refresh the worktree base from origin/main.");
-  }
-  if (!existsSync(pointer)) {
-    return step("doctrine", "doctrine", "fail", "CLAUDE.md missing — nothing imports the rulebook", "Refresh the worktree base from origin/main.");
-  }
-  const body = safeRead(pointer);
-  if (!/^@AGENTS\.md\s*$/m.test(body || "")) {
+  const d = doctrineDelivery({ cwd, git });
+  if (!d.loaded) {
     return step(
       "doctrine",
       "doctrine",
       "fail",
-      "CLAUDE.md does not import AGENTS.md (pre-#4477 prose pointer) — NO doctrine is loaded",
-      "Refresh this worktree onto current main, or restore the '@AGENTS.md' import line in CLAUDE.md.",
+      d.pointer.present
+        ? "CLAUDE.md does not import AGENTS.md and no rulebook is reachable to inject"
+        : "no CLAUDE.md and no rulebook reachable — NO doctrine is loaded",
+      "Refresh the worktree base from origin/main, or repair the root clone so AGENTS.md is reachable.",
+    );
+  }
+  if (d.mode === "injected") {
+    return step(
+      "doctrine",
+      "doctrine",
+      "pass",
+      `injected from ${d.resolved.source} (${d.resolved.bytes}B) — this branch's pointer is pre-#4477 and loads nothing on its own`,
+      null,
     );
   }
   return step("doctrine", "doctrine", "pass", "AGENTS.md imported by CLAUDE.md", null);
