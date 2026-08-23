@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Directory Service Identity Absorption — Implementation Plan
 
 - **Umbrella item:** BI-C7362CA5 (xlarge, decomposed)

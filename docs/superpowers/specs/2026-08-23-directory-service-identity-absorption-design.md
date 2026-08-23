@@ -1,8 +1,12 @@
+---
+status: active
+---
+
 # Directory Service — Identity Absorption Design
 
 - **Epic:** EP-24741BBF — Absorb identity into DPF: the Directory Service
 - **Workroom:** WC-94429637
-- **Status:** Design, pending review
+- **Status:** active (see frontmatter)
 - **Supersedes:** `docs/superpowers/specs/2026-04-22-enterprise-auth-directory-federation-design.md` (see §6)
 - **Budget:** ~80% refactor/integration, ~20% new feature — inverting the prior 80/20 feature-first convention (`docs/design/golden-triangle-design.md:654`). This document adopts the inverted allocation and any doc it touches is updated rather than carrying the old wording forward.
 
@@ -41,7 +45,7 @@ Every claim below was checked against the tree at `cf29d511a` on 2026-08-23. **T
 
 **Correction 1 — a federation surface exists.** The brief stated the only `ldap` string was a keyword list in `integration-benchmarking.ts`. In fact `/platform/identity/federation` configures LDAP and Active Directory upstreams, and `/platform/identity/applications` covers SAML and SCIM-readiness. The surface points *inward* (consuming an upstream), which is the wrong direction for this epic — but it is not absent.
 
-**Correction 2 — service accounts exist.** The brief stated there is "no service-account model of any kind" and that `BI-59C8828F` is "the missing primitive the rest depend on." In fact `Principal(kind: "service")` is live, and `resolveServiceAccountPrincipal()` provides deterministic find-or-create service principals on the Principal spine — *already the architecture this epic prescribes*. The defect is that it lives inside one consumer (`browser-drive`) as a local convention rather than a platform primitive. That is an AGENTS.md §8 violation (a feature-local helper as the second home of a shared concern), not a greenfield gap. Filed as `refactor`, not `feature`.
+**Correction 2 — service accounts exist.** The brief stated there is "no service-account model of any kind" and that its first child item was "the missing primitive the rest depend on." (That child id, like the epic id, was not present in the live backlog when this design was written — the epic and its children were filed as part of this work. It is deliberately not cited here: a document must not carry an anchor the coordination plane cannot resolve.) In fact `Principal(kind: "service")` is live, and `resolveServiceAccountPrincipal()` provides deterministic find-or-create service principals on the Principal spine — *already the architecture this epic prescribes*. The defect is that it lives inside one consumer (`browser-drive`) as a local convention rather than a platform primitive. That is an AGENTS.md §8 violation (a feature-local helper as the second home of a shared concern), not a greenfield gap. Filed as `refactor`, not `feature`.
 
 **Correction 3 — DPF already authenticates people.** `User.passwordHash` is a non-optional column and the platform runs a credential login with password reset. DPF is *already* the authentication authority for people. The gap is not "can we authenticate" but "is the directory the authority" — see §3.
 
