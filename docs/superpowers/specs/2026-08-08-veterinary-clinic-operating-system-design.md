@@ -1,3 +1,7 @@
+---
+status: draft
+---
+
 # Veterinary Clinic Operating System — Canonical Design
 
 **Date:** 2026-08-08  
@@ -67,6 +71,29 @@ compassionate end-of-life handling.
 A small companion-animal clinic can operate a complete, auditable day in DPF without a
 shadow spreadsheet, paper controlled-drug log, separate whiteboard, or duplicate animal
 record, while clinical judgment and regulated actions remain with qualified humans.
+
+### Governed objective baseline
+
+1. **OBJ-VET-001:** Deepen the existing veterinary archetype as a care-practice
+   capability profile that reuses canonical DPF identity, work, scheduling, resource,
+   finance, inventory, document, compliance and evidence authorities. Do not create a
+   parallel veterinary application or a second animal authority.
+2. **OBJ-VET-002:** Let Oak & Prairie and Julia operate a deterministic, complete and
+   auditable clinic day from booking through care, diagnostics or procedure, medication,
+   checkout, discharge and recall without shadow operating systems.
+3. **OBJ-VET-003:** Keep clinical judgment and regulated actions with qualified humans,
+   and make controlled-substance, inventory, waste, consent, signature and correction
+   paths fail closed with actor, subject, authority, time, reason and provenance.
+4. **OBJ-VET-004:** Give every named clinic role a job-appropriate first viewport and
+   action flow. Julia sees ranked care, safety, compliance and operating exceptions
+   before generic commercial metrics, with accessible desktop and mobile behavior.
+5. **OBJ-VET-005:** Define one declarative acceptance-scenario authority that projects
+   into Demo Business, simulation, live exercise, UX/audit and replay/export/restore
+   evidence with deterministic identity and time. Runner-specific state must not become
+   business truth.
+6. **OBJ-VET-006:** Use tiered acceptance coverage and a long-tail backlog to deepen
+   veterinary functionality while protecting the other archetypes. Reserve approximately
+   20% of every implementation slice for tested convergence at seams the slice touches.
 
 ### Evidence labels and business-model hypothesis
 
@@ -552,6 +579,24 @@ and receive a grounded implementation plan before code.
 | `BI-F2CB784B` retail/add-ons | Food/supplement catalog/order/stock/price/margin; wellness entitlement remains separate from care completion. | Online food order and pharmacy margin alert. |
 | `BI-204EB07D` multi-location/mobile/emergency/specialty | Separate long-tail architecture; do not distort single-site MVP. | Deferred extension fixture. |
 | `BI-C2FD0C18` public health/travel/food animal/jurisdiction | Versioned policy and certification/withdrawal/reporting workflows. | APHIS timeline only in initial fixture; food-animal deferred. |
+
+### Objective-to-acceptance mapping
+
+These criteria make the objective baseline reviewable and give implementation plans
+stable requirement references. Passing a fixture oracle proves product behavior only
+when the underlying capability exists; an expected-gap observation is evidence for its
+owning BI, not acceptance of missing functionality.
+
+| Acceptance criterion | Objectives | Required proof | Design coverage |
+|---|---|---|---|
+| **AC-VET-001** | `OBJ-VET-001`, `OBJ-VET-005` | Oak & Prairie and Julia are the sole canonical veterinary fixture identity. No Meadowbrook/Iris or runner-local business copy remains, and all projections resolve to one scenario authority. | §§1, 6, 12, 14 |
+| **AC-VET-002** | `OBJ-VET-002` | Preventive, urgent, species-boundary, procedure, end-of-life, inventory-safety and operating-exception journeys are deterministic, resettable and executable or reported as explicit product gaps. | §§3, 12, 15 |
+| **AC-VET-003** | `OBJ-VET-003` | Controlled-drug, waste, cold-chain, recall, consent, signature, authority and correction negative paths fail closed and preserve actor, subject, authority, time, reason and provenance. | §§5, 7, 11, 12, 15 |
+| **AC-VET-004** | `OBJ-VET-004` | Julia, veterinarian, technician, assistant/kennel, CSR, manager and guardian complete their MVP jobs at real privileges; first viewport, drill-through, denial/recovery, accessibility and required mobile checks pass. | §§8, 12, 15 |
+| **AC-VET-005** | `OBJ-VET-001`, `OBJ-VET-002` | Animal/guardian, VCPR, appointment, encounter, diagnostic, procedure, medication, stock, finance and evidence records resolve through their canonical authorities without a duplicate veterinary record system. | §§6–7, 12, 16 |
+| **AC-VET-006** | `OBJ-VET-005` | The scenario validates and compiles deterministically; existing adapters consume compiled projections; duplicate, retry, export/restore and evidence correlation retain stable references. | §§10, 12, 15 |
+| **AC-VET-007** | `OBJ-VET-006` | The tiered registry protects all 13 canonical operating shapes, deep fixtures and affected shared contracts; impact selection includes the smallest sufficient deterministic test set. | §§13–15 |
+| **AC-VET-008** | `OBJ-VET-003`, `OBJ-VET-006` | Regulated implementation does not claim completion until named veterinary, legal/compliance, controlled/waste, security and accessibility reviews are recorded, and each slice accounts for its tested 20% refactoring allocation. | §§18–20 |
 
 ## 15. Verification strategy
 
