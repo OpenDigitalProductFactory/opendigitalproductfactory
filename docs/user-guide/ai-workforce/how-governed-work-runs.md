@@ -147,8 +147,8 @@ Two properties keep it safe on the shared inference path: it **fails open** — 
 falls back to today's behaviour — and it is **Balanced-inert**, so a default posture produces
 no adjustments at all.
 
-→ [AI Operations](../platform/ai-operations.md) covers where to set it and where to review
-what actually ran.
+→ [Priority, Outcomes & Calibration](priority-and-outcomes.md) covers where to set it, how the
+kind of work raises the floor, and how to read what actually ran.
 
 ## 4. The corpus decides the question
 
@@ -278,5 +278,6 @@ Stated plainly, so nothing here reads as more finished than it is:
 - [Coworker Proactivity](coworker-proactivity.md) — the per-coworker pace control
 - [Decision Perspective](decision-perspective.md) — WWMD, WWWD, and WSID in full
 - [Decision Perspective in Practice](decision-perspective-in-practice.md) — one question, end to end
+- [Priority, Outcomes & Calibration](priority-and-outcomes.md) — the cost/quality/time half, and its receipts
 - [AI Workforce](index.md) — the coworker directory, grants, and availability
 - [Work shapes and the decision gate](../../architecture/work-shapes-and-the-decision-gate.md) — the architecture behind steps 2 and 5
