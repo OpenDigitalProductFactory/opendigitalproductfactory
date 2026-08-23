@@ -16,6 +16,11 @@ reconciliation, and existing-Workroom replay. Production implementation starts
 only after governed implementation intent is allowed; design/plan work proceeds
 under design intent.
 
+This committed plan is intentionally pre-implementation. Its Red tests are
+traceability commitments, not claims that production code or tests already
+exist. The first code mutation occurs only after a fresh readiness decision
+authorizes implementation intent.
+
 ## Traceability matrix
 
 | Acceptance | Red test | Production surface |
