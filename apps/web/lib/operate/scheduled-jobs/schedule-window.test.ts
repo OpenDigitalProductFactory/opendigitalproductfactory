@@ -25,6 +25,8 @@ function view(over: Partial<ScheduledWorkView> & { jobId: string }): ScheduledWo
     lastError: null,
     health: "ok",
     overdueByMs: 0,
+    reportsRunData: true,
+    killSwitchEnforced: true,
     projectionStale: false,
     agent: null,
     canRunNow: false,

@@ -72,8 +72,12 @@ export type WorkHealth =
   | "error"
   /** Active + recurring, but nextRunAt is well past due — it has stopped firing. */
   | "overdue"
-  /** Has never run. */
+  /** Has never run, and it maintains run data — so this is a real silence. */
   | "never"
+  /** Runs, but reports nothing. A catalog cron with tracksRunData:false writes no
+   *  ScheduledJob row by design, so it has no lastRunAt to show. Treating that
+   *  absence as "never run" cried wolf on 44 healthy crons. */
+  | "untracked"
   /** One-shot or slot-lock that has already fired. Nothing more will happen. */
   | "spent";
 
@@ -116,6 +120,14 @@ export interface ScheduledWorkView {
   health: WorkHealth;
   /** How far past due `nextRunAt` is, in ms. 0 when not overdue. */
   overdueByMs: number;
+  /** True when disabling this job actually stops it. Agent tasks always qualify
+   *  (the dispatcher reads isActive); a cron qualifies only when its entry gate
+   *  consults ScheduledJob.enabled. Elsewhere the switch is advisory and the
+   *  surface must say so rather than offer a control that does nothing. */
+  killSwitchEnforced: boolean;
+  /** False when this job writes no run data, so last/next run are unknowable
+   *  rather than absent. Drives the "runs, but reports nothing" presentation. */
+  reportsRunData: boolean;
   /** True when the stored nextRunAt disagrees with the cadence — the schedule
    *  projection has gone stale and the row's "next run" cannot be trusted. */
   projectionStale: boolean;
@@ -315,6 +327,9 @@ export interface HealthInput {
   lastRunAt: Date | null;
   nextRunAt: Date | null;
   lastStatus: string | null;
+  /** False when the job is a catalog cron that does not instrument run data.
+   *  Its silence is by design and must not be reported as a failure. */
+  reportsRunData: boolean;
 }
 
 /**
@@ -327,10 +342,13 @@ export function deriveHealth(input: HealthInput, now: Date): {
   health: WorkHealth;
   overdueByMs: number;
 } {
-  const { kind, enabled, schedule, lastRunAt, nextRunAt, lastStatus } = input;
+  const { kind, enabled, schedule, lastRunAt, nextRunAt, lastStatus, reportsRunData } = input;
 
   if (kind !== "recurring" && lastRunAt) return { health: "spent", overdueByMs: 0 };
-  if (!lastRunAt) return { health: enabled ? "never" : "spent", overdueByMs: 0 };
+  if (!lastRunAt) {
+    if (!reportsRunData) return { health: "untracked", overdueByMs: 0 };
+    return { health: enabled ? "never" : "spent", overdueByMs: 0 };
+  }
   if (lastStatus === "error") return { health: "error", overdueByMs: 0 };
   if (!enabled || !nextRunAt) return { health: "ok", overdueByMs: 0 };
 
@@ -464,8 +482,13 @@ export function buildWorkView(
       : "editable";
   const locked = entry ? entry.category === "core" : (job?.locked ?? false);
 
+  // A job reports run data when it actually has a row, or when its catalog entry
+  // says it instruments one. An uncatalogued row obviously reports (it exists).
+  const reportsRunData = job != null || task != null || (entry?.tracksRunData ?? false);
+  const killSwitchEnforced = task != null || (entry?.honorsEnabledGate ?? false);
+
   const { health, overdueByMs } = deriveHealth(
-    { kind, enabled, schedule, lastRunAt, nextRunAt, lastStatus },
+    { kind, enabled, schedule, lastRunAt, nextRunAt, lastStatus, reportsRunData },
     now,
   );
 
@@ -509,6 +532,8 @@ export function buildWorkView(
     lastError,
     health,
     overdueByMs,
+    killSwitchEnforced,
+    reportsRunData,
     projectionStale:
       kind === "recurring" && isProjectionStale(schedule, lastRunAt, nextRunAt),
     agent,

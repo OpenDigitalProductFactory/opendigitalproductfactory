@@ -149,6 +149,7 @@ describe("deriveHealth", () => {
     lastStatus: "ok" as string | null,
     lastRunAt: from(-65 * MIN),
     nextRunAt: from(-5 * MIN),
+    reportsRunData: true,
   };
 
   it("is ok when the next run is still ahead or barely past", () => {
@@ -180,6 +181,18 @@ describe("deriveHealth", () => {
 
   it("reports a never-run recurring job as never, not ok", () => {
     expect(deriveHealth({ ...base, lastRunAt: null }, NOW).health).toBe("never");
+  });
+
+  it("does NOT cry never-run for a cron that records no run data", () => {
+    // 45 of 55 catalog crons set tracksRunData:false and write no ScheduledJob
+    // row. Reading that absence as "never run" put 44 false alarms in the
+    // attention strip — the exact wolf-crying the register exists to end.
+    const silent = { ...base, lastRunAt: null, reportsRunData: false };
+    expect(deriveHealth(silent, NOW).health).toBe("untracked");
+  });
+
+  it("keeps untracked distinct from a genuinely silent tracked job", () => {
+    expect(deriveHealth({ ...base, lastRunAt: null, reportsRunData: true }, NOW).health).toBe("never");
   });
 });
 
@@ -259,6 +272,28 @@ describe("buildWorkView", () => {
 
   it("offers a manual trigger for agent work that had none before", () => {
     expect(buildWorkView(task.taskId, undefined, task, NOW).canRunNow).toBe(true);
+  });
+
+  it("says a cron with no entry gate has no working kill switch", () => {
+    // Disabling one of these persists a column nothing reads; the job runs on.
+    const ungated = {
+      jobId: "log-signature-scanner",
+      name: "Log signature scanner",
+      schedule: "*/15 * * * *",
+      lastRunAt: null,
+      nextRunAt: null,
+      lastStatus: null as string | null,
+      lastError: null,
+      category: "editable",
+      locked: false,
+      enabled: true,
+    };
+    expect(buildWorkView("log-signature-scanner", ungated, undefined, NOW).killSwitchEnforced).toBe(false);
+  });
+
+  it("says an agent task's kill switch is load-bearing", () => {
+    // The dispatcher reads isActive, so Disable genuinely stops it.
+    expect(buildWorkView(task.taskId, undefined, task, NOW).killSwitchEnforced).toBe(true);
   });
 
   it("marks a spent slot-lock retirable and not schedule-editable", () => {

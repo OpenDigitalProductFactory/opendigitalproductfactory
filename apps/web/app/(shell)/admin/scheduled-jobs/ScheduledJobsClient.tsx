@@ -59,6 +59,7 @@ const HEALTH_PILL: Record<WorkHealth, { bg: string; color: string; label: string
   error: { bg: "var(--dpf-state-error)", color: "var(--dpf-error)", label: "ERROR" },
   overdue: { bg: "var(--dpf-state-warning)", color: "var(--dpf-warning)", label: "OVERDUE" },
   never: { bg: "var(--dpf-surface-3)", color: "var(--dpf-muted)", label: "NEVER RUN" },
+  untracked: { bg: "var(--dpf-surface-3)", color: "var(--dpf-muted)", label: "NO REPORTING" },
   spent: { bg: "var(--dpf-surface-3)", color: "var(--dpf-muted)", label: "SPENT" },
 };
 
@@ -126,7 +127,10 @@ function Td({ children, className }: { children: React.ReactNode; className?: st
   );
 }
 
-/** Health states that mean "an operator should look at this". */
+/** Health states that mean "an operator should look at this".
+ *  "untracked" is deliberately absent: a cron with tracksRunData:false reports
+ *  nothing by design, and counting those made the strip read 51 when 3 were
+ *  real. An attention count nobody believes is worse than none. */
 const ATTENTION: WorkHealth[] = ["error", "overdue", "never"];
 
 export function ScheduledJobsClient({ initialJobs }: { initialJobs: ScheduledWorkView[] }) {
@@ -347,6 +351,7 @@ export function ScheduledJobsClient({ initialJobs }: { initialJobs: ScheduledWor
           <option value="error">Error</option>
           <option value="overdue">Overdue</option>
           <option value="never">Never run</option>
+          <option value="untracked">No reporting</option>
           <option value="spent">Spent</option>
         </select>
         {(query || lane !== "all" || healthFilter !== "all") && (
@@ -484,10 +489,16 @@ export function ScheduledJobsClient({ initialJobs }: { initialJobs: ScheduledWor
                         )}
                       </Td>
                       <Td>
-                        <div>{relative(job.lastRunAt)}</div>
-                        <div className="text-dpf-caption" style={{ color: "var(--dpf-muted)" }}>
-                          {formatTimestamp(job.lastRunAt)}
-                        </div>
+                        <div>{job.reportsRunData ? relative(job.lastRunAt) : "not reported"}</div>
+                        {job.reportsRunData ? (
+                          <div className="text-dpf-caption" style={{ color: "var(--dpf-muted)" }}>
+                            {formatTimestamp(job.lastRunAt)}
+                          </div>
+                        ) : (
+                          <div className="text-dpf-caption" style={{ color: "var(--dpf-muted)" }}>
+                            this cron records no run data
+                          </div>
+                        )}
                         {job.lastError && (
                           <div className="text-dpf-caption mt-0.5 max-w-xs" style={{ color: "var(--dpf-error)" }}>
                             {job.lastError.slice(0, 120)}
@@ -495,7 +506,9 @@ export function ScheduledJobsClient({ initialJobs }: { initialJobs: ScheduledWor
                         )}
                       </Td>
                       <Td>
-                        {job.kind === "recurring" ? (
+                        {job.kind === "recurring" && !job.reportsRunData ? (
+                          <div style={{ color: "var(--dpf-muted)" }}>on its cron</div>
+                        ) : job.kind === "recurring" ? (
                           <>
                             <div>{relative(job.nextRunAt)}</div>
                             <div className="text-dpf-caption" style={{ color: "var(--dpf-muted)" }}>
@@ -547,16 +560,26 @@ export function ScheduledJobsClient({ initialJobs }: { initialJobs: ScheduledWor
                               >
                                 Edit
                               </button>
-                              <button
-                                onClick={() =>
-                                  run(job.jobId, () => setJobEnabledAction(job.jobId, !job.enabled))
-                                }
-                                disabled={busy}
-                                className="px-2 py-1 rounded"
-                                style={{ border: "1px solid var(--dpf-border)", color: "var(--dpf-text)" }}
-                              >
-                                {job.enabled ? "Disable" : "Enable"}
-                              </button>
+                              {job.killSwitchEnforced ? (
+                                <button
+                                  onClick={() =>
+                                    run(job.jobId, () => setJobEnabledAction(job.jobId, !job.enabled))
+                                  }
+                                  disabled={busy}
+                                  className="px-2 py-1 rounded"
+                                  style={{ border: "1px solid var(--dpf-border)", color: "var(--dpf-text)" }}
+                                >
+                                  {job.enabled ? "Disable" : "Enable"}
+                                </button>
+                              ) : (
+                                <span
+                                  className="text-dpf-caption"
+                                  style={{ color: "var(--dpf-muted)" }}
+                                  title="This cron never reads the enabled column, so disabling it here would not stop it. Tracked as BI-7E49FA15."
+                                >
+                                  no kill switch
+                                </span>
+                              )}
                             </>
                           )}
                           {job.retirable && (
