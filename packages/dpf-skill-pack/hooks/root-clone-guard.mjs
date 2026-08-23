@@ -32,6 +32,7 @@
 // Emergency bypass: prefix the command with DPF_ALLOW_ROOT_CLONE_MUTATION=1.
 
 import { lstatSync, statSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import {
   readHookPayload,
   isShellTool,
@@ -102,12 +103,53 @@ export function resolveAgainst(cwd, target) {
  *   - main clone (cwd has a real .git DIRECTORY) -> cwd itself
  *   - sibling worktree / unknown -> null (its .git is a FILE; rely on the junction rule)
  */
-export function deriveCloneRoot(cwd, isDir = () => false) {
+/**
+ * Resolve the shared clone root behind `cwd`.
+ *
+ * BI-B49665EA: this used to resolve by PATH SHAPE only — the `/.claude/worktrees/`
+ * marker, or `<cwd>/.git` being a directory. In a canonical sibling-base worktree
+ * (~/dpf-worktrees/<slug>) neither holds: `.git` is a FILE and there is no marker.
+ * deriveCloneRoot returned null, isUnderRootSharedArea short-circuited to false,
+ * and the guard permitted `rm -rf <root clone>/...` and `rm -rf node_modules`
+ * from 88 of 99 live worktrees — the exact mechanism that wiped 730 tracked files
+ * on 2026-06-19. The guard covered the topology AGENTS.md §12 deprecated and not
+ * the one it mandates, and nothing noticed because guards are only checked for
+ * presence, never for coverage.
+ *
+ * Now asks git, which answers from any worktree on any platform: the parent of
+ * `--git-common-dir` IS the root clone. Path-shape routes are kept as fallbacks
+ * so the function stays pure and testable when no git resolver is supplied.
+ */
+export function deriveCloneRoot(cwd, isDir = () => false, gitCommonDir = defaultGitCommonDir) {
   const c = norm(cwd);
   const i = c.indexOf(WORKTREE_MARKER);
   if (i >= 0) return c.slice(0, i);
   if (isDir(`${c}/.git`)) return c;
+  const common = gitCommonDir ? gitCommonDir(c) : null;
+  if (common) {
+    const n = norm(common);
+    // ".../<root>/.git" -> "<root>"; a bare-ish common dir with no /.git suffix is not a clone root.
+    if (n.endsWith("/.git")) return n.slice(0, -"/.git".length);
+  }
   return null;
+}
+
+/** Ask git for the common dir; null on any failure so the guard degrades to path shape. */
+function defaultGitCommonDir(cwd) {
+  try {
+    const r = spawnSync("git", ["rev-parse", "--git-common-dir"], {
+      cwd,
+      encoding: "utf8",
+      windowsHide: true,
+      timeout: 5000,
+    });
+    if (r.status !== 0) return null;
+    const out = (r.stdout || "").trim();
+    if (!out) return null;
+    return out.startsWith("/") || /^[A-Za-z]:/.test(out) ? out : `${norm(cwd)}/${out}`;
+  } catch {
+    return null;
+  }
 }
 
 /** True when `resolved` is the clone root or a shared file/dir in it (NOT the per-worktree area). */

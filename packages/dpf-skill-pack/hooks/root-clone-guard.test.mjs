@@ -354,3 +354,29 @@ test("the shell surface and the file surface agree — the bypass is what this c
   assert.equal(fileVerdict.block, shellVerdict.block);
   assert.equal(fileVerdict.block, true);
 });
+
+// ── BI-B49665EA: coverage from a canonical sibling-base worktree ─────────────
+//
+// deriveCloneRoot used to resolve by path shape only, so from ~/dpf-worktrees/<slug>
+// it returned null and the guard permitted `rm -rf <root clone>/...` — inert in 88
+// of 99 live worktrees, covering the topology AGENTS.md §12 deprecated rather than
+// the one it mandates.
+
+test("deriveCloneRoot resolves the root clone from a sibling-base worktree via git", () => {
+  const gitCommonDir = () => "/Users/x/dpf/.git";
+  const root = deriveCloneRoot("/Users/x/dpf-worktrees/some-slug", () => false, gitCommonDir);
+  assert.equal(root, "/Users/x/dpf", "a sibling-base worktree must still resolve the shared clone root");
+});
+
+test("deriveCloneRoot still honours the nested marker and the root clone itself", () => {
+  assert.equal(deriveCloneRoot("/Users/x/dpf/.claude/worktrees/w", () => false, () => null), "/Users/x/dpf");
+  assert.equal(deriveCloneRoot("/Users/x/dpf", (p) => p === "/Users/x/dpf/.git", () => null), "/Users/x/dpf");
+});
+
+test("deriveCloneRoot returns null when git cannot answer and no path route matches", () => {
+  assert.equal(deriveCloneRoot("/tmp/not-a-clone", () => false, () => null), null);
+});
+
+test("a git common dir that is not a .git suffix is not treated as a clone root", () => {
+  assert.equal(deriveCloneRoot("/tmp/x", () => false, () => "/tmp/bare-repo"), null);
+});
