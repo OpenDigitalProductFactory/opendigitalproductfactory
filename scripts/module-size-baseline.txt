@@ -20,8 +20,8 @@ apps/web/components/storefront/SlotBookingFlow.tsx	1015
 apps/web/components/workbooks/Grid.tsx	1830
 apps/web/instrumentation.test.ts	945
 apps/web/instrumentation.ts	1475
-apps/web/lib/actions/agent-coworker-external.test.ts	867
-apps/web/lib/actions/agent-coworker.ts	2792
+apps/web/lib/actions/agent-coworker-external.test.ts	889
+apps/web/lib/actions/agent-coworker.ts	2810
 apps/web/lib/actions/agent-task-scheduler.test.ts	1132
 apps/web/lib/actions/agent-task-scheduler.ts	807
 apps/web/lib/actions/ai-providers.ts	914
@@ -59,7 +59,7 @@ apps/web/lib/tak/agent-grants.test.ts	940
 apps/web/lib/tak/agent-grants.ts	991
 apps/web/lib/tak/agent-routing.ts	1168
 apps/web/lib/tak/agentic-loop.test.ts	2501
-apps/web/lib/tak/agentic-loop.ts	2809
+apps/web/lib/tak/agentic-loop.ts	2806
 apps/web/lib/tak/route-context-map.ts	1390
 apps/web/lib/work-capsules/mcp-handlers.ts	847
 apps/web/lib/work-capsules/work-capsule-store.test.ts	1191

@@ -127,6 +127,7 @@ vi.mock("@/lib/route-context-map", () => ({
 
 vi.mock("@/lib/prompt-assembler", () => ({
   assembleSystemPrompt: vi.fn().mockResolvedValue("assembled prompt"),
+  assembleSystemPromptWithProvenance: vi.fn().mockResolvedValue({ text: "assembled prompt", instructionSpans: [] }),
 }));
 
 vi.mock("@/lib/permissions", async () => {
@@ -202,7 +203,7 @@ import { classifyTask } from "@/lib/task-classifier";
 import { executeTool, getAvailableTools, toolsToOpenAIFormat } from "@/lib/mcp-tools";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import { resolvePortalContextEnvelope } from "@/lib/portal-context";
-import { assembleSystemPrompt } from "@/lib/prompt-assembler";
+import { assembleSystemPromptWithProvenance } from "@/lib/prompt-assembler";
 import { createTaskArtifact } from "@/lib/tak/task-records";
 import { recordWorkCapsuleEvidence } from "@/lib/work-capsules/work-capsule-store";
 import { prisma } from "@dpf/db";
@@ -218,7 +219,7 @@ const mockToolsToOpenAIFormat = toolsToOpenAIFormat as ReturnType<typeof vi.fn>;
 const mockExecuteTool = executeTool as ReturnType<typeof vi.fn>;
 const mockGovernedExecuteTool = governedExecuteTool as ReturnType<typeof vi.fn>;
 const mockResolvePortalContextEnvelope = resolvePortalContextEnvelope as ReturnType<typeof vi.fn>;
-const mockAssembleSystemPrompt = assembleSystemPrompt as ReturnType<typeof vi.fn>;
+const mockAssembleSystemPrompt = assembleSystemPromptWithProvenance as ReturnType<typeof vi.fn>;
 const mockCreateTaskArtifact = createTaskArtifact as ReturnType<typeof vi.fn>;
 const mockRecordWorkCapsuleEvidence = recordWorkCapsuleEvidence as ReturnType<typeof vi.fn>;
 const mockPrisma = prisma as any;
@@ -383,6 +384,8 @@ describe("agent coworker external access", () => {
           hardEdges: ["Do not grant extra tool authority."],
           expectedArtifact: "patch",
         },
+        // BI-463BE12A: declared brief; undeclared text counts as the turn's data.
+        instructionSpans: expect.arrayContaining([expect.any(String)]),
       }),
     );
   });
@@ -432,6 +435,25 @@ describe("agent coworker external access", () => {
       "restricted",
       expect.not.objectContaining({ tools: expect.anything() }),
     );
+  });
+
+  // BI-463BE12A. USE_UNIFIED_COWORKER is off on a default install, so this is
+  // the path that decides whether a COO or HR coworker reaches a cloud provider.
+  it("declares the coworker's brief as instruction on the legacy path", async () => {
+    await sendMessage({
+      threadId: "thread-1",
+      content: "What needs my attention?",
+      routeContext: "/workspace",
+      coworkerMode: "act",
+    });
+
+    const options = mockRouteAndCall.mock.calls[0]?.[3] ?? {};
+    expect(options.systemPromptInstructionSpans).toEqual(
+      expect.arrayContaining([expect.any(String)]),
+    );
+    // Page context is DATA and must stay undeclared.
+    const declared = (options.systemPromptInstructionSpans ?? []).join("\n");
+    expect(declared).not.toContain("PAGE DATA");
   });
 
   it("strips coworker tools for terse explanation follow-ups like elaborate", async () => {

@@ -5,6 +5,14 @@ import type { RouteDecisionActor } from "@/lib/routing/route-decision-attributio
 
 /** Caller-owned constraints and preferences for canonical routing plus dispatch. */
 export interface RouteAndCallOptions {
+  /**
+   * Exact spans of `systemPrompt` that are platform-authored INSTRUCTION rather
+   * than the turn's data (BI-463BE12A / BI-9C14CB5D). Supplied by whoever knows
+   * the provenance — the prompt assembler for its static blocks, the calling
+   * surface for the coworker persona. Anything unlabelled is classified as data,
+   * so omitting this is the safe default and changes nothing.
+   */
+  systemPromptInstructionSpans?: string[];
   tools?: Array<Record<string, unknown>>;
   taskType?: string;
   preferredProviderId?: string;

@@ -293,6 +293,8 @@ export async function resolveAutonomousWorkTools(input: {
 
 export async function executeAutonomousAgenticLoop(input: {
   systemPrompt: string;
+  /** Instruction spans within `systemPrompt`, forwarded to routing (BI-463BE12A). */
+  systemPromptInstructionSpans?: string[];
   chatHistory: ChatMessage[];
   sensitivity: RouteSensitivity;
   tools: ToolDefinition[];
@@ -430,6 +432,7 @@ export async function executeAutonomousAgenticLoop(input: {
     result = await withInferenceOrigin(inferenceOrigin, () =>
       runAgenticLoop({
         systemPrompt,
+        systemPromptInstructionSpans: input.systemPromptInstructionSpans,
         chatHistory: input.chatHistory,
         sensitivity: input.sensitivity,
         tools: input.tools,
