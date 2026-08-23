@@ -49,6 +49,7 @@ scripts/check-no-twin-artifact-drift.test.mjs
 scripts/check-no-suitability-object-shorthand.test.mjs
 scripts/check-no-system-user-sentinel.test.mjs
 scripts/check-no-type-reexport-in-use-server.test.mjs
+scripts/check-no-unhonored-grant-growth.test.mjs
 scripts/check-no-unresolved-prometheus-targets.test.mjs
 scripts/check-reporting-composition.test.mjs
 scripts/check-style-drift.test.mjs

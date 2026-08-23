@@ -33,12 +33,14 @@ const VIEW: InstallationIdentityView = {
     teardown: "capture-required",
     sourceAuthority: "governed-worktree",
     peerWrite: "read-only",
+    workSync: "same-organization",
     pairedProductionInstallationRef: "dpf-prod-acme",
     rationale: {
       credentials: "Local test credentials may be rotated here.",
       teardown: "Capture a durable backlog bundle before any teardown.",
       sourceAuthority: "Source changes belong in a governed worktree.",
       peerWrite: "Read from that peer but never write to it.",
+      workSync: "Mirror the backlog this installation owns so the work survives a teardown.",
     },
   },
   environment: {

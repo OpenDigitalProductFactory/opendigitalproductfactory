@@ -1,0 +1,23 @@
+{
+  "version": "1",
+  "decidedOption": "inline-origin-block",
+  "decisionInteractionId": "DI-FC18F139E8BD",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/coworker-decisions/decisions/[interactionId]/page.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "decisionInteractionId": "DI-FC18F139E8BD",
+    "consideredOptions": [
+      "inline-origin-block",
+      "technical-detail-drawer"
+    ]
+  },
+  "rationale": {
+    "inline-origin-block": "CHOSEN. Kernel composite 9.726, margin 1.445, high confidence, autonomy eligible. A 'Where this came from' block above the options carries the work room and what that room is for, the coworker by display name and role, what it was doing, how the link was matched, and whether the same question has come back before; each option carries at most two strength lines and two cost lines derived from the feature vector the gate actually scored. Highest legibility_of_consequence (0.85) and lowest operator_effort (0.15): the owner reads the reason for the question and the cost of each answer in the same viewport where they rule, instead of holding one screen in their head while working another. Scores positively on 'Do the work; don't task the operator with what an agent can do' (+0.172) where the drawer scores NEGATIVE (-0.080), which is exactly the complaint being fixed.",
+    "technical-detail-drawer": "REJECTED. Kernel composite 8.281. Keeping the record as it is and hiding the origin behind a collapsed drawer preserves today's first viewport, but it preserves today's defect with it: the context needed to rule stays one interaction away, so the owner is still asked to decide first and understand second. It scores worst on the two axes this change exists to move \u2014 legibility_of_consequence 0.35 and human_cognitive_load 0.55 \u2014 and it is the option 'Show the consequence before the confirm' rates lowest (0.058 vs 0.144)."
+  },
+  "notes": "BI-6700AF66, EP-0AF96937, spec docs/superpowers/specs/2026-08-23-decision-concierge-design.md \u00a74.1-\u00a74.2. Arrival cost is bounded: the block renders at most four short rows, and it renders NOTHING when the origin cannot be resolved \u2014 in that case it states plainly that the work behind the decision could not be traced rather than showing an empty frame. Consequence lines appear only when the gate scored real per-option feature vectors AND an option separates from the field by at least 0.15; an unscored decision keeps exactly the option list it had before, because an invented consequence is worse than none. Prose lint and style drift both pass with no growth on any axis (all new copy is built in lib/decision/decision-origin.ts and lib/decision/option-consequences.ts, and colour is --dpf-* tokens only). The 'answer it once' step now carries the finding's domain and the originating interaction id, so following it lands on the finding with its answer box already open and the question restated \u2014 no empty textarea. Scope is the decision record only: the review page and its answer form changed to RECEIVE the focus this record now sends (a query param and an already-open box), which adds no control of their own."
+}

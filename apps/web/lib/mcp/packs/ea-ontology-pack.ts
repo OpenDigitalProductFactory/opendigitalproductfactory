@@ -245,10 +245,44 @@ async function queryOntologyGraphHandler(params: Record<string, unknown>): Promi
     },
   });
   const total = await prisma.eaElement.count({ where });
+
+  // BI-4501D3C8: never return ontology elements without a staleness signal.
+  // The mirror is a NIGHTLY reconcile, so an element merged since the last run
+  // is legitimately absent here — and a bare empty result made that
+  // indistinguishable from "does not exist".
+  let trust: unknown = undefined;
+  let staleness = "";
+  try {
+    const { buildMirrorFreshnessTrust } = await import("@/lib/ea/mirror-freshness-trust");
+    const { DATA_MODEL_MIRROR_TASK_ID } = await import("@dpf/db");
+    const task = await prisma.scheduledAgentTask.findUnique({
+      where: { taskId: DATA_MODEL_MIRROR_TASK_ID },
+      select: { lastRunAt: true, lastStatus: true, isActive: true },
+    });
+    const assessment = buildMirrorFreshnessTrust({
+      lastRunAt: task?.lastRunAt ?? null,
+      lastStatus: task?.lastStatus ?? null,
+      isActive: task?.isActive ?? false,
+      elementCount: total,
+    });
+    trust = assessment;
+    if (total === 0) {
+      staleness =
+        ` — NO MATCHES. This is a nightly mirror (${assessment.tier} trust, ${assessment.action}): ` +
+        `${assessment.primaryRationale} An empty result is NOT evidence the model does not exist; ` +
+        "check the committed schema with describe_committed_model before concluding absence.";
+    } else if (assessment.tier === "low" || assessment.action === "qualify") {
+      staleness = ` — mirror trust ${assessment.tier} (${assessment.action}): ${assessment.primaryRationale}`;
+    }
+  } catch {
+    // Advisory only; a scoring failure must not fail the read.
+  }
+
   return {
     success: true,
-    message: `Found ${elements.length} elements (${total} total)`,
+    message: `Found ${elements.length} elements (${total} total)${staleness}`,
     data: {
+      ...(trust ? { trust } : {}),
       elements: elements.map(el => ({
         elementId: el.id,
         name: el.name,
