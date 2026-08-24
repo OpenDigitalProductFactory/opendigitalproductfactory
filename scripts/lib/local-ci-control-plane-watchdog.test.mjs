@@ -51,6 +51,27 @@ test("one transient round recovers without tripping the boundary", async () => {
   assert.equal(result.samples.length, 3);
 });
 
+test("alternating single-surface misses do not form a sustained starvation breach", async () => {
+  const rounds = [
+    { ...healthy, portal: { healthy: false, reason: "timeout" } },
+    { ...healthy, mcp: { healthy: false, reason: "timeout" } },
+    healthy,
+  ];
+  let complete = false;
+  const result = await monitorControlPlane({
+    sample: async () => {
+      const value = rounds.shift();
+      if (rounds.length === 0) complete = true;
+      return value;
+    },
+    isComplete: () => complete,
+    wait: async () => {},
+    consecutiveFailureLimit: 2,
+  });
+  assert.equal(result.status, "healthy");
+  assert.equal(result.samples.length, 3);
+});
+
 test("publishes every control-plane sample for durable stage heartbeats", async () => {
   const observed = [];
   let complete = false;
@@ -81,6 +102,50 @@ test("two consecutive unhealthy rounds form a sustained starvation breach", asyn
   assert.equal(result.status, "blocked_control_plane_starvation");
   assert.equal(result.samples.length, 2);
   assert.deepEqual(result.failures, ["postgres:timeout"]);
+});
+
+test("a breach names only the surface whose consecutive limit was reached", async () => {
+  const rounds = [
+    { ...healthy, portal: { healthy: false, reason: "timeout" } },
+    {
+      ...healthy,
+      portal: { healthy: false, reason: "timeout" },
+      mcp: { healthy: false, reason: "connection-reset" },
+    },
+  ];
+  const result = await monitorControlPlane({
+    sample: async () => rounds.shift(),
+    isComplete: () => false,
+    wait: async () => {},
+    consecutiveFailureLimit: 2,
+  });
+  assert.equal(result.status, "blocked_control_plane_starvation");
+  assert.deepEqual(result.failures, ["portal:timeout"]);
+});
+
+test("a recovered surface resets only its own consecutive history", async () => {
+  const rounds = [
+    {
+      ...healthy,
+      portal: { healthy: false, reason: "timeout" },
+      mcp: { healthy: false, reason: "timeout" },
+    },
+    { ...healthy, mcp: { healthy: false, reason: "timeout" } },
+  ];
+  const observed = [];
+  const result = await monitorControlPlane({
+    sample: async () => rounds.shift(),
+    isComplete: () => false,
+    wait: async () => {},
+    onSample: async (sample) => observed.push(sample),
+    consecutiveFailureLimit: 2,
+  });
+  assert.equal(result.status, "blocked_control_plane_starvation");
+  assert.deepEqual(observed.map((sample) => sample.consecutiveFailures), [
+    { portal: 1, mcp: 1, docker: 0, postgres: 0 },
+    { portal: 0, mcp: 2, docker: 0, postgres: 0 },
+  ]);
+  assert.deepEqual(result.failures, ["mcp:timeout"]);
 });
 
 test("an unhealthy control plane blocks the build before it starts", async () => {

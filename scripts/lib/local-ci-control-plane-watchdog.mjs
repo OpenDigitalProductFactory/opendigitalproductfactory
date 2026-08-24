@@ -21,25 +21,35 @@ export async function monitorControlPlane({
   onSample = () => {},
 }) {
   const samples = [];
-  let consecutiveFailures = 0;
+  const consecutiveFailures = Object.fromEntries(
+    SURFACES.map((surface) => [surface, 0]),
+  );
   while (true) {
     const probes = await sample();
     const classification = classifyControlPlaneSample(probes);
+    for (const surface of SURFACES) {
+      consecutiveFailures[surface] = probes?.[surface]?.healthy === true
+        ? 0
+        : consecutiveFailures[surface] + 1;
+    }
     const observed = {
       observedAt: new Date().toISOString(),
       probes,
       ...classification,
+      consecutiveFailures: { ...consecutiveFailures },
     };
     samples.push(observed);
     await onSample(observed);
-    consecutiveFailures = classification.healthy
-      ? 0
-      : consecutiveFailures + 1;
-    if (consecutiveFailures >= consecutiveFailureLimit) {
+    const breachedSurfaces = SURFACES.filter(
+      (surface) => consecutiveFailures[surface] >= consecutiveFailureLimit,
+    );
+    if (breachedSurfaces.length > 0) {
       return {
         status: "blocked_control_plane_starvation",
         samples,
-        failures: classification.failures,
+        failures: breachedSurfaces.map((surface) => (
+          `${surface}:${probes?.[surface]?.reason || "unhealthy"}`
+        )),
       };
     }
     if (isComplete()) {
