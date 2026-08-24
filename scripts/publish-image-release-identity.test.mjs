@@ -35,6 +35,9 @@ test("published promoter identity is bound to its checked-out contract", () => {
     /DPF_PROMOTER_CONTRACT_DIGEST=sha256:\$\{\{ steps\.promoter-contract\.outputs\.digest \}\}/,
     "the promoter Dockerfile must receive the derived contract digest instead of its 'unknown' default",
   );
+  assert.match(build, /DPF_PROMOTER_SOURCE_SHA=\$\{\{ github\.sha \}\}/);
+  assert.match(build, /DPF_PROMOTER_RELEASE_TAG=\$\{\{ needs\.gate\.outputs\.tag \}\}/);
+  assert.match(build, /DPF_PROMOTER_RELEASE_OWNER=\$\{\{ steps\.owner\.outputs\.value \}\}/);
 });
 
 test("latest is promoted only from the verified immutable release tag", () => {
