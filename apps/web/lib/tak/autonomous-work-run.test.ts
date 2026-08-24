@@ -201,6 +201,33 @@ describe("createAutonomousWorkRun", () => {
     expect(String(arg?.data?.taskRunId)).toMatch(/^TR-SCHED-/);
   });
 
+  it("uses a server-derived public identity for idempotent external work", async () => {
+    const { prisma } = await import("@dpf/db");
+    vi.mocked(prisma.taskRun.create).mockResolvedValue({
+      id: "tr_internal_external",
+      taskRunId: "TR-MCP-A1B2C3D4E5F6",
+      contextId: "thread-external",
+    } as never);
+    const { createAutonomousWorkRun } = await import("./autonomous-work-run");
+
+    await createAutonomousWorkRun({
+      trigger: "external-mcp",
+      taskRunId: "TR-MCP-A1B2C3D4E5F6",
+      userId: "user-1",
+      agentId: "AGT-WS-REVIEW",
+      routeContext: "/platform/build",
+      title: "Independent review",
+      objective: "Review immutable design.",
+      prompt: "Review immutable design.",
+      threadId: "thread-external",
+    });
+
+    expect(vi.mocked(prisma.taskRun.create).mock.calls[0]?.[0]?.data).toMatchObject({
+      taskRunId: "TR-MCP-A1B2C3D4E5F6",
+      initiatingAgentId: "AGT-WS-REVIEW",
+    });
+  });
+
   it("creates capacity-continuity TaskRuns with capacity metadata and no tool execution", async () => {
     const { prisma } = await import("@dpf/db");
     vi.mocked(prisma.taskRun.create).mockResolvedValue({
