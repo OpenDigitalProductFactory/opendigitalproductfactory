@@ -210,7 +210,16 @@ function runCandidate(fixture: Fixture, options: {
       `export DPF_PROMOTER_CONTRACT=${quote(bashPath(contract))}`,
     ] : []),
   ];
-  return spawnSync(BASH, ["-lc", `${exports.join("\n")}\nexec bash ${quote(bashPath(SCRIPT))} ${options.readiness ? "--readiness" : "--self-upgrade"}`], { encoding: "utf8" });
+  // Dockerfile.promoter normalizes the packaged entrypoint to 0755. Reproduce
+  // that image invariant for the duration of the real-script fixture, then
+  // restore the checkout mode so the test never leaves the worktree dirty.
+  const originalMode = statSync(SCRIPT).mode;
+  chmodSync(SCRIPT, originalMode | 0o111);
+  try {
+    return spawnSync(BASH, ["-lc", `${exports.join("\n")}\nexec bash ${quote(bashPath(SCRIPT))} ${options.readiness ? "--readiness" : "--self-upgrade"}`], { encoding: "utf8" });
+  } finally {
+    chmodSync(SCRIPT, originalMode);
+  }
 }
 
 describe.skipIf(!BASH_OK)("promote.sh candidate-owned legacy bootstrap", () => {
