@@ -19,10 +19,14 @@ import {
   type AuthorityApprovalEnvelopeFinalize,
   type AuthorityApprovalTaskResume,
   type CoworkerAuthorityInputResolver,
+  type PolicyAuthorityProjectionAttempt,
+  type PolicyAuthorityEnvelopeReserve,
 } from "./govern/authority/coworker-tool-authority-gate";
 export type {
   AuthorityApprovalEnvelopeCreate,
   AuthorityApprovalEnvelopeFinalize,
+  PolicyAuthorityProjectionAttempt,
+  PolicyAuthorityEnvelopeReserve,
   AuthorityApprovalTaskResume,
   CoworkerAuthorityInputResolver,
 } from "./govern/authority/coworker-tool-authority-gate";
@@ -242,6 +246,8 @@ export function _setGovernanceForTests(overrides: {
   authorityApprovalEnvelopeCreate?: AuthorityApprovalEnvelopeCreate | null;
   authorityApprovalTaskResume?: AuthorityApprovalTaskResume | null;
   authorityApprovalEnvelopeFinalize?: AuthorityApprovalEnvelopeFinalize | null;
+  policyAuthorityProjectionAttempt?: PolicyAuthorityProjectionAttempt | null;
+  policyAuthorityEnvelopeReserve?: PolicyAuthorityEnvelopeReserve | null;
   lifecycleHooks?: ToolLifecycleHook[] | null;
   alignmentGate?: AlignmentGate | null;
   preconditionGate?: PreconditionGate | null;

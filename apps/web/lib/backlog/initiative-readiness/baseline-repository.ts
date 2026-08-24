@@ -257,11 +257,14 @@ export async function recordInitiativeSpecApproval(args: {
   if (!authority || authority.decision !== "allow" || authority.actionKey !== "record_initiative_design_review") {
     return { ok: false, code: "AUTHORIZATION_DENIED", error: "The current tool call has no matching design-review allow decision." };
   }
-  const organizationId = authority.organizationId ?? item.organizationId;
-  if (!organizationId) {
-    return { ok: false, code: "AUTHORIZATION_DENIED", error: "Spec approval requires an organization-bound authority decision." };
-  }
-  if (item.organizationId && authority.organizationId !== item.organizationId) {
+  const organizationId = item.organizationId ?? "platform";
+  // AuthorizationDecisionLog.organizationId is a tenant Organization FK. An
+  // organizationless platform initiative therefore persists null while the
+  // receipt/baseline snapshot below projects the canonical `platform` scope.
+  // A real tenant id on either side must still match exactly.
+  if (item.organizationId
+    ? authority.organizationId !== item.organizationId
+    : authority.organizationId !== null) {
     return { ok: false, code: "AUTHORIZATION_DENIED", error: "Reviewer authority does not match the initiative organization." };
   }
   // BI-72F368BC: attribute the review to the ACTOR — the coworker's own
@@ -458,10 +461,21 @@ export async function recordInitiativeSpecApproval(args: {
       if (blob.storageKey !== archived.storageKey || blob.sizeBytes !== archived.sizeBytes) {
         throw new InitiativeApprovalRollback({ ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS", error: "Existing content-addressed blob metadata does not match the provider archive." });
       }
+      // Managed Documents are install-owned storage records. The canonical
+      // document store resolves a missing business organization to the
+      // install's first Organization row; this storage FK does not replace the
+      // `platform` subject/authority scope carried by the receipt and baseline.
+      const documentOrganizationId = item.organizationId ?? (await tx.organization.findFirst({
+        orderBy: { createdAt: "asc" },
+        select: { id: true },
+      }))?.id ?? null;
+      if (!documentOrganizationId) {
+        throw new InitiativeApprovalRollback({ ok: false, code: "CANONICAL_DESIGN_REQUIRED", error: "No Organization row exists for retained design storage." });
+      }
       const document = await tx.document.create({
         data: {
           documentId: `DOC-INIT-${randomUUID().toUpperCase()}`,
-          organizationId,
+          organizationId: documentOrganizationId,
           title: `${item.title} — retained canonical design`,
           documentKind: "initiative-design",
           contentFormat: "markdown",

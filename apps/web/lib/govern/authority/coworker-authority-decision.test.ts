@@ -111,6 +111,60 @@ describe("evaluateCoworkerAuthority", () => {
     });
   });
 
+  it("allows an authorized immediate read even when the coworker's coarse policy is all", () => {
+    const decision = evaluateCoworkerAuthority(
+      base({
+        action: {
+          toolName: "read_source_at_version",
+          requiredCapability: "view_employee",
+          agentGrantAllowed: true,
+          sideEffect: false,
+          executionMode: "immediate",
+          routeContext: "/build/work/WC-7FF8A505",
+          approvalPolicy: "all",
+        },
+        delegation: {
+          chainId: "CHAIN-1",
+          status: "active",
+          originUserId: "USER-1",
+          currentAgentId: "AGT-CHILD",
+          authorityScope: ["view_employee"],
+        },
+        rawParams: {
+          path: "docs/superpowers/specs/initiative-readiness-design.md",
+          version: "45d2c191",
+        },
+      }),
+    );
+
+    expect(decision).toMatchObject({
+      outcome: "allow",
+      reasonCode: "authorized",
+      nextAction: "execute",
+    });
+  });
+
+  it("keeps proposal execution approval-gated even when it is not marked as a side effect", () => {
+    const decision = evaluateCoworkerAuthority(
+      base({
+        action: {
+          toolName: "propose_employee_update",
+          requiredCapability: "manage_employee",
+          agentGrantAllowed: true,
+          sideEffect: false,
+          executionMode: "proposal",
+          routeContext: "/people",
+          approvalPolicy: "none",
+        },
+      }),
+    );
+
+    expect(decision).toMatchObject({
+      outcome: "require-approval",
+      reasonCode: "approval-required",
+    });
+  });
+
   it.each<[string, Partial<EffectiveAuthContext>, string]>([
     ["missing human", { actingHumanUserId: null }, "human-identity-missing"],
     ["missing agent", { actingAgentId: null }, "agent-identity-missing"],
@@ -191,6 +245,23 @@ describe("evaluateCoworkerAuthority", () => {
       outcome: "deny",
       reasonCode: "subject-scope-denied",
     });
+  });
+
+  it("denies a backlog subject until its canonical organization is resolved", () => {
+    const withoutOrganization = evaluateCoworkerAuthority(base({
+      subject: { kind: "backlog-item", id: "BI-F0715C9C" },
+      organizationId: null,
+    }));
+    expect(withoutOrganization).toMatchObject({
+      outcome: "deny",
+      reasonCode: "subject-scope-denied",
+    });
+
+    const withOrganization = evaluateCoworkerAuthority(base({
+      subject: { kind: "backlog-item", id: "BI-F0715C9C" },
+      organizationId: "org-canonical",
+    }));
+    expect(withOrganization.outcome).toBe("require-approval");
   });
 
   it.each([

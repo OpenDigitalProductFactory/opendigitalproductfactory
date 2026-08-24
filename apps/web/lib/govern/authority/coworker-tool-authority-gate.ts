@@ -42,12 +42,37 @@ export type AuthorityApprovalEnvelopeFinalize = (
   success: boolean,
 ) => Promise<void>;
 
+export type PolicyAuthorityEnvelopeReserve = (envelopeId: string) => Promise<boolean>;
+
+export type PolicyAuthorityProjectionAttempt = (input: {
+  execution: GovernedExecuteArgs;
+  authorityInput: CoworkerAuthorityInput;
+  approvalBinding: Extract<CoworkerAuthorityDecision, { outcome: "require-approval" }>["approvalBinding"];
+}) => Promise<{
+  outcome: "approved";
+  authorityDecisionId: string;
+  envelopeId: string;
+  expiresAt: Date;
+} | { outcome: "not-authorized" }
+  | {
+      outcome: "denied";
+      reasonCode: "policy-declined" | "policy-authorization-invalid";
+      explanation: string;
+    }
+  | {
+      outcome: "resolution-required";
+      reasonCode: "dual-control-required";
+      explanation: string;
+    }>;
+
 type AuthorityGateOverrides = {
   resolveCoworkerAuthorityInput?: CoworkerAuthorityInputResolver | null;
   authorizationDecisionCreate?: AuthorizationDecisionCreate | null;
   authorityApprovalEnvelopeCreate?: AuthorityApprovalEnvelopeCreate | null;
   authorityApprovalTaskResume?: AuthorityApprovalTaskResume | null;
   authorityApprovalEnvelopeFinalize?: AuthorityApprovalEnvelopeFinalize | null;
+  policyAuthorityProjectionAttempt?: PolicyAuthorityProjectionAttempt | null;
+  policyAuthorityEnvelopeReserve?: PolicyAuthorityEnvelopeReserve | null;
 };
 
 export type CoworkerToolAuthorityGateResult =
@@ -101,6 +126,29 @@ export function setCoworkerToolAuthorityOverridesForTests(
     overrides.authorityApprovalEnvelopeFinalize =
       next.authorityApprovalEnvelopeFinalize ?? null;
   }
+  if ("policyAuthorityProjectionAttempt" in next) {
+    overrides.policyAuthorityProjectionAttempt = next.policyAuthorityProjectionAttempt ?? null;
+  }
+  if ("policyAuthorityEnvelopeReserve" in next) {
+    overrides.policyAuthorityEnvelopeReserve = next.policyAuthorityEnvelopeReserve ?? null;
+  }
+}
+
+async function attemptPolicyAuthorityProjection(input: Parameters<PolicyAuthorityProjectionAttempt>[0]) {
+  const projector = overrides.policyAuthorityProjectionAttempt
+    ?? (await import("./resolve-policy-action-authority")).resolveAndPersistPolicyActionAuthority;
+  return projector(input);
+}
+
+async function reservePolicyAuthorityEnvelope(envelopeId: string): Promise<boolean> {
+  if (overrides.policyAuthorityEnvelopeReserve) {
+    return overrides.policyAuthorityEnvelopeReserve(envelopeId);
+  }
+  const result = await prisma.coworkerActionEnvelope.updateMany({
+    where: { id: envelopeId, status: "approved", resolvedAt: null },
+    data: { resolvedAt: new Date() },
+  });
+  return result.count === 1;
 }
 
 async function resolveAuthorityInput(
@@ -142,7 +190,12 @@ async function writeAuthorizationDecision(
     agentContextRef:
       input.authContext.actingAgentId ?? execution.context?.agentId ?? null,
     delegationGrantId: null,
-    organizationId: null,
+    // `organizationId` is a tenant Organization FK. Platform-scoped initiatives
+    // deliberately use the in-memory `platform` authority sentinel, but that
+    // sentinel is not (and must never become) a synthetic tenant row.
+    organizationId: input.organizationId === "platform"
+      ? null
+      : input.organizationId ?? null,
     purposeOfUse: execution.context?.workCase?.action ?? "tool-execution",
     policyVersion: input.dataPolicy.decisionVersionIds?.join(",") || null,
     actionKey: execution.toolName,
@@ -155,6 +208,7 @@ async function writeAuthorizationDecision(
       taskRunId:
         input.task?.taskRunId ?? execution.context?.taskRunId ?? null,
       subjectKind: input.subject?.kind ?? null,
+      authorityOrganizationScope: input.organizationId ?? null,
     },
     endpointUsed: execution.source,
     mode: input.action.executionMode,
@@ -243,8 +297,43 @@ export async function enforceCoworkerToolAuthority(
     };
   }
 
-  const decision = evaluateCoworkerAuthority(input);
-  const decisionId = await writeAuthorizationDecision(
+  let decision = evaluateCoworkerAuthority(input);
+  let projectedDecisionId: string | null = null;
+  if (decision.outcome === "require-approval") {
+    const projected = await attemptPolicyAuthorityProjection({
+      execution,
+      authorityInput: input,
+      approvalBinding: decision.approvalBinding,
+    });
+    if (projected.outcome === "approved") {
+      input = {
+        ...input,
+        approval: {
+          envelopeId: projected.envelopeId,
+          status: "approved",
+          expiresAt: projected.expiresAt,
+          binding: decision.approvalBinding,
+        },
+      };
+      decision = evaluateCoworkerAuthority(input);
+      projectedDecisionId = projected.authorityDecisionId;
+    } else if (projected.outcome === "denied") {
+      decision = {
+        outcome: "deny",
+        reasonCode: projected.reasonCode,
+        explanation: projected.explanation,
+        nextAction: "request-authority",
+      };
+    } else if (projected.outcome === "resolution-required") {
+      decision = {
+        outcome: "deny",
+        reasonCode: projected.reasonCode,
+        explanation: projected.explanation,
+        nextAction: "request-authority",
+      };
+    }
+  }
+  const decisionId = projectedDecisionId ?? await writeAuthorizationDecision(
     input,
     decision,
     execution,
@@ -303,6 +392,17 @@ export async function enforceCoworkerToolAuthority(
   }
 
   const approvedEnvelopeId = input.approval?.envelopeId ?? null;
+  if (
+    projectedDecisionId
+    && approvedEnvelopeId
+    && !await reservePolicyAuthorityEnvelope(approvedEnvelopeId)
+  ) {
+    return {
+      outcome: "reject",
+      rejection: "authority_evidence_unavailable",
+      message: "the policy-derived single-use authorization was already consumed",
+    };
+  }
   if (approvedEnvelopeId && input.task?.taskRunId) {
     try {
       await resumeApprovedTask(input.task.taskRunId);
