@@ -29,6 +29,10 @@ All phases therefore ship and verify as one cohesive behavior slice.
 
 Contract, flow, and verification identifiers refer to the matching sections in the design document.
 
+### Coverage receipt status
+
+The deliverable table above is the four-way traceability record for this atomic plan. `record_plan_backlog_coverage` could not issue a receipt because BI-1FFDF4B1 has no `initiative_scope_baseline`, and that baseline is not reachable from an external MCP session. This is the known governance-tooling gap tracked by BI-B9403248. No green receipt is claimed; implementation proceeds under the filed BI, claimed Workroom scope, immutable plan commit, and this explicit blocked-receipt evidence.
+
 ## Phase 1 — Red tests and native adapter
 
 1. Add failing tests for native `/models` mapping using the two observed live payloads. Assert non-zero byte values, human display values, digest/parameter/quantization preservation, and `null` for missing/unparseable size. **[D1, R2, R3, V1]**
