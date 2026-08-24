@@ -17,6 +17,7 @@ export type InitiativeReadinessLane = {
 /** One registry drives disclosure, receipt validation, and recovery routing. */
 export const INITIATIVE_READINESS_LANES: Record<string, InitiativeReadinessLane> = {
   record_initiative_evidence: { capability: "manage_backlog", grant: "initiative_evidence_write", gates: ["classification", "research", "dependency-disposition"], accountableRoles: ["design-author", "portfolio-management"], independent: false },
+  record_plan_backlog_coverage: { capability: "manage_backlog", grant: "backlog_write", gates: ["dependency-disposition"], accountableRoles: ["implementation-planner"], independent: false },
   record_initiative_design_review: { capability: "manage_backlog", grant: "initiative_design_review", gates: ["design-spec", "spec-approval", "plan-review"], accountableRoles: ["design-checklist-reviewer", "plan-reviewer"], independent: true },
   record_initiative_architecture_review: { capability: "manage_ea_model", grant: "initiative_architecture_review", gates: ["architecture-review"], accountableRoles: ["architecture-reviewer"], independent: true },
   record_initiative_data_review: { capability: "manage_ea_model", grant: "initiative_data_review", gates: ["data-review"], accountableRoles: ["data-reviewer"], independent: true },
@@ -30,6 +31,7 @@ export const INITIATIVE_READINESS_LANES: Record<string, InitiativeReadinessLane>
 /** Static mirror keeps source-policy audits and runtime disclosure on one exact grant map. */
 export const INITIATIVE_READINESS_TOOL_GRANTS: Record<string, string[]> = {
   record_initiative_evidence: ["initiative_evidence_write"],
+  record_plan_backlog_coverage: ["backlog_write"],
   record_initiative_design_review: ["initiative_design_review"],
   record_initiative_architecture_review: ["initiative_architecture_review"],
   record_initiative_data_review: ["initiative_data_review"],
@@ -138,11 +140,13 @@ export async function resolveInitiativeReviewerRecovery(input: {
         },
       })
     : [];
+  const deterministicRows = [...rows].sort((left, right) =>
+    left.agent.agentId.localeCompare(right.agent.agentId));
 
   const reviewerRoutes: InitiativeReviewerRecovery["reviewerRoutes"] = [];
   const escalations: InitiativeReviewerRecovery["escalations"] = [];
   for (const entry of distinct) {
-    const candidate = rows.find((row) =>
+    const candidate = deterministicRows.find((row) =>
       row.grantKey === entry.route.lane.grant
       && row.agent.status === "active"
       && !row.agent.archived
