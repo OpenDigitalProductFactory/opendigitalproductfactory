@@ -45,6 +45,21 @@ post-amendment operator ratification makes the one-time envelope effective.
 | `AC-POLICY-BRIDGE-SCOPE`, `AC-POLICY-NOT-RBAC`, `AC-POLICY-RECOVERY` | policy/delegation/artifact/expiry/replay, direct-DI prohibition, and exact-route tests | governed authority gate, delegation, envelope lifecycle, readiness recovery |
 | `AC-FIRST-DEPLOY-WARRANT`, `AC-FIRST-DEPLOY-INDEPENDENCE`, `AC-FIRST-DEPLOY-CONSUME` | immutable bootstrap-contract, drift/revocation/replay, exact-tree review, branch-rule, and merge-consumption evidence | design/plan, Workroom audit, DCO/review/pregate/PR boundary |
 
+### Atomic coverage projection
+
+These five mappings are sequencing groups within one atomic repair, not
+independently shippable deliverables. They change one readiness contract and
+must deploy together: shipping any group alone would leave the governed
+implementation path fail-closed or would expose an incomplete recovery path.
+
+| Mapping | Objective requirements | Acceptance verification | Depends on |
+|---|---|---|---|
+| `policy-profile` | `OBJ-IRT-001` | `AC-PROFILE-FIX`, `AC-PROFILE-MONOTONIC`, `AC-POLICY-DIFFERENT` | none |
+| `recovery-review` | `OBJ-IRT-002`, `OBJ-IRT-003` | `AC-RECOVERY-ROUTE`, `AC-UI-TARGET`, `AC-REVIEW-SEPARATION`, `AC-REVIEWER-READ` | `policy-profile` |
+| `authority-freshness` | `OBJ-IRT-004` | `AC-SPEC-AUTHORITY`, `AC-RECEIPT-FRESHNESS`, `AC-FAIL-CLOSED`, `AC-POLICY-BRIDGE-YES`, `AC-POLICY-BRIDGE-DENY`, `AC-POLICY-BRIDGE-SCOPE`, `AC-POLICY-NOT-RBAC`, `AC-POLICY-RECOVERY` | `recovery-review` |
+| `reconciliation-coverage` | `OBJ-IRT-005` | `AC-HEAD-RECONCILE`, `AC-AUTHOR-AFTER-SYNC`, `AC-REPLAY`, `AC-COVERAGE-TX` | `authority-freshness` |
+| `bootstrap-shipping` | `OBJ-IRT-006` | `AC-FIRST-DEPLOY-WARRANT`, `AC-FIRST-DEPLOY-INDEPENDENCE`, `AC-FIRST-DEPLOY-CONSUME` | `reconciliation-coverage` |
+
 ## Task 0 - Establish the policy-authority boundary
 
 Before any production source or test mutation:
