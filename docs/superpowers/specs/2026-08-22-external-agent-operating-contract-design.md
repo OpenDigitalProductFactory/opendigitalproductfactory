@@ -18,9 +18,15 @@ status: draft
 
 DPF will treat a source-free production installation as a complete agent host. An external AI agent does not need the application repository, contributor `AGENTS.md`, or a browser to operate a business. It does need a governed operating contract that tells it, for the current installation and principal, what the business is trying to accomplish, what work is available, what it may perceive, what it may do, when it must stop, and what evidence closes the work.
 
-The canonical interaction is:
+The canonical business-operation interaction is:
 
 `dual-principal session → authorized operating profile → Work Case/Packet → Authorized Surface → governed action → canonical business record → receipt/evidence`
+
+Platform development is an alternate, explicitly declared use shape:
+
+`dual-principal session → authorized operating profile → BacklogItem → source-change Workroom → governed worktree/PR → review/gate evidence`
+
+These are not separate agent platforms. They share identity, Workroom, WorkUnit, evidence, lease, and receipt substrate, but they start from different outcomes and resolve decisions in different scopes. Customer installations default to business operation. Development is selected only when `evolve-dpf` is a confirmed primary or secondary installation purpose, and that purpose still grants no source or tool authority.
 
 The contract is a runtime projection over existing DPF authorities. It is not a new database, task bus, agent registry, prompt framework, or business record. MCP is the primary local protocol, A2A is the peer protocol, and a tiny generated install-local `AGENTS.md`/README is only a discovery pointer for clients that inspect files. Chat is an ingress and steering channel; it is never the system of record.
 
@@ -55,6 +61,8 @@ If those answers exist only in a prompt, chat transcript, or agent memory, the s
 8. **Archetypes supply operating meaning, not cloned process engines.** Industry vocabulary, value streams, evidence, and measures specialize the common formula.
 9. **Federation preserves sovereignty.** A remote installation proposes or submits work; the owning installation authorizes and mutates its own records.
 10. **Progress is legible to an operator.** The canonical UX shows outcome, state, owner, blockers, risk, evidence, and next action without exposing agent internals by default.
+11. **Customer operation is the default external-agent posture.** Repository, worktree, PR, CI, and Build Studio concepts remain backstage unless the customer explicitly enters the platform-development shape.
+12. **Decision scopes do not blur.** Business choices belong to WWWD, professional craft choices to WSID, and platform-development choices to WWMD. Mixed work decomposes into linked single-scope work.
 
 ## 4. Goals and non-goals
 
@@ -62,6 +70,7 @@ If those answers exist only in a prompt, chat transcript, or agent memory, the s
 
 - Give any supported agent a bounded connect-time orientation before its first business action.
 - Make consumer, production, development, and managed installations explicit operating contexts.
+- Compile a default and available engagement shape from primary/secondary installation purpose while keeping environment, source capability, and token authority independent.
 - Expose business purpose, archetype, GTM perspective, work, surfaces, policy, and evidence through typed projections.
 - Support one or many simultaneous agents without duplicate work or lost accountability.
 - Reuse Work Cases, WorkUnits, work shapes, TaskRuns, Authorized Surface, federation, A2A, WWWD, and Hive.
@@ -84,12 +93,13 @@ If those answers exist only in a prompt, chat transcript, or agent memory, the s
 
 | Concern | Existing authority | Reuse | Remaining gap |
 |---|---|---|---|
-| Installation role | `InstallationOperatingIntentV1`, profile snapshot | purpose, environment, topology hints | no agent-facing operating-profile projection |
+| Installation role | `InstallationOperatingIntentV1`, profile snapshot | primary and secondary purpose, environment, topology hints | no agent-facing default/available engagement-shape projection |
 | Delegated identity | Headless Employee session, MCP principal, `AuthorityBinding` | human subject plus acting agent | no single connect-time external-agent session handshake |
 | Product semantics | Authorized Surface Contract and `surface_*` tools | render-neutral perception and governed actions | catalog is not the full business orientation contract |
 | Work | Work Case, WorkUnit adapters, policy/receipt envelopes | durable state, ownership, transitions, evidence | external claim/lease and multi-agent collaboration profile incomplete |
 | Durable execution | TaskRun and Durable Agentic Process architecture | journaled/resumable execution | not uniformly bound to Work Case collaboration and completion |
-| External development visibility | `work-capsules/external-session-capture.ts` | idempotent provider/session capture into a Workroom | contributor sessions and business operating sessions need distinct policies over one WorkUnit projection |
+| External development visibility | `work-capsules/external-session-capture.ts` | idempotent provider/session capture into a Workroom | contributor sessions and business operating sessions need distinct entry, decision-scope, and UX policies over one WorkUnit projection |
+| Business Workrooms | generalized `Workroom`, `decisionScope`, outcome anchors, activity/portfolio attribution, room shapes, WorkUnit adapters, and Work Case projections | one durable coordination substrate for WWWD/WSID business work and WWMD/WSID source work | external-agent discovery does not yet choose the correct posture; generic `create_workroom` still presents a backlog-management capability boundary, and the current capsule WorkUnit adapter does not project decision scope |
 | Agent exchange | A2A Agent Card/tasks, coordination proposals | capability discovery, task lifecycle, proposals | no DPF operating-profile extension and work-packet compatibility contract |
 | Cross-install trust | GAID/AIDoc, federation links, issuer/device/token boundaries | sovereignty and scoped trust | topology-specific entry rules need one projection |
 | Business judgment | WWWD/org overlay and governed decision gates | organization-specific stances | agents need compact decision-scope references, not copied doctrine |
@@ -119,7 +129,26 @@ type ExternalAgentOperatingProfile = {
       | "deliver-managed-services"
       | "grow-channel"
       | "participate-community";
+    secondaryPurposes: Array<
+      | "operate-organization"
+      | "evolve-dpf"
+      | "deliver-managed-services"
+      | "grow-channel"
+      | "participate-community"
+    >;
     topology: "local" | "same-org" | "managed-estate" | "sovereign-peer" | "hive";
+  };
+  interaction: {
+    defaultShape: "business-operations" | "platform-development";
+    availableShapes: Array<"business-operations" | "platform-development">;
+    decisionRouting: {
+      "business-operations": { primary: "wwwd"; craft: "wsid" };
+      "platform-development": { primary: "wwmd"; craft: "wsid" };
+    };
+    developmentSource:
+      | "host-governed-worktree"
+      | "separate-governed-checkout"
+      | "not-declared";
   };
   principal: {
     sessionId: string;
@@ -160,7 +189,16 @@ type ExternalAgentOperatingProfile = {
 };
 ```
 
-The profile contains references and safe summaries, not copied business records, secrets, full policy corpora, or every available tool. It changes when installation purpose, organization context, token tier, authority, or connection topology changes.
+The profile contains references and safe summaries, not copied business records, secrets, full policy corpora, or every available tool. It changes when installation purpose, organization context, token tier, authority, or connection topology changes. The P0 design is authoritative for the final V1 field names and digest preimages.
+
+The shape compiler applies these rules:
+
+- `evolve-dpf` as primary purpose makes `platform-development` the default;
+- every other current primary purpose makes `business-operations` the default;
+- a secondary purpose adds the corresponding alternate shape;
+- environment class changes caution, host profile changes source location, and token/grant authority changes available actions; none changes the declared purpose by inference;
+- a source-free runtime can coordinate platform development, but source edits happen in a separate governed checkout;
+- a Workroom carries one owning decision scope. Cross-scope work uses linked WorkUnits/Workrooms and explicit handoff evidence.
 
 ### 6.2 `ExternalAgentSession`
 
@@ -249,19 +287,31 @@ It contains no contributor workflow, business doctrine, static tool catalog, sec
 
 ### 7.3 Progressive disclosure
 
-The initial model context stays small:
+The initial model context stays small and follows the selected interaction shape. A business-purpose customer does not receive development doctrine merely because the client is Codex, Claude, or Grok.
+
+For `business-operations`:
 
 1. identity and installation summary;
-2. stop rules and policy mode;
-3. work catalog summaries;
+2. business purpose, default WWWD scope, relevant WSID profession context, and stop rules;
+3. authorized business Work Case/catalog summaries;
 4. selected Work Packet;
 5. selected Authorized Surface graph;
 6. action schemas only when selected;
 7. result, receipt, and next transition.
 
+For `platform-development`:
+
+1. identity, installation summary, and source-location rule;
+2. WWMD platform scope, relevant WSID engineering context, and stop rules;
+3. authorized backlog/source-change Workroom summary;
+4. governed checkout/worktree, branch, review, and gate requirements only when the task enters that lifecycle;
+5. result, review evidence, PR/merge state, and next transition.
+
 An agent should never receive hundreds of unrelated tools or the complete organization corpus merely because it connected.
 
 ## 8. End-to-end interaction
+
+### 8.1 Business operation
 
 ```mermaid
 sequenceDiagram
@@ -288,7 +338,26 @@ sequenceDiagram
 
 The runtime, not the model, decides whether an action is a read, proposal, reversible change, consequential change, irreversible action, or prohibited operation.
 
-## 9. Business interaction shapes
+A business Workroom is not a development Workroom with different labels. Its outcome anchor points to a Work Case or canonical business record; repository, branch, worktree, PR, and source-scope claims are normally absent. WWWD owns the organization's business choice. WSID supplies the profession's method and quality bar. The room exists when work needs durable coordination, leases, evidence, handoff, review, or recovery; ordinary read-only conversation does not need a synthetic room.
+
+`BI-D4C110BC` owns two concrete convergence fixes before business agents can rely on this path. First, business convening must enter through a domain/case authority facade or a context-aware collaboration capability; the implementation must not grant `manage_backlog` merely so an employee agent can coordinate business work. Second, the Workroom-to-WorkUnit adapter must carry the canonical `decisionScope`, accountable/contributor references, outcome summary, and receipt requirement instead of projecting every room as a coding capsule with null governance. Both changes extend the existing substrate and require no second room or task table.
+
+### 8.2 Platform development
+
+The development shape begins only after the declared purpose and task select it. Its Workroom is anchored to a BacklogItem or build/source outcome and may carry repository, branch, worktree, PR, and change-impact state. WWMD owns platform and architecture decisions; WSID supplies software, data, UX, security, and other craft judgment. If the work also requires a customer business decision, that decision remains a linked WWWD interaction rather than being absorbed into the development room.
+
+On a source-free customer runtime, DPF remains the coordination and evidence plane while the source change occurs in a separate governed checkout. Installed Compose files, scripts, and release assets never become source by implication.
+
+## 9. Use and topology interaction shapes
+
+The use shape and the connection topology are orthogonal:
+
+| Use shape | Default trigger | Primary work | Decision scopes | Primary operator surface |
+|---|---|---|---|---|
+| Business operations | any primary purpose except `evolve-dpf` | Work Case/Packet, canonical business record, outcome evidence | WWWD for business; WSID for craft | Workspace, My Queue, Inbox, Case detail |
+| Platform development | primary `evolve-dpf`; explicit alternate when secondary | BacklogItem, source-change Workroom, governed checkout/worktree, review and gate evidence | WWMD for platform; WSID for craft | Build Studio/contributor lanes and source review surfaces |
+
+Topology then changes how either use shape crosses an installation boundary:
 
 | Shape | Entry | Canonical work owner | Allowed exchange | Key boundary |
 |---|---|---|---|---|
@@ -300,7 +369,7 @@ The runtime, not the model, decides whether an action is a read, proposal, rever
 | Channel/GTM network | channel federation profile | upstream/downstream owner | opportunity, enablement, support, evidence | commercial agreement and consent |
 | Hive/community | contribution egress/intake | contributor then commons review | redacted contribution/result | curation, provenance, no customer leakage |
 
-All shapes use the same Work Packet and action semantics. Topology changes identity proof, visibility, policy intersection, transport, and ownership—not the business formula.
+All business topology shapes use the same Work Packet and action semantics. Platform development uses the same Workroom/WorkUnit coordination formula but keeps source, review, and promotion evidence specific to development. Topology changes identity proof, visibility, policy intersection, transport, and ownership; it does not turn business operation into source development.
 
 ## 10. Archetype and GTM specialization
 
@@ -380,6 +449,8 @@ Do not add a new global “AI command center.” Use the existing navigation:
 - **Case detail (`/workspace/cases/[caseKey]`):** objective, stage, actors, active leases, policy mode, timeline, evidence, receipts, blockers, and next governed action.
 - **Platform/Federation administration:** external agent connections, token tier, sponsor, version compatibility, link/device trust, revocation, and health.
 - **Chat/coworker:** start, explain, steer, or ask about work while linking every material statement to the case/surface/receipt.
+
+Business-operation surfaces are the customer default. Build Studio, contributor lanes, repository identity, worktree state, and CI appear only after the operator enters an available `platform-development` shape. The UI must never lead a business operator from “help run my organization” into a source-development cockpit.
 
 ### 13.2 First viewport
 
@@ -529,6 +600,8 @@ The umbrella design is implemented only when:
 10. Workspace, My Queue, Inbox, Case detail, and connection administration expose the required state with no new global dashboard.
 11. Contract, authority, privacy, A2A, federation, and browser/headless parity tests pass.
 12. The convergence/refactor stream accounts for approximately 20% of the implementation plan and removes measured duplication.
+13. A customer/business-purpose install opens in `business-operations`, discovers WWWD/WSID business work, and completes a governed Work Case without seeing source-development concepts in its primary path.
+14. The same customer can opt into `platform-development` only when `evolve-dpf` is declared as a primary or secondary purpose and authority permits it; source-free runtime assets remain non-source and the development Workroom binds a separate governed checkout.
 
 ## 21. Design review checklist
 

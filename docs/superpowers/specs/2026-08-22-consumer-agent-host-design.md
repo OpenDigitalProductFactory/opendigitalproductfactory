@@ -6,6 +6,7 @@ status: binding
 
 **Date:** 2026-08-22  
 **Status:** approved for implementation  
+**Amendment:** 2026-08-24 interaction-shape clarification is pending fresh P0 review; the approved self-upgrade contract is unchanged
 **Backlog:** BI-11D611B3, BI-DD7DC141  
 **Workroom:** WC-E08BD92F  
 **Kernel decisions:** DI-06201F1778E9, DI-88D1C6E4B937
@@ -125,6 +126,13 @@ Custom tokens are classified by their effective grants. Instructions describe
 the ceiling and required workflow but never broaden authorization; tool dispatch
 continues to enforce the existing scope/grant intersection.
 
+The authority tier does not select the agent's use shape. The operating profile
+derives `business-operations` versus `platform-development` from confirmed
+primary/secondary installation purpose, then applies the token/grant intersection
+inside that context. A development-capable token cannot silently turn a customer
+business interaction into source work, and a declared `evolve-dpf` purpose does
+not grant development authority.
+
 ### Instruction ordering
 
 The initialize result is composed in this order:
@@ -132,14 +140,24 @@ The initialize result is composed in this order:
 1. fetch `operating_profile_get` before any business or platform action and stop
    when it is unavailable or incompatible;
 2. obey its active brakes and refresh on its invalidators;
-3. use the existing bounded `load_tools`/catalog recovery contract only after
+3. begin in the profile's default interaction shape and enter an alternate only
+   when the profile advertises it and the task explicitly requires it;
+4. use the existing bounded `load_tools`/catalog recovery contract only after
    orientation identifies the relevant capability;
-4. render compatibility host and organization context from the same canonical
+5. render compatibility host and organization context from the same canonical
    inputs for clients that do not call the profile tool.
 
-The consumer contract tells an external development agent to coordinate through
-MCP and use a separate source checkout/worktree for code. It explicitly forbids
-editing the installed Compose/scripts as if they were the repository.
+The consumer contract is business-first. For a normal customer installation it
+routes the agent to organization purpose, WWWD business judgment, WSID profession
+practice, authorized Work Cases, and business outcome Workrooms. It does not lead
+with backlog, worktree, PR, CI, or Build Studio instructions.
+
+When the installation explicitly declares `evolve-dpf` as a primary or secondary
+purpose and the task enters that available shape, the same contract tells the
+external development agent to coordinate through MCP and use a separate governed
+source checkout/worktree for code. It explicitly forbids editing the installed
+Compose/scripts as if they were the repository. Purpose, environment class,
+source capability, and token authority remain independent facts.
 
 ### Release pointer
 
@@ -220,3 +238,6 @@ established.
    Git target could not be resolved.
 6. Source-backed contributor behavior and authorization enforcement remain green.
 7. Unit, route, release-asset, owner UI, style, build, and exact-tree gates pass.
+8. Customer/business-purpose profiles lead with WWWD/WSID Work Case operation and
+   suppress development-workroom concepts until an explicit, available
+   `platform-development` shape is selected.
