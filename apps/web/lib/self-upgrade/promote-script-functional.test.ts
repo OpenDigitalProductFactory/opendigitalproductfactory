@@ -289,7 +289,7 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
     { caller: "legacy bootstrap caller", configDigest: undefined, engineImageId: `sha256:${"c".repeat(64)}`, platformArchitecture: "amd64", expectedStatus: 0 },
     { caller: "unrecognized engine digest", configDigest: `sha256:${"c".repeat(64)}`, engineImageId: `sha256:${"f".repeat(64)}`, platformArchitecture: "amd64", expectedStatus: 1 },
     { caller: "wrong engine platform", configDigest: `sha256:${"c".repeat(64)}`, engineImageId: `sha256:${"a".repeat(64)}`, platformArchitecture: "amd64", enginePlatformArchitecture: "arm64", expectedStatus: 1 },
-  ])("promotes a verified release into a source-free install for a $caller", ({ configDigest, engineImageId, platformArchitecture, enginePlatformArchitecture, frozenStrata, missingModernStratum, repoImageId, registryConfigDigest, expectedStatus }) => {
+  ])("promotes a verified release into a source-free install for a $caller", ({ caller, configDigest, engineImageId, platformArchitecture, enginePlatformArchitecture, frozenStrata, missingModernStratum, repoImageId, registryConfigDigest, expectedStatus }) => {
     const { root, source, backup, fakeBin } = makeScratch();
     const targetSha = "b".repeat(40);
     const candidateAssets = join(root, "candidate-assets");
@@ -353,6 +353,7 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
       }
       expect(existsSync(gitLog)).toBe(false);
       expect(r.stdout).toContain(`step=done target=${targetSha}`);
+      if (caller.startsWith("N-1")) expect(r.stdout).toContain("step=release-identity mode=config-only");
       if (configDigest) {
         expect(r.stdout).not.toContain("mode=legacy-bootstrap");
       } else {

@@ -372,6 +372,10 @@ if [[ $_release_mode -eq 1 && $_dry_run -eq 0 ]]; then
       exit 1
     }
   fi
+  if [[ "$_release_identity_mode" == "config-only" ]]; then
+    printf 'step=release-identity mode=config-only engine-digest=%s config-digest=%s platform=%s/%s\n' \
+      "$_candidate_engine_digest" "$DPF_RELEASE_CONFIG_DIGEST" "$_candidate_platform_os" "$_candidate_platform_architecture"
+  fi
   _candidate_revision="$(docker image inspect "$_candidate_portal" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' | tr -d '[:space:]')"
   [[ "$_candidate_revision" == "$PROMOTE_TARGET_SHA" ]] || {
     printf 'error: release portal revision %s does not match promote target %s\n' "${_candidate_revision:-missing}" "$PROMOTE_TARGET_SHA" >&2
