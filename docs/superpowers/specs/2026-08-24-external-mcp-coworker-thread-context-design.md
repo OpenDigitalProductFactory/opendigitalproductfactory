@@ -4,10 +4,10 @@ status: draft
 
 # External MCP coworker handoff through auth-bound tasks
 
-**Backlog item:** BI-6804F720  
-**Workroom:** WC-4DC4E103  
-**Blocks:** BI-2C50F548  
-**Kernel decision:** DI-BCCA7F3AC101  
+**Backlog item:** BI-6804F720
+**Workroom:** WC-4DC4E103
+**Blocks:** BI-2C50F548
+**Kernel decision:** DI-BCCA7F3AC101
 **Superseded decision:** DI-A308C6C7E47C
 
 ## Objective baseline
