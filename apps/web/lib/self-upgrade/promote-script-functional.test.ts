@@ -90,6 +90,7 @@ for arg in "$@"; do
 done
 [ -n "$DOCKER_LOG" ] && printf '%s\\n' "$*" >> "$DOCKER_LOG"
 case "$*" in
+  *".Id"*) printf "%s" "$DPF_TEST_RELEASE_CONFIG_DIGEST" ;;
   "image inspect "*) printf "%s" "$DPF_TEST_RELEASE_SHA" ;;
   "create "*) printf "candidate-container" ;;
   "cp candidate-container:/dpf-release-assets/. "*)
@@ -155,7 +156,7 @@ function runPromote(opts: {
   principalRecoveryDecision?: "recover" | "not-needed" | "blocked";
   principalResolveFails?: boolean;
   principalVerifyFails?: boolean;
-  release?: { tag: string; owner: string; candidateAssets: string; gitLog: string };
+  release?: { tag: string; owner: string; configDigest: string; candidateAssets: string; gitLog: string };
 }): { status: number | null; stdout: string; stderr: string } {
   const stateDir = join(opts.backup, "state");
   const secret = "s".repeat(32);
@@ -215,8 +216,10 @@ function runPromote(opts: {
     ...(opts.release ? [
       "export DPF_PROMOTION_MODE=release",
       `export DPF_RELEASE_TAG=${shellQuote(opts.release.tag)}`,
+      `export DPF_RELEASE_CONFIG_DIGEST=${shellQuote(opts.release.configDigest)}`,
       `export GHCR_OWNER=${shellQuote(opts.release.owner)}`,
       `export DPF_TEST_RELEASE_SHA=${shellQuote(opts.targetSha)}`,
+      `export DPF_TEST_RELEASE_CONFIG_DIGEST=${shellQuote(opts.release.configDigest)}`,
       `export DPF_TEST_RELEASE_ASSETS=${shellQuote(toBashPath(opts.release.candidateAssets))}`,
       `export GIT_LOG=${shellQuote(toBashPath(opts.release.gitLog))}`,
       "export PROMOTE_COMPOSE_FILES='docker-compose.yml docker-compose.release.yml'",
@@ -307,7 +310,7 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
       writeFileSync(join(fakeBin, "git"), '#!/bin/sh\nprintf "git invoked: %s\\n" "$*" >> "$GIT_LOG"\nexit 97\n');
       chmodSync(join(fakeBin, "git"), 0o755);
 
-      const r = runPromote({ source, backup, targetSha, fakeBin, dockerLog, release: { tag: "v2.0.0", owner: "opendigitalproductfactory", candidateAssets, gitLog } });
+      const r = runPromote({ source, backup, targetSha, fakeBin, dockerLog, release: { tag: "v2.0.0", owner: "opendigitalproductfactory", configDigest: `sha256:${"c".repeat(64)}`, candidateAssets, gitLog } });
       expect(r.status, r.stderr).toBe(0);
       expect(existsSync(gitLog)).toBe(false);
       expect(r.stdout).toContain(`step=done target=${targetSha}`);

@@ -30,6 +30,7 @@ import {
 } from "@/lib/self-upgrade/preflight";
 import { evaluateHostMemoryGuard } from "@/lib/self-upgrade/host-memory-preflight";
 import { getDeployedSha, isFeatureBuildDeployed } from "@/lib/self-upgrade/completion";
+import { readCurrentContainerConfigDigest } from "@/lib/self-upgrade/runtime-image-identity";
 import {
   classifyBuildFailure,
   formatClassifiedExcerpt,
@@ -325,9 +326,14 @@ export async function runSelfUpgrade(
 
   let upstreamSha: string | null = null;
   let releaseTag: string | null = null;
+  let releaseConfigDigest: string | null = null;
   const deployedSha = await getDeployedSha();
   if (upgradeStrategy === "release" && releaseInstall) {
-    const target = await resolveReleaseUpgradeCandidate({ context: releaseInstall, currentSourceSha: deployedSha });
+    const currentConfigDigest = await readCurrentContainerConfigDigest();
+    const target = await resolveReleaseUpgradeCandidate({
+      context: releaseInstall,
+      currentConfigDigest,
+    });
     if (target.kind === "no-published-target") {
       return await skipAttempt("no-published-target", `no-published-target: ${target.reason}`, { releaseStatus: target.reason });
     }
@@ -339,6 +345,7 @@ export async function runSelfUpgrade(
     }
     upstreamSha = target.sourceSha;
     releaseTag = target.tag;
+    releaseConfigDigest = target.configDigest;
   } else if (config.sourceMode === "upstream") {
     await gitRun(buildFetchCommand({ hostSourcePath, remote, branch }).slice(1));
     const head = await gitRun(buildRemoteHeadCommand({ hostSourcePath, remote, branch }).slice(1));
@@ -643,8 +650,12 @@ export async function runSelfUpgrade(
       composeProject,
       healthUrl: config.healthUrl ?? process.env.PROMOTE_HEALTH_URL ?? "",
       promoterImage: resolvedPromoterDigest ?? config.promoterImage,
-      release: releaseTag && releaseInstall
-        ? { tag: releaseTag, ghcrOwner: releaseInstall.ghcrOwner }
+      release: releaseTag && releaseConfigDigest && releaseInstall
+        ? {
+            tag: releaseTag,
+            ghcrOwner: releaseInstall.ghcrOwner,
+            configDigest: releaseConfigDigest,
+          }
         : undefined,
       stateDirHostPath: process.env.DPF_STATE_DIR_HOST,
       installStateMigrationEnvelope: migrationHandoff ? Buffer.from(JSON.stringify(migrationHandoff.envelope)).toString("base64url") : undefined,

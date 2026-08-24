@@ -1,7 +1,49 @@
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { signTransitionPayload } from "@/lib/platform-runtime/transition-protocol";
+import { ok } from "@/lib/shared/action-result";
 
 type TestContext = { mocks: any; runSelfUpgrade: (input: any) => Promise<any>; installState: string; installStateHash: string };
+
+export function registerSelfUpgradeFunctionTests(input: {
+  allFunctions: unknown[];
+  scheduled: unknown;
+  manual: unknown;
+}) {
+  it("registers both self-upgrade entry points", () => {
+    expect(input.allFunctions).toEqual(expect.arrayContaining([input.scheduled, input.manual]));
+  });
+}
+
+export function registerCoreSelfUpgradeSuccessTest(input: {
+  mocks: any;
+  runSelfUpgrade: (params: any) => Promise<any>;
+}) {
+  it("returns succeeded status when promoter exits 0", async () => {
+    const result = await input.runSelfUpgrade({ triggeredBy: "ops" });
+    expect(result).toMatchObject({ status: "succeeded", runId: "SUR-AAAABBBB" });
+    expect(input.mocks.completeRun).toHaveBeenCalledWith("SUR-AAAABBBB");
+  });
+}
+
+export function configureReleaseUpgradeTest(input: {
+  mocks: any;
+  installState: string;
+  sourceSha: string;
+  currentConfigDigest: string;
+  targetConfigDigest: string;
+}) {
+  vi.stubEnv("GHCR_OWNER", "opendigitalproductfactory");
+  vi.stubEnv("DPF_IMAGE_TAG", "v1.0.0");
+  vi.stubEnv("DPF_HOST_INSTALL_PATH", "/opt/dpf");
+  vi.stubEnv("DPF_SELF_UPGRADE_COMPOSE_FILES", "docker-compose.yml docker-compose.release.yml");
+  input.mocks.readSelfUpgradeSupport.mockResolvedValue({ configuredEnabled: true, supported: true, enabled: true, targetKind: "release-artifact", reason: "enabled", message: null });
+  input.mocks.readFile.mockImplementation(async (path: string) => path.endsWith("install-state.json") ? input.installState : path.endsWith(".install-mode") ? "consumer" : "s".repeat(32));
+  input.mocks.readCurrentContainerConfigDigest.mockResolvedValue(input.currentConfigDigest);
+  input.mocks.readRegistryReleaseCandidate.mockResolvedValue({
+    ...ok(),
+    candidate: { tag: "v2.0.0", sourceSha: input.sourceSha, channelDigest: `sha256:${"b".repeat(64)}`, platformManifestDigest: `sha256:${"c".repeat(64)}`, configDigest: input.targetConfigDigest },
+  });
+}
 
 export function registerInstallStateHandoffTests({ mocks, runSelfUpgrade, installState, installStateHash }: TestContext) {
   it("resolves and validates readiness before quiescence, then promotes the same digest", async () => {
