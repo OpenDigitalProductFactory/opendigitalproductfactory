@@ -649,7 +649,6 @@ describe("runAgenticLoop", () => {
       agentId: "admin-assistant",
     });
 
-    // Genuine config gap → name the REAL surface, not the old "Model Assignment".
     expect(result.content).toContain("No AI model that supports tools is active");
     expect(result.content).toContain("Providers & Routing");
     expect(result.content).not.toContain("Model Assignment");
@@ -766,7 +765,7 @@ describe("runAgenticLoop", () => {
     expect(result.modelId).toBe("unknown");
   });
 
-  it("treats a generic all-endpoints-failed as a transient retry, not a config error", async () => {
+  it("types a rate-limited all-endpoints failure as busy", async () => {
     const mockRoute = vi.mocked(routeAndCall);
     mockRoute.mockRejectedValueOnce(new Error(
       'All endpoints failed for conversation. Attempts: [{"endpointId":"anthropic-sub","error":"429 rate limited"}]',
@@ -780,6 +779,7 @@ describe("runAgenticLoop", () => {
 
     expect(result.content).toMatch(/Nothing is misconfigured/); // BI-33F1EA72 hand-off
     expect(result.content).not.toContain("Model Assignment");
+    expect(result.failure?.kind).toBe("busy");
   });
 
   it("does not accept a max_tokens-truncated response as a complete answer — continues generation (BI-1D144CC1)", async () => {

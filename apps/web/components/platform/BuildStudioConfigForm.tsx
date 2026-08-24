@@ -14,7 +14,7 @@ import {
   ProviderRadio,
   type EngineReadinessBadge,
 } from "./BuildStudioProviderControls";
-import { CLAUDE_MODELS, describeOpenCodeProvider, shouldShowPinnedEngineMissingWarning, type BuildStudioConfigFormProps } from "./build-studio-config-form-model";
+import { CLAUDE_MODELS, describeBuildEngineSelection, describeOpenCodeProvider, shouldShowPinnedEngineMissingWarning, type BuildStudioConfigFormProps } from "./build-studio-config-form-model";
 
 export function BuildStudioConfigForm({
   config,
@@ -330,7 +330,7 @@ export function BuildStudioConfigForm({
           <span>
             <strong style={{ color: "var(--dpf-text)", fontSize: 12 }}>Auto (recommended)</strong>
             <span style={{ display: "block", color: "var(--dpf-muted)", fontSize: 11, marginTop: 2 }}>
-              Selected now: {config.selection?.selected?.engine ?? config.provider}. {config.selection?.reason ?? "Selection updates from live readiness and routing evidence."}
+              Selected now: {config.selection?.selected?.engine ?? config.provider}. {describeBuildEngineSelection(config.selection)}
             </span>
             {config.selection && config.selection.fallbackChain.length > 0 && (
               <span style={{ display: "block", color: "var(--dpf-muted)", fontSize: 10, marginTop: 2 }}>

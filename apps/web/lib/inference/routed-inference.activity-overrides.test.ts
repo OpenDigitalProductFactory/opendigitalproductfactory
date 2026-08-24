@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   loadEndpointManifests: vi.fn(),
   loadPolicyRules: vi.fn(),
   loadOverrides: vi.fn(),
+  invalidateRoutingLoaderCache: vi.fn(),
   persistRouteDecision: vi.fn(),
   updateProviderSuitabilityReceipt: vi.fn(),
   inferContract: vi.fn(),
@@ -34,6 +35,7 @@ vi.mock("@/lib/routing/loader", () => ({
   loadEndpointManifests: mocks.loadEndpointManifests,
   loadPolicyRules: mocks.loadPolicyRules,
   loadOverrides: mocks.loadOverrides,
+  invalidateRoutingLoaderCache: mocks.invalidateRoutingLoaderCache,
   persistRouteDecision: mocks.persistRouteDecision,
   // Mirror the real gating so the persistDecision:false test observes the
   // same contract the production helper enforces (BI-F4D3B9E9(c)).
@@ -77,6 +79,7 @@ vi.mock("@/lib/routing/provider-suitability/provider-onboarding-data", () => ({
 
 import { routeAndCall } from "./routed-inference";
 import { previewRoute } from "./routed-inference";
+import { ProviderReconciliationRequiredError } from "./provider-reconciliation";
 
 describe("routeAndCall activity harness overrides", () => {
   beforeEach(() => {
@@ -272,6 +275,48 @@ describe("routeAndCall activity harness overrides", () => {
     expect(mocks.logTokenUsage).toHaveBeenCalledWith(
       expect.objectContaining({ inferenceMs: 1234 }),
     );
+  });
+
+  it("rebuilds the route once after provider model reconciliation", async () => {
+    mocks.callWithFallbackChain
+      .mockRejectedValueOnce(new ProviderReconciliationRequiredError(["openai"], []))
+      .mockResolvedValueOnce({
+        providerId: "openai",
+        modelId: "gpt-4o-mini",
+        content: "recovered",
+        toolCalls: [],
+        tokenUsage: { inputTokens: 12, outputTokens: 4 },
+        inferenceMs: 12,
+        downgraded: false,
+        downgradeMessage: null,
+      });
+
+    const result = await routeAndCall(
+      [{ role: "user", content: "Continue" }],
+      "You help.",
+      "internal",
+      { taskType: "conversation", persistDecision: false },
+    );
+
+    expect(result.content).toBe("recovered");
+    expect(mocks.invalidateRoutingLoaderCache).toHaveBeenCalledTimes(1);
+    expect(mocks.loadEndpointManifests).toHaveBeenCalledTimes(2);
+    expect(mocks.callWithFallbackChain).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not loop when the rebuilt route also requests reconciliation", async () => {
+    mocks.callWithFallbackChain.mockRejectedValue(
+      new ProviderReconciliationRequiredError(["openai"], []),
+    );
+
+    await expect(routeAndCall(
+      [{ role: "user", content: "Continue" }],
+      "You help.",
+      "internal",
+      { taskType: "conversation", persistDecision: false },
+    )).rejects.toBeInstanceOf(ProviderReconciliationRequiredError);
+
+    expect(mocks.callWithFallbackChain).toHaveBeenCalledTimes(2);
   });
 
   it("keeps preview routing deterministic by not loading approved overrides", async () => {
