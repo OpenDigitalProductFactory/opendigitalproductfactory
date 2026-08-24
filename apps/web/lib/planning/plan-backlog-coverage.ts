@@ -2,6 +2,11 @@ import { prisma } from "@dpf/db";
 
 import { resolveRepositoryArtifact, type InitiativeArtifactRef } from "@/lib/backlog/initiative-readiness";
 
+export {
+  projectPlanBacklogDependencies,
+  type PlanDependencyProjection,
+} from "./plan-backlog-dependency-projection";
+
 export type PlanBacklogCoverageDecision = "decomposed" | "atomic";
 
 export type PlanBacklogDeliverable = {
@@ -38,44 +43,7 @@ export type PlanBacklogCoverageReceipt = {
   deliverables: PlanBacklogDeliverable[] | PlanBacklogDeliverableV2[];
 };
 
-type MappedBacklogItem = { itemId: string; status: string };
-
-export type PlanDependencyProjection = {
-  state: "pass" | "missing" | "fail";
-  unresolvedDeliverableKeys: string[];
-};
-
-/** Project live dependency readiness without treating a bare deferred status as success. */
-export function projectPlanBacklogDependencies(
-  receipt: PlanBacklogCoverageReceipt,
-  mappedBacklogItems: MappedBacklogItem[],
-): PlanDependencyProjection {
-  const byKey = new Map(receipt.deliverables.map((deliverable) => [deliverable.key, deliverable]));
-  const statusByItem = new Map(mappedBacklogItems.map((item) => [item.itemId, item.status]));
-  const unresolved = new Set<string>();
-  let hasExplicitFailure = false;
-  for (const deliverable of receipt.deliverables) {
-    for (const dependencyKey of deliverable.dependsOn ?? []) {
-      const dependency = byKey.get(dependencyKey) as PlanBacklogDeliverableV2 | undefined;
-      if (!dependency) {
-        unresolved.add(dependencyKey);
-        hasExplicitFailure = true;
-        continue;
-      }
-      const status = dependency.backlogItemId ? statusByItem.get(dependency.backlogItemId) : undefined;
-      if (status === "done") continue;
-      const disposition = dependency.disposition;
-      if (disposition && (disposition.decision === "deferred" || disposition.decision === "not-applicable")
-        && disposition.reason.trim().length >= 20) continue;
-      unresolved.add(dependency.key);
-      if (status === "deferred" || (disposition && !disposition.reason.trim())) hasExplicitFailure = true;
-    }
-  }
-  return {
-    state: unresolved.size === 0 ? "pass" : hasExplicitFailure ? "fail" : "missing",
-    unresolvedDeliverableKeys: [...unresolved].sort(),
-  };
-}
+export type MappedBacklogItem = { itemId: string; status: string };
 
 export type PlanBacklogCoverageValidation =
   | {
@@ -670,6 +638,17 @@ export async function recordPlanBacklogCoverage(args: {
     return { ok: false, code: "plan-artifact-invalid", error: "Serializable plan coverage persistence is unavailable." };
   }
 
+  // Provider I/O is immutable and may exceed the interactive transaction
+  // budget. Resolve it before opening the serializable transaction; mutable
+  // Workroom/head identity is revalidated under lock below.
+  const resolvedPlan = await (args.resolveArtifact ?? resolveRepositoryArtifact)({
+    locator: args.planArtifactRef,
+    subject: { kind: "backlog-item", id: parent.itemId },
+  });
+  if (!resolvedPlan.ok) {
+    return { ok: false, code: "plan-artifact-invalid", error: resolvedPlan.error };
+  }
+
   return db.$transaction(async (tx) => {
     if (!tx.$queryRaw) {
       return { ok: false as const, code: "plan-artifact-invalid" as const, error: "Plan coverage lock support is unavailable." };
@@ -687,12 +666,24 @@ export async function recordPlanBacklogCoverage(args: {
     if (!currentParent || currentParent.id !== parent.id) {
       return { ok: false as const, code: "backlog-item-not-found" as const, error: `BacklogItem ${args.itemId} was not found.` };
     }
-    const resolvedPlan = await (args.resolveArtifact ?? resolveRepositoryArtifact)({
-      locator: args.planArtifactRef,
-      subject: { kind: "backlog-item", id: currentParent.itemId },
-    });
-    if (!resolvedPlan.ok) {
-      return { ok: false as const, code: "plan-artifact-invalid" as const, error: resolvedPlan.error };
+    const matchingHeads = await tx.$queryRaw<Array<{ id: string; createdByPrincipalId: string | null }>>`
+      SELECT "id", "createdByPrincipalId" FROM "WorkCapsule"
+      WHERE "backlogItemId" = ${currentParent.itemId}
+        AND "repositoryFullName" = ${args.planArtifactRef.repositoryFullName}
+        AND "headSha" = ${args.planArtifactRef.commitSha}
+        AND "archivedAt" IS NULL
+        AND "status" NOT IN ('abandoned', 'cancelled')
+      FOR SHARE
+    `;
+    if (
+      matchingHeads.length !== 1
+      || matchingHeads[0]?.createdByPrincipalId !== resolvedPlan.artifact.authorPrincipalId
+    ) {
+      return {
+        ok: false as const,
+        code: "plan-artifact-invalid" as const,
+        error: "The immutable plan commit and author no longer match exactly one live governed Workroom head.",
+      };
     }
     const requestedIds = Array.from(new Set(
       args.deliverables.map((deliverable) => deliverable.backlogItemId).filter((id): id is string => Boolean(id)),

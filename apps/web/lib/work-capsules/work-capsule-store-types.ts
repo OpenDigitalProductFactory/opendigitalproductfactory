@@ -30,4 +30,5 @@ export type CapsuleDb = {
   $queryRaw?(strings: TemplateStringsArray, ...values: unknown[]): Promise<unknown>;
   platformCapability?: { findMany(args: unknown): Promise<any[]> };
   runtimeCapabilityTransition?: { findFirst(args: unknown): Promise<any> };
+  agentToolGrant?: { findMany(args: unknown): Promise<any[]> };
 };

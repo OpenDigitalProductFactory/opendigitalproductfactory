@@ -39,6 +39,9 @@ export type CoworkerAuthorityReasonCode =
   | "sensitivity-clearance-denied"
   | "masking-obligation-unmet"
   | "policy-version-stale"
+  | "policy-declined"
+  | "policy-authorization-invalid"
+  | "dual-control-required"
   | "approval-required"
   | "approval-expired"
   | "approval-binding-mismatch"
@@ -59,6 +62,8 @@ export type CoworkerApprovalBinding = {
 
 export type CoworkerAuthorityInput = {
   authContext: EffectiveAuthContext;
+  /** Server-resolved organization for the governed subject. */
+  organizationId?: string | null;
   action: {
     toolName: string;
     requiredCapability: string | null;
@@ -180,6 +185,12 @@ const EXPLANATIONS: Record<CoworkerAuthorityReasonCode, string> = {
     "Required data protection was not completed before this action.",
   "policy-version-stale":
     "The governing policy changed; the action must be evaluated again.",
+  "policy-declined":
+    "The owning policy judgment explicitly declined this action.",
+  "policy-authorization-invalid":
+    "The owning policy judgment cannot authorize this exact action.",
+  "dual-control-required":
+    "This action requires a fresh distinct-human approval bound to the exact call.",
   "approval-required":
     "This action is authorized to proceed only after employee approval.",
   "approval-expired": "The prior approval expired; request a new decision.",
@@ -249,12 +260,10 @@ function deny(
 }
 
 function requiresApproval(input: CoworkerAuthorityInput): boolean {
-  if (input.action.approvalPolicy === "all") return true;
   if (input.action.executionMode === "proposal") return true;
-  return (
-    input.action.approvalPolicy === "side-effects" &&
-    input.action.sideEffect
-  );
+  if (!input.action.sideEffect) return false;
+  return input.action.approvalPolicy === "all"
+    || input.action.approvalPolicy === "side-effects";
 }
 
 function sameBinding(
@@ -322,7 +331,7 @@ export function evaluateCoworkerAuthority(
     return deny("route-scope-denied");
   }
 
-  if (!canAccessAuthoritySubject(input.authContext, input.subject)) {
+  if (!canAccessAuthoritySubject(input.authContext, input.subject, input.organizationId)) {
     return deny("subject-scope-denied", "request-authority");
   }
 

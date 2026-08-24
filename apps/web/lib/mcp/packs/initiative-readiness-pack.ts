@@ -1,30 +1,16 @@
 import type { InitiativeArtifactRef, InitiativeGateKey } from "@/lib/backlog/initiative-readiness";
+import { prisma } from "@dpf/db";
 import {
   recordInitiativeGateReceipt,
   recordInitiativeObjectiveMappingProposal,
   recordInitiativeSpecApproval,
 } from "@/lib/backlog/initiative-readiness";
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import {
+  INITIATIVE_READINESS_LANES as LANES,
+  type InitiativeReadinessLane as Lane,
+} from "@/lib/tak/initiative-readiness-tool-grants";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
-
-type Lane = {
-  capability: NonNullable<ToolDefinition["requiredCapability"]>;
-  grant: string;
-  gates: readonly InitiativeGateKey[];
-  independent: boolean;
-};
-
-const LANES: Record<string, Lane> = {
-  record_initiative_evidence: { capability: "manage_backlog", grant: "initiative_evidence_write", gates: ["classification", "research", "dependency-disposition"], independent: false },
-  record_initiative_design_review: { capability: "manage_backlog", grant: "initiative_design_review", gates: ["design-spec", "spec-approval", "plan-review"], independent: true },
-  record_initiative_architecture_review: { capability: "manage_ea_model", grant: "initiative_architecture_review", gates: ["architecture-review"], independent: true },
-  record_initiative_data_review: { capability: "manage_ea_model", grant: "initiative_data_review", gates: ["data-review"], independent: true },
-  record_initiative_ux_review: { capability: "manage_backlog", grant: "initiative_ux_review", gates: ["ux-fit-review"], independent: true },
-  record_initiative_security_review: { capability: "manage_compliance", grant: "initiative_security_review", gates: ["security-review"], independent: true },
-  record_initiative_compliance_review: { capability: "manage_compliance", grant: "initiative_compliance_review", gates: ["compliance-review"], independent: true },
-  record_initiative_domain_review: { capability: "manage_backlog", grant: "initiative_domain_review", gates: ["domain-review"], independent: true },
-  record_initiative_archetype_review: { capability: "manage_taxonomy", grant: "initiative_archetype_review", gates: ["archetype-provisioning", "archetype-completeness"], independent: true },
-};
 
 const artifactRefSchema = {
   type: "object",
@@ -186,8 +172,76 @@ function parseObjectiveMappings(value: unknown): Array<{ objectiveId: string; ev
   return mappings;
 }
 
+async function resolveExternalInitiativeReviewBinding(
+  actionKey: string,
+  taskRunId: string | undefined,
+): Promise<{
+  itemId: string;
+  gate: string;
+  expectedCurrentBaselineId?: string | null;
+  artifactRef: InitiativeArtifactRef;
+} | null> {
+  if (!taskRunId) return null;
+  const run = await prisma.taskRun.findUnique({
+    where: { taskRunId },
+    select: { a2aMetadata: true },
+  });
+  const metadata = run?.a2aMetadata;
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+  const record = metadata as Record<string, unknown>;
+  if (record["trigger"] !== "external-mcp") return null;
+  const rawBinding = record["initiativeReviewBinding"];
+  if (!rawBinding || typeof rawBinding !== "object" || Array.isArray(rawBinding)) return null;
+  const binding = rawBinding as Record<string, unknown>;
+  if (binding["writerToolName"] !== actionKey) return null;
+  const itemId = typeof binding["itemId"] === "string" ? binding["itemId"].trim() : "";
+  const gate = typeof binding["gate"] === "string" ? binding["gate"].trim() : "";
+  const rawArtifact = binding["artifactRef"];
+  const expectedCurrentBaselineId = binding["expectedCurrentBaselineId"];
+  if (!itemId.startsWith("BI-") || !gate || !rawArtifact || typeof rawArtifact !== "object" || Array.isArray(rawArtifact)) {
+    return null;
+  }
+  const artifact = rawArtifact as Record<string, unknown>;
+  if (
+    artifact["kind"] !== "repo-blob-at-commit"
+    || typeof artifact["repositoryFullName"] !== "string"
+    || typeof artifact["commitSha"] !== "string"
+    || typeof artifact["path"] !== "string"
+    || typeof artifact["providerBlobId"] !== "string"
+    || (expectedCurrentBaselineId !== undefined
+      && expectedCurrentBaselineId !== null
+      && typeof expectedCurrentBaselineId !== "string")
+  ) return null;
+  return {
+    itemId,
+    gate,
+    ...(expectedCurrentBaselineId !== undefined
+      ? { expectedCurrentBaselineId: expectedCurrentBaselineId as string | null }
+      : {}),
+    artifactRef: {
+      kind: "repo-blob-at-commit",
+      repositoryFullName: artifact["repositoryFullName"],
+      commitSha: artifact["commitSha"],
+      path: artifact["path"],
+      providerBlobId: artifact["providerBlobId"],
+    },
+  };
+}
+
 function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
   return async (params, userId, context): Promise<ToolResult> => {
+    const binding = await resolveExternalInitiativeReviewBinding(actionKey, context?.taskRunId);
+    if (binding) {
+      params = {
+        ...params,
+        itemId: binding.itemId,
+        gate: binding.gate,
+        artifactRef: binding.artifactRef,
+        ...(Object.prototype.hasOwnProperty.call(binding, "expectedCurrentBaselineId")
+          ? { expectedCurrentBaselineId: binding.expectedCurrentBaselineId }
+          : {}),
+      };
+    }
     const operation = params.operation ?? "gate-receipt";
     if (actionKey === "record_initiative_evidence" && operation === "objective-mapping") {
       const mappings = parseObjectiveMappings(params.objectiveMappings);

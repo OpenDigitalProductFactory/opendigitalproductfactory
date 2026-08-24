@@ -117,6 +117,35 @@ describe("resolveAutonomousWorkTools — attachment budget (BI-CAP-F2D39F8F)", (
     expect(result.tools).toHaveLength(40);
     expect(result.deferredTools).toHaveLength(0);
   });
+
+  it("force-attaches authorized tools named by an exact external workflow packet", async () => {
+    const tools = await import("@/lib/mcp-tools");
+    const surface = [
+      ...Array.from({ length: 18 }, (_, i) => fakeTool(`filler_${i}`)),
+      fakeTool("search_tool_marketplace"),
+      fakeTool("read_source_at_version"),
+      { ...fakeTool("record_initiative_evidence"), sideEffect: true },
+    ];
+    vi.mocked(tools.getAvailableTools).mockResolvedValue(surface as never);
+
+    const { resolveAutonomousWorkTools } = await import("./autonomous-work-run");
+    const result = await resolveAutonomousWorkTools({
+      userContext,
+      agentId: "AGT-WS-BUILD",
+      mode: "act",
+      routeContext: "/build/work/WC-7FF8A505",
+      requiredToolNames: ["read_source_at_version", "record_initiative_evidence"],
+    });
+
+    expect(result.tools.map((tool) => tool.name)).toEqual(expect.arrayContaining([
+      "read_source_at_version",
+      "record_initiative_evidence",
+    ]));
+    expect(result.deferredTools.map((tool) => tool.name)).not.toEqual(expect.arrayContaining([
+      "read_source_at_version",
+      "record_initiative_evidence",
+    ]));
+  });
 });
 
 describe("createAutonomousWorkRun", () => {
