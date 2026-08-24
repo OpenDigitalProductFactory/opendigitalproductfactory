@@ -122,6 +122,12 @@ export function referencesProviderRoutingSurface(content: string): boolean {
   return /Providers\s*&\s*Routing/i.test(content);
 }
 
+export function referencesTerminalProviderRecovery(content: string): boolean {
+  if (!referencesProviderRoutingSurface(content)) return false;
+  return /^(?:The selected AI model is no longer available|No AI model (?:can handle|that supports tools is active)|No AI provider credentials are configured|No AI provider is available to handle|I couldn't get an answer from any AI model)/i
+    .test(content.trim());
+}
+
 function ProviderRoutingCta() {
   return (
     <div style={{ marginTop: 8 }}>
@@ -387,7 +393,7 @@ export function AgentMessageBubble({
         }}
       >
         {message.content}
-        {referencesProviderRoutingSurface(message.content) && <ProviderRoutingCta />}
+        {referencesTerminalProviderRecovery(message.content) && <ProviderRoutingCta />}
       </div>
     );
   }

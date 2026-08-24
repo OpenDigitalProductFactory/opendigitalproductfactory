@@ -85,7 +85,8 @@ describe("AgentMessageBubble", () => {
         message={{
           id: "routing-failed",
           role: "system",
-          content: "The selected AI model is unavailable. Open Providers & Routing.",
+          content:
+            "The selected AI model is no longer available from its provider, so the platform could not answer this turn. Open Providers & Routing.",
           agentId: null,
           routeContext: "/workspace",
           createdAt: "2026-08-24T00:00:00.000Z",
@@ -97,6 +98,25 @@ describe("AgentMessageBubble", () => {
     expect(html).toContain('data-message-role="system"');
     expect(html).toContain('data-testid="agent-provider-reconnect-cta"');
     expect(html).not.toContain('data-message-role="assistant"');
+  });
+
+  it("does not add recovery controls to unrelated system notices that mention provider routing", () => {
+    const html = renderToStaticMarkup(
+      <AgentMessageBubble
+        message={{
+          id: "build-studio-routing-note",
+          role: "system",
+          content: "Build Runtime and Providers & Routing govern different phases.",
+          agentId: null,
+          routeContext: "/platform/ai/build-studio",
+          createdAt: "2026-08-24T00:00:00.000Z",
+        }}
+        showAgentLabel={false}
+        agentName={null}
+      />,
+    );
+    expect(html).toContain('data-message-role="system"');
+    expect(html).not.toContain('data-testid="agent-provider-reconnect-cta"');
   });
 
   it("renders assistant markdown as structured HTML", () => {
