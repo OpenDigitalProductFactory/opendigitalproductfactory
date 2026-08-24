@@ -198,19 +198,26 @@ inconclusive score.
 Do not accept an organization identifier from the receipt caller. Extend the
 existing subject derivation so the server-recognized `itemId` becomes
 `{ kind: "backlog-item", id }`. Before writing the generic authority decision,
-resolve that canonical BacklogItem server-side and copy its `organizationId`
-into `AuthorizationDecisionLog`.
+resolve that canonical BacklogItem server-side. For an organization-bound item,
+require an authenticated execution organization and an exact match to the
+item's `organizationId`. For an organizationless platform item, retain the exact
+backlog-item subject and bind the decision to the existing non-tenant authority
+scope sentinel `organizationId="platform"`.
 
 The decision writer must bind `objectRef` to the derived backlog subject and
-must fail closed when the item is absent, the item has no governed organization,
-or the resolved organization conflicts with any authenticated execution
-context. Other subject kinds keep their current behavior until they have an
-equally canonical server-side organization resolver; there is no permissive
-fallback from caller input.
+must fail closed when the item is absent, an organization-bound item lacks a
+matching authenticated execution organization, or the resolved organization
+conflicts with that context. The caller cannot select, supply, or fabricate an
+organization for either case: the server derives the tenant organization or
+the `platform` authority scope from the governed BacklogItem. Other subject
+kinds keep their current behavior until they have an equally canonical
+server-side organization resolver; there is no permissive fallback from caller
+input.
 
 This lets an independently granted design reviewer traverse the existing
 `spec-approval` repository checks. It does not relax the checks, grant the
-author review authority, or manufacture an organization for platform scope.
+author review authority, collapse the object to a generic platform subject, or
+manufacture a tenant organization for platform scope.
 
 ### 6. Anchor pre-baseline receipts to the proposed design
 
@@ -601,7 +608,8 @@ relabelled design mutation is valid.
 | `AC-RECOVERY-ROUTE` | Missing grants identify exact eligible agents and request packet. | Recovery resolver and claim tests. |
 | `AC-UI-TARGET` | Following a recovery action preserves the exact eligible agent identity or fails visibly; it never opens a default coworker. | Recovery-action/launcher component test. |
 | `AC-REVIEW-SEPARATION` | External fallback executes as target reviewer and never grants caller authority. | Coworker/task and receipt separation tests. |
-| `AC-SPEC-AUTHORITY` | A correctly granted independent reviewer gets an organization-bound allow decision for the governed item; missing/mismatched subjects fail closed. | Authority-gate and exact spec-approval traversal tests. |
+| `AC-REVIEWER-READ` | An immediate `sideEffect=false` immutable review read does not require a per-call HITL envelope solely because the coworker's coarse approval policy is `all`; proposal execution and all side effects remain approval-gated. | Coworker authority-decision regression test. |
+| `AC-SPEC-AUTHORITY` | A correctly granted independent reviewer gets an allow decision for the exact governed item: tenant items require the matching authenticated organization, while organizationless platform items use server-derived authority scope `platform`; missing/mismatched subjects fail closed. | Authority-gate and exact spec-approval traversal tests. |
 | `AC-RECEIPT-FRESHNESS` | Superseded specialist receipts never satisfy a newer proposed or approved design, including before the first baseline. | Entry-adapter tests shaped from the e89f362 -> ad873ed reproduction. |
 | `AC-HEAD-RECONCILE` | Provider-verified evidence updates the existing subject Workroom through adoption. | Provider, evidence handler, and capture tests. |
 | `AC-AUTHOR-AFTER-SYNC` | Artifact author resolves after synchronization. | Repository-artifact integration fixture. |

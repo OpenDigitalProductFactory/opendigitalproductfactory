@@ -13,7 +13,7 @@ status: draft
 ## Delivery contract
 
 The repair has seven testable slices: universal policy-authority projection,
-profile/policy, actionable reviewer routing, organization-bound reviewer
+profile/policy, actionable reviewer routing, server-derived reviewer
 authority, provider-verified Workroom reconciliation, existing-Workroom replay,
 and bounded plan-coverage persistence.
 Production implementation starts only after governed implementation intent is
@@ -35,6 +35,7 @@ post-amendment operator ratification makes the one-time envelope effective.
 | `AC-RECOVERY-ROUTE` | recovery resolver and claim-response tests | lane registry, recovery adapter, claim handler |
 | `AC-UI-TARGET` | exact-target and stale-target launcher tests | recovery action / coworker launcher |
 | `AC-REVIEW-SEPARATION` | external no-thread request tests and receipt separation tests | coworker pack -> `submitRemoteCoworkerTask` |
+| `AC-REVIEWER-READ` | immediate `sideEffect=false` read under coarse approval policy `all`, plus unchanged proposal/side-effect approval cases | coworker authority decision |
 | `AC-SPEC-AUTHORITY` | authority writer and exact spec-approval traversal tests | subject derivation, authority decision log, baseline repository |
 | `AC-RECEIPT-FRESHNESS` | pre-baseline and post-baseline supersession tests | readiness entry adapter / receipt projection |
 | `AC-HEAD-RECONCILE`, `AC-REPLAY` | provider, handler, capture/adopt tests | external evidence and external session capture |
@@ -183,20 +184,31 @@ failed readiness claim and is consumed by the protected merge.
    `riskClass=bounded-write`, explicit target agent, and caller agent null.
 4. Prove read-only PAT denial, idempotent retry, and non-PAT missing-thread
    behavior.
-5. Reuse existing TaskRun lifecycle, clearance, grants, and audit code.
+5. Red-test that an immediate `sideEffect=false` immutable read does not require
+   a per-call HITL envelope solely because the target coworker's coarse approval
+   policy is `all`; keep proposal execution and every side-effecting action
+   approval-gated.
+6. Reuse existing TaskRun lifecycle, clearance, grants, and audit code.
 
-## Task 6 - Red/green organization-bound reviewer authority
+## Task 6 - Red/green server-derived reviewer authority
 
 Before head reconciliation, repair the independently reproduced spec-approval
 authority path:
 
 1. Add `itemId` as a server-recognized backlog-item authority subject.
-2. Resolve the BacklogItem organization server-side before the authority log is
-   written; do not accept caller-supplied organization authority.
-3. Prove an eligible independent reviewer receives a matching organization-bound
-   allow decision and can traverse the existing spec-approval repository.
-4. Prove missing item, missing organization, conflicting authenticated context,
-   wrong reviewer grant, and author/reviewer collision remain denied.
+2. Resolve authority scope from the BacklogItem server-side before the authority
+   log is written; do not accept caller-supplied organization authority. An
+   organization-bound item requires an authenticated exact tenant match. An
+   organizationless platform item retains its exact backlog-item subject and
+   uses the existing non-tenant authority-scope sentinel
+   `organizationId="platform"`.
+3. Prove an eligible independent reviewer receives the matching server-derived
+   allow decision and can traverse the existing spec-approval repository for
+   both tenant-bound and platform-scoped items.
+4. Prove missing item, missing authenticated organization for a tenant-bound
+   item, conflicting tenant context, a real/mismatched organization asserted
+   for a platform item, wrong reviewer grant, and author/reviewer collision
+   remain denied.
 
 ## Task 7 - Red/green receipt artifact freshness
 
