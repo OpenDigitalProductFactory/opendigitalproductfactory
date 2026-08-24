@@ -53,6 +53,8 @@ correctly but does not expose a governed path to satisfy the denial.
 | Profile derivation | `profiles.ts` maps `platform` and `common` directly to `cross-domain` | Ownership scope is incorrectly treated as risk/coupling. |
 | Requirement policy | `evaluate.ts` gives fix, feature, and cross-domain the same plan requirements and almost the same implementation requirements | The approved profile semantics were not encoded. |
 | Tool disclosure | Exact `load_tools` requests for every initiative receipt writer returned no granted tools | The developer correctly lacks reviewer grants, but the response does not identify who can act. |
+| Claim recovery serialization | On candidate `702332388d009950670bd7ecaf6facff1710a393`, preview claim decision `IRD-5B5D2B34D6C3` correctly returned profile `fix`, verdict `input-required`, and unmet `RESEARCH_REQUIRED` plus `PLAN_REQUIRED`, but the MCP result contained no `recovery` object | `claimGovernedBacklogWorkspace` computes recovery, then `claim-backlog-item-handler.ts` serializes only `workIntent` and `readiness` on `!governed.ok`, dropping the recovery contract at the MCP boundary. |
+| Recovery packet completeness | The computed reviewer route contains role, tool, grant, target identity, and independence only; the operator had to construct the no-thread handoff packet out of band | The recovery producer omits `requestKey`, `objective`, `questionPacketSummary`, exact gate/artifact bindings, and the executable `request_coworker` arguments required by the design. |
 | Reviewer routing | `request_coworker` and `summon_coworker` reject PAT calls without `threadId` | The collaboration adapter assumes a portal thread and ignores the existing auth-bound `tasks/submit` substrate. |
 | Workforce routing | WC-B0DD2B2F exhausted native discovery and the workforce UI opened a default/ineligible coworker | Handoff intent and exact eligible reviewer identity are not carried end to end. |
 | Eligible reviewers | The live agent/grant registry has separate design, architecture, data, UX, security, compliance, domain, and evidence agents | The existing roster is not joined to unmet receipt authority. |
@@ -62,6 +64,7 @@ correctly but does not expose a governed path to satisfy the denial.
 | Artifact author | `resolveRepositoryArtifact` requires one subject Workroom whose head equals the immutable commit | `ARTIFACT_AUTHOR_REQUIRED` is downstream of the missing head sync. |
 | Plan coverage persistence | WC-A31DBE53 now resolves plan blob `8f933b3c9312f0a3b2f01794f421ac4b9cace01e` and validates five mappings, but commit attempts expire at 5,532 ms and 8,431 ms against Prisma's 5,000 ms interactive-transaction limit | `recordPlanBacklogCoverage` performs provider commit, DCO, blob, alias, and Workroom resolution while holding a serializable parent-row lock. |
 | Policy-to-authority bridge | `DecisionInteraction` seals the owning WWMD/WWWD/WSID judgment, profile version, evidence, scores, and outcome. `AuthorizationDecisionLog`, `DelegationGrant`, and `CoworkerActionEnvelope` already carry human-rooted, scoped, expiring action authority. Workroom evidence `cmt5wqbft0j8c01rm8l54p0g5` records `DI-053D69EADEDC`: `policy-authority-bridge`, high confidence, composite `15.883`, margin `5.984`, `autonomyEligible=true`, and no commandment conflict. | The judgment and action-authority substrates are not connected by one canonical projector. A raw DecisionInteraction reference is currently treated as presence evidence, not as a verified bounded authority decision, so a valid policy “yes” cannot authorize the exact action and a normal identity receives no lawful next step. |
+| Portal projection | Candidate preview renders BI-F0715C9C as `READY TO BUILD` with an enabled Build Studio action while the canonical claim verdict is `input-required`; `/build/work/WC-7FF8A505` omits the verdict, unmet requirements, reviewer route, head SHA, and next action | Existing BI `BI-812AC0D8` owns the cross-surface readiness presenter and action suppression. This repair must not claim multi-surface completion before that governed follow-up is delivered. |
 
 The defect is a combination of profile derivation, per-profile policy,
 progressive disclosure/recovery, external reviewer dispatch, authority-decision
@@ -137,16 +140,34 @@ Centralize initiative lane metadata (tool, grant, gates, accountable roles,
 independence) in the existing initiative tool-grant module. The receipt pack
 and recovery builder both consume it.
 
-When a decision is not allowed, the claim response adds a bounded `recovery`
-array. Each actionable entry contains:
+When a decision is not allowed, the governed claim and its MCP adapter return
+the same bounded `recovery` object. The adapter may add transport metadata, but
+it may not select or omit fields. Every unmet requirement is represented by
+either an executable next action or one explicit escalation; unmapped
+requirements may not silently disappear.
+
+Each eligible reviewer route contains:
 
 - unmet code and accountable role;
 - canonical receipt tool and required grant;
 - whether independent authority is required;
 - active, production, non-archived agents with the exact grant;
 - one recommended agent, excluding the current author agent;
-- an exact `request_coworker` packet and deterministic request key;
+- the exact unmet gate, BI, Workroom, repository, branch, and immutable
+  artifact identity used by the reviewer action;
+- an exact `request_coworker` packet with `targetAgent`, `objective`,
+  `questionPacketSummary`, deterministic `requestKey`, `tier=2`, and
+  `enteredVia=handoff`;
 - one manual escalation only when no eligible reviewer exists.
+
+The server constructs, returns, and tests the whole packet. Callers and portal
+components must not synthesize it. For artifact-bound review, the deterministic
+key is `initiative-readiness:<BI>:<gate>:<headSha>` and the objective names the
+exact BI, Workroom, canonical artifact, receipt tool, and independent-review
+constraint. If the Workroom, gate, target, or immutable artifact binding is
+missing or stale, recovery returns a bounded escalation explaining that exact
+binding failure and no executable dispatch packet. Returning recovery never
+dispatches automatically.
 
 Recovery never changes the verdict and never grants the caller reviewer
 authority.
@@ -494,6 +515,8 @@ The envelope is bound to:
   - `apps/web/lib/planning/plan-backlog-coverage.ts`
   - `apps/web/lib/planning/plan-backlog-dependency-projection.ts`
   - `apps/web/lib/tak/initiative-readiness-tool-grants.ts`
+  - `apps/web/lib/work-capsules/claim-backlog-item-handler.test.ts`
+  - `apps/web/lib/work-capsules/claim-backlog-item-handler.ts`
   - `apps/web/lib/work-capsules/external-session-capture.test.ts`
   - `apps/web/lib/work-capsules/external-session-capture.ts`
   - `apps/web/lib/work-capsules/governed-work-claim.test.ts`
@@ -501,6 +524,13 @@ The envelope is bound to:
   - `apps/web/lib/work-capsules/work-capsule-store-types.ts`
   - `docs/superpowers/plans/2026-08-23-initiative-readiness-traversal-repair.md`
   - `docs/superpowers/specs/2026-08-23-initiative-readiness-traversal-repair-design.md`
+
+The preview acceptance correction expands the exact envelope from 35 to 37
+paths only by adding `claim-backlog-item-handler.ts` and its focused boundary
+test. It authorizes no portal source changes. Cross-surface readiness display
+and action suppression remain governed by existing `BI-812AC0D8`; therefore
+this BI may claim the MCP/external-contributor recovery contract repaired, but
+not the portal journey complete.
 
 The earlier envelope for `WC-2ABA65F7` and
 `fix/initiative-readiness-bootstrap` was revoked by a non-fast-forward force
@@ -605,7 +635,7 @@ relabelled design mutation is valid.
 | `AC-PROFILE-FIX` | A small platform bug without stronger signals derives `fix`. | Profile unit test and BI-A45D744A-shaped fixture. |
 | `AC-PROFILE-MONOTONIC` | Recorded cross-domain/archetype evidence still wins. | Profile regression tests. |
 | `AC-POLICY-DIFFERENT` | Fix, feature, and cross-domain have materially different sets. | Table-driven pure-policy tests. |
-| `AC-RECOVERY-ROUTE` | Missing grants identify exact eligible agents and request packet. | Recovery resolver and claim tests. |
+| `AC-RECOVERY-ROUTE` | Missing grants identify exact eligible agents; the governed claim and MCP result preserve the complete deterministic no-thread request packet without changing the verdict or dispatching. | Recovery resolver, claim, and `claim-backlog-item-handler` boundary tests. |
 | `AC-UI-TARGET` | Following a recovery action preserves the exact eligible agent identity or fails visibly; it never opens a default coworker. | Recovery-action/launcher component test. |
 | `AC-REVIEW-SEPARATION` | External fallback executes as target reviewer and never grants caller authority. | Coworker/task and receipt separation tests. |
 | `AC-REVIEWER-READ` | An immediate `sideEffect=false` immutable review read does not require a per-call HITL envelope solely because the coworker's coarse approval policy is `all`; proposal execution and all side effects remain approval-gated. | Coworker authority-decision regression test. |

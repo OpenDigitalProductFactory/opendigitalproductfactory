@@ -32,7 +32,7 @@ post-amendment operator ratification makes the one-time envelope effective.
 |---|---|---|
 | `AC-PROFILE-FIX`, `AC-PROFILE-MONOTONIC` | policy and adapter fixtures | `profiles.ts` |
 | `AC-POLICY-DIFFERENT` | table-driven fix/feature/cross-domain tests | `evaluate.ts` and policy version |
-| `AC-RECOVERY-ROUTE` | recovery resolver and claim-response tests | lane registry, recovery adapter, claim handler |
+| `AC-RECOVERY-ROUTE` | recovery resolver plus MCP-handler tests proving the full recovery object and exact no-thread packet survive serialization | lane registry, recovery adapter, `claim-backlog-item-handler.ts` |
 | `AC-UI-TARGET` | exact-target and stale-target launcher tests | recovery action / coworker launcher |
 | `AC-REVIEW-SEPARATION` | external no-thread request tests and receipt separation tests | coworker pack -> `submitRemoteCoworkerTask` |
 | `AC-REVIEWER-READ` | immediate `sideEffect=false` read under coarse approval policy `all`, plus unchanged proposal/side-effect approval cases | coworker authority decision |
@@ -135,15 +135,25 @@ budget and may not broaden untested behavior.
 2. Return only active, production, non-archived exact-grant agents.
 3. Exclude the current author agent.
 4. Return one escalation when no eligible agent exists.
-5. Add recovery to unsuccessful claims without changing their verdict.
-6. Preserve the recommended canonical `agentId` through any recovery launcher;
+5. Add recovery to unsuccessful governed claims without changing their verdict,
+   and prove `claim-backlog-item-handler.ts` preserves the complete recovery
+   object in the MCP `initiative_not_ready` result.
+6. Return an executable `request_coworker` packet from the canonical recovery
+   producer. It must contain the exact target `agentId`, deterministic
+   `requestKey`, `objective`, `questionPacketSummary`, `tier=2`,
+   `enteredVia=handoff`, BI, Workroom, gate, and immutable artifact identity.
+   Missing or stale bindings return an exact escalation and never dispatch.
+7. Preserve the recommended canonical `agentId` through any recovery launcher;
    stale targets fail visibly and refresh, never fall back to a default agent.
-7. Centralize lane metadata in the existing initiative tool-grant module and
+8. Centralize lane metadata in the existing initiative tool-grant module and
    make the receipt pack consume it.
-8. When policy authority cannot be projected, return the exact owning WWMD,
+9. When policy authority cannot be projected, return the exact owning WWMD,
    WWWD, or WSID evaluation/escalation packet. When the remaining gap is an
    independent receipt, return the exact eligible reviewer route. Neither path
    is a receipt or a grant.
+10. Prove every unmet requirement appears as an executable next action or one
+    explicit escalation; the MCP adapter may not drop recovery and the caller
+    may not construct missing packet fields out of band.
 
 ## Task 4A - Red/green universal policy-authority bridge
 
@@ -269,6 +279,12 @@ Run focused suites after every Red/Green slice, then related projection,
 baseline, receipt, Workroom, coworker, MCP task/route, and external-evidence
 suites; typecheck; blast-radius analysis; independent architecture review; UX
 review of model-facing recovery copy; and `pnpm run pregate:preflight`.
+
+Repeat the exact preview claim for BI-F0715C9C/WC-7FF8A505. Its MCP result must
+retain `recovery` and the exact packet without changing the fail-closed verdict.
+Repeat responsive inspection only to preserve evidence for existing
+BI-812AC0D8, which remains a blocking dependency for any claim of multi-surface
+readiness UX completion; this repair does not add unratified portal paths.
 
 ## Task 12 - Governed publication
 
