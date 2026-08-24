@@ -119,6 +119,9 @@ single-tree mode — the current default and fully back-compat.
 7. **Workspace dependencies** — `pnpm install`.
 8. **Host hardware profile** — runs `scripts/detect-hardware-host.ts`
    (reads `/proc/cpuinfo`, `nproc`, `free -b`, `nvidia-smi` if present).
+   Model selection reads the shared `scripts/installer/local-model-policy.json`
+   policy. A 24 GB discrete GPU selects the curated `ai/qwen3-coder` tier;
+   fresh installs do not auto-provision mutable third-party model references.
 9. **`.env` generation** — only on first install; existing `.env` is
    preserved.
 10. **`docker compose up -d`** on the Linux overlay (which adds the
