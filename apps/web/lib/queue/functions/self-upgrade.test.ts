@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   defaultGitRunner: vi.fn(),
   prepareUpgradeSource: vi.fn(),
   getDeployedSha: vi.fn(),
+  readCurrentContainerConfigDigest: vi.fn().mockResolvedValue(`sha256:${"a".repeat(64)}`),
   isFeatureBuildDeployed: vi.fn(),
   createRun: vi.fn(),
   startRun: vi.fn(),
@@ -51,7 +52,7 @@ const mocks = vi.hoisted(() => ({
   getActiveSelfUpgradeBlackout: vi.fn().mockResolvedValue(null),
   readFile: vi.fn(async (path: string) => path.endsWith("install-state.json") ? '{"platform":"linux","arch":"amd64"}' : "s".repeat(32)),
   resolveSelfUpgradeHostIdentity: vi.fn(() => ({ platform: "linux", arch: "amd64", provenance: "explicit" })),
-  readLatestReleaseStamp: vi.fn(),
+  readRegistryReleaseCandidate: vi.fn(),
 }));
 
 vi.mock("@/lib/self-upgrade/config", () => ({
@@ -65,8 +66,8 @@ vi.mock("@/lib/self-upgrade/support", () => ({
 
 vi.mock("node:fs/promises", () => ({ readFile: mocks.readFile }));
 
-vi.mock("@/lib/release-health/release-runs-reader", () => ({
-  readLatestReleaseStamp: mocks.readLatestReleaseStamp,
+vi.mock("@/lib/self-upgrade/registry-release", () => ({
+  readRegistryReleaseCandidate: mocks.readRegistryReleaseCandidate,
 }));
 
 vi.mock("@/lib/self-upgrade/window", () => ({
@@ -117,6 +118,10 @@ vi.mock("@/lib/self-upgrade/prepare-source", () => ({
 vi.mock("@/lib/self-upgrade/completion", () => ({
   getDeployedSha: mocks.getDeployedSha,
   isFeatureBuildDeployed: mocks.isFeatureBuildDeployed,
+}));
+
+vi.mock("@/lib/self-upgrade/runtime-image-identity", () => ({
+  readCurrentContainerConfigDigest: mocks.readCurrentContainerConfigDigest,
 }));
 
 vi.mock("@/lib/self-upgrade/run-store", () => ({
@@ -325,15 +330,74 @@ describe("success path", () => {
       reason: "enabled",
       message: null,
     });
-    mocks.readFile.mockImplementation(async (path: string) => path.endsWith("install-state.json") ? releaseState : "consumer");
+    mocks.readFile.mockImplementation(async (path: string) => path.endsWith("install-state.json") ? releaseState : "s".repeat(32));
     mocks.getDeployedSha.mockResolvedValue(sourceSha);
-    mocks.readLatestReleaseStamp.mockResolvedValue({ ok: true, latest: { tag: "v2.0.0", headSha: sourceSha, status: "verified" } });
+    const configDigest = `sha256:${"a".repeat(64)}`;
+    mocks.readCurrentContainerConfigDigest.mockResolvedValue(configDigest);
+    mocks.readRegistryReleaseCandidate.mockResolvedValue({
+      ok: true,
+      candidate: {
+        tag: "v2.0.0",
+        sourceSha,
+        channelDigest: `sha256:${"b".repeat(64)}`,
+        platformManifestDigest: `sha256:${"c".repeat(64)}`,
+        configDigest,
+      },
+    });
     try {
       const result = await runSelfUpgrade({ triggeredBy: "ops" });
       expect(result).toMatchObject({ skipped: true, reason: "up-to-date", releaseTag: "v2.0.0" });
       expect(mocks.defaultGitRunner).not.toHaveBeenCalled();
       expect(mocks.prepareUpgradeSource).not.toHaveBeenCalled();
       expect(mocks.evaluateHostMemoryGuard).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("hands the frozen release config digest through to promotion", async () => {
+    const sourceSha = "abc1234deadbeef";
+    const targetConfigDigest = `sha256:${"c".repeat(64)}`;
+    vi.stubEnv("GHCR_OWNER", "opendigitalproductfactory");
+    vi.stubEnv("DPF_IMAGE_TAG", "v1.0.0");
+    vi.stubEnv("DPF_HOST_INSTALL_PATH", "/opt/dpf");
+    vi.stubEnv("DPF_SELF_UPGRADE_COMPOSE_FILES", "docker-compose.yml docker-compose.release.yml");
+    mocks.readSelfUpgradeSupport.mockResolvedValue({
+      configuredEnabled: true,
+      supported: true,
+      enabled: true,
+      targetKind: "release-artifact",
+      reason: "enabled",
+      message: null,
+    });
+    mocks.readFile.mockImplementation(async (path: string) =>
+      path.endsWith("install-state.json")
+        ? TEST_INSTALL_STATE
+        : path.endsWith(".install-mode")
+          ? "consumer"
+          : "s".repeat(32),
+    );
+    mocks.readCurrentContainerConfigDigest.mockResolvedValue(`sha256:${"a".repeat(64)}`);
+    mocks.readRegistryReleaseCandidate.mockResolvedValue({
+      ok: true,
+      candidate: {
+        tag: "v2.0.0",
+        sourceSha,
+        channelDigest: `sha256:${"d".repeat(64)}`,
+        platformManifestDigest: `sha256:${"e".repeat(64)}`,
+        configDigest: targetConfigDigest,
+      },
+    });
+    try {
+      const result = await runSelfUpgrade({ triggeredBy: "ops" });
+      expect(result).toMatchObject({ ok: true, status: "succeeded" });
+      expect(mocks.runPromoter).toHaveBeenCalledWith(expect.objectContaining({
+        release: {
+          tag: "v2.0.0",
+          ghcrOwner: "opendigitalproductfactory",
+          configDigest: targetConfigDigest,
+        },
+      }));
     } finally {
       vi.unstubAllEnvs();
     }

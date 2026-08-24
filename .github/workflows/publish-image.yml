@@ -195,7 +195,7 @@ jobs:
           # Harmless for images whose Dockerfile ignores DPF_VERSION.
           build-args: |
             DPF_VERSION=${{ github.sha }}
-            DPF_PLATFORM_VERSION=${{ github.ref_name }}
+            DPF_PLATFORM_VERSION=${{ needs.gate.outputs.tag }}
           # Same identity, in the OCI-standard place. /app/.dpf-image-version is inside
           # the filesystem, so reading it costs a `docker create` + `docker cp`; a label
           # is readable straight from the manifest. `latest` sat 1851 commits behind main
@@ -204,7 +204,7 @@ jobs:
           # portal self-reports, the label is what tooling inspects.
           labels: |
             org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.version=${{ github.ref_name }}
+            org.opencontainers.image.version=${{ needs.gate.outputs.tag }}
           # Push by digest only — the merge job assembles the named
           # tag manifest list. `type=image,name=...,push-by-digest=true`
           # uploads the layers under the digest with no human tag.

@@ -45,7 +45,7 @@ A source-free consumer install detects verification-gated GHCR channel movement,
 2. Read the current portal container config digest through a narrow injected Docker identity helper. Fail unavailable when byte identity cannot be established; do not silently fall back to tag equality. **[D1, D2]**
 3. Converge page and queue on the same resolver input/output. Preserve the existing candidate promoter digest, quiescence, recovery point, migration, health, asset transaction, and rollback path. **[D2]**
 4. Add failing workflow contract assertions, then stamp the validated gate tag into `DPF_PLATFORM_VERSION` and the OCI version label while retaining `github.sha` as revision. **[D3, V3]**
-5. Retain promoter pre-swap revision checks and immutable release-tag validation. Add only the evidence fields needed to prove the resolved channel candidate is the one promoted. **[D2, D3]**
+5. Retain promoter pre-swap revision checks and immutable release-tag validation. Carry the resolved portal config digest into the promoter and reject pulled bytes that differ before asset extraction or swap. **[D2, D3]**
 
 ## Phase 3 — Truthful Upgrade Center and bounded refactor
 

@@ -57,7 +57,7 @@ describe("SelfUpgradeTriggerControl live observation", () => {
 
   it("rehydrates the targeted status after enqueue without refreshing the route", async () => {
     render(
-      <SelfUpgradeTriggerControl enabled channel="stable" latestRun={null} />,
+      <SelfUpgradeTriggerControl enabled actionState="update-available" channel="stable" latestRun={null} />,
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Upgrade now" }));

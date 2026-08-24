@@ -51,6 +51,10 @@ vi.mock("@/lib/self-upgrade/completion", () => ({
   getDeployedSha: vi.fn(),
 }));
 
+vi.mock("@/lib/self-upgrade/runtime-image-identity", () => ({
+  readCurrentContainerConfigDigest: vi.fn(),
+}));
+
 vi.mock("@/lib/self-upgrade/run-store", () => ({
   createRun: vi.fn(),
   failRun: vi.fn(),
@@ -170,6 +174,7 @@ import { prisma } from "@dpf/db";
 import { getSelfUpgradeConfig } from "@/lib/self-upgrade/config";
 import { resolveTargetSha, isShaFresh } from "@/lib/self-upgrade/version";
 import { getDeployedSha } from "@/lib/self-upgrade/completion";
+import { readCurrentContainerConfigDigest } from "@/lib/self-upgrade/runtime-image-identity";
 import { readSelfUpgradeSupport } from "@/lib/self-upgrade/support";
 import { loadReleaseInstallContext, resolveReleaseUpgradeCandidate } from "@/lib/self-upgrade/release-target";
 import { createRun, getLatestRun, getLatestSucceededRun } from "@/lib/self-upgrade/run-store";
@@ -199,6 +204,7 @@ beforeEach(() => {
   vi.mocked(auth).mockResolvedValue(mockSession as never);
   vi.mocked(can).mockReturnValue(true);
   vi.mocked(getSelfUpgradeConfig).mockResolvedValue(mockConfig as never);
+  vi.mocked(readCurrentContainerConfigDigest).mockResolvedValue(`sha256:${"a".repeat(64)}`);
   vi.mocked(readSelfUpgradeSupport).mockImplementation(async (configuredEnabled) => ({
     configuredEnabled,
     supported: true,
@@ -282,12 +288,20 @@ describe("getSelfUpgradeStatus", () => {
     const sourceSha = "f".repeat(40);
     vi.mocked(readSelfUpgradeSupport).mockResolvedValue(consumerReleaseSupport);
     vi.mocked(loadReleaseInstallContext).mockResolvedValue(consumerReleaseContext);
-    vi.mocked(resolveReleaseUpgradeCandidate).mockResolvedValue({ kind: "target", tag: "v2.0.0", sourceSha });
+    vi.mocked(resolveReleaseUpgradeCandidate).mockResolvedValue({
+      kind: "target",
+      tag: "v2.0.0",
+      sourceSha,
+      channelDigest: `sha256:${"b".repeat(64)}`,
+      configDigest: `sha256:${"c".repeat(64)}`,
+    });
     vi.mocked(getDeployedSha).mockResolvedValue("e".repeat(40));
     vi.mocked(isShaFresh).mockReturnValue(false);
     const result = await getSelfUpgradeStatus();
 
     expect(result.targetSha).toBe(sourceSha);
+    expect(result.targetTag).toBe("v2.0.0");
+    expect(result.targetAvailability).toBe("resolved");
     expect(resolveTargetSha).not.toHaveBeenCalled();
   });
 

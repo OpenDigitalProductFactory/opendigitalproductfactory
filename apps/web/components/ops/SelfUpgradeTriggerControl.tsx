@@ -28,6 +28,7 @@ import { useOptionalSelfUpgradeLive } from "@/components/ops/SelfUpgradeLiveProv
 
 type Props = {
   enabled: boolean;
+  actionState: "update-available" | "no-update" | "unavailable";
   unavailableReason?: string | null;
   channel: string;
   latestRun: LatestRun | null;
@@ -37,6 +38,7 @@ type Props = {
 
 export default function SelfUpgradeTriggerControl({
   enabled,
+  actionState,
   unavailableReason,
   channel,
   latestRun: initialLatestRun,
@@ -225,7 +227,7 @@ export default function SelfUpgradeTriggerControl({
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-[var(--dpf-success)]" />
+          <span className="w-2 h-2 rounded-full bg-[var(--dpf-success)]" aria-hidden="true" />
           <span className="text-sm font-medium text-[var(--dpf-text)]">
             Self-Upgrade: <span data-upgrade-status="enabled">Enabled</span>
           </span>
@@ -318,7 +320,7 @@ export default function SelfUpgradeTriggerControl({
                   : "Upgrade in progress…"}
               </span>
             )
-          ) : (
+          ) : actionState === "update-available" ? (
             <>
               <label className="flex items-center gap-1.5 text-xs text-[var(--dpf-muted)] cursor-pointer select-none">
                 <input
@@ -351,11 +353,21 @@ export default function SelfUpgradeTriggerControl({
                       : "Upgrade now"}
               </button>
             </>
+          ) : (
+            <span
+              className="text-xs text-[var(--dpf-muted)]"
+              data-upgrade-action-state={actionState}
+              role="status"
+            >
+              {actionState === "unavailable"
+                ? "Update status unavailable. Nothing queued."
+                : "No update is ready."}
+            </span>
           )}
         </div>
       </div>
 
-      {triggerBusy && latestRun?.status !== "running" && !queuedRun && (
+      {actionState === "update-available" && triggerBusy && latestRun?.status !== "running" && !queuedRun && (
         <div
           className="text-xs text-[var(--dpf-muted)]"
           data-upgrade-starting="true"
@@ -366,7 +378,7 @@ export default function SelfUpgradeTriggerControl({
         </div>
       )}
 
-      {triggerResult && (
+      {actionState === "update-available" && triggerResult && (
         <div
           className={`p-3 rounded-lg text-sm ${
             triggerResult.queued

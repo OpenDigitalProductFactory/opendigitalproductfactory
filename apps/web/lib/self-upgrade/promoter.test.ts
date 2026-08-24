@@ -220,12 +220,17 @@ describe("buildPromoterCommand", () => {
   it("launches release promotion with a narrowly writable install and immutable release identity", () => {
     const { args } = buildPromoterCommand({
       ...BASE,
-      release: { tag: "v2026.08.23", ghcrOwner: "opendigitalproductfactory" },
+      release: {
+        tag: "v2026.08.23",
+        ghcrOwner: "opendigitalproductfactory",
+        configDigest: `sha256:${"c".repeat(64)}`,
+      },
     });
     expect(args).toContain("/Users/me/dpf:/host-source");
     expect(args).not.toContain("/Users/me/dpf:/host-source:ro");
     expect(args).toContain("DPF_PROMOTION_MODE=release");
     expect(args).toContain("DPF_RELEASE_TAG=v2026.08.23");
+    expect(args).toContain(`DPF_RELEASE_CONFIG_DIGEST=sha256:${"c".repeat(64)}`);
     expect(args).toContain("GHCR_OWNER=opendigitalproductfactory");
     expect(args).toContain("PROMOTE_TARGET_SHA=abc1234");
   });

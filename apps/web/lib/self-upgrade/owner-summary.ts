@@ -77,6 +77,9 @@ export interface OwnerReleaseInput {
   };
   isFresh: boolean;
   targetSha: string | null;
+  targetTag?: string | null;
+  targetAvailability: "resolved" | "unavailable";
+  targetUnavailableReason: string | null;
   deployedSha: string | null;
   nextWindowStart: string | null;
   blackoutUntil: string | null;
@@ -156,7 +159,9 @@ export function buildOwnerReleaseSummary(
       ? "in-progress"
       : failed
         ? "failed"
-        : input.isFresh || !input.targetSha
+        : input.targetAvailability === "unavailable"
+          ? "unavailable"
+        : input.isFresh
           ? "up-to-date"
           : "update-available";
 
@@ -183,7 +188,9 @@ export function buildOwnerReleaseSummary(
   const targetDetail = input.availableMergePointLabel ?? targetShort;
   const availableVersion =
     state === "update-available"
-      ? input.latestRunImpact?.headline
+      ? input.support.targetKind === "release-artifact" && input.targetTag
+        ? input.targetTag
+        : input.latestRunImpact?.headline
         ? input.latestRunImpact.headline
         : targetDetail
           ? `Latest build (${targetDetail})`
@@ -266,15 +273,15 @@ export function buildOwnerReleaseSummary(
 
   switch (state) {
     case "unavailable":
-      headline =
-        input.support.message?.replace(/[.]$/, "") ??
-        "Automatic updates aren’t available for this install yet";
+      headline = input.support.supported
+        ? "Update availability could not be verified"
+        : input.support.message?.replace(/[.]$/, "") ??
+          "Automatic updates aren’t available for this install yet";
       recommendedAction = {
-        label: "No automatic update action",
-        detail:
-          input.support.targetKind === "release-artifact"
-            ? "DPF will not queue a source-based upgrade here. Follow the installer guidance for the consumer release you want to move to."
-            : "DPF will not queue an update until this install’s identity can be verified. Try again when status is available.",
+        label: input.support.supported ? "No update action available" : "No automatic update action",
+        detail: input.support.supported
+          ? "DPF could not prove a newer immutable release from the update registry, so it will not queue or install anything. It keeps checking automatically."
+          : "DPF will not queue an update until this install’s identity can be verified. Try again when status is available.",
       };
       ifYouDoNothing =
         "Your current release keeps running. Nothing is queued or changed automatically.";

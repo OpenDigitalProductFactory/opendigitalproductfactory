@@ -37,7 +37,7 @@ No new database model, queue, deploy mechanism, channel selector, or lifecycle b
 
 ## Objectives and requirements
 
-- **R1 — Correct authority:** consumer/customer discovery reads the configured GHCR channel tag recorded by install state (`latest` for this install), not GitHub release-run history.
+- **R1 — Correct authority:** consumer/customer discovery reads the configured GHCR channel tag (`DPF_IMAGE_CHANNEL_TAG`, default `latest`), not the installed immutable tag or GitHub release-run history. The discovery channel remains stable when promotion persists a new immutable `imageTag` for rollback identity.
 - **R2 — Metadata-only polling:** normal checks fetch manifests and config metadata only; they do not pull image layers or mutate the daemon.
 - **R3 — Frozen candidate:** the channel index digest, platform manifest/config digest, release tag, and source SHA are resolved once and validated before any drain.
 - **R4 — Immutable acquisition:** promotion uses the immutable release tag whose manifest digest equals the channel digest; it never deploys mutable `latest`.
@@ -77,7 +77,7 @@ A server-only registry reader receives the owner, portal repository, channel tag
 6. resolves that immutable tag and requires its manifest digest to equal the channel digest;
 7. returns the immutable tag, source SHA, channel/index digest, platform manifest digest, and config digest.
 
-The reader bounds response bytes, redirect/auth hosts, timeouts, tag pages, and legacy concurrency. Registry errors are short stable reasons; response bodies and tokens never reach operator copy.
+The reader bounds response bytes, redirect/auth hosts, timeouts, tag pages, and legacy concurrency. GHCR config-blob redirects are followed without forwarding registry authorization and only to GitHub's package-content host; the downloaded bytes must hash to the config digest from the verified platform manifest. Registry errors are short stable reasons; response bodies and tokens never reach operator copy.
 
 ### Legacy tag recovery
 
@@ -85,30 +85,34 @@ Images published before R6 may have a valid source revision but `version=main`. 
 
 ### Freshness and orchestration
 
-`resolveReleaseUpgradeCandidate` accepts the registry candidate plus current container config digest, current source SHA, and installed tag:
+`resolveReleaseUpgradeCandidate` accepts the registry candidate plus the current container config digest:
 
 - equal config digest -> `up-to-date`;
 - different config digest with valid frozen candidate -> `target`;
 - no verifiable candidate/current digest -> `no-published-target` with a specific registry reason.
 
-The actions page and queue call the same resolver. The queue stores the candidate tag/SHA in the existing run plan, resolves the candidate promoter by immutable digest, and passes the immutable tag to release-mode `promote.sh`. The shell path continues to verify the pulled portal revision before extracting assets or swapping services. Rollback continues to restore the prior recorded tag and recovery state.
+The actions page and queue call the same resolver. The queue stores the candidate tag/SHA in the existing run plan, resolves the candidate promoter by immutable digest, and passes the immutable tag plus expected portal config digest to release-mode `promote.sh`. The shell path verifies both the pulled portal bytes and revision before extracting assets or swapping services. Rollback continues to restore the prior recorded tag and recovery state.
 
 ### Publication contract
 
 The build job uses `needs.gate.outputs.tag`, not `github.ref_name`, for `DPF_PLATFORM_VERSION` and `org.opencontainers.image.version`; `github.sha` remains the revision. Contract tests lock the relationship between the gate output, build args, labels, immutable merge tag, and verification-gated `latest` promotion.
 
-### UX fit decision
+### UX fit review — consumer registry self-upgrade
 
-- Decision: fits with guardrails.
+- Decision: fits.
 - Owning area: Platform operations; existing `/ops/self-upgrade` route remains canonical.
 - Persona: the DPF operator maintaining a source-free consumer install.
 - Navigation: contextual action only; no navigation or strategy selector is added.
 - Reuse: `OwnerReleaseCard` and `SelfUpgradeTriggerControl` remain; the trigger receives a closed action state derived from the same target result as the summary.
+- Source truth: the server-only registry candidate resolver plus the running container config digest.
 - Current: show automatic updates enabled and the resolved current version, without an Upgrade button.
 - Update available: show current and target immutable versions plus “Upgrade now”.
 - Checking/unavailable: name that update availability could not be verified and preserve the last run evidence; never say “latest” or show a mutation control without a target.
-- In flight: show the existing progress/disabled state.
+- In flight: show the existing progress state. A failed attempt retains retry only while a newer resolved candidate remains.
 - AI boundary: none.
+- Required plan/spec edits: incorporated registry/current/unavailable state semantics and immutable target copy here and in the implementation plan.
+- Evidence before merge: route/component/summary tests, theme and UX gates, live registry proof, and a governed browser viewport/failure-state exercise.
+- Captured in: this section and `docs/ux-fit/2026-08-24-consumer-registry-self-upgrade.ux-fit.json`.
 
 ## Scale ceiling
 
