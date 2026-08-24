@@ -1,12 +1,40 @@
 # Local-CI Builder Lifecycle Recovery Implementation Plan
 
-- **Status:** awaiting backlog coverage receipt
+- **Status:** blocked before implementation — initiative scope baseline unavailable
 - **Date:** 2026-08-24
 - **Backlog item:** `BI-B131F357`
 - **Architecture:** `docs/superpowers/specs/2026-08-24-local-ci-builder-lifecycle-recovery-design.md`
 - **WWMD decision:** `DI-308054F94780` (`bounded-transition`)
 - **Workroom:** `WC-DD1EF64C`
-- **Backlog coverage receipt:** pending
+- **Backlog coverage receipt:** none written; blocked by `BI-91AF30A5`
+
+## Backlog coverage
+
+- Decision: atomic
+- Parent: `BI-B131F357`
+- Deliverable: bounded builder recovery, fail-fast placement, production-build
+  revalidation, structured lifecycle evidence, and truthful pregate status ->
+  `BI-B131F357`
+- Dependencies: none
+- Immutable plan attempted: commit
+  `544830a220adbda0570da17e391dabd0d429b1fc`, provider blob
+  `5c1b7349c2848f6676ea8e4e075105b6526bb144`
+- Receipt: **not written**
+- Live blocker: `BI-91AF30A5` — external Workrooms cannot establish the
+  initiative scope baseline required by `record_plan_backlog_coverage`
+
+The provider first rejected the plan because the install's stored
+`github-pr-sync` credential was invalid. After that development credential was
+rotated through the install's encrypted credential store, the provider verified
+the signed commit and exact blob. The recorder then returned
+`traceability-incomplete`: `BI-B131F357` has no `initiative_scope_baseline`, and
+the baseline writer is not reachable from an MCP session.
+
+The error prescribed citing `BI-B9403248`, but live `get_backlog_item` returned
+`not_found` for that ID. This plan cites the live captured blocker instead. No
+failed call, Markdown marker, or absent blocker ID is represented as a coverage
+receipt, and source implementation must not start until a valid receipt can be
+written and revalidated.
 
 ## Outcome
 
