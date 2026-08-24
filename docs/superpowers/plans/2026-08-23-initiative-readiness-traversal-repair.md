@@ -1,5 +1,5 @@
 ---
-status: draft
+status: active
 ---
 
 # Initiative readiness traversal repair implementation plan
@@ -59,6 +59,26 @@ implementation path fail-closed or would expose an incomplete recovery path.
 | `authority-freshness` | `OBJ-IRT-004` | `AC-SPEC-AUTHORITY`, `AC-RECEIPT-FRESHNESS`, `AC-FAIL-CLOSED`, `AC-POLICY-BRIDGE-YES`, `AC-POLICY-BRIDGE-DENY`, `AC-POLICY-BRIDGE-SCOPE`, `AC-POLICY-NOT-RBAC`, `AC-POLICY-RECOVERY` | `recovery-review` |
 | `reconciliation-coverage` | `OBJ-IRT-005` | `AC-HEAD-RECONCILE`, `AC-AUTHOR-AFTER-SYNC`, `AC-REPLAY`, `AC-COVERAGE-TX` | `authority-freshness` |
 | `bootstrap-shipping` | `OBJ-IRT-006` | `AC-FIRST-DEPLOY-WARRANT`, `AC-FIRST-DEPLOY-INDEPENDENCE`, `AC-FIRST-DEPLOY-CONSUME` | `reconciliation-coverage` |
+
+### Governed planning evidence
+
+- Canonical design artifact: commit
+  `8ba87200bfc093a6ebd981f6c1923a33a3c6428f`, provider blob
+  `1cdc523f5552f7d366d746ce55224addf41815b4`.
+- Independent research receipt:
+  `initiative-8042dea2-327d-4a67-9b64-109c6752805c`.
+- Independent spec-approval receipt:
+  `initiative-5eab8246-8bc5-4a41-8e28-36669796a538`.
+- Canonical scope baseline:
+  `baseline-acd3d154-8d63-4939-9382-4318f7bf045e`.
+- Atomic plan-coverage artifact: commit
+  `eb792d235c9da8d64ec6606aeb46cd99d99341fd`, provider blob
+  `5482400611e2a3306b049c83bba1ad0ae2cc1b2e`.
+- Atomic plan-coverage receipt: `cmt6xp5k2000c51kpdb76su1t`.
+
+The receipt is bound to the immutable pre-receipt plan artifact above. This
+evidence section records the resulting identities; it does not rewrite or
+proxy that receipt.
 
 ## Task 0 - Establish the policy-authority boundary
 
