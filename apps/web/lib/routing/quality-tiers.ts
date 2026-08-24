@@ -30,7 +30,18 @@ export const TIER_DESCRIPTIONS: Record<QualityTier, string> = {
 // Longest prefix match against modelId determines tier.
 
 export const FAMILY_TIERS: Record<string, QualityTier> = {
-  // Anthropic
+  // Anthropic. GENERATION-LESS entries are deliberate: a vendor ships a new
+  // generation every few weeks, and a table keyed to one generation silently
+  // demotes the next one to the unknown-model fallback — which is BELOW
+  // "strong", so a brand-new flagship ranked under the previous generation's
+  // cheapest model and was excluded by every minimumTier: "strong" floor while
+  // that cheap model passed. Observed live: claude-opus-5 and claude-sonnet-5
+  // classified "adequate" (measured toolFidelity 90 and 85) while
+  // claude-haiku-4-5 classified "strong" (measured 75). Longest-prefix match
+  // means a generation-specific entry still wins where one exists.
+  "claude-opus":      "frontier",
+  "claude-sonnet":    "frontier",
+  "claude-haiku":     "strong",
   "claude-opus-4":    "frontier",
   "claude-sonnet-4":  "frontier",
   "claude-haiku-4":   "strong",
@@ -82,23 +93,49 @@ function normaliseFamilyId(modelId: string): string {
   return s;
 }
 
+/** The tier assumed for a model no family rule matches. */
+export const UNMATCHED_MODEL_TIER: QualityTier = "adequate";
+
+export type TierClassification = {
+  tier: QualityTier;
+  /** False when no family rule matched and the fallback was assumed. */
+  matched: boolean;
+  /** The family prefix that decided the tier, or null when unmatched. */
+  matchedFamily: string | null;
+};
+
 /**
- * Assign a quality tier to a model using longest-prefix match.
- * Returns "adequate" for unknown models (conservative default).
+ * Classify a model, reporting whether a family rule actually matched.
+ *
+ * "Unknown" and "weak" are different claims, and conflating them is what makes
+ * the fallback dangerous: an unmatched model is assumed `adequate`, which sits
+ * BELOW `strong`, so an unrecognised flagship is excluded by exactly the floors
+ * that exist to guarantee capability. Callers that care — seeding, posture,
+ * routing diagnostics — should surface `matched: false` rather than presenting
+ * the assumed tier as though it were established.
  */
-export function assignTierFromModelId(modelId: string): QualityTier {
+export function classifyTierFromModelId(modelId: string): TierClassification {
   const normalised = normaliseFamilyId(modelId);
-  let bestMatch = "";
-  let bestTier: QualityTier = "adequate";
+  let matchedFamily: string | null = null;
+  let bestTier: QualityTier = UNMATCHED_MODEL_TIER;
 
   for (const [prefix, tier] of Object.entries(FAMILY_TIERS)) {
-    if (normalised.startsWith(prefix) && prefix.length > bestMatch.length) {
-      bestMatch = prefix;
+    if (normalised.startsWith(prefix) && prefix.length > (matchedFamily?.length ?? 0)) {
+      matchedFamily = prefix;
       bestTier = tier;
     }
   }
 
-  return bestTier;
+  return { tier: bestTier, matched: matchedFamily !== null, matchedFamily };
+}
+
+/**
+ * Assign a quality tier to a model using longest-prefix match.
+ * Returns "adequate" for unknown models — see classifyTierFromModelId when the
+ * caller needs to know whether that tier was matched or merely assumed.
+ */
+export function assignTierFromModelId(modelId: string): QualityTier {
+  return classifyTierFromModelId(modelId).tier;
 }
 
 // ── Tier → Dimension Baselines ─────────────────────────────────────────────
