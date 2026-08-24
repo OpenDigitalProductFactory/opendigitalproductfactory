@@ -18,6 +18,7 @@ function ev(
     routeContext: null,
     apiTokenId: "tok-1",
     skillId: null,
+    parameters: null,
     ...partial,
   };
 }
@@ -130,6 +131,64 @@ describe("analyzeCallEfficiency (BI-A08EBAEC)", () => {
     expect(report.findings.some(
       (finding) => finding.kind === "high_volume" && finding.toolName === "edge.heartbeat",
     )).toBe(true);
+  });
+
+  it("uses ownerSessionId when external JSON-RPC rows have no thread attribution", () => {
+    const start = Date.parse("2026-08-03T12:00:00.000Z");
+    const events = Array.from({ length: 10 }, (_, i) => ev({
+      id: `claim-${i}`,
+      toolName: "claim_nonprod_environment_lease",
+      threadId: "",
+      agentId: "unknown",
+      parameters: { ownerSessionId: "gate-session-a" },
+      createdAt: new Date(start + i * 1_000),
+    }));
+
+    const report = analyzeCallEfficiency(events, { thrashThreshold: 8 });
+    const thrash = report.findings.find((finding) => finding.kind === "thrash");
+    expect(thrash?.evidence.correlationId).toBe("owner-session:gate-session-a");
+  });
+
+  it("does not turn unattributed aggregate read traffic into a polling finding", () => {
+    const start = Date.parse("2026-08-03T12:00:00.000Z");
+    const events = Array.from({ length: 30 }, (_, i) => ev({
+      id: `read-${i}`,
+      toolName: "get_backlog_item",
+      threadId: "",
+      agentId: "unknown",
+      parameters: {},
+      createdAt: new Date(start + i * 1_000),
+    }));
+
+    const report = analyzeCallEfficiency(events, { highVolumeFloor: 25 });
+    expect(report.findings.some(
+      (finding) => finding.kind === "high_volume" && finding.toolName === "get_backlog_item",
+    )).toBe(false);
+    expect(report.ledgerSufficiency.note).toContain("unattributed aggregate");
+  });
+
+  it("suppresses healthy per-session lease renewal cadence", () => {
+    const start = Date.parse("2026-08-03T12:00:00.000Z");
+    const events: CallEfficiencyEvent[] = [];
+    for (const [session, offset] of [["gate-a", 0], ["gate-b", 5_000]] as const) {
+      for (let i = 0; i < 30; i++) {
+        events.push(ev({
+          id: `${session}-${i}`,
+          toolName: "renew_nonprod_environment_lease",
+          threadId: "",
+          agentId: "unknown",
+          parameters: { ownerSessionId: session },
+          createdAt: new Date(start + offset + i * 40_000),
+        }));
+      }
+    }
+
+    const report = analyzeCallEfficiency(events, { highVolumeFloor: 25 });
+    expect(report.findings.some(
+      (finding) => finding.kind === "high_volume"
+        && finding.toolName === "renew_nonprod_environment_lease",
+    )).toBe(false);
+    expect(report.ledgerSufficiency.note).toContain("contractual machine cadence");
   });
 
   it("reports insufficient ledger when volume is tiny", () => {

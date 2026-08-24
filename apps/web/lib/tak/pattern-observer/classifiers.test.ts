@@ -89,13 +89,36 @@ describe("pattern observer classifiers", () => {
       expect(need?.blocks).toContain("tool surface");
     });
 
-    it("classifies near-cliff caution assessments as minor tool needs", () => {
+    it("suppresses caution without observed selection degradation", () => {
+      const assessment: ToolSurfaceAssessment = {
+        toolCount: LOCAL_TOOL_SELECTION_CLIFF - 1,
+        estDefinitionTokens: 2200,
+        exceedsLocalCliff: false,
+        windowShare: 0.16,
+        zone: "caution",
+      };
+
+      expect(classifyToolSurfaceOverload(assessment)).toBeNull();
+      expect(classifyToolSurfaceOverload(assessment, {
+        total: 10,
+        succeeded: 10,
+        accuracy: 1,
+        perTool: {},
+      })).toBeNull();
+    });
+
+    it("classifies caution as minor only with observed selection degradation", () => {
       const need = classifyToolSurfaceOverload({
         toolCount: LOCAL_TOOL_SELECTION_CLIFF - 1,
         estDefinitionTokens: 2200,
         exceedsLocalCliff: false,
         windowShare: 0.16,
         zone: "caution",
+      }, {
+        total: 10,
+        succeeded: 6,
+        accuracy: 0.6,
+        perTool: {},
       });
 
       expect(need).toMatchObject({
@@ -106,27 +129,8 @@ describe("pattern observer classifiers", () => {
           windowShare: 0.16,
           zone: "caution",
           exceedsLocalCliff: false,
-        },
-      });
-    });
-
-    it("classifies caution assessments with window-share evidence as minor tool needs", () => {
-      const need = classifyToolSurfaceOverload({
-        toolCount: 8,
-        estDefinitionTokens: 140,
-        exceedsLocalCliff: false,
-        windowShare: 0.01,
-        zone: "caution",
-      });
-
-      expect(need).toMatchObject({
-        kind: "tool",
-        severity: "minor",
-        evidenceJson: {
-          toolCount: 8,
-          windowShare: 0.01,
-          zone: "caution",
-          exceedsLocalCliff: false,
+          observedSelectionAccuracy: 0.6,
+          observedSelectionSample: 10,
         },
       });
     });

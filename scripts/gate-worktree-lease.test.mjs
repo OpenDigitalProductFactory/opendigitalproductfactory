@@ -156,12 +156,14 @@ test("canonical gate heartbeats during a long command and releases once", async 
 
 test("durable queue observation reuses claimKey and grants a fresh admitted TTL", async () => {
   const claims = [];
+  let leaseLists = 0;
   const server = createServer((request, response) => {
     let body = "";
     request.on("data", (chunk) => { body += chunk; });
     request.on("end", () => {
       const payload = JSON.parse(body);
       const tool = payload.params.name;
+      if (tool === "list_nonprod_environment_leases") leaseLists += 1;
       if (tool === "claim_nonprod_environment_lease") {
         claims.push({ receivedAt: Date.now(), args: payload.params.arguments });
       }
@@ -219,6 +221,7 @@ test("durable queue observation reuses claimKey and grants a fresh admitted TTL"
 
     assert.ok([0, 3].includes(result.code), result.output);
     assert.equal(claims.length, 2);
+    assert.equal(leaseLists, 1, "queue reconciliation should be cached across a short admission retry");
     assert.equal(claims[0].args.claimKey, claims[1].args.claimKey);
     assert.match(
       claims[0].args.claimKey,
