@@ -472,6 +472,29 @@ describe("submitRemoteCoworkerTask idempotency", () => {
       "record_initiative_evidence",
     ]);
     expect(execution.deferredTools).toEqual([]);
+    const reader = execution.tools.find((tool) => tool.name === "read_source_at_version")!;
+    expect(reader.inputSchema).toEqual({
+      type: "object",
+      properties: {
+        path: { type: "string", enum: [initiativeReviewBinding.artifactRef.path] },
+        version: { type: "string", enum: [initiativeReviewBinding.artifactRef.commitSha] },
+      },
+      required: ["path", "version"],
+      additionalProperties: false,
+    });
+    const providerReader = execution.toolsForProvider.find((tool) => tool.function?.name === "read_source_at_version")!;
+    expect(providerReader.function?.parameters).toEqual(reader.inputSchema);
+    const searchReader = execution.tools.find((tool) => tool.name === "search_source_at_version")!;
+    expect(searchReader.inputSchema).toEqual({
+      type: "object",
+      properties: {
+        query: expect.any(Object),
+        version: { type: "string", enum: [initiativeReviewBinding.artifactRef.commitSha] },
+        glob: { type: "string", enum: [initiativeReviewBinding.artifactRef.path] },
+      },
+      required: ["query", "version", "glob"],
+      additionalProperties: false,
+    });
     const writer = execution.tools.find((tool) => tool.name === "record_initiative_evidence")!;
     expect(writer.inputSchema.properties).toEqual(expect.objectContaining({
       decision: expect.any(Object),

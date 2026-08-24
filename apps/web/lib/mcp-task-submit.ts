@@ -177,11 +177,42 @@ function narrowInitiativeReviewTools<T extends {
       required: requiredJudgmentNames,
     };
   };
+  const narrowReaderSchema = (name: string, schema: Record<string, unknown>) => {
+    const properties = schema.properties && typeof schema.properties === "object" && !Array.isArray(schema.properties)
+      ? schema.properties as Record<string, unknown>
+      : {};
+    if (name === "read_source_at_version") {
+      return {
+        type: "object",
+        properties: {
+          path: { type: "string", enum: [binding.artifactRef.path] },
+          version: { type: "string", enum: [binding.artifactRef.commitSha] },
+        },
+        required: ["path", "version"],
+        additionalProperties: false,
+      };
+    }
+    if (name === "search_source_at_version") {
+      return {
+        type: "object",
+        properties: {
+          query: properties["query"] ?? { type: "string" },
+          version: { type: "string", enum: [binding.artifactRef.commitSha] },
+          glob: { type: "string", enum: [binding.artifactRef.path] },
+        },
+        required: ["query", "version", "glob"],
+        additionalProperties: false,
+      };
+    }
+    return schema;
+  };
+  const boundSchema = (name: string, schema: Record<string, unknown>) =>
+    name === binding.writerToolName
+      ? narrowSchema(schema)
+      : narrowReaderSchema(name, schema);
   const tools = input.tools
     .filter((tool) => exactNames.has(tool.name))
-    .map((tool) => tool.name === binding.writerToolName
-      ? { ...tool, inputSchema: narrowSchema(tool.inputSchema) }
-      : tool);
+    .map((tool) => ({ ...tool, inputSchema: boundSchema(tool.name, tool.inputSchema) }));
   const toolsForProvider = input.toolsForProvider
     .filter((entry) => {
       const fn = entry["function"];
@@ -190,9 +221,8 @@ function narrowInitiativeReviewTools<T extends {
     })
     .map((entry) => {
       const fn = entry["function"] as Record<string, unknown>;
-      return fn["name"] === binding.writerToolName
-        ? { ...entry, function: { ...fn, parameters: narrowSchema((fn["parameters"] ?? {}) as Record<string, unknown>) } }
-        : entry;
+      const name = String(fn["name"] ?? "");
+      return { ...entry, function: { ...fn, parameters: boundSchema(name, (fn["parameters"] ?? {}) as Record<string, unknown>) } };
     });
   return { ...input, tools, toolsForProvider, deferredTools: [] };
 }
