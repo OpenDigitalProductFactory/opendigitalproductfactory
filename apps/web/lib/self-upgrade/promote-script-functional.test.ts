@@ -91,7 +91,8 @@ done
 [ -n "$DOCKER_LOG" ] && printf '%s\\n' "$*" >> "$DOCKER_LOG"
 case "$*" in
   *".Id"*) printf "%s" "$DPF_TEST_RELEASE_CONFIG_DIGEST" ;;
-  "image inspect "*) printf "%s" "$DPF_TEST_RELEASE_SHA" ;;
+  *"org.opencontainers.image.version"*) printf "%s" "$DPF_TEST_RELEASE_TAG" ;;
+  *"org.opencontainers.image.revision"*) printf "%s" "$DPF_TEST_RELEASE_SHA" ;;
   "create "*) printf "candidate-container" ;;
   "cp candidate-container:/dpf-release-assets/. "*)
     for destination in "$@"; do :; done
@@ -221,6 +222,7 @@ function runPromote(opts: {
         : ["unset DPF_RELEASE_CONFIG_DIGEST"]),
       `export GHCR_OWNER=${shellQuote(opts.release.owner)}`,
       `export DPF_TEST_RELEASE_SHA=${shellQuote(opts.targetSha)}`,
+      `export DPF_TEST_RELEASE_TAG=${shellQuote(opts.release.tag)}`,
       `export DPF_TEST_RELEASE_CONFIG_DIGEST=${shellQuote(opts.release.configDigest ?? `sha256:${"c".repeat(64)}`)}`,
       `export DPF_TEST_RELEASE_ASSETS=${shellQuote(toBashPath(opts.release.candidateAssets))}`,
       `export GIT_LOG=${shellQuote(toBashPath(opts.release.gitLog))}`,

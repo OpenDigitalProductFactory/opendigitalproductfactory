@@ -200,6 +200,9 @@ jobs:
           build-args: |
             DPF_VERSION=${{ github.sha }}
             DPF_PLATFORM_VERSION=${{ needs.gate.outputs.tag }}
+            DPF_PROMOTER_SOURCE_SHA=${{ github.sha }}
+            DPF_PROMOTER_RELEASE_TAG=${{ needs.gate.outputs.tag }}
+            DPF_PROMOTER_RELEASE_OWNER=${{ steps.owner.outputs.value }}
             DPF_PROMOTER_CONTRACT_DIGEST=sha256:${{ steps.promoter-contract.outputs.digest }}
           # Same identity, in the OCI-standard place. /app/.dpf-image-version is inside
           # the filesystem, so reading it costs a `docker create` + `docker cp`; a label
