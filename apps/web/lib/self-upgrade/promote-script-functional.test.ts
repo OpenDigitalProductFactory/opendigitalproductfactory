@@ -156,7 +156,7 @@ function runPromote(opts: {
   principalRecoveryDecision?: "recover" | "not-needed" | "blocked";
   principalResolveFails?: boolean;
   principalVerifyFails?: boolean;
-  release?: { tag: string; owner: string; configDigest: string; candidateAssets: string; gitLog: string };
+  release?: { tag: string; owner: string; configDigest?: string; candidateAssets: string; gitLog: string };
 }): { status: number | null; stdout: string; stderr: string } {
   const stateDir = join(opts.backup, "state");
   const secret = "s".repeat(32);
@@ -216,10 +216,12 @@ function runPromote(opts: {
     ...(opts.release ? [
       "export DPF_PROMOTION_MODE=release",
       `export DPF_RELEASE_TAG=${shellQuote(opts.release.tag)}`,
-      `export DPF_RELEASE_CONFIG_DIGEST=${shellQuote(opts.release.configDigest)}`,
+      ...(opts.release.configDigest
+        ? [`export DPF_RELEASE_CONFIG_DIGEST=${shellQuote(opts.release.configDigest)}`]
+        : ["unset DPF_RELEASE_CONFIG_DIGEST"]),
       `export GHCR_OWNER=${shellQuote(opts.release.owner)}`,
       `export DPF_TEST_RELEASE_SHA=${shellQuote(opts.targetSha)}`,
-      `export DPF_TEST_RELEASE_CONFIG_DIGEST=${shellQuote(opts.release.configDigest)}`,
+      `export DPF_TEST_RELEASE_CONFIG_DIGEST=${shellQuote(opts.release.configDigest ?? `sha256:${"c".repeat(64)}`)}`,
       `export DPF_TEST_RELEASE_ASSETS=${shellQuote(toBashPath(opts.release.candidateAssets))}`,
       `export GIT_LOG=${shellQuote(toBashPath(opts.release.gitLog))}`,
       "export PROMOTE_COMPOSE_FILES='docker-compose.yml docker-compose.release.yml'",
@@ -259,7 +261,10 @@ function makeScratch(): { root: string; source: string; backup: string; fakeBin:
 }
 
 describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run", () => {
-  it("promotes a verified release into a source-free install without invoking Git", () => {
+  it.each([
+    { caller: "digest-bound caller", configDigest: `sha256:${"c".repeat(64)}` },
+    { caller: "legacy bootstrap caller", configDigest: undefined },
+  ])("promotes a verified release into a source-free install for a $caller", ({ configDigest }) => {
     const { root, source, backup, fakeBin } = makeScratch();
     const targetSha = "b".repeat(40);
     const candidateAssets = join(root, "candidate-assets");
@@ -310,10 +315,15 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
       writeFileSync(join(fakeBin, "git"), '#!/bin/sh\nprintf "git invoked: %s\\n" "$*" >> "$GIT_LOG"\nexit 97\n');
       chmodSync(join(fakeBin, "git"), 0o755);
 
-      const r = runPromote({ source, backup, targetSha, fakeBin, dockerLog, release: { tag: "v2.0.0", owner: "opendigitalproductfactory", configDigest: `sha256:${"c".repeat(64)}`, candidateAssets, gitLog } });
+      const r = runPromote({ source, backup, targetSha, fakeBin, dockerLog, release: { tag: "v2.0.0", owner: "opendigitalproductfactory", configDigest, candidateAssets, gitLog } });
       expect(r.status, r.stderr).toBe(0);
       expect(existsSync(gitLog)).toBe(false);
       expect(r.stdout).toContain(`step=done target=${targetSha}`);
+      if (configDigest) {
+        expect(r.stdout).not.toContain("mode=legacy-bootstrap");
+      } else {
+        expect(r.stdout).toContain("step=release-identity mode=legacy-bootstrap");
+      }
       expect(readFileSync(join(source, ".env"), "utf8")).toMatch(/^KEEP_ME=yes$/m);
       expect(readFileSync(join(source, ".env"), "utf8")).toMatch(/^DPF_IMAGE_TAG=v2\.0\.0$/m);
       expect(JSON.parse(readFileSync(statePath, "utf8")).imageTag).toBe("v2.0.0");
