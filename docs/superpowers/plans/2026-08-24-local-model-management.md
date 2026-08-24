@@ -22,7 +22,7 @@ The existing local-provider route becomes an honest, fully in-product control su
 - D3 local-tailored provider UX -> `BI-1FFDF4B1`
 - D4 measured verification and generated projections -> `BI-1FFDF4B1`
 - Dependencies: none
-- Receipt: `cmt6julqc01vl01mxqlrsaz15` (traceability-incomplete attempt; not a green coverage receipt)
+- Receipt: `cmt6julqc01vl01mxqlrsaz15`
 - Rationale: Native management, durable execution, the tailored operator surface, and routing reconciliation are one end-to-end correction; no phase is independently useful or safe to ship.
 
 This plan is **atomic** under BI-1FFDF4B1. The four implementation phases are not independently shippable:

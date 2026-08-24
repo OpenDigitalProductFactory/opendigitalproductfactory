@@ -141,16 +141,6 @@ Two real gaps remain even *within* Build Studio, and they are the operator's sha
 
 ---
 
-### 3.3 A bounded workflow proving the same durability seam
-
-Local model installation uses the same execution boundary without pretending
-the download is an agentic process. The request writes a deterministic manual
-job receipt, dispatches a concurrency-one Inngest event, and returns. The worker
-streams Docker Model Runner progress into the receipt, then reconciles model
-discovery and profiling. A shared system event only invalidates the browser's
-authenticated status projection. Closing the tab therefore stops observation,
-not the download, and a reconnect can recover progress from durable state.
-
 ## 4. The gap, named
 
 > **Build Studio's orchestrator runs the agent loop inside the portal's request/process lifetime, not inside Inngest's durable step model. Every resilience problem follows from that one decision.**
