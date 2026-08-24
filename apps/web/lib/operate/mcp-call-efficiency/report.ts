@@ -59,6 +59,7 @@ export async function loadCallEfficiencyEvents(
       routeContext: true,
       apiTokenId: true,
       skillId: true,
+      parameters: true,
     },
     orderBy: { createdAt: "asc" },
     take: Math.min(20_000, Math.max(100, limit)),
@@ -77,6 +78,7 @@ export async function loadCallEfficiencyEvents(
     routeContext: r.routeContext,
     apiTokenId: r.apiTokenId,
     skillId: r.skillId,
+    parameters: r.parameters,
   }));
 }
 
