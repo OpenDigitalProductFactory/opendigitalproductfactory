@@ -175,7 +175,12 @@ _release_mode=0
 if [[ "${DPF_PROMOTION_MODE:-source}" == "release" ]]; then
   _release_mode=1
   [[ "${DPF_RELEASE_TAG:-}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-+][A-Za-z0-9.-]+)?$ ]] || _missing+=(DPF_RELEASE_TAG)
-  [[ "${DPF_RELEASE_CONFIG_DIGEST:-}" =~ ^sha256:[a-f0-9]{64}$ ]] || _missing+=(DPF_RELEASE_CONFIG_DIGEST)
+  # Portals released before the registry-authoritative upgrade contract do not
+  # send a config digest. Keep that one-hop bootstrap path working; repaired
+  # callers always send the digest and remain bound to it below.
+  if [[ -n "${DPF_RELEASE_CONFIG_DIGEST:-}" && ! "${DPF_RELEASE_CONFIG_DIGEST}" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+    _missing+=(DPF_RELEASE_CONFIG_DIGEST)
+  fi
   [[ "${GHCR_OWNER:-}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,254}$ ]] || _missing+=(GHCR_OWNER)
 fi
 
@@ -209,10 +214,17 @@ if [[ $_release_mode -eq 1 && $_dry_run -eq 0 ]]; then
   _candidate_portal="ghcr.io/${GHCR_OWNER}/dpf-portal:${DPF_RELEASE_TAG}"
   docker pull "$_candidate_portal" >/dev/null
   _candidate_config_digest="$(docker image inspect "$_candidate_portal" --format '{{.Id}}' | tr -d '[:space:]')"
-  [[ "$_candidate_config_digest" == "$DPF_RELEASE_CONFIG_DIGEST" ]] || {
+  [[ "$_candidate_config_digest" =~ ^sha256:[a-f0-9]{64}$ ]] || {
+    printf 'error: release portal returned invalid config digest %s\n' "${_candidate_config_digest:-missing}" >&2
+    exit 1
+  }
+  [[ -z "${DPF_RELEASE_CONFIG_DIGEST:-}" || "$_candidate_config_digest" == "$DPF_RELEASE_CONFIG_DIGEST" ]] || {
     printf 'error: release portal config digest %s does not match resolved candidate %s\n' "${_candidate_config_digest:-missing}" "$DPF_RELEASE_CONFIG_DIGEST" >&2
     exit 1
   }
+  if [[ -z "${DPF_RELEASE_CONFIG_DIGEST:-}" ]]; then
+    printf 'step=release-identity mode=legacy-bootstrap config-digest=%s\n' "$_candidate_config_digest"
+  fi
   _candidate_revision="$(docker image inspect "$_candidate_portal" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' | tr -d '[:space:]')"
   [[ "$_candidate_revision" == "$PROMOTE_TARGET_SHA" ]] || {
     printf 'error: release portal revision %s does not match promote target %s\n' "${_candidate_revision:-missing}" "$PROMOTE_TARGET_SHA" >&2
