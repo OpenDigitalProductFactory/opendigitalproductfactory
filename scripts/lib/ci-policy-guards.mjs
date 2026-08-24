@@ -57,7 +57,11 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("release-asset-contract", "Release Asset Contract", [
       // The consumer install has no git checkout: whatever the installer copies
       // out of the install dir must ship in the image's /dpf-release-assets.
-      node("--test", "scripts/check-release-asset-contract.test.mjs"),
+      node(
+        "--test",
+        "scripts/check-release-asset-contract.test.mjs",
+        "scripts/installer/local-model-policy-contract.test.mjs",
+      ),
     ]),
     guard("db-commandment-coverage", "DB Commandment Coverage", [
       // The never-wipe-db commandment guarded two spellings and allowed three

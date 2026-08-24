@@ -45,6 +45,7 @@ const REQUIRED_IN_BUNDLE = Object.freeze([
   "scripts/installer/lib/state.ps1",
   "scripts/installer/lib/compose-chain.ps1",
   "scripts/installer/install-release-assets.mjs",
+  "scripts/installer/local-model-policy.json",
   "scripts/bootstrap-organization-pki.ps1",
   // The install guides tell operators to run these by name, so a consumer install
   // that lacks them fails the documented uninstall with "file not found" — the

@@ -61,6 +61,7 @@ COPY scripts/lib/capability-service-projection.mjs ./scripts/lib/
 COPY scripts/lib/capability-state-hash.mjs ./scripts/lib/
 COPY scripts/lib/transition-signing.mjs ./scripts/lib/
 COPY scripts/installer/resolve-host-identity.mjs ./scripts/installer/
+COPY scripts/installer/local-model-policy.json ./scripts/installer/
 COPY apps/web/ ./apps/web/
 COPY packages/ ./packages/
 COPY docs/professions/ ./docs/professions/
@@ -103,6 +104,7 @@ COPY scripts/lib/capability-state-hash.mjs ./scripts/lib/
 COPY scripts/lib/capability-service-projection.mjs ./scripts/lib/
 COPY scripts/lib/transition-signing.mjs ./scripts/lib/
 COPY scripts/installer/resolve-host-identity.mjs ./scripts/installer/
+COPY scripts/installer/local-model-policy.json ./scripts/installer/
 COPY scripts/capability-service-catalog.generated.json ./scripts/
 COPY scripts/installer/validate-install-state.mjs ./scripts/installer/
 COPY scripts/installer/install-state-transaction.mjs ./scripts/installer/
@@ -195,6 +197,7 @@ RUN mkdir -p /dpf-release-assets/scripts/lib /dpf-release-assets/scripts/install
     cp scripts/bootstrap-organization-pki.ps1 /dpf-release-assets/scripts/ && \
     cp scripts/lib/resolve-capability-compose-profiles.mjs scripts/lib/govern-capability-compose-args.mjs scripts/lib/capability-state-hash.mjs /dpf-release-assets/scripts/lib/ && \
     cp scripts/capability-service-catalog.generated.json /dpf-release-assets/scripts/ && \
+    cp scripts/installer/local-model-policy.json /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/validate-install-state.mjs /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/install-state-transaction.mjs scripts/installer/install-release-assets.mjs scripts/installer/install-state-lock-contract.json /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/install-state-schema-registry.mjs /dpf-release-assets/scripts/installer/ && \
