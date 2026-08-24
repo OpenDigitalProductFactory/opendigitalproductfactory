@@ -1,0 +1,128 @@
+# Local-CI Builder Lifecycle Recovery Implementation Plan
+
+- **Status:** awaiting backlog coverage receipt
+- **Date:** 2026-08-24
+- **Backlog item:** `BI-B131F357`
+- **Architecture:** `docs/superpowers/specs/2026-08-24-local-ci-builder-lifecycle-recovery-design.md`
+- **WWMD decision:** `DI-308054F94780` (`bounded-transition`)
+- **Workroom:** `WC-DD1EF64C`
+- **Backlog coverage receipt:** pending
+
+## Outcome
+
+Make the currently enforced local-CI Docker gate recover safely from stale
+Buildx registration metadata, discover builder blockers before expensive tests,
+and give the operator a truthful next action when automatic recovery cannot
+restore the governed builder.
+
+## Atomic delivery decision
+
+This is one compatibility-hardening boundary under `BI-B131F357`. Automatic
+recovery without fail-fast placement still wastes the exhaustive suite when
+recovery fails. Early preflight without production-build revalidation leaves a
+time-of-check/time-of-use gap. Structured failure metadata without reader changes
+continues to recommend blind retries. The lifecycle, plan placement, evidence,
+and status-reader changes therefore ship together.
+
+The separate migration from local heavy verification to the cloud is not part of
+this atomic unit.
+
+## 1. Specify lifecycle classification as pure behavior
+
+### Files
+
+- modify `scripts/lib/local-ci-builder-lifecycle.mjs`
+- modify `scripts/lib/local-ci-builder-lifecycle.test.mjs`
+
+### Red-green sequence
+
+1. Add failing tests that classify a missing expected container separately from
+   generic inspection failure and resource drift.
+2. Add failing tests for the bounded actions: create when absent, recover once
+   when registration is stale, keep when valid, and fail closed otherwise.
+3. Implement the smallest pure classifier/action contract that makes the tests
+   pass. Keep Docker process execution outside the pure module.
+
+## 2. Harden bounded-builder preflight and its evidence
+
+### Files
+
+- modify `scripts/local-ci-bounded-build.mjs`
+- modify `scripts/local-ci-bounded-build.test.mjs`
+- modify `scripts/lib/local-ci-bounded-builder.mjs` if an argument helper is needed
+- modify `scripts/lib/local-ci-bounded-builder.test.mjs` with any helper change
+
+### Red-green sequence
+
+1. Add failing tests for a preflight-only invocation and for the exact managed
+   `buildx rm` then `buildx create` recovery sequence.
+2. Prove that recovery happens only for a missing-object classification, only for
+   the configured managed builder, and at most once.
+3. Add failing tests for stable `failureClass`, `failureFingerprint`,
+   `recoveryAction`, and `retryable` metadata after recovery exhaustion, generic
+   inspection failure, and resource drift.
+4. Implement `--preflight-only`; it performs control-plane health checks and
+   bounded-builder validation/recovery but never starts an image build.
+5. Replace the historical receipt backlog ID with a stable contract identifier.
+
+## 3. Move builder discovery ahead of expensive verification
+
+### Files
+
+- modify `scripts/lib/local-integration-ci.mjs`
+- modify the existing local-integration plan tests that own command ordering
+- modify `scripts/local-integration-ci.mjs`
+- modify its existing receipt/metadata tests
+
+### Red-green sequence
+
+1. Add a failing plan test proving that `docker-build` inserts
+   `local-ci-bounded-build.mjs --preflight-only` before typecheck and Vitest, and
+   that host builds do not.
+2. Add a failing test proving the production build still performs its own
+   preflight and remains last.
+3. Add a failing provenance assertion for the stable integration contract ID.
+4. Implement the command placement without changing merge, freshness, generated
+   client, doc-guard, typecheck, test, or production-build semantics.
+
+## 4. Make the authoritative status reader truthful
+
+### Files
+
+- modify `scripts/lib/pregate-status.mjs`
+- modify `scripts/lib/pregate-status.test.mjs`
+- update `docs/testing/pre-pr-gate.md` if its operator contract changes
+
+### Red-green sequence
+
+1. Add a failing test that a non-retryable builder-lifecycle receipt produces a
+   `BLOCKED` verdict with the recorded recovery action.
+2. Add a failing reconciliation test proving an exact-HEAD `PASS` still wins over
+   a sibling slot's `BLOCKED` record.
+3. Add a failing rendering test proving `BLOCKED` does not print the generic
+   `pnpm run pregate` instruction.
+4. Preserve current guidance for stale records, pending evidence, and retryable
+   lease outcomes.
+5. Implement the reader-only classification and render changes. Do not infer a
+   lifecycle blocker from log text.
+
+## 5. Verify the compatibility boundary
+
+1. Run the touched Node test files and record the expected red-to-green sequence.
+2. Run all local-CI/pregate-status script tests.
+3. Run documentation links/index checks and repository guards.
+4. Run typecheck and affected tests according to the current pre-push contract.
+5. Run blast-radius checks for receipt/status consumers and Buildx lifecycle
+   callers.
+6. Run the exact-tree gate once. If external builder infrastructure blocks it,
+   preserve the receipt and report the infrastructure failure without claiming a
+   passing gate.
+7. Record Workroom evidence, obtain independent semantic review, and ship through
+   a DCO-signed PR only when the governed gates permit it.
+
+## Rollback
+
+Revert the source commit. No data migration or persistent runtime state is added.
+A builder registration recreated by the compatibility path remains governed by
+the pre-existing policy and can be stopped or reaped by the existing lifecycle
+commands.
