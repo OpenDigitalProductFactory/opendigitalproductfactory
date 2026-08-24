@@ -104,6 +104,13 @@ if [[ $_readiness -eq 1 ]]; then
     fi
   fi
   _profile_adapter="${PROMOTE_SOURCE:-}/scripts/lib/resolve-capability-compose-profiles.mjs"
+  if [[ "${DPF_PROMOTION_MODE:-source}" == "release" ]]; then
+    # A consumer install contains verified release assets, not a source tree.
+    # The candidate promoter is itself an immutable release artifact and its
+    # contract requires this adapter, so release readiness must project from
+    # that packaged closure instead of reaching through /host-source.
+    _profile_adapter="$_promoter_dir/lib/resolve-capability-compose-profiles.mjs"
+  fi
   if [[ ! -f "$_profile_adapter" ]]; then
     _readiness_fail capability_projection_failed "candidate source has no profile adapter at $_profile_adapter"
   elif ! _profile_error="$(node "$_profile_adapter" --state "$_state_file" --overlay promote --migrate 2>&1 >/dev/null)"; then
@@ -147,7 +154,20 @@ if [[ $_readiness -eq 1 ]]; then
     _readiness_fail host_identity_missing "${_host_identity_error:-the shipped resolver produced no host identity}"
   fi
   [[ -n "${PROMOTE_COMPOSE_PROJECT:-}" ]] || _readiness_fail compose_identity_missing "PROMOTE_COMPOSE_PROJECT is unset"
-  [[ -n "${PROMOTE_BACKUP_PATH:-}" && -d "$(dirname "${PROMOTE_BACKUP_PATH:-/missing}")" ]] || _readiness_fail recovery_parent_unavailable "no writable parent for PROMOTE_BACKUP_PATH=${PROMOTE_BACKUP_PATH:-<unset>}"
+  _recovery_path="${PROMOTE_BACKUP_PATH:-}"
+  _recovery_parent="$(dirname "${_recovery_path:-/missing}")"
+  _recovery_root="${DPF_PROMOTER_RECOVERY_ROOT:-/backups}"
+  _recovery_available=0
+  if [[ -n "$_recovery_path" && -d "$_recovery_parent" ]]; then
+    _recovery_available=1
+  elif [[ -n "$_recovery_path" && -d "$_recovery_root" && "$_recovery_path" == "${_recovery_root%/}/"* ]]; then
+    # Readiness is deliberately non-mutating and mounts recovery storage read
+    # only. The mutating run creates its self-upgrade/<run> subdirectories; the
+    # preflight proves the governed mount root exists and the target stays below
+    # it instead of requiring those future directories to pre-exist.
+    _recovery_available=1
+  fi
+  [[ $_recovery_available -eq 1 ]] || _readiness_fail recovery_parent_unavailable "no writable parent for PROMOTE_BACKUP_PATH=${PROMOTE_BACKUP_PATH:-<unset>}"
   [[ -d "$_state_dir" ]] || _readiness_fail transition_secret_parent_unavailable "state dir $_state_dir is not a directory"
   if [[ ${#_readiness_failures[@]} -gt 0 ]]; then
     _failures_json="$(
