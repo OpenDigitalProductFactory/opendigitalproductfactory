@@ -150,6 +150,10 @@ Architecture decision: aligned.
   It adds no schema, enum, route family, provider-health store, or second identity source.
 - Reconciliation is bounded to one route rebuild. Credential checks are deduplicated by
   provider before execution, so profile count does not multiply credential lookups.
+- Build Studio retains the full route-selection reason as diagnostic evidence, while its
+  first viewport projects that variable internal text to a stable ready/blocked sentence.
+  Credential truth can therefore change without leaking task types, provider identifiers,
+  or endpoint counts into the operator-facing setup summary.
 - Terminal platform failures remain in the existing timeline as `system` messages and are
   excluded from coworker semantic memory. This preserves the audit trail without teaching
   later turns that the coworker authored a platform failure.
