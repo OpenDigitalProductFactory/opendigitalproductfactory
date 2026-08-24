@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "canonical-guide-with-entry-point",
+  "decisionInteractionId": "DI-23888F11C9EC",
+  "scope": {
+    "files": [
+      "docs/index.html"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "homepage-full-matrix",
+      "canonical-guide-with-entry-point",
+      "architecture-only"
+    ]
+  }
+}
