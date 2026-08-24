@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 
 import {
   buildCoworkerApprovalBinding,
@@ -53,6 +53,55 @@ export function registerCoworkerAuthorityCases(
       decision: "allow",
       routeContext: "/ops",
       sensitivityLevel: "internal",
+    });
+  });
+
+  it("records the server-resolved initiative organization and backlog subject", async () => {
+    harness.applyOverrides({
+      resolveCoworkerAuthorityInput: async () => harness.authorityInput({
+        organizationId: "org-canonical",
+        subject: { kind: "backlog-item", id: "BI-F0715C9C" },
+      }),
+    });
+
+    const result = await governedExecuteTool({
+      toolName: "query_backlog",
+      rawParams: { itemId: "BI-F0715C9C", organizationId: "caller-org" },
+      userId: "user-1",
+      userContext: harness.normalUser,
+      context: { agentId: "AGT-100", organizationId: "org-canonical" },
+      source: "agentic-loop",
+    });
+
+    expect(result.success).toBe(true);
+    expect(harness.authorityRows().at(-1)).toMatchObject({
+      organizationId: "org-canonical",
+      objectRef: "backlog-item:BI-F0715C9C",
+    });
+  });
+
+  it("persists platform initiative scope without a tenant organization foreign key", async () => {
+    harness.applyOverrides({
+      resolveCoworkerAuthorityInput: async () => harness.authorityInput({
+        organizationId: "platform",
+        subject: { kind: "backlog-item", id: "BI-F0715C9C" },
+      }),
+    });
+
+    const result = await governedExecuteTool({
+      toolName: "query_backlog",
+      rawParams: { itemId: "BI-F0715C9C" },
+      userId: "user-1",
+      userContext: harness.normalUser,
+      context: { agentId: "AGT-100" },
+      source: "agentic-loop",
+    });
+
+    expect(result.success).toBe(true);
+    expect(harness.authorityRows().at(-1)).toMatchObject({
+      organizationId: null,
+      objectRef: "backlog-item:BI-F0715C9C",
+      rationale: { authorityOrganizationScope: "platform" },
     });
   });
 
@@ -179,6 +228,177 @@ export function registerCoworkerAuthorityCases(
     expect(harness.authorityRows().at(-1)).toMatchObject({
       decision: "require-approval",
     });
+  });
+
+  it("consumes a server-projected exact-call policy authorization before execution", async () => {
+    const pending = harness.authorityInput({
+      organizationId: "org-canonical",
+      action: {
+        ...harness.authorityInput().action,
+        toolName: "create_backlog_item",
+        requiredCapability: "manage_backlog",
+        sideEffect: true,
+        approvalPolicy: "side-effects",
+      },
+      rawParams: { title: "policy-authorized" },
+    });
+    const projected = vi.fn(async () => ({
+      outcome: "approved" as const,
+      authorityDecisionId: "AUTH-POLICY",
+      envelopeId: "ENV-POLICY",
+      expiresAt: new Date(Date.now() + 60_000),
+    }));
+    harness.applyOverrides({
+      resolveCoworkerAuthorityInput: async () => pending,
+      policyAuthorityProjectionAttempt: projected,
+    });
+
+    const result = await governedExecuteTool({
+      toolName: "create_backlog_item",
+      rawParams: { title: "policy-authorized" },
+      userId: "user-1",
+      userContext: harness.normalUser,
+      context: { agentId: "AGT-100", organizationId: "org-canonical" },
+      source: "agentic-loop",
+    });
+
+    expect(result.success).toBe(true);
+    expect(projected).toHaveBeenCalledWith(expect.objectContaining({
+      execution: expect.objectContaining({ toolName: "create_backlog_item" }),
+      authorityInput: expect.objectContaining({ organizationId: "org-canonical" }),
+      approvalBinding: expect.objectContaining({ toolName: "create_backlog_item" }),
+    }));
+    expect(harness.approvalEnvelopeCreate()).not.toHaveBeenCalled();
+    expect(harness.approvalEnvelopeFinalize()).toHaveBeenCalledWith("ENV-POLICY", true);
+  });
+
+  it("rejects replay when the policy-derived single-use envelope is already reserved", async () => {
+    const pending = harness.authorityInput({
+      organizationId: "org-canonical",
+      action: {
+        ...harness.authorityInput().action,
+        toolName: "create_backlog_item",
+        requiredCapability: "manage_backlog",
+        sideEffect: true,
+        approvalPolicy: "side-effects",
+      },
+      rawParams: { title: "policy-replay" },
+    });
+    harness.applyOverrides({
+      resolveCoworkerAuthorityInput: async () => pending,
+      policyAuthorityProjectionAttempt: async () => ({
+        outcome: "approved" as const,
+        authorityDecisionId: "AUTH-POLICY",
+        envelopeId: "ENV-POLICY",
+        expiresAt: new Date(Date.now() + 60_000),
+      }),
+      policyAuthorityEnvelopeReserve: async () => false,
+    });
+
+    const result = await governedExecuteTool({
+      toolName: "create_backlog_item",
+      rawParams: { title: "policy-replay" },
+      userId: "user-1",
+      userContext: harness.normalUser,
+      context: { agentId: "AGT-100", organizationId: "org-canonical" },
+      source: "agentic-loop",
+    });
+
+    expect(result).toMatchObject({
+      success: false,
+      error: "authority_evidence_unavailable",
+      governance: { rejected: "authority_evidence_unavailable" },
+    });
+    expect(harness.executeMock()).not.toHaveBeenCalled();
+    expect(harness.approvalEnvelopeFinalize()).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when the exact-bound owning policy explicitly declines", async () => {
+    const pending = harness.authorityInput({
+      organizationId: "org-canonical",
+      action: {
+        ...harness.authorityInput().action,
+        toolName: "create_backlog_item",
+        requiredCapability: "manage_backlog",
+        sideEffect: true,
+        approvalPolicy: "side-effects",
+      },
+      rawParams: { title: "policy-declined" },
+    });
+    harness.applyOverrides({
+      resolveCoworkerAuthorityInput: async () => pending,
+      policyAuthorityProjectionAttempt: async () => ({
+        outcome: "denied" as const,
+        reasonCode: "policy-declined" as const,
+        explanation: "The owning policy judgment explicitly declined this action.",
+      }),
+    });
+
+    const result = await governedExecuteTool({
+      toolName: "create_backlog_item",
+      rawParams: { title: "policy-declined" },
+      userId: "user-1",
+      userContext: harness.normalUser,
+      context: { agentId: "AGT-100", organizationId: "org-canonical" },
+      source: "agentic-loop",
+    });
+
+    expect(result).toMatchObject({
+      success: false,
+      error: "authority_denied",
+      governance: {
+        rejected: "authority_denied",
+        authorityReason: "policy-declined",
+      },
+    });
+    expect(harness.executeMock()).not.toHaveBeenCalled();
+    expect(harness.approvalEnvelopeCreate()).not.toHaveBeenCalled();
+    expect(harness.authorityRows().at(-1)).toMatchObject({
+      decision: "deny",
+      rationale: expect.objectContaining({ reasonCode: "policy-declined" }),
+    });
+  });
+
+  it("does not substitute the initiating-human approval path for a dual-control floor", async () => {
+    const pending = harness.authorityInput({
+      organizationId: "org-canonical",
+      action: {
+        ...harness.authorityInput().action,
+        toolName: "create_backlog_item",
+        requiredCapability: "manage_backlog",
+        sideEffect: true,
+        approvalPolicy: "side-effects",
+      },
+      rawParams: { title: "dual-control" },
+    });
+    harness.applyOverrides({
+      resolveCoworkerAuthorityInput: async () => pending,
+      policyAuthorityProjectionAttempt: async () => ({
+        outcome: "resolution-required" as const,
+        reasonCode: "dual-control-required" as const,
+        explanation: "This action requires a fresh distinct-human approval bound to the exact call.",
+      }),
+    });
+
+    const result = await governedExecuteTool({
+      toolName: "create_backlog_item",
+      rawParams: { title: "dual-control" },
+      userId: "user-1",
+      userContext: harness.normalUser,
+      context: { agentId: "AGT-100", organizationId: "org-canonical" },
+      source: "agentic-loop",
+    });
+
+    expect(result).toMatchObject({
+      success: false,
+      error: "authority_denied",
+      governance: {
+        rejected: "authority_denied",
+        authorityReason: "dual-control-required",
+      },
+    });
+    expect(harness.executeMock()).not.toHaveBeenCalled();
+    expect(harness.approvalEnvelopeCreate()).not.toHaveBeenCalled();
   });
 
   it("resumes and finalizes only the exact task bound to an approved call", async () => {

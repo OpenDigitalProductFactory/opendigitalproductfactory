@@ -17,6 +17,59 @@ _dry_run=0
 _readiness=0
 _promoter_dir="${DPF_PROMOTER_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 
+# A registry release promoter is selected by immutable digest before this
+# script starts. Portals released before the release-mode carrier existed can
+# launch that exact candidate but cannot pass DPF_PROMOTION_MODE or its release
+# identity. Recover only that one N-1 edge: a schema-valid source-free install
+# may consume identity baked into the candidate image. Explicit source callers
+# and source installs never enter this path.
+_candidate_release_error=""
+_resolve_candidate_release_bootstrap() {
+  _candidate_release_error=""
+
+  if [[ -n "${DPF_PROMOTION_MODE:-}" ]]; then
+    if [[ "$DPF_PROMOTION_MODE" != "source" && "$DPF_PROMOTION_MODE" != "release" ]]; then
+      _candidate_release_error="unsupported DPF_PROMOTION_MODE=$DPF_PROMOTION_MODE"
+      return 1
+    fi
+    return 0
+  fi
+
+  local _candidate_state="${DPF_PROMOTER_STATE_DIR:-/dpf-state}/install-state.json"
+  local _install_mode=""
+  [[ -r "$_candidate_state" ]] || return 0
+  _install_mode="$(node -e 'const state=JSON.parse(require("node:fs").readFileSync(process.argv[1],"utf8").replace(/^\uFEFF/,"")); process.stdout.write(typeof state.installMode==="string"?state.installMode:"")' "$_candidate_state" 2>/dev/null || true)"
+  [[ "$_install_mode" == "consumer" || "$_install_mode" == "customer" ]] || return 0
+
+  local _candidate_validator="$_promoter_dir/installer/validate-install-state.mjs"
+  local _candidate_state_error=""
+  if [[ ! -f "$_candidate_validator" ]] ||
+     ! _candidate_state_error="$(node "$_candidate_validator" "$_candidate_state" 2>&1 >/dev/null)"; then
+    _candidate_release_error="candidate release bootstrap requires valid install-state${_candidate_state_error:+: $_candidate_state_error}"
+    return 1
+  fi
+
+  if [[ ! "${DPF_CANDIDATE_RELEASE_TAG:-}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-+][A-Za-z0-9.-]+)?$ ]] ||
+     [[ ! "${DPF_CANDIDATE_RELEASE_OWNER:-}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,254}$ ]] ||
+     [[ ! "${DPF_CANDIDATE_SOURCE_SHA:-}" =~ ^[a-f0-9]{40}$ ]]; then
+    _candidate_release_error="candidate release identity is incomplete or malformed"
+    return 1
+  fi
+  if [[ "$DPF_CANDIDATE_SOURCE_SHA" != "${PROMOTE_TARGET_SHA:-}" ]]; then
+    _candidate_release_error="candidate release source $DPF_CANDIDATE_SOURCE_SHA does not match promote target ${PROMOTE_TARGET_SHA:-<unset>}"
+    return 1
+  fi
+  if [[ -n "${DPF_RELEASE_TAG:-}" && "$DPF_RELEASE_TAG" != "$DPF_CANDIDATE_RELEASE_TAG" ]] ||
+     [[ -n "${GHCR_OWNER:-}" && "$GHCR_OWNER" != "$DPF_CANDIDATE_RELEASE_OWNER" ]]; then
+    _candidate_release_error="caller release identity contradicts the immutable candidate"
+    return 1
+  fi
+
+  export DPF_PROMOTION_MODE=release
+  export DPF_RELEASE_TAG="$DPF_CANDIDATE_RELEASE_TAG"
+  export GHCR_OWNER="$DPF_CANDIDATE_RELEASE_OWNER"
+}
+
 if [[ "${1:-}" == "--runtime-transition-secret-rotation" ]]; then
   exec node "$_promoter_dir/rotate-runtime-transition-secret.mjs" --state-dir "${DPF_PROMOTER_STATE_DIR:-/dpf-state}" --rotate
 elif [[ "${1:-}" == "--runtime-transition-authority" ]]; then
@@ -69,10 +122,16 @@ if [[ $_readiness -eq 1 ]]; then
   _state_file="$_state_dir/install-state.json"
   [[ -d "$_state_dir" && -r "$_state_dir" ]] || _readiness_fail state_mount_unreadable "state mount $_state_dir is not a readable directory"
   _state_validator="$_promoter_dir/installer/validate-install-state.mjs"
+  _state_valid=0
   if [[ ! -r "$_state_file" ]] || [[ ! -f "$_state_validator" ]]; then
     _readiness_fail install_state_invalid "no readable install-state at $_state_file"
   elif ! _state_error="$(node "$_state_validator" "$_state_file" 2>&1 >/dev/null)"; then
     _readiness_fail install_state_invalid "$_state_error"
+  else
+    _state_valid=1
+  fi
+  if [[ $_state_valid -eq 1 ]] && ! _resolve_candidate_release_bootstrap; then
+    _readiness_fail release_identity_invalid "$_candidate_release_error"
   fi
   # Build-context completeness. The candidate promoter image is built FROM the
   # host source tree, so every COPY source in Dockerfile.promoter must exist
@@ -104,6 +163,13 @@ if [[ $_readiness -eq 1 ]]; then
     fi
   fi
   _profile_adapter="${PROMOTE_SOURCE:-}/scripts/lib/resolve-capability-compose-profiles.mjs"
+  if [[ "${DPF_PROMOTION_MODE:-source}" == "release" ]]; then
+    # A consumer install contains verified release assets, not a source tree.
+    # The candidate promoter is itself an immutable release artifact and its
+    # contract requires this adapter, so release readiness must project from
+    # that packaged closure instead of reaching through /host-source.
+    _profile_adapter="$_promoter_dir/lib/resolve-capability-compose-profiles.mjs"
+  fi
   if [[ ! -f "$_profile_adapter" ]]; then
     _readiness_fail capability_projection_failed "candidate source has no profile adapter at $_profile_adapter"
   elif ! _profile_error="$(node "$_profile_adapter" --state "$_state_file" --overlay promote --migrate 2>&1 >/dev/null)"; then
@@ -147,7 +213,20 @@ if [[ $_readiness -eq 1 ]]; then
     _readiness_fail host_identity_missing "${_host_identity_error:-the shipped resolver produced no host identity}"
   fi
   [[ -n "${PROMOTE_COMPOSE_PROJECT:-}" ]] || _readiness_fail compose_identity_missing "PROMOTE_COMPOSE_PROJECT is unset"
-  [[ -n "${PROMOTE_BACKUP_PATH:-}" && -d "$(dirname "${PROMOTE_BACKUP_PATH:-/missing}")" ]] || _readiness_fail recovery_parent_unavailable "no writable parent for PROMOTE_BACKUP_PATH=${PROMOTE_BACKUP_PATH:-<unset>}"
+  _recovery_path="${PROMOTE_BACKUP_PATH:-}"
+  _recovery_parent="$(dirname "${_recovery_path:-/missing}")"
+  _recovery_root="${DPF_PROMOTER_RECOVERY_ROOT:-/backups}"
+  _recovery_available=0
+  if [[ -n "$_recovery_path" && -d "$_recovery_parent" ]]; then
+    _recovery_available=1
+  elif [[ -n "$_recovery_path" && -d "$_recovery_root" && "$_recovery_path" == "${_recovery_root%/}/"* ]]; then
+    # Readiness is deliberately non-mutating and mounts recovery storage read
+    # only. The mutating run creates its self-upgrade/<run> subdirectories; the
+    # preflight proves the governed mount root exists and the target stays below
+    # it instead of requiring those future directories to pre-exist.
+    _recovery_available=1
+  fi
+  [[ $_recovery_available -eq 1 ]] || _readiness_fail recovery_parent_unavailable "no writable parent for PROMOTE_BACKUP_PATH=${PROMOTE_BACKUP_PATH:-<unset>}"
   [[ -d "$_state_dir" ]] || _readiness_fail transition_secret_parent_unavailable "state dir $_state_dir is not a directory"
   if [[ ${#_readiness_failures[@]} -gt 0 ]]; then
     _failures_json="$(
@@ -164,6 +243,11 @@ fi
 
 [[ $_self_upgrade -eq 1 ]] || { printf 'error: --self-upgrade flag required\n' >&2; exit 1; }
 
+if ! _resolve_candidate_release_bootstrap; then
+  printf 'error: %s\n' "$_candidate_release_error" >&2
+  exit 78
+fi
+
 # Validate all required variables before any mutating work
 _missing=()
 [[ -n "${PROMOTE_SOURCE:-}"      ]] || _missing+=(PROMOTE_SOURCE)
@@ -175,6 +259,12 @@ _release_mode=0
 if [[ "${DPF_PROMOTION_MODE:-source}" == "release" ]]; then
   _release_mode=1
   [[ "${DPF_RELEASE_TAG:-}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-+][A-Za-z0-9.-]+)?$ ]] || _missing+=(DPF_RELEASE_TAG)
+  # Portals released before the registry-authoritative upgrade contract do not
+  # send a config digest. Keep that one-hop bootstrap path working; repaired
+  # callers always send the digest and remain bound to it below.
+  if [[ -n "${DPF_RELEASE_CONFIG_DIGEST:-}" && ! "${DPF_RELEASE_CONFIG_DIGEST}" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+    _missing+=(DPF_RELEASE_CONFIG_DIGEST)
+  fi
   [[ "${GHCR_OWNER:-}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,254}$ ]] || _missing+=(GHCR_OWNER)
 fi
 
@@ -207,9 +297,26 @@ _candidate_portal=""
 if [[ $_release_mode -eq 1 && $_dry_run -eq 0 ]]; then
   _candidate_portal="ghcr.io/${GHCR_OWNER}/dpf-portal:${DPF_RELEASE_TAG}"
   docker pull "$_candidate_portal" >/dev/null
+  _candidate_config_digest="$(docker image inspect "$_candidate_portal" --format '{{.Id}}' | tr -d '[:space:]')"
+  [[ "$_candidate_config_digest" =~ ^sha256:[a-f0-9]{64}$ ]] || {
+    printf 'error: release portal returned invalid config digest %s\n' "${_candidate_config_digest:-missing}" >&2
+    exit 1
+  }
+  [[ -z "${DPF_RELEASE_CONFIG_DIGEST:-}" || "$_candidate_config_digest" == "$DPF_RELEASE_CONFIG_DIGEST" ]] || {
+    printf 'error: release portal config digest %s does not match resolved candidate %s\n' "${_candidate_config_digest:-missing}" "$DPF_RELEASE_CONFIG_DIGEST" >&2
+    exit 1
+  }
+  if [[ -z "${DPF_RELEASE_CONFIG_DIGEST:-}" ]]; then
+    printf 'step=release-identity mode=legacy-bootstrap config-digest=%s\n' "$_candidate_config_digest"
+  fi
   _candidate_revision="$(docker image inspect "$_candidate_portal" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' | tr -d '[:space:]')"
   [[ "$_candidate_revision" == "$PROMOTE_TARGET_SHA" ]] || {
     printf 'error: release portal revision %s does not match promote target %s\n' "${_candidate_revision:-missing}" "$PROMOTE_TARGET_SHA" >&2
+    exit 1
+  }
+  _candidate_version="$(docker image inspect "$_candidate_portal" --format '{{ index .Config.Labels "org.opencontainers.image.version" }}' | tr -d '[:space:]')"
+  [[ "$_candidate_version" == "$DPF_RELEASE_TAG" ]] || {
+    printf 'error: release portal version %s does not match release tag %s\n' "${_candidate_version:-missing}" "$DPF_RELEASE_TAG" >&2
     exit 1
   }
   mkdir -p "$PROMOTE_BACKUP_PATH"

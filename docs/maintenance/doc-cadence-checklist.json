@@ -18,14 +18,14 @@
     "storefront": "Marketing scheduler, discovery attribution"
   },
   "summary": {
-    "pagesInScope": 56,
+    "pagesInScope": 59,
     "complete": 5,
     "byElement": {
-      "acts": 8,
+      "acts": 9,
       "cadence": 14,
       "currency": 9,
-      "boundary": 40,
-      "humanStep": 9
+      "boundary": 41,
+      "humanStep": 10
     },
     "note": "Detection is lexical and presence-only. A tick means the question is answered somewhere on the page, never that the answer is correct."
   },
@@ -107,6 +107,21 @@
     },
     {
       "path": "docs/user-guide/platform/authority-and-audit.md",
+      "area": "platform",
+      "automation": "Discovery sweeps, estate patch posture, token expiry monitor, runtime janitors",
+      "elements": {
+        "acts": false,
+        "cadence": false,
+        "currency": false,
+        "boundary": false,
+        "humanStep": false
+      },
+      "answered": 0,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/platform/wordpress-self-hosted.md",
       "area": "platform",
       "automation": "Discovery sweeps, estate patch posture, token expiry monitor, runtime janitors",
       "elements": {
@@ -211,6 +226,36 @@
       "complete": false
     },
     {
+      "path": "docs/user-guide/ai-workforce/how-governed-work-runs.md",
+      "area": "ai-workforce",
+      "automation": "Coworker self-tasks, nightly coworker certification, model discovery refresh",
+      "elements": {
+        "acts": false,
+        "cadence": false,
+        "currency": false,
+        "boundary": true,
+        "humanStep": false
+      },
+      "answered": 1,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/ai-workforce/priority-and-outcomes.md",
+      "area": "ai-workforce",
+      "automation": "Coworker self-tasks, nightly coworker certification, model discovery refresh",
+      "elements": {
+        "acts": false,
+        "cadence": false,
+        "currency": false,
+        "boundary": false,
+        "humanStep": true
+      },
+      "answered": 1,
+      "total": 5,
+      "complete": false
+    },
+    {
       "path": "docs/user-guide/ai-workforce/provider-codex.md",
       "area": "ai-workforce",
       "automation": "Coworker self-tasks, nightly coworker certification, model discovery refresh",
@@ -272,21 +317,6 @@
     },
     {
       "path": "docs/user-guide/build-studio/index.md",
-      "area": "build-studio",
-      "automation": "Build Studio PR delivery reconcile, sandbox build GC, task-run watchdog",
-      "elements": {
-        "acts": false,
-        "cadence": false,
-        "currency": false,
-        "boundary": true,
-        "humanStep": false
-      },
-      "answered": 1,
-      "total": 5,
-      "complete": false
-    },
-    {
-      "path": "docs/user-guide/build-studio/sandbox.md",
       "area": "build-studio",
       "automation": "Build Studio PR delivery reconcile, sandbox build GC, task-run watchdog",
       "elements": {
@@ -670,6 +700,21 @@
         "currency": false,
         "boundary": true,
         "humanStep": true
+      },
+      "answered": 2,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/build-studio/sandbox.md",
+      "area": "build-studio",
+      "automation": "Build Studio PR delivery reconcile, sandbox build GC, task-run watchdog",
+      "elements": {
+        "acts": true,
+        "cadence": false,
+        "currency": false,
+        "boundary": true,
+        "humanStep": false
       },
       "answered": 2,
       "total": 5,

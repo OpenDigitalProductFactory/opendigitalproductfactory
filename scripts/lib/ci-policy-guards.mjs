@@ -57,7 +57,11 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("release-asset-contract", "Release Asset Contract", [
       // The consumer install has no git checkout: whatever the installer copies
       // out of the install dir must ship in the image's /dpf-release-assets.
-      node("--test", "scripts/check-release-asset-contract.test.mjs"),
+      node(
+        "--test",
+        "scripts/check-release-asset-contract.test.mjs",
+        "scripts/installer/local-model-policy-contract.test.mjs",
+      ),
     ]),
     guard("db-commandment-coverage", "DB Commandment Coverage", [
       // The never-wipe-db commandment guarded two spellings and allowed three
@@ -102,7 +106,11 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("published-image-freshness", "Published Image Freshness", [
       // Decision logic only — the live registry check needs Docker and runs on a
       // schedule (.github/workflows/published-image-freshness.yml).
-      node("--test", "scripts/lib/published-image-freshness.test.mjs"),
+      node(
+        "--test",
+        "scripts/lib/published-image-freshness.test.mjs",
+        "scripts/publish-image-release-identity.test.mjs",
+      ),
     ]),
     guard("docs-link-integrity", "Docs Link Integrity", [
       node("scripts/gen-doc-index.mjs", "--check"),
@@ -147,6 +155,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/ci-policy-test-inventory.test.mjs",
         "scripts/lib/git-shallow-preflight.test.mjs",
         "scripts/pregate-preflight.test.mjs",
+        "scripts/pregate-exit-honesty.test.mjs",
         "scripts/gate-context.test.mjs",
         "scripts/lib/gate-context-runtime-contract.test.mjs",
         "scripts/pre-push-dco-check.test.mjs",
@@ -233,6 +242,14 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("doc-anchor-existence", "Doc Anchor Existence", [
       node("--test", "scripts/check-doc-anchor-existence.test.mjs"),
       node("scripts/check-doc-anchor-existence.mjs"),
+    ]),
+    // BI-38A353B2: doc-anchor-existence proves a cited id EXISTS; nothing
+    // proved it was still OPEN. A closed id cited from user-facing runtime
+    // text names a fixed defect as a live blocker. Same diff scope, same
+    // grandfather baseline, same warn-pass degradation.
+    guard("live-blocker-references", "Live Blocker References", [
+      node("--test", "scripts/check-live-blocker-references.test.mjs"),
+      node("scripts/check-live-blocker-references.mjs"),
     ]),
     // BI-79BCE3F2: ONE status/supersession frontmatter convention across
     // docs/superpowers/{specs,plans} — new/changed files must carry
@@ -321,6 +338,13 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     ]),
     guard("package-boundary-guard", "Package Boundary Guard", [
       node("scripts/check-package-boundaries.mjs"),
+    ]),
+    // BI-96033E25 — a vitest test must resolve repo paths from __dirname, not
+    // process.cwd(), or `vitest run --root <pkg>` reads outside the repo and
+    // fails as a misleading missing file.
+    guard("test-cwd-independence-guard", "Test Cwd Independence Guard", [
+      node("--test", "scripts/check-test-cwd-independence.test.mjs"),
+      node("scripts/check-test-cwd-independence.mjs"),
     ]),
     guard("build-studio-namespace-guard", "Build Studio Namespace Guard", [
       node("scripts/check-build-namespace.mjs"),
@@ -462,6 +486,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       ),
       node("--test", "packages/dpf-skill-pack/hooks/root-clone-guard.test.mjs"),
       node("--test", "packages/dpf-skill-pack/hooks/compose-guard.test.mjs"),
+      node("--test", "packages/dpf-skill-pack/hooks/portal-image-guard.test.mjs"),
       node("--test", "packages/dpf-skill-pack/hooks/worktree-create.test.mjs"),
       // BI-B1065D41 / BI-1C1483C6: the sixth PreToolUse guard and the
       // SessionStart readiness banner. Both are hand-added here for the same
@@ -487,6 +512,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node(
         "--test",
         "packages/dpf-skill-pack/hooks/shared-clone-occupancy.test.mjs",
+      ),
+      node(
+        "--test",
+        "scripts/lib/dev-portal-lease-claim-key.test.mjs",
       ),
       node(
         "--test",

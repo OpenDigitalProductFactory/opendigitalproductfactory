@@ -79,6 +79,8 @@ Use these guides for the internal systems that keep the organization healthy, ac
 Use these guides when you are responsible for AI behavior, platform services, access, security, or governed knowledge.
 
 - [AI Workforce](ai-workforce/index.md) — configure providers, understand model-routing lifecycle and decision perspective, and govern AI cost.
+- [Priority, Outcomes & Calibration](ai-workforce/priority-and-outcomes.md) — set a cost / quality / time priority in plain terms, see what actually ran against it, and let the platform propose a better-fitted default.
+- [How Governed Work Actually Runs](ai-workforce/how-governed-work-runs.md) — one pass end to end: the room, the shape that bounds it, the pace it sets, the corpus it consults, the gate on the tool, and the receipt you review.
 - [Platform](platform/index.md) — operate AI services, Edge Nodes, identity and access, authority and audit, tools, and integrations.
 - [Security Operations](security/index.md) — use the built-in AI security operations center for sources, detections, cases, governed response, compliance, and MSP federation.
 - [Admin](admin/index.md) — configure administrator-only platform settings.

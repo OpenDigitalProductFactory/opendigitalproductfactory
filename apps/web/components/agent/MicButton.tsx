@@ -113,15 +113,15 @@ export function MicButton(props: MicButtonProps) {
     ariaLabel = "Stop dictation";
     title = "Click to stop dictation";
     dataState = "recording";
-    iconColor = "var(--dpf-error, #d33)";
-    borderColor = "var(--dpf-error, #d33)";
+    iconColor = "var(--dpf-error)";
+    borderColor = "var(--dpf-error)";
   } else if (isError) {
     icon = <Mic size={16} />;
     ariaLabel = "Voice input error — click to retry";
     title = errorMessage ?? "Voice input failed. Click to retry.";
     dataState = "error";
-    iconColor = "var(--dpf-error, #d33)";
-    borderColor = "var(--dpf-error, #d33)";
+    iconColor = "var(--dpf-error)";
+    borderColor = "var(--dpf-error)";
   } else {
     // idle / result
     icon = <Mic size={16} />;
@@ -152,8 +152,8 @@ export function MicButton(props: MicButtonProps) {
         style={{
           position: "relative",
           background: isRecording
-            ? "color-mix(in srgb, var(--dpf-error, #d33) 15%, transparent)"
-            : "var(--dpf-surface-2, #f3f3f3)",
+            ? "color-mix(in srgb, var(--dpf-error) 15%, transparent)"
+            : "var(--dpf-surface-2)",
           border: `1px solid ${borderColor}`,
           borderRadius: 6,
           padding: "0 8px",
@@ -180,7 +180,7 @@ export function MicButton(props: MicButtonProps) {
               width: 6,
               height: 6,
               borderRadius: "50%",
-              background: "var(--dpf-error, #d33)",
+              background: "var(--dpf-error)",
               animation: "dpf-voice-pulse 1.2s ease-in-out infinite",
             }}
           />

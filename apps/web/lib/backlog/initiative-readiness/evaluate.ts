@@ -7,7 +7,7 @@ import type {
   ReadinessTarget,
 } from "./types";
 
-export const INITIATIVE_READINESS_POLICY_VERSION = "initiative-readiness.v1";
+export const INITIATIVE_READINESS_POLICY_VERSION = "initiative-readiness.v2";
 
 type Requirement = {
   code: ReadinessCode;
@@ -36,32 +36,51 @@ function designRequirements(facts: InitiativeReadinessFacts): Requirement[] {
 
 function planRequirements(facts: InitiativeReadinessFacts): Requirement[] {
   const specialist = facts.specialistReviews;
-  return [
-    ...designRequirements(facts),
-    requirement("CANONICAL_DESIGN_REQUIRED", facts.canonicalDesign, "design-checklist-reviewer"),
+  const common = designRequirements(facts);
+  if (facts.profile === "doc-only") return common;
+
+  const fix = [
+    ...common,
     requirement("RESEARCH_REQUIRED", facts.research, "design-author"),
+  ];
+  if (facts.profile === "fix") return fix;
+
+  const feature = [
+    ...fix,
+    requirement("CANONICAL_DESIGN_REQUIRED", facts.canonicalDesign, "design-checklist-reviewer"),
     requirement("SPEC_APPROVAL_REQUIRED", facts.specApproval, "design-checklist-reviewer", "REVIEW_FAILED"),
     requirement("REVIEW_REQUIRED", specialist.architecture, "architecture-reviewer", "REVIEW_FAILED", true),
+    requirement("OBJECTIVE_BASELINE_REQUIRED", facts.objectiveBaseline, "design-checklist-reviewer"),
+    requirement("ARTIFACT_AUTHOR_REQUIRED", facts.artifactAuthor, "artifact-resolver"),
+  ];
+  if (facts.profile === "feature") return feature;
+
+  return [
+    ...feature,
     requirement("REVIEW_REQUIRED", specialist.data, "data-reviewer", "REVIEW_FAILED", true),
     requirement("REVIEW_REQUIRED", specialist.ux, "ux-reviewer", "REVIEW_FAILED", true),
     requirement("REVIEW_REQUIRED", specialist.security, "security-reviewer", "REVIEW_FAILED", true),
     requirement("REVIEW_REQUIRED", specialist.compliance, "compliance-reviewer", "REVIEW_FAILED", true),
     requirement("REVIEW_REQUIRED", specialist.domain, "domain-reviewer", "REVIEW_FAILED", true),
-    requirement("OBJECTIVE_BASELINE_REQUIRED", facts.objectiveBaseline, "design-checklist-reviewer"),
-    requirement("ARTIFACT_AUTHOR_REQUIRED", facts.artifactAuthor, "artifact-resolver"),
   ];
 }
 
 function implementationRequirements(facts: InitiativeReadinessFacts): Requirement[] {
-  const requirements = [
-    ...planRequirements(facts),
-    requirement("PLAN_REQUIRED", facts.plan, "implementation-planner"),
-    requirement("PLAN_REVIEW_REQUIRED", facts.planReview, "plan-reviewer", "REVIEW_FAILED"),
-    requirement("PLAN_COVERAGE_REQUIRED", facts.planCoverage, "portfolio-management"),
-    requirement("TRACEABILITY_INCOMPLETE", facts.traceability ?? facts.planCoverage, "portfolio-management"),
-    requirement("DEPENDENCY_UNRESOLVED", facts.dependencies, "portfolio-management", undefined, true),
-    requirement("CAPSULE_IDENTITY_MISMATCH", facts.capsuleIdentity, "delivery-coordinator"),
-  ];
+  const requirements = [...planRequirements(facts)];
+  if (facts.profile !== "doc-only") {
+    requirements.push(
+      requirement("PLAN_REQUIRED", facts.plan, "implementation-planner"),
+      requirement("DEPENDENCY_UNRESOLVED", facts.dependencies, "portfolio-management", undefined, true),
+      requirement("CAPSULE_IDENTITY_MISMATCH", facts.capsuleIdentity, "delivery-coordinator"),
+    );
+  }
+  if (["feature", "cross-domain", "archetype"].includes(facts.profile)) {
+    requirements.push(
+      requirement("PLAN_REVIEW_REQUIRED", facts.planReview, "plan-reviewer", "REVIEW_FAILED"),
+      requirement("PLAN_COVERAGE_REQUIRED", facts.planCoverage, "portfolio-management"),
+      requirement("TRACEABILITY_INCOMPLETE", facts.traceability ?? facts.planCoverage, "portfolio-management"),
+    );
+  }
   if (facts.profile === "archetype") {
     const provisioningStates = Object.values(facts.archetypeProvisioning);
     const provisioningState: ReadinessEvidenceState = provisioningStates.some((state) => state === "fail")

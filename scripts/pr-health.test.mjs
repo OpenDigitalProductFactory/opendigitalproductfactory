@@ -170,6 +170,12 @@ test("classifyLocalCiOverride accepts closed codes and rejects free text (BI-563
 
 test("isDocsOnlyFileSet — docs/memory/*.md only counts, empty set does not", () => {
   assert.equal(isDocsOnlyFileSet([{ path: "docs/a.md" }, { path: "AGENTS.md" }, { path: "memory/x.md" }]), true);
+  assert.equal(isDocsOnlyFileSet([
+    { path: "docs/architecture/a.md" },
+    { path: "apps/web/lib/docs/doc-index.generated.json" },
+  ]), true);
+  assert.equal(isDocsOnlyFileSet([{ path: "apps/web/lib/docs/doc-index.generated.json" }]), false);
+  assert.equal(isDocsOnlyFileSet([{ path: "apps/web/lib/docs/doc-link-resolver.mjs" }]), false);
   assert.equal(isDocsOnlyFileSet([{ path: "docs/a.md" }, { path: "apps/web/lib/x.ts" }]), false);
   assert.equal(isDocsOnlyFileSet([]), false);
   assert.equal(isDocsOnlyFileSet(undefined), false);
@@ -313,5 +319,36 @@ test("localCi: docs-only PR needs no gate, ready", () => {
 
 test("localCi omitted (null) leaves legacy behavior untouched", () => {
   const r = evalPr({ meta: okMeta, checks: [pass("Typecheck")], threads: [], localCi: null });
+  assert.equal(r.ready, true);
+});
+
+// AGENTS.md §3 — PRs land against main. ci.yml is `pull_request: branches: [main]`,
+// so a feature-branch base silently skips the whole heavy suite while still
+// reporting CLEAN. #4483 sat like that with 4 checks instead of ~34.
+test("blocks a PR whose base is not main, even when every check it ran passed", () => {
+  const r = evaluatePrHealth({
+    meta: { ...okMeta, baseRefName: "feat/some-other-branch" },
+    checks: [pass("DCO"), pass("classify"), pass("acceptance")],
+    threads: [],
+  });
+  assert.equal(r.ready, false);
+  const text = r.blockers.join(" | ");
+  assert.match(text, /base is feat\/some-other-branch, not main/);
+  assert.match(text, /Green here does NOT mean verified/);
+});
+
+test("a main-based PR is not blocked by the base check", () => {
+  const r = evaluatePrHealth({
+    meta: { ...okMeta, baseRefName: "main" },
+    checks: [pass("Typecheck"), pass("Production Build")],
+    threads: [],
+  });
+  assert.equal(r.ready, true);
+  assert.deepEqual(r.blockers, []);
+});
+
+test("absent baseRefName does not invent a blocker", () => {
+  // Older callers and fixtures omit the field; missing evidence is not a failure.
+  const r = evaluatePrHealth({ meta: okMeta, checks: [pass("Typecheck")], threads: [] });
   assert.equal(r.ready, true);
 });

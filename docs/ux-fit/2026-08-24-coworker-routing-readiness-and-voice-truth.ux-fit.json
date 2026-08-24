@@ -1,0 +1,24 @@
+{
+  "version": "1",
+  "decidedOption": "truthful-contextual-recovery",
+  "decisionInteractionId": "DI-ADB42335FC3E",
+  "scope": {
+    "files": [
+      "apps/web/components/agent/AgentMessageBubble.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "truthful-contextual-recovery",
+      "generic-coworker-error",
+      "remove-recovery-controls"
+    ]
+  },
+  "rationale": {
+    "truthful-contextual-recovery": "CHOSEN. The kernel review scored 13.378 with a 7.336 margin and high confidence. It keeps the existing coworker panel, separates the coworker's name from the role, retains accessible message authorship, presents terminal inference failure as platform status, offers one contextual recovery destination, and derives speaker readiness from the existing profile, preference, and TTS health sources. The microphone and profile preview remain independent.",
+    "generic-coworker-error": "REJECTED. A wording-only repair leaves stale routes, repeated identity, and click-to-discover playback failure intact. It still asks the operator to infer whether the coworker, provider, profile, or service failed.",
+    "remove-recovery-controls": "REJECTED. Removing the controls reduces visible surface area but creates a dead end: the operator must remember where provider and voice settings live and cannot see why a capability is unavailable."
+  },
+  "notes": "Fits with guardrails. Owning area: the existing common-shell coworker panel, with the existing Platform > AI > Providers route as recovery. Primary persona: an organization owner using a named AI coworker. No navigation, route family, dashboard, or component family is added. Failure copy is typed from the inference outcome; identity comes from the standing-COO presentation resolver; provider readiness comes from executable credential and model facts; voice readiness comes from the existing voice profile, preference, and service probe. Existing semantic link/button controls, DPF tokens, distinct checking/unavailable labels, accessible authorship, and independent microphone/preview behavior are retained."
+}

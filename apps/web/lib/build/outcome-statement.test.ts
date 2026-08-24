@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { OUTCOME_STATEMENT_MAX, toOutcomeStatement } from "./owner-change-view";
+import {
+  OUTCOME_STATEMENT_MAX,
+  clampStatement,
+  isSameStatement,
+  toOutcomeStatement,
+  toProseStatement,
+} from "./owner-change-view";
 
 // The literal shape the operator hit: the Outcome slot rendered the WHOLE
 // markdown BI body as one plain <p>, so `##`, `>` and `**` appeared on screen.
@@ -79,5 +85,38 @@ describe("toOutcomeStatement", () => {
   it("returns empty for empty input rather than inventing copy", () => {
     expect(toOutcomeStatement("")).toBe("");
     expect(toOutcomeStatement("   \n  ")).toBe("");
+  });
+});
+
+describe("isSameStatement — the same sentence must not render twice", () => {
+  const intake =
+    "On the Build Studio page, the technical details drawer shows the build's brief as raw markdown — owners see literal \"## Problem\" characters instead of formatted text.";
+
+  it("matches a string against itself", () => {
+    expect(isSameStatement(intake, intake)).toBe(true);
+  });
+
+  it("matches a clamped form against its original", () => {
+    // The real case: title is the raw intake, the heading is a clamped form of
+    // it, and the outcome paragraph is the stripped form. All one sentence.
+    expect(isSameStatement(toOutcomeStatement(intake), intake)).toBe(true);
+    expect(isSameStatement(clampStatement(toProseStatement(intake), 96), intake)).toBe(true);
+  });
+
+  it("ignores markdown, case and punctuation differences", () => {
+    expect(isSameStatement("## Fix the invoice total", "Fix the invoice total.")).toBe(true);
+  });
+
+  it("does NOT match two genuinely different statements", () => {
+    expect(isSameStatement(intake, "Let owners rotate API keys without downtime.")).toBe(false);
+  });
+
+  it("does not match on a short coincidental prefix", () => {
+    expect(isSameStatement("Fix the", "Fix the invoice total for multi-currency customers")).toBe(false);
+  });
+
+  it("treats empty input as not-the-same rather than suppressing a real slot", () => {
+    expect(isSameStatement("", "anything")).toBe(false);
+    expect(isSameStatement(null, undefined)).toBe(false);
   });
 });

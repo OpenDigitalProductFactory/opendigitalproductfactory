@@ -1,6 +1,6 @@
 ---
 name: dpf-route-learning-to-commons
-description: "Use in the DPF codebase at a task or session boundary when a finding has been confirmed and is durable. Classifies the learning (decision rule -> WWMD, durable org/platform fact -> WWWD, role technique -> WSID/skill, code contract -> repo+AGENTS.md), drafts the right entry, files it through the existing governed pipeline, and contributes it to the hive so every agent and every install inherits it."
+description: "Use in the DPF codebase at a task or session boundary when a finding has been confirmed and is durable."
 disable-model-invocation: false
 user-invocable: true
 allowed-tools: mcp__dpf__propose_improvement mcp__dpf__doc_save mcp__dpf__propose_skill_improvement mcp__dpf__create_backlog_item mcp__dpf__save_build_notes mcp__dpf__contribute_to_hive mcp__dpf__escalate_feedback_upstream mcp__dpf__flag_stale_knowledge

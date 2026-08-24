@@ -61,6 +61,67 @@ function codes(result: ReturnType<typeof evaluateInitiativeReadiness>): Readines
 }
 
 describe("evaluateInitiativeReadiness", () => {
+  it("applies materially different implementation floors by readiness profile", () => {
+    const fix = evaluateInitiativeReadiness(facts({ profile: "fix", capsuleIdentity: "missing" }), "implementation");
+    const feature = evaluateInitiativeReadiness(facts({
+      profile: "feature",
+      artifactAuthor: "missing",
+      capsuleIdentity: "missing",
+    }), "implementation");
+    const crossDomain = evaluateInitiativeReadiness(facts({
+      profile: "cross-domain",
+      artifactAuthor: "missing",
+      capsuleIdentity: "missing",
+      specialistReviews: {
+        architecture: "missing",
+        data: "missing",
+        ux: "missing",
+        security: "missing",
+        compliance: "missing",
+        domain: "missing",
+      },
+    }), "implementation");
+
+    const missingRoles = (decision: ReturnType<typeof evaluateInitiativeReadiness>, code: ReadinessCode) =>
+      decision.unmet.filter((entry) => entry.code === code).map((entry) => entry.accountableRole);
+
+    expect(codes(fix)).toEqual(expect.arrayContaining([
+      "RESEARCH_REQUIRED",
+      "PLAN_REQUIRED",
+      "DEPENDENCY_UNRESOLVED",
+      "CAPSULE_IDENTITY_MISMATCH",
+    ]));
+    expect(codes(fix)).toEqual(expect.not.arrayContaining([
+      "CANONICAL_DESIGN_REQUIRED",
+      "SPEC_APPROVAL_REQUIRED",
+      "OBJECTIVE_BASELINE_REQUIRED",
+      "PLAN_REVIEW_REQUIRED",
+      "PLAN_COVERAGE_REQUIRED",
+      "TRACEABILITY_INCOMPLETE",
+      "ARTIFACT_AUTHOR_REQUIRED",
+    ]));
+
+    expect(codes(feature)).toEqual(expect.arrayContaining([
+      "CANONICAL_DESIGN_REQUIRED",
+      "SPEC_APPROVAL_REQUIRED",
+      "OBJECTIVE_BASELINE_REQUIRED",
+      "ARTIFACT_AUTHOR_REQUIRED",
+      "PLAN_REVIEW_REQUIRED",
+      "PLAN_COVERAGE_REQUIRED",
+      "TRACEABILITY_INCOMPLETE",
+    ]));
+    expect(missingRoles(feature, "REVIEW_REQUIRED")).toEqual(["architecture-reviewer"]);
+
+    expect(missingRoles(crossDomain, "REVIEW_REQUIRED")).toEqual([
+      "architecture-reviewer",
+      "data-reviewer",
+      "ux-reviewer",
+      "security-reviewer",
+      "compliance-reviewer",
+      "domain-reviewer",
+    ]);
+  });
+
   it("allows provisional feature capture only into design", () => {
     expect(evaluateInitiativeReadiness(facts(), "design")).toMatchObject({ verdict: "allowed" });
     expect(evaluateInitiativeReadiness(facts(), "plan")).toMatchObject({ verdict: "input-required" });
@@ -256,12 +317,27 @@ describe("selectStrongestReadinessProfile", () => {
     })).toBe("feature");
   });
 
+  it("classifies a bounded platform-owned bug as fix without treating ownership as risk", () => {
+    expect(deriveAuthoritativeReadinessProfile({
+      type: "bug",
+      scopeKind: "platform",
+    })).toBe("fix");
+    expect(deriveAuthoritativeReadinessProfile({
+      type: "feature",
+      scopeKind: "common",
+    })).toBe("feature");
+    expect(deriveAuthoritativeReadinessProfile({
+      type: "bug",
+      scopeKind: "platform",
+      recordedProfiles: ["cross-domain"],
+    })).toBe("cross-domain");
+  });
+
   it.each([
     ["archetype-category", "archetype"],
     ["archetype-leaf", "archetype"],
     ["multi-archetype", "archetype"],
-    ["common", "cross-domain"],
-    ["platform", "cross-domain"],
+    ["cross-domain", "cross-domain"],
   ] as const)("maps canonical scopeKind %s to %s", (scopeKind, expected) => {
     expect(deriveAuthoritativeReadinessProfile({ type: "feature", scopeKind })).toBe(expected);
   });

@@ -150,4 +150,25 @@ export const DECISION_TRUST_ENVELOPE_ASSETS: readonly DataAssetDefinition[] = [
     classification: { state: "confirmed", source: "manual", effectiveFrom: "2026-07-24" },
     fields: [],
   },
+  {
+    // BI-3D0FB84B: a drafted resolution an owner accepts, edits or rejects.
+    // Holds the organization's own business judgement once accepted, plus the
+    // ruling human's identity by reference — hence governed, local-only, and
+    // never emitted to the hive or a federated peer.
+    id: "data:decision-resolution-proposal",
+    physical: { prismaModel: "DecisionResolutionProposal" },
+    domain: "decision-governance",
+    ownerRole: "platform-owner",
+    stewardRole: "data-steward",
+    categories: ["content", "operational", "security-audit"],
+    sensitivity: "internal",
+    criticality: "standard",
+    subjectLocators: [{ role: "user", fieldPath: "ruledByUser" }],
+    lifecycleClass: "operational",
+    purposeCapabilities: ["platform-operations"],
+    residencyClass: "local-only",
+    projectionClass: "metadata",
+    classification: { state: "confirmed", source: "manual", effectiveFrom: "2026-08-23" },
+    fields: [],
+  },
 ];

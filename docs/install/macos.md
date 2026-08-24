@@ -142,7 +142,10 @@ single-tree mode persists — current behavior, full back-compat.
    this.
 8. **Host hardware profile** — runs `scripts/detect-hardware-host.ts`
    and emits `DPF_HOST_PROFILE` (Apple Silicon reports
-   `architecture: "unified"` for memory).
+   `architecture: "unified"` for memory). Model selection reads the shared
+   `scripts/installer/local-model-policy.json` policy. A 32 GB unified Mac
+   selects the curated `ai/qwen3-coder` tier; fresh installs do not
+   auto-provision mutable third-party model references.
 9. **`.env` generation** — only on first install; existing `.env` is
    preserved.
 10. **Release image availability** (customer mode only) — probes the GHCR

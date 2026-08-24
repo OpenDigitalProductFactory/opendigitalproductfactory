@@ -15,6 +15,7 @@ type PromoterRuntime = Pick<
 type RecordReadiness = typeof import("./run-store").recordPromoterReadiness;
 type FailRun = typeof import("./run-store").failRun;
 type ReadinessFailure = { code: string; message: string; remediation?: string };
+type ReleaseIdentity = { tag: string; ghcrOwner: string; configDigest: string };
 
 export type CandidatePreflightResult =
   | { ok: true; resolvedPromoterDigest?: string; migrationHandoff?: InstallStateMigrationHandoff }
@@ -45,6 +46,8 @@ export async function runCandidatePreflight(params: {
   promoterImage?: string;
   /** Published immutable release promoter; bypasses source compilation. */
   candidatePromoterReference?: string;
+  /** Verified release identity carried into candidate readiness. */
+  release?: ReleaseIdentity;
   callerProtocolVersion?: number;
   sourcePath: string;
   hostInstallPath: string;
@@ -105,6 +108,7 @@ export async function runCandidatePreflight(params: {
       containerName: `dpf-promoter-readiness-${params.runId}`,
       artifact,
       hostIdentity: params.hostIdentity,
+      release: params.release,
     });
     let failures: ReadinessFailure[] = [];
     let report: Record<string, unknown> = {};

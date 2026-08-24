@@ -136,7 +136,7 @@ Output: Blockers first.
       "skills/universal/add-skill.skill.md",
     ];
 
-    const rootDir = join(process.cwd(), "..", "..");
+    const rootDir = join(__dirname, "..", "..", "..");
     const results = skillPaths.map((path) => auditSkillMarkdown({
       path,
       content: readFileSync(join(rootDir, path), "utf-8"),

@@ -13,6 +13,7 @@ order: 2
 - `/platform/ai/capability-needs`
 - `/platform/ai/history`
 - `/platform/ai/assignments` — **Priority & Models**: the everyday Cost / Quality / Time priority (platform default) and the advanced per-coworker guardrails on one surface (`/platform/ai/priority` redirects here)
+- `/platform/ai/priority/outcomes` — **Priority — Outcomes**: what recent runs actually did against the priority you set, separating an infrastructure failover from a deliberate trade-off, plus a calibration suggestion once enough runs accumulate. See [Priority, Outcomes & Calibration](../ai-workforce/priority-and-outcomes.md).
 
 ## Workflow
 

@@ -15,6 +15,8 @@ function baseInput(overrides: Partial<OwnerReleaseInput> = {}): OwnerReleaseInpu
     },
     isFresh: true,
     targetSha: null,
+    targetAvailability: "resolved",
+    targetUnavailableReason: null,
     deployedSha: "abc1234def",
     nextWindowStart: null,
     blackoutUntil: null,
@@ -82,6 +84,29 @@ describe("buildOwnerReleaseSummary", () => {
     expect(s.recommendedAction.label).toBe("No action needed");
   });
 
+  it("reports registry discovery failure as unavailable instead of up to date", () => {
+    const s = buildOwnerReleaseSummary(
+      baseInput({
+        support: {
+          supported: true,
+          targetKind: "release-artifact",
+          reason: "enabled",
+          message: null,
+        },
+        isFresh: false,
+        targetSha: null,
+        targetAvailability: "unavailable",
+        targetUnavailableReason: "registry-unavailable",
+      }),
+      NO_LOCAL_CHANGES,
+    );
+
+    expect(s.state).toBe("unavailable");
+    expect(s.headline).toBe("Update availability could not be verified");
+    expect(s.recommendedAction.label).toBe("No update action available");
+    expect(s.ifYouDoNothing).toContain("current release keeps running");
+  });
+
   it("does not surface a stale no-target skip after release discovery proves the install is current", () => {
     const sha = "f".repeat(40);
     const s = buildOwnerReleaseSummary(
@@ -122,6 +147,25 @@ describe("buildOwnerReleaseSummary", () => {
     expect(s.riskNotice?.reversibility.length).toBeGreaterThan(0);
     expect(s.riskNotice?.duration.length).toBeGreaterThan(0);
     expect(s.riskNotice?.recovery.length).toBeGreaterThan(0);
+  });
+
+  it("uses the immutable release tag as the owner-facing available version", () => {
+    const s = buildOwnerReleaseSummary(
+      baseInput({
+        support: {
+          supported: true,
+          targetKind: "release-artifact",
+          reason: "enabled",
+          message: null,
+        },
+        isFresh: false,
+        targetSha: "f".repeat(40),
+        targetTag: "v2026.08.24",
+      }),
+      NO_LOCAL_CHANGES,
+    );
+
+    expect(s.availableVersion).toBe("v2026.08.24");
   });
 
   it("prefers the merged-PR label over hex in both version labels (BI-5B1FDA09)", () => {

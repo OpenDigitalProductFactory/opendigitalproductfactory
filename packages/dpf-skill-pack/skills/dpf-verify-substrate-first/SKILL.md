@@ -52,7 +52,7 @@ This skill carries forward the substrate-sweep discipline added by [PR #1104](ht
 | Source | Path | What to extract |
 |---|---|---|
 | Code graph | `mcp__dpf__search_code_graph({ query: "<noun>", limit: 10 })` | Curated subgraph of code matching the noun — fastest first sweep |
-| Prisma schema | `packages/db/prisma/schema.prisma` | Many candidate "new tables" turn out to be columns or relations on existing models |
+| Prisma schema | `packages/db/prisma/schema/*.prisma` (26 domain files — there is no monolithic `schema.prisma`) | Many candidate "new tables" turn out to be columns or relations on existing models |
 | Type unions / enums | `apps/web/lib/`, `packages/db/src/` | Some "new states" are already values in existing string-union types (per AGENTS.md §3) |
 | Live backlog | `mcp__dpf__list_epics`, `mcp__dpf__list_backlog_items`, `mcp__dpf__query_backlog` | Active epics + open BIs may already cover the work |
 | Main-branch history | `git log origin/main --oneline -- <topic-path>` | Worktrees can be 100+ PRs behind; verify the spec's "not implemented" claim against `origin/main` |
@@ -69,14 +69,24 @@ This skill carries forward the substrate-sweep discipline added by [PR #1104](ht
 
 1. **State the candidate noun.** Be precise: "new model `FeatureBuildArtifact`" or "new enum value `pending-review` on `BacklogItem.status`" — not "new artifact tracking."
 
-2. **First sweep — code graph.** Run `mcp__dpf__search_code_graph({ query: "<noun>", limit: 10 })`. The DPF code graph returns a curated subgraph that respects the platform's structure better than raw grep. If the result includes an existing model, type, or capability that matches the noun, you may not need a new substrate — pivot to extension instead.
+2. **First sweep — Prisma schema, read from the merge target.** The schema is SPLIT across `packages/db/prisma/schema/*.prisma`; a grep against the old monolithic `packages/db/prisma/schema.prisma` matches nothing and exits 0, which is indistinguishable from a real absence.
+   ```
+   # confirm the path exists BEFORE trusting any null result (see "Null results" below)
+   ls packages/db/prisma/schema/*.prisma
 
-3. **Second sweep — Prisma schema.**
+   # sweep the worktree
+   grep -rn "model <NameOfThing>" packages/db/prisma/schema/
+   grep -rn "<thing>" packages/db/prisma/schema/
+
+   # sweep the MERGE TARGET — the worktree may be many PRs behind main
+   git fetch origin main -q
+   git grep -n "model <NameOfThing>" origin/main -- packages/db/prisma/schema/
    ```
-   grep -n "model <NameOfThing>" packages/db/prisma/schema.prisma
-   grep -n "<thing>" packages/db/prisma/schema.prisma
-   ```
-   Check for: existing model with the same name; existing model with a column that would carry your concept; existing relation that already expresses the linkage.
+   Prefer the `origin/main` sweep as authoritative: it answers "does this exist on the branch I will merge into", which is the question that matters. Check for: existing model with the same name; existing model with a column that would carry your concept; existing relation that already expresses the linkage.
+
+3. **Second sweep — code graph (currently degraded; corroborate, never conclude).** Run `mcp__dpf__search_code_graph({ query: "<noun>", limit: 10 })`. A HIT is useful evidence. An EMPTY RESULT IS NOT EVIDENCE OF ABSENCE and must never be reported as one.
+   Per BI-86EF5900 the platform code graph is indexed from a non-default branch with 0/5 structural relationship types populated and a `low` trust tier, so it returns an empty array for models that are demonstrably on `main`. Confirm its state with `mcp__dpf__get_code_graph_freshness` and read the `trust` vector: if `trust.tier` is `low` or `trust.action` is `qualify`, treat every empty result from this graph as NO EVIDENCE and rely on the grep sweep above.
+   Restore this to the first sweep only once `get_code_graph_freshness` reports all five relationship types populated and `lastIndexedBranch` equal to the default branch.
 
 4. **Third sweep — type unions and enums.**
    ```
@@ -105,6 +115,19 @@ This skill carries forward the substrate-sweep discipline added by [PR #1104](ht
    - **Substrate exists** → propose an extension (new column on existing model, new value in existing enum, new BI under existing epic) instead of new substrate.
    - **Substrate exists but doesn't fit** → say so concretely; cite the file/line where the existing substrate falls short. This is the legitimate path to new substrate, and the cite is the record.
    - **Substrate truly absent + no in-flight work** → proceed with the new-X claim and reference this verification in the proposal body.
+
+## Null results — a clean sweep is not the same as an absence
+
+A grep that matches nothing exits 0 whether the thing is genuinely absent or the path you swept is wrong, moved, or deleted. A tool that returns an empty array exits successfully whether the substrate is absent or the index behind it is stale. **In both cases absence reads as evidence, which is the exact failure this skill exists to prevent.**
+
+Before recording any "X does not exist" conclusion:
+
+1. **Prove the path you swept exists.** `ls` the directory or file first. If it does not exist, your null result carries no information — fix the path and re-sweep.
+2. **Prove the instrument is live.** For the code graph, call `mcp__dpf__get_code_graph_freshness` and read `trust.tier` / `trust.action`. A `low` tier or a `qualify` action means an empty result is NO EVIDENCE.
+3. **Prove you swept the merge target.** A worktree can be 100+ PRs behind. `git grep ... origin/main` answers the question that actually matters.
+4. **Say which sweep produced the null.** Report "not found on `origin/main` in `packages/db/prisma/schema/`" — never a bare "does not exist". The cite is what lets a reviewer catch a bad sweep.
+
+Worked failure (BI-FA950F74): an agent grepped `packages/db/prisma/schema.prisma`, a path deleted by the schema split, got silence, and reported `PayRun` and `Payslip` as missing. Both were already on `main`. The sweep was clean; the conclusion was false.
 
 ## Output template
 

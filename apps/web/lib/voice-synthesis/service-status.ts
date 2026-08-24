@@ -21,6 +21,19 @@ export interface TtsServiceStatus {
   reason: string | null
 }
 
+export type VoicePlaybackState =
+  | "ready"
+  | "preference_disabled"
+  | "profile_missing"
+  | "service_unavailable"
+
+export interface VoicePlaybackCapability {
+  available: boolean
+  state: VoicePlaybackState
+  provider: string
+  reason: string | null
+}
+
 /** Health URL for self-hosted sidecars, or null for providers we don't probe. */
 function selfHostedHealthUrl(provider: string): string | null {
   if (provider === "chatterbox") {
@@ -80,6 +93,28 @@ export async function isVoiceNarrationEnabled(): Promise<boolean> {
     where: { status: "ready", profile: { voiceEnabled: true } },
   })
   return n > 0
+}
+
+export async function resolveVoicePlaybackCapability(
+  options: { purpose?: "coworker" | "preview" } = {},
+): Promise<VoicePlaybackCapability> {
+  const provider = defaultProvider()
+  const profiles = await prisma.voiceProfile.findMany({
+    where: { status: "ready", providerVoiceId: { not: null } },
+    select: { profile: { select: { voiceEnabled: true } } },
+    take: 20,
+  })
+  if (profiles.length === 0) {
+    return { available: false, state: "profile_missing", provider, reason: "No ready voice profile is available." }
+  }
+  if (options.purpose !== "preview" && !profiles.some((entry) => entry.profile.voiceEnabled)) {
+    return { available: false, state: "preference_disabled", provider, reason: "Voice narration is off for this coworker." }
+  }
+  const service = await resolveTtsServiceUp()
+  if (!service.up) {
+    return { available: false, state: "service_unavailable", provider: service.provider, reason: service.reason }
+  }
+  return { available: true, state: "ready", provider: service.provider, reason: null }
 }
 
 /**

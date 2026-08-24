@@ -4,8 +4,8 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const sql = readFileSync(resolve(
-  process.cwd(),
-  "prisma/migrations/20260717035500_enforce_care_intake_evidence_immutability/migration.sql",
+  __dirname,
+  "../prisma/migrations/20260717035500_enforce_care_intake_evidence_immutability/migration.sql",
 ), "utf8");
 
 describe("care intake reviewed evidence immutability migration", () => {

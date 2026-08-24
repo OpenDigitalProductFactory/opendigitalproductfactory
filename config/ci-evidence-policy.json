@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "policyVersion": "2026-08-01.1",
+  "policyVersion": "2026-08-24.1",
   "plannerVersion": "1.0.0-shadow",
   "mode": "shadow",
   "selectionThresholdPercent": 70,
@@ -26,7 +26,7 @@
   ],
   "patterns": {
     "docs": [
-      "(^|/)docs/",
+      "^docs/",
       "(^|/)README\\.md$",
       "\\.mdx?$"
     ],

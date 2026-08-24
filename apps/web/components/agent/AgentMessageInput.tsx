@@ -31,6 +31,7 @@ type Props = {
   onFileClear: () => void;
   /** Whether a ready voice profile is available for synthesis. */
   voiceSynthAvailable?: boolean;
+  voiceSynthChecking?: boolean;
   /** Short explanation to show when voice synthesis is unavailable. */
   voicePlaybackUnavailableReason?: string | null;
   /** Current playback preference set by the user. */
@@ -92,7 +93,7 @@ function truncate(value: string, max = 32): string {
   return `${value.slice(0, max - 1)}…`;
 }
 
-export function AgentMessageInput({ onSend, composerState, busy, threadId, pendingFile, onFileUploaded, onFileClear, voiceSynthAvailable, voicePlaybackUnavailableReason, voicePlaybackEnabled, onVoicePlaybackToggle, elevatedAssistEnabled, onToggleElevatedAssist, externalAccessEnabled, onToggleExternalAccess, webAccessAvailable = true, coworkerMode, onToggleCoworkerMode, useUnified }: Props) {
+export function AgentMessageInput({ onSend, composerState, busy, threadId, pendingFile, onFileUploaded, onFileClear, voiceSynthAvailable, voiceSynthChecking, voicePlaybackUnavailableReason, voicePlaybackEnabled, onVoicePlaybackToggle, elevatedAssistEnabled, onToggleElevatedAssist, externalAccessEnabled, onToggleExternalAccess, webAccessAvailable = true, coworkerMode, onToggleCoworkerMode, useUnified }: Props) {
   const disabled = composerInputDisabled(composerState);
   const [value, setValue] = useState("");
   const [intentCenter, setIntentCenter] = useState("");
@@ -359,9 +360,9 @@ export function AgentMessageInput({ onSend, composerState, busy, threadId, pendi
   }
 
   const overLimit = value.trim().length > MAX_MESSAGE_LENGTH;
-  const voicePlaybackUnavailable = voiceSynthAvailable === false;
+  const voicePlaybackUnavailable = voiceSynthChecking || voiceSynthAvailable === false;
   const voicePlaybackUnavailableTitle =
-    voicePlaybackUnavailableReason ?? "Voice playback unavailable. Start the text-to-speech service or replace the voice sample.";
+    voiceSynthChecking ? "Checking voice playback availability." : voicePlaybackUnavailableReason ?? "Voice playback is unavailable.";
   const hasAnyChip =
     !!pendingFile ||
     !!intentCenter ||
@@ -707,13 +708,7 @@ export function AgentMessageInput({ onSend, composerState, busy, threadId, pendi
 
   return (
     <div style={{ borderTop: "1px solid var(--dpf-border)", padding: "8px 10px" }}>
-      {/*
-        Voice Slice 2 follow-up: surface voice errors INLINE, not just in the
-        button tooltip. Operators were clicking the mic, getting silent
-        failures (red ring on a small button), and concluding "nothing
-        happened". The error banner shows the failure reason + the next
-        actionable step in plain language.
-      */}
+      {/* Voice-input errors stay inline so the next action is visible. */}
       {voice.state === "error" && voice.error && (
         <div
           role="alert"
@@ -903,13 +898,15 @@ export function AgentMessageInput({ onSend, composerState, busy, threadId, pendi
                     : "Unmute voice playback"
               }
               aria-label={
-                voicePlaybackUnavailable
+                voiceSynthChecking
+                  ? "Checking voice playback"
+                  : voicePlaybackUnavailable
                   ? "Voice playback unavailable"
                   : voicePlaybackEnabled
                     ? "Mute voice playback"
                     : "Unmute voice playback"
               }
-              aria-pressed={voicePlaybackEnabled}
+              aria-pressed={!!voicePlaybackEnabled && !voicePlaybackUnavailable}
               disabled={voicePlaybackUnavailable}
               style={{
                 background: "none",

@@ -50,6 +50,23 @@ const definitions: ToolDefinition[] = [
     buildPhases: ["ideate", "plan", "build", "review"],
   },
   {
+    name: "describe_committed_model",
+    description:
+      "Look up a Prisma model's fields, types, relations and indexes from the COMMITTED schema on disk. Unlike describe_model this needs NO active Build Studio build and no sandbox, so an external CLI session (Claude Code, Codex, Grok) can inspect the data model directly. Every result states which tree answered — root, branch and HEAD sha — plus a trust vector that scores an off-default branch down, so a stale checkout is visible rather than silent. A model that is not found is reported as not-found IN THE NAMED TREE, never as a bare absence.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        model_name: { type: "string", description: "Exact model name (PascalCase), e.g. 'User', 'PayRun', 'MileageRate'" },
+      },
+      required: ["model_name"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+    buildPhases: ["ideate", "plan", "build", "review"],
+    annotations: { readOnlyHint: true, idempotentHint: true },
+  },
+  {
     name: "add_provider",
     description: "Add a new AI provider to the platform. Creates an unconfigured entry that can then be set up.",
     inputSchema: {
@@ -94,6 +111,87 @@ async function resolveModelSelectionHandler(): Promise<ToolResult> {
     success: true,
     message: `Model selection (${overview.verdict}): ${overview.summary}`,
     data: overview as unknown as Record<string, unknown>,
+  };
+}
+
+async function describeCommittedModelHandler(params: Record<string, unknown>): Promise<ToolResult> {
+  const modelName = String(params.model_name ?? "");
+  if (!modelName) {
+    return { success: false, error: "model_name is required.", message: "Provide the model name (PascalCase)." };
+  }
+
+  const { loadCommittedSchema } = await import("./committed-schema-source");
+  const source = await loadCommittedSchema();
+  if (!source) {
+    // Read failure is NOT absence. Saying "not found" here is the false-absence
+    // defect this whole tool exists to prevent (BI-FA950F74).
+    return {
+      success: false,
+      error: "Committed schema unreadable.",
+      message:
+        "Could not read the committed schema directory (packages/db/prisma/schema). " +
+        "This is a READ FAILURE, not evidence that the model is absent — do not conclude the model does not exist.",
+    };
+  }
+
+  const { describeModel, formatModelDescription } = await import("@/lib/build/schema-validator");
+  const desc = describeModel(source.schema, modelName);
+  const where = `${source.provenance.branch ?? "unknown branch"} @ ${source.provenance.headSha?.slice(0, 12) ?? "unknown sha"}`;
+
+  if (!desc) {
+    // A miss against a tree we cannot NAME is inconclusive, not an absence.
+    // Shipped defect: this returned a flat "not found" at trust tier high for
+    // MileageRate — a model on main — because the container has no git and the
+    // unidentified tree scored full freshness marks.
+    if (!source.provenance.identified) {
+      return {
+        success: false,
+        error: `INCONCLUSIVE: "${modelName}" not present in an unidentified tree.`,
+        message:
+          `INCONCLUSIVE — NOT an absence. "${modelName}" is not in the schema read from ` +
+          `${source.provenance.root} (${source.provenance.schemaFileCount} domain files), but the ` +
+          "branch and commit of that tree could NOT be determined, so there is no way to tell how far " +
+          "it has drifted from the merge target. Do NOT record this as evidence the model does not " +
+          "exist. Confirm against the default branch — e.g. " +
+          `\`git grep -n "model ${modelName}" origin/main -- packages/db/prisma/schema/\` — before concluding anything.`,
+        data: {
+          found: false,
+          inconclusive: true,
+          source: source.provenance,
+          trust: source.trust,
+        } as unknown as Record<string, unknown>,
+      };
+    }
+    return {
+      success: false,
+      error: `Model "${modelName}" not found on ${where}.`,
+      message:
+        `No model named "${modelName}" in the committed schema on ${where} ` +
+        `(${source.provenance.schemaFileCount} domain files under ${source.provenance.root}). ` +
+        "Check PascalCase spelling. If this tree is not the default branch, re-check against the merge target before recording an absence.",
+      data: {
+        found: false,
+        inconclusive: false,
+        source: source.provenance,
+        trust: source.trust,
+      } as unknown as Record<string, unknown>,
+    };
+  }
+
+  return {
+    success: true,
+    message:
+      `${formatModelDescription(desc)}\n\nRead from committed schema on ${where}` +
+      (source.provenance.identified
+        ? ""
+        : " (branch and commit could NOT be determined — the shape shown may be older than the merge target)") +
+      `. Trust: ${source.trust.tier} (${source.trust.action}) — ${source.trust.primaryRationale}`,
+    data: {
+      found: true,
+      model: desc,
+      source: source.provenance,
+      trust: source.trust,
+    } as unknown as Record<string, unknown>,
   };
 }
 
@@ -199,6 +297,7 @@ async function updateProviderCategoryHandler(params: Record<string, unknown>): P
 const handlers: Record<string, ToolPackHandler> = {
   resolve_model_selection: () => resolveModelSelectionHandler(),
   describe_model: (params, userId) => describeModelHandler(params, userId),
+  describe_committed_model: (params) => describeCommittedModelHandler(params),
   add_provider: (params) => addProviderHandler(params),
   update_provider_category: (params) => updateProviderCategoryHandler(params),
 };
@@ -210,6 +309,9 @@ export const modelProviderPack: ToolPack = {
   grants: {
     resolve_model_selection: ["work_capsule_read"],
     describe_model: ["sandbox_execute"],
+    // file_read, not sandbox_execute: this reads committed source files exactly as
+    // read_project_file does, so a read-scoped external token can hold it.
+    describe_committed_model: ["file_read"],
     add_provider: ["agent_control_read"],
     update_provider_category: ["agent_control_read"],
   },

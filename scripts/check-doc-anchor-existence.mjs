@@ -42,7 +42,7 @@ import { formatTxtBudgetHeader, parseTxtBudgetHeader } from "./lib/baseline-budg
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const BASELINE_PATH = path.join(REPO_ROOT, "scripts", "doc-anchor-baseline.txt");
-const DEFAULT_ENDPOINT = "http://127.0.0.1:3000/api/mcp/v1";
+export const DEFAULT_ENDPOINT = "http://127.0.0.1:3000/api/mcp/v1";
 const FETCH_TIMEOUT_MS = 5000;
 
 const DEFAULT_BUDGET = Object.freeze({ owner: "platform-architecture", expiry: "2026-11-16" });
@@ -122,7 +122,7 @@ export function interpretToolResponse(kind, id, body) {
 }
 
 /** POST one MCP tools/call. Returns the raw response text, or null on failure. */
-async function callTool(endpoint, token, name, args) {
+export async function callTool(endpoint, token, name, args) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {

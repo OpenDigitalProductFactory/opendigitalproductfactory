@@ -37,11 +37,44 @@ import {
   installBrokenPipeTolerance,
   isVerboseGateConsole,
 } from "./lib/pregate-console.mjs";
+import { collectSlotVerdicts, resolveWorktreeContext } from "./pregate-status.mjs";
+import { reconcileSlots } from "./lib/pregate-status.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
 
 const THIS_FILE = fileURLToPath(import.meta.url);
 const SCRIPT_DIR = dirname(THIS_FILE);
 export const WINDOWS_WRAPPER_TERMINATED_STATUS = 4294967295;
+
+// BI-A9CF0D69 (plan §3 M5): the wrapper's exit 0 must MEAN "gated and passed".
+// Historically a run that gave up while queued could surface exit 0 having
+// gated nothing (BI-2C7F51BA), and pregate:status existed to compensate. The
+// compensation stays (a SHA-bound record beats any exit code), but the wrapper
+// no longer tells the lie: an abandoned admission window, or a zero exit the
+// slot records cannot corroborate as PASS-at-HEAD, exits this distinct code.
+export const ABANDONED_OR_UNRECORDED_EXIT_CODE = 7;
+
+// Invocations that legitimately exit 0 without writing a PASS record: routing
+// probes and evidence replays change nothing about the tree and are exempt
+// from record corroboration — the same closed set shouldRunPreflight() exempts.
+export function isRecordExemptInvocation(args) {
+  return (
+    args.includes("--dry-run")
+    || args.includes("--finalize-evidence")
+    || args.includes("--help")
+    || args.includes("-h")
+  );
+}
+
+// Pure exit-code policy so the honesty rules are unit-testable without a gate:
+// timedOut (admission window elapsed, nothing gated) and status-0-without-a-
+// corroborating-PASS both map to ABANDONED_OR_UNRECORDED_EXIT_CODE; a genuine
+// failure keeps its own status; exempt invocations pass a zero through.
+export function resolveWrapperExitCode({ status, timedOut, recordExempt, verdictAtHead }) {
+  if (timedOut) return ABANDONED_OR_UNRECORDED_EXIT_CODE;
+  if (status !== 0) return status ?? 1;
+  if (recordExempt) return 0;
+  return verdictAtHead === "PASS" ? 0 : ABANDONED_OR_UNRECORDED_EXIT_CODE;
+}
 const DEFAULT_LEASE_WAIT_SECONDS = 7200;
 
 // Host-side guard parity preflight (BI-D35433FB): run the deterministic CI
@@ -622,12 +655,47 @@ async function main() {
   }
 
   const useShell = shouldUseShell();
-  const { result } = await runGateWithQueuedRevival({ args, useShell });
+  const { result, timedOut } = await runGateWithQueuedRevival({ args, useShell });
   if (result?.error) {
     process.stderr.write(`pregate: failed to launch gate: ${result.error.message}\n`);
     process.exit(1);
   }
-  process.exit(result?.status ?? 1);
+  const recordExempt = isRecordExemptInvocation(args);
+  const exitCode = resolveWrapperExitCode({
+    status: result?.status ?? 1,
+    timedOut: Boolean(timedOut),
+    recordExempt,
+    verdictAtHead: (result?.status ?? 1) === 0 && !recordExempt && !timedOut
+      ? readReconciledVerdictAtHead()
+      : "",
+  });
+  if (exitCode === ABANDONED_OR_UNRECORDED_EXIT_CODE) {
+    process.stderr.write(
+      timedOut
+        ? `pregate: admission window elapsed without gating — exiting ${ABANDONED_OR_UNRECORDED_EXIT_CODE}, not 0; nothing was verified (BI-A9CF0D69).\n`
+        : `pregate: gate reported 0 but no PASS record exists for current HEAD — treating as did-not-run and exiting ${ABANDONED_OR_UNRECORDED_EXIT_CODE} (BI-A9CF0D69). Read the verdict with: pnpm run pregate:status\n`,
+    );
+  }
+  process.exit(exitCode);
+}
+
+// Read the same SHA-bound slot records pregate:status reads, reduced to the
+// reconciled verdict for current HEAD. Failure to read is "", never "PASS" —
+// corroboration must fail closed or the honesty rule re-opens the exit-0 hole.
+export function readReconciledVerdictAtHead({
+  resolveContextImpl = resolveWorktreeContext,
+  collectVerdictsImpl = collectSlotVerdicts,
+  reconcileImpl = reconcileSlots,
+} = {}) {
+  try {
+    const context = resolveContextImpl();
+    if (!context) return "";
+    const slots = collectVerdictsImpl(context);
+    if (slots.length === 0) return "";
+    return reconcileImpl(slots)?.verdict ?? "";
+  } catch {
+    return "";
+  }
 }
 
 // Guard against side effects on import (e.g. from tests importing routing

@@ -13,6 +13,7 @@
 
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
+import { dispatchExternalCoworkerTask } from "@/lib/mcp/external-coworker-task-adapter";
 
 const definitions: ToolDefinition[] = [
   {
@@ -27,6 +28,7 @@ const definitions: ToolDefinition[] = [
         questionPacketSummary: { type: "string", description: "Optional one-line summary of the intent/question shown on the handoff card." },
         tier: { type: "number", enum: [2, 3], description: "Interaction tier (default 2). Tier 3 requires depth-2 spawn support." },
         enteredVia: { type: "string", enum: ["handoff", "escalation", "spawn"], description: "How the peer is entering (default 'handoff')." },
+        requestKey: { type: "string", description: "Stable idempotency key required for threadless external MCP handoffs." },
       },
       required: ["targetAgent", "objective"],
     },
@@ -48,6 +50,7 @@ const definitions: ToolDefinition[] = [
         targetAgent: { type: "string", description: "Target coworker — canonical agentId (AGT-*) or slug alias." },
         objective: { type: "string", description: "What the summoned coworker should address." },
         tier: { type: "number", enum: [2, 3], description: "Interaction tier (default 2)." },
+        requestKey: { type: "string", description: "Stable idempotency key required for threadless external MCP summons." },
       },
       required: ["targetAgent", "objective"],
     },
@@ -85,13 +88,21 @@ async function requestCoworkerHandler(
   userId: string,
   context?: Parameters<ToolPackHandler>[2],
 ): Promise<ToolResult> {
-  if (!context?.threadId) {
-    return { success: false, error: "missing_threadId", message: "request_coworker requires caller thread context." };
-  }
   const targetAgent = String(params["targetAgent"] ?? "").trim();
   const objective = String(params["objective"] ?? "").trim();
   if (!targetAgent || !objective) {
     return { success: false, error: "invalid_params", message: "request_coworker requires targetAgent and objective." };
+  }
+  if (!context?.threadId) {
+    return dispatchExternalCoworkerTask({
+      collaborationKind: "handoff",
+      targetAgent,
+      objective,
+      requestKey: typeof params["requestKey"] === "string" ? params["requestKey"] : undefined,
+      title: typeof params["questionPacketSummary"] === "string" ? params["questionPacketSummary"] : undefined,
+      userId,
+      context,
+    });
   }
   const tierParam = Number(params["tier"]);
   const enteredViaParam = typeof params["enteredVia"] === "string" ? params["enteredVia"] : undefined;
@@ -126,13 +137,20 @@ async function summonCoworkerHandler(
   userId: string,
   context?: Parameters<ToolPackHandler>[2],
 ): Promise<ToolResult> {
-  if (!context?.threadId) {
-    return { success: false, error: "missing_threadId", message: "summon_coworker requires caller thread context." };
-  }
   const targetAgent = String(params["targetAgent"] ?? "").trim();
   const objective = String(params["objective"] ?? "").trim();
   if (!targetAgent || !objective) {
     return { success: false, error: "invalid_params", message: "summon_coworker requires targetAgent and objective." };
+  }
+  if (!context?.threadId) {
+    return dispatchExternalCoworkerTask({
+      collaborationKind: "summon",
+      targetAgent,
+      objective,
+      requestKey: typeof params["requestKey"] === "string" ? params["requestKey"] : undefined,
+      userId,
+      context,
+    });
   }
   const tierParam = Number(params["tier"]);
   const { summonCoworker } = await import("@/lib/tak/coworker-collaboration");

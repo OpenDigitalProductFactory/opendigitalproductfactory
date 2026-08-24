@@ -34,7 +34,7 @@ export default async function SelfUpgradePage() {
   const runs = runsResult?.runs ?? [];
   const nextCursor = runsResult?.nextCursor ?? null;
 
-  const initialImpactSummary = status?.targetSha
+  const initialImpactSummary = status?.targetSha && status.support.targetKind === "git-source"
     ? await loadPersistedImpactSummary(status.targetSha).catch(() => null)
     : null;
 
@@ -44,7 +44,7 @@ export default async function SelfUpgradePage() {
   // deployed id is a local merge commit that can never equal the upstream
   // target. The running end resolves from the upstream LINEAGE marker (not
   // deployedSha) so its subject actually carries a `(#N)`.
-  const mergePoints = status?.targetSha
+  const mergePoints = status?.targetSha && status.support.targetKind === "git-source"
     ? await (async () => {
         const [config, runningSha] = await Promise.all([
           getSelfUpgradeConfig().catch(() => null),
@@ -75,6 +75,10 @@ export default async function SelfUpgradePage() {
     deployedSha: null,
     deployedShaSource: "unknown",
     targetSha: null,
+    targetTag: null,
+    targetAvailability: "unavailable" as const,
+    targetUnavailableReason: "status-unavailable",
+    currentConfigDigest: null,
     isFresh: true,
     releaseBatch: {
       applicable: false,
@@ -145,6 +149,9 @@ export default async function SelfUpgradePage() {
       support: effectiveStatus.support,
       isFresh: effectiveStatus.isFresh,
       targetSha: effectiveStatus.targetSha,
+      targetTag: effectiveStatus.targetTag,
+      targetAvailability: effectiveStatus.targetAvailability,
+      targetUnavailableReason: effectiveStatus.targetUnavailableReason,
       deployedSha: effectiveStatus.deployedSha,
       nextWindowStart: effectiveStatus.nextWindowStart,
       blackoutUntil: effectiveStatus.blackoutUntil,
@@ -179,6 +186,15 @@ export default async function SelfUpgradePage() {
     cooldownUntil: effectiveStatus.cooldownUntil,
     jobEngine: effectiveStatus.jobEngine,
   };
+  const updateActionState = ownerSummary.state === "unavailable"
+    ? "unavailable"
+    : ownerSummary.state === "update-available" || (
+        ownerSummary.state === "failed" &&
+        effectiveStatus.targetAvailability === "resolved" &&
+        !effectiveStatus.isFresh
+      )
+      ? "update-available"
+      : "no-update";
 
   return (
     <SelfUpgradeLiveProvider initialSnapshot={initialLiveSnapshot}>
@@ -198,6 +214,7 @@ export default async function SelfUpgradePage() {
           primaryAction={
             <SelfUpgradeTriggerControl
               enabled={clientProps.enabled}
+              actionState={updateActionState}
               unavailableReason={
                 clientProps.support.supported ? null : clientProps.support.message
               }

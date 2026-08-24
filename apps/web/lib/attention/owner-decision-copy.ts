@@ -1,7 +1,7 @@
 import type { AttentionItem, AttentionSource } from "./types";
 
 const HEADLINE: Record<AttentionSource, string> = {
-  escalation: "Choose what happens to this build?",
+  escalation: "What should happen to this build?",
   "ai-decision": "Make this business decision?",
   "paused-ai": "Help your coworker continue?",
   "scheduled-task": "Review this scheduled task?",
@@ -12,13 +12,13 @@ const HEADLINE: Record<AttentionSource, string> = {
   "compliance-submission": "File this report?",
   "research-proposal": "Approve this research?",
   "coworker-memory": "Review what your coworker learned?",
-  "ai-readiness-blocker": "Choose an intelligence setup fix?",
-  "platform-health": "Choose how to handle this outage?",
+  "ai-readiness-blocker": "How should we fix your intelligence setup?",
+  "platform-health": "How should we handle this outage?",
   "provider-credential": "Reconnect this service?",
   "reservation-exception": "Handle this reservation?",
   "hospitality-capacity": "Resolve this capacity issue?",
   "storefront-inquiry": "Reply to this enquiry?",
-  "business-journey": "Choose how to fix this for customers?",
+  "business-journey": "How should we fix this for customers?",
   "compliance-source-freshness": "Renew this compliance evidence?",
 };
 

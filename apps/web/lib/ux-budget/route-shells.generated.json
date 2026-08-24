@@ -1,11 +1,11 @@
 {
   "generator": "apps/web/scripts/build-route-shells.ts",
-  "pageRouteCount": 326,
+  "pageRouteCount": 327,
   "migratedCount": 1,
   "summary": {
     "cockpit": 17,
     "list": 6,
-    "detail": 252,
+    "detail": 253,
     "settings": 12,
     "form": 18,
     "public": 21,
@@ -1405,6 +1405,18 @@
     {
       "routePath": "/finance/invoices/new",
       "shell": "form",
+      "audience": "owner",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "sweepEligible": true,
+      "confidence": "high"
+    },
+    {
+      "routePath": "/finance/mileage",
+      "shell": "detail",
       "audience": "owner",
       "migrated": false,
       "exemptChecks": [

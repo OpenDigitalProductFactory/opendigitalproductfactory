@@ -152,7 +152,7 @@ export type PromoterParams = {
   /** Exact portal-verified carrier retained for orchestration identity/audit. */
   installStateMigrationHandoff?: InstallStateMigrationHandoff;
   /** Verified registry release promoted without a source checkout/build. */
-  release?: { tag: string; ghcrOwner: string };
+  release?: { tag: string; ghcrOwner: string; configDigest: string };
 };
 
 export type PromoterResult = {
@@ -167,6 +167,7 @@ const RUNTIME_TRANSITION_ENVELOPE = /^[A-Za-z0-9_-]{16,65536}$/;
 const RUNTIME_HOST_PATH_SEGMENT = /^[A-Za-z0-9._ -]+$/;
 const RELEASE_TAG = /^v\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?$/;
 const REGISTRY_OWNER = /^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,253}[A-Za-z0-9])?$/;
+const IMAGE_CONFIG_DIGEST = /^sha256:[a-f0-9]{64}$/;
 
 function isSafeRuntimeHostPath(value: string): boolean {
   if (value.length < 2 || value.length > 1024 || /[\0\r\n]/.test(value)) return false;
@@ -202,7 +203,11 @@ function validateRuntimeTransitionCommandInputs(params: PromoterParams): void {
   }
   if (params.installStateMigrationEnvelope && !RUNTIME_TRANSITION_ENVELOPE.test(params.installStateMigrationEnvelope)) throw new Error("invalid_install_state_migration_envelope");
   if (params.installStateMigrationSignature && !RUNTIME_TRANSITION_TOKEN.test(params.installStateMigrationSignature)) throw new Error("invalid_install_state_migration_signature");
-  if (params.release && (!RELEASE_TAG.test(params.release.tag) || !REGISTRY_OWNER.test(params.release.ghcrOwner))) {
+  if (params.release && (
+    !RELEASE_TAG.test(params.release.tag) ||
+    !REGISTRY_OWNER.test(params.release.ghcrOwner) ||
+    !IMAGE_CONFIG_DIGEST.test(params.release.configDigest)
+  )) {
     throw new Error("invalid_release_identity");
   }
 }
@@ -288,6 +293,8 @@ export function buildPromoterCommand(
       "DPF_PROMOTION_MODE=release",
       "-e",
       `DPF_RELEASE_TAG=${params.release.tag}`,
+      "-e",
+      `DPF_RELEASE_CONFIG_DIGEST=${params.release.configDigest}`,
       "-e",
       `GHCR_OWNER=${params.release.ghcrOwner}`,
     );

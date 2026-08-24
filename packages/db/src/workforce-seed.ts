@@ -465,6 +465,11 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
     "backlog_read",
     "backlog_write",
     "tool_evaluation_create",
+    // onboard-regulation declares search_public_web, which TOOL_TO_GRANTS keys on
+    // web_search. Without it the skill was denied on every call — a broken skill
+    // that looked assigned. Surfaced by the tool-grant audit once the coworker
+    // gained a canonical registry record.
+    "web_search",
     // registry_read reaches evaluate_profession_decision (WSID) and
     // principle_decide (WWMD). Without it the coworker whose entire job is
     // governance was the one coworker locked out of the governance kernel, and

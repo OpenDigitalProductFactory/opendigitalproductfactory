@@ -2,6 +2,11 @@ import { prisma } from "@dpf/db";
 
 import { resolveRepositoryArtifact, type InitiativeArtifactRef } from "@/lib/backlog/initiative-readiness";
 
+export {
+  projectPlanBacklogDependencies,
+  type PlanDependencyProjection,
+} from "./plan-backlog-dependency-projection";
+
 export type PlanBacklogCoverageDecision = "decomposed" | "atomic";
 
 export type PlanBacklogDeliverable = {
@@ -38,44 +43,7 @@ export type PlanBacklogCoverageReceipt = {
   deliverables: PlanBacklogDeliverable[] | PlanBacklogDeliverableV2[];
 };
 
-type MappedBacklogItem = { itemId: string; status: string };
-
-export type PlanDependencyProjection = {
-  state: "pass" | "missing" | "fail";
-  unresolvedDeliverableKeys: string[];
-};
-
-/** Project live dependency readiness without treating a bare deferred status as success. */
-export function projectPlanBacklogDependencies(
-  receipt: PlanBacklogCoverageReceipt,
-  mappedBacklogItems: MappedBacklogItem[],
-): PlanDependencyProjection {
-  const byKey = new Map(receipt.deliverables.map((deliverable) => [deliverable.key, deliverable]));
-  const statusByItem = new Map(mappedBacklogItems.map((item) => [item.itemId, item.status]));
-  const unresolved = new Set<string>();
-  let hasExplicitFailure = false;
-  for (const deliverable of receipt.deliverables) {
-    for (const dependencyKey of deliverable.dependsOn ?? []) {
-      const dependency = byKey.get(dependencyKey) as PlanBacklogDeliverableV2 | undefined;
-      if (!dependency) {
-        unresolved.add(dependencyKey);
-        hasExplicitFailure = true;
-        continue;
-      }
-      const status = dependency.backlogItemId ? statusByItem.get(dependency.backlogItemId) : undefined;
-      if (status === "done") continue;
-      const disposition = dependency.disposition;
-      if (disposition && (disposition.decision === "deferred" || disposition.decision === "not-applicable")
-        && disposition.reason.trim().length >= 20) continue;
-      unresolved.add(dependency.key);
-      if (status === "deferred" || (disposition && !disposition.reason.trim())) hasExplicitFailure = true;
-    }
-  }
-  return {
-    state: unresolved.size === 0 ? "pass" : hasExplicitFailure ? "fail" : "missing",
-    unresolvedDeliverableKeys: [...unresolved].sort(),
-  };
-}
+export type MappedBacklogItem = { itemId: string; status: string };
 
 export type PlanBacklogCoverageValidation =
   | {
@@ -304,7 +272,19 @@ export function validatePlanBacklogCoverageReceipt(args: {
     const traceability = args.traceabilityContext;
     if (!traceability || !traceability.planText.trim()
       || traceability.objectiveIds.length === 0 || traceability.acceptanceIds.length === 0) {
-      return { ok: false, code: "traceability-incomplete", error: "Current plan and scope-baseline traceability could not be resolved." };
+      // Name which of the three inputs is absent; "could not be resolved" sent
+      // two prior sessions bisecting by trial (BI-38A353B2).
+      const absent = [
+        !traceability || !traceability.planText.trim() ? "the plan text (the resolved plan artifact is empty)" : null,
+        traceability && traceability.objectiveIds.length === 0 ? "objective ids on the scope baseline" : null,
+        traceability && traceability.acceptanceIds.length === 0 ? "acceptance ids on the scope baseline" : null,
+      ].filter(Boolean);
+      return {
+        ok: false,
+        code: "traceability-incomplete",
+        error: `Plan coverage needs plan text plus objective and acceptance ids from the scope baseline; missing: ${absent.join(", ") || "the scope-baseline traceability context"}. `
+          + "Objective and acceptance ids come from the scope manifest in the canonical design the spec-approval gate baselined; re-approve the design if it does not declare them.",
+      };
     }
     if (!args.receipt.scopeBaselineId || !args.receipt.scopeBaselineArtifactDigest
       || args.receipt.scopeBaselineId !== traceability.baselineId
@@ -314,22 +294,34 @@ export function validatePlanBacklogCoverageReceipt(args: {
     const objectiveIds = new Set(traceability.objectiveIds);
     const acceptanceIds = new Set(traceability.acceptanceIds);
     const coveredAcceptance = new Set<string>();
+    let firstIncompleteKey: string | null = null;
     const incomplete = args.receipt.deliverables.some((deliverable) => {
+      const failed = (): true => { firstIncompleteKey ??= deliverable.key; return true; };
       if (!deliverable.independentlyShippable && args.receipt.decision !== "atomic") return false;
       const v2 = deliverable as Partial<PlanBacklogDeliverableV2>;
       if (!nonEmptyRefs(v2.requirementRefs)
         || !nonEmptyRefs(v2.contractRefs)
         || !nonEmptyRefs(v2.flowRefs)
-        || !nonEmptyRefs(v2.verificationRefs)) return true;
+        || !nonEmptyRefs(v2.verificationRefs)) return failed();
       const allRefs = [...v2.requirementRefs, ...v2.contractRefs, ...v2.flowRefs, ...v2.verificationRefs];
       if (allRefs.some((ref) => !traceability.planText.includes(ref))
         || v2.requirementRefs.some((ref) => !objectiveIds.has(ref))
-        || v2.verificationRefs.some((ref) => !acceptanceIds.has(ref))) return true;
+        || v2.verificationRefs.some((ref) => !acceptanceIds.has(ref))) return failed();
       for (const ref of v2.verificationRefs) coveredAcceptance.add(ref);
-      return Boolean(v2.disposition && v2.verificationRefs.some((ref) => acceptanceIds.has(ref)));
+      return v2.disposition && v2.verificationRefs.some((ref) => acceptanceIds.has(ref)) ? failed() : false;
     });
     if (incomplete || [...acceptanceIds].some((id) => !coveredAcceptance.has(id))) {
-      return { ok: false, code: "traceability-incomplete", error: "Every implementation deliverable needs requirement, contract, flow, and verification references." };
+      // Name the offending deliverable and which leg failed, rather than
+      // restating the rule the caller already read (BI-38A353B2).
+      const uncovered = [...acceptanceIds].filter((id) => !coveredAcceptance.has(id));
+      return {
+        ok: false,
+        code: "traceability-incomplete",
+        error: uncovered.length > 0 && !incomplete
+          ? `Every acceptance id on the scope baseline must be covered by some deliverable's verificationRefs; uncovered: ${uncovered.join(", ")}.`
+          : `Deliverable ${firstIncompleteKey ?? "(unknown)"} is not fully traced: each implementation deliverable needs non-empty requirementRefs, contractRefs, flowRefs, and verificationRefs, every ref must appear verbatim in the plan text, requirementRefs must be baseline objective ids, and verificationRefs must be baseline acceptance ids.`
+          + (uncovered.length > 0 ? ` Uncovered acceptance ids: ${uncovered.join(", ")}.` : ""),
+      };
     }
   }
 
@@ -646,6 +638,17 @@ export async function recordPlanBacklogCoverage(args: {
     return { ok: false, code: "plan-artifact-invalid", error: "Serializable plan coverage persistence is unavailable." };
   }
 
+  // Provider I/O is immutable and may exceed the interactive transaction
+  // budget. Resolve it before opening the serializable transaction; mutable
+  // Workroom/head identity is revalidated under lock below.
+  const resolvedPlan = await (args.resolveArtifact ?? resolveRepositoryArtifact)({
+    locator: args.planArtifactRef,
+    subject: { kind: "backlog-item", id: parent.itemId },
+  });
+  if (!resolvedPlan.ok) {
+    return { ok: false, code: "plan-artifact-invalid", error: resolvedPlan.error };
+  }
+
   return db.$transaction(async (tx) => {
     if (!tx.$queryRaw) {
       return { ok: false as const, code: "plan-artifact-invalid" as const, error: "Plan coverage lock support is unavailable." };
@@ -663,12 +666,24 @@ export async function recordPlanBacklogCoverage(args: {
     if (!currentParent || currentParent.id !== parent.id) {
       return { ok: false as const, code: "backlog-item-not-found" as const, error: `BacklogItem ${args.itemId} was not found.` };
     }
-    const resolvedPlan = await (args.resolveArtifact ?? resolveRepositoryArtifact)({
-      locator: args.planArtifactRef,
-      subject: { kind: "backlog-item", id: currentParent.itemId },
-    });
-    if (!resolvedPlan.ok) {
-      return { ok: false as const, code: "plan-artifact-invalid" as const, error: resolvedPlan.error };
+    const matchingHeads = await tx.$queryRaw<Array<{ id: string; createdByPrincipalId: string | null }>>`
+      SELECT "id", "createdByPrincipalId" FROM "WorkCapsule"
+      WHERE "backlogItemId" = ${currentParent.itemId}
+        AND "repositoryFullName" = ${args.planArtifactRef.repositoryFullName}
+        AND "headSha" = ${args.planArtifactRef.commitSha}
+        AND "archivedAt" IS NULL
+        AND "status" NOT IN ('abandoned', 'cancelled')
+      FOR SHARE
+    `;
+    if (
+      matchingHeads.length !== 1
+      || matchingHeads[0]?.createdByPrincipalId !== resolvedPlan.artifact.authorPrincipalId
+    ) {
+      return {
+        ok: false as const,
+        code: "plan-artifact-invalid" as const,
+        error: "The immutable plan commit and author no longer match exactly one live governed Workroom head.",
+      };
     }
     const requestedIds = Array.from(new Set(
       args.deliverables.map((deliverable) => deliverable.backlogItemId).filter((id): id is string => Boolean(id)),
@@ -685,15 +700,20 @@ export async function recordPlanBacklogCoverage(args: {
       select: { payload: true },
     }));
     if (!baseline) {
-      // BI-B9403248: this used to say only "could not be resolved", which named
-      // neither the missing artifact nor a way to produce one. The baseline is
-      // minted by the initiative spec-approval gate — no MCP tool exposes it —
-      // so a caller who does not know that has no route forward and no way to
-      // learn there is one. Say what is missing and who can mint it.
+      // The remediation text names the CONDITION, never a blocker id. It used
+      // to instruct callers to "cite BI-B9403248 for the blocked receipt";
+      // that BI closed on 2026-08-21 (PR #4422) while the block stayed live,
+      // so every contributor who followed the message literally blamed a
+      // fixed defect for a live gate, and every auditor who checked the id
+      // found it closed and concluded the block was stale (BI-38A353B2). An
+      // id written as a literal goes stale silently; a condition does not.
       return {
         ok: false as const,
         code: "traceability-incomplete" as const,
-        error: `BacklogItem ${currentParent.itemId} has no initiative scope baseline, so plan coverage cannot be bound to a governed scope. The baseline is recorded as an \`initiative_scope_baseline\` activity when the initiative's spec-approval gate passes; it is not currently reachable from an MCP session. Take the item through initiative spec approval first, or record the plan's coverage table in the plan and cite BI-B9403248 for the blocked receipt.`,
+        error: `BacklogItem ${currentParent.itemId} has no initiative scope baseline, so plan coverage cannot be bound to a governed scope. `
+          + "A baseline is written only when the initiative's spec-approval gate passes: call `record_initiative_design_review` with gate=`spec-approval`, decision=`pass`, and a canonical design under `docs/superpowers/specs/`. "
+          + "That gate requires a reviewer independent of the artifact's author, so the author cannot record it — an independent reviewer must, which on this platform means an in-platform reviewer coworker holding the `initiative_design_review` grant. "
+          + "Until this item carries a baseline, record the plan's coverage table in the plan itself and state the blocking CONDITION — \"no initiative scope baseline exists for <item>\" — rather than citing a backlog id, which goes stale when that id closes.",
       };
     }
     const receipt: PlanBacklogCoverageReceipt = {

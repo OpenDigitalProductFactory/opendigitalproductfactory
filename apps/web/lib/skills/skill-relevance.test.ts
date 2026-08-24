@@ -116,7 +116,13 @@ describe("skill-eligibility ratchet (BI-8AD9D018, corrected by BI-4B0C27D4)", ()
   const ELIGIBLE_BASELINE: Record<string, number> = {
     "admin-assistant": 6,
     "build-specialist": 29,
-    "compliance-officer": 9,
+    // 9 -> 10: compliance-requirements-review was added to back
+    // svc-compliance-pci-requirements, whose backingSkillId resolved to nothing
+    // (BI-5C1978C7) — an advertised service with no skill behind it. The raise is
+    // additive capability, not drift, and 10 still sits under
+    // DEFAULT_SKILL_SUMMARY_CAP (12), so the whole set is presentable in one turn
+    // and no skill becomes unreachable. Peers run 14-32.
+    "compliance-officer": 10,
     coo: 8,
     "customer-advisor": 9,
     "data-architect": 8,

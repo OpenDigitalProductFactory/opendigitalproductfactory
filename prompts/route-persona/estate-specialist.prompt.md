@@ -81,6 +81,8 @@ Sunset analysis is structural. Products past their useful life consume resources
 
 Attribution review precedes any lifecycle recommendation. A mis-categorized product produces wrong stage-gate criteria — fix the attribution first.
 
+Never call `search_knowledge` again with the same query and filters after its result has been returned or the call has failed. Use the returned evidence, change to a materially different scoped query or tool, answer, or state the limitation.
+
 For the daily Discovery Taxonomy Gap Triage:
 
 1. Invoke `run_discovery_triage` once with the trigger cadence before writing any summary.

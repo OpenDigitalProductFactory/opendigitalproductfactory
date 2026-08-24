@@ -19,6 +19,8 @@ import {
 type RoutedScreenInput = {
   messages: ChatMessage[];
   systemPrompt: string;
+  /** Platform-authored instruction spans within `systemPrompt` (BI-463BE12A). */
+  systemPromptInstructionSpans?: string[];
   tools?: Array<Record<string, unknown>>;
   taskType: string;
   routeContext: ScreenInferencePayloadInput["routeContext"];

@@ -32,13 +32,13 @@ the platform is not".
 ## Inventory
 
 - Distinct agent identities measured: **82**
-  - canonical agent registry: 71 · workforce roster: 27 · profession roles: 94
+  - canonical agent registry: 72 · workforce roster: 27 · profession roles: 94
   - Joined via COWORKER_SLUG_TO_CANONICAL_AGENT_ID; a handle-only join over-counts.
-- At 100% of attainable: **0**
+- At 100% of attainable: **1**
 - Median attainable: **12%** · median absolute: **11%**
-- Skills: **69** total, **0** stranded, **1** able to declare a cadence
+- Skills: **70** total, **0** stranded, **1** able to declare a cadence
 - Unresolved `assignTo` targets: `external-coding-agent`
-- Unbacked `backingSkillIds`: `build-sensitive-domain-requirements`, `compliance-requirements-review`, `customer-intake-triage`, `external-catalog-scout`, `marketing-collaboration-intake`, `prepare-counsel-packet`, `provider-cost-intake`
+- Unbacked `backingSkillIds`: `build-sensitive-domain-requirements`, `customer-intake-triage`, `external-catalog-scout`, `marketing-collaboration-intake`, `prepare-counsel-packet`, `provider-cost-intake`
 
 ## Consequential-tool gate coverage
 
@@ -56,9 +56,9 @@ The gate is built, enforced, and its reach is derived from each tool's declared 
 
 | Class | Count | Median attainable | Meaning |
 |---|---|---|---|
-| `active-roster` | 12 | 76% | Active in the canonical registry and seeded onto the workforce roster. |
+| `active-roster` | 13 | 76% | Active in the canonical registry and seeded onto the workforce roster. |
 | `active-registry-only` | 7 | 12% | Active in the canonical registry but absent from the workforce roster. |
-| `roster-only` | 11 | 44% | On the workforce roster but absent from the canonical agent registry. |
+| `roster-only` | 10 | 44% | On the workforce roster but absent from the canonical agent registry. |
 | `defined-roster` | 4 | 60% | Declared in the canonical registry (not active) and seeded onto the roster. |
 | `declared-only` | 48 | 12% | Declared in the canonical registry and never seeded anywhere. |
 
@@ -66,13 +66,13 @@ The gate is built, enforced, and its reach is derived from each tool's declared 
 
 | Plane | Weight | Ceiling | L0 | L1 | L2 | L3 | At ceiling |
 |---|---|---|---|---|---|---|---|
-| Identity | 1 | 3 | 0 | 66 | 4 | 12 | 12/82 |
+| Identity | 1 | 3 | 0 | 65 | 4 | 13 | 13/82 |
 | Corpus / WSID | 1 | 3 | 0 | 0 | 54 | 28 | 28/82 |
-| Governance / WWWD | 2 | 3 | 54 | 0 | 11 | 17 | 17/82 |
+| Governance / WWWD | 2 | 3 | 54 | 0 | 10 | 18 | 18/82 |
 | Shape | 1 | 2 | 81 | 0 | 1 | 0 | 1/82 |
 | Cadence | 1 | 3 | 76 | 0 | 5 | 1 | 1/82 |
-| Tools + Skills | 2 | 3 | 53 | 12 | 5 | 12 | 12/82 |
-| Evidence | 1 | 2 | 55 | 21 | 6 | 0 | 6/82 |
+| Tools + Skills | 2 | 3 | 53 | 12 | 4 | 13 | 13/82 |
+| Evidence | 1 | 2 | 55 | 20 | 7 | 0 | 7/82 |
 
 ### Planes the substrate currently caps
 
@@ -221,7 +221,6 @@ _Certification exercises a real domain act, not a generic probe._
 | `AGT-WS-SCOUT` | active-roster | 68% | 63% | 3 | 3 | 3 | 0 | 0 | 2 | 1 |
 | `doc-specialist` | roster-only | 68% | 63% | 1 | 3 | 2 | 0 | 2 | 3 | 1 |
 | `AGT-ORCH-000` | defined-roster | 72% | 67% | 2 | 3 | 3 | 0 | 0 | 3 | 1 |
-| `compliance-officer` | roster-only | 72% | 67% | 1 | 3 | 2 | 2 | 3 | 2 | 1 |
 | `AGT-WS-ADMIN` | active-roster | 76% | 70% | 3 | 3 | 3 | 0 | 0 | 3 | 1 |
 | `AGT-WS-EA` | active-roster | 76% | 70% | 3 | 3 | 3 | 0 | 0 | 3 | 1 |
 | `AGT-WS-HR` | active-roster | 76% | 70% | 3 | 3 | 3 | 0 | 0 | 3 | 1 |
@@ -230,6 +229,7 @@ _Certification exercises a real domain act, not a generic probe._
 | `AGT-WS-OPS` | active-roster | 80% | 74% | 3 | 3 | 3 | 0 | 0 | 3 | 2 |
 | `AGT-WS-PLATFORM` | active-roster | 84% | 78% | 3 | 3 | 3 | 0 | 2 | 3 | 1 |
 | `AGT-WS-INVENTORY` | active-roster | 88% | 81% | 3 | 3 | 3 | 0 | 2 | 3 | 2 |
+| `AGT-WS-COMPLIANCE` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
 
 ## Widest gaps — detail
 

@@ -3,18 +3,18 @@
   "selectionCliff": 15,
   "entries": {
     "registry.toolDefinitions": {
-      "value": 392,
-      "reason": "Adds get_capability_completeness (BI-B6157AAB): a READ-ONLY door onto the platform's own capability measure \u2014 which of the seven planes resolve for each of the 82 agent identities, plus the repo-level reference defects. It earns a permanent place because the platform is supposed to close its own gaps: without it, only a human outside the system can see them, which is the condition this whole programme exists to end. It adds nothing to the ACTING surface \u2014 it reports, and never changes authority.",
-      "recordedAt": "2026-08-20"
+      "value": 393,
+      "reason": "Adds describe_committed_model (BI-F9CAF214): a READ-ONLY door onto the committed Prisma schema that needs no Build Studio build and no sandbox, so an external CLI surface (Claude Code, Codex, Grok) can inspect the data model at all — today describe_model returns \"No active build.\" to every one of them, leaving the platform unable to answer questions about its own schema from outside a build. It earns a permanent place because it is the only governed path to the schema for the surfaces that do most of the work, and because it never answers anonymously: every result names the tree, branch and sha it read and carries a trust vector that scores an off-default branch down, so a stale checkout is visible rather than silent. Kept separate from describe_model per kernel decision DI-7A4DFF0A1809, which scored a separate tool above an in-tool fallback on legibility_of_consequence — a single tool that silently switches trees is the ambiguity behind BI-6CFC5429 and BI-86EF5900. Adds nothing to the ACTING surface: read-only, idempotent, file_read grant.",
+      "recordedAt": "2026-08-23"
     },
     "registry.packFiles": {
-      "value": 96,
-      "reason": "Adds capability-completeness-pack, the single-tool pack serving get_capability_completeness. Kept as its own pack rather than folded into an existing one so its read-only contract stays legible: the pack declares one grant (registry_read) and no side-effecting handler.",
-      "recordedAt": "2026-08-20"
+      "value": 97,
+      "reason": "Adds committed-schema-source.ts to the model-provider pack's file set — the reader that resolves the split schema (packages/db/prisma/schema/*.prisma) with explicit tree provenance and a trust vector. Kept as its own module rather than inlined into model-provider-pack.ts so the provenance contract is testable without a build, and so the module-size cap on the pack file is not spent on it.",
+      "recordedAt": "2026-08-23"
     },
     "tier.coreToolNames": {
       "value": 30,
-      "reason": "Promotes find_coworker into the lean core tier so peer CLIs without client-side ToolSearch (Grok, Codex) can discover the coworker roster to route A2A handoffs \u2014 same rationale that keeps principle_decide/wiki_query core. Discovery-only; execution still gates on grants. BI-5FB59BC6.",
+      "reason": "Promotes find_coworker into the lean core tier so peer CLIs without client-side ToolSearch (Grok, Codex) can discover the coworker roster to route A2A handoffs — same rationale that keeps principle_decide/wiki_query core. Discovery-only; execution still gates on grants. BI-5FB59BC6.",
       "recordedAt": "2026-08-08"
     },
     "dispatch.maxAttachedTools": {

@@ -68,6 +68,7 @@ const providerFixture: ProviderWithCredential = {
     status: "ok",
     tokenExpiresAt: null,
     hasRefreshToken: false,
+    hasUsableMaterial: true,
   },
 };
 

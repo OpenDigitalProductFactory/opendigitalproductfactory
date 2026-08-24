@@ -55,6 +55,7 @@
     "check:retention-enrollment": "node scripts/check-retention-enrollment.mjs",
     "check:closed-set-strings": "node scripts/check-no-new-closed-set-strings.mjs",
     "check:doc-anchors": "node scripts/check-doc-anchor-existence.mjs",
+    "check:live-blockers": "node scripts/check-live-blocker-references.mjs",
     "check:baseline-budgets": "node scripts/check-no-expired-baseline-budgets.mjs",
     "check:spec-status": "node scripts/check-spec-status-frontmatter.mjs",
     "check:data-impact": "node scripts/check-data-impact.mjs",

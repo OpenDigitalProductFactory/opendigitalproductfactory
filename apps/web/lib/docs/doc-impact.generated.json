@@ -333,6 +333,12 @@
     "apps/web/app/(shell)/delivery/page.tsx": [
       "docs/architecture/delivery-ia.md"
     ],
+    "apps/web/app/(shell)/platform/ai/assignments/page.tsx": [
+      "docs/user-guide/ai-workforce/priority-and-outcomes.md"
+    ],
+    "apps/web/app/(shell)/platform/ai/priority/outcomes/page.tsx": [
+      "docs/user-guide/ai-workforce/priority-and-outcomes.md"
+    ],
     "apps/web/app/(shell)/platform/ai/providers/page.tsx": [
       "docs/user-guide/ai-workforce/connecting-providers.md"
     ],
@@ -348,6 +354,9 @@
     "apps/web/app/api/mcp/v1/route.ts": [
       "docs/architecture/ai-agent-meta-model.md",
       "docs/architecture/mcp-tool-authorization-runbook.md"
+    ],
+    "apps/web/app/api/platform/ai/local-models/status/route.ts": [
+      "docs/architecture/background-operation-observation-contract.md"
     ],
     "apps/web/app/api/v1/auth/provider-oauth/callback/route.ts": [
       "docs/user-guide/ai-workforce/provider-developer-notes.md"
@@ -420,6 +429,9 @@
     ],
     "apps/web/components/platform/AgentCardSupervisorPanel.tsx": [
       "docs/architecture/agent-standards-dpf-conformance.md"
+    ],
+    "apps/web/components/platform/OllamaManagement.tsx": [
+      "docs/architecture/background-operation-observation-contract.md"
     ],
     "apps/web/components/platform/ProviderSuitabilityGuide.tsx": [
       "docs/user-guide/ai-workforce/connecting-providers.md"
@@ -680,11 +692,24 @@
     "apps/web/lib/gear-interface/otel-exporter.ts": [
       "docs/architecture/2026-08-09-portal-architecture-hardening-findings.md"
     ],
+    "apps/web/lib/golden-triangle/calibrate.ts": [
+      "docs/user-guide/ai-workforce/priority-and-outcomes.md"
+    ],
     "apps/web/lib/golden-triangle/compile.ts": [
-      "docs/design/golden-triangle-vector-reference.md"
+      "docs/design/golden-triangle-vector-reference.md",
+      "docs/user-guide/ai-workforce/priority-and-outcomes.md"
+    ],
+    "apps/web/lib/golden-triangle/receipt.ts": [
+      "docs/user-guide/ai-workforce/priority-and-outcomes.md"
+    ],
+    "apps/web/lib/golden-triangle/telemetry-receipts.ts": [
+      "docs/user-guide/ai-workforce/priority-and-outcomes.md"
     ],
     "apps/web/lib/govern/auth-redirect.ts": [
       "docs/install/platform-support-watchlist.md"
+    ],
+    "apps/web/lib/govern/auth.ts": [
+      "docs/security/tool-evaluations/2026-08-23-authentik.md"
     ],
     "apps/web/lib/govern/data/field-classification.ts": [
       "docs/architecture/backlog-and-planning-runbook.md"
@@ -726,6 +751,9 @@
     "apps/web/lib/inference/jit-retrieval-discipline.test.ts": [
       "docs/architecture/context-engineering-standards.md"
     ],
+    "apps/web/lib/inference/local-model-operations.ts": [
+      "docs/architecture/background-operation-observation-contract.md"
+    ],
     "apps/web/lib/inference/local-only.ts": [
       "docs/strategy/2026-09-cada-architects-forum-deck.md"
     ],
@@ -758,7 +786,8 @@
     ],
     "apps/web/lib/mcp-governed-execute.ts": [
       "docs/architecture/ai-agent-meta-model.md",
-      "docs/architecture/mcp-tool-surface-ergonomics-audit.md"
+      "docs/architecture/mcp-tool-surface-ergonomics-audit.md",
+      "docs/user-guide/ai-workforce/how-governed-work-runs.md"
     ],
     "apps/web/lib/mcp/load-tools.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md"
@@ -1022,6 +1051,9 @@
     "apps/web/lib/tak/compaction-digest.ts": [
       "docs/architecture/context-engineering-standards.md"
     ],
+    "apps/web/lib/tak/consequential-tool-policy.ts": [
+      "docs/user-guide/ai-workforce/how-governed-work-runs.md"
+    ],
     "apps/web/lib/tak/context-arbitrator.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md"
     ],
@@ -1058,10 +1090,19 @@
       "docs/architecture/agent-standards-dpf-conformance.md",
       "docs/architecture/context-engineering-standards.md"
     ],
+    "apps/web/lib/testing/degenerate-env/index.ts": [
+      "docs/testing/pre-pr-gate.md"
+    ],
+    "apps/web/lib/testing/degenerate-env/probe-conformance.test.ts": [
+      "docs/testing/pre-pr-gate.md"
+    ],
     "apps/web/lib/tool-description-hygiene.test.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md",
       "docs/architecture/context-engineering-standards.md",
       "docs/architecture/mcp-tool-authorization-runbook.md"
+    ],
+    "apps/web/lib/ux-budget/budgets.ts": [
+      "docs/platform-usability-standards.md"
     ],
     "apps/web/lib/ux-budget/measure.ts": [
       "docs/platform-usability-standards.md"
@@ -1076,7 +1117,8 @@
       "docs/architecture/work-shapes-and-the-decision-gate.md"
     ],
     "apps/web/lib/work-management/autonomy-envelope.ts": [
-      "docs/architecture/work-shapes-and-the-decision-gate.md"
+      "docs/architecture/work-shapes-and-the-decision-gate.md",
+      "docs/user-guide/ai-workforce/how-governed-work-runs.md"
     ],
     "apps/web/lib/work-management/room-channel-continuity.ts": [
       "docs/user-guide/workspace/work-rooms.md"
@@ -1091,10 +1133,12 @@
       "docs/user-guide/workspace/work-rooms.md"
     ],
     "apps/web/lib/work-management/room-posture.ts": [
-      "docs/architecture/work-shapes-and-the-decision-gate.md"
+      "docs/architecture/work-shapes-and-the-decision-gate.md",
+      "docs/user-guide/ai-workforce/how-governed-work-runs.md"
     ],
     "apps/web/lib/work-management/room-shapes.ts": [
-      "docs/architecture/work-shapes-and-the-decision-gate.md"
+      "docs/architecture/work-shapes-and-the-decision-gate.md",
+      "docs/user-guide/ai-workforce/how-governed-work-runs.md"
     ],
     "apps/web/lib/work-management/room-types.ts": [
       "docs/architecture/work-shapes-and-the-decision-gate.md"
@@ -1107,6 +1151,12 @@
     ],
     "apps/web/lib/work-management/workspace-room-access.ts": [
       "docs/user-guide/workspace/work-rooms.md"
+    ],
+    "apps/web/lib/work-posture/derive.ts": [
+      "docs/user-guide/ai-workforce/how-governed-work-runs.md"
+    ],
+    "apps/web/lib/work-posture/temporal-band.ts": [
+      "docs/user-guide/ai-workforce/how-governed-work-runs.md"
     ],
     "apps/web/lib/workbooks/backlog-adapter-mapping.ts": [
       "docs/architecture/backlog-archetype-scope.md"
@@ -1306,6 +1356,9 @@
     "packages/db/src/profession-local-axes.ts": [
       "docs/architecture/decision-vectors.md"
     ],
+    "packages/db/src/profession-material-promotion.ts": [
+      "docs/architecture/decision-vectors.md"
+    ],
     "packages/db/src/provider-compliance-source-registry.ts": [
       "docs/operations/ai-provider-compliance-source-renewal-runbook.md"
     ],
@@ -1501,6 +1554,9 @@
       "docs/architecture/context-engineering-standards.md"
     ],
     "scripts/check-label-association.mjs": [
+      "docs/testing/pre-pr-gate.md"
+    ],
+    "scripts/check-live-blocker-references.mjs": [
       "docs/testing/pre-pr-gate.md"
     ],
     "scripts/check-mcp-tool-pack.mjs": [
@@ -2188,11 +2244,14 @@
       "scripts/gen-architecture-counts.mjs"
     ],
     "docs/architecture/background-operation-observation-contract.md": [
+      "apps/web/app/api/platform/ai/local-models/status/route.ts",
       "apps/web/components/ops/SelfUpgradeLiveProvider.tsx",
+      "apps/web/components/platform/OllamaManagement.tsx",
       "apps/web/components/platform/SystemEventProvider.tsx",
       "apps/web/lib/architecture/background-operation-observation-contract.test.ts",
       "apps/web/lib/hooks/useBackgroundOperationObserver.ts",
       "apps/web/lib/hooks/useResilientEventSource.ts",
+      "apps/web/lib/inference/local-model-operations.ts",
       "apps/web/lib/self-upgrade/status-snapshot.ts",
       "apps/web/lib/tak/agent-event-bus.ts"
     ],
@@ -2284,7 +2343,8 @@
     "docs/architecture/decision-vectors.md": [
       "apps/web/lib/decision-perspective/material.ts",
       "packages/db/src/dimension-scope.ts",
-      "packages/db/src/profession-local-axes.ts"
+      "packages/db/src/profession-local-axes.ts",
+      "packages/db/src/profession-material-promotion.ts"
     ],
     "docs/architecture/delivery-ia.md": [
       "apps/web/app/(shell)/delivery/page.tsx",
@@ -2693,6 +2753,7 @@
       "apps/web/lib/shell/shell-action-contract.ts",
       "apps/web/lib/tak/escalation-ladder.ts",
       "apps/web/lib/tak/prompt-assembler.ts",
+      "apps/web/lib/ux-budget/budgets.ts",
       "apps/web/lib/ux-budget/measure.ts",
       "apps/web/lib/workforce/oversight-copy.ts",
       "packages/validators/src/readability.ts",
@@ -2754,6 +2815,9 @@
     ],
     "docs/security/tool-evaluations/2026-08-01-marketing-media-stack.md": [
       "scripts/probes/marketing-media/local-render-receipt.json"
+    ],
+    "docs/security/tool-evaluations/2026-08-23-authentik.md": [
+      "apps/web/lib/govern/auth.ts"
     ],
     "docs/specs/device-identification-and-portfolio-placement-spec.md": [
       "apps/web/lib/queue/functions/hive-scout-ingest.ts",
@@ -2851,10 +2915,13 @@
       ".github/workflows/ci.yml",
       ".github/workflows/codeql.yml",
       ".github/workflows/policy-guards-recheck.yml",
+      "apps/web/lib/testing/degenerate-env/index.ts",
+      "apps/web/lib/testing/degenerate-env/probe-conformance.test.ts",
       "docker-compose.local-ci.yml",
       "packages/dpf-skill-pack/hooks/pregate-evidence-guard.mjs",
       "scripts/check-guards.mjs",
       "scripts/check-label-association.mjs",
+      "scripts/check-live-blocker-references.mjs",
       "scripts/check-mobile-jest-pin.mjs",
       "scripts/ci-policy-guards.test.mjs",
       "scripts/gate-worktree.mjs",
@@ -2886,8 +2953,25 @@
       "apps/web/lib/founder-review/queue.ts",
       "apps/web/lib/tak/route-context.ts"
     ],
+    "docs/user-guide/ai-workforce/how-governed-work-runs.md": [
+      "apps/web/lib/mcp-governed-execute.ts",
+      "apps/web/lib/tak/consequential-tool-policy.ts",
+      "apps/web/lib/work-management/autonomy-envelope.ts",
+      "apps/web/lib/work-management/room-posture.ts",
+      "apps/web/lib/work-management/room-shapes.ts",
+      "apps/web/lib/work-posture/derive.ts",
+      "apps/web/lib/work-posture/temporal-band.ts"
+    ],
     "docs/user-guide/ai-workforce/model-routing-lifecycle.md": [
       "docker-entrypoint.sh"
+    ],
+    "docs/user-guide/ai-workforce/priority-and-outcomes.md": [
+      "apps/web/app/(shell)/platform/ai/assignments/page.tsx",
+      "apps/web/app/(shell)/platform/ai/priority/outcomes/page.tsx",
+      "apps/web/lib/golden-triangle/calibrate.ts",
+      "apps/web/lib/golden-triangle/compile.ts",
+      "apps/web/lib/golden-triangle/receipt.ts",
+      "apps/web/lib/golden-triangle/telemetry-receipts.ts"
     ],
     "docs/user-guide/ai-workforce/provider-codex.md": [
       "docker-entrypoint.sh"

@@ -17,6 +17,11 @@ import {
   type WorkCapsuleActor,
 } from "./work-capsule-store";
 import type { WorkCapsuleExecutorKind } from "@/lib/work-capsules";
+import { defaultPlatformRepositoryFullName } from "./work-capsule-branch-identity";
+import {
+  resolveGithubToken,
+  resolveRepoIdentity,
+} from "@/lib/contributor-change-lanes/github-rest-reader";
 
 /** Map a self-declared provider string to the closest desktop executor kind. */
 export function providerToExecutorKind(provider: string): WorkCapsuleExecutorKind {
@@ -32,6 +37,37 @@ function providerLabel(provider: string): string {
   const trimmed = provider.trim();
   if (!trimmed) return "External agent";
   return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+}
+
+export async function resolvePublishedBranchHead(args: {
+  repositoryFullName: string;
+  branchName: string;
+  expectedCommitSha: string;
+  db: CapsuleDb;
+  fetchImpl?: typeof fetch;
+}): Promise<string | null> {
+  if (!/^[a-f0-9]{40}$/i.test(args.expectedCommitSha)) return null;
+  const identity = await resolveRepoIdentity(args.db as never);
+  const canonical = `${identity.owner}/${identity.name}`;
+  if (canonical.toLowerCase() !== args.repositoryFullName.toLowerCase()) return null;
+  const token = await resolveGithubToken(args.db as never);
+  const response = await (args.fetchImpl ?? fetch)(
+    `https://api.github.com/repos/${encodeURIComponent(identity.owner)}/${encodeURIComponent(identity.name)}/git/ref/heads/${encodeURIComponent(args.branchName)}`,
+    {
+      headers: {
+        Accept: "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      cache: "no-store",
+    },
+  );
+  if (!response.ok) return null;
+  const payload = await response.json() as { object?: { type?: unknown; sha?: unknown } };
+  const sha = payload.object?.type === "commit" && typeof payload.object.sha === "string"
+    ? payload.object.sha.toLowerCase()
+    : null;
+  return sha === args.expectedCommitSha.toLowerCase() ? sha : null;
 }
 
 /**
@@ -57,6 +93,8 @@ export async function captureExternalSessionEvidence(args: {
   branchName?: string | null;
   repositoryFullName?: string | null;
   baseBranch?: string | null;
+  publishedCommitSha?: string | null;
+  resolvePublishedHead?: typeof resolvePublishedBranchHead;
 }): Promise<string> {
   const capsuleId = await ensureExternalSessionCapsule(args);
 
@@ -93,6 +131,8 @@ export async function ensureExternalSessionCapsule(args: {
   branchName?: string | null;
   repositoryFullName?: string | null;
   baseBranch?: string | null;
+  publishedCommitSha?: string | null;
+  resolvePublishedHead?: typeof resolvePublishedBranchHead;
 }): Promise<string> {
   const idempotencyKey = `external-session:${args.externalSessionId}`;
   const objective =
@@ -102,6 +142,19 @@ export async function ensureExternalSessionCapsule(args: {
   const backlogItemId = args.backlogItemId?.trim() || null;
   const worktreePath = args.worktreePath?.trim() || null;
   const branchName = args.branchName?.trim() || null;
+  const repositoryFullName =
+    args.repositoryFullName?.trim() || defaultPlatformRepositoryFullName();
+  let headSha: string | null = null;
+  if (args.publishedCommitSha) {
+    if (!branchName) throw new Error("Published commit reconciliation requires the governed branch name.");
+    headSha = await (args.resolvePublishedHead ?? resolvePublishedBranchHead)({
+      repositoryFullName,
+      branchName,
+      expectedCommitSha: args.publishedCommitSha,
+      db: args.db,
+    });
+    if (!headSha) throw new Error("The repository provider did not verify the published commit as the governed branch head.");
+  }
 
   // Prefer the adopt path when we have a location: it keys the capsule on
   // (repo, branch) so the session's BI, worktree, and branch are one record —
@@ -112,16 +165,14 @@ export async function ensureExternalSessionCapsule(args: {
       input: {
         title,
         objective,
-        repositoryFullName:
-          args.repositoryFullName?.trim() ||
-          process.env.DPF_REPO_FULL_NAME?.trim() ||
-          "OpenDigitalProductFactory/opendigitalproductfactory",
+        repositoryFullName,
         headBranch: branchName,
         worktreePath,
         baseBranch: args.baseBranch?.trim() || "main",
         executorKind: providerToExecutorKind(args.provider),
         executorRef: args.externalSessionId,
         backlogItemId,
+        headSha,
       },
       actor: args.actor,
     });

@@ -56,6 +56,33 @@ The transition protocol uses an HMAC-signed, expiring envelope containing the tr
 
 Health is an observation of the desired state, not permission to enable or disable a capability.
 
+### Retiring a capability
+
+Retirement is **declared, and it is two-phase**. A capability carries two independent axes: `state`
+(`active` | `disabled`) is *enablement* — whether this install has it turned on, tracked per-install in
+the database — and `lifecycle` (absent, meaning active, or `retired`) is *lifecycle* — whether the
+platform still offers it at all. Conflating them would make "the operator turned it off"
+indistinguishable from "the platform withdrew it", so a `retired` capability may not also be `state:
+active`; the compiler refuses that contradiction.
+
+To retire a capability:
+
+1. **Mark it** `lifecycle: "retired"` and `state: "disabled"` in the capability seed, and **leave the
+   entry in the catalog** for at least one release. Installs migrate off it on their next upgrade: the
+   projection drops it from `enabledRuntimeCapabilities`, restamps the snapshot, and reports it in
+   `droppedRetiredCapabilities` so the withdrawal is visible rather than silent.
+2. **Only then delete the entry**, once every supported install has upgraded past step 1.
+
+Deleting the entry without step 1 wedges every install that still has the capability enabled. Nothing
+vouches for an id that is simply absent, so it cannot be told apart from a corrupt or hand-edited
+snapshot — the projection fails closed, and the upgrade that would have dropped the capability is the
+upgrade it blocks (BI-5AA0345E). That is the same self-wedging shape as a moved catalog hash
+([install-state readiness migration](../superpowers/specs/2026-07-18-install-state-readiness-migration-design.md) §7)
+and an N-1 promoter build context.
+
+A retired capability that is still a dependency of a live one is a catalog authoring error, reported as
+`retired_runtime_capability_required`, not silently projected.
+
 ## Install, upgrade, consumer assets, and rollback
 
 The persistent snapshot stores sorted `enabledRuntimeCapabilities`, `capabilityCatalogHash`, and `capabilityStateVersion`. POSIX hosts use `$XDG_STATE_HOME/dpf/install-state.json` when `XDG_STATE_HOME` is set and otherwise `$HOME/.dpf/install-state.json`; Windows uses `%USERPROFILE%\.dpf\install-state.json`. A container reads the host directory through `/dpf-state` with the mount access appropriate to its responsibility.
@@ -101,6 +128,7 @@ Host diagnostics remain in installer-owned doctor and verification surfaces. The
 - Change enabled state only through the governed transition API/saga. Do not set `COMPOSE_PROFILES` to bypass capability authority.
 - Preserve lifecycle overlays as explicit operator intent and capability profiles as resolved state.
 - Treat a stale hash, unknown capability, unknown observation, or failed receipt as an operator-visible fault. Do not infer a replacement state.
+- Retire a capability in two phases — mark it `retired` and leave the entry for a release, then delete it. Deleting the entry outright wedges every install that still has it enabled.
 - Use governed self-upgrade and its recovery point for release changes; do not mutate the live topology with an ad hoc Compose rebuild.
 - Do not remove optional volumes, schedules, or provider records merely because a capability is inactive.
 

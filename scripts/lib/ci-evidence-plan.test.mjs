@@ -119,6 +119,42 @@ describe("createEvidencePlan", () => {
     assert.deepEqual(plan.escalations, []);
   });
 
+  it("keeps a docs-only change non-portal when it includes its generated doc index", () => {
+    const plan = createEvidencePlan(input({
+      changedFiles: [
+        "docs/architecture/archetype-operating-model-audit.md",
+        "docs/architecture/platform-overview.md",
+        "apps/web/lib/docs/doc-index.generated.json",
+      ],
+    }));
+
+    assert.equal(plan.scope.docsOnly, true);
+    assert.equal(plan.scope.heavy, false);
+    assert.equal(plan.fullSuite, false);
+    assert.equal(plan.uxMode, "none");
+    assert.deepEqual(plan.escalations, []);
+  });
+
+  it("does not treat runtime code under a docs-named module as documentation", () => {
+    const plan = createEvidencePlan(input({
+      changedFiles: ["apps/web/lib/docs/doc-link-resolver.mjs"],
+    }));
+
+    assert.equal(plan.scope.docsOnly, false);
+    assert.equal(plan.scope.heavy, true);
+    assert.equal(plan.fullSuite, true);
+  });
+
+  it("keeps a generated doc index exhaustive when no documentation source changed", () => {
+    const plan = createEvidencePlan(input({
+      changedFiles: ["apps/web/lib/docs/doc-index.generated.json"],
+    }));
+
+    assert.equal(plan.scope.docsOnly, false);
+    assert.equal(plan.scope.heavy, true);
+    assert.equal(plan.fullSuite, true);
+  });
+
   for (const executableStandardPath of [
     "docs/architecture/four-portfolio-archetype-ai-workforce-operating-standard.md",
     "docs/architecture/four-portfolio-archetype-standard-profile-catalog.md",

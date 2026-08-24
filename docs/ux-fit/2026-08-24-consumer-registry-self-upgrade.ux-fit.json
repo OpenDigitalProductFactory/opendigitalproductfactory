@@ -1,0 +1,26 @@
+{
+  "version": "1",
+  "decidedOption": "channel-to-immutable-candidate",
+  "decisionInteractionId": "DI-1483263456A9",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/ops/self-upgrade/page.tsx",
+      "apps/web/components/ops/SelfUpgradeTriggerControl.tsx",
+      "apps/web/lib/self-upgrade/owner-summary.ts"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "channel-to-immutable-candidate",
+      "deploy-mutable-latest",
+      "github-release-history-authority"
+    ]
+  },
+  "rationale": {
+    "channel-to-immutable-candidate": "CHOSEN. Kernel decision DI-1483263456A9 selected this option with high confidence and a 3.27 margin. The existing Self-Upgrade route remains the canonical home. Registry bytes become the source of availability, the owner sees the immutable target version, and a mutation control is rendered only for a resolved newer candidate.",
+    "deploy-mutable-latest": "REJECTED. It makes the acquisition target move between status, queueing, and promotion, which weakens rollback identity and can install bytes the operator was never shown.",
+    "github-release-history-authority": "REJECTED. It preserves the defect because verification-gated image publications can move the customer channel without creating a matching GitHub release run."
+  },
+  "notes": "Platform > Runtime & Releases > Self-Upgrade remains the owning surface for the DPF operator. OwnerReleaseCard and SelfUpgradeTriggerControl are reused; no new route, navigation layer, card family, or AI action is added. The registry resolver and current Docker config digest own visible availability. Current, newer, unavailable, in-progress, and failed/retry states are explicit, theme-token based, and covered by route/component tests."
+}

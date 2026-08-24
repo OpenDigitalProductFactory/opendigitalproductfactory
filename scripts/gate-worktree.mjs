@@ -62,6 +62,7 @@ import { isEntryModule } from "./lib/entry-module.mjs";
 const THIS_FILE = fileURLToPath(import.meta.url);
 const SCRIPT_DIR = dirname(THIS_FILE);
 const LOCAL_CI_ACTIVE_LEASE_TTL_MS = 2 * 60_000;
+const DEAD_QUEUE_RECONCILIATION_INTERVAL_MS = 60_000;
 
 const HARD_EXECUTION_PRESSURE_REASONS = new Set([
   "host-memory-low",
@@ -250,7 +251,7 @@ function parseArgs(argv) {
       case "--help":
       case "-h":
         process.stdout.write(usage());
-        process.exit(0);
+        process.exit(0); // exit-0: --help prints usage; nothing gated and nothing claimed
         break;
       case "--":
         break;
@@ -832,7 +833,7 @@ async function main() {
       process.stdout.write("localCiCommand=missing; gate would fail before push/lease\n");
     }
     process.stdout.write("would call claim_nonprod_environment_lease and record_local_integration_result only when a real command or explicit stub is configured\n");
-    process.exit(0);
+    process.exit(0); // exit-0: --dry-run routing probe; changes nothing and records nothing
   }
 
   if (!options.finalizeEvidence && !commandSpec && !allowStub) {
@@ -950,7 +951,7 @@ async function main() {
         evidencePending: false,
       });
       process.stdout.write(`finalized existing local-CI evidence: ${state.evidenceRecordId}\n`);
-      process.exit(0);
+      process.exit(0); // exit-0: --finalize-evidence revalidated an already-recorded PASS for this sha
     }
     const pending = JSON.parse(readFileSync(pendingEvidenceFile, "utf8"));
     if (pending.branch !== branch) die(`pending evidence branch mismatch: ${pending.branch} != ${branch}`);
@@ -985,7 +986,7 @@ async function main() {
     });
     rmSync(pendingEvidenceFile, { force: true });
     process.stdout.write(`recorded pending local-CI evidence: ${evidenceId}\n`);
-    process.exit(0);
+    process.exit(0); // exit-0: --finalize-evidence recorded the pending PASS evidence for this sha
   }
 
   warnAboutMainFreshness({ gitBin, worktreePath });
@@ -1074,18 +1075,25 @@ async function main() {
   }
 
   let claimAttempt = 0;
+  let nextQueueReconciliationAt = 0;
   for (;;) {
     if (receivedSignal) {
       await releaseLeaseOnce();
       process.exit(130);
     }
-    await cancelDeadLocalQueueObservers({
-      directory: queueObserverDirectory,
-      mcpUrl: options.mcpUrl,
-      bearerToken,
-      leaseEvents,
-      reportActive: claimAttempt === 0,
-    });
+    // Reconciliation is a shared-host hygiene sweep, not an admission poll.
+    // Run it before the first claim and at a human-scale cadence during long
+    // queue waits; the durable claimKey remains the queue authority in between.
+    if (Date.now() >= nextQueueReconciliationAt) {
+      await cancelDeadLocalQueueObservers({
+        directory: queueObserverDirectory,
+        mcpUrl: options.mcpUrl,
+        bearerToken,
+        leaseEvents,
+        reportActive: claimAttempt === 0,
+      });
+      nextQueueReconciliationAt = Date.now() + DEAD_QUEUE_RECONCILIATION_INTERVAL_MS;
+    }
     expiresAt = new Date(Date.now() + leaseTtlMs).toISOString();
     const hostPressure = await observeLocalCiHostPressure({
       rootClone,
@@ -1795,7 +1803,7 @@ async function main() {
 
   if (outcome.gatePassed) {
     process.stdout.write(`${formatGateSummary({ ...summaryInput, verdictLine: "gate passed" }).join("\n")}\n`);
-    process.exit(0);
+    process.exit(0); // exit-0: gate passed; the PASS record for this sha was written above
   }
   process.stderr.write(
     `${formatGateSummary({ ...summaryInput, verdictLine: "", failureSummary }).join("\n")}\n`,

@@ -24,6 +24,13 @@ export type {
   CapacityAllocationState,
 } from "../generated/client/client";
 export { WriteGateRequirement } from "../generated/client/client";
+// Decision-resolution proposal vocabulary (BI-3D0FB84B). Exported as values so
+// the app composes from the generated enum instead of re-typing its members.
+export {
+  DecisionProposalAction,
+  DecisionProposalScope,
+  DecisionProposalStatus,
+} from "../generated/client/client";
 export {
   PRINCIPAL_SENSITIVITIES,
   isPrincipalSensitivity,
@@ -325,6 +332,17 @@ export {
   type MirrorSyncStatus,
   type OrganizationCrosswalk,
 } from "./federated-record-sync";
+export {
+  ENROLLMENT_DECISIONS,
+  MANUAL_APPROVAL_REASONS,
+  evaluateOrganizationEnrollment,
+  type EnrollmentDecision,
+  type EnrollmentEvaluation,
+  type EnrollmentProposal,
+  type ManualApprovalReason,
+  type OrganizationTrustAnchor,
+  type PeerEnrollmentEvidence,
+} from "./organization-federation-enrollment";
 export {
   syncDigitalProduct,
   syncTaxonomyNode,

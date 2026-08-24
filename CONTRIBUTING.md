@@ -85,6 +85,12 @@ pnpm test:e2e           # Playwright against a running portal
 pnpm test:e2e:demo      # Sandbox-preview demo profile
 ```
 
+### Local build capacity precedence
+
+Local model capacity is shared by contributor verification, Build Studio, and AI coworkers. Data-sensitivity constraints are applied first. For routed build phases, a user-configured provider takes precedence over the bundled local provider. While an exact local-CI run holds the on-box capacity lease, local Build Studio and coworker inference defer and retry instead of competing with verification or reporting the provider as broken.
+
+Configure provider choices in **Admin > AI Workforce > Providers & Routing**; do not edit seed data to change routing. See [Connecting AI providers](docs/user-guide/ai-workforce/connecting-providers.md#local-capacity-during-platform-verification) for the operator-facing behavior.
+
 ## Pull request expectations
 
 - **Scope:** one concern per PR. Refactors that ride along with a feature change are fine only if they're genuinely entangled.
