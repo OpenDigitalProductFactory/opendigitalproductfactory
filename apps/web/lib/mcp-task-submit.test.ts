@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const db = vi.hoisted(() => ({
@@ -70,7 +71,13 @@ describe("submitRemoteCoworkerTask idempotency", () => {
 
     expect(outcome).toMatchObject({ kind: "result", result: { idempotentReplay: false } });
     const createInput = autonomous.create.mock.calls[0]?.[0] as Record<string, unknown>;
-    expect(createInput["taskRunId"]).toMatch(/^TR-MCP-[A-F0-9]{12}$/);
+    expect(createInput["taskRunId"]).toMatch(/^TR-MCP-[A-Za-z0-9_-]+-[A-F0-9]{12}$/);
+    const insecureUnkeyedId = `TR-MCP-${createHash("sha256")
+      .update(`PAT-A\0${immutableParams.idempotencyKey}`)
+      .digest("hex")
+      .slice(0, 12)
+      .toUpperCase()}`;
+    expect(createInput["taskRunId"]).not.toBe(insecureUnkeyedId);
     expect(createInput).toMatchObject({
       agentId: "AGT-WS-REVIEW",
       sourceRef: { kind: "mcp-token", id: "PAT-A" },

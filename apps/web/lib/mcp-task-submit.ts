@@ -88,12 +88,18 @@ function stableDigest(value: unknown): string {
 }
 
 function deterministicExternalTaskRunId(tokenId: string, idempotencyKey: string): string {
+  // `tokenId` is the server-owned McpApiToken row id, not the bearer secret.
+  // Keep it out of a password-shaped fast hash: CodeQL correctly cannot infer
+  // that distinction across the auth boundary. The reversible base64url
+  // namespace preserves per-token isolation while only the caller-controlled,
+  // non-secret request key is digested to keep the public id bounded.
+  const tokenNamespace = Buffer.from(tokenId, "utf8").toString("base64url");
   const suffix = createHash("sha256")
-    .update(`${tokenId}\0${idempotencyKey}`)
+    .update(idempotencyKey)
     .digest("hex")
     .slice(0, 12)
     .toUpperCase();
-  return `TR-MCP-${suffix}`;
+  return `TR-MCP-${tokenNamespace}-${suffix}`;
 }
 
 type ExistingRemoteTask = {
@@ -168,7 +174,6 @@ export async function submitRemoteCoworkerTask(input: {
   }
 
   const requestDigest = stableDigest({
-    tokenId: token.tokenId,
     agentId: parsed.agentId,
     routeContext: parsed.routeContext,
     title: parsed.title,
