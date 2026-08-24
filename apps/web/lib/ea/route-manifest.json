@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 630,
+  "routeCount": 631,
   "routes": [
     {
       "routePath": "/",
@@ -1172,6 +1172,20 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/api/ops/self-upgrade/status/route.ts"
+    },
+    {
+      "routePath": "/api/platform/ai/local-models/status",
+      "kind": "route",
+      "segments": [
+        "api",
+        "platform",
+        "ai",
+        "local-models",
+        "status"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/platform/ai/local-models/status/route.ts",
+      "exposure": "authenticated"
     },
     {
       "routePath": "/api/platform/alerts",

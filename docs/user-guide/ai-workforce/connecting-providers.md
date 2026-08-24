@@ -40,6 +40,22 @@ Used for local providers that run on your machine or local network. No credentia
 
 Supported providers: Docker Model Runner, Ollama.
 
+### Managing models on this computer
+
+The Docker Model Runner provider page shows the models actually installed on
+this computer, including their on-disk size when the runtime reports it. Local
+providers do not ask for a hosted account type, a data-training declaration, a
+DPA, or a processing region because that hosted-provider posture does not apply
+to an on-box runtime.
+
+Use **Install** and **Remove** on the provider page. DPF performs those actions
+through the local runtime and reports long-download progress in the page; you
+do not need to copy a command or use a terminal. Removing the embedding model
+requires confirmation because semantic search and durable memory will stop
+until an embedding model is installed again. If the installed runtime is too
+old to support model management, the page asks you to update the runtime rather
+than handing you a script.
+
 ### Local capacity during platform verification
 
 A local provider shares the installation's finite execution capacity with
