@@ -104,6 +104,13 @@ if [[ $_readiness -eq 1 ]]; then
     fi
   fi
   _profile_adapter="${PROMOTE_SOURCE:-}/scripts/lib/resolve-capability-compose-profiles.mjs"
+  if [[ "${DPF_PROMOTION_MODE:-source}" == "release" ]]; then
+    # A consumer install contains verified release assets, not a source tree.
+    # The candidate promoter is itself an immutable release artifact and its
+    # contract requires this adapter, so release readiness must project from
+    # that packaged closure instead of reaching through /host-source.
+    _profile_adapter="$_promoter_dir/lib/resolve-capability-compose-profiles.mjs"
+  fi
   if [[ ! -f "$_profile_adapter" ]]; then
     _readiness_fail capability_projection_failed "candidate source has no profile adapter at $_profile_adapter"
   elif ! _profile_error="$(node "$_profile_adapter" --state "$_state_file" --overlay promote --migrate 2>&1 >/dev/null)"; then
