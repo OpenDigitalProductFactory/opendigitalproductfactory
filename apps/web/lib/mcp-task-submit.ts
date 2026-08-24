@@ -1,4 +1,6 @@
 import { prisma } from "@dpf/db";
+import type { Prisma } from "@dpf/db";
+import { createHash } from "crypto";
 import type { UserContext } from "@/lib/permissions";
 import {
   createAutonomousWorkRun,
@@ -21,6 +23,7 @@ export type RemoteTaskSubmitParams = {
   riskClass: RemoteRiskClass;
   threadId?: string | null;
   authorityScope?: string[];
+  collaborationKind?: "handoff" | "summon";
 };
 
 export type RemoteTaskSubmitAuth = {
@@ -74,6 +77,63 @@ export function parseRemoteTaskSubmitParams(params: Record<string, unknown> | un
     riskClass: riskClass as RemoteRiskClass,
     threadId: optionalString(params["threadId"]),
     authorityScope,
+    collaborationKind: params["collaborationKind"] === "handoff" || params["collaborationKind"] === "summon"
+      ? params["collaborationKind"]
+      : undefined,
+  };
+}
+
+function stableDigest(value: unknown): string {
+  return createHash("sha256").update(JSON.stringify(value)).digest("hex");
+}
+
+function deterministicExternalTaskRunId(tokenId: string, idempotencyKey: string): string {
+  const suffix = createHash("sha256")
+    .update(`${tokenId}\0${idempotencyKey}`)
+    .digest("hex")
+    .slice(0, 12)
+    .toUpperCase();
+  return `TR-MCP-${suffix}`;
+}
+
+type ExistingRemoteTask = {
+  taskRunId: string;
+  status: string;
+  progressPayload: unknown;
+  a2aMetadata: unknown;
+};
+
+function replayOrConflict(existing: ExistingRemoteTask, requestDigest: string): RemoteTaskSubmitOutcome {
+  const metadata = existing.a2aMetadata && typeof existing.a2aMetadata === "object"
+    ? existing.a2aMetadata as Record<string, unknown>
+    : {};
+  const storedDigest = optionalString(metadata["requestDigest"]);
+  if (storedDigest && storedDigest !== requestDigest) {
+    return {
+      kind: "result",
+      result: {
+        content: remoteTaskContent(
+          "This requestKey is already bound to a different external coworker request. Retry with the original immutable packet or use a new requestKey.",
+        ),
+        structuredContent: {
+          error: "idempotency_conflict",
+          action: "Retry with the original immutable packet or use a new requestKey.",
+          taskRunId: existing.taskRunId,
+        },
+        isError: true,
+      },
+    };
+  }
+  return {
+    kind: "result",
+    result: {
+      taskRunId: existing.taskRunId,
+      status: existing.status,
+      idempotentReplay: true,
+      requiresApproval: existing.status === "input-required",
+      progressPayload: existing.progressPayload,
+      a2aMetadata: existing.a2aMetadata,
+    },
   };
 }
 
@@ -107,13 +167,25 @@ export async function submitRemoteCoworkerTask(input: {
     };
   }
 
-  const existing = await prisma.taskRun.findFirst({
+  const requestDigest = stableDigest({
+    tokenId: token.tokenId,
+    agentId: parsed.agentId,
+    routeContext: parsed.routeContext,
+    title: parsed.title,
+    objective: parsed.objective,
+    prompt: parsed.prompt,
+    riskClass: parsed.riskClass,
+    authorityScope: [...(parsed.authorityScope ?? [])].sort(),
+    collaborationKind: parsed.collaborationKind ?? null,
+  });
+  const taskRunId = deterministicExternalTaskRunId(token.tokenId, parsed.idempotencyKey);
+  const existingQuery: Prisma.TaskRunFindFirstArgs = {
     where: {
       userId: token.userId,
-      a2aMetadata: {
-        path: ["idempotencyKey"],
-        equals: parsed.idempotencyKey,
-      },
+      AND: [
+        { a2aMetadata: { path: ["idempotencyKey"], equals: parsed.idempotencyKey } },
+        { a2aMetadata: { path: ["apiTokenId"], equals: token.tokenId } },
+      ],
     },
     orderBy: [{ createdAt: "desc" }],
     select: {
@@ -122,20 +194,11 @@ export async function submitRemoteCoworkerTask(input: {
       progressPayload: true,
       a2aMetadata: true,
     },
-  });
+  };
+  const existing = await prisma.taskRun.findFirst(existingQuery);
 
   if (existing) {
-    return {
-      kind: "result",
-      result: {
-        taskRunId: existing.taskRunId,
-        status: existing.status,
-        idempotentReplay: true,
-        requiresApproval: existing.status === "input-required",
-        progressPayload: existing.progressPayload,
-        a2aMetadata: existing.a2aMetadata,
-      },
-    };
+    return replayOrConflict(existing, requestDigest);
   }
 
   const contextKey = parsed.threadId ?? `mcp:${token.tokenId}:${parsed.idempotencyKey}`;
@@ -147,25 +210,37 @@ export async function submitRemoteCoworkerTask(input: {
   });
 
   const sourceKind = token.source === "session-jwt" ? "mcp-session" : "mcp-token";
-  const run = await createAutonomousWorkRun({
-    trigger: "external-mcp",
-    userId: token.userId,
-    agentId: parsed.agentId,
-    routeContext: parsed.routeContext,
-    title: parsed.title,
-    objective: parsed.objective,
-    prompt: parsed.prompt,
-    threadId: thread.id,
-    authorityScope: parsed.authorityScope ?? [],
-    sourceRef: { kind: sourceKind, id: token.tokenId },
-    metadata: {
-      idempotencyKey: parsed.idempotencyKey,
-      riskClass: parsed.riskClass,
-      apiTokenId: token.tokenId,
-      tokenSource: token.source,
-      requestedThreadId: parsed.threadId ?? null,
-    },
-  });
+  let run: Awaited<ReturnType<typeof createAutonomousWorkRun>>;
+  try {
+    run = await createAutonomousWorkRun({
+      trigger: "external-mcp",
+      taskRunId,
+      userId: token.userId,
+      agentId: parsed.agentId,
+      routeContext: parsed.routeContext,
+      title: parsed.title,
+      objective: parsed.objective,
+      prompt: parsed.prompt,
+      threadId: thread.id,
+      authorityScope: parsed.authorityScope ?? [],
+      sourceRef: { kind: sourceKind, id: token.tokenId },
+      metadata: {
+        idempotencyKey: parsed.idempotencyKey,
+        requestDigest,
+        collaborationKind: parsed.collaborationKind ?? null,
+        riskClass: parsed.riskClass,
+        apiTokenId: token.tokenId,
+        tokenSource: token.source,
+        requestedThreadId: parsed.threadId ?? null,
+      },
+    });
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "P2002") {
+      const concurrent = await prisma.taskRun.findFirst(existingQuery);
+      if (concurrent) return replayOrConflict(concurrent, requestDigest);
+    }
+    throw error;
+  }
 
   await createTaskMessage({
     taskRunId: run.taskRunId,

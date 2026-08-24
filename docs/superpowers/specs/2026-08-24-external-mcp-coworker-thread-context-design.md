@@ -322,11 +322,34 @@ Expected implementation scope after approval:
 `apps/web/app/api/mcp/v1/route.ts`, Prisma schema, portal UI, and internal
 session-token code are not expected to change.
 
-BI-F0715C9C currently has an active scope claim on the coworker pack and an
-in-flight implementation of the `request_coworker` half of this architecture.
-This BI must not force-co-claim or duplicate that change. It will rebase after
-the owning branch lands, preserve its implementation, and complete the shared
-adapter plus `summon_coworker` acceptance on the resulting mainline.
+The overlapping external-readiness task released its coworker-pack claims on
+2026-08-23 after confirming that it had only a local, unpublished
+`request_coworker` half-change. `WC-12BC22D4` owns the complete request plus
+summon contract so both doors land against one shared adapter and immutable
+task identity. The releasing task will reconcile by normal ancestry after this
+change publishes; it will not mutate these paths in parallel.
+
+## Live evidence (development install, 2026-08-23 CDT)
+
+- `BI-B131F357` and `WC-DD1EF64C` resolve with immutable plan commit
+  `544830a220adbda0570da17e391dabd0d429b1fc` and provider blob
+  `5c1b7349c2848f6676ea8e4e075105b6526bb144`.
+- `BI-91AF30A5` is the verified tooling gap. The remediation's former
+  `BI-B9403248` citation was queried and returned `not_found`; current main no
+  longer hardcodes it.
+- Coworker discovery resolves `AGT-WS-REVIEW` (Change Reviewer). The reviewer
+  registry grants `initiative_design_review`, while the external human PAT
+  correctly does not expose `record_initiative_design_review` for self-use.
+- Both `request_coworker` and `summon_coworker`, called with the same subject
+  and immutable artifact locator, return `missing_threadId` before dispatch.
+- No spec-approval receipt or `initiative_scope_baseline` can be produced on
+  the installed runtime through that documented route. No self-approval,
+  synthetic receipt, direct database write, or reviewer-principal weakening
+  was attempted.
+- Focused source regressions prove the repaired threadless lane for Codex,
+  Claude, Grok, embedded, and generic MCP metadata. Live success evidence must
+  follow merge and governed deployment because the installed runtime still
+  serves the pre-fix implementation.
 
 ## Verification plan
 

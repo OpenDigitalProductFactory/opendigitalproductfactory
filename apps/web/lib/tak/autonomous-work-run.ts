@@ -52,6 +52,8 @@ type AgentPromptInfo = {
 
 export type AutonomousWorkRunInput = {
   trigger: AutonomousWorkTrigger;
+  /** Server-derived public identity for idempotent external work. */
+  taskRunId?: string;
   userId: string;
   agentId: string;
   routeContext: string;
@@ -113,7 +115,7 @@ export async function createAutonomousWorkRun(
     await admitRuntimeGuardedWork(tx as never, `task-run:${source}`);
     return tx.taskRun.create({
     data: {
-      taskRunId: createPublicTaskRunId(input.trigger),
+      taskRunId: input.taskRunId ?? createPublicTaskRunId(input.trigger),
       userId: input.userId,
       threadId,
       contextId: threadId,
