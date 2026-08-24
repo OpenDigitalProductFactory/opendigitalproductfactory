@@ -16,14 +16,15 @@ A source-free consumer install detects verification-gated GHCR channel movement,
 
 ## Backlog coverage
 
-- Decision: atomic.
-- Parent: `BI-C3B0B2EA`.
+- Decision: atomic
+- Parent: `BI-C3B0B2EA`
+- Receipt: `blocked-by-BI-B9403248`.
+- Rationale: D1 discovery, D2 immutable acquisition, D3 publication identity, and D4 truthful operator projection must land together; any subset preserves either a byte-identity race or the reported false-current/no-op behavior.
 - D1 registry candidate identity -> BI-C3B0B2EA.
 - D2 resolver/orchestrator convergence -> BI-C3B0B2EA.
 - D3 publication identity -> BI-C3B0B2EA.
 - D4 truthful operator projection and measured verification -> BI-C3B0B2EA.
-- Dependencies: existing release-mode promoter and consumer install-state contracts on `main`.
-- Rationale: discovery without immutable acquisition races; acquisition without publication identity cannot select a tag; runtime behavior without the truthful UI leaves the reported defect; none is independently safe or useful.
+- Dependencies: existing release-mode promoter and consumer install-state contracts on `main`; live receipt issuance is blocked because BI-C3B0B2EA lacks the initiative scope baseline, tracked by BI-B9403248.
 
 | Key | Deliverable | Requirements | Verification | Depends on |
 |---|---|---|---|---|
