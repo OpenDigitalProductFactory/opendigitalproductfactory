@@ -73,6 +73,14 @@ describe("classifyTask", () => {
     expect(result.taskType).toBe("reasoning");
   });
 
+  it("does not treat misconfigured in a prior fallback as platform onboarding", () => {
+    const result = classifyTask("It's not busy", [
+      "Every AI provider is busy right now. Nothing is misconfigured.",
+    ]);
+
+    expect(result.taskType).not.toBe("onboarding");
+  });
+
   it("returns high confidence (0.8) when a single type matches clearly", () => {
     const result = classifyTask("Hello there!", []);
     expect(result.confidence).toBe(0.8);

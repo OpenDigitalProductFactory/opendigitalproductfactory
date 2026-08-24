@@ -50,6 +50,14 @@ export function providersBusyHandoff(): string {
   });
 }
 
+export function modelMissingHandoff(): string {
+  return buildHumanHandoff({
+    blocker: "The selected AI model is no longer available from its provider, so the platform could not answer this turn.",
+    steps: ["Open Platform > AI Operations > Providers & Routing and refresh that provider's models."],
+    verify: "re-check the available models and pick this straight back up",
+  });
+}
+
 
 /**
  * The local model is present and healthy, but a background job on this host
@@ -144,7 +152,7 @@ export function isLocalCapacityDeferral(error: unknown, message: string): boolea
  *  - genuinely no tool-capable endpoint active → point to the REAL surface.
  *  - anything else → say we do not know, and offer the check.
  */
-export function describeToolRouteFailure(
+function describeToolRouteFailureMessage(
   errorMessage: string,
   toolCount: number,
   error?: unknown,
@@ -233,4 +241,44 @@ export function describeToolRouteFailure(
   }
 
   return unexplainedDeadEndHandoff();
+}
+
+export type InferenceDeadEndKind =
+  | "model-missing"
+  | "credentials"
+  | "capacity"
+  | "policy-or-capability"
+  | "context"
+  | "busy"
+  | "unknown";
+
+export type InferenceDeadEndOutcome = {
+  kind: InferenceDeadEndKind;
+  message: string;
+};
+
+export function describeToolRouteFailureOutcome(
+  errorMessage: string,
+  toolCount: number,
+  error?: unknown,
+): InferenceDeadEndOutcome {
+  const msg = errorMessage ?? "";
+  if (/model[_ ]not[_ ]found|model not found|provider model inventory changed/i.test(msg)) {
+    return { kind: "model-missing", message: modelMissingHandoff() };
+  }
+  const message = describeToolRouteFailureMessage(msg, toolCount, error);
+  if (/REQUEST_TOO_LARGE|exceed_context_size|available context size/i.test(msg)) return { kind: "context", message };
+  if (isLocalCapacityDeferral(error, msg)) return { kind: "capacity", message };
+  if (/No credential|auth(?:entication|orization)? (?:failed|error)|unauthorized/i.test(msg)) return { kind: "credentials", message };
+  if (/No eligible endpoints|toolUse required|tool-capable/i.test(msg)) return { kind: "policy-or-capability", message };
+  if (/rate.?limit|overload|\bbusy\b|status(?:Code)?[\"']?:\s*(?:429|529)/i.test(msg)) return { kind: "busy", message };
+  return { kind: "unknown", message };
+}
+
+export function describeToolRouteFailure(
+  errorMessage: string,
+  toolCount: number,
+  error?: unknown,
+): string {
+  return describeToolRouteFailureOutcome(errorMessage, toolCount, error).message;
 }

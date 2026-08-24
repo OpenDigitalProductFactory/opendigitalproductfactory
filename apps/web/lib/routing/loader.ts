@@ -3,6 +3,7 @@
  * Converts Prisma rows into the routing pipeline's type system.
  */
 import { prisma } from "@dpf/db";
+import { providerHasConfiguredCredential } from "@/lib/ai-provider-internals";
 import type {
   EndpointManifest,
   ProviderTier,
@@ -177,7 +178,19 @@ async function queryEndpointManifests(): Promise<EndpointManifest[]> {
     },
   });
 
-  return profiles.map((mp) => profileToManifest(mp));
+  const providers = new Map(
+    profiles.map((profile) => [profile.providerId, profile.provider.authMethod] as const),
+  );
+  const readiness = new Map(await Promise.all(
+    [...providers].map(async ([providerId, authMethod]) => [
+      providerId,
+      await providerHasConfiguredCredential(providerId, authMethod),
+    ] as const),
+  ));
+
+  return profiles
+    .filter((profile) => readiness.get(profile.providerId) === true)
+    .map((profile) => profileToManifest(profile));
 }
 
 type ProfileWithProvider = Awaited<

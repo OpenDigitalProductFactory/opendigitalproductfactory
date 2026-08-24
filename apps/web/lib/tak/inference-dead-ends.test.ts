@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  describeToolRouteFailureOutcome,
   describeToolRouteFailure,
   localCapacityHeldHandoff,
   noEligibleModelHandoff,
@@ -124,5 +125,26 @@ describe("describeToolRouteFailure classifies the deferral that stranded the own
   it("falls through to the unexplained hand-off, not to a fabricated cause", () => {
     expect(describeToolRouteFailure("ECONNRESET talking to the model host", 0))
       .toBe(unexplainedDeadEndHandoff());
+  });
+
+  it("does not call a missing model busy", () => {
+    const outcome = describeToolRouteFailureOutcome(
+      'All endpoints failed for conversation. Attempts: [{"endpointId":"docker-model-runner","error":"Model not found"}]',
+      0,
+    );
+
+    expect(outcome.kind).toBe("model-missing");
+    expect(outcome.message).not.toMatch(/busy|rate-limit/i);
+    expect(outcome.message).toMatch(/model.*unavailable|available model/i);
+  });
+
+  it("keeps the bounded reconciliation signal classified as model-missing", () => {
+    const outcome = describeToolRouteFailureOutcome(
+      "Provider model inventory changed for docker-model-runner. Attempts: []",
+      0,
+    );
+
+    expect(outcome.kind).toBe("model-missing");
+    expect(outcome.message).not.toMatch(/busy|rate-limit/i);
   });
 });

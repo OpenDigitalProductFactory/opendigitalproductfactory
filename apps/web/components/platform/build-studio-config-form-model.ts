@@ -46,3 +46,19 @@ export function shouldShowPinnedEngineMissingWarning(input: {
     && !input.probing
     && input.present === false;
 }
+
+/**
+ * Keep the owner-facing readiness line stable and legible. The routing reason is
+ * diagnostic evidence: it can contain task-type, sensitivity, endpoint counts,
+ * and provider identifiers, and its wording changes as the candidate pool does.
+ * Build Studio retains that evidence on `config.selection`; the first viewport
+ * answers only whether the resolved engine is ready under the current contract.
+ */
+export function describeBuildEngineSelection(
+  selection: BuildStudioDispatchConfig["selection"],
+): string {
+  if (!selection) return "Selection updates from live readiness evidence.";
+  return selection.status === "selected"
+    ? "Ready under current routing and policy."
+    : "No engine currently meets readiness and policy.";
+}
