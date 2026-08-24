@@ -158,6 +158,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Bind promoter image to its release contract
+        id: promoter-contract
+        run: echo "digest=$(sha256sum promoter-contract.json | cut -d ' ' -f1)" >> "$GITHUB_OUTPUT"
+
       # CodeQL actions/unpinned-tag #101-#103: 3rd-party actions pinned to
       # immutable commit SHAs (with version trailing comment) so a compromised
       # docker/* maintainer cannot retroactively repoint the v4/v7 tag at
@@ -196,6 +200,7 @@ jobs:
           build-args: |
             DPF_VERSION=${{ github.sha }}
             DPF_PLATFORM_VERSION=${{ needs.gate.outputs.tag }}
+            DPF_PROMOTER_CONTRACT_DIGEST=sha256:${{ steps.promoter-contract.outputs.digest }}
           # Same identity, in the OCI-standard place. /app/.dpf-image-version is inside
           # the filesystem, so reading it costs a `docker create` + `docker cp`; a label
           # is readable straight from the manifest. `latest` sat 1851 commits behind main

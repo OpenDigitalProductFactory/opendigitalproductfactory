@@ -21,6 +21,22 @@ test("published image identity uses the resolved immutable release tag", () => {
   assert.doesNotMatch(build, /github\.ref_name/);
 });
 
+test("published promoter identity is bound to its checked-out contract", () => {
+  const build = jobBlock("build", "merge");
+
+  assert.match(build, /id: promoter-contract/);
+  assert.match(
+    build,
+    /sha256sum promoter-contract\.json[^\n]*GITHUB_OUTPUT/,
+    "the release workflow must derive the digest from the contract in the release commit",
+  );
+  assert.match(
+    build,
+    /DPF_PROMOTER_CONTRACT_DIGEST=sha256:\$\{\{ steps\.promoter-contract\.outputs\.digest \}\}/,
+    "the promoter Dockerfile must receive the derived contract digest instead of its 'unknown' default",
+  );
+});
+
 test("latest is promoted only from the verified immutable release tag", () => {
   const promotion = workflow.slice(workflow.indexOf("  promote-latest:"));
 
