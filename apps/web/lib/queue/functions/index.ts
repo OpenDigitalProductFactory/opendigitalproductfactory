@@ -117,6 +117,7 @@ import {
   dataControlOperationRecoveryScheduled,
 } from "./data-control-operation";
 import { indexIntegritySweep } from "./index-integrity-sweep";
+import { localModelInstall } from "./local-model-install";
 
 export const scheduledFunctions = [
   prometheusPoll,
@@ -186,6 +187,7 @@ export const scheduledFunctions = [
 ];
 
 export const eventFunctions = [
+  localModelInstall,
   rateRecovery,
   mcpCatalogSync,
   codeGraphReconcileEvent,

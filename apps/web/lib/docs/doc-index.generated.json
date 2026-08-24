@@ -10605,6 +10605,7 @@
         "oauth-sign-in",
         "device-code-sign-in-xai-grok",
         "none",
+        "managing-models-on-this-computer",
         "local-capacity-during-platform-verification",
         "how-oauth-works",
         "choosing-the-right-method",

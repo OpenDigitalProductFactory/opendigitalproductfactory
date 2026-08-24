@@ -62,6 +62,7 @@ import { isEntryModule } from "./lib/entry-module.mjs";
 const THIS_FILE = fileURLToPath(import.meta.url);
 const SCRIPT_DIR = dirname(THIS_FILE);
 const LOCAL_CI_ACTIVE_LEASE_TTL_MS = 2 * 60_000;
+const DEAD_QUEUE_RECONCILIATION_INTERVAL_MS = 60_000;
 
 const HARD_EXECUTION_PRESSURE_REASONS = new Set([
   "host-memory-low",
@@ -1074,18 +1075,25 @@ async function main() {
   }
 
   let claimAttempt = 0;
+  let nextQueueReconciliationAt = 0;
   for (;;) {
     if (receivedSignal) {
       await releaseLeaseOnce();
       process.exit(130);
     }
-    await cancelDeadLocalQueueObservers({
-      directory: queueObserverDirectory,
-      mcpUrl: options.mcpUrl,
-      bearerToken,
-      leaseEvents,
-      reportActive: claimAttempt === 0,
-    });
+    // Reconciliation is a shared-host hygiene sweep, not an admission poll.
+    // Run it before the first claim and at a human-scale cadence during long
+    // queue waits; the durable claimKey remains the queue authority in between.
+    if (Date.now() >= nextQueueReconciliationAt) {
+      await cancelDeadLocalQueueObservers({
+        directory: queueObserverDirectory,
+        mcpUrl: options.mcpUrl,
+        bearerToken,
+        leaseEvents,
+        reportActive: claimAttempt === 0,
+      });
+      nextQueueReconciliationAt = Date.now() + DEAD_QUEUE_RECONCILIATION_INTERVAL_MS;
+    }
     expiresAt = new Date(Date.now() + leaseTtlMs).toISOString();
     const hostPressure = await observeLocalCiHostPressure({
       rootClone,

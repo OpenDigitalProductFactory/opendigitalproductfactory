@@ -1,56 +1,27 @@
-// apps/web/lib/actions/ollama-management.ts
-// Local model management server actions.
-// With Docker Model Runner, model pull/delete is done via Docker Desktop CLI:
-//   docker model pull ai/gemma4
-//   docker model list
-//   docker model rm <model>
-// This file provides read-only listing via the OpenAI-compatible API.
 "use server";
 
-import { auth } from "@/lib/auth";
-import { can } from "@/lib/permissions";
-import { getOllamaBaseUrl } from "@/lib/ollama-url";
+import { requireCapability } from "@/lib/actions/shared/guards";
+import {
+  listLocalModels,
+  removeLocalModel,
+  type LocalModelInfo,
+} from "@/lib/inference/local-model-management";
+import {
+  admitLocalModelInstall,
+  reconcileRemovedLocalModel,
+  updateLocalModelOperation,
+} from "@/lib/inference/local-model-operations";
+import { enqueueLocalModelInstall } from "@/lib/queue/local-model-install-events";
+import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 
-async function requireAdmin() {
-  const session = await auth();
-  const user = session?.user;
-  if (!user?.id) throw new Error("Unauthorized");
-  if (!can({ platformRole: user.platformRole, isSuperuser: user.isSuperuser }, "manage_provider_connections")) {
-    throw new Error("Insufficient permissions");
-  }
-  return { user };
-}
+const REQUIRED_CAPABILITY = "manage_provider_connections" as const;
 
-export type OllamaModelInfo = {
-  name: string;
-  size: number;
-  sizeGb: string;
-  modified_at: string;
-  digest: string;
-  parameterSize: string;
-  quantization: string;
-};
-
-export async function listOllamaModels(): Promise<{ models: OllamaModelInfo[]; error?: string }> {
+export async function listOllamaModels(): Promise<ActionResult<LocalModelInfo[]>> {
   try {
-    await requireAdmin();
-    const baseUrl = getOllamaBaseUrl();
-    const url = baseUrl.endsWith("/v1") ? `${baseUrl}/models` : `${baseUrl}/v1/models`;
-    const res = await fetch(url, { cache: "no-store" });
-    if (!res.ok) return { models: [], error: `Local inference unreachable (${res.status})` };
-    const data = (await res.json()) as { data?: Array<{ id: string; created?: number; owned_by?: string }> };
-    const models: OllamaModelInfo[] = (data.data ?? []).map((m) => ({
-      name: m.id,
-      size: 0,
-      sizeGb: "—",
-      modified_at: m.created ? new Date(m.created * 1000).toISOString() : "",
-      digest: "",
-      parameterSize: "",
-      quantization: "",
-    }));
-    return { models };
-  } catch (e) {
-    return { models: [], error: e instanceof Error ? e.message : "Failed to list models" };
+    await requireCapability(REQUIRED_CAPABILITY);
+    return ok(await listLocalModels());
+  } catch {
+    return err("The installed model list is unavailable.");
   }
 }
 
@@ -65,11 +36,75 @@ export async function getOllamaRunningModels(): Promise<{ models: OllamaRunningM
   return { models: [] };
 }
 
-// Model pull/delete are handled via Docker Desktop CLI, not through the app
-export async function pullOllamaModel(_modelName: string): Promise<{ success: boolean; error?: string }> {
-  return { success: false, error: "Run: .\\scripts\\manage-local-models.ps1 pull <name> — or: docker model pull <name>. Models are auto-discovered daily at 4 AM." };
+export async function pullOllamaModel(
+  modelReference: string,
+): Promise<ActionResult<{ operationId: string; status: "queued" | "running" }>> {
+  let userId: string;
+  try {
+    ({ userId } = await requireCapability(REQUIRED_CAPABILITY));
+  } catch {
+    return err("You do not have permission to install local models.");
+  }
+
+  let admission: Awaited<ReturnType<typeof admitLocalModelInstall>>;
+  try {
+    admission = await admitLocalModelInstall(modelReference, userId);
+  } catch {
+    return err("That model reference cannot be installed.");
+  }
+  if (!admission.admitted) {
+    return ok({
+      operationId: admission.operation.jobId,
+      status: admission.operation.status === "queued" ? "queued" : "running",
+    });
+  }
+
+  try {
+    await enqueueLocalModelInstall(
+      {
+        jobId: admission.operation.jobId,
+        attempt: admission.operation.attempt,
+        modelReference,
+        requestedByUserId: userId,
+      },
+      admission.eventId,
+    );
+    return ok({ operationId: admission.operation.jobId, status: "queued" });
+  } catch {
+    await updateLocalModelOperation({
+      jobId: admission.operation.jobId,
+      attempt: admission.operation.attempt,
+      status: "failed",
+      error: "Background dispatch failed",
+      message: "Install could not start",
+    }).catch(() => null);
+    return err("The model install could not be started. Try again.");
+  }
 }
 
-export async function deleteOllamaModel(_modelName: string): Promise<{ success: boolean; error?: string }> {
-  return { success: false, error: "Run: .\\scripts\\manage-local-models.ps1 rm <name> — or: docker model rm <name>. Removed models are retired at next sync." };
+export async function deleteOllamaModel(
+  modelReference: string,
+): Promise<ActionResult<{ alreadyAbsent: boolean; reconciliationWarning?: string }>> {
+  try {
+    await requireCapability(REQUIRED_CAPABILITY);
+  } catch {
+    return err("You do not have permission to remove local models.");
+  }
+
+  let removed: { alreadyAbsent: boolean };
+  try {
+    removed = await removeLocalModel(modelReference);
+  } catch {
+    return err("The local runtime could not remove that model.");
+  }
+
+  try {
+    await reconcileRemovedLocalModel(modelReference);
+    return ok(removed);
+  } catch {
+    return ok({
+      ...removed,
+      reconciliationWarning: "The model was removed, but routing is still refreshing.",
+    });
+  }
 }
