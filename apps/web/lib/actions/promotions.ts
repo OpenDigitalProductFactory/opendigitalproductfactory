@@ -11,12 +11,9 @@ import { generatePromotionId } from "@/lib/version-tracking";
 import { getSelfUpgradeConfig, nextMaintenanceWindowStart } from "@/lib/self-upgrade/config";
 import { resolveReleaseBatchStatus } from "@/lib/self-upgrade/release-batch-status";
 import { readSelfUpgradeSupport } from "@/lib/self-upgrade/support";
-import {
-  loadReleaseInstallContext,
-  resolveReleaseUpgradeCandidate,
-} from "@/lib/self-upgrade/release-target";
+import { resolveSelfUpgradeStatusTarget } from "@/lib/self-upgrade/status-target";
 import { computeNextScheduledUpgradeCheckAt } from "@/lib/self-upgrade/next-check";
-import { resolveTargetSha, isShaFresh } from "@/lib/self-upgrade/version";
+import { isShaFresh } from "@/lib/self-upgrade/version";
 import { getDeployedSha } from "@/lib/self-upgrade/completion";
 import { readCurrentContainerConfigDigest } from "@/lib/self-upgrade/runtime-image-identity";
 import { getJobEngineHealth } from "@/lib/queue/job-engine-health";
@@ -691,48 +688,13 @@ export async function getSelfUpgradeStatus() {
     checkIntervalHours: config.checkIntervalHours,
     now,
   });
-  let targetSha: string | null = null;
-  let targetTag: string | null = null;
-  let targetAvailability: "resolved" | "unavailable" = "unavailable";
-  let targetUnavailableReason: string | null = "no-target";
-  let releaseFreshness: boolean | null = null;
-  if (support.supported && support.targetKind === "release-artifact") {
-    const releaseContext = await loadReleaseInstallContext({
-      hostSourcePath:
-        config.hostSourceMountPath ??
-        process.env.DPF_SELF_UPGRADE_HOST_SOURCE_MOUNT ??
-        "/host-dpf",
-    });
-    if (releaseContext) {
-      const releaseTarget = await resolveReleaseUpgradeCandidate({
-        context: releaseContext,
-        currentConfigDigest,
-      }).catch(() => null);
-      targetSha =
-        !releaseTarget || releaseTarget.kind === "no-published-target"
-          ? null
-          : releaseTarget.sourceSha;
-      targetTag =
-        !releaseTarget || releaseTarget.kind === "no-published-target"
-          ? null
-          : releaseTarget.tag;
-      targetAvailability = targetSha ? "resolved" : "unavailable";
-      targetUnavailableReason = releaseTarget?.kind === "no-published-target"
-        ? releaseTarget.reason
-        : releaseTarget
-          ? null
-          : "registry-unavailable";
-      releaseFreshness = releaseTarget?.kind === "up-to-date"
-        ? true
-        : releaseTarget?.kind === "target"
-          ? false
-          : null;
-    }
-  } else if (support.supported) {
-    targetSha = await resolveTargetSha(config.channel, config);
-    targetAvailability = targetSha ? "resolved" : "unavailable";
-    targetUnavailableReason = targetSha ? null : "no-target";
-  }
+  const {
+    targetSha,
+    targetTag,
+    availability: targetAvailability,
+    unavailableReason: targetUnavailableReason,
+    releaseFreshness,
+  } = await resolveSelfUpgradeStatusTarget({ support, config, currentConfigDigest });
   // Merge-mode-aware freshness. In upstream/merge mode the deployed stamp is the
   // merge-commit identity, which CONTAINS but never EQUALS the upstream target —
   // so strict deployedSha===targetSha alone reports "Update available" forever,

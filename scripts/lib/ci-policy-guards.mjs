@@ -106,7 +106,11 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("published-image-freshness", "Published Image Freshness", [
       // Decision logic only — the live registry check needs Docker and runs on a
       // schedule (.github/workflows/published-image-freshness.yml).
-      node("--test", "scripts/lib/published-image-freshness.test.mjs"),
+      node(
+        "--test",
+        "scripts/lib/published-image-freshness.test.mjs",
+        "scripts/publish-image-release-identity.test.mjs",
+      ),
     ]),
     guard("docs-link-integrity", "Docs Link Integrity", [
       node("scripts/gen-doc-index.mjs", "--check"),

@@ -28,7 +28,14 @@ The 2026-08-22 consumer release-artifact design remains authoritative for instal
 
 No new database model, queue, deploy mechanism, channel selector, or lifecycle branch is introduced.
 
-## Standards and architecture grounding
+## Design grounding
+
+- Existing specs/plans reviewed: `docs/superpowers/specs/2026-08-22-consumer-self-upgrade-design.md`, `docs/superpowers/plans/2026-08-22-consumer-self-upgrade.md`, and the governed-upgrade lifecycle contracts they cite.
+- Current code substrate reviewed: `apps/web/lib/self-upgrade/release-target.ts`, `apps/web/lib/queue/functions/self-upgrade.ts`, `apps/web/lib/actions/promotions.ts`, `scripts/promote.sh`, `.github/workflows/publish-image.yml`, and the `/ops/self-upgrade` page/card/control projection.
+- Source of truth: verification-gated GHCR channel manifest/config bytes for the candidate, Docker container config digest for the running bytes, and canonical install state for topology and immutable rollback identity.
+- Decision: kernel record `DI-1483263456A9` selected `channel-to-immutable-candidate`; the implementation reuses the existing promotion lifecycle and rejects mutable-tag deployment and GitHub release-run discovery authority.
+
+Standards reviewed:
 
 - The [OCI Distribution Specification](https://github.com/opencontainers/distribution-spec/blob/main/spec.md) defines a tag as a human-readable pointer to a manifest and a digest as the content identifier. Manifest `GET`/`HEAD` returns `Docker-Content-Digest`; clients using it verify the returned bytes.
 - The [OCI Image annotations contract](https://github.com/opencontainers/image-spec/blob/main/annotations.md) defines `org.opencontainers.image.version` as the packaged software version and `org.opencontainers.image.revision` as the source revision.

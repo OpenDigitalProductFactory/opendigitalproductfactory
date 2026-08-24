@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { ok, type ActionSuccess } from "@/lib/shared/action-result";
 
 const DEFAULT_REGISTRY_ORIGIN = "https://ghcr.io";
 const DEFAULT_REPOSITORY = "dpf-portal";
@@ -52,7 +53,7 @@ export type RegistryReleaseFailureReason =
   | "tag-list-limit";
 
 export type RegistryReleaseReadResult =
-  | { ok: true; candidate: RegistryReleaseCandidate }
+  | (ActionSuccess & { candidate: RegistryReleaseCandidate })
   | { ok: false; reason: RegistryReleaseFailureReason };
 
 type ManifestDescriptor = {
@@ -380,7 +381,7 @@ export async function readRegistryReleaseCandidate(input: {
     }
 
     return {
-      ok: true,
+      ...ok(),
       candidate: Object.freeze({
         tag: immutableTag,
         sourceSha: sourceSha.toLowerCase(),

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createHash } from "node:crypto";
-import { registerInstallStateHandoffTests } from "./self-upgrade-handoff.test-support";
+import { configureReleaseUpgradeTest, registerCoreSelfUpgradeSuccessTest, registerInstallStateHandoffTests, registerSelfUpgradeFunctionTests } from "./self-upgrade-handoff.test-support";
 
 const TEST_INSTALL_STATE = JSON.stringify({ platform: "linux", arch: "amd64" });
 const TEST_INSTALL_STATE_HASH = createHash("sha256").update(TEST_INSTALL_STATE).digest("hex");
@@ -66,9 +66,7 @@ vi.mock("@/lib/self-upgrade/support", () => ({
 
 vi.mock("node:fs/promises", () => ({ readFile: mocks.readFile }));
 
-vi.mock("@/lib/self-upgrade/registry-release", () => ({
-  readRegistryReleaseCandidate: mocks.readRegistryReleaseCandidate,
-}));
+vi.mock("@/lib/self-upgrade/registry-release", () => ({ readRegistryReleaseCandidate: mocks.readRegistryReleaseCandidate }));
 
 vi.mock("@/lib/self-upgrade/window", () => ({
   isUpgradeWindowOpen: mocks.isUpgradeWindowOpen,
@@ -120,9 +118,7 @@ vi.mock("@/lib/self-upgrade/completion", () => ({
   isFeatureBuildDeployed: mocks.isFeatureBuildDeployed,
 }));
 
-vi.mock("@/lib/self-upgrade/runtime-image-identity", () => ({
-  readCurrentContainerConfigDigest: mocks.readCurrentContainerConfigDigest,
-}));
+vi.mock("@/lib/self-upgrade/runtime-image-identity", () => ({ readCurrentContainerConfigDigest: mocks.readCurrentContainerConfigDigest }));
 
 vi.mock("@/lib/self-upgrade/run-store", () => ({
   createRun: mocks.createRun,
@@ -265,15 +261,7 @@ beforeEach(() => {
   );
 });
 
-describe("function registration", () => {
-  it("allFunctions includes selfUpgradeScheduled", () => {
-    expect(allFunctions).toContain(selfUpgradeScheduled);
-  });
-
-  it("allFunctions includes selfUpgradeManual", () => {
-    expect(allFunctions).toContain(selfUpgradeManual);
-  });
-});
+registerSelfUpgradeFunctionTests({ allFunctions, scheduled: selfUpgradeScheduled, manual: selfUpgradeManual });
 
 const ENABLED_CONFIG = {
   enabled: true,
@@ -312,38 +300,14 @@ describe("success path", () => {
     mocks.isFeatureBuildDeployed.mockResolvedValue(true);
   });
 
-  it("returns succeeded status when promoter exits 0", async () => {
-    const result = await runSelfUpgrade({ triggeredBy: "ops" });
-    expect(result).toMatchObject({ ok: true, status: "succeeded", runId: "SUR-AAAABBBB" });
-    expect(mocks.completeRun).toHaveBeenCalledWith("SUR-AAAABBBB");
-  });
+  registerCoreSelfUpgradeSuccessTest({ mocks, runSelfUpgrade });
 
   it("classifies a source-free consumer at the verified release as up to date without Git", async () => {
     const sourceSha = "a".repeat(40);
     const releaseState = JSON.stringify({ installMode: "consumer", imageTag: "v2.0.0", installPath: "/opt/dpf", composeFiles: ["docker-compose.yml", "docker-compose.release.yml"] });
-    vi.stubEnv("GHCR_OWNER", "opendigitalproductfactory");
-    mocks.readSelfUpgradeSupport.mockResolvedValue({
-      configuredEnabled: true,
-      supported: true,
-      enabled: true,
-      targetKind: "release-artifact",
-      reason: "enabled",
-      message: null,
-    });
-    mocks.readFile.mockImplementation(async (path: string) => path.endsWith("install-state.json") ? releaseState : "s".repeat(32));
     mocks.getDeployedSha.mockResolvedValue(sourceSha);
     const configDigest = `sha256:${"a".repeat(64)}`;
-    mocks.readCurrentContainerConfigDigest.mockResolvedValue(configDigest);
-    mocks.readRegistryReleaseCandidate.mockResolvedValue({
-      ok: true,
-      candidate: {
-        tag: "v2.0.0",
-        sourceSha,
-        channelDigest: `sha256:${"b".repeat(64)}`,
-        platformManifestDigest: `sha256:${"c".repeat(64)}`,
-        configDigest,
-      },
-    });
+    configureReleaseUpgradeTest({ mocks, installState: releaseState, sourceSha, currentConfigDigest: configDigest, targetConfigDigest: configDigest });
     try {
       const result = await runSelfUpgrade({ triggeredBy: "ops" });
       expect(result).toMatchObject({ skipped: true, reason: "up-to-date", releaseTag: "v2.0.0" });
@@ -358,36 +322,7 @@ describe("success path", () => {
   it("hands the frozen release config digest through to promotion", async () => {
     const sourceSha = "abc1234deadbeef";
     const targetConfigDigest = `sha256:${"c".repeat(64)}`;
-    vi.stubEnv("GHCR_OWNER", "opendigitalproductfactory");
-    vi.stubEnv("DPF_IMAGE_TAG", "v1.0.0");
-    vi.stubEnv("DPF_HOST_INSTALL_PATH", "/opt/dpf");
-    vi.stubEnv("DPF_SELF_UPGRADE_COMPOSE_FILES", "docker-compose.yml docker-compose.release.yml");
-    mocks.readSelfUpgradeSupport.mockResolvedValue({
-      configuredEnabled: true,
-      supported: true,
-      enabled: true,
-      targetKind: "release-artifact",
-      reason: "enabled",
-      message: null,
-    });
-    mocks.readFile.mockImplementation(async (path: string) =>
-      path.endsWith("install-state.json")
-        ? TEST_INSTALL_STATE
-        : path.endsWith(".install-mode")
-          ? "consumer"
-          : "s".repeat(32),
-    );
-    mocks.readCurrentContainerConfigDigest.mockResolvedValue(`sha256:${"a".repeat(64)}`);
-    mocks.readRegistryReleaseCandidate.mockResolvedValue({
-      ok: true,
-      candidate: {
-        tag: "v2.0.0",
-        sourceSha,
-        channelDigest: `sha256:${"d".repeat(64)}`,
-        platformManifestDigest: `sha256:${"e".repeat(64)}`,
-        configDigest: targetConfigDigest,
-      },
-    });
+    configureReleaseUpgradeTest({ mocks, installState: TEST_INSTALL_STATE, sourceSha, currentConfigDigest: `sha256:${"a".repeat(64)}`, targetConfigDigest });
     try {
       const result = await runSelfUpgrade({ triggeredBy: "ops" });
       expect(result).toMatchObject({ ok: true, status: "succeeded" });

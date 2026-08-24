@@ -1,5 +1,6 @@
 import { hostname } from "node:os";
 import { spawn } from "node:child_process";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 const CONFIG_DIGEST = /^sha256:[a-f0-9]{64}$/;
 
@@ -44,7 +45,7 @@ async function defaultDockerRunner(args: string[]): Promise<{
         finish({ exitCode: code ?? 1, stdout, stderr });
       });
     } catch (error) {
-      resolve({ exitCode: 1, stdout: "", stderr: error instanceof Error ? error.message : String(error) });
+      resolve({ exitCode: 1, stdout: "", stderr: getErrorMessage(error) });
     }
   });
 }

@@ -19,6 +19,11 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { triggerSelfUpgrade, forceActiveRun, abortActiveRun } from "@/lib/actions/promotions";
 import { isExpectedDuringSwap } from "@/lib/self-upgrade/is-expected-during-swap";
+import {
+  describeSelfUpgradeActionState,
+  SELF_UPGRADE_ACTION_STATE,
+  type SelfUpgradeActionState,
+} from "@/lib/self-upgrade/action-state";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import type { LatestRun, QuiescenceActivity } from "@/lib/self-upgrade/run-types";
 import SelfUpgradeJobEngineHealthAlert, {
@@ -28,7 +33,7 @@ import { useOptionalSelfUpgradeLive } from "@/components/ops/SelfUpgradeLiveProv
 
 type Props = {
   enabled: boolean;
-  actionState: "update-available" | "no-update" | "unavailable";
+  actionState: SelfUpgradeActionState;
   unavailableReason?: string | null;
   channel: string;
   latestRun: LatestRun | null;
@@ -69,6 +74,7 @@ export default function SelfUpgradeTriggerControl({
   const queuedRun = latestRun?.status === "queued" || latestRun?.status === "pending";
   const upgradeInFlight = queuedRun || latestRun?.status === "running" || draining;
   const triggerBusy = isPending || justQueued;
+  const updateAvailable = actionState === SELF_UPGRADE_ACTION_STATE.UPDATE_AVAILABLE;
 
   // The manual trigger only *queues* an upgrade: the server action returns
   // `{ queued: true }` in well under a second, but the worker still has to
@@ -320,8 +326,10 @@ export default function SelfUpgradeTriggerControl({
                   : "Upgrade in progress…"}
               </span>
             )
-          ) : actionState === "update-available" ? (
+          ) : (
             <>
+            {updateAvailable ? (
+              <>
               <label className="flex items-center gap-1.5 text-xs text-[var(--dpf-muted)] cursor-pointer select-none">
                 <input
                   type="checkbox"
@@ -352,22 +360,22 @@ export default function SelfUpgradeTriggerControl({
                       ? "Force upgrade now"
                       : "Upgrade now"}
               </button>
+              </>
+            ) : (
+              <span
+                className="text-xs text-[var(--dpf-muted)]"
+                data-upgrade-action-state={actionState}
+                role="status"
+              >
+                {describeSelfUpgradeActionState(actionState)}
+              </span>
+            )}
             </>
-          ) : (
-            <span
-              className="text-xs text-[var(--dpf-muted)]"
-              data-upgrade-action-state={actionState}
-              role="status"
-            >
-              {actionState === "unavailable"
-                ? "Update status unavailable. Nothing queued."
-                : "No update is ready."}
-            </span>
           )}
         </div>
       </div>
 
-      {actionState === "update-available" && triggerBusy && latestRun?.status !== "running" && !queuedRun && (
+      {updateAvailable && triggerBusy && latestRun?.status !== "running" && !queuedRun && (
         <div
           className="text-xs text-[var(--dpf-muted)]"
           data-upgrade-starting="true"
@@ -378,7 +386,7 @@ export default function SelfUpgradeTriggerControl({
         </div>
       )}
 
-      {actionState === "update-available" && triggerResult && (
+      {updateAvailable && triggerResult && (
         <div
           className={`p-3 rounded-lg text-sm ${
             triggerResult.queued
