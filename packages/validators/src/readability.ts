@@ -97,11 +97,12 @@ export function analyzeReadability(rawText: string): ReadabilityScore {
  * carries no complexity at all.
  *
  * Measured proof (packages/validators/src/readability.test.ts): the same fifteen
- * words, at the same 1.4 syllables per word, score grade 3.9 unpunctuated and
- * grade 1.5 with a stop after each label. Identical vocabulary; the only variable
- * is punctuation the UI had no reason to carry. On a real 200-word surface the
- * same mechanism produced grades in the teens, and that inflation is what drove
- * every /admin route over the high-school cap.
+ * words, at the same 1.4 syllables per word, score grade 6.8 with no full stop at
+ * all (one "sentence") and grade 1.5 with a stop after each label. Identical
+ * vocabulary; the only variable is punctuation the UI had no reason to carry. At
+ * the 21-word length the BI measured, the same swing is 8.7 -> 5.2. On a real
+ * 200-word surface the mechanism produced grades in the teens, and that inflation
+ * is what drove every /admin route over the high-school cap.
  *
  * THE CORRECTION. In a UI the SENTENCE BOUNDARY IS THE ELEMENT BOUNDARY. Each
  * utterance — one heading, one cell, one label — is at least one sentence, and
