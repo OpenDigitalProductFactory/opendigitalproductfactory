@@ -18,6 +18,19 @@ import { TOOL_TO_GRANTS } from "@/lib/tak/agent-grants";
 
 const EXPECTED_TOOLS = ["request_coworker", "summon_coworker", "find_coworker"];
 
+const initiativeReviewBinding = {
+  writerToolName: "record_initiative_evidence",
+  itemId: "BI-9DC21917",
+  gate: "research",
+  artifactRef: {
+    kind: "repo-blob-at-commit",
+    repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+    commitSha: "6dad5759f9e88176c59fecd2c13e6d5b5bdd344d",
+    path: "docs/superpowers/plans/2026-08-24-local-ci-control-plane-fencing.md",
+    providerBlobId: "a".repeat(40),
+  },
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   external.dispatch.mockResolvedValue({
@@ -55,6 +68,12 @@ describe("coworker pack — registration", () => {
     const schema = coworkerPack.definitions.find((definition) => definition.name === toolName)?.inputSchema;
     expect(schema?.properties).toHaveProperty("requestKey");
   });
+
+  it.each(["request_coworker", "summon_coworker"])("%s advertises the immutable initiative-review packet", (toolName) => {
+    const schema = coworkerPack.definitions.find((definition) => definition.name === toolName)?.inputSchema;
+    expect(schema?.properties).toHaveProperty("requiredToolNames");
+    expect(schema?.properties).toHaveProperty("initiativeReviewBinding");
+  });
 });
 
 describe("coworker pack — handler behavior (delegation preserved)", () => {
@@ -86,6 +105,8 @@ describe("coworker pack — handler behavior (delegation preserved)", () => {
           objective,
           questionPacketSummary: "Independent immutable design review",
           requestKey: "initiative-review:BI-B131F357:544830a",
+          requiredToolNames: ["read_source_at_version", "record_initiative_evidence"],
+          initiativeReviewBinding,
         },
         "u1",
         {
@@ -104,6 +125,8 @@ describe("coworker pack — handler behavior (delegation preserved)", () => {
         objective,
         requestKey: "initiative-review:BI-B131F357:544830a",
         title: "Independent immutable design review",
+        requiredToolNames: ["read_source_at_version", "record_initiative_evidence"],
+        initiativeReviewBinding,
         userId: "u1",
       }));
       expect(collab.requestCoworker).not.toHaveBeenCalled();
@@ -181,6 +204,8 @@ describe("coworker pack — handler behavior (delegation preserved)", () => {
         targetAgent: "AGT-WS-REVIEW",
         objective,
         requestKey: "initiative-review:BI-B131F357:spec-approval:544830a",
+        requiredToolNames: ["read_source_at_version", "record_initiative_evidence"],
+        initiativeReviewBinding,
       },
       "u1",
       {
@@ -197,6 +222,8 @@ describe("coworker pack — handler behavior (delegation preserved)", () => {
       collaborationKind: "summon",
       targetAgent: "AGT-WS-REVIEW",
       objective,
+      requiredToolNames: ["read_source_at_version", "record_initiative_evidence"],
+      initiativeReviewBinding,
     }));
     expect(collab.summonCoworker).not.toHaveBeenCalled();
   });

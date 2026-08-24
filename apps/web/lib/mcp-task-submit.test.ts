@@ -504,6 +504,40 @@ describe("submitRemoteCoworkerTask idempotency", () => {
     }));
   });
 
+  it("rejects an immutable binding whose BI is not in the exact authority scope", async () => {
+    const outcome = await submit("PAT-BINDING-MISMATCH", {
+      agentId: "AGT-WS-BUILD",
+      routeContext: "/build/work/WC-7FF8A505",
+      objective: "Record the immutable research review.",
+      prompt: "Read the source and record the governed evidence.",
+      idempotencyKey: "research-review-binding-mismatch",
+      riskClass: "bounded-write",
+      authorityScope: [
+        "backlog-item:BI-OTHER",
+        "tool:read_source_at_version",
+        "tool:record_initiative_evidence",
+      ],
+      initiativeReviewBinding: {
+        writerToolName: "record_initiative_evidence",
+        itemId: "BI-F0715C9C",
+        gate: "research",
+        artifactRef: {
+          kind: "repo-blob-at-commit",
+          repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+          commitSha: "d47536a552c7d588b2f963e478ae99369f720783",
+          path: "docs/superpowers/specs/2026-08-23-initiative-readiness-traversal-repair-design.md",
+          providerBlobId: "fb57e087c19ce0a3c78b4d591bb5da63027c2b3b",
+        },
+      },
+    });
+
+    expect(outcome).toMatchObject({
+      kind: "invalid_params",
+      message: expect.stringContaining("item must match the backlog authority scope"),
+    });
+    expect(autonomous.resolveAgent).not.toHaveBeenCalled();
+  });
+
   it("server-binds the spec baseline precondition instead of exposing it to the reviewer model", async () => {
     const writer = {
       name: "record_initiative_design_review",

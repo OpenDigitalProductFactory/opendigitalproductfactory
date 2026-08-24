@@ -32,7 +32,7 @@ export type RemoteTaskSubmitParams = {
   initiativeReviewBinding?: InitiativeReviewBinding;
 };
 
-type InitiativeReviewBinding = {
+export type InitiativeReviewBinding = {
   writerToolName: string;
   itemId: string;
   gate: string;
@@ -84,7 +84,7 @@ function requiresInitiativeReviewEffort(toolNames: readonly string[]): boolean {
   return researchWriterRequired || independentReviewWriterRequired;
 }
 
-function parseInitiativeReviewBinding(value: unknown): InitiativeReviewBinding | null {
+export function parseInitiativeReviewBinding(value: unknown): InitiativeReviewBinding | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const binding = value as Record<string, unknown>;
   const artifact = binding["artifactRef"];
@@ -126,6 +126,20 @@ function parseInitiativeReviewBinding(value: unknown): InitiativeReviewBinding |
       providerBlobId,
     },
   };
+}
+
+export function validateInitiativeReviewAuthorityScope(
+  binding: InitiativeReviewBinding,
+  authorityScope: readonly string[] | undefined,
+): string | null {
+  const exactTools = requiredToolNames(authorityScope);
+  if (!exactTools.includes(binding.writerToolName)) {
+    return "initiativeReviewBinding writer must match the exact tool authority scope";
+  }
+  if (!authorityScope?.includes(`backlog-item:${binding.itemId}`)) {
+    return "initiativeReviewBinding item must match the backlog authority scope";
+  }
+  return null;
 }
 
 function narrowInitiativeReviewTools<T extends {
@@ -211,11 +225,8 @@ export function parseRemoteTaskSubmitParams(params: Record<string, unknown> | un
     return "tasks/submit requires a valid immutable initiativeReviewBinding";
   }
   if (initiativeReviewBinding) {
-    const exactTools = requiredToolNames(authorityScope);
-    if (
-      !exactTools.includes(initiativeReviewBinding.writerToolName)
-      || !authorityScope?.includes(`backlog-item:${initiativeReviewBinding.itemId}`)
-    ) return "tasks/submit initiativeReviewBinding must match the exact tool and backlog authority scope";
+    const scopeError = validateInitiativeReviewAuthorityScope(initiativeReviewBinding, authorityScope);
+    if (scopeError) return `tasks/submit ${scopeError}`;
   }
 
   return {
