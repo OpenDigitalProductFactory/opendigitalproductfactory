@@ -27,6 +27,7 @@ import { invalidateRoutingLoaderCache } from "./loader";
 import { recordRouteOutcome } from "./route-outcome";
 import { autoDiscoverAndProfile } from "@/lib/ai-provider-internals";
 import {
+  ProviderReconciliationRequiredError,
   shouldDegradeModelForInterfaceDrift,
   shouldReconcileProviderAfterError,
 } from "@/lib/inference/provider-reconciliation";
@@ -249,6 +250,7 @@ export async function callWithFallbackChain(
   });
 
   const attempts: Array<{ endpointId: string; error: string }> = [];
+  const reconciledProviders = new Set<string>();
   const capacityDeferrals: LocalProviderCapacityDeferredError[] = [];
   let rateLimitRetried = false;
   let overloadRetried = false;
@@ -509,7 +511,9 @@ export async function callWithFallbackChain(
             );
 
           if (shouldReconcileProviderAfterError(e.code, e.message)) {
-            autoDiscoverAndProfile(entry.providerId).catch((err) =>
+            await autoDiscoverAndProfile(entry.providerId).then(() => {
+              reconciledProviders.add(entry.providerId);
+            }).catch((err) =>
               console.error(
                 `[callWithFallbackChain] failed to reconcile ${entry.providerId} after model_not_found:`,
                 err,
@@ -628,6 +632,10 @@ export async function callWithFallbackChain(
 
   if (capacityDeferrals.length === chain.length) {
     throw capacityDeferrals.at(-1)!;
+  }
+
+  if (reconciledProviders.size > 0) {
+    throw new ProviderReconciliationRequiredError(reconciledProviders, attempts);
   }
 
   throw new Error(

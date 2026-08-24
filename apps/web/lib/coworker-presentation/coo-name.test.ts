@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   COO_NAME_SUGGESTION_GROUPS,
   resolveCooPresentationName,
+  resolveCooPresentationIdentity,
   validateCooConversationalName,
 } from "./coo-name";
 
@@ -77,5 +78,13 @@ describe("COO conversational-name policy", () => {
       canonicalName: "COO",
       conversationalName: null,
     })).toBe("COO");
+  });
+
+  it("separates a standing COO's conversational name from the role", () => {
+    expect(resolveCooPresentationIdentity({
+      agentId: "AGT-ORCH-000",
+      canonicalName: "COO",
+      conversationalName: "Coolio",
+    })).toEqual({ primaryName: "Coolio", roleName: "AI COO" });
   });
 });

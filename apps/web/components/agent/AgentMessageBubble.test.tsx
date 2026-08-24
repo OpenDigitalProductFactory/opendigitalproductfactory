@@ -79,6 +79,26 @@ describe("AgentMessageBubble", () => {
     expect(html).toContain("Provider posture was not changed");
   });
 
+  it("renders provider recovery as a system card without coworker attribution", () => {
+    const html = renderToStaticMarkup(
+      <AgentMessageBubble
+        message={{
+          id: "routing-failed",
+          role: "system",
+          content: "The selected AI model is unavailable. Open Providers & Routing.",
+          agentId: null,
+          routeContext: "/workspace",
+          createdAt: "2026-08-24T00:00:00.000Z",
+        }}
+        showAgentLabel={false}
+        agentName={null}
+      />,
+    );
+    expect(html).toContain('data-message-role="system"');
+    expect(html).toContain('data-testid="agent-provider-reconnect-cta"');
+    expect(html).not.toContain('data-message-role="assistant"');
+  });
+
   it("renders assistant markdown as structured HTML", () => {
     const html = renderToStaticMarkup(
       <AgentMessageBubble
@@ -100,6 +120,26 @@ describe("AgentMessageBubble", () => {
     expect(html).toContain("<ul");
     expect(html).toContain("automation</li>");
     expect(html).not.toContain("**Agents**");
+  });
+
+  it("keeps assistant authorship accessible when the visual label is suppressed", () => {
+    const html = renderToStaticMarkup(
+      <AgentMessageBubble
+        message={{
+          id: "msg-accessible-author",
+          role: "assistant",
+          content: "I can help with that.",
+          agentId: "AGT-ORCH-000",
+          routeContext: "/workspace",
+          createdAt: "2026-08-24T00:00:00.000Z",
+        }}
+        showAgentLabel={false}
+        agentName="Coolio"
+      />,
+    );
+
+    expect(html).toContain('aria-label="Message from Coolio"');
+    expect(html).not.toMatch(/>Coolio<\/span>/);
   });
 
   it("keeps user messages as plain text bubbles", () => {

@@ -113,6 +113,19 @@ describe("AgentMessageInput — mic button is mounted", () => {
 });
 
 describe("AgentMessageInput — voice playback affordance", () => {
+  it("announces capability checking separately from an unavailable service", () => {
+    render(
+      <AgentMessageInput
+        {...defaultProps}
+        voiceSynthChecking
+        voiceSynthAvailable={false}
+        voicePlaybackEnabled={true}
+        onVoicePlaybackToggle={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("button", { name: /checking voice playback/i })).toBeTruthy();
+  });
+
   it("keeps the speaker control visible but disabled when voice synthesis is unavailable", () => {
     render(
       <AgentMessageInput

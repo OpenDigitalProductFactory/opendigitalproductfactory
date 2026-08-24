@@ -1,7 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
+  ProviderReconciliationRequiredError,
   shouldDegradeModelForInterfaceDrift,
   shouldReconcileProviderAfterError,
+  withProviderReconciliationRetry,
 } from "./provider-reconciliation";
 
 describe("provider reconciliation heuristics", () => {
@@ -39,5 +41,21 @@ describe("provider reconciliation heuristics", () => {
     expect(
       shouldReconcileProviderAfterError("network", "ECONNRESET"),
     ).toBe(false);
+  });
+
+  it("retries one route build after reconciliation and never loops", async () => {
+    const reconcile = vi.fn();
+    const attempt = vi.fn()
+      .mockRejectedValueOnce(new ProviderReconciliationRequiredError(["openai"], []))
+      .mockResolvedValueOnce("recovered");
+
+    await expect(withProviderReconciliationRetry(attempt, reconcile)).resolves.toBe("recovered");
+    expect(attempt).toHaveBeenCalledTimes(2);
+    expect(reconcile).toHaveBeenCalledTimes(1);
+
+    attempt.mockReset().mockRejectedValue(new ProviderReconciliationRequiredError(["openai"], []));
+    await expect(withProviderReconciliationRetry(attempt, reconcile))
+      .rejects.toBeInstanceOf(ProviderReconciliationRequiredError);
+    expect(attempt).toHaveBeenCalledTimes(2);
   });
 });

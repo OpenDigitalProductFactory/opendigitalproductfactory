@@ -47,6 +47,34 @@ import {
 beforeEach(() => { vi.clearAllMocks(); });
 
 describe("getProviders", () => {
+  it("distinguishes an empty credential row from usable dispatch material", async () => {
+    mockPrisma.modelProvider.findMany.mockResolvedValue([{
+      providerId: "openai",
+      name: "OpenAI",
+      families: [],
+      enabledFamilies: [],
+      supportedAuthMethods: ["api_key"],
+      catalogVisibility: "visible",
+      sensitivityClearance: [],
+      taskTags: [],
+    }]);
+    mockPrisma.credentialEntry.findMany.mockResolvedValue([{
+      providerId: "openai",
+      secretRef: null,
+      clientId: null,
+      clientSecret: null,
+      cachedToken: null,
+      tokenEndpoint: null,
+      scope: null,
+      status: "ok",
+      tokenExpiresAt: null,
+      refreshToken: null,
+    }]);
+
+    const result = await getProviders();
+    expect(result[0]?.credential?.hasUsableMaterial).toBe(false);
+  });
+
   it("does not include hidden execution endpoints in the normal provider catalog", async () => {
     mockPrisma.modelProvider.findMany.mockResolvedValue([
       {

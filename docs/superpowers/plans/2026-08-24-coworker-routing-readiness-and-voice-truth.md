@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Coworker routing readiness and voice truth implementation plan
 
 Date: 2026-08-24  
@@ -99,8 +103,8 @@ Verification: rerun Phase 3 tests plus coworker-panel UX smoke and accessibility
 - Run web typecheck, prose guards, style-drift guard, and `pnpm run pregate:preflight`.
 - Apply the DPF blast-radius review to routing callers, persisted message shape, provider admin status, and both voice surfaces.
 - Apply the DPF UX-fit review to first viewport, identity hierarchy, disabled reasons, keyboard focus, accessible names, and light/dark themes.
-- Claim the shared nonproduction lease, run exact-tree `pnpm run pregate`, and exercise the original coworker-decision path in the portal.
-- Confirm a stale local model reroutes once; no-route failures are system cards; the COO label is not repeated; TTS-down/STT-up remains truthful.
+- Run exact-tree `pnpm run pregate` through the shared local-integration lease and require the recorded candidate SHA to match the committed head.
+- Treat post-merge live-install exercise of the original coworker-decision path as release verification, not as pre-PR evidence.
 
 ## Phase 6 — One-PR delivery
 
@@ -116,11 +120,11 @@ Decision: `decomposed` — each independently shippable deliverable maps to its 
 - `routing-readiness`: `BI-D25F867D`; independent; verifies route reconciliation, readiness, classification, and system attribution.
 - `identity-voice`: `BI-45B95929`; independent; verifies identity hierarchy and independent TTS/STT capability states.
 
-Coverage receipt: blocked by `BI-B9403248`. The live coverage service resolved the signed,
+Coverage receipt: blocked by `BI-MCP-EFF-3E441834`. The live coverage service resolved the signed,
 provider-verified plan blob at commit `2bb0b9772d7af23e9def4ea7a34be5a47c909829`,
 then reported that `BI-D25F867D` has no initiative-scope baseline and that this baseline is
 not currently recordable from an MCP session. Per the service's required fallback, this
-section is the authoritative coverage table until that tool gap is repaired.
+section is the authoritative coverage table until that live MCP-efficiency gap is repaired.
 
 Traceability:
 
@@ -136,6 +140,29 @@ Traceability:
   and Phase 4 suites.
 - Dependencies: neither deliverable depends on the other for correctness; the shared PR is
   an operator-requested delivery boundary.
+
+## Architecture and UX review
+
+Architecture decision: aligned.
+
+- The repair extends the existing route/fallback boundary, `AgentMessage` role projection,
+  provider credential authority, standing-COO presenter, and voice service-status endpoint.
+  It adds no schema, enum, route family, provider-health store, or second identity source.
+- Reconciliation is bounded to one route rebuild. Credential checks are deduplicated by
+  provider before execution, so profile count does not multiply credential lookups.
+- Terminal platform failures remain in the existing timeline as `system` messages and are
+  excluded from coworker semantic memory. This preserves the audit trail without teaching
+  later turns that the coworker authored a platform failure.
+- The voice endpoint now distinguishes coworker playback from profile preview. Narration
+  preference governs the speaker; a ready profile can still be previewed while narration is
+  off. Dictation continues to use its independent capture capability.
+
+UX-fit decision: `truthful-contextual-recovery`, recorded as `DI-ADB42335FC3E` with a high-
+confidence kernel margin of 7.336. The review is `fits-with-guardrails`: keep the existing
+panel and controls, establish name and role once, preserve accessible authorship, present
+terminal inference failures as platform status with one contextual recovery link, and state
+why playback is checking or unavailable. The measured decision manifest is
+`docs/ux-fit/2026-08-24-coworker-routing-readiness-and-voice-truth.ux-fit.json`.
 
 ## Risks and rollback
 
