@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Local-CI per-surface control-plane fencing
 
 Backlog item: `BI-9DC21917`  
