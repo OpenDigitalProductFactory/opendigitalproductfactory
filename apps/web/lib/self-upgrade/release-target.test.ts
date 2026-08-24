@@ -130,6 +130,40 @@ describe("consumer release target", () => {
     });
   });
 
+  it("returns up to date when Docker exposes the running multi-arch channel digest", () => {
+    const channelDigest = `sha256:${"d".repeat(64)}`;
+    expect(resolveReleaseTarget({
+      currentConfigDigest: channelDigest,
+      candidate: {
+        tag: "v2026.08.24-consumer-self-upgrade.6",
+        sourceSha: "a".repeat(40),
+        channelDigest,
+        platformManifestDigest: `sha256:${"e".repeat(64)}`,
+        configDigest: `sha256:${"c".repeat(64)}`,
+      },
+    })).toEqual({
+      kind: "up-to-date",
+      tag: "v2026.08.24-consumer-self-upgrade.6",
+      sourceSha: "a".repeat(40),
+      channelDigest,
+      configDigest: `sha256:${"c".repeat(64)}`,
+    });
+  });
+
+  it("returns up to date when Docker exposes the running platform manifest digest", () => {
+    const platformManifestDigest = `sha256:${"e".repeat(64)}`;
+    expect(resolveReleaseTarget({
+      currentConfigDigest: platformManifestDigest,
+      candidate: {
+        tag: "v2026.08.24-consumer-self-upgrade.6",
+        sourceSha: "a".repeat(40),
+        channelDigest: `sha256:${"d".repeat(64)}`,
+        platformManifestDigest,
+        configDigest: `sha256:${"c".repeat(64)}`,
+      },
+    }).kind).toBe("up-to-date");
+  });
+
   it("returns a frozen immutable target when the channel bytes differ", () => {
     expect(resolveReleaseTarget({
       currentConfigDigest: `sha256:${"c".repeat(64)}`,
