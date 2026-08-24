@@ -500,12 +500,16 @@ export async function runSelfUpgrade(
   });
   if (!signingContext.ok) return { ok: false, status: "failed", runId: run.runId, reason: "installer-state-repair-required", excerpt: signingContext.reason };
   const { runtimeTransitionSecret, hostIdentity } = signingContext;
+  const release = releaseTag && releaseConfigDigest && releaseInstall
+    ? { tag: releaseTag, ghcrOwner: releaseInstall.ghcrOwner, configDigest: releaseConfigDigest }
+    : undefined;
   const preflight = await runCandidatePreflight({
     dryRun: params.dryRun, readinessMode: config.readinessMode, readinessOwner: config.readinessOwner,
     promoterImage: config.promoterImage, callerProtocolVersion: config.callerProtocolVersion,
-    candidatePromoterReference: releaseTag && releaseInstall
-      ? `ghcr.io/${releaseInstall.ghcrOwner}/dpf-promoter:${releaseTag}`
+    candidatePromoterReference: release
+      ? `ghcr.io/${release.ghcrOwner}/dpf-promoter:${release.tag}`
       : undefined,
+    release,
     sourcePath: upgradeWorkspaceMountPath ?? hostSourcePath,
     hostInstallPath: upgradeWorkspaceHostPath ?? hostInstallPathResolved,
     canonicalInstallPath: hostInstallPathResolved, targetSha: builtStamp, baselineSha: deployedSha,
@@ -650,13 +654,7 @@ export async function runSelfUpgrade(
       composeProject,
       healthUrl: config.healthUrl ?? process.env.PROMOTE_HEALTH_URL ?? "",
       promoterImage: resolvedPromoterDigest ?? config.promoterImage,
-      release: releaseTag && releaseConfigDigest && releaseInstall
-        ? {
-            tag: releaseTag,
-            ghcrOwner: releaseInstall.ghcrOwner,
-            configDigest: releaseConfigDigest,
-          }
-        : undefined,
+      release,
       stateDirHostPath: process.env.DPF_STATE_DIR_HOST,
       installStateMigrationEnvelope: migrationHandoff ? Buffer.from(JSON.stringify(migrationHandoff.envelope)).toString("base64url") : undefined,
       installStateMigrationSignature: migrationHandoff?.signature,
