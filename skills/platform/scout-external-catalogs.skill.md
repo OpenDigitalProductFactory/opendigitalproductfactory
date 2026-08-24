@@ -44,6 +44,7 @@ repository. The source catalog is reference material, not code to import.
 
 ## Guidelines
 
+- Invoke `run_hive_scout_ingest` once per turn. If the call fails, do not call `run_hive_scout_ingest` again with the same arguments. Report the failure and the single next action instead; if it returns a result, consume that result without repeating the call.
 - Fail loud if the upstream README format has changed — never write partial
   results.
 - Always include the source URL and the phrase "Reference only — not vendored"
