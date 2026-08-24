@@ -38,6 +38,22 @@ Use a bounded transition:
 This preserves the current safety boundary while avoiding further investment in
 local Docker as the long-term verification architecture.
 
+## Objectives
+
+**OBJ-LCBLR-001:** Restore the governed bounded builder automatically when its
+Buildx registration survives deletion of the expected BuildKit container,
+without broadening the repair to unknown Docker failures or resource drift.
+
+**OBJ-LCBLR-002:** Discover a non-recoverable builder lifecycle problem before
+typecheck and the exhaustive test suite consume the shared local-CI slot.
+
+**OBJ-LCBLR-003:** Preserve exact-tree build evidence while recording a stable,
+specific lifecycle failure and a truthful operator action when automatic
+recovery is exhausted.
+
+**OBJ-LCBLR-004:** Remove historical backlog-item identifiers from reusable
+runtime receipts and keep the local-Docker change explicitly transitional.
+
 ## Lifecycle state machine
 
 The preflight observes the Buildx registration and its expected container:
@@ -118,6 +134,18 @@ receipt provenance, and status reconciliation/guidance. Targeted script tests,
 repository guards, typecheck, and the exact-tree gate remain required before
 handoff.
 
+## Acceptance mapping
+
+| ID | Objectives | Statement |
+| --- | --- | --- |
+| AC-LCBLR-001 | OBJ-LCBLR-001 | A missing expected BuildKit container behind the configured managed Buildx registration triggers exactly one remove-and-recreate attempt, followed by governed policy validation. |
+| AC-LCBLR-002 | OBJ-LCBLR-001 | Generic container inspection failure and driver, identity, memory, CPU, or policy drift fail closed without deleting or resizing the builder. |
+| AC-LCBLR-003 | OBJ-LCBLR-002 | The Docker strategy runs a non-building builder preflight before typecheck and exhaustive tests; non-Docker strategies do not. |
+| AC-LCBLR-004 | OBJ-LCBLR-002, OBJ-LCBLR-003 | The production build repeats the idempotent preflight immediately before use and exact-tree passed-build receipt reuse remains unchanged. |
+| AC-LCBLR-005 | OBJ-LCBLR-003 | Recovery exhaustion records `failureClass`, `failureFingerprint`, `recoveryAction`, and `retryable` fields without introducing a new database status. |
+| AC-LCBLR-006 | OBJ-LCBLR-003 | `pregate:status` renders a non-retryable lifecycle blocker with its recorded action and does not recommend an unchanged pregate rerun; an exact-HEAD pass still wins slot reconciliation. |
+| AC-LCBLR-007 | OBJ-LCBLR-004 | Bounded-build and integration receipts use stable contract identifiers rather than historical `BI-*` values, and the change does not move heavy verification back into the long-term local process. |
+
 ## Out of scope
 
 - Replacing the local Docker production build with the Stage 2/Stage 4 process
@@ -125,4 +153,3 @@ handoff.
 - Adding a new database status enum or persistent model.
 - General Docker Desktop repair or deletion of unknown builders/containers.
 - Treating a local builder repair as proof that product code passed.
-
