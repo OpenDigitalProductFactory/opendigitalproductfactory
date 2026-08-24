@@ -97,6 +97,7 @@ describe("AgentMessageBubble", () => {
     );
     expect(html).toContain('data-message-role="system"');
     expect(html).toContain('data-testid="agent-provider-reconnect-cta"');
+    expect(html.match(/Providers &amp; Routing/g)).toHaveLength(1);
     expect(html).not.toContain('data-message-role="assistant"');
   });
 

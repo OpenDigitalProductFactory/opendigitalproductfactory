@@ -110,13 +110,15 @@ function extractManagedDocumentIds(content: string): string[] {
 export const PROVIDER_ROUTING_ROUTE = AI_PROVIDER_CONNECTIONS_ROUTE;
 
 /**
- * True when an assistant message steers the operator to reconnect or activate an
- * AI provider. Every provider-config failure branch (describeToolRouteFailure in
+ * True when a message steers the operator to reconnect or activate an AI
+ * provider. Every provider-config failure branch (describeToolRouteFailure in
  * agentic-loop.ts, and the credential-gap messages in agent-coworker.ts) names
  * the "Providers & Routing" surface. BI-282C39D5: rather than make the user hunt
  * the menu, render a one-click chip straight to it — hand the fix, don't just
- * describe it. Benign on the rare false positive: the chip only links to a page
- * the message already names. Assistant-only; user text is never scanned.
+ * describe it. Assistant messages retain the established chip treatment;
+ * terminal system messages link the words already present in their copy so a
+ * recovery action does not duplicate first-viewport prose. User text is never
+ * scanned.
  */
 export function referencesProviderRoutingSurface(content: string): boolean {
   return /Providers\s*&\s*Routing/i.test(content);
@@ -153,6 +155,27 @@ function ProviderRoutingCta() {
         Open Providers &amp; Routing
       </Link>
     </div>
+  );
+}
+
+function ProviderRoutingInlineRecovery({ content }: { content: string }): ReactNode {
+  const match = /Providers\s*&\s*Routing/i.exec(content);
+  if (!match || match.index === undefined) return content;
+  const before = content.slice(0, match.index);
+  const after = content.slice(match.index + match[0].length);
+
+  return (
+    <>
+      {before}
+      <Link
+        href={PROVIDER_ROUTING_ROUTE}
+        data-testid="agent-provider-reconnect-cta"
+        style={{ color: "var(--dpf-accent)", fontWeight: 600 }}
+      >
+        {match[0]}
+      </Link>
+      {after}
+    </>
   );
 }
 
@@ -392,8 +415,9 @@ export function AgentMessageBubble({
           fontStyle: "italic",
         }}
       >
-        {message.content}
-        {referencesTerminalProviderRecovery(message.content) && <ProviderRoutingCta />}
+        {referencesTerminalProviderRecovery(message.content)
+          ? <ProviderRoutingInlineRecovery content={message.content} />
+          : message.content}
       </div>
     );
   }
