@@ -50,6 +50,20 @@ export function derivedReadProbe(agentId: string): GoldenJourney {
  * Keyed by agentId; each entry must remain read-only.
  */
 export const CURATED_JOURNEYS: Readonly<Record<string, readonly Omit<GoldenJourney, "agentId" | "kind">[]>> = {
+  // The compliance coworker previously fell to derivedReadProbe, which any agent
+  // passes by calling any tool at all. That is precisely the gap this coworker
+  // exists to close in the business, so certifying it on a generic probe was the
+  // measure's own blind spot. This exercises a real compliance act: reach the
+  // obligation corpus, and distinguish what the record says from what the record
+  // PROVES — the distinction the whole domain turns on.
+  "compliance-officer": [
+    {
+      journeyId: "compliance-officer/obligation-grounded-posture-read",
+      mode: "act",
+      prompt:
+        "Certification probe (read-only). Retrieve one active regulation or obligation currently recorded on this install and one control or piece of evidence linked to it. Report: the obligation reference, what the linked control claims, and one specific thing that would have to be true for that claim to be verifiable by a reviewer who was not present. If the obligation carries a review date or frequency, say whether anything is scheduled to act on it. Do not create, modify, or delete anything. If every tool call fails, reply TOOL-FAILURE and name the tool you tried.",
+    },
+  ],
   "change-reviewer": [
     {
       journeyId: "change-reviewer/evidence-grounded-change-review",

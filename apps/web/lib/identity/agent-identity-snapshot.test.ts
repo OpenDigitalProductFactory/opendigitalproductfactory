@@ -207,3 +207,73 @@ describe("summarizeAgentIdentitySnapshots", () => {
     expect(summary.portableAuthorizationClassCount).toBe(3);
   });
 });
+
+describe("dual-seed collapse (BI-74FD6420 applied to the identity page)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(prisma.principalAlias.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.agentModelConfig.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.userFact.findMany).mockResolvedValue([] as never);
+  });
+
+  const row = (agentId: string, name: string) => ({
+    id: agentId,
+    agentId,
+    name,
+    status: "active",
+    lifecycleStage: "production",
+    sensitivity: "internal",
+    hitlTierDefault: 0,
+    humanSupervisorId: null,
+    executionConfig: null,
+    governanceProfile: null,
+    skills: [],
+    toolGrants: [],
+  });
+
+  it("renders ONE row when a coworker is seeded under both its slug and its canonical id", async () => {
+    // The page sorts by name, so the twins land adjacent and read as a duplicate
+    // of the same coworker — the roster fixed this and this page never did.
+    vi.mocked(prisma.agent.findMany).mockResolvedValue([
+      row("compliance-officer", "Compliance Officer"),
+      row("AGT-WS-COMPLIANCE", "Compliance Officer"),
+    ] as never);
+
+    const snapshots = await listAgentIdentitySnapshots();
+    expect(snapshots.map((s) => s.agentId)).toEqual(["AGT-WS-COMPLIANCE"]);
+  });
+
+  it("KEEPS a canonical agent that was never seeded under a slug", async () => {
+    // The distinction from the roster's dropDualSeedAliasAgents, which drops
+    // these. An identity page must show a declared agent even when no slug twin
+    // exists, or ~55 registry-only agents vanish from the platform's own
+    // identity view.
+    vi.mocked(prisma.agent.findMany).mockResolvedValue([
+      row("AGT-S2P-POL", "Policy Specialist"),
+    ] as never);
+
+    const snapshots = await listAgentIdentitySnapshots();
+    expect(snapshots.map((s) => s.agentId)).toEqual(["AGT-S2P-POL"]);
+  });
+
+  it("KEEPS a slug-only coworker whose canonical twin is absent", async () => {
+    // Collapsing on the map alone would hide a roster coworker that has a
+    // mapping but no seeded canonical row.
+    vi.mocked(prisma.agent.findMany).mockResolvedValue([
+      row("compliance-officer", "Compliance Officer"),
+    ] as never);
+
+    const snapshots = await listAgentIdentitySnapshots();
+    expect(snapshots.map((s) => s.agentId)).toEqual(["compliance-officer"]);
+  });
+
+  it("leaves unmapped agents untouched", async () => {
+    vi.mocked(prisma.agent.findMany).mockResolvedValue([
+      row("data-architect", "Data Architect"),
+      row("AGT-100", "Policy Enforcement Agent"),
+    ] as never);
+
+    const snapshots = await listAgentIdentitySnapshots();
+    expect(snapshots.map((s) => s.agentId).sort()).toEqual(["AGT-100", "data-architect"]);
+  });
+});
