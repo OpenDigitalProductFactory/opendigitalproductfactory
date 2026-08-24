@@ -149,19 +149,18 @@ function narrowInitiativeReviewTools<T extends {
 }>(input: T, requiredNames: readonly string[], binding: InitiativeReviewBinding | undefined): T {
   if (!binding) return input;
   const exactNames = new Set(requiredNames);
+  const compactResearchReceipt = binding.gate === "research"
+    && binding.writerToolName === "record_initiative_evidence";
+  const baseJudgmentNames = compactResearchReceipt
+    ? ["decision"]
+    : ["decision", "reason", "findings", "resolvedFindingRefs"];
   const judgmentPropertyNames = [
-    "decision",
-    "reason",
-    "findings",
-    "resolvedFindingRefs",
+    ...baseJudgmentNames,
     ...(binding.gate === "spec-approval" ? ["profile", "artifactRole", "supersessionDispositions"] : []),
     ...(binding.gate === "classification" ? ["profile"] : []),
   ];
   const requiredJudgmentNames = [
-    "decision",
-    "reason",
-    "findings",
-    "resolvedFindingRefs",
+    ...baseJudgmentNames,
     ...(binding.gate === "spec-approval" ? ["profile", "artifactRole"] : []),
     ...(binding.gate === "classification" ? ["profile"] : []),
   ];
@@ -169,12 +168,14 @@ function narrowInitiativeReviewTools<T extends {
     const properties = schema.properties && typeof schema.properties === "object" && !Array.isArray(schema.properties)
       ? schema.properties as Record<string, unknown>
       : {};
+    const narrowedProperties = Object.fromEntries(
+      judgmentPropertyNames.flatMap((name) => name in properties ? [[name, properties[name]]] : []),
+    );
     return {
       type: "object",
-      properties: Object.fromEntries(
-        judgmentPropertyNames.flatMap((name) => name in properties ? [[name, properties[name]]] : []),
-      ),
+      properties: narrowedProperties,
       required: requiredJudgmentNames,
+      additionalProperties: false,
     };
   };
   const narrowReaderSchema = (name: string, schema: Record<string, unknown>) => {
