@@ -351,6 +351,20 @@ if [[ $_release_mode -eq 1 && $_dry_run -eq 0 ]]; then
       "${_candidate_engine_digest:-missing}" "$DPF_RELEASE_CONFIG_DIGEST" "$DPF_RELEASE_PLATFORM_MANIFEST_DIGEST" "$DPF_RELEASE_CHANNEL_DIGEST" >&2
     exit 1
   fi
+  if [[ "$_release_identity_mode" == "full" && "$_candidate_engine_digest" != "$DPF_RELEASE_CONFIG_DIGEST" ]]; then
+    _candidate_repository="ghcr.io/${GHCR_OWNER}/dpf-portal"
+    _candidate_immutable_ref="${_candidate_repository}@${_candidate_engine_digest}"
+    _candidate_resolved_config_digest="$(_resolve_immutable_release_config_digest "$_candidate_immutable_ref" "$_candidate_platform_os" "$_candidate_platform_architecture")" || {
+      printf 'error: release portal engine digest %s could not resolve the frozen %s/%s config\n' \
+        "$_candidate_engine_digest" "$DPF_RELEASE_PLATFORM_OS" "$DPF_RELEASE_PLATFORM_ARCHITECTURE" >&2
+      exit 1
+    }
+    [[ "$_candidate_resolved_config_digest" == "$DPF_RELEASE_CONFIG_DIGEST" ]] || {
+      printf 'error: release portal resolved config digest %s does not match frozen release config %s\n' \
+        "$_candidate_resolved_config_digest" "$DPF_RELEASE_CONFIG_DIGEST" >&2
+      exit 1
+    }
+  fi
   if [[ "$_release_identity_mode" == "config-only" && "$_candidate_engine_digest" != "$DPF_RELEASE_CONFIG_DIGEST" ]]; then
     [[ "$_candidate_platform_os" == "linux" && "$_candidate_platform_architecture" =~ ^(amd64|arm64)$ ]] || {
       printf 'error: release portal legacy platform %s/%s is unsupported\n' "${_candidate_platform_os:-missing}" "${_candidate_platform_architecture:-missing}" >&2

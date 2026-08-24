@@ -283,6 +283,7 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
   it.each([
     { caller: "classic-store digest-bound caller", configDigest: `sha256:${"c".repeat(64)}`, engineImageId: `sha256:${"c".repeat(64)}`, platformArchitecture: "amd64", expectedStatus: 0 },
     { caller: "Docker Desktop containerd index-ID caller", configDigest: `sha256:${"c".repeat(64)}`, engineImageId: `sha256:${"a".repeat(64)}`, platformArchitecture: "amd64", expectedStatus: 0 },
+    { caller: "modern index with cross-stratum config mismatch", configDigest: `sha256:${"c".repeat(64)}`, engineImageId: `sha256:${"a".repeat(64)}`, registryConfigDigest: `sha256:${"f".repeat(64)}`, platformArchitecture: "amd64", expectedStatus: 1 },
     { caller: "N-1 config-only Docker Desktop caller", configDigest: `sha256:${"c".repeat(64)}`, engineImageId: `sha256:${"a".repeat(64)}`, platformArchitecture: "amd64", frozenStrata: false, expectedStatus: 0 },
     { caller: "N-1 index absent from RepoDigests", configDigest: `sha256:${"c".repeat(64)}`, engineImageId: `sha256:${"a".repeat(64)}`, repoImageId: `sha256:${"f".repeat(64)}`, platformArchitecture: "amd64", frozenStrata: false, expectedStatus: 1 },
     { caller: "N-1 registry config mismatch", configDigest: `sha256:${"c".repeat(64)}`, engineImageId: `sha256:${"a".repeat(64)}`, registryConfigDigest: `sha256:${"f".repeat(64)}`, platformArchitecture: "amd64", frozenStrata: false, expectedStatus: 1 },
@@ -373,7 +374,6 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
       rmSync(root, { recursive: true, force: true });
     }
   }, PROMOTE_TEST_TIMEOUT_MS);
-
   it("stamps the source HEAD and sha-verify passes against a correctly-stamped portal", () => {
     const { root, source, backup, fakeBin, head } = makeScratch();
     try {
