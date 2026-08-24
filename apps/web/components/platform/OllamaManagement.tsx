@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { deleteOllamaModel, pullOllamaModel } from "@/lib/actions/ollama-management";
 import { useBackgroundOperationObserver } from "@/lib/hooks/useBackgroundOperationObserver";
+import { StatusBadge } from "@/components/ui/report-kit";
 import type { LocalModelOperation, LocalModelStatusSnapshot } from "@/lib/inference/local-model-operations";
 import {
   formatModelBytes,
@@ -249,7 +250,12 @@ function CatalogRow({ model, installed, operation, canWrite, busy, hardwareFit, 
     <article style={{ border: "1px solid var(--dpf-border)", borderRadius: 7, display: "flex", gap: 12,
       justifyContent: "space-between", opacity: hardwareFit ? 1 : 0.62, padding: "11px 12px" }}>
       <div>
-        <div style={{ color: "var(--dpf-text)", fontSize: 12, fontWeight: 600 }}>{model.recommended ? "★ " : ""}{model.name}</div>
+        <div style={{ alignItems: "center", color: "var(--dpf-text)", display: "flex", flexWrap: "wrap", fontSize: 12, fontWeight: 600, gap: 6 }}>
+          <span>{model.name}</span>
+          {model.governanceRole === "high-trust-reviewer" && (
+            <StatusBadge intent="accent" label="High-trust reviewer" uppercase={false} variant="soft" />
+          )}
+        </div>
         <div style={{ color: "var(--dpf-muted)", fontSize: 10, marginTop: 3 }}>
           {model.vramGb} GB graphics memory · {model.contextK}K context{model.toolUse ? " · Tool use" : ""}{!hardwareFit ? " · Exceeds detected memory" : ""}
         </div>

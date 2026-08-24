@@ -21,6 +21,7 @@ The existing local-provider route becomes an honest, fully in-product control su
 - D2 durable model-install operation -> `BI-1FFDF4B1`
 - D3 local-tailored provider UX -> `BI-1FFDF4B1`
 - D4 measured verification and generated projections -> `BI-1FFDF4B1`
+- D5 governed 27B reviewer runtime and diagnostics -> `BI-1FFDF4B1`
 - Dependencies: none
 - Receipt: `cmt6julqc01vl01mxqlrsaz15`
 - Rationale: Native management, durable execution, the tailored operator surface, and routing reconciliation are one end-to-end correction; no phase is independently useful or safe to ship.
@@ -40,6 +41,7 @@ All phases therefore ship and verify as one cohesive behavior slice.
 | D2 | Durable model-install operation | R4, R5, R8, R10, R11 | C3 manual-job receipt; C4 queue execution | F2 install | V2 queue/action tests | D1 |
 | D3 | Local-tailored provider UX | R1, R3, R4, R6, R7, R9, R11 | C5 locality composition; C6 honest view model | F1–F3 | V3 component/route tests | D1, D2 |
 | D4 | Measured verification and generated projections | R8, R12, R13 | C7 UX-fit and route projection | F4 verification | V4 guards/live sweep | D1, D2, D3 |
+| D5 | Governed 27B reviewer runtime and diagnostics | R14–R16 | C8 policy separation; C9 timeout resolver | Existing chat dispatch and status read flows | V5 reviewer runtime tests | D1, D3 |
 
 Contract, flow, and verification identifiers refer to the matching sections in the design document.
 
@@ -78,6 +80,14 @@ The deliverable table above is the four-way traceability record for this atomic 
 4. Acquire the governed shared nonproduction environment, verify the actual route in dark/light at desktop/narrow sizes, and exercise one small reversible install/remove path if the runtime supports it. Capture DOM/state assertions as well as screenshots. **[D4, R12, V4]**
 5. Write `docs/ux-fit/2026-08-24-local-model-management.ux-fit.json` with `sweep-measurement` evidence for the exact UI diff and route budget axes. **[D4, R12, C7]**
 6. Run exact-tree local merged-code CI, independent semantic review, DCO commit/PR gates, record Workroom/external evidence, and hand off a regular ready PR. **[D4, V4]**
+
+## Phase 5 — Governed reviewer runtime correction
+
+1. Add failing tests for the governed 27B identity, unset/default and explicit 600,000 ms timeout behavior, the 600,000 ms upper bound, and a response that remains live beyond the former 120-second abort. **[D5, R14, R15, V5]**
+2. Add one pure reviewer-runtime policy consumed by chat dispatch and diagnostics. Keep PR #4624's installer tiers unchanged: initial host selection and high-trust review are separate decisions. **[D5, C8, C9]**
+3. Remove the catalog's generic 8B recommendation and label Qwen3.8 27B as the high-trust reviewer without changing its explicit-install workflow. **[D5, R14]**
+4. Extend the authenticated local-model status projection with the effective reviewer timeout and DMR-backed served-context facts. Do not expose raw environment values or cross into BI-F0715C9C's readiness envelope. **[D5, R16]**
+5. Run the focused runtime, catalog, route, component, and full chat-adapter suites before the repository guards and exact-tree gate. **[D5, V5]**
 
 ## Refactor allocation
 
