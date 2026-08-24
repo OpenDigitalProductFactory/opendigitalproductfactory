@@ -4,9 +4,9 @@ status: active
 
 # Coworker routing readiness and voice truth implementation plan
 
-Date: 2026-08-24  
-Epic: `EP-56AE0F69`  
-Backlog items: `BI-D25F867D`, `BI-45B95929`  
+Date: 2026-08-24
+Epic: `EP-56AE0F69`
+Backlog items: `BI-D25F867D`, `BI-45B95929`
 Workroom: `WC-BB6874E6`
 
 ## Outcome
