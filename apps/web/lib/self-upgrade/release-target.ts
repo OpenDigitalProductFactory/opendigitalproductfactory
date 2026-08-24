@@ -120,7 +120,18 @@ export function resolveReleaseTarget(input: {
   if (!input.currentConfigDigest) {
     return { kind: "no-published-target", reason: "current-image-identity-missing" };
   }
-  if (input.currentConfigDigest.toLowerCase() === input.candidate.configDigest.toLowerCase()) {
+  // Docker's `.Image` field is an immutable content identity, but its stratum
+  // varies by image store: classic stores expose the config digest, while the
+  // containerd store can expose the platform manifest or multi-arch index.
+  // Registry discovery verifies and freezes all three identities, so matching
+  // any one of them proves that the running bytes are the published candidate.
+  const currentDigest = input.currentConfigDigest.toLowerCase();
+  const candidateDigests = [
+    input.candidate.configDigest,
+    input.candidate.platformManifestDigest,
+    input.candidate.channelDigest,
+  ];
+  if (candidateDigests.some((digest) => digest.toLowerCase() === currentDigest)) {
     return {
       kind: "up-to-date",
       tag: input.candidate.tag,
