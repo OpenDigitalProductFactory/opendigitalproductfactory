@@ -170,6 +170,12 @@ test("classifyLocalCiOverride accepts closed codes and rejects free text (BI-563
 
 test("isDocsOnlyFileSet — docs/memory/*.md only counts, empty set does not", () => {
   assert.equal(isDocsOnlyFileSet([{ path: "docs/a.md" }, { path: "AGENTS.md" }, { path: "memory/x.md" }]), true);
+  assert.equal(isDocsOnlyFileSet([
+    { path: "docs/architecture/a.md" },
+    { path: "apps/web/lib/docs/doc-index.generated.json" },
+  ]), true);
+  assert.equal(isDocsOnlyFileSet([{ path: "apps/web/lib/docs/doc-index.generated.json" }]), false);
+  assert.equal(isDocsOnlyFileSet([{ path: "apps/web/lib/docs/doc-link-resolver.mjs" }]), false);
   assert.equal(isDocsOnlyFileSet([{ path: "docs/a.md" }, { path: "apps/web/lib/x.ts" }]), false);
   assert.equal(isDocsOnlyFileSet([]), false);
   assert.equal(isDocsOnlyFileSet(undefined), false);
