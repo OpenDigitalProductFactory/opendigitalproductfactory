@@ -46,6 +46,15 @@ the correctly granted `AGT-WS-REVIEW`, failed with `AUTHORIZATION_DENIED` and
 This is not permission to skip readiness. The gate denies implementation
 correctly but does not expose a governed path to satisfy the denial.
 
+## Objectives
+
+1. **OBJ-IRT-001:** Small platform repairs derive the `fix` readiness profile unless stronger recorded evidence applies, and each profile retains a materially distinct monotonic requirement set.
+2. **OBJ-IRT-002:** Every readiness refusal returns a deterministic, executable recovery packet for the exact eligible reviewer without changing the verdict, dispatching automatically, or opening a default coworker.
+3. **OBJ-IRT-003:** External reviewers can inspect immutable source and record only their independently authorized lane while reviewer identity, artifact identity, and author separation remain server-bound.
+4. **OBJ-IRT-004:** Initiative authority remains human-rooted, subject- and organization-scoped, expiring, single-use, and fail-closed for missing, stale, mismatched, or non-affirmative evidence.
+5. **OBJ-IRT-005:** Provider-verified evidence reconciles the existing Workroom and plan coverage without holding network I/O inside the transactional commit boundary.
+6. **OBJ-IRT-006:** The first-deployment bootstrap warrant is narrowly bound to the ratified artifact and path envelope, requires independent verification and protected checks, and cannot become a reusable bypass.
+
 ## Live evidence and root causes
 
 | Area | Evidence | Root cause |
@@ -630,30 +639,30 @@ relabelled design mutation is valid.
 
 ## Acceptance and traceability
 
-| ID | Requirement | Verification |
-|---|---|---|
-| `AC-PROFILE-FIX` | A small platform bug without stronger signals derives `fix`. | Profile unit test and BI-A45D744A-shaped fixture. |
-| `AC-PROFILE-MONOTONIC` | Recorded cross-domain/archetype evidence still wins. | Profile regression tests. |
-| `AC-POLICY-DIFFERENT` | Fix, feature, and cross-domain have materially different sets. | Table-driven pure-policy tests. |
-| `AC-RECOVERY-ROUTE` | Missing grants identify exact eligible agents; the governed claim and MCP result preserve the complete deterministic no-thread request packet without changing the verdict or dispatching. | Recovery resolver, claim, and `claim-backlog-item-handler` boundary tests. |
-| `AC-UI-TARGET` | Following a recovery action preserves the exact eligible agent identity or fails visibly; it never opens a default coworker. | Recovery-action/launcher component test. |
-| `AC-REVIEW-SEPARATION` | External fallback executes as target reviewer and never grants caller authority. | Coworker/task and receipt separation tests. |
-| `AC-REVIEWER-READ` | An immediate `sideEffect=false` immutable review read does not require a per-call HITL envelope solely because the coworker's coarse approval policy is `all`; proposal execution and all side effects remain approval-gated. | Coworker authority-decision regression test. |
-| `AC-SPEC-AUTHORITY` | A correctly granted independent reviewer gets an allow decision for the exact governed item: tenant items require the matching authenticated organization, while organizationless platform items use server-derived authority scope `platform`; missing/mismatched subjects fail closed. | Authority-gate and exact spec-approval traversal tests. |
-| `AC-RECEIPT-FRESHNESS` | Superseded specialist receipts never satisfy a newer proposed or approved design, including before the first baseline. | Entry-adapter tests shaped from the e89f362 -> ad873ed reproduction. |
-| `AC-HEAD-RECONCILE` | Provider-verified evidence updates the existing subject Workroom through adoption. | Provider, evidence handler, and capture tests. |
-| `AC-AUTHOR-AFTER-SYNC` | Artifact author resolves after synchronization. | Repository-artifact integration fixture. |
-| `AC-FAIL-CLOSED` | Unverified, mismatched, ambiguous, foreign, unsigned, or DCO-conflicting artifacts do not resolve. | Negative tests. |
-| `AC-REPLAY` | Replaying evidence reconciles null/stale heads idempotently, and blocked Workrooms receive an exact reviewer route. | WC-E8275570- and WC-B0DD2B2F-shaped regression tests. |
-| `AC-COVERAGE-TX` | A slow provider preflight does not consume the interactive transaction window; five valid mappings commit, while changed bindings or transaction expiry write no receipt and return an exact retry action. | WC-A31DBE53-shaped timing, race, and failure tests. |
-| `AC-POLICY-BRIDGE-YES` | A current explicit WWMD/WWWD/WSID affirmative result with eligible signal and human-rooted standing provenance projects one scoped, expiring authorization that cites the complete decision evidence. | Pure projector plus authorization-log/envelope integration tests for all three gates. |
-| `AC-POLICY-BRIDGE-DENY` | No, revise, defer, escalate, ambiguous, unusable, advisory-only, conflicted, or missing judgments never authorize and return the owning gate's exact route. | Table-driven negative and recovery tests. |
-| `AC-POLICY-BRIDGE-SCOPE` | Subject, organization, action, actor, route, policy version, delegation, artifact, expiry, and use limits are revalidated; cross-scope, stale, revoked, expired, or replayed authority fails closed. | Binding mutation, expiry, revocation, reuse, and cross-WWMD/WWWD/WSID tests. |
-| `AC-POLICY-NOT-RBAC` | A DecisionInteraction id alone never grants access, and projection never creates a role/grant or marks an initiative receipt satisfied. | Prohibition tests at the policy and governed-execution gates. |
-| `AC-POLICY-RECOVERY` | A developer receives the exact owning evaluation/escalation or eligible independent-reviewer route rather than an impossible receipt checklist. | Claim-response and recovery-action tests. |
-| `AC-FIRST-DEPLOY-WARRANT` | The one-time envelope is ineffective without the exact human root, DI, BI/Workroom, repository/branch, base, design/plan artifacts, action/path scope, expiry, and a governed authorization identity; an evidence note alone is insufficient. | Bootstrap contract/pregate fixture plus immutable authority and Workroom-pointer inspection. |
-| `AC-FIRST-DEPLOY-INDEPENDENCE` | The candidate needs fresh independent exact-tree semantic and architecture review and every protected check; repository automation is never reported as a human approval. | Review-receipt identity, branch-rule snapshot, exact-tree CI, and PR-health evidence. |
-| `AC-FIRST-DEPLOY-CONSUME` | Drift, failure, revocation, timeout, non-affirmative judgment, or merge invalidates the envelope; one merge consumes it and no later work can reuse it. | Bootstrap contract negative/replay fixtures and protected-merge audit. |
+| ID | Objectives | Requirement | Verification |
+|---|---|---|---|
+| AC-PROFILE-FIX | OBJ-IRT-001 | A small platform bug without stronger signals derives `fix`. | Profile unit test and BI-A45D744A-shaped fixture. |
+| AC-PROFILE-MONOTONIC | OBJ-IRT-001 | Recorded cross-domain/archetype evidence still wins. | Profile regression tests. |
+| AC-POLICY-DIFFERENT | OBJ-IRT-001 | Fix, feature, and cross-domain have materially different sets. | Table-driven pure-policy tests. |
+| AC-RECOVERY-ROUTE | OBJ-IRT-002 | Missing grants identify exact eligible agents; the governed claim and MCP result preserve the complete deterministic no-thread request packet without changing the verdict or dispatching. | Recovery resolver, claim, and `claim-backlog-item-handler` boundary tests. |
+| AC-UI-TARGET | OBJ-IRT-002 | Following a recovery action preserves the exact eligible agent identity or fails visibly; it never opens a default coworker. | Recovery-action/launcher component test. |
+| AC-REVIEW-SEPARATION | OBJ-IRT-003 | External fallback executes as target reviewer and never grants caller authority. | Coworker/task and receipt separation tests. |
+| AC-REVIEWER-READ | OBJ-IRT-003 | An immediate `sideEffect=false` immutable review read does not require a per-call HITL envelope solely because the coworker's coarse approval policy is `all`; proposal execution and all side effects remain approval-gated. | Coworker authority-decision regression test. |
+| AC-SPEC-AUTHORITY | OBJ-IRT-003, OBJ-IRT-004 | A correctly granted independent reviewer gets an allow decision for the exact governed item: tenant items require the matching authenticated organization, while organizationless platform items use server-derived authority scope `platform`; missing/mismatched subjects fail closed. | Authority-gate and exact spec-approval traversal tests. |
+| AC-RECEIPT-FRESHNESS | OBJ-IRT-003, OBJ-IRT-004 | Superseded specialist receipts never satisfy a newer proposed or approved design, including before the first baseline. | Entry-adapter tests shaped from the e89f362 -> ad873ed reproduction. |
+| AC-HEAD-RECONCILE | OBJ-IRT-005 | Provider-verified evidence updates the existing subject Workroom through adoption. | Provider, evidence handler, and capture tests. |
+| AC-AUTHOR-AFTER-SYNC | OBJ-IRT-005 | Artifact author resolves after synchronization. | Repository-artifact integration fixture. |
+| AC-FAIL-CLOSED | OBJ-IRT-004, OBJ-IRT-005 | Unverified, mismatched, ambiguous, foreign, unsigned, or DCO-conflicting artifacts do not resolve. | Negative tests. |
+| AC-REPLAY | OBJ-IRT-002, OBJ-IRT-005 | Replaying evidence reconciles null/stale heads idempotently, and blocked Workrooms receive an exact reviewer route. | WC-E8275570- and WC-B0DD2B2F-shaped regression tests. |
+| AC-COVERAGE-TX | OBJ-IRT-005 | A slow provider preflight does not consume the interactive transaction window; five valid mappings commit, while changed bindings or transaction expiry write no receipt and return an exact retry action. | WC-A31DBE53-shaped timing, race, and failure tests. |
+| AC-POLICY-BRIDGE-YES | OBJ-IRT-004 | A current explicit WWMD/WWWD/WSID affirmative result with eligible signal and human-rooted standing provenance projects one scoped, expiring authorization that cites the complete decision evidence. | Pure projector plus authorization-log/envelope integration tests for all three gates. |
+| AC-POLICY-BRIDGE-DENY | OBJ-IRT-004 | No, revise, defer, escalate, ambiguous, unusable, advisory-only, conflicted, or missing judgments never authorize and return the owning gate's exact route. | Table-driven negative and recovery tests. |
+| AC-POLICY-BRIDGE-SCOPE | OBJ-IRT-004 | Subject, organization, action, actor, route, policy version, delegation, artifact, expiry, and use limits are revalidated; cross-scope, stale, revoked, expired, or replayed authority fails closed. | Binding mutation, expiry, revocation, reuse, and cross-WWMD/WWWD/WSID tests. |
+| AC-POLICY-NOT-RBAC | OBJ-IRT-004 | A DecisionInteraction id alone never grants access, and projection never creates a role/grant or marks an initiative receipt satisfied. | Prohibition tests at the policy and governed-execution gates. |
+| AC-POLICY-RECOVERY | OBJ-IRT-002, OBJ-IRT-004 | A developer receives the exact owning evaluation/escalation or eligible independent-reviewer route rather than an impossible receipt checklist. | Claim-response and recovery-action tests. |
+| AC-FIRST-DEPLOY-WARRANT | OBJ-IRT-006 | The one-time envelope is ineffective without the exact human root, DI, BI/Workroom, repository/branch, base, design/plan artifacts, action/path scope, expiry, and a governed authorization identity; an evidence note alone is insufficient. | Bootstrap contract/pregate fixture plus immutable authority and Workroom-pointer inspection. |
+| AC-FIRST-DEPLOY-INDEPENDENCE | OBJ-IRT-006 | The candidate needs fresh independent exact-tree semantic and architecture review and every protected check; repository automation is never reported as a human approval. | Review-receipt identity, branch-rule snapshot, exact-tree CI, and PR-health evidence. |
+| AC-FIRST-DEPLOY-CONSUME | OBJ-IRT-006 | Drift, failure, revocation, timeout, non-affirmative judgment, or merge invalidates the envelope; one merge consumes it and no later work can reuse it. | Bootstrap contract negative/replay fixtures and protected-merge audit. |
 
 ## Non-goals
 
