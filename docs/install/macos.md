@@ -1,7 +1,7 @@
 # DPF Install Guide — macOS (Apple Silicon)
 
 This is the end-user install guide for the Open Digital Product Factory
-on **Apple Silicon Macs** (M1 / M2 / M3 / M4).
+on **Apple Silicon Macs** (M1 or later).
 
 > **Status: GA — validated on real Apple Silicon hardware.**
 >
@@ -28,7 +28,7 @@ and the [deployment doctrine](../superpowers/specs/2026-05-09-deployment-contrac
 | OS | macOS 14 (Sonoma) or newer |
 | Architecture | Apple Silicon (`arm64`). Intel Macs are not supported. |
 | Disk | ~10 GB free (Docker Desktop + multi-arch GHCR images) |
-| RAM | 16 GB recommended for the local-LLM tier; 8 GB works with an external `LLM_BASE_URL` |
+| RAM | 16 GB minimum for a small local model; 64 GB practical and 128 GB recommended for serious local-first use. See [Choosing Hardware for DPF](hardware.md). An external `LLM_BASE_URL` reduces local memory pressure. |
 
 The installer refuses to run on unsupported hosts (Intel Mac, older
 macOS) unless you pass `--force-unsupported-host` — see

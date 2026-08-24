@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 682,
+  "pageCount": 683,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -1945,8 +1945,6 @@
         "ai-provider-failure-detection-and-recovery",
         "graph-mirror-sync-integrity",
         "hardware-guidance",
-        "practical-tiers",
-        "current-local-model-auto-selection",
         "summary"
       ]
     },
@@ -4922,6 +4920,24 @@
         "what-gets-emitted",
         "whats-deferred",
         "cross-references"
+      ]
+    },
+    "docs/install/hardware.md": {
+      "publicHref": "/install/hardware/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "choosing-hardware-for-dpf",
+        "the-short-recommendation",
+        "machines-available-now",
+        "provider-assisted-operations",
+        "local-first-windows-with-nvidia",
+        "local-first-apple-unified-memory",
+        "why-unified-memory-changes-the-calculation",
+        "model-and-context-sizing",
+        "shared-memory-systems-not-yet-in-the-standard-profile",
+        "before-ordering"
       ]
     },
     "docs/install/linux.md": {
