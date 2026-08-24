@@ -10,18 +10,6 @@ function digest(body: string): string {
   return `sha256:${createHash("sha256").update(body).digest("hex")}`;
 }
 
-function verifiedJson(value: unknown, headers: Record<string, string> = {}): Response {
-  const body = JSON.stringify(value);
-  return new Response(body, {
-    status: 200,
-    headers: {
-      "content-type": "application/vnd.oci.image.index.v1+json",
-      "docker-content-digest": digest(body),
-      ...headers,
-    },
-  });
-}
-
 function fixtureFetch(options: {
   version?: string;
   revision?: string;
