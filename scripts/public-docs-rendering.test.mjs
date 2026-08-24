@@ -169,11 +169,10 @@ test("homepage install cards expose both customer hardware profiles for each GA 
   assert.match(windowsCard, /Local-first operations/);
   assert.match(windowsCard, /32 GB recommended for a new purchase/);
   assert.match(windowsCard, /href="\/install\/windows\/"/);
-  assert.equal(
-    windowsCard.includes("github.com"),
-    false,
-    "the Windows card must stay on the public documentation site",
+  const windowsLinks = [...windowsCard.matchAll(/href="([^"]+)"/g)].map(
+    ([, href]) => href,
   );
+  assert.deepEqual(windowsLinks, ["/install/windows/"]);
 
   assert.ok(macCard, "macOS must have a first-class install card");
   assert.match(macCard, /Provider-assisted operations/);
