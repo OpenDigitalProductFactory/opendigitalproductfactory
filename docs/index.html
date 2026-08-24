@@ -849,13 +849,13 @@
 
   .install-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 12px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
   }
 
   .install-card {
     display: flex;
-    min-height: 210px;
+    min-height: 360px;
     flex-direction: column;
     padding: 22px;
     border: 1px solid var(--border);
@@ -865,7 +865,6 @@
 
   .status-badge {
     align-self: flex-start;
-    margin-bottom: auto;
     padding: 4px 8px;
     border: 1px solid var(--border-strong);
     border-radius: 999px;
@@ -881,12 +880,51 @@
   }
 
   .install-card h3 {
-    margin-top: 28px;
+    margin-top: 24px;
   }
 
   .install-card p {
     color: var(--muted);
     font-size: 0.84rem;
+  }
+
+  .install-profiles {
+    display: grid;
+    gap: 12px;
+    margin: 18px 0 22px;
+  }
+
+  .install-profile {
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+  }
+
+  .install-profile strong,
+  .install-profile span {
+    display: block;
+  }
+
+  .install-profile strong {
+    margin-bottom: 4px;
+    font-size: 0.78rem;
+  }
+
+  .install-profile span {
+    color: var(--muted);
+    font-size: 0.82rem;
+    line-height: 1.55;
+  }
+
+  .install-secondary {
+    margin-top: 14px;
+  }
+
+  .install-card.compact {
+    min-height: 180px;
+  }
+
+  .install-card.compact h3 {
+    margin-top: 20px;
   }
 
   .install-card a {
@@ -1763,47 +1801,68 @@
 
   <section id="install">
     <p class="eyebrow">Deployment choices</p>
-    <h2>Pick the host that matches your evidence tolerance.</h2>
+    <h2>Choose a machine for the way you will run DPF.</h2>
     <p class="section-intro">
-      Windows and Apple Silicon macOS are generally available. Native Linux and cloud
-      single-VM paths are available for early adopters and need broader host verification
-      before graduation. Each path preserves the same canonical platform contracts.
+      Windows and Apple Silicon macOS are the two tested customer targets. Provider-assisted
+      operations use approved external AI and need no dedicated GPU. Local-first operations
+      keep primary AI inference on the host and need more model memory.
     </p>
 
     <div class="install-grid">
-      <article class="install-card">
+      <article class="install-card" data-install-target="windows">
         <span class="status-badge">Generally available</span>
         <h3>Windows 10 / 11</h3>
-        <p>Guided PowerShell installer for a local Docker Desktop deployment.</p>
-        <a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory#quick-install">Windows install steps &rarr;</a>
+        <p>Guided PowerShell installer for Docker Desktop with the WSL2 backend.</p>
+        <div class="install-profiles">
+          <div class="install-profile">
+            <strong>Provider-assisted operations</strong>
+            <span>32 GB system RAM · 1 TB NVMe SSD · no dedicated GPU required</span>
+          </div>
+          <div class="install-profile">
+            <strong>Local-first operations</strong>
+            <span>64 GB system RAM · 2 TB NVMe SSD · 24 GB GPU memory supported; 32 GB recommended for a new purchase</span>
+          </div>
+        </div>
+        <a href="/install/windows/">Windows hardware and install guide &rarr;</a>
       </article>
-      <article class="install-card">
+      <article class="install-card" data-install-target="macos">
         <span class="status-badge">Generally available</span>
         <h3>macOS Apple Silicon</h3>
-        <p>Native shell installer for supported Apple Silicon hosts.</p>
-        <a href="/install/macos">macOS install guide &rarr;</a>
+        <p>Native shell installer with one shared memory pool for the CPU and GPU.</p>
+        <div class="install-profiles">
+          <div class="install-profile">
+            <strong>Provider-assisted operations</strong>
+            <span>32 GB unified memory · 1 TB SSD · no separate GPU required</span>
+          </div>
+          <div class="install-profile">
+            <strong>Local-first operations</strong>
+            <span>64 GB unified memory practical · 128 GB for larger models or combined operations and development · 2 TB SSD</span>
+          </div>
+        </div>
+        <a href="/install/macos/">macOS hardware and install guide &rarr;</a>
       </article>
-      <article class="install-card">
+    </div>
+
+    <div class="install-grid install-secondary">
+      <article class="install-card compact">
         <span class="status-badge early">Early access</span>
         <h3>Native Linux</h3>
-        <p>Docker-based native host path for contributors and pilot operators.</p>
-        <a href="/install/linux">Linux install guide &rarr;</a>
+        <p>Docker-based host path for contributors and pilot operators. Validate the exact GPU backend before buying hardware.</p>
+        <a href="/install/linux/">Linux install guide &rarr;</a>
       </article>
-      <article class="install-card">
+      <article class="install-card compact">
         <span class="status-badge early">Early access</span>
         <h3>Cloud single VM</h3>
         <p>Single-tenant VM deployment patterns for AWS, Google Cloud, and Azure.</p>
-        <a href="/install/cloud-single-vm">Cloud install guide &rarr;</a>
+        <a href="/install/cloud-single-vm/">Cloud install guide &rarr;</a>
       </article>
     </div>
 
     <div class="note">
-      <strong>Ready-to-go or customizable?</strong> Choose ready-to-go when you want packaged
-      platform images. Choose customizable when you expect serious source work from an editor
-      or external agent client. Build Studio is available in both modes; it is not the only
-      supported development path. Customer operations do not need coding-workstation capacity.
-      Use the <a href="/install/hardware/">current hardware guide</a> to compare provider-assisted,
-      NVIDIA, and Apple unified-memory systems before buying a host.
+      <strong>Operations and development are different workloads.</strong> Customer operations
+      do not need coding-workstation capacity or Build Studio. Choose customizable only when the
+      host will also do serious source work, builds, tests, or local coding-model evaluation.
+      Compare current Windows and Mac machines in the <a href="/install/hardware/">complete hardware guide</a>.
     </div>
   </section>
 
@@ -1829,8 +1888,8 @@
       </a>
       <a class="doc-path" href="/install/hardware/">
         <span class="doc-kind">Install</span>
-        <strong>Hardware and deployment</strong>
-        <span>Choose a current machine, memory architecture, and provider posture before setup.</span>
+        <strong>Hardware and installation</strong>
+        <span>Compare the two AI deployment models, current Windows and Mac machines, and the guide for each tested host.</span>
       </a>
       <a class="doc-path" href="/architecture/platform-overview">
         <span class="doc-kind">Understand</span>
