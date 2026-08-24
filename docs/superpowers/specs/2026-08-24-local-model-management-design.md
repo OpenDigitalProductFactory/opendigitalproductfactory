@@ -54,6 +54,9 @@ The DPF unified connector kernel is adjacent but not the ownership boundary: DMR
 - **R11 — Observable async UX:** actions use the shared busy/status patterns, live-region announcements, disabled duplicate controls, and bounded background-state observation.
 - **R12 — Measured fit:** the exact route is verified in dark and light themes at desktop and narrow widths, with a measured UX-fit artifact.
 - **R13 — Safe HTTP failures:** the net-new JSON status route returns bounded `application/problem+json` failures with a stable DPF problem type and request correlation ID.
+- **R14 — Governed reviewer:** Qwen3.8 27B remains the governed high-trust local reviewer. The catalog names that role explicitly; a low-memory catalog choice cannot override it through a generic recommendation flag.
+- **R15 — Bounded reviewer latency:** the governed reviewer receives an effective 600,000 ms inference window. Generic local overrides remain capped at that value, while unrelated provider timeouts retain their existing behavior.
+- **R16 — Observable runtime:** the authenticated status projection exposes the reviewer model, effective timeout, timeout source, ceiling, and live served-context facts without exposing environment values.
 
 ## Architecture
 
@@ -66,6 +69,9 @@ The DPF unified connector kernel is adjacent but not the ownership boundary: DMR
 | Background execution | Existing Inngest event/function substrate | DMR `POST /models/create` |
 | Routable model catalog | Existing `DiscoveredModel` and `ModelProfile` records | Provider routing and model cards |
 | Local/cloud classification | Existing `isLocalProviderId` routing primitive | Provider detail composition |
+| Fresh-install model choice | `scripts/installer/local-model-policy.json` from PR #4624 | Installers and host detection |
+| Governed reviewer runtime | `lib/routing/local-inference-runtime-policy.ts` | Chat adapter and authenticated diagnostics |
+| Effective served context | DMR `_configure` through `resolveServedContextInfo` | Authenticated diagnostics |
 
 No new database model, provider, or host-shell capability is introduced. `ScheduledJob` already carries manually triggered inference evaluation/probe state; a deterministic `local-model-install:<sha256>` job ID gives each model one bounded, retry-safe operation row. Its metadata contains only the validated model reference, requested-by ID, byte progress, total bytes, message, and timestamps.
 
@@ -80,6 +86,8 @@ The operation states are a closed TypeScript union—`queued`, `running`, `compl
 - **C5 — Locality composition:** the canonical `isLocalProviderId` primitive decides whether cloud posture controls apply.
 - **C6 — Honest view model:** byte counts remain nullable end to end and unknown data is named, never converted to zero.
 - **C7 — UX and route projection:** the existing provider route owns the workflow; generated route/doc projections and measured UX-fit evidence change with it.
+- **C8 — Separate policy questions:** the installer selects a broadly compatible initial model; the reviewer-runtime policy identifies the trusted reviewer and its latency budget. Neither is projected as the other's recommendation.
+- **C9 — One timeout resolver:** chat dispatch and diagnostics consume the same pure runtime-policy resolver, so the displayed effective timeout cannot drift from the abort signal.
 
 ### F1 — Read flow
 
@@ -120,6 +128,18 @@ DMR's local policy permits one generation model plus small supporting models, an
 
 **Decision: fits with guardrails.** This is a contextual management workflow on the existing Platform provider-detail route, not a new top-level destination.
 
+### UX fit review — governed reviewer label
+
+- **Decision:** fits.
+- **Owning area / route:** Platform, on the existing `/platform/ai/providers/local` detail family.
+- **Primary persona:** platform operator choosing an on-box model; they should not need to infer trust from model size or an unexplained star.
+- **Navigation / AI boundary:** no navigation layer changes and the label starts no coworker work.
+- **Reuse:** the existing catalog row and report-kit `StatusBadge`; no new badge primitive or color map.
+- **Source truth:** `lib/routing/local-inference-runtime-policy.ts` owns the reviewer identity and timeout; DMR owns served context; PR #4624's installer policy remains a separate initial-selection authority.
+- **Empty/failure behavior:** unchanged. The label appears only on the governed catalog entry; existing unavailable, permission, and management failure states remain authoritative.
+- **Evidence before merge:** catalog/component/route tests, prose/style/module guards, exact-tree gate, and the existing measured UX-fit manifest.
+- **Captured in:** this section and `docs/ux-fit/2026-08-24-local-model-management.ux-fit.json`.
+
 - **Persona:** founder/operator or platform operator managing on-box AI capacity.
 - **Primary question:** “What is installed, how much space does it use, and can I change it here?”
 - **First viewport:** local status and installed inventory, followed by the model catalog. Cloud contract questions are absent.
@@ -144,6 +164,7 @@ DMR's local policy permits one generation model plus small supporting models, an
 - **V2 — Queue lifecycle:** queue-function tests cover canonical states, progress, concurrency/idempotency behavior, success, failure, and reconciliation.
 - **V3 — Route and components:** tests cover local/cloud form branching, honest sizes, Install/Remove behavior, embedding consequence copy, async announcements, safe Problem Details, and absence of terminal/script/clipboard instructions.
 - **V4 — Repository and live:** existing provider, routing, event-provider, queue registry, prose, style-drift, route-manifest, type, and exact-tree guards run before governed live verification on `/platform/ai/providers/local` in dark/light themes and desktop/narrow viewports. The live path includes one reversible small-model install/remove flow where practical.
+- **V5 — Reviewer runtime:** tests cover the unset/default 27B policy, an explicit 600,000 ms local override, upper-bound clamping, survival beyond the former 120,000 ms abort, catalog-role reconciliation, and status diagnostics containing the effective timeout plus served context. Infrastructure timeout evidence remains a runtime/configuration finding and never changes reviewer trust.
 
 ## Alternatives considered
 

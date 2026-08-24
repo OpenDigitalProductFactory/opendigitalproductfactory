@@ -3,6 +3,8 @@ import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { requireCapability } from "@/lib/actions/shared/guards";
 import { getLocalModelStatusSnapshot } from "@/lib/inference/local-model-operations";
+import { resolveServedContextInfo } from "@/lib/inference/local-model-context-reconcile";
+import { resolveLocalReviewerRuntimeDiagnostics } from "@/lib/routing/local-inference-runtime-policy";
 
 export const dynamic = "force-dynamic";
 
@@ -12,8 +14,27 @@ const INSTANCE = "/api/platform/ai/local-models/status";
 export async function GET(): Promise<Response> {
   try {
     await requireCapability("manage_provider_connections");
-    const snapshot = await getLocalModelStatusSnapshot();
-    return NextResponse.json(snapshot, {
+    const [snapshot, context] = await Promise.all([
+      getLocalModelStatusSnapshot(),
+      resolveServedContextInfo(),
+    ]);
+    return NextResponse.json({
+      ...snapshot,
+      runtime: {
+        reviewer: resolveLocalReviewerRuntimeDiagnostics({
+          defaultTimeoutMs: process.env.DPF_INFERENCE_TIMEOUT_MS,
+          localTimeoutMs: process.env.DPF_LOCAL_INFERENCE_TIMEOUT_MS,
+        }),
+        servedContext: {
+          servedTokens: context.served,
+          targetTokens: context.target,
+          ceilingTokens: context.ceiling,
+          reasoningEnvelopeTokens: context.reasoningEnvelope,
+          reasoningEligible: context.reasoningEligible,
+          selectedModel: context.selectedModel,
+        },
+      },
+    }, {
       headers: { "Cache-Control": CACHE_CONTROL },
     });
   } catch (error) {

@@ -82,6 +82,13 @@ describe("OllamaManagement", () => {
     expect(container.textContent).not.toMatch(/copy|terminal|powershell|docker model/i);
   });
 
+  it("identifies Qwen3.8 27B as the high-trust reviewer without recommending 8B", () => {
+    const { container } = render(<OllamaManagement canWrite vramGb={24} providerId="local" />);
+
+    expect(screen.getByText("High-trust reviewer")).toBeTruthy();
+    expect(container.textContent).not.toContain("★ Qwen3 8B");
+  });
+
   it("makes the embedding consequence explicit before removing Nomic", async () => {
     render(<OllamaManagement canWrite vramGb={24} providerId="local" />);
 
