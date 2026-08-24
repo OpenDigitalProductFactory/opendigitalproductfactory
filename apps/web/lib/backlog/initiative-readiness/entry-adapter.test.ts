@@ -145,7 +145,7 @@ describe("projectBacklogItemReadiness", () => {
     });
 
     expect(projection.governed).toBe(true);
-    expect(projection.decision).toMatchObject({ verdict: "allowed", profile: "cross-domain" });
+    expect(projection.decision).toMatchObject({ verdict: "allowed", profile: "feature" });
   });
 
   it("fails closed for an implementation claim with only textual spec and plan hints", () => {
