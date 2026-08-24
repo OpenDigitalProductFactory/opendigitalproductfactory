@@ -11,7 +11,7 @@ import {
   reconcileRemovedLocalModel,
   updateLocalModelOperation,
 } from "@/lib/inference/local-model-operations";
-import { inngest } from "@/lib/queue/inngest-client";
+import { enqueueLocalModelInstall } from "@/lib/queue/local-model-install-events";
 import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 
 const REQUIRED_CAPABILITY = "manage_provider_connections" as const;
@@ -60,16 +60,15 @@ export async function pullOllamaModel(
   }
 
   try {
-    await inngest.send({
-      id: admission.eventId,
-      name: "inference/local-model.install",
-      data: {
+    await enqueueLocalModelInstall(
+      {
         jobId: admission.operation.jobId,
         attempt: admission.operation.attempt,
         modelReference,
         requestedByUserId: userId,
       },
-    });
+      admission.eventId,
+    );
     return ok({ operationId: admission.operation.jobId, status: "queued" });
   } catch {
     await updateLocalModelOperation({

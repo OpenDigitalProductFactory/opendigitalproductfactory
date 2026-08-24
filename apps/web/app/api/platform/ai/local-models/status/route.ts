@@ -1,3 +1,4 @@
+// @exposure authenticated
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { requireCapability } from "@/lib/actions/shared/guards";

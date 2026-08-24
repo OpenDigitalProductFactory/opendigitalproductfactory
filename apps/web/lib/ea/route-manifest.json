@@ -1184,7 +1184,8 @@
         "status"
       ],
       "dynamicParams": [],
-      "file": "apps/web/app/api/platform/ai/local-models/status/route.ts"
+      "file": "apps/web/app/api/platform/ai/local-models/status/route.ts",
+      "exposure": "authenticated"
     },
     {
       "routePath": "/api/platform/alerts",

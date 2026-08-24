@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Local model management implementation plan
 
 **Backlog item:** BI-1FFDF4B1  
@@ -9,7 +13,17 @@
 
 The existing local-provider route becomes an honest, fully in-product control surface: cloud-only questions disappear, installed storage comes from native runtime metadata, and authorized operators install or remove models without a terminal. Long installs run durably and automatically reconcile routing state.
 
-## Deliverable graph and coverage decision
+## Backlog coverage
+
+- Decision: atomic
+- Parent: `BI-1FFDF4B1`
+- D1 native DMR inventory/mutation adapter -> `BI-1FFDF4B1`
+- D2 durable model-install operation -> `BI-1FFDF4B1`
+- D3 local-tailored provider UX -> `BI-1FFDF4B1`
+- D4 measured verification and generated projections -> `BI-1FFDF4B1`
+- Dependencies: none
+- Receipt: `cmt6julqc01vl01mxqlrsaz15` (traceability-incomplete attempt; not a green coverage receipt)
+- Rationale: Native management, durable execution, the tailored operator surface, and routing reconciliation are one end-to-end correction; no phase is independently useful or safe to ship.
 
 This plan is **atomic** under BI-1FFDF4B1. The four implementation phases are not independently shippable:
 
@@ -31,7 +45,7 @@ Contract, flow, and verification identifiers refer to the matching sections in t
 
 ### Coverage receipt status
 
-The deliverable table above is the four-way traceability record for this atomic plan. `record_plan_backlog_coverage` could not issue a receipt because BI-1FFDF4B1 has no `initiative_scope_baseline`, and that baseline is not reachable from an external MCP session. This is the known governance-tooling gap tracked by BI-B9403248. No green receipt is claimed; implementation proceeds under the filed BI, claimed Workroom scope, immutable plan commit, and this explicit blocked-receipt evidence.
+The deliverable table above is the four-way traceability record for this atomic plan. `record_plan_backlog_coverage` could not issue a green receipt because BI-1FFDF4B1 has no `initiative_scope_baseline`, and that baseline is not reachable from an external MCP session. The receipt above is the recorded failed attempt, not coverage approval. The governance-tooling gap is tracked by `BI-91AF30A5`. Implementation proceeds under the filed delivery BI, claimed Workroom scope, immutable plan commit, and this explicit blocked-receipt evidence.
 
 ## Phase 1 — Red tests and native adapter
 

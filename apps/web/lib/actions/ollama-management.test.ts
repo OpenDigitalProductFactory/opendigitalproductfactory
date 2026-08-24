@@ -23,7 +23,9 @@ vi.mock("@/lib/inference/local-model-operations", () => ({
   updateLocalModelOperation: mocks.updateLocalModelOperation,
   reconcileRemovedLocalModel: mocks.reconcileRemovedLocalModel,
 }));
-vi.mock("@/lib/queue/inngest-client", () => ({ inngest: { send: mocks.send } }));
+vi.mock("@/lib/queue/local-model-install-events", () => ({
+  enqueueLocalModelInstall: mocks.send,
+}));
 
 import {
   deleteOllamaModel,
@@ -65,16 +67,15 @@ describe("local model management actions", () => {
       ok: true,
       data: expect.objectContaining({ operationId: "local-model-install:abc", status: "queued" }),
     });
-    expect(mocks.send).toHaveBeenCalledWith({
-      id: "local-model-install:abc:1",
-      name: "inference/local-model.install",
-      data: {
+    expect(mocks.send).toHaveBeenCalledWith(
+      {
         jobId: "local-model-install:abc",
         attempt: 1,
         modelReference: "ai/qwen3:8B-Q4_K_M",
         requestedByUserId: "operator-1",
       },
-    });
+      "local-model-install:abc:1",
+    );
   });
 
   it("returns an existing active install without dispatching a duplicate", async () => {

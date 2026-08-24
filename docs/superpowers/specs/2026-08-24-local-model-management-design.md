@@ -1,7 +1,11 @@
+---
+status: active
+---
+
 # Local model management design
 
 **Backlog item:** BI-1FFDF4B1  
-**Status:** Proposed  
+**Status:** Active
 **Owning area:** Platform / AI providers  
 **Primary route:** `/platform/ai/providers/local`
 
@@ -27,6 +31,13 @@ Docker documents native model-management endpoints for `GET /models`, `POST /mod
 | LM Studio 0.4 | Its native v1 REST API separates list, download, load/unload, and download-status operations from OpenAI compatibility. | **Pattern adopted, protocol rejected.** The status projection reinforces an observable background download. LM Studio is not the installed runtime and does not belong in this adapter. |
 
 The DPF unified connector kernel is adjacent but not the ownership boundary: DMR is a bundled deployment capability, not a third-party connector with credentials or callbacks. This design adopts the kernel's safe-failure and durable-refresh rules without registering DMR as an integration connector.
+
+## Design grounding
+
+- **Existing specs/plans reviewed:** the provider-connection guide, platform usability standards, portal UX simplification spine, background-operation observation contract, and deployment contracts.
+- **Current code substrate reviewed:** the provider detail route, `OllamaManagement`, canonical local-provider classification, DMR URL derivation, `ScheduledJob`, the Inngest queue registry, shared system-event fan-out, model discovery, and model profiling.
+- **Source of truth:** native DMR `/models` owns installed model facts; `ScheduledJob` owns durable install progress; `DiscoveredModel` and `ModelProfile` remain routing projections.
+- **Decision:** retain the existing provider-detail home, remove cloud posture from local providers, use native HTTP management with a durable install job, and reconcile routing automatically. No host-command bridge, new provider, or new database model is introduced.
 
 ## Objectives and requirements
 

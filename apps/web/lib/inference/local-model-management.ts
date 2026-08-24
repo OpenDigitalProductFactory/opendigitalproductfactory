@@ -1,3 +1,4 @@
+import { isRecord } from "@/lib/shared/coerce";
 import { getOllamaApiRoot } from "./ollama-url";
 
 export type LocalModelOperationStatus = "queued" | "running" | "completed" | "failed";
@@ -350,10 +351,6 @@ async function consumeNdjson(
     if (done) break;
   }
   if (pending.trim()) await consumeLine(pending);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 function stringValue(value: unknown): string | null {

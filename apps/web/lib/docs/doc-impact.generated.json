@@ -355,6 +355,9 @@
       "docs/architecture/ai-agent-meta-model.md",
       "docs/architecture/mcp-tool-authorization-runbook.md"
     ],
+    "apps/web/app/api/platform/ai/local-models/status/route.ts": [
+      "docs/architecture/background-operation-observation-contract.md"
+    ],
     "apps/web/app/api/v1/auth/provider-oauth/callback/route.ts": [
       "docs/user-guide/ai-workforce/provider-developer-notes.md"
     ],
@@ -426,6 +429,9 @@
     ],
     "apps/web/components/platform/AgentCardSupervisorPanel.tsx": [
       "docs/architecture/agent-standards-dpf-conformance.md"
+    ],
+    "apps/web/components/platform/OllamaManagement.tsx": [
+      "docs/architecture/background-operation-observation-contract.md"
     ],
     "apps/web/components/platform/ProviderSuitabilityGuide.tsx": [
       "docs/user-guide/ai-workforce/connecting-providers.md"
@@ -744,6 +750,9 @@
     ],
     "apps/web/lib/inference/jit-retrieval-discipline.test.ts": [
       "docs/architecture/context-engineering-standards.md"
+    ],
+    "apps/web/lib/inference/local-model-operations.ts": [
+      "docs/architecture/background-operation-observation-contract.md"
     ],
     "apps/web/lib/inference/local-only.ts": [
       "docs/strategy/2026-09-cada-architects-forum-deck.md"
@@ -2235,11 +2244,14 @@
       "scripts/gen-architecture-counts.mjs"
     ],
     "docs/architecture/background-operation-observation-contract.md": [
+      "apps/web/app/api/platform/ai/local-models/status/route.ts",
       "apps/web/components/ops/SelfUpgradeLiveProvider.tsx",
+      "apps/web/components/platform/OllamaManagement.tsx",
       "apps/web/components/platform/SystemEventProvider.tsx",
       "apps/web/lib/architecture/background-operation-observation-contract.test.ts",
       "apps/web/lib/hooks/useBackgroundOperationObserver.ts",
       "apps/web/lib/hooks/useResilientEventSource.ts",
+      "apps/web/lib/inference/local-model-operations.ts",
       "apps/web/lib/self-upgrade/status-snapshot.ts",
       "apps/web/lib/tak/agent-event-bus.ts"
     ],

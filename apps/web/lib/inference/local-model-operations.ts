@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { Prisma, prisma } from "@dpf/db";
+import { isRecord } from "@/lib/shared/coerce";
 import {
   discoverModelsInternal,
   profileModelsInternal,
@@ -319,10 +320,6 @@ function operationMetadata(value: Record<string, unknown>): Prisma.InputJsonObje
 
 function isOperationStatus(value: unknown): value is LocalModelOperationStatus {
   return typeof value === "string" && OPERATION_STATUSES.has(value as LocalModelOperationStatus);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 function stringValue(value: unknown): string | null {
