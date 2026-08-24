@@ -90,7 +90,11 @@ for arg in "$@"; do
 done
 [ -n "$DOCKER_LOG" ] && printf '%s\\n' "$*" >> "$DOCKER_LOG"
 case "$*" in
-  *".Id"*) printf "%s" "$DPF_TEST_RELEASE_CONFIG_DIGEST" ;;
+  *".Id"*) printf "%s" "\${DPF_TEST_RELEASE_ENGINE_ID:-$DPF_TEST_RELEASE_CONFIG_DIGEST}" ;;
+  *".RepoDigests"*) printf "%s@%s\n" "$DPF_TEST_RELEASE_REPO" "\${DPF_TEST_RELEASE_REPO_ID:-$DPF_TEST_RELEASE_ENGINE_ID}" ;;
+  *".Os"*) printf "%s" "\${DPF_TEST_RELEASE_OS:-linux}" ;;
+  *".Architecture"*) printf "%s" "\${DPF_TEST_RELEASE_ARCHITECTURE:-amd64}" ;;
+  *"buildx imagetools inspect"*"--raw"*) case "$*" in *"@$DPF_TEST_RELEASE_PLATFORM_MANIFEST_DIGEST"*) printf '{"config":{"digest":"%s"}}' "\${DPF_TEST_RELEASE_REGISTRY_CONFIG_DIGEST:-$DPF_TEST_RELEASE_CONFIG_DIGEST}" ;; *) printf '{"manifests":[{"digest":"%s","platform":{"os":"%s","architecture":"%s"}}]}' "$DPF_TEST_RELEASE_PLATFORM_MANIFEST_DIGEST" "$DPF_TEST_RELEASE_OS" "$DPF_TEST_RELEASE_ARCHITECTURE" ;; esac ;;
   *"org.opencontainers.image.version"*) printf "%s" "$DPF_TEST_RELEASE_TAG" ;;
   *"org.opencontainers.image.revision"*) printf "%s" "$DPF_TEST_RELEASE_SHA" ;;
   "create "*) printf "candidate-container" ;;
@@ -157,7 +161,12 @@ function runPromote(opts: {
   principalRecoveryDecision?: "recover" | "not-needed" | "blocked";
   principalResolveFails?: boolean;
   principalVerifyFails?: boolean;
-  release?: { tag: string; owner: string; configDigest?: string; candidateAssets: string; gitLog: string };
+  release?: {
+    tag: string; owner: string; channelDigest?: string; platformManifestDigest?: string;
+    configDigest?: string; engineImageId?: string; platformOs?: string; frozenStrata?: boolean; repoImageId?: string; registryConfigDigest?: string;
+    platformArchitecture?: string; enginePlatformArchitecture?: string;
+    candidateAssets: string; gitLog: string;
+  };
 }): { status: number | null; stdout: string; stderr: string } {
   const stateDir = join(opts.backup, "state");
   const secret = "s".repeat(32);
@@ -220,10 +229,17 @@ function runPromote(opts: {
       ...(opts.release.configDigest
         ? [`export DPF_RELEASE_CONFIG_DIGEST=${shellQuote(opts.release.configDigest)}`]
         : ["unset DPF_RELEASE_CONFIG_DIGEST"]),
+      ...(opts.release.frozenStrata === false || !opts.release.configDigest ? ["unset DPF_RELEASE_CHANNEL_DIGEST DPF_RELEASE_PLATFORM_MANIFEST_DIGEST DPF_RELEASE_PLATFORM_OS DPF_RELEASE_PLATFORM_ARCHITECTURE"] : [`export DPF_RELEASE_CHANNEL_DIGEST=${shellQuote(opts.release.channelDigest ?? "")}`, `export DPF_RELEASE_PLATFORM_MANIFEST_DIGEST=${shellQuote(opts.release.platformManifestDigest ?? "")}`, `export DPF_RELEASE_PLATFORM_OS=${shellQuote(opts.release.platformOs ?? "linux")}`, `export DPF_RELEASE_PLATFORM_ARCHITECTURE=${shellQuote(opts.release.platformArchitecture ?? "amd64")}`]),
       `export GHCR_OWNER=${shellQuote(opts.release.owner)}`,
       `export DPF_TEST_RELEASE_SHA=${shellQuote(opts.targetSha)}`,
       `export DPF_TEST_RELEASE_TAG=${shellQuote(opts.release.tag)}`,
       `export DPF_TEST_RELEASE_CONFIG_DIGEST=${shellQuote(opts.release.configDigest ?? `sha256:${"c".repeat(64)}`)}`,
+      `export DPF_TEST_RELEASE_ENGINE_ID=${shellQuote(opts.release.engineImageId ?? opts.release.configDigest ?? `sha256:${"c".repeat(64)}`)}`,
+      `export DPF_TEST_RELEASE_REPO_ID=${shellQuote(opts.release.repoImageId ?? "")}`, `export DPF_TEST_RELEASE_REGISTRY_CONFIG_DIGEST=${shellQuote(opts.release.registryConfigDigest ?? "")}`,
+      `export DPF_TEST_RELEASE_REPO=ghcr.io/${shellQuote(opts.release.owner)}/dpf-portal`,
+      `export DPF_TEST_RELEASE_PLATFORM_MANIFEST_DIGEST=${shellQuote(opts.release.platformManifestDigest ?? `sha256:${"b".repeat(64)}`)}`,
+      `export DPF_TEST_RELEASE_OS=${shellQuote(opts.release.platformOs ?? "linux")}`,
+      `export DPF_TEST_RELEASE_ARCHITECTURE=${shellQuote(opts.release.enginePlatformArchitecture ?? opts.release.platformArchitecture ?? "amd64")}`,
       `export DPF_TEST_RELEASE_ASSETS=${shellQuote(toBashPath(opts.release.candidateAssets))}`,
       `export GIT_LOG=${shellQuote(toBashPath(opts.release.gitLog))}`,
       "export PROMOTE_COMPOSE_FILES='docker-compose.yml docker-compose.release.yml'",
@@ -264,9 +280,16 @@ function makeScratch(): { root: string; source: string; backup: string; fakeBin:
 
 describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run", () => {
   it.each([
-    { caller: "digest-bound caller", configDigest: `sha256:${"c".repeat(64)}` },
-    { caller: "legacy bootstrap caller", configDigest: undefined },
-  ])("promotes a verified release into a source-free install for a $caller", ({ configDigest }) => {
+    { caller: "classic-store digest-bound caller", configDigest: `sha256:${"c".repeat(64)}`, engineImageId: `sha256:${"c".repeat(64)}`, platformArchitecture: "amd64", expectedStatus: 0 },
+    { caller: "Docker Desktop containerd index-ID caller", configDigest: `sha256:${"c".repeat(64)}`, engineImageId: `sha256:${"a".repeat(64)}`, platformArchitecture: "amd64", expectedStatus: 0 },
+    { caller: "N-1 config-only Docker Desktop caller", configDigest: `sha256:${"c".repeat(64)}`, engineImageId: `sha256:${"a".repeat(64)}`, platformArchitecture: "amd64", frozenStrata: false, expectedStatus: 0 },
+    { caller: "N-1 index absent from RepoDigests", configDigest: `sha256:${"c".repeat(64)}`, engineImageId: `sha256:${"a".repeat(64)}`, repoImageId: `sha256:${"f".repeat(64)}`, platformArchitecture: "amd64", frozenStrata: false, expectedStatus: 1 },
+    { caller: "N-1 registry config mismatch", configDigest: `sha256:${"c".repeat(64)}`, engineImageId: `sha256:${"a".repeat(64)}`, registryConfigDigest: `sha256:${"f".repeat(64)}`, platformArchitecture: "amd64", frozenStrata: false, expectedStatus: 1 },
+    { caller: "partial modern packet", configDigest: `sha256:${"c".repeat(64)}`, engineImageId: `sha256:${"a".repeat(64)}`, platformArchitecture: "amd64", missingModernStratum: true, expectedStatus: 1 },
+    { caller: "legacy bootstrap caller", configDigest: undefined, engineImageId: `sha256:${"c".repeat(64)}`, platformArchitecture: "amd64", expectedStatus: 0 },
+    { caller: "unrecognized engine digest", configDigest: `sha256:${"c".repeat(64)}`, engineImageId: `sha256:${"f".repeat(64)}`, platformArchitecture: "amd64", expectedStatus: 1 },
+    { caller: "wrong engine platform", configDigest: `sha256:${"c".repeat(64)}`, engineImageId: `sha256:${"a".repeat(64)}`, platformArchitecture: "amd64", enginePlatformArchitecture: "arm64", expectedStatus: 1 },
+  ])("promotes a verified release into a source-free install for a $caller", ({ configDigest, engineImageId, platformArchitecture, enginePlatformArchitecture, frozenStrata, missingModernStratum, repoImageId, registryConfigDigest, expectedStatus }) => {
     const { root, source, backup, fakeBin } = makeScratch();
     const targetSha = "b".repeat(40);
     const candidateAssets = join(root, "candidate-assets");
@@ -317,8 +340,17 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
       writeFileSync(join(fakeBin, "git"), '#!/bin/sh\nprintf "git invoked: %s\\n" "$*" >> "$GIT_LOG"\nexit 97\n');
       chmodSync(join(fakeBin, "git"), 0o755);
 
-      const r = runPromote({ source, backup, targetSha, fakeBin, dockerLog, release: { tag: "v2.0.0", owner: "opendigitalproductfactory", configDigest, candidateAssets, gitLog } });
-      expect(r.status, r.stderr).toBe(0);
+      const release = {
+        tag: "v2.0.0", owner: "opendigitalproductfactory", channelDigest: `sha256:${"a".repeat(64)}`,
+        platformManifestDigest: missingModernStratum ? undefined : `sha256:${"b".repeat(64)}`, configDigest, engineImageId, platformOs: "linux",
+        platformArchitecture, enginePlatformArchitecture, frozenStrata, repoImageId, registryConfigDigest, candidateAssets, gitLog,
+      };
+      const r = runPromote({ source, backup, targetSha, fakeBin, dockerLog, release });
+      expect(r.status, r.stderr).toBe(expectedStatus);
+      if (expectedStatus !== 0) {
+        expect(r.stderr).toMatch(/(?:missing required variables|not a pulled repository digest|resolved config digest .* does not match|does not match resolved (?:config\/platform\/channel identities|candidate linux\/amd64))/);
+        return;
+      }
       expect(existsSync(gitLog)).toBe(false);
       expect(r.stdout).toContain(`step=done target=${targetSha}`);
       if (configDigest) {
