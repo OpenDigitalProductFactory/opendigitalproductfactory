@@ -1,5 +1,6 @@
 import { expect, it, vi } from "vitest";
 import { signTransitionPayload } from "@/lib/platform-runtime/transition-protocol";
+import { ok } from "@/lib/shared/action-result";
 
 type TestContext = { mocks: any; runSelfUpgrade: (input: any) => Promise<any>; installState: string; installStateHash: string };
 
@@ -19,7 +20,7 @@ export function registerCoreSelfUpgradeSuccessTest(input: {
 }) {
   it("returns succeeded status when promoter exits 0", async () => {
     const result = await input.runSelfUpgrade({ triggeredBy: "ops" });
-    expect(result).toMatchObject({ ok: true, status: "succeeded", runId: "SUR-AAAABBBB" });
+    expect(result).toMatchObject({ status: "succeeded", runId: "SUR-AAAABBBB" });
     expect(input.mocks.completeRun).toHaveBeenCalledWith("SUR-AAAABBBB");
   });
 }
@@ -39,7 +40,7 @@ export function configureReleaseUpgradeTest(input: {
   input.mocks.readFile.mockImplementation(async (path: string) => path.endsWith("install-state.json") ? input.installState : path.endsWith(".install-mode") ? "consumer" : "s".repeat(32));
   input.mocks.readCurrentContainerConfigDigest.mockResolvedValue(input.currentConfigDigest);
   input.mocks.readRegistryReleaseCandidate.mockResolvedValue({
-    ok: true,
+    ...ok(),
     candidate: { tag: "v2.0.0", sourceSha: input.sourceSha, channelDigest: `sha256:${"b".repeat(64)}`, platformManifestDigest: `sha256:${"c".repeat(64)}`, configDigest: input.targetConfigDigest },
   });
 }
