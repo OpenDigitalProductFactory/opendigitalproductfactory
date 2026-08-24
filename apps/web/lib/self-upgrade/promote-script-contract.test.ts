@@ -122,7 +122,10 @@ function runScript(
   env: Record<string, string | undefined>,
   extraArgs: string[] = [],
   stateOverrides: Record<string, unknown> = {},
-  options: { sourceProfileAdapter?: boolean } = {},
+  options: {
+    recoveryPathMode?: "canonical-missing-parent" | "outside-recovery-root";
+    sourceProfileAdapter?: boolean;
+  } = {},
 ) {
   const marker = basename(env.PROMOTE_SOURCE ?? "source").replace(/[^A-Za-z0-9-]/g, "-");
   const root = mkdtempSync(join(tmpdir(), `dpf-promote-contract-${marker}-`));
@@ -145,7 +148,20 @@ function runScript(
 
     const mapped = { ...env };
     if (mapped.PROMOTE_SOURCE !== undefined) mapped.PROMOTE_SOURCE = resolveBashPath(source);
-    if (mapped.PROMOTE_BACKUP_PATH !== undefined) mapped.PROMOTE_BACKUP_PATH = resolveBashPath(join(root, basename(mapped.PROMOTE_BACKUP_PATH)));
+    if (mapped.PROMOTE_BACKUP_PATH !== undefined) {
+      if (options.recoveryPathMode) {
+        const recoveryRoot = join(root, "backups");
+        mkdirSync(recoveryRoot, { recursive: true });
+        mapped.DPF_PROMOTER_RECOVERY_ROOT = resolveBashPath(recoveryRoot);
+        mapped.PROMOTE_BACKUP_PATH = resolveBashPath(join(
+          options.recoveryPathMode === "canonical-missing-parent" ? recoveryRoot : root,
+          "self-upgrade",
+          "SUR-contract",
+        ));
+      } else {
+        mapped.PROMOTE_BACKUP_PATH = resolveBashPath(join(root, basename(mapped.PROMOTE_BACKUP_PATH)));
+      }
+    }
     const envSource: Record<string, string | undefined> = { NODE_ENV: process.env.NODE_ENV ?? "test", DPF_PROMOTER_STATE_DIR: resolveBashPath(stateDir), ...mapped };
     const envAssignments = Object.entries(envSource).flatMap(([key, value]) => value === undefined ? [] : [`${key}=${quoteForBash(value)}`]);
     const command = ["env", "-i", 'PATH="$PATH"', ...envAssignments, "bash", quoteForBash(SCRIPT), "--self-upgrade", ...extraArgs.map(quoteForBash)].join(" ");
@@ -192,6 +208,26 @@ describe.skipIf(!BASH_AVAILABLE)("promote.sh --readiness host identity", () => {
     );
     expect(result.stdout).toContain("capability_projection_failed");
     expect(result.stdout).toContain("candidate source has no profile adapter");
+  }, READINESS_SCRIPT_TIMEOUT_MS);
+
+  it("accepts a run-specific recovery path whose canonical mounted root exists", () => {
+    const result = runScript(
+      BASE_ENV,
+      ["--readiness"],
+      { platform: "linux", arch: "amd64" },
+      { recoveryPathMode: "canonical-missing-parent" },
+    );
+    expect(result.stdout).not.toContain("recovery_parent_unavailable");
+  }, READINESS_SCRIPT_TIMEOUT_MS);
+
+  it("still rejects a missing recovery parent outside the canonical mounted root", () => {
+    const result = runScript(
+      BASE_ENV,
+      ["--readiness"],
+      { platform: "linux", arch: "amd64" },
+      { recoveryPathMode: "outside-recovery-root" },
+    );
+    expect(result.stdout).toContain("recovery_parent_unavailable");
   }, READINESS_SCRIPT_TIMEOUT_MS);
 
   it("resolves installer-owned identity when the N-1 caller sends no DPF_HOST_* env", () => {
