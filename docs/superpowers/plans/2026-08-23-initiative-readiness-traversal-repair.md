@@ -5,7 +5,9 @@ status: draft
 # Initiative readiness traversal repair implementation plan
 
 **Backlog item:** BI-F0715C9C  
-**Workroom:** WC-2ABA65F7  
+**Workroom:** WC-7FF8A505
+**Branch:** `fix/initiative-readiness-traversal-recovery`
+**Recovery base:** `f20a78f63dc1884eea0fc171d04556b4be8de32f`
 **Design:** `docs/superpowers/specs/2026-08-23-initiative-readiness-traversal-repair-design.md`
 
 ## Delivery contract
@@ -96,7 +98,7 @@ review is explicit and may not be inferred from the merge queue.
 ## Task 1 - Rebase and refresh Workroom scope
 
 Fetch `origin/main`, follow the repository rebase runbook, preserve existing DCO
-design commits, claim implementation/test/doc-index paths in WC-2ABA65F7, and
+design commits, claim implementation/test/doc-index paths in WC-7FF8A505, and
 record a fresh change-impact contract before Red.
 
 ## Task 2 - Red/green profile derivation
@@ -258,7 +260,7 @@ review of model-facing recovery copy; and `pnpm run pregate:preflight`.
 
 ## Task 12 - Governed publication
 
-Commit with one DCO trailer, synchronize WC-2ABA65F7 to the stable commit,
+Commit with one DCO trailer, synchronize WC-7FF8A505 to the stable commit,
 obtain fresh independent semantic review, run shared-lease exact-tree local CI
 and full pregate, push only green reviewed SHA, open a ready PR, read bot
 findings, run `pnpm pr:health`, and use the protected merge queue. Verify the

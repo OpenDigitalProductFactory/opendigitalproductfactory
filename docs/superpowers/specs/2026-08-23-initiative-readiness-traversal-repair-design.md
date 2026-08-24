@@ -5,7 +5,7 @@ status: draft
 # Initiative readiness traversal and external evidence reconciliation
 
 **Backlog item:** BI-F0715C9C  
-**Workroom:** WC-2ABA65F7  
+**Workroom:** WC-7FF8A505
 **Binding design:** `docs/superpowers/specs/2026-08-08-initiative-readiness-and-goal-completion-reconciliation-design.md`  
 **Policy change:** `initiative-readiness.v1` -> `initiative-readiness.v2`
 
@@ -448,21 +448,63 @@ human exists or the root policy is explicitly amended.
 
 The envelope is bound to:
 
-- BI `BI-F0715C9C`, Workroom `WC-2ABA65F7`, repository
+- BI `BI-F0715C9C`, Workroom `WC-7FF8A505`, repository
   `OpenDigitalProductFactory/opendigitalproductfactory`, and branch
-  `fix/initiative-readiness-bootstrap`;
+  `fix/initiative-readiness-traversal-recovery`;
+- recovery base `f20a78f63dc1884eea0fc171d04556b4be8de32f`;
 - the exact design and plan commit/blobs named by the post-amendment
   ratification, plus the ratified base commit;
 - test-first authorship, refactoring inside the same contracts, documentation,
   verification, DCO publication, independent review, protected PR, and merge
   queue actions only;
-- these path envelopes and their colocated tests:
-  `apps/web/lib/backlog/initiative-readiness/**`,
-  `apps/web/lib/work-capsules/{governed-work-claim,work-capsule-store,external-session-capture,mcp-handlers}*`,
-  `apps/web/lib/mcp/packs/{initiative-readiness-pack,work-capsules-pack,build-evidence-extra-pack,decomposition-pack,workforce-pack}*`,
-  `apps/web/lib/{mcp-task-submit,planning/plan-backlog-coverage}*`,
-  `apps/web/lib/govern/authority/{coworker-tool-authority-gate,resolve-coworker-tool-authority}*`,
-  the two BI-F0715C9C design/plan documents, and the generated docs index.
+- only the exact candidate files below; no directory-wide or adjacent-package
+  authority is implied:
+  - `apps/web/lib/backlog/initiative-baseline-repository.test.ts`
+  - `apps/web/lib/backlog/initiative-readiness-policy.test.ts`
+  - `apps/web/lib/backlog/initiative-readiness/baseline-repository.ts`
+  - `apps/web/lib/backlog/initiative-readiness/entry-adapter.test.ts`
+  - `apps/web/lib/backlog/initiative-readiness/evaluate.ts`
+  - `apps/web/lib/backlog/initiative-readiness/profiles.ts`
+  - `apps/web/lib/backlog/initiative-readiness/repository-artifact.test.ts`
+  - `apps/web/lib/govern/authority/authority-subject.ts`
+  - `apps/web/lib/govern/authority/coworker-authority-decision.test.ts`
+  - `apps/web/lib/govern/authority/coworker-authority-decision.ts`
+  - `apps/web/lib/govern/authority/coworker-tool-authority-gate.ts`
+  - `apps/web/lib/govern/authority/policy-authority-projector.test.ts`
+  - `apps/web/lib/govern/authority/policy-authority-projector.ts`
+  - `apps/web/lib/govern/authority/resolve-coworker-tool-authority.test.ts`
+  - `apps/web/lib/govern/authority/resolve-coworker-tool-authority.ts`
+  - `apps/web/lib/govern/authority/resolve-policy-action-authority.test.ts`
+  - `apps/web/lib/govern/authority/resolve-policy-action-authority.ts`
+  - `apps/web/lib/mcp-governed-execute-authority.cases.ts`
+  - `apps/web/lib/mcp-governed-execute.test.ts`
+  - `apps/web/lib/mcp-governed-execute.ts`
+  - `apps/web/lib/mcp/packs/build-evidence-extra-pack.ts`
+  - `apps/web/lib/mcp/packs/coworker-pack.test.ts`
+  - `apps/web/lib/mcp/packs/coworker-pack.ts`
+  - `apps/web/lib/mcp/packs/initiative-readiness-pack.ts`
+  - `apps/web/lib/planning/plan-backlog-coverage.test.ts`
+  - `apps/web/lib/planning/plan-backlog-coverage.ts`
+  - `apps/web/lib/planning/plan-backlog-dependency-projection.ts`
+  - `apps/web/lib/tak/initiative-readiness-tool-grants.ts`
+  - `apps/web/lib/work-capsules/external-session-capture.test.ts`
+  - `apps/web/lib/work-capsules/external-session-capture.ts`
+  - `apps/web/lib/work-capsules/governed-work-claim.test.ts`
+  - `apps/web/lib/work-capsules/governed-work-claim.ts`
+  - `apps/web/lib/work-capsules/work-capsule-store-types.ts`
+  - `docs/superpowers/plans/2026-08-23-initiative-readiness-traversal-repair.md`
+  - `docs/superpowers/specs/2026-08-23-initiative-readiness-traversal-repair-design.md`
+
+The earlier envelope for `WC-2ABA65F7` and
+`fix/initiative-readiness-bootstrap` was revoked by a non-fast-forward force
+update and subsequent Workroom identity pollution. Its audit history remains
+immutable, but it authorizes nothing. Recovery proceeds only through
+`WC-7FF8A505` and `fix/initiative-readiness-traversal-recovery`; the abandoned
+Workroom and compromised branch may not be revived, rewritten, or used as
+review evidence. The expanded authority and execution paths above are named
+explicitly because the pre-recovery candidate touched them while the prior
+path envelope did not. That mismatch is corrected before re-ratification; a
+scope claim alone never amends an authorization envelope.
 
 When effective, it authorizes production authorship only. It does not change the failed
 initiative-readiness claim, satisfy or fabricate a receipt, grant reviewer
@@ -510,8 +552,8 @@ or test mutation starts only after the operator supplies this text with the
 post-amendment immutable values filled in:
 
 > I ratify the one-time first-deployment bootstrap envelope for BI-F0715C9C
-> and WC-2ABA65F7 in OpenDigitalProductFactory/opendigitalproductfactory on
-> fix/initiative-readiness-bootstrap. My authority is the current
+> and WC-7FF8A505 in OpenDigitalProductFactory/opendigitalproductfactory on
+> fix/initiative-readiness-traversal-recovery. My authority is the current
 > Mark-approved WWMD criteria; I accept DI-568FF23AF27B's explicit,
 > autonomy-eligible policy-derived-second-check recommendation, corroborated
 > by DI-5B6BF3990A83. This
