@@ -334,7 +334,9 @@ change publishes; it will not mutate these paths in parallel.
 - `BI-B131F357` and `WC-DD1EF64C` resolve with immutable plan commit
   `544830a220adbda0570da17e391dabd0d429b1fc` and provider blob
   `5c1b7349c2848f6676ea8e4e075105b6526bb144`.
-- `BI-91AF30A5` is the verified tooling gap. The remediation's former
+- `BI-6804F720` is the canonical routing defect. `BI-91AF30A5` was identified
+  during reproduction and later retired as a duplicate; related plan-coverage
+  remediation remains tracked by `BI-0996913C`. The remediation's former
   `BI-B9403248` citation was queried and returned `not_found`; current main no
   longer hardcodes it.
 - Coworker discovery resolves `AGT-WS-REVIEW` (Change Reviewer). The reviewer

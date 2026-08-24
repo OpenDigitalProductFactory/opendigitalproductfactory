@@ -4,8 +4,8 @@ status: active
 
 # External initiative-review workflow repair
 
-- **Primary backlog item:** `BI-91AF30A5`
-- **Routing dependency:** `BI-6804F720`
+- **Primary backlog item:** `BI-6804F720`
+- **Related plan-coverage defect:** `BI-0996913C`
 - **Workroom:** `WC-12BC22D4`
 - **Design:** [`2026-08-24-external-mcp-coworker-thread-context-design.md`](../specs/2026-08-24-external-mcp-coworker-thread-context-design.md)
 - **Architecture decision:** `DI-BCCA7F3AC101` — use the existing auth-bound remote-task substrate for threadless external MCP callers
@@ -20,7 +20,7 @@ This is one workflow repair, not two independently shippable changes. The reques
 
 | Key | Backlog item | Independently shippable | Depends on |
 | --- | --- | --- | --- |
-| `external-initiative-review` | `BI-91AF30A5` | no | existing coworker Principal/grant and initiative-readiness receipt writers |
+| `external-initiative-review` | `BI-6804F720` | no | existing coworker Principal/grant and initiative-readiness receipt writers |
 
 ## Traceability
 
