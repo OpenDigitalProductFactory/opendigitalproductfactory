@@ -116,7 +116,26 @@ Decision: `decomposed` — each independently shippable deliverable maps to its 
 - `routing-readiness`: `BI-D25F867D`; independent; verifies route reconciliation, readiness, classification, and system attribution.
 - `identity-voice`: `BI-45B95929`; independent; verifies identity hierarchy and independent TTS/STT capability states.
 
-Coverage receipt: pending committed plan artifact.
+Coverage receipt: blocked by `BI-B9403248`. The live coverage service resolved the signed,
+provider-verified plan blob at commit `2bb0b9772d7af23e9def4ea7a34be5a47c909829`,
+then reported that `BI-D25F867D` has no initiative-scope baseline and that this baseline is
+not currently recordable from an MCP session. Per the service's required fallback, this
+section is the authoritative coverage table until that tool gap is repaired.
+
+Traceability:
+
+- `routing-readiness` -> `BI-D25F867D`; contracts: Workroom `WC-BB6874E6` impact contract
+  and the BI acceptance contract; requirements: executable readiness, system attribution,
+  and onboarding isolation; flows: route -> fallback -> reconciliation -> bounded reroute,
+  then agentic loop -> typed dead-end -> system timeline message; verification: Phase 1 and
+  Phase 2 suites.
+- `identity-voice` -> `BI-45B95929`; contracts: Workroom `WC-BB6874E6` impact contract and
+  the BI acceptance contract; requirements: identity hierarchy, accessible authorship, and
+  independent TTS/STT readiness; flows: standing-COO presentation -> header/message
+  authorship and voice status -> synthesis hook -> speaker control; verification: Phase 3
+  and Phase 4 suites.
+- Dependencies: neither deliverable depends on the other for correctness; the shared PR is
+  an operator-requested delivery boundary.
 
 ## Risks and rollback
 
