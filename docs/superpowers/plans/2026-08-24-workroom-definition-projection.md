@@ -83,7 +83,7 @@ Affected tests:
 - Decision: atomic
 - Parent: `BI-80BECE1E`
 - Rationale: Definition versioning, occurrence trace, and progressive disclosure are one consumer contract. Shipping any one without the others either exposes no usable behavior or leaves the existing Workroom surface inconsistent with its read model.
-- Receipt: pending governed coverage write after this mapping is committed.
+- Receipt: `cmt8evhbb0p4d01mg1ijx4m6x`
 - Dependencies: none
 
 Deliverable mapping:
