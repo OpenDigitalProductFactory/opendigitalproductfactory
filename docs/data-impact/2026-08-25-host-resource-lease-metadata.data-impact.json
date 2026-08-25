@@ -7,8 +7,8 @@
     "Prisma-to-EA current-state data-model mirror"
   ],
   "migration": {
-    "name": "20260825160000_add_nonprod_lease_resource_contract",
-    "backfill": "none — all three fields are nullable, so historical preview and local-CI leases retain their original semantics without fabricated resource attribution"
+    "name": "20260825160000_add_nonprod_lease_resource_contract + 20260825161500_add_nonprod_lease_process_identity",
+    "backfill": "none — all four fields are nullable, so historical preview and local-CI leases retain their original semantics without fabricated resource attribution"
   },
   "tests": [
     "apps/web/lib/nonprod/host-resource-policy.test.ts",
