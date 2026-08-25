@@ -6,10 +6,12 @@
 
 ## Problem
 
-The canonical chat adapter already normalizes provider-native Anthropic
-`tool_use` blocks, OpenAI `tool_calls`, JSON `<tool_call>` blocks, and the
-Gemma/Llama template variant into one internal tool-call shape. A governed
-Qwen3.8 27B run instead emitted this provider prompt format as ordinary text:
+The runtime has two overlapping textual tool-call extractors. The shared
+cross-adapter extractor handles CLI-style `tool_use` JSON, while the chat-only
+helper handles JSON `<tool_call>` and the Gemma/Llama template variant. The
+shared extractor also accepts a fenced or inline JSON object whose first key is
+`name` or `tool`; explanatory prose can therefore be mistaken for an action.
+A governed Qwen3.8 27B run emitted this provider prompt format as ordinary text:
 
 ```text
 <antml:invoke name="read_source_at_version">
@@ -31,9 +33,10 @@ path can authorize and execute it.
 **OBJ-FAIL-CLOSED:** Treat incomplete, malformed, ambiguous, or unsupported
 markup as text, never as an executable tool call.
 
-**OBJ-CANONICAL-PATH:** Reuse the chat adapter, internal tool-call shape,
-agentic-loop availability check, grants, argument validation, authority gate,
-and `ToolExecution` audit. Add no parallel executor or approval path.
+**OBJ-CANONICAL-PATH:** Consolidate textual normalization in the existing shared
+cross-adapter extractor, then reuse the internal tool-call shape, agentic-loop
+availability check, grants, argument validation, authority gate, and
+`ToolExecution` audit. Add no parallel parser, executor, or approval path.
 
 **OBJ-SCOPE:** Change only textual response normalization and its focused tests.
 Do not alter model floors, assignments, prompts, grants, writer authority,
@@ -41,10 +44,13 @@ subject binding, or reviewer policy.
 
 ## Existing substrate
 
-- `apps/web/lib/inference/ai-inference.ts::extractTextualToolCalls` is the
-  canonical textual-response normalizer.
-- `apps/web/lib/routing/chat-adapter.ts` invokes that normalizer when a local or
-  OpenAI-compatible response leaks textual tool markers.
+- `apps/web/lib/routing/extract-tool-calls.ts::extractToolCalls` is already the
+  shared textual-response normalizer for Codex CLI, Claude CLI, chat fallback,
+  and the agentic loop.
+- `apps/web/lib/inference/ai-inference.ts::extractTextualToolCalls` is an older
+  chat-only duplicate for JSON `<tool_call>` and Gemma/Llama markers. The repair
+  removes this duplicate after moving those recognized formats to the shared
+  extractor.
 - `apps/web/lib/tak/agentic-loop.ts` resolves each normalized name against the
   attached tool definitions before calling `governedExecuteTool`; an unknown
   name is rejected as unavailable.
@@ -71,16 +77,26 @@ for parameter text and rejects unknown or unterminated entity references. It
 does not add DTD, external-entity, namespace, or general XML processing. Source:
 <https://www.w3.org/TR/xml/>.
 
-The existing DPF normalizer is the local benchmark: it already converts the two
-other textual formats into the same internal shape. The new branch must preserve
-those tests and route the third observed format through the same downstream
-authorization boundary.
+The existing DPF adapters are the local benchmark: they already converge
+provider-native calls on the same internal shape. The new branch must preserve
+those structured paths while consolidating every textual format at one shared,
+strict boundary.
+
+## Architecture decision
+
+WWMD DecisionInteraction **DI-2A4178058018** compared a chat-only patch,
+consolidation in the shared extractor, and a new parser module. It selected
+`consolidate-shared-extractor` with high confidence (composite 7.262, margin
+1.139), `autonomyEligible=true`, and no commandment conflict. The decision
+avoids a second parser while bounding the larger cross-adapter blast radius with
+one compatibility matrix.
 
 ## Design
 
 ### Narrow grammar
 
-Add one pure `antml` extraction branch to `extractTextualToolCalls`:
+Make `routing/extract-tool-calls.ts` the sole textual parser and add one pure
+`antml` branch there:
 
 1. Recognize only a complete `<antml:invoke ...>...</antml:invoke>` block.
 2. Require exactly one valid `name` attribute and only supported optional call
@@ -97,17 +113,30 @@ Add one pure `antml` extraction branch to `extractTextualToolCalls`:
 7. Remove only successfully normalized blocks from `cleanText`. Invalid or
    truncated markup remains visible text and produces no call.
 
+The shared parser keeps only explicit invocation envelopes:
+
+- complete `<tool_use>...</tool_use>` and `<tool_call>...</tool_call>` wrappers;
+- complete Gemma/Llama `<|tool_call>...<tool_call|>` markers;
+- complete `<antml:invoke>...</antml:invoke>` blocks; and
+- inline JSON carrying `type:"tool_use"`, or an explicitly `tool_use`-labelled
+  fence.
+
+A plain or `json`-labelled fenced object with only `name`/`tool` is explanatory
+text, not an invocation. Removing that ambiguous acceptance is part of the
+fail-closed contract, not a prompt workaround.
+
 The extractor produces the existing `{ id, name, arguments }` shape. A missing
 provider call ID receives a deterministic per-response ordinal ID; it grants no
 authority and is used only to correlate a result inside the turn.
 
 ### Activation and authority
 
-`chat-adapter.ts` adds `<antml:invoke` to the existing textual-marker detection.
-It does not execute a call. The agentic loop still must find the name in the
-attached surface, then pass the arguments through the canonical schema, grant,
-subject, sensitivity, approval, and audit gates. Syntactically valid but
-unattached names remain non-executable.
+`chat-adapter.ts` calls the shared normalizer for non-structured text and uses
+its `cleanText`; CLI and agentic-loop callers retain the array-only compatibility
+entry point over the same implementation. Parsing does not execute a call. The
+agentic loop still must find the name in the attached surface, then pass the
+arguments through the canonical schema, grant, subject, sensitivity, approval,
+and audit gates. Syntactically valid but unattached names remain non-executable.
 
 ### Complexity and scale ceiling
 
@@ -123,7 +152,7 @@ agent-host reliability rather than this adapter repair.
 | --- | --- |
 | **AC-OBSERVED-FORM** | The exact observed `read_source_at_version` block normalizes to one call with exact `path` and `version`. |
 | **AC-TYPED-PARAMS** | String, escaped text, boolean, number, null, array, and object parameter cases preserve their intended values. |
-| **AC-FAIL-CLOSED** | Truncated blocks, malformed nesting/attributes/entities/JSON, duplicate parameters, and stray markup produce no call and remain text. |
+| **AC-FAIL-CLOSED** | Truncated blocks, malformed nesting/attributes/entities/JSON, duplicate parameters, stray markup, and bare/fenced explanatory JSON without an explicit invocation envelope produce no call and remain text. |
 | **AC-CANONICAL-AUTHORITY** | Existing OpenAI, Anthropic, JSON `<tool_call>`, and Gemma/Llama tests remain green; unknown/unattached names cannot pass the agentic-loop availability gate. |
 | **AC-LIVE-REVIEWER** | A governed full-clone preview proves the immutable BI-9DC21917 reader and writer execute through normal authority and persist the required receipt/baseline. Prose is not evidence. |
 

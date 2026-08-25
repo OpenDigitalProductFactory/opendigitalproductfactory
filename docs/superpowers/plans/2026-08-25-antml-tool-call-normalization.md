@@ -8,25 +8,26 @@ provider-verified plan receipt.
 
 ## Delivery shape
 
-This is one atomic repair. Parser normalization and chat-adapter activation are
-not independently useful: shipping either alone leaves the observed reviewer
-route broken. Both source edits and their regression tests remain in
-BI-B87D7A69 and one PR.
+This is one atomic repair. Shared-parser consolidation and chat-adapter
+activation are not independently useful: shipping either alone leaves either
+the observed reviewer route broken or two divergent parsers. All source edits
+and their regression tests remain in BI-B87D7A69 and one PR. The chosen shape
+is governed by DI-2A4178058018 (`consolidate-shared-extractor`).
 
 ## Phase 1 — Establish the failing contract
 
 **Requirements:** OBJ-ANTML-RECOVERY, OBJ-FAIL-CLOSED, AC-OBSERVED-FORM,
 AC-TYPED-PARAMS, AC-FAIL-CLOSED.
 
-1. Add focused tests to
-   `apps/web/lib/inference/ai-inference-toolcalls.test.ts` for the exact observed
-   reader call, typed parameters, escaping, deterministic IDs, and rejected
-   malformed/duplicate/truncated cases.
-2. Add a `chat-adapter.test.ts` response fixture proving an OpenAI-compatible
-   local response containing a complete `antml:invoke` reaches the textual
-   normalizer.
-3. Run both focused suites and preserve the expected RED caused by zero
-   extracted calls.
+1. Extend `apps/web/lib/routing/codex-cli-tool-extract.test.ts` with the exact
+   observed reader call, typed parameters, escaping, deterministic IDs, and
+   rejected malformed/duplicate/truncated cases.
+2. Change its historical fenced-JSON expectation: an explanatory
+   `json`-labelled block or inline `{name:...}` object without an explicit
+   invocation envelope must produce no call, while an explicit
+   `tool_use`-labelled fence remains valid.
+3. Run the focused suite and preserve the expected RED: `antml` is not
+   extracted and ambiguous JSON is still accepted.
 
 **Verification:** the new observed-form tests fail against the design-only tree
 for the missing normalization, while existing structured/textual tests retain
@@ -36,19 +37,23 @@ their prior result.
 
 **Requirements:** OBJ-CANONICAL-PATH, OBJ-SCOPE, AC-CANONICAL-AUTHORITY.
 
-1. Add the bounded `antml` grammar and entity/scalar decoder inside
-   `extractTextualToolCalls`.
-2. Add the new complete-start marker to the chat adapter's existing textual
-   fallback condition.
-3. Keep the internal tool-call shape and downstream availability, grant,
+1. Consolidate JSON `<tool_call>`, Gemma/Llama, explicit `tool_use`, and the
+   bounded `antml` grammar inside `routing/extract-tool-calls.ts`.
+2. Remove the duplicate `extractTextualToolCalls` helper from
+   `inference/ai-inference.ts`; route non-structured chat text through the shared
+   normalizer and its `cleanText` result.
+3. Reject bare/`json`-labelled fenced name/tool objects while preserving
+   explicit invocation wrappers and canonical inline `type:"tool_use"` calls.
+4. Keep the internal tool-call shape and downstream availability, grant,
    schema, subject, approval, and audit gates unchanged.
-4. Refactor only within the existing normalizer when the green tests expose a
+5. Refactor only within the existing normalizer when the green tests expose a
    simpler pure helper boundary.
 
-**Verification:** both focused suites pass; graph-linked
-`ai-inference.call-provider.test.ts` and `ai-inference.test.ts` also pass; source
-inspection confirms `agentic-loop.ts` still rejects names absent from the
-attached tools.
+**Verification:** the shared-extractor suite and graph-linked
+`chat-adapter.test.ts`, `cli-adapter.test.ts`, `codex-cli-adapter.test.ts`,
+`agentic-loop.test.ts`, `ai-inference.call-provider.test.ts`, and
+`ai-inference.test.ts` pass; source inspection confirms `agentic-loop.ts` still
+rejects names absent from the attached tools.
 
 ## Phase 3 — Functional and architectural gate
 
