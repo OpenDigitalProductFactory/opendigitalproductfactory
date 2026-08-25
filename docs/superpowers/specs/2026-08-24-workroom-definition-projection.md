@@ -8,29 +8,19 @@ status: active
 
 ## Purpose
 
-Realize the first Workroom definition/instance slice through the existing Work
-Case source registry, read model, and Workspace route. The canonical business
-meaning remains in
-[`docs/architecture/workroom-vocabulary-boundary.md`](../../architecture/workroom-vocabulary-boundary.md)
-and Section 9.5 of the four-portfolio operating standard. This specification
-defines only the atomic adapter change required to make that architecture real.
+Realize the [canonical definition/instance boundary](../../architecture/workroom-vocabulary-boundary.md)
+through the existing Work Case projection and Workspace route.
 
 ## Objective
 
-1. **OBJ-WORKROOM-IDENTITY-001:** Distinguish a reusable Workroom definition from the occurrence carrying work through the existing Work Case projection and Workspace route, without requiring development evidence or adding a parallel platform surface.
+1. **OBJ-WR-001:** Distinguish a reusable Workroom definition from its occurrence without requiring development evidence or a parallel surface.
 
 ## Acceptance
 
 | Acceptance | Objectives | Requirement | Evidence |
 |---|---|---|---|
-| AC-WORKROOM-001 | OBJ-WORKROOM-IDENTITY-001 | Every registered Work Case source has a stable definition key and positive version owned by the source registry. | registry invariant test |
-| AC-WORKROOM-002 | OBJ-WORKROOM-IDENTITY-001 | `WorkroomView` carries definition identity and an instance trace with its primary source, current cycle, and active carrier references. | read-model tests |
-| AC-WORKROOM-003 | OBJ-WORKROOM-IDENTITY-001 | Unknown sources expose no invented definition, and ordinary business rooms require no repository, worktree, PR, or CI evidence. | unknown-source test and architecture contract |
-| AC-WORKROOM-004 | OBJ-WORKROOM-IDENTITY-001 | The existing route defaults to Overview; Details reveals activity, participants, evidence, receipts, and technical references. | component and served-route checks |
-| AC-WORKROOM-005 | OBJ-WORKROOM-IDENTITY-001 | The change introduces no schema, migration, route, API, queue, or parallel definition registry. | exact-tree integration gate |
-
-## Verification
-
-Registry invariants, pure read-model tests, both disclosure states, related
-Workroom projections, TypeScript, prose/style guards, served-route UX evidence,
-and the exact committed integration gate must pass in the same PR.
+| AC-WR-001 | OBJ-WR-001 | The registry owns a stable definition key and positive version. | test |
+| AC-WR-002 | OBJ-WR-001 | `WorkroomView` has definition plus occurrence source, cycle, and carriers. | test |
+| AC-WR-003 | OBJ-WR-001 | Unknown definitions stay null; development evidence is optional. | test |
+| AC-WR-004 | OBJ-WR-001 | Overview is default; Details reveals work, evidence, and raw refs. | test |
+| AC-WR-005 | OBJ-WR-001 | No schema, route, API, queue, or parallel registry is added. | gate |
