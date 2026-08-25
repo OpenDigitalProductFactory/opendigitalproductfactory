@@ -14,15 +14,30 @@ Three exact-tree local-CI attempts for the frozen self-upgrade candidate complet
 
 The watchdog currently evaluates portal, MCP, Docker, and PostgreSQL together. Its sample is healthy only when every surface is healthy, but its hysteresis state is a single scalar shared by all surfaces. That conflates independent transient misses and creates a false cross-surface fence.
 
+The first repair reached `origin/main` through PR #4643 and removed that
+cross-surface counter. Two later gates on immutable candidate
+`0dc592df29605c59860bd71ee3337d1299ff60a1` then exposed the remaining
+same-surface boundary. During OCI tarball handoff, portal, Docker, and
+PostgreSQL stayed healthy while the MCP probe missed its 2.5-second request
+budget twice. The first gate had already passed exhaustive tests and compiled
+the production application; the explicit retry reused cached build output and
+reproduced the two MCP misses. Evidence receipts are
+`cmt8di8830odw01mgdrnl3u7j` and `cmt8dohy80oky01mg5lj0p5hm`.
+
 ## Required behavior
 
 - Keep the strict preflight invariant: all four surfaces must be healthy before build work starts.
 - Track consecutive misses independently for portal, MCP, Docker, and PostgreSQL during the build watchdog.
 - Reset only the counter for a surface that recovers.
-- Fence when any one surface reaches the configured consecutive-failure limit.
+- Keep portal, Docker, and PostgreSQL fail-closed at two consecutive misses.
+- Give the authenticated MCP probe a three-miss build-watchdog boundary, so
+  two bounded request misses under OCI handoff can recover while a third still
+  fences sustained degradation.
 - Treat an absent probe as unhealthy and preserve the existing fail-closed exit classification.
-- Report the surface or surfaces that breached the limit so the evidence is actionable.
-- Do not change the configured limit, probe cadence, product gates, or candidate under test.
+- Report both the per-surface counters and effective limits so the evidence is
+  actionable.
+- Do not change probe cadence, per-request timeout, product gates, or the
+  candidate under test.
 
 ## Test-first implementation
 
@@ -31,8 +46,25 @@ The watchdog currently evaluates portal, MCP, Docker, and PostgreSQL together. I
 3. Add a failing regression proving a recovered surface resets only its own counter while another surface retains its consecutive history.
 4. Preserve and run the strict all-surface preflight cases, including missing-probe behavior.
 5. Replace the shared scalar with bounded per-surface state and include the tripping surface names in the terminal result.
-6. Run the focused watchdog suite, pregate, and governed exact-tree local CI before publication.
+6. Add a regression that two consecutive MCP request misses recover at the
+   default boundary, and a counterexample that the third miss fences.
+7. Run the focused watchdog/bounded-build suite, pregate, and governed
+   exact-tree local CI before publication.
+
+## Backlog coverage
+
+- Decision: atomic
+- Parent: `BI-9DC21917`
+- Receipt: pending
+- Dependencies: none
+- Deliverable: `local-ci-per-surface-control-plane-fencing` → `BI-9DC21917`
+- Rationale: preflight, per-surface counters, surface-specific hysteresis,
+  evidence fields, and fail-closed terminal classification are one watchdog
+  safety boundary.
 
 ## Acceptance
 
-The repair is accepted only when the focused tests prove alternating-surface tolerance and same-surface fail-closed behavior, semantic review passes on the committed tree, and one unchanged-SHA local-CI rerun completes without the false global-counter fence.
+The repair is accepted only when focused tests prove alternating-surface
+tolerance, the MCP-specific recovery window, and same-surface fail-closed
+behavior; semantic review covers the committed tree; and one unchanged-SHA
+local-CI rerun completes without a false control-plane fence.
