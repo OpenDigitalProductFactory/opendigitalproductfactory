@@ -7,13 +7,23 @@ export type LocalProviderCapacityDeferralReason =
   | "local-ci-capacity-reservation-unavailable";
 
 export type LocalProviderCapacityStatus =
-  | { available: true; reason: null }
-  | { available: false; reason: LocalProviderCapacityDeferralReason };
+  | { available: true; reason: null; expectedFreeAt?: null }
+  | {
+    available: false;
+    reason: LocalProviderCapacityDeferralReason;
+    /**
+     * When the blocking claim's own contract says the host comes free
+     * (BI-94D44FDB). Null when nothing is blocking us that we can read — an
+     * unproven-capacity deferral has no window to report.
+     */
+    expectedFreeAt?: Date | null;
+  };
 
 type LeaseReader = () => Promise<Array<{
   environmentKey: string;
   status?: string;
   claimKey?: string | null;
+  expiresAt?: Date | null;
 }>>;
 
 /**
@@ -37,10 +47,31 @@ function contendsForInference(lease: { claimKey?: string | null }): boolean {
 }
 
 export class LocalProviderCapacityDeferredError extends Error {
-  constructor(public readonly reason: LocalProviderCapacityDeferralReason) {
+  constructor(
+    public readonly reason: LocalProviderCapacityDeferralReason,
+    /**
+     * When the blocking claim's contract says the host comes free
+     * (BI-94D44FDB). Carried on the error so the owner-facing reply can name a
+     * window instead of an open-ended wait: measured over seven days on the
+     * live install, a real gate holds the host for ~195s on average, which is
+     * short enough to wait out and far too long to leave unexplained.
+     */
+    public readonly expectedFreeAt: Date | null = null,
+  ) {
     super(`Local provider dispatch deferred: ${reason}`);
     this.name = "LocalProviderCapacityDeferredError";
   }
+}
+
+/** The soonest a blocking claim releases the host, or null if none is readable. */
+function earliestExpiry(
+  leases: ReadonlyArray<{ expiresAt?: Date | null }>,
+): Date | null {
+  const times = leases
+    .map((lease) => lease.expiresAt)
+    .filter((value): value is Date => value instanceof Date && !Number.isNaN(value.getTime()));
+  if (times.length === 0) return null;
+  return times.reduce((soonest, next) => (next < soonest ? next : soonest));
 }
 
 /** Authoritative host-capacity policy shared by every local inference boundary. */
@@ -51,22 +82,40 @@ export async function inspectLocalProviderCapacity(input: {
     ?? (() => listCapacityReservingNonprodEnvironmentLeases({}));
   try {
     const reservations = await listCapacityLeases();
-    if (reservations.some((lease) => (
+    const blocking = (status: string) => reservations.filter((lease) => (
       lease.environmentKey === "local-integration-ci"
-      && lease.status === "active"
+      && lease.status === status
       && contendsForInference(lease)
-    ))) {
-      return { available: false, reason: "local-ci-active-capacity-reservation" };
+    ));
+
+    const active = blocking("active");
+    if (active.length > 0) {
+      return {
+        available: false,
+        reason: "local-ci-active-capacity-reservation",
+        expectedFreeAt: earliestExpiry(active),
+      };
     }
     // A live queued claim is bounded by its heartbeat/expiry contract. Giving
     // it precedence over *new* local inference reserves the next safe host
     // window without killing provider work that was already in flight.
-    if (reservations.some((lease) => (
-      lease.environmentKey === "local-integration-ci"
-      && lease.status === "queued"
-      && contendsForInference(lease)
-    ))) {
-      return { available: false, reason: "local-ci-queued-capacity-reservation" };
+    //
+    // Deliberately UNCHANGED (BI-94D44FDB). The obvious move was to drop the
+    // queued deferral here as DI-405E6765ED90 did for the short-call boundary,
+    // but the evidence does not support it: over seven days on the live install
+    // the queue held 3 rows, not a standing backlog, because BI-D933A328's
+    // contendsForInference filter already removed the dev-portal flood that
+    // made it permanently non-empty (998 of 1,006 expired claims were
+    // dev-portal). The starvation that remains is `active` holds — ~300 real
+    // gate runs averaging 195s — so changing the queued rule would trade a
+    // reasoned safety property for no measured gain.
+    const queued = blocking("queued");
+    if (queued.length > 0) {
+      return {
+        available: false,
+        reason: "local-ci-queued-capacity-reservation",
+        expectedFreeAt: earliestExpiry(queued),
+      };
     }
     return { available: true, reason: null };
   } catch {
@@ -80,7 +129,9 @@ export async function assertLocalProviderCapacityAvailable(input: {
   listCapacityLeases?: LeaseReader;
 } = {}): Promise<void> {
   const status = await inspectLocalProviderCapacity(input);
-  if (!status.available) throw new LocalProviderCapacityDeferredError(status.reason);
+  if (!status.available) {
+    throw new LocalProviderCapacityDeferredError(status.reason, status.expectedFreeAt ?? null);
+  }
 }
 
 /** Completion-adapter boundary: remote providers remain independent of host leases. */
@@ -141,10 +192,10 @@ export async function inspectShortCallLocalCapacity(input: {
   const deadline = Math.max(0, waitMs);
   let waited = 0;
   for (;;) {
-    let active: boolean;
+    let active: Array<{ expiresAt?: Date | null }>;
     try {
       const reservations = await listCapacityLeases();
-      active = reservations.some((lease) => (
+      active = reservations.filter((lease) => (
         lease.environmentKey === "local-integration-ci" && lease.status === "active"
       ));
     } catch {
@@ -153,9 +204,13 @@ export async function inspectShortCallLocalCapacity(input: {
       return { available: false, reason: "local-ci-capacity-reservation-unavailable" };
     }
 
-    if (!active) return { available: true, reason: null };
+    if (active.length === 0) return { available: true, reason: null };
     if (waited >= deadline) {
-      return { available: false, reason: "local-ci-active-capacity-reservation" };
+      return {
+        available: false,
+        reason: "local-ci-active-capacity-reservation",
+        expectedFreeAt: earliestExpiry(active),
+      };
     }
     await sleep(SHORT_CALL_POLL_MS);
     waited += SHORT_CALL_POLL_MS;
@@ -168,5 +223,7 @@ export async function assertShortCallLocalCapacityAvailable(input: {
   sleep?: (ms: number) => Promise<void>;
 } = {}): Promise<void> {
   const status = await inspectShortCallLocalCapacity(input);
-  if (!status.available) throw new LocalProviderCapacityDeferredError(status.reason);
+  if (!status.available) {
+    throw new LocalProviderCapacityDeferredError(status.reason, status.expectedFreeAt ?? null);
+  }
 }
