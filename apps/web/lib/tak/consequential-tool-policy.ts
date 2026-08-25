@@ -36,6 +36,12 @@ export type ConsequentialToolClassification = {
 export const ALIGNMENT_CONSEQUENTIAL_TOOL_NAMES = [
   "create_digital_product",
   "create_marketing_campaign",
+  // Banking books loop (BI-DE27D34E, S-FIN): setting up a real account and
+  // importing a statement move money-of-record, so they route the governance
+  // gate for owner approval. Categorization/matching are ordinary, reversible
+  // mutations and intentionally stay off this list.
+  "create_bank_account",
+  "import_bank_statement",
 ] as const;
 const EXPLICIT = new Set<string>(ALIGNMENT_CONSEQUENTIAL_TOOL_NAMES);
 /**
