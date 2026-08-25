@@ -15,6 +15,7 @@ import type { InstallationEnvironmentClass } from "@dpf/db/installation-operatin
 import {
   ESTATE_IDENTITY_CONFIG_KEY,
   ESTATE_NAME_ENV_VAR,
+  formatInstallationBadge,
   normalizeEstateName,
   parsePortalEstateIdentityDeclaration,
   resolveEstateNamePrecedence,
@@ -22,7 +23,10 @@ import {
   type PortalEstateIdentityDeclarationV1,
   type ResolvedInstallationIdentity,
 } from "@/lib/install/estate-identity-contract";
-import { INSTALL_STATE_PATH } from "@/lib/install/environment-class";
+import {
+  INSTALL_STATE_PATH,
+  loadEnvironmentClassResolution,
+} from "@/lib/install/environment-class";
 
 export * from "@/lib/install/estate-identity-contract";
 
@@ -129,4 +133,38 @@ export async function resolveInstallationIdentity(input: {
     isProduction: input.environmentClass === "production",
     shortDeviceId,
   };
+}
+
+/**
+ * Resolve the header badge for this installation, or null on production.
+ *
+ * The shell layout calls this once per render and passes the result to `Header`
+ * as a plain string. Both halves come from the SAME resolvers the operations
+ * page uses, so the header cannot claim an environment class the detail page
+ * would contradict.
+ *
+ * Fails safe rather than open: any unreadable tier degrades toward the cautious
+ * environment class, which is `production` — and a production install renders no
+ * badge. A resolution failure therefore hides the badge; it can never invent one,
+ * and it can never mislabel a production box as development.
+ */
+export async function loadInstallationBadge(
+  store: EstateIdentityStore,
+  options: {
+    env?: Record<string, string | undefined>;
+    readText?: (path: string) => Promise<string>;
+  } = {},
+): Promise<string | null> {
+  try {
+    const [environment, estate] = await Promise.all([
+      loadEnvironmentClassResolution(store, options),
+      loadEstateNameResolution(store, options),
+    ]);
+    return formatInstallationBadge({
+      estateName: estate.estateName,
+      environmentClass: environment.environmentClass,
+    });
+  } catch {
+    return null;
+  }
 }
