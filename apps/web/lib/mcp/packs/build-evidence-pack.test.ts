@@ -176,6 +176,8 @@ describe("build-evidence pack — handler behavior (delegation preserved)", () =
         mode: "single-branch",
         status: "passed",
         summary: "ok",
+        gateKey: "a".repeat(64),
+        leaseId: "NPEL-GATE",
         evidence: { freshness: "current" },
       },
       "u1",
@@ -184,7 +186,14 @@ describe("build-evidence pack — handler behavior (delegation preserved)", () =
     expect(res.success).toBe(true);
     expect(res.entityId).toBe("ev-1");
     expect(localIntegration.recordLocalIntegrationResult).toHaveBeenCalledWith(
-      expect.objectContaining({ actorUserId: "u1", provider: "claude", routeContext: "/build", status: "passed" }),
+      expect.objectContaining({
+        actorUserId: "u1",
+        provider: "claude",
+        routeContext: "/build",
+        status: "passed",
+        gateKey: "a".repeat(64),
+        leaseId: "NPEL-GATE",
+      }),
     );
   });
 

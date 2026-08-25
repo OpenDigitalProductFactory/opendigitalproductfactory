@@ -812,6 +812,8 @@ async function main() {
   const gateObserverIdentity = createGateObserverIdentity();
   const baseClaimKey = `local-ci:${ownerSessionId}:${sha}`;
   let claimKey = baseClaimKey;
+  let preAdmissionGateIdentity = null;
+  let gateKey = "";
   const deadline = Date.now() + options.leaseWaitSeconds * 1000;
   const commandSpec = resolveGateCommand({ branch, allowStub, gitBin });
 
@@ -1025,6 +1027,7 @@ async function main() {
       );
       process.exit(documentationResult.status);
     }
+    preAdmissionGateIdentity = documentationResult.gateIdentity ?? null;
   }
 
   if (!options.finalizeEvidence && !commandSpec && !allowStub) {
@@ -1082,6 +1085,7 @@ async function main() {
     leaseReleased = true;
     const response = await mcpCall("release_nonprod_environment_lease", {
       leaseId,
+      ownerSessionId,
     }, { mcpUrl: options.mcpUrl, bearerToken });
     if (response?.success !== true) {
       throw new Error(`failed to release local-CI lease: ${JSON.stringify(response)}`);
@@ -1134,6 +1138,7 @@ async function main() {
         ownerProvider,
         ownerSessionId,
         claimKey,
+        ...(preAdmissionGateIdentity ? { gateIdentity: preAdmissionGateIdentity } : {}),
         purpose: `Pre-PR local-CI gate for ${branch} @ ${sha}`,
         url,
         ports: [slotManifest.portal.port, slotManifest.postgres.hostPort],
@@ -1152,10 +1157,71 @@ async function main() {
       continue;
     }
 
-    leaseId = claimResponse?.entityId || claimResponse?.data?.lease?.leaseId || leaseId;
     const admission = claimResponse?.data?.admission;
+    const canonicalLeaseId = claimResponse?.data?.lease?.leaseId || "";
+    gateKey = claimResponse?.data?.gateKey || gateKey;
     admissionPoolPolicy = claimResponse?.data?.poolPolicy ?? admissionPoolPolicy;
-    if (claimResponse?.success === true && admission?.status !== "queued") {
+    if (claimResponse?.success === true && admission?.status === "reused") {
+      const evidenceId = admission.evidenceRecordId || claimResponse.entityId || "";
+      const passed = admission.resultClass === "pass";
+      if (queueObserverPath) {
+        releaseLocalQueueObserver({
+          path: queueObserverPath,
+          token: gateObserverIdentity.token,
+        });
+        queueObserverPath = "";
+      }
+      writeState(stateFile, {
+        branch,
+        sha,
+        gatePassed: passed,
+        leaseId: canonicalLeaseId,
+        evidenceId,
+        status: passed ? "passed" : "failed",
+        expiresAt: claimResponse?.data?.lease?.expiresAt || expiresAt,
+        resilience: null,
+        leaseEvents: [
+          ...leaseEvents,
+          { type: "reused", gateKey, evidenceId, at: new Date().toISOString() },
+        ],
+        evidencePending: false,
+      });
+      process.stdout.write(`reused canonical local-CI ${admission.resultClass} evidence: ${evidenceId}\n`);
+      process.exit(passed ? 0 : 1);
+    }
+    if (claimResponse?.success === true && admission?.status === "subscribed") {
+      leaseEvents.push({
+        type: "subscribed",
+        at: new Date().toISOString(),
+        gateKey,
+        canonicalLeaseId,
+        executionStatus: admission.executionStatus,
+      });
+      writeState(stateFile, {
+        branch,
+        sha,
+        gatePassed: false,
+        leaseId: canonicalLeaseId,
+        evidenceId: "",
+        status: "subscribed",
+        expiresAt: claimResponse?.data?.lease?.expiresAt || expiresAt,
+        resilience: null,
+        leaseEvents,
+        evidencePending: false,
+        queueObserver: queueObserverState(),
+      });
+      if (Date.now() >= deadline) die("local-CI canonical execution observation timed out");
+      const delayMs = retryDelayMs({ attempt: claimAttempt, pollSeconds: options.pollSeconds });
+      claimAttempt += 1;
+      waiting(`local-CI execution is owned by another caller; observing ${canonicalLeaseId} again in ${(delayMs / 1000).toFixed(1)}s...`);
+      await sleep(Math.min(delayMs, Math.max(10, deadline - Date.now())));
+      continue;
+    }
+    if (
+      claimResponse?.success === true
+      && (admission?.status === "admitted" || !admission?.status)
+    ) {
+      leaseId = canonicalLeaseId || claimResponse.entityId || leaseId;
       const admittedExpiresAt = claimResponse?.data?.lease?.expiresAt;
       if (
         typeof admittedExpiresAt === "string"
@@ -1207,6 +1273,7 @@ async function main() {
       break;
     }
     if (claimResponse?.success === true && admission?.status === "queued") {
+      leaseId = canonicalLeaseId || claimResponse.entityId || leaseId;
       queuedClaimInterruptedByQuiescence = false;
       leaseEvents.push({
         type: "queued",
@@ -1276,6 +1343,19 @@ async function main() {
       });
       claimAttempt += 1;
       waiting(`portal is quiescing; preserving queue intent and retrying in ${(delayMs / 1000).toFixed(1)}s...`);
+      await sleep(Math.min(delayMs, Math.max(10, deadline - Date.now())));
+      continue;
+    }
+    if (
+      claimResponse?.error === "gate_evidence_blocked"
+      && claimResponse?.data?.admission?.reason === "missing-evidence"
+    ) {
+      if (Date.now() >= deadline) {
+        die("canonical local-CI executor ended without publishing evidence before the deadline");
+      }
+      const delayMs = retryDelayMs({ attempt: claimAttempt, pollSeconds: options.pollSeconds });
+      claimAttempt += 1;
+      waiting(`canonical local-CI execution is finalizing evidence; observing again in ${(delayMs / 1000).toFixed(1)}s...`);
       await sleep(Math.min(delayMs, Math.max(10, deadline - Date.now())));
       continue;
     }
@@ -1631,6 +1711,9 @@ async function main() {
   );
 
   const commandLabel = commandSpec ? commandSpec.label : "sandbox checkout/build stub";
+  const evidenceValidity = ["passed", "failed"].includes(outcome.status)
+    ? createLocalCiPassEvidenceValidity()
+    : null;
   let evidenceArgs = {
     provider: ownerProvider,
     externalSessionId: ownerSessionId,
@@ -1639,6 +1722,7 @@ async function main() {
     mode: "single-branch",
     status: outcome.status,
     summary: outcome.summary,
+    ...(gateKey ? { gateKey, leaseId } : {}),
     evidence: {
       bi: "BI-166C59F3",
       resilienceBi: "BI-76551B2D",
@@ -1678,6 +1762,7 @@ async function main() {
       branch,
       sha,
       expiresAt,
+      evidenceValidity,
       pushBeforeLease: options.pushBranch,
       resilience,
       content: contentMetadata,
@@ -1792,9 +1877,6 @@ async function main() {
     die(`failed to record local integration evidence: ${JSON.stringify(evidenceResponse)}`);
   }
 
-  const evidenceValidity = outcome.gatePassed
-    ? createLocalCiPassEvidenceValidity()
-    : null;
   writeState(stateFile, {
     branch,
     sha,

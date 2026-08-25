@@ -1,28 +1,19 @@
 import { randomUUID } from "node:crypto";
 import { prisma } from "@dpf/db";
-import {
-  planEnvironmentAdmission,
-  type AdmissionLease,
-} from "./environment-lease-admission";
-import {
-  type LocalCiHostPressure,
-  type ResolvedLocalCiPoolPolicy,
-} from "./local-ci-pool-policy";
+import { planEnvironmentAdmission, type AdmissionLease } from "./environment-lease-admission";
+import { type LocalCiHostPressure, type ResolvedLocalCiPoolPolicy } from "./local-ci-pool-policy";
 import type { LocalCiCapacityBroker } from "./local-ci-capacity-broker";
 import { resolveNonprodPoolPolicy } from "./environment-lease-pool-policy";
 import localCiSlotResources from "./local-ci-slot-resources.json";
 import { recordQueueTransition } from "@/lib/queue/queue-telemetry";
+import { gateRunDispositionsTotal } from "@/lib/operate/metrics";
 import type { NonprodOwnerProvider } from "./nonprod-owner-provider";
-export {
-  NONPROD_OWNER_PROVIDERS,
-  type NonprodOwnerProvider,
-} from "./nonprod-owner-provider";
+import { isImmutableGateClaimKey, resolveLocalCiTerminalEvidence } from "@/lib/gates/gate-run-identity";
+export { NONPROD_OWNER_PROVIDERS, type NonprodOwnerProvider } from "./nonprod-owner-provider";
 
 export type NonprodEnvironmentKey = "active-candidate" | "local-integration-ci";
 type NonprodSlotKey = keyof typeof localCiSlotResources.slots;
-export const NONPROD_SLOT_KEYS = Object.freeze(
-  Object.keys(localCiSlotResources.slots) as NonprodSlotKey[],
-);
+export const NONPROD_SLOT_KEYS = Object.freeze(Object.keys(localCiSlotResources.slots) as NonprodSlotKey[]);
 
 function expectedLocalCiSlotBinding(slotKey: NonprodSlotKey) {
   const resources = localCiSlotResources.slots[slotKey];
@@ -31,15 +22,18 @@ function expectedLocalCiSlotBinding(slotKey: NonprodSlotKey) {
     slotKey,
     url: `http://localhost:${resources.portalPort}`,
     ports: [resources.portalPort, resources.postgresPort],
-    cleanupCommand:
-      `node scripts/local-ci-slot-cleanup.mjs --slot-key ${slotKey}`,
+    cleanupCommand: `node scripts/local-ci-slot-cleanup.mjs --slot-key ${slotKey}`,
   };
 }
 
 type LeaseModel = typeof prisma.nonProductionEnvironmentLease;
-type LeaseTx = Pick<typeof prisma, "$executeRaw" | "nonProductionEnvironmentLease">;
-type LeaseDb = Pick<typeof prisma, "nonProductionEnvironmentLease">
-  & Partial<Pick<typeof prisma, "$transaction" | "$executeRaw" | "platformConfig">>;
+type LeaseTx = Pick<
+  typeof prisma,
+  "$executeRaw" | "nonProductionEnvironmentLease" | "externalEvidenceRecord"
+>;
+type LeaseDb = Pick<typeof prisma, "nonProductionEnvironmentLease"> & Partial<Pick<
+  typeof prisma, "$transaction" | "$executeRaw" | "platformConfig" | "externalEvidenceRecord"
+>>;
 type LeaseRow = NonNullable<Awaited<ReturnType<LeaseModel["findUnique"]>>>;
 
 // BI-4043A64B — anti-monopolization for the shared nonprod pool. A holder must
@@ -297,26 +291,12 @@ export async function listCapacityReservingNonprodEnvironmentLeases(input: {
 }
 
 export type ClaimNonprodEnvironmentLeaseResult =
-  | {
-    status: "admitted";
-    lease: LeaseRow;
-    slotKey: string;
-    waitAgeMs: number;
-    poolPolicy: ResolvedLocalCiPoolPolicy;
-  }
-  | {
-    status: "queued";
-    lease: LeaseRow;
-    queuePosition: number;
-    waitAgeMs: number;
-    poolPolicy: ResolvedLocalCiPoolPolicy;
-  }
-  | {
-    status: "terminal";
-    lease: LeaseRow;
-    reason: "released" | "expired" | "cancelled";
-    poolPolicy: ResolvedLocalCiPoolPolicy;
-  };
+  | { status: "admitted"; lease: LeaseRow; slotKey: string; waitAgeMs: number; poolPolicy: ResolvedLocalCiPoolPolicy }
+  | { status: "queued"; lease: LeaseRow; queuePosition: number; waitAgeMs: number; poolPolicy: ResolvedLocalCiPoolPolicy }
+  | { status: "terminal"; lease: LeaseRow; reason: "released" | "expired" | "cancelled"; poolPolicy: ResolvedLocalCiPoolPolicy }
+  | { status: "subscribed"; lease: LeaseRow; executionStatus: "admitted" | "queued"; poolPolicy: ResolvedLocalCiPoolPolicy }
+  | { status: "reused"; lease: LeaseRow; evidenceRecordId: string; resultClass: "pass" | "fail"; poolPolicy: ResolvedLocalCiPoolPolicy }
+  | { status: "blocked"; lease: LeaseRow; reason: "missing-evidence" | "mismatched-evidence" | "expired-evidence"; poolPolicy: ResolvedLocalCiPoolPolicy };
 
 export async function claimNonprodEnvironmentLease(input: {
   db?: LeaseDb;
@@ -372,6 +352,28 @@ export async function claimNonprodEnvironmentLease(input: {
       })
       : null;
 
+    if (
+      lease
+      && isTerminalLeaseStatus(lease.status)
+      && isImmutableGateClaimKey(input.claimKey)
+    ) {
+      return {
+        ...await resolveLocalCiTerminalEvidence({
+          claimKey: input.claimKey!,
+          evidenceRecordId: lease.evidenceRecordId,
+          now,
+          loadEvidence: async (id) => tx.externalEvidenceRecord
+            ? tx.externalEvidenceRecord.findUnique({
+              where: { id },
+              select: { id: true, operationType: true, details: true },
+            })
+            : null,
+        }),
+        lease,
+        poolPolicy,
+      };
+    }
+
     if (lease && isTerminalLeaseStatus(lease.status)) {
       return {
         status: "terminal",
@@ -386,6 +388,17 @@ export async function claimNonprodEnvironmentLease(input: {
         throw new Error("nonprod_claim_key_environment_mismatch");
       }
       if (lease.ownerSessionId !== input.ownerSessionId) {
+        if (isImmutableGateClaimKey(input.claimKey)) {
+          if (lease.status !== "active" && lease.status !== "queued") {
+            throw new Error(`nonprod_claim_invalid_status:${lease.status}`);
+          }
+          return {
+            status: "subscribed",
+            lease,
+            executionStatus: lease.status === "active" ? "admitted" : "queued",
+            poolPolicy,
+          };
+        }
         throw new Error("nonprod_claim_key_owner_mismatch");
       }
       if (lease.status === "queued") {
@@ -506,12 +519,20 @@ export async function claimNonprodEnvironmentLease(input: {
     });
   }
   void emitLeaseTransitions(transitions);
+  if (isImmutableGateClaimKey(input.claimKey)) {
+    gateRunDispositionsTotal.inc({
+      gate_kind: "local-integration-ci",
+      disposition: result.status,
+      result_class: result.status === "reused" ? result.resultClass : "none",
+    });
+  }
   return result;
 }
 
 export async function releaseNonprodEnvironmentLease(input: {
   db?: LeaseDb;
   leaseId: string;
+  ownerSessionId?: string;
   now?: Date;
 }) {
   const db = input.db ?? prisma;
@@ -527,6 +548,12 @@ export async function releaseNonprodEnvironmentLease(input: {
       where: { leaseId: input.leaseId },
     });
     if (!current) throw new Error("nonprod_lease_not_found");
+    if (
+      isImmutableGateClaimKey(current.claimKey)
+      && current.ownerSessionId !== input.ownerSessionId
+    ) {
+      throw new Error("nonprod_lease_not_owner");
+    }
     if (isTerminalLeaseStatus(current.status)) {
       return {
         lease: current,

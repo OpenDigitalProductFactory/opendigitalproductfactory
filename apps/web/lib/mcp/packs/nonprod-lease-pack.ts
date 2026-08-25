@@ -152,6 +152,24 @@ const definitions: ToolDefinition[] = [
         },
         ownerSessionId: { type: "string" },
         claimKey: { type: "string", description: "Stable idempotency key reused while waiting for admission." },
+        gateIdentity: {
+          type: "object",
+          description: "Immutable local-CI identity components. The server derives the claim key and ignores caller claimKey.",
+          properties: {
+            repository: { type: "string" },
+            integrationTreeSha: { type: "string" },
+            evidencePlanDigest: { type: "string" },
+            toolchainFingerprint: { type: "string" },
+            gateKind: { type: "string", enum: ["local-integration-ci"] },
+          },
+          required: [
+            "repository",
+            "integrationTreeSha",
+            "evidencePlanDigest",
+            "toolchainFingerprint",
+            "gateKind",
+          ],
+        },
         purpose: { type: "string" },
         url: { type: "string" },
         ports: { type: "array", items: { type: "number" } },
@@ -191,6 +209,10 @@ const definitions: ToolDefinition[] = [
         leaseId: {
           type: "string",
           description: "Lease id from claim_nonprod_environment_lease (e.g. NPEL-…), not the environmentKey.",
+        },
+        ownerSessionId: {
+          type: "string",
+          description: "Owning session identity; required by immutable gate leases.",
         },
       },
       required: ["leaseId"],
@@ -341,11 +363,39 @@ async function claimNonprodEnvironmentLeaseHandler(params: Record<string, unknow
     };
   }
 
+  const gateIdentityValue = objectValue(params["gateIdentity"]);
+  let gateKey: string | undefined;
+  if (params["gateIdentity"] !== undefined) {
+    if (!gateIdentityValue || environmentKey !== "local-integration-ci") {
+      return {
+        success: false,
+        error: "invalid_gate_identity",
+        message: "gateIdentity is valid only for local-integration-ci claims.",
+      };
+    }
+    try {
+      const { deriveGateKey } = await import("@/lib/gates/gate-run-identity");
+      gateKey = deriveGateKey({
+        repository: String(gateIdentityValue.repository ?? ""),
+        integrationTreeSha: String(gateIdentityValue.integrationTreeSha ?? ""),
+        evidencePlanDigest: String(gateIdentityValue.evidencePlanDigest ?? ""),
+        toolchainFingerprint: String(gateIdentityValue.toolchainFingerprint ?? ""),
+        gateKind: gateIdentityValue.gateKind as "local-integration-ci",
+      });
+    } catch (error) {
+      return {
+        success: false,
+        error: "invalid_gate_identity",
+        message: getErrorMessage(error),
+      };
+    }
+  }
+
   const result = await claimNonprodEnvironmentLease({
     environmentKey: environmentKey as "active-candidate" | "local-integration-ci",
     ownerProvider: ownerProvider as (typeof NONPROD_OWNER_PROVIDERS)[number],
     ownerSessionId,
-    claimKey: stringValue("claimKey") || undefined,
+    claimKey: gateKey ? `gate:${gateKey}` : stringValue("claimKey") || undefined,
     purpose,
     url,
     ports,
@@ -358,13 +408,60 @@ async function claimNonprodEnvironmentLeaseHandler(params: Record<string, unknow
     slotManifestVersion: slotManifestVersion as 1 | undefined,
     hostPressure: hostPressure as LocalCiHostPressure | undefined,
   });
+  if (result.status === "reused") {
+    return {
+      success: true,
+      entityId: result.evidenceRecordId,
+      message: `Reused terminal local-CI evidence ${result.evidenceRecordId}.`,
+      data: {
+        lease: result.lease,
+        admission: {
+          status: "reused",
+          evidenceRecordId: result.evidenceRecordId,
+          resultClass: result.resultClass,
+        },
+        poolPolicy: result.poolPolicy,
+        gateKey,
+      },
+    };
+  }
+  if (result.status === "blocked") {
+    return {
+      success: false,
+      entityId: result.lease.leaseId,
+      error: "gate_evidence_blocked",
+      message: `Canonical local-CI evidence cannot be reused (${result.reason}).`,
+      data: {
+        lease: result.lease,
+        admission: { status: "blocked", reason: result.reason },
+        poolPolicy: result.poolPolicy,
+        gateKey,
+      },
+    };
+  }
   if (result.status === "terminal") {
     return {
       success: false,
       entityId: result.lease.leaseId,
       error: "lease_terminal",
       message: `Nonproduction lease request is already ${result.reason}; create a new claimKey to request admission again.`,
-      data: { lease: result.lease, reason: result.reason, poolPolicy: result.poolPolicy },
+      data: { lease: result.lease, reason: result.reason, poolPolicy: result.poolPolicy, gateKey },
+    };
+  }
+  if (result.status === "subscribed") {
+    return {
+      success: true,
+      entityId: result.lease.leaseId,
+      message: `Subscribed to canonical nonproduction environment lease ${result.lease.leaseId}.`,
+      data: {
+        lease: result.lease,
+        admission: {
+          status: "subscribed",
+          executionStatus: result.executionStatus,
+        },
+        poolPolicy: result.poolPolicy,
+        gateKey,
+      },
     };
   }
   if (result.status === "queued") {
@@ -380,6 +477,7 @@ async function claimNonprodEnvironmentLeaseHandler(params: Record<string, unknow
           waitAgeMs: result.waitAgeMs,
         },
         poolPolicy: result.poolPolicy,
+        gateKey,
       },
     };
   }
@@ -395,6 +493,7 @@ async function claimNonprodEnvironmentLeaseHandler(params: Record<string, unknow
         waitAgeMs: result.waitAgeMs,
       },
       poolPolicy: result.poolPolicy,
+      gateKey,
     },
   };
 }
@@ -402,6 +501,9 @@ async function claimNonprodEnvironmentLeaseHandler(params: Record<string, unknow
 async function releaseNonprodEnvironmentLeaseHandler(params: Record<string, unknown>): Promise<ToolResult> {
   const { releaseNonprodEnvironmentLease } = await import("@/lib/nonprod/environment-lease");
   const leaseId = typeof params["leaseId"] === "string" ? params["leaseId"].trim() : "";
+  const ownerSessionId = typeof params["ownerSessionId"] === "string"
+    ? params["ownerSessionId"].trim()
+    : "";
   if (!leaseId) {
     return {
       success: false,
@@ -414,7 +516,10 @@ async function releaseNonprodEnvironmentLeaseHandler(params: Record<string, unkn
     };
   }
   try {
-    const lease = await releaseNonprodEnvironmentLease({ leaseId });
+    const lease = await releaseNonprodEnvironmentLease({
+      leaseId,
+      ...(ownerSessionId ? { ownerSessionId } : {}),
+    });
     return {
       success: true,
       entityId: lease.leaseId,

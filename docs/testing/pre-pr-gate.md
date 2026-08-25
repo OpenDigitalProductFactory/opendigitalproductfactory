@@ -298,6 +298,24 @@ records the failure and retries only inside its last known authority window. A
 separate deadline terminates the child tree before that window expires if no
 successful renewal advances it. MCP requests have their own bounded transport
 deadline, so a hung heartbeat cannot outlive the lease silently.
+
+**Equivalent gate requests are single-flight.** Before admission, the gate
+builds the exact merge-tree evidence plan and fingerprints the host toolchain.
+The server derives one immutable key from repository, integration tree, plan
+digest, toolchain fingerprint, and gate kind; caller session identity is only
+attribution and never part of that key. The first caller owns the queued or
+admitted lease. A later equivalent caller receives `subscribed` and observes
+the canonical execution without renewing, releasing, recording evidence, or
+starting the command. Once the owner links a fresh terminal pass or fail
+receipt, later callers receive `reused` and stop without recomputation.
+Missing, mismatched, inconclusive, or expired evidence remains fail-closed.
+
+The same identity rule coordinates assembled semantic review through the
+existing `TaskRun` carrier: one caller dispatches, concurrent callers subscribe,
+and fresh pass/fail receipts are reused. Durable suspension and notification
+after the current bounded observation window are a separate workflow concern;
+single-flight does not invent a second queue, waiter table, or process authority.
+
 Admission also takes an atomic slot-local owner fence in the shared Git
 directory. A competing claimant for that slot waits while the fence's PID is alive even if
 an older database TTL has elapsed; a dead PID is reaped as an orphan. The
