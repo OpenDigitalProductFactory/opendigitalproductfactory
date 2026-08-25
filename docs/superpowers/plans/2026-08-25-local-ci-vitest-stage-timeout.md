@@ -34,11 +34,12 @@ atomic deliverable under `BI-F3422349`.
 
 Add injected-child tests for `CONTRACT-OBSERVER-DEADLINE`. The first test keeps a
 fake child open past a short injected deadline and must fail until the observer
-requests graceful termination. Assert that the promise remains pending until
-`close`, the result records `deadlineExceeded=true`, and the termination request
-occurs once. Add a second red case where the child ignores that request and the
-observer invokes one injected, PID-bound process-tree termination after the
-grace period. Add the normal-close counterexample proving both timers are cleared.
+sets `deadlineExceeded=true` and requests graceful process-tree termination once.
+Add red cases where the child ignores the request: after the first 10-second
+grace the observer force-terminates the same PID-bound tree, and after a second
+10-second grace it returns `close-timeout` rather than waiting forever. Cover
+Windows `/T` then `/T /F`, POSIX group `SIGTERM` then `SIGKILL`, a late zero exit,
+termination errors, and the normal-close counterexample that clears every timer.
 
 Run the focused test and retain the expected red output before implementation.
 
@@ -53,8 +54,10 @@ Add an optional positive `maxDurationMs`, bounded termination grace, and
 injectable timer/process-tree seams to the observed-process factory. On expiry,
 sample once, mark the deadline, and request graceful child termination. If the
 same child remains open after the grace period, invoke the platform-aware
-process-tree terminator for its verified PID. Resolve only from the existing
-`close` handler and clear sampling, deadline, and escalation timers there.
+process-tree terminator for its verified PID. If the tree still does not close,
+return a synthetic `close-timeout` after the final grace. The observer owns this
+shared finalizer; it records stop/force/close outcomes and clears sampling,
+deadline, escalation, and close timers on every terminal path.
 
 Run `VERIFY-OBSERVER-DEADLINE` until green.
 
@@ -81,11 +84,14 @@ Run `VERIFY-OPT-IN` until green.
 - Verify `scripts/lib/local-ci-vitest-supervisor.mjs`
 
 Exercise a timed child close through the real supervisor. Assert
-`runner-termination`, one lower-worker retry, and terminal
-`retryExhausted=true` when both attempts time out. Preserve existing cases that
-deny retries for assertion failures and exhausted identities. Run an executable
-runner fixture with a very short explicit bound and verify its persisted stage
-receipt contains the deadline evidence and infrastructure exit code.
+`runner-termination` for deadlines, termination errors, `close-timeout`, and a
+zero status observed after the deadline; allow one lower-worker retry and assert
+terminal `retryExhausted=true` plus infrastructure exit 86 when both attempts
+terminate. Preserve existing cases that deny retries for assertion failures and
+exhausted identities. Run an executable runner fixture with a short explicit
+bound and verify its stage receipt records configured duration, deadline, both
+termination attempts, close/error outcome, PID/status/signal, samples, attempt
+history, recovery disposition, exhaustion, and lease release from `finally`.
 
 ## Task 5: Review and ship
 
@@ -109,7 +115,8 @@ receipt contains the deadline evidence and infrastructure exit code.
   unsafe or ineffective when shipped separately.
 - **Receipt:** pending governed `record_plan_backlog_coverage` after immutable
   provider verification of this plan blob.
-- **Blocking condition:** no initiative scope baseline exists for this item.
-  Source implementation must not begin until an independent reviewer reads the
-  immutable design, persists a passing `spec-approval` receipt/baseline, and the
-  atomic coverage writer accepts this plan blob.
+- **Design gate:** passing receipt
+  `initiative-58eb4c0f-3f4a-45ce-9e94-210b6ca25d9f` and canonical baseline
+  `baseline-5fcad4ed-b99c-423b-9faa-ecc58be3977c` bind the immutable design.
+- **Blocking condition:** source implementation must not begin until the atomic
+  coverage writer accepts this immutable plan blob.
