@@ -83,9 +83,42 @@ Affected tests:
 - Decision: atomic
 - Parent: `BI-80BECE1E`
 - Rationale: Definition versioning, occurrence trace, and progressive disclosure are one consumer contract. Shipping any one without the others either exposes no usable behavior or leaves the existing Workroom surface inconsistent with its read model.
-- Receipt: blocked — no initiative scope baseline exists for this item. The governed receipt call rejected the immutable plan because the initiative has not passed an independent `spec-approval` design review.
+- Receipt: pending governed coverage write after this mapping is committed.
 - Dependencies: none
-- Deliverable mapping: `workroom-definition-projection` -> `BI-80BECE1E`
+
+Deliverable mapping:
+
+1. `D1-definition-registry` — canonical reusable Workroom definition projection.
+   - Backlog item: `BI-80BECE1E`
+   - Requirement: `OBJ-WR-001`
+   - Verification: `AC-WR-001`
+   - Contract: `workroom-source-registry`
+   - Flow: `source-registry -> definition lookup -> Workroom read model`
+   - Independently shippable: no
+2. `D2-occurrence-view` — definition and occurrence trace in the existing Workroom read model.
+   - Backlog item: `BI-80BECE1E`
+   - Requirement: `OBJ-WR-001`
+   - Verification: `AC-WR-002`, `AC-WR-003`
+   - Contracts: `WorkCaseDetail`, `WorkroomView`
+   - Flow: `WorkCaseDetail -> buildWorkroomView -> WorkroomView`
+   - Depends on: `D1-definition-registry`
+   - Independently shippable: no
+3. `D3-progressive-disclosure` — business-first Overview and disclosed Details on the existing Workroom surface.
+   - Backlog item: `BI-80BECE1E`
+   - Requirement: `OBJ-WR-001`
+   - Verification: `AC-WR-004`
+   - Contract: `WorkroomBody`
+   - Flow: `WorkroomView -> WorkroomBody -> Overview/Details`
+   - Depends on: `D2-occurrence-view`
+   - Independently shippable: no
+4. `D4-conformance-evidence` — architecture and UX conformance evidence for the consolidated surface.
+   - Backlog item: `BI-80BECE1E`
+   - Requirement: `OBJ-WR-001`
+   - Verification: `AC-WR-005`
+   - Contracts: `architecture-conformance`, `ux-fit-manifest`
+   - Flow: `implementation -> architecture review -> served UX evidence`
+   - Depends on: `D3-progressive-disclosure`
+   - Independently shippable: no
 
 ## Risks and rollback
 
