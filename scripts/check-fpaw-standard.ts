@@ -27,7 +27,7 @@ import {
 const CORE_PATH = "docs/architecture/four-portfolio-archetype-ai-workforce-operating-standard.md";
 const CATALOG_PATH = "docs/architecture/four-portfolio-archetype-standard-profile-catalog.md";
 
-const EXPECTED_CORE_REQUIREMENTS = 175;
+const EXPECTED_CORE_REQUIREMENTS = 180;
 const EXPECTED_CATALOG_REQUIREMENTS = 18;
 const EXPECTED_WORKED_SPECIMENS = 7;
 
