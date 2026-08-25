@@ -4974,6 +4974,7 @@
       "anchors": [
         "dpf-install-guide-macos-apple-silicon",
         "supported-environment",
+        "recommended-hardware",
         "prerequisites",
         "quick-start",
         "contributor-separate-dev-workspace-from-install-recommended-bi-0856a4ce-phase-1",
@@ -5062,6 +5063,7 @@
       "anchors": [
         "dpf-install-guide-windows-1011",
         "supported-environment",
+        "recommended-hardware",
         "prerequisites",
         "quick-start",
         "what-the-installer-does",
