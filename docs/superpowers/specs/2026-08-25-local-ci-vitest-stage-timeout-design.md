@@ -7,10 +7,10 @@ status: proposed
 **OBJ-FINALIZE:** Close expired trees; unclosed=termination.
 **OBJ-EVIDENCE:** Persist retry/cleanup.
 
-**AC-VITEST-ONLY [OBJ-BOUND]:** Other work unchanged.
-**AC-TREE-CLOSE [OBJ-FINALIZE]:** Bounded tree close.
-**AC-NON-PASS [OBJ-FINALIZE]:** Termination never product-red.
-**AC-RETRY-RECEIPT [OBJ-EVIDENCE]:** One retry+receipt.
+| AC-VITEST-ONLY | OBJ-BOUND | Other work unchanged. |
+| AC-TREE-CLOSE | OBJ-FINALIZE | Bounded tree close. |
+| AC-NON-PASS | OBJ-FINALIZE | Termination never product-red. |
+| AC-RETRY-RECEIPT | OBJ-EVIDENCE | One retry+receipt. |
 
 Scope: attempt runner alone uses positive `DPF_LOCAL_CI_VITEST_MAX_DURATION_MS` or 1,800,000ms; observer else unbounded. Observer owns finalizer; supervisor class/retry; writer receipt. No other stage/test/schema/lease/tree.
 
