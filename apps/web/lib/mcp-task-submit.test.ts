@@ -472,36 +472,87 @@ describe("submitRemoteCoworkerTask idempotency", () => {
       "record_initiative_evidence",
     ]);
     expect(execution.deferredTools).toEqual([]);
+    const reader = execution.tools.find((tool) => tool.name === "read_source_at_version")!;
+    expect(reader.inputSchema).toEqual({
+      type: "object",
+      properties: {
+        path: { type: "string", enum: [initiativeReviewBinding.artifactRef.path] },
+        version: { type: "string", enum: [initiativeReviewBinding.artifactRef.commitSha] },
+      },
+      required: ["path", "version"],
+      additionalProperties: false,
+    });
+    const providerReader = execution.toolsForProvider.find((tool) => tool.function?.name === "read_source_at_version")!;
+    expect(providerReader.function?.parameters).toEqual(reader.inputSchema);
+    const searchReader = execution.tools.find((tool) => tool.name === "search_source_at_version")!;
+    expect(searchReader.inputSchema).toEqual({
+      type: "object",
+      properties: {
+        query: expect.any(Object),
+        version: { type: "string", enum: [initiativeReviewBinding.artifactRef.commitSha] },
+        glob: { type: "string", enum: [initiativeReviewBinding.artifactRef.path] },
+      },
+      required: ["query", "version", "glob"],
+      additionalProperties: false,
+    });
     const writer = execution.tools.find((tool) => tool.name === "record_initiative_evidence")!;
     expect(writer.inputSchema.properties).toEqual(expect.objectContaining({
       decision: expect.any(Object),
-      reason: expect.any(Object),
-      findings: expect.any(Object),
-      resolvedFindingRefs: expect.any(Object),
     }));
     expect(writer.inputSchema.properties).not.toHaveProperty("itemId");
     expect(writer.inputSchema.properties).not.toHaveProperty("gate");
     expect(writer.inputSchema.properties).not.toHaveProperty("artifactRef");
-    expect(writer.inputSchema.required).toEqual(["decision", "reason", "findings", "resolvedFindingRefs"]);
+    expect(writer.inputSchema.properties).not.toHaveProperty("findings");
+    expect(writer.inputSchema.properties).not.toHaveProperty("resolvedFindingRefs");
+    expect(writer.inputSchema.properties).not.toHaveProperty("reason");
+    expect(writer.inputSchema.required).toEqual(["decision"]);
     const providerWriter = execution.toolsForProvider.find((tool) => tool.function?.name === "record_initiative_evidence")!;
     expect(providerWriter.function?.parameters?.properties).toEqual(writer.inputSchema.properties);
     expect(providerWriter.function?.parameters?.required).toEqual(writer.inputSchema.required);
     const dryWriterArguments = JSON.stringify({
       decision: "pass",
-      reason: "Complete.",
-      findings: [],
-      resolvedFindingRefs: [],
     });
     expect(dryWriterArguments.length).toBeLessThan(138);
     expect(JSON.parse(dryWriterArguments)).toEqual({
       decision: "pass",
-      reason: "Complete.",
-      findings: [],
-      resolvedFindingRefs: [],
     });
     expect(autonomous.create).toHaveBeenCalledWith(expect.objectContaining({
       metadata: expect.objectContaining({ initiativeReviewBinding }),
     }));
+  });
+
+  it("rejects an immutable binding whose BI is not in the exact authority scope", async () => {
+    const outcome = await submit("PAT-BINDING-MISMATCH", {
+      agentId: "AGT-WS-BUILD",
+      routeContext: "/build/work/WC-7FF8A505",
+      objective: "Record the immutable research review.",
+      prompt: "Read the source and record the governed evidence.",
+      idempotencyKey: "research-review-binding-mismatch",
+      riskClass: "bounded-write",
+      authorityScope: [
+        "backlog-item:BI-OTHER",
+        "tool:read_source_at_version",
+        "tool:record_initiative_evidence",
+      ],
+      initiativeReviewBinding: {
+        writerToolName: "record_initiative_evidence",
+        itemId: "BI-F0715C9C",
+        gate: "research",
+        artifactRef: {
+          kind: "repo-blob-at-commit",
+          repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+          commitSha: "d47536a552c7d588b2f963e478ae99369f720783",
+          path: "docs/superpowers/specs/2026-08-23-initiative-readiness-traversal-repair-design.md",
+          providerBlobId: "fb57e087c19ce0a3c78b4d591bb5da63027c2b3b",
+        },
+      },
+    });
+
+    expect(outcome).toMatchObject({
+      kind: "invalid_params",
+      message: expect.stringContaining("item must match the backlog authority scope"),
+    });
+    expect(autonomous.resolveAgent).not.toHaveBeenCalled();
   });
 
   it("server-binds the spec baseline precondition instead of exposing it to the reviewer model", async () => {
