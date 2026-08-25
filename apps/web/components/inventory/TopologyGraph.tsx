@@ -14,6 +14,7 @@ import { usePhysicalTopologyViewport } from "@/lib/graph/use-physical-topology-v
 import { TopologyIntegritySummary } from "@/components/inventory/TopologyIntegritySummary";
 import { TopologyLegend } from "@/components/inventory/TopologyLegend";
 import { OSI_LAYER_NAMES, SHOW_DOCKER_STORAGE_KEY, TOPOLOGY_GRAPH_LIVE_REGION_PROPS } from "@/lib/graph/topology-constants";
+import { resolveCanvasColor, useCanvasTheme, type CanvasTheme } from "./canvas-theme";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -44,71 +45,6 @@ type Props = {
 
 type SimNode = PositionedNode & { vx?: number; vy?: number };
 
-// ─── Theme palette ──────────────────────────────────────────────────────────
-// Canvas pixels don't inherit CSS variables, so we resolve theme tokens at
-// render time and watch prefers-color-scheme to stay legible in both modes.
-
-type CanvasPalette = {
-  isDark: boolean;
-  label: string;          // node label (default state)
-  labelHover: string;     // node label (hovered/focused)
-  focusRing: string;      // ring around focused node
-  edgeAlpha: number;      // alpha for non-highlighted edges
-  bandFillEven: string;
-  bandFillOdd: string;
-  bandFillDockerEven: string;
-  bandFillDockerOdd: string;
-  bandLabel: string;
-  bandLabelDocker: string;
-};
-
-function buildPalette(isDark: boolean): CanvasPalette {
-  if (isDark) {
-    return {
-      isDark: true,
-      label: "rgba(224,224,255,0.6)",
-      labelHover: "#fff",
-      focusRing: "#fff",
-      edgeAlpha: 0.3,
-      bandFillEven: "rgba(255,255,255,0.02)",
-      bandFillOdd: "rgba(255,255,255,0.04)",
-      bandFillDockerEven: "rgba(52,211,153,0.03)",
-      bandFillDockerOdd: "rgba(52,211,153,0.05)",
-      bandLabel: "rgba(224,224,255,0.4)",
-      bandLabelDocker: "rgba(52,211,153,0.5)",
-    };
-  }
-  // Light mode — WCAG 1.4.3 / 1.4.11 compliant on white-ish surface.
-  return {
-    isDark: false,
-    label: "rgba(26,26,46,0.75)",     // #1a1a2e @ 0.75 on white ≈ 5.2:1
-    labelHover: "#1a1a2e",            // full --dpf-text
-    focusRing: "#1a1a2e",             // visible on white
-    edgeAlpha: 0.65,                  // pastels need more presence on white
-    bandFillEven: "rgba(26,26,46,0.03)",
-    bandFillOdd: "rgba(26,26,46,0.06)",
-    bandFillDockerEven: "rgba(22,163,74,0.05)",
-    bandFillDockerOdd: "rgba(22,163,74,0.09)",
-    bandLabel: "rgba(26,26,46,0.55)",
-    bandLabelDocker: "rgba(22,163,74,0.75)",
-  };
-}
-
-function useCanvasPalette(): CanvasPalette {
-  const [isDark, setIsDark] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return window.matchMedia("(prefers-color-scheme: dark)").matches;
-  });
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    const onChange = (e: MediaQueryListEvent) => setIsDark(e.matches);
-    mq.addEventListener("change", onChange);
-    return () => mq.removeEventListener("change", onChange);
-  }, []);
-  return useMemo(() => buildPalette(isDark), [isDark]);
-}
-
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusNodeId }: Props) {
@@ -119,7 +55,7 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
   const [focusNodeId, setFocusNodeId] = useState<string | null>(initialFocusNodeId ?? null);
   const [maxHops, setMaxHops] = useState(0);
   const [liveMessage, setLiveMessage] = useState("");
-  const palette = useCanvasPalette();
+  const palette = useCanvasTheme(canvasRef);
 
   // Pan and zoom state
   const [zoom, setZoom] = useState(1);
@@ -421,20 +357,23 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
         focusNodeId === source.id ||
         focusNodeId === target.id;
 
-      const linkColor = link.type === "UPLINKS_TO" ? LINK_COLORS.DEPENDS_ON : LINK_COLORS[link.type] ?? "#555566";
-      ctx.strokeStyle = isHighlighted ? linkColor : hexWithAlpha(linkColor, palette.edgeAlpha);
+      const linkColor = link.type === "UPLINKS_TO" ? LINK_COLORS.DEPENDS_ON : LINK_COLORS[link.type];
+      const resolvedLinkColor = resolveCanvasColor(canvas, linkColor, palette.border);
+      ctx.strokeStyle = resolvedLinkColor;
+      ctx.globalAlpha = isHighlighted ? 1 : palette.edgeAlpha;
       ctx.lineWidth = isHighlighted ? 2 : palette.isDark ? 0.7 : 1;
       ctx.beginPath();
       ctx.moveTo(source.x, source.y);
       ctx.lineTo(target.x, target.y);
       ctx.stroke();
+      ctx.globalAlpha = 1;
 
       // Edge label on hover
       if (isHighlighted) {
         const mx = (source.x + target.x) / 2;
         const my = (source.y + target.y) / 2;
         ctx.font = "9px -apple-system, sans-serif";
-        ctx.fillStyle = linkColor;
+        ctx.fillStyle = resolvedLinkColor;
         ctx.textAlign = "center";
         ctx.fillText(link.type, mx, my - 4);
       }
@@ -447,7 +386,7 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
       const isFocus = focusNodeId === node.id;
       const ciType = (node as { ciType?: string }).ciType;
       const dv = ciType ? getDeviceVisual(ciType) : null;
-      const nodeColor = dv?.color ?? node.color;
+      const nodeColor = resolveCanvasColor(canvas, dv?.color ?? node.color, palette.accent);
       const radius = (dv?.size ?? node.size ?? 4) * (isHovered || isFocus ? 1.5 : 1);
       const topologyVisualScale = selectedView === "network-topology" ? Math.max(zoom, 0.65) : 1;
       const renderRadius = radius / topologyVisualScale;
@@ -472,7 +411,7 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
       }
 
       if (isFocus) {
-        ctx.strokeStyle = palette.focusRing;
+        ctx.strokeStyle = palette.text;
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.arc(node.x, node.y, renderRadius + 3 / topologyVisualScale, 0, Math.PI * 2);
@@ -488,7 +427,7 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
           ? `${node.name.slice(0, 17)}\u2026`
           : node.name;
         ctx.font = `${labelSize}px -apple-system, sans-serif`;
-        ctx.fillStyle = isHovered || isFocus ? palette.labelHover : palette.label;
+        ctx.fillStyle = isHovered || isFocus ? palette.text : palette.muted;
         ctx.textAlign = "center";
         ctx.fillText(label, node.x, node.y - renderRadius - 6 / topologyVisualScale);
       }
@@ -888,19 +827,11 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-function hexWithAlpha(hex: string, alpha: number): string {
-  if (hex.startsWith("var(")) return `rgba(100,100,120,${alpha})`; // CSS var fallback
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  return `rgba(${r},${g},${b},${alpha})`;
-}
-
 function drawSwimlaneBands(
   ctx: CanvasRenderingContext2D,
   nodes: PositionedNode[],
   dimensions: { width: number; height: number },
-  palette: CanvasPalette,
+  palette: CanvasTheme,
 ) {
   // Check if nodes have partition (subnet view) or osiLayer (dependency view)
   const hasPartitions = nodes.some((n) => (n as { partition?: unknown }).partition != null);
@@ -929,15 +860,14 @@ function drawSwimlaneBands(
       const bandH = range.max - range.min + 20;
       const isDocker = range.name.startsWith("Docker:") || range.name.startsWith("172.");
 
-      if (isDocker) {
-        ctx.fillStyle = idx % 2 === 0 ? palette.bandFillDockerEven : palette.bandFillDockerOdd;
-      } else {
-        ctx.fillStyle = idx % 2 === 0 ? palette.bandFillEven : palette.bandFillOdd;
-      }
+      ctx.save();
+      ctx.globalAlpha = idx % 2 === 0 ? 0.04 : 0.07;
+      ctx.fillStyle = isDocker ? palette.success : palette.text;
       ctx.fillRect(0, bandY, dimensions.width, bandH);
+      ctx.restore();
 
       ctx.font = "9px -apple-system, sans-serif";
-      ctx.fillStyle = isDocker ? palette.bandLabelDocker : palette.bandLabel;
+      ctx.fillStyle = isDocker ? palette.success : palette.muted;
       ctx.textAlign = "left";
       ctx.fillText(range.name, 8, bandY + 12);
       idx++;
@@ -960,11 +890,14 @@ function drawSwimlaneBands(
       const bandY = range.min - 10;
       const bandH = range.max - range.min + 20;
 
-      ctx.fillStyle = layer % 2 === 0 ? palette.bandFillEven : palette.bandFillOdd;
+      ctx.save();
+      ctx.globalAlpha = layer % 2 === 0 ? 0.04 : 0.07;
+      ctx.fillStyle = palette.text;
       ctx.fillRect(0, bandY, dimensions.width, bandH);
+      ctx.restore();
 
       ctx.font = "9px -apple-system, sans-serif";
-      ctx.fillStyle = palette.bandLabel;
+      ctx.fillStyle = palette.muted;
       ctx.textAlign = "left";
       ctx.fillText(`L${layer} ${OSI_LAYER_NAMES[layer] ?? ""}`, 8, bandY + 12);
     }
