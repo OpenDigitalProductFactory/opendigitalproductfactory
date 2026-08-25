@@ -82,6 +82,13 @@ was **declared or derived**, and expect most older rooms to have neither.
 Finite and standing rooms are explained for end users in
 [Work Rooms](../user-guide/workspace/work-rooms.md).
 
+Definition and occurrence identity are not a fifth shape axis. The Work Case source
+registry owns a stable, versioned room-definition projection. The Work Case owns the room
+instance, with its primary source, current cycle, and active execution carriers forming
+the occurrence trace. This keeps the same definition useful for business-only and
+development rooms: repository, worktree, pull-request, token, and CI records are optional
+execution evidence, never prerequisites for room identity.
+
 ## The gate: which scope decides
 
 Three decision surfaces, three corpora. They are siblings, not a hierarchy, and each
@@ -230,8 +237,9 @@ this page does not plan against a stale limitation:
   only for tools that predate the declared `ToolDefinition.consequence` axis, and a
   conformance test now asserts every name in it resolves to a real tool.
 - **The shape view is rendered** ⟦runtime: `BI-C7E2E924`⟧ — `WorkroomShapeSection` on the
-  room and `CoworkerShapePanel` on the coworker record draw the same picture, behind the
-  same Shape / Detail toggle.
+  room and `CoworkerShapePanel` on the coworker record draw the same picture. The room now
+  presents that picture in the default **Overview** and defers cycles, activity, evidence,
+  receipts, and technical references to **Details**.
 
 **Shape now also sets posture** ⟦runtime: added 2026-08-22, `BI-4F468192`⟧. The same four
 axes feed the room's *posture* — how persistently the coworker follows up and how it trades
