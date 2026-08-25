@@ -23,7 +23,7 @@ describe("archetype catalog", () => {
     });
 
     for (const archetype of [petRescue, animalShelter]) {
-      expect(archetype?.activationProfile?.processProfile).toEqual({
+      expect(archetype?.activationProfile?.processProfile).toMatchObject({
         catalogModes: ["donation", "unpriced"],
         subjectTypes: ["animal"],
         housesSubjects: true,
@@ -33,6 +33,9 @@ describe("archetype catalog", () => {
         ],
       });
     }
+
+    expect(petRescue?.activationProfile?.processProfile?.valueStreams).toHaveLength(3);
+    expect(animalShelter?.activationProfile?.processProfile?.valueStreams).toBeUndefined();
   });
 
   it("has at least 30 archetypes", () => {
