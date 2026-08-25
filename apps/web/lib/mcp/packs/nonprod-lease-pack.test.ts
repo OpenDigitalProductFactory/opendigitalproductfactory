@@ -275,6 +275,7 @@ describe("nonprod-lease pack — handler behavior (delegation preserved)", () =>
         leaseId: "NPEL-HOST",
         expectedMemoryBytes: BigInt(8 * 1024 ** 3),
         resourceClass: "vitest",
+        ownerProcessIdentity: "win32:638917704000000000",
       },
       slotKey: "slot-0",
       waitAgeMs: 0,
@@ -315,6 +316,7 @@ describe("nonprod-lease pack — handler behavior (delegation preserved)", () =>
       success: true,
       data: { lease: { expectedMemoryBytes: 8 * 1024 ** 3 } },
     });
+    expect(result.data?.lease).not.toHaveProperty("ownerProcessIdentity");
     expect(() => JSON.stringify(result)).not.toThrow();
   });
 

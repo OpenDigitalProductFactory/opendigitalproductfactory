@@ -406,6 +406,13 @@ describe("durable nonproduction admission", () => {
       }),
     });
     expect(mockDb.nonProductionEnvironmentLease.update).toHaveBeenCalledTimes(1);
+    expect(mockDb.nonProductionEnvironmentLease.update).toHaveBeenCalledWith({
+      where: { leaseId: "NPEL-1" },
+      data: expect.objectContaining({
+        ownerProcessId: null,
+        ownerProcessIdentity: null,
+      }),
+    });
   });
 
   it("releases a host resource without promoting a waiter from stale memory evidence", async () => {
@@ -491,6 +498,8 @@ describe("durable nonproduction admission", () => {
       data: expect.objectContaining({
         status: "expired",
         activeKey: null,
+        ownerProcessId: null,
+        ownerProcessIdentity: null,
       }),
     });
     expect(mockDb.nonProductionEnvironmentLease.update).not.toHaveBeenCalled();

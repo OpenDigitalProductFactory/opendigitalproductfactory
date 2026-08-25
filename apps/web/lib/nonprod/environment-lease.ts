@@ -219,6 +219,8 @@ async function reconcileEnvironmentInTransaction(input: {
         activeKey: null,
         phase: "expired",
         releasedAt: input.now,
+        ownerProcessId: null,
+        ownerProcessIdentity: null,
       },
     });
   }
@@ -653,6 +655,8 @@ export async function releaseNonprodEnvironmentLease(input: {
         cancelledAt: queued ? now : current.cancelledAt,
         activeKey: null,
         phase: queued ? "cancelled" : "released",
+        ownerProcessId: null,
+        ownerProcessIdentity: null,
       },
     });
     const reconciliation = await reconcileEnvironmentInTransaction({

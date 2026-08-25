@@ -49,9 +49,10 @@ function nonnegativeNumber(value: unknown): number | undefined {
   return Number.isFinite(number) && number >= 0 ? number : undefined;
 }
 
-function toolSafeLease<T extends Record<string, unknown>>(lease: T): T {
+function toolSafeLease(lease: Record<string, unknown>): Record<string, unknown> {
+  const { ownerProcessIdentity: _sensitiveProcessIdentity, ...visibleLease } = lease;
   return {
-    ...lease,
+    ...visibleLease,
     expectedMemoryBytes: typeof lease.expectedMemoryBytes === "bigint"
       ? Number(lease.expectedMemoryBytes)
       : lease.expectedMemoryBytes,
