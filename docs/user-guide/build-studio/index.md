@@ -12,6 +12,10 @@ Build Studio is the platform's guided way to turn a plain-language outcome into 
 
 Build Studio is not a separate code universe. It works from the install's shared development workspace. In customizable installs, that means Build Studio and VS Code operate on the same source tree while the portal continues to own review, evidence, and governed promotion.
 
+### Development Workrooms
+
+Open `/build/work` when you need the engineering context behind Build Studio: live development Workrooms, adoptable worktrees, branches, and the governed work-planning form. Its live count only includes rooms with current execution evidence. Use **Operations > Workrooms** for every live room plus retained history, and **Architecture > Workrooms** for reusable definitions, participants, queues, and human triggers.
+
 ## The operator workspace
 
 Open **Build Studio** under **Delivery**, then:

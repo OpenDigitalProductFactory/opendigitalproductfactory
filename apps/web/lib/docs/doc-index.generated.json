@@ -874,7 +874,8 @@
         "archetype-business-value-streams",
         "0-why-this-document-exists",
         "1-two-senses-of-value-stream-keep-them-distinct",
-        "2-the-universal-small-business-value-stream",
+        "2-the-default-small-business-value-stream",
+        "21-leaf-process-profiles-replace-the-fallback-when-the-business-works-differently",
         "3-the-commercial-model-decides-the-value-stream-shape",
         "4-the-bridge-value-stream-stage-platform-surface-audit-phase",
         "5-the-value-stream-stages-map-onto-substrate-the-platform-already-carries",
@@ -10913,6 +10914,7 @@
       "anchors": [
         "overview",
         "key-concepts",
+        "workroom-definitions",
         "what-you-can-do",
         "ai-coworker-identity",
         "following-a-concern-across-views"
@@ -10957,6 +10959,7 @@
       "publishedPortal": true,
       "anchors": [
         "overview",
+        "development-workrooms",
         "the-operator-workspace",
         "current-maturity",
         "key-concepts",
@@ -11599,6 +11602,7 @@
       "publishedPortal": true,
       "anchors": [
         "overview",
+        "workroom-inventory",
         "key-concepts",
         "what-you-can-do",
         "reading-epic-progress",
