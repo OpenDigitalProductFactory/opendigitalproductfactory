@@ -4,9 +4,10 @@ status: active
 
 # Local-CI per-surface control-plane fencing
 
-Backlog item: `BI-9DC21917`  
-Workroom: `WC-7E4580C0`  
-Decision: `DI-F858F9EB93E0`
+- Backlog item: `BI-9DC21917`
+- Workroom: `WC-1DC83FE8` (successor to `WC-7E4580C0`)
+- Decision: `DI-F858F9EB93E0`
+- Design: `docs/superpowers/specs/2026-08-25-local-ci-mcp-probe-hysteresis-design.md`
 
 ## Evidence and diagnosis
 
@@ -61,6 +62,8 @@ reproduced the two MCP misses. Evidence receipts are
 - Rationale: preflight, per-surface counters, surface-specific hysteresis,
   evidence fields, and fail-closed terminal classification are one watchdog
   safety boundary.
+- Blocking condition: no initiative scope baseline exists for `BI-9DC21917`;
+  independent spec approval must create it before coverage can be recorded.
 
 ## Acceptance
 
