@@ -184,6 +184,7 @@ describe("WorkCaseDetailView", () => {
     expect(html).toContain(">My Work<");
     expect(html).toContain(">Work Room<");
     expect(html).toContain('href="/workspace/my-queue"');
+    expect(html).not.toContain("<main");
   });
 
   it("puts outcome, attention, accountability, participants, and next action in the first viewport", () => {
@@ -223,6 +224,8 @@ describe("WorkCaseDetailView", () => {
     expect(html).toContain("Details");
     expect(html).toContain("Storefront booking");
     expect(html).toContain("Definition v1");
+    expect(html.match(/aria-labelledby="workroom-shape-title"/g)).toHaveLength(2);
+    expect(html).toContain('tabindex="0"');
     expect(html).not.toContain('aria-labelledby="work-room-activity-title"');
     expect(html).not.toContain('aria-labelledby="work-room-participants-title"');
     expect(html).not.toContain("Room details");
