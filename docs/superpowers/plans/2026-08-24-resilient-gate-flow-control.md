@@ -95,6 +95,13 @@ Increase delivery throughput without reducing evidence quality by moving wait st
 
 ## Slice 4 — Governed host resource lanes (`BI-30EDD4B0`)
 
+**Architecture decision:** `DI-F6868CA99BC1` selected explicit typed fields on
+the existing `NonProductionEnvironmentLease` at high confidence. The host lane
+therefore does not create a new broker/table or encode its contract into a
+free-form purpose string. `resourceClass`, `expectedMemoryBytes`, and
+`ownerProcessId` extend the existing durable authority; the in-process
+`ResourceLane` remains its portal adapter.
+
 ### Requirements
 
 - `REQ-RES-1`: TypeScript, Vitest, Next, Docker, preview, and inference declare resource class and expected memory.
@@ -107,6 +114,12 @@ Increase delivery throughput without reducing evidence quality by moving wait st
 2. Add measured peak working-set telemetry and configurable host reserve.
 3. Route all canonical script entry points through the resource broker.
 4. Detect ungoverned matching processes and return one actionable owner diagnostic.
+5. Route the root `typecheck`, `test`, `build`, and development-preview scripts
+   through one Node-native host runner. Cloud CI bypasses host-local admission;
+   a configured DPF contributor host fails closed when the lease facade is not
+   reachable.
+6. When admission is full, return a typed bounded retry and exit. Do not retain
+   a polling Node process; Slice 3 later replaces retry with server-driven wake.
 
 ### Verification
 
