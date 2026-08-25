@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import { WorkCaseDetailView } from "./WorkCaseDetailView";
+import { WorkroomBodyContent } from "./workroom/WorkroomBody";
 import type { WorkspaceWorkCaseDetailView } from "@/lib/work-management/workspace-case-loader";
 import type { WorkroomView } from "@/lib/work-management/room-types";
 
@@ -12,6 +13,25 @@ const room: WorkroomView = {
   purpose: "Coordinate the customer appointment.",
   mode: "finite",
   state: "waiting-on-person",
+  identity: {
+    definition: {
+      definitionId: "workroom-definition:booking",
+      version: 1,
+      sourceKey: "booking",
+      label: "Storefront booking",
+      mode: "finite",
+      decisionScope: "wwwd",
+    },
+    instance: {
+      instanceId: "workroom-instance:booking:BK-1",
+      occurrenceTrace: {
+        caseRef: { caseId: "booking:BK-1", sourceType: "booking", sourceId: "BK-1" },
+        sourceRef: { kind: "source", id: "BK-1", sourceType: "booking" },
+        cycleRef: null,
+        executionRefs: [{ kind: "work-item", id: "WI-1", status: "awaiting-input" }],
+      },
+    },
+  },
   outcome: {
     statement: "Customer has a confirmed appointment and arrival window.",
     packet: null,
@@ -164,6 +184,7 @@ describe("WorkCaseDetailView", () => {
     expect(html).toContain(">My Work<");
     expect(html).toContain(">Work Room<");
     expect(html).toContain('href="/workspace/my-queue"');
+    expect(html).not.toContain("<main");
   });
 
   it("puts outcome, attention, accountability, participants, and next action in the first viewport", () => {
@@ -196,8 +217,25 @@ describe("WorkCaseDetailView", () => {
     expect(header).not.toContain("<details open");
   });
 
-  it("keeps technical source references and A2A status behind room details", () => {
+  it("keeps the reusable definition visible while detailed work stays disclosed", () => {
     const html = renderToStaticMarkup(<WorkCaseDetailView detail={detail} />);
+
+    expect(html).toContain("Overview");
+    expect(html).toContain("Details");
+    expect(html).toContain("Storefront booking");
+    expect(html).toContain("Definition v1");
+    expect(html.match(/aria-labelledby="workroom-shape-title"/g)).toHaveLength(2);
+    expect(html).toContain('tabindex="0"');
+    expect(html).not.toContain('aria-labelledby="work-room-activity-title"');
+    expect(html).not.toContain('aria-labelledby="work-room-participants-title"');
+    expect(html).not.toContain("Room details");
+    expect(html).not.toContain("Customer called twice.");
+  });
+
+  it("reveals activity, participants, evidence, and technical references in Details", () => {
+    const html = renderToStaticMarkup(
+      <WorkroomBodyContent detail={detail} room={room} mode="detail" onModeChange={() => {}} />,
+    );
 
     expect(html).toContain("<details");
     expect(html).toContain("Room details");
@@ -205,8 +243,10 @@ describe("WorkCaseDetailView", () => {
     expect(html.indexOf("Room details")).toBeLessThan(html.indexOf("BK-1"));
   });
 
-  it("renders activity kinds with distinct accessible labels", () => {
-    const html = renderToStaticMarkup(<WorkCaseDetailView detail={detail} />);
+  it("renders detailed activity kinds with distinct accessible labels", () => {
+    const html = renderToStaticMarkup(
+      <WorkroomBodyContent detail={detail} room={room} mode="detail" onModeChange={() => {}} />,
+    );
 
     expect(html).toContain('aria-label="Message"');
     expect(html).toContain('aria-label="Decision resolved"');
@@ -270,7 +310,12 @@ describe("WorkCaseDetailView", () => {
       },
     };
     const html = renderToStaticMarkup(
-      <WorkCaseDetailView detail={unavailableCoworkerDetail} />,
+      <WorkroomBodyContent
+        detail={unavailableCoworkerDetail}
+        room={unavailableCoworkerDetail.room}
+        mode="detail"
+        onModeChange={() => {}}
+      />,
     );
 
     expect(html).toContain("Coworker status unavailable");
