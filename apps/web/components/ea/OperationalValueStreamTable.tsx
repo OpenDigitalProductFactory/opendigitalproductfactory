@@ -80,7 +80,6 @@ export function buildOperationalValueStreamRows(
     .map((element): OperationalValueStreamRow | null => {
       const metadata = asRecord(element.element.properties?.operationalValueStream) as ProcessMetadata | null;
       const streamKey = typeof metadata?.streamKey === "string" ? metadata.streamKey : null;
-      const stageKey = typeof metadata?.stageKey === "string" ? metadata.stageKey : element.viewElementId;
       if (!streamKey) return null;
       const gates = Array.isArray(metadata?.trustGateKeys)
         ? metadata.trustGateKeys.filter((gate): gate is string => typeof gate === "string").map(humanize)
