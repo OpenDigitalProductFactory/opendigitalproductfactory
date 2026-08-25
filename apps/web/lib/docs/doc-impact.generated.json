@@ -1665,6 +1665,7 @@
       "docs/testing/archetype-audit-plan.md"
     ],
     "scripts/gate-worktree.mjs": [
+      "docs/architecture/context-engineering-standards.md",
       "docs/testing/pre-pr-gate.md"
     ],
     "scripts/gate-worktree.sh": [
@@ -2315,6 +2316,7 @@
       "apps/web/lib/tool-description-hygiene.test.ts",
       "packages/dpf-skill-pack/hooks/tool-economy-precheck.mjs",
       "scripts/check-instruction-plane-size.mjs",
+      "scripts/gate-worktree.mjs",
       "scripts/lib/ci-policy-guards.mjs"
     ],
     "docs/architecture/contributor-procedure-runbook.md": [

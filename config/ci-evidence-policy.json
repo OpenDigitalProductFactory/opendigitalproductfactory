@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "policyVersion": "2026-08-24.1",
-  "plannerVersion": "1.0.0-shadow",
-  "mode": "shadow",
+  "policyVersion": "2026-08-24.2",
+  "plannerVersion": "1.1.0",
+  "mode": "authoritative-docs",
   "selectionThresholdPercent": 70,
   "graphAdviceSchemaVersion": 1,
   "requiredGraphRelationships": [

@@ -40,6 +40,7 @@ import {
   resolveLocalCiRootClone,
 } from "./lib/local-ci-slot-manifest.mjs";
 import { classifyBaseResilience } from "./lib/local-ci-base-freshness.mjs";
+import { runPreAdmissionDocumentationLane } from "./lib/documentation-evidence-lane.mjs";
 import {
   createLocalCiPassEvidenceValidity,
   readLocalCiGateState,
@@ -748,6 +749,7 @@ async function cancelDeadLocalQueueObservers({
   }
 }
 
+
 function warnAboutMainFreshness({ gitBin, worktreePath }) {
   if (!gitOrEmpty(gitBin, ["rev-parse", "--verify", "origin/main"], worktreePath)) return;
   const behind = gitOrEmpty(gitBin, ["rev-list", "--count", "HEAD..origin/main"], worktreePath);
@@ -834,10 +836,6 @@ async function main() {
     }
     process.stdout.write("would call claim_nonprod_environment_lease and record_local_integration_result only when a real command or explicit stub is configured\n");
     process.exit(0); // exit-0: --dry-run routing probe; changes nothing and records nothing
-  }
-
-  if (!options.finalizeEvidence && !commandSpec && !allowStub) {
-    die("local-CI gate runner is not wired (scripts/local-ci-runner.mjs is missing); refusing to record passing stub evidence. Set DPF_LOCAL_CI_COMMAND to the canonical sandbox command, or use DPF_ALLOW_LOCAL_CI_STUB=1 only in contract tests.");
   }
 
   const bearerToken = process.env.DPF_MCP_BEARER_TOKEN;
@@ -996,6 +994,43 @@ async function main() {
     if (push.status !== 0) die(`push failed: ${push.stderr || push.stdout}`);
   }
 
+  if (!ownerProvider) {
+    die(
+      "cannot attribute this gate to a client. Pass --owner-provider "
+        + "<build-studio|claude|codex|grok|antigravity|coworker> or set "
+        + "DPF_GATE_OWNER_PROVIDER. (The lease and the evidence record use a "
+        + "closed provider vocabulary, so there is no honest default.)",
+    );
+  }
+
+  if (!options.finalizeEvidence) {
+    const documentationResult = await runPreAdmissionDocumentationLane({
+      branch,
+      sha,
+      worktreePath,
+      gitBin,
+      ownerProvider,
+      ownerSessionId,
+      mcpUrl: options.mcpUrl,
+      bearerToken,
+      stateFile,
+      planFile: resolvePath(candidateGitDir, "dpf-pre-admission-evidence-plan.json"),
+      plannerPath: resolvePath(SCRIPT_DIR, "ci-evidence-plan.mjs"),
+    });
+    if (documentationResult.handled) {
+      process.stdout.write(
+        documentationResult.status === 0
+          ? `documentation evidence passed without heavyweight admission: ${documentationResult.evidenceId}\n`
+          : `documentation evidence failed without heavyweight admission: ${documentationResult.evidenceId}\n`,
+      );
+      process.exit(documentationResult.status);
+    }
+  }
+
+  if (!options.finalizeEvidence && !commandSpec && !allowStub) {
+    die("local-CI gate runner is not wired (scripts/local-ci-runner.mjs is missing); refusing to record passing stub evidence. Set DPF_LOCAL_CI_COMMAND to the canonical sandbox command, or use DPF_ALLOW_LOCAL_CI_STUB=1 only in contract tests.");
+  }
+
   const leaseTtlMs = Math.min(
     options.expiresMinutes * 60_000,
     LOCAL_CI_ACTIVE_LEASE_TTL_MS,
@@ -1065,15 +1100,6 @@ async function main() {
   // no "unknown" member, so an unresolved provider has no honest value — refuse
   // rather than attribute this run to whichever client is most common. Everything
   // above (--dry-run, the runner-wiring check) stays runnable unattributed.
-  if (!ownerProvider) {
-    die(
-      "cannot attribute this gate to a client. Pass --owner-provider "
-        + "<build-studio|claude|codex|grok|antigravity|coworker> or set "
-        + "DPF_GATE_OWNER_PROVIDER. (The lease and the evidence record use a "
-        + "closed provider vocabulary, so there is no honest default.)",
-    );
-  }
-
   let claimAttempt = 0;
   let nextQueueReconciliationAt = 0;
   for (;;) {

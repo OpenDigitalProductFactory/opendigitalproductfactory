@@ -347,6 +347,11 @@ export function createEvidencePlan(input) {
   }
 
   const routes = sortedUnique([...affectedRoutes]);
+  const executionLane = escalations.length > 0
+    ? "exhaustive"
+    : docsOnly
+      ? "documentation"
+      : "affected";
   const semanticPlan = {
     schemaVersion: CI_EVIDENCE_PLAN_SCHEMA_VERSION,
     plannerVersion: policy.plannerVersion,
@@ -377,6 +382,7 @@ export function createEvidencePlan(input) {
     routeFamilies: sortedUnique(routes.map(routeFamily)),
     globalGuards: sortedUnique(policy.globalGuards),
     uxMode: routes.length > 0 ? "changed-routes" : "none",
+    executionLane,
     fullSuite: escalations.length > 0,
     evidenceTier: escalations.length > 0 ? "exhaustive" : "affected",
     escalations: escalations.sort((left, right) => left.code.localeCompare(right.code)),
