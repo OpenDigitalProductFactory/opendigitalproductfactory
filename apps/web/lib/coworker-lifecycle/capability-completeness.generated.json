@@ -290,9 +290,9 @@
         "irreversible": 21,
         "authority": 17
       },
-      "sideEffectingTools": 179,
+      "sideEffectingTools": 178,
       "gateClassified": 56,
-      "ungated": 123,
+      "ungated": 122,
       "coveragePct": 31,
       "classifiedTools": [
         "abandon_stalled_build",

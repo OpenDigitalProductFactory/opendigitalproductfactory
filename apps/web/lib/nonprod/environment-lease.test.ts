@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import localCiSlotResources from "./local-ci-slot-resources.json";
-
 const recordQueueTransition = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/queue/queue-telemetry", () => ({ recordQueueTransition }));
 
@@ -21,11 +20,9 @@ import {
 } from "./environment-lease";
 
 const NOW = new Date("2026-07-28T21:00:00.000Z");
-
 beforeEach(() => {
   vi.clearAllMocks();
 });
-
 function lease(overrides: Record<string, unknown> = {}) {
   return {
     id: "row-1",
@@ -46,6 +43,10 @@ function lease(overrides: Record<string, unknown> = {}) {
     url: "http://localhost:3010",
     ports: [3010],
     cleanupCommand: null,
+    resourceClass: null,
+    expectedMemoryBytes: null,
+    ownerPid: null,
+    ownerProcessIdentity: null,
     evidenceRecordId: null,
     requestedTtlMs: DEFAULT_LEASE_TTL_MS,
     expiresAt: new Date(NOW.getTime() + DEFAULT_LEASE_TTL_MS),
@@ -333,6 +334,13 @@ describe("durable nonproduction admission", () => {
       }),
     });
     expect(mockDb.nonProductionEnvironmentLease.update).toHaveBeenCalledTimes(1);
+    expect(mockDb.nonProductionEnvironmentLease.update).toHaveBeenCalledWith({
+      where: { leaseId: "NPEL-1" },
+      data: expect.objectContaining({
+        ownerPid: null,
+        ownerProcessIdentity: null,
+      }),
+    });
   });
 
   it("refuses to let a subscriber release the canonical immutable gate lease", async () => {
@@ -376,6 +384,8 @@ describe("durable nonproduction admission", () => {
       data: expect.objectContaining({
         status: "expired",
         activeKey: null,
+        ownerPid: null,
+        ownerProcessIdentity: null,
       }),
     });
     expect(mockDb.nonProductionEnvironmentLease.update).not.toHaveBeenCalled();

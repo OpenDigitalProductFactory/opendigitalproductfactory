@@ -1380,6 +1380,7 @@
         "13-workroom-vs-featurebuild-vs-sandbox-vs-runtimetarget-pick-the-right-substrate",
         "14-propose-acknowledge-reassign-par-concurrent-session-ownership-protocol",
         "15-governance-approves-evidence-not-provenance",
+        "16-host-heavy-work-uses-durable-resource-leases-not-waiting-processes",
         "2-dpf-anti-patterns-defaults-the-kernel-forbids",
         "21-wiping-db-volumes-to-fix-a-code-bug",
         "22-hardcoding-a-provider-in-the-seed-or-agentmodelconfig",
@@ -5484,6 +5485,7 @@
       "publishedPortal": false,
       "anchors": [
         "local-ci-sandbox-slots",
+        "host-wide-heavyweight-resource-admission",
         "current-operating-mode",
         "peer-slot-host-fencing",
         "design-grounding",
@@ -11195,6 +11197,7 @@
         "spin-up-an-isolated-thread",
         "commit-and-push-fast",
         "worktrees-are-source-control-isolation-not-runtime-isolation",
+        "heavy-local-commands-use-a-shared-host-resource-lane",
         "clean-up-when-merged",
         "webhooks-closing-the-promotion-loop",
         "adhering-to-the-portals-processes",

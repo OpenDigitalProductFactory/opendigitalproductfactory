@@ -1,0 +1,59 @@
+{
+  "version": "1",
+  "accountableOwner": "developer-platform",
+  "affectedCopies": [
+    "Nonproduction lease MCP list/claim/renew/release responses",
+    "QueueTelemetryEvent host-resource admission evidence",
+    "Prisma-to-EA current-state data-model mirror"
+  ],
+  "migration": {
+    "name": "20260825160000_add_nonprod_lease_resource_contract + 20260825161500_add_nonprod_lease_process_identity",
+    "backfill": "none — all four fields are nullable, so historical preview and local-CI leases retain their original semantics without fabricated resource attribution"
+  },
+  "tests": [
+    "apps/web/lib/nonprod/host-resource-policy.test.ts",
+    "apps/web/lib/nonprod/environment-lease.test.ts",
+    "apps/web/lib/mcp/packs/nonprod-lease-pack.test.ts",
+    "scripts/host-resource-runner.test.mjs"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:nonproduction-environment-lease#host-resource-admission",
+      "prismaModel": "NonProductionEnvironmentLease",
+      "lifecycleDisposition": "Resource metadata follows the existing queued, admitted, renewed, released, cancelled, and expired lease lifecycle.",
+      "fields": [
+        {
+          "fieldId": "data:nonproduction-environment-lease#resourceClass",
+          "resolution": "governed",
+          "reason": "Names the closed heavyweight process class whose host capacity the lease reserves.",
+          "provenance": "Canonical host-resource runner validated against the versioned profile contract",
+          "flags": []
+        },
+        {
+          "fieldId": "data:nonproduction-environment-lease#expectedMemoryBytes",
+          "resolution": "governed",
+          "reason": "Persists the calibrated memory reservation used for admission and later peak comparison.",
+          "provenance": "Versioned host-resource profile floor or a validated higher calibration",
+          "flags": []
+        },
+        {
+          "fieldId": "data:nonproduction-environment-lease#ownerPid",
+          "resolution": "governed",
+          "reason": "Correlates the admitted runner and its descendants for liveness and evidence-only stray detection.",
+          "provenance": "Admitted host runner process; never treated as identity without live process-start evidence",
+          "flags": ["sensitive"],
+          "fieldPolicy": "Operational correlation only; mapped to the ownerProcessId database column, but deliberately not named like a relational key. PID is not authorization and must not justify terminating an unowned process."
+        },
+        {
+          "fieldId": "data:nonproduction-environment-lease#ownerProcessIdentity",
+          "resolution": "governed",
+          "reason": "Pairs the PID with its OS process-start identity so PID reuse cannot make a stale owner appear live.",
+          "provenance": "Existing cross-platform local sandbox fence process-identity reader",
+          "flags": ["sensitive"],
+          "fieldPolicy": "Operational liveness correlation only; omitted from MCP responses and cleared with ownerPid at release, cancellation, or expiry. Never expose as user identity or authorization."
+        }
+      ]
+    }
+  ]
+}
