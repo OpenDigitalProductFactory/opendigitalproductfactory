@@ -8,18 +8,6 @@ status: proposed
 - **Workroom:** `WC-B7D92C90`
 - **Design:** `docs/superpowers/specs/2026-08-25-local-ci-vitest-stage-timeout-design.md`
 
-## Requirement and contract map
-
-| Ref | Requirement | Contract | Flow | Verification |
-| --- | --- | --- | --- | --- |
-| `REQ-STAGE-BOUND` | Exhaustive Vitest cannot hold the governed gate indefinitely. | `CONTRACT-OBSERVER-DEADLINE` | `FLOW-DEADLINE-FINALIZE` | `VERIFY-OBSERVER-DEADLINE` |
-| `REQ-FAIL-CLOSED` | A deadline is infrastructure runner termination, never a pass or product failure. | `CONTRACT-VITEST-CLASSIFICATION` | `FLOW-RECOVERY-BOUND` | `VERIFY-CLASSIFICATION` |
-| `REQ-SCOPE` | Other observed process stages keep current duration behavior. | `CONTRACT-OPT-IN` | `FLOW-VITEST-WIRING` | `VERIFY-OPT-IN` |
-| `REQ-EVIDENCE` | Terminal evidence identifies the configured bound and whether it fired. | `CONTRACT-STAGE-RECEIPT` | `FLOW-DEADLINE-FINALIZE` | `VERIFY-EXECUTABLE-RECEIPT` |
-
-Canonical baseline mapping: `OBJ-BOUND` → `AC-VITEST-ONLY`; `OBJ-FINALIZE` →
-`AC-TREE-CLOSE`, `AC-NON-PASS`; `OBJ-EVIDENCE` → `AC-RETRY-RECEIPT`.
-
 ## Research evidence
 
 - Frozen candidate `286b14ef3` under lease `NPEL-79E8B0C233` stopped emitting
@@ -34,6 +22,18 @@ Canonical baseline mapping: `OBJ-BOUND` → `AC-VITEST-ONLY`; `OBJ-FINALIZE` →
   the shared observer, close the verified process tree through its finalizer,
   classify that close as runner infrastructure, and keep the existing single
   reduced-worker retry. Other stages remain unbounded and all tests still run.
+
+## Requirement and contract map
+
+| Ref | Requirement | Contract | Flow | Verification |
+| --- | --- | --- | --- | --- |
+| `REQ-STAGE-BOUND` | Exhaustive Vitest cannot hold the governed gate indefinitely. | `CONTRACT-OBSERVER-DEADLINE` | `FLOW-DEADLINE-FINALIZE` | `VERIFY-OBSERVER-DEADLINE` |
+| `REQ-FAIL-CLOSED` | A deadline is infrastructure runner termination, never a pass or product failure. | `CONTRACT-VITEST-CLASSIFICATION` | `FLOW-RECOVERY-BOUND` | `VERIFY-CLASSIFICATION` |
+| `REQ-SCOPE` | Other observed process stages keep current duration behavior. | `CONTRACT-OPT-IN` | `FLOW-VITEST-WIRING` | `VERIFY-OPT-IN` |
+| `REQ-EVIDENCE` | Terminal evidence identifies the configured bound and whether it fired. | `CONTRACT-STAGE-RECEIPT` | `FLOW-DEADLINE-FINALIZE` | `VERIFY-EXECUTABLE-RECEIPT` |
+
+Canonical baseline mapping: `OBJ-BOUND` → `AC-VITEST-ONLY`; `OBJ-FINALIZE` →
+`AC-TREE-CLOSE`, `AC-NON-PASS`; `OBJ-EVIDENCE` → `AC-RETRY-RECEIPT`.
 
 ## Atomic delivery
 
