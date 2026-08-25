@@ -6,6 +6,10 @@ import {
   createLocalCiPassEvidenceValidity,
   writeLocalCiGateState,
 } from "./local-ci-gate-state.mjs";
+import {
+  collectToolchainFingerprint,
+  defaultBuildStrategy,
+} from "./local-integration-ci.mjs";
 
 const WORKSPACE_REQUIRED_DOCS = new Set([
   "docs/architecture/four-portfolio-archetype-ai-workforce-operating-standard.md",
@@ -26,6 +30,26 @@ export function couldBeDocumentationFiles(changedFiles) {
     ));
 }
 
+export function repositorySlugFromRemote(remote) {
+  const value = String(remote || "").trim();
+  const match = value.match(/(?:github\.com[/:])([^/\s]+)\/([^/\s]+?)(?:\.git)?$/i);
+  return match ? `${match[1]}/${match[2]}` : "";
+}
+
+export function createPreAdmissionGateIdentity({
+  repository,
+  plan,
+  toolchainFingerprint,
+}) {
+  return {
+    repository,
+    integrationTreeSha: plan.headTreeSha,
+    evidencePlanDigest: plan.digest,
+    toolchainFingerprint,
+    gateKind: "local-integration-ci",
+  };
+}
+
 function gitOutput(gitBin, args, cwd) {
   const result = spawnSync(gitBin, args, { cwd, encoding: "utf8", shell: false });
   return result.status === 0 ? result.stdout.trim() : "";
@@ -36,11 +60,7 @@ function exactCandidateIsEligible({ gitBin, worktreePath, sha }) {
   if (gitOutput(gitBin, ["status", "--porcelain", "--untracked-files=normal"], worktreePath)) {
     return false;
   }
-  return spawnSync(
-    gitBin,
-    ["merge-base", "--is-ancestor", "origin/main", sha],
-    { cwd: worktreePath, shell: false },
-  ).status === 0;
+  return Boolean(gitOutput(gitBin, ["rev-parse", "--verify", "origin/main"], worktreePath));
 }
 
 function readCandidateFiles(gitBin, worktreePath, sha) {
@@ -52,6 +72,23 @@ function readCandidateFiles(gitBin, worktreePath, sha) {
   return result.status === 0
     ? result.stdout.split(/\r?\n/).filter(Boolean)
     : null;
+}
+
+function integrationTreeRef(gitBin, worktreePath, sha) {
+  const currentBase = spawnSync(
+    gitBin,
+    ["merge-base", "--is-ancestor", "origin/main", sha],
+    { cwd: worktreePath, shell: false },
+  );
+  if (currentBase.status === 0) return sha;
+  const merge = spawnSync(
+    gitBin,
+    ["merge-tree", "--write-tree", "origin/main", sha],
+    { cwd: worktreePath, encoding: "utf8", shell: false },
+  );
+  if (merge.status !== 0) return "";
+  const tree = (merge.stdout || "").trim().split(/\s+/)[0] || "";
+  return /^[0-9a-f]{40}$/i.test(tree) ? tree : "";
 }
 
 function runDocumentationCommands(worktreePath, env) {
@@ -102,15 +139,17 @@ export async function runPreAdmissionDocumentationLane({
   env = process.env,
 }) {
   if (!exactCandidateIsEligible({ gitBin, worktreePath, sha })) return { handled: false };
-  const changedFiles = readCandidateFiles(gitBin, worktreePath, sha);
-  if (!changedFiles || !couldBeDocumentationFiles(changedFiles)) return { handled: false };
+  const integrationRef = integrationTreeRef(gitBin, worktreePath, sha);
+  if (!integrationRef) return { handled: false };
+  const changedFiles = readCandidateFiles(gitBin, worktreePath, integrationRef);
+  if (!changedFiles) return { handled: false };
 
   rmSync(planFile, { force: true });
   const planner = spawnSync(process.execPath, [
     plannerPath,
     "--event", "local-ci",
     "--base", "origin/main",
-    "--head", sha,
+    "--head", integrationRef,
     "--output", planFile,
   ], { cwd: worktreePath, encoding: "utf8", shell: false, env });
   if (planner.status !== 0 || !existsSync(planFile)) return { handled: false };
@@ -121,11 +160,28 @@ export async function runPreAdmissionDocumentationLane({
   } catch {
     return { handled: false };
   }
-  if (plan.executionLane !== "documentation" || plan.fullSuite !== false) {
-    return { handled: false, plan };
+  const repository = repositorySlugFromRemote(
+    gitOutput(gitBin, ["remote", "get-url", "origin"], worktreePath),
+  );
+  const toolchain = collectToolchainFingerprint({
+    buildStrategy: defaultBuildStrategy(process.platform),
+    cwd: worktreePath,
+  });
+  const gateIdentity = repository
+    ? createPreAdmissionGateIdentity({
+      repository,
+      plan,
+      toolchainFingerprint: toolchain.toolchainFingerprint,
+    })
+    : null;
+  if (!couldBeDocumentationFiles(changedFiles)) {
+    return { handled: false, plan, gateIdentity };
   }
-  if (gitOutput(gitBin, ["rev-parse", `${sha}^{tree}`], worktreePath) !== plan.headTreeSha) {
-    return { handled: false, plan };
+  if (plan.executionLane !== "documentation" || plan.fullSuite !== false) {
+    return { handled: false, plan, gateIdentity };
+  }
+  if (gitOutput(gitBin, ["rev-parse", `${integrationRef}^{tree}`], worktreePath) !== plan.headTreeSha) {
+    return { handled: false, plan, gateIdentity };
   }
 
   const execution = runDocumentationCommands(worktreePath, env);
@@ -194,6 +250,7 @@ export async function runPreAdmissionDocumentationLane({
     handled: true,
     status: passed ? 0 : execution.exitCode,
     plan,
+    gateIdentity,
     evidenceId,
   };
 }

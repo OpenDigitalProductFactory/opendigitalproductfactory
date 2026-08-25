@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   claimSemanticReviewSingleFlight,
   completeSemanticReviewSingleFlight,
+  createPrismaSemanticReviewSingleFlightStore,
   type SemanticReviewRunRow,
   type SemanticReviewSingleFlightStore,
 } from "./semantic-review-single-flight";
@@ -49,6 +50,26 @@ const input = (gateKey = "a".repeat(64)) => ({
   capsuleId: "WC-TEST",
   title: "Review immutable change",
   objective: "Review the exact committed delivery packet once.",
+});
+
+describe("semantic review TaskRun adapter", () => {
+  it("uses the indexed repeated-pattern lookup with a bounded attempt window", async () => {
+    const taskRun = {
+      findMany: vi.fn().mockResolvedValue([]),
+      findUnique: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+    };
+    const store = createPrismaSemanticReviewSingleFlightStore({ taskRun } as never);
+
+    await store.list(`gate:${"a".repeat(64)}`);
+
+    expect(taskRun.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { repeatedPatternKey: `gate:${"a".repeat(64)}` },
+      orderBy: { createdAt: "desc" },
+      take: 10,
+    }));
+  });
 });
 
 describe("semantic review single-flight", () => {

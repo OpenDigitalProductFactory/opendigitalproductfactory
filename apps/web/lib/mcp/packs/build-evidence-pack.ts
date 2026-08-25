@@ -79,6 +79,8 @@ const definitions: ToolDefinition[] = [
         mode: { type: "string", enum: ["single-branch", "sibling-set", "post-merge-main"] },
         status: { type: "string", enum: ["passed", "failed", "conflict", "blocked_sandbox_drift", "blocked_control_plane_starvation"] },
         summary: { type: "string" },
+        gateKey: { type: "string", description: "Server-derived immutable gate key returned at admission." },
+        leaseId: { type: "string", description: "Canonical executor lease id returned at admission." },
         evidence: { type: "object" },
       },
       required: ["provider", "externalSessionId", "routeContext", "candidateBranch", "mode", "status", "summary", "evidence"],
@@ -248,6 +250,8 @@ async function recordLocalIntegrationResultHandler(
     mode: mode as "single-branch" | "sibling-set" | "post-merge-main",
     status: status as "passed" | "failed" | "conflict" | "blocked_sandbox_drift" | "blocked_control_plane_starvation",
     summary,
+    gateKey: stringValue("gateKey") || undefined,
+    leaseId: stringValue("leaseId") || undefined,
     evidence: evidence as import("@dpf/db").Prisma.InputJsonValue,
   });
   return {

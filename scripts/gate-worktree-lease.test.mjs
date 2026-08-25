@@ -318,6 +318,87 @@ test("durable queue observation reuses claimKey and grants a fresh admitted TTL"
   }
 });
 
+test("a subscriber observes the canonical run and reuses its terminal evidence without authority", async () => {
+  const calls = [];
+  let claims = 0;
+  const server = createServer((request, response) => {
+    let body = "";
+    request.on("data", (chunk) => { body += chunk; });
+    request.on("end", () => {
+      const payload = JSON.parse(body);
+      const tool = payload.params.name;
+      calls.push(tool);
+      if (tool === "claim_nonprod_environment_lease") claims += 1;
+      const result = tool === "claim_nonprod_environment_lease" && claims === 1
+        ? {
+          success: true,
+          entityId: "NPEL-WINNER",
+          data: {
+            gateKey: "a".repeat(64),
+            lease: { leaseId: "NPEL-WINNER" },
+            admission: { status: "subscribed", executionStatus: "admitted" },
+          },
+        }
+        : tool === "claim_nonprod_environment_lease"
+          ? {
+            success: true,
+            entityId: "EXT-WINNER",
+            data: {
+              gateKey: "a".repeat(64),
+              lease: { leaseId: "NPEL-WINNER" },
+              admission: {
+                status: "reused",
+                evidenceRecordId: "EXT-WINNER",
+                resultClass: "pass",
+              },
+            },
+          }
+          : { success: true, data: { level: "normal" } };
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify({
+        jsonrpc: "2.0",
+        id: payload.id,
+        result: { content: [{ type: "text", text: JSON.stringify(result) }] },
+      }));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  const worktree = makeTempWorktree();
+
+  try {
+    const result = await run(process.execPath, [
+      "scripts/gate-worktree.mjs",
+      "--branch", "fix/subscriber-reuse",
+      "--worktree", worktree,
+      "--poll-seconds", "0.01",
+      "--mcp-url", `http://127.0.0.1:${address.port}`,
+      "--no-push",
+    ], {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        DPF_MCP_BEARER_TOKEN: "test-token",
+        DPF_ALLOW_LOCAL_CI_STUB: "1",
+        DPF_GATE_RETRY_JITTER: "0",
+        DPF_LOCAL_SANDBOX_FENCE_PATH: isolatedFencePath(),
+      },
+    });
+
+    assert.equal(result.code, 0, result.output);
+    assert.match(result.output, /owned by another caller/);
+    assert.match(result.output, /reused canonical local-CI pass evidence: EXT-WINNER/);
+    assert.equal(calls.filter((tool) => tool === "claim_nonprod_environment_lease").length, 2);
+    assert.equal(calls.includes("renew_nonprod_environment_lease"), false);
+    assert.equal(calls.includes("release_nonprod_environment_lease"), false);
+    assert.equal(calls.includes("record_local_integration_result"), false);
+  } finally {
+    rmSync(worktree, { recursive: true, force: true });
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
 test("released terminal claim from a prior run gets a fresh rerun claimKey", async () => {
   const claims = [];
   const server = createServer((request, response) => {

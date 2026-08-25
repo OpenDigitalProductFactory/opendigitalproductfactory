@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { markTaskRunWorking } from "@/lib/observability/heartbeat";
 
 export type SemanticReviewRunStatus =
   | "submitted"
@@ -10,6 +11,7 @@ export type SemanticReviewRunStatus =
   | "canceled"
   | "rejected"
   | "archived";
+const WORKING_STATUS: SemanticReviewRunStatus = "working";
 
 export type SemanticReviewRunCreate = {
   taskRunId: string;
@@ -37,6 +39,159 @@ export interface SemanticReviewSingleFlightStore {
   update(taskRunId: string, update: SemanticReviewRunUpdate): Promise<SemanticReviewRunRow>;
 }
 
+type TaskRunRecord = {
+  taskRunId: string;
+  repeatedPatternKey: string | null;
+  userId: string;
+  title: string;
+  objective: string;
+  status: string;
+  progressPayload: unknown;
+  a2aMetadata: unknown;
+  createdAt: Date;
+};
+
+type SemanticReviewTaskRunDb = {
+  taskRun: {
+    findMany(input: unknown): Promise<TaskRunRecord[]>;
+    findUnique(input: unknown): Promise<TaskRunRecord | null>;
+    create(input: unknown): Promise<TaskRunRecord>;
+    update(input: unknown): Promise<TaskRunRecord>;
+  };
+};
+
+function metadata(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function mapTaskRun(row: TaskRunRecord): SemanticReviewRunRow {
+  const runMetadata = metadata(row.a2aMetadata);
+  const gateKey = typeof runMetadata.gateKey === "string" ? runMetadata.gateKey : "";
+  const capsuleId = typeof runMetadata.capsuleId === "string" ? runMetadata.capsuleId : "";
+  const attempt = typeof runMetadata.attempt === "number" ? runMetadata.attempt : 0;
+  if (!row.repeatedPatternKey || !SHA256.test(gateKey) || !capsuleId || attempt < 1) {
+    throw new Error(`Invalid semantic-review TaskRun projection: ${row.taskRunId}`);
+  }
+  return {
+    taskRunId: row.taskRunId,
+    repeatedPatternKey: row.repeatedPatternKey,
+    userId: row.userId,
+    gateKey,
+    capsuleId,
+    attempt,
+    title: row.title,
+    objective: row.objective,
+    status: row.status as SemanticReviewRunStatus,
+    progressPayload: row.progressPayload,
+    createdAt: row.createdAt,
+  };
+}
+
+export function createPrismaSemanticReviewSingleFlightStore(
+  db: SemanticReviewTaskRunDb,
+): SemanticReviewSingleFlightStore {
+  return {
+    async list(repeatedPatternKey) {
+      const rows = await db.taskRun.findMany({
+        where: { repeatedPatternKey },
+        orderBy: { createdAt: "desc" },
+        take: 10,
+        select: {
+          taskRunId: true,
+          repeatedPatternKey: true,
+          userId: true,
+          title: true,
+          objective: true,
+          status: true,
+          progressPayload: true,
+          a2aMetadata: true,
+          createdAt: true,
+        },
+      });
+      return rows.map(mapTaskRun);
+    },
+    async find(taskRunId) {
+      const row = await db.taskRun.findUnique({
+        where: { taskRunId },
+        select: {
+          taskRunId: true,
+          repeatedPatternKey: true,
+          userId: true,
+          title: true,
+          objective: true,
+          status: true,
+          progressPayload: true,
+          a2aMetadata: true,
+          createdAt: true,
+        },
+      });
+      return row ? mapTaskRun(row) : null;
+    },
+    async create(input) {
+      const row = await db.taskRun.create({
+        data: {
+          taskRunId: input.taskRunId,
+          userId: input.userId,
+          currentAgentId: "change-reviewer",
+          routeContext: "change-review",
+          title: input.title,
+          objective: input.objective,
+          source: "build",
+          status: "submitted",
+          repeatedPatternKey: input.repeatedPatternKey,
+          a2aMetadata: {
+            gateKind: "semantic-review",
+            gateKey: input.gateKey,
+            capsuleId: input.capsuleId,
+            attempt: input.attempt,
+          },
+          lastHeartbeatAt: new Date(),
+        },
+        select: {
+          taskRunId: true,
+          repeatedPatternKey: true,
+          userId: true,
+          title: true,
+          objective: true,
+          status: true,
+          progressPayload: true,
+          a2aMetadata: true,
+          createdAt: true,
+        },
+      });
+      await markTaskRunWorking(row.taskRunId);
+      return mapTaskRun({ ...row, status: WORKING_STATUS });
+    },
+    async update(taskRunId, update) {
+      const terminal = ["completed", "failed", "canceled", "rejected", "archived"]
+        .includes(update.status);
+      const row = await db.taskRun.update({
+        where: { taskRunId },
+        data: {
+          status: update.status,
+          progressPayload: update.progressPayload,
+          lastHeartbeatAt: new Date(),
+          ...(terminal ? { completedAt: new Date() } : {}),
+        },
+        select: {
+          taskRunId: true,
+          repeatedPatternKey: true,
+          userId: true,
+          title: true,
+          objective: true,
+          status: true,
+          progressPayload: true,
+          a2aMetadata: true,
+          createdAt: true,
+        },
+      });
+      return mapTaskRun(row);
+    },
+  };
+}
+
 export type SemanticReviewSingleFlightClaim =
   | { disposition: "admitted"; taskRunId: string; gateKey: string; attempt: number }
   | { disposition: "subscribed"; taskRunId: string; gateKey: string; attempt: number }
@@ -46,6 +201,7 @@ export type SemanticReviewSingleFlightClaim =
     gateKey: string;
     attempt: number;
     evidenceRecordId: string;
+    resultClass: "pass" | "fail";
   };
 
 const SHA256 = /^[0-9a-f]{64}$/;
@@ -90,13 +246,18 @@ async function projectExisting(
   }
   if (row.status !== "completed") return null;
   const evidenceId = evidenceRecordId(row.progressPayload);
-  if (!evidenceId || !(await isReusableEvidence(evidenceId))) return null;
+  const payload = metadata(row.progressPayload);
+  const resultClass = payload.resultClass === "pass" || payload.resultClass === "fail"
+    ? payload.resultClass
+    : null;
+  if (!evidenceId || !resultClass || !(await isReusableEvidence(evidenceId))) return null;
   return {
     disposition: "reused",
     taskRunId: row.taskRunId,
     gateKey,
     attempt: row.attempt,
     evidenceRecordId: evidenceId,
+    resultClass,
   };
 }
 

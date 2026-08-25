@@ -12,6 +12,7 @@ vi.mock("@/lib/nonprod/environment-lease", () => lease);
 
 import { nonprodLeasePack } from "./nonprod-lease-pack";
 import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
+import { deriveGateKey } from "@/lib/gates/gate-run-identity";
 
 const EXPECTED_TOOLS = [
   "list_nonprod_environment_leases",
@@ -146,6 +147,84 @@ describe("nonprod-lease pack — handler behavior (delegation preserved)", () =>
           slotKey: "slot-0",
           waitAgeMs: 2500,
         },
+      },
+    });
+  });
+
+  it("derives the immutable local-CI claim key on the server and projects subscribers", async () => {
+    const gateIdentity = {
+      repository: "OpenDigitalProductFactory/OpenDigitalProductFactory",
+      integrationTreeSha: "a".repeat(40),
+      evidencePlanDigest: "b".repeat(64),
+      toolchainFingerprint: "c".repeat(64),
+      gateKind: "local-integration-ci" as const,
+    };
+    const gateKey = deriveGateKey(gateIdentity);
+    lease.claimNonprodEnvironmentLease.mockResolvedValue({
+      status: "subscribed",
+      lease: { leaseId: "NPEL-WINNER", ownerSessionId: "winner" },
+      executionStatus: "admitted",
+      poolPolicy: { effectiveCapacity: 1 },
+    });
+
+    const res = await nonprodLeasePack.handlers.claim_nonprod_environment_lease({
+      environmentKey: "local-integration-ci",
+      ownerProvider: "codex",
+      ownerSessionId: "subscriber",
+      claimKey: "caller-must-not-control-this",
+      gateIdentity,
+      purpose: "test",
+      url: "http://localhost:3010",
+      ports: [3010],
+      expiresAt: new Date("2026-07-28T22:00:00Z").toISOString(),
+    }, "u1");
+
+    expect(lease.claimNonprodEnvironmentLease).toHaveBeenCalledWith(
+      expect.objectContaining({ claimKey: `gate:${gateKey}` }),
+    );
+    expect(res).toMatchObject({
+      success: true,
+      entityId: "NPEL-WINNER",
+      data: {
+        gateKey,
+        admission: { status: "subscribed", executionStatus: "admitted" },
+      },
+    });
+  });
+
+  it("projects reusable terminal gate evidence without another admission", async () => {
+    const gateIdentity = {
+      repository: "opendigitalproductfactory/opendigitalproductfactory",
+      integrationTreeSha: "a".repeat(40),
+      evidencePlanDigest: "b".repeat(64),
+      toolchainFingerprint: "c".repeat(64),
+      gateKind: "local-integration-ci" as const,
+    };
+    const gateKey = deriveGateKey(gateIdentity);
+    lease.claimNonprodEnvironmentLease.mockResolvedValue({
+      status: "reused",
+      lease: { leaseId: "NPEL-DONE" },
+      evidenceRecordId: "EXT-DONE",
+      resultClass: "pass",
+    });
+
+    const res = await nonprodLeasePack.handlers.claim_nonprod_environment_lease({
+      environmentKey: "local-integration-ci",
+      ownerProvider: "codex",
+      ownerSessionId: "later-caller",
+      gateIdentity,
+      purpose: "test",
+      url: "http://localhost:3010",
+      ports: [3010],
+      expiresAt: new Date("2026-07-28T22:00:00Z").toISOString(),
+    }, "u1");
+
+    expect(res).toMatchObject({
+      success: true,
+      entityId: "EXT-DONE",
+      data: {
+        gateKey,
+        admission: { status: "reused", resultClass: "pass" },
       },
     });
   });

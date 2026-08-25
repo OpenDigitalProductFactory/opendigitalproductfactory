@@ -4,6 +4,7 @@ import {
   deriveGateKey,
   deriveSemanticReviewGateIdentity,
   normalizeGateRunIdentity,
+  projectLocalCiTerminalEvidence,
 } from "./gate-run-identity";
 
 const SHA_A = "a".repeat(40);
@@ -126,5 +127,43 @@ describe("semantic-review gate identity", () => {
     } as never);
 
     expect(changed.gateKey).not.toBe(baseline.gateKey);
+  });
+});
+
+describe("local-CI terminal evidence projection", () => {
+  const gateKey = "d".repeat(64);
+  const evidence = (expiresAt: string) => ({
+    id: "EXT-GATE",
+    operationType: "local_integration_ci",
+    details: {
+      gateKey,
+      status: "passed",
+      evidenceValidity: { expiresAt },
+    },
+  });
+
+  it("reuses a fresh pass linked to the same immutable key", () => {
+    expect(projectLocalCiTerminalEvidence({
+      claimKey: `gate:${gateKey}`,
+      evidence: evidence("2026-08-25T12:01:00.000Z"),
+      now: new Date("2026-08-25T12:00:00.000Z"),
+    })).toEqual({
+      status: "reused",
+      evidenceRecordId: "EXT-GATE",
+      resultClass: "pass",
+    });
+  });
+
+  it("fails closed for expired or mismatched evidence", () => {
+    expect(projectLocalCiTerminalEvidence({
+      claimKey: `gate:${gateKey}`,
+      evidence: evidence("2026-08-25T11:59:59.000Z"),
+      now: new Date("2026-08-25T12:00:00.000Z"),
+    })).toEqual({ status: "blocked", reason: "expired-evidence" });
+    expect(projectLocalCiTerminalEvidence({
+      claimKey: `gate:${gateKey}`,
+      evidence: { ...evidence("2026-08-25T12:01:00.000Z"), operationType: "other" },
+      now: new Date("2026-08-25T12:00:00.000Z"),
+    })).toEqual({ status: "blocked", reason: "mismatched-evidence" });
   });
 });

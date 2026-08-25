@@ -17,6 +17,13 @@ export type GateRunIdentity = GateRunIdentityInput & {
   schemaVersion: typeof GATE_RUN_IDENTITY_SCHEMA_VERSION;
 };
 
+export type LocalCiTerminalEvidenceProjection =
+  | { status: "reused"; evidenceRecordId: string; resultClass: "pass" | "fail" }
+  | {
+    status: "blocked";
+    reason: "missing-evidence" | "mismatched-evidence" | "expired-evidence";
+  };
+
 export type SemanticReviewGateIdentityInput = {
   repository: string;
   identity: {
@@ -81,6 +88,67 @@ export function normalizeGateRunIdentity(input: GateRunIdentityInput): GateRunId
 
 export function deriveGateKey(input: GateRunIdentityInput | GateRunIdentity): string {
   return sha256(normalizeGateRunIdentity(input));
+}
+
+export function isImmutableGateClaimKey(claimKey: string | null | undefined): boolean {
+  return Boolean(claimKey?.startsWith("gate:"));
+}
+
+export function projectLocalCiTerminalEvidence(input: {
+  claimKey: string;
+  evidence: {
+    id: string;
+    operationType: string;
+    details: unknown;
+  } | null;
+  now: Date;
+}): LocalCiTerminalEvidenceProjection {
+  if (!input.evidence) return { status: "blocked", reason: "missing-evidence" };
+  const details = input.evidence.details && typeof input.evidence.details === "object"
+    && !Array.isArray(input.evidence.details)
+    ? input.evidence.details as Record<string, unknown>
+    : null;
+  const validity = details?.evidenceValidity
+    && typeof details.evidenceValidity === "object"
+    && !Array.isArray(details.evidenceValidity)
+    ? details.evidenceValidity as Record<string, unknown>
+    : null;
+  if (
+    input.evidence.operationType !== "local_integration_ci"
+    || details?.gateKey !== input.claimKey.slice("gate:".length)
+    || (details.status !== "passed" && details.status !== "failed")
+  ) {
+    return { status: "blocked", reason: "mismatched-evidence" };
+  }
+  const expiresAt = typeof validity?.expiresAt === "string"
+    ? Date.parse(validity.expiresAt)
+    : Number.NaN;
+  if (!Number.isFinite(expiresAt) || expiresAt <= input.now.getTime()) {
+    return { status: "blocked", reason: "expired-evidence" };
+  }
+  return {
+    status: "reused",
+    evidenceRecordId: input.evidence.id,
+    resultClass: details.status === "passed" ? "pass" : "fail",
+  };
+}
+
+export async function resolveLocalCiTerminalEvidence(input: {
+  claimKey: string;
+  evidenceRecordId: string | null;
+  now: Date;
+  loadEvidence: (id: string) => Promise<{
+    id: string;
+    operationType: string;
+    details: unknown;
+  } | null>;
+}): Promise<LocalCiTerminalEvidenceProjection> {
+  if (!input.evidenceRecordId) return { status: "blocked", reason: "missing-evidence" };
+  return projectLocalCiTerminalEvidence({
+    claimKey: input.claimKey,
+    evidence: await input.loadEvidence(input.evidenceRecordId),
+    now: input.now,
+  });
 }
 
 function normalizedSpecialistIds(ids: readonly string[]): string[] {
