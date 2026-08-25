@@ -4,44 +4,50 @@ status: proposed
 
 # Bounded exhaustive-Vitest termination
 
-`BI-F3422349`; approval receipt + scope baseline required.
+`BI-F3422349`; approval receipt and scope baseline required.
 
-**OBJ-BOUND:** Bound exhaustive Vitest attempts without shortening another local-CI stage or skipping tests.
+**OBJ-BOUND:** Bound exhaustive Vitest without shortening another stage or skipping tests.
 
-**OBJ-FINALIZE:** Terminate an expired Vitest process tree predictably and never classify an unclosed runner as pass or product failure.
+**OBJ-FINALIZE:** Close an expired Vitest process tree; never report an unclosed attempt as pass or product failure.
 
-**OBJ-EVIDENCE:** Preserve attempt, classification, retry, and cleanup evidence for governed diagnosis.
+**OBJ-EVIDENCE:** Persist attempt, classification, retry, and cleanup evidence.
 
-| Acceptance | Objectives | Statement |
+| Acceptance | Objective | Contract |
 | --- | --- | --- |
-| AC-VITEST-ONLY | OBJ-BOUND | Only Vitest receives the explicit bounded duration; other stage budgets and test inventory stay unchanged. |
-| AC-TREE-CLOSE | OBJ-FINALIZE | Expiry performs one graceful request, one bounded process-tree escalation, and a bounded final close check. |
-| AC-NON-PASS | OBJ-FINALIZE | Kill error or missing close is runner-termination and cannot become pass or product red. |
-| AC-RETRY-RECEIPT | OBJ-EVIDENCE | One reduced-worker retry records deadline, finalizer, escalation, attempts, classification, exhaustion, and cleanup. |
+| AC-VITEST-ONLY | OBJ-BOUND | Only Vitest gets the duration; all other budgets and test inventory remain unchanged. |
+| AC-TREE-CLOSE | OBJ-FINALIZE | Expiry performs one graceful tree stop, one bounded force escalation, and one bounded final close check. |
+| AC-NON-PASS | OBJ-FINALIZE | Stop error or missing close is `runner-termination`, never pass or product red. |
+| AC-RETRY-RECEIPT | OBJ-EVIDENCE | One reduced-worker retry records deadline, finalizer, escalation, classification, exhaustion, and cleanup. |
 
-## Boundary and owner
+## Complete contract
 
-Only `createAttemptRunner` supplies `maxDurationMs=1_800_000`, read from positive integer `DPF_LOCAL_CI_VITEST_MAX_DURATION_MS`; the generic observer remains unbounded by default. `createObservedProcessRunner` owns deadline/finalization timers and returns finalizer evidence. `runVitestWithRecovery` owns classification/retry. The existing stage-receipt writer persists attempts and terminal classification. Skip no tests; change no other stage, schema, lease/status, tree identity, or retry budget.
+- `createAttemptRunner` alone supplies `maxDurationMs`. A positive integer `DPF_LOCAL_CI_VITEST_MAX_DURATION_MS` overrides the 1,800,000 ms default; missing, zero, negative, or invalid values use the default. The generic observer is unbounded when duration is absent.
+- `createObservedProcessRunner` owns deadline/finalization timers and evidence. `runVitestWithRecovery` owns classification/retry. The existing stage writer persists receipts. No other stage, schema, lease/status, tree identity, inventory, or retry budget changes.
+- At deadline: sample once; set `deadlineExceeded`; request Windows `taskkill /PID <pid> /T` or POSIX process-group `SIGTERM`; wait 10 seconds for `close`; if open, request Windows `/T /F` or group `SIGKILL`; wait a final 10 seconds.
+- Normal close clears all timers. Action errors are recorded and do not skip the next bounded step. No final close resolves synthetically with `finalizationError=close-timeout`; the promise cannot remain pending. Any post-deadline close stays timed out regardless of status.
 
-## Finalizer contract
-
-At the deadline the observer samples once, marks `deadlineExceeded`, and requests one tree stop: Windows `taskkill /PID <pid> /T`; POSIX spawns the attempt in its own process group and sends group `SIGTERM`. It waits 10 seconds for `close`. If still open it performs one force-tree action: Windows adds `/F`; POSIX sends group `SIGKILL`. It then waits a final 10 seconds for `close`. Normal close clears all three timers. Action failure is recorded but does not skip the remaining bounded step. Missing `close` after final grace resolves a synthetic attempt with `finalizationError=close-timeout`; the promise never remains pending. Any close after deadline remains a timed-out attempt regardless of exit status.
-
-## Terminal decision table
-
-| Condition | Classification | Retry/final result |
+| Terminal condition | Classification | Result |
 | --- | --- | --- |
-| Close before deadline; status 0; no signal/error | `passed` | Finish 0. |
-| Close before deadline; failed-test summary | `test-failure` | No retry; preserve nonzero status. |
-| Close before deadline; other nonzero, signal, or spawn error | `runner-termination` | Retry attempt 1 only. |
-| Deadline fired; close during either grace, any status | `runner-termination` | Retry attempt 1 only. |
-| Stop/force error or no final `close` | `runner-termination` | Retry attempt 1 only. |
-| Attempt 2 is `runner-termination` | `runner-termination` | Exit 86 and `retryExhausted=true`. |
+| Pre-deadline status 0, no signal/error | `passed` | Exit 0. |
+| Pre-deadline failed-test summary | `test-failure` | Preserve nonzero; no retry. |
+| Pre-deadline other nonzero, signal, or spawn error | `runner-termination` | Retry attempt 1. |
+| Deadline fired; close in either grace; any status | `runner-termination` | Retry attempt 1. |
+| Stop/force error or no final close | `runner-termination` | Retry attempt 1. |
+| Attempt 2 termination | `runner-termination` | Exit 86; `retryExhausted=true`. |
 
-The retry uses the existing reduced-worker profile. Cleanup and lease release remain in the outer `finally`; no finalizer outcome can become pass or product red.
+Retry uses the existing reduced-worker profile. Outer `finally` still releases cleanup and lease state.
 
-## Evidence and verification
+## Durable receipt
 
-Each attempt carries `maxDurationMs`, `deadlineAt`, `deadlineExceeded`, `gracefulStopAt/result`, `forceTreeAt/result`, `closeObservedAt`, `closeTimedOut`, `finalizationError`, child PID, status/signal/error, workers, timestamps, output tail, host samples, and classification. Existing heartbeats record phase changes; the existing exhaustive-Vitest receipt persists the attempt array, recovery plan, terminal classification, recovered flag, and `retryExhausted` before exit.
+Each attempt records `maxDurationMs`, `deadlineAt`, `deadlineExceeded`, `gracefulStopAt/result`, `forceTreeAt/result`, `closeObservedAt`, `closeTimedOut`, `finalizationError`, PID, status/signal/error, workers, timestamps, output tail, host samples, and classification. Before exit, the existing exhaustive-Vitest receipt persists attempts, recovery plan, terminal classification, recovered flag, and `retryExhausted`.
 
-Tests separately prove: unbounded default and Vitest-only opt-in; normal-close timer cleanup; graceful-close success; Windows and POSIX graceful/force PID binding; force-tree close; kill error; missing final close resolves non-pass; post-deadline status 0 stays termination; ordinary failed-test summary stays `test-failure`; one retry and second termination exhaustion; receipt fields/exit 86; outer `finally` release. Require independent review, preflight, and exact-tree CI.
+## Verification matrix
+
+| Acceptance | Distinct tests |
+| --- | --- |
+| AC-VITEST-ONLY | Unbounded default; Vitest-only opt-in; valid override; invalid-value default. |
+| AC-TREE-CLOSE | Timer cleanup; graceful close; Windows/POSIX graceful and force binding; force close. |
+| AC-NON-PASS | Stop error; missing close; post-deadline zero; ordinary failed-test summary. |
+| AC-RETRY-RECEIPT | One retry; second termination/exit 86; receipt fields; outer-finally release. |
+
+Require independent review, preflight, and exact-tree CI.
