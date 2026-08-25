@@ -1,3 +1,7 @@
+---
+status: binding
+---
+
 # Resilient Concurrent Development Process
 
 **Surface-agnostic flow control for high-fan-out AI development**
@@ -70,11 +74,13 @@ The existing CI evidence planner becomes the admission authority. It evaluates t
 | Lane | Qualification | Runs | Shared heavyweight lease |
 | --- | --- | --- | --- |
 | **Plan-only** | Invalid/missing planner input or dry-run | Planner and diagnostics only; unresolved input escalates | No |
-| **Documentation** | `docsOnly=true`, no escalation | Doc index, link, derived-artifact, and repository guards in an isolated lightweight worktree | No |
+| **Documentation** | `docsOnly=true`, no escalation, clean exact candidate tree contains the accepted base | Doc index, link, derived-artifact, and repository guards in the candidate worktree | No |
 | **Affected code** | Planner is trusted and `fullSuite=false` | Global guards, affected package typechecks, mapped tests, changed-route UX evidence | Resource-specific lane only; no Docker/Next build lease |
 | **Exhaustive** | Risk escalation, unsafe graph, merge group, main, schedule, or explicit override | Full typecheck, full tests, production build, required integration and UX evidence | Yes; preferably elastic cloud execution |
 
 Documentation is not “no verification.” It is a smaller, exact, policy-defined evidence contract. An edit to workspace configuration, generated contracts, migration state, gate policy, or an unresolved derived artifact cannot enter the documentation lane.
+
+The first rollout admits the documentation lane only when `origin/main` is an ancestor of the clean candidate SHA, so the candidate tree is also the integration tree. A stale base, dirty worktree, unresolved tree, or planner escalation uses the existing exhaustive integration path. A later slice may synthesize a unique lightweight merge worktree; this slice does not claim evidence for a prospective tree it did not execute.
 
 The planner output records its lane, selected commands, reasons, affected tests/routes/packages, policy version, digest, and immutable tree. The executor must run that plan or fail; it may not silently replace an affected plan with an exhaustive one merely because exhaustive is easier to invoke.
 

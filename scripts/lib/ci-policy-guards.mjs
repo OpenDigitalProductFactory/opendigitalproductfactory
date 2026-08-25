@@ -148,6 +148,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/ci-build-artifact-discovery.test.mjs",
         "scripts/lib/ci-build-artifact.test.mjs",
         "scripts/lib/ci-evidence-plan.test.mjs",
+        "scripts/lib/documentation-evidence-lane.test.mjs",
         "scripts/ci-policy-guards.test.mjs",
         "scripts/lib/host-command-invocation.test.mjs",
         // BI-812C676D: every covered-root *.test.mjs must appear here or on the

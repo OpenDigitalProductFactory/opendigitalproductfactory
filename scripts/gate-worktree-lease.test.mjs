@@ -101,6 +101,88 @@ function makeTempWorktree() {
   return dir;
 }
 
+function makeDocumentationWorktree() {
+  const dir = mkdtempSync(join(tmpdir(), "dpf-gate-doc-worktree-"));
+  const git = (args) => {
+    const result = spawnSync("git", args, { cwd: dir, encoding: "utf8" });
+    if (result.status !== 0) {
+      throw new Error(`git ${args.join(" ")} failed: ${result.stderr || result.stdout}`);
+    }
+    return result.stdout.trim();
+  };
+  git(["init", "-q", "-b", "main"]);
+  git(["config", "user.name", "DPF Test"]);
+  git(["config", "user.email", "dpf-test@example.invalid"]);
+  spawnSync(process.execPath, ["-e", [
+    "const { mkdirSync, writeFileSync } = require('node:fs');",
+    "mkdirSync('scripts', { recursive: true });",
+    "writeFileSync('README.md', 'base\\n');",
+    "writeFileSync('scripts/ci-evidence-plan.mjs', `import { writeFileSync } from 'node:fs'; const i=process.argv.indexOf('--output'); writeFileSync(process.argv[i+1], JSON.stringify({executionLane:'documentation',digest:'doc-plan',fullSuite:false,scope:{docsOnly:true},headTreeSha:process.env.DPF_TEST_HEAD_TREE})+'\\n');`);",
+    "for (const name of ['gen-doc-index.mjs','check-doc-links.mjs','check-guards.mjs']) writeFileSync(`scripts/${name}`, 'process.exit(0);\\n');",
+  ].join(" ")], { cwd: dir, encoding: "utf8" });
+  git(["add", "."]);
+  git(["commit", "-q", "-m", "base"]);
+  git(["update-ref", "refs/remotes/origin/main", "HEAD"]);
+  git(["switch", "-q", "-c", "docs/lease-bypass"]);
+  writeFileSync(join(dir, "README.md"), "base\ndocumentation change\n");
+  git(["add", "README.md"]);
+  git(["commit", "-q", "-m", "docs"]);
+  return { dir, sha: git(["rev-parse", "HEAD"]), tree: git(["rev-parse", "HEAD^{tree}"]) };
+}
+
+test("documentation evidence completes without claiming a heavyweight lease", async () => {
+  const calls = [];
+  const server = createServer((request, response) => {
+    let body = "";
+    request.on("data", (chunk) => { body += chunk; });
+    request.on("end", () => {
+      const payload = JSON.parse(body);
+      calls.push(payload.params.name);
+      const result = payload.params.name === "record_local_integration_result"
+        ? { success: true, entityId: "EVIDENCE-DOC-LANE" }
+        : { success: true, data: { level: "normal" } };
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify({
+        jsonrpc: "2.0",
+        id: payload.id,
+        result: { content: [{ type: "text", text: JSON.stringify(result) }] },
+      }));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  const worktree = makeDocumentationWorktree();
+
+  try {
+    const result = await run(process.execPath, [
+      "scripts/gate-worktree.mjs",
+      "--branch", "docs/lease-bypass",
+      "--sha", worktree.sha,
+      "--worktree", worktree.dir,
+      "--mcp-url", `http://127.0.0.1:${address.port}`,
+      "--no-push",
+    ], {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        DPF_MCP_BEARER_TOKEN: "test-token",
+        DPF_GATE_OWNER_PROVIDER: "codex",
+        DPF_GATE_OWNER_SESSION_ID: "doc-lane-test",
+        DPF_TEST_HEAD_TREE: worktree.tree,
+      },
+    });
+
+    assert.equal(result.code, 0, result.output);
+    assert.match(result.output, /documentation evidence passed without heavyweight admission/);
+    assert.equal(calls.includes("claim_nonprod_environment_lease"), false, calls.join(", "));
+    assert.equal(calls.includes("renew_nonprod_environment_lease"), false, calls.join(", "));
+    assert.equal(calls.filter((tool) => tool === "record_local_integration_result").length, 1);
+  } finally {
+    rmSync(worktree.dir, { recursive: true, force: true });
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
 test("canonical gate heartbeats during a long command and releases once", async () => {
   const calls = [];
   const server = createServer((request, response) => {

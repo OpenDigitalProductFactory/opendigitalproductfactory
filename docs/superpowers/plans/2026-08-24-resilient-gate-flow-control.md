@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Resilient Gate Flow-Control Implementation Plan
 
 **Program:** `BI-7C1F43E3`
@@ -32,7 +36,7 @@ Increase delivery throughput without reducing evidence quality by moving wait st
 
 1. Add a pure execution-lane projection to `scripts/lib/ci-evidence-plan.mjs` and contract tests for documentation, affected, and exhaustive plans.
 2. Split `createLocalIntegrationPlan` into merge/setup, global guards, affected/exhaustive verification, and production-build command groups. Select groups from a supplied evidence plan rather than always appending full Vitest and build.
-3. Add a pre-admission planner step to `scripts/gate-worktree.mjs`. A clean documentation plan runs in a unique lightweight integration worktree and records evidence without calling `claim_nonprod_environment_lease`.
+3. Add a pre-admission planner step to `scripts/gate-worktree.mjs`. When the clean candidate contains the accepted base, its tree is the exact integration tree: run documentation guards there and record evidence without calling `claim_nonprod_environment_lease`. Otherwise retain the existing exhaustive path.
 4. Keep exhaustive admission fail-closed when the planner cannot resolve the base, tree, policy, derived artifacts, or graph advice.
 5. Persist the evidence-plan digest and lane in local-CI metadata and governed result evidence.
 
