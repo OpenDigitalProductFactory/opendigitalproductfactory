@@ -103,7 +103,11 @@ export function WorkroomShape({ graph }: Props) {
         </p>
       </div>
       {/* The canvas scrolls on its own so the page body never scrolls sideways. */}
-      <div className="mt-3 overflow-x-auto">
+      <div
+        aria-labelledby="workroom-shape-title"
+        tabIndex={0}
+        className="mt-3 overflow-x-auto focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]"
+      >
         <ul className="flex min-w-max gap-3">
           {graph.stages.map((stage) => (
             <Stage
