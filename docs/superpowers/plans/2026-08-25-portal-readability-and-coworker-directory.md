@@ -14,6 +14,10 @@ Ship the three operator-reported regressions as one atomic repair:
 
 The three phases are internal checkpoints, not independent deliverables. Acceptance is the browser-visible outcome across all three reported surfaces, and all three share the same UX-fit, theme, and verification gate.
 
+## Baseline traceability
+
+The atomic deliverable traces to objectives `OBJ-METRICS-READABILITY`, `OBJ-COWORKER-DIRECTORY`, and `OBJ-GRAPH-READABILITY`; contracts `docs/superpowers/specs/2026-08-24-portal-readability-and-coworker-directory-design.md` and `AGENTS.md: theme-aware styling and report-kit convergence`; flows `/platform/audit/metrics`, `/workforce`, and `/admin/graph-explorer`; and acceptance statements `AC-REGRESSION-TESTS`, `AC-THEME-SAFETY`, `AC-DIRECT-ROSTER`, and `AC-QUALITY-GATES`.
+
 ## Phase 1: Add regression coverage
 
 ### Operational Metrics
@@ -78,4 +82,3 @@ The three phases are internal checkpoints, not independent deliverables. Accepta
 ## Documentation impact
 
 No route, data model, permission, prompt, or operator procedure changes. The committed design, this plan, and measured UX-fit evidence are the documentation for the presentation repair. Existing user documentation remains accurate.
-
