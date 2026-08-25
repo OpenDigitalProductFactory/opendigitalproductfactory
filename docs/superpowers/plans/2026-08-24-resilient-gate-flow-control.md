@@ -79,12 +79,14 @@ Increase delivery throughput without reducing evidence quality by moving wait st
 
 ### Implementation
 
-1. Project lease admission as an MCP Task and expose full task state.
-2. Emit queue transition events from release, expiry, capacity change, and reconciliation paths.
-3. Suspend native workflows with Inngest `step.waitForEvent()` keyed to the task/claim.
-4. Publish MCP task status notifications over the existing Streamable HTTP/SSE path.
-5. Add a Codex host adapter that wakes the owning task; fall back to a five-minute reconciliation, never a 10-second claim loop.
-6. Move queued liveness to server-owned state and retain one fresh host-pressure claim after wake-up.
+1. Add `nonprod/durable-wait.ts` as the single projection service. Derive a deterministic task identity per lease/subscriber, persist `nonprod-lease-wait.v1` in `TaskRun.progressPayload`, bind the lease to its owner task, and make capacity-event updates idempotent. No Prisma migration.
+2. Extend `claim_nonprod_environment_lease` with a bounded `waitDeadlineAt`. When a claim is queued or subscribed, return the MCP task and checkpoint the wait; when its fresh claim admits, reuses evidence, or becomes terminal, settle that task. Accept a refreshed PID/process identity for a same-owner queued host-resource claim because its original runner is intentionally gone.
+3. After release/expiry, select only the FIFO head of each capacity lane and emit a typed event carrying task, lease, claim, owner session, immutable candidate, and event identity. Add a five-minute scheduled reconciliation that repairs a lost wake and owns queued liveness until the task deadline.
+4. Add an Inngest durable-wait function: wait for the exact capacity event with `step.waitForEvent()`, then apply the idempotent task transition. Keep direct durable transition/replay as the recovery path when Inngest or advisory delivery is unavailable.
+5. Extend the MCP task projection with wait metadata and add authenticated Streamable HTTP GET/SSE. One connection replays all durable `capacity-available` tasks for the token's user, then publishes `notifications/tasks/status`; it does not create one connection per waiter.
+6. Change `gate-worktree.mjs` and `host-resource-runner.mjs` to write atomic wake descriptors and terminate on `queued`/`subscribed`, without release or renewal. On a wake they re-read the task and make one fresh claim; the existing active-lease supervisor remains unchanged after admission.
+7. Add one host adapter process for the contributor toolchain. It consumes the SSE stream, deduplicates event ids in a bounded local ledger, and invokes the provider's supported session-resume command. Codex is the first executable adapter; unsupported providers surface the durable task and recovery command instead of polling.
+8. Update contributor bootstrap and operations documentation so the adapter is installed, health-checked, and visible. Record queue/task/event ids in gate evidence for later throughput attribution.
 
 ### Verification
 
@@ -92,6 +94,19 @@ Increase delivery throughput without reducing evidence quality by moving wait st
 - One release produces one wake-up and one fresh claim.
 - Dropped SSE still resumes through reconciliation.
 - Waiting lease-call volume falls at least 95% in a soak test.
+- A duplicated release/event does not launch a second resume.
+- A queued host-resource claim survives the intentional death of its original PID and safely rebinds only on the same owner/claim/resource contract.
+- A reconnecting singleton adapter replays an unconsumed wake without one resident process per task.
+
+### Exact implementation sequence
+
+1. **Red — projection and idempotency:** add focused tests for deterministic task ids, queued checkpointing, duplicate event suppression, task settlement, and deadline expiry.
+2. **Green — server state:** implement the projection service and wire claim/release/reap paths. Run the environment-lease and nonprod MCP pack suites.
+3. **Red/green — transport:** add route tests for authenticated GET/SSE replay, live task notification, disconnect cleanup, and task metadata; then implement the singleton stream.
+4. **Red/green — durable event:** add Inngest function tests for exact correlation, timeout, duplicate delivery, and reconciliation; register the function and five-minute catalog entry.
+5. **Red/green — host:** change the gate and resource-runner fixtures so queueing exits quickly, preserves its claim, writes a descriptor, and performs only one claim after a simulated wake. Add adapter tests for replay, dedupe, Codex invocation, and unsupported-provider fallback.
+6. **Functional soak:** hold a capacity lease, enqueue at least ten synthetic waiters, release once, drop/reconnect the stream, and run reconciliation. Assert zero resident waiter processes, FIFO-head wake, no duplicate execution, and at most one normal claim plus one five-minute recovery read per wait interval (at least 95% fewer waiting MCP calls than the recorded baseline).
+7. **Documentation and handoff:** update install/contributor operations, regenerate the documentation index, record before/after telemetry, run the impacted suites plus typecheck and policy guards, then ship through independent semantic review, exact-tree CI, DCO, and the protected merge queue.
 
 ## Slice 4 — Governed host resource lanes (`BI-30EDD4B0`)
 

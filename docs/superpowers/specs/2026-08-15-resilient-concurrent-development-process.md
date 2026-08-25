@@ -96,6 +96,67 @@ The planner output records its lane, selected commands, reasons, affected tests/
 
 MCP task notifications are optional by specification, so correctness never depends on delivery. The server-owned task and lease state is authoritative; events reduce latency and traffic.
 
+### 5.1 Durable wait projection
+
+No wait table is added. Each queued claimant or immutable-run subscriber is
+projected as a `TaskRun` whose `repeatedPatternKey` is
+`nonprod-wait:<leaseId>`. The lease remains queue authority; the task is the
+durable client-facing checkpoint. Its `progressPayload` carries a versioned
+`nonprod-lease-wait.v1` envelope with:
+
+- lease id, stable claim key, environment, owner provider, owner session, and
+  Workroom/worktree identity;
+- immutable candidate identity when the claim is a gate run;
+- wait deadline, current wait state, queue position, and last transition time;
+- the last capacity-event identity and whether a fresh claim consumed it.
+
+The MCP task remains `working` while its wait state is `waiting`. A capacity
+event updates the same task to `capacity-available`; admission, terminal
+evidence reuse, cancellation, or deadline expiry completes or cancels it. The
+MCP projection includes the wait envelope in task metadata, so `tasks/get` is
+the durable recovery read even when notifications were missed.
+
+### 5.2 Capacity event identity and delivery
+
+A normal wake has identity
+`nonprod-capacity:<environment>:<released-or-expired-lease>:<head-lease>`.
+Reconciliation uses
+`nonprod-reconcile:<environment>:<head-lease>:<five-minute-bucket>`.
+Task updates compare the stored event identity before writing or notifying, so
+release retries and duplicate Inngest delivery are idempotent. The event
+contains the lease, claim, owner session, task, immutable candidate, and event
+identity; adapters never reconstruct authority from prose.
+
+After the lease transaction commits, DPF persists the task transition, emits
+the matching Inngest event for suspended platform workflows, and broadcasts an
+advisory `notifications/tasks/status` message. One authenticated Streamable
+HTTP SSE connection serves all waiting tasks for a host. On reconnect it first
+replays durable `capacity-available` tasks, then follows live events. In-memory
+broadcast is latency only; TaskRun plus bounded reconciliation is correctness.
+
+### 5.3 Server-owned liveness and host resume
+
+The initial claim supplies a bounded wait deadline separately from the short
+active-lease TTL. While the task remains live, the five-minute reconciler owns
+queued expiry and may extend it only to the earlier of the next reconciliation
+window or the wait deadline. Clients do not renew queued leases. Active leases
+retain their existing short heartbeat and process-fence rules.
+
+`gate-worktree` and `host-resource-runner` write an atomic local wake descriptor
+and exit with the typed queued result. A singleton host adapter holds the one
+SSE connection, deduplicates event identities on disk, and resumes the owning
+Codex session with the immutable task/lease identity. The resumed client
+re-reads `tasks/get` and makes exactly one fresh claim with current host
+pressure. Claude/Grok adapters consume the same descriptor contract when their
+session-resume command is available; lack of a native resume command degrades
+to an operator-visible durable task, not polling.
+
+The adapter is not queue authority, does not reserve capacity, and cannot mark
+a task admitted. Its only authority is to deliver a wake hint to the recorded
+owner. If it is stopped, the next connection replays unconsumed durable events;
+if delivery is lost entirely, the five-minute reconciliation emits another
+bounded event.
+
 ## 6. Resource lanes and host memory
 
 All heavyweight developer processes must declare a lane and expected memory class:
