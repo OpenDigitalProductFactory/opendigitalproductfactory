@@ -1749,6 +1749,9 @@
     "scripts/lib/local-integration-ci.mjs": [
       "docs/testing/pre-pr-gate.md"
     ],
+    "scripts/lib/mcp-client.mjs": [
+      "docs/architecture/mcp-tool-authorization-runbook.md"
+    ],
     "scripts/lib/published-doc-roots.mjs": [
       "docs/architecture/enforced-ci-gates.md"
     ],
@@ -2434,7 +2437,8 @@
       "apps/web/lib/tak/tool-result-budget.ts",
       "apps/web/lib/tool-description-hygiene.test.ts",
       "scripts/check-no-adhoc-mcp-protocol-versions.mjs",
-      "scripts/lib/bootstrap-worktree-deps.mjs"
+      "scripts/lib/bootstrap-worktree-deps.mjs",
+      "scripts/lib/mcp-client.mjs"
     ],
     "docs/architecture/mcp-tool-packs.md": [
       "apps/web/lib/mcp/packs/deliberation-siem-pack.ts",
