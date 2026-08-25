@@ -1,3 +1,7 @@
+---
+status: binding
+---
+
 # Portal readability and coworker-directory implementation plan
 
 **Backlog item:** `BI-6DBD3AB4`  
@@ -17,6 +21,15 @@ The three phases are internal checkpoints, not independent deliverables. Accepta
 ## Baseline traceability
 
 The atomic deliverable traces to objectives `OBJ-METRICS-READABILITY`, `OBJ-COWORKER-DIRECTORY`, and `OBJ-GRAPH-READABILITY`; contracts `docs/superpowers/specs/2026-08-24-portal-readability-and-coworker-directory-design.md` and `AGENTS.md: theme-aware styling and report-kit convergence`; flows `/platform/audit/metrics`, `/workforce`, and `/admin/graph-explorer`; and acceptance statements `AC-REGRESSION-TESTS`, `AC-THEME-SAFETY`, `AC-DIRECT-ROSTER`, and `AC-QUALITY-GATES`.
+
+## Backlog coverage
+
+- Decision: atomic
+- Parent: `BI-6DBD3AB4`
+- Repair the three reported portal usability regressions -> `BI-6DBD3AB4`
+- Dependencies: none
+- Receipt: `cmt8q42fr0s4a01mgheohyu1s`
+- Rationale: metrics readability, direct coworker access, and graph readability share one operator-reported acceptance boundary and must pass together.
 
 ## Phase 1: Add regression coverage
 

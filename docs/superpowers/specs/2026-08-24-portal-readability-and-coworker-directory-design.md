@@ -1,3 +1,7 @@
+---
+status: binding
+---
+
 # Portal readability and coworker-directory repair
 
 **Backlog item:** `BI-6DBD3AB4`  
