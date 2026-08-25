@@ -13,7 +13,7 @@
 
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
 import type { LocalCiHostPressure } from "@/lib/nonprod/local-ci-pool-policy";
-import type { HostResourceLeaseEvidence } from "@/lib/nonprod/environment-lease";
+import type { HostResourceLeaseEvidence } from "@/lib/nonprod/environment-lease-pool-policy";
 import { HEAVY_RESOURCE_CLASSES, isHeavyResourceClass } from "@/lib/nonprod/host-resource-policy";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";

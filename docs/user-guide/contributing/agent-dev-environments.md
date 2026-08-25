@@ -5,6 +5,10 @@ order: 3
 relatedCode:
   - scripts/dpf-bootstrap-agent-toolchain.sh
   - scripts/dpf-bootstrap-agent-toolchain.ps1
+  - scripts/host-resource-runner.mjs
+  - apps/web/lib/nonprod/host-resource-policy.ts
+  - apps/web/lib/nonprod/host-resource-profiles.json
+  - packages/db/prisma/schema/build-delivery.prisma
 ---
 
 ## Agent Development Environments — Claude, Codex, Grok, Antigravity
@@ -352,6 +356,14 @@ claim_nonprod_environment_lease(environmentKey="local-integration-ci")
 ```
 
 Harness friction inside a worktree (missing pnpm on PATH, cross-workspace symlinks, missing Prisma client) is a *harness limitation, not a product defect* — verify via the lease. Cheap source-local checks (targeted `vitest`, `pnpm --filter <pkg> typecheck`) are fine in the worktree.
+
+#### Heavy local commands use a shared host-resource lane
+
+Full TypeScript and Vitest runs, Next builds, Docker builds, previews, local inference, and semantic review can each retain several gigabytes of memory. The repository routes these commands through a governed host-resource runner. It measures available memory, preserves operating-system and resident-inference reserves, and admits only the work that fits. Inference is always single-flight.
+
+When capacity is unavailable, the command records its queue position and exits with code `75` instead of leaving a waiting Node process alive. Retry after the active heavyweight command releases its lease. Do not start duplicate copies to race the queue, and do not kill processes based only on a familiar executable name; the runner supervises only the child whose PID and process-start identity it owns.
+
+If memory cannot be measured, heavyweight admission fails closed. Cheap repository guards still run without claiming the lane. For current resource classes, memory floors, queue inspection, and recovery, see [Local CI and host-resource lanes](../../operations/local-ci-sandbox-slots.md).
 
 #### Clean up when merged
 

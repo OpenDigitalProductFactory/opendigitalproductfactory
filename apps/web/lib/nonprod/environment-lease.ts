@@ -6,19 +6,30 @@ import type { LocalCiCapacityBroker } from "./local-ci-capacity-broker";
 import {
   resolveHostResourcePoolPolicy,
   resolveNonprodPoolPolicy,
-  type HostResourcePressure,
+  type HostResourceLeaseEvidence,
   type ResolvedHostResourcePoolPolicy,
 } from "./environment-lease-pool-policy";
-import {
-  isHeavyResourceClass,
-  type HeavyResourceClass,
-} from "./host-resource-policy";
+import { isHeavyResourceClass, type HeavyResourceClass } from "./host-resource-policy";
 import localCiSlotResources from "./local-ci-slot-resources.json";
 import { recordQueueTransition } from "@/lib/queue/queue-telemetry";
 import { gateRunDispositionsTotal } from "@/lib/operate/metrics";
 import type { NonprodOwnerProvider } from "./nonprod-owner-provider";
 import { isImmutableGateClaimKey, resolveLocalCiTerminalEvidence } from "@/lib/gates/gate-run-identity";
+import { admittedLeaseTtlMs, DEFAULT_LEASE_TTL_MS, requestedTtlMs } from "./environment-lease-timing";
 export { NONPROD_OWNER_PROVIDERS, type NonprodOwnerProvider } from "./nonprod-owner-provider";
+export {
+  admittedLeaseTtlMs,
+  clampLeaseExpiry,
+  DEFAULT_LEASE_TTL_MS,
+  HOST_RESOURCE_ACTIVE_LEASE_TTL_MS,
+  LOCAL_CI_ACTIVE_LEASE_TTL_MS,
+  MAX_LEASE_TTL_MS,
+} from "./environment-lease-timing";
+export {
+  listActiveNonprodEnvironmentLeases,
+  listCapacityReservingNonprodEnvironmentLeases,
+  listQueuedNonprodEnvironmentLeases,
+} from "./environment-lease-registry";
 
 export type NonprodEnvironmentKey = "active-candidate" | "local-integration-ci" | "host-heavy-resource";
 type NonprodSlotKey = keyof typeof localCiSlotResources.slots;
@@ -44,54 +55,6 @@ type LeaseDb = Pick<typeof prisma, "nonProductionEnvironmentLease"> & Partial<Pi
   typeof prisma, "$transaction" | "$executeRaw" | "platformConfig" | "externalEvidenceRecord"
 >>;
 type LeaseRow = NonNullable<Awaited<ReturnType<LeaseModel["findUnique"]>>>;
-
-// BI-4043A64B — anti-monopolization for the shared nonprod pool. A holder must
-// heartbeat; queued claim retries also refresh this bounded liveness window.
-export const MAX_LEASE_TTL_MS = 20 * 60_000;
-export const DEFAULT_LEASE_TTL_MS = 15 * 60_000;
-// A queued request can remain observable for the normal bounded window, but an
-// admitted singleton local-CI owner must prove liveness frequently. If its host
-// process disappears immediately after admission, FIFO reconciliation can
-// recover the slot within this bound instead of waiting 15-20 minutes.
-export const LOCAL_CI_ACTIVE_LEASE_TTL_MS = 2 * 60_000;
-export const HOST_RESOURCE_ACTIVE_LEASE_TTL_MS = 2 * 60_000;
-
-export function admittedLeaseTtlMs(
-  environmentKey: string,
-  requestedMs: number,
-): number {
-  if (!Number.isFinite(requestedMs) || requestedMs <= 0) {
-    throw new Error("nonprod_lease_ttl_must_be_positive");
-  }
-  const boundedRequest = Math.min(
-    MAX_LEASE_TTL_MS,
-    requestedMs,
-  );
-  if (environmentKey === "local-integration-ci") {
-    return Math.min(LOCAL_CI_ACTIVE_LEASE_TTL_MS, boundedRequest);
-  }
-  if (environmentKey === "host-heavy-resource") {
-    return Math.min(HOST_RESOURCE_ACTIVE_LEASE_TTL_MS, boundedRequest);
-  }
-  return boundedRequest;
-}
-
-export function clampLeaseExpiry(
-  now: Date,
-  requested: Date | undefined,
-  ttlMs: number = DEFAULT_LEASE_TTL_MS,
-): Date {
-  const cap = now.getTime() + MAX_LEASE_TTL_MS;
-  const want = (requested ?? new Date(now.getTime() + ttlMs)).getTime();
-  return new Date(Math.min(want, cap));
-}
-
-function requestedTtlMs(now: Date, requested: Date): number {
-  return Math.max(
-    1,
-    Math.min(MAX_LEASE_TTL_MS, requested.getTime() - now.getTime()),
-  );
-}
 
 function createLeaseId() {
   return `NPEL-${randomUUID().replace(/-/g, "").slice(0, 10).toUpperCase()}`;
@@ -219,7 +182,7 @@ async function reconcileEnvironmentInTransaction(input: {
         activeKey: null,
         phase: "expired",
         releasedAt: input.now,
-        ownerProcessId: null,
+        ownerPid: null,
         ownerProcessIdentity: null,
       },
     });
@@ -255,57 +218,6 @@ async function reconcileEnvironmentInTransaction(input: {
   };
 }
 
-export async function listActiveNonprodEnvironmentLeases(input: {
-  db?: LeaseDb;
-  now?: Date;
-}) {
-  const db = input.db ?? prisma;
-  const now = input.now ?? new Date();
-  return db.nonProductionEnvironmentLease.findMany({
-    where: {
-      status: "active",
-      expiresAt: { gt: now },
-    },
-    orderBy: { createdAt: "desc" },
-  });
-}
-
-export async function listQueuedNonprodEnvironmentLeases(input: {
-  db?: LeaseDb;
-  now?: Date;
-}) {
-  const db = input.db ?? prisma;
-  const now = input.now ?? new Date();
-  return db.nonProductionEnvironmentLease.findMany({
-    where: {
-      status: "queued",
-      expiresAt: { gt: now },
-    },
-    orderBy: [{ queuedAt: "asc" }, { id: "asc" }],
-  });
-}
-
-/**
- * One registry snapshot for host-capacity arbitration. Active leases own the
- * host now; queued leases reserve the next safe admission window. Keeping both
- * states in one query prevents a provider from slipping between separate
- * active/queued reads.
- */
-export async function listCapacityReservingNonprodEnvironmentLeases(input: {
-  db?: LeaseDb;
-  now?: Date;
-}) {
-  const db = input.db ?? prisma;
-  const now = input.now ?? new Date();
-  return db.nonProductionEnvironmentLease.findMany({
-    where: {
-      status: { in: ["active", "queued"] },
-      expiresAt: { gt: now },
-    },
-    orderBy: [{ queuedAt: "asc" }, { id: "asc" }],
-  });
-}
-
 export type ClaimNonprodEnvironmentLeaseResult =
   | { status: "admitted"; lease: LeaseRow; slotKey: string; waitAgeMs: number; poolPolicy: ResolvedNonprodPoolPolicy }
   | { status: "queued"; lease: LeaseRow; queuePosition: number; waitAgeMs: number; poolPolicy: ResolvedNonprodPoolPolicy }
@@ -315,16 +227,6 @@ export type ClaimNonprodEnvironmentLeaseResult =
   | { status: "blocked"; lease: LeaseRow; reason: "missing-evidence" | "mismatched-evidence" | "expired-evidence"; poolPolicy: ResolvedNonprodPoolPolicy };
 
 type ResolvedNonprodPoolPolicy = ResolvedLocalCiPoolPolicy | ResolvedHostResourcePoolPolicy;
-
-export interface HostResourceLeaseEvidence extends HostResourcePressure {
-  ungovernedProcesses?: Array<{
-    pid: number;
-    parentPid: number;
-    resourceClass: string;
-    commandLine: string;
-    disposition: "evidence-only";
-  }>;
-}
 
 export async function claimNonprodEnvironmentLease(input: {
   db?: LeaseDb;
@@ -461,7 +363,7 @@ export async function claimNonprodEnvironmentLease(input: {
         && (
           lease.resourceClass !== input.resourceClass
           || Number(lease.expectedMemoryBytes ?? 0) !== input.expectedMemoryBytes
-          || lease.ownerProcessId !== input.ownerProcessId
+          || lease.ownerPid !== input.ownerProcessId
           || lease.ownerProcessIdentity !== input.ownerProcessIdentity
         )
       ) {
@@ -523,7 +425,7 @@ export async function claimNonprodEnvironmentLease(input: {
           cleanupCommand: input.cleanupCommand,
           resourceClass: input.resourceClass,
           expectedMemoryBytes: input.expectedMemoryBytes,
-          ownerProcessId: input.ownerProcessId,
+          ownerPid: input.ownerProcessId,
           ownerProcessIdentity: input.ownerProcessIdentity,
           slotManifestVersion: input.environmentKey === "local-integration-ci"
             ? input.slotManifestVersion
@@ -655,7 +557,7 @@ export async function releaseNonprodEnvironmentLease(input: {
         cancelledAt: queued ? now : current.cancelledAt,
         activeKey: null,
         phase: queued ? "cancelled" : "released",
-        ownerProcessId: null,
+        ownerPid: null,
         ownerProcessIdentity: null,
       },
     });

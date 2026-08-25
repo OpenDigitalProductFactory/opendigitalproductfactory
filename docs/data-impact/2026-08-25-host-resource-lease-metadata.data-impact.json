@@ -38,12 +38,12 @@
           "flags": []
         },
         {
-          "fieldId": "data:nonproduction-environment-lease#ownerProcessId",
+          "fieldId": "data:nonproduction-environment-lease#ownerPid",
           "resolution": "governed",
           "reason": "Correlates the admitted runner and its descendants for liveness and evidence-only stray detection.",
           "provenance": "Admitted host runner process; never treated as identity without live process-start evidence",
           "flags": ["sensitive"],
-          "fieldPolicy": "Operational correlation only; PID is not authorization and must not justify terminating an unowned process."
+          "fieldPolicy": "Operational correlation only; mapped to the ownerProcessId database column, but deliberately not named like a relational key. PID is not authorization and must not justify terminating an unowned process."
         },
         {
           "fieldId": "data:nonproduction-environment-lease#ownerProcessIdentity",
@@ -51,7 +51,7 @@
           "reason": "Pairs the PID with its OS process-start identity so PID reuse cannot make a stale owner appear live.",
           "provenance": "Existing cross-platform local sandbox fence process-identity reader",
           "flags": ["sensitive"],
-          "fieldPolicy": "Operational liveness correlation only; omitted from MCP responses and cleared with ownerProcessId at release, cancellation, or expiry. Never expose as user identity or authorization."
+          "fieldPolicy": "Operational liveness correlation only; omitted from MCP responses and cleared with ownerPid at release, cancellation, or expiry. Never expose as user identity or authorization."
         }
       ]
     }

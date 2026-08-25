@@ -37,6 +37,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
   source: Object.freeze([
     guard("repo-guard-loop", "Repo Guard Loop", [
       node("--test", "scripts/check-guards.test.mjs"),
+      node("--test", "scripts/host-resource-runner.test.mjs"),
       node("scripts/check-guards.mjs"),
       node("--test", "scripts/check-capability-compose-profiles.test.mjs"),
       node("scripts/check-capability-compose-profiles.mjs"),

@@ -443,7 +443,7 @@ model NonProductionEnvironmentLease {
   // local-CI leases created before BI-30EDD4B0.
   resourceClass       String?
   expectedMemoryBytes BigInt?
-  ownerProcessId      Int?
+  ownerPid            Int?     @map("ownerProcessId")
   ownerProcessIdentity String?
   // Null means a legacy singleton-only claimant. Version 1 proves the runner
   // can bind the server-assigned slot manifest before any host mutation.

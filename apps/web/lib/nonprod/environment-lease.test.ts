@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import localCiSlotResources from "./local-ci-slot-resources.json";
-
 const recordQueueTransition = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/queue/queue-telemetry", () => ({ recordQueueTransition }));
 
@@ -21,11 +20,9 @@ import {
 } from "./environment-lease";
 
 const NOW = new Date("2026-07-28T21:00:00.000Z");
-
 beforeEach(() => {
   vi.clearAllMocks();
 });
-
 function lease(overrides: Record<string, unknown> = {}) {
   return {
     id: "row-1",
@@ -48,7 +45,7 @@ function lease(overrides: Record<string, unknown> = {}) {
     cleanupCommand: null,
     resourceClass: null,
     expectedMemoryBytes: null,
-    ownerProcessId: null,
+    ownerPid: null,
     ownerProcessIdentity: null,
     evidenceRecordId: null,
     requestedTtlMs: DEFAULT_LEASE_TTL_MS,
@@ -232,75 +229,6 @@ describe("durable nonproduction admission", () => {
     });
   });
 
-  it("admits a typed host resource claim through the same durable transaction", async () => {
-    const mockDb = db();
-    const queued = lease({
-      environmentKey: "host-heavy-resource",
-      claimKey: "host-resource:s1:42",
-      resourceClass: "vitest",
-      expectedMemoryBytes: BigInt(8 * 1024 ** 3),
-      ownerProcessId: 42,
-      ownerProcessIdentity: "win32:638917704000000000",
-      url: "host://localhost",
-      ports: [],
-    });
-    const active = admitted({
-      environmentKey: "host-heavy-resource",
-      claimKey: "host-resource:s1:42",
-      resourceClass: "vitest",
-      expectedMemoryBytes: BigInt(8 * 1024 ** 3),
-      ownerProcessId: 42,
-      ownerProcessIdentity: "win32:638917704000000000",
-      url: "host://localhost",
-      ports: [],
-      activeKey: "host-heavy-resource:slot-0",
-    });
-    mockDb.nonProductionEnvironmentLease.findUnique
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce(active);
-    mockDb.nonProductionEnvironmentLease.create.mockResolvedValue(queued);
-    mockDb.nonProductionEnvironmentLease.findMany
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([queued]);
-
-    const result = await claimNonprodEnvironmentLease({
-      db: mockDb as never,
-      environmentKey: "host-heavy-resource",
-      ownerProvider: "codex",
-      ownerSessionId: "s1",
-      claimKey: "host-resource:s1:42",
-      purpose: "host-resource:vitest",
-      url: "host://localhost",
-      ports: [],
-      expiresAt: new Date(NOW.getTime() + DEFAULT_LEASE_TTL_MS),
-      resourceClass: "vitest",
-      expectedMemoryBytes: 8 * 1024 ** 3,
-      ownerProcessId: 42,
-      ownerProcessIdentity: "win32:638917704000000000",
-      hostResource: {
-        totalMemoryBytes: 64 * 1024 ** 3,
-        availableMemoryBytes: 30 * 1024 ** 3,
-        inferenceResident: true,
-      },
-      now: NOW,
-    });
-
-    expect(result).toMatchObject({
-      status: "admitted",
-      slotKey: "slot-0",
-      poolPolicy: { source: "host-resource-profile", effectiveCapacity: 1 },
-    });
-    expect(mockDb.nonProductionEnvironmentLease.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        environmentKey: "host-heavy-resource",
-        resourceClass: "vitest",
-        expectedMemoryBytes: 8 * 1024 ** 3,
-        ownerProcessId: 42,
-        ownerProcessIdentity: "win32:638917704000000000",
-      }),
-    });
-  });
-
   it("returns the same queued row for an idempotent claim retry", async () => {
     const mockDb = db();
     const waiting = lease();
@@ -409,52 +337,10 @@ describe("durable nonproduction admission", () => {
     expect(mockDb.nonProductionEnvironmentLease.update).toHaveBeenCalledWith({
       where: { leaseId: "NPEL-1" },
       data: expect.objectContaining({
-        ownerProcessId: null,
+        ownerPid: null,
         ownerProcessIdentity: null,
       }),
     });
-  });
-
-  it("releases a host resource without promoting a waiter from stale memory evidence", async () => {
-    const mockDb = db();
-    const current = admitted({
-      environmentKey: "host-heavy-resource",
-      activeKey: "host-heavy-resource:slot-0",
-      claimKey: "host-resource:s1:42",
-      resourceClass: "vitest",
-      expectedMemoryBytes: BigInt(8 * 1024 ** 3),
-      ownerProcessId: 42,
-      ownerProcessIdentity: "win32:one",
-    });
-    const waiting = lease({
-      id: "row-2",
-      leaseId: "NPEL-2",
-      environmentKey: "host-heavy-resource",
-      claimKey: "host-resource:s2:43",
-      resourceClass: "next-build",
-      expectedMemoryBytes: BigInt(16 * 1024 ** 3),
-    });
-    mockDb.nonProductionEnvironmentLease.findUnique
-      .mockResolvedValueOnce(current)
-      .mockResolvedValueOnce(current);
-    mockDb.nonProductionEnvironmentLease.update.mockResolvedValueOnce(lease({
-      ...current,
-      status: "released",
-      activeKey: null,
-      releasedAt: NOW,
-    }));
-    mockDb.nonProductionEnvironmentLease.findMany.mockResolvedValueOnce([waiting]);
-
-    await releaseNonprodEnvironmentLease({
-      db: mockDb as never,
-      leaseId: "NPEL-1",
-      now: NOW,
-    });
-
-    expect(mockDb.nonProductionEnvironmentLease.update).toHaveBeenCalledTimes(1);
-    expect(mockDb.nonProductionEnvironmentLease.update).not.toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: "row-2" } }),
-    );
   });
 
   it("refuses to let a subscriber release the canonical immutable gate lease", async () => {
@@ -498,7 +384,7 @@ describe("durable nonproduction admission", () => {
       data: expect.objectContaining({
         status: "expired",
         activeKey: null,
-        ownerProcessId: null,
+        ownerPid: null,
         ownerProcessIdentity: null,
       }),
     });

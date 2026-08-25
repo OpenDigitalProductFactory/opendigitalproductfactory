@@ -25,6 +25,16 @@ export interface HostResourcePressure {
   inferenceResident: boolean;
 }
 
+export interface HostResourceLeaseEvidence extends HostResourcePressure {
+  ungovernedProcesses?: Array<{
+    pid: number;
+    parentPid: number;
+    resourceClass: string;
+    commandLine: string;
+    disposition: "evidence-only";
+  }>;
+}
+
 export interface ResolvedHostResourcePoolPolicy {
   policyVersion: 1;
   source: "host-resource-profile";

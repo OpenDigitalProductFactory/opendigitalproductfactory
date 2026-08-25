@@ -294,7 +294,7 @@ describe("nonprod-lease pack — handler behavior (delegation preserved)", () =>
       ownerSessionId: "s-host",
       claimKey: "host-resource:s-host:42",
       purpose: "host-resource:vitest",
-      expiresAt: new Date("2026-07-30T05:10:00Z").toISOString(),
+      expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
       resourceClass: "vitest",
       expectedMemoryBytes: 8 * 1024 ** 3,
       ownerProcessId: 42,
