@@ -4,13 +4,8 @@
   "decisionInteractionId": "DI-9EC571C2CEB4",
   "scope": {
     "files": [
-      "apps/web/app/(shell)/build/work/page.tsx",
       "apps/web/app/(shell)/ea/workrooms/page.tsx",
       "apps/web/app/(shell)/ops/workrooms/page.tsx",
-      "apps/web/components/build/work-control/WorkCapsuleTable.tsx",
-      "apps/web/components/build/work-control/WorkControlPanel.tsx",
-      "apps/web/components/ea/ea-nav.ts",
-      "apps/web/components/ops/ops-nav.ts",
       "apps/web/components/ops/workrooms/WorkroomInventory.tsx"
     ]
   },

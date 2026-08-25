@@ -2,6 +2,7 @@ import Link from "next/link";
 import { prisma } from "@dpf/db";
 
 import { EaTabNav } from "@/components/ea/EaTabNav";
+import { Surface } from "@/components/ui/Surface";
 import { EmptyState, StatCard, StatusBadge } from "@/components/ui/report-kit";
 import { loadWorkroomArchitecture } from "@/lib/ea/workroom-architecture";
 
@@ -36,7 +37,7 @@ export default async function WorkroomArchitecturePage() {
       </div>
       <EaTabNav />
 
-      <div data-dpf-lead className="my-6 rounded-xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
+      <Surface data-dpf-lead className="my-6" rounded="xl">
         <p className="text-sm font-medium text-[var(--dpf-text)]">
           {definitions.length === 0
             ? "No reusable Workroom definitions are configured yet."
@@ -46,7 +47,7 @@ export default async function WorkroomArchitecturePage() {
         <Link data-owner-first-next-action href={definitions.length > 0 ? `#portfolio-${bands.find((band) => band.definitions.length > 0)?.role ?? "foundational"}` : "/ea/value-streams"} className="mt-3 inline-block text-xs font-medium text-[var(--dpf-accent)] hover:underline">
           {definitions.length > 0 ? "Review portfolio definitions" : "Review value streams"}
         </Link>
-      </div>
+      </Surface>
 
       <div className="mb-6 grid gap-3 sm:grid-cols-3">
         <StatCard label="Definition patterns" value={definitions.length} hint="Active Value Stream Teams" />
@@ -69,7 +70,7 @@ export default async function WorkroomArchitecturePage() {
             ) : (
               <div className="grid gap-4 xl:grid-cols-2">
                 {band.definitions.map((definition) => (
-                  <article key={definition.id} className="rounded-xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
+                  <Surface as="article" key={definition.id} rounded="xl">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
                         <p className="text-dpf-caption uppercase tracking-[0.14em] text-[var(--dpf-muted)]">{definition.valueStream.replaceAll("-", " ")}</p>
@@ -103,7 +104,7 @@ export default async function WorkroomArchitecturePage() {
                       {definition.eaViewId ? <Link href={`/ea/views/${definition.eaViewId}`} className="font-medium text-[var(--dpf-accent)] hover:underline">Open process view</Link> : <span className="text-[var(--dpf-muted)]">No process view linked</span>}
                       {definition.eaProcessId ? <span className="font-mono text-dpf-caption text-[var(--dpf-muted)]">{definition.eaProcessId}</span> : null}
                     </div>
-                  </article>
+                  </Surface>
                 ))}
               </div>
             )}

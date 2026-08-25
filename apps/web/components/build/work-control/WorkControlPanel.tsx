@@ -65,11 +65,7 @@ export function WorkControlPanel({
           hint={`${livenessSummary.history} inactive`}
         />
         <StatCard label="Adoptable work" value={adoptable.length} />
-        <StatCard
-          label="Definitions"
-          value="Architecture"
-          href="/ea/workrooms"
-        />
+        <StatCard label="Definitions" value="Architecture" href="/ea/workrooms" />
       </div>
 
       {canCreateGovernedWork ? (

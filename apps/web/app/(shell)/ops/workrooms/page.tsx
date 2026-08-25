@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { OpsTabNav } from "@/components/ops/OpsTabNav";
 import { WorkroomInventory, type WorkroomInventoryRow } from "@/components/ops/workrooms/WorkroomInventory";
+import { Surface } from "@/components/ui/Surface";
 import { loadCapsuleLivenessInventory } from "@/lib/work-capsules/liveness-inventory";
 
 export const dynamic = "force-dynamic";
@@ -23,7 +24,7 @@ export default async function WorkroomsPage() {
         </p>
       </div>
       <OpsTabNav />
-      <div data-dpf-lead className="my-6 rounded-xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
+      <Surface data-dpf-lead className="my-6" rounded="xl">
         <p className="text-sm font-medium text-[var(--dpf-text)]">
           {inventory.livenessSummary.live === 0
             ? "No Workrooms have live execution evidence right now."
@@ -35,7 +36,7 @@ export default async function WorkroomsPage() {
         <Link data-owner-first-next-action href="#live-workrooms-heading" className="mt-3 inline-block text-xs font-medium text-[var(--dpf-accent)] hover:underline">
           Review live Workrooms
         </Link>
-      </div>
+      </Surface>
       <div className="mt-6">
         <WorkroomInventory workrooms={workrooms} summary={inventory.livenessSummary} />
       </div>

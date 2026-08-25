@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Workroom portfolio convergence implementation plan
 
 Backlog item: `BI-3023912F`  

@@ -10911,6 +10911,7 @@
       "anchors": [
         "overview",
         "key-concepts",
+        "workroom-definitions",
         "what-you-can-do",
         "ai-coworker-identity",
         "following-a-concern-across-views"
@@ -10955,6 +10956,7 @@
       "publishedPortal": true,
       "anchors": [
         "overview",
+        "development-workrooms",
         "the-operator-workspace",
         "current-maturity",
         "key-concepts",
@@ -11597,6 +11599,7 @@
       "publishedPortal": true,
       "anchors": [
         "overview",
+        "workroom-inventory",
         "key-concepts",
         "what-you-can-do",
         "reading-epic-progress",

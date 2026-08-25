@@ -1,6 +1,7 @@
 "use client";
 
 import { DataTable, type Column } from "@/components/ui/report-kit";
+import { Surface } from "@/components/ui/Surface";
 import type { SerializedViewElement } from "@/lib/ea-types";
 
 type ProcessMetadata = {
@@ -130,7 +131,7 @@ export function OperationalValueStreamTable({
   const rows = buildOperationalValueStreamRows(elements);
   return (
     <section className="h-full overflow-auto bg-[var(--dpf-bg)] p-dpf-lg" aria-labelledby="operational-stream-table-title">
-      <div className="mx-auto max-w-[1500px] rounded-dpf-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-dpf-lg shadow-dpf-sm">
+      <Surface className="mx-auto max-w-[1500px] shadow-dpf-sm" padding="lg">
         <div data-dpf-lead>
           <p className="text-dpf-caption font-dpf-semibold uppercase tracking-wide text-[var(--dpf-accent)]">
             Readable process view
@@ -150,7 +151,7 @@ export function OperationalValueStreamTable({
           getRowKey={(row) => row.id}
           empty="No operational stages are projected for this view."
         />
-      </div>
+      </Surface>
     </section>
   );
 }
