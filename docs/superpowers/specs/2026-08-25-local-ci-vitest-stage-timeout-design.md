@@ -52,10 +52,13 @@ When the deadline expires:
 
 1. record a final progress sample and a deadline observation;
 2. request graceful termination through the child-process API;
-3. wait for the child's normal `close` event so the existing observer/finalizer
+3. if the child has not closed within a short bounded grace period, terminate
+   the verified child process tree through the existing platform-aware gate
+   substrate (`taskkill /T` on Windows and process-group termination on POSIX);
+4. wait for the child's normal `close` event so the existing observer/finalizer
    path clears timers, captures signal/status/output/host evidence, and returns;
-4. classify the result through the existing `runner-termination` path;
-5. allow the existing one differentiated recovery attempt at the lower worker
+5. classify the result through the existing `runner-termination` path;
+6. allow the existing one differentiated recovery attempt at the lower worker
    count, then persist `retryExhausted=true` if that bounded attempt also ends as
    runner termination.
 
@@ -74,6 +77,9 @@ existing test-failure classifier remains authoritative.
   unchanged.
 - A deadline clears on normal child completion and cannot terminate a later
   process.
+- Escalation is bound to the observed child PID and occurs only if that same
+  attempt remains open after the grace period; it may not target a discovered
+  or caller-supplied unrelated PID.
 - The observer waits for `close`; it does not resolve early while descendants or
   pipes may still be active.
 - The stage receipt includes the configured maximum duration and whether the
@@ -87,14 +93,16 @@ Test-first coverage must prove:
 
 1. an observed child that never closes receives exactly one termination request
    at the configured deadline;
-2. the observer still resolves only after `close`, reports
+2. a child that ignores the graceful request receives one verified process-tree
+   escalation after the grace period, while a child that closes does not;
+3. the observer still resolves only after `close`, reports
    `deadlineExceeded=true`, and clears its deadline on normal completion;
-3. the Vitest attempt runner passes the configured maximum duration while a
+4. the Vitest attempt runner passes the configured maximum duration while a
    generic observed process remains unbounded by default;
-4. the existing supervisor maps the timed termination to
+5. the existing supervisor maps the timed termination to
    `runner-termination`, preserves one differentiated retry, and never retries a
    real failed-test summary;
-5. the executable runner persists the terminal receipt and exits through its
+6. the executable runner persists the terminal receipt and exits through its
    existing infrastructure code after the retry budget is exhausted.
 
 Focused Node tests, pregate preflight, independent semantic review, and a fresh

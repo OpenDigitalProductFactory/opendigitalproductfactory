@@ -34,9 +34,11 @@ atomic deliverable under `BI-F3422349`.
 
 Add injected-child tests for `CONTRACT-OBSERVER-DEADLINE`. The first test keeps a
 fake child open past a short injected deadline and must fail until the observer
-requests termination. Assert that the promise remains pending until `close`, the
-result records `deadlineExceeded=true`, and the termination request occurs once.
-Add the normal-close counterexample proving the timer is cleared.
+requests graceful termination. Assert that the promise remains pending until
+`close`, the result records `deadlineExceeded=true`, and the termination request
+occurs once. Add a second red case where the child ignores that request and the
+observer invokes one injected, PID-bound process-tree termination after the
+grace period. Add the normal-close counterexample proving both timers are cleared.
 
 Run the focused test and retain the expected red output before implementation.
 
@@ -47,10 +49,12 @@ Run the focused test and retain the expected red output before implementation.
 - Modify `scripts/lib/local-ci-process-observer.mjs`
 - Modify `scripts/local-ci-vitest-runner.test.mjs`
 
-Add an optional positive `maxDurationMs` and injectable termination/timer seam to
-the observed-process factory. On expiry, sample once, mark the deadline, and
-request graceful child termination. Resolve only from the existing `close`
-handler and clear both sampling and deadline timers there.
+Add an optional positive `maxDurationMs`, bounded termination grace, and
+injectable timer/process-tree seams to the observed-process factory. On expiry,
+sample once, mark the deadline, and request graceful child termination. If the
+same child remains open after the grace period, invoke the platform-aware
+process-tree terminator for its verified PID. Resolve only from the existing
+`close` handler and clear sampling, deadline, and escalation timers there.
 
 Run `VERIFY-OBSERVER-DEADLINE` until green.
 
