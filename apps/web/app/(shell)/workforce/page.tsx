@@ -48,6 +48,7 @@ export default async function WorkforceDirectoryPage({
             facets={facets}
             initialQuery={initialQuery}
             grantedCapabilities={grantedCapabilities}
+            presentation="directory"
           />
         </section>
       ) : (

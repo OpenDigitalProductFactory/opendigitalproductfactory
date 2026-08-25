@@ -9,7 +9,19 @@ vi.mock("@/lib/auth", () => ({
 }));
 vi.mock("@/lib/permissions", () => ({ getGrantedCapabilities: vi.fn(() => ["registry_read"]) }));
 vi.mock("@/components/platform/coworker-record/RosterView", () => ({
-  RosterView: ({ initialQuery }: { initialQuery: string }) => <div data-roster data-query={initialQuery} />,
+  RosterView: ({
+    initialQuery,
+    presentation,
+  }: {
+    initialQuery: string;
+    presentation: string;
+  }) => (
+    <div
+      data-roster
+      data-query={initialQuery}
+      data-presentation={presentation}
+    />
+  ),
 }));
 vi.mock("@/components/owner-first/OwnerFirstDisclosure", () => ({
   OwnerFirstDisclosure: ({ children }: { children: React.ReactNode }) => <details>{children}</details>,
@@ -25,6 +37,7 @@ describe("WorkforceDirectoryPage", () => {
 
     expect(html).toContain("data-roster");
     expect(html).toContain('data-query="q=review"');
+    expect(html).toContain('data-presentation="directory"');
     expect(html).not.toContain("<details");
     expect(html).not.toContain("Browse the list");
   });
