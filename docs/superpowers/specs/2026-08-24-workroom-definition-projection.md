@@ -15,18 +15,19 @@ meaning remains in
 and Section 9.5 of the four-portfolio operating standard. This specification
 defines only the atomic adapter change required to make that architecture real.
 
-## Contract
+## Objective
 
-- Each registered Work Case source has a stable definition key and positive
-  version. The source registry remains the authority.
-- `WorkroomView` carries the resolved definition identity and a Work Case-derived
-  instance identity with primary source, current cycle, and active carrier refs.
-- Unknown sources expose no invented definition. Ordinary business rooms require
-  no repository, worktree, PR, or CI evidence.
-- The existing Workspace Workroom route defaults to Overview. Details reveals
-  activity, participants, evidence, receipts, and technical references.
-- No schema, migration, route, API, queue, or parallel definition registry is
-  introduced.
+1. **OBJ-WORKROOM-IDENTITY-001:** Distinguish a reusable Workroom definition from the occurrence carrying work through the existing Work Case projection and Workspace route, without requiring development evidence or adding a parallel platform surface.
+
+## Acceptance
+
+| Acceptance | Objectives | Requirement | Evidence |
+|---|---|---|---|
+| AC-WORKROOM-001 | OBJ-WORKROOM-IDENTITY-001 | Every registered Work Case source has a stable definition key and positive version owned by the source registry. | registry invariant test |
+| AC-WORKROOM-002 | OBJ-WORKROOM-IDENTITY-001 | `WorkroomView` carries definition identity and an instance trace with its primary source, current cycle, and active carrier references. | read-model tests |
+| AC-WORKROOM-003 | OBJ-WORKROOM-IDENTITY-001 | Unknown sources expose no invented definition, and ordinary business rooms require no repository, worktree, PR, or CI evidence. | unknown-source test and architecture contract |
+| AC-WORKROOM-004 | OBJ-WORKROOM-IDENTITY-001 | The existing route defaults to Overview; Details reveals activity, participants, evidence, receipts, and technical references. | component and served-route checks |
+| AC-WORKROOM-005 | OBJ-WORKROOM-IDENTITY-001 | The change introduces no schema, migration, route, API, queue, or parallel definition registry. | exact-tree integration gate |
 
 ## Verification
 
