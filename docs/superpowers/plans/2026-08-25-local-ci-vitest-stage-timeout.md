@@ -17,6 +17,9 @@ status: proposed
 | `REQ-SCOPE` | Other observed process stages keep current duration behavior. | `CONTRACT-OPT-IN` | `FLOW-VITEST-WIRING` | `VERIFY-OPT-IN` |
 | `REQ-EVIDENCE` | Terminal evidence identifies the configured bound and whether it fired. | `CONTRACT-STAGE-RECEIPT` | `FLOW-DEADLINE-FINALIZE` | `VERIFY-EXECUTABLE-RECEIPT` |
 
+Canonical baseline mapping: `OBJ-BOUND` → `AC-VITEST-ONLY`; `OBJ-FINALIZE` →
+`AC-TREE-CLOSE`, `AC-NON-PASS`; `OBJ-EVIDENCE` → `AC-RETRY-RECEIPT`.
+
 ## Atomic delivery
 
 The observer deadline, Vitest opt-in, classification, and receipt evidence form
