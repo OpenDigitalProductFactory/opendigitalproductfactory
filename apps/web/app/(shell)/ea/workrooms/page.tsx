@@ -9,7 +9,7 @@ import { loadWorkroomArchitecture } from "@/lib/ea/workroom-architecture";
 export const dynamic = "force-dynamic";
 
 function HumanGateList({ triggers }: { triggers: Array<{ triggerPoint: string; requiredRole: string; escalationTimeoutMinutes: number }> }) {
-  if (triggers.length === 0) return <p className="text-xs text-[var(--dpf-muted)]">No human gate triggers configured.</p>;
+  if (triggers.length === 0) return <p className="text-xs text-[var(--dpf-muted)]">No human checks are set.</p>;
   return (
     <ul className="space-y-1 text-xs text-[var(--dpf-muted)]">
       {triggers.map((trigger, index) => (
@@ -32,7 +32,7 @@ export default async function WorkroomArchitecturePage() {
       <div className="mb-6">
         <h1 className="text-xl font-bold text-[var(--dpf-text)]">Enterprise Architecture</h1>
         <p className="mt-0.5 max-w-3xl text-sm text-[var(--dpf-muted)]">
-          Workroom definitions connect each portfolio&rsquo;s value streams to reusable collaboration shapes, participants, queues, human triggers, and running instances.
+          Plan how teams work in each portfolio. Set the room shape, people, queues, checks, and links to live work.
         </p>
       </div>
       <EaTabNav />
@@ -40,19 +40,19 @@ export default async function WorkroomArchitecturePage() {
       <Surface data-dpf-lead className="my-6" rounded="xl">
         <p className="text-sm font-medium text-[var(--dpf-text)]">
           {definitions.length === 0
-            ? "No reusable Workroom definitions are configured yet."
-            : `${definitions.length} reusable Workroom definition${definitions.length === 1 ? "" : "s"} coordinate work across ${bands.filter((band) => band.definitions.length > 0).length} portfolios.`}
+            ? "No Workroom plans are set yet."
+            : `${definitions.length} Workroom plan${definitions.length === 1 ? "" : "s"} guide work in ${bands.filter((band) => band.definitions.length > 0).length} portfolios.`}
         </p>
-        <p className="mt-1 text-xs text-[var(--dpf-muted)]">Definitions shape collaboration; Operations shows the instances they create.</p>
+        <p className="mt-1 text-xs text-[var(--dpf-muted)]">Plans show how teams work. Operations shows each live room.</p>
         <Link data-owner-first-next-action href={definitions.length > 0 ? `#portfolio-${bands.find((band) => band.definitions.length > 0)?.role ?? "foundational"}` : "/ea/value-streams"} className="mt-3 inline-block text-xs font-medium text-[var(--dpf-accent)] hover:underline">
-          {definitions.length > 0 ? "Review portfolio definitions" : "Review value streams"}
+          {definitions.length > 0 ? "Review Workroom plans" : "Review value streams"}
         </Link>
       </Surface>
 
       <div className="mb-6 grid gap-3 sm:grid-cols-3">
-        <StatCard label="Definition patterns" value={definitions.length} hint="Active Value Stream Teams" />
-        <StatCard label="Associated instances" value={instanceCount} href="/ops/workrooms" hint="Open the operational inventory" />
-        <StatCard label="Portfolio coverage" value={`${bands.filter((band) => band.definitions.length > 0).length} / 4`} hint="Every portfolio remains visible" />
+        <StatCard label="Workroom plans" value={definitions.length} hint="Active value stream teams" />
+        <StatCard label="Live links" value={instanceCount} href="/ops/workrooms" hint="Open live work" />
+        <StatCard label="Portfolios" value={`${bands.filter((band) => band.definitions.length > 0).length} / 4`} hint="All four stay in view" />
       </div>
 
       <div className="space-y-8">
@@ -66,7 +66,7 @@ export default async function WorkroomArchitecturePage() {
               <StatusBadge intent={band.definitions.length > 0 ? "success" : "neutral"} label={`${band.definitions.length} definition${band.definitions.length === 1 ? "" : "s"}`} uppercase={false} />
             </div>
             {band.definitions.length === 0 ? (
-              <EmptyState size="sm" title={`No ${band.label} Workroom definitions yet`} description="Define a Value Stream Team to make its collaboration pattern visible here." />
+              <EmptyState size="sm" title={`No ${band.label} Workroom plans yet`} description="Set up a value stream team to show its room here." />
             ) : (
               <div className="grid gap-4 xl:grid-cols-2">
                 {band.definitions.map((definition) => (
@@ -81,7 +81,7 @@ export default async function WorkroomArchitecturePage() {
 
                     <div className="mt-4 grid gap-4 sm:grid-cols-2">
                       <div>
-                        <h4 className="text-xs font-semibold text-[var(--dpf-text)]">Participants</h4>
+                        <h4 className="text-xs font-semibold text-[var(--dpf-text)]">People</h4>
                         <ul className="mt-1 space-y-1 text-xs text-[var(--dpf-muted)]">
                           {definition.participants.map((participant) => <li key={participant.roleName}>{participant.roleName} · {participant.workerType}</li>)}
                         </ul>
@@ -95,12 +95,12 @@ export default async function WorkroomArchitecturePage() {
                     </div>
 
                     <div className="mt-4 border-t border-[var(--dpf-border)] pt-3">
-                      <h4 className="text-xs font-semibold text-[var(--dpf-text)]">Human triggers</h4>
+                      <h4 className="text-xs font-semibold text-[var(--dpf-text)]">Human checks</h4>
                       <div className="mt-1"><HumanGateList triggers={definition.triggers} /></div>
                     </div>
 
                     <div className="mt-4 flex flex-wrap items-center gap-3 text-xs">
-                      <Link href="/ops/workrooms" className="font-medium text-[var(--dpf-accent)] hover:underline">{definition.instanceCount} associated instance{definition.instanceCount === 1 ? "" : "s"}</Link>
+                      <Link href="/ops/workrooms" className="font-medium text-[var(--dpf-accent)] hover:underline">{definition.instanceCount} live room{definition.instanceCount === 1 ? "" : "s"}</Link>
                       {definition.eaViewId ? <Link href={`/ea/views/${definition.eaViewId}`} className="font-medium text-[var(--dpf-accent)] hover:underline">Open process view</Link> : <span className="text-[var(--dpf-muted)]">No process view linked</span>}
                       {definition.eaProcessId ? <span className="font-mono text-dpf-caption text-[var(--dpf-muted)]">{definition.eaProcessId}</span> : null}
                     </div>
