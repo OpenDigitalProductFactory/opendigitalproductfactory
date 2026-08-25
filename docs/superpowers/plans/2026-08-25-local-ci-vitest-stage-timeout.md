@@ -20,6 +20,21 @@ status: proposed
 Canonical baseline mapping: `OBJ-BOUND` → `AC-VITEST-ONLY`; `OBJ-FINALIZE` →
 `AC-TREE-CLOSE`, `AC-NON-PASS`; `OBJ-EVIDENCE` → `AC-RETRY-RECEIPT`.
 
+## Research evidence
+
+- Frozen candidate `286b14ef3` under lease `NPEL-79E8B0C233` stopped emitting
+  exhaustive-unit output at 01:16:40Z and stopped its stage-receipt heartbeat at
+  01:20:48Z, while the Vitest worker and singleton lease remained alive beyond
+  one hour. The process later disappeared without a terminal gate record.
+- Source inspection shows `local-ci-vitest-runner.mjs` delegates every attempt to
+  `createObservedProcessRunner` and forwards progress to the stage receipt, but
+  the observer has no duration/finalization input. The gate therefore keeps
+  renewing while the child PID stays alive even after useful progress stops.
+- The smallest boundary is the Vitest attempt runner: add an opt-in duration to
+  the shared observer, close the verified process tree through its finalizer,
+  classify that close as runner infrastructure, and keep the existing single
+  reduced-worker retry. Other stages remain unbounded and all tests still run.
+
 ## Atomic delivery
 
 The observer deadline, Vitest opt-in, classification, and receipt evidence form
