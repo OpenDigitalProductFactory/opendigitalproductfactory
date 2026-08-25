@@ -240,6 +240,13 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
         ...(Object.prototype.hasOwnProperty.call(binding, "expectedCurrentBaselineId")
           ? { expectedCurrentBaselineId: binding.expectedCurrentBaselineId }
           : {}),
+        ...(actionKey === "record_initiative_evidence" && binding.gate === "research"
+          ? {
+              findings: [],
+              resolvedFindingRefs: [],
+              reason: `Independent reviewer ${context?.agentId ?? "unknown"} recorded ${String(params.decision ?? "unknown")} for the immutable research artifact bound to TaskRun ${context?.taskRunId ?? "unknown"}.`,
+            }
+          : {}),
       };
     }
     const operation = params.operation ?? "gate-receipt";
