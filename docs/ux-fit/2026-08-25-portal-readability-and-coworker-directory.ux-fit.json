@@ -4,13 +4,7 @@
   "decisionInteractionId": "DI-32EFBD2643CA",
   "scope": {
     "files": [
-      "apps/web/app/(shell)/platform/audit/metrics/TopToolsTable.tsx",
-      "apps/web/app/(shell)/platform/audit/metrics/page.tsx",
-      "apps/web/app/(shell)/workforce/page.tsx",
-      "apps/web/components/platform/coworker-record/RosterView.tsx",
-      "apps/web/components/inventory/RelationshipGraph.tsx",
-      "apps/web/components/inventory/TopologyGraph.tsx",
-      "apps/web/components/inventory/canvas-theme.ts"
+      "apps/web/components/platform/coworker-record/RosterView.tsx"
     ]
   },
   "evidence": {
