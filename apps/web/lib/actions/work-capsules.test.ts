@@ -21,6 +21,7 @@ const {
       findMany: vi.fn(),
       findUnique: vi.fn(),
     },
+    featureBuild: { findMany: vi.fn() },
   },
   mockScanGitWorktrees: vi.fn(),
 }));
@@ -51,6 +52,7 @@ describe("getWorkControlData", () => {
     });
     mockCan.mockReturnValue(true);
     mockPrisma.workroom.findMany.mockResolvedValue([]);
+    mockPrisma.featureBuild.findMany.mockResolvedValue([]);
     mockScanGitWorktrees.mockResolvedValue([]);
     mockGetWorktreeDirtySummary.mockResolvedValue({ modifiedCount: 0, untrackedCount: 0 });
   });
@@ -81,7 +83,7 @@ describe("getWorkControlData", () => {
         headBranch: "feat/already-adopted",
         worktreePath: "D:/DPF-adopted",
         pullRequestUrl: null,
-        leaseExpiresAt: null,
+        leaseExpiresAt: new Date(Date.now() + 60_000),
         lastSyncedAt: null,
         updatedAt: new Date("2026-05-14T00:00:00.000Z"),
       },
@@ -114,6 +116,9 @@ describe("getWorkControlData", () => {
     ]);
     expect(mockGetWorktreeDirtySummary).toHaveBeenCalledWith("D:/DPF-orphan");
     expect(mockPrisma.workroom.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        OR: expect.any(Array),
+      }),
       select: expect.objectContaining({
         decisionScope: true,
         portfolioRole: true,
@@ -124,6 +129,35 @@ describe("getWorkControlData", () => {
         dependsOnPortfolioRoles: true,
       }),
     }));
+  });
+
+  it("returns only truly live development workrooms and a truthful summary", async () => {
+    const future = new Date(Date.now() + 60_000);
+    const past = new Date(Date.now() - 60_000);
+    mockPrisma.workroom.findMany.mockResolvedValue([
+      {
+        capsuleId: "WC-LIVE", title: "Live branch", status: "working", source: "external-adoption",
+        executorKind: "codex-desktop", decisionScope: null, portfolioRole: "foundational",
+        servedPersona: null, activityKind: "improvement", outcomeAnchor: {}, servesPortfolioRoles: [],
+        dependsOnPortfolioRoles: [], headBranch: "feat/live", worktreePath: "D:/live",
+        pullRequestUrl: null, pullRequestNumber: null, leaseExpiresAt: future, lastSyncedAt: null,
+        updatedAt: new Date(), featureBuildId: null,
+      },
+      {
+        capsuleId: "WC-DEAD", title: "Expired branch", status: "working", source: "external-adoption",
+        executorKind: "codex-desktop", decisionScope: null, portfolioRole: "foundational",
+        servedPersona: null, activityKind: "improvement", outcomeAnchor: {}, servesPortfolioRoles: [],
+        dependsOnPortfolioRoles: [], headBranch: "feat/dead", worktreePath: "D:/dead",
+        pullRequestUrl: null, pullRequestNumber: null, leaseExpiresAt: past, lastSyncedAt: null,
+        updatedAt: new Date(), featureBuildId: null,
+      },
+    ]);
+
+    const { getWorkControlData } = await import("./work-capsules");
+    const data = await getWorkControlData();
+
+    expect(data.capsules.map((row) => row.capsuleId)).toEqual(["WC-LIVE"]);
+    expect(data.livenessSummary).toEqual(expect.objectContaining({ scanned: 2, live: 1, reapable: 1 }));
   });
 
   it("does not present the release main worktree as adoptable work", async () => {

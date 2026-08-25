@@ -142,5 +142,14 @@ Decision: atomic. The phases are internal sequencing, not independent product sl
 
 ## Backlog coverage
 
-Coverage receipt: pending initial committed plan artifact.  
+Coverage recorder result: blocked at provider provenance. The signed plan commit
+`3bd5230770ffb88558554be9826fc5c2e87c7a28` and blob
+`1ef3983d4aaa82c2651e8a19fc09254de41f68f8` both resolve from GitHub, and
+Workroom `WC-261E0B3D` records the same repository, branch, and head. The live
+`record_plan_backlog_coverage` call nevertheless returned
+`plan-artifact-invalid` / "Repository provider could not resolve immutable
+commit provenance." No receipt is claimed. The governed
+`check_branch_plan_backlog_gate` then confirmed that this `large` BI does not
+require an xlarge decomposition/atomic coverage decision before source work.
+
 Decision: atomic; all phases map to `BI-3023912F`.
