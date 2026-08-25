@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: active
 ---
 
 # Local-CI exhaustive-Vitest stage timeout implementation plan
@@ -127,12 +127,13 @@ history, recovery disposition, exhaustion, and lease release from `finally`.
 
 ## Backlog coverage
 
-- **Decision:** `atomic`
-- **Deliverable:** `bounded-exhaustive-vitest-finalization` → `BI-F3422349`
-- **Rationale:** deadline, finalization, classification, and durable evidence are
+- Decision: atomic
+- Parent: `BI-F3422349`
+- Receipt: `cmt8b0pm10nku01mg49c9d6j9`
+- Dependencies: none
+- Deliverable: `bounded-exhaustive-vitest-finalization` → `BI-F3422349`
+- Rationale: deadline, finalization, classification, and durable evidence are
   unsafe or ineffective when shipped separately.
-- **Receipt:** pending governed `record_plan_backlog_coverage` after immutable
-  provider verification of this plan blob.
 - **Design gate:** passing receipt
   `initiative-58eb4c0f-3f4a-45ce-9e94-210b6ca25d9f` and canonical baseline
   `baseline-5fcad4ed-b99c-423b-9faa-ecc58be3977c` bind the immutable design.

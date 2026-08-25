@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: active
 ---
 # Vitest bound (`BI-F3422349`)
 
