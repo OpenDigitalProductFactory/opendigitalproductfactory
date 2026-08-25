@@ -33,6 +33,7 @@ export default async function WorkControlPage() {
     <WorkControlPanel
       capsules={data.capsules}
       adoptable={data.adoptable}
+      livenessSummary={data.livenessSummary}
       createAction={createGovernedWorkAction}
       canCreateGovernedWork={canCreateGovernedWork}
       portalContext={portalContext}

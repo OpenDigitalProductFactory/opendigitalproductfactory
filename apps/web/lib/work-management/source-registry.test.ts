@@ -6,6 +6,7 @@ import {
   WORK_CASE_ACCOUNT_RESOLVER_SOURCE_KEYS,
   WORK_CASE_SOURCE_REGISTRY,
   getWorkCaseSourceEntry,
+  getWorkroomDefinitionIdentity,
 } from "./source-registry";
 
 describe("Work Case source registry", () => {
@@ -33,10 +34,23 @@ describe("Work Case source registry", () => {
       expect(entry.receiptPolicy.defaultReceiptKind.length).toBeGreaterThan(0);
       expect(entry.titleProjection.length).toBeGreaterThan(0);
       expect(entry.summaryProjection.length).toBeGreaterThan(0);
+      expect(entry.definitionVersion).toBeGreaterThan(0);
       expect(["finite", "standing"]).toContain(entry.roomProjection.mode);
       expect(Array.isArray(entry.roomProjection.cycleCarrierPrecedence)).toBe(true);
       expect(Array.isArray(entry.roomProjection.outcomePacket.requiredCategories)).toBe(true);
     }
+  });
+
+  it("derives one stable definition identity from the registered source", () => {
+    expect(getWorkroomDefinitionIdentity(" booking ")).toEqual({
+      definitionId: "workroom-definition:booking",
+      version: 1,
+      sourceKey: "booking",
+      label: "Storefront booking",
+      mode: "finite",
+      decisionScope: "wwwd",
+    });
+    expect(getWorkroomDefinitionIdentity("external-ticket")).toBeNull();
   });
 
   it("makes standing room mode an explicit source-registry decision", () => {

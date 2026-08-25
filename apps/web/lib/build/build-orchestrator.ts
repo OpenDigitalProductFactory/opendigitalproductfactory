@@ -21,7 +21,7 @@ import {
 } from "./task-dependency-graph";
 import { normalizeBuildPlanPaths } from "./build-plan-paths";
 import {
-  buildSpecialistPrompt,
+  buildSpecialistPromptWithProvenance,
   SPECIALIST_AGENT_IDS,
   SPECIALIST_MODEL_REQS,
   SPECIALIST_TOOLS,
@@ -942,7 +942,7 @@ async function dispatchSpecialist(params: {
   const scopedTools = allTools.filter(t => allowedToolNames.has(t.name));
   const toolsForProvider = toolsToOpenAIFormat(scopedTools);
 
-  const baseSystemPrompt = await buildSpecialistPrompt({
+  const base = await buildSpecialistPromptWithProvenance({
     role,
     taskDescription: `Task: ${task.title}\n\nFiles to work on:\n${(task.files ?? []).map(f => `- ${f.path} (${f.action}): ${f.purpose}`).join("\n") || "See task description for details."}`,
     buildContext,
@@ -950,7 +950,9 @@ async function dispatchSpecialist(params: {
   });
   // A1 (BI-C654F960) Phase 2a: govern the inline path — append the real
   // specialist Agent's corpus (BI-B31072B8). Flag-gated default-off (no-op).
-  const { prompt: systemPrompt } = await appendGovernedSpecialistCorpus(baseSystemPrompt, { role, agentId, query: task.title });
+  // BI-CE93E314: the appended corpus is retrieved DATA, so the declared spans
+  // stay exactly the role prompt from buildSpecialistPromptWithProvenance.
+  const { prompt: systemPrompt } = await appendGovernedSpecialistCorpus(base.text, { role, agentId, query: task.title });
 
   let lastResult: AgenticResult | null = null;
   let retries = 0;
@@ -963,6 +965,7 @@ async function dispatchSpecialist(params: {
     lastResult = await runAgenticLoop({
       chatHistory: [{ role: "user", content: taskPrompt }],
       systemPrompt,
+      systemPromptInstructionSpans: base.instructionSpans,
       sensitivity: "development", // code clearance; payload screening still applies
       tools: scopedTools,
       toolsForProvider,

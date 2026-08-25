@@ -8,6 +8,7 @@ export const EA_TABS: ReadonlyArray<{ label: string; href: string }> = [
   { label: "Overview", href: "/ea" },
   { label: "Capability Map", href: "/ea/capabilities" },
   { label: "Value Streams", href: "/ea/value-streams" },
+  { label: "Workrooms", href: "/ea/workrooms" },
   { label: "Data Model", href: "/ea/data-model" },
   { label: "Views & Viewpoints", href: "/ea/views" },
   { label: "Reference Models", href: "/ea/models" },

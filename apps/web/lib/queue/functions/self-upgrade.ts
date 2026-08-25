@@ -12,6 +12,7 @@ import {
   loadReleaseInstallContext,
   resolveReleaseUpgradeCandidate,
   resolveUpgradeStrategy,
+  type ReleaseTargetResult,
 } from "@/lib/self-upgrade/release-target";
 import {
   countPendingUpstreamCommits,
@@ -325,8 +326,7 @@ export async function runSelfUpgrade(
   const promotionComposeFiles = composeFiles ?? releaseInstall?.composeFiles;
 
   let upstreamSha: string | null = null;
-  let releaseTag: string | null = null;
-  let releaseConfigDigest: string | null = null;
+  let releaseTarget: Exclude<ReleaseTargetResult, { kind: "no-published-target" }> | null = null;
   const deployedSha = await getDeployedSha();
   if (upgradeStrategy === "release" && releaseInstall) {
     const currentConfigDigest = await readCurrentContainerConfigDigest();
@@ -344,8 +344,7 @@ export async function runSelfUpgrade(
       });
     }
     upstreamSha = target.sourceSha;
-    releaseTag = target.tag;
-    releaseConfigDigest = target.configDigest;
+    releaseTarget = target;
   } else if (config.sourceMode === "upstream") {
     await gitRun(buildFetchCommand({ hostSourcePath, remote, branch }).slice(1));
     const head = await gitRun(buildRemoteHeadCommand({ hostSourcePath, remote, branch }).slice(1));
@@ -500,8 +499,10 @@ export async function runSelfUpgrade(
   });
   if (!signingContext.ok) return { ok: false, status: "failed", runId: run.runId, reason: "installer-state-repair-required", excerpt: signingContext.reason };
   const { runtimeTransitionSecret, hostIdentity } = signingContext;
-  const release = releaseTag && releaseConfigDigest && releaseInstall
-    ? { tag: releaseTag, ghcrOwner: releaseInstall.ghcrOwner, configDigest: releaseConfigDigest }
+  const release = releaseTarget && releaseInstall
+    ? { tag: releaseTarget.tag, ghcrOwner: releaseInstall.ghcrOwner, channelDigest: releaseTarget.channelDigest,
+        platformManifestDigest: releaseTarget.platformManifestDigest, configDigest: releaseTarget.configDigest,
+        platformOs: releaseTarget.platformOs, platformArchitecture: releaseTarget.platformArchitecture }
     : undefined;
   const preflight = await runCandidatePreflight({
     dryRun: params.dryRun, readinessMode: config.readinessMode, readinessOwner: config.readinessOwner,

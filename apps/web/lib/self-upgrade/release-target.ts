@@ -105,8 +105,8 @@ export function resolveUpgradeStrategy(
 }
 
 export type ReleaseTargetResult =
-  | { kind: "target"; tag: string; sourceSha: string; channelDigest: string; configDigest: string }
-  | { kind: "up-to-date"; tag: string; sourceSha: string; channelDigest: string; configDigest: string }
+  | { kind: "target"; tag: string; sourceSha: string; channelDigest: string; platformManifestDigest: string; configDigest: string; platformOs: "linux"; platformArchitecture: string }
+  | { kind: "up-to-date"; tag: string; sourceSha: string; channelDigest: string; platformManifestDigest: string; configDigest: string; platformOs: "linux"; platformArchitecture: string }
   | { kind: "no-published-target"; reason: RegistryReleaseFailureReason | "current-image-identity-missing" };
 
 export function resolveReleaseTarget(input: {
@@ -120,13 +120,27 @@ export function resolveReleaseTarget(input: {
   if (!input.currentConfigDigest) {
     return { kind: "no-published-target", reason: "current-image-identity-missing" };
   }
-  if (input.currentConfigDigest.toLowerCase() === input.candidate.configDigest.toLowerCase()) {
+  // Docker's `.Image` field is an immutable content identity, but its stratum
+  // varies by image store: classic stores expose the config digest, while the
+  // containerd store can expose the platform manifest or multi-arch index.
+  // Registry discovery verifies and freezes all three identities, so matching
+  // any one of them proves that the running bytes are the published candidate.
+  const currentDigest = input.currentConfigDigest.toLowerCase();
+  const candidateDigests = [
+    input.candidate.configDigest,
+    input.candidate.platformManifestDigest,
+    input.candidate.channelDigest,
+  ];
+  if (candidateDigests.some((digest) => digest.toLowerCase() === currentDigest)) {
     return {
       kind: "up-to-date",
       tag: input.candidate.tag,
       sourceSha: input.candidate.sourceSha,
       channelDigest: input.candidate.channelDigest,
+      platformManifestDigest: input.candidate.platformManifestDigest,
       configDigest: input.candidate.configDigest,
+      platformOs: input.candidate.platformOs,
+      platformArchitecture: input.candidate.platformArchitecture,
     };
   }
   return {
@@ -134,7 +148,10 @@ export function resolveReleaseTarget(input: {
     tag: input.candidate.tag,
     sourceSha: input.candidate.sourceSha,
     channelDigest: input.candidate.channelDigest,
+    platformManifestDigest: input.candidate.platformManifestDigest,
     configDigest: input.candidate.configDigest,
+    platformOs: input.candidate.platformOs,
+    platformArchitecture: input.candidate.platformArchitecture,
   };
 }
 

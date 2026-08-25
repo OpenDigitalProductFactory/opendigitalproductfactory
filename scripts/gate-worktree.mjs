@@ -40,6 +40,7 @@ import {
   resolveLocalCiRootClone,
 } from "./lib/local-ci-slot-manifest.mjs";
 import { classifyBaseResilience } from "./lib/local-ci-base-freshness.mjs";
+import { runPreAdmissionDocumentationLane } from "./lib/documentation-evidence-lane.mjs";
 import {
   createLocalCiPassEvidenceValidity,
   readLocalCiGateState,
@@ -748,6 +749,7 @@ async function cancelDeadLocalQueueObservers({
   }
 }
 
+
 function warnAboutMainFreshness({ gitBin, worktreePath }) {
   if (!gitOrEmpty(gitBin, ["rev-parse", "--verify", "origin/main"], worktreePath)) return;
   const behind = gitOrEmpty(gitBin, ["rev-list", "--count", "HEAD..origin/main"], worktreePath);
@@ -810,6 +812,8 @@ async function main() {
   const gateObserverIdentity = createGateObserverIdentity();
   const baseClaimKey = `local-ci:${ownerSessionId}:${sha}`;
   let claimKey = baseClaimKey;
+  let preAdmissionGateIdentity = null;
+  let gateKey = "";
   const deadline = Date.now() + options.leaseWaitSeconds * 1000;
   const commandSpec = resolveGateCommand({ branch, allowStub, gitBin });
 
@@ -834,10 +838,6 @@ async function main() {
     }
     process.stdout.write("would call claim_nonprod_environment_lease and record_local_integration_result only when a real command or explicit stub is configured\n");
     process.exit(0); // exit-0: --dry-run routing probe; changes nothing and records nothing
-  }
-
-  if (!options.finalizeEvidence && !commandSpec && !allowStub) {
-    die("local-CI gate runner is not wired (scripts/local-ci-runner.mjs is missing); refusing to record passing stub evidence. Set DPF_LOCAL_CI_COMMAND to the canonical sandbox command, or use DPF_ALLOW_LOCAL_CI_STUB=1 only in contract tests.");
   }
 
   const bearerToken = process.env.DPF_MCP_BEARER_TOKEN;
@@ -996,6 +996,44 @@ async function main() {
     if (push.status !== 0) die(`push failed: ${push.stderr || push.stdout}`);
   }
 
+  if (!ownerProvider) {
+    die(
+      "cannot attribute this gate to a client. Pass --owner-provider "
+        + "<build-studio|claude|codex|grok|antigravity|coworker> or set "
+        + "DPF_GATE_OWNER_PROVIDER. (The lease and the evidence record use a "
+        + "closed provider vocabulary, so there is no honest default.)",
+    );
+  }
+
+  if (!options.finalizeEvidence) {
+    const documentationResult = await runPreAdmissionDocumentationLane({
+      branch,
+      sha,
+      worktreePath,
+      gitBin,
+      ownerProvider,
+      ownerSessionId,
+      mcpUrl: options.mcpUrl,
+      bearerToken,
+      stateFile,
+      planFile: resolvePath(candidateGitDir, "dpf-pre-admission-evidence-plan.json"),
+      plannerPath: resolvePath(SCRIPT_DIR, "ci-evidence-plan.mjs"),
+    });
+    if (documentationResult.handled) {
+      process.stdout.write(
+        documentationResult.status === 0
+          ? `documentation evidence passed without heavyweight admission: ${documentationResult.evidenceId}\n`
+          : `documentation evidence failed without heavyweight admission: ${documentationResult.evidenceId}\n`,
+      );
+      process.exit(documentationResult.status);
+    }
+    preAdmissionGateIdentity = documentationResult.gateIdentity ?? null;
+  }
+
+  if (!options.finalizeEvidence && !commandSpec && !allowStub) {
+    die("local-CI gate runner is not wired (scripts/local-ci-runner.mjs is missing); refusing to record passing stub evidence. Set DPF_LOCAL_CI_COMMAND to the canonical sandbox command, or use DPF_ALLOW_LOCAL_CI_STUB=1 only in contract tests.");
+  }
+
   const leaseTtlMs = Math.min(
     options.expiresMinutes * 60_000,
     LOCAL_CI_ACTIVE_LEASE_TTL_MS,
@@ -1047,6 +1085,7 @@ async function main() {
     leaseReleased = true;
     const response = await mcpCall("release_nonprod_environment_lease", {
       leaseId,
+      ownerSessionId,
     }, { mcpUrl: options.mcpUrl, bearerToken });
     if (response?.success !== true) {
       throw new Error(`failed to release local-CI lease: ${JSON.stringify(response)}`);
@@ -1065,15 +1104,6 @@ async function main() {
   // no "unknown" member, so an unresolved provider has no honest value — refuse
   // rather than attribute this run to whichever client is most common. Everything
   // above (--dry-run, the runner-wiring check) stays runnable unattributed.
-  if (!ownerProvider) {
-    die(
-      "cannot attribute this gate to a client. Pass --owner-provider "
-        + "<build-studio|claude|codex|grok|antigravity|coworker> or set "
-        + "DPF_GATE_OWNER_PROVIDER. (The lease and the evidence record use a "
-        + "closed provider vocabulary, so there is no honest default.)",
-    );
-  }
-
   let claimAttempt = 0;
   let nextQueueReconciliationAt = 0;
   for (;;) {
@@ -1108,6 +1138,7 @@ async function main() {
         ownerProvider,
         ownerSessionId,
         claimKey,
+        ...(preAdmissionGateIdentity ? { gateIdentity: preAdmissionGateIdentity } : {}),
         purpose: `Pre-PR local-CI gate for ${branch} @ ${sha}`,
         url,
         ports: [slotManifest.portal.port, slotManifest.postgres.hostPort],
@@ -1126,10 +1157,71 @@ async function main() {
       continue;
     }
 
-    leaseId = claimResponse?.entityId || claimResponse?.data?.lease?.leaseId || leaseId;
     const admission = claimResponse?.data?.admission;
+    const canonicalLeaseId = claimResponse?.data?.lease?.leaseId || "";
+    gateKey = claimResponse?.data?.gateKey || gateKey;
     admissionPoolPolicy = claimResponse?.data?.poolPolicy ?? admissionPoolPolicy;
-    if (claimResponse?.success === true && admission?.status !== "queued") {
+    if (claimResponse?.success === true && admission?.status === "reused") {
+      const evidenceId = admission.evidenceRecordId || claimResponse.entityId || "";
+      const passed = admission.resultClass === "pass";
+      if (queueObserverPath) {
+        releaseLocalQueueObserver({
+          path: queueObserverPath,
+          token: gateObserverIdentity.token,
+        });
+        queueObserverPath = "";
+      }
+      writeState(stateFile, {
+        branch,
+        sha,
+        gatePassed: passed,
+        leaseId: canonicalLeaseId,
+        evidenceId,
+        status: passed ? "passed" : "failed",
+        expiresAt: claimResponse?.data?.lease?.expiresAt || expiresAt,
+        resilience: null,
+        leaseEvents: [
+          ...leaseEvents,
+          { type: "reused", gateKey, evidenceId, at: new Date().toISOString() },
+        ],
+        evidencePending: false,
+      });
+      process.stdout.write(`reused canonical local-CI ${admission.resultClass} evidence: ${evidenceId}\n`);
+      process.exit(passed ? 0 : 1);
+    }
+    if (claimResponse?.success === true && admission?.status === "subscribed") {
+      leaseEvents.push({
+        type: "subscribed",
+        at: new Date().toISOString(),
+        gateKey,
+        canonicalLeaseId,
+        executionStatus: admission.executionStatus,
+      });
+      writeState(stateFile, {
+        branch,
+        sha,
+        gatePassed: false,
+        leaseId: canonicalLeaseId,
+        evidenceId: "",
+        status: "subscribed",
+        expiresAt: claimResponse?.data?.lease?.expiresAt || expiresAt,
+        resilience: null,
+        leaseEvents,
+        evidencePending: false,
+        queueObserver: queueObserverState(),
+      });
+      if (Date.now() >= deadline) die("local-CI canonical execution observation timed out");
+      const delayMs = retryDelayMs({ attempt: claimAttempt, pollSeconds: options.pollSeconds });
+      claimAttempt += 1;
+      waiting(`local-CI execution is owned by another caller; observing ${canonicalLeaseId} again in ${(delayMs / 1000).toFixed(1)}s...`);
+      await sleep(Math.min(delayMs, Math.max(10, deadline - Date.now())));
+      continue;
+    }
+    if (
+      claimResponse?.success === true
+      && (admission?.status === "admitted" || !admission?.status)
+    ) {
+      leaseId = canonicalLeaseId || claimResponse.entityId || leaseId;
       const admittedExpiresAt = claimResponse?.data?.lease?.expiresAt;
       if (
         typeof admittedExpiresAt === "string"
@@ -1181,6 +1273,7 @@ async function main() {
       break;
     }
     if (claimResponse?.success === true && admission?.status === "queued") {
+      leaseId = canonicalLeaseId || claimResponse.entityId || leaseId;
       queuedClaimInterruptedByQuiescence = false;
       leaseEvents.push({
         type: "queued",
@@ -1250,6 +1343,19 @@ async function main() {
       });
       claimAttempt += 1;
       waiting(`portal is quiescing; preserving queue intent and retrying in ${(delayMs / 1000).toFixed(1)}s...`);
+      await sleep(Math.min(delayMs, Math.max(10, deadline - Date.now())));
+      continue;
+    }
+    if (
+      claimResponse?.error === "gate_evidence_blocked"
+      && claimResponse?.data?.admission?.reason === "missing-evidence"
+    ) {
+      if (Date.now() >= deadline) {
+        die("canonical local-CI executor ended without publishing evidence before the deadline");
+      }
+      const delayMs = retryDelayMs({ attempt: claimAttempt, pollSeconds: options.pollSeconds });
+      claimAttempt += 1;
+      waiting(`canonical local-CI execution is finalizing evidence; observing again in ${(delayMs / 1000).toFixed(1)}s...`);
       await sleep(Math.min(delayMs, Math.max(10, deadline - Date.now())));
       continue;
     }
@@ -1605,6 +1711,9 @@ async function main() {
   );
 
   const commandLabel = commandSpec ? commandSpec.label : "sandbox checkout/build stub";
+  const evidenceValidity = ["passed", "failed"].includes(outcome.status)
+    ? createLocalCiPassEvidenceValidity()
+    : null;
   let evidenceArgs = {
     provider: ownerProvider,
     externalSessionId: ownerSessionId,
@@ -1613,6 +1722,7 @@ async function main() {
     mode: "single-branch",
     status: outcome.status,
     summary: outcome.summary,
+    ...(gateKey ? { gateKey, leaseId } : {}),
     evidence: {
       bi: "BI-166C59F3",
       resilienceBi: "BI-76551B2D",
@@ -1652,6 +1762,7 @@ async function main() {
       branch,
       sha,
       expiresAt,
+      evidenceValidity,
       pushBeforeLease: options.pushBranch,
       resilience,
       content: contentMetadata,
@@ -1766,9 +1877,6 @@ async function main() {
     die(`failed to record local integration evidence: ${JSON.stringify(evidenceResponse)}`);
   }
 
-  const evidenceValidity = outcome.gatePassed
-    ? createLocalCiPassEvidenceValidity()
-    : null;
   writeState(stateFile, {
     branch,
     sha,

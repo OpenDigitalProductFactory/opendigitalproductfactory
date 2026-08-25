@@ -158,6 +158,8 @@ describe("readRegistryReleaseCandidate", () => {
         channelDigest: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
         platformManifestDigest: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
         configDigest: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
+        platformOs: "linux",
+        platformArchitecture: "amd64",
       },
     });
   });

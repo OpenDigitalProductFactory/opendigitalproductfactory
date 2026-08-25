@@ -439,6 +439,12 @@ model NonProductionEnvironmentLease {
   branchName          String?
   buildId             String?
   taskRunId           String?
+  // Typed host-resource admission. Null retains compatibility for preview and
+  // local-CI leases created before BI-30EDD4B0.
+  resourceClass       String?
+  expectedMemoryBytes BigInt?
+  ownerPid            Int?     @map("ownerProcessId")
+  ownerProcessIdentity String?
   // Null means a legacy singleton-only claimant. Version 1 proves the runner
   // can bind the server-assigned slot manifest before any host mutation.
   slotManifestVersion Int?

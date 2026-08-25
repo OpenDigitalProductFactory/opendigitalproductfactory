@@ -95,6 +95,7 @@ export async function OperatorCockpit({
 }) {
   const { items, failedSources } = await loadAttentionItems(prisma, {
     aiReadinessUserId: userId,
+    delegatingUserId: userId,
   });
   const visible = filterAttentionForAudience(items, { operator: true });
   const projection = buildOwnerAttentionProjection(visible, {

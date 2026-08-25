@@ -20,6 +20,8 @@ function makeRevisionId(): string {
   return `${REVISION_ID_PREFIX}-${randomUUID().slice(0, 8).toUpperCase()}`;
 }
 
+import { writeSkillSeed, type SkillSeedWriteResult } from "./seed-writeback";
+
 export type SubmitSkillImprovementProposalInput = {
   /** SkillDefinition.skillId (business id). */
   skillId: string;
@@ -100,6 +102,13 @@ export type ApproveSkillImprovementProposalInput = {
 };
 
 export type ApproveSkillImprovementProposalResult = {
+  /**
+   * Whether the approved body reached the SEED FILE — the authoritative copy
+   * (DI-36D36FEBF4BA). Only `status: "written"` means the approval is durable;
+   * anything else will be reverted by the next reseed, and callers MUST say so
+   * rather than reporting a bare success.
+   */
+  propagation: SkillSeedWriteResult;
   proposalId: string;
   skillId: string;
   snapshotRevisionId: string;
@@ -117,7 +126,7 @@ export type ApproveSkillImprovementProposalResult = {
 export async function approveSkillImprovementProposal(
   input: ApproveSkillImprovementProposalInput,
 ): Promise<ApproveSkillImprovementProposalResult> {
-  return prisma.$transaction(async (tx) => {
+  const applied = await prisma.$transaction(async (tx) => {
     const proposal = await tx.improvementProposal.findUnique({
       where: { proposalId: input.proposalId },
     });
@@ -148,7 +157,7 @@ export async function approveSkillImprovementProposal(
 
     const skill = await tx.skillDefinition.findUnique({
       where: { skillId: proposal.targetSkillId },
-      select: { skillId: true, skillMdContent: true },
+      select: { skillId: true, category: true, skillMdContent: true },
     });
     if (!skill) {
       throw new Error(
@@ -209,11 +218,32 @@ export async function approveSkillImprovementProposal(
     return {
       proposalId: proposal.proposalId,
       skillId: skill.skillId,
+      category: skill.category,
+      approvedContent: proposedContent,
       snapshotRevisionId,
       appliedRevisionId,
       newVersion: appliedVersion,
     };
   });
+
+  // POST-COMMIT, deliberately. The approval is already durable in the DB; a
+  // filesystem failure here must be reported, never allowed to unwind it.
+  // Writing the seed is what stops the next reseed reverting the approval
+  // (BI-5798BBA3), because the seed file is the authoritative copy.
+  const propagation = writeSkillSeed(
+    applied.category,
+    applied.skillId,
+    applied.approvedContent,
+  );
+
+  return {
+    proposalId: applied.proposalId,
+    skillId: applied.skillId,
+    snapshotRevisionId: applied.snapshotRevisionId,
+    appliedRevisionId: applied.appliedRevisionId,
+    newVersion: applied.newVersion,
+    propagation,
+  };
 }
 
 export type RejectSkillImprovementProposalInput = {

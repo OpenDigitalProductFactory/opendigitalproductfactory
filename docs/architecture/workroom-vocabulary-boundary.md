@@ -3,6 +3,7 @@
 **Backlog item:** `BI-C2C16582`
 **Epic:** `EP-WORK-CONVERGENCE`
 **Status:** Current
+**Definition/instance realization:** `BI-D4C110BC` under `EP-1FABA22D`
 
 Founder-directed 2026-08-15: **Workroom** is the canonical name for what we claim
 and how we work. This page is the single place that says what the word means at
@@ -18,6 +19,103 @@ each layer, so the two vocabularies that merged here do not re-diverge.
 
 Read it as one sentence: **a Workroom is claimed as a record, projected as a
 WorkCase, and rendered as a Workroom view.**
+
+## Definition and instance are an orthogonal axis
+
+The three layers above describe how actual work is coordinated. They do not by
+themselves distinguish a reusable room design from one place where that design
+is used. At the business surface, use these two qualified phrases:
+
+| Business phrase | Formal architecture | Meaning |
+| --- | --- | --- |
+| **Workroom definition** | A projection of `WorkUnitDefinition`, its owning `OperatingFlow` / `Stage`, archetype profile, and `WORK_CASE_SOURCE_REGISTRY` policy | The versioned blueprint for work that can recur. It defines the intended outcome, trigger, work shape, controls, default participants, evidence, measures, and composition policy. It is not an occurrence, lease, branch, or second work ledger. |
+| **Workroom instance** | A `WorkOccurrence` projected through a `WorkCase`; a `Workroom` record is attached when durable coordination is required | The actual place where work happens for one trigger and context. It carries effective assignments, cycles, sub-rooms, decisions, evidence, actual measures, and outcome. |
+
+These are not new competing nouns. **Definition** and **instance** qualify the
+canonical word `Workroom`; `WorkUnitDefinition` and `WorkOccurrence` remain the
+formal exchange terms. The source registry is the present runtime definition
+projection. It must be refactored toward the complete definition contract rather
+than copied into a second registry or a new template subsystem.
+
+### Implemented projection seam
+
+The Workspace adapter now realizes the first definition/instance slice without
+adding another work ledger or route:
+
+- `WORK_CASE_SOURCE_REGISTRY` owns each source definition's stable key, positive
+  version, label, finite or standing mode, and decision scope;
+- `buildWorkroomView` projects that definition identity together with one
+  Work Case-derived instance identity and occurrence trace;
+- the occurrence trace links the primary source, current cycle, and active work
+  carriers when they exist; repository, worktree, and PR evidence remains
+  optional; and
+- `/workspace/cases/[caseKey]` shows the definition and occurrence posture in
+  Overview, while Details reveals activity, participants, evidence, receipts,
+  and technical references.
+
+This is an adapter seam, not the complete definition contract below. Later
+refactoring should deepen the same registry and read model rather than create a
+parallel Workroom-definition surface.
+
+A Workroom definition has a stable key and version. At minimum it declares:
+
+- outcome, trigger classes, eligibility, and finite or standing instance policy;
+- the applicable archetype and value-stream / lifecycle position;
+- the four work-shape axes, owning decision scope, authority, review, escalation,
+  and completion rules;
+- accountable and contributing roles, skills, resources, and default allocation
+  pattern without pre-assigning a person or agent to every future instance;
+- planned sub-room and cycle composition plus event-triggered spawn rules;
+- required outcome-packet categories, measures, budget / estimate policy, and
+  evidence retention; and
+- primary coordinated portfolio role plus directional portfolio dependencies.
+
+A Workroom instance references the exact definition version and snapshots any
+approved tailoring needed to interpret its history. It adds the actual trigger,
+source `WorkCase`, objective and outcome anchor, participants and assignments,
+times, costs, token / tool use when applicable, actions, receipts, exceptions,
+and closure evidence. A repository, backlog item, worktree, commit, PR, or CI run
+is linked delivery evidence for a development instance; none is required for an
+ordinary business instance.
+
+### Composition, duration, and evidence
+
+A **sub-room** is a Workroom instance with its own objective or control boundary
+that is structurally contained by another instance. It is not a nested chat and
+not merely a task row. A **cycle** is a bounded operating interval inside a
+standing instance; it becomes a sub-room only when it needs independent
+accountability, authority, lifecycle, or outcome evidence.
+
+Work coordination uses explicit relationships rather than treating every link as
+parent / child:
+
+| Relationship | Meaning |
+| --- | --- |
+| `contains` | structural composition of a room and its sub-room |
+| `spawned-from` | provenance from a schedule, event, exception, or prior room |
+| `depends-on` | the subject cannot meet its outcome without the referenced work or capacity |
+| `blocks` | current state prevents progress in the referenced room |
+| `contributes-to` | outcome evidence advances a broader room without structural containment |
+
+These are work-coordination relationships. Four-portfolio dependencies keep the
+directional enterprise semantics in the FPAW standard; the UI must not silently
+convert one relation family into the other.
+
+Finite instances seal when their acceptance and evidence requirements are met.
+Standing instances remain durable and contain bounded cycles or spawned
+sub-rooms. Teardown removes temporary execution resources, not history: the
+definition version, instance identity, actions, receipts, outcome packet,
+estimates versus actuals, linked BIs / worktrees / PRs, and retained metrics stay
+queryable after the room is sealed or archived.
+
+Example: `Restaurant Day` is a scheduled, finite Workroom definition. Each day
+creates an instance containing planned opening, kitchen, dining-service, staffing,
+receiving, and closing sub-rooms. A complaint or oven failure spawns an event
+sub-room. The oven remains a canonical Manufacturing and Delivery asset (or a
+Foundational shared-facility aspect where appropriate), linked through a typed
+dependency; it is not recreated as a child record every day. A standing
+`Restaurant Operations` instance can receive each day's outcome packet through
+`contributes-to` without owning every operational record.
 
 ## Naming rules
 
@@ -81,14 +179,15 @@ silent drift.
 - **Agent-facing MCP copy** — tool descriptions and error payloads under
   `apps/web/lib/mcp/packs/` still say "Work Capsule" (27 occurrences, recorded in
   `scripts/prose-lint-baseline.json`). They are read by clients inside the alias
-  window, not by an operator, so they retire with the aliases (`BI-8D968679`).
+  window, not by an operator, so they retire with the aliases through the
+  existing alias-retirement follow-on.
 
 ## What a human reads is renamed, and now guarded
 
 ⟦runtime: enforced by `pnpm check:prose-lint` — a new "capsule" in owner copy fails CI⟧
 
-`BI-D6BC8C18`. Phases 1-4 moved the model, the view types, the tools and the
-doctrine, but eleven owner-facing strings kept saying capsule — the portal
+The owner-copy cleanup moved the model, view types, tools, and doctrine, but
+eleven owner-facing strings kept saying capsule — the portal
 context strip, the Build Studio work-control table and panel, the change-lane
 facet and its blocker text, the delivery nav, and the MCP token-template
 description. Phase 2's only UX gate was `workspace/cases/[caseKey]`, so no gate

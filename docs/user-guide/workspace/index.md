@@ -150,3 +150,4 @@ Re-run the installer with `--environment-class` to change the value in force.
 - Use your digital coworker to get a personalized briefing on what needs your attention
 - Open **Change what this installation is** to declare this installation's job, environment, and paired installation, and to see the impact before you confirm it
 - Open the ["Needs you" inbox](attention-inbox.md) to review plain-language decision cards, weekly batches, and the full technical record when needed
+- Approve or decline a coworker action that is held waiting on you, with the exact record and the time left shown on the card

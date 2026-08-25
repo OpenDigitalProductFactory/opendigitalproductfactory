@@ -15,9 +15,78 @@ describe("recordLocalIntegrationResult", () => {
     findUnique: vi.fn(),
     updateMany: vi.fn(),
   };
+  const environmentLease = {
+    findUnique: vi.fn(),
+    updateMany: vi.fn(),
+  };
 
   beforeEach(() => {
     vi.clearAllMocks();
+    environmentLease.updateMany.mockResolvedValue({ count: 1 });
+  });
+
+  it("binds immutable gate evidence only when the recording session owns the canonical lease", async () => {
+    const gateKey = "a".repeat(64);
+    environmentLease.findUnique.mockResolvedValue({
+      leaseId: "NPEL-GATE",
+      claimKey: `gate:${gateKey}`,
+      ownerSessionId: "codex-session-1",
+      status: "active",
+      evidenceRecordId: null,
+    });
+
+    await recordLocalIntegrationResult({
+      actorUserId: "user-1",
+      provider: "codex",
+      externalSessionId: "codex-session-1",
+      routeContext: "/build",
+      candidateBranch: "feat/immutable-gate",
+      mode: "single-branch",
+      status: "passed",
+      summary: "Merged-code gate passed.",
+      gateKey,
+      leaseId: "NPEL-GATE",
+      evidence: { integrationTreeSha: "b".repeat(40) },
+    }, { platformConfig, environmentLease });
+
+    expect(mockRecordExternalEvidence).toHaveBeenCalledWith(expect.objectContaining({
+      details: expect.objectContaining({ gateKey, leaseId: "NPEL-GATE" }),
+    }));
+    expect(environmentLease.updateMany).toHaveBeenCalledWith({
+      where: {
+        leaseId: "NPEL-GATE",
+        claimKey: `gate:${gateKey}`,
+        ownerSessionId: "codex-session-1",
+        evidenceRecordId: null,
+      },
+      data: { evidenceRecordId: "external-1" },
+    });
+  });
+
+  it("refuses a subscriber attempt to record the canonical executor result", async () => {
+    environmentLease.findUnique.mockResolvedValue({
+      leaseId: "NPEL-GATE",
+      claimKey: `gate:${"a".repeat(64)}`,
+      ownerSessionId: "winner-session",
+      status: "active",
+      evidenceRecordId: null,
+    });
+
+    await expect(recordLocalIntegrationResult({
+      actorUserId: "user-1",
+      provider: "codex",
+      externalSessionId: "subscriber-session",
+      routeContext: "/build",
+      candidateBranch: "feat/immutable-gate",
+      mode: "single-branch",
+      status: "passed",
+      summary: "Must not record.",
+      gateKey: "a".repeat(64),
+      leaseId: "NPEL-GATE",
+      evidence: {},
+    }, { platformConfig, environmentLease })).rejects.toThrow(/owner/i);
+
+    expect(mockRecordExternalEvidence).not.toHaveBeenCalled();
   });
 
   it("records local integration output as external evidence", async () => {
