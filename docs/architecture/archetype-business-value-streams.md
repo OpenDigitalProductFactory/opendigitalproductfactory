@@ -21,7 +21,7 @@
 
 The archetype audit drives 106 seeded archetypes through a browser-realistic experience and records gaps. The risk it names in its own Section 1 — *"The platform must behave correctly for each organizational model"* — is that **testing becomes arbitrary**: we click through phases A–H because the checklist says so, not because each click defends something the business actually depends on.
 
-This artefact removes the arbitrariness. It states, for every archetype, **the operational value stream the business runs in the real world** — the end-to-end sequence of value-adding stages that turns a stranger into a served, paid, retained customer. Every test phase then exists to validate a *named stage of a real value stream*, and every finding can be tied to *the stage of the business it threatens*. A vet booking form that drops the pet fields is not "an important finding because the checklist says pet fields" — it is a **break in the Capture-Demand → Deliver-Care handoff** that makes the clinic's core value stream non-functional.
+This artefact removes the arbitrariness. It states, for every archetype, **the operational value stream the business runs in the real world** — the end-to-end sequence of value-adding stages that creates the outcome its stakeholders rely on. For a commercial business this may turn a stranger into a served, paid, retained customer. For a rescue it moves an animal through safe intake, health and welfare, and placement. Every test phase then exists to validate a *named stage of a real value stream*, and every finding can be tied to *the stage of the business it threatens*. A vet booking form that drops the pet fields is not "an important finding because the checklist says pet fields" — it is a **break in the Capture-Demand → Deliver-Care handoff** that makes the clinic's core value stream non-functional.
 
 Four consumers, one source of truth:
 
@@ -47,7 +47,7 @@ This document is about the other sense: the **operational value stream of the cu
 | | DPF DigitalProduct lifecycle keys | Operational value streams (this doc) |
 |---|---|---|
 | Whose flow | Any organization managing a DigitalProduct lifecycle | The archetype business serving its customers |
-| Canonical slugs | `evaluate … consume` | `attract · capture · qualify · deliver · settle · retain` (Section 3) |
+| Canonical slugs | `evaluate … consume` | leaf-defined stage slugs, or `attract · capture · qualify · deliver · settle · retain` as the fallback (Section 3) |
 | Example | "Voice STT slice moves Explore→Integrate→Deploy" | "A vet clinic moves a pet from booking → exam → invoice → recall" |
 | Standards posture | local lifecycle vocabulary; IT4IT™ is a future authorized comparison target | FPAW Stage contract; BACM/ArchiMate® are future representation-review targets |
 
@@ -68,9 +68,9 @@ value stream.
 
 ---
 
-## 2. The universal small-business value stream
+## 2. The default small-business value stream
 
-Across all 106 archetypes, the same backbone recurs. Differences are not *which* stages exist — every business attracts, captures, delivers, settles, and retains — but **which stage is load-bearing, what "value delivered" means, and which trust gate governs it.** The backbone:
+The commercial backbone recurs across most of the 106 archetypes. It is the subject-agnostic fallback when a leaf archetype does not define a more truthful process. Differences usually concern **which stage is load-bearing, what "value delivered" means, and which trust gate governs it.** The fallback backbone:
 
 ```
                  ┌─────────────────── TRUST & COMPLIANCE (cross-cutting) ───────────────────┐
@@ -98,6 +98,14 @@ Across all 106 archetypes, the same backbone recurs. Differences are not *which*
 - **Operate & Improve** — the coworker and the ops backlog: the always-on operator's assistant that must speak the *business's* language, never the platform-developer's, and convert demand into operational work.
 
 > **Reading guide:** a stage is *load-bearing* for an archetype when a defect there makes the business non-functional, not merely inconvenient. The per-category profiles (Section 6) name the load-bearing stage(s) for each archetype. Audit severity should track this: a defect in a load-bearing stage is `critical`/`important`; the same class of defect in a non-load-bearing stage is `minor`.
+
+### 2.1 Leaf process profiles replace the fallback when the business works differently
+
+`ActivationProfile.processProfile.valueStreams` is the canonical seam for a leaf-authored operating model. When populated, `deriveOperationalValueStream` projects those streams and does not append the commercial fallback. Each stream and stage carries its input, output, responsible role, trust gates, load-bearing status, and handoff target. The same derived model feeds Enterprise Architecture and the generated public archetype drill-down.
+
+Pet Rescue is the first leaf profile on this seam. It defines three primary streams — **Intake and safe placement**, **Health and welfare**, and **Adoption and placement** — plus Fundraising, Volunteer Coordination, Supplies, Compliance, and Reporting as supporting capabilities. Its capacity-full decision, welfare exception, custody transfer, and failed-placement return are explicit stages. `Capture Demand` is therefore not presented as Pet Rescue's operating model.
+
+The committed public projection is generated with `pnpm docs:business-types`; `public-process-projection.test.ts` fails if it drifts from the canonical archetype definition.
 
 ---
 

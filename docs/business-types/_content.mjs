@@ -8,7 +8,7 @@
 // Files in this directory that start with "_" are ignored by Jekyll, so this
 // data + the generator never ship to the public site — only the emitted HTML.
 //
-// To regenerate the pages after editing this file:  node _generate.mjs
+// To regenerate the pages after editing this file: pnpm docs:business-types
 // ============================================================================
 
 // How a business works — the audience-first grouping that replaces the

@@ -23,6 +23,8 @@ describe("readActivationProfile", () => {
       housesSubjects: false,
       schedulesSubjects: false,
       resourceKinds: [],
+      valueStreams: [],
+      supportingCapabilities: [],
     });
   });
 
@@ -41,6 +43,28 @@ describe("readActivationProfile", () => {
         resourceKinds: [
           { kindSlug: "table", capacityUnit: "seats", maxCapacity: 100 },
         ],
+        valueStreams: [
+          {
+            key: "intake-safe-placement",
+            label: "Intake and safe placement",
+            purpose: "Move an animal from a report or surrender into safe accommodation.",
+            input: "Stray report, surrender request, or partner handoff",
+            output: "Triaged animal in a safe kennel or foster placement",
+            responsibleRole: "Intake coordinator",
+            loadBearingStageKeys: ["intake-report-handoff"],
+            stages: [
+              {
+                key: "intake-report-handoff",
+                label: "Report or handoff",
+                input: "Stray report, surrender request, or partner handoff",
+                output: "Accepted intake case",
+                responsibleRole: "Intake coordinator",
+                trustGateKeys: ["intake-authority"],
+              },
+            ],
+          },
+        ],
+        supportingCapabilities: ["fundraising", "volunteer-coordination"],
       },
     });
 
@@ -52,7 +76,75 @@ describe("readActivationProfile", () => {
       resourceKinds: [
         { kindSlug: "table", capacityUnit: "seats", maxCapacity: 100 },
       ],
+      valueStreams: [
+        {
+          key: "intake-safe-placement",
+          label: "Intake and safe placement",
+          purpose: "Move an animal from a report or surrender into safe accommodation.",
+          input: "Stray report, surrender request, or partner handoff",
+          output: "Triaged animal in a safe kennel or foster placement",
+          responsibleRole: "Intake coordinator",
+          loadBearingStageKeys: ["intake-report-handoff"],
+          stages: [
+            {
+              key: "intake-report-handoff",
+              label: "Report or handoff",
+              input: "Stray report, surrender request, or partner handoff",
+              output: "Accepted intake case",
+              responsibleRole: "Intake coordinator",
+              trustGateKeys: ["intake-authority"],
+            },
+          ],
+        },
+      ],
+      supportingCapabilities: ["fundraising", "volunteer-coordination"],
     });
+  });
+
+  it("rejects duplicate stage keys across leaf value streams", () => {
+    expect(
+      readActivationProfile({
+        profileType: "standard",
+        modules: [],
+        billingReadinessMode: "none",
+        customerGraph: "none",
+        estateSeparation: "shared",
+        processProfile: {
+          catalogModes: ["unpriced"],
+          subjectTypes: ["animal"],
+          housesSubjects: true,
+          schedulesSubjects: true,
+          resourceKinds: [],
+          supportingCapabilities: [],
+          valueStreams: [
+            {
+              key: "intake",
+              label: "Intake",
+              purpose: "Accept the animal safely.",
+              input: "Report",
+              output: "Accepted animal",
+              responsibleRole: "Intake coordinator",
+              loadBearingStageKeys: ["triage"],
+              stages: [
+                { key: "triage", label: "Triage", input: "Animal", output: "Assessment", responsibleRole: "Intake coordinator", trustGateKeys: [] },
+              ],
+            },
+            {
+              key: "welfare",
+              label: "Welfare",
+              purpose: "Maintain health and welfare.",
+              input: "Accepted animal",
+              output: "Adoption-ready animal",
+              responsibleRole: "Animal care lead",
+              loadBearingStageKeys: ["triage"],
+              stages: [
+                { key: "triage", label: "Daily care", input: "Animal", output: "Care record", responsibleRole: "Animal care lead", trustGateKeys: [] },
+              ],
+            },
+          ],
+        },
+      }),
+    ).toBeNull();
   });
 
   it.each([
