@@ -18,8 +18,14 @@ test("parses one declared resource class and a command without shell interpolati
       resourceClass: "vitest",
       command: "pnpm",
       commandArgs: ["--filter", "web", "test"],
-      waitSeconds: 1800,
     },
+  );
+});
+
+test("rejects obsolete polling wait flags because queued work resumes through durable events", () => {
+  assert.throws(
+    () => parseHostResourceArgs(["--class", "vitest", "--wait-seconds", "30", "--", "pnpm", "test"]),
+    /unknown argument: --wait-seconds/,
   );
 });
 
@@ -61,6 +67,7 @@ test("builds one typed durable claim with host and inference evidence", () => {
     worktreePath: "D:/wt",
     branchName: "feat/x",
     pid: 42,
+    processIdentity: "win32:638917704000000000",
     now: new Date("2026-08-25T10:00:00.000Z"),
     totalMemoryBytes: 64 * GiB,
     availableMemoryBytes: 24 * GiB,
@@ -82,6 +89,7 @@ test("builds one typed durable claim with host and inference evidence", () => {
     resourceClass: "next-build",
     expectedMemoryBytes: 16 * GiB,
     ownerProcessId: 42,
+    ownerProcessIdentity: "win32:638917704000000000",
     hostResource: {
       totalMemoryBytes: 64 * GiB,
       availableMemoryBytes: 24 * GiB,

@@ -7,6 +7,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { isEntryModule } from "./lib/entry-module.mjs";
 import { mcpCall } from "./lib/mcp-client.mjs";
 import { superviseLeaseRun } from "./lib/lease-supervisor.mjs";
+import { readProcessIdentity } from "./lib/local-sandbox-fence.mjs";
 
 const PROFILE_CONTRACT = JSON.parse(readFileSync(
   new URL("../apps/web/lib/nonprod/host-resource-profiles.json", import.meta.url),
@@ -26,11 +27,9 @@ export const HEAVY_PROCESS_CLASSES = Object.freeze([
 export function parseHostResourceArgs(argv) {
   const args = [...argv];
   let resourceClass = "";
-  let waitSeconds = 1800;
   while (args.length > 0 && args[0] !== "--") {
     const flag = args.shift();
     if (flag === "--class") resourceClass = args.shift() ?? "";
-    else if (flag === "--wait-seconds") waitSeconds = Number(args.shift());
     else throw new Error(`unknown argument: ${flag}`);
   }
   if (!resourceClass) throw new Error("--class is required");
@@ -40,14 +39,10 @@ export function parseHostResourceArgs(argv) {
   if (args.shift() !== "--" || args.length === 0) {
     throw new Error("a command is required after --");
   }
-  if (!Number.isFinite(waitSeconds) || waitSeconds < 0) {
-    throw new Error("--wait-seconds must be a non-negative number");
-  }
   return {
     resourceClass,
     command: args.shift(),
     commandArgs: args,
-    waitSeconds,
   };
 }
 
@@ -88,6 +83,7 @@ export function buildHostResourceClaim({
   worktreePath,
   branchName,
   pid,
+  processIdentity,
   now,
   totalMemoryBytes,
   availableMemoryBytes,
@@ -110,6 +106,7 @@ export function buildHostResourceClaim({
     resourceClass,
     expectedMemoryBytes: profile.expectedMemoryMiB * 1024 ** 2,
     ownerProcessId: pid,
+    ownerProcessIdentity: processIdentity,
     hostResource: {
       totalMemoryBytes,
       availableMemoryBytes,
@@ -233,6 +230,7 @@ async function main() {
     worktreePath: cwd.replaceAll("\\", "/"),
     branchName: gitValue(["branch", "--show-current"]),
     pid: process.pid,
+    processIdentity: readProcessIdentity(process.pid),
     now: new Date(),
     totalMemoryBytes: totalmem(),
     availableMemoryBytes: freemem(),

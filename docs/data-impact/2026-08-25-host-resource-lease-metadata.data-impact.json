@@ -44,6 +44,14 @@
           "provenance": "Admitted host runner process; never treated as identity without live process-start evidence",
           "flags": ["sensitive"],
           "fieldPolicy": "Operational correlation only; PID is not authorization and must not justify terminating an unowned process."
+        },
+        {
+          "fieldId": "data:nonproduction-environment-lease#ownerProcessIdentity",
+          "resolution": "governed",
+          "reason": "Pairs the PID with its OS process-start identity so PID reuse cannot make a stale owner appear live.",
+          "provenance": "Existing cross-platform local sandbox fence process-identity reader",
+          "flags": ["sensitive"],
+          "fieldPolicy": "Operational liveness correlation only; never expose as user identity or authorization."
         }
       ]
     }

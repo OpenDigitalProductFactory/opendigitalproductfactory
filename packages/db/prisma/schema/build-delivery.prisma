@@ -444,6 +444,7 @@ model NonProductionEnvironmentLease {
   resourceClass       String?
   expectedMemoryBytes BigInt?
   ownerProcessId      Int?
+  ownerProcessIdentity String?
   // Null means a legacy singleton-only claimant. Version 1 proves the runner
   // can bind the server-assigned slot manifest before any host mutation.
   slotManifestVersion Int?

@@ -100,7 +100,8 @@ the existing `NonProductionEnvironmentLease` at high confidence. The host lane
 therefore does not create a new broker/table or encode its contract into a
 free-form purpose string. `resourceClass`, `expectedMemoryBytes`, and
 `ownerProcessId` extend the existing durable authority; the in-process
-`ResourceLane` remains its portal adapter.
+`ResourceLane` remains its portal adapter. `ownerProcessIdentity` accompanies
+the PID so liveness cannot be fooled by OS PID reuse.
 
 ### Requirements
 

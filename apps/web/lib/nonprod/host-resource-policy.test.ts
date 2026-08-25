@@ -43,6 +43,24 @@ describe("resolveHostResourceAdmission", () => {
     });
   });
 
+  it("keeps local inference itself single-flight even when host memory could fit two models", () => {
+    expect(resolveHostResourceAdmission(request({
+      resourceClass: "inference",
+      expectedMemoryBytes: DEFAULT_HEAVY_RESOURCE_PROFILES.inference.expectedMemoryBytes,
+      totalMemoryBytes: 128 * GiB,
+      availableMemoryBytes: 100 * GiB,
+      inferenceResident: false,
+      activeHeavyReservations: [{
+        resourceClass: "inference",
+        expectedMemoryBytes: DEFAULT_HEAVY_RESOURCE_PROFILES.inference.expectedMemoryBytes,
+      }],
+    }))).toMatchObject({
+      status: "queued",
+      capacity: 1,
+      reason: "heavy-capacity-full",
+    });
+  });
+
   it("keeps cheap source-local guards outside heavyweight admission", () => {
     expect(resolveHostResourceAdmission(request({ resourceClass: "cheap-guard" }))).toEqual({
       status: "bypass",

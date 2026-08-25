@@ -109,10 +109,11 @@ export function resolveHostResourceAdmission(
   const inferenceGrowthReserveBytes = input.inferenceResident
     ? input.inferenceGrowthReserveBytes ?? profiles.inferenceGrowthReserveMiB * 1024 ** 2
     : 0;
+  const inferenceSingleton = input.resourceClass === "inference";
   const singletonWhileInferenceResident = input.inferenceResident
     && input.resourceClass !== "inference"
     && input.totalMemoryBytes <= profiles.singletonHostCeilingMiB * 1024 ** 2;
-  const capacity = singletonWhileInferenceResident
+  const capacity = inferenceSingleton || singletonWhileInferenceResident
     ? 1
     : Math.max(1, Math.floor(
         (input.availableMemoryBytes - hostReserveBytes - inferenceGrowthReserveBytes)
