@@ -1,7 +1,7 @@
 {
   "version": "1",
-  "decidedOption": "canonical-guide-with-entry-point",
-  "decisionInteractionId": "DI-23888F11C9EC",
+  "decidedOption": "profile-summary-with-os-guides",
+  "decisionInteractionId": "DI-A80F63778943",
   "scope": {
     "files": [
       "docs/index.html"
@@ -10,9 +10,9 @@
   "evidence": {
     "kind": "propose-n-pick",
     "consideredOptions": [
-      "homepage-full-matrix",
-      "canonical-guide-with-entry-point",
-      "architecture-only"
+      "full-matrix-homepage",
+      "profile-summary-with-os-guides",
+      "guide-only-links"
     ]
   }
 }
