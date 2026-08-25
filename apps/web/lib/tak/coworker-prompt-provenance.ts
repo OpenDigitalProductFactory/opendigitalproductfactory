@@ -54,3 +54,22 @@ export function composeCoworkerDomainContext(parts: CoworkerDomainParts): {
       .filter((span): span is string => Boolean(span)),
   };
 }
+
+/**
+ * The instruction spans for a prompt that is ENTIRELY the coworker's brief
+ * (BI-CE93E314).
+ *
+ * `loadPromptBackplane` composes the identity block, company mission, platform
+ * preamble and route persona — four authored prompt templates, with no
+ * runtime-injected business data anywhere in them. Callers that hand that string
+ * straight to the agentic loop (the scheduled runner, the thread dispatcher, the
+ * MCP task path, the certification runner) can declare the whole thing.
+ *
+ * Named rather than inlined at each call site so there is one place to correct
+ * if the backplane ever starts injecting recalled data — at which point this
+ * function must narrow, and every caller narrows with it.
+ */
+export function coworkerBriefSpans(systemPrompt: string | null | undefined): string[] {
+  const brief = systemPrompt?.trim();
+  return brief ? [brief] : [];
+}
