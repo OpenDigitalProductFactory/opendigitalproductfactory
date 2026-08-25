@@ -176,7 +176,7 @@ describe("nonprod-lease pack — handler behavior (delegation preserved)", () =>
       purpose: "test",
       url: "http://localhost:3010",
       ports: [3010],
-      expiresAt: new Date("2026-07-28T22:00:00Z").toISOString(),
+      expiresAt: new Date(Date.now() + 60 * 60_000).toISOString(),
     }, "u1");
 
     expect(lease.claimNonprodEnvironmentLease).toHaveBeenCalledWith(
@@ -216,7 +216,7 @@ describe("nonprod-lease pack — handler behavior (delegation preserved)", () =>
       purpose: "test",
       url: "http://localhost:3010",
       ports: [3010],
-      expiresAt: new Date("2026-07-28T22:00:00Z").toISOString(),
+      expiresAt: new Date(Date.now() + 60 * 60_000).toISOString(),
     }, "u1");
 
     expect(res).toMatchObject({

@@ -1,5 +1,5 @@
 ---
-status: implemented
+status: active
 backlogItem: BI-6A5AB570
 workroom: WC-CE5EB2E7
 design: docs/superpowers/specs/2026-08-25-immutable-gate-single-flight-design.md
