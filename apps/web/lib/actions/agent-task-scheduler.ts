@@ -1,5 +1,6 @@
 "use server";
 
+import { coworkerBriefSpans } from "@/lib/tak/coworker-prompt-provenance";
 import { auth } from "@/lib/auth";
 import { prisma, DATA_MODEL_MIRROR_TASK_ID, SYSML_PROJECTION_TASK_ID, SELF_OPTIMIZATION_SWEEP_TASK_ID } from "@dpf/db";
 import {
@@ -540,6 +541,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
 
     const result = await executeAutonomousAgenticLoop({
       systemPrompt: agentInfo.systemPrompt,
+      systemPromptInstructionSpans: coworkerBriefSpans(agentInfo.systemPrompt),
       chatHistory,
       sensitivity: agentInfo.sensitivity ?? "internal",
       tools,
