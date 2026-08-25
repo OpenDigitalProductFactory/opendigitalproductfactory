@@ -695,7 +695,7 @@ function leafProcessPageHTML(model, parentSlug) {
 <meta name="description" content="The intake, health and welfare, and adoption value streams that define how a pet rescue operates."/>
 <link rel="stylesheet" href="/assets/css/business.css"/>
 </head>
-<body id="top">
+<body id="top" data-canonical-archetype-id="${esc(model.archetypeId)}">
 ${topbar()}
 <section class="hero"><div class="wrap">
   <p class="eyebrow"><span class="dot"></span>Pet rescue · operating model</p>
@@ -705,6 +705,13 @@ ${topbar()}
   <div class="cta-row"><a class="btn" href="/business-types/${esc(parentSlug)}.html">← Nonprofits &amp; community</a><a class="btn primary" href="/#install">Install the platform</a></div>
 </div></section>
 <main class="wrap">
+  <section aria-label="Definition status">
+    <div class="evidence-note">
+      <span class="badge">Canonical projection · shipped definition</span>
+      <h2>This process comes from the installed Pet Rescue definition</h2>
+      <p>The public stages below are generated from the same archetype process model used by the platform. The generation check fails if this page or its process projection drifts from source.</p>
+    </div>
+  </section>
   <section aria-label="Operating model summary">
     <p class="section-eyebrow">The animal journey</p>
     <h2>One journey, three accountable value streams</h2>

@@ -18,7 +18,7 @@ describe("public archetype process projection", () => {
 
   it("publishes a Pet Rescue drill-down from that projection", () => {
     const html = readFileSync(
-      resolve(repoRoot, "docs/business-types/nonprofits-and-community/pet-rescue.html"),
+      resolve(repoRoot, "docs/business-types/archetypes/pet-rescue.html"),
       "utf8",
     );
     expect(html).toContain("Intake and safe placement");
