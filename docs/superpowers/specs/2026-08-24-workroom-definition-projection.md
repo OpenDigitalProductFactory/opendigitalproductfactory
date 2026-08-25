@@ -11,6 +11,12 @@ status: active
 Realize the [canonical definition/instance boundary](../../architecture/workroom-vocabulary-boundary.md)
 through the existing Work Case projection and Workspace route.
 
+## Research & Benchmarking
+
+[FPAW section 20](../../architecture/four-portfolio-archetype-ai-workforce-operating-standard.md#20-research-and-source-register)
+compares OMG CMMN and W3C PROV-O. This slice adopts their definition/occurrence
+and trace boundaries; it rejects a parallel agent task bus.
+
 ## Objective
 
 1. **OBJ-WR-001:** Distinguish a reusable Workroom definition from its occurrence without requiring development evidence or a parallel surface.
