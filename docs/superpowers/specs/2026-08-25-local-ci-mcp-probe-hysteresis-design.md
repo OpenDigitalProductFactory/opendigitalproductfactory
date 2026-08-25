@@ -18,18 +18,21 @@ repaired cross-surface counter defect.
 
 ## Objectives and acceptance
 
-- **OBJ-MCP-RECOVERY / AC-MCP-RECOVERY:** Two consecutive bounded MCP request
-  misses during the build watchdog can recover; a third consecutive miss fences
-  as `blocked_control_plane_starvation`.
-- **OBJ-STRICT-FENCE / AC-STRICT-SURFACES:** Portal, Docker, and PostgreSQL keep
-  their two-consecutive-miss fail-closed boundary.
-- **OBJ-STRICT-FENCE / AC-PREFLIGHT:** All four surfaces must still be healthy
-  before BuildKit starts.
-- **OBJ-EVIDENCE / AC-LIMIT-EVIDENCE:** Every build-watchdog sample records the
-  effective per-surface limits beside its counters.
-- **OBJ-SCOPE / AC-NO-BROADEN:** Probe cadence, the 2.5-second request timeout,
-  product tests, build semantics, lease lifecycle, and installed runtime remain
-  unchanged.
+- **OBJ-MCP-RECOVERY:** Allow two consecutive bounded MCP request misses during
+  the build watchdog to recover while sustained MCP degradation still fences.
+- **OBJ-STRICT-FENCE:** Preserve the existing fail-closed boundaries for every
+  non-MCP control-plane surface and for preflight.
+- **OBJ-EVIDENCE:** Make the effective per-surface watchdog limits explicit in
+  each build-watchdog sample.
+- **OBJ-SCOPE:** Keep the correction confined to build-watchdog hysteresis.
+
+| Acceptance ID | Objective ID | Statement |
+| --- | --- | --- |
+| AC-MCP-RECOVERY | OBJ-MCP-RECOVERY | Two consecutive bounded MCP request misses recover; a third consecutive miss fences as `blocked_control_plane_starvation`. |
+| AC-STRICT-SURFACES | OBJ-STRICT-FENCE | Portal, Docker, and PostgreSQL retain their two-consecutive-miss fail-closed boundary. |
+| AC-PREFLIGHT | OBJ-STRICT-FENCE | All four control-plane surfaces are healthy before BuildKit starts. |
+| AC-LIMIT-EVIDENCE | OBJ-EVIDENCE | Every build-watchdog sample records the effective per-surface limits beside its counters. |
+| AC-NO-BROADEN | OBJ-SCOPE | Probe cadence, the 2.5-second request timeout, product tests, build semantics, lease lifecycle, and installed runtime remain unchanged. |
 
 ## Architecture
 
@@ -55,4 +58,3 @@ healthy sample. Missing probes and invalid limits fail closed.
 - Raw importer analysis identifies one production caller; no UI, schema, route,
   migration, seed, deployment, or business-archetype surface changes.
 - Decision `DI-F858F9EB93E0` remains the governing surface-hysteresis choice.
-
