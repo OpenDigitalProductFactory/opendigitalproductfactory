@@ -105,3 +105,7 @@ receipt contains the deadline evidence and infrastructure exit code.
   unsafe or ineffective when shipped separately.
 - **Receipt:** pending governed `record_plan_backlog_coverage` after immutable
   provider verification of this plan blob.
+- **Blocking condition:** no initiative scope baseline exists for this item.
+  Source implementation must not begin until an independent reviewer reads the
+  immutable design, persists a passing `spec-approval` receipt/baseline, and the
+  atomic coverage writer accepts this plan blob.
