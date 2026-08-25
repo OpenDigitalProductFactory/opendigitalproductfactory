@@ -22,6 +22,10 @@ const { ALL_ARCHETYPES, deriveOperationalValueStream } = storefrontTemplates;
 const READING_TARGET = TIERS.archetype.maxGrade;
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const processProjection = JSON.parse(
+  readFileSync(join(__dirname, "_process-projection.generated.json"), "utf8"),
+);
+const leafProcesses = Object.values(processProjection.archetypes ?? {});
 
 const esc = (s) =>
   String(s)
@@ -89,6 +93,12 @@ for (const page of pages) {
     if (!pageForArchetype.has(archetype.archetypeId)) pageForArchetype.set(archetype.archetypeId, page);
   }
 }
+
+const humanize = (value) =>
+  String(value)
+    .split("-")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
 
 // ---- per-group "operating model" parameters (drive the SVG diagram) --------
 const OP = {
@@ -624,6 +634,96 @@ function judgementSection(page) {
 }
 
 // ---- per-business page -----------------------------------------------------
+function leafProcessPageHTML(model, parentSlug) {
+  const stageByKey = new Map(
+    model.streams.flatMap((stream) => stream.stages.map((stage) => [stage.key, stage])),
+  );
+  const streamSections = model.streams
+    .map((stream, streamIndex) => {
+      const stages = stream.stages
+        .map((stage, stageIndex) => {
+          const handoff = stage.handoffToStageKey
+            ? stageByKey.get(stage.handoffToStageKey)?.label ?? humanize(stage.handoffToStageKey)
+            : stageIndex < stream.stages.length - 1
+              ? stream.stages[stageIndex + 1].label
+              : streamIndex < model.streams.length - 1
+                ? model.streams[streamIndex + 1].label
+                : "Outcome review";
+          const gates = stage.trustGateKeys.length
+            ? stage.trustGateKeys.map(humanize).join(", ")
+            : "Routine work within approved care policy";
+          return `<tr>
+            <td><strong>${esc(stage.label)}</strong></td>
+            <td>${esc(stage.input)}</td>
+            <td>${esc(stage.output)}</td>
+            <td>${esc(stage.responsibleRole)}</td>
+            <td>${esc(gates)}</td>
+            <td>${esc(handoff)}</td>
+          </tr>`;
+        })
+        .join("\n");
+
+      return `<section aria-labelledby="stream-${esc(stream.key)}">
+        <p class="section-eyebrow">Primary value stream ${streamIndex + 1}</p>
+        <h2 id="stream-${esc(stream.key)}">${esc(stream.label)}</h2>
+        <p class="sub">${esc(stream.purpose)}</p>
+        <div class="twocol">
+          <div class="card"><h3>Starts with</h3><p>${esc(stream.input)}</p></div>
+          <div class="card"><h3>Finishes with</h3><p>${esc(stream.output)}</p></div>
+        </div>
+        <p class="sub"><strong>Accountable lead:</strong> ${esc(stream.responsibleRole)}</p>
+        <div class="diagram-scroll" role="region" aria-label="${esc(stream.label)} stage details" tabindex="0">
+          <table style="width:100%;border-collapse:collapse;min-width:980px">
+            <thead><tr><th scope="col">Stage</th><th scope="col">Input</th><th scope="col">Output</th><th scope="col">Responsible</th><th scope="col">Approval or trust gate</th><th scope="col">Handoff</th></tr></thead>
+            <tbody>${stages}</tbody>
+          </table>
+        </div>
+      </section>`;
+    })
+    .join("\n");
+
+  const support = model.supportingCapabilities
+    .map((capability) => `<li class="chip">${esc(capability)}</li>`)
+    .join("");
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>${esc(model.name)} operating model — Open Digital Product Factory</title>
+<meta name="description" content="The intake, health and welfare, and adoption value streams that define how a pet rescue operates."/>
+<link rel="stylesheet" href="/assets/css/business.css"/>
+</head>
+<body id="top">
+${topbar()}
+<section class="hero"><div class="wrap">
+  <p class="eyebrow"><span class="dot"></span>Pet rescue · operating model</p>
+  <h1>How ${esc(model.name)} protects an animal from intake to placement</h1>
+  <p class="tagline">Three connected flows keep the animal—not fundraising or sales—at the centre of the work.</p>
+  <p class="lede">Use this view to see what starts each stream, who is responsible, what evidence allows work to advance, and where the animal is handed to the next team.</p>
+  <div class="cta-row"><a class="btn" href="/business-types/${esc(parentSlug)}.html">← Nonprofits &amp; community</a><a class="btn primary" href="/#install">Install the platform</a></div>
+</div></section>
+<main class="wrap">
+  <section aria-label="Operating model summary">
+    <p class="section-eyebrow">The animal journey</p>
+    <h2>One journey, three accountable value streams</h2>
+    <p class="sub">An animal enters through intake, remains in health and welfare care until it is ready, then moves through adoption and placement. A failed placement returns safely to intake and care; it does not disappear from the record.</p>
+  </section>
+  ${streamSections}
+  <section aria-labelledby="supporting-work">
+    <p class="section-eyebrow">Enabling work</p>
+    <h2 id="supporting-work">Supporting capabilities</h2>
+    <p class="sub">These capabilities sustain the rescue, but they do not replace the animal's progression through intake, care, and placement.</p>
+    <ul class="chips">${support}</ul>
+  </section>
+</main>
+${footer()}
+<a class="back-top" href="#top" aria-label="Back to top">↑ Top</a>
+</body>
+</html>`;
+}
+
 function pageHTML(page) {
   const g = groups.find((x) => x.id === page.group);
   const canonicalLeaves = resolveCanonicalLeaves(page);
@@ -1106,7 +1206,13 @@ export function buildOutputs() {
   for (const page of pages) {
     outputs.set(`${page.slug}.html`, pageHTML(page));
     for (const archetype of resolveCanonicalLeaves(page)) {
-      outputs.set(`archetypes/${archetype.archetypeId}.html`, canonicalLeafHTML(archetype));
+      const processModel = leafProcesses.find(
+        (candidate) => candidate.archetypeId === archetype.archetypeId,
+      );
+      outputs.set(
+        `archetypes/${archetype.archetypeId}.html`,
+        processModel ? leafProcessPageHTML(processModel, page.slug) : canonicalLeafHTML(archetype),
+      );
     }
   }
   outputs.set("_readability-report.md", readabilityResult().report);
@@ -1156,8 +1262,7 @@ function printReadability(result) {
 }
 
 const invokedPath = process.argv[1] ? resolve(process.argv[1]) : "";
-if (invokedPath === fileURLToPath(import.meta.url)) {
-  const checkOnly = process.argv.includes("--check");
+export function generateBusinessTypeOutputs(checkOnly = false) {
   const outputs = buildOutputs();
   const stale = writeOrCheckOutputs(outputs, checkOnly);
   const pageCount = Array.from(outputs.keys()).filter((path) => path.endsWith(".html")).length;
@@ -1167,4 +1272,9 @@ if (invokedPath === fileURLToPath(import.meta.url)) {
     console.log(`Generated ${pageCount} HTML pages into ${__dirname}.`);
   }
   printReadability(readabilityResult());
+  return stale;
+}
+
+if (invokedPath === fileURLToPath(import.meta.url)) {
+  generateBusinessTypeOutputs(process.argv.includes("--check"));
 }
