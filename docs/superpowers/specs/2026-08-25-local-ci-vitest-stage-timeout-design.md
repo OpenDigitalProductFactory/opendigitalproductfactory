@@ -7,16 +7,16 @@ status: proposed
 **OBJ-FINALIZE:** Close expired trees; unclosed=termination.
 **OBJ-EVIDENCE:** Persist retry/cleanup.
 
-**AC-VITEST-ONLY [OBJ-BOUND]:** Other stages/tests unchanged.
-**AC-TREE-CLOSE [OBJ-FINALIZE]:** Bounded stop/force/close.
-**AC-NON-PASS [OBJ-FINALIZE]:** Error/no-close never passes/product-red.
-**AC-RETRY-RECEIPT [OBJ-EVIDENCE]:** One reduced retry+receipt.
+**AC-VITEST-ONLY [OBJ-BOUND]:** Other work unchanged.
+**AC-TREE-CLOSE [OBJ-FINALIZE]:** Bounded tree close.
+**AC-NON-PASS [OBJ-FINALIZE]:** Termination never product-red.
+**AC-RETRY-RECEIPT [OBJ-EVIDENCE]:** One retry+receipt.
 
-Scope: attempt runner alone uses positive env duration or 1,800,000ms; observer else unbounded. Observer owns finalizer; supervisor class/retry; writer receipt. No other stage/test/schema/lease/tree.
+Scope: attempt runner alone uses positive `DPF_LOCAL_CI_VITEST_MAX_DURATION_MS` or 1,800,000ms; observer else unbounded. Observer owns finalizer; supervisor class/retry; writer receipt. No other stage/test/schema/lease/tree.
 
-Finalizer: mark; Windows `/T` or POSIX group `SIGTERM`; wait 10s; if open `/T /F` or `SIGKILL`; wait 10s; no-close=`close-timeout`. Close clears timers; errors record; late zero terminates.
+Finalizer: set `deadlineExceeded`; Windows `/T` or POSIX group `SIGTERM`; wait 10s; if open `/T /F` or `SIGKILL`; wait 10s; no-close=`close-timeout`. Close clears timers; errors record.
 
-Decision: early 0=`passed`; failed-test=`test-failure`/no-retry; nonzero/signal/spawn/deadline/stop/no-close=`runner-termination`/retry; second=exit86+exhausted.
+Decision: early 0=`passed`; failed-test=`test-failure`/no-retry; nonzero/signal/spawn/deadline (including late 0)/stop/no-close=`runner-termination`/retry; second=exit86+exhausted.
 
 Receipt: duration/deadline; stop/force time+result; close/error; PID/status/signal; workers/time/tail/samples/class; terminal attempts/recovery/recovered/exhausted; `finally` releases.
 
