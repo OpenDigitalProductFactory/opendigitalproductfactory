@@ -1,0 +1,25 @@
+{
+  "version": "1",
+  "decidedOption": "scoped-diagram-table-toggle",
+  "decisionInteractionId": "DI-F916DEAA4498",
+  "scope": {
+    "files": [
+      "apps/web/components/ea/EaCanvas.tsx",
+      "apps/web/components/ea/EaViewControls.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "decisionInteractionId": "DI-F916DEAA4498",
+    "consideredOptions": [
+      "diagram-only",
+      "table-only",
+      "scoped-diagram-table-toggle"
+    ]
+  },
+  "rationale": {
+    "scoped-diagram-table-toggle": "CHOSEN. Kernel composite 6.181, margin 2.432, high confidence, verdict proceed. A local switch preserves the architecture model while giving operators an accessible text alternative derived from the same projection. It scored highest on grounding new work in the existing platform, architecture over shortcuts, and single source of truth.",
+    "diagram-only": "REJECTED. Composite 3.749. It preserves the canvas but does not satisfy the operator's need to read inputs, outputs, responsibility, gates, and handoffs without decoding the graph.",
+    "table-only": "REJECTED. Composite 3.026. It improves linear reading but removes the relationship view architects use and creates a broader replacement than the acceptance criteria require."
+  }
+}

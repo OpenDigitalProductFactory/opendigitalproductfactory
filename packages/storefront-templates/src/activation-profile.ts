@@ -63,6 +63,8 @@ const PROCESS_PROFILE_KEYS = new Set([
   "housesSubjects",
   "schedulesSubjects",
   "resourceKinds",
+  "valueStreams",
+  "supportingCapabilities",
 ]);
 const PROCESS_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const MAX_PROCESS_SLUG_LENGTH = 63;
@@ -195,6 +197,104 @@ function hasUniqueValues(values: string[]): boolean {
   return new Set(values).size === values.length;
 }
 
+function isProcessText(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0 && value.length <= 500;
+}
+
+function readValueStreams(raw: unknown): ArchetypeProcessProfile["valueStreams"] | null {
+  if (raw === undefined) return [];
+  if (!Array.isArray(raw)) return null;
+
+  const streams = [];
+  const streamKeys = new Set<string>();
+  const stageKeys = new Set<string>();
+  const handoffTargets: string[] = [];
+
+  for (const stream of raw) {
+    if (
+      !isRecord(stream) ||
+      Object.keys(stream).some(
+        (key) => !["key", "label", "purpose", "input", "output", "responsibleRole", "loadBearingStageKeys", "stages"].includes(key),
+      ) ||
+      !isProcessSlug(stream.key) ||
+      streamKeys.has(stream.key) ||
+      !isProcessText(stream.label) ||
+      !isProcessText(stream.purpose) ||
+      !isProcessText(stream.input) ||
+      !isProcessText(stream.output) ||
+      !isProcessText(stream.responsibleRole) ||
+      !Array.isArray(stream.loadBearingStageKeys) ||
+      stream.loadBearingStageKeys.some((key) => !isProcessSlug(key)) ||
+      !hasUniqueValues(stream.loadBearingStageKeys as string[]) ||
+      !Array.isArray(stream.stages) ||
+      stream.stages.length === 0
+    ) {
+      return null;
+    }
+
+    streamKeys.add(stream.key);
+    const stages = [];
+    const streamStageKeys = new Set<string>();
+    for (const stage of stream.stages) {
+      if (
+        !isRecord(stage) ||
+        Object.keys(stage).some(
+          (key) => !["key", "label", "input", "output", "responsibleRole", "trustGateKeys", "handoffTo", "capabilityBindings", "metricBindings"].includes(key),
+        ) ||
+        !isProcessSlug(stage.key) ||
+        stageKeys.has(stage.key) ||
+        !isProcessText(stage.label) ||
+        !isProcessText(stage.input) ||
+        !isProcessText(stage.output) ||
+        !isProcessText(stage.responsibleRole) ||
+        !Array.isArray(stage.trustGateKeys) ||
+        stage.trustGateKeys.some((key) => !isProcessSlug(key)) ||
+        !hasUniqueValues(stage.trustGateKeys as string[]) ||
+        (stage.handoffTo !== undefined && !isProcessSlug(stage.handoffTo)) ||
+        (stage.capabilityBindings !== undefined &&
+          (!Array.isArray(stage.capabilityBindings) || stage.capabilityBindings.some((module) => !MODULES.has(module as ArchetypeModule)))) ||
+        (stage.metricBindings !== undefined &&
+          (!Array.isArray(stage.metricBindings) || stage.metricBindings.some((metric) => !isProcessSlug(metric))))
+      ) {
+        return null;
+      }
+
+      stageKeys.add(stage.key);
+      streamStageKeys.add(stage.key);
+      if (stage.handoffTo !== undefined) handoffTargets.push(stage.handoffTo);
+      stages.push({
+        key: stage.key,
+        label: stage.label,
+        input: stage.input,
+        output: stage.output,
+        responsibleRole: stage.responsibleRole,
+        trustGateKeys: stage.trustGateKeys as string[],
+        ...(stage.handoffTo !== undefined ? { handoffTo: stage.handoffTo } : {}),
+        ...(stage.capabilityBindings !== undefined ? { capabilityBindings: stage.capabilityBindings as ArchetypeModule[] } : {}),
+        ...(stage.metricBindings !== undefined ? { metricBindings: stage.metricBindings as string[] } : {}),
+      });
+    }
+
+    if ((stream.loadBearingStageKeys as string[]).some((key) => !streamStageKeys.has(key))) {
+      return null;
+    }
+
+    streams.push({
+      key: stream.key,
+      label: stream.label,
+      purpose: stream.purpose,
+      input: stream.input,
+      output: stream.output,
+      responsibleRole: stream.responsibleRole,
+      loadBearingStageKeys: stream.loadBearingStageKeys as string[],
+      stages,
+    });
+  }
+
+  if (handoffTargets.some((target) => !stageKeys.has(target))) return null;
+  return streams;
+}
+
 function readProcessProfile(raw: unknown): ArchetypeProcessProfile | null {
   if (raw === undefined) {
     return {
@@ -203,6 +303,8 @@ function readProcessProfile(raw: unknown): ArchetypeProcessProfile | null {
       housesSubjects: false,
       schedulesSubjects: false,
       resourceKinds: [],
+      valueStreams: [],
+      supportingCapabilities: [],
     };
   }
 
@@ -220,6 +322,17 @@ function readProcessProfile(raw: unknown): ArchetypeProcessProfile | null {
     typeof raw.housesSubjects !== "boolean" ||
     typeof raw.schedulesSubjects !== "boolean" ||
     !Array.isArray(raw.resourceKinds)
+  ) {
+    return null;
+  }
+
+  const valueStreams = readValueStreams(raw.valueStreams);
+  if (!valueStreams) return null;
+  const supportingCapabilities = raw.supportingCapabilities ?? [];
+  if (
+    !Array.isArray(supportingCapabilities) ||
+    supportingCapabilities.some((capability) => !isProcessSlug(capability)) ||
+    !hasUniqueValues(supportingCapabilities as string[])
   ) {
     return null;
   }
@@ -257,6 +370,8 @@ function readProcessProfile(raw: unknown): ArchetypeProcessProfile | null {
     housesSubjects: raw.housesSubjects,
     schedulesSubjects: raw.schedulesSubjects,
     resourceKinds,
+    valueStreams,
+    supportingCapabilities: supportingCapabilities as string[],
   };
 }
 

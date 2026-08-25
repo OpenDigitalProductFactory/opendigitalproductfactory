@@ -8,6 +8,10 @@ order: 1
 
 Operations is the delivery backlog for the platform. It tracks the work items, epics, priorities, and deployments that make up your team's delivery commitments. It is designed for transparency — blockers are visible, WIP limits are enforced, and progress is always up to date.
 
+## Workroom Inventory
+
+Open **Operations > Workrooms** (`/ops/workrooms`) for one operational inventory across business work, coworker activity, and development. **Live now** requires current execution evidence such as a valid lease, an open pull request, or recent activity. **History and cleanup** retains terminal, expired, stalled, and cleanup-eligible records without counting them as active. Select a Workroom to open its canonical activity case; open **Architecture > Workrooms** when you need the reusable definition instead of the instance history.
+
 ## Key Concepts
 
 - **Backlog Items** — Individual units of work with a status, priority, epic, and owner. Items move through triaging, open, in-progress, done, deferred, or retired.

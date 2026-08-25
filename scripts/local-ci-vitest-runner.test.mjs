@@ -11,8 +11,287 @@ import {
   createAttemptRunner,
   lastCompletedTestLine,
   recoveryReceiptForIdentity,
+  resolveVitestMaxDurationMs,
   selectVitestRecoveryPlan,
 } from "./local-ci-vitest-runner.mjs";
+import {
+  createObservedProcessRunner,
+  terminateProcessTree,
+} from "./lib/local-ci-process-observer.mjs";
+import {
+  classifyVitestAttempt,
+  runVitestWithRecovery,
+} from "./lib/local-ci-vitest-supervisor.mjs";
+
+function manualTimeouts() {
+  const scheduled = [];
+  return {
+    scheduled,
+    setTimeoutImpl(callback, delayMs) {
+      const timer = { callback, delayMs, cleared: false, ran: false };
+      scheduled.push(timer);
+      return timer;
+    },
+    clearTimeoutImpl(timer) {
+      if (timer) timer.cleared = true;
+    },
+    runNext(delayMs) {
+      const timer = scheduled.find((candidate) => (
+        !candidate.cleared && !candidate.ran && candidate.delayMs === delayMs
+      ));
+      assert.ok(timer, `expected a pending ${delayMs}ms timer`);
+      timer.ran = true;
+      timer.callback();
+      return timer;
+    },
+  };
+}
+
+function fakeChild(pid = 4123) {
+  const child = new EventEmitter();
+  child.pid = pid;
+  child.stdout = new PassThrough();
+  child.stderr = new PassThrough();
+  return child;
+}
+
+test("Vitest stage duration defaults to 30 minutes and accepts only a positive override", () => {
+  assert.equal(resolveVitestMaxDurationMs({}), 1_800_000);
+  assert.equal(resolveVitestMaxDurationMs({ DPF_LOCAL_CI_VITEST_MAX_DURATION_MS: "45000" }), 45_000);
+  assert.equal(resolveVitestMaxDurationMs({ DPF_LOCAL_CI_VITEST_MAX_DURATION_MS: "0" }), 1_800_000);
+  assert.equal(resolveVitestMaxDurationMs({ DPF_LOCAL_CI_VITEST_MAX_DURATION_MS: "invalid" }), 1_800_000);
+});
+
+test("the bounded observer stops then force-stops a hung process tree and closes with terminal evidence", async () => {
+  const child = fakeChild();
+  const timers = manualTimeouts();
+  const terminations = [];
+  let clock = 0;
+  const runObserved = createObservedProcessRunner({
+    spawnImpl: () => child,
+    sampleHost: () => ({ freeMemoryBytes: 24_000_000_000 }),
+    stdout: { write() {} },
+    stderr: { write() {} },
+    sampleIntervalMs: 60_000,
+    maxDurationMs: 1_800_000,
+    terminationGraceMs: 10_000,
+    closeGraceMs: 10_000,
+    setTimeoutImpl: timers.setTimeoutImpl,
+    clearTimeoutImpl: timers.clearTimeoutImpl,
+    now: () => new Date(clock).toISOString(),
+    terminateProcessTreeImpl: (pid, options) => {
+      terminations.push({ pid, ...options });
+      return { ok: true, force: options.force };
+    },
+  });
+
+  const resultPromise = runObserved({ command: "pnpm", args: ["vitest"] });
+  clock = 1_800_000;
+  timers.runNext(1_800_000);
+  assert.deepEqual(terminations, [{ pid: 4123, force: false }]);
+  clock += 10_000;
+  timers.runNext(10_000);
+  assert.deepEqual(terminations, [
+    { pid: 4123, force: false },
+    { pid: 4123, force: true },
+  ]);
+  clock += 10_000;
+  timers.runNext(10_000);
+
+  const result = await resultPromise;
+  assert.equal(result.deadlineExceeded, true);
+  assert.equal(result.maxDurationMs, 1_800_000);
+  assert.equal(result.deadlineAt, new Date(1_800_000).toISOString());
+  assert.equal(result.stopAttemptedAt, new Date(1_800_000).toISOString());
+  assert.equal(result.forceAttemptedAt, new Date(1_810_000).toISOString());
+  assert.equal(result.closeTimedOutAt, new Date(1_820_000).toISOString());
+  assert.equal(result.closeTimedOut, true);
+  assert.equal(result.status, null);
+  assert.equal(result.childPid, 4123);
+  assert.ok(result.hostSamples.length >= 3, "start, deadline, and terminal samples are retained");
+  assert.equal(classifyVitestAttempt(result), "runner-termination");
+});
+
+test("a late zero exit after the deadline is runner termination and receives one reduced-worker retry", async () => {
+  const child = fakeChild(5001);
+  const timers = manualTimeouts();
+  const runObserved = createObservedProcessRunner({
+    spawnImpl: () => child,
+    sampleHost: () => ({}),
+    stdout: { write() {} },
+    stderr: { write() {} },
+    sampleIntervalMs: 60_000,
+    maxDurationMs: 100,
+    setTimeoutImpl: timers.setTimeoutImpl,
+    clearTimeoutImpl: timers.clearTimeoutImpl,
+    terminateProcessTreeImpl: () => ({ ok: true }),
+  });
+  const firstPromise = runObserved({ command: "pnpm", args: ["vitest"] });
+  timers.runNext(100);
+  child.emit("close", 0, null);
+  const lateZero = await firstPromise;
+
+  const workers = [];
+  const recovered = await runVitestWithRecovery({
+    runAttempt: async ({ attempt, workers: attemptWorkers }) => {
+      workers.push(attemptWorkers);
+      return attempt === 1
+        ? lateZero
+        : { status: 0, signal: null, error: null, outputTail: "Tests  20000 passed" };
+    },
+  });
+  assert.equal(lateZero.deadlineExceeded, true);
+  assert.equal(classifyVitestAttempt(lateZero), "runner-termination");
+  assert.deepEqual(workers, [4, 2]);
+  assert.equal(recovered.status, 0);
+  assert.equal(recovered.recovered, true);
+});
+
+test("termination helper errors remain bounded and are preserved in the terminal receipt", async () => {
+  const child = fakeChild(5501);
+  const timers = manualTimeouts();
+  const runObserved = createObservedProcessRunner({
+    spawnImpl: () => child,
+    sampleHost: () => ({}),
+    stdout: { write() {} },
+    stderr: { write() {} },
+    sampleIntervalMs: 60_000,
+    maxDurationMs: 100,
+    terminationGraceMs: 10,
+    closeGraceMs: 10,
+    setTimeoutImpl: timers.setTimeoutImpl,
+    clearTimeoutImpl: timers.clearTimeoutImpl,
+    terminateProcessTreeImpl: (_pid, { force }) => {
+      throw Object.assign(new Error(force ? "force failed" : "stop failed"), {
+        code: force ? "EFORCE" : "ESTOP",
+      });
+    },
+  });
+  const resultPromise = runObserved({ command: "pnpm", args: ["vitest"] });
+  timers.runNext(100);
+  timers.runNext(10);
+  timers.runNext(10);
+
+  const result = await resultPromise;
+  assert.equal(result.deadlineExceeded, true);
+  assert.equal(result.closeTimedOut, true);
+  assert.deepEqual(result.stopResult, {
+    ok: false,
+    force: false,
+    error: { name: "Error", code: "ESTOP", message: "stop failed" },
+  });
+  assert.deepEqual(result.forceResult, {
+    ok: false,
+    force: true,
+    error: { name: "Error", code: "EFORCE", message: "force failed" },
+  });
+  assert.equal(classifyVitestAttempt(result), "runner-termination");
+});
+
+test("a normal close clears the deadline and observers without a bound remain unbounded", async () => {
+  const boundedChild = fakeChild(6001);
+  const boundedTimers = manualTimeouts();
+  const boundedRun = createObservedProcessRunner({
+    spawnImpl: () => boundedChild,
+    sampleHost: () => ({}),
+    stdout: { write() {} },
+    stderr: { write() {} },
+    sampleIntervalMs: 60_000,
+    maxDurationMs: 100,
+    setTimeoutImpl: boundedTimers.setTimeoutImpl,
+    clearTimeoutImpl: boundedTimers.clearTimeoutImpl,
+  });
+  const boundedPromise = boundedRun({ command: "pnpm", args: ["vitest"] });
+  boundedChild.emit("close", 0, null);
+  const bounded = await boundedPromise;
+  assert.equal(bounded.deadlineExceeded, false);
+  assert.equal(boundedTimers.scheduled[0].cleared, true);
+
+  const unboundedChild = fakeChild(6002);
+  const unboundedTimers = manualTimeouts();
+  const unboundedRun = createObservedProcessRunner({
+    spawnImpl: () => unboundedChild,
+    sampleHost: () => ({}),
+    stdout: { write() {} },
+    stderr: { write() {} },
+    sampleIntervalMs: 60_000,
+    setTimeoutImpl: unboundedTimers.setTimeoutImpl,
+    clearTimeoutImpl: unboundedTimers.clearTimeoutImpl,
+  });
+  const unboundedPromise = unboundedRun({ command: "pnpm", args: ["typecheck"] });
+  assert.equal(unboundedTimers.scheduled.length, 0);
+  unboundedChild.emit("close", 0, null);
+  assert.equal((await unboundedPromise).maxDurationMs, null);
+});
+
+test("only a bounded POSIX observer starts the child in an isolated process group", async () => {
+  const boundedChild = fakeChild(6501);
+  const unboundedChild = fakeChild(6502);
+  const spawnOptions = [];
+  const boundedRun = createObservedProcessRunner({
+    platform: "linux",
+    maxDurationMs: 100,
+    spawnImpl: (_command, _args, options) => {
+      spawnOptions.push(options);
+      return boundedChild;
+    },
+    sampleHost: () => ({}),
+    stdout: { write() {} },
+    stderr: { write() {} },
+    sampleIntervalMs: 60_000,
+  });
+  const unboundedRun = createObservedProcessRunner({
+    platform: "linux",
+    spawnImpl: (_command, _args, options) => {
+      spawnOptions.push(options);
+      return unboundedChild;
+    },
+    sampleHost: () => ({}),
+    stdout: { write() {} },
+    stderr: { write() {} },
+    sampleIntervalMs: 60_000,
+  });
+  const boundedPromise = boundedRun({ command: "pnpm", args: ["vitest"] });
+  const unboundedPromise = unboundedRun({ command: "pnpm", args: ["typecheck"] });
+  boundedChild.emit("close", 0, null);
+  unboundedChild.emit("close", 0, null);
+  await Promise.all([boundedPromise, unboundedPromise]);
+
+  assert.equal(spawnOptions[0].shell, false);
+  assert.equal(spawnOptions[0].detached, true);
+  assert.equal(spawnOptions[1].shell, false);
+  assert.equal(spawnOptions[1].detached, false);
+});
+
+test("process-tree termination preserves platform-specific graceful and force semantics", () => {
+  const windowsCalls = [];
+  const winSpawn = (command, args) => {
+    windowsCalls.push({ command, args });
+    return { status: 0, signal: null, error: null };
+  };
+  terminateProcessTree(7001, { platform: "win32", force: false, spawnSyncImpl: winSpawn });
+  terminateProcessTree(7001, { platform: "win32", force: true, spawnSyncImpl: winSpawn });
+  assert.deepEqual(windowsCalls, [
+    { command: "taskkill.exe", args: ["/PID", "7001", "/T"] },
+    { command: "taskkill.exe", args: ["/PID", "7001", "/T", "/F"] },
+  ]);
+
+  const posixCalls = [];
+  terminateProcessTree(7001, {
+    platform: "linux",
+    force: false,
+    killImpl: (pid, signal) => posixCalls.push({ pid, signal }),
+  });
+  terminateProcessTree(7001, {
+    platform: "linux",
+    force: true,
+    killImpl: (pid, signal) => posixCalls.push({ pid, signal }),
+  });
+  assert.deepEqual(posixCalls, [
+    { pid: -7001, signal: "SIGTERM" },
+    { pid: -7001, signal: "SIGKILL" },
+  ]);
+});
 
 test("lastCompletedTestLine returns the latest verbose Vitest test marker", () => {
   assert.equal(lastCompletedTestLine([
@@ -98,6 +377,7 @@ test("the executable runner refuses a persisted exhausted profile before spawn",
     identity: {
       integrationTreeSha,
       command: "pnpm --filter web exec vitest run --maxWorkers=4 --reporter=verbose",
+      maxDurationMs: 1_800_000,
     },
     status: "runner-termination",
     retryExhausted: true,

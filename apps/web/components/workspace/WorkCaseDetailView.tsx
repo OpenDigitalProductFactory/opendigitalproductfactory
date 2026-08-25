@@ -12,7 +12,7 @@ type Props = {
 export function WorkCaseDetailView({ detail }: Props) {
   if (!detail.room) {
     return (
-      <main className="space-y-5 text-[var(--dpf-text)]">
+      <div className="space-y-5 text-[var(--dpf-text)]">
         <a
           href="/workspace/my-queue"
           className="inline-flex min-h-11 items-center gap-2 rounded-md text-sm font-medium text-[var(--dpf-accent)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]"
@@ -33,14 +33,14 @@ export function WorkCaseDetailView({ detail }: Props) {
             </a>
           )}
         />
-      </main>
+      </div>
     );
   }
 
   return (
-    <main className="space-y-5 text-[var(--dpf-text)]">
+    <div className="space-y-5 text-[var(--dpf-text)]">
       <WorkroomHeader room={detail.room} summary={detail.summary} />
       <WorkroomBody detail={detail} room={detail.room} />
-    </main>
+    </div>
   );
 }

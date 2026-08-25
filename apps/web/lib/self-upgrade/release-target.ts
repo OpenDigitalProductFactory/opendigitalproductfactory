@@ -105,8 +105,8 @@ export function resolveUpgradeStrategy(
 }
 
 export type ReleaseTargetResult =
-  | { kind: "target"; tag: string; sourceSha: string; channelDigest: string; configDigest: string }
-  | { kind: "up-to-date"; tag: string; sourceSha: string; channelDigest: string; configDigest: string }
+  | { kind: "target"; tag: string; sourceSha: string; channelDigest: string; platformManifestDigest: string; configDigest: string; platformOs: "linux"; platformArchitecture: string }
+  | { kind: "up-to-date"; tag: string; sourceSha: string; channelDigest: string; platformManifestDigest: string; configDigest: string; platformOs: "linux"; platformArchitecture: string }
   | { kind: "no-published-target"; reason: RegistryReleaseFailureReason | "current-image-identity-missing" };
 
 export function resolveReleaseTarget(input: {
@@ -137,7 +137,10 @@ export function resolveReleaseTarget(input: {
       tag: input.candidate.tag,
       sourceSha: input.candidate.sourceSha,
       channelDigest: input.candidate.channelDigest,
+      platformManifestDigest: input.candidate.platformManifestDigest,
       configDigest: input.candidate.configDigest,
+      platformOs: input.candidate.platformOs,
+      platformArchitecture: input.candidate.platformArchitecture,
     };
   }
   return {
@@ -145,7 +148,10 @@ export function resolveReleaseTarget(input: {
     tag: input.candidate.tag,
     sourceSha: input.candidate.sourceSha,
     channelDigest: input.candidate.channelDigest,
+    platformManifestDigest: input.candidate.platformManifestDigest,
     configDigest: input.candidate.configDigest,
+    platformOs: input.candidate.platformOs,
+    platformArchitecture: input.candidate.platformArchitecture,
   };
 }
 
