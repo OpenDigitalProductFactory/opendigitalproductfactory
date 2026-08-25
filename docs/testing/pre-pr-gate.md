@@ -240,6 +240,24 @@ Run it standalone with `pnpm run pregate:preflight`
 still enforces every guard. Routing probes (`--dry-run`) and evidence replays
 (`--finalize-evidence`) skip the preflight automatically.
 
+**Documentation evidence lane (BI-B2E9FC9D).** After preflight and before any
+`local-integration-ci` lease claim, the Node gate checks whether the committed
+candidate is an exact documentation-only tree. This lane is deliberately
+fail-closed: `HEAD` must equal the requested SHA, the worktree must be clean,
+the candidate must contain the current `origin/main`, and the authoritative CI
+evidence planner must select `executionLane: documentation` with no full suite.
+Two architecture documents that need the workspace runtime remain excluded.
+If any check is missing, stale, or ambiguous, the gate falls through to the
+normal exhaustive sandbox path.
+
+An eligible documentation tree runs doc-index freshness, link integrity, and
+the complete repository guard loop in the worktree. It records the planner
+digest, candidate tree, commands, output, and result through
+`record_local_integration_result`, then writes the same SHA-bound local gate
+state used by `pregate:status`. Its evidence carries no lease id because it
+never enters the scarce sandbox. A failed documentation check is a failed gate;
+it does not retry by consuming the heavyweight lane.
+
 **Host-native/Node-first entry point (BI-2272D840, BI-52500C0D, BI-4BE30454).** `pregate.mjs`
 routes to `scripts/gate-worktree.mjs` by default on every host. The Node-native
 gate owns the lease-claim / heartbeat / fenced-run / descendant-quiescence /
@@ -249,14 +267,15 @@ and delegates to the Node gate; set `DPF_PREGATE_FORCE_SH=1` only for focused
 shell-adapter debugging. Missing native `sh` is therefore classified as
 **sandbox-routable, never a build blocker**.
 
-Either path produces the same evidence shape (manifest version and slot,
-branch/SHA, integration tree, database and Compose identity, production
-artifact, lease id, freshness verdict, toolchain fingerprint, expiry) and
-writes the same
-`.git/dpf-local-ci-gate.json` state file, so the pre-push gate below accepts
-either without caring which one ran. `DPF_PREGATE_FORCE_NODE=1` preserves the
-default. `DPF_PREGATE_FORCE_SH=1` is explicit legacy-shell debugging and still
-requires a working shell.
+The exhaustive Node and compatibility-shell paths produce the same sandbox
+evidence shape (manifest version and slot, branch/SHA, integration tree,
+database and Compose identity, production artifact, lease id, freshness
+verdict, toolchain fingerprint, expiry). The documentation lane produces a
+smaller planner-bound evidence record. All three write the same
+`.git/dpf-local-ci-gate.json` state file, so the pre-push gate accepts a fresh
+pass without caring which eligible lane produced it. `DPF_PREGATE_FORCE_NODE=1`
+preserves the default. `DPF_PREGATE_FORCE_SH=1` is explicit legacy-shell
+debugging and still requires a working shell.
 
 The gate claims a `local-integration-ci` lease (waiting if the sandbox is
 already leased). A canonical waiter refreshes its idempotent claim well inside
