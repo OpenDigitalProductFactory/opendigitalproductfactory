@@ -8,9 +8,9 @@
 
 Repair three operator-visible regressions without adding a new visual dialect:
 
-1. `/platform/audit/metrics` remains readable in light and dark themes.
-2. `/workforce` exposes its primary directory immediately, without an expand step.
-3. `/admin/graph-explorer` renders legible canvas labels and relationships in the active theme.
+- **OBJ-METRICS-READABILITY:** `/platform/audit/metrics` remains readable in light and dark themes.
+- **OBJ-COWORKER-DIRECTORY:** `/workforce` exposes its primary directory immediately, without an expand step.
+- **OBJ-GRAPH-READABILITY:** `/admin/graph-explorer` renders legible canvas labels and relationships in the active theme.
 
 The repair keeps the existing data sources, routes, and interaction contracts. It changes presentation and disclosure only.
 
@@ -101,13 +101,12 @@ Roughly 20% of the implementation is reserved for convergence work rather than s
 
 ## Acceptance and verification
 
-1. First-failing tests reproduce all three regressions.
-2. Targeted tests pass after the minimum fixes and remain green after convergence refactoring.
-3. No raw hex color is introduced in the changed UI paths; metrics hard-coded presentation colors are removed.
-4. Source-local typecheck and affected tests pass in the correct worktree or are explicitly rerouted to governed local CI if the worktree remains source-only.
-5. Browser verification covers all three routes in light and dark themes, plus a narrow viewport.
-6. A measured `docs/ux-fit/*.ux-fit.json` covers exactly the UI-impacting files.
-7. The exact committed tree receives independent semantic review, local-CI evidence, DCO sign-off, and a ready-for-review PR.
+| Acceptance ID | Objective IDs | Statement |
+| --- | --- | --- |
+| AC-REGRESSION-TESTS | OBJ-METRICS-READABILITY, OBJ-COWORKER-DIRECTORY, OBJ-GRAPH-READABILITY | First-failing tests reproduce all three regressions, then targeted tests pass after the fixes and convergence refactoring. |
+| AC-THEME-SAFETY | OBJ-METRICS-READABILITY, OBJ-GRAPH-READABILITY | No raw hex color is introduced in the changed UI paths, metrics hard-coded presentation colors are removed, and browser verification covers both themes. |
+| AC-DIRECT-ROSTER | OBJ-COWORKER-DIRECTORY | The coworker search, filters, and roster are usable on arrival without a details or disclosure control, including at a narrow viewport. |
+| AC-QUALITY-GATES | OBJ-METRICS-READABILITY, OBJ-COWORKER-DIRECTORY, OBJ-GRAPH-READABILITY | Source-local checks, the measured UX-fit manifest, exact-tree semantic review, local-CI evidence, DCO sign-off, and a ready-for-review PR all pass. |
 
 ## Architecture review
 
