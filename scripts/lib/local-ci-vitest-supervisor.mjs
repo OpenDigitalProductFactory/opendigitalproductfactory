@@ -2,7 +2,15 @@ const FAILED_TEST_SUMMARY_RE = /(?:Test Files|Tests)\s+[^\r\n]*\b[1-9]\d* failed
 
 export { BoundedTextTail } from "./bounded-text-tail.mjs";
 
-export function classifyVitestAttempt({ status, signal, error, outputTail = "" }) {
+export function classifyVitestAttempt({
+  status,
+  signal,
+  error,
+  outputTail = "",
+  deadlineExceeded = false,
+  closeTimedOut = false,
+}) {
+  if (deadlineExceeded || closeTimedOut) return "runner-termination";
   if (status === 0 && !signal && !error) return "passed";
   if (FAILED_TEST_SUMMARY_RE.test(outputTail)) return "test-failure";
   if (
@@ -44,6 +52,15 @@ function normalizeAttempt(raw, { attempt, workers }) {
     hostSamples: raw.hostSamples ?? [],
     startedAt: raw.startedAt ?? null,
     completedAt: raw.completedAt ?? null,
+    maxDurationMs: raw.maxDurationMs ?? null,
+    deadlineAt: raw.deadlineAt ?? null,
+    deadlineExceeded: raw.deadlineExceeded === true,
+    stopAttemptedAt: raw.stopAttemptedAt ?? null,
+    stopResult: raw.stopResult ?? null,
+    forceAttemptedAt: raw.forceAttemptedAt ?? null,
+    forceResult: raw.forceResult ?? null,
+    closeTimedOutAt: raw.closeTimedOutAt ?? null,
+    closeTimedOut: raw.closeTimedOut === true,
   };
 }
 
