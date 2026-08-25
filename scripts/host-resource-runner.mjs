@@ -5,7 +5,7 @@ import { hostname, freemem, totalmem } from "node:os";
 import { resolve } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { isEntryModule } from "./lib/entry-module.mjs";
-import { mcpCall } from "./lib/mcp-client.mjs";
+import { isAllowedMcpEndpoint, mcpCall } from "./lib/mcp-client.mjs";
 import { superviseLeaseRun } from "./lib/lease-supervisor.mjs";
 import { readProcessIdentity } from "./lib/local-sandbox-fence.mjs";
 
@@ -13,6 +13,8 @@ const PROFILE_CONTRACT = JSON.parse(readFileSync(
   new URL("../apps/web/lib/nonprod/host-resource-profiles.json", import.meta.url),
   "utf8",
 ));
+
+const DEFAULT_LOCAL_MCP_URL = "http://127.0.0.1:3000/api/mcp/v1";
 
 export const HEAVY_PROCESS_CLASSES = Object.freeze([
   "typescript",
@@ -121,26 +123,50 @@ function gitValue(args) {
   return result.status === 0 ? result.stdout.trim() : "";
 }
 
-function readMcpConnection(cwd) {
+export function readMcpConnection(cwd) {
   const envToken = process.env.DPF_MCP_BEARER_TOKEN;
   if (envToken) {
+    // Explicit operator input: the endpoint is whatever the operator named.
     return {
-      mcpUrl: process.env.DPF_MCP_URL || "http://127.0.0.1:3000/api/mcp/v1",
+      mcpUrl: process.env.DPF_MCP_URL || DEFAULT_LOCAL_MCP_URL,
       bearerToken: envToken,
     };
   }
-  try {
-    const config = JSON.parse(readFileSync(resolve(cwd, ".mcp.json"), "utf8"));
-    const server = config?.mcpServers?.dpf;
-    const authorization = server?.headers?.Authorization ?? server?.headers?.authorization;
-    const bearerToken = typeof authorization === "string"
-      ? authorization.replace(/^Bearer\s+/i, "")
-      : "";
-    if (server?.url && bearerToken) return { mcpUrl: server.url, bearerToken };
-  } catch {
-    // The actionable fail-closed error is emitted by the caller.
+  return readMcpConnectionFile(resolve(cwd, ".mcp.json"));
+}
+
+// `.mcp.json` is ambient state, not operator intent -- it is copied between
+// worktrees by scripts/sync-mcp-worktrees.ps1 and is writable by anything with
+// the checkout. The token it carries is a live DPF credential, so the endpoint
+// it names is checked against the loopback contract before the token is put on
+// the wire; a non-loopback endpoint is a stop (AGENTS.md section 1), not a
+// silent fall-through to the default.
+function readMcpConnectionFile(configPath) {
+  const config = parseJsonFile(configPath);
+  const server = config?.mcpServers?.dpf;
+  const authorization = server?.headers?.Authorization ?? server?.headers?.authorization;
+  const bearerToken = typeof authorization === "string"
+    ? authorization.replace(/^Bearer\s+/i, "")
+    : "";
+  const mcpUrl = typeof server?.url === "string" ? server.url : "";
+  if (!mcpUrl || !bearerToken) return null;
+  if (!isAllowedMcpEndpoint(mcpUrl)) {
+    throw new Error(
+      `${configPath} points the dpf MCP server at ${mcpUrl}, which is not a local endpoint; `
+      + "refusing to send the bearer token off-box. Set DPF_MCP_BEARER_TOKEN (and DPF_MCP_URL) "
+      + "to reach a non-loopback endpoint deliberately.",
+    );
   }
-  return null;
+  return { mcpUrl, bearerToken };
+}
+
+function parseJsonFile(path) {
+  try {
+    return JSON.parse(readFileSync(path, "utf8"));
+  } catch {
+    // Absent or malformed: the actionable fail-closed error is emitted by the caller.
+    return null;
+  }
 }
 
 function readProcessRows() {

@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
 import {
@@ -7,7 +9,9 @@ import {
   classifyHeavyProcess,
   findUngovernedHeavyProcesses,
   parseHostResourceArgs,
+  readMcpConnection,
 } from "./host-resource-runner.mjs";
+import { isAllowedMcpEndpoint } from "./lib/mcp-client.mjs";
 
 const GiB = 1024 ** 3;
 
@@ -105,4 +109,107 @@ test("canonical heavyweight package scripts cannot bypass the governed runner", 
   assert.match(manifest.scripts.test, /host-resource-runner\.mjs --class vitest/);
   assert.match(manifest.scripts.build, /host-resource-runner\.mjs --class next-build/);
   assert.match(manifest.scripts.dev, /host-resource-runner\.mjs --class preview/);
+});
+
+
+// scripts/lib/mcp-client.mjs's own test file is a live-socket timing test held out
+// of CI by scripts/ci-policy-test-inventory-allowlist.txt, so the endpoint guard is
+// covered here -- next to the .mcp.json reader that is the reason it exists.
+
+function seedMcpConfig(url, token = "dpfmcp_seeded") {
+  const dir = mkdtempSync(join(tmpdir(), "dpf-mcp-config-"));
+  writeFileSync(join(dir, ".mcp.json"), JSON.stringify({
+    mcpServers: { dpf: { url, headers: { Authorization: `Bearer ${token}` } } },
+  }));
+  return dir;
+}
+
+function withoutMcpEnv(run) {
+  const { DPF_MCP_BEARER_TOKEN: token, DPF_MCP_URL: url } = process.env;
+  delete process.env.DPF_MCP_BEARER_TOKEN;
+  delete process.env.DPF_MCP_URL;
+  try {
+    return run();
+  } finally {
+    if (token === undefined) delete process.env.DPF_MCP_BEARER_TOKEN;
+    else process.env.DPF_MCP_BEARER_TOKEN = token;
+    if (url === undefined) delete process.env.DPF_MCP_URL;
+    else process.env.DPF_MCP_URL = url;
+  }
+}
+
+test("the loopback endpoints scripts/sync-mcp-worktrees.ps1 writes are accepted", () => {
+  for (const url of [
+    "http://127.0.0.1:3000/api/mcp/v1",
+    "http://localhost:3000/api/mcp/v1",
+    "https://127.0.0.1:3443/api/mcp/v1",
+    "http://[::1]:3000/api/mcp/v1",
+    "http://127.0.0.1/api/mcp/v1",
+  ]) {
+    assert.equal(isAllowedMcpEndpoint(url), true, url);
+  }
+});
+
+test("an endpoint that would put the bearer token on another host is rejected", () => {
+  for (const url of [
+    "http://example.com/api/mcp/v1",
+    "https://mcp.example.com/api/mcp/v1",
+    // Loopback literal as userinfo -- the authority is example.com.
+    "http://127.0.0.1@example.com/api/mcp/v1",
+    "http://127.0.0.1:3000@example.com/api/mcp/v1",
+    // Loopback literal as a subdomain label or path, not the host.
+    "http://127.0.0.1.example.com/api/mcp/v1",
+    "http://localhost.example.com/api/mcp/v1",
+    "http://example.com/127.0.0.1/api/mcp/v1",
+    // 127.0.0.2 is loopback to the kernel but is not an endpoint DPF publishes.
+    "http://127.0.0.2:3000/api/mcp/v1",
+    // Non-HTTP schemes never carry an Authorization header the way this client does.
+    "file:///etc/passwd",
+    "ftp://127.0.0.1/api/mcp/v1",
+    "not a url",
+    "",
+  ]) {
+    assert.equal(isAllowedMcpEndpoint(url), false, url);
+  }
+  assert.equal(isAllowedMcpEndpoint(undefined), false);
+  assert.equal(isAllowedMcpEndpoint({ toString: () => "http://127.0.0.1:3000/" }), false);
+});
+
+test("a seeded loopback .mcp.json still yields a usable connection", () => {
+  const cwd = seedMcpConfig("http://127.0.0.1:3000/api/mcp/v1");
+  assert.deepEqual(withoutMcpEnv(() => readMcpConnection(cwd)), {
+    mcpUrl: "http://127.0.0.1:3000/api/mcp/v1",
+    bearerToken: "dpfmcp_seeded",
+  });
+});
+
+test("a .mcp.json naming a remote endpoint stops rather than sending the token off-box", () => {
+  const cwd = seedMcpConfig("https://mcp.example.com/api/mcp/v1");
+  assert.throws(
+    () => withoutMcpEnv(() => readMcpConnection(cwd)),
+    /not a local endpoint; refusing to send the bearer token off-box/,
+  );
+});
+
+test("an absent .mcp.json is still an admission failure, not an endpoint refusal", () => {
+  const cwd = mkdtempSync(join(tmpdir(), "dpf-mcp-config-"));
+  assert.equal(withoutMcpEnv(() => readMcpConnection(cwd)), null);
+});
+
+test("DPF_MCP_URL stays operator intent and is not narrowed to loopback", () => {
+  const cwd = seedMcpConfig("https://mcp.example.com/api/mcp/v1");
+  const previous = { ...process.env };
+  process.env.DPF_MCP_BEARER_TOKEN = "dpfmcp_env";
+  process.env.DPF_MCP_URL = "https://mcp.example.com/api/mcp/v1";
+  try {
+    assert.deepEqual(readMcpConnection(cwd), {
+      mcpUrl: "https://mcp.example.com/api/mcp/v1",
+      bearerToken: "dpfmcp_env",
+    });
+  } finally {
+    if (previous.DPF_MCP_BEARER_TOKEN === undefined) delete process.env.DPF_MCP_BEARER_TOKEN;
+    else process.env.DPF_MCP_BEARER_TOKEN = previous.DPF_MCP_BEARER_TOKEN;
+    if (previous.DPF_MCP_URL === undefined) delete process.env.DPF_MCP_URL;
+    else process.env.DPF_MCP_URL = previous.DPF_MCP_URL;
+  }
 });
