@@ -42,6 +42,7 @@ const OUTCOME_CLASS: Record<AttentionSource, string> = {
   "business-journey": "Something your customers rely on has stopped working",
   "ai-decision": "A business decision needs you",
   "agent-proposal": "A coworker is asking permission",
+  "coworker-envelope": "A coworker is waiting for your approval",
   "paused-ai": "A coworker is waiting on you",
   "research-proposal": "A research request needs approving",
   "coworker-memory": "A coworker recorded something new",

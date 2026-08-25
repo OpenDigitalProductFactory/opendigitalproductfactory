@@ -36,7 +36,10 @@ export async function loadOpeningBriefingPayload(
   // Quiet means quiet — skip the attention fan-out entirely.
   if ((proactivityLevel ?? "balanced") === "quiet") return null;
 
-  const { items } = await loadAttentionItems(prisma, { aiReadinessUserId: user.id });
+  const { items } = await loadAttentionItems(prisma, {
+    aiReadinessUserId: user.id,
+    delegatingUserId: user.id,
+  });
   // V1 operator-view, matching /workspace/inbox; worker scoping is BI-AS-4.
   const visible = filterAttentionForAudience(items, { operator: true });
 
