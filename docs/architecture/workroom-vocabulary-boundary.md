@@ -159,14 +159,15 @@ silent drift.
 - **Agent-facing MCP copy** — tool descriptions and error payloads under
   `apps/web/lib/mcp/packs/` still say "Work Capsule" (27 occurrences, recorded in
   `scripts/prose-lint-baseline.json`). They are read by clients inside the alias
-  window, not by an operator, so they retire with the aliases (`BI-8D968679`).
+  window, not by an operator, so they retire with the aliases through the
+  existing alias-retirement follow-on.
 
 ## What a human reads is renamed, and now guarded
 
 ⟦runtime: enforced by `pnpm check:prose-lint` — a new "capsule" in owner copy fails CI⟧
 
-`BI-D6BC8C18`. Phases 1-4 moved the model, the view types, the tools and the
-doctrine, but eleven owner-facing strings kept saying capsule — the portal
+The owner-copy cleanup moved the model, view types, tools, and doctrine, but
+eleven owner-facing strings kept saying capsule — the portal
 context strip, the Build Studio work-control table and panel, the change-lane
 facet and its blocker text, the delivery nav, and the MCP token-template
 description. Phase 2's only UX gate was `workspace/cases/[caseKey]`, so no gate
