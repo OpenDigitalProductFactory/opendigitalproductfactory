@@ -112,11 +112,10 @@ Verification: runtime evidence, UX critique, and `pnpm pr:health` including revi
 
 ## Backlog coverage
 
-Coverage is deliberately atomic. Receipt and immutable plan coordinates are recorded after this plan's first commit and then inserted here without changing the delivery graph.
+Coverage is deliberately atomic. The immutable coverage write is currently blocked because no initiative scope baseline exists for this item. The canonical design is committed at `docs/superpowers/specs/2026-08-24-platform-sbom-currency-consolidation-design.md`; an independent in-platform reviewer must pass its `spec-approval` gate before implementation may begin.
 
 - Decision: `atomic`
 - Umbrella BI: `BI-7D2C4F02`
 - Deliverable: `platform-sbom-currency-consolidation` → `BI-7D2C4F02`
 - Dependencies: none
-- Coverage receipt: pending first plan commit
-
+- Coverage receipt: blocked on the initiative scope baseline; do not implement until the independent `spec-approval` pass is recorded and this receipt is written
