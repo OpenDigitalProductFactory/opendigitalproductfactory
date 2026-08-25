@@ -40,6 +40,25 @@ function room(): WorkroomView {
   return {
     roomKey: "scheduled%3AWEEKLY-CASH",
     caseRef: { caseId: "scheduled:WEEKLY-CASH", sourceType: "scheduled", sourceId: "WEEKLY-CASH" },
+    identity: {
+      definition: {
+        definitionId: "workroom-definition:scheduled",
+        version: 1,
+        sourceKey: "scheduled",
+        label: "Scheduled work",
+        mode: "standing",
+        decisionScope: "wwwd",
+      },
+      instance: {
+        instanceId: "workroom-instance:scheduled:WEEKLY-CASH",
+        occurrenceTrace: {
+          caseRef: { caseId: "scheduled:WEEKLY-CASH", sourceType: "scheduled", sourceId: "WEEKLY-CASH" },
+          sourceRef: { kind: "source", id: "WEEKLY-CASH", sourceType: "scheduled" },
+          cycleRef: { kind: "work-item", id: "WI-CYCLE-32", status: "open" },
+          executionRefs: [{ kind: "work-item", id: "WI-CYCLE-32" }],
+        },
+      },
+    },
     title: "Weekly cash review",
     purpose: "Keep the weekly cash position current.",
     mode: "standing",

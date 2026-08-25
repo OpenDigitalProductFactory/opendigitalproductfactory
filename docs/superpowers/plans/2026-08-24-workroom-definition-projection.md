@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Workroom Definition Projection Implementation Plan
 
 **Backlog item:** `BI-80BECE1E`  
@@ -76,11 +80,12 @@ Affected tests:
 
 ## Backlog coverage
 
-- **Decision:** atomic
-- **Item:** `BI-80BECE1E`
-- **Rationale:** definition versioning, occurrence trace, and progressive disclosure are one consumer contract. Shipping any one without the others either exposes no usable behavior or leaves the existing Workroom surface inconsistent with its read model.
-- **Receipt:** pending the immutable plan commit
-- **Deliverable mapping:** `workroom-definition-projection` -> `BI-80BECE1E`
+- Decision: atomic
+- Parent: `BI-80BECE1E`
+- Rationale: Definition versioning, occurrence trace, and progressive disclosure are one consumer contract. Shipping any one without the others either exposes no usable behavior or leaves the existing Workroom surface inconsistent with its read model.
+- Receipt: blocked — no initiative scope baseline exists for this item. The governed receipt call rejected the immutable plan because the initiative has not passed an independent `spec-approval` design review.
+- Dependencies: none
+- Deliverable mapping: `workroom-definition-projection` -> `BI-80BECE1E`
 
 ## Risks and rollback
 
