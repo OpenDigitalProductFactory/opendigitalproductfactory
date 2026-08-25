@@ -72,8 +72,9 @@ The component contract is:
 - `integrationTreeSha`: lower-case 40-character committed tree SHA. For
   semantic review this is the reviewed head tree.
 - `evidencePlanDigest`: the CI evidence-plan digest. For semantic review it is
-  a digest of the policy version, base tree, diff digest, risk, and sorted
-  specialist set.
+  a digest of the Workroom capsule, policy version, base tree, diff digest,
+  risk, and sorted specialist set. The capsule is required because the current
+  receipt freshness contract binds review evidence to one delivery packet.
 - `toolchainFingerprint`: the local-CI toolchain fingerprint. For semantic
   review it is a digest of the reviewer version and dispatch contract version.
 - `gateKind`: a closed value, initially `local-integration-ci` or
@@ -237,4 +238,3 @@ No unresolved architectural trade-off requires a new kernel decision.
   supersede only its nonterminal observation state.
 - `VC-SF-8`: duplicate suppression increments bounded telemetry and preserves
   the exact key in evidence payloads.
-

@@ -151,12 +151,12 @@ Expected files:
 Focused tests:
 
 ```text
-pnpm --filter web test --run apps/web/lib/gates/gate-run-identity.test.ts
-pnpm --filter web test --run apps/web/lib/nonprod/environment-lease.test.ts
-pnpm --filter web test --run apps/web/lib/nonprod/local-integration.test.ts
-pnpm --filter web test --run apps/web/lib/change-review/semantic-review-single-flight.test.ts
-pnpm --filter web test --run apps/web/lib/mcp/packs/nonprod-lease-pack.dispatch.test.ts
-pnpm --filter web test --run apps/web/lib/mcp/packs/change-review-pack.test.ts
+pnpm --filter web test --run lib/gates/gate-run-identity.test.ts
+pnpm --filter web test --run lib/nonprod/environment-lease.test.ts
+pnpm --filter web test --run lib/nonprod/local-integration.test.ts
+pnpm --filter web test --run lib/change-review/semantic-review-single-flight.test.ts
+pnpm --filter web test --run lib/mcp/packs/nonprod-lease-pack.dispatch.test.ts
+pnpm --filter web test --run lib/mcp/packs/change-review-pack.test.ts
 node --test scripts/gate-worktree-lease.test.mjs
 ```
 
@@ -190,4 +190,3 @@ The final PR must include:
 - exact branch/head/base identity;
 - migration and UX dispositions;
 - PR URL and GitHub required-check result.
-
