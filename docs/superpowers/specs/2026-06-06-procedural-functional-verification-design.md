@@ -1,6 +1,6 @@
 ---
 title: Procedural functional-verification — one executable preflight, one verdict, one stop-rule
-status: accepted
+status: active
 date: 2026-06-06
 owner: platform
 relates:
@@ -17,6 +17,7 @@ backlog:
   - BI-E4CBC7C1  # classify self-upgrade build-gate failures
   - BI-98AF1066  # fast static bundle-boundary guard
   - BI-C5E03376  # bind entry point into AGENTS.md + thin-adapter seam
+  - BI-FFBDDD96  # source-free release ancestry disposition
 ---
 
 # Procedural functional-verification
@@ -100,6 +101,54 @@ A surface-agnostic, deterministic resolver. **It computes a verdict; it changes 
    - else → **MUST-ADVANCE** (`nextAction: trigger-self-upgrade`, then re-preflight).
 
 The preflight wraps existing substrate (the two `/api/platform/*` endpoints, the version-tracking lib) and introduces **no new data sources**. The verdict-computation is a pure function (`apps/web/lib/verify/preflight.ts`), unit-tested as a truth table, and reused by both the CLI shim and (later) an MCP tool so all three surfaces hit identical logic.
+
+#### 3.1.1 Source-free release ancestry amendment — `BI-FFBDDD96`
+
+The original decision table assumes the process that owns a Git-stamped served
+image can also consult a Git object store. That assumption is false for a
+consumer release install by design: the image has an immutable source revision,
+while the installed runtime contains neither a checkout nor `.git`.
+
+The preflight therefore distinguishes **served identity** from **ancestry
+authority**. A Git SHA proves which source revision produced the image; it does
+not prove that a Git repository is present at runtime. The server-side adapter
+must reuse `readInstallHostProfile()` from
+`apps/web/lib/install/host-profile.ts` and project its closed
+`source | consumer | unknown` classification into the pure verdict input. That
+existing adapter owns the governed host-mount evidence: `.install-mode`, `.git`
+presence, and the release image tag. Verification must not add a second raw
+install-state reader or infer provenance from a caller assertion.
+
+| Provenance | Ancestry result | Verdict |
+| --- | --- | --- |
+| any built install | equal or prefix-equal feature/served SHA | `CAN-TEST` |
+| any built install | Git proves ancestor | `CAN-TEST` |
+| any built install | Git proves not-ancestor | `MUST-ADVANCE` |
+| source-backed | uncomputable | `BLOCKED` with the existing Git repair |
+| source-free release (`consumer` or `customer`) | uncomputable | `MUST-ADVANCE` through `/ops/self-upgrade` |
+| unknown installation provenance | uncomputable | `BLOCKED` |
+
+`consumer` and `customer` remain the only source-free mode markers interpreted
+by `readInstallHostProfile()`. A release image tag without a mode marker may
+also establish its existing `consumer-release-install` classification, while a
+consumer marker paired with Git source is contradictory and therefore
+`unknown`. Unknown or malformed identity remains fail-closed. CLI calls made
+from a source checkout remain source-backed unless they consume the same
+validated host profile.
+
+This does not claim containment from a release label alone. When no repository
+can prove ancestry, the consumer-safe fact is only that containment is
+unprovable on the running bytes. The governed response is `MUST-ADVANCE`, not a
+request to mount source into a production image. After an advance, exact
+feature/served identity can establish `CAN-TEST` without Git; richer immutable
+release provenance may later prove older ancestors, but it must enter through
+the same adapter and may not add another verdict or deployment path.
+
+The CLI and MCP/server adapters must produce the same result for the same
+validated provenance. Focused tests cover source-backed, source-free, unknown,
+equal-SHA, proven-ancestor, and proven-not-ancestor cases, and assert that no
+source-free recovery text mentions `DPF_REPO_ROOT`, mounting `.git`, or installing
+Git.
 
 ### 3.2 The entry-point skill (decision + the stop-rule) — `BI-35A92FB6`
 
