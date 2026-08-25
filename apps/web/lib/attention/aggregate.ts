@@ -11,6 +11,7 @@ import { loadAiDecisionItems } from "./sources/ai-decision";
 import { loadPausedAiItems } from "./sources/paused-ai";
 import { loadScheduledTaskItems } from "./sources/scheduled-task";
 import { loadAgentProposalItems } from "./sources/agent-proposal";
+import { loadCoworkerEnvelopeItems } from "./sources/coworker-envelope";
 import { loadPlatformHealthItems } from "./sources/platform-health";
 import {
   loadCoworkerMemoryItems,
@@ -82,11 +83,23 @@ export function filterAttentionForAudience(
   );
 }
 
-/** Production entry point — wires the real source loaders over the db client. */
-export async function loadAttentionItems(
+/** Options every caller resolves from the authenticated session. Both ids are
+ *  the READING user: attention is projected for one person at a time. */
+export type AttentionLoadOptions = {
+  aiReadinessUserId?: string;
+  /** The reader's user id, used to scope CoworkerActionEnvelope proposals to
+   *  their delegating user. Omitted → the envelope source is not registered at
+   *  all, so an unidentified reader can never see another user's envelope
+   *  (BI-7CB2CCDE). */
+  delegatingUserId?: string;
+};
+
+/** The real source loaders for a reading user. Exported so the wiring — which
+ *  sources exist, and which are user-scoped — is testable without a database. */
+export function attentionSourceLoaders(
   db: Db,
-  opts: { aiReadinessUserId?: string } = {},
-): Promise<AttentionResult> {
+  opts: AttentionLoadOptions = {},
+): AttentionSourceLoader[] {
   const loaders: AttentionSourceLoader[] = [
     { source: "escalation", load: () => loadEscalationItems() },
     { source: "ai-decision", load: () => loadAiDecisionItems(db) },
@@ -129,5 +142,19 @@ export async function loadAttentionItems(
         ),
     });
   }
-  return aggregateAttention(loaders);
+  if (opts.delegatingUserId) {
+    loaders.push({
+      source: "coworker-envelope",
+      load: () => loadCoworkerEnvelopeItems(db, opts.delegatingUserId),
+    });
+  }
+  return loaders;
+}
+
+/** Production entry point — wires the real source loaders over the db client. */
+export async function loadAttentionItems(
+  db: Db,
+  opts: AttentionLoadOptions = {},
+): Promise<AttentionResult> {
+  return aggregateAttention(attentionSourceLoaders(db, opts));
 }

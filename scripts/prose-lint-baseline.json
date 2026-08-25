@@ -4383,6 +4383,14 @@
     "longSentences": 0,
     "textMass": 31
   },
+  "apps/web/components/attention/CoworkerEnvelopeApproval.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 30
+  },
   "apps/web/components/attention/CoworkerProposalActions.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,

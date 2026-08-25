@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { aggregateAttention, filterAttentionForAudience } from "./aggregate";
+import { aggregateAttention, attentionSourceLoaders, filterAttentionForAudience } from "./aggregate";
 import type { AttentionItem } from "./types";
 
 function item(id: string, over: Partial<AttentionItem> = {}): AttentionItem {
@@ -65,5 +65,24 @@ describe("filterAttentionForAudience", () => {
 
   it("shows a worker nothing when no item is assigned to them", () => {
     expect(filterAttentionForAudience(items, { operator: false, principalId: "p-99" })).toEqual([]);
+  });
+});
+
+describe("attentionSourceLoaders", () => {
+  const db = {} as never;
+
+  it("registers the coworker-envelope source for an identified reader", () => {
+    const sources = attentionSourceLoaders(db, { delegatingUserId: "user-1" }).map(
+      (loader) => loader.source,
+    );
+    expect(sources).toContain("coworker-envelope");
+  });
+
+  it("omits the coworker-envelope source when no reader is identified", () => {
+    // Without a delegating user there is no safe scope for envelopes, so the
+    // source is not registered at all (BI-7CB2CCDE).
+    const sources = attentionSourceLoaders(db, {}).map((loader) => loader.source);
+    expect(sources).not.toContain("coworker-envelope");
+    expect(sources).toContain("agent-proposal");
   });
 });
