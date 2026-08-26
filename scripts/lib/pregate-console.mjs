@@ -231,6 +231,43 @@ export function createGateOutputRelay({
  * }} input
  * @returns {string[]}
  */
+/**
+ * Render a failure summary as text (BI-F22B4EEE).
+ *
+ * `summarizeLocalCiOutput` returns a STRUCTURED record
+ * ({ failedTests, failedChecks, omittedFailureLineCount, … }), and this
+ * function used to do `String(input.failureSummary)` — which prints
+ * `[object Object]`. That was the single line an operator reads on a failed
+ * gate, so five consecutive failures on one branch produced no usable signal
+ * anywhere: not in the console, not in the record.
+ *
+ * Strings still pass through, because some callers hand a plain message.
+ */
+export function failureSummaryLines(summary) {
+  if (!summary) return [];
+  if (typeof summary === "string") {
+    return summary.split(/\r?\n/).filter(Boolean);
+  }
+  const lines = [];
+  for (const entry of summary.failedTests ?? []) {
+    lines.push(typeof entry === "string" ? entry : entry?.text ?? JSON.stringify(entry));
+  }
+  for (const entry of summary.failedChecks ?? []) {
+    lines.push(typeof entry === "string" ? entry : entry?.text ?? JSON.stringify(entry));
+  }
+  if (lines.length === 0) {
+    // A failed gate with nothing to attribute is itself the finding — say so
+    // rather than printing an empty line or an object.
+    lines.push(
+      "no failing test or check was captured in the log — the run may have been killed rather than failing; check the recorded signal and host pressure",
+    );
+  }
+  if (summary.omittedFailureLineCount > 0) {
+    lines.push(`… ${summary.omittedFailureLineCount} more failure line(s) omitted`);
+  }
+  return lines;
+}
+
 export function formatGateSummary(input) {
   const maxLines = input.maxLines ?? 24;
   const out = [];
@@ -249,10 +286,8 @@ export function formatGateSummary(input) {
   if (input.evidenceId) out.push(`  evidence    ${input.evidenceId}`);
   if (input.metadataFile) out.push(`  record      ${input.metadataFile}`);
   if (input.logFile) out.push(`  full log    ${input.logFile}`);
-  if (input.failureSummary) {
-    for (const line of String(input.failureSummary).split(/\r?\n/).filter(Boolean).slice(0, 8)) {
-      out.push(`  ! ${line.length > 110 ? `${line.slice(0, 109)}…` : line}`);
-    }
+  for (const line of failureSummaryLines(input.failureSummary).slice(0, 8)) {
+    out.push(`  ! ${line.length > 110 ? `${line.slice(0, 109)}…` : line}`);
   }
   out.push("  verdict     pnpm run pregate:status  (reads the record, not this text)");
   const trimmed = out.slice(0, Math.max(1, maxLines - 1));
