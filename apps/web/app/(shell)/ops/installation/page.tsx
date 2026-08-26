@@ -17,8 +17,13 @@ import { redirect } from "next/navigation";
 
 import { prisma } from "@dpf/db";
 
+import { EstateNameField } from "@/components/workspace/EstateNameField";
 import { InstallationIdentityPanel } from "@/components/workspace/InstallationIdentityPanel";
 import { auth } from "@/lib/auth";
+import {
+  ENVIRONMENT_ROLE_WORD,
+  loadEstateNameResolution,
+} from "@/lib/install/estate-identity";
 import { prismaInstanceStanceStore } from "@/lib/install/instance-stance";
 import { loadInstallationIdentityView } from "@/lib/installation-journey/installation-identity-view";
 import { can } from "@/lib/permissions";
@@ -37,11 +42,26 @@ export default async function InstallationIdentityPage() {
   );
   if (!canManageInstallation) redirect("/workspace");
 
-  const view = await loadInstallationIdentityView(prisma, prismaInstanceStanceStore(prisma));
+  const store = prismaInstanceStanceStore(prisma);
+  const [view, estate] = await Promise.all([
+    loadInstallationIdentityView(prisma, store),
+    loadEstateNameResolution(store),
+  ]);
+
+  // The badge pairs the estate name with the role word, and renders at all only
+  // when the installation is not production. Passing null for production keeps
+  // that single decision in the contract rather than restating it here.
+  const badgePreview =
+    view.environment.environmentClass === "production"
+      ? null
+      : ENVIRONMENT_ROLE_WORD[view.environment.environmentClass].toUpperCase();
 
   return (
     <div className="mx-auto w-full max-w-4xl">
       <InstallationIdentityPanel view={view} />
+      <div className="px-4 pb-6 sm:px-6">
+        <EstateNameField estateName={estate.estateName} badgePreview={badgePreview} />
+      </div>
     </div>
   );
 }
