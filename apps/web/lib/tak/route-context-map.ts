@@ -501,6 +501,12 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
         capability: "manage_finance",
         prompt: "Look at our recent transactions and propose bank rules to auto-categorize the recurring vendors.",
       },
+      {
+        label: "Report an issue",
+        description: "Report a bug or give feedback",
+        capability: null,
+        prompt: "I'd like to report an issue or give feedback about this page.",
+      },
     ],
   },
   "/finance": {

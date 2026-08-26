@@ -88,6 +88,27 @@ export type BuildProgressVisibility = {
     summary: string;
     observedAt: string;
   } | null;
+  /**
+   * BI-CE1AB982 — the newest dispatch that was REFUSED before it started,
+   * because no allowed healthy engine could run the phase.
+   *
+   * A skipped dispatch writes no BuildDispatchAttempt row, so it is invisible to
+   * `dispatchHistory`, to `quietAgent` (which only counts elapsed silence) and
+   * to `inferenceFailure` (which classifies an assistant turn that actually
+   * ran). Without this signal the owner panel falls through to "working" and
+   * reports progress on a build that never started, indefinitely.
+   *
+   * Self-clearing on the same rule as `inferenceFailure`: a fresher meaningful
+   * signal (task result, verification, dispatch) proves the pipeline moved on.
+   *
+   * Optional so projection literals (tests) need not supply it;
+   * getBuildProgressVisibility always populates it.
+   */
+  dispatchBlock?: {
+    blocked: boolean;
+    reason: string | null;
+    observedAt: string | null;
+  };
   /** Phase-level cost rollup; empty array when BuildPhaseRun rows don't exist yet */
   phaseRuns: PhaseRunSummary[];
   /**
@@ -116,6 +137,11 @@ export function buildProgressProjectionFromParts(args: {
   phaseRuns?: PhaseRunSummary[];
   evidenceTimeline?: UnifiedEvidenceTimelineEvent[];
   engineSelection?: { summary: string; observedAt: Date | string } | null;
+  /**
+   * BI-CE1AB982 — newest refused-before-start dispatch, if any. Optional so
+   * projection literals (tests) need not supply it — absent means "not blocked".
+   */
+  dispatchBlock?: { reason: string; observedAt: Date | string } | null;
 }): BuildProgressVisibility {
   const now = args.now ?? new Date();
   const conflicts = getProgressConflicts(args.dbTasks.source, args.chatSnapshots);
@@ -172,6 +198,7 @@ export function buildProgressProjectionFromParts(args: {
       lastMeaningfulSignalAt,
     },
     inferenceFailure,
+    dispatchBlock: deriveDispatchBlock(args.dispatchBlock, lastMeaningfulSignalAt),
     engineSelection: args.engineSelection
       ? {
           summary: args.engineSelection.summary,
@@ -180,6 +207,33 @@ export function buildProgressProjectionFromParts(args: {
       : null,
     phaseRuns: args.phaseRuns ?? [],
     evidenceTimeline: args.evidenceTimeline ?? [],
+  };
+}
+
+/**
+ * BI-CE1AB982 — resolve the refused-before-start dispatch signal.
+ *
+ * Mirrors deriveInferenceFailure's self-clearing rule: a refusal only stands
+ * while it is at least as recent as the last meaningful non-chat signal, so a
+ * later successful dispatch clears it without anyone having to reset state.
+ */
+function deriveDispatchBlock(
+  input: { reason: string; observedAt: Date | string } | null | undefined,
+  lastMeaningfulSignalAt: string | null,
+): { blocked: boolean; reason: string | null; observedAt: string | null } {
+  const empty = { blocked: false, reason: null, observedAt: null };
+  if (!input) return empty;
+  const observedAt = new Date(input.observedAt);
+  const observedMs = observedAt.getTime();
+  if (!Number.isFinite(observedMs)) return empty;
+  if (lastMeaningfulSignalAt) {
+    const signalMs = new Date(lastMeaningfulSignalAt).getTime();
+    if (Number.isFinite(signalMs) && signalMs > observedMs) return empty;
+  }
+  return {
+    blocked: true,
+    reason: input.reason,
+    observedAt: observedAt.toISOString(),
   };
 }
 
@@ -287,6 +341,13 @@ export async function getBuildProgressVisibility(buildId: string): Promise<Build
     orderBy: { createdAt: "desc" },
     select: { summary: true, createdAt: true },
   });
+  // BI-CE1AB982 — a refused-before-start dispatch leaves no BuildDispatchAttempt
+  // row, so its only durable trace is this activity row.
+  const dispatchBlockActivity = await prisma.buildActivity.findFirst({
+    where: { buildId, tool: "dispatch_blocked" },
+    orderBy: { createdAt: "desc" },
+    select: { summary: true, createdAt: true },
+  });
 
   return buildProgressProjectionFromParts({
     buildId,
@@ -303,6 +364,9 @@ export async function getBuildProgressVisibility(buildId: string): Promise<Build
     evidenceTimeline,
     engineSelection: engineSelectionActivity
       ? { summary: engineSelectionActivity.summary, observedAt: engineSelectionActivity.createdAt }
+      : null,
+    dispatchBlock: dispatchBlockActivity
+      ? { reason: dispatchBlockActivity.summary, observedAt: dispatchBlockActivity.createdAt }
       : null,
   });
 }

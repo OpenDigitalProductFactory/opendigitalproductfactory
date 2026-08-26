@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 684,
+  "pageCount": 688,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -564,6 +564,26 @@
         "annex-e-suggested-receipt-verifier-pseudocode"
       ]
     },
+    "docs/architecture/accommodation-doctrine.md": {
+      "publicHref": "/architecture/accommodation-doctrine/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "accommodation-doctrine",
+        "why",
+        "the-five-patterns-already-in-the-codebase-now-named",
+        "the-classification-procedure",
+        "the-promotion-rule",
+        "worked-example-live-right-now",
+        "the-promotion-mechanic",
+        "escape-hatch-discipline",
+        "probe-discipline",
+        "recording",
+        "anti-patterns",
+        "applying-this-to-campground"
+      ]
+    },
     "docs/architecture/agent-client-capability-parity.md": {
       "publicHref": "/architecture/agent-client-capability-parity/",
       "portalHref": null,
@@ -960,6 +980,44 @@
         "8-documentation-maintenance-rule"
       ]
     },
+    "docs/architecture/archetypes/campground-operating-model.md": {
+      "publicHref": "/architecture/archetypes/campground-operating-model/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "campground-rv-park-operating-model-and-probe-result",
+        "1-the-operating-day",
+        "2-the-bad-day",
+        "3-the-periodic-cycle",
+        "4-load-bearing-obligations",
+        "5-probe-result-classification",
+        "confirmed-no-new-canonical-element",
+        "promoted-by-the-counting-rule",
+        "genuinely-new-candidates",
+        "confirmed-stress-test-long-episodes",
+        "6-doctrine-verdict",
+        "7-what-campground-still-needs-before-it-could-run",
+        "8-cross-archetype-notes"
+      ]
+    },
+    "docs/architecture/archetypes/pet-rescue-operating-model.md": {
+      "publicHref": "/architecture/archetypes/pet-rescue-operating-model/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "standing-requirements-pet-rescue-animal-shelter-archetype",
+        "1-the-operating-day",
+        "2-the-bad-day",
+        "3-the-periodic-cycle",
+        "4-load-bearing-obligations",
+        "5-required-entities",
+        "6-what-exists-today-measured-2026-08-25",
+        "7-ux-requirements",
+        "8-definition-of-done"
+      ]
+    },
     "docs/architecture/architecture-counts.generated.md": {
       "publicHref": "/architecture/architecture-counts.generated/",
       "portalHref": null,
@@ -1088,6 +1146,30 @@
         "product-operating-context-query-boundary",
         "direction-route-and-projection-boundary",
         "fleet-safe-evolution"
+      ]
+    },
+    "docs/architecture/canonical-minimal-substrate.md": {
+      "publicHref": "/architecture/canonical-minimal-substrate/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "the-canonical-minimal-substrate",
+        "headline",
+        "the-elements",
+        "what-is-already-done-and-done-well",
+        "the-capacity-substrate-is-genuinely-canonical",
+        "care-is-already-subject-agnostic-this-corrects-an-earlier-finding",
+        "the-remaining-work",
+        "7-canonical-subject-identity-the-keystone",
+        "8-occupancy-episode-lift-hospitalityserviceturn",
+        "9-episode-stagestate-and-event-ledger-already-designed-do-not-re-invent",
+        "10-concurrent-time-bound-holds-a-genuine-gap-and-an-extension-of-the-grammar",
+        "11-jurisdiction-as-a-rule-source-promoted-at-two-sightings",
+        "also-resource-to-service-capability-map",
+        "what-pet-rescue-proved-that-restaurant-could-not",
+        "sequencing",
+        "method-note-for-the-next-archetype"
       ]
     },
     "docs/architecture/capability-driven-runtime-profiles.md": {
@@ -5858,6 +5940,7 @@
         "what-it-is",
         "operating-rule",
         "how-to-apply",
+        "a-phase-that-cannot-start-is-blocked-not-working",
         "see-also"
       ]
     },
