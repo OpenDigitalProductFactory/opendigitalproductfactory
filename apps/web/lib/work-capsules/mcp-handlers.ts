@@ -104,6 +104,28 @@ function numberParam(params: Record<string, unknown>, key: string): number | nul
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+/**
+ * Resolve a `backlog-item` outcome anchor onto the capsule's subject binding.
+ *
+ * `Workroom.backlogItemId` is what every subject lookup keys on — reviewer
+ * recovery, and `repository-artifact.ts`'s `subjectWhere` behind plan coverage.
+ * Its only writer was the successful-claim path, which is readiness-gated, so a
+ * room adopted before readiness could never satisfy a subject lookup: adoption
+ * recorded the anchor and the lookups never read it (BI-512214EA).
+ *
+ * `CapsuleAdoptionInput` already carries `backlogItemId` and already late-binds
+ * it onto an existing room whose binding is null, so this only has to supply the
+ * value the caller already stated.
+ */
+export function backlogItemIdFromOutcomeAnchor(params: Record<string, unknown>): string | null {
+  const anchor = params.outcomeAnchor;
+  if (!anchor || typeof anchor !== "object" || Array.isArray(anchor)) return null;
+  const { kind, id } = anchor as { kind?: unknown; id?: unknown };
+  if (kind !== "backlog-item" || typeof id !== "string") return null;
+  const trimmed = id.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 function parseScopeInput(params: Record<string, unknown>): WorkCapsuleScopeInput {
   return {
     workroomShape: params.workroomShape,
@@ -310,6 +332,7 @@ export async function adoptWorktreeTool(
         baseSha: stringParam(params, "baseSha") ?? null,
         headSha: stringParam(params, "headSha") ?? null,
         executorKind: validatedExecutorKind,
+        backlogItemId: backlogItemIdFromOutcomeAnchor(params),
         scope: parseScopeInput(params),
       },
       actor: await actor(userId, context),
