@@ -224,6 +224,33 @@ Three hardening details:
   `operator-confirmation`. An unreachable peer costs a human confirmation, never
   an assumption.
 
+### 5.8 Composing the evidence, and the open attribution question
+
+`resolveCandidatePairingMode` gathers the anchor (§5.5), the observed chain
+(§5.7), the verification (§5.6), and the decision (§5.4) for one candidate, and
+returns the mode **together with the evidence that produced it** — so a caller
+records *why* a peer was or was not eligible, not merely the verdict. A peer whose
+transport already disqualifies it is never dialled.
+
+**What remains, and why it is not guessed here.** Bypassing the pairing code means
+approving a `FederationPairingSession` without a human, but
+`approveIncomingNearbyPairing` takes a required `approverPrincipalId`. Supplying a
+person's principal for a decision no person made would falsify the audit trail,
+and the whole point of this design is that trust is *derived from evidence* rather
+than asserted.
+
+So the remaining slice is an attribution decision, not wiring:
+
+- attribute an automated enrolment to a governed non-human identity (GAID already
+  models non-human actors), or
+- record approval provenance as `organization-trust` on the session, distinct
+  from principal approval, so the audit trail states plainly that no person
+  approved it and which evidence did.
+
+Either is defensible; inventing one silently is not. Until it is settled, the
+resolved mode and its evidence are computed and recorded, and the code comparison
+still stands.
+
 ## 6. Lifecycle at scale
 
 The unattended cycle this enables:
