@@ -11714,7 +11714,11 @@
         "being-reached-when-you-are-away",
         "business-journeys",
         "promoter-timeout",
-        "platform-stack-currency"
+        "platform-stack-currency",
+        "what-this-installation-is",
+        "who-runs-this-installation",
+        "what-your-ai-coworkers-may-do-here",
+        "correcting-the-identity"
       ]
     },
     "docs/user-guide/operations/infrastructure-discovery.md": {
@@ -12115,7 +12119,7 @@
         "operations-and-performance",
         "spatial-operations-for-tables-and-rooms",
         "confirming-an-operational-suggestion",
-        "what-this-installation-is",
+        "which-installation-you-are-on",
         "correcting-the-identity",
         "key-concepts",
         "what-you-can-do"
