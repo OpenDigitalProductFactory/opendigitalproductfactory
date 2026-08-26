@@ -17,7 +17,7 @@ The governed semantic reviewer routes according to the request it actually sends
 - `inferContract` estimates message tokens but does not include the separately supplied system prompt. This caller must therefore add a bounded floor for both prompt components rather than retain the unrelated coworker default.
 - The code graph identifies one exact colocated test file. The Workroom impact contract also requires the style-drift guard and normal source preflight.
 - Live evidence on unchanged BI-SIG head `14bf816838950a794e4a8b7958c927e2b0b436cc` proves the defect: ChatGPT/gpt-5.4 is excluded only for `supportsToolUse=false`, while local Qwen3.8 27B is excluded only because 24,576 is below the static 32,000 floor.
-- The first governed research handoff used five tools but exhausted that local window before writing evidence. The already-connected OpenAI Codex provider was then readied through the canonical provider UI; its active tool-capable 400k and 1M models provide the changed state required for one fresh immutable recovery attempt.
+- The first governed research handoff used five tools but exhausted that local window before writing evidence. After provider readiness alone left the Portfolio Advisor on its prior local assignment, the canonical model-assignment UI pinned that reviewer to active, tool-capable GPT-5.3 Codex (400k context). This is the actual routing-state change required before one fresh immutable recovery attempt.
 
 ## Backlog coverage
 
