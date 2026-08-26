@@ -179,6 +179,9 @@ served by an incorporated open-source identity edge. The enterprise
 auth spec selects **authentik** as the chosen runtime; do not
 duplicate that responsibility in the Edge Node.
 
+> **Superseded stance (2026-08-26, EP-24741BBF / `BI-5167932D`).** The enterprise-auth spec's choice to adopt authentik as a runtime identity edge has been **reversed**. DPF absorbs the directory over its own `Principal` spine and adds no IdP to any install. Consuming an external IdP as an *upstream* remains supported and optional. See [Directory Service — Identity Absorption Design](2026-08-23-directory-service-identity-absorption-design.md) and [the authentik evaluation](../../security/tool-evaluations/2026-08-23-authentik.md).
+
+
 The Edge Node never serves user-facing OIDC/SAML/LDAP/SCIM. It may
 hold a *device* identity that authenticates *to* the Authority Core,
 but it is never an IdP for humans.
