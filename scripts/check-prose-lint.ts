@@ -140,11 +140,40 @@ export function countRetiredVocabulary(snippets: string[]): number {
 // regex pass over source text is the established complexity budget for these
 // guards). Two shapes cover almost all DPF UI copy: JSX text nodes, and
 // quoted values assigned to copy-bearing props/keys.
-const JSX_TEXT_RE = />\s*([^<>{}\n][^<>{}]*?)\s*</g;
+// BI-F45A2AE2: the closing delimiter must open a REAL tag (`</` or `<Name`),
+// not a generic's type argument. On its own this is not enough — `useState<T>`
+// is followed by a letter too — so `looksLikeCode` below carries the rest.
+const JSX_TEXT_RE = />\s*([^<>{}\n][^<>{}]*?)\s*<[/A-Za-z]/g;
 const ATTR_COPY_RE =
   /\b(?:label|title|placeholder|alt|aria-label|description|heading|subheading|subtitle|helperText|helpText|summary|message|tooltip)\s*[:=]\s*(["'`])((?:(?!\1)[^\\]|\\.)*)\1/g;
 
+/**
+ * Source that the JSX-text regex captured by accident (BI-F45A2AE2).
+ *
+ * `/>...</` matches everything between a `>` and the next `<`, which includes
+ * the code between two generic calls: the span from the `>` closing
+ * `useState<Mode>` to the `<` opening `useState<{ ok: boolean }>` is captured
+ * verbatim and scored as prose. A component carrying ZERO copy measured
+ * textMass +23 that way, and the only exits were contorting the component or
+ * `--update`, which bakes the false count into everyone's baseline.
+ *
+ * Each signal below is code-only. UI copy may contain parentheses and colons,
+ * so those alone are never enough; a statement separator, an arrow, a
+ * declaration keyword or a leading close-paren is.
+ */
+function looksLikeCode(s: string): boolean {
+  if (/=>/.test(s)) return true;
+  if (/^\s*[)\]]/.test(s)) return true; // a JSX text node never opens with a closer
+  if (/;\s*(\n|$)/.test(s)) return true; // a statement ended inside the span
+  if (/\b(const|let|var|function|return|await|import|export\s+(async|function|const|type))\b/.test(s)) {
+    return true;
+  }
+  if (/\b(useState|useEffect|useMemo|useCallback|useRef|useTransition)\s*\(/.test(s)) return true;
+  return false;
+}
+
 function looksLikeCopy(s: string): boolean {
+  if (looksLikeCode(s)) return false;
   if (s.length < 8) return false;
   if (!/[a-zA-Z]{3}/.test(s)) return false;
   if (!/\s/.test(s)) return false; // require at least two words

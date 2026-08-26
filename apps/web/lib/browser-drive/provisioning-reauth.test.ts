@@ -2,7 +2,17 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("@dpf/db", () => ({
   prisma: {
-    principal: { upsert: vi.fn().mockResolvedValue({ principalId: "browser-svc:substack:default" }) },
+    // BI-3181909E: a service account is now minted only against an accountable
+    // owner, so the provisioning path resolves the delegating human's principal
+    // first. `delegatingUserId: "user-1"` is expected to resolve.
+    principalAlias: {
+      findFirst: vi.fn().mockResolvedValue({ principal: { id: "prn-row-user-1" } }),
+    },
+    principal: {
+      findUnique: vi.fn().mockResolvedValue(null),
+      update: vi.fn().mockResolvedValue({}),
+      upsert: vi.fn().mockResolvedValue({ principalId: "browser-svc:substack:default" }),
+    },
     integrationCredential: {
       upsert: vi.fn().mockResolvedValue({}),
       update: vi.fn().mockResolvedValue({}),
@@ -48,6 +58,23 @@ describe("provisionServiceAccount (§9.2)", () => {
 
   it("refuses to provision a service account without a target-domain allowlist", async () => {
     await expect(provisionServiceAccount({ ...base, targetDomains: [] })).rejects.toThrow(/allowlist/);
+    expect(prisma.principal.upsert).not.toHaveBeenCalled();
+  });
+
+  it("binds the delegating human as the service account's accountable owner", async () => {
+    await provisionServiceAccount(base);
+    expect(prisma.principalAlias.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ aliasType: "user", aliasValue: "user-1" }),
+      }),
+    );
+    const createArg = vi.mocked(prisma.principal.upsert).mock.calls[0][0].create as Record<string, unknown>;
+    expect(createArg.sponsorPrincipalId).toBe("prn-row-user-1");
+  });
+
+  it("refuses to provision when the delegating human resolves to no principal (BI-3181909E)", async () => {
+    vi.mocked(prisma.principalAlias.findFirst).mockResolvedValueOnce(null);
+    await expect(provisionServiceAccount(base)).rejects.toThrow(/accountable owner/i);
     expect(prisma.principal.upsert).not.toHaveBeenCalled();
   });
 });
