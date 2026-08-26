@@ -143,6 +143,14 @@ export default defineConfig({
       },
       { find: "@", replacement: webDir },
       {
+        find: "@dpf/db/organization-federation-enrollment",
+        replacement: resolve(rootDir, "packages/db/src/organization-federation-enrollment.ts"),
+      },
+      {
+        find: "@dpf/db/organization-join-action",
+        replacement: resolve(rootDir, "packages/db/src/organization-join-action.ts"),
+      },
+      {
         find: "@dpf/db/installation-peer-pairing",
         replacement: resolve(rootDir, "packages/db/src/installation-peer-pairing.ts"),
       },
