@@ -184,5 +184,30 @@ test("consumer installs ship a minimal AGENTS.md pointer before checksums", () =
   assert.match(pointer, /not a source (checkout|repository)/i);
   assert.match(pointer, /MCP/i);
   assert.match(pointer, /authoritative/i);
-  assert.ok(pointer.split(/\s+/).length < 120, "the pointer must not duplicate the contributor rulebook");
+  // The install must POINT at the contributor rulebook, never restate it.
+  assert.match(pointer, /AGENTS\.md/, "the pointer must name the rulebook it points at");
+
+  // What "does not duplicate the rulebook" actually means, asserted directly
+  // rather than proxied by a word count alone (BI-649C1F7E). The count stayed at
+  // <120 while the file sat at 118, so the next legitimate pointer sentence — a
+  // reference TO the rulebook, the opposite of duplication — could not be added
+  // without deleting shipped guidance. A proxy that blocks its own intent is the
+  // failure `Principle-Based Rules Over Enumeration` names.
+  assert.doesNotMatch(pointer, /§/, "no rulebook section citations — point at the rulebook, do not quote it");
+  assert.doesNotMatch(
+    pointer,
+    /(^|\s)([A-Za-z]:[\\/]|\/(?:home|Users|opt|srv|mnt|var)\/)/,
+    "no absolute path literals — checkout locations differ per host",
+  );
+  assert.doesNotMatch(
+    pointer,
+    /^\s*(?:[-*+]|\d+\.)\s+/m,
+    "no rule list — an enumerated list here is the rulebook leaking into the install",
+  );
+  // Backstop only. Generous enough for the next honest pointer, and orders of
+  // magnitude below the rulebook it must not become.
+  assert.ok(
+    pointer.split(/\s+/).length < 200,
+    "the pointer must stay a pointer, not grow into the contributor rulebook",
+  );
 });
