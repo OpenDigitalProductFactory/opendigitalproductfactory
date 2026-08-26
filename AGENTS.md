@@ -44,7 +44,7 @@ Stack, layout conventions, migration/prompt/skill/archetype mechanics and route 
 
 Procedure, recovery steps and rationale: [branch & worktree runbook](docs/architecture/branch-and-worktree-runbook.md). The rules:
 
-- **All changes land via PR against `main`, one concern per branch and PR, DCO-signed.** Including the maintainer's. Topic branches named by intent: `feat/`, `fix/`, `chore/`, `doc/`, `clean/<slug>`, branched from `main`. → [kernel principle](docs/founder-kernel/wiki/principles/one-concern-per-pr.md)
+- **All changes land via PR against `main`, DCO-signed, scoped to one clean revert.** Including the maintainer's. Topic branches named by intent: `feat/`, `fix/`, `chore/`, `doc/`, `clean/<slug>`, from `main`. → [kernel principle](docs/founder-kernel/wiki/principles/one-concern-per-pr.md)
 - **Always push after committing.** Local-only commits are invisible to CI. → [kernel principle](docs/founder-kernel/wiki/principles/always-push-after-committing.md)
 - **PR creation means ready to merge.** A pushed branch — not a PR — is the handoff/recovery artifact while work is in flight. No draft PRs, no `--draft`. Open only when the build gate is green and the author believes it is mergeable. → [kernel principle](docs/founder-kernel/wiki/principles/all-changes-land-via-pr.md)
 - **Merge via the merge queue**, never by hand: `gh pr merge <n> --squash --auto`.

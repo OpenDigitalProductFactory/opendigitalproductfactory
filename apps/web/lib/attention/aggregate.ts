@@ -11,6 +11,7 @@ import { loadAiDecisionItems } from "./sources/ai-decision";
 import { loadPausedAiItems } from "./sources/paused-ai";
 import { loadScheduledTaskItems } from "./sources/scheduled-task";
 import { loadAgentProposalItems } from "./sources/agent-proposal";
+import { loadSkillProposalItems } from "./sources/skill-proposal";
 import { loadCoworkerEnvelopeItems } from "./sources/coworker-envelope";
 import { loadPlatformHealthItems } from "./sources/platform-health";
 import {
@@ -106,6 +107,7 @@ export function attentionSourceLoaders(
     { source: "paused-ai", load: () => loadPausedAiItems(db) },
     { source: "scheduled-task", load: () => loadScheduledTaskItems(db) },
     { source: "agent-proposal", load: () => loadAgentProposalItems(db) },
+    { source: "skill-proposal", load: () => loadSkillProposalItems(db) },
     { source: "approval-outbound", load: () => loadOutboundItems(db) },
     { source: "approval-bill", load: () => loadBillItems(db) },
     { source: "approval-expense", load: () => loadExpenseItems(db) },

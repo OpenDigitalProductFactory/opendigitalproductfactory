@@ -133,9 +133,49 @@ describe("deriveSkillCatalogCap", () => {
   });
 
   it("is uncapped when the served context is unknown (no local model / cloud)", () => {
+    // Legacy shape: with no explicit presence, an absent window still reads as a
+    // cloud turn. Callers that CAN tell absent from unread pass localPresence.
     expect(deriveSkillCatalogCap(null)).toBe(Number.POSITIVE_INFINITY);
     expect(deriveSkillCatalogCap(undefined)).toBe(Number.POSITIVE_INFINITY);
     expect(deriveSkillCatalogCap(0)).toBe(Number.POSITIVE_INFINITY);
+    // Explicit absence is the same answer, stated honestly.
+    expect(deriveSkillCatalogCap(null, { localPresence: "absent" })).toBe(
+      Number.POSITIVE_INFINITY,
+    );
+  });
+
+  it("caps an UNREADABLE window rather than uncapping it (BI-DBEEC15B)", () => {
+    // The null carries two facts — no local model, and a probe that could not
+    // read one. Only the first justifies enumerating the whole catalog. Eight
+    // agents on the live install sit above this cap (platform-engineer holds 45
+    // skills ≈ 3.8k tokens), so the uncapped path is genuinely reachable.
+    expect(deriveSkillCatalogCap(null, { localPresence: "unknown" })).toBe(
+      SKILL_CATALOG_CLIFF_CAP,
+    );
+    expect(deriveSkillCatalogCap(null, { localPresence: "present" })).toBe(
+      SKILL_CATALOG_CLIFF_CAP,
+    );
+    expect(deriveSkillCatalogCap(undefined, { localPresence: "unknown" })).toBe(
+      SKILL_CATALOG_CLIFF_CAP,
+    );
+    expect(deriveSkillCatalogCap(0, { localPresence: "unknown" })).toBe(SKILL_CATALOG_CLIFF_CAP);
+  });
+
+  it("still lets a KNOWN large local window stay uncapped — this axis is fit, not fidelity", () => {
+    // Deliberately unlike the tool cap, which binds on presence alone. A local
+    // model with room for the catalog keeps the whole catalog.
+    expect(deriveSkillCatalogCap(131_072, { localPresence: "present" })).toBe(
+      Number.POSITIVE_INFINITY,
+    );
+    expect(deriveSkillCatalogCap(24_576, { localPresence: "present" })).toBe(
+      SKILL_CATALOG_CLIFF_CAP,
+    );
+  });
+
+  it("lets explicit absence override a known window", () => {
+    expect(deriveSkillCatalogCap(24_576, { localPresence: "absent" })).toBe(
+      Number.POSITIVE_INFINITY,
+    );
   });
 });
 
