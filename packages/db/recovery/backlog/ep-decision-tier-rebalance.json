@@ -3,7 +3,7 @@
   "bundleId": "capture-ep-decision-tier-rebalance",
   "description": "Backlog captured from this installation on 2026-08-26T03:02:44.748Z.",
   "source": {
-    "capturedAt": "2026-08-26T03:07:09.229Z",
+    "capturedAt": "2026-08-26T03:57:53.481Z",
     "repository": "OpenDigitalProductFactory/opendigitalproductfactory",
     "planPath": "docs/superpowers/plans/2026-08-22-instance-identity-and-purpose.md"
   },
@@ -212,6 +212,32 @@
       "scopeRationale": "Universal DPF decision-governance substrate; organization and profession policies remain scoped to their owning domains.",
       "priority": 3,
       "createdAt": "2026-08-23T15:01:14.045Z"
+    },
+    {
+      "itemId": "BI-A5697C5E",
+      "epicId": "EP-DECISION-TIER-REBALANCE",
+      "title": "Demand scoring judges the effort estimate by provenance, not evidence",
+      "body": "## Problem\n\nTwo rules in demand scoring decide an effort estimate's standing by who produced it rather than what grounds it. Both contradict AGENTS.md section 12: \"Governance approves evidence, not provenance — the keystone. A gate reads its required evidence fields; it never asks which surface produced them.\" They also sit against the commandment \"Do the work; don't task the operator with what an agent can do.\"\n\n**1. An AI estimate is provisional by provenance.** `apps/web/lib/demand/activation.ts:105`\n\n```\nconst provisional =\n  input.estimateDiverged ||\n  input.estimateSource === \"ai\" ||\n  (input.estimateSource !== null && input.estimateAgreed === false);\n```\n\nThe second clause needs no disagreement and no divergence. An estimate is unusable because an AI made it. `provisional` blocks `scoreReady`, which blocks `fundingReady`, which blocks the funnel to `ready` — so every AI-estimated item stalls until a human clicks confirm.\n\n**2. A human number unconditionally overrules an AI one.** `apps/web/lib/demand/estimate-provenance.ts:94`\n\n```\n// Human overrules AI; otherwise whichever single side estimated.\nconst effectiveJobSize = human !== null ? human : ai;\n```\n\nNot on better grounding. Not on cited evidence. On being human.\n\n## Why this is wrong on the merits\n\n`jobSize` here is a technical complexity measurement. The AI estimator reads the actual schema, migration surface and test surface. A reviewer who has not read them holds strictly less information, so the confirmation cannot be a judgement — it can only be a rubber stamp. Ceremony that presents itself as governance is worse than no gate: it manufactures assurance nobody actually supplied.\n\nThe genuinely human judgement in this funnel is appetite and priority — what the business chooses to spend on. That is already a separate, correctly-human blocker (`validBucket`, the investment bucket). The defect is conflating a measurement with a decision and asking the wrong party to confirm the measurement.\n\n## Expected vs actual\n\nExpected: an estimate stands on its recorded grounding; disagreement between two estimates is the exception that needs reconciliation.\nActual: an AI-sourced estimate is permanently provisional, and any human number silently wins.\n\n## Suggested fix\n\n- Drop the `estimateSource === \"ai\"` clause from `provisional`. Keep `estimateDiverged` — a competing number is a real signal.\n- Replace \"human overrules AI\" with symmetric divergence handling: neither side wins by provenance; a divergence is reconciled on stated grounds.\n- Keep the investment-bucket blocker exactly as it is. That decision is the human's and should stay.\n- Add a test asserting that an estimate with identical grounding scores identically regardless of `estimateSource`, so this cannot regress.\n\n## Scale\n\nAffects every backlog item on every installation that is estimated by an agent, which under an AI-native operating model is the default path rather than an edge case. Observed on all seven items of EP-862820FD, each reporting \"Confirm or overrule the proposed AI effort estimate\" with `estimateAgreed: false` despite complete score inputs.\n\n## Founder position\n\nRaised 2026-08-26: humans are not qualified to override an AI effort estimate, so the ask is irrational. Verified against the code above; the position is correct and is already platform doctrine in section 12.",
+      "status": "triaging",
+      "type": "product",
+      "workType": "bug",
+      "source": "user-request",
+      "scopeKind": "unknown",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-a5697c5e-cmt9kbcic05wx01qv0njj17r2",
+          "kind": "epic_link",
+          "summary": "(no epic) → EP-DECISION-TIER-REBALANCE",
+          "recordedAt": "2026-08-26T03:56:55.188Z",
+          "payload": {
+            "toEpicId": "EP-DECISION-TIER-REBALANCE",
+            "fromEpicId": null
+          }
+        }
+      ],
+      "createdAt": "2026-08-26T03:50:09.902Z"
     },
     {
       "itemId": "BI-C6801B5A",

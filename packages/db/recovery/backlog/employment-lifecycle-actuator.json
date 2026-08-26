@@ -3,7 +3,7 @@
   "bundleId": "employment-lifecycle-actuator",
   "description": "Operator-invoked recovery input for the employment lifecycle actuator epic — worker classification, jurisdiction, and employment events as Workroom definitions.",
   "source": {
-    "capturedAt": "2026-08-26T03:07:09.229Z",
+    "capturedAt": "2026-08-26T03:57:53.481Z",
     "repository": "OpenDigitalProductFactory/opendigitalproductfactory",
     "planPath": "docs/superpowers/plans/2026-08-22-instance-identity-and-purpose.md"
   },
@@ -22,14 +22,126 @@
       "epicId": "EP-862820FD",
       "title": "Spawn Workroom instances from employment events",
       "body": "## Problem\n\nThis is the item the epic exists for.\n\n`EmploymentEvent` is written on every lifecycle transition, typed by a closed 16-value `EmploymentEventType` union and guarded by `LIFECYCLE_TRANSITION_MATRIX`, which validates every status move. The vocabulary and the state machine are already correct and already enforced.\n\nVerified 2026-08-25: nothing subscribes. The only consumers are the workforce actions that write it, the type module that declares it, a workbook supplier config, a legacy coverage baseline and a table classification map. Hiring someone appends a row and creates checklist items that a human then works by hand.\n\nThe Workroom definition contract already provides for this: definitions declare trigger classes and event-triggered spawn rules. The trigger source and the definition both exist; the edge between them does not.\n\n## Scope\n\nBind `EmploymentEventType` values to the definitions registered by BI-28EFA338, so a lifecycle transition spawns the governed Workroom instance its definition prescribes:\n\n- `hired`, `offer_accepted`, `onboarding_started` spawn `worker-onboarding`\n- `manager_changed`, `department_changed`, `position_changed` spawn `worker-change`\n- `offboarding_started`, `terminated` spawn `worker-offboarding`\n- `leave_started`, `leave_ended`, `activated`, `reactivated` update an open instance rather than spawning a new one\n\nSpawning is idempotent on (event, definition): replaying an event, or two writers racing the same transition, yields one instance. `Workroom.idempotencyKey` already carries a unique constraint and is the mechanism.\n\nAn event whose definition cannot be resolved, or whose worker has no resolvable classification or jurisdiction, does not spawn a partial instance. It surfaces as operator work naming the missing input. A half-provisioned worker is worse than an unprovisioned one.\n\n## Acceptance criteria\n\n- Each of the 16 `EmploymentEventType` values has an explicit disposition: spawns a named definition, updates an open instance, or is deliberately inert with a recorded reason. No value is unhandled by omission.\n- Spawning is idempotent under event replay and under two concurrent writers of the same transition.\n- An event for a worker with unresolved classification or jurisdiction produces operator work, never a partial instance.\n- The spawned instance carries the subject worker, the originating event, the definition key and version, and the requesting principal.\n- `LIFECYCLE_TRANSITION_MATRIX` remains the single authority on legal transitions; this item adds no second state machine.\n- Tests cover replay, concurrent-writer, unresolved-input and inert-event paths.\n\n## Dependencies\n\nBI-28EFA338 (definitions), BI-C61CEEA9 (classification), BI-9252B9EA (jurisdiction). Provisioning actions inside the spawned instance are BI-828F8EC9.",
-      "status": "triaging",
+      "status": "open",
       "type": "product",
       "workType": "feature",
       "source": "user-request",
       "scopeKind": "unknown",
       "dependsOn": [],
       "externalDependencies": [],
-      "activities": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-2624b7ea-cmt9iv2k604is01qvvndvre66",
+          "kind": "demand_evidence_linked",
+          "summary": "Linked EmploymentEvent is a log with no subscriber",
+          "recordedAt": "2026-08-26T03:16:16.182Z",
+          "payload": {
+            "sourceRef": "docs/superpowers/specs/2026-08-25-employment-lifecycle-actuator-design.md#74-event-to-instance",
+            "confidence": 0.95,
+            "reviewedAt": "2026-08-26T03:16:16.174Z",
+            "sourceKind": "research",
+            "evidenceLinkId": "DME-7029238558F2"
+          }
+        },
+        {
+          "recoveryKey": "bi-2624b7ea-cmt9ivrxi04jg01qva7aeyvwj",
+          "kind": "demand_scored",
+          "summary": "Computed rice score 0.531",
+          "recordedAt": "2026-08-26T03:16:49.062Z",
+          "payload": {
+            "score": 0.531,
+            "inputs": {
+              "reach": null,
+              "impact": 5,
+              "jobSize": null,
+              "confidence": 0.85,
+              "effortSize": "large",
+              "businessValue": null,
+              "occurrenceCount": 1,
+              "riskOpportunity": null,
+              "timeCriticality": null
+            },
+            "missing": [],
+            "framework": "rice",
+            "confidence": 0.85,
+            "demandStage": "unclassified",
+            "contributions": {
+              "reach": 1,
+              "impact": 5,
+              "jobSize": 8,
+              "confidence": 0.85
+            },
+            "estimateAgreed": false,
+            "estimateSource": null,
+            "effectiveJobSize": null,
+            "estimateDiverged": false,
+            "investmentBucket": "grow"
+          }
+        },
+        {
+          "recoveryKey": "bi-2624b7ea-cmt9iwd3z04k301qv1f183mtg",
+          "kind": "demand_scored",
+          "summary": "Recomputed rice score after ai effort estimate",
+          "recordedAt": "2026-08-26T03:17:16.511Z",
+          "payload": {
+            "score": 0.531,
+            "inputs": {
+              "reach": null,
+              "impact": 5,
+              "jobSize": 8,
+              "confidence": 0.85,
+              "effortSize": "large",
+              "businessValue": null,
+              "occurrenceCount": 1,
+              "riskOpportunity": null,
+              "timeCriticality": null
+            },
+            "missing": [],
+            "framework": "rice",
+            "confidence": 0.85,
+            "demandStage": "unclassified",
+            "contributions": {
+              "reach": 1,
+              "impact": 5,
+              "jobSize": 8,
+              "confidence": 0.85
+            },
+            "estimateAgreed": false,
+            "estimateSource": "ai",
+            "effectiveJobSize": 8,
+            "estimateDiverged": false,
+            "investmentBucket": "grow"
+          }
+        },
+        {
+          "recoveryKey": "bi-2624b7ea-cmt9jlmx305hg01qv6oninj0q",
+          "kind": "demand_stage_transition",
+          "summary": "unclassified → raw",
+          "recordedAt": "2026-08-26T03:36:55.623Z",
+          "payload": {
+            "to": "raw",
+            "from": "unclassified",
+            "score": 0.531,
+            "inputs": {
+              "reach": 1,
+              "impact": 5,
+              "jobSize": 8,
+              "confidence": 0.85
+            },
+            "missing": [],
+            "framework": "rice",
+            "rationale": "Classified as build, evidenced by the verified finding that EmploymentEvent has no acting consumer, scored with no missing inputs. This is the outcome item for EP-862820FD.",
+            "confidence": 0.85,
+            "provisional": true,
+            "evidenceCount": 1,
+            "estimateSource": "ai",
+            "effectiveJobSize": 8,
+            "investmentBucket": "grow"
+          }
+        }
+      ],
+      "effortSize": "large",
+      "triageOutcome": "build",
       "createdAt": "2026-08-26T00:56:12.858Z"
     },
     {
@@ -37,29 +149,268 @@
       "epicId": "EP-862820FD",
       "title": "Register the employment lifecycle as Workroom definitions in the source registry",
       "body": "## Problem\n\n`WORK_CASE_SOURCE_REGISTRY` holds 13 source definitions — `task-node`, `backlog-item`, `work-capsule`, `approval`, `data-control-operation`, `manual-task`, `scheduled`, `engagement`, `opportunity`, `booking`, `storefront-booking`, `activity`, `field-service-job`. None is a workforce shape.\n\nBI-80BECE1E shipped the definition/occurrence seam through this exact registry: a definition owns a stable key, a positive version, a finite-or-standing mode and a decision scope, and `buildWorkroomView` projects definition identity alongside occurrence trace with repository, worktree and PR evidence optional. `docs/architecture/workroom-vocabulary-boundary.md` states the contract directly: no development evidence is required for an ordinary business instance, and later work must deepen this registry rather than create a parallel Workroom-definition surface.\n\nThe employment lifecycle is therefore a set of registry entries, not a new automation engine. Building a workflow engine beside this registry would be the parallel-surface defect the boundary document exists to prevent.\n\n## Scope\n\nRegister the employment lifecycle definitions:\n\n- `worker-onboarding` (joiner) — finite\n- `worker-change` (mover) — finite\n- `worker-offboarding` (leaver) — finite\n- `worker-classification-review` — standing, periodic\n- `referral-intake` — finite\n\nEach entry declares what the definition contract already requires: intended outcome, trigger classes, finite-or-standing instance policy, owning decision scope, authority, review, escalation and completion rules, accountable and contributing roles without pre-assigning a person, required outcome-packet categories, and coordinated portfolio role.\n\nAll five sit at `defaultDecisionScope: \"wwwd\"` and `portfolioRole: \"forEmployees\"`. They are the customer's business decisions about their own workforce, not platform-development decisions — AGENTS.md section 11 forbids settling them through `principle_decide`.\n\nAuthority resolves through the existing `apps/web/lib/workforce/approval-routing.ts` chain walk rather than a second approver model; its fail-loud unresolved posture and transient `onBehalfOf` handling carry over unchanged.\n\n## Acceptance criteria\n\n- Five definitions are registered in `WORK_CASE_SOURCE_REGISTRY` with stable keys and positive versions; no second registry, route, API or queue is added.\n- Each definition declares its trigger classes, authority, review, escalation and completion rules per the definition contract in `docs/architecture/workroom-vocabulary-boundary.md`.\n- A workforce Workroom instance projects definition and occurrence identity with no repository, worktree, branch, PR or CI evidence present, and loses no identity by their absence.\n- The Workspace surface renders a workforce instance business-first on Overview, with Details disclosing activity, participants, evidence and receipts — the disclosure contract AC-WR-004 established.\n- Approvals inside these definitions resolve through `approval-routing.ts`; an unresolved chain surfaces as operator work with its reason.\n- Contract tests fail before registration and pass after.\n\n## Dependencies\n\nConsumes the definition/occurrence seam from BI-80BECE1E. Does not extend the portable Work Packet program in BI-D4C110BC.",
-      "status": "triaging",
+      "status": "open",
       "type": "product",
       "workType": "feature",
       "source": "user-request",
       "scopeKind": "unknown",
       "dependsOn": [],
       "externalDependencies": [],
-      "activities": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-28efa338-cmt9iuze404ip01qvpnvolsek",
+          "kind": "demand_evidence_linked",
+          "summary": "Linked The Workroom definition contract already covers the employment lifecycle",
+          "recordedAt": "2026-08-26T03:16:12.076Z",
+          "payload": {
+            "sourceRef": "docs/architecture/workroom-vocabulary-boundary.md",
+            "confidence": 0.9,
+            "reviewedAt": "2026-08-26T03:16:12.070Z",
+            "sourceKind": "research",
+            "evidenceLinkId": "DME-105593FA03AF"
+          }
+        },
+        {
+          "recoveryKey": "bi-28efa338-cmt9ivpah04j901qvufljae1l",
+          "kind": "demand_scored",
+          "summary": "Computed rice score 0.9",
+          "recordedAt": "2026-08-26T03:16:45.641Z",
+          "payload": {
+            "score": 0.9,
+            "inputs": {
+              "reach": null,
+              "impact": 3,
+              "jobSize": null,
+              "confidence": 0.9,
+              "effortSize": "medium",
+              "businessValue": null,
+              "occurrenceCount": 1,
+              "riskOpportunity": null,
+              "timeCriticality": null
+            },
+            "missing": [],
+            "framework": "rice",
+            "confidence": 0.9,
+            "demandStage": "unclassified",
+            "contributions": {
+              "reach": 1,
+              "impact": 3,
+              "jobSize": 3,
+              "confidence": 0.9
+            },
+            "estimateAgreed": false,
+            "estimateSource": null,
+            "effectiveJobSize": null,
+            "estimateDiverged": false,
+            "investmentBucket": "grow"
+          }
+        },
+        {
+          "recoveryKey": "bi-28efa338-cmt9iw85f04jy01qvwsa6ylte",
+          "kind": "demand_scored",
+          "summary": "Recomputed rice score after ai effort estimate",
+          "recordedAt": "2026-08-26T03:17:10.083Z",
+          "payload": {
+            "score": 0.9,
+            "inputs": {
+              "reach": null,
+              "impact": 3,
+              "jobSize": 3,
+              "confidence": 0.9,
+              "effortSize": "medium",
+              "businessValue": null,
+              "occurrenceCount": 1,
+              "riskOpportunity": null,
+              "timeCriticality": null
+            },
+            "missing": [],
+            "framework": "rice",
+            "confidence": 0.9,
+            "demandStage": "unclassified",
+            "contributions": {
+              "reach": 1,
+              "impact": 3,
+              "jobSize": 3,
+              "confidence": 0.9
+            },
+            "estimateAgreed": false,
+            "estimateSource": "ai",
+            "effectiveJobSize": 3,
+            "estimateDiverged": false,
+            "investmentBucket": "grow"
+          }
+        },
+        {
+          "recoveryKey": "bi-28efa338-cmt9jlj3505hb01qv6z9p8epj",
+          "kind": "demand_stage_transition",
+          "summary": "unclassified → raw",
+          "recordedAt": "2026-08-26T03:36:50.657Z",
+          "payload": {
+            "to": "raw",
+            "from": "unclassified",
+            "score": 0.9,
+            "inputs": {
+              "reach": 1,
+              "impact": 3,
+              "jobSize": 3,
+              "confidence": 0.9
+            },
+            "missing": [],
+            "framework": "rice",
+            "rationale": "Classified as build, evidenced against the Workroom vocabulary boundary, scored with no missing inputs. Deepens an existing registry rather than adding substrate; 13 source keys are registered and none is a workforce shape.",
+            "confidence": 0.9,
+            "provisional": true,
+            "evidenceCount": 1,
+            "estimateSource": "ai",
+            "effectiveJobSize": 3,
+            "investmentBucket": "grow"
+          }
+        }
+      ],
+      "effortSize": "medium",
+      "triageOutcome": "build",
       "createdAt": "2026-08-26T00:55:56.313Z"
+    },
+    {
+      "itemId": "BI-3EBFC177",
+      "epicId": "EP-862820FD",
+      "title": "Deliver the employment lifecycle actuator",
+      "body": "## Purpose\n\nUmbrella item carrying the design and plan for `EP-862820FD`, so plan coverage, traceability and readiness receipts bind to one artifact pair rather than being restated on each sibling.\n\n- **Design:** `docs/superpowers/specs/2026-08-25-employment-lifecycle-actuator-design.md`\n- **Plan:** `docs/superpowers/plans/2026-08-25-employment-lifecycle-actuator-plan.md`\n\n## Outcome\n\nAn employment event spawns the governed Workroom instance its definition prescribes, exactly once; every worker carries a typed classification and a resolved employment jurisdiction; an action contrary to that classification in that jurisdiction is refused at the point of action.\n\n## Deliverables\n\nSeven, each independently shippable and mapped to its own item:\n\n| Key | Item |\n|---|---|\n| D1 worker classification axis | `BI-C61CEEA9` |\n| D2 employment jurisdiction resolution | `BI-9252B9EA` |\n| D3 Workroom definitions in the source registry | `BI-28EFA338` |\n| D4 employment event spawns a Workroom instance | `BI-2624B7EA` |\n| D5 classification and jurisdiction control | `BI-B506AD2E` |\n| D6 referral as an evidenced relationship | `BI-D78DC392` |\n| D7 lifecycle steps resolve to connector capabilities | `BI-828F8EC9` |\n\n## Sequencing\n\nRatified as `DI-DC833C327A44`: the control (D5) ships before the actuator (D4), which is the plan's only ordering choice that is not dependency order. Confidence high, margin 5.86 against a 0.2 tie threshold, no commandment conflict.\n\n## Completion\n\nThis item closes only when all seven close. It carries no implementation of its own.",
+      "status": "triaging",
+      "type": "portfolio",
+      "workType": "feature",
+      "source": "user-request",
+      "scopeKind": "unknown",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [],
+      "createdAt": "2026-08-26T03:18:49.962Z"
     },
     {
       "itemId": "BI-828F8EC9",
       "epicId": "EP-862820FD",
       "title": "Resolve onboarding and offboarding steps to connector capabilities",
       "body": "## Problem\n\nA spawned onboarding Workroom instance can hold steps and assign them to people. It cannot yet create an account, assign a group, provision a mailbox or revoke access on a termination date, because nothing binds a lifecycle step to an executable capability.\n\nThe binding surface exists. `apps/web/lib/integrations/kernel/` defines a frozen connector contract with a dotted capability namespace, a capability-indexed registry that rejects duplicate capability keys at construction, an encrypted credential envelope, a typed error taxonomy and an audit trail with canonical argument hashing. Three connectors are registered on it today.\n\nThe identity target is being built under EP-24741BBF, which is closing the split between `User` as authentication root and `Principal` as authorization root. That epic owns the directory; this item consumes it and must not fork it.\n\nWhere no connector covers a capability an org needs, that gap is the on-demand integration case, not a reason to hand-build another bespoke connector.\n\n## Scope\n\nMake a lifecycle step address a capability rather than name a system. A step declares `directory.user.create` or `directory.group.assign`; the registry resolves which connector serves it, or reports that none does.\n\nRevocation is date-bound. An offboarding step scheduled for a termination date executes on that date, and the instance stays open and accountable until it does. An unexecuted revocation is visible operator work, never a closed room.\n\nEvery step is classification-gated through BI-B506AD2E before it executes, so provisioning a contingent worker follows that worker's lawful path rather than the employee path.\n\nAn unresolved capability is an honest, actionable gap: it names the missing capability and opens the integration decision — absorb, generate a connector on demand, or record the step as manual — rather than failing anonymously.\n\n## Acceptance criteria\n\n- A lifecycle step declares a capability identifier; connector selection is by capability through the existing registry, never by a hardcoded connector key.\n- An unresolved capability produces a named gap with the three dispositions available, not an anonymous failure.\n- A dated revocation executes on its date; the instance cannot reach completion with an unexecuted revocation outstanding.\n- Every provisioning and deprovisioning attempt writes a connector audit row through the existing audit path.\n- No new credential storage is introduced; the kernel encrypted envelope is the only store.\n- Classification gating runs before execution, proven by a test where the employee path executes and the contingent path refuses.\n- Tests use the existing contract harness, exercising auth-failure, rate-limited, token-expired and malformed-response scenarios against the provisioning path.\n\n## Dependencies\n\nEP-24741BBF supplies the directory target. BI-B506AD2E supplies the gate. BI-2624B7EA supplies the instance. Connectors not yet on the kernel cannot serve capabilities; that migration is integration-strategy work tracked outside this epic.",
-      "status": "triaging",
+      "status": "open",
       "type": "product",
       "workType": "feature",
       "source": "user-request",
       "scopeKind": "unknown",
       "dependsOn": [],
       "externalDependencies": [],
-      "activities": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-828f8ec9-cmt9ivezm04j301qvgzy8mc8b",
+          "kind": "demand_evidence_linked",
+          "summary": "Linked Provisioning has a binding surface and no binding",
+          "recordedAt": "2026-08-26T03:16:32.290Z",
+          "payload": {
+            "sourceRef": "docs/superpowers/specs/2026-08-25-employment-lifecycle-actuator-design.md#77-provisioning-by-capability",
+            "confidence": 0.9,
+            "reviewedAt": "2026-08-26T03:16:32.284Z",
+            "sourceKind": "research",
+            "evidenceLinkId": "DME-D048B32A894B"
+          }
+        },
+        {
+          "recoveryKey": "bi-828f8ec9-cmt9ivuft04jm01qveqm8prc1",
+          "kind": "demand_scored",
+          "summary": "Computed rice score 0.438",
+          "recordedAt": "2026-08-26T03:16:52.313Z",
+          "payload": {
+            "score": 0.438,
+            "inputs": {
+              "reach": null,
+              "impact": 5,
+              "jobSize": null,
+              "confidence": 0.7,
+              "effortSize": "large",
+              "businessValue": null,
+              "occurrenceCount": 1,
+              "riskOpportunity": null,
+              "timeCriticality": null
+            },
+            "missing": [],
+            "framework": "rice",
+            "confidence": 0.7,
+            "demandStage": "unclassified",
+            "contributions": {
+              "reach": 1,
+              "impact": 5,
+              "jobSize": 8,
+              "confidence": 0.7
+            },
+            "estimateAgreed": false,
+            "estimateSource": null,
+            "effectiveJobSize": null,
+            "estimateDiverged": false,
+            "investmentBucket": "grow"
+          }
+        },
+        {
+          "recoveryKey": "bi-828f8ec9-cmt9iwhyn04k701qvrrg350v1",
+          "kind": "demand_scored",
+          "summary": "Recomputed rice score after ai effort estimate",
+          "recordedAt": "2026-08-26T03:17:22.799Z",
+          "payload": {
+            "score": 0.438,
+            "inputs": {
+              "reach": null,
+              "impact": 5,
+              "jobSize": 8,
+              "confidence": 0.7,
+              "effortSize": "large",
+              "businessValue": null,
+              "occurrenceCount": 1,
+              "riskOpportunity": null,
+              "timeCriticality": null
+            },
+            "missing": [],
+            "framework": "rice",
+            "confidence": 0.7,
+            "demandStage": "unclassified",
+            "contributions": {
+              "reach": 1,
+              "impact": 5,
+              "jobSize": 8,
+              "confidence": 0.7
+            },
+            "estimateAgreed": false,
+            "estimateSource": "ai",
+            "effectiveJobSize": 8,
+            "estimateDiverged": false,
+            "investmentBucket": "grow"
+          }
+        },
+        {
+          "recoveryKey": "bi-828f8ec9-cmt9jlqv005hp01qvqtpz07k1",
+          "kind": "demand_stage_transition",
+          "summary": "unclassified → raw",
+          "recordedAt": "2026-08-26T03:37:00.732Z",
+          "payload": {
+            "to": "raw",
+            "from": "unclassified",
+            "score": 0.438,
+            "inputs": {
+              "reach": 1,
+              "impact": 5,
+              "jobSize": 8,
+              "confidence": 0.7
+            },
+            "missing": [],
+            "framework": "rice",
+            "rationale": "Classified as build, evidenced against the connector kernel and the absence of outbound provisioning, scored with no missing inputs. Carries a named external prerequisite: 13 of 16 connectors are not on the kernel.",
+            "confidence": 0.7,
+            "provisional": true,
+            "evidenceCount": 1,
+            "estimateSource": "ai",
+            "effectiveJobSize": 8,
+            "investmentBucket": "grow"
+          }
+        }
+      ],
+      "effortSize": "large",
+      "triageOutcome": "build",
       "createdAt": "2026-08-26T00:57:10.375Z"
     },
     {
@@ -67,14 +418,126 @@
       "epicId": "EP-862820FD",
       "title": "Resolve every worker to an employment jurisdiction",
       "body": "## Problem\n\n`Organization` already declares employment jurisdiction: `employsIn String[]` holds PROFESSION_JURISDICTIONS slugs, and the schema comment states plainly that employment law keys off where staff work, distinct from where the business sells or operates. That declaration reaches nothing. `WorkLocation` carries a name, a `locationType`, a timezone and an optional `Address`, and no jurisdiction. `EmployeeProfile` carries a `workLocationId` and a `timezone` string.\n\nSo the org knows it employs in three jurisdictions and cannot say which one governs any individual worker. Every jurisdiction-scoped rule in EP-862820FD — classification tests, leave entitlement, notice periods, what an offboarding may lawfully revoke and when — has no key to look up.\n\n`RegulatoryAutonomyPolicy` and `JurisdictionCriteriaProfile` are both already keyed on (industry, jurisdiction, jurisdictionBasis, activityClass). The lookup spine exists. The worker cannot supply the key.\n\n## Scope\n\nGive `WorkLocation` a jurisdiction, and add the resolver that answers \"which employment jurisdiction governs this worker\" from the work location, falling back explicitly and never silently.\n\nJurisdiction is multi-dimensional and this item claims exactly one dimension: the employment basis. Sales-tax, data-residency and marketing-consent bases already resolve from their own `Organization` columns and are untouched.\n\nA worker whose jurisdiction cannot be resolved is surfaced as operator work with the reason, in the same fail-loud posture as `approval-routing.ts` — never defaulted to `global` behind the operator's back, because a silent default here produces a confidently wrong legal answer.\n\n## Acceptance criteria\n\n- `WorkLocation` carries a jurisdiction slug validated against the same PROFESSION_JURISDICTIONS vocabulary `Organization.employsIn` uses.\n- A resolver returns the governing employment jurisdiction for a worker, or an explicit unresolved result naming the reason (no work location, location without jurisdiction, jurisdiction not in the org `employsIn` set).\n- An unresolved jurisdiction is operator-visible work, not a `global` fallback.\n- Where a location jurisdiction is absent from `Organization.employsIn`, that contradiction is reported rather than reconciled.\n- The resolved jurisdiction is accepted directly as the `jurisdiction` key by `RegulatoryAutonomyPolicy` and `JurisdictionCriteriaProfile` lookups; no translation layer is introduced.\n- Migration applies cleanly against populated data; existing locations become explicitly unresolved rather than being assigned a guess.\n- Unit tests cover each unresolved reason and the org/location contradiction case.\n\n## Out of scope\n\nSeeding jurisdictional employment rule content. Any change to the tax jurisdiction reference model in `finance.prisma`, which is a separate basis.",
-      "status": "triaging",
+      "status": "open",
       "type": "product",
       "workType": "feature",
       "source": "user-request",
       "scopeKind": "unknown",
       "dependsOn": [],
       "externalDependencies": [],
-      "activities": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-9252b9ea-cmt9iuuvt04im01qvovt0wcb5",
+          "kind": "demand_evidence_linked",
+          "summary": "Linked Employment jurisdiction is declared but unreachable",
+          "recordedAt": "2026-08-26T03:16:06.233Z",
+          "payload": {
+            "sourceRef": "docs/superpowers/specs/2026-08-25-employment-lifecycle-actuator-design.md#72-jurisdiction-resolution",
+            "confidence": 0.9,
+            "reviewedAt": "2026-08-26T03:16:06.220Z",
+            "sourceKind": "research",
+            "evidenceLinkId": "DME-E0CA57CB30C8"
+          }
+        },
+        {
+          "recoveryKey": "bi-9252b9ea-cmt9ivotw04j701qvveqtmb9s",
+          "kind": "demand_scored",
+          "summary": "Computed rice score 1.2",
+          "recordedAt": "2026-08-26T03:16:45.044Z",
+          "payload": {
+            "score": 1.2,
+            "inputs": {
+              "reach": null,
+              "impact": 4,
+              "jobSize": null,
+              "confidence": 0.9,
+              "effortSize": "medium",
+              "businessValue": null,
+              "occurrenceCount": 1,
+              "riskOpportunity": null,
+              "timeCriticality": null
+            },
+            "missing": [],
+            "framework": "rice",
+            "confidence": 0.9,
+            "demandStage": "unclassified",
+            "contributions": {
+              "reach": 1,
+              "impact": 4,
+              "jobSize": 3,
+              "confidence": 0.9
+            },
+            "estimateAgreed": false,
+            "estimateSource": null,
+            "effectiveJobSize": null,
+            "estimateDiverged": false,
+            "investmentBucket": "grow"
+          }
+        },
+        {
+          "recoveryKey": "bi-9252b9ea-cmt9iw70804jw01qvuoxe0c9q",
+          "kind": "demand_scored",
+          "summary": "Recomputed rice score after ai effort estimate",
+          "recordedAt": "2026-08-26T03:17:08.600Z",
+          "payload": {
+            "score": 1.2,
+            "inputs": {
+              "reach": null,
+              "impact": 4,
+              "jobSize": 3,
+              "confidence": 0.9,
+              "effortSize": "medium",
+              "businessValue": null,
+              "occurrenceCount": 1,
+              "riskOpportunity": null,
+              "timeCriticality": null
+            },
+            "missing": [],
+            "framework": "rice",
+            "confidence": 0.9,
+            "demandStage": "unclassified",
+            "contributions": {
+              "reach": 1,
+              "impact": 4,
+              "jobSize": 3,
+              "confidence": 0.9
+            },
+            "estimateAgreed": false,
+            "estimateSource": "ai",
+            "effectiveJobSize": 3,
+            "estimateDiverged": false,
+            "investmentBucket": "grow"
+          }
+        },
+        {
+          "recoveryKey": "bi-9252b9ea-cmt9jlie705h901qvswvair9p",
+          "kind": "demand_stage_transition",
+          "summary": "unclassified → raw",
+          "recordedAt": "2026-08-26T03:36:49.759Z",
+          "payload": {
+            "to": "raw",
+            "from": "unclassified",
+            "score": 1.2,
+            "inputs": {
+              "reach": 1,
+              "impact": 4,
+              "jobSize": 3,
+              "confidence": 0.9
+            },
+            "missing": [],
+            "framework": "rice",
+            "rationale": "Classified as build, evidenced, scored with no missing inputs. Verified gap with a waiting consumer: Organization.employsIn declares employment jurisdiction and WorkLocation carries none, so the policy spine already keyed on that tuple cannot be reached from a worker.",
+            "confidence": 0.9,
+            "provisional": true,
+            "evidenceCount": 1,
+            "estimateSource": "ai",
+            "effectiveJobSize": 3,
+            "investmentBucket": "grow"
+          }
+        }
+      ],
+      "effortSize": "medium",
+      "triageOutcome": "build",
       "createdAt": "2026-08-26T00:55:38.564Z"
     },
     {
@@ -82,14 +545,126 @@
       "epicId": "EP-862820FD",
       "title": "Refuse actions that contradict a worker classification (co-employment control)",
       "body": "## Problem\n\nJoint-employer and misclassification liability turns on conduct, not paperwork. The tests regulators apply — behavioural control, financial control, integration into the organisation, permanence — are satisfied by what a system records the org actually doing to a worker.\n\nAn actuator that treats every worker identically is therefore not merely legally naive. It industrialises the evidence: it assigns mandatory training to a contractor, puts an agency temp into a performance review cycle, schedules a volunteer into a rostered shift, and timestamps all of it in an auditable ledger the org later hands to an investigator.\n\nThis risk arrives with the actuator and must land in the same epic, not after it.\n\n## Scope\n\nMake classification consequential at the point of action. A Workroom step that would direct, schedule, review or integrate a worker checks the worker classification and the resolved jurisdiction before it runs, and refuses where the combination is unlawful or unsafe.\n\nThe check routes through the existing policy spine, not a new one. `RegulatoryAutonomyPolicy` is already keyed on (industry, jurisdiction, jurisdictionBasis, activityClass) and already carries `maxAutonomyLevel`, `humanControlRequired` and `requiredEvidence`. This item adds the activity classes — `worker-direction`, `worker-classification`, `worker-provisioning` — and the seeded policy rows behind them.\n\nA refusal is a stop, not a workaround (AGENTS.md section 1). It names the classification, the jurisdiction, the rule and the lawful alternative — a contractor is not assigned mandatory training, they are sent a statement of work amendment — so the operator can act rather than route around it.\n\nThe classification determination itself routes through the WWWD Decision Perspective Gate. The platform presents the factors, records the human determination and holds the evidence. It never decides. Misclassification liability sits with the employer, and a platform asserting a classification would be both outside its authority and wrong to.\n\n## Acceptance criteria\n\n- Direction, scheduling, review-cycle enrolment and mandatory-training assignment each check classification plus jurisdiction before executing.\n- Refusals are typed, name the governing rule, and state the lawful alternative; they never silently no-op or degrade to a warning.\n- New activity classes are added to the existing `RegulatoryAutonomyPolicy` spine; no parallel policy model is introduced.\n- A classification determination carries a human author and evidence; no code path derives one.\n- The `worker-classification-review` standing definition surfaces a determination for periodic re-confirmation when the facts of engagement drift — duration extended, direction increased, exclusivity emerged.\n- Tests cover a refusal per classification and a jurisdiction where the same action is permitted, proving the check reads jurisdiction and not just classification.\n\n## Dependencies\n\nBI-C61CEEA9 (classification), BI-9252B9EA (jurisdiction), BI-28EFA338 (definitions). Related but not blocked by BI-514826D3, the deferred policy-authority bridge; this item uses the existing policy read path and must not fork it.",
-      "status": "triaging",
+      "status": "open",
       "type": "product",
       "workType": "feature",
       "source": "user-request",
       "scopeKind": "unknown",
       "dependsOn": [],
       "externalDependencies": [],
-      "activities": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-b506ad2e-cmt9iv7k504iv01qvipmgzf8r",
+          "kind": "demand_evidence_linked",
+          "summary": "Linked Control ships before the actuator",
+          "recordedAt": "2026-08-26T03:16:22.661Z",
+          "payload": {
+            "sourceRef": "DI-DC833C327A44",
+            "confidence": 0.9,
+            "reviewedAt": "2026-08-26T03:16:22.652Z",
+            "sourceKind": "decision",
+            "evidenceLinkId": "DME-0AE75B6BE42F"
+          }
+        },
+        {
+          "recoveryKey": "bi-b506ad2e-cmt9ivsay04ji01qviqnib5rb",
+          "kind": "demand_scored",
+          "summary": "Computed rice score 1.417",
+          "recordedAt": "2026-08-26T03:16:49.546Z",
+          "payload": {
+            "score": 1.417,
+            "inputs": {
+              "reach": null,
+              "impact": 5,
+              "jobSize": null,
+              "confidence": 0.85,
+              "effortSize": "medium",
+              "businessValue": null,
+              "occurrenceCount": 1,
+              "riskOpportunity": null,
+              "timeCriticality": null
+            },
+            "missing": [],
+            "framework": "rice",
+            "confidence": 0.85,
+            "demandStage": "unclassified",
+            "contributions": {
+              "reach": 1,
+              "impact": 5,
+              "jobSize": 3,
+              "confidence": 0.85
+            },
+            "estimateAgreed": false,
+            "estimateSource": null,
+            "effectiveJobSize": null,
+            "estimateDiverged": false,
+            "investmentBucket": "grow"
+          }
+        },
+        {
+          "recoveryKey": "bi-b506ad2e-cmt9iwbv504k101qv75ggrtve",
+          "kind": "demand_scored",
+          "summary": "Recomputed rice score after ai effort estimate",
+          "recordedAt": "2026-08-26T03:17:14.897Z",
+          "payload": {
+            "score": 1.417,
+            "inputs": {
+              "reach": null,
+              "impact": 5,
+              "jobSize": 3,
+              "confidence": 0.85,
+              "effortSize": "medium",
+              "businessValue": null,
+              "occurrenceCount": 1,
+              "riskOpportunity": null,
+              "timeCriticality": null
+            },
+            "missing": [],
+            "framework": "rice",
+            "confidence": 0.85,
+            "demandStage": "unclassified",
+            "contributions": {
+              "reach": 1,
+              "impact": 5,
+              "jobSize": 3,
+              "confidence": 0.85
+            },
+            "estimateAgreed": false,
+            "estimateSource": "ai",
+            "effectiveJobSize": 3,
+            "estimateDiverged": false,
+            "investmentBucket": "grow"
+          }
+        },
+        {
+          "recoveryKey": "bi-b506ad2e-cmt9jlm4805he01qvst2m8poc",
+          "kind": "demand_stage_transition",
+          "summary": "unclassified → raw",
+          "recordedAt": "2026-08-26T03:36:54.584Z",
+          "payload": {
+            "to": "raw",
+            "from": "unclassified",
+            "score": 1.417,
+            "inputs": {
+              "reach": 1,
+              "impact": 5,
+              "jobSize": 3,
+              "confidence": 0.85
+            },
+            "missing": [],
+            "framework": "rice",
+            "rationale": "Classified as build, evidenced by ratified sequencing decision DI-DC833C327A44, scored with no missing inputs. The control is sequenced ahead of the actuator so the actuator never runs classification-blind.",
+            "confidence": 0.85,
+            "provisional": true,
+            "evidenceCount": 1,
+            "estimateSource": "ai",
+            "effectiveJobSize": 3,
+            "investmentBucket": "grow"
+          }
+        }
+      ],
+      "effortSize": "medium",
+      "triageOutcome": "build",
       "createdAt": "2026-08-26T00:56:33.909Z"
     },
     {
@@ -97,14 +672,549 @@
       "epicId": "EP-862820FD",
       "title": "Model worker classification as a typed axis with legal consequence",
       "body": "## Problem\n\n`EmploymentType` is a free-text name table (`name String`, `status String`) with no legal semantics. \"Contractor\", \"Full-time\" and \"Volunteer\" are labels an org types in. Nothing downstream can ask the only question that matters — may this worker be directed, scheduled, reviewed and provisioned the way an employee is? — because the answer is not represented.\n\nVerified 2026-08-25: no co-employment, misclassification, contingent-worker or equivalent vocabulary exists anywhere in `apps/web/lib`, `packages/db` or `docs`.\n\nThis blocks every other item in EP-862820FD. An actuator that provisions without reading a classification is not a smaller version of the right thing; it is the mechanism that manufactures joint-employer evidence.\n\n## Scope\n\nAdd `WorkerClassification` as a typed, closed enum (AGENTS.md section 8: closed-set string fields are Prisma enums plus a generated TypeScript union, never free-form strings), distinct from the org's `EmploymentType` label:\n\n`employee`, `contractor-direct`, `contractor-agency`, `temp-agency-worker`, `eor-employee`, `volunteer`, `intern`, `board-member`.\n\nEach classification declares typed consequences, not prose: whether payroll withholding applies, whether the worker may be directed and scheduled by the org, whether they accrue leave and benefits, whether they enter performance review cycles, and whether they appear in the org chart as a reporting line or as an engaged party.\n\n`EmploymentType` is retained as the org's own display label and gains a required classification reference, so an existing installation's labels are mapped rather than replaced.\n\nThe engagement term is modelled here too: a contingent worker has a definite end date and an engagement that can be extended, which is a different fact from an employee `endDate`.\n\n## Acceptance criteria\n\n- `WorkerClassification` is a Prisma enum with a generated TypeScript union; no consumer reads a free-form classification string.\n- Every `EmploymentType` row resolves to exactly one classification; the migration maps existing rows and applies cleanly against a populated database.\n- Classification consequences are queryable as typed values, not inferred from label text.\n- A contingent engagement carries a definite term and an extension history distinguishable from employee `endDate`.\n- The platform records a classification determination with its author and evidence; it never derives or asserts one. A determination with no recorded human author is invalid.\n- Unit tests cover each classification consequence set and the migration mapping of pre-existing labels.\n\n## Out of scope\n\nRefusing actions on the basis of classification (the co-employment control item). Jurisdiction resolution (its own item). Any change to payroll calculation.",
-      "status": "triaging",
+      "status": "open",
       "type": "product",
       "workType": "feature",
       "source": "user-request",
       "scopeKind": "unknown",
       "dependsOn": [],
       "externalDependencies": [],
-      "activities": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-c61ceea9-cmt9iurw804ii01qvr8lsvrxd",
+          "kind": "demand_evidence_linked",
+          "summary": "Linked Worker classification benchmarked against Workday and SAP Fieldglass",
+          "recordedAt": "2026-08-26T03:16:02.360Z",
+          "payload": {
+            "sourceRef": "docs/superpowers/specs/2026-08-25-employment-lifecycle-actuator-design.md#71-worker-classification",
+            "confidence": 0.85,
+            "reviewedAt": "2026-08-26T03:16:02.346Z",
+            "sourceKind": "research",
+            "evidenceLinkId": "DME-87522FB78E87"
+          }
+        },
+        {
+          "recoveryKey": "bi-c61ceea9-cmt9ivhtm04j501qvbmjn6u8i",
+          "kind": "demand_scored",
+          "summary": "Computed rice score 1.2",
+          "recordedAt": "2026-08-26T03:16:35.962Z",
+          "payload": {
+            "score": 1.2,
+            "inputs": {
+              "reach": null,
+              "impact": 4,
+              "jobSize": null,
+              "confidence": 0.9,
+              "effortSize": "medium",
+              "businessValue": null,
+              "occurrenceCount": 1,
+              "riskOpportunity": null,
+              "timeCriticality": null
+            },
+            "missing": [],
+            "framework": "rice",
+            "confidence": 0.9,
+            "demandStage": "unclassified",
+            "contributions": {
+              "reach": 1,
+              "impact": 4,
+              "jobSize": 3,
+              "confidence": 0.9
+            },
+            "estimateAgreed": false,
+            "estimateSource": null,
+            "effectiveJobSize": null,
+            "estimateDiverged": false,
+            "investmentBucket": "grow"
+          }
+        },
+        {
+          "recoveryKey": "bi-c61ceea9-cmt9iw3ay04ju01qvccvz1cdd",
+          "kind": "demand_scored",
+          "summary": "Recomputed rice score after ai effort estimate",
+          "recordedAt": "2026-08-26T03:17:03.802Z",
+          "payload": {
+            "score": 1.2,
+            "inputs": {
+              "reach": null,
+              "impact": 4,
+              "jobSize": 3,
+              "confidence": 0.9,
+              "effortSize": "medium",
+              "businessValue": null,
+              "occurrenceCount": 1,
+              "riskOpportunity": null,
+              "timeCriticality": null
+            },
+            "missing": [],
+            "framework": "rice",
+            "confidence": 0.9,
+            "demandStage": "unclassified",
+            "contributions": {
+              "reach": 1,
+              "impact": 4,
+              "jobSize": 3,
+              "confidence": 0.9
+            },
+            "estimateAgreed": false,
+            "estimateSource": "ai",
+            "effectiveJobSize": 3,
+            "estimateDiverged": false,
+            "investmentBucket": "grow"
+          }
+        },
+        {
+          "recoveryKey": "bi-c61ceea9-cmt9jlej705h601qvlcva5uwn",
+          "kind": "demand_stage_transition",
+          "summary": "unclassified → raw",
+          "recordedAt": "2026-08-26T03:36:44.755Z",
+          "payload": {
+            "to": "raw",
+            "from": "unclassified",
+            "score": 1.2,
+            "inputs": {
+              "reach": 1,
+              "impact": 4,
+              "jobSize": 3,
+              "confidence": 0.9
+            },
+            "missing": [],
+            "framework": "rice",
+            "rationale": "Classified as build with a medium size, one reviewed research evidence link, and a computed RICE score with no missing inputs. The demand is a verified substrate gap rather than a request: EmploymentType carries no legal semantics and no worker-classification vocabulary exists in the tree.",
+            "confidence": 0.9,
+            "provisional": true,
+            "evidenceCount": 1,
+            "estimateSource": "ai",
+            "effectiveJobSize": 3,
+            "investmentBucket": "grow"
+          }
+        },
+        {
+          "recoveryKey": "bi-c61ceea9-cmt9jmjda05i001qvh6m9ykpf",
+          "kind": "initiative_readiness_decision",
+          "summary": "implementation readiness: input-required",
+          "recordedAt": "2026-08-26T03:37:37.678Z",
+          "payload": {
+            "unmet": [
+              {
+                "code": "RESEARCH_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-author"
+              },
+              {
+                "code": "CANONICAL_DESIGN_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-checklist-reviewer"
+              },
+              {
+                "code": "SPEC_APPROVAL_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-checklist-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "architecture-reviewer"
+              },
+              {
+                "code": "OBJECTIVE_BASELINE_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-checklist-reviewer"
+              },
+              {
+                "code": "ARTIFACT_AUTHOR_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "artifact-resolver"
+              },
+              {
+                "code": "PLAN_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "implementation-planner"
+              },
+              {
+                "code": "PLAN_REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "plan-reviewer"
+              },
+              {
+                "code": "PLAN_COVERAGE_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              },
+              {
+                "code": "TRACEABILITY_INCOMPLETE",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              }
+            ],
+            "target": "implementation",
+            "profile": "feature",
+            "subject": {
+              "id": "BI-C61CEEA9",
+              "kind": "backlog-item"
+            },
+            "verdict": "input-required",
+            "blockers": [],
+            "authority": {
+              "actionKey": "claim_backlog_item_for_work",
+              "enforcementState": "enforced"
+            },
+            "satisfied": [
+              {
+                "code": "CLASSIFICATION_REQUIRED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "product-owner"
+              },
+              {
+                "code": "AUTHORIZATION_DENIED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "platform-governance"
+              },
+              {
+                "code": "DEPENDENCY_UNRESOLVED",
+                "state": "not-applicable",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              },
+              {
+                "code": "CAPSULE_IDENTITY_MISMATCH",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "delivery-coordinator"
+              }
+            ],
+            "decisionId": "IRD-92BA60C556F4",
+            "workIntent": "implementation",
+            "evaluatedAt": "2026-08-26T03:37:37.669Z",
+            "factsDigest": "0f64687c677512e0f44c43f1036f3462a9eb8627c84501433715d8a713369885",
+            "stableCodes": {
+              "unmet": [
+                "RESEARCH_REQUIRED",
+                "CANONICAL_DESIGN_REQUIRED",
+                "SPEC_APPROVAL_REQUIRED",
+                "REVIEW_REQUIRED",
+                "OBJECTIVE_BASELINE_REQUIRED",
+                "ARTIFACT_AUTHOR_REQUIRED",
+                "PLAN_REQUIRED",
+                "PLAN_REVIEW_REQUIRED",
+                "PLAN_COVERAGE_REQUIRED",
+                "TRACEABILITY_INCOMPLETE"
+              ],
+              "blockers": [],
+              "satisfied": [
+                "CLASSIFICATION_REQUIRED",
+                "AUTHORIZATION_DENIED",
+                "DEPENDENCY_UNRESOLVED",
+                "CAPSULE_IDENTITY_MISMATCH"
+              ]
+            },
+            "policyVersion": "initiative-readiness.v2",
+            "schemaVersion": 1,
+            "transitionObject": {
+              "id": "OpenDigitalProductFactory/opendigitalproductfactory#feat/worker-classification-axis",
+              "kind": "work-capsule",
+              "targetState": "implementation",
+              "expectedVersion": "claim.v1"
+            }
+          }
+        },
+        {
+          "recoveryKey": "bi-c61ceea9-cmt9jnrlt05it01qvuusmwbsf",
+          "kind": "initiative_readiness_decision",
+          "summary": "implementation readiness: input-required",
+          "recordedAt": "2026-08-26T03:38:35.009Z",
+          "payload": {
+            "unmet": [
+              {
+                "code": "RESEARCH_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-author"
+              },
+              {
+                "code": "CANONICAL_DESIGN_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-checklist-reviewer"
+              },
+              {
+                "code": "SPEC_APPROVAL_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-checklist-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "architecture-reviewer"
+              },
+              {
+                "code": "OBJECTIVE_BASELINE_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-checklist-reviewer"
+              },
+              {
+                "code": "ARTIFACT_AUTHOR_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "artifact-resolver"
+              },
+              {
+                "code": "PLAN_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "implementation-planner"
+              },
+              {
+                "code": "PLAN_REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "plan-reviewer"
+              },
+              {
+                "code": "PLAN_COVERAGE_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              },
+              {
+                "code": "TRACEABILITY_INCOMPLETE",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              }
+            ],
+            "target": "implementation",
+            "profile": "feature",
+            "subject": {
+              "id": "BI-C61CEEA9",
+              "kind": "backlog-item"
+            },
+            "verdict": "input-required",
+            "blockers": [],
+            "authority": {
+              "actionKey": "claim_backlog_item_for_work",
+              "enforcementState": "enforced"
+            },
+            "satisfied": [
+              {
+                "code": "CLASSIFICATION_REQUIRED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "product-owner"
+              },
+              {
+                "code": "AUTHORIZATION_DENIED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "platform-governance"
+              },
+              {
+                "code": "DEPENDENCY_UNRESOLVED",
+                "state": "not-applicable",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              },
+              {
+                "code": "CAPSULE_IDENTITY_MISMATCH",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "delivery-coordinator"
+              }
+            ],
+            "decisionId": "IRD-B710E78028E7",
+            "workIntent": "implementation",
+            "evaluatedAt": "2026-08-26T03:38:35.003Z",
+            "factsDigest": "dc4dc15368b526155808267115e65d45edd2c20470b18479b6a38f117767ca79",
+            "stableCodes": {
+              "unmet": [
+                "RESEARCH_REQUIRED",
+                "CANONICAL_DESIGN_REQUIRED",
+                "SPEC_APPROVAL_REQUIRED",
+                "REVIEW_REQUIRED",
+                "OBJECTIVE_BASELINE_REQUIRED",
+                "ARTIFACT_AUTHOR_REQUIRED",
+                "PLAN_REQUIRED",
+                "PLAN_REVIEW_REQUIRED",
+                "PLAN_COVERAGE_REQUIRED",
+                "TRACEABILITY_INCOMPLETE"
+              ],
+              "blockers": [],
+              "satisfied": [
+                "CLASSIFICATION_REQUIRED",
+                "AUTHORIZATION_DENIED",
+                "DEPENDENCY_UNRESOLVED",
+                "CAPSULE_IDENTITY_MISMATCH"
+              ]
+            },
+            "policyVersion": "initiative-readiness.v2",
+            "schemaVersion": 1,
+            "transitionObject": {
+              "id": "OpenDigitalProductFactory/opendigitalproductfactory#feat/worker-classification-axis-d1",
+              "kind": "work-capsule",
+              "targetState": "implementation",
+              "expectedVersion": "claim.v1"
+            }
+          }
+        },
+        {
+          "recoveryKey": "bi-c61ceea9-cmt9k7x5h05va01qvbnuu1wsa",
+          "kind": "initiative_readiness_decision",
+          "summary": "implementation readiness: input-required",
+          "recordedAt": "2026-08-26T03:54:15.317Z",
+          "payload": {
+            "unmet": [
+              {
+                "code": "RESEARCH_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-author"
+              },
+              {
+                "code": "CANONICAL_DESIGN_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-checklist-reviewer"
+              },
+              {
+                "code": "SPEC_APPROVAL_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-checklist-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "architecture-reviewer"
+              },
+              {
+                "code": "OBJECTIVE_BASELINE_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-checklist-reviewer"
+              },
+              {
+                "code": "ARTIFACT_AUTHOR_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "artifact-resolver"
+              },
+              {
+                "code": "PLAN_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "implementation-planner"
+              },
+              {
+                "code": "PLAN_REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "plan-reviewer"
+              },
+              {
+                "code": "PLAN_COVERAGE_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              },
+              {
+                "code": "TRACEABILITY_INCOMPLETE",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              }
+            ],
+            "target": "implementation",
+            "profile": "feature",
+            "subject": {
+              "id": "BI-C61CEEA9",
+              "kind": "backlog-item"
+            },
+            "verdict": "input-required",
+            "blockers": [],
+            "authority": {
+              "actionKey": "claim_backlog_item_for_work",
+              "enforcementState": "enforced"
+            },
+            "satisfied": [
+              {
+                "code": "CLASSIFICATION_REQUIRED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "product-owner"
+              },
+              {
+                "code": "AUTHORIZATION_DENIED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "platform-governance"
+              },
+              {
+                "code": "DEPENDENCY_UNRESOLVED",
+                "state": "not-applicable",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              },
+              {
+                "code": "CAPSULE_IDENTITY_MISMATCH",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "delivery-coordinator"
+              }
+            ],
+            "decisionId": "IRD-9B1E8B873889",
+            "workIntent": "implementation",
+            "evaluatedAt": "2026-08-26T03:54:15.301Z",
+            "factsDigest": "dc4dc15368b526155808267115e65d45edd2c20470b18479b6a38f117767ca79",
+            "stableCodes": {
+              "unmet": [
+                "RESEARCH_REQUIRED",
+                "CANONICAL_DESIGN_REQUIRED",
+                "SPEC_APPROVAL_REQUIRED",
+                "REVIEW_REQUIRED",
+                "OBJECTIVE_BASELINE_REQUIRED",
+                "ARTIFACT_AUTHOR_REQUIRED",
+                "PLAN_REQUIRED",
+                "PLAN_REVIEW_REQUIRED",
+                "PLAN_COVERAGE_REQUIRED",
+                "TRACEABILITY_INCOMPLETE"
+              ],
+              "blockers": [],
+              "satisfied": [
+                "CLASSIFICATION_REQUIRED",
+                "AUTHORIZATION_DENIED",
+                "DEPENDENCY_UNRESOLVED",
+                "CAPSULE_IDENTITY_MISMATCH"
+              ]
+            },
+            "policyVersion": "initiative-readiness.v2",
+            "schemaVersion": 1,
+            "transitionObject": {
+              "id": "OpenDigitalProductFactory/opendigitalproductfactory#feat/worker-classification-axis-d1",
+              "kind": "work-capsule",
+              "targetState": "implementation",
+              "expectedVersion": "claim.v1"
+            }
+          }
+        }
+      ],
+      "effortSize": "medium",
+      "triageOutcome": "build",
       "createdAt": "2026-08-26T00:55:15.165Z"
     },
     {
@@ -112,14 +1222,126 @@
       "epicId": "EP-862820FD",
       "title": "Make an employee referral an evidenced relationship, not a source label",
       "body": "## Problem\n\n`RecruitingSource.type` accepts `referral` as one of five category labels. `Candidate.sourceId` points at that row. Nothing records who referred whom.\n\nSo the platform can report how many hires came through referrals and cannot answer any question that follows from it: who is owed a referral bonus and when it vests, whether the referrer sat in the approval chain for their own referral, or whether referral hiring is narrowing the workforce.\n\nThat last one is not a reporting nicety. Referral pipelines reproduce the existing shape of a workforce, which is the textbook adverse-impact risk in hiring. DPF already carries the rail built for exactly this: `ProtectedMonitoringObservation` is deliberately structurally separate from the scoring path, joined to an evaluation only by an opaque `evaluationRef`, and exists to compute four-fifths and NYC LL144 impact ratios. It is unused for referral analysis because referrals are not represented.\n\n## Scope\n\nAdd the referrer relationship, and the three consequences that follow from having it.\n\n**Attribution.** An application records the referring worker, distinct from the recruiting source category. A referral by a contingent worker is attributable but does not imply the referrer may participate in hiring decisions.\n\n**Conflict of interest.** The referrer is excluded from the approval chain for their own referral. `apps/web/lib/workforce/approval-routing.ts` already walks the chain and already skips hops that cannot act, with typed skip reasons. This adds one skip reason and reuses the walk; it does not fork it. The chain-exhausted and reporting-loop cases already fail loud and continue to.\n\n**Bonus.** A referral bonus is a tenure-gated payroll consequence, not an ad-hoc payment. It is a `referral-intake` Workroom instance that stays open to its vesting milestone and then produces a pay component line. It never moves money — the standing payroll boundary is unchanged.\n\n**Monitoring.** Referral-sourced outcomes feed `ProtectedMonitoringObservation` through its existing opaque correlation, where collection is lawful and consented. The structural separation is preserved exactly: the referral relationship must never become a scoring input, and must not share a foreign key with one.\n\n## Acceptance criteria\n\n- An application records its referring worker; a referral without a resolvable referrer is rejected rather than stored as an orphan.\n- The referrer cannot appear as an approver on their own referral; the exclusion is a skip reason in the existing chain walk, not a second routing implementation.\n- A referral bonus vests against a tenure milestone and emits a pay component line; it initiates no payment.\n- Referral-sourced outcomes reach `ProtectedMonitoringObservation` only through the existing opaque `evaluationRef`, with no foreign key to any scoring model, and only where a consent basis is recorded.\n- Tests cover the self-approval exclusion, the orphan-referrer rejection, and the absence of any scoring-path relation from the referral record.\n\n## Dependencies\n\nBI-28EFA338 for the `referral-intake` definition. Classification (BI-C61CEEA9) for the contingent-referrer case.",
-      "status": "triaging",
+      "status": "open",
       "type": "product",
       "workType": "feature",
       "source": "user-request",
       "scopeKind": "unknown",
       "dependsOn": [],
       "externalDependencies": [],
-      "activities": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-d78dc392-cmt9iva0804iy01qvgi9kcqn2",
+          "kind": "demand_evidence_linked",
+          "summary": "Linked Referral is a source label with no referrer",
+          "recordedAt": "2026-08-26T03:16:25.832Z",
+          "payload": {
+            "sourceRef": "docs/superpowers/specs/2026-08-25-employment-lifecycle-actuator-design.md#76-referral",
+            "confidence": 0.85,
+            "reviewedAt": "2026-08-26T03:16:25.828Z",
+            "sourceKind": "research",
+            "evidenceLinkId": "DME-45E3E66F56C3"
+          }
+        },
+        {
+          "recoveryKey": "bi-d78dc392-cmt9ivtz604jk01qvogrbv6uq",
+          "kind": "demand_scored",
+          "summary": "Computed rice score 0.8",
+          "recordedAt": "2026-08-26T03:16:51.714Z",
+          "payload": {
+            "score": 0.8,
+            "inputs": {
+              "reach": null,
+              "impact": 3,
+              "jobSize": null,
+              "confidence": 0.8,
+              "effortSize": "medium",
+              "businessValue": null,
+              "occurrenceCount": 1,
+              "riskOpportunity": null,
+              "timeCriticality": null
+            },
+            "missing": [],
+            "framework": "rice",
+            "confidence": 0.8,
+            "demandStage": "unclassified",
+            "contributions": {
+              "reach": 1,
+              "impact": 3,
+              "jobSize": 3,
+              "confidence": 0.8
+            },
+            "estimateAgreed": false,
+            "estimateSource": null,
+            "effectiveJobSize": null,
+            "estimateDiverged": false,
+            "investmentBucket": "grow"
+          }
+        },
+        {
+          "recoveryKey": "bi-d78dc392-cmt9iwgfx04k501qvzmz0a2g2",
+          "kind": "demand_scored",
+          "summary": "Recomputed rice score after ai effort estimate",
+          "recordedAt": "2026-08-26T03:17:20.829Z",
+          "payload": {
+            "score": 0.8,
+            "inputs": {
+              "reach": null,
+              "impact": 3,
+              "jobSize": 3,
+              "confidence": 0.8,
+              "effortSize": "medium",
+              "businessValue": null,
+              "occurrenceCount": 1,
+              "riskOpportunity": null,
+              "timeCriticality": null
+            },
+            "missing": [],
+            "framework": "rice",
+            "confidence": 0.8,
+            "demandStage": "unclassified",
+            "contributions": {
+              "reach": 1,
+              "impact": 3,
+              "jobSize": 3,
+              "confidence": 0.8
+            },
+            "estimateAgreed": false,
+            "estimateSource": "ai",
+            "effectiveJobSize": 3,
+            "estimateDiverged": false,
+            "investmentBucket": "grow"
+          }
+        },
+        {
+          "recoveryKey": "bi-d78dc392-cmt9jlprf05hi01qvol8e0bq1",
+          "kind": "demand_stage_transition",
+          "summary": "unclassified → raw",
+          "recordedAt": "2026-08-26T03:36:59.307Z",
+          "payload": {
+            "to": "raw",
+            "from": "unclassified",
+            "score": 0.8,
+            "inputs": {
+              "reach": 1,
+              "impact": 3,
+              "jobSize": 3,
+              "confidence": 0.8
+            },
+            "missing": [],
+            "framework": "rice",
+            "rationale": "Classified as build, evidenced by the verified absence of a referrer relationship behind the referral source label, scored with no missing inputs. Every consequence reuses an existing mechanism.",
+            "confidence": 0.8,
+            "provisional": true,
+            "evidenceCount": 1,
+            "estimateSource": "ai",
+            "effectiveJobSize": 3,
+            "investmentBucket": "grow"
+          }
+        }
+      ],
+      "effortSize": "medium",
+      "triageOutcome": "build",
       "createdAt": "2026-08-26T00:56:52.291Z"
     }
   ]

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "capturedAt": "2026-08-26T03:07:09.229Z",
+  "capturedAt": "2026-08-26T03:57:53.481Z",
   "items": [
     {
       "itemId": "BI-0E8B29C3",
@@ -18,23 +18,6 @@
       "createdAt": "2026-08-23T00:20:28.485Z",
       "completedAt": "2026-08-24T04:37:14.818Z",
       "resolution": "The truncated promoter-image failure is already preserved in BI-52FF87E2 with the complete self-upgrade trace: bare dpf-promoter resolution was its first observed failure before capability_state_stale. Keep one canonical consumer self-upgrade defect."
-    },
-    {
-      "itemId": "BI-10C34BE1",
-      "title": "`search_specs_and_plans` returns zero results on a runtime-host install, silently defeating the pre-filing overlap check",
-      "body": "**Observed 2026-08-26** on this development installation (`D:\\DPF`, purpose `evolve-dpf`).\n\n`search_specs_and_plans` returns `{\"results\":[]}` for every query, including single common words:\n- `\"interaction shape graph\"` → `[]` (the spec exists on `main` at `docs/superpowers/specs/2026-08-15-interaction-shape-graph-and-design-shaping-design.md`)\n- `\"lexicon\"` → `[]`\n- `\"design\"` → `[]` — a word in nearly every spec filename in the corpus\n\n**Root cause hypothesis (unverified).** The tool reads `docs/superpowers/` relative to the install root. Per this host's own declared identity, *\"Source — none: This directory holds installed runtime assets and no source\"* — so the tree it searches is absent. The source checkout lives separately (here: `D:\\DPF-source-root`, which does contain the corpus).\n\n**Why this matters more than it looks.** `AGENTS.md` §5 requires checking for an existing design before writing a new one, and §1 requires grounding new work in existing platform work. `search_specs_and_plans` is the tool for that check. Returning `[]` is indistinguishable from \"no prior art exists\", so the failure mode is silent and biases toward creating duplicate specs and parallel substrate — the exact outcome §1 exists to prevent. An empty result should never be mistaken for a clean overlap check.\n\n**Expected behaviour.** Either resolve the corpus from the configured source checkout, or fail loudly (`corpus_unavailable`) so the caller knows the check did not run. Never return an empty success.\n\n**Workaround used.** Fell back to `list_backlog_items` for the overlap check and to direct `grep` over `D:\\DPF-source-root` for the substrate check.\n\n**Related.** Two other read tools on this install are worth checking for the same root cause: any tool resolving `docs/` or repo paths from the install root rather than a source checkout.",
-      "status": "triaging",
-      "type": "product",
-      "workType": "bug",
-      "source": "automated-detection",
-      "priority": null,
-      "effortSize": null,
-      "triageOutcome": null,
-      "scopeKind": "platform",
-      "scopeRationale": "Affects the governed MCP tool surface on every consumer/runtime-host installation, independent of archetype or organization.",
-      "createdAt": "2026-08-26T03:02:41.852Z",
-      "completedAt": null,
-      "resolution": null
     },
     {
       "itemId": "BI-1214873D",

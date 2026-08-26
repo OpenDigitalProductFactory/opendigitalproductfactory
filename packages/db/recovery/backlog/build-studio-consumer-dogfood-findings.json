@@ -3,7 +3,7 @@
   "bundleId": "build-studio-consumer-dogfood-findings",
   "description": "Operator-invoked recovery input for the Build Studio consumer dogfood findings epic — intake quality, dispatch honesty, and build state visibility.",
   "source": {
-    "capturedAt": "2026-08-26T03:07:09.229Z",
+    "capturedAt": "2026-08-26T03:57:53.481Z",
     "repository": "OpenDigitalProductFactory/opendigitalproductfactory",
     "planPath": "docs/superpowers/plans/2026-08-22-instance-identity-and-purpose.md"
   },
@@ -67,6 +67,18 @@
           "payload": {
             "toEpicId": "EP-F09D63B3",
             "fromEpicId": null
+          }
+        },
+        {
+          "recoveryKey": "bi-16a1b4a3-cmt9k3mpa05t001qvpm4i6uob",
+          "kind": "evidence",
+          "summary": "Diagnostics half shipped in PR #4684: 413 files / 4750 tests pass, both new tests verified Red against origin/main first",
+          "recordedAt": "2026-08-26T03:50:55.150Z",
+          "payload": {
+            "url": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/4684",
+            "body": "Scope shipped: `getExclusionReasonV2` now names the failing dimension and gap (\"Minimum quality dimensions not met (toolFidelity 80 < 85)\"), and Build Studio's blocked action reuses the existing `routing-exclusion-buckets` explanation instead of the generic \"Connect, provision, or wait\" — scoped to route-contract rejections so genuine readiness failures keep the accurate advice.\n\nNo routing decision changes: the same endpoints are excluded and the same one is selected. This is the diagnostics half only.\n\nStill open on this item (product policy, deliberately not decided inside a diagnostics fix): whether an unmeasured placeholder dimension should exclude an endpoint at all, and whether a floor that excludes every candidate should step down a tier rather than return nothing.\n\nVerification: tsc 0 errors; guard loop 37/37; module-size, style-drift, One-ActionResult, docs-impact, spec/plan/doc and design-grounding gates clean. All 34 CI checks green.",
+            "evidenceKind": "test_pass",
+            "toolExecutionId": null
           }
         }
       ],

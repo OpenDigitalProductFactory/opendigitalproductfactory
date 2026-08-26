@@ -3,7 +3,7 @@
   "bundleId": "reset-cycle-3-platform-findings",
   "description": "Operator-invoked recovery input for the platform findings from from-scratch reset/dogfood cycle 3 (install, lifecycle, agent-host and CI-gate).",
   "source": {
-    "capturedAt": "2026-08-26T03:07:09.229Z",
+    "capturedAt": "2026-08-26T03:57:53.481Z",
     "repository": "OpenDigitalProductFactory/opendigitalproductfactory",
     "planPath": "docs/architecture/archetype-operating-model-audit.md"
   },
@@ -86,6 +86,35 @@
       "triageOutcome": "build",
       "scopeRationale": "A flaky assertion in the shared local-CI vitest stage fails unrelated PRs across the whole platform, so the defect is platform-wide rather than archetype-specific.",
       "createdAt": "2026-08-25T22:10:14.536Z"
+    },
+    {
+      "itemId": "BI-10C34BE1",
+      "epicId": "EP-56AE0F69",
+      "title": "`search_specs_and_plans` returns zero results on a runtime-host install, silently defeating the pre-filing overlap check",
+      "body": "**Observed 2026-08-26** on this development installation (`D:\\DPF`, purpose `evolve-dpf`).\n\n`search_specs_and_plans` returns `{\"results\":[]}` for every query, including single common words:\n- `\"interaction shape graph\"` → `[]` (the spec exists on `main` at `docs/superpowers/specs/2026-08-15-interaction-shape-graph-and-design-shaping-design.md`)\n- `\"lexicon\"` → `[]`\n- `\"design\"` → `[]` — a word in nearly every spec filename in the corpus\n\n**Root cause hypothesis (unverified).** The tool reads `docs/superpowers/` relative to the install root. Per this host's own declared identity, *\"Source — none: This directory holds installed runtime assets and no source\"* — so the tree it searches is absent. The source checkout lives separately (here: `D:\\DPF-source-root`, which does contain the corpus).\n\n**Why this matters more than it looks.** `AGENTS.md` §5 requires checking for an existing design before writing a new one, and §1 requires grounding new work in existing platform work. `search_specs_and_plans` is the tool for that check. Returning `[]` is indistinguishable from \"no prior art exists\", so the failure mode is silent and biases toward creating duplicate specs and parallel substrate — the exact outcome §1 exists to prevent. An empty result should never be mistaken for a clean overlap check.\n\n**Expected behaviour.** Either resolve the corpus from the configured source checkout, or fail loudly (`corpus_unavailable`) so the caller knows the check did not run. Never return an empty success.\n\n**Workaround used.** Fell back to `list_backlog_items` for the overlap check and to direct `grep` over `D:\\DPF-source-root` for the substrate check.\n\n**Related.** Two other read tools on this install are worth checking for the same root cause: any tool resolving `docs/` or repo paths from the install root rather than a source checkout.",
+      "status": "open",
+      "type": "product",
+      "workType": "bug",
+      "source": "automated-detection",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-10c34be1-cmt9iy97h04pb01qvtyjdtgwm",
+          "kind": "epic_link",
+          "summary": "(no epic) → EP-56AE0F69",
+          "recordedAt": "2026-08-26T03:18:44.765Z",
+          "payload": {
+            "toEpicId": "EP-56AE0F69",
+            "fromEpicId": null
+          }
+        }
+      ],
+      "effortSize": "small",
+      "triageOutcome": "build",
+      "scopeRationale": "Affects the governed MCP tool surface on every consumer/runtime-host installation, independent of archetype or organization.",
+      "createdAt": "2026-08-26T03:02:41.852Z"
     },
     {
       "itemId": "BI-114C1F40",
@@ -2059,6 +2088,240 @@
             "toEpicId": "EP-56AE0F69",
             "fromEpicId": null
           }
+        },
+        {
+          "recoveryKey": "bi-2db7254b-cmt9jhfmc05fv01qvagialzry",
+          "kind": "initiative_readiness_decision",
+          "summary": "completion readiness: input-required",
+          "recordedAt": "2026-08-26T03:33:39.540Z",
+          "payload": {
+            "unmet": [
+              {
+                "code": "RESEARCH_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-author"
+              },
+              {
+                "code": "PLAN_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "implementation-planner"
+              },
+              {
+                "code": "DELIVERY_EVIDENCE_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [
+                  "cmt9jh73705fi01qv4qpb96ym"
+                ],
+                "accountableRole": "delivery-coordinator"
+              },
+              {
+                "code": "ACCEPTANCE_EVIDENCE_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "acceptance-reviewer"
+              },
+              {
+                "code": "OBJECTIVE_BASELINE_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-checklist-reviewer"
+              },
+              {
+                "code": "OBJECTIVE_RECONCILIATION_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "acceptance-reviewer"
+              }
+            ],
+            "target": "completion",
+            "profile": "fix",
+            "subject": {
+              "id": "BI-2DB7254B",
+              "kind": "backlog-item"
+            },
+            "verdict": "input-required",
+            "blockers": [],
+            "satisfied": [
+              {
+                "code": "CLASSIFICATION_REQUIRED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "product-owner"
+              },
+              {
+                "code": "AUTHORIZATION_DENIED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "platform-governance"
+              },
+              {
+                "code": "DEPENDENCY_UNRESOLVED",
+                "state": "not-applicable",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              },
+              {
+                "code": "CAPSULE_IDENTITY_MISMATCH",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "delivery-coordinator"
+              }
+            ],
+            "decisionId": "IRD-51CCC57DDDE8",
+            "evaluatedAt": "2026-08-26T03:33:39.506Z",
+            "factsDigest": "sha256:73059155083cfe48efa5b0310b9a114f872a12ed428c004ceca59ce05cdeff2c",
+            "stableCodes": [
+              "RESEARCH_REQUIRED",
+              "PLAN_REQUIRED",
+              "DELIVERY_EVIDENCE_REQUIRED",
+              "ACCEPTANCE_EVIDENCE_REQUIRED",
+              "OBJECTIVE_BASELINE_REQUIRED",
+              "OBJECTIVE_RECONCILIATION_REQUIRED"
+            ],
+            "policyVersion": "initiative-readiness.v2",
+            "schemaVersion": 1,
+            "enforcementState": "enforced",
+            "transitionObject": {
+              "id": "cmt9i893p03tk01qvw97ekgum",
+              "kind": "backlog-item",
+              "targetState": "done",
+              "expectedVersion": "open"
+            },
+            "authoritySnapshot": {
+              "decision": "allow",
+              "actionKey": "update_backlog_item_status",
+              "policyVersion": "coworker-authority.v1",
+              "organizationId": "platform",
+              "effectiveAgentGrant": "backlog_write",
+              "effectiveHumanCapability": "manage_backlog"
+            },
+            "authorityDecisionId": "DI-936B01E8A1D0"
+          }
+        },
+        {
+          "recoveryKey": "bi-2db7254b-cmt9jiiq005g401qv1lbuvbjn",
+          "kind": "evidence",
+          "summary": "DELIVERED and merged (PR #4681, fe2c68cf). Cannot be set to done: completion blocked by initiative-readiness gate — see BI-3AE38A1F.",
+          "recordedAt": "2026-08-26T03:34:30.216Z",
+          "payload": {
+            "url": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/4681",
+            "body": "This item is functionally complete and live on main; its status is stuck at `open` for governance reasons, not delivery reasons.\n\nDELIVERED: PR #4681 merged 2026-08-26T03:32:24Z as fe2c68cf. Verified against merged main — state.sh lines 86/96/130 (overridable budget + both timeout messages), install-dpf.sh lines 287/290 (fail() guards naming the stage), ci-policy-guards.mjs line 92 (new test registered so it actually runs). Suites: state-lock-timeout + state-cleanup-temps 9/9 green against merged main; install-state-writer-conformance 8/8; ci-policy-guards 9/9. Proven red-then-green — reverting only the reclaim-path message takes the new suite to 2 failed / 2 passed.\n\nBLOCKED ON CLOSURE: update_backlog_item_status(status=done) fails with initiative_not_ready (decision IRD-51CCC57DDDE8): RESEARCH_REQUIRED, PLAN_REQUIRED, DELIVERY_EVIDENCE_REQUIRED, ACCEPTANCE_EVIDENCE_REQUIRED, OBJECTIVE_BASELINE_REQUIRED, OBJECTIVE_RECONCILIATION_REQUIRED. RESEARCH_REQUIRED is satisfiable only by record_initiative_evidence (grant initiative_evidence_write), which is not granted to this contributor, and the recovery block reports no-eligible-reviewer with an empty reviewerRoutes array. Notably DELIVERY_EVIDENCE_REQUIRED reports state \"missing\" while listing evidence row cmt9jh73705fi01qv4qpb96ym in its own evidenceRefs.\n\nFull delivery evidence: cmt9jh73705fi01qv4qpb96ym. Governance defect: BI-3AE38A1F.\n\nDeliberately not forced. Closing this by fabricating readiness artifacts would defeat the gate's purpose; whoever holds initiative_evidence_write can close it in seconds.",
+            "evidenceKind": "external_link",
+            "toolExecutionId": null
+          }
+        },
+        {
+          "recoveryKey": "bi-2db7254b-cmt9k61eh05uo01qvhcqz8ql3",
+          "kind": "initiative_readiness_decision",
+          "summary": "completion readiness: input-required",
+          "recordedAt": "2026-08-26T03:52:47.513Z",
+          "payload": {
+            "unmet": [
+              {
+                "code": "RESEARCH_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-author"
+              },
+              {
+                "code": "PLAN_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "implementation-planner"
+              },
+              {
+                "code": "DELIVERY_EVIDENCE_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "delivery-coordinator"
+              },
+              {
+                "code": "ACCEPTANCE_EVIDENCE_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "acceptance-reviewer"
+              },
+              {
+                "code": "OBJECTIVE_BASELINE_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-checklist-reviewer"
+              },
+              {
+                "code": "OBJECTIVE_RECONCILIATION_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "acceptance-reviewer"
+              }
+            ],
+            "target": "completion",
+            "profile": "fix",
+            "subject": {
+              "id": "BI-2DB7254B",
+              "kind": "backlog-item"
+            },
+            "verdict": "input-required",
+            "blockers": [],
+            "satisfied": [
+              {
+                "code": "CLASSIFICATION_REQUIRED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "product-owner"
+              },
+              {
+                "code": "AUTHORIZATION_DENIED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "platform-governance"
+              },
+              {
+                "code": "DEPENDENCY_UNRESOLVED",
+                "state": "not-applicable",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              },
+              {
+                "code": "CAPSULE_IDENTITY_MISMATCH",
+                "state": "pass",
+                "evidenceRefs": [
+                  "WC-CB607773"
+                ],
+                "accountableRole": "delivery-coordinator"
+              }
+            ],
+            "decisionId": "IRD-43D3AFF6E3AF",
+            "evaluatedAt": "2026-08-26T03:52:47.504Z",
+            "factsDigest": "sha256:969952af25726327ded2e3314e1563af59d6582515e5b8885d99fb736a275952",
+            "stableCodes": [
+              "RESEARCH_REQUIRED",
+              "PLAN_REQUIRED",
+              "DELIVERY_EVIDENCE_REQUIRED",
+              "ACCEPTANCE_EVIDENCE_REQUIRED",
+              "OBJECTIVE_BASELINE_REQUIRED",
+              "OBJECTIVE_RECONCILIATION_REQUIRED"
+            ],
+            "policyVersion": "initiative-readiness.v2",
+            "schemaVersion": 1,
+            "enforcementState": "enforced",
+            "transitionObject": {
+              "id": "cmt9ia2h203x801qvzo3dkaj9",
+              "kind": "work-capsule",
+              "targetState": "complete",
+              "expectedVersion": "ready"
+            },
+            "authoritySnapshot": {
+              "decision": "allow",
+              "actionKey": "complete_work_capsule",
+              "policyVersion": "coworker-authority.v1",
+              "organizationId": "platform",
+              "effectiveAgentGrant": "update_work_capsule_status",
+              "effectiveHumanCapability": "manage_backlog"
+            },
+            "authorityDecisionId": "DI-48D4A990D138"
+          }
         }
       ],
       "effortSize": "small",
@@ -2329,6 +2592,32 @@
       "scopeRationale": "The defect is in the external MCP reviewer task and authority-decision propagation path shared by governed initiative review across platform work.",
       "priority": 1,
       "createdAt": "2026-08-26T02:51:14.405Z"
+    },
+    {
+      "itemId": "BI-3DC2EFD8",
+      "epicId": "EP-56AE0F69",
+      "title": "The operator inbox renders 24 distinct coworker tasks as 24 byte-identical rows: the attention projection carries each title but the card discards it, and every one of them recommends keeping the work with a specialist",
+      "body": "## What the operator sees\n\n`/workspace/inbox`, headed:\n\n> **What needs you now** — \"Business choices only, written in plain language. Your digital team\n> keeps technical recovery and low-urgency review out of today's count.\"\n>\n> **28 things need you today**\n\nOf those 28, **24 are byte-identical**:\n\n> **Help your coworker continue?** · Reversible\n> A coworker paused and needs your input to continue.\n> IF YOU DO NOTHING — your coworker stays stuck here and the work behind it waits.\n> AI RECOMMENDATION — Digital workforce — Keep this with the specialist unless it forces a\n> business choice from you.\n\nThere are only four distinct question types across the whole inbox: *Help your coworker\ncontinue?*, *Approve this coworker action?*, *How should we fix this for customers?*, *Make this\nbusiness decision?*\n\n## The underlying data is NOT identical\n\n24 `TaskRun` rows in `input-required` with **23 distinct titles**:\n\n```\nCanonical-digest Vitest timeout research review\nIndependent spec approval of compact complete local-CI Vitest timeout design\nIndependently review immutable BI-F3422349 design and persist the spec-approval ...\nIndependently approve or reject the immutable bounded exhaustive-Vitest terminat...\nRender one governed decision on the compact immutable bounded exhaustive-Vitest ...\nIndependent Vitest timeout research review\n```\n\nAnd the projection already carries it — `apps/web/lib/attention/sources/paused-ai.ts:72`:\n\n```ts\nreturn {\n  id: `paused-ai:${row.taskRunId}`,\n  source: \"paused-ai\",\n  title: row.title,          // <- distinguishing information, present\n  context: readSummary(row.progressPayload)\n    ?? \"A coworker paused and needs your input to continue.\",\n  ...\n```\n\n**This is a rendering defect, not a data defect.** The card shows the generic question and the\ngeneric fallback `context`, and drops `title` entirely. Every item also falls back on `context`\nbecause `readSummary(progressPayload)` returns null for these runs, so the one field that could\nhave differentiated them is empty too.\n\n## Three separate problems, worth separating\n\n**1. The list is unusable.** Twenty-four identical rows cannot be triaged, prioritised, or even\ncounted meaningfully. An operator cannot tell whether they are looking at one problem shown 24\ntimes or 24 problems. Nothing indicates which coworker, which work, or which decision.\n\n**2. The surface contradicts itself.** The page says \"Business choices only... your digital team\nkeeps technical recovery out of today's count\", and then every one of the 24 carries\n**\"Keep this with the specialist unless it forces a business choice from you.\"** The system's own\nrecommendation on all 24 is *not yours* — while counting them in \"28 things need you today\". If\nthe recommendation is trustworthy, they should not be in the count; if they belong in the count,\nthe recommendation is wrong. Both cannot hold.\n\n**3. None of it is this business.** The organization here is a pet rescue. All 24 titles are\nplatform-engineering tasks — Vitest timeout research, spec approvals, canonical-digest reviews.\nA shelter operator opening \"what needs you now\" is shown two dozen requests to approve CI test\ninfrastructure decisions.\n\n## Suggested fix\n\nOrdered by value:\n\n1. **Render `title`.** It is already on the item. The generic question can stay as a category\n   label, but the title must be the heading — otherwise the projection's work is thrown away at\n   the last step.\n2. **Collapse or group identical-shaped items.** Twenty-four paused coworkers is one situation,\n   not 24 decisions; a grouped row with a count and an expander respects the operator's\n   attention.\n3. **Honour the AI recommendation in the count.** An item whose recommendation is \"keep this with\n   the specialist\" should not be in \"things need you today\" unless the operator asks to see\n   specialist-held work. This is the difference between an inbox and a log.\n4. **Populate `context`.** `readSummary(progressPayload)` returns null for every one of these\n   runs, so the fallback is doing all the work. Either the runs should write a progress summary\n   or the fallback should synthesise from the title.\n\n## Standing UX requirement this violates\n\nFrom `docs/architecture/archetypes/pet-rescue-operating-model.md` §7: *to the point for the\nintended activity, minimal cognitive overload, no erroneous distractions for day-to-day\nworkers.* An inbox of 24 indistinguishable platform-engineering prompts is the clearest failure\nof that requirement found so far, and it sits on the operator's primary surface.\n\nRelated: `BI-7A38F667` (workspace answers commercial questions on a shelter). Found during\ndogfood reset cycle 4.",
+      "status": "triaging",
+      "type": "portfolio",
+      "workType": "bug",
+      "source": "automated-detection",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-3dc2efd8-cmt9kbctl05x501qv8w4zj7xt",
+          "kind": "epic_link",
+          "summary": "(no epic) → EP-56AE0F69",
+          "recordedAt": "2026-08-26T03:56:55.593Z",
+          "payload": {
+            "toEpicId": "EP-56AE0F69",
+            "fromEpicId": null
+          }
+        }
+      ],
+      "createdAt": "2026-08-26T03:07:18.396Z"
     },
     {
       "itemId": "BI-45B95929",
@@ -4757,12 +5046,276 @@
             "evidenceKind": "manual_check",
             "toolExecutionId": null
           }
+        },
+        {
+          "recoveryKey": "bi-7d2c4f02-cmt9j4nrk04vh01qv9ilqvp8n",
+          "kind": "initiative_readiness_decision",
+          "summary": "implementation readiness: input-required",
+          "recordedAt": "2026-08-26T03:23:43.568Z",
+          "payload": {
+            "unmet": [
+              {
+                "code": "RESEARCH_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-author"
+              },
+              {
+                "code": "PLAN_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "implementation-planner"
+              }
+            ],
+            "target": "implementation",
+            "profile": "fix",
+            "subject": {
+              "id": "BI-7D2C4F02",
+              "kind": "backlog-item"
+            },
+            "verdict": "input-required",
+            "blockers": [],
+            "authority": {
+              "actionKey": "claim_backlog_item_for_work",
+              "enforcementState": "enforced"
+            },
+            "satisfied": [
+              {
+                "code": "CLASSIFICATION_REQUIRED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "product-owner"
+              },
+              {
+                "code": "AUTHORIZATION_DENIED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "platform-governance"
+              },
+              {
+                "code": "DEPENDENCY_UNRESOLVED",
+                "state": "not-applicable",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              },
+              {
+                "code": "CAPSULE_IDENTITY_MISMATCH",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "delivery-coordinator"
+              }
+            ],
+            "decisionId": "IRD-53D3FBC8AB98",
+            "workIntent": "implementation",
+            "evaluatedAt": "2026-08-26T03:23:43.557Z",
+            "factsDigest": "be4cb523d85a61531928748d754f9909a5d67290cf78b6aa8d5faa49d342d785",
+            "stableCodes": {
+              "unmet": [
+                "RESEARCH_REQUIRED",
+                "PLAN_REQUIRED"
+              ],
+              "blockers": [],
+              "satisfied": [
+                "CLASSIFICATION_REQUIRED",
+                "AUTHORIZATION_DENIED",
+                "DEPENDENCY_UNRESOLVED",
+                "CAPSULE_IDENTITY_MISMATCH"
+              ]
+            },
+            "policyVersion": "initiative-readiness.v2",
+            "schemaVersion": 1,
+            "transitionObject": {
+              "id": "OpenDigitalProductFactory/opendigitalproductfactory#fix/bi-7d2c4f02-platform-sbom-currency",
+              "kind": "work-capsule",
+              "targetState": "implementation",
+              "expectedVersion": "claim.v1"
+            }
+          }
+        },
+        {
+          "recoveryKey": "bi-7d2c4f02-cmt9jw93605mx01qv54p1fyqx",
+          "kind": "initiative_readiness_decision",
+          "summary": "implementation readiness: input-required",
+          "recordedAt": "2026-08-26T03:45:10.914Z",
+          "payload": {
+            "unmet": [
+              {
+                "code": "RESEARCH_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-author"
+              },
+              {
+                "code": "PLAN_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "implementation-planner"
+              }
+            ],
+            "target": "implementation",
+            "profile": "fix",
+            "subject": {
+              "id": "BI-7D2C4F02",
+              "kind": "backlog-item"
+            },
+            "verdict": "input-required",
+            "blockers": [],
+            "authority": {
+              "actionKey": "claim_backlog_item_for_work",
+              "enforcementState": "enforced"
+            },
+            "satisfied": [
+              {
+                "code": "CLASSIFICATION_REQUIRED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "product-owner"
+              },
+              {
+                "code": "AUTHORIZATION_DENIED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "platform-governance"
+              },
+              {
+                "code": "DEPENDENCY_UNRESOLVED",
+                "state": "not-applicable",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              },
+              {
+                "code": "CAPSULE_IDENTITY_MISMATCH",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "delivery-coordinator"
+              }
+            ],
+            "decisionId": "IRD-61A8D93F5AAD",
+            "workIntent": "implementation",
+            "evaluatedAt": "2026-08-26T03:45:10.906Z",
+            "factsDigest": "be4cb523d85a61531928748d754f9909a5d67290cf78b6aa8d5faa49d342d785",
+            "stableCodes": {
+              "unmet": [
+                "RESEARCH_REQUIRED",
+                "PLAN_REQUIRED"
+              ],
+              "blockers": [],
+              "satisfied": [
+                "CLASSIFICATION_REQUIRED",
+                "AUTHORIZATION_DENIED",
+                "DEPENDENCY_UNRESOLVED",
+                "CAPSULE_IDENTITY_MISMATCH"
+              ]
+            },
+            "policyVersion": "initiative-readiness.v2",
+            "schemaVersion": 1,
+            "transitionObject": {
+              "id": "OpenDigitalProductFactory/opendigitalproductfactory#fix/bi-7d2c4f02-platform-sbom-currency",
+              "kind": "work-capsule",
+              "targetState": "implementation",
+              "expectedVersion": "claim.v1"
+            }
+          }
         }
       ],
       "effortSize": "medium",
       "triageOutcome": "build",
       "scopeRationale": "Cross-cutting DPF platform architecture and operator UX; not organization- or archetype-specific.",
       "createdAt": "2026-08-25T01:17:21.620Z"
+    },
+    {
+      "itemId": "BI-8634F0BE",
+      "epicId": "EP-56AE0F69",
+      "title": "The minimum attachment floor punches through the measured local tool ceiling, re-opening the fallback disqualification for any model measured below 12",
+      "body": "## Observed\n\n`BI-A8BFEFCE` established the invariant that the attachment budget must never hand the model more tools than the routing gate will agree to run locally, and closed two paths that broke it. A third path is still open and shipped.\n\n`deriveCoworkerToolCap` ends with:\n\n```ts\nreturn Math.max(MIN_COWORKER_ATTACHED_TOOLS, Math.min(ceiling, fitted));\n```\n\nThe `MIN` floor is applied AFTER the ceiling, so it overrides it. Whenever a measured tool-fidelity ceiling is below `MIN_COWORKER_ATTACHED_TOOLS` (12), the budget attaches 12 while `callWithFallbackChain` refuses anything above the measured value. The unreadable-window branch has the same shape: `return Math.max(MIN, ceiling)`.\n\nExhaustively checked over windows `[null, 0, 4096, 16000, 24576, 32768, 131072, 262144]`, measured ceilings `[null, 4, 8, 10, 12, 15, 30, 48, 200]` and presences `[present, unknown]`: **48 combinations violate the invariant.** Examples:\n\n```\nwindow=null   measured=4   presence=present  -> cap=12 but gate=4\nwindow=0      measured=8   presence=unknown  -> cap=12 but gate=8\nwindow=24576  measured=10  presence=present  -> cap=12 but gate=10\n```\n\n## Why it matters\n\nThis is the original defect's failure mode, reinstated by a different route. The budget attaches 12 tools, the gate refuses the local endpoint for exceeding a limit of 4/8/10, and a cloud outage on top of it produces a turn that executes nothing — exactly the reviewer symptom `BI-A8BFEFCE` was raised for.\n\nIt is currently latent because no install has measured fidelity yet, so every ceiling resolves to the fail-safe cliff of 15 which sits above the floor. It arms the moment the Phase-2 eval harness measures any local model below 12 — and a weak small local model measuring 8 or 10 is exactly the case the harness exists to detect. The harness would then make the platform worse, silently.\n\n## Cause\n\nOperator precedence. `Math.max(MIN, Math.min(ceiling, fitted))` treats the floor as final. The floor's documented purpose is to stop WINDOW-fit arithmetic shrinking a coworker into uselessness on a small context — it was never meant to override evidence about what the model can actually select from. A measured ceiling is evidence; the floor is a guard against a different failure.\n\n## Fix\n\nApply the floor to the window-fit term only, then bound by the ceiling:\n\n```ts\nif (!hasWindow) return ceiling;\nreturn Math.min(ceiling, Math.max(MIN_COWORKER_ATTACHED_TOOLS, fitted));\n```\n\nVerified: 0 violations across the same matrix, and all nine documented behaviours unchanged (`131_072 → 15`, `131_072 + measured 40 → 40`, `24_576 → 15`, `16_000 → 12`, `4_096 → 12`, `1_000 → 12`, `null + absent → 48`, `null + unknown → 15`, `null + present → 15`).\n\nThe consequence to state plainly in the code: when a model measures below 12, the cap follows the measurement rather than the floor. Attaching more than the model has proven it can select from is not a kindness — the gate refuses it anyway, so the coworker gets nothing instead of a small working surface.\n\n## Acceptance criteria\n\n1. For every combination where a local model is in the serving path (`present` or `unknown`), `deriveCoworkerToolCap(...) <= resolveLocalToolCeiling(measured)`. Asserted as a matrix, not a sample.\n2. The nine documented window/presence examples are unchanged.\n3. The unreadable-window branch obeys the same bound.\n4. A measured ceiling below `MIN_COWORKER_ATTACHED_TOOLS` yields a cap equal to that ceiling, and the reason is documented at the floor's definition.\n5. The joint invariant is guarded by a test that exercises the budget and the gate ceiling TOGETHER — today `fallback.test.ts` holds zero references to the budget and `coworker-tool-budget.test.ts` pins only a single hardcoded cap-15 case, so the two ends have never been tested against each other.\n\nProvenance: found while auditing whether `BI-A8BFEFCE` fully closed the invariant it introduced, 2026-08-26.",
+      "status": "triaging",
+      "type": "portfolio",
+      "workType": "bug",
+      "source": "automated-detection",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-8634f0be-cmt9j3g9q04tx01qvxr2cf133",
+          "kind": "initiative_readiness_decision",
+          "summary": "design readiness: allowed",
+          "recordedAt": "2026-08-26T03:22:47.198Z",
+          "payload": {
+            "unmet": [],
+            "target": "design",
+            "profile": "fix",
+            "subject": {
+              "id": "BI-8634F0BE",
+              "kind": "backlog-item"
+            },
+            "verdict": "allowed",
+            "blockers": [],
+            "authority": {
+              "actionKey": "claim_backlog_item_for_work",
+              "enforcementState": "enforced"
+            },
+            "satisfied": [
+              {
+                "code": "CLASSIFICATION_REQUIRED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "product-owner"
+              },
+              {
+                "code": "AUTHORIZATION_DENIED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "platform-governance"
+              }
+            ],
+            "decisionId": "IRD-F9B385BD9EC4",
+            "workIntent": "design",
+            "evaluatedAt": "2026-08-26T03:22:47.170Z",
+            "factsDigest": "93e4a607300b098682e227bf3c3138b8148ac5928fa684a7ff1468b87dd2b193",
+            "stableCodes": {
+              "unmet": [],
+              "blockers": [],
+              "satisfied": [
+                "CLASSIFICATION_REQUIRED",
+                "AUTHORIZATION_DENIED"
+              ]
+            },
+            "policyVersion": "initiative-readiness.v2",
+            "schemaVersion": 1,
+            "transitionObject": {
+              "id": "OpenDigitalProductFactory/opendigitalproductfactory#fix/tool-cap-floor-respects-ceiling",
+              "kind": "work-capsule",
+              "targetState": "design",
+              "expectedVersion": "claim.v1"
+            }
+          }
+        },
+        {
+          "recoveryKey": "bi-8634f0be-cmt9k14ky05r101qvbuz9h53k",
+          "kind": "evidence",
+          "summary": "This fix makes BI-95D74DE9 reachable — the always-include set puts a floor of 7 under the attached surface, previously masked by the cap floor of 12",
+          "recordedAt": "2026-08-26T03:48:58.354Z",
+          "payload": {
+            "url": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/4687",
+            "body": "Recorded against this item by the session that raised it, so the consequence travels with the change rather than being discovered later.\n\nCorrecting the floor lets a measured tool-fidelity ceiling below 12 be honoured, which is the point. It also allows caps of 4 or 6 for the first time, and that exposes a second bound one layer down.\n\n`selectCoworkerToolBudget` attaches everything in `alwaysIncludeNames` without consulting the cap. Both call sites pass `LOAD_TOOLS_TOOL_NAME` plus the six `AUTHORIZED_SURFACE_TOOL_NAMES`, so the attached surface has a hard floor of 7 regardless of cap:\n\n```\ncap=4  -> attached 6 + load_tools = 7  > gate 4\ncap=6  -> attached 6 + load_tools = 7  > gate 6\ncap=7  -> 7  ok\ncap=15 -> 15 ok\n```\n\nBelow cap 7 the surface is one `callWithFallbackChain` refuses, which is the `BI-A8BFEFCE` failure again. Filed as **`BI-95D74DE9`** with the fix direction — move the surface tools to `pageActionNames` so they keep tier-0 ranking priority but stop being cap-exempt, leaving `load_tools` as the single unconditional entry, which is what this module's own comment already says the contract is.\n\n## Why this PR still stands as-is\n\nThe two are separate concerns and separate clean reverts. This change strictly reduces violations: 48 combinations before, zero at the cap level after. The remaining exposure needs a local model measured below 7 — an extreme case that cannot occur today, since no install has measured fidelity at all and every ceiling resolves to the fail-safe cliff of 15.\n\nThe honest framing is that this PR does not create a live defect; it removes a mask that was hiding one, and the masked defect is now filed rather than latent and unrecorded.\n\n## Limitation of this PR's guard, worth knowing\n\nThe matrix added here asserts `deriveCoworkerToolCap(...) <= resolveLocalToolCeiling(...)`. That is a bound on the derived CAP. It does not exercise `selectCoworkerToolBudget`, so it cannot see the attached-surface floor — which is exactly why `BI-95D74DE9` needed separate discovery. Its acceptance criteria place the assertion on the attached surface, one level below this one.",
+            "evidenceKind": "manual_check",
+            "toolExecutionId": null
+          }
+        },
+        {
+          "recoveryKey": "bi-8634f0be-cmt9kbcny05x101qvmx72rtmo",
+          "kind": "epic_link",
+          "summary": "(no epic) → EP-56AE0F69",
+          "recordedAt": "2026-08-26T03:56:55.391Z",
+          "payload": {
+            "toEpicId": "EP-56AE0F69",
+            "fromEpicId": null
+          }
+        }
+      ],
+      "scopeRationale": "Coworker tool-attachment policy and the routing local-fallback gate; affects every install with a measured local model.",
+      "createdAt": "2026-08-26T03:22:31.374Z"
     },
     {
       "itemId": "BI-89887875",
@@ -5019,6 +5572,88 @@
       "effortSize": "small",
       "triageOutcome": "build",
       "createdAt": "2026-08-24T00:08:15.719Z"
+    },
+    {
+      "itemId": "BI-95D74DE9",
+      "epicId": "EP-56AE0F69",
+      "title": "Six surface tools were added to the unconditional always-include set, putting a floor of 7 under the attached surface that the local gate does not honour",
+      "body": "## Observed\n\n`selectCoworkerToolBudget` attaches anything in `alwaysIncludeNames` without consulting the cap:\n\n```ts\nif (always.has(entry.t.name)) { attached.push(entry); attachedCount++; }\nelse if (attachedCount < cap) { ... }\n```\n\nBoth call sites pass `new Set([LOAD_TOOLS_TOOL_NAME, ...AUTHORIZED_SURFACE_TOOL_NAMES])`. `AUTHORIZED_SURFACE_TOOL_NAMES` holds six entries (`surface_list`, `surface_open`, `surface_snapshot`, `surface_query`, `surface_act`, `surface_close`). With `load_tools` prepended when anything defers, the attached surface therefore has a hard floor of **7**, whatever the cap says.\n\nModelled against the exact loop and ranking:\n\n```\ncap | attached | +load_tools | gate | verdict\n4   | 6        | 7           | 4    | EXCEEDS gate\n6   | 6        | 7           | 6    | EXCEEDS gate\n7   | 6        | 7           | 7    | ok\n15  | 14       | 15          | 15   | ok\n48  | 47       | 48          | 48   | ok\n```\n\nAny cap below 7 produces a surface `callWithFallbackChain` refuses, which removes local from the fallback chain — the `BI-A8BFEFCE` failure, one layer further down.\n\n## Reachability, stated honestly\n\nThis was **unreachable** until now: `MIN_COWORKER_ATTACHED_TOOLS` floored the cap at 12, comfortably above 7.\n\n`BI-8634F0BE` (PR #4687, in the merge queue as of filing) corrects the floor so a measured tool-fidelity ceiling below 12 is honoured. That is the right fix for its own defect, and it makes caps of 4 or 6 possible for the first time — which makes this path reachable. Filed by the same session, against its own change, rather than left for someone to discover after the eval harness lands.\n\nIt still requires a local model measuring below 7, which is an extreme case. It is not urgent; it is a known hole that should not be left open.\n\n## Cause: the comment records the intended design and the code drifted from it\n\nThe implementation comment states the contract:\n\n> The always-include set (load_tools — the escape hatch that reaches every deferred tool) attaches unconditionally and counts toward the cap.\n\nSingular, and for a specific reason: `load_tools` must survive any cap because it is the only route back to deferred tools. The six surface tools were added to the same set later, taking the cap exemption with them, and nothing flagged the divergence.\n\nThe same comment already names the correct mechanism for the surface tools two lines earlier:\n\n> Tier-0 (page actions) keeps top PRIORITY within the cap rather than a free pass past it.\n\n## Fix direction, not prescribed\n\nPass `AUTHORIZED_SURFACE_TOOL_NAMES` through `pageActionNames` rather than `alwaysIncludeNames` at both call sites (`agent-coworker.ts`, `autonomous-work-run.ts`). They keep tier-0 ranking priority — so on any ordinary cap they still attach first — but stop being exempt from the bound. `load_tools` remains the single unconditional entry, matching the documented contract.\n\nWorth confirming while there: whether a coworker whose cap is genuinely below 7 should serve tool turns at all, or whether that measurement should instead exclude the model from tool-using work.\n\n## Acceptance criteria\n\n1. For every cap from 1 upward, `selectCoworkerToolBudget(...).attached.length` plus the prepended `load_tools` is less than or equal to the cap, except where the cap is below 1.\n2. `load_tools` is attached whenever anything is deferred, at any cap.\n3. On ordinary caps (12 and above) the attached set is unchanged — surface tools still rank first and still attach.\n4. Both call sites are covered; the invariant is asserted on the ATTACHED SURFACE, not only on the derived cap, which is the level `BI-8634F0BE`'s matrix does not reach.\n5. The implementation comment and the code agree about which names are unconditional.\n\nProvenance: found by auditing whether `BI-8634F0BE` fully closed the invariant it was fixing, 2026-08-26. First modelling attempt inverted the tier sort and reported breaches at every cap; corrected before filing, and the real boundary is cap below 7.",
+      "status": "triaging",
+      "type": "portfolio",
+      "workType": "bug",
+      "source": "automated-detection",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-95d74de9-cmt9kbcqt05x301qvn8abql85",
+          "kind": "epic_link",
+          "summary": "(no epic) → EP-56AE0F69",
+          "recordedAt": "2026-08-26T03:56:55.493Z",
+          "payload": {
+            "toEpicId": "EP-56AE0F69",
+            "fromEpicId": null
+          }
+        },
+        {
+          "recoveryKey": "bi-95d74de9-cmt9kbqmh05xo01qvpaw6uwfj",
+          "kind": "initiative_readiness_decision",
+          "summary": "design readiness: allowed",
+          "recordedAt": "2026-08-26T03:57:13.481Z",
+          "payload": {
+            "unmet": [],
+            "target": "design",
+            "profile": "fix",
+            "subject": {
+              "id": "BI-95D74DE9",
+              "kind": "backlog-item"
+            },
+            "verdict": "allowed",
+            "blockers": [],
+            "authority": {
+              "actionKey": "claim_backlog_item_for_work",
+              "enforcementState": "enforced"
+            },
+            "satisfied": [
+              {
+                "code": "CLASSIFICATION_REQUIRED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "product-owner"
+              },
+              {
+                "code": "AUTHORIZATION_DENIED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "platform-governance"
+              }
+            ],
+            "decisionId": "IRD-AAD0ACC3EEB1",
+            "workIntent": "design",
+            "evaluatedAt": "2026-08-26T03:57:13.449Z",
+            "factsDigest": "533b35267aa44655573f985a1869ab19fcbb08a4c607ac8d64b1d18537d9166d",
+            "stableCodes": {
+              "unmet": [],
+              "blockers": [],
+              "satisfied": [
+                "CLASSIFICATION_REQUIRED",
+                "AUTHORIZATION_DENIED"
+              ]
+            },
+            "policyVersion": "initiative-readiness.v2",
+            "schemaVersion": 1,
+            "transitionObject": {
+              "id": "OpenDigitalProductFactory/opendigitalproductfactory#fix/surface-tools-respect-attachment-cap",
+              "kind": "work-capsule",
+              "targetState": "design",
+              "expectedVersion": "claim.v1"
+            }
+          }
+        }
+      ],
+      "scopeRationale": "Coworker tool-attachment selection shared by the interactive and autonomous surfaces.",
+      "createdAt": "2026-08-26T03:48:33.867Z"
     },
     {
       "itemId": "BI-9BFC627D",
@@ -7877,6 +8512,32 @@
       "triageOutcome": "build",
       "scopeRationale": "Prompt-assembly sizing shared by every coworker turn; not archetype-specific.",
       "createdAt": "2026-08-26T00:20:53.285Z"
+    },
+    {
+      "itemId": "BI-DC9CA20D",
+      "epicId": "EP-56AE0F69",
+      "title": "Local-CI queue loses dead-waiter reconciliation under load: a 10s MCP timeout on a call that normally takes 0.6s silently disables the only mechanism that reclaims a dead waiter's lease",
+      "body": "## Observed\n\nRunning `pnpm run pregate` on `fix/teardown-stance-capture-freshness` while another session held\nthe `local-integration-ci` lease:\n\n```\ngate-worktree: preflight sees 1 active local-integration-ci lease(s); claim will queue if busy.\nlocal-CI admission queued at position 2; observing again in 9.2s...\ngate-worktree: dead-waiter reconciliation unavailable\n  (mcpCall: list_nonprod_environment_leases timed out after 10000ms); queue remains fail-closed\nlocal-CI admission queued at position 1; observing again in 13.5s... (still; 8 polls)\n```\n\n## The endpoint is not slow\n\nMeasured against the same portal, same endpoint, same tool, no tier parameter — exactly the path\n`scripts/gate-worktree.mjs` uses (`http://127.0.0.1:3000/api/mcp/v1`):\n\n| Call | Time |\n|---|---|\n| `list_nonprod_environment_leases`, pregate's path | **0.62s** |\n| same tool with `?tier=full` | 1.50s |\n\nBoth far inside the 10s default in `scripts/lib/mcp-client.mjs:75` (`timeoutMs = 10_000`).\n\nSo this is **not** steady-state slowness. The timeout fired under transient load — the portal was\nsimultaneously serving another session's local-CI run and browser traffic. Which is precisely the\ncondition under which the queue exists at all: reconciliation is needed most exactly when the box\nis busy, and that is when the call is most likely to time out.\n\n## Why it matters\n\nThe message is honest about the consequence — *\"queue remains fail-closed\"* — and fail-closed is\nthe right default. But it means the mechanism that reclaims a lease from a **dead** waiter is\nsilently unavailable. A waiter that died holding a slot is then never reconciled, and every\nqueued gate behind it waits indefinitely. Recovery becomes manual.\n\nEvery PR passes through this gate, so a stalled queue blocks all merges on the box, not one\nbranch.\n\n## Suggested fix\n\n1. **Raise or separate the timeout for reconciliation reads.** A read-only lease listing is\n   idempotent and cheap; 10s is tight for a moment of contention. A distinct, longer budget for\n   reconciliation (or a small bounded retry with backoff) costs nothing when the box is idle and\n   is the difference between reconciling and not when it is busy.\n2. **Retry before declaring it unavailable.** One timeout currently disables reconciliation for\n   that poll with no second attempt.\n3. **Escalate on repetition.** The line appears once and then the queue keeps polling with no\n   further mention. If reconciliation has been unavailable for N consecutive polls while the\n   queue has not advanced, say so loudly — that is the shape of a stall, and right now it is\n   indistinguishable from a legitimately busy queue.\n\n## Not a defect in the queue itself\n\nRecorded explicitly so this is not over-read: the queue behaved correctly here. It queued,\nreported position, polled with backoff, and stayed fail-closed when it could not verify. The\ncontention was genuine — another session legitimately held the lease. The only defect is that a\ntransient timeout removes a safety net without any path back.\n\nFound during dogfood reset cycle 4, gating PR #4678.",
+      "status": "triaging",
+      "type": "portfolio",
+      "workType": "bug",
+      "source": "automated-detection",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-dc9ca20d-cmt9kbcwe05x701qvbq7vsh6n",
+          "kind": "epic_link",
+          "summary": "(no epic) → EP-56AE0F69",
+          "recordedAt": "2026-08-26T03:56:55.694Z",
+          "payload": {
+            "toEpicId": "EP-56AE0F69",
+            "fromEpicId": null
+          }
+        }
+      ],
+      "createdAt": "2026-08-26T03:30:46.209Z"
     },
     {
       "itemId": "BI-DD7DC141",

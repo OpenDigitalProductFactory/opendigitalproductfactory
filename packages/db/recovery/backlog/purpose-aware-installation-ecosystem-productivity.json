@@ -3,7 +3,7 @@
   "bundleId": "purpose-aware-installation-ecosystem-productivity",
   "description": "Operator-invoked recovery input for the approved purpose-aware installation epic, umbrella for install identity and ecosystem productivity work.",
   "source": {
-    "capturedAt": "2026-08-26T03:07:09.229Z",
+    "capturedAt": "2026-08-26T03:57:53.481Z",
     "repository": "OpenDigitalProductFactory/opendigitalproductfactory",
     "planPath": "docs/superpowers/plans/2026-08-08-purpose-aware-installation-ecosystem-productivity.md"
   },
@@ -259,6 +259,32 @@
       "triageOutcome": "defer",
       "scopeRationale": "DPF platform installation-to-ecosystem-productivity program.",
       "createdAt": "2026-08-22T04:02:37.414Z"
+    },
+    {
+      "itemId": "BI-54F7B1E0",
+      "epicId": "EP-1FABA22D",
+      "title": "Latent fail-open in the stance resolver: resolveInstanceStance defaults holdsIrreplaceableWork to false, so a caller that omits it is told teardown is permitted",
+      "body": "## Latent, not live — recorded for defence in depth\n\nSeverity is **low today** and the item is filed because it is the same defect class as\n`BI-9CE1A6C8`, in the same call path, one character from being wrong again.\n\n`packages/db/src/installation-instance-stance.ts:220`:\n\n```ts\nexport function resolveInstanceStance(\n  snapshot: InstallationOperatingProfileSnapshot,\n  host: InstanceStanceHostFacts,\n  options: { holdsIrreplaceableWork?: boolean } = {},\n): InstanceStanceProfile {\n  const holdsIrreplaceableWork = options.holdsIrreplaceableWork ?? false;\n```\n\n`false` means \"this installation holds nothing that exists only here\", which resolves teardown to\n**permitted**. A caller that forgets the option is therefore told teardown is routine.\n\n## Why it is not live\n\nBoth production callers pass it:\n\n- `apps/web/lib/install/instance-stance.ts:206` — the composer used by the workspace panel and\n  the MCP handshake\n- `apps/web/lib/installation-journey/identity-change-impact.ts:136`\n\nOnly the test helper omits it. So nothing today reaches the permissive default.\n\n## Why it is still worth changing\n\nThe two halves of this feature disagree about which way to fail. The composer states its contract\nexplicitly at the top of `apps/web/lib/install/instance-stance.ts`:\n\n> \"Every read fails open to the *most cautious* answer. An installation that cannot prove it is\n> disposable is treated as production.\"\n\nThe resolver it delegates to does the opposite for the one input that governs a destructive\naction. `BI-9CE1A6C8` has just demonstrated what happens when this particular signal is wrong in\nthe permissive direction — the operator and every AI coworker are told teardown is routine over\nwork that exists nowhere else.\n\nA future caller — a new surface, a CLI, an agent tool — that composes a stance without wiring the\ncapture check gets the dangerous answer silently, with no type error and no test failure.\n\n## Suggested change\n\nDefault to the cautious answer:\n\n```ts\nconst holdsIrreplaceableWork = options.holdsIrreplaceableWork ?? true;\n```\n\nAn installation that cannot prove its work is captured is treated as holding uncaptured work,\nmatching the composer's stated contract and this module's own framing that *\"a permissive stance\nis the absence of an extra brake\"* — a brake should not be removed by omission.\n\nThe test helper at `packages/db/src/installation-instance-stance.test.ts:47` will need to pass\n`false` explicitly where it is asserting the permitted path, which is the right shape: a test\nthat wants the permissive answer should have to ask for it.\n\nWorth pairing with a small assertion that every production caller supplies the option, so the\ndefault is genuinely unreachable rather than merely unused.\n\nFollow-up to BI-9CE1A6C8 / PR #4678. Found during dogfood reset cycle 4 while checking whether\nthat defect class appeared elsewhere.",
+      "status": "triaging",
+      "type": "portfolio",
+      "workType": "bug",
+      "source": "automated-detection",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-54f7b1e0-cmt9kbclk05wz01qvp4x0ei8b",
+          "kind": "epic_link",
+          "summary": "(no epic) → EP-1FABA22D",
+          "recordedAt": "2026-08-26T03:56:55.304Z",
+          "payload": {
+            "toEpicId": "EP-1FABA22D",
+            "fromEpicId": null
+          }
+        }
+      ],
+      "createdAt": "2026-08-26T03:18:50.742Z"
     },
     {
       "itemId": "BI-5C203662",

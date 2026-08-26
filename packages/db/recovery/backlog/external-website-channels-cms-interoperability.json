@@ -3,7 +3,7 @@
   "bundleId": "external-website-channels-cms-interoperability",
   "description": "Operator-invoked recovery input for the external website channels and CMS interoperability epic (WordPress projection).",
   "source": {
-    "capturedAt": "2026-08-26T03:07:09.229Z",
+    "capturedAt": "2026-08-26T03:57:53.481Z",
     "repository": "OpenDigitalProductFactory/opendigitalproductfactory",
     "planPath": "docs/superpowers/plans/2026-08-21-wordpress-channel-projection.md"
   },
