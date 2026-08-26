@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 
 import { Surface } from "@/components/ui/Surface";
+import type { ActionResult } from "@/lib/shared/action-result";
 import {
   resetWorkroomPosture,
   saveWorkroomPosture,
@@ -82,13 +83,14 @@ export function WorkroomPostureControl({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  function run(fn: () => Promise<{ ok: boolean }>) {
+  function run(fn: () => Promise<ActionResult>) {
     setError(null);
     startTransition(async () => {
       const result = await fn();
       // Server actions return failures as DATA, not throws — a thrown error is
-      // redacted in production and the operator would see nothing useful.
-      if (!result.ok) setError("Couldn't save that. Your change was not applied.");
+      // redacted in production and the operator would see nothing useful. The
+      // action's own message is shown, so the operator learns WHICH thing failed.
+      if (!result.ok) setError(result.error);
     });
   }
 

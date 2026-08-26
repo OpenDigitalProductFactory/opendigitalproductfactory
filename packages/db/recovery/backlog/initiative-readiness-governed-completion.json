@@ -3,7 +3,7 @@
   "bundleId": "initiative-readiness-governed-completion",
   "description": "Operator-invoked recovery input for the initiative-readiness and governed-completion enforcement epic.",
   "source": {
-    "capturedAt": "2026-08-23T02:00:56.767Z",
+    "capturedAt": "2026-08-26T03:57:53.481Z",
     "repository": "OpenDigitalProductFactory/opendigitalproductfactory",
     "planPath": "docs/superpowers/plans/2026-08-08-initiative-readiness-and-goal-completion-reconciliation-implementation.md"
   },
@@ -19,10 +19,166 @@
   },
   "items": [
     {
+      "itemId": "BI-0099B704",
+      "epicId": "EP-129D11FD",
+      "title": "Docs impact graph misses public landing and sibling install surfaces for canonical guidance changes",
+      "body": "## Problem\n\nThe documentation-impact machinery does not protect the customer journey when canonical documentation changes. PR #4638 added a canonical hardware guide, but the gate passed while the public #install OS cards omitted the recommendations, the Windows action still led to GitHub, only the macOS guide received hardware detail, and the documentation tile led to a source-directory listing on the deployed site.\n\nEvidence on 2026-08-24:\n- `docs/install/hardware.md`, `docs/install/windows.md`, and `docs/index.html` have no entries in `docToRoutes` or `docToCode` in `apps/web/lib/docs/doc-impact.generated.json`.\n- `scripts/gen-doc-impact.mjs` walks published Markdown and derives route/code edges, but `docs/index.html` is outside that graph.\n- `scripts/check-docs-impact.mjs` enforces code/route changes reaching docs; a docs-only canonical-guidance change does not fan out to public entry points or sibling OS guides.\n- Live browser verification reproduced Windows -> GitHub README, macOS -> rendered site guide, and Deployment guides -> GitHub directory listing.\n- The separate committed code graph is also unavailable on this install (`indexStatus: missing`, 0 files), but that known fresh-install condition is already tracked by retired BI-0F02522B and is not duplicated here.\n\n## Scope\n\nIn:\n- Represent public landing pages and sibling/canonical documentation relationships in the documentation-impact contract.\n- Make a canonical install/hardware change flag the affected public #install entry point and supported-OS guides.\n- Add focused docs-only fixtures and actionable failure output.\n\nOut:\n- The immediate hardware copy and link repair, which remains in BI-5C203662 / PR #4638.\n- General code-graph startup, already covered by BI-0F02522B.\n\n## Acceptance criteria\n\n- A fixture that changes canonical hardware guidance without reviewing `docs/index.html`, `docs/install/windows.md`, and `docs/install/macos.md` fails or requires a specific, reviewable impact disposition.\n- The queryable impact artifact reports the hardware guide's customer-facing landing and supported-OS relationships.\n- `docs/index.html` is no longer invisible merely because it is HTML rather than Markdown.\n- The gate remains diff-scoped and avoids flagging unrelated documentation families.\n- Public-site and OS-path browser assertions demonstrate consistent internal navigation.\n\nRelated: BI-5C203662; PR https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/4638",
+      "status": "open",
+      "type": "product",
+      "workType": "bug",
+      "source": "user-request",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [],
+      "effortSize": "medium",
+      "triageOutcome": "build",
+      "scopeRationale": "Cross-cutting documentation-impact enforcement affects every contributor surface and every customer-facing documentation family.",
+      "createdAt": "2026-08-24T17:16:13.851Z"
+    },
+    {
       "itemId": "BI-0996913C",
       "epicId": "EP-129D11FD",
       "title": "Make plan-coverage baseline remediation reachable and live-anchor safe",
-      "body": "## Problem\n\n`record_plan_backlog_coverage` rejects a provider-verified immutable plan with `traceability-incomplete` when its BacklogItem lacks an `initiative_scope_baseline`, but reports that the only writer is not reachable from an MCP session. The same diagnostic instructs contributors to cite a blocker ID that `get_backlog_item` and the repository doc-anchor guard report as not found, leaving two governed gates with no jointly valid representation.\n\n## Scope\n\nIn scope: make initiative-scope baseline creation/remediation reachable for governed external Workrooms, keep plan coverage bound to immutable provider artifacts, and ensure every prescribed blocked-receipt anchor resolves through the live backlog. Add integration tests spanning the MCP recorder response and repository-compatible citation contract.\n\nOut of scope: weakening four-way traceability, bypassing plan coverage, or changing the subject-agnostic scheduling implementation in BI-2C80E6EA.\n\n## Acceptance criteria\n\n- A governed external Workroom can establish or reach the initiative scope baseline required by `record_plan_backlog_coverage`.\n- When remediation is temporarily blocked, the recorder returns a live BacklogItem ID visible to `get_backlog_item` and the doc-anchor existence guard.\n- The recorder and repository plan/doc guards accept the same honest blocked-receipt representation.\n- Regression tests cover the missing-baseline path, external MCP caller path, and stale/nonexistent blocker-anchor path.\n- Existing immutable-artifact provenance and four-way traceability checks remain enforced.\n\n## Dependencies\n\nBlocks compliant plan-coverage receipt recording for BI-2C80E6EA and other externally authored plans that lack an initiative scope baseline.\n\n## Evidence\n\nObserved 2026-08-22 in Work Capsule WC-E97AF089: provider blob resolution succeeded for commit c4a0cc1682f2502cc4f2e1d7f008bd05ff494601, then the recorder returned `traceability-incomplete`; the prescribed blocker lookup returned `not_found`, and `pnpm run pregate:preflight` failed Doc Anchor Existence on that citation.",
+      "body": "## Problem\r\n\r\n`record_plan_backlog_coverage` rejects a provider-verified immutable plan with `traceability-incomplete` when its BacklogItem lacks an `initiative_scope_baseline`, but reports that the only writer is not reachable from an MCP session. The same diagnostic instructs contributors to cite a blocker ID that `get_backlog_item` and the repository doc-anchor guard report as not found, leaving two governed gates with no jointly valid representation.\r\n\r\n## Scope\r\n\r\nIn scope: make initiative-scope baseline creation/remediation reachable for governed external Workrooms, keep plan coverage bound to immutable provider artifacts, and ensure every prescribed blocked-receipt anchor resolves through the live backlog. Add integration tests spanning the MCP recorder response and repository-compatible citation contract.\r\n\r\nOut of scope: weakening four-way traceability, bypassing plan coverage, or changing the subject-agnostic scheduling implementation in BI-2C80E6EA.\r\n\r\n## Acceptance criteria\r\n\r\n- A governed external Workroom can establish or reach the initiative scope baseline required by `record_plan_backlog_coverage`.\r\n- When remediation is temporarily blocked, the recorder returns a live BacklogItem ID visible to `get_backlog_item` and the doc-anchor existence guard.\r\n- The recorder and repository plan/doc guards accept the same honest blocked-receipt representation.\r\n- Regression tests cover the missing-baseline path, external MCP caller path, and stale/nonexistent blocker-anchor path.\r\n- Existing immutable-artifact provenance and four-way traceability checks remain enforced.\r\n\r\n## Dependencies\r\n\r\nBlocks compliant plan-coverage receipt recording for BI-2C80E6EA and other externally authored plans that lack an initiative scope baseline.\r\n\r\n## Evidence\r\n\r\nObserved 2026-08-22 in Work Capsule WC-E97AF089: provider blob resolution succeeded for commit c4a0cc1682f2502cc4f2e1d7f008bd05ff494601, then the recorder returned `traceability-incomplete`; the prescribed blocker lookup returned `not_found`, and `pnpm run pregate:preflight` failed Doc Anchor Existence on that citation.",
+      "status": "retired",
+      "type": "product",
+      "workType": "bug",
+      "source": "automated-detection",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-0996913c-cmt7xtza50e5001mgshl0k7wp",
+          "kind": "evidence",
+          "summary": "Recovered BI is already implemented by merged PRs #4571, #4603, and #4605.",
+          "recordedAt": "2026-08-25T00:39:47.165Z",
+          "payload": {
+            "url": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/4605",
+            "body": "PR #4571 made Workroom branch identity durable; PR #4603 replaced stale blocker IDs with condition-based remediation and added the live-reference guard; PR #4605 made the independent coworker reviewer path produce an initiative scope baseline on single-human installs. Current main contains all three contracts.",
+            "evidenceKind": "source_verified",
+            "toolExecutionId": null
+          }
+        },
+        {
+          "recoveryKey": "bi-0996913c-cmt7xtzaw0e5201mge3ojf72j",
+          "kind": "evidence",
+          "summary": "Merged conformance tests cover baseline reachability, self-review refusal, live-anchor safety, and branch late-binding.",
+          "recordedAt": "2026-08-25T00:39:47.192Z",
+          "payload": {
+            "url": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/4603",
+            "body": "The merged tests preserve immutable artifact provenance and four-way traceability while proving the external/coworker reviewer route and condition-based refusal contract.",
+            "evidenceKind": "test_pass",
+            "toolExecutionId": null
+          }
+        },
+        {
+          "recoveryKey": "bi-0996913c-cmt7xu3gy0e5601mgitwbzgj8",
+          "kind": "status_change",
+          "summary": "Retired BI-0996913C as discard",
+          "recordedAt": "2026-08-25T00:39:52.594Z",
+          "payload": {
+            "to": "retired",
+            "from": "open",
+            "reason": "All acceptance criteria are present in current source and covered by merged conformance tests. Delivery evidence activities: cmt7xtza50e5001mgshl0k7wp, cmt7xtzaw0e5201mge3ojf72j.",
+            "outcome": "discard",
+            "rationale": "Recovered aggregate is already fully delivered on main by PRs #4571, #4603, and #4605; retaining it as open would duplicate completed historical delivery work.",
+            "duplicateOfId": null
+          }
+        }
+      ],
+      "effortSize": "medium",
+      "triageOutcome": "discard",
+      "scopeRationale": "The defect is in the cross-cutting plan-coverage recorder, initiative spec-approval baseline path, and repository governance guards used by every DPF contributor.",
+      "priority": 1,
+      "createdAt": "2026-08-22T19:26:55.793Z"
+    },
+    {
+      "itemId": "BI-17CBD21F",
+      "epicId": "EP-129D11FD",
+      "title": "record_plan_backlog_coverage is shadowed by the initiative-readiness pack and cannot be called",
+      "body": "## Problem\n\n`record_plan_backlog_coverage` is registered in two MCP packs with incompatible schemas, and the initiative-readiness registration shadows the real handler. Calling the tool with its documented parameters fails, so no thread can record a plan-coverage receipt over MCP.\n\n| Registration | Schema |\n|---|---|\n| `apps/web/lib/mcp/packs/decomposition-pack.ts:131` | `itemId`, `planPath`, `planArtifactRef`, `decision: decomposed\\|atomic`, `deliverables[]` |\n| `apps/web/lib/tak/initiative-readiness-tool-grants.ts:20` via `initiative-readiness-pack.ts` | `itemId`, `gate`, `decision: pass\\|fail\\|not-applicable`, `artifactRef`, `findings` |\n\nThe readiness lane declares `gates: [\"dependency-disposition\"]`. `initiative-readiness-pack.ts:277` rejects any call whose `gate` is absent or outside that list.\n\n## Reproduction\n\nCall `record_plan_backlog_coverage` with the decomposition-pack schema (no `gate`):\n\n```\n{ \"success\": false, \"error\": \"gate-not-authorized\",\n  \"message\": \"record_plan_backlog_coverage cannot record that gate.\" }\n```\n\nAdd `gate: \"dependency-disposition\"` and the error moves to the readiness schema, proving the routing:\n\n```\n{ \"success\": false, \"error\": \"malformed-receipt\",\n  \"message\": \"decision must be pass, fail, or not-applicable.\" }\n```\n\nThe two schemas cannot be satisfied at once: the coverage handler requires `decision: decomposed`, the readiness handler requires `decision: pass`.\n\n## Expected vs actual\n\nExpected: the documented coverage schema records a receipt and returns `receiptId` plus `mappedItemIds`.\nActual: every call is refused. Reproduced 2026-08-26 both through the in-session tool registry and through the raw JSON-RPC transport at `/api/mcp/v1`, so it is server-side rather than a client artifact.\n\n## Why it matters\n\n`scripts/check-plan-backlog-coverage.mjs` requires a live MCP receipt on any plan that declares a `**Backlog item:**`, and explicitly rejects `pending` and Markdown-only evidence. With the tool unreachable, a correctly-formed plan cannot pass CI, and `PLAN_COVERAGE_REQUIRED` cannot clear on any backlog item.\n\n## Origin\n\nThe shadowing lane entry was added by `6dad5759f9` — \"fix(readiness): complete deterministic recovery routes (#4641)\", 2026-08-24 19:05 UTC. Note that BI-80BECE1E recorded coverage successfully at 2026-08-25T08:36Z, after that commit, so either that receipt was written through a different surface or disclosure order affects which registration wins. Worth establishing during the fix.\n\n## Suggested fix\n\nOne tool name, one registration. Either rename the readiness lane's dependency-disposition receipt, or drop `record_plan_backlog_coverage` from `INITIATIVE_READINESS_LANES` and let the decomposition-pack handler own the name. Add a guard that fails the build when two packs register the same tool name — this class of collision is silent today.\n\n## Grant note\n\nNot an authorization defect. Both registrations require `backlog_write`, which callers hitting this already hold.",
+      "status": "triaging",
+      "type": "product",
+      "workType": "bug",
+      "source": "user-request",
+      "scopeKind": "unknown",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-17cbd21f-cmt9kbc7a05wp01qv5k7i7u4i",
+          "kind": "epic_link",
+          "summary": "(no epic) → EP-129D11FD",
+          "recordedAt": "2026-08-26T03:56:54.790Z",
+          "payload": {
+            "toEpicId": "EP-129D11FD",
+            "fromEpicId": null
+          }
+        }
+      ],
+      "createdAt": "2026-08-26T03:26:10.327Z"
+    },
+    {
+      "itemId": "BI-28E8CB88",
+      "epicId": "EP-129D11FD",
+      "title": "Recorded evidence does not count toward readiness and nothing says so — 35 of 38 items have evidence the gates cannot see",
+      "body": "## Observed\n\n`BI-7D2C4F02` reports `RESEARCH_REQUIRED: missing` and cannot reach plan or implementation. Its research was demonstrably done: activity `cmt814vg80gch01mgdsvu06f4` (kind `evidence`, evidenceKind `source_verified`, 2026-08-25) records that the stack, portfolio, BOM, catalog-lifecycle, seed and route ownership were all traced before design, and cites the canonical design at `d59d99e5ef9f8855437a23b689d6231c0ba7f074` plus kernel decision `DI-C24852C1789A`.\n\nThe projector is behaving correctly. `entry-adapter.ts:259` computes `research: state(evidence, \"research\")` where `evidence` comes from `latestGateStates(...)` — it reads **gate receipts only**. A general timeline `evidence` activity is invisible to it.\n\nActivity kinds on `BI-7D2C4F02`: `evidence` x2, `initiative_readiness_decision` x1. Zero `initiative_gate_receipt`.\n\n## This is not a one-item mistake\n\nMeasured across the live install:\n\n| | count |\n| --- | --- |\n| items with at least one `evidence` activity | **38** |\n| items with at least one `initiative_gate_receipt` | **4** |\n| items with evidence but NO gate receipt | **35** |\n\nEvery gate receipt on the install belongs to just four items (`BI-FFBDDD96`, `BI-6DBD3AB4`, `BI-80BECE1E`, `BI-F3422349`). So roughly 10% of the items that recorded evidence produced anything readiness can read. The other 35 recorded their work, saw it appear on the item timeline, and remain unsatisfied at the gate.\n\n## Why this matters\n\nThe failure is silent in both directions. The author calls an evidence-recording tool, gets a success result and a visible timeline entry, and reasonably concludes the obligation is met. The gate then reports the requirement as `missing` — not \"recorded in a form that does not count\" — so the next reader concludes the research was never done and either redoes it or escalates. Neither party is told the two are different lanes.\n\nThis is a plausible common cause for items sitting in readiness limbo, and it is adjacent to but distinct from `BI-CC9D5997` (which is a handler/schema collision making one writer unreachable). Here the writer works fine; it just writes somewhere the reader never looks.\n\n## Directions worth weighing, not prescribed\n\nSeveral shapes could resolve it and the choice is a design decision:\n\n- Have the readiness projector also consider qualifying `evidence` activities, with whatever binding to the canonical artifact digest the receipt path already enforces.\n- Or keep receipts as the only currency, and make the divergence loud: when a requirement is `missing` but qualifying evidence activities exist for that subject, say so in the decision and name the tool that mints the receipt.\n- Or converge the surfaces so that recording evidence against a governed gate mints the receipt directly, removing the two-lane distinction that nothing explains.\n\nWhichever is chosen, an author who has genuinely done the work should not be able to record it into a lane that silently does not count.\n\n## Acceptance criteria\n\n1. An item whose research is recorded through the ordinary evidence path either satisfies `RESEARCH_REQUIRED` or receives an explicit, actionable statement that it does not and which tool does.\n2. A readiness decision distinguishes \"no evidence exists\" from \"evidence exists but not in a form this gate reads\", for every requirement backed by gate receipts.\n3. The existing 35 items are surfaced — a query or report identifying items holding evidence with no corresponding receipt, so the backlog can be reconciled rather than silently stalled.\n4. Whatever convergence is chosen preserves the separation of duties on independent lanes: a reviewer receipt must still come from an eligible independent reviewer, and this must not become a self-approval path.\n5. Regression test covers an item with evidence-but-no-receipt and asserts the chosen behaviour.\n\nProvenance: traced while establishing why `BI-7D2C4F02` remained blocked after its reviewer defect (`BI-A8BFEFCE`) was fixed and merged, 2026-08-26. Counts measured directly against `BacklogItemActivity` on the live install.",
+      "status": "triaging",
+      "type": "portfolio",
+      "workType": "bug",
+      "source": "automated-detection",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-28e8cb88-cmt9ib8mz042l01qvbyh03sdk",
+          "kind": "epic_link",
+          "summary": "(no epic) → EP-129D11FD",
+          "recordedAt": "2026-08-26T03:00:50.939Z",
+          "payload": {
+            "toEpicId": "EP-129D11FD",
+            "fromEpicId": null
+          }
+        }
+      ],
+      "scopeRationale": "Initiative-readiness evidence contract shared by every governed item and every agent surface.",
+      "createdAt": "2026-08-26T02:58:44.815Z"
+    },
+    {
+      "itemId": "BI-310EC5AF",
+      "epicId": "EP-129D11FD",
+      "title": "The plan-coverage CI gate accepts a receipt that does not exist: it regex-matches the Receipt line and never asks the substrate, so a preview-minted receipt merges to main",
+      "body": "## Observed\n\n`docs/superpowers/plans/2026-08-23-initiative-readiness-traversal-repair.md` is merged on `main` (PR #4633, `ddd1ae31e`, 2026-08-24) and its `## Backlog coverage` section cites:\n\n```\n- Decision: atomic\n- Parent: BI-F0715C9C\n- Receipt: cmt6xp5k2000c51kpdb76su1t\n```\n\nCalling the governed verifier against exactly those identities returns:\n\n```\ncheck_plan_backlog_coverage(\n  itemId   = BI-F0715C9C,\n  planPath = docs/superpowers/plans/2026-08-23-initiative-readiness-traversal-repair.md,\n  receiptId= cmt6xp5k2000c51kpdb76su1t)\n-> { \"success\": false, \"error\": \"receipt-not-found\",\n     \"message\": \"Coverage receipt cmt6xp5k2000c51kpdb76su1t was not found.\" }\n```\n\nThe plan passed CI and merged anyway.\n\n## Evidence-backed cause\n\nTwo independent defects compose.\n\n**1. The receipt was minted outside the canonical runtime.** `WC-7FF8A505` activity `cmt6xr47b0kjd01mxtemerijv` records it:\n\n```\ncommand: \"27B research/spec approved replay; record_plan_backlog_coverage via preview /api/mcp/v1\"\npreviewLeaseId: NPEL-0583244D50\nplanCoverageReceiptId: cmt6xp5k2000c51kpdb76su1t\n```\n\nThe same preview run also produced research receipt `initiative-8042dea2-327d-4a67-9b64-109c6752805c`, spec-approval receipt `initiative-5eab8246-8bc5-4a41-8e28-36669796a538`, and scope baseline `baseline-acd3d154-8d63-4939-9382-4318f7bf045e`. All four identities are cited in the merged plan and all four are open to the same question.\n\nThis is not a database reset: `WC-2ABA65F7` and `WC-7FF8A505` both still resolve with full activity history. The receipt simply never existed in production.\n\nAGENTS.md section 1 is explicit that the canonical runtime is the only source of runtime truth. A preview-minted governance receipt is not runtime truth.\n\n**2. The gate cannot tell.** `scripts/check-plan-backlog-coverage.mjs` `validatePlanText` does only lexical validation:\n\n```js\nconst receipt = section.match(/^\\s*-\\s*Receipt:\\s*`?([^`\\n]+?)`?\\s*$/im)?.[1]?.trim();\nif (!receipt || /^(?:pending|none|n\\/a)\\b/i.test(receipt)) { errors.push(...); }\n```\n\nIt asserts a `Receipt:` line exists and is not `pending`/`none`/`n/a`. It never resolves the id, never checks the parent binding, and cannot distinguish a production receipt from a preview one or from an arbitrary string of the right shape.\n\n`check_plan_backlog_coverage` already exists and is documented in `dpf-writing-plans` as \"the resumability check\". Nothing calls it from CI.\n\n## Why this matters beyond one plan\n\nThis is the exact defect class the initiative-readiness design exists to eliminate — evidence that *projects* as satisfied without being verified — reproduced inside that design's own plan. Any string matching the regex satisfies the gate today.\n\nAdjacent but distinct: `BI-28E8CB88` (recorded evidence does not count toward readiness) is the mirror failure — real evidence not counting. This item is unreal evidence counting.\n\nNot a duplicate of `BI-CC9D5997`, which is about `record_plan_backlog_coverage` resolving to the wrong handler. That blocks *minting*; this accepts a receipt that was never minted here. Note the interaction: while `BI-CC9D5997` is open the receipt cannot be re-minted, so this plan cannot currently be repaired even once the gate is strengthened. Sequence them.\n\n## Acceptance criteria\n\n1. The plan-coverage gate resolves the cited receipt against the substrate and fails when it does not exist, does not bind to the plan's parent `**Backlog item:**`, or does not bind to the plan path.\n2. A receipt minted against a non-production environment (preview lease, sandbox) is rejected by the gate, or is durably marked non-canonical at mint time so the gate can reject it.\n3. The gate degrades honestly when the substrate is unreachable: it reports \"could not verify\" and fails closed, and never silently downgrades to the current lexical check.\n4. Regression test covers: valid live receipt passes; unknown id fails; live receipt bound to a different parent or plan path fails; preview-minted receipt fails; substrate unreachable fails closed.\n5. The four identities cited in `2026-08-23-initiative-readiness-traversal-repair.md` are re-verified against production and either re-minted or explicitly recorded as historical/non-canonical. No hand-written substitute value.\n6. A sweep reports which other merged plans cite coverage receipts that no longer resolve, so the blast radius is known rather than assumed.\n\nProvenance: found while reconciling the BI-F0715C9C design and plan against delivered state, 2026-08-26. Branch `doc/initiative-readiness-doc-reconciliation` records the finding in the plan's `### Receipt liveness` section.",
+      "status": "triaging",
+      "type": "portfolio",
+      "workType": "bug",
+      "source": "automated-detection",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-310ec5af-cmt9kbcaf05wr01qvyvg9ps56",
+          "kind": "epic_link",
+          "summary": "(no epic) → EP-129D11FD",
+          "recordedAt": "2026-08-26T03:56:54.903Z",
+          "payload": {
+            "toEpicId": "EP-129D11FD",
+            "fromEpicId": null
+          }
+        }
+      ],
+      "scopeRationale": "Governance evidence substrate and the Spec/Plan/Doc CI edge; affects every plan-bearing PR on every install.",
+      "createdAt": "2026-08-26T03:20:59.774Z"
+    },
+    {
+      "itemId": "BI-329AD58D",
+      "epicId": "EP-129D11FD",
+      "title": "Threadless readiness reviewers lose immutable binding and exceed the local tool-surface limit",
+      "body": "## Observed defect\n\nA threadless governed initiative-research handoff reached TaskRun TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-FA8F19339628 with the canonical local Qwen3.8 27B profile proven eligible by EndpointTestRun DE-24E07989 (reasoning=90, codegen=86, toolFidelity=82, tool use true). The run executed zero tools before inference because 16 generic tools were attached, exceeding the unchanged bundled-local selection cliff of 15.\n\n## Evidence-backed cause\n\n`apps/web/lib/mcp-task-submit.ts` already supports the safe path: `initiativeReviewBinding`, exact `tool:*` authority names, and `narrowInitiativeReviewTools(...)` reduce the provider surface to the immutable reader and governed writer while retaining server-derived artifact identity and authority checks.\n\nThreadless `request_coworker` and `summon_coworker` enter through `apps/web/lib/mcp/external-coworker-task-adapter.ts`. That adapter forwards only generic `tokenGrantScopes` as `authorityScope` and cannot carry the server-validated immutable initiative-review binding. The existing narrowing therefore never activates and generic autonomous budgeting emits 16 tools.\n\n## Scope\n\nIn:\n- Extend the governed threadless external handoff contract so readiness recovery can carry a server-validated immutable initiative-review binding and exact required tool names.\n- Reuse `mcp-task-submit` validation, canonical identity, subject/org checks, authority checks, writer-schema narrowing, idempotency, and durable TaskRun attribution.\n- Cover both request and summon adapter paths where they share the contract.\n\nOut:\n- Lowering `LOCAL_TOOL_SELECTION_CLIFF`\n- Changing model dimension scores or the 70/70/70 floor\n- Revoking coworker grants or weakening capability/subject/organization/writer authority\n- Auto-dispatching recovery work\n- Modifying BI-9DC21917, WC-7E4580C0, or frozen candidate 286b14ef3 before a real receipt exists\n\n## Acceptance\n\n1. A readiness recovery packet passed through threadless request/summon carries an immutable `initiativeReviewBinding` and exact required tool names to `mcp-task-submit`.\n2. Server validation rejects mismatched BI, Workroom/repository artifact identity, writer tool, gate, authority scope, or caller-supplied widening.\n3. The existing narrowing path attaches only `read_source_at_version` (or the explicitly required immutable reader) plus the exact `record_initiative_*` writer; no generic 16-tool surface reaches the provider.\n4. Capability grants, canonical agent attribution, token scope, subject/org checks, approval behavior, idempotency, and fail-closed semantics remain unchanged.\n5. TDD covers external adapter serialization, coworker pack request/summon schemas and handlers, and mcp-task-submit narrow-binding behavior.\n6. After protected deployment, exactly one fresh immutable BI-9DC21917 research dispatch executes the governed reader/writer and creates a durable initiative evidence receipt.\n\nBlocks: BI-9DC21917, which in turn blocks BI-86C5082D release publication and frozen candidate 286b14ef3 rerun.\n\nEvidence: DE-24E07989; TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-FA8F19339628; DI-F858F9EB93E0.",
       "status": "open",
       "type": "product",
       "workType": "bug",
@@ -33,16 +189,68 @@
       "activities": [],
       "effortSize": "medium",
       "triageOutcome": "build",
-      "scopeRationale": "The defect is in the cross-cutting plan-coverage recorder, initiative spec-approval baseline path, and repository governance guards used by every DPF contributor.",
+      "scopeRationale": "The defect is in the shared external MCP coworker handoff and autonomous tool-attachment substrate, first proven by initiative-readiness recovery.",
+      "priority": 4,
+      "createdAt": "2026-08-24T21:13:18.137Z"
+    },
+    {
+      "itemId": "BI-3AE38A1F",
+      "epicId": "EP-129D11FD",
+      "title": "External contributors cannot satisfy RESEARCH_REQUIRED: it needs an initiative_gate_receipt only an ungranted tool can write, with no eligible reviewer",
+      "body": "OBSERVED 2026-08-26 across the full lifecycle of BI-2DB7254B — a `fix`-profile item that was filed, triaged to build, implemented, CI-verified and MERGED to main (PR #4681, fe2c68cf), and still cannot be marked done.\n\nCORRECTION TO THIS ITEM'S EARLIER BODY: I previously claimed DELIVERY_EVIDENCE_REQUIRED reporting `state: \"missing\"` while listing an evidence id in its own `evidenceRefs` was an evaluator wiring defect. **That claim was wrong and is withdrawn.** Reading the code: `backlog-terminal-transition.ts` populates `evidenceRefs.DELIVERY_EVIDENCE_REQUIRED` whenever the completion manifest is *evaluated* (`completion.kind === \"evaluated\"`), while `deliveryState()` returns the *verdict*. So refs list what was supplied and considered; state reports whether it was accepted. Showing rejected refs is correct-by-design and useful. There is no bug there.\n\nTHE ACTUAL, VERIFIED DEFECT — one unmet condition with no caller-reachable path:\n\n`RESEARCH_REQUIRED` is derived at `initiative-readiness/entry-adapter.ts:259` as `state(evidence, \"research\")`, where `evidence` comes from `initiative_gate_receipt` BacklogItemActivity rows (see receipt-reader / projection). The only tool that writes such a receipt is `record_initiative_evidence` (grant `initiative_evidence_write`).\n\n- That tool is NOT granted to this contributor: `load_tools {names:[\"record_initiative_evidence\"]}` returns `newlyLoaded: [], count: 0` — \"No granted tools matched\".\n- The recovery block reports `reason: \"no-eligible-reviewer\"` with `reviewerRoutes: []`, so there is no role to escalate to either.\n\nBecause `completionRequirements` composes `implementationRequirements` -> `planRequirements`, and `planRequirements` includes RESEARCH_REQUIRED for the `fix` profile (evaluate.ts:42-46), that single unmet condition blocks THREE transitions:\n\n1. claim at implementation — IRD-307C1CA8F455\n2. claim at plan — IRD-E277B26FA99F\n3. completion of already-merged work — IRD-51CCC57DDDE8\n\n`design` intent is allowed (IRD-E3AB9B5AFA70, capsule WC-CB607773), so the lifecycle can be entered but never advanced.\n\nCONSEQUENCE: BI-2DB7254B sits `open` with its fix live on main and its delivery evidence attached (cmt9jh73705fi01qv4qpb96ym, cmt9jiiq005g401qv1lbuvbjn). The backlog understates what is delivered. The two options left to a contributor are to leave delivered work permanently open, or to fabricate readiness artifacts — the exact behaviour the gate exists to prevent.\n\nWHY I DID NOT SELF-SERVE A FIX: every available remedy either grants a capability or weakens a governance gate, and both are the platform owner's call, not an implementing contributor's. Options, for the owner to choose:\n\n- (a) Grant `initiative_evidence_write` to external-contributor executor kinds so RESEARCH_REQUIRED is self-satisfiable.\n- (b) Let a `fix`-profile item with a completed triage decision satisfy RESEARCH_REQUIRED implicitly — triage already records a rationale, and a small fix does not warrant a separate design artifact. This is a deliberate loosening of evaluate.ts:42-46 and should be decided, not slipped in.\n- (c) Populate `reviewerRoutes` with a real accountable role so `no-eligible-reviewer` becomes an escalation rather than a dead end. Least invasive; weakens nothing.\n\nIndependent of the choice: a readiness response should never name a recovery tool the caller holds no grant for. That is a UX contract on the gate itself.\n\nEVIDENCE: IRD-307C1CA8F455, IRD-E277B26FA99F, IRD-E3AB9B5AFA70, IRD-51CCC57DDDE8. Capsule WC-CB607773. Code: apps/web/lib/backlog/initiative-readiness/{evaluate.ts:42-46,106-114; entry-adapter.ts:259; backlog-terminal-transition.ts:70-76,150-163}.\n\nRELATED: a neighbouring break in this chain was recorded before — `record_plan_backlog_coverage` publishing one tool pack's schema while running another pack's handler, same user-visible symptom. PLAN_REQUIRED also appears in the completion failure above, so confirm whether that is still live before designing (b).",
+      "status": "triaging",
+      "type": "portfolio",
+      "workType": "bug",
+      "source": "automated-detection",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-3ae38a1f-cmt9k6es105ut01qv7miu9rza",
+          "kind": "evidence",
+          "summary": "Fourth blocked transition confirmed: Work Capsule completion also fails on RESEARCH_REQUIRED (IRD-43D3AFF6E3AF), leaving WC-CB607773 stuck at ready.",
+          "recordedAt": "2026-08-26T03:53:04.849Z",
+          "payload": {
+            "url": null,
+            "body": "Attempted update_workroom_status(WC-CB607773, complete) after PR #4681 merged (fe2c68cf) and the worktree was reaped. Rejected: \"Work Capsule completion is blocked by RESEARCH_REQUIRED.\" — decision IRD-43D3AFF6E3AF, transitionObject kind=work-capsule, expectedVersion=ready, targetState=complete, profile=fix.\n\nSo the single unmet RESEARCH_REQUIRED condition now demonstrably blocks FOUR transitions on the same item:\n  1. claim at plan            — IRD-E277B26FA99F\n  2. claim at implementation  — IRD-307C1CA8F455\n  3. backlog item -> done     — IRD-51CCC57DDDE8\n  4. work capsule -> complete — IRD-43D3AFF6E3AF\n\nOnly design intent is allowed (IRD-E3AB9B5AFA70).\n\nOperational consequence: a contributor who delivers merged, CI-green work cannot close the item, cannot close the capsule, and cannot release the lease cleanly. The capsule stays `ready` and the BI stays `open` indefinitely. Anything that reports on in-flight work will over-count, and anything that reaps stale capsules may treat a completed one as abandoned.\n\nWorth noting for whoever fixes this: CAPSULE_IDENTITY_MISMATCH passed with evidenceRefs [\"WC-CB607773\"], so the capsule binding itself is healthy — the block is purely the missing research receipt.\n\nNo workaround was applied. Closing any of these by writing synthetic readiness artifacts would defeat the gate; whoever holds initiative_evidence_write can clear all four in one call.",
+            "evidenceKind": "manual_check",
+            "toolExecutionId": null
+          }
+        },
+        {
+          "recoveryKey": "bi-3ae38a1f-cmt9kbcda05wt01qvn6kalm0j",
+          "kind": "epic_link",
+          "summary": "(no epic) → EP-129D11FD",
+          "recordedAt": "2026-08-26T03:56:55.006Z",
+          "payload": {
+            "toEpicId": "EP-129D11FD",
+            "fromEpicId": null
+          }
+        },
+        {
+          "recoveryKey": "bi-3ae38a1f-cmt9kc35905xv01qvzlaokfpq",
+          "kind": "evidence",
+          "summary": "Verified by code trace: the research receipt has exactly one writer, reachable only via MCP by nine tools, none granted here — and there is NO portal UI path, so no human can click it either.",
+          "recordedAt": "2026-08-26T03:57:29.709Z",
+          "payload": {
+            "url": null,
+            "body": "This replaces an inference with a verified trace. The earlier body asserted \"record_initiative_evidence is the only tool that can satisfy RESEARCH_REQUIRED\" on the strength of the readiness error's own toolName field. That was taken on trust and is now actually checked.\n\nWRITE PATH (single, verified):\n- Every occurrence of the \"initiative_gate_receipt\" activity kind across apps/web is a READ except two. The only writers are receipt-repository.ts:215-219 and baseline-repository.ts:536.\n- receipt-repository.ts exports exactly one writer: recordInitiativeGateReceipt (line 38).\n- Its only non-test caller in the entire app is apps/web/lib/mcp/packs/initiative-readiness-pack.ts:333.\n\nTOOL SURFACE (nine, not one):\nThat pack exposes nine tools, all funnelling into the same writer with a per-lane grant (line 337, requiredGrant: lane.grant): record_initiative_evidence, record_initiative_design_review, record_initiative_architecture_review, record_initiative_data_review, record_initiative_ux_review, record_initiative_security_review, record_initiative_compliance_review, record_initiative_domain_review, record_initiative_archetype_review.\n\nRequesting ALL NINE by exact name via load_tools returns newlyLoaded: [], count: 0 — \"No granted tools matched\". The earlier conclusion holds, but it now rests on testing the whole surface rather than the single name the error happened to mention.\n\nNEW AND MORE IMPORTANT: there is NO portal UI path. Grepping apps/web/app and apps/web/components for recordInitiativeGateReceipt or record_initiative_evidence returns nothing. The receipt is MCP-only.\n\nThis changes the remedy. It is not merely \"an agent lacks a permission a human could work around in the portal\" — no human can click this either. Unblocking any item stuck on RESEARCH_REQUIRED requires an MCP call carrying a token whose grants include the relevant lane. An operator looking at an item stuck at open has no control to press.\n\nConsequence for option (c) in the parent body (populate reviewerRoutes): routing to a human reviewer only helps if that reviewer can act. Today they would receive an escalation they also cannot satisfy from the UI. Option (c) should be paired with a portal surface, or dropped in favour of (a) or (b).\n\nMethod note: I asserted the single-writer claim before verifying it, and only checked it when challenged. The trace above is what should have backed the original filing.",
+            "evidenceKind": "manual_check",
+            "toolExecutionId": null
+          }
+        }
+      ],
+      "scopeRationale": "Verified single root condition: RESEARCH_REQUIRED needs an initiative_gate_receipt writable only by an ungranted tool, with an empty reviewer route. Blocks claim at plan/implementation and completion of merged work. Remedies are all grant/policy decisions reserved to the platform owner, so this is filed for decision rather than self-served.",
       "priority": 1,
-      "createdAt": "2026-08-22T19:26:55.793Z"
+      "createdAt": "2026-08-26T03:22:57.925Z"
     },
     {
       "itemId": "BI-441BECAC",
       "epicId": "EP-129D11FD",
       "title": "Converge governed TaskRun success through one objective-aware completion boundary",
-      "body": "## Problem\n\nGoverned TaskRun success is written directly from many scheduler, thread, MCP, queue, deliberation, pattern, integration, AIOps, and skill-curator paths. These writers can mark work completed without resolving the governed subject, canonical objective baseline, ToolExecution evidence, or terminal-transition policy.\n\n## Scope\n\n- Re-inventory every production TaskRun success update and already-completed creation; encode it in a source invariant.\n- Test-drive one `completeTaskRun` boundary.\n- Resolve governance through active Workroom, FeatureBuild origin, or explicit governed-subject envelope.\n- Treat `Workroom.taskRunId` as semantic `TaskRun.taskRunId`, never the row id.\n- Map execution objectives to current baseline IDs and join ToolExecution evidence by semantic taskRunId.\n- Delegate governed terminal success to the canonical TERM repository.\n- Persist canonical `input-required` and MCP wire `input_required` when subject/objective evidence is unresolved.\n- Preserve ordinary ungoverned conversational completion.\n- Migrate every inventoried writer and prohibit direct success writes elsewhere.\n\n## Acceptance criteria\n\n- Governed remote/child/scheduled/queue success cannot become completed without subject and objective reconciliation.\n- Ordinary conversational runs preserve their current completion behavior.\n- Every known direct success update and already-completed creation is migrated.\n- The production-source invariant detects a newly introduced bypass.\n- Focused tests for all migrated writers, typecheck/build, canonical runtime governed/ungoverned paths, docs impact, and independent semantic review pass.\n\n## Dependencies\n\n- Child of BI-CF5A1078.\n- Blocked by BI-B770A083 (canonical terminal-transition repository).\n- Shared foundation already merged in PR #4348.\n- Blocks UX.\n\n## Approved source\n\n- Design: `docs/superpowers/specs/2026-08-08-initiative-readiness-and-goal-completion-reconciliation-design.md`\n- Plan §6 and verified writer inventory §2.1.\n- Supersession decision: DI-3F25CDF8D0E0.",
-      "status": "open",
+      "body": "## Problem\r\n\r\nGoverned TaskRun success is written directly from many scheduler, thread, MCP, queue, deliberation, pattern, integration, AIOps, and skill-curator paths. These writers can mark work completed without resolving the governed subject, canonical objective baseline, ToolExecution evidence, or terminal-transition policy.\r\n\r\n## Scope\r\n\r\n- Re-inventory every production TaskRun success update and already-completed creation; encode it in a source invariant.\r\n- Test-drive one `completeTaskRun` boundary.\r\n- Resolve governance through active Workroom, FeatureBuild origin, or explicit governed-subject envelope.\r\n- Treat `Workroom.taskRunId` as semantic `TaskRun.taskRunId`, never the row id.\r\n- Map execution objectives to current baseline IDs and join ToolExecution evidence by semantic taskRunId.\r\n- Delegate governed terminal success to the canonical TERM repository.\r\n- Persist canonical `input-required` and MCP wire `input_required` when subject/objective evidence is unresolved.\r\n- Preserve ordinary ungoverned conversational completion.\r\n- Migrate every inventoried writer and prohibit direct success writes elsewhere.\r\n\r\n## Acceptance criteria\r\n\r\n- Governed remote/child/scheduled/queue success cannot become completed without subject and objective reconciliation.\r\n- Ordinary conversational runs preserve their current completion behavior.\r\n- Every known direct success update and already-completed creation is migrated.\r\n- The production-source invariant detects a newly introduced bypass.\r\n- Focused tests for all migrated writers, typecheck/build, canonical runtime governed/ungoverned paths, docs impact, and independent semantic review pass.\r\n\r\n## Dependencies\r\n\r\n- Child of BI-CF5A1078.\r\n- Blocked by BI-B770A083 (canonical terminal-transition repository).\r\n- Shared foundation already merged in PR #4348.\r\n- Blocks UX.\r\n\r\n## Approved source\r\n\r\n- Design: `docs/superpowers/specs/2026-08-08-initiative-readiness-and-goal-completion-reconciliation-design.md`\r\n- Plan §6 and verified writer inventory §2.1.\r\n- Supersession decision: DI-3F25CDF8D0E0.",
+      "status": "deferred",
       "type": "product",
       "workType": "refactor",
       "source": "user-request",
@@ -51,194 +259,81 @@
       "externalDependencies": [],
       "activities": [
         {
-          "recoveryKey": "bi-441becac-cmt4mgcgr04d201pjzw7uudo3",
-          "kind": "initiative_readiness_decision",
-          "summary": "implementation readiness: input-required",
-          "recordedAt": "2026-08-22T16:57:56.763Z",
+          "recoveryKey": "bi-441becac-cmt7zcvxn0fb301mgljn4hfwy",
+          "kind": "status_change",
+          "summary": "Retired BI-441BECAC as defer",
+          "recordedAt": "2026-08-25T01:22:28.907Z",
           "payload": {
-            "unmet": [
-              {
-                "code": "CANONICAL_DESIGN_REQUIRED",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "design-checklist-reviewer"
-              },
-              {
-                "code": "RESEARCH_REQUIRED",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "design-author"
-              },
-              {
-                "code": "SPEC_APPROVAL_REQUIRED",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "design-checklist-reviewer"
-              },
-              {
-                "code": "REVIEW_REQUIRED",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "architecture-reviewer"
-              },
-              {
-                "code": "REVIEW_REQUIRED",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "data-reviewer"
-              },
-              {
-                "code": "REVIEW_REQUIRED",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "ux-reviewer"
-              },
-              {
-                "code": "REVIEW_REQUIRED",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "security-reviewer"
-              },
-              {
-                "code": "REVIEW_REQUIRED",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "compliance-reviewer"
-              },
-              {
-                "code": "REVIEW_REQUIRED",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "domain-reviewer"
-              },
-              {
-                "code": "OBJECTIVE_BASELINE_REQUIRED",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "design-checklist-reviewer"
-              },
-              {
-                "code": "ARTIFACT_AUTHOR_REQUIRED",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "artifact-resolver"
-              },
-              {
-                "code": "PLAN_REQUIRED",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "implementation-planner"
-              },
-              {
-                "code": "PLAN_REVIEW_REQUIRED",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "plan-reviewer"
-              },
-              {
-                "code": "PLAN_COVERAGE_REQUIRED",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "portfolio-management"
-              },
-              {
-                "code": "TRACEABILITY_INCOMPLETE",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "portfolio-management"
-              }
-            ],
-            "target": "implementation",
-            "profile": "cross-domain",
-            "subject": {
-              "id": "BI-441BECAC",
-              "kind": "backlog-item"
+            "to": "deferred",
+            "from": "open",
+            "reason": "TaskRun completion convergence requires a full production-writer inventory, source invariant, semantic-id evidence join, canonical terminal repository, and compatibility for ordinary ungoverned runs.",
+            "outcome": "defer",
+            "deferral": {
+              "reason": "TaskRun completion convergence requires a full production-writer inventory, source invariant, semantic-id evidence join, canonical terminal repository, and compatibility for ordinary ungoverned runs.",
+              "trigger": "Resume after ENTRY and TERM enforcement are stable; fund TASK as its own PR with red characterization tests, writer migration, race tests, input-required behavior, and source invariant.",
+              "reviewAt": "2026-09-15T20:00:00.000Z"
             },
-            "verdict": "input-required",
-            "blockers": [],
-            "authority": {
-              "actionKey": "claim_backlog_item_for_work",
-              "enforcementState": "enforced"
-            },
-            "satisfied": [
-              {
-                "code": "CLASSIFICATION_REQUIRED",
-                "state": "pass",
-                "evidenceRefs": [],
-                "accountableRole": "product-owner"
-              },
-              {
-                "code": "AUTHORIZATION_DENIED",
-                "state": "pass",
-                "evidenceRefs": [],
-                "accountableRole": "platform-governance"
-              },
-              {
-                "code": "DEPENDENCY_UNRESOLVED",
-                "state": "not-applicable",
-                "evidenceRefs": [],
-                "accountableRole": "portfolio-management"
-              },
-              {
-                "code": "CAPSULE_IDENTITY_MISMATCH",
-                "state": "pass",
-                "evidenceRefs": [],
-                "accountableRole": "delivery-coordinator"
-              }
-            ],
-            "decisionId": "IRD-D9A749A6B959",
-            "workIntent": "implementation",
-            "evaluatedAt": "2026-08-22T16:57:56.757Z",
-            "factsDigest": "56393a7fa7081de63174242d5888c5a5a5976cdcf213819140470fd80e468047",
-            "stableCodes": {
-              "unmet": [
-                "CANONICAL_DESIGN_REQUIRED",
-                "RESEARCH_REQUIRED",
-                "SPEC_APPROVAL_REQUIRED",
-                "REVIEW_REQUIRED",
-                "REVIEW_REQUIRED",
-                "REVIEW_REQUIRED",
-                "REVIEW_REQUIRED",
-                "REVIEW_REQUIRED",
-                "REVIEW_REQUIRED",
-                "OBJECTIVE_BASELINE_REQUIRED",
-                "ARTIFACT_AUTHOR_REQUIRED",
-                "PLAN_REQUIRED",
-                "PLAN_REVIEW_REQUIRED",
-                "PLAN_COVERAGE_REQUIRED",
-                "TRACEABILITY_INCOMPLETE"
-              ],
-              "blockers": [],
-              "satisfied": [
-                "CLASSIFICATION_REQUIRED",
-                "AUTHORIZATION_DENIED",
-                "DEPENDENCY_UNRESOLVED",
-                "CAPSULE_IDENTITY_MISMATCH"
-              ]
-            },
-            "policyVersion": "initiative-readiness.v1",
-            "schemaVersion": 1,
-            "transitionObject": {
-              "id": "OpenDigitalProductFactory/opendigitalproductfactory#feat/initiative-readiness-task",
-              "kind": "work-capsule",
-              "targetState": "implementation",
-              "expectedVersion": "claim.v1"
-            }
+            "rationale": "Valid initiative-governance demand with approved architecture, but the remaining work is explicitly split into ordered, independently reviewed slices. It is unsafe to collapse those boundaries into the pre-reinstall drain PR.",
+            "duplicateOfId": null
           }
         }
       ],
       "effortSize": "xlarge",
-      "triageOutcome": "build",
+      "triageOutcome": "defer",
       "scopeRationale": "Universal TaskRun completion contract across every DPF delivery and coworker execution surface.",
       "priority": 3,
       "createdAt": "2026-08-22T05:58:28.301Z"
     },
     {
+      "itemId": "BI-512214EA",
+      "epicId": "EP-129D11FD",
+      "title": "Workroom creation drops backlogItemId, so reviewer dispatch reports no-eligible-reviewer",
+      "body": "## Problem\n\nNo initiative can reach implementation readiness, because the reviewer dispatch context can never be built. Two silent parameter drops break a chain that then reports a misleading cause.\n\n**1. `create_workroom` accepts `backlogItemId` and discards it.** Called with `backlogItemId: \"BI-C61CEEA9\"`, the returned capsule has `backlogItemId: null`.\n\n**2. `adopt_worktree` accepts `outcomeAnchor`, `executorKind` and `activityKind` and discards all three.** Called with `outcomeAnchor: {kind: \"backlog-item\", id: \"BI-C61CEEA9\"}`, `executorKind: \"claude-desktop\"`, `activityKind: \"delivery\"`, the returned capsule has `outcomeAnchor: {}`, `executorKind: null`, `activityKind: null`. It does correctly persist `headSha`, `baseSha` and `headBranch`.\n\n**3. The recovery lookup requires the field that was dropped.** `apps/web/lib/work-capsules/governed-work-claim.ts:239`\n\n```\nconst recoveryWorkroom = await tx.workroom.findFirst({\n  where: { backlogItemId: item.itemId, repositoryFullName, headBranch, archivedAt: null },\n```\n\nWith `backlogItemId` null the Workroom never matches, so `dispatchContext` is null.\n\n**4. The resulting escalation names the wrong cause.** `apps/web/lib/tak/initiative-readiness-tool-grants.ts:154`\n\n```\nif (candidate) {                      // an eligible reviewer WAS found\n  if (!input.dispatchContext) {\n    escalations.push({ ..., reason: \"no-eligible-reviewer\", ... });\n```\n\nThe branch is only reached when `candidate` is truthy — an eligible, active, production reviewer holding the grant. Reporting `no-eligible-reviewer` is false. The real cause is the missing dispatch context, which only the `nextAction` string hints at.\n\n## Reproduction\n\n1. `create_workroom` with a `backlogItemId` — observe it returns null.\n2. `plan_workroom_worktree`, push the branch, `adopt_worktree` with `headSha` — observe `headSha` persists and `outcomeAnchor` does not.\n3. `claim_backlog_item_for_work` for the same item and branch.\n4. Result: `initiative_not_ready` with `reviewerRoutes: []` and every accountable role escalated as `no-eligible-reviewer`.\n\nObserved across decisions `IRD-92BA60C556F4`, `IRD-B710E78028E7` and `IRD-9B1E8B873889` on 2026-08-26, against Workroom `WC-A3816A0A` (headSha `ef3ba508635461e4f21d64b1640dc46be101fda0`) and item `BI-C61CEEA9`.\n\n## Expected vs actual\n\nExpected: a Workroom bound to its backlog item and an immutable head yields populated `reviewerRoutes` with `requestCoworker` packets, so review can be dispatched.\nActual: `reviewerRoutes` is always empty and the escalation blames reviewer eligibility, which is not the fault.\n\n## Impact\n\nThis blocks implementation on every governed backlog item, not just EP-862820FD. The misleading label also costs diagnostic time: three separate investigations here concluded reviewer absence, authorization failure, and a missing Workroom before the real cause surfaced. `AGT-WS-REVIEW` and the other reviewers are registered, active and eligible throughout.\n\n## Suggested fix\n\n- Persist `backlogItemId` in `create_workroom` and resolve `outcomeAnchor` of kind `backlog-item` onto it in `adopt_worktree`; reject rather than silently drop an unpersisted parameter.\n- Split the escalation reason: keep `no-eligible-reviewer` for a genuinely absent candidate, and emit a distinct reason such as `dispatch-context-unresolved` when a candidate exists but the Workroom binding does not.\n- Add a test asserting that every accepted parameter is either persisted or rejected, since silent drops are invisible to callers today.\n\n## Related\n\n`BI-17CBD21F` — the `record_plan_backlog_coverage` two-pack schema collision, which independently blocks the coverage lane in this same chain.",
+      "status": "open",
+      "type": "product",
+      "workType": "bug",
+      "source": "user-request",
+      "scopeKind": "unknown",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-512214ea-cmt9kbcg105wv01qvf3ogalvy",
+          "kind": "epic_link",
+          "summary": "(no epic) → EP-129D11FD",
+          "recordedAt": "2026-08-26T03:56:55.105Z",
+          "payload": {
+            "toEpicId": "EP-129D11FD",
+            "fromEpicId": null
+          }
+        }
+      ],
+      "effortSize": "small",
+      "triageOutcome": "build",
+      "createdAt": "2026-08-26T03:54:50.072Z"
+    },
+    {
+      "itemId": "BI-78D3CF1E",
+      "epicId": "EP-129D11FD",
+      "title": "Envelope approval surface landed the same hour it was reported missing — retained only for the expiry-observability gap",
+      "body": "CORRECTED 2026-08-25. The original claim in this item — \"no approval surface exists anywhere in the portal\" — was WRONG. Retained rather than retired because one narrow finding survives and the research failure is worth recording.\n\nWHAT IS ACTUALLY TRUE: the surface exists, is tested, and is deployed.\n\n- `apps/web/components/attention/CoworkerEnvelopeApproval.tsx` renders the decision card, showing which coworker, which action, which commit/path/blob, which gate, and the expiry window.\n- `apps/web/lib/attention/sources/coworker-envelope.ts` projects `status=proposed` envelopes bound to the reading user into the attention inbox.\n- `OwnerDecisionCards` renders it; `AttentionInbox`, `WeeklyDigestPanel` and `OperatorCockpit` all mount that — so it appears on the workspace home.\n- Copy, routing and reach-messages are all wired: \"Approve this coworker action?\" / \"A coworker is waiting for your approval\".\n- It shipped as `c851313fc7 fix(attention): project coworker action envelopes into the owner inbox (#4660)` at 2026-08-25 22:37:59Z, and is present in the running image `v2026.08.25-consumer-self-upgrade.2`.\n\nWHY I GOT IT WRONG — the part worth keeping:\n\n1. **Research ran against a stale, diverged root clone.** I grepped `D:/DPF-source-root`, whose local `main` was at `853068f709`, while `origin/main` — the base of the working branch — was at `74420701aa` and carried the fix. The two had diverged. Nothing warned me; the clone looked clean and on `main`. AGENTS.md section 3's \"keep the root clone as the merge worktree\" assumes it is kept CURRENT, and a stale one silently produces confident false negatives.\n\n2. **The grep could not have found it.** `CoworkerEnvelopeApproval` posts to `approval.approveHref` — a URL carried in data, not a literal. Searching for `api/agent/envelope` across the app returns nothing but a comment. A \"zero callers\" result against a data-driven href is not evidence of absence.\n\n3. **The timing was adversarial.** The fix merged roughly 25 minutes before the investigation started and deployed mid-session via the self-upgrade whose quiescence interrupted a write. The install genuinely did not have the surface for most of the window in which the envelopes were piling up.\n\nWHAT STILL STANDS, and the only reason this item is open:\n\n**Expired-unactioned envelopes are not observable.** An envelope that nobody sees within its 15-minute window transitions to nothing, alerts nobody, and leaves no metric. Seven envelopes reached `proposed` and expired unactioned before #4660; that was detectable only by reading the table directly. Whatever the surface, a consent request that can silently lapse needs a count. Scope reduced to:\n\n1. A metric or ops signal for envelopes that expired without a decision.\n2. A decision on whether the 15-minute TTL suits an unattended agent-to-agent handoff, where the human may not be at a screen (also BI-B9312D74 defect B).\n\nDO NOT re-open the \"missing surface\" framing. It is fixed. The remaining defect is that its absence was silent, and would be silent again.",
+      "status": "triaging",
+      "type": "product",
+      "workType": "chore",
+      "source": "automated-detection",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [],
+      "scopeRationale": "Human-in-the-loop approval of coworker actions is universal platform governance substrate for every install and archetype.",
+      "createdAt": "2026-08-25T23:25:41.726Z"
+    },
+    {
       "itemId": "BI-812AC0D8",
       "epicId": "EP-129D11FD",
       "title": "Expose initiative readiness recovery UX and complete enforcement rollout",
-      "body": "## Problem\n\nThe platform lacks a user-facing, existing-route presentation of provisional, ready, failed, stale, restricted, and legacy-unverified initiative states. Even after adapters enforce the policy, users and coworkers need one plain state and one accountable recovery action, plus activation evidence proving every adapter is enforced.\n\n## Scope\n\n- Add pure presenter/component tests first for every readiness and failure state.\n- Extend only existing `BacklogItemRow`, /ops detail/action seams, Build Studio action/banner/readiness/timeline/drawer components, and /build/work control/status region.\n- Consume bounded sanitized projections for list views and authorize focused evidence detail.\n- Show one lifecycle state and one enabled primary recovery action; hide unavailable implementation actions.\n- Require explicit preview/confirmation before dispatch and guarantee zero dispatch for disclosure/view actions.\n- Add accessible text/icon supplements, focus restoration, live reevaluation status, 44px targets, narrow-viewport recovery visibility, and theme/org-token compliance.\n- Record per-adapter ENTRY, TERM, TASK, and UI activation/rollback evidence.\n- Update MCP, backlog, Build Studio, TaskRun, contributor/external-agent, archetype, route help, and architecture documentation without duplicating doctrine.\n- Verify /ops, /build, and /build/work at desktop/narrow viewports, axe, themes, route budgets, and zero-dispatch behavior.\n\n## Acceptance criteria\n\n- No new route, dashboard, card system, or status narrator is introduced.\n- Provisional and denied work cannot look implementation-ready.\n- Restricted evidence is not mislabeled missing.\n- Each recovery action is plain, specific, and accountable.\n- ENTRY, TERM, TASK, and UI activation records are enforced; observation mode never labels work ready.\n- Served-DOM UX verification, accessibility, theme scans, affected tests, build, docs impact, and independent semantic review pass.\n- Parent BI-CF5A1078 remains incomplete until this slice and all dependencies are merged and runtime-verified.\n\n## Dependencies\n\n- Child of BI-CF5A1078.\n- Blocked by BI-4D756545, BI-B770A083, and BI-441BECAC.\n\n## Approved source\n\n- Design: `docs/superpowers/specs/2026-08-08-initiative-readiness-and-goal-completion-reconciliation-design.md`\n- Plan §7.\n- Supersession decision: DI-3F25CDF8D0E0.",
-      "status": "open",
+      "body": "## Problem\r\n\r\nThe platform lacks a user-facing, existing-route presentation of provisional, ready, failed, stale, restricted, and legacy-unverified initiative states. Even after adapters enforce the policy, users and coworkers need one plain state and one accountable recovery action, plus activation evidence proving every adapter is enforced.\r\n\r\n## Scope\r\n\r\n- Add pure presenter/component tests first for every readiness and failure state.\r\n- Extend only existing `BacklogItemRow`, /ops detail/action seams, Build Studio action/banner/readiness/timeline/drawer components, and /build/work control/status region.\r\n- Consume bounded sanitized projections for list views and authorize focused evidence detail.\r\n- Show one lifecycle state and one enabled primary recovery action; hide unavailable implementation actions.\r\n- Require explicit preview/confirmation before dispatch and guarantee zero dispatch for disclosure/view actions.\r\n- Add accessible text/icon supplements, focus restoration, live reevaluation status, 44px targets, narrow-viewport recovery visibility, and theme/org-token compliance.\r\n- Record per-adapter ENTRY, TERM, TASK, and UI activation/rollback evidence.\r\n- Update MCP, backlog, Build Studio, TaskRun, contributor/external-agent, archetype, route help, and architecture documentation without duplicating doctrine.\r\n- Verify /ops, /build, and /build/work at desktop/narrow viewports, axe, themes, route budgets, and zero-dispatch behavior.\r\n\r\n## Acceptance criteria\r\n\r\n- No new route, dashboard, card system, or status narrator is introduced.\r\n- Provisional and denied work cannot look implementation-ready.\r\n- Restricted evidence is not mislabeled missing.\r\n- Each recovery action is plain, specific, and accountable.\r\n- ENTRY, TERM, TASK, and UI activation records are enforced; observation mode never labels work ready.\r\n- Served-DOM UX verification, accessibility, theme scans, affected tests, build, docs impact, and independent semantic review pass.\r\n- Parent BI-CF5A1078 remains incomplete until this slice and all dependencies are merged and runtime-verified.\r\n\r\n## Dependencies\r\n\r\n- Child of BI-CF5A1078.\r\n- Blocked by BI-4D756545, BI-B770A083, and BI-441BECAC.\r\n\r\n## Approved source\r\n\r\n- Design: `docs/superpowers/specs/2026-08-08-initiative-readiness-and-goal-completion-reconciliation-design.md`\r\n- Plan §7.\r\n- Supersession decision: DI-3F25CDF8D0E0.",
+      "status": "deferred",
       "type": "product",
       "workType": "feature",
       "source": "user-request",
@@ -247,70 +342,147 @@
       "externalDependencies": [],
       "activities": [
         {
-          "recoveryKey": "bi-812ac0d8-cmt3ywkud0k9j01pe7wz0j172",
-          "kind": "intake_origin",
-          "summary": "Possible existing implementation: apps/web/lib/mcp/packs/initiative-readiness-pack.ts",
-          "recordedAt": "2026-08-22T05:58:43.333Z",
+          "recoveryKey": "bi-812ac0d8-cmt7zcw9y0fb601mgu14ev5lx",
+          "kind": "status_change",
+          "summary": "Retired BI-812AC0D8 as defer",
+          "recordedAt": "2026-08-25T01:22:29.350Z",
           "payload": {
-            "advisory": true,
-            "createdBy": "implementation-scan",
-            "candidates": [
-              {
-                "path": "apps/web/lib/mcp/packs/initiative-readiness-pack.ts",
-                "score": 5,
-                "matchedTerms": [
-                  "initiative",
-                  "readi"
-                ]
-              },
-              {
-                "path": "apps/web/lib/tak/initiative-readiness-tool-grants.ts",
-                "score": 5,
-                "matchedTerms": [
-                  "initiative",
-                  "readi"
-                ]
-              },
-              {
-                "path": "apps/web/lib/backlog/initiative-readiness/artifact-resolver.ts",
-                "score": 3,
-                "matchedTerms": [
-                  "initiative",
-                  "readi"
-                ]
-              },
-              {
-                "path": "apps/web/lib/backlog/initiative-readiness/baseline-manifest.ts",
-                "score": 3,
-                "matchedTerms": [
-                  "initiative",
-                  "readi"
-                ]
-              },
-              {
-                "path": "apps/web/lib/backlog/initiative-readiness/baseline-repository.ts",
-                "score": 3,
-                "matchedTerms": [
-                  "initiative",
-                  "readi"
-                ]
-              }
-            ]
+            "to": "deferred",
+            "from": "open",
+            "reason": "The readiness recovery UX depends on enforced adapter state and sanitized canonical projections; UI-first work would expose controls that do not yet reflect complete enforcement.",
+            "outcome": "defer",
+            "deferral": {
+              "reason": "The readiness recovery UX depends on enforced adapter state and sanitized canonical projections; UI-first work would expose controls that do not yet reflect complete enforcement.",
+              "trigger": "Resume after ENTRY/TERM/TASK enforcement is green; fund the UX slice on existing /ops, Build Studio, and /build/work seams with presenter tests, one-primary-action hierarchy, accessibility, and live verification.",
+              "reviewAt": "2026-09-15T20:00:00.000Z"
+            },
+            "rationale": "Valid initiative-governance demand with approved architecture, but the remaining work is explicitly split into ordered, independently reviewed slices. It is unsafe to collapse those boundaries into the pre-reinstall drain PR.",
+            "duplicateOfId": null
           }
         }
       ],
       "effortSize": "large",
-      "triageOutcome": "build",
+      "triageOutcome": "defer",
       "scopeRationale": "Universal recovery UX and rollout evidence for the shared DPF process-spine enforcement.",
       "priority": 4,
       "createdAt": "2026-08-22T05:58:43.229Z"
     },
     {
-      "itemId": "BI-CF5A1078",
+      "itemId": "BI-91AF30A5",
       "epicId": "EP-129D11FD",
-      "title": "Complete initiative readiness and governed completion enforcement",
-      "body": "## Problem\n\nDPF currently has the approved initiative-readiness policy substrate, but authoritative entry, terminal, TaskRun, and UX adapters are not wired. An agent can therefore still treat underspecified feature or archetype work as implementation-ready or complete outside the shared evaluator.\n\nThe original live anchors (EP-PROCESS-SPINE, BI-94B4AB38 and its unfinished children) are absent from this replacement install. DI-3F25CDF8D0E0 selected an explicit superseding live graph instead of restoring database history or coding without a Workroom.\n\n## Existing delivered substrate\n\n- Approved design/plan/audit: PR #4146.\n- Workroom abandoned/foreign-claim guard: PR #4169.\n- Shared readiness policy, canonical baselines, receipts, retention, objective mapping, plan coverage v2, migration, projection and MCP writer pack: PR #4348.\n\n## Scope\n\nDeliver four separate ready PRs in dependency order:\n\n1. ENTRY — recommendation, claim, and Build Studio phase enforcement.\n2. TERM — canonical BacklogItem/Epic/FeatureBuild/Workroom terminal-transition boundary.\n3. TASK — governed TaskRun success-writer convergence.\n4. UX — existing-route recovery UX, activation records, docs, and runtime verification.\n\n## Acceptance criteria\n\n- Every implementation ingress and terminal writer routes through the shared initiative-readiness contract.\n- Underspecified feature/archetype work stays provisional and receives an actionable next gate.\n- Governed completion reconciles the current canonical baseline, live reviews, dependencies, authority, exact Workroom identity, objectives, and evidence.\n- No direct governed terminal or TaskRun-success writer remains outside the sanctioned boundary.\n- Existing /ops, /build, and /build/work surfaces expose plain recovery actions without new routes or hardcoded colors.\n- Each child has TDD evidence, affected tests, build/typecheck, independent semantic review, DCO, ready PR, and runtime evidence where applicable.\n- The veterinary incident regression is refused without rewriting its historical record.\n- Parent completion occurs only after all four child BIs are terminal with merged/runtime evidence.\n\n## Governance\n\n- Approved source: `docs/superpowers/specs/2026-08-08-initiative-readiness-and-goal-completion-reconciliation-design.md`\n- Approved plan: `docs/superpowers/plans/2026-08-08-initiative-readiness-and-goal-completion-reconciliation-implementation.md`\n- Supersession decision: DI-3F25CDF8D0E0\n- Historical IDs are provenance only; this live graph owns execution.",
-      "status": "in-progress",
+      "title": "Let external Workrooms establish initiative scope baselines for plan coverage",
+      "body": "The governed record_plan_backlog_coverage path refuses an otherwise complete atomic plan when initiative_scope_baseline is absent, but external Codex/Claude/Grok Workrooms have no governed tool that can create that prerequisite. The result is a circular gate: the plan cannot receive its live coverage receipt, while the external contributor cannot satisfy the missing baseline. Add an authorized, auditable factory path or make record_plan_backlog_coverage establish the baseline when the umbrella BI and immutable plan are already verified. Acceptance: external Workroom can record and revalidate plan coverage without database or installed-runtime edits; the operation preserves four-way traceability, immutable blob binding, dependency-cycle checks, and principal attribution.",
+      "status": "retired",
+      "type": "product",
+      "workType": "tool",
+      "source": "automated-detection",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-91af30a5-cmt9i9to303vn01qvmv6uezz1",
+          "kind": "epic_link",
+          "summary": "(no epic) → EP-129D11FD",
+          "recordedAt": "2026-08-26T02:59:44.883Z",
+          "payload": {
+            "toEpicId": "EP-129D11FD",
+            "fromEpicId": null
+          }
+        }
+      ],
+      "triageOutcome": "duplicate",
+      "scopeRationale": "This is a platform coordination-plane/tooling gap shared by every external coding agent.",
+      "createdAt": "2026-08-24T02:05:50.991Z"
+    },
+    {
+      "itemId": "BI-9AD6D9F3",
+      "epicId": "EP-129D11FD",
+      "title": "Make the local spinning guard model- and progress-aware for high-trust reviewers",
+      "body": "Observed during BI-F0715C9C exact-tree research review on 2026-08-24. Qwen3.8 27B ran on the proven local-only route with a 600,000 ms inference timeout and high effort warrant (600,000 ms / 200 iterations), made eight successful immutable source-tool calls, then apps/web/lib/tak/agentic-loop.ts stopped it under the generic `providerId === \"local\" && executedTools.length >= 8` spinning guard before record_initiative_evidence. The adjacent code comment says this guard is intended for small 7–13B fallback models, but the implementation ignores model/profile size and genuine successful progress.\n\nAcceptance:\n1. A governed high-trust reviewer on a measured/approved 27B local profile is not terminated solely because it reaches eight successful, non-repeating tool executions.\n2. The guard distinguishes genuine progress from spinning and/or uses resolved model-profile capability/size policy rather than providerId alone.\n3. True small local fallback spinning remains bounded and retains the preserved pre-nudge-answer safety behavior.\n4. TDD reproduces the eight-successful-tool 27B failure, proves the corrected behavior, and proves the small-model guard still fires.\n5. Coordinate ownership with PR #4627, which currently edits agentic-loop.ts and tests; land by normal ancestry after that scope releases.\n\nEvidence: v8 TaskRun TR-MCP-Y210NnUyN2tyMDAwMDh3a282cWU3eHF1aQ-385BCECBA71C; exact served runtime eb0b9c2eca31663da94c43d614218bc93b4bf82f; exact Qwen3.8 27B route; eight successful immutable reads/searches; no writer/envelope/receipt because the guard terminated the loop.",
+      "status": "open",
+      "type": "product",
+      "workType": "bug",
+      "source": "automated-detection",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-9ad6d9f3-cmt9i9tsc03vr01qv2zs3gjr7",
+          "kind": "epic_link",
+          "summary": "(no epic) → EP-129D11FD",
+          "recordedAt": "2026-08-26T02:59:45.036Z",
+          "payload": {
+            "toEpicId": "EP-129D11FD",
+            "fromEpicId": null
+          }
+        }
+      ],
+      "effortSize": "medium",
+      "triageOutcome": "build",
+      "scopeRationale": "The defect is in the shared TAK agentic-loop runtime and affects governed high-trust local reviewers across organizations.",
+      "createdAt": "2026-08-24T06:16:31.488Z"
+    },
+    {
+      "itemId": "BI-9FE775F9",
+      "epicId": "EP-129D11FD",
+      "title": "Make initiative research evidence reachable from external Workrooms",
+      "body": "External implementation work can be stopped at RESEARCH_REQUIRED even when the governed recovery action is record_initiative_evidence, because development agents may have neither the initiative_evidence_write grant nor any eligible reviewer route. The Help → Getting Started repair exposed this on WC-DF1D3AFD / BI-AE7C386B. Provide an actionable governed route for an external Workroom to submit the required evidence or summon an eligible reviewer. Preserve separation of duties: no self-approval, no silent readiness bypass, and no blanket grant expansion. Acceptance: (1) readiness identifies a reachable actor/action when research evidence is required, (2) an external Workroom can submit or route the evidence through governed authority, (3) the original Help bug can advance without administrative database edits, and (4) regression coverage proves the no-eligible-reviewer case.",
+      "status": "open",
+      "type": "product",
+      "workType": "tool",
+      "source": "automated-detection",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-9fe775f9-cmt9cqfvh01eu01qvbhjqk46u",
+          "kind": "evidence",
+          "summary": "Upgraded initiative-readiness route omits immutable reviewer packet",
+          "recordedAt": "2026-08-26T00:24:42.461Z",
+          "payload": {
+            "url": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/e5f86ccbfb368c5cfa7571173d50a08ce66920ef/docs/superpowers/specs/2026-08-25-pet-rescue-operating-system-and-help-recovery-design.md",
+            "body": "On BI-7A38F667 / WC-16B8E810 at pushed immutable head e5f86ccbfb368c5cfa7571173d50a08ce66920ef, claim_backlog_item_for_work(workIntent=plan) returns reviewerRoutes with targetAgentId, gate, writer toolName, branch, headSha, and requestCoworker fields, but no initiativeReviewBinding and no requiredToolNames. request_coworker therefore dispatches the target without record_initiative_evidence; the coworker reports the writer is absent. Supplying requiredToolNames from the route is rejected because initiativeReviewBinding is absent (`initiativeReviewBinding and requiredToolNames must be supplied together`). This makes the exact server-issued recovery route non-executable without synthesizing a forbidden binding. TaskRuns: TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-027107654EB5 and TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-645CD8A4191A.",
+            "evidenceKind": "manual_check",
+            "toolExecutionId": null
+          }
+        },
+        {
+          "recoveryKey": "bi-9fe775f9-cmt9hwc7a03kj01qvyl9oe9uc",
+          "kind": "evidence",
+          "summary": "Post-upgrade retry still omits the immutable reviewer packet",
+          "recordedAt": "2026-08-26T02:49:15.718Z",
+          "payload": {
+            "url": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/e5f86ccbfb368c5cfa7571173d50a08ce66920ef/docs/superpowers/specs/2026-08-25-pet-rescue-operating-system-and-help-recovery-design.md",
+            "body": "Retry after the operator-reported server upgrade at 2026-08-26T02:46:23Z produced readiness decision IRD-2CE4EFAB99B4 for BI-7A38F667 / WC-16B8E810 at immutable head e5f86ccbfb368c5cfa7571173d50a08ce66920ef. Every reviewer route still omits initiativeReviewBinding and requiredToolNames. Replaying the exact server-issued research request returned completed TaskRun TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-645CD8A4191A with idempotentReplay=true, executedToolCount=1, and a2aMetadata.initiativeReviewBinding=null; its summary confirms it never reached record_initiative_evidence. No implementation or sandbox was started.",
+            "evidenceKind": "manual_check",
+            "toolExecutionId": null
+          }
+        },
+        {
+          "recoveryKey": "bi-9fe775f9-cmt9i9tqk03vp01qvktim1b0f",
+          "kind": "epic_link",
+          "summary": "(no epic) → EP-129D11FD",
+          "recordedAt": "2026-08-26T02:59:44.972Z",
+          "payload": {
+            "toEpicId": "EP-129D11FD",
+            "fromEpicId": null
+          }
+        }
+      ],
+      "effortSize": "medium",
+      "triageOutcome": "build",
+      "scopeRationale": "This is a cross-cutting governance and Workroom capability gap in the platform readiness plane, independent of any business archetype.",
+      "createdAt": "2026-08-25T01:02:50.101Z"
+    },
+    {
+      "itemId": "BI-AADDF8C1",
+      "epicId": "EP-129D11FD",
+      "title": "Make independently approved designs durable until successor implementation",
+      "body": "## Problem\n\nAn independently approved design whose implementation is deferred has no durable preservation boundary. Its authoritative state is fragmented across a pushed branch, one installation's Workroom, an external-client task, and immutable review/coverage receipts. Worktree, client-task, branch, or installation cleanup can erase discoverability and delivery intent even though the design is approved and ready to implement.\n\n## Scope\n\nDesign and enforce a first-class document-only delivery lifecycle that:\n- lets an independently approved design/spec merge through a normal non-draft PR before implementation;\n- durably links the merged commit and provider blob/digest, approval receipt, initiative scope baseline, originating BI and Workroom, and a separately reviewable successor implementation BI/branch/PR;\n- projects an operator-readable existing-substrate state equivalent to “approved — awaiting implementation”;\n- protects the only branch carrying approved unresolved work until its document delivery boundary is durable;\n- includes approved unresolved work and immutable references in recovery capture;\n- works consistently from Codex, Claude, Grok, Antigravity, and the portal.\n\nOut of scope:\n- GitHub draft PRs as parking;\n- self-approval, direct database bypasses, or a duplicate backlog;\n- implementation under the reviewer-baseline remediation BI;\n- Build Studio execution.\n\n## Acceptance criteria\n\n- A normal docs/spec PR can land after independent approval even when implementation is blocked or deferred.\n- Durable records link merged commit, provider blob/digest, approval receipt, baseline, BI, Workroom, and successor implementation work.\n- The backlog exposes an operator-readable approved-awaiting-implementation projection using existing status/projection substrate where possible.\n- Implementation uses a separate successor BI, branch, and PR when design and implementation are not one honest delivery unit.\n- Removing the originating worktree and client-task fixture does not remove durable work identity or delivery intent.\n- Cleanup cannot reap the only branch that contains approved unresolved work.\n- Recovery capture deterministically includes approved unresolved work and immutable references.\n- Cross-surface conformance tests cover Codex, Claude, Grok, Antigravity, and portal paths.\n- Enforcement changes are developed test-first and verified deterministically.\n- Delivery is a DCO-signed, non-draft PR with an end-to-end recovery demonstration.\n\n## Relationship to existing defect\n\nThis is intentionally separate from BI-0996913C (“Make plan-coverage baseline remediation reachable and live-anchor safe”). That BI repairs reviewer/baseline reachability. This BI establishes the durable approved-design delivery lifecycle and must have its own branch, Workroom, review, and PR.",
+      "status": "deferred",
       "type": "portfolio",
       "workType": "feature",
       "source": "user-request",
@@ -319,193 +491,54 @@
       "externalDependencies": [],
       "activities": [
         {
-          "recoveryKey": "bi-cf5a1078-cmt4nqbjp05pi01pjrlv76jjd",
-          "kind": "initiative_readiness_decision",
-          "summary": "implementation readiness: input-required",
-          "recordedAt": "2026-08-22T17:33:41.749Z",
+          "recoveryKey": "bi-aaddf8c1-cmt7zcwk80fb901mg0cq0ot1y",
+          "kind": "status_change",
+          "summary": "Retired BI-AADDF8C1 as defer",
+          "recordedAt": "2026-08-25T01:22:29.720Z",
           "payload": {
-            "unmet": [
-              {
-                "code": "CANONICAL_DESIGN_REQUIRED",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "design-checklist-reviewer"
-              },
-              {
-                "code": "RESEARCH_REQUIRED",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "design-author"
-              },
-              {
-                "code": "SPEC_APPROVAL_REQUIRED",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "design-checklist-reviewer"
-              },
-              {
-                "code": "REVIEW_REQUIRED",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "architecture-reviewer"
-              },
-              {
-                "code": "REVIEW_REQUIRED",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "data-reviewer"
-              },
-              {
-                "code": "REVIEW_REQUIRED",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "ux-reviewer"
-              },
-              {
-                "code": "REVIEW_REQUIRED",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "security-reviewer"
-              },
-              {
-                "code": "REVIEW_REQUIRED",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "compliance-reviewer"
-              },
-              {
-                "code": "REVIEW_REQUIRED",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "domain-reviewer"
-              },
-              {
-                "code": "OBJECTIVE_BASELINE_REQUIRED",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "design-checklist-reviewer"
-              },
-              {
-                "code": "ARTIFACT_AUTHOR_REQUIRED",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "artifact-resolver"
-              },
-              {
-                "code": "PLAN_REQUIRED",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "implementation-planner"
-              },
-              {
-                "code": "PLAN_REVIEW_REQUIRED",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "plan-reviewer"
-              },
-              {
-                "code": "PLAN_COVERAGE_REQUIRED",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "portfolio-management"
-              },
-              {
-                "code": "TRACEABILITY_INCOMPLETE",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "portfolio-management"
-              }
-            ],
-            "target": "implementation",
-            "profile": "cross-domain",
-            "subject": {
-              "id": "BI-CF5A1078",
-              "kind": "backlog-item"
+            "to": "deferred",
+            "from": "in-progress",
+            "reason": "Durable approved-design retention is a separate lifecycle and artifact-governance feature spanning PR evidence, blobs/digests, receipts, successor work, retention pins, and operator projection.",
+            "outcome": "defer",
+            "deferral": {
+              "reason": "Durable approved-design retention is a separate lifecycle and artifact-governance feature spanning PR evidence, blobs/digests, receipts, successor work, retention pins, and operator projection.",
+              "trigger": "Resume after reinstall when threadless initiative review is stable; fund a design-first lifecycle slice that proves retention, successor linkage, cleanup safety, operator readability, and no implementation-readiness bypass.",
+              "reviewAt": "2026-09-15T20:00:00.000Z"
             },
-            "verdict": "input-required",
-            "blockers": [],
-            "authority": {
-              "actionKey": "claim_backlog_item_for_work",
-              "enforcementState": "enforced"
-            },
-            "satisfied": [
-              {
-                "code": "CLASSIFICATION_REQUIRED",
-                "state": "pass",
-                "evidenceRefs": [],
-                "accountableRole": "product-owner"
-              },
-              {
-                "code": "AUTHORIZATION_DENIED",
-                "state": "pass",
-                "evidenceRefs": [],
-                "accountableRole": "platform-governance"
-              },
-              {
-                "code": "DEPENDENCY_UNRESOLVED",
-                "state": "not-applicable",
-                "evidenceRefs": [],
-                "accountableRole": "portfolio-management"
-              },
-              {
-                "code": "CAPSULE_IDENTITY_MISMATCH",
-                "state": "pass",
-                "evidenceRefs": [],
-                "accountableRole": "delivery-coordinator"
-              }
-            ],
-            "decisionId": "IRD-36480F91763F",
-            "workIntent": "implementation",
-            "evaluatedAt": "2026-08-22T17:33:41.744Z",
-            "factsDigest": "674d796819db72ef60caca10e7b319fe5b86bac29ef903619326171a3718f934",
-            "stableCodes": {
-              "unmet": [
-                "CANONICAL_DESIGN_REQUIRED",
-                "RESEARCH_REQUIRED",
-                "SPEC_APPROVAL_REQUIRED",
-                "REVIEW_REQUIRED",
-                "REVIEW_REQUIRED",
-                "REVIEW_REQUIRED",
-                "REVIEW_REQUIRED",
-                "REVIEW_REQUIRED",
-                "REVIEW_REQUIRED",
-                "OBJECTIVE_BASELINE_REQUIRED",
-                "ARTIFACT_AUTHOR_REQUIRED",
-                "PLAN_REQUIRED",
-                "PLAN_REVIEW_REQUIRED",
-                "PLAN_COVERAGE_REQUIRED",
-                "TRACEABILITY_INCOMPLETE"
-              ],
-              "blockers": [],
-              "satisfied": [
-                "CLASSIFICATION_REQUIRED",
-                "AUTHORIZATION_DENIED",
-                "DEPENDENCY_UNRESOLVED",
-                "CAPSULE_IDENTITY_MISMATCH"
-              ]
-            },
-            "policyVersion": "initiative-readiness.v1",
-            "schemaVersion": 1,
-            "transitionObject": {
-              "id": "OpenDigitalProductFactory/opendigitalproductfactory#doc/initiative-readiness-traceability",
-              "kind": "work-capsule",
-              "targetState": "implementation",
-              "expectedVersion": "claim.v1"
-            }
+            "rationale": "Valid initiative-governance demand with approved architecture, but the remaining work is explicitly split into ordered, independently reviewed slices. It is unsafe to collapse those boundaries into the pre-reinstall drain PR.",
+            "duplicateOfId": null
           }
         }
       ],
-      "effortSize": "xlarge",
-      "triageOutcome": "build",
-      "scopeRationale": "Cross-cutting DPF process-spine control that governs every archetype and delivery surface.",
+      "effortSize": "large",
+      "triageOutcome": "defer",
+      "scopeRationale": "Cross-cutting DPF process-spine lifecycle across backlog, Workrooms, immutable evidence, recovery capture, branch cleanup, contributor tooling, and portal projection for every delivery surface.",
       "priority": 1,
-      "createdAt": "2026-08-22T05:57:48.058Z"
+      "createdAt": "2026-08-24T03:20:18.218Z"
     },
     {
-      "itemId": "BI-F0715C9C",
+      "itemId": "BI-B9312D74",
       "epicId": "EP-129D11FD",
-      "title": "Claimed external Workroom cannot stamp its head SHA, blocking immutable plan coverage",
-      "body": "## Observed\nFor BI-F50B1E46, claim_backlog_item_for_work created WC-587EA55D bound to repository OpenDigitalProductFactory/opendigitalproductfactory and branch doc/design-and-plan-wordpress-channel-projection. The pushed DCO commit is 233536d7aaa315f10e8588ed3a9a79ee66bd6645. Two adopt_worktree calls supplied that exact headSha and baseSha; both returned the same Workroom with headSha=null.\n\nTwo record_plan_backlog_coverage attempts against canonical plan blob 04bc8d9826f1ec27a6e35ea45adce83b6dcdab4a then failed plan-artifact-invalid: \"Repository artifact ownership is missing or ambiguous for this subject.\"\n\n## Evidence-backed cause\nThe live resolver in apps/web/lib/backlog/initiative-readiness/repository-artifact.ts requires exactly one nonarchived subject-bound Workroom whose recorded headSha equals the immutable commit. The exposed claim tool creates a subject-bound room without headSha, and the exposed adopt tool did not update it. An external Codex session therefore cannot satisfy the accepted provenance shape even with a pushed, DCO-signed immutable blob.\n\nAfter this is fixed, a newly filed xlarge umbrella may next fail for missing initiative_scope_baseline; no initiative/spec-approval or baseline writer is exposed in the current MCP tool surface. The remediation must provide an attainable governed path for both prerequisites or make the recorder return the precise next governed action.\n\n## Independent reproduction — BI-CF5A1078 (2026-08-22)\nPR #4487 merged the corrected canonical design and plan through the protected merge queue at commit 8c56af22783403ac8037fe31c23d22ffb98d6ef6. The immutable design blob is b184c865e1947ce4a60d0411a248ec758f37d640 and the immutable plan blob is 4704bde1f057f99f165434327d9697df54d8dffe.\n\nA clean external worktree was adopted successfully as WC-2912EF2A with repository, branch, base SHA, head SHA, worktree, and outcomeAnchor BI-CF5A1078. record_plan_backlog_coverage still returned plan-artifact-invalid: \"No live workroom for this subject is bound to OpenDigitalProductFactory/opendigitalproductfactory.\" The adopted Workroom has backlogItemId=null even though its outcome anchor is the BI.\n\nFollowing that error's exact next action, claim_backlog_item_for_work on BI-CF5A1078 refused implementation because PLAN_COVERAGE_REQUIRED and TRACEABILITY_INCOMPLETE (among the other independent design/review prerequisites) are missing. Coverage therefore requires a subject-bound claim, while the claim requires coverage: a bootstrap deadlock after recovery.\n\nThe independent reviewer path is also unreachable in this desktop context. Both summon_coworker and request_coworker against the designated reviewer agents returned missing_threadId, although the current task has a stable Codex task id. The designated reviewer agents expose no coworker-service offers, and the current principal correctly lacks their review grants. This prevents restoring CANONICAL_DESIGN_REQUIRED, SPEC_APPROVAL_REQUIRED, the six REVIEW_REQUIRED lanes, OBJECTIVE_BASELINE_REQUIRED, PLAN_REQUIRED, and PLAN_REVIEW_REQUIRED without bypassing separation of duties.\n\n## Acceptance\n1. Claim/adopt of an existing branch atomically binds backlog item, canonical repository, branch, current head SHA, owner principal, and worktree, or returns a precise actionable conflict.\n2. Re-adopt updates headSha after commit/amend/rebase and returns the updated row.\n3. An external human-principal Codex/Claude/Grok session with a single DCO trailer can resolve its immutable artifact without fabricating an agent.\n4. The same flow can create/approve the required initiative scope baseline through an exposed governed tool, or the coverage recorder no longer requires an unreachable artifact for ordinary decomposed xlarge BIs.\n5. Regression test reproduces WC-587EA55D shape and proceeds to validate the submitted coverage mapping rather than plan-artifact-invalid.\n6. Existing ambiguity/multiple-workroom/DCO-mismatch protections remain fail-closed.\n7. summon_coworker/request_coworker receive or accept the current Codex task context through the supported host integration, and a regression test proves an external task can route immutable design, specialist, domain, and plan reviews without inheriting reviewer grants.\n8. A recovered parent initiative can record plan coverage before implementation claim, with no claim↔coverage circular dependency.\n\n## Independent reproduction — veterinary recovery fixture (2026-08-22)\nA separate fixture task restored canonical EP-55AF36AC and xlarge BI-79449954, filed five child BIs, and wrote the draft plan at docs/superpowers/plans/2026-08-22-veterinary-archetype-acceptance-fixture.md on branch doc/write-the-governed-oak-prairie-acceptance-fixtur. plan intent refused with IRD-EF7FE6E00C13 for canonical design, research, spec approval, six specialist reviews, objective baseline, and artifact author even though the merged design exists at docs/superpowers/specs/2026-08-08-veterinary-clinic-operating-system-design.md with historical research and architecture/data/UX review. design intent correctly succeeded and created repository-bound WC-A31DBE53. This confirms that source files and historical review prose do not substitute for live governed receipts after recovery; the supported external-session route must let designated reviewers re-materialize receipts from immutable artifacts without bypass or fabricated authority.",
+      "title": "A readiness-gate handoff parks on a 15-minute human approval, but the MCP caller is told only \"timed out\"",
+      "body": "Found 2026-08-25 taking BI-7626A660 from design to implementation from Claude Code over MCP. Corrected twice as the diagnosis improved; this is the accurate version.\n\nTHE CHAIN ACTUALLY WORKS. Traced end to end:\n\n1. `claim_backlog_item_for_work` (`workIntent: implementation`) refuses: `RESEARCH_REQUIRED`, `PLAN_REQUIRED`. Correct — an author must not ratify their own readiness.\n2. The external agent does not hold the writer grants. `load_tools {names:[\"record_initiative_evidence\"]}` returns `count: 0`. Correct.\n3. FIRST refusal returned `escalations: [{reason: \"no-eligible-reviewer\"}]` and an EMPTY `reviewerRoutes`. After `record_external_development_evidence` bound the workroom to branch + head SHA, the SECOND refusal resolved two reviewers with ready-made `requestCoworker` packets. **Branch-binding is what makes reviewers resolvable, and nothing documents that.** The first refusal reads as a dead end.\n4. `request_coworker` with the server packet **returned a timeout to the caller**. It had in fact succeeded: TaskRun `TR-MCP-...-E78DE05376CF`, `currentAgentId: AGT-WS-PORTFOLIO`, `authorityScope` correctly narrowed to `backlog-item:BI-7626A660` + `tool:record_initiative_evidence`.\n5. The Portfolio Advisor **ran and reached a verdict**. Portal log:\n   `[agentic-tool] CALL iter=0 tool=record_initiative_evidence args={\"decision\":\"pass\"}`\n   `[agentic-tool] RESULT iter=0 success=false msg=\"record_initiative_evidence rejected: This action is authorized to proceed only after employee approval.\"`\n6. That refusal is `approval-required` from `apps/web/lib/govern/authority/coworker-authority-decision.ts:375`, whose `nextAction` is `request-approval`. The coworker followed through: `CoworkerActionEnvelope cmt99vf8m00lz01p7we19mjgn`, status `proposed`, `delegatingUserId` = the founder, `authorityDecisionId AUTH-904afd21`, bound by `inputFingerprint` and `approvalBindingFingerprint`.\n7. TaskRun status is `input-required`. It is waiting for a human. Correctly.\n\nSO THE GOVERNANCE IS RIGHT. Dual control fired exactly where it should: an agent asked another agent to ratify its readiness, and the platform stopped and asked a human. That is the system working.\n\nTHE ACTUAL DEFECTS, all in the feedback path:\n\nA. **`request_coworker` reports a timeout for a call that succeeded and parked.** The caller cannot distinguish \"dispatch failed\" from \"dispatched, verdict reached, awaiting your approval\". A retry then fails with `idempotency_conflict`, which is the only hint the first call worked. The tool should return the TaskRun handle and a pending-approval status immediately, not block.\n\nB. **The approval envelope expires in 15 minutes** (`createdAt 23:04:36`, `expiresAt 23:19:36`). An unattended handoff to a human who is not watching the screen will always expire. Either the window should scale with the interaction shape, or expiry should be recoverable without re-running the reviewer.\n\nC. **No pollable status from the requesting surface.** `get_child_threads` requires a thread context an external MCP caller does not have. Reaching the truth required reading `TaskRun`, `CoworkerActionEnvelope` and portal logs directly — a direct-DB fallback, stated as such per AGENTS.md section 5.\n\nD. **The reviewer's verdict is invisible to the requester.** The Advisor decided `pass`. That is in a log line, not in any surface the requesting agent or the approving human can read before deciding.\n\nE. `readiness.artifactHints` reports `hasSpec:false, hasPlan:false` while both files are committed and pushed, because the projection resolves from the portal `PROJECT_ROOT` (`/sandbox-workspace`) rather than the workroom's bound branch. `record_plan_backlog_coverage` already models the right shape via `planArtifactRef: repo-blob-at-commit`; the readiness projection does not use it.\n\nDO NOT fix by granting external agents `initiative_evidence_write`, and do not fix by letting the requesting chain approve its own envelope. Independent review and dual control are the point. Fix the feedback path, not the gate.\n\nEVIDENCE: WC-DF6943D2; branch `feat/installation-estate-identity-header-badge-mcp-se` at `cf92cb72a4`; readiness decisions IRD-9E937A47B543, IRD-5A85CC5633D1, IRD-00D1A641019E; external dev evidence `cmt99t0kc00kk01p72edg3j2j`; TaskRun `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-E78DE05376CF`; envelope `cmt99vf8m00lz01p7we19mjgn`.",
+      "status": "open",
+      "type": "product",
+      "workType": "bug",
+      "source": "automated-detection",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [],
+      "effortSize": "medium",
+      "triageOutcome": "build",
+      "scopeRationale": "The readiness gate and the external-agent MCP grant surface are universal platform governance substrate.",
+      "createdAt": "2026-08-25T23:02:06.532Z"
+    },
+    {
+      "itemId": "BI-CC9D5997",
+      "epicId": "EP-129D11FD",
+      "title": "record_plan_backlog_coverage publishes one pack's schema but executes another's handler, making the Spec/Plan/Doc CI gate unsatisfiable",
+      "body": "## Observed\n\nCalling `record_plan_backlog_coverage` against the live install with exactly the payload its published schema describes (`itemId`, `planPath`, `planArtifactRef`, `decision: \"atomic\"`, `deliverables`, `rationale`) returns:\n\n```\n{\"success\": false, \"error\": \"gate-not-authorized\",\n \"message\": \"record_plan_backlog_coverage cannot record that gate.\"}\n```\n\nThe payload contained no `gate` field, because the published schema has no such field.\n\n## Evidence-backed cause\n\nTwo packs claim the same tool name, and the registry resolves the schema and the handler to different owners.\n\n`apps/web/lib/mcp/packs/decomposition-pack.ts` owns the **definition** — the plan-coverage-v2 contract (`planPath` / `planArtifactRef` / `deliverables`) — and its handler `recordPlanBacklogCoverageTool`.\n\n`apps/web/lib/mcp/packs/initiative-readiness-pack.ts` builds its exports asymmetrically:\n\n```ts\nexport const initiativeReadinessPack: ToolPack = {\n  packId: \"initiative-readiness\",\n  definitions,                                                    // hand-listed, 9 entries\n  handlers: Object.fromEntries(Object.entries(LANES).map(...)),   // derived from LANES, 10 entries\n  grants:   Object.fromEntries(Object.entries(LANES).map(...)),   // derived from LANES, 10 entries\n};\n```\n\n`INITIATIVE_READINESS_LANES` (`apps/web/lib/tak/initiative-readiness-tool-grants.ts:20`) contains a `record_plan_backlog_coverage` entry whose only gate is `dependency-disposition`. The hand-listed `definitions` array omits it. So the pack contributes a **handler and grant** for that name but no definition.\n\n`composeToolPacks` (`apps/web/lib/mcp/tool-registry.ts:26-39`) then throws on duplicate **definitions** but silently overwrites **handlers**:\n\n```ts\nfor (const def of pack.definitions) {\n  if (seen.has(def.name)) throw new Error(`Duplicate tool \"${def.name}\" registered across tool packs`);\n  ...\n}\nfor (const [name, handler] of Object.entries(pack.handlers)) {\n  handlers[name] = handler;   // last pack wins, no duplicate check\n}\n```\n\n`pack-registry.ts` lists `decompositionPack` before `initiativeReadinessPack`, so the readiness handler wins. The duplicate guard cannot catch it precisely because the readiness pack contributes no definition for the name.\n\n`handlerFor` has no fall-through — `const operation = params.operation ?? \"gate-receipt\"` — so the call lands in the gate-receipt branch, finds `params.gate` undefined, and rejects with `gate-not-authorized`.\n\n## Consequence\n\n`scripts/check-plan-backlog-coverage.mjs` fails any PR that adds or modifies a `docs/superpowers/plans/*.md` carrying a `**Backlog item:**` line unless the plan holds a live MCP coverage receipt, and explicitly rejects `pending`/`none`/`n/a`. Since the tool that mints that receipt is unreachable, the Spec/Plan/Doc Gate is unsatisfiable and such PRs cannot go green.\n\nReproduced on PR #4663, where the gate failed with:\n\n```\n2 guard(s) failed: Spec/Plan/Doc Gate, Design Grounding Gate\ndocs/superpowers/plans/2026-08-26-local-fallback-eligibility-invariant.md:\n  missing canonical \"## Backlog coverage\" section.\n```\n\nA receipt minted on 2026-08-25 (`cmt8b0pm10nku01mg49c9d6j9`, in `docs/superpowers/plans/2026-08-25-local-ci-vitest-stage-timeout.md`) shows the path worked recently, so this is a regression rather than a never-worked surface. Establishing exactly which change introduced the LANES entry is part of the work.\n\nThis is very likely a contributor to the \"bootstrap deadlock after recovery\" described in `BI-F0715C9C`, which reports `record_plan_backlog_coverage` refusing along a related path.\n\n## Acceptance criteria\n\n1. `record_plan_backlog_coverage` executes the handler matching its published schema; a payload valid under that schema records a coverage receipt.\n2. `composeToolPacks` refuses to silently overwrite a handler or grant for a name another pack already contributed, the same way it refuses duplicate definitions — a collision fails loudly at startup rather than resolving by registration order.\n3. Any pack contributing a handler or grant for a name contributes a definition for it, or the registry rejects the pack. The `LANES`-derived handlers/grants and the hand-listed `definitions` in `initiative-readiness-pack.ts` cannot diverge silently.\n4. If a `dependency-disposition` readiness lane genuinely needs a writer, it gets its own tool name rather than shadowing an existing one.\n5. Regression test registers two packs claiming one name and asserts the failure, and an end-to-end test records plan coverage through the published schema.\n6. The Spec/Plan/Doc Gate passes for a plan whose coverage was recorded through the governed tool.\n\nProvenance: hit while landing `BI-A8BFEFCE` on PR #4663; traced through source, 2026-08-26.",
       "status": "open",
       "type": "portfolio",
       "workType": "bug",
@@ -515,110 +548,19 @@
       "externalDependencies": [],
       "activities": [
         {
-          "recoveryKey": "bi-f0715c9c-cmt52up8b002f01rmezipbfg0",
+          "recoveryKey": "bi-cc9d5997-cmt9dprkl023b01qvvxp10r5s",
           "kind": "initiative_readiness_decision",
-          "summary": "implementation readiness: input-required",
-          "recordedAt": "2026-08-23T00:37:00.347Z",
+          "summary": "design readiness: allowed",
+          "recordedAt": "2026-08-26T00:52:10.581Z",
           "payload": {
-            "unmet": [
-              {
-                "code": "CANONICAL_DESIGN_REQUIRED",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "design-checklist-reviewer"
-              },
-              {
-                "code": "RESEARCH_REQUIRED",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "design-author"
-              },
-              {
-                "code": "SPEC_APPROVAL_REQUIRED",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "design-checklist-reviewer"
-              },
-              {
-                "code": "REVIEW_REQUIRED",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "architecture-reviewer"
-              },
-              {
-                "code": "REVIEW_REQUIRED",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "data-reviewer"
-              },
-              {
-                "code": "REVIEW_REQUIRED",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "ux-reviewer"
-              },
-              {
-                "code": "REVIEW_REQUIRED",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "security-reviewer"
-              },
-              {
-                "code": "REVIEW_REQUIRED",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "compliance-reviewer"
-              },
-              {
-                "code": "REVIEW_REQUIRED",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "domain-reviewer"
-              },
-              {
-                "code": "OBJECTIVE_BASELINE_REQUIRED",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "design-checklist-reviewer"
-              },
-              {
-                "code": "ARTIFACT_AUTHOR_REQUIRED",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "artifact-resolver"
-              },
-              {
-                "code": "PLAN_REQUIRED",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "implementation-planner"
-              },
-              {
-                "code": "PLAN_REVIEW_REQUIRED",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "plan-reviewer"
-              },
-              {
-                "code": "PLAN_COVERAGE_REQUIRED",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "portfolio-management"
-              },
-              {
-                "code": "TRACEABILITY_INCOMPLETE",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "portfolio-management"
-              }
-            ],
-            "target": "implementation",
-            "profile": "cross-domain",
+            "unmet": [],
+            "target": "design",
+            "profile": "fix",
             "subject": {
-              "id": "BI-F0715C9C",
+              "id": "BI-CC9D5997",
               "kind": "backlog-item"
             },
-            "verdict": "input-required",
+            "verdict": "allowed",
             "blockers": [],
             "authority": {
               "actionKey": "claim_backlog_item_for_work",
@@ -636,65 +578,139 @@
                 "state": "pass",
                 "evidenceRefs": [],
                 "accountableRole": "platform-governance"
-              },
-              {
-                "code": "DEPENDENCY_UNRESOLVED",
-                "state": "not-applicable",
-                "evidenceRefs": [],
-                "accountableRole": "portfolio-management"
-              },
-              {
-                "code": "CAPSULE_IDENTITY_MISMATCH",
-                "state": "pass",
-                "evidenceRefs": [],
-                "accountableRole": "delivery-coordinator"
               }
             ],
-            "decisionId": "IRD-5FE40CA19BEF",
-            "workIntent": "implementation",
-            "evaluatedAt": "2026-08-23T00:37:00.341Z",
-            "factsDigest": "a96182ba2f7f6e1f86354978c6aa23df0ec224c73a53570f66a5210f5f4bb9fa",
+            "decisionId": "IRD-D1636F273F34",
+            "workIntent": "design",
+            "evaluatedAt": "2026-08-26T00:52:10.564Z",
+            "factsDigest": "c40e530cf35e0852c6f1e6c14b9efd0144424f401b4e69d64096004312439b21",
             "stableCodes": {
-              "unmet": [
-                "CANONICAL_DESIGN_REQUIRED",
-                "RESEARCH_REQUIRED",
-                "SPEC_APPROVAL_REQUIRED",
-                "REVIEW_REQUIRED",
-                "REVIEW_REQUIRED",
-                "REVIEW_REQUIRED",
-                "REVIEW_REQUIRED",
-                "REVIEW_REQUIRED",
-                "REVIEW_REQUIRED",
-                "OBJECTIVE_BASELINE_REQUIRED",
-                "ARTIFACT_AUTHOR_REQUIRED",
-                "PLAN_REQUIRED",
-                "PLAN_REVIEW_REQUIRED",
-                "PLAN_COVERAGE_REQUIRED",
-                "TRACEABILITY_INCOMPLETE"
-              ],
+              "unmet": [],
               "blockers": [],
               "satisfied": [
                 "CLASSIFICATION_REQUIRED",
-                "AUTHORIZATION_DENIED",
-                "DEPENDENCY_UNRESOLVED",
-                "CAPSULE_IDENTITY_MISMATCH"
+                "AUTHORIZATION_DENIED"
               ]
             },
-            "policyVersion": "initiative-readiness.v1",
+            "policyVersion": "initiative-readiness.v2",
             "schemaVersion": 1,
             "transitionObject": {
-              "id": "OpenDigitalProductFactory/opendigitalproductfactory#fix/initiative-readiness-bootstrap",
+              "id": "OpenDigitalProductFactory/opendigitalproductfactory#fix/plan-coverage-tool-registry",
               "kind": "work-capsule",
-              "targetState": "implementation",
+              "targetState": "design",
               "expectedVersion": "claim.v1"
             }
           }
         },
         {
-          "recoveryKey": "bi-f0715c9c-cmt52wz5z003b01rmqi770axo",
+          "recoveryKey": "bi-cc9d5997-cmt9eel7q02el01qvxt9526kn",
+          "kind": "evidence",
+          "summary": "Root cause bisected to PR #4641 (6dad5759f9, 2026-08-24) — handed to the claiming session on WC-C3B828AE",
+          "recordedAt": "2026-08-26T01:11:28.742Z",
+          "payload": {
+            "url": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/4641",
+            "body": "Handoff note from the session that filed this item. WC-C3B828AE (codex-desktop, branch `fix/plan-coverage-tool-registry`) holds the live claim; this session is NOT working the item and removed its duplicate worktree.\n\n## Which change introduced it\n\n`git log -S 'record_plan_backlog_coverage: { capability' -- apps/web/lib/tak/initiative-readiness-tool-grants.ts` returns exactly one commit:\n\n```\n6dad5759f9e88176c59fecd2c13e6d5b5bdd344d\n2026-08-24 19:05:13 +0000\nfix(readiness): complete deterministic recovery routes (#4641)\n```\n\nDiff: 5 insertions, 1 deletion, adding both\n\n```ts\nrecord_plan_backlog_coverage: { capability: \"manage_backlog\", grant: \"backlog_write\",\n  gates: [\"dependency-disposition\"], accountableRoles: [\"implementation-planner\"], independent: false },\n```\n\nto `INITIATIVE_READINESS_LANES` and `record_plan_backlog_coverage: [\"backlog_write\"]` to `INITIATIVE_READINESS_TOOL_GRANTS`.\n\n## Why this confirms the diagnosis rather than contradicting it\n\nThat PR's own design-grounding note states the intended ownership:\n\n> Source of truth: initiative-readiness-tool-grants owns recovery lane disclosure; decomposition-pack owns record_plan_backlog_coverage and its backlog_write grant.\n\nThe intent was disclosure only — to name the canonical writer in the recovery/escalation payload so a blocked caller learns which tool and grant satisfy PLAN_REQUIRED. That intent is correct and worth preserving.\n\nThe unintended effect is structural: `initiativeReadinessPack` derives `handlers` and `grants` from `LANES` while hand-listing `definitions`. Adding a LANES row therefore does not merely disclose a route — it installs a competing handler. Because `composeToolPacks` overwrites handlers without a duplicate check, and `initiativeReadinessPack` is registered after `decompositionPack`, the readiness gate-receipt handler silently replaced the plan-coverage-v2 one.\n\nSo the author's stated source of truth and the code's actual effect diverge purely because of the derived-handlers / hand-listed-definitions asymmetry. This is a strong argument for acceptance criterion 3: a pack must not be able to contribute a handler for a name it does not define.\n\n## Suggested shape, offered not prescribed\n\nKeep the LANES row (recovery disclosure was the point of #4641) but stop deriving handlers/grants from LANES wholesale — derive them from the pack's declared `definitions`, or from an explicit lane subset that excludes disclosure-only entries. Then make `composeToolPacks` reject handler/grant collisions the way it already rejects definition collisions, so the next occurrence fails loudly at startup.\n\n## Timeline note\n\nThe working receipt cited in the item (`cmt8b0pm10nku01mg49c9d6j9`, 2026-08-25) predates this reaching the running portal image `v2026.08.25-consumer-self-upgrade.2`, which is consistent with a regression rather than a never-worked surface.\n\nReproduction that produced the original finding: a `record_plan_backlog_coverage` call carrying exactly the published schema fields and no `gate`, rejected `gate-not-authorized`.",
+            "evidenceKind": "source_verified",
+            "toolExecutionId": null
+          }
+        },
+        {
+          "recoveryKey": "bi-cc9d5997-cmt9f38go02oi01qv5g5hnoom",
+          "kind": "evidence",
+          "summary": "Blast radius is wider than PR gating — the unreachable coverage tool also blocks closing delivered backlog items via PLAN_REQUIRED",
+          "recordedAt": "2026-08-26T01:30:38.616Z",
+          "payload": {
+            "url": null,
+            "body": "Second observation for WC-C3B828AE, from the session that filed this item.\n\nThe original report framed the impact as CI gating: `check-plan-backlog-coverage.mjs` fails any PR carrying a plan doc. That understates it.\n\n`update_backlog_item_status` to `done` on `BI-A8BFEFCE` — whose PR #4663 had already merged to `main` as `aa456254b6` with 34 checks green — was refused:\n\n```\nCannot complete BI-A8BFEFCE: DELIVERY_EVIDENCE_REQUIRED, RESEARCH_REQUIRED,\nPLAN_REQUIRED, ACCEPTANCE_EVIDENCE_REQUIRED, OBJECTIVE_BASELINE_REQUIRED,\nOBJECTIVE_RECONCILIATION_REQUIRED.  (IRD-2E853FE57EAF)\n```\n\n`PLAN_REQUIRED` is cleared by a `record_plan_backlog_coverage` receipt. While that tool is unreachable, the code is `unmet` for every item regardless of what shipped. So the defect blocks two lanes, not one:\n\n1. a plan-bearing PR cannot go green, and\n2. a delivered item cannot be marked done.\n\nWorth adding an acceptance criterion covering (2): after the fix, an item whose work has merged can traverse `PLAN_REQUIRED` and reach completion.\n\n## A possibly related signal, offered as a lead not a claim\n\nIn the same refusal, `DELIVERY_EVIDENCE_REQUIRED` came back with `state: \"fail\"` rather than `\"missing\"`, while its `evidenceRefs` correctly listed the three supplied activities (`cmt9cm92i01c601qvpdj9jnfk` test_pass, `cmt9cp8kb01ed01qvjmf5dqi3` build_pass, `cmt9ctghy01gn01qvf9zmic99` the PR link). Server-resolved evidence was present and the lane still failed rather than reporting it absent.\n\nThat may be an unrelated evidence-shape mismatch — the delivery lane may want a receipt kind that execution evidence does not satisfy. But it is the same family of symptom this item is about (a writer and a reader disagreeing about the contract between them), so it is worth one look while the registry is already open. If it turns out to be independent, it deserves its own item rather than being folded in here.",
+            "evidenceKind": "manual_check",
+            "toolExecutionId": null
+          }
+        },
+        {
+          "recoveryKey": "bi-cc9d5997-cmt9g516y030q01qv8a261i05",
+          "kind": "evidence",
+          "summary": "Second independent reproduction — BI-DBEEC15B also merged and also cannot be closed. Two test cases available.",
+          "recordedAt": "2026-08-26T02:00:02.122Z",
+          "payload": {
+            "url": null,
+            "body": "Confirming the completion-lane consequence is systematic rather than specific to one item.\n\n`BI-DBEEC15B` merged to `main` as `0ad91e688c` (PR #4669, 34 checks passing, 0 unresolved threads). `update_backlog_item_status → done` refused identically to `BI-A8BFEFCE`:\n\n```\nCannot complete BI-DBEEC15B: DELIVERY_EVIDENCE_REQUIRED, RESEARCH_REQUIRED,\nPLAN_REQUIRED, ACCEPTANCE_EVIDENCE_REQUIRED, OBJECTIVE_BASELINE_REQUIRED,\nOBJECTIVE_RECONCILIATION_REQUIRED.  (IRD-50B0B7B554B3)\n```\n\nSo there are now two merged, CI-green items stuck open on the same codes. Both are usable as end-to-end test cases for acceptance criterion 6: after the fix, an item whose work has merged should traverse `PLAN_REQUIRED` and reach completion.\n\n- `BI-A8BFEFCE` → `aa456254b6` (PR #4663), decision `IRD-2E853FE57EAF`\n- `BI-DBEEC15B` → `0ad91e688c` (PR #4669), decision `IRD-50B0B7B554B3`\n\nThe `DELIVERY_EVIDENCE_REQUIRED` oddity reproduced too: `state: \"fail\"` rather than `\"missing\"`, with `evidenceRefs` correctly listing the supplied activities (`cmt9eu8l202kj01qvjgyay8ka`, `cmt9g4j17030b01qvxunukopr`). Two independent occurrences make an evidence-shape mismatch more likely than a one-off, though it remains a lead rather than a confirmed finding and may well belong in its own item.\n\nBoth items are left open deliberately. No status was forced and no direct-DB edit was made.",
+            "evidenceKind": "manual_check",
+            "toolExecutionId": null
+          }
+        },
+        {
+          "recoveryKey": "bi-cc9d5997-cmt9i9tlg03vl01qvy2cdq33u",
+          "kind": "epic_link",
+          "summary": "(no epic) → EP-129D11FD",
+          "recordedAt": "2026-08-26T02:59:44.788Z",
+          "payload": {
+            "toEpicId": "EP-129D11FD",
+            "fromEpicId": null
+          }
+        }
+      ],
+      "effortSize": "medium",
+      "triageOutcome": "build",
+      "scopeRationale": "MCP tool registry and initiative-readiness governance surface; affects every agent and every plan-bearing PR.",
+      "createdAt": "2026-08-26T00:32:03.082Z"
+    },
+    {
+      "itemId": "BI-CF5A1078",
+      "epicId": "EP-129D11FD",
+      "title": "Complete initiative readiness and governed completion enforcement",
+      "body": "## Problem\r\n\r\nDPF currently has the approved initiative-readiness policy substrate, but authoritative entry, terminal, TaskRun, and UX adapters are not wired. An agent can therefore still treat underspecified feature or archetype work as implementation-ready or complete outside the shared evaluator.\r\n\r\nThe original live anchors (EP-PROCESS-SPINE, BI-94B4AB38 and its unfinished children) are absent from this replacement install. DI-3F25CDF8D0E0 selected an explicit superseding live graph instead of restoring database history or coding without a Workroom.\r\n\r\n## Existing delivered substrate\r\n\r\n- Approved design/plan/audit: PR #4146.\r\n- Workroom abandoned/foreign-claim guard: PR #4169.\r\n- Shared readiness policy, canonical baselines, receipts, retention, objective mapping, plan coverage v2, migration, projection and MCP writer pack: PR #4348.\r\n\r\n## Scope\r\n\r\nDeliver four separate ready PRs in dependency order:\r\n\r\n1. ENTRY — recommendation, claim, and Build Studio phase enforcement.\r\n2. TERM — canonical BacklogItem/Epic/FeatureBuild/Workroom terminal-transition boundary.\r\n3. TASK — governed TaskRun success-writer convergence.\r\n4. UX — existing-route recovery UX, activation records, docs, and runtime verification.\r\n\r\n## Acceptance criteria\r\n\r\n- Every implementation ingress and terminal writer routes through the shared initiative-readiness contract.\r\n- Underspecified feature/archetype work stays provisional and receives an actionable next gate.\r\n- Governed completion reconciles the current canonical baseline, live reviews, dependencies, authority, exact Workroom identity, objectives, and evidence.\r\n- No direct governed terminal or TaskRun-success writer remains outside the sanctioned boundary.\r\n- Existing /ops, /build, and /build/work surfaces expose plain recovery actions without new routes or hardcoded colors.\r\n- Each child has TDD evidence, affected tests, build/typecheck, independent semantic review, DCO, ready PR, and runtime evidence where applicable.\r\n- The veterinary incident regression is refused without rewriting its historical record.\r\n- Parent completion occurs only after all four child BIs are terminal with merged/runtime evidence.\r\n\r\n## Governance\r\n\r\n- Approved source: `docs/superpowers/specs/2026-08-08-initiative-readiness-and-goal-completion-reconciliation-design.md`\r\n- Approved plan: `docs/superpowers/plans/2026-08-08-initiative-readiness-and-goal-completion-reconciliation-implementation.md`\r\n- Supersession decision: DI-3F25CDF8D0E0\r\n- Historical IDs are provenance only; this live graph owns execution.",
+      "status": "deferred",
+      "type": "portfolio",
+      "workType": "feature",
+      "source": "user-request",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-cf5a1078-cmt7zcvqd0fb001mgkx08ncd8",
+          "kind": "status_change",
+          "summary": "Retired BI-CF5A1078 as defer",
+          "recordedAt": "2026-08-25T01:22:28.645Z",
+          "payload": {
+            "to": "deferred",
+            "from": "in-progress",
+            "reason": "Foundation readiness policy and receipts are delivered, but ENTRY, TERM, TASK, and UX remain four ordered PRs. Recent traversal/recovery repairs do not substitute for the full enforcement program.",
+            "outcome": "defer",
+            "deferral": {
+              "reason": "Foundation readiness policy and receipts are delivered, but ENTRY, TERM, TASK, and UX remain four ordered PRs. Recent traversal/recovery repairs do not substitute for the full enforcement program.",
+              "trigger": "Resume after reinstall when PR #4644's threadless reviewer binding is merged and verified; fund the next unfinished canonical slice in dependency order, with parent closure only after all four slices pass the plan's matrix.",
+              "reviewAt": "2026-09-15T20:00:00.000Z"
+            },
+            "rationale": "Valid initiative-governance demand with approved architecture, but the remaining work is explicitly split into ordered, independently reviewed slices. It is unsafe to collapse those boundaries into the pre-reinstall drain PR.",
+            "duplicateOfId": null
+          }
+        }
+      ],
+      "effortSize": "xlarge",
+      "triageOutcome": "defer",
+      "scopeRationale": "Cross-cutting DPF process-spine control that governs every archetype and delivery surface.",
+      "priority": 1,
+      "createdAt": "2026-08-22T05:57:48.058Z"
+    },
+    {
+      "itemId": "BI-F0715C9C",
+      "epicId": "EP-129D11FD",
+      "title": "Initiative readiness is untraversable for bounded external repairs",
+      "body": "## Observed\r\nFor BI-F50B1E46, claim_backlog_item_for_work created WC-587EA55D bound to repository OpenDigitalProductFactory/opendigitalproductfactory and branch doc/design-and-plan-wordpress-channel-projection. The pushed DCO commit is 233536d7aaa315f10e8588ed3a9a79ee66bd6645. Two adopt_worktree calls supplied that exact headSha and baseSha; both returned the same Workroom with headSha=null.\r\n\r\nTwo record_plan_backlog_coverage attempts against canonical plan blob 04bc8d9826f1ec27a6e35ea45adce83b6dcdab4a then failed plan-artifact-invalid: \"Repository artifact ownership is missing or ambiguous for this subject.\"\r\n\r\n## Evidence-backed cause\r\nThe live resolver in apps/web/lib/backlog/initiative-readiness/repository-artifact.ts requires exactly one nonarchived subject-bound Workroom whose recorded headSha equals the immutable commit. The exposed claim tool creates a subject-bound room without headSha, and the exposed adopt tool did not update it. An external Codex session therefore cannot satisfy the accepted provenance shape even with a pushed, DCO-signed immutable blob.\r\n\r\nAfter this is fixed, a newly filed xlarge umbrella may next fail for missing initiative_scope_baseline; no initiative/spec-approval or baseline writer is exposed in the current MCP tool surface. The remediation must provide an attainable governed path for both prerequisites or make the recorder return the precise next governed action.\r\n\r\n## Independent reproduction â€” BI-CF5A1078 (2026-08-22)\r\nPR #4487 merged the corrected canonical design and plan through the protected merge queue at commit 8c56af22783403ac8037fe31c23d22ffb98d6ef6. The immutable design blob is b184c865e1947ce4a60d0411a248ec758f37d640 and the immutable plan blob is 4704bde1f057f99f165434327d9697df54d8dffe.\r\n\r\nA clean external worktree was adopted successfully as WC-2912EF2A with repository, branch, base SHA, head SHA, worktree, and outcomeAnchor BI-CF5A1078. record_plan_backlog_coverage still returned plan-artifact-invalid: \"No live workroom for this subject is bound to OpenDigitalProductFactory/opendigitalproductfactory.\" The adopted Workroom has backlogItemId=null even though its outcome anchor is the BI.\r\n\r\nFollowing that error's exact next action, claim_backlog_item_for_work on BI-CF5A1078 refused implementation because PLAN_COVERAGE_REQUIRED and TRACEABILITY_INCOMPLETE (among the other independent design/review prerequisites) are missing. Coverage therefore requires a subject-bound claim, while the claim requires coverage: a bootstrap deadlock after recovery.\r\n\r\nThe independent reviewer path is also unreachable in this desktop context. Both summon_coworker and request_coworker against the designated reviewer agents returned missing_threadId, although the current task has a stable Codex task id. The designated reviewer agents expose no coworker-service offers, and the current principal correctly lacks their review grants. This prevents restoring CANONICAL_DESIGN_REQUIRED, SPEC_APPROVAL_REQUIRED, the six REVIEW_REQUIRED lanes, OBJECTIVE_BASELINE_REQUIRED, PLAN_REQUIRED, and PLAN_REVIEW_REQUIRED without bypassing separation of duties.\r\n\r\n## Acceptance\r\n1. Claim/adopt of an existing branch atomically binds backlog item, canonical repository, branch, current head SHA, owner principal, and worktree, or returns a precise actionable conflict.\r\n2. Re-adopt updates headSha after commit/amend/rebase and returns the updated row.\r\n3. An external human-principal Codex/Claude/Grok session with a single DCO trailer can resolve its immutable artifact without fabricating an agent.\r\n4. The same flow can create/approve the required initiative scope baseline through an exposed governed tool, or the coverage recorder no longer requires an unreachable artifact for ordinary decomposed xlarge BIs.\r\n5. Regression test reproduces WC-587EA55D shape and proceeds to validate the submitted coverage mapping rather than plan-artifact-invalid.\r\n6. Existing ambiguity/multiple-workroom/DCO-mismatch protections remain fail-closed.\r\n7. summon_coworker/request_coworker receive or accept the current Codex task context through the supported host integration, and a regression test proves an external task can route immutable design, specialist, domain, and plan reviews without inheriting reviewer grants.\r\n8. A recovered parent initiative can record plan coverage before implementation claim, with no claimâ†”coverage circular dependency.\r\n\r\n## Independent reproduction â€” veterinary recovery fixture (2026-08-22)\r\nA separate fixture task restored canonical EP-55AF36AC and xlarge BI-79449954, filed five child BIs, and wrote the draft plan at docs/superpowers/plans/2026-08-22-veterinary-archetype-acceptance-fixture.md on branch doc/write-the-governed-oak-prairie-acceptance-fixtur. plan intent refused with IRD-EF7FE6E00C13 for canonical design, research, spec approval, six specialist reviews, objective baseline, and artifact author even though the merged design exists at docs/superpowers/specs/2026-08-08-veterinary-clinic-operating-system-design.md with historical research and architecture/data/UX review. design intent correctly succeeded and created repository-bound WC-A31DBE53. This confirms that source files and historical review prose do not substitute for live governed receipts after recovery; the supported external-session route must let designated reviewers re-materialize receipts from immutable artifacts without bypass or fabricated authority.\r\n\r\n## WordPress readiness reproduction â€” BI-A45D744A (2026-08-22)\r\nBI-A45D744A is a small, bounded WordPress regression repair (workType=bug, effort=small) whose platform scope derives the cross-domain readiness profile. IRD-F6A6FC2E8BCC therefore requires the same canonical design, research, spec approval, six specialist reviews, objective baseline, artifact author, plan review, plan coverage, and traceability ceremony imposed on genuinely cross-domain work. The normal development PAT cannot load any initiative receipt writer, request_coworker fails missing_threadId, and no coworker service offer exists for the eligible reviewers.\r\n\r\nWC-E8275570 records provider-published commit 6b4ea6b906836b8e67b2afa53cf2aab25fdf03b1 plus immutable design/plan paths, but record_external_development_evidence did not reconcile Workroom.headSha. Repository artifact author resolution consequently remains fail-closed with ARTIFACT_AUTHOR_REQUIRED.\r\n\r\n## Additional acceptance\r\n9. A bounded platform bug derives the fix profile unless stronger recorded facts establish cross-domain or higher risk; platform ownership alone is not a risk signal.\r\n10. Fix, feature, and cross-domain policies have auditable, monotonic, materially different requirement sets aligned to the approved initiative-readiness design.\r\n11. Every unmet independent-review requirement identifies the canonical receipt tool/grant and at least one eligible, separate reviewer, plus a governed dispatch action or precise session-reconnect action.\r\n12. record_external_development_evidence reconciles a unique provider-verified published commit into the subject-bound Workroom head through the canonical adoption primitive; zero, ambiguous, unverified, or mismatched commits remain fail-closed.\r\n13. Artifact-author resolution succeeds only after canonical Workroom head reconciliation and continues to enforce immutable blob, subject binding, reviewer/author separation, and DCO identity.\r\n14. Existing blocked Workrooms can be reconciled idempotently by replaying the canonical external-development evidence call; no one-time database edit or fabricated receipt is required.\r\n\r\n## Traversal blockers discovered during governed repair (2026-08-23)\r\nThe current canonical design and plan are published at provider commit ab14d940a8e1d032ea0fc6a9cc1dc9fae4d8ad58 in WC-2ABA65F7. Implementation remains deliberately stopped at the design boundary.\r\n\r\nAn independently granted AGT-WS-REVIEW spec-approval attempt failed AUTHORIZATION_DENIED: \"Spec approval requires an organization-bound authority decision.\" Source verification found coworker-tool-authority-gate.ts writes AuthorizationDecisionLog.organizationId=null and deriveCoworkerAuthoritySubject ignores itemId, while baseline-repository.ts requires an allow decision bound to the governed BacklogItem organization. No readiness break-glass exists; the approved binding design explicitly forbids first-slice self-approval.\r\n\r\nThe latest live readiness projection also counted architecture/data/UX/security/compliance receipts bound to superseded e89f362 transport-session artifacts as satisfied against the current design. With no baseline, entry-adapter.ts supplies canonicalDigest=null and therefore never marks different-digest receipts stale. Superseded receipts must remain audit history but cannot authorize a newer proposed design.\r\n\r\nA second blocked initiative, BI-D2A51B36 / WC-B0DD2B2F at immutable head 49140d33a9f7c2d62abcf1ffc28e0fbff50b1203, reproduced missing_threadId and a workforce UI fallback to an ineligible/default coworker. Manual-check evidence: cmt5b0dy006gd01rmfykifyq3.\r\n\r\n## Additional acceptance\r\n15. record_initiative_design_review derives the backlog subject and organization server-side, records a matching organization-bound allow decision, and never trusts caller-supplied organization authority.\r\n16. A correctly granted independent reviewer can traverse exact spec approval; missing item/org, mismatch, wrong grant, and author/reviewer collision remain denied.\r\n17. Before baseline approval, the latest valid design-spec digest anchors specialist receipts; superseded artifact receipts project stale and cannot satisfy readiness.\r\n18. Recovery actions preserve the exact eligible agentId through portal/task dispatch or fail visibly; they never open a default coworker.\r\n\r\n## Veterinary coverage transaction reproduction (2026-08-23)\r\nWC-A31DBE53 is now synchronized to base abaa0452d199b058bbdcb638c7d370075947f82a and head d7470e7457e958b5919e98e017fd5865ea4c22fb. record_plan_backlog_coverage resolves immutable plan blob 8f933b3c9312f0a3b2f01794f421ac4b9cace01e and validates all five requirement/contract/flow/verification mappings far enough to commit. Both attempts then expire against Prisma's 5000 ms interactive transaction limit: 5532 ms and 8431 ms. No receipt is returned.\r\n\r\nSource verification shows recordPlanBacklogCoverage calls resolveRepositoryArtifact after opening the serializable transaction and locking the parent BacklogItem. Provider commit, DCO, blob, credential, alias, and Workroom reads therefore run while the lock is held. The repair must move immutable provider verification before the transaction and lock/revalidate the mutable Workroom head, owner, baseline, and mapped items inside it; increasing the global timeout is not the architecture fix.\r\n\r\nEvidence: repair activity cmt5c515e07e101rmafeg61tg; veterinary activity cmt5c516h07e301rm7dkeokmu; WC-A31DBE53.\r\n\r\n## Additional acceptance\r\n19. A provider preflight slower than five seconds does not consume the interactive transaction window; five valid mappings commit after a database-only serializable recheck, while changed Workroom/head/owner/baseline/mappings or transaction expiry remain fail-closed and write no receipt.\r\n\r\n## Post-delivery reproduction — BI-1819D34F (2026-08-25)\r\n\r\nEvery reproduction above is blocked BEFORE implementation. This one is blocked AFTER a clean delivery, which is a distinct failure mode: work that ships correctly can still never reach done.\r\n\r\nBI-1819D34F is a fix-profile, small, bounded security repair (CodeQL alert 388, js/file-access-to-http, CWE-200). It merged through the protected merge queue as squash commit 63c858add92d77c236215b2251d7f61d4df23bbe (PR #4661) with all 34 checks green, and the CodeQL javascript-typescript analysis on the merge commit confirms the alert is closed. The item still cannot complete: RESEARCH_REQUIRED, PLAN_REQUIRED, DELIVERY_EVIDENCE_REQUIRED, ACCEPTANCE_EVIDENCE_REQUIRED, OBJECTIVE_BASELINE_REQUIRED, OBJECTIVE_RECONCILIATION_REQUIRED.\r\n\r\nA scope manifest and plan were authored to satisfy the gate and pushed to doc/mcp-endpoint-trust-boundary-artifacts at 09be41d2c514dfabb98178958567310541003f06 (design blob 6eac4f394baa009810970cf2b8fea0029b3e79f3, plan blob 0808352eb4cbfbf745c6dd264a7a4786179814ac). The manifest was validated against parseInitiativeScopeManifest: three objectives, five acceptance statements, no unknown links.\r\n\r\nIndependent reviewer AGT-WS-REVIEW was summoned for spec-approval and DID run this time, on codex. It declined on the merits: \"Cannot pass: the fix already merged in PR #4661 before this scope manifest was authored, so spec-approval would be a post-hoc ratification rather than a forward-looking scope gate.\" It also reported it could not inspect the artifact at the bound commit or the PR #4661 diff, so its reading was partial, though its primary reason does not depend on that.\r\n\r\nThat judgement is sound and is NOT the defect. The defect is that the platform routes a whole class of legitimate work — a repair filed FROM a code-scanning alert and fixed directly — into a state where the only completion path requires an artifact that can only be authored honestly before the work, and no disposition other than retire exists afterwards. The founder accepted the refusal on 2026-08-25 and directed that the debt be recorded rather than the gate be worked around.\r\n\r\nCorroborated in the same run, each already filed separately:\r\n- BI-CC9D5997: record_plan_backlog_coverage returned \"record_plan_backlog_coverage cannot record that gate\" / gate-not-authorized. Confirmed at source: tool-registry.ts duplicate-guards pack DEFINITIONS but silently overwrites pack HANDLERS, and initiativeReadinessPack (pack-registry.ts:198) registers a handler for every LANES key — including record_plan_backlog_coverage — after decompositionPack (pack-registry.ts:191) defines its real one. The generic gate handler therefore executes against a schema that exposes no gate parameter. The runtime message matches that handler's exact string, so the tool is uncallable regardless of grants.\r\n- BI-B9312D74: the reviewer's fail receipt was itself not written — record_initiative_design_review returned \"This action is authorized to proceed only after employee approval.\" A declined review is therefore invisible in readiness state; baselineId stayed null.\r\n- BI-329AD58D: summon_coworker requiredToolNames did not narrow the surface. Logs show \"Skipping local fallback (16 tools > 15 threshold for small local models)\", so with codex pool-exhausted the reviewer had no engine at all until the pool reset.\r\n- BI-9FE775F9: initiative_evidence_write appears in no MCP token template. The caller's token matched DEVELOPMENT_TEMPLATE_GRANTS exactly, so the design-author research lane was unreachable even though that lane is independent:false and explicitly non-approval.\r\n\r\nEvidence: Workroom WC-710F9E03 (status blocked, reviewer judgement recorded as workroom evidence); external development evidence cmt9ca4u7013k01qvay66dgc7.\r\n\r\n## Additional acceptance\r\n20. A fix-profile item delivered directly from an automated detection can reach a terminal state that reflects \"shipped and verified\" without a forward-looking scope baseline being retroactively manufactured, or the readiness policy states plainly that such items are ineligible for done and offers the correct disposition.\r\n21. A reviewer's fail decision is recordable without a separate human approval step, so a declined gate is visible in readiness state rather than indistinguishable from a gate never attempted.",
+      "status": "open",
+      "type": "portfolio",
+      "workType": "bug",
+      "source": "automated-detection",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-f0715c9c-cmt6i4o1b00nw01mx01hhi7rc",
           "kind": "initiative_readiness_decision",
           "summary": "design readiness: allowed",
-          "recordedAt": "2026-08-23T00:38:46.535Z",
+          "recordedAt": "2026-08-24T00:32:25.775Z",
           "payload": {
             "unmet": [],
             "target": "design",
@@ -723,9 +739,64 @@
                 "accountableRole": "platform-governance"
               }
             ],
-            "decisionId": "IRD-D729776E9556",
+            "decisionId": "IRD-D72D5D6DF65F",
             "workIntent": "design",
-            "evaluatedAt": "2026-08-23T00:38:46.489Z",
+            "evaluatedAt": "2026-08-24T00:32:25.721Z",
+            "factsDigest": "a8a135e0ebaa37d6bea0ecd0197feb1b2d859bc681bb86a2cc65c78fb334ddea",
+            "stableCodes": {
+              "unmet": [],
+              "blockers": [],
+              "satisfied": [
+                "CLASSIFICATION_REQUIRED",
+                "AUTHORIZATION_DENIED"
+              ]
+            },
+            "policyVersion": "initiative-readiness.v1",
+            "schemaVersion": 1,
+            "transitionObject": {
+              "id": "OpenDigitalProductFactory/opendigitalproductfactory#fix/initiative-readiness-traversal-recovery",
+              "kind": "work-capsule",
+              "targetState": "design",
+              "expectedVersion": "claim.v1"
+            }
+          }
+        },
+        {
+          "recoveryKey": "bi-f0715c9c-cmt6if3w600w201mxqfh5jq5w",
+          "kind": "initiative_readiness_decision",
+          "summary": "design readiness: allowed",
+          "recordedAt": "2026-08-24T00:40:32.886Z",
+          "payload": {
+            "unmet": [],
+            "target": "design",
+            "profile": "cross-domain",
+            "subject": {
+              "id": "BI-F0715C9C",
+              "kind": "backlog-item"
+            },
+            "verdict": "allowed",
+            "blockers": [],
+            "authority": {
+              "actionKey": "claim_backlog_item_for_work",
+              "enforcementState": "enforced"
+            },
+            "satisfied": [
+              {
+                "code": "CLASSIFICATION_REQUIRED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "product-owner"
+              },
+              {
+                "code": "AUTHORIZATION_DENIED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "platform-governance"
+              }
+            ],
+            "decisionId": "IRD-34CE3575549D",
+            "workIntent": "design",
+            "evaluatedAt": "2026-08-24T00:40:32.873Z",
             "factsDigest": "4f250e6353d018dd3362c54b6f89bef238087dc5c76009cc1cd8371c52cd5865",
             "stableCodes": {
               "unmet": [],
@@ -746,19 +817,149 @@
           }
         },
         {
-          "recoveryKey": "bi-f0715c9c-cmt539yek00e401rmud2bybkw",
-          "kind": "epic_link",
-          "summary": "(no epic) → EP-129D11FD",
-          "recordedAt": "2026-08-23T00:48:52.076Z",
+          "recoveryKey": "bi-f0715c9c-cmt6nndlf06e001mx08a8uzei",
+          "kind": "initiative_readiness_decision",
+          "summary": "design readiness: allowed",
+          "recordedAt": "2026-08-24T03:06:56.787Z",
           "payload": {
-            "toEpicId": "EP-129D11FD",
-            "fromEpicId": null
+            "unmet": [],
+            "target": "design",
+            "profile": "cross-domain",
+            "subject": {
+              "id": "BI-F0715C9C",
+              "kind": "backlog-item"
+            },
+            "verdict": "allowed",
+            "blockers": [],
+            "authority": {
+              "actionKey": "claim_backlog_item_for_work",
+              "enforcementState": "enforced"
+            },
+            "satisfied": [
+              {
+                "code": "CLASSIFICATION_REQUIRED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "product-owner"
+              },
+              {
+                "code": "AUTHORIZATION_DENIED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "platform-governance"
+              }
+            ],
+            "decisionId": "IRD-3921E473D93D",
+            "workIntent": "design",
+            "evaluatedAt": "2026-08-24T03:06:56.768Z",
+            "factsDigest": "d49f950db3475eca91a55313c4a5f2901eb0109a627d19af04ad0c8e6d061f6a",
+            "stableCodes": {
+              "unmet": [],
+              "blockers": [],
+              "satisfied": [
+                "CLASSIFICATION_REQUIRED",
+                "AUTHORIZATION_DENIED"
+              ]
+            },
+            "policyVersion": "initiative-readiness.v1",
+            "schemaVersion": 1,
+            "transitionObject": {
+              "id": "OpenDigitalProductFactory/opendigitalproductfactory#fix/initiative-readiness-traversal-root",
+              "kind": "work-capsule",
+              "targetState": "design",
+              "expectedVersion": "claim.v1"
+            }
+          }
+        },
+        {
+          "recoveryKey": "bi-f0715c9c-cmt7j58gk08t801mgo2k74o07",
+          "kind": "initiative_readiness_decision",
+          "summary": "implementation readiness: input-required",
+          "recordedAt": "2026-08-24T17:48:38.036Z",
+          "payload": {
+            "unmet": [
+              {
+                "code": "RESEARCH_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-author"
+              },
+              {
+                "code": "PLAN_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "implementation-planner"
+              }
+            ],
+            "target": "implementation",
+            "profile": "fix",
+            "subject": {
+              "id": "BI-F0715C9C",
+              "kind": "backlog-item"
+            },
+            "verdict": "input-required",
+            "blockers": [],
+            "authority": {
+              "actionKey": "claim_backlog_item_for_work",
+              "enforcementState": "enforced"
+            },
+            "satisfied": [
+              {
+                "code": "CLASSIFICATION_REQUIRED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "product-owner"
+              },
+              {
+                "code": "AUTHORIZATION_DENIED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "platform-governance"
+              },
+              {
+                "code": "DEPENDENCY_UNRESOLVED",
+                "state": "not-applicable",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              },
+              {
+                "code": "CAPSULE_IDENTITY_MISMATCH",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "delivery-coordinator"
+              }
+            ],
+            "decisionId": "IRD-9150B28BAEBD",
+            "workIntent": "implementation",
+            "evaluatedAt": "2026-08-24T17:48:38.020Z",
+            "factsDigest": "11e58b6cd5ffae43b3af0080baf63767c23cf49c497d776bcc933917d3604749",
+            "stableCodes": {
+              "unmet": [
+                "RESEARCH_REQUIRED",
+                "PLAN_REQUIRED"
+              ],
+              "blockers": [],
+              "satisfied": [
+                "CLASSIFICATION_REQUIRED",
+                "AUTHORIZATION_DENIED",
+                "DEPENDENCY_UNRESOLVED",
+                "CAPSULE_IDENTITY_MISMATCH"
+              ]
+            },
+            "policyVersion": "initiative-readiness.v2",
+            "schemaVersion": 1,
+            "transitionObject": {
+              "id": "OpenDigitalProductFactory/opendigitalproductfactory#fix/initiative-readiness-recovery-serialization",
+              "kind": "work-capsule",
+              "targetState": "implementation",
+              "expectedVersion": "claim.v1"
+            }
           }
         }
       ],
       "effortSize": "medium",
       "triageOutcome": "build",
-      "scopeRationale": "Cross-cutting DPF planning and external-contributor governance defect; not specific to WordPress.",
+      "scopeRationale": "Platform process-substrate bug spanning readiness profile policy, reviewer routing, and canonical external-evidence Workroom synchronization; no archetype-specific behavior.",
       "priority": 1,
       "createdAt": "2026-08-22T04:23:15.674Z"
     }

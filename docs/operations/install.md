@@ -269,3 +269,18 @@ For the avoidance of doubt, the installer:
 - Planning library: [`packages/dpf-bootstrap/README.md`](../../packages/dpf-bootstrap/README.md)
 - State schema: [`scripts/installer/install-state.schema.json`](../../scripts/installer/install-state.schema.json)
 - Backlog: BI-A9F60372 (EP-1FABA22D), BI-4B17051B (EP-INSTALL-HARDENING-2026-05-23)
+
+## Mapping a network from another machine
+
+Installing DPF does not start an edge node — a small host-resident agent that
+maps a network and reports back. Mapping a network is a deliberate choice, made
+at setup or later under **Platform → Edge Nodes**.
+
+You want one when the network you care about is not the one your portal sits on:
+a branch office, a customer site, a shop floor. Businesses with several
+locations run one per location, and IT service companies run one per customer
+per site, so each estate stays separate.
+
+Start with the [edge node deployment topology guide](../edge-node/deployment-topology.md),
+which covers where a node can run and how it connects. For many nodes at once,
+see [fleet operations](../edge-node/fleet-operations.md).

@@ -262,12 +262,125 @@ export const OVSM_GRAMMAR: LifecycleGrammar = {
 };
 
 // ─── Registry ────────────────────────────────────────────────────────────────────────
+// ─── bookkeeping-room ──────────────────────────────────────────────────────────────────
+// The recurring day-to-day books loop as a Work Room lifecycle (BI-F8B6CF81, slice S-ROOM of
+// BI-1585FA9E — docs/superpowers/specs/2026-08-16-bookkeeping-work-room-design.md). Six stages
+// carry a period from open to reconciled-and-closed: open → gather → import-categorize →
+// reconcile → owner-review → closed. Each working stage names its real exception condition as a
+// `blocked` state so a stalled period reads honestly (awaiting the owner's statement export, open
+// transaction exceptions, an unexplained reconciliation gap, owner-requested changes) rather than
+// looking on-track. `owner-review` is `ready` — the books are done and waiting only on the human.
+export const BOOKKEEPING_ROOM_GRAMMAR: LifecycleGrammar = {
+  key: "bookkeeping-room",
+  label: "Bookkeeping period",
+  stages: [
+    {
+      key: "open",
+      label: "Open",
+      advancesTo: ["gather"],
+      exitCriteria: ["Period and accounts in scope confirmed", "Bookkeeper convened"],
+      states: [{ key: "open", label: "Open", band: "on-track", isEntry: true, isExitReady: true }],
+    },
+    {
+      key: "gather",
+      label: "Gather",
+      advancesTo: ["import-categorize"],
+      exitCriteria: ["Statements and receipts for the period received"],
+      states: [
+        { key: "gathering", label: "Gathering", band: "on-track", isEntry: true, isExitReady: true },
+        // The owner's card-statement export is the standing gate (spec §Standing blockers) — a
+        // period waiting on it is blocked, not on-track.
+        { key: "awaiting-documents", label: "Awaiting documents", band: "blocked" },
+      ],
+    },
+    {
+      key: "import-categorize",
+      label: "Import & categorize",
+      advancesTo: ["reconcile"],
+      exitCriteria: [
+        "Statement imported with provenance",
+        "Every transaction categorized/matched or surfaced as an exception",
+      ],
+      states: [
+        { key: "categorizing", label: "Categorizing", band: "on-track", isEntry: true, isExitReady: true },
+        // An unmatched transaction with no explaining record stays an exception — never a forced match.
+        { key: "exceptions-open", label: "Exceptions open", band: "blocked" },
+      ],
+    },
+    {
+      key: "reconcile",
+      label: "Reconcile",
+      advancesTo: ["owner-review"],
+      exitCriteria: ["Book balance reconciled to the statement", "Any difference explained by named open items"],
+      states: [
+        { key: "reconciling", label: "Reconciling", band: "on-track", isEntry: true, isExitReady: true },
+        // An unexplained difference is a finding, not a plug.
+        { key: "unreconciled", label: "Unreconciled", band: "blocked" },
+      ],
+    },
+    {
+      key: "owner-review",
+      label: "Owner review",
+      advancesTo: ["closed"],
+      exitCriteria: ["Owner reviewed the Outcome Packet", "Consequential writes approved"],
+      states: [
+        { key: "in-review", label: "In review", band: "ready", isEntry: true, isExitReady: true },
+        { key: "changes-requested", label: "Changes requested", band: "blocked" },
+      ],
+    },
+    {
+      key: "closed",
+      label: "Closed",
+      advancesTo: [],
+      isTerminal: true,
+      states: [
+        { key: "closed", label: "Closed", band: "on-track", isEntry: true },
+        { key: "cancelled", label: "Cancelled", band: "on-track" },
+      ],
+    },
+  ],
+};
+
+/** Map a stored bookkeeping-period status → its (stage, state) point in the grammar. The period's
+ *  status is supplied by the room loader (S-TRIG wires the live period source); unknown values fall
+ *  back to the `open` entry, the earliest stage. */
+export function resolveBookkeepingRoomPoint(status: string): LifecyclePoint {
+  switch (status) {
+    case "open":
+      return { stage: "open", state: "open" };
+    case "gathering":
+      return { stage: "gather", state: "gathering" };
+    case "awaiting-documents":
+      return { stage: "gather", state: "awaiting-documents" };
+    case "categorizing":
+      return { stage: "import-categorize", state: "categorizing" };
+    case "exceptions-open":
+      return { stage: "import-categorize", state: "exceptions-open" };
+    case "reconciling":
+      return { stage: "reconcile", state: "reconciling" };
+    case "unreconciled":
+      return { stage: "reconcile", state: "unreconciled" };
+    case "in-review":
+      return { stage: "owner-review", state: "in-review" };
+    case "changes-requested":
+      return { stage: "owner-review", state: "changes-requested" };
+    case "closed":
+      return { stage: "closed", state: "closed" };
+    case "cancelled":
+      return { stage: "closed", state: "cancelled" };
+    default:
+      return { stage: "open", state: "open" };
+  }
+}
+
+// ─── Registry ────────────────────────────────────────────────────────────────
 export const LIFECYCLE_GRAMMARS: Record<string, LifecycleGrammar> = {
   [CUSTOMER_ACCOUNT_GRAMMAR.key]: CUSTOMER_ACCOUNT_GRAMMAR,
   [OPPORTUNITY_GRAMMAR.key]: OPPORTUNITY_GRAMMAR,
   [BACKBONE_GRAMMAR.key]: BACKBONE_GRAMMAR,
   [TECH_CURRENCY_GRAMMAR.key]: TECH_CURRENCY_GRAMMAR,
   [OVSM_GRAMMAR.key]: OVSM_GRAMMAR,
+  [BOOKKEEPING_ROOM_GRAMMAR.key]: BOOKKEEPING_ROOM_GRAMMAR,
 };
 
 /**

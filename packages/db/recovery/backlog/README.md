@@ -100,9 +100,20 @@ Two classes currently sit there by decision, not by oversight:
   field. Where a trace has been analysed into a human-authored finding, that
   finding is bundled and carries the durable knowledge.
 
-- **Automated capability-need items (`BI-CAP-*`).** Filed by the capability-need
-  engine from a coworker's tool-surface pressure signal (`CWN-*` origin), the
-  same shape of derived observation as the `BI-MCP-EFF-*` items above and
-  regenerated the same way once the signal recurs.
+- **Other derived observations: `BI-CAP-*` (capability need), `BI-PIR-*`
+  (post-incident report), `BI-SIG-*` (signal), `BI-OBS-*` (observation).** All
+  are minted by engines from a live signal — a coworker's tool-surface pressure,
+  a route crash, an issue-report spike — with generated ids and a source row the
+  bundle format does not carry. They are the same shape as the `BI-MCP-EFF-*`
+  items above and regenerate the same way once the signal recurs.
+
+- **`source: build-failure` traces.** Same as the self-upgrade traces above:
+  outside the bundle `SOURCES` vocabulary, and the evidence they point at is
+  install-local.
+
+A note on scale: these classes grow fast. They went from 6 items to 48 in three
+days of dogfooding, while the substantive backlog grew from 43 to 156. Do not
+let the volume of derived noise become an argument for skipping the capture —
+they are separated from reconcilable work precisely so it stays legible.
 
 Anything else with no epic should be linked to one and captured, not left here.

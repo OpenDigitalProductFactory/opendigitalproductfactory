@@ -8,6 +8,7 @@ import {
   DEFAULT_SKILL_SUMMARY_CAP,
   type RankableSkill,
 } from "./skill-relevance";
+import { MANDATED_DECISION_SKILL_IDS } from "@dpf/db/mandated-skills";
 
 function skill(id: string, over: Partial<RankableSkill> = {}): RankableSkill {
   return {
@@ -205,5 +206,111 @@ describe("skill-eligibility ratchet (BI-8AD9D018, corrected by BI-4B0C27D4)", ()
       .map(([role, count]) => `${role}: ${count} > ${ELIGIBLE_BASELINE[role] ?? 0}`);
 
     expect(grew).toEqual([]);
+  });
+});
+
+describe("mandated skills are pinned, not ranked (BI-43920DD1)", () => {
+  // The measured failure: an inventory-specialist turn about stock has no
+  // vocabulary overlap with the decision stack, so before the pin the four
+  // mandated skills lost every slot to the role's own skills. 61.4% of 1,175
+  // real turns on the live install dropped at least one this way.
+  const irrelevantTurn = "how many blue widgets are left in the warehouse";
+
+  function corpus(roleSkillCount: number): RankableSkill[] {
+    return [
+      ...MANDATED_DECISION_SKILL_IDS.map((id) => skill(id, { category: "decision" })),
+      ...Array.from({ length: roleSkillCount }, (_, i) =>
+        skill(`stock-skill-${i}`, {
+          label: `Warehouse widgets ${i}`,
+          description: "blue widgets left in the warehouse stock count",
+          tags: ["inventory"],
+        }),
+      ),
+    ];
+  }
+
+  it("keeps every mandated skill on a turn that matches none of them", () => {
+    const kept = rankSkillsByRelevance(corpus(20), irrelevantTurn).map((s) => s.skillId);
+
+    for (const id of MANDATED_DECISION_SKILL_IDS) expect(kept).toContain(id);
+  });
+
+  it("pinning spends slots rather than adding them — the cap still holds", () => {
+    // Raising the cap was the option the kernel rejected (DI-E68BCB1767BD): it
+    // taxes every coworker's turn, worst on the local models this platform targets.
+    // If pinning ever grows the output, that rejected cost arrives by the back door.
+    expect(rankSkillsByRelevance(corpus(20), irrelevantTurn)).toHaveLength(
+      DEFAULT_SKILL_SUMMARY_CAP,
+    );
+  });
+
+  it("still fills the remaining slots by relevance", () => {
+    const kept = rankSkillsByRelevance(corpus(20), irrelevantTurn).map((s) => s.skillId);
+    const contested = kept.filter((id) => !MANDATED_DECISION_SKILL_IDS.includes(id));
+
+    expect(contested).toHaveLength(DEFAULT_SKILL_SUMMARY_CAP - MANDATED_DECISION_SKILL_IDS.length);
+    // Every one of them scored on this turn — the pin did not displace relevance.
+    for (const id of contested) expect(id).toMatch(/^stock-skill-/);
+  });
+
+  it("returns the mandated stack ahead of the ranked remainder", () => {
+    const kept = rankSkillsByRelevance(corpus(20), irrelevantTurn).map((s) => s.skillId);
+
+    expect(kept.slice(0, MANDATED_DECISION_SKILL_IDS.length)).toEqual([
+      ...MANDATED_DECISION_SKILL_IDS,
+    ]);
+  });
+
+  it("changes nothing for a set already within the cap", () => {
+    // The regression guard the original ranker documented: a small-set coworker
+    // must come back byte-for-byte unchanged. Agents at or under the cap were the
+    // ones that never dropped a mandated skill in the measurement, and they must
+    // stay that way.
+    const small = corpus(4);
+    expect(rankSkillsByRelevance(small, irrelevantTurn)).toBe(small);
+  });
+
+  it("keeps the mandate whole when it alone would exceed the cap", () => {
+    const kept = rankSkillsByRelevance(corpus(20), irrelevantTurn, 3).map((s) => s.skillId);
+
+    expect(kept).toEqual([...MANDATED_DECISION_SKILL_IDS].slice(0, 3));
+  });
+
+  it("does not duplicate a mandated skill that is also the most relevant", () => {
+    const onTopic = "which option should we choose — compare the options";
+    const kept = rankSkillsByRelevance(corpus(20), onTopic).map((s) => s.skillId);
+
+    expect(new Set(kept).size).toBe(kept.length);
+  });
+});
+
+describe("the mandated list is a budget, not a wish list (BI-43920DD1 follow-up)", () => {
+  // Pinning spends slots. Every id in MANDATED_DECISION_SKILL_IDS is a slot taken
+  // from EVERY coworker's own skills on EVERY over-cap turn — 64.7% of real turns
+  // when this was measured. Before this guard, adding a valid fifth mandated skill
+  // passed all 141 tests across both planes while silently costing every coworker
+  // a slot. (A *misspelled* id was already caught: seed-skills.test.ts reads each
+  // slug's SKILL.md and throws ENOENT. Verified, so this guard deliberately does
+  // not re-check existence.)
+  const MANDATED_BASELINE = 4;
+
+  it("has not grown — a fifth mandated skill is a kernel decision, not a test edit", () => {
+    // Raising this number is the same call DI-E68BCB1767BD weighed: it re-spends
+    // the per-turn budget every coworker pays. Route it through principle_decide
+    // with the drop-rate measured again, and move the baseline in that PR — do not
+    // bump it to make a red test green.
+    expect(MANDATED_DECISION_SKILL_IDS.length).toBeLessThanOrEqual(MANDATED_BASELINE);
+  });
+
+  it("leaves the majority of the cap contestable however the baseline moves", () => {
+    // The paired half of the ratchet, and the reason the count guard cannot simply
+    // be re-baselined its way out of. If the mandate ever takes half the cap, a
+    // coworker's own skills are the minority of its own prompt — at which point
+    // "pinned, not ranked" has quietly become "ranked, but only the mandate".
+    expect(MANDATED_DECISION_SKILL_IDS.length).toBeLessThan(DEFAULT_SKILL_SUMMARY_CAP / 2);
+  });
+
+  it("names no skill twice — a duplicate would spend two slots for one skill", () => {
+    expect(new Set(MANDATED_DECISION_SKILL_IDS).size).toBe(MANDATED_DECISION_SKILL_IDS.length);
   });
 });

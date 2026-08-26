@@ -22,6 +22,7 @@ import { revalidatePath } from "next/cache";
 
 import { Prisma, prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
+import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 import { can } from "@/lib/permissions";
 import {
   clearWorkroomPostureDefault,
@@ -57,14 +58,14 @@ export async function saveWorkroomPosture(
   roomRowId: string,
   caseKey: string,
   declaration: RoomPostureDeclaration,
-): Promise<{ ok: boolean }> {
+): Promise<ActionResult> {
   const user = await requirePlatformAdmin();
   try {
     const room = await prisma.workroom.findUnique({
       where: { id: roomRowId },
       select: { scopeClaims: true },
     });
-    if (!room) return { ok: false };
+    if (!room) return err("That room could not be found.");
     const next = withWorkroomPostureClaim(room.scopeClaims, {
       ...declaration,
       declaredBy: user.id ?? null,
@@ -75,10 +76,10 @@ export async function saveWorkroomPosture(
       data: { scopeClaims: next as Prisma.InputJsonValue },
     });
     revalidateRoom(caseKey);
-    return { ok: true };
-  } catch (err) {
-    console.warn("[workroom-posture] save failed:", err);
-    return { ok: false };
+    return ok();
+  } catch (error) {
+    console.warn("[workroom-posture] save failed:", error);
+    return err("That room could not be found.");
   }
 }
 
@@ -86,14 +87,14 @@ export async function saveWorkroomPosture(
 export async function resetWorkroomPosture(
   roomRowId: string,
   caseKey: string,
-): Promise<{ ok: boolean }> {
+): Promise<ActionResult> {
   await requirePlatformAdmin();
   try {
     const room = await prisma.workroom.findUnique({
       where: { id: roomRowId },
       select: { scopeClaims: true },
     });
-    if (!room) return { ok: false };
+    if (!room) return err("That room could not be found.");
     // Drop only the posture entry; every other claim (including the shape) stays.
     const kept = Array.isArray(room.scopeClaims)
       ? (room.scopeClaims as unknown[]).filter(
@@ -106,10 +107,10 @@ export async function resetWorkroomPosture(
       data: { scopeClaims: kept as Prisma.InputJsonValue },
     });
     revalidateRoom(caseKey);
-    return { ok: true };
-  } catch (err) {
-    console.warn("[workroom-posture] reset failed:", err);
-    return { ok: false };
+    return ok();
+  } catch (error) {
+    console.warn("[workroom-posture] reset failed:", error);
+    return err("That room could not be found.");
   }
 }
 
@@ -123,15 +124,15 @@ export async function saveWorkroomShape(
   roomRowId: string,
   caseKey: string,
   shape: WorkroomShapeKey,
-): Promise<{ ok: boolean }> {
+): Promise<ActionResult> {
   await requirePlatformAdmin();
-  if (!WORKROOM_SHAPE_KEYS.includes(shape)) return { ok: false };
+  if (!WORKROOM_SHAPE_KEYS.includes(shape)) return err("That room could not be found.");
   try {
     const room = await prisma.workroom.findUnique({
       where: { id: roomRowId },
       select: { scopeClaims: true },
     });
-    if (!room) return { ok: false };
+    if (!room) return err("That room could not be found.");
     const existing = Array.isArray(room.scopeClaims) ? (room.scopeClaims as unknown[]) : [];
     // Replace any prior shape claim rather than appending a second one — the
     // reader returns the FIRST valid declaration, so a stale entry would win.
@@ -143,10 +144,10 @@ export async function saveWorkroomShape(
       data: { scopeClaims: [...kept, buildWorkroomShapeClaim(shape)] as Prisma.InputJsonValue },
     });
     revalidateRoom(caseKey);
-    return { ok: true };
-  } catch (err) {
-    console.warn("[workroom-posture] shape save failed:", err);
-    return { ok: false };
+    return ok();
+  } catch (error) {
+    console.warn("[workroom-posture] shape save failed:", error);
+    return err("That room could not be found.");
   }
 }
 
@@ -161,27 +162,27 @@ export async function readWorkroomPostureDefault(): Promise<RoomPostureDeclarati
 /** Decree how rooms behave here unless the room says otherwise. */
 export async function saveWorkroomPostureDefault(
   declaration: RoomPostureDeclaration,
-): Promise<{ ok: boolean }> {
+): Promise<ActionResult> {
   const user = await requirePlatformAdmin();
-  const ok = await setWorkroomPostureDefault({
+  const saved = await setWorkroomPostureDefault({
     ...declaration,
     declaredBy: user.id ?? null,
     declaredAt: new Date().toISOString(),
   });
-  if (ok) {
+  if (saved) {
     revalidatePath("/platform/ai/priority");
     revalidatePath("/workspace/my-queue");
   }
-  return { ok };
+  return saved ? ok() : err("Couldn't save that. Your change was not applied.");
 }
 
 /** Remove the decree so rooms fall back to the coworker/org/platform ladder. */
-export async function resetWorkroomPostureDefault(): Promise<{ ok: boolean }> {
+export async function resetWorkroomPostureDefault(): Promise<ActionResult> {
   await requirePlatformAdmin();
-  const ok = await clearWorkroomPostureDefault();
-  if (ok) {
+  const saved = await clearWorkroomPostureDefault();
+  if (saved) {
     revalidatePath("/platform/ai/priority");
     revalidatePath("/workspace/my-queue");
   }
-  return { ok };
+  return saved ? ok() : err("Couldn't save that. Your change was not applied.");
 }

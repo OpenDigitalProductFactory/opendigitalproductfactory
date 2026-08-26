@@ -3,9 +3,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/actions/workroom-posture", () => ({
-  saveWorkroomPosture: vi.fn(),
-  saveWorkroomShape: vi.fn(),
-  resetWorkroomPosture: vi.fn(),
+  saveWorkroomPosture: vi.fn().mockResolvedValue({ ok: true }),
+  saveWorkroomShape: vi.fn().mockResolvedValue({ ok: true }),
+  resetWorkroomPosture: vi.fn().mockResolvedValue({ ok: true }),
 }));
 
 import { WorkroomPostureControl } from "./WorkroomPostureControl";

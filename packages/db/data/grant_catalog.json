@@ -99,6 +99,38 @@
       "implies": []
     },
     {
+      "key": "banking_read",
+      "description": "Read the banking books surface: bank accounts, transactions, suggested transaction matches, bank rules, and reconciliation summaries.",
+      "category": "operate",
+      "sensitivity": "confidential",
+      "honored_by_tools": [
+        "list_bank_accounts",
+        "get_bank_account",
+        "get_bank_transactions",
+        "suggest_transaction_matches",
+        "list_bank_rules",
+        "get_reconciliation_summary"
+      ],
+      "implies": []
+    },
+    {
+      "key": "banking_write",
+      "description": "Mutate the banking books surface: create bank accounts, import statements, match/unmatch transactions, and create/delete bank rules. Reconciles what happened; never moves money.",
+      "category": "operate",
+      "sensitivity": "confidential",
+      "honored_by_tools": [
+        "create_bank_account",
+        "import_bank_statement",
+        "match_transaction",
+        "unmatch_transaction",
+        "create_bank_rule",
+        "delete_bank_rule"
+      ],
+      "implies": [
+        "banking_read"
+      ]
+    },
+    {
       "key": "backlog_read",
       "description": "Read backlog.",
       "category": "backlog",

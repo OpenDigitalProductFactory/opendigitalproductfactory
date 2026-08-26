@@ -46,7 +46,7 @@ apps/web/lib/marketing.ts	1369
 apps/web/lib/mcp/packs/backlog-pack.dispatch.test.ts	874
 apps/web/lib/mcp/packs/contribution-hive-pack.ts	855
 apps/web/lib/mcp/packs/sandbox-pack.ts	921
-apps/web/lib/navigation/portal-navigation-model.ts	965
+apps/web/lib/navigation/portal-navigation-model.ts	979
 apps/web/lib/operate/coworker-regression-detector.ts	935
 apps/web/lib/queue/functions/self-upgrade.test.ts	1380
 apps/web/lib/routing/chat-adapter.test.ts	1073
@@ -57,10 +57,10 @@ apps/web/lib/self-upgrade/quiescence.ts	1621
 apps/web/lib/skills/evidence-search.ts	803
 apps/web/lib/tak/agent-grants.test.ts	940
 apps/web/lib/tak/agent-grants.ts	994
-apps/web/lib/tak/agent-routing.ts	1168
+apps/web/lib/tak/agent-routing.ts	1191
 apps/web/lib/tak/agentic-loop.test.ts	2501
 apps/web/lib/tak/agentic-loop.ts	2806
-apps/web/lib/tak/route-context-map.ts	1390
+apps/web/lib/tak/route-context-map.ts	1440
 apps/web/lib/work-capsules/mcp-handlers.ts	847
 apps/web/lib/work-capsules/work-capsule-store.test.ts	1191
 apps/web/lib/work-capsules/work-capsule-store.ts	1052

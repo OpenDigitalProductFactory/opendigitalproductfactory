@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 
 import { Surface } from "@/components/ui/Surface";
+import type { ActionResult } from "@/lib/shared/action-result";
 import {
   resetWorkroomPostureDefault,
   saveWorkroomPostureDefault,
@@ -44,11 +45,11 @@ export function WorkroomDefaultControl({
   const [error, setError] = useState<string | null>(null);
   const isSet = Boolean(currentPace || currentAuthority);
 
-  function run(fn: () => Promise<{ ok: boolean }>) {
+  function run(fn: () => Promise<ActionResult>) {
     setError(null);
     startTransition(async () => {
       const result = await fn();
-      if (!result.ok) setError("Couldn't save that. Your change was not applied.");
+      if (!result.ok) setError(result.error);
     });
   }
 
