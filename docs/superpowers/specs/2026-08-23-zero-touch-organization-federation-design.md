@@ -174,6 +174,30 @@ decrypt failure costs a human confirmation instead of widening trust.
 Decryption is injected, so the resolver never imports the credential store and a
 failure is a value rather than a thrown error.
 
+### 5.6 Verifying the peer against the pinned root
+
+§5.4 will only auto-enrol a peer whose chain was *actually* validated against the
+organization root. Nothing produced that fact: discovery reports
+`tls-validation-required`, which is a to-do, and no peer-certificate inspection
+existed anywhere in the codebase.
+
+`verifyPeerChainAgainstRoot` is the evaluation half, and it is pure — the caller
+supplies the chain it observed. Keeping it pure means the security rule is
+testable without a TLS server, and a network adapter cannot quietly change what
+"verified" means.
+
+Two details carry real weight:
+
+- **Fingerprint forms must be normalised.** Node reports `AA:BB:CC:…`; a join
+  package records 64 bare hex characters. Comparing those directly would never
+  match, so both collapse to lowercase hex, and anything that is not exactly 64
+  hex characters is rejected rather than compared loosely.
+- **Validity is checked across the whole chain**, not just the leaf. An expired
+  intermediate breaks the chain as surely as an expired leaf.
+
+Verification requires a positive match against the pinned fingerprint. There is
+no path where an absent, malformed, or unmatched value yields `verified: true`.
+
 ## 6. Lifecycle at scale
 
 The unattended cycle this enables:
@@ -198,7 +222,8 @@ the identity design remains the backstop for an install with **no** peer.
   discovery with the trust decision is §5.4 and is no longer deferred.
 - Calling §5.4 from the pairing path, so a validated same-organization peer
   enrols without the code comparison, is the remaining slice. Trust-anchor
-  resolution is §5.5.
+  resolution is §5.5; peer chain verification is §5.6. The network adapter that
+  observes a live chain is part of that final slice.
 
 ## 8. Acceptance criteria
 
@@ -216,6 +241,9 @@ the identity design remains the backstop for an install with **no** peer.
    chain-validated same-organization peer reaches `auto-enroll`.
 7. The trust anchor resolves the full fingerprint from the stored package, and
    every unreadable path yields a null anchor rather than a partial match.
+8. Peer verification matches fingerprints across colon-separated and bare hex
+   forms, rejects an expired certificate anywhere in the chain, and never reports
+   verified without a positive match against the pinned root.
 
 ## 9. Decision record
 

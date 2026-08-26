@@ -355,6 +355,14 @@ export {
   type PairingMode,
 } from "./automatic-pairing-decision";
 export {
+  PEER_VERIFICATION_FAILURES,
+  normalizeFingerprint,
+  verifyPeerChainAgainstRoot,
+  type ObservedCertificate,
+  type PeerVerification,
+  type PeerVerificationFailure,
+} from "./peer-certificate-verification";
+export {
   PAIRING_SOURCES,
   pairingSupportsWorkSync,
   resolveInstallationPairing,
