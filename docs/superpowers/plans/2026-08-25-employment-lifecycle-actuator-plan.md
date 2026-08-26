@@ -1,8 +1,12 @@
+---
+status: active
+---
+
 # Employment lifecycle actuator — implementation plan
 
 - **Design:** [`2026-08-25-employment-lifecycle-actuator-design.md`](../specs/2026-08-25-employment-lifecycle-actuator-design.md)
 - **Epic:** `EP-862820FD`
-- **Status:** active. The sequencing decision in §2 is ratified — `DI-DC833C327A44`, confidence high, margin 5.86, no commandment conflict.
+- **Status:** active (see frontmatter). The sequencing decision in §2 is ratified — `DI-DC833C327A44`, confidence high, margin 5.86, no commandment conflict.
 
 ---
 
