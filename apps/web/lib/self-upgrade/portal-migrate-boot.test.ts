@@ -291,9 +291,25 @@ describe.skipIf(!BASH_OK)("portal-migrate-boot.sh (BI-5322D025)", () => {
         subprocessTimeoutMs: 1_000,
         forcePortableWatchdog,
       });
+      // Status 124 IS the watchdog's deadline signal — both the GNU `timeout`
+      // path and the portable process-group path normalize to it (see
+      // boundedCommand above), and nothing else in this harness produces it. If
+      // the watchdog never fired, the spawnSync backstop at
+      // `subprocessTimeoutMs + 2_000` kills the process instead and the status
+      // is not 124, so these two assertions already prove prompt termination.
+      //
+      // A wall-clock ceiling used to sit here as a third check: `durationMs`
+      // under a bare 2_500 against a 1s deadline plus a 1s kill grace, leaving
+      // ~500ms for Git Bash startup, process spawn and teardown. Under local-CI
+      // load at --initial-workers 4 it went red twice in one evening, at 2559ms
+      // and 2554ms, failing whole gate runs of ~25,400 otherwise-passing tests.
+      // It was removed rather than widened: the signal it chased (did the
+      // watchdog fire at its deadline?) and the noise it measured (host
+      // scheduling) are the same order of magnitude, so no threshold separates
+      // them — and any ceiling loose enough to be stable sits above the
+      // spawnSync backstop, where it can never trip at all. BI-0F2A4137.
       expect(r.timedOut, bootDiagnostics(r)).toBe(true);
       expect(r.status, bootDiagnostics(r)).toBe(124);
-      expect(r.durationMs).toBeLessThan(2_500);
       expect(r.command).toContain("portal-migrate-boot.sh");
     } finally {
       rmSync(root, { recursive: true, force: true });
