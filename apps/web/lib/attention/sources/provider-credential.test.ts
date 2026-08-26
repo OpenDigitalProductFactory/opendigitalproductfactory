@@ -6,6 +6,8 @@ import {
   selectExpiredCredentialProviders,
   suitabilityDriftToAttentionItem,
   PROVIDER_RECONNECT_ROUTE,
+  selectUnclearedCloudProviders,
+  unclearedCloudProviderToAttentionItem,
 } from "./provider-credential";
 import type { ProviderSuitabilityDriftSignal } from "@/lib/routing/provider-suitability/telemetry";
 
@@ -223,5 +225,77 @@ describe("suitabilityDriftToAttentionItem", () => {
     expect(item.context).toContain("Restricted routing stays blocked");
     expect(item.deepLink).toBe("/platform/ai/providers/openrouter");
     expect(item.triage.decideEffort).toBe("review");
+  });
+});
+
+// BI-575F0046. The state no source detected: a cloud provider that is active,
+// authenticated and healthy, and eligible for nothing — because a new connection
+// is cleared for `public` and no route is ever `public`.
+describe("selectUnclearedCloudProviders", () => {
+  const row = (over: Record<string, unknown> = {}) => ({
+    provider: {
+      providerId: "chatgpt",
+      name: "ChatGPT",
+      status: "active",
+      endpointType: "llm",
+      sensitivityClearance: ["public"],
+      ...over,
+    },
+  });
+
+  it("flags an active cloud provider cleared only for public", () => {
+    expect(selectUnclearedCloudProviders([row()]).map((p) => p.providerId)).toEqual(["chatgpt"]);
+  });
+
+  it("treats an empty clearance as uncleared rather than unrestricted", () => {
+    expect(selectUnclearedCloudProviders([row({ sensitivityClearance: [] })])).toHaveLength(1);
+  });
+
+  it("stays quiet once the provider is cleared for internal", () => {
+    expect(
+      selectUnclearedCloudProviders([
+        row({ sensitivityClearance: ["public", "internal", "confidential"] }),
+      ]),
+    ).toEqual([]);
+  });
+
+  it("ignores the local sidecars, which never leave the machine", () => {
+    expect(
+      selectUnclearedCloudProviders([
+        row({ providerId: "local", name: "Local", sensitivityClearance: ["public"] }),
+        row({ providerId: "ollama", name: "Ollama", sensitivityClearance: ["public"] }),
+      ]),
+    ).toEqual([]);
+  });
+
+  it("ignores providers that are not active and non-routing service endpoints", () => {
+    expect(selectUnclearedCloudProviders([row({ status: "unconfigured" })])).toEqual([]);
+    expect(selectUnclearedCloudProviders([row({ endpointType: "service" })])).toEqual([]);
+  });
+});
+
+describe("unclearedCloudProviderToAttentionItem", () => {
+  const item = unclearedCloudProviderToAttentionItem({
+    providerId: "chatgpt",
+    name: "ChatGPT",
+    detectedAtIso: "2026-08-26T02:00:00.000Z",
+  });
+
+  it("does not tell the owner to reconnect — nothing has failed", () => {
+    expect(`${item.title} ${item.context}`.toLowerCase()).not.toContain("reconnect");
+    expect(item.actions[0]?.label).toBe("Confirm data handling");
+  });
+
+  it("names the consequence in the owner's terms, not routing vocabulary", () => {
+    const text = `${item.title} ${item.context}`.toLowerCase();
+
+    expect(text).toContain("local ai");
+    for (const jargon of ["clearance", "sensitivity", "restricted", "routing"]) {
+      expect(text, `owner-facing copy must not say "${jargon}"`).not.toContain(jargon);
+    }
+  });
+
+  it("is distinct from the other provider lanes so it cannot collide on id", () => {
+    expect(item.id).toBe("provider-uncleared:chatgpt");
   });
 });
