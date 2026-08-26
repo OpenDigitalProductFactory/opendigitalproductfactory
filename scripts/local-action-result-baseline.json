@@ -4,5 +4,5 @@
   "expiry": "2026-11-16",
   "note": "One-ActionResult ratchet baseline (BI-1CED89B9). localAliases must stay empty; inlineOkTrueTotal is shrink-only — compose ok()/err() from lib/shared/action-result. Regenerate with: node scripts/check-no-local-action-result.mjs --update",
   "localAliases": [],
-  "inlineOkTrueTotal": 978
+  "inlineOkTrueTotal": 974
 }
