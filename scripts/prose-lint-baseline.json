@@ -359,6 +359,22 @@
     "longSentences": 0,
     "textMass": 26
   },
+  "apps/web/app/(shell)/admin/scheduled-jobs/EditScheduleDialog.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 120
+  },
+  "apps/web/app/(shell)/admin/scheduled-jobs/ScheduleWindowChart.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 22
+  },
   "apps/web/app/(shell)/admin/scheduled-jobs/ScheduledJobsClient.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
@@ -373,7 +389,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 27
+    "textMass": 15
   },
   "apps/web/app/(shell)/admin/settings/page.tsx": {
     "vocabulary": 0,
@@ -957,7 +973,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 70
+    "textMass": 69
   },
   "apps/web/app/(shell)/employee/page.tsx": {
     "vocabulary": 0,
@@ -1629,7 +1645,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 110
+    "textMass": 115
   },
   "apps/web/app/(shell)/platform/ai/browser-sessions/BrowserSessionLedgerTable.tsx": {
     "vocabulary": 0,
@@ -1821,7 +1837,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 77
+    "textMass": 63
   },
   "apps/web/app/(shell)/platform/audit/operations/page.tsx": {
     "vocabulary": 0,
@@ -2405,7 +2421,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 23
+    "textMass": 20
   },
   "apps/web/app/(shell)/workspace/calendar/page.tsx": {
     "vocabulary": 0,
@@ -6375,6 +6391,14 @@
     "longSentences": 0,
     "textMass": 11
   },
+  "apps/web/components/golden-triangle/WorkroomDefaultControl.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 72
+  },
   "apps/web/components/golden-triangle/posture-display.ts": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
@@ -7125,7 +7149,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 48
+    "textMass": 37
   },
   "apps/web/components/owner-first/OwnerFirstSummary.tsx": {
     "vocabulary": 0,
@@ -9823,6 +9847,14 @@
     "longSentences": 0,
     "textMass": 16
   },
+  "apps/web/components/workspace/workroom/WorkroomPostureControl.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 84
+  },
   "apps/web/components/workspace/workroom/WorkroomShape.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
@@ -9942,21 +9974,5 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 0
-  },
-  "apps/web/app/(shell)/admin/scheduled-jobs/EditScheduleDialog.tsx": {
-    "vocabulary": 0,
-    "retiredVocabulary": 0,
-    "genericLabels": 0,
-    "readability": 0,
-    "longSentences": 0,
-    "textMass": 120
-  },
-  "apps/web/app/(shell)/admin/scheduled-jobs/ScheduleWindowChart.tsx": {
-    "vocabulary": 0,
-    "retiredVocabulary": 0,
-    "genericLabels": 0,
-    "readability": 0,
-    "longSentences": 0,
-    "textMass": 22
   }
 }

@@ -281,3 +281,17 @@ Stated plainly, so nothing here reads as more finished than it is:
 - [Priority, Outcomes & Calibration](priority-and-outcomes.md) — the cost/quality/time half, and its receipts
 - [AI Workforce](index.md) — the coworker directory, grants, and availability
 - [Work shapes and the decision gate](../../architecture/work-shapes-and-the-decision-gate.md) — the architecture behind steps 2 and 5
+
+## The pace a room runs at
+
+Work happening in a room resolves its own pace, rather than inheriting only the acting
+coworker's settings. Four things decide it: what the room declares, what kind of work it is,
+what the business does, and what time it is. Outside your operating hours a room quietens
+down; work whose harm grows while nobody is looking — a security incident, a late
+appointment — does not.
+
+None of that changes what a coworker is allowed to do. Timing and authority are separate:
+a quieter room still asks permission for exactly the same things.
+
+You can set a room's pace on the room itself, and a default for all rooms under
+Priority & Models. See [Work Rooms](../workspace/work-rooms.md).
