@@ -9,11 +9,17 @@ status: active
 **Branch:** `fix/initiative-readiness-traversal-recovery`
 **Recovery base:** `f20a78f63dc1884eea0fc171d04556b4be8de32f`
 **Design:** `docs/superpowers/specs/2026-08-23-initiative-readiness-traversal-repair-design.md`
+**Status:** active — **executed**. PR #4633 (`ddd1ae31e`, 2026-08-24) merged Tasks 2-10.
+Read the task list as the record of what was built, not as outstanding work. See Delivery status.
 
-> **For agentic workers:** execute this plan one independently reviewable backlog
-> item at a time — one BI, one branch, one PR. Use `dpf-tdd` for red-green
-> implementation, `dpf-local-merge-ci-before-push` plus the plan's completion gate
-> before any success claim, and `dpf-pr-with-dco` for handoff.
+> **For agentic workers — this plan is already executed. Do not start Task 0.**
+> Tasks 2-10 shipped in PR #4633 and Task 13 is the only one still outstanding.
+> Check Delivery status before acting on anything below.
+>
+> The convention, for the tasks that remain and for plans that follow: execute one
+> independently reviewable backlog item at a time — one BI, one branch, one PR. Use
+> `dpf-tdd` for red-green implementation, `dpf-local-merge-ci-before-push` plus the
+> plan's completion gate before any success claim, and `dpf-pr-with-dco` for handoff.
 
 
 ## Delivery contract
