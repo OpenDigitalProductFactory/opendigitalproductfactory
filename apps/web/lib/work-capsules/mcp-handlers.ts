@@ -30,6 +30,7 @@ import {
   type WorkCapsuleEvidenceKind,
   type WorkCapsuleScopeInput,
 } from "@/lib/work-capsules";
+import { backlogItemIdFromOutcomeAnchor } from "./outcome-anchor";
 import {
   adoptWorktreeCapsule,
   claimWorkCapsuleScope,
@@ -310,6 +311,7 @@ export async function adoptWorktreeTool(
         baseSha: stringParam(params, "baseSha") ?? null,
         headSha: stringParam(params, "headSha") ?? null,
         executorKind: validatedExecutorKind,
+        backlogItemId: backlogItemIdFromOutcomeAnchor(params),
         scope: parseScopeInput(params),
       },
       actor: await actor(userId, context),
