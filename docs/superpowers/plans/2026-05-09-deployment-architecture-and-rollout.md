@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Branch Plan: Deployment Architecture + Public Documentation Rollout
 
 > Branch: `claude/mac-docker-compatibility-uN4Ya`

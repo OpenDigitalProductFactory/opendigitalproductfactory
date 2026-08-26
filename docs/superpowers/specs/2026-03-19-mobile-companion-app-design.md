@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Mobile Companion App — iOS & Android
 
 **Date:** 2026-03-19

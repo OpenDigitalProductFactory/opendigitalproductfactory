@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Partner / Reseller Archetype Extension, Capability Activation, And Partner Identity Design
 
 **Date:** 2026-06-04

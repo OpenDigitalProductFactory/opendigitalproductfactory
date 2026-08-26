@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Implementation Plan - Partner / Reseller Channel & Identity
 
 **Date:** 2026-06-04
