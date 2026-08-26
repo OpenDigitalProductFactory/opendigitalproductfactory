@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "profile-summary-with-os-guides",
+  "decisionInteractionId": "DI-A80F63778943",
+  "scope": {
+    "files": [
+      "docs/index.html"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "full-matrix-homepage",
+      "profile-summary-with-os-guides",
+      "guide-only-links"
+    ]
+  }
+}

@@ -57,7 +57,11 @@ export async function claimBacklogItemForWork(args: {
         success: false,
         error: governed.data.code,
         message: governed.error,
-        data: { workIntent: governed.data.workIntent, readiness: governed.data.readiness },
+        data: {
+          workIntent: governed.data.workIntent,
+          readiness: governed.data.readiness,
+          recovery: governed.data.recovery,
+        },
       };
     }
     const result = governed.data.claim;

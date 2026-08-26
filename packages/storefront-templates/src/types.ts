@@ -562,6 +562,30 @@ export interface ResourceKindProfile {
   maxCapacity: number;
 }
 
+export interface ArchetypeValueStreamStageProfile {
+  key: string;
+  label: string;
+  input: string;
+  output: string;
+  responsibleRole: string;
+  trustGateKeys: string[];
+  /** Explicit cross-stream or return handoff. In-stream sequence is implied by order. */
+  handoffTo?: string;
+  capabilityBindings?: ArchetypeModule[];
+  metricBindings?: string[];
+}
+
+export interface ArchetypeValueStreamProfile {
+  key: string;
+  label: string;
+  purpose: string;
+  input: string;
+  output: string;
+  responsibleRole: string;
+  loadBearingStageKeys: string[];
+  stages: ArchetypeValueStreamStageProfile[];
+}
+
 /**
  * Operational semantics that accompany an archetype without leaking into its
  * presentation vocabulary. Subject and resource slugs stay open for future
@@ -573,6 +597,10 @@ export interface ArchetypeProcessProfile {
   housesSubjects: boolean;
   schedulesSubjects: boolean;
   resourceKinds: ResourceKindProfile[];
+  /** Leaf-specific operating flows. Omit to use the shared commercial backbone. */
+  valueStreams?: ArchetypeValueStreamProfile[];
+  /** Supporting work that enables, but must not replace, the subject's primary flow. */
+  supportingCapabilities?: string[];
 }
 
 export interface ActivationProfile {

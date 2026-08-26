@@ -221,6 +221,11 @@ const DEVELOPMENT_TEMPLATE_GRANTS = [
 const EMPLOYEE_FINANCE_TEMPLATE_GRANTS = [
   "browser_drive",
   "financial_report_create",
+  // Banking books loop (BI-DE27D34E, S-FIN): set up accounts, import statements,
+  // categorize via rules, reconcile. A finance token holds both the read and the
+  // write axis so a bookkeeper coworker can keep the books current.
+  "banking_read",
+  "banking_write",
   "registry_read",
   "document_read",
   "backlog_read",

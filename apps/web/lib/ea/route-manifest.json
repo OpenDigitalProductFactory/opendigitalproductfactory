@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 630,
+  "routeCount": 633,
   "routes": [
     {
       "routePath": "/",
@@ -1172,6 +1172,20 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/api/ops/self-upgrade/status/route.ts"
+    },
+    {
+      "routePath": "/api/platform/ai/local-models/status",
+      "kind": "route",
+      "segments": [
+        "api",
+        "platform",
+        "ai",
+        "local-models",
+        "status"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/platform/ai/local-models/status/route.ts",
+      "exposure": "authenticated"
     },
     {
       "routePath": "/api/platform/alerts",
@@ -4647,6 +4661,16 @@
       "file": "apps/web/app/(shell)/ea/views/[id]/page.tsx"
     },
     {
+      "routePath": "/ea/workrooms",
+      "kind": "page",
+      "segments": [
+        "ea",
+        "workrooms"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/ea/workrooms/page.tsx"
+    },
+    {
       "routePath": "/employee",
       "kind": "page",
       "segments": [
@@ -5477,6 +5501,16 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/ops/teardown/page.tsx"
+    },
+    {
+      "routePath": "/ops/workrooms",
+      "kind": "page",
+      "segments": [
+        "ops",
+        "workrooms"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/ops/workrooms/page.tsx"
     },
     {
       "routePath": "/performance",

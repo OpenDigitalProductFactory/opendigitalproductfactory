@@ -10,19 +10,30 @@ order: 2
 
 ## Overview
 
-Self-upgrade upgrades the platform itself. It builds a fresh application image
-from the approved source and swaps the running install over to it. This is a
-higher-consequence operation than editing backlog work, so it is operator-gated
-and governed by deployment windows.
+Self-upgrade upgrades the platform itself. A source-backed install builds from
+approved source; a consumer install resolves the verification-gated registry
+channel to an immutable release image. Both shapes use the same recovery,
+quiescence, health, and rollback lifecycle. This is a higher-consequence
+operation than editing backlog work, so it is operator-gated and governed by
+deployment windows.
+
+For a consumer install, the page compares the running container's image-config
+digest with the verified platform-specific config digest behind the registry
+channel. A matching digest means the installed bytes are current. A different
+digest exposes the immutable target version and **Upgrade now**. If registry or
+running-image identity cannot be verified, the page reports that update status
+is unavailable and does not offer or queue an upgrade.
 
 ## Workflow
 
-1. Review the pending upgrade and what it will change before triggering anything.
-2. Trigger the upgrade only inside an approved deployment window. Normal changes
+1. Confirm the status card shows a resolved immutable update. If it says current
+   or unavailable, there is no upgrade action to trigger.
+2. Review the pending upgrade and what it will change before triggering anything.
+3. Trigger the upgrade only inside an approved deployment window. Normal changes
    respect the window; only an emergency change may override it.
-3. Watch the deployment status — the page updates automatically while the build
+4. Watch the deployment status — the page updates automatically while the build
    and swap are in progress. A normal upgrade completes in a few minutes.
-4. Confirm the health check passed after the swap, and read the deployment log if
+5. Confirm the health check passed after the swap, and read the deployment log if
    it did not.
 
 You may navigate away after the upgrade has been accepted. Leaving the page stops
@@ -40,9 +51,9 @@ returns to normal.
 
 ## What Happens If You Do Nothing
 
-The install stays on its current version. Queued fixes and improvements are not
-applied until an operator approves and runs the upgrade. Nothing is lost by
-waiting, but the platform does not move forward on its own.
+The install stays on its current version. The consumer channel keeps being
+checked, but newer bytes are not applied until an operator approves and runs the
+upgrade. Nothing is lost by waiting.
 
 ## What Is Reversible
 
@@ -62,6 +73,9 @@ waiting, but the platform does not move forward on its own.
 
 - If an upgrade fails, open the deployment log for the retryable diagnosis, then
   re-run the upgrade.
+- If update status is unavailable, read the technical reason under **Deploy
+  controls & history**. Repair registry access or install identity before
+  retrying; the unavailable state has not queued or mutated anything.
 - Operators on unusually slow hosts can raise the shared build budget by setting
   `DPF_PROMOTER_TIMEOUT_MS` (milliseconds) in the environment.
 - Deployment windows and change-request lifecycle are managed from the wider

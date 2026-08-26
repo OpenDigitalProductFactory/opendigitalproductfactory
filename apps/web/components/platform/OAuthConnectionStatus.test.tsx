@@ -23,6 +23,7 @@ function credentialFixture(overrides: Partial<CredentialRow> = {}): CredentialRo
     status: "ok",
     tokenExpiresAt: null,
     hasRefreshToken: false,
+    hasUsableMaterial: true,
     ...overrides,
   };
 }

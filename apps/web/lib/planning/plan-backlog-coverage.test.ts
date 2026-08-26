@@ -327,7 +327,11 @@ function fakeDb(): {
 } {
   const activityCreate = vi.fn(async () => ({ id: "activity-receipt-1" }));
   const tx = {
-    $queryRaw: async <T>(_strings: TemplateStringsArray, ..._values: unknown[]) => [{ id: "parent-row" }] as unknown as T,
+    $queryRaw: async <T>(strings: TemplateStringsArray, ..._values: unknown[]) => (
+      strings.join("").includes('FROM "WorkCapsule"')
+        ? [{ id: "workroom-row", createdByPrincipalId: "p" }]
+        : [{ id: "parent-row" }]
+    ) as unknown as T,
     backlogItem: {
       findUnique: vi.fn(async ({ where }: { where: { itemId: string } }) =>
         where.itemId === "BI-PARENT"
@@ -502,6 +506,38 @@ describe("checkBranchPlanBacklogGate", () => {
 });
 
 describe("recordPlanBacklogCoverage", () => {
+  it("completes immutable provider I/O before opening the serializable transaction", async () => {
+    const { db } = fakeDb();
+    let providerComplete = false;
+    const resolveArtifact = vi.fn(async () => {
+      expect(db.$transaction).not.toHaveBeenCalled();
+      providerComplete = true;
+      return resolvePlan();
+    });
+
+    await recordPlanBacklogCoverage({
+      itemId: "BI-PARENT",
+      planPath: "docs/superpowers/plans/example.md",
+      planArtifactRef,
+      decision: "atomic",
+      rationale: "The enforcement layers must ship together as one compatibility boundary.",
+      deliverables: [{
+        key: "atomic",
+        title: "Atomic repair",
+        independentlyShippable: false,
+        dependsOn: [],
+        ...traceability,
+      }],
+      userId: "user-1",
+      db,
+      resolveArtifact,
+    });
+
+    expect(resolveArtifact).toHaveBeenCalledOnce();
+    expect(providerComplete).toBe(true);
+    expect(db.$transaction).toHaveBeenCalledOnce();
+  });
+
   it("records one structured receipt after live BI validation", async () => {
     const { db, activityCreate } = fakeDb();
     const result = await recordPlanBacklogCoverage({
@@ -551,6 +587,38 @@ describe("recordPlanBacklogCoverage", () => {
         },
       },
     });
+  });
+
+  it("fails if Workroom authorship changes after immutable preflight", async () => {
+    const { db, activityCreate } = fakeDb();
+    const tx = db as PlanBacklogCoverageDb & { $queryRaw: NonNullable<PlanBacklogCoverageDb["$queryRaw"]> };
+    tx.$queryRaw = async <T>(strings: TemplateStringsArray, ..._values: unknown[]) => (
+      strings.join("").includes('FROM "WorkCapsule"')
+        ? [{ id: "workroom-row", createdByPrincipalId: "different-principal" }]
+        : [{ id: "parent-row" }]
+    ) as unknown as T;
+    db.$transaction = vi.fn(async (work) => work(tx));
+
+    const result = await recordPlanBacklogCoverage({
+      itemId: "BI-PARENT",
+      planPath: "docs/superpowers/plans/example.md",
+      planArtifactRef,
+      decision: "atomic",
+      rationale: "The enforcement layers must ship together as one compatibility boundary.",
+      deliverables: [{
+        key: "atomic",
+        title: "Atomic repair",
+        independentlyShippable: false,
+        dependsOn: [],
+        ...traceability,
+      }],
+      userId: "user-1",
+      db,
+      resolveArtifact: resolvePlan,
+    });
+
+    expect(result).toMatchObject({ ok: false, code: "plan-artifact-invalid" });
+    expect(activityCreate).not.toHaveBeenCalled();
   });
 
   // BI-B9403248: an external session that hits this has no route forward and no

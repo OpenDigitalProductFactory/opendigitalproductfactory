@@ -22,11 +22,67 @@ const OVSM: OperationalValueStream = {
   it4itStageBinding: ["request-to-fulfill"],
   loadBearingStageKeys: ["qualify"],
   stages: [
-    { key: "capture", label: "Capture Demand", order: 20, loadBearing: false, capabilityBindings: [], metricBindings: ["inbox-submissions"], trustGateKeys: [] },
-    { key: "qualify", label: "Qualify & Schedule", order: 30, loadBearing: true, capabilityBindings: ["service-operations"], metricBindings: ["utilization"], trustGateKeys: [] },
-    { key: "settle", label: "Settle & Account", order: 50, loadBearing: false, capabilityBindings: ["billing-readiness"], metricBindings: ["invoice"], trustGateKeys: [] },
+    { key: "capture", label: "Capture Demand", order: 20, loadBearing: false, capabilityBindings: [], metricBindings: ["inbox-submissions"], trustGateKeys: [], streamKey: "operational-value-stream", input: null, output: null, responsibleRole: null, handoffToStageKey: null },
+    { key: "qualify", label: "Qualify & Schedule", order: 30, loadBearing: true, capabilityBindings: ["service-operations"], metricBindings: ["utilization"], trustGateKeys: [], streamKey: "operational-value-stream", input: null, output: null, responsibleRole: null, handoffToStageKey: null },
+    { key: "settle", label: "Settle & Account", order: 50, loadBearing: false, capabilityBindings: ["billing-readiness"], metricBindings: ["invoice"], trustGateKeys: [], streamKey: "operational-value-stream", input: null, output: null, responsibleRole: null, handoffToStageKey: null },
   ],
+  streams: [
+    {
+      key: "operational-value-stream",
+      label: "Hair Salon operational value stream",
+      purpose: "Create and deliver value",
+      input: "Demand",
+      output: "Delivered service",
+      responsibleRole: "Business operator",
+      stages: [],
+    },
+  ],
+  supportingCapabilities: [],
 };
+
+OVSM.streams[0]!.stages = OVSM.stages;
+
+const PET_OVSM: OperationalValueStream = {
+  ...OVSM,
+  archetypeId: "pet-rescue",
+  archetypeName: "Pet Rescue",
+  capacityUnit: "volunteer-or-bed-capacity",
+  loadBearingStageKeys: ["intake-capacity", "welfare-care", "placement-transfer"],
+  supportingCapabilities: ["Fundraising"],
+  stages: [],
+  streams: [],
+};
+
+PET_OVSM.streams = [
+  ["intake", "Intake and safe placement", "intake-capacity", "welfare-care"],
+  ["welfare", "Health and welfare", "welfare-care", "placement-transfer"],
+  ["placement", "Adoption and placement", "placement-transfer", "intake-capacity"],
+].map(([key, label, stageKey, handoffToStageKey], streamIndex) => {
+  const stage = {
+    key: stageKey!,
+    label: `${label} stage`,
+    order: (streamIndex + 1) * 100,
+    loadBearing: true,
+    capabilityBindings: [],
+    metricBindings: [],
+    trustGateKeys: [`${key}-approval`],
+    streamKey: key!,
+    input: `${label} input`,
+    output: `${label} output`,
+    responsibleRole: `${label} lead`,
+    handoffToStageKey: handoffToStageKey!,
+  };
+  return {
+    key: key!,
+    label: label!,
+    purpose: `${label} purpose`,
+    input: `${label} input`,
+    output: `${label} output`,
+    responsibleRole: `${label} lead`,
+    stages: [stage],
+  };
+});
+PET_OVSM.stages = PET_OVSM.streams.flatMap((stream) => stream.stages);
 
 function makeDb() {
   return {
@@ -134,6 +190,53 @@ describe("projectArchetypeValueStream", () => {
     // Two flows: capture → qualify → settle.
     expect(db.eaRelationship.create).toHaveBeenCalledTimes(2);
     expect(db.eaElement.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it("projects leaf-authored streams as separate bands with explicit handoffs", async () => {
+    db.eaView.findFirst.mockResolvedValue(null);
+    db.eaView.create.mockResolvedValue({ id: "view-pet" });
+    db.eaElement.findMany.mockResolvedValue([]);
+    db.eaElement.findFirst.mockResolvedValue(null);
+    db.eaElement.create
+      .mockResolvedValueOnce({ id: "band-intake" })
+      .mockResolvedValueOnce({ id: "stage-intake" })
+      .mockResolvedValueOnce({ id: "band-welfare" })
+      .mockResolvedValueOnce({ id: "stage-welfare" })
+      .mockResolvedValueOnce({ id: "band-placement" })
+      .mockResolvedValueOnce({ id: "stage-placement" });
+    db.eaViewElement.findUnique.mockResolvedValue(null);
+    db.eaViewElement.create
+      .mockResolvedValueOnce({ id: "ve-band-intake" })
+      .mockResolvedValueOnce({ id: "ve-stage-intake" })
+      .mockResolvedValueOnce({ id: "ve-band-welfare" })
+      .mockResolvedValueOnce({ id: "ve-stage-welfare" })
+      .mockResolvedValueOnce({ id: "ve-band-placement" })
+      .mockResolvedValueOnce({ id: "ve-stage-placement" });
+    db.eaRelationship.findFirst.mockResolvedValue(null);
+    db.eaRelationship.create.mockResolvedValue({ id: "rel" });
+
+    const result = await projectArchetypeValueStream({ db, orgId: "org-1", ovsm: PET_OVSM });
+
+    expect(result.createdElements).toBe(6);
+    const bandCreates = db.eaElement.create.mock.calls.filter(
+      ([args]) => (args as { data: { properties: { projection: { layoutRole: string } } } }).data.properties.projection.layoutRole === "stream_band",
+    );
+    expect(bandCreates).toHaveLength(3);
+    expect(bandCreates.map(([args]) => (args as { data: { name: string } }).data.name)).toEqual([
+      "Intake and safe placement",
+      "Health and welfare",
+      "Adoption and placement",
+    ]);
+    expect(db.eaRelationship.create).toHaveBeenCalledTimes(3);
+    expect(db.eaRelationship.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          fromElementId: "stage-placement",
+          toElementId: "stage-intake",
+          properties: expect.objectContaining({ handoff: true }),
+        }),
+      }),
+    );
   });
 
   it("refreshes an existing projection in place without creating duplicates", async () => {

@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 682,
+  "pageCount": 687,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -564,6 +564,26 @@
         "annex-e-suggested-receipt-verifier-pseudocode"
       ]
     },
+    "docs/architecture/accommodation-doctrine.md": {
+      "publicHref": "/architecture/accommodation-doctrine/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "accommodation-doctrine",
+        "why",
+        "the-five-patterns-already-in-the-codebase-now-named",
+        "the-classification-procedure",
+        "the-promotion-rule",
+        "worked-example-live-right-now",
+        "the-promotion-mechanic",
+        "escape-hatch-discipline",
+        "probe-discipline",
+        "recording",
+        "anti-patterns",
+        "applying-this-to-campground"
+      ]
+    },
     "docs/architecture/agent-client-capability-parity.md": {
       "publicHref": "/architecture/agent-client-capability-parity/",
       "portalHref": null,
@@ -874,7 +894,8 @@
         "archetype-business-value-streams",
         "0-why-this-document-exists",
         "1-two-senses-of-value-stream-keep-them-distinct",
-        "2-the-universal-small-business-value-stream",
+        "2-the-default-small-business-value-stream",
+        "21-leaf-process-profiles-replace-the-fallback-when-the-business-works-differently",
         "3-the-commercial-model-decides-the-value-stream-shape",
         "4-the-bridge-value-stream-stage-platform-surface-audit-phase",
         "5-the-value-stream-stages-map-onto-substrate-the-platform-already-carries",
@@ -957,6 +978,44 @@
         "6-test-translation-rules",
         "7-guardrails",
         "8-documentation-maintenance-rule"
+      ]
+    },
+    "docs/architecture/archetypes/campground-operating-model.md": {
+      "publicHref": "/architecture/archetypes/campground-operating-model/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "campground-rv-park-operating-model-and-probe-result",
+        "1-the-operating-day",
+        "2-the-bad-day",
+        "3-the-periodic-cycle",
+        "4-load-bearing-obligations",
+        "5-probe-result-classification",
+        "confirmed-no-new-canonical-element",
+        "promoted-by-the-counting-rule",
+        "genuinely-new-candidates",
+        "confirmed-stress-test-long-episodes",
+        "6-doctrine-verdict",
+        "7-what-campground-still-needs-before-it-could-run",
+        "8-cross-archetype-notes"
+      ]
+    },
+    "docs/architecture/archetypes/pet-rescue-operating-model.md": {
+      "publicHref": "/architecture/archetypes/pet-rescue-operating-model/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "standing-requirements-pet-rescue-animal-shelter-archetype",
+        "1-the-operating-day",
+        "2-the-bad-day",
+        "3-the-periodic-cycle",
+        "4-load-bearing-obligations",
+        "5-required-entities",
+        "6-what-exists-today-measured-2026-08-25",
+        "7-ux-requirements",
+        "8-definition-of-done"
       ]
     },
     "docs/architecture/architecture-counts.generated.md": {
@@ -1087,6 +1146,30 @@
         "product-operating-context-query-boundary",
         "direction-route-and-projection-boundary",
         "fleet-safe-evolution"
+      ]
+    },
+    "docs/architecture/canonical-minimal-substrate.md": {
+      "publicHref": "/architecture/canonical-minimal-substrate/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "the-canonical-minimal-substrate",
+        "headline",
+        "the-elements",
+        "what-is-already-done-and-done-well",
+        "the-capacity-substrate-is-genuinely-canonical",
+        "care-is-already-subject-agnostic-this-corrects-an-earlier-finding",
+        "the-remaining-work",
+        "7-canonical-subject-identity-the-keystone",
+        "8-occupancy-episode-lift-hospitalityserviceturn",
+        "9-episode-stagestate-and-event-ledger-already-designed-do-not-re-invent",
+        "10-concurrent-time-bound-holds-a-genuine-gap-and-an-extension-of-the-grammar",
+        "11-jurisdiction-as-a-rule-source-promoted-at-two-sightings",
+        "also-resource-to-service-capability-map",
+        "what-pet-rescue-proved-that-restaurant-could-not",
+        "sequencing",
+        "method-note-for-the-next-archetype"
       ]
     },
     "docs/architecture/capability-driven-runtime-profiles.md": {
@@ -1379,6 +1462,7 @@
         "13-workroom-vs-featurebuild-vs-sandbox-vs-runtimetarget-pick-the-right-substrate",
         "14-propose-acknowledge-reassign-par-concurrent-session-ownership-protocol",
         "15-governance-approves-evidence-not-provenance",
+        "16-host-heavy-work-uses-durable-resource-leases-not-waiting-processes",
         "2-dpf-anti-patterns-defaults-the-kernel-forbids",
         "21-wiping-db-volumes-to-fix-a-code-bug",
         "22-hardcoding-a-provider-in-the-seed-or-agentmodelconfig",
@@ -1540,6 +1624,7 @@
         "92-work-unit-definition",
         "93-physical-and-non-digital-work",
         "94-capacity",
+        "95-dpf-workroom-definition-and-instance-projection",
         "10-performer-and-work-allocation-model",
         "101-performer-kinds",
         "102-allocation-is-a-governed-decision",
@@ -1945,8 +2030,6 @@
         "ai-provider-failure-detection-and-recovery",
         "graph-mirror-sync-integrity",
         "hardware-guidance",
-        "practical-tiers",
-        "current-local-model-auto-selection",
         "summary"
       ]
     },
@@ -2352,6 +2435,9 @@
       "anchors": [
         "workroom-vocabulary-boundary",
         "the-three-layers",
+        "definition-and-instance-are-an-orthogonal-axis",
+        "implemented-projection-seam",
+        "composition-duration-and-evidence",
         "naming-rules",
         "a-known-tension-accepted-deliberately",
         "what-is-deliberately-not-renamed-yet",
@@ -4924,6 +5010,24 @@
         "cross-references"
       ]
     },
+    "docs/install/hardware.md": {
+      "publicHref": "/install/hardware/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "choosing-hardware-for-dpf",
+        "the-short-recommendation",
+        "machines-available-now",
+        "provider-assisted-operations",
+        "local-first-windows-with-nvidia",
+        "local-first-apple-unified-memory",
+        "why-unified-memory-changes-the-calculation",
+        "model-and-context-sizing",
+        "shared-memory-systems-not-yet-in-the-standard-profile",
+        "before-ordering"
+      ]
+    },
     "docs/install/linux.md": {
       "publicHref": "/install/linux/",
       "portalHref": null,
@@ -4958,6 +5062,7 @@
       "anchors": [
         "dpf-install-guide-macos-apple-silicon",
         "supported-environment",
+        "recommended-hardware",
         "prerequisites",
         "quick-start",
         "contributor-separate-dev-workspace-from-install-recommended-bi-0856a4ce-phase-1",
@@ -5046,6 +5151,7 @@
       "anchors": [
         "dpf-install-guide-windows-1011",
         "supported-environment",
+        "recommended-hardware",
         "prerequisites",
         "quick-start",
         "what-the-installer-does",
@@ -5461,6 +5567,7 @@
       "publishedPortal": false,
       "anchors": [
         "local-ci-sandbox-slots",
+        "host-wide-heavyweight-resource-admission",
         "current-operating-mode",
         "peer-slot-host-fencing",
         "design-grounding",
@@ -5833,6 +5940,7 @@
         "what-it-is",
         "operating-rule",
         "how-to-apply",
+        "a-phase-that-cannot-start-is-blocked-not-working",
         "see-also"
       ]
     },
@@ -10605,6 +10713,7 @@
         "oauth-sign-in",
         "device-code-sign-in-xai-grok",
         "none",
+        "managing-models-on-this-computer",
         "local-capacity-during-platform-verification",
         "how-oauth-works",
         "choosing-the-right-method",
@@ -10891,6 +11000,7 @@
       "anchors": [
         "overview",
         "key-concepts",
+        "workroom-definitions",
         "what-you-can-do",
         "ai-coworker-identity",
         "following-a-concern-across-views"
@@ -10935,6 +11045,7 @@
       "publishedPortal": true,
       "anchors": [
         "overview",
+        "development-workrooms",
         "the-operator-workspace",
         "current-maturity",
         "key-concepts",
@@ -11169,6 +11280,7 @@
         "spin-up-an-isolated-thread",
         "commit-and-push-fast",
         "worktrees-are-source-control-isolation-not-runtime-isolation",
+        "heavy-local-commands-use-a-shared-host-resource-lane",
         "clean-up-when-merged",
         "webhooks-closing-the-promotion-loop",
         "adhering-to-the-portals-processes",
@@ -11577,6 +11689,7 @@
       "publishedPortal": true,
       "anchors": [
         "overview",
+        "workroom-inventory",
         "key-concepts",
         "what-you-can-do",
         "reading-epic-progress",

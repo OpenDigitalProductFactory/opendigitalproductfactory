@@ -30,6 +30,7 @@ import { professionDecisionPack } from "./packs/profession-decision-pack";
 import { uxCritiquePack } from "./packs/ux-critique-pack";
 import { optimizationPack } from "./packs/optimization-pack";
 import { marketingPack } from "./packs/marketing-pack";
+import { bankingPack } from "./packs/banking-pack";
 import { workCapturePack } from "./packs/work-capture-pack";
 import { activityRoutingPack } from "./packs/activity-routing-pack";
 import { selfUpgradePack } from "./packs/self-upgrade-pack";
@@ -121,6 +122,7 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   uxCritiquePack,
   optimizationPack,
   marketingPack,
+  bankingPack,
   workCapturePack,
   activityRoutingPack,
   selfUpgradePack,

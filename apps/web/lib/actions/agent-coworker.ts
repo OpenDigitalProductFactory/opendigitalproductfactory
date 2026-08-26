@@ -561,8 +561,7 @@ export async function sendMessage(input: {
     take: RECENT_WINDOW,
     select: { id: true, role: true, content: true },
   });
-  // Token-aware trimming: keep newest messages up to a token budget.
-  // Prevents 8 long messages from overwhelming context.
+  // Keep newest messages within a token budget.
   const CHAT_HISTORY_TOKEN_BUDGET = isBuildPhase ? 4000 : 2000;
   const reversed = recentMessages.reverse();
   let historyTokens = 0;
@@ -574,7 +573,6 @@ export async function sendMessage(input: {
     trimmedMessages.unshift(reversed[i]!);
     historyTokens += msgTokens;
   }
-  // Track message IDs for semantic recall dedup
   const windowMessageIds = new Set(trimmedMessages.map((m) => m.id));
   let chatHistory: ChatMessage[] = trimmedMessages.map((m) => ({
     role: m.role as ChatMessage["role"],
@@ -620,10 +618,12 @@ export async function sendMessage(input: {
     }
   }
   const recentContentForClassification = chatHistory
+    .filter((m) => m.role === "user")
     .slice(-3)
     .map((m) => typeof m.content === "string" ? m.content : JSON.stringify(m.content));
   const taskClassification = classifyTask(trimmedContent, recentContentForClassification);
   let taskTypeId: string = taskClassification.taskType;
+  if (taskTypeId === "onboarding" && !input.routeContext.startsWith("/setup")) taskTypeId = "unknown";
 
   // Enrich the last user message with file content so the LLM sees it inline,
   // not just in the system prompt. LLMs pay more attention to message content
@@ -708,13 +708,15 @@ export async function sendMessage(input: {
   // heavy coworker (36-38 skills) can still overflow after the tool cap. Reads the
   // DMR served-context truth; null/unknown (or a capable window) → Infinity cap =
   // no change (cloud + large-window installs are byte-identical).
-  const { resolveLocalServedContextTokens } = await import(
+  const { resolveLocalServingPosture } = await import(
     "@/lib/inference/local-model-context-reconcile"
   );
   const { deriveSkillCatalogCap, capSkillCatalog } = await import(
     "@/lib/actions/coworker-tool-budget"
   );
-  const localServedContext = await resolveLocalServedContextTokens();
+  // Presence rides with the window: a null window cannot tell an absent local
+  // model from an unread one, and the tool cap below needs that (BI-A8BFEFCE).
+  const { servedContextTokens: localServedContext, presence: localPresence } = await resolveLocalServingPosture();
   const skillCatalogCap = deriveSkillCatalogCap(localServedContext);
   // Computed once; an explicitly-invoked skill is pinned into the catalog so the
   // cap never breaks a `Use the <id> skill.` request (reused for telemetry below).
@@ -1342,7 +1344,7 @@ export async function sendMessage(input: {
   // surface; unmeasured → null → Phase-1 fail-safe. Best-effort (never throws).
   const { resolveLocalToolFidelityCeiling } = await import("@/lib/routing/local-tool-fidelity");
   const measuredToolFidelityCeiling = await resolveLocalToolFidelityCeiling();
-  const toolCap = deriveCoworkerToolCap(localServedContext, { measuredToolFidelityCeiling });
+  const toolCap = deriveCoworkerToolCap(localServedContext, { measuredToolFidelityCeiling, localPresence });
   // BI-B5C358B1 — the route's declared domain tools are the ones a turn on this
   // route is most likely to need (e.g. /ops → backlog query/update). They were
   // only injected as system-prompt PROSE, never attached, so the intent ranker's
@@ -1737,6 +1739,7 @@ export async function sendMessage(input: {
   let responseContent = "";
   let responseProviderId: string | null = null;
   let responseModelId: string | null = null;
+  let responseIsSystemFailure = false;
   let formAssistUpdate: Record<string, unknown> | undefined;
   let systemMessage: AgentMessageRow | undefined;
   // Pre-allocate the assistant AgentMessage id so adapter telemetry rows
@@ -2009,10 +2012,7 @@ export async function sendMessage(input: {
       return { userMessage: serializeMessage(userMsg), agentMessage: serializeMessage(agentMsg, proposal) };
     }
 
-    // Map agentic result to the downstream shape. The Golden Triangle review runs
-    // inside executeAutonomousAgenticLoop — the single seam
-    // for both chat and autonomous turns — so agenticResult.content is already
-    // reviewed when the coworker's posture calls for it.)
+    // The Golden Triangle review already ran inside executeAutonomousAgenticLoop.
     const result = {
       content: agenticResult.content,
       providerId: agenticResult.providerId,
@@ -2024,6 +2024,7 @@ export async function sendMessage(input: {
       inferenceMs: 0,
       toolCalls: undefined as undefined, // already handled by loop
     };
+    responseIsSystemFailure = Boolean(agenticResult.failure);
 
     // Caveat a blind local answer, but not one grounded in authoritative ASC state.
     responseContent = applyLocalDegradationCaveat(result.content, {
@@ -2393,18 +2394,17 @@ export async function sendMessage(input: {
     }
   }
 
-  // Persist agent response
   const agentMsg = await prisma.agentMessage.create({
     data: {
       id: pendingAgentMessageId,
       threadId: input.threadId,
-      role: "assistant",
+      role: responseIsSystemFailure ? "system" : "assistant",
       taskRunId: currentTaskRun?.taskRunId ?? null,
       content: responseContent,
-      agentId: agent.agentId,
+      agentId: responseIsSystemFailure ? null : agent.agentId,
       routeContext: input.routeContext,
-      providerId: responseProviderId,
-      modelId: responseModelId,
+      providerId: responseIsSystemFailure ? null : responseProviderId,
+      modelId: responseIsSystemFailure ? null : responseModelId,
       taskType: taskTypeId !== "unknown" ? taskTypeId : null,
       routedEndpointId: null, // EP-INF-009b: routing is per-iteration via routeAndCall
       contextTrace, // BI-3E218D80 — plain-response path (see also the proposal write)
@@ -2456,7 +2456,7 @@ export async function sendMessage(input: {
       storeConversationMemory({ ...memBase, messageId: userMsg.id, content: trimmedContent, role: "user" })
         .catch((e) => console.warn("[memory-store] user:", getErrorMessage(e)));
     }
-    if (isSubstantive(responseContent)) {
+    if (isSubstantive(responseContent) && !responseIsSystemFailure) {
       storeConversationMemory({ ...memBase, messageId: agentMsg.id, content: responseContent, role: "assistant" })
         .catch((e) => console.warn("[memory-store] assistant:", getErrorMessage(e)));
     }

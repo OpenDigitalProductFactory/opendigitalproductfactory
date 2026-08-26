@@ -2344,7 +2344,7 @@
       "tier": "cross-cutting",
       "value_stream": "evaluate",
       "role": "reviewer",
-      "capability_domain": "Curates the founder-authored UX critique corpus and, once calibrated against it, critiques owner-facing surfaces for information hierarchy, content density, and cognitive load. Grounded in the ux-design profession corpus (WSID), not in a bare rubric — ungrounded design critique measures 13.1% valid. Established in its curation stage with NO gating authority: it may draft, cluster, and propose verdicts, but never attach one, and it cannot file backlog work, advance a build, or block a merge. Distinct from AGT-903 (WCAG/accessibility compliance) and from the HX UX Analyst (behavioural findings over user telemetry).",
+      "capability_domain": "Curates the founder-authored UX critique corpus and, once calibrated against it, critiques owner-facing surfaces for information hierarchy, content density, and cognitive load. Grounded in the ux-design profession corpus (WSID), not in a bare rubric \u2014 ungrounded design critique measures 13.1% valid. Established in its curation stage with NO gating authority: it may draft, cluster, and propose verdicts, but never attach one, and it cannot file backlog work, advance a build, or block a merge. Distinct from AGT-903 (WCAG/accessibility compliance) and from the HX UX Analyst (behavioural findings over user telemetry).",
       "human_supervisor_id": "HR-300",
       "hitl_tier_default": 3,
       "delegates_to": [],
@@ -3031,7 +3031,7 @@
       "tier": "specialist",
       "value_stream": "operate",
       "role": "operator",
-      "capability_domain": "AI SOC Tier-2 analyst (EP-SOVEREIGN-SOC). Deep investigation on escalated cases: pivots across SecurityEvents, builds the incident timeline, scopes blast radius, maps ATT&CK, recommends a verdict. Drafts case evidence and response proposals only — never executes.",
+      "capability_domain": "AI SOC Tier-2 analyst (EP-SOVEREIGN-SOC). Deep investigation on escalated cases: pivots across SecurityEvents, builds the incident timeline, scopes blast radius, maps ATT&CK, recommends a verdict. Drafts case evidence and response proposals only \u2014 never executes.",
       "human_supervisor_id": "HR-500",
       "hitl_tier_default": 1,
       "delegates_to": [],
@@ -3114,7 +3114,7 @@
       "tier": "specialist",
       "value_stream": "operate",
       "role": "operator",
-      "capability_domain": "AI SOC incident commander (EP-SOVEREIGN-SOC). Coordinates containment/remediation: drafts RemediationProposals on the proposal-not-action rail, owns the SecurityCase, manages customer communications. Never executes a response on a customer estate unilaterally — the customer approves and the customer's own runner acts.",
+      "capability_domain": "AI SOC incident commander (EP-SOVEREIGN-SOC). Coordinates containment/remediation: drafts RemediationProposals on the proposal-not-action rail, owns the SecurityCase, manages customer communications. Never executes a response on a customer estate unilaterally \u2014 the customer approves and the customer's own runner acts.",
       "human_supervisor_id": "HR-500",
       "hitl_tier_default": 2,
       "delegates_to": [
@@ -3160,7 +3160,7 @@
       "tier": "specialist",
       "value_stream": "cross-cutting",
       "role": "operator",
-      "capability_domain": "AI Ops Engineer: providers, models, costs, capability matching, failover, routing, workforce planning. Owns host resource health — disk free-space floors, Docker/container sprawl, and critical host alerts (BI-1C88254D).",
+      "capability_domain": "AI Ops Engineer: providers, models, costs, capability matching, failover, routing, workforce planning. Owns host resource health \u2014 disk free-space floors, Docker/container sprawl, and critical host alerts (BI-1C88254D).",
       "human_supervisor_id": "HR-500",
       "hitl_tier_default": 1,
       "delegates_to": [],
@@ -3234,18 +3234,18 @@
           "backend": null
         },
         "concurrency_limit": 2,
-      "tool_grants": [
-        "backlog_read",
-        "backlog_write",
-        "crm_read",
-        "marketing_read",
-        "marketing_write",
-        "portfolio_read",
-        "registry_read",
-        "web_search",
-        "work_capsule_read",
-        "initiative_evidence_write"
-      ]
+        "tool_grants": [
+          "backlog_read",
+          "backlog_write",
+          "crm_read",
+          "marketing_read",
+          "marketing_write",
+          "portfolio_read",
+          "registry_read",
+          "web_search",
+          "work_capsule_read",
+          "initiative_evidence_write"
+        ]
       }
     },
     {
@@ -3408,7 +3408,9 @@
       "hitl_tier_default": 1,
       "delegates_to": [],
       "escalates_to": "AGT-ORCH-000",
-      "it4it_sections": ["5.4 Operate Value Stream"],
+      "it4it_sections": [
+        "5.4 Operate Value Stream"
+      ],
       "status": "draft",
       "config_profile": {
         "model_binding": {
@@ -3450,7 +3452,10 @@
       "hitl_tier_default": 1,
       "delegates_to": [],
       "escalates_to": "AGT-WS-HR",
-      "it4it_sections": ["5.4 Operate Value Stream", "6.2.5 Workforce FC"],
+      "it4it_sections": [
+        "5.4 Operate Value Stream",
+        "6.2.5 Workforce FC"
+      ],
       "status": "draft",
       "config_profile": {
         "model_binding": {
@@ -3471,7 +3476,57 @@
           "backend": null
         },
         "concurrency_limit": 2,
-        "tool_grants": ["consumer_read", "registry_read"]
+        "tool_grants": [
+          "consumer_read",
+          "registry_read"
+        ]
+      }
+    },
+    {
+      "agent_id": "AGT-WS-COMPLIANCE",
+      "agent_name": "compliance-officer",
+      "displayName": "Compliance Officer",
+      "tier": "specialist",
+      "value_stream": "cross-cutting",
+      "role": "specialist",
+      "capability_domain": "Regulatory compliance, policy governance, audit readiness and risk management. Owns the obligation-deadline work shape: watches recorded review dates, control review cadence, licence renewal and evidence freshness, and raises findings for a human to act on. Does not determine compliance, renew a licence, or submit a filing.",
+      "human_supervisor_id": "HR-000",
+      "hitl_tier_default": 0,
+      "delegates_to": [],
+      "escalates_to": "AGT-ORCH-000",
+      "it4it_sections": [
+        "6.1.1 Policy FC"
+      ],
+      "status": "active",
+      "config_profile": {
+        "model_binding": {
+          "model_id": null,
+          "temperature": 0.3,
+          "max_tokens": 8192
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 300
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 50000
+        },
+        "memory": {
+          "type": "persistent",
+          "backend": null
+        },
+        "concurrency_limit": 2,
+        "tool_grants": [
+          "policy_write",
+          "data_governance_validate",
+          "file_read",
+          "backlog_read",
+          "backlog_write",
+          "tool_evaluation_create",
+          "registry_read",
+          "web_search"
+        ]
       }
     }
   ]

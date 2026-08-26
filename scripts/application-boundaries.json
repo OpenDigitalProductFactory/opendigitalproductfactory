@@ -256,12 +256,6 @@
       "reviewBy": "2026-11-01"
     },
     {
-      "key": "apps/web/lib/routing/fallback.ts|@/lib/tak/context-economy-metrics|tak",
-      "owner": "ai-platform",
-      "rationale": "Pre-existing reverse dependency captured by BI-2E9F6D37; remove through the owning context refactor.",
-      "reviewBy": "2026-11-01"
-    },
-    {
       "key": "apps/web/lib/routing/inference-dispatch-guard.ts|@/lib/inference/data-screening/types|inference",
       "owner": "ai-platform",
       "rationale": "Pre-existing reverse dependency captured by BI-2E9F6D37; remove through the owning context refactor.",

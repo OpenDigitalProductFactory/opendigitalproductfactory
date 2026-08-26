@@ -211,6 +211,28 @@ describe("resolveRepositoryArtifact", () => {
     expect(result.error).toContain("adopt_worktree");
   });
 
+  it("resolves the artifact author after canonical head synchronization", async () => {
+    const row = capsule({ headSha: null });
+    const store = db({ capsules: [row] });
+    await expect(resolveRepositoryArtifact({
+      locator,
+      subject: { kind: "backlog-item", id: "BI-TEST" },
+      db: store as never,
+      fetchImpl: providerFetch() as typeof fetch,
+    })).resolves.toMatchObject({ ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS" });
+
+    row.headSha = locator.commitSha;
+    await expect(resolveRepositoryArtifact({
+      locator,
+      subject: { kind: "backlog-item", id: "BI-TEST" },
+      db: store as never,
+      fetchImpl: providerFetch() as typeof fetch,
+    })).resolves.toMatchObject({
+      ok: true,
+      artifact: { authorPrincipalId: "principal-author", authorAgentId: "agent-author" },
+    });
+  });
+
   it("names the competing capsules when two live capsules claim the same head", async () => {
     const fetchImpl = vi.fn();
     const result = await resolveRepositoryArtifact({

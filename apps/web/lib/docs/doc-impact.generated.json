@@ -355,6 +355,9 @@
       "docs/architecture/ai-agent-meta-model.md",
       "docs/architecture/mcp-tool-authorization-runbook.md"
     ],
+    "apps/web/app/api/platform/ai/local-models/status/route.ts": [
+      "docs/architecture/background-operation-observation-contract.md"
+    ],
     "apps/web/app/api/v1/auth/provider-oauth/callback/route.ts": [
       "docs/user-guide/ai-workforce/provider-developer-notes.md"
     ],
@@ -426,6 +429,9 @@
     ],
     "apps/web/components/platform/AgentCardSupervisorPanel.tsx": [
       "docs/architecture/agent-standards-dpf-conformance.md"
+    ],
+    "apps/web/components/platform/OllamaManagement.tsx": [
+      "docs/architecture/background-operation-observation-contract.md"
     ],
     "apps/web/components/platform/ProviderSuitabilityGuide.tsx": [
       "docs/user-guide/ai-workforce/connecting-providers.md"
@@ -745,6 +751,9 @@
     "apps/web/lib/inference/jit-retrieval-discipline.test.ts": [
       "docs/architecture/context-engineering-standards.md"
     ],
+    "apps/web/lib/inference/local-model-operations.ts": [
+      "docs/architecture/background-operation-observation-contract.md"
+    ],
     "apps/web/lib/inference/local-only.ts": [
       "docs/strategy/2026-09-cada-architects-forum-deck.md"
     ],
@@ -831,6 +840,14 @@
     "apps/web/lib/navigation/section-nav-model.ts": [
       "docs/architecture/section-navigation.md",
       "docs/maintenance/staleness-report.md"
+    ],
+    "apps/web/lib/nonprod/host-resource-policy.ts": [
+      "docs/architecture/dpf-patterns.md",
+      "docs/user-guide/contributing/agent-dev-environments.md"
+    ],
+    "apps/web/lib/nonprod/host-resource-profiles.json": [
+      "docs/architecture/dpf-patterns.md",
+      "docs/user-guide/contributing/agent-dev-environments.md"
     ],
     "apps/web/lib/operate/db-continuity.ts": [
       "docs/architecture/delivery-surfaces-runbook.md"
@@ -1253,7 +1270,8 @@
     ],
     "packages/db/prisma/schema/build-delivery.prisma": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
-      "docs/architecture/dpf-patterns.md"
+      "docs/architecture/dpf-patterns.md",
+      "docs/user-guide/contributing/agent-dev-environments.md"
     ],
     "packages/db/prisma/schema/resource-scheduling.prisma": [
       "docs/architecture/data-model-stewardship-runbook.md"
@@ -1656,6 +1674,7 @@
       "docs/testing/archetype-audit-plan.md"
     ],
     "scripts/gate-worktree.mjs": [
+      "docs/architecture/context-engineering-standards.md",
       "docs/testing/pre-pr-gate.md"
     ],
     "scripts/gate-worktree.sh": [
@@ -1674,6 +1693,11 @@
     "scripts/hooks/run-hook.mjs": [
       "docs/install/platform-support-watchlist.md",
       "docs/operations/session-transcript-recovery.md"
+    ],
+    "scripts/host-resource-runner.mjs": [
+      "docs/architecture/dpf-patterns.md",
+      "docs/operations/local-ci-sandbox-slots.md",
+      "docs/user-guide/contributing/agent-dev-environments.md"
     ],
     "scripts/install-worktree-janitor-schedule.sh": [
       "docs/install/worktree-janitor-schedule.md"
@@ -1724,6 +1748,9 @@
     ],
     "scripts/lib/local-integration-ci.mjs": [
       "docs/testing/pre-pr-gate.md"
+    ],
+    "scripts/lib/mcp-client.mjs": [
+      "docs/architecture/mcp-tool-authorization-runbook.md"
     ],
     "scripts/lib/published-doc-roots.mjs": [
       "docs/architecture/enforced-ci-gates.md"
@@ -2235,11 +2262,14 @@
       "scripts/gen-architecture-counts.mjs"
     ],
     "docs/architecture/background-operation-observation-contract.md": [
+      "apps/web/app/api/platform/ai/local-models/status/route.ts",
       "apps/web/components/ops/SelfUpgradeLiveProvider.tsx",
+      "apps/web/components/platform/OllamaManagement.tsx",
       "apps/web/components/platform/SystemEventProvider.tsx",
       "apps/web/lib/architecture/background-operation-observation-contract.test.ts",
       "apps/web/lib/hooks/useBackgroundOperationObserver.ts",
       "apps/web/lib/hooks/useResilientEventSource.ts",
+      "apps/web/lib/inference/local-model-operations.ts",
       "apps/web/lib/self-upgrade/status-snapshot.ts",
       "apps/web/lib/tak/agent-event-bus.ts"
     ],
@@ -2303,6 +2333,7 @@
       "apps/web/lib/tool-description-hygiene.test.ts",
       "packages/dpf-skill-pack/hooks/tool-economy-precheck.mjs",
       "scripts/check-instruction-plane-size.mjs",
+      "scripts/gate-worktree.mjs",
       "scripts/lib/ci-policy-guards.mjs"
     ],
     "docs/architecture/contributor-procedure-runbook.md": [
@@ -2362,8 +2393,11 @@
       "scripts/sbom/scan-dependencies.mjs"
     ],
     "docs/architecture/dpf-patterns.md": [
+      "apps/web/lib/nonprod/host-resource-policy.ts",
+      "apps/web/lib/nonprod/host-resource-profiles.json",
       "packages/db/prisma/schema/build-delivery.prisma",
-      "packages/db/prisma/schema/work-coordination.prisma"
+      "packages/db/prisma/schema/work-coordination.prisma",
+      "scripts/host-resource-runner.mjs"
     ],
     "docs/architecture/enforced-ci-gates.md": [
       "apps/web/lib/docs-route-map.ts",
@@ -2403,7 +2437,8 @@
       "apps/web/lib/tak/tool-result-budget.ts",
       "apps/web/lib/tool-description-hygiene.test.ts",
       "scripts/check-no-adhoc-mcp-protocol-versions.mjs",
-      "scripts/lib/bootstrap-worktree-deps.mjs"
+      "scripts/lib/bootstrap-worktree-deps.mjs",
+      "scripts/lib/mcp-client.mjs"
     ],
     "docs/architecture/mcp-tool-packs.md": [
       "apps/web/lib/mcp/packs/deliberation-siem-pack.ts",
@@ -2685,6 +2720,7 @@
     ],
     "docs/operations/local-ci-sandbox-slots.md": [
       "scripts/check-host-port-range.test.mjs",
+      "scripts/host-resource-runner.mjs",
       "scripts/lib/local-ci-slot-manifest.mjs",
       "scripts/local-ci-pilot-report.mjs"
     ],
@@ -2980,8 +3016,12 @@
       "apps/web/lib/build/build-orchestrator.ts"
     ],
     "docs/user-guide/contributing/agent-dev-environments.md": [
+      "apps/web/lib/nonprod/host-resource-policy.ts",
+      "apps/web/lib/nonprod/host-resource-profiles.json",
+      "packages/db/prisma/schema/build-delivery.prisma",
       "scripts/dpf-bootstrap-agent-toolchain.ps1",
-      "scripts/dpf-bootstrap-agent-toolchain.sh"
+      "scripts/dpf-bootstrap-agent-toolchain.sh",
+      "scripts/host-resource-runner.mjs"
     ],
     "docs/user-guide/contributing/dev-container.md": [
       "packages/db/scripts/dev-preview-migrate-deploy.mjs"

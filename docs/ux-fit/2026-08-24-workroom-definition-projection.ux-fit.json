@@ -1,0 +1,26 @@
+{
+  "version": "1",
+  "decidedOption": "existing-workspace-progressive-disclosure",
+  "scope": {
+    "files": [
+      "apps/web/components/workspace/workroom/WorkroomShapeSection.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "sweep-measurement",
+    "baselineComparison": "new-route",
+    "measured": {
+      "/workspace/cases/backlog-item%3ABI-F0715C9C": {
+        "defaultVisibleWords": 216,
+        "leadBandWords": 0,
+        "primaryActions": 1,
+        "visibleFields": 0,
+        "maxChoicesPerControl": 0,
+        "subLegibleControls": 0,
+        "buriedPrimaryAction": 0,
+        "axeViolations": 1
+      }
+    }
+  },
+  "notes": "Measured from the hydrated concrete Work Case route on the governed contributor preview. Overview was the default, detailed activity and technical references were absent, the page had no horizontal overflow at 1280 by 720, and the sole serious axe finding belonged to the shared system-notice shell rather than the Workroom. The existing Workspace route family is dynamically keyed and has no frozen concrete-route baseline, so this first concrete measurement is declared new-route."
+}

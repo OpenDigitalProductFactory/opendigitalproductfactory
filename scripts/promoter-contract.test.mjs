@@ -34,7 +34,12 @@ test("promoter image embeds and labels the exact contract", async () => {
   const digest = `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
   assert.match(dockerfile, /COPY promoter-contract\.json \/app\/promoter-contract\.json/);
   assert.match(dockerfile, /ARG DPF_PROMOTER_SOURCE_SHA/);
+  assert.match(dockerfile, /ARG DPF_PROMOTER_RELEASE_TAG/);
+  assert.match(dockerfile, /ARG DPF_PROMOTER_RELEASE_OWNER/);
   assert.match(dockerfile, /ARG DPF_PROMOTER_CONTRACT_DIGEST/);
+  assert.match(dockerfile, /ENV DPF_CANDIDATE_SOURCE_SHA="\$\{DPF_PROMOTER_SOURCE_SHA\}"/);
+  assert.match(dockerfile, /DPF_CANDIDATE_RELEASE_TAG="\$\{DPF_PROMOTER_RELEASE_TAG\}"/);
+  assert.match(dockerfile, /DPF_CANDIDATE_RELEASE_OWNER="\$\{DPF_PROMOTER_RELEASE_OWNER\}"/);
   assert.match(dockerfile, /org\.opencontainers\.image\.revision="\$\{DPF_PROMOTER_SOURCE_SHA\}"/);
   assert.match(dockerfile, /org\.opendpf\.promoter\.contract-schema="1"/);
   assert.match(dockerfile, /org\.opendpf\.promoter\.contract-digest="\$\{DPF_PROMOTER_CONTRACT_DIGEST\}"/);

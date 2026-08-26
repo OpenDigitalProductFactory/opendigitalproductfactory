@@ -31,7 +31,16 @@ The top of a Workroom answers four questions:
 3. Who is accountable and who is participating?
 4. What is the next action?
 
-Source identifiers, integration status, and projection confidence remain available under **Room details**. They do not displace the outcome or the people doing the work.
+Below that header, **Room definition** names the reusable room pattern and its version.
+**This room** identifies whether you are seeing one occurrence, a standing stream, or its
+active cycle. **Overview** is the default and keeps the room boundary and shape in view.
+Open **Details** for cycles, activity, participants, context, evidence, receipts, and
+technical references. A business room does not need a repository, worktree, or pull
+request; those appear only when development work actually produces them.
+
+Source identifiers, integration status, and projection confidence remain available under
+**Room details** inside **Details**. They do not displace the outcome or the people doing
+the work.
 
 ## Activity and Participants
 
@@ -55,7 +64,10 @@ Across rooms, you can see **where each AI coworker is engaged**—which active r
 
 An authorized coworker can also open a relevant product surface from the room's work type, resources, or task intent—even when no browser page is rendered. These silent/headless surfaces use the same semantic fields, validation, and governed actions as the human browser or mobile view. Room membership still does not expand authority: the surface catalog and every action apply the human role, coworker grants, room/work context, token scope, and approval rules together.
 
-Open **Participants** to see why each person or coworker is in the room, what they are working on, their authority summary, and an AI coworker's accountable sponsor. Coworkers created by the active thread's governed lineage appear automatically; the room does not provide an unrestricted coworker picker.
+Open **Details**, then **Participants**, to see why each person or coworker is in the room,
+what they are working on, their authority summary, and an AI coworker's accountable
+sponsor. Coworkers created by the active thread's governed lineage appear automatically;
+the room does not provide an unrestricted coworker picker.
 
 ## Access and Other Channels
 

@@ -1,10 +1,4 @@
-/**
- * EP-INF-004: Fallback behavior tests — model-level degradation, auto-recovery,
- * rate tracking in the callWithFallbackChain dispatch loop.
- */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
-// ── Mocks (must be declared before imports) ──────────────────────────────────
 
 vi.mock("@dpf/db", () => ({
   prisma: {
@@ -50,9 +44,13 @@ vi.mock("./rate-recovery", () => ({
   scheduleRecovery: vi.fn(),
 }));
 
-// BI-OPT-ROUTING-CACHE: fallback.ts busts the request-scoped routing-loader
-// cache when it degrades a model / cools an endpoint. Mock the loader so we can
-// assert the bust is wired without exercising the real DB-backed loaders.
+// The local-fallback gate derives its ceiling from the MEASURED tool-fidelity
+// evidence, the same input the attachment budget uses (BI-A8BFEFCE). Default to
+// unmeasured so existing expectations keep the fail-safe cliff of 15.
+vi.mock("./local-tool-fidelity", () => ({
+  resolveLocalToolFidelityCeiling: vi.fn(async () => null),
+}));
+
 vi.mock("./loader", () => ({
   invalidateRoutingLoaderCache: vi.fn(),
 }));
@@ -61,8 +59,6 @@ vi.mock("@/lib/ai-provider-internals", () => ({
   autoDiscoverAndProfile: vi.fn(),
 }));
 
-// fallback.ts dynamically imports refreshOAuthToken to self-heal a lapsed OAuth
-// token on an auth error before disabling the provider.
 vi.mock("@/lib/provider-oauth", () => ({
   refreshOAuthToken: vi.fn(),
 }));
@@ -71,9 +67,8 @@ vi.mock("./route-outcome", () => ({
   recordRouteOutcome: vi.fn(() => Promise.resolve()),
 }));
 
-// ── Imports (after mocks) ────────────────────────────────────────────────────
-
 import { buildFallbackPlan, callWithFallbackChain } from "./fallback";
+import { ProviderReconciliationRequiredError } from "@/lib/inference/provider-reconciliation";
 import { prisma } from "@dpf/db";
 import { callProvider, InferenceError } from "@/lib/ai-inference";
 import {
@@ -90,8 +85,6 @@ import { recordRouteOutcome } from "./route-outcome";
 import { refreshOAuthToken } from "@/lib/provider-oauth";
 import type { RouteDecision } from "./types";
 import type { SensitivityLevel } from "./types";
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
 
 const makeDecision = (providerId: string, modelId: string): RouteDecision => ({
   selectedEndpoint: providerId,
@@ -184,19 +177,15 @@ const mockClearEndpointUnavailable = clearEndpointUnavailable as ReturnType<type
 const mockInvalidateRoutingLoaderCache = invalidateRoutingLoaderCache as ReturnType<typeof vi.fn>;
 const mockRefreshOAuthToken = refreshOAuthToken as ReturnType<typeof vi.fn>;
 
-// ── Setup ────────────────────────────────────────────────────────────────────
-
 beforeEach(() => {
   vi.useFakeTimers();
   vi.clearAllMocks();
 
-  // Default: provider lookup returns a valid provider
   mockPrisma.modelProvider.findUnique.mockResolvedValue({
     providerId: "test-provider",
     name: "Test Provider",
   });
 
-  // Default: prisma writes succeed
   mockPrisma.modelProfile.updateMany.mockResolvedValue({ count: 1 });
   mockPrisma.modelProvider.update.mockResolvedValue({});
   mockAutoDiscoverAndProfile.mockResolvedValue({
@@ -205,10 +194,7 @@ beforeEach(() => {
   });
   mockRecordRouteOutcome.mockResolvedValue(undefined);
 
-  // Default: extractRetryAfterMs returns undefined (fallback to 60s)
   mockExtractRetryAfterMs.mockReturnValue(undefined);
-
-  // Default: OAuth token refresh succeeds
   mockRefreshOAuthToken.mockResolvedValue({ token: "fresh-token" });
 });
 
@@ -216,11 +202,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-// ── Tests ────────────────────────────────────────────────────────────────────
-
 describe("callWithFallbackChain — EP-INF-004 error handling", () => {
-  // ── Success path ─────────────────────────────────────────────────────────
-
   describe("successful call", () => {
     it("records request with token count on success", async () => {
       mockCallProvider.mockResolvedValue({
@@ -477,8 +459,6 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
     });
   });
 
-  // ── model_not_found ──────────────────────────────────────────────────────
-
   describe("model_not_found", () => {
     function throwModelNotFound() {
       const err = new InferenceError(
@@ -537,6 +517,32 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
       ).rejects.toThrow();
 
       expect(mockAutoDiscoverAndProfile).toHaveBeenCalledWith("prov1");
+    });
+
+    it("awaits reconciliation before requesting one fresh route", async () => {
+      let finishReconciliation!: () => void;
+      mockAutoDiscoverAndProfile.mockReturnValue(
+        new Promise((resolve) => {
+          finishReconciliation = () => resolve({ discovered: 1, profiled: 1 });
+        }),
+      );
+      throwModelNotFound();
+
+      const pending = callWithFallbackChain(
+        makeDecision("prov1", "model1"),
+        [{ role: "user", content: "hi" }],
+        "system",
+      );
+      let settled = false;
+      void pending.then(
+        () => { settled = true; },
+        () => { settled = true; },
+      );
+      await vi.waitFor(() => expect(mockAutoDiscoverAndProfile).toHaveBeenCalledWith("prov1"));
+      expect(settled).toBe(false);
+
+      finishReconciliation();
+      await expect(pending).rejects.toBeInstanceOf(ProviderReconciliationRequiredError);
     });
   });
 
@@ -1049,6 +1055,38 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
 
       // Only the primary was attempted; local fallback was skipped.
       expect(mockCallProvider).toHaveBeenCalledTimes(1);
+    });
+
+    it("admits a surface the measured fidelity ceiling covers (BI-A8BFEFCE)", async () => {
+      // The attachment budget will attach up to a MEASURED ceiling. Before this
+      // gate shared that derivation it pinned the raw cliff of 15, so a budgeted
+      // 30-tool surface was refused for exceeding a limit nothing else applied —
+      // and with the cloud provider rate-limited the turn executed no tools.
+      const { resolveLocalToolFidelityCeiling } = await import("./local-tool-fidelity");
+      vi.mocked(resolveLocalToolFidelityCeiling).mockResolvedValueOnce(30);
+
+      mockPrisma.modelProvider.findUnique
+        .mockResolvedValueOnce({ providerId: "prov1", name: "Prov1" })
+        .mockResolvedValueOnce({ providerId: "local", name: "Local" });
+
+      const pinnedErr = new InferenceError("preferred down", "auth", "prov1", 401);
+      const localErr = new InferenceError("local also down", "auth", "local", 401);
+      mockCallProvider
+        .mockRejectedValueOnce(pinnedErr)
+        .mockRejectedValueOnce(localErr);
+
+      const pending = callWithFallbackChain(
+        makeChainWithLocalFallback(),
+        [{ role: "user", content: "hi" }],
+        "system",
+        manyTools(30), // past the raw cliff, within the measured ceiling
+      );
+      const rejection = expect(pending).rejects.toThrow("All endpoints failed");
+      await vi.runAllTimersAsync();
+      await rejection;
+
+      // Local was tried rather than skipped on a count the model has proven.
+      expect(mockCallProvider).toHaveBeenCalledTimes(2);
     });
 
     it("keeps local fallback when tools.length is within threshold", async () => {

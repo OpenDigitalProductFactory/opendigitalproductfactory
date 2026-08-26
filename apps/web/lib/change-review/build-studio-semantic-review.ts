@@ -5,12 +5,27 @@ import { recordExternalEvidence } from "@/lib/actions/external-evidence";
 import type { BuildSandboxState } from "@/lib/build/sandbox-state";
 import { dispatchRoutedSemanticReview } from "./routed-semantic-review";
 import {
+  resolveSemanticReviewCoordination,
   runSemanticChangeReview,
   type SemanticChangeReviewMode,
   type SemanticChangeReviewOperationResult,
 } from "./semantic-change-review-operation";
-import type { SemanticReviewReceipt } from "./semantic-change-review";
+import {
+  assessSemanticReviewReceiptFreshness,
+  type SemanticReviewReceipt,
+} from "./semantic-change-review";
+import {
+  claimSemanticReviewSingleFlight,
+  completeSemanticReviewSingleFlight,
+  createPrismaSemanticReviewSingleFlightStore,
+  failSemanticReviewSingleFlight,
+} from "./semantic-review-single-flight";
+import { deriveSemanticReviewGateIdentity } from "@/lib/gates/gate-run-identity";
 import { recordWorkCapsuleEvidence } from "@/lib/work-capsules/work-capsule-store";
+import { gateRunDispositionsTotal } from "@/lib/operate/metrics";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
+
+const SEMANTIC_REVIEW_DISPATCH_CONTRACT_VERSION = "routed-semantic-review.v1";
 
 export type BuildStudioSemanticReviewResult =
   | { kind: "reviewed"; outcome: SemanticChangeReviewOperationResult }
@@ -66,7 +81,7 @@ export async function reviewBuildStudioAssembledChange(args: {
   const priorRows = await prisma.externalEvidenceRecord.findMany({
     where: { workCapsuleId: capsule.id, operationType: "semantic-change-review.receipt" },
     orderBy: { createdAt: "desc" },
-    select: { details: true },
+    select: { id: true, details: true },
     take: 3,
   });
   const receipts: SemanticReviewReceipt[] = priorRows.flatMap(
@@ -80,7 +95,7 @@ export async function reviewBuildStudioAssembledChange(args: {
     2,
   );
   const changedFiles = args.sandboxState?.sourceDiffstat.map((entry) => entry.path) ?? [];
-  const outcome = await runSemanticChangeReview({
+  const operationInput: Parameters<typeof runSemanticChangeReview>[0] = {
     surface: "build-studio",
     authorSurface: "build-studio",
     artifactType: "code-change",
@@ -98,7 +113,83 @@ export async function reviewBuildStudioAssembledChange(args: {
     priorReceipt,
     repairRound,
     mode,
-  }, { dispatch: dispatchRoutedSemanticReview });
+  };
+  const coordination = resolveSemanticReviewCoordination(operationInput);
+  const { gateKey } = deriveSemanticReviewGateIdentity({
+    repository: process.env.GITHUB_REPOSITORY
+      ?? "OpenDigitalProductFactory/opendigitalproductfactory",
+    identity: coordination.identity,
+    risk: coordination.risk,
+    dispatchContractVersion: SEMANTIC_REVIEW_DISPATCH_CONTRACT_VERSION,
+  });
+  const store = createPrismaSemanticReviewSingleFlightStore(prisma as never);
+  const singleFlight = await claimSemanticReviewSingleFlight({
+    gateKey,
+    userId: args.build.createdById,
+    capsuleId: capsule.capsuleId,
+    title: `Semantic review: ${args.build.title}`,
+    objective: `Independently review the immutable assembled change at ${currency.headTreeSha}.`,
+  }, store, async (evidenceRecordId) => {
+    const row = await prisma.externalEvidenceRecord.findUnique({
+      where: { id: evidenceRecordId },
+      select: { workCapsuleId: true, details: true },
+    });
+    return row?.workCapsuleId === capsule.id
+      && isReceipt(row.details)
+      && row.details.result.decision !== "inconclusive"
+      && assessSemanticReviewReceiptFreshness(row.details, coordination.identity).fresh;
+  });
+  gateRunDispositionsTotal.inc({
+    gate_kind: "semantic-review",
+    disposition: singleFlight.disposition,
+    result_class: singleFlight.disposition === "reused" ? singleFlight.resultClass : "none",
+  });
+  if (singleFlight.disposition === "subscribed") {
+    return {
+      kind: "unavailable",
+      reason: `Canonical semantic review ${singleFlight.taskRunId} is already running.`,
+      mayContinue: false,
+    };
+  }
+
+  let coordinatedPriorReceipt = priorReceipt;
+  let coordinatedEvidenceId = priorRows.find((row) => isReceipt(row.details))?.id ?? null;
+  if (singleFlight.disposition === "reused") {
+    const row = await prisma.externalEvidenceRecord.findUnique({
+      where: { id: singleFlight.evidenceRecordId },
+      select: { details: true },
+    });
+    if (!isReceipt(row?.details)) {
+      throw new Error("Canonical semantic-review evidence is missing or invalid");
+    }
+    coordinatedPriorReceipt = row.details;
+    coordinatedEvidenceId = singleFlight.evidenceRecordId;
+  }
+
+  let outcome: SemanticChangeReviewOperationResult;
+  try {
+    outcome = await runSemanticChangeReview({
+      ...operationInput,
+      priorReceipt: coordinatedPriorReceipt,
+    }, { dispatch: dispatchRoutedSemanticReview });
+  } catch (error) {
+    await failSemanticReviewSingleFlight({
+      taskRunId: singleFlight.taskRunId,
+      reason: getErrorMessage(error),
+    }, store);
+    throw error;
+  }
+
+  if (outcome.reusedFreshReceipt && coordinatedEvidenceId) {
+    if (singleFlight.disposition === "admitted") {
+      await completeSemanticReviewSingleFlight({
+        taskRunId: singleFlight.taskRunId,
+        evidenceRecordId: coordinatedEvidenceId,
+        resultClass: outcome.receipt.result.decision === "fail" ? "fail" : "pass",
+      }, store);
+    }
+    return { kind: "reviewed", outcome };
+  }
 
   const projection = outcome.evidence;
   const evidence = await recordExternalEvidence({
@@ -125,6 +216,18 @@ export async function reviewBuildStudioAssembledChange(args: {
     },
     actor: { userId: args.build.createdById, agentId: "change-reviewer", principalId: null },
   });
+  if (outcome.receipt.result.decision === "inconclusive") {
+    await failSemanticReviewSingleFlight({
+      taskRunId: singleFlight.taskRunId,
+      reason: outcome.receipt.result.inconclusiveReason ?? "semantic-review-inconclusive",
+    }, store);
+  } else {
+    await completeSemanticReviewSingleFlight({
+      taskRunId: singleFlight.taskRunId,
+      evidenceRecordId: evidence.id,
+      resultClass: outcome.receipt.result.decision === "fail" ? "fail" : "pass",
+    }, store);
+  }
 
   return { kind: "reviewed", outcome };
 }

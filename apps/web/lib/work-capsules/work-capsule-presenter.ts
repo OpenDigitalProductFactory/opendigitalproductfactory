@@ -35,12 +35,16 @@ const DECISION_SCOPE_LABELS: Record<string, string> = {
   wsid: "WSID",
 };
 
-const PORTFOLIO_ROLE_LABELS: Record<string, string> = {
+export const PORTFOLIO_ROLE_LABELS: Record<string, string> = {
   foundational: "Foundational",
   manufactureAndDeliver: "Manufacture & Deliver",
   forEmployees: "Workforce",
   productsAndServicesSold: "Goods and Services for Sale",
 };
+
+export function portfolioRoleLabel(value: string | null | undefined): string {
+  return labelOf(value, PORTFOLIO_ROLE_LABELS) ?? "Unassigned";
+}
 
 const ACTIVITY_KIND_LABELS: Record<string, string> = {
   delivery: "Delivery",
@@ -71,11 +75,17 @@ function outcomeAnchorLabel(value: unknown): string | null {
   return null;
 }
 
-export function presentCapsuleRow(row: CapsuleRowInput, now = new Date()) {
+type PreclassifiedLiveness = ReturnType<typeof classifyWorkCapsuleLiveness>;
+
+export function presentCapsuleRow(
+  row: CapsuleRowInput,
+  now = new Date(),
+  preclassified?: PreclassifiedLiveness,
+) {
   // WS9: liveness is derived from lease / linked-build / sync — NOT updatedAt,
   // which the 14:00 governed-backlog tee-up freezes at capsule birth. The
   // classifier is the single source of truth shared with the tool and reaper.
-  const verdict = classifyWorkCapsuleLiveness(row, now);
+  const verdict = preclassified ?? classifyWorkCapsuleLiveness(row, now);
   // Stale scanner cache is an orthogonal, still-useful nuance: the lease is live
   // but the cached worktree data is old. Only surfaced when the capsule is not
   // already dead by a stronger signal.

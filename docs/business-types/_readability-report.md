@@ -1,6 +1,6 @@
 # Readability report — business-facing copy
 
-Metric: Flesch–Kincaid (the test Microsoft Word reports). Target: Grade ≤ 9 (high-school, plain English). Technical sections (standards, archetype-engine) are excluded by design.
+Metric: Flesch–Kincaid (the test Microsoft Word reports). Target: Grade ≤ 9 (high-school, plain English). Architecture and partner pages are scored under their own audience tiers and excluded here.
 
 Mean Grade: **6.9** · within target: **19/19**
 

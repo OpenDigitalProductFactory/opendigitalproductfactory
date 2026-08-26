@@ -134,6 +134,7 @@ if (metadataOut) {
     integrationCommitSha,
     synthesizedTreeSha,
     buildStrategy: plan.buildStrategy,
+    executionLane: evidencePlan?.executionLane ?? plan.executionLane,
     productionArtifact,
     execution: {
       status: execution.status === 0 ? "passed" : "failed",
@@ -151,6 +152,7 @@ if (metadataOut) {
       plannerVersion: evidencePlan.plannerVersion,
       policyVersion: evidencePlan.policyVersion,
       evidenceTier: evidencePlan.evidenceTier,
+      executionLane: evidencePlan.executionLane,
       fullSuite: evidencePlan.fullSuite,
     } : null,
     ...collectToolchainFingerprint({ buildStrategy: plan.buildStrategy }),

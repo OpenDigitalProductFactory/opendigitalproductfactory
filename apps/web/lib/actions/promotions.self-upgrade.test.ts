@@ -51,6 +51,7 @@ vi.mock("@/lib/self-upgrade/completion", () => ({
   getDeployedSha: vi.fn(),
 }));
 
+vi.mock("@/lib/self-upgrade/runtime-image-identity", () => ({ readCurrentContainerConfigDigest: vi.fn().mockResolvedValue(`sha256:${"a".repeat(64)}`) }));
 vi.mock("@/lib/self-upgrade/run-store", () => ({
   createRun: vi.fn(),
   failRun: vi.fn(),
@@ -282,12 +283,11 @@ describe("getSelfUpgradeStatus", () => {
     const sourceSha = "f".repeat(40);
     vi.mocked(readSelfUpgradeSupport).mockResolvedValue(consumerReleaseSupport);
     vi.mocked(loadReleaseInstallContext).mockResolvedValue(consumerReleaseContext);
-    vi.mocked(resolveReleaseUpgradeCandidate).mockResolvedValue({ kind: "target", tag: "v2.0.0", sourceSha });
+    vi.mocked(resolveReleaseUpgradeCandidate).mockResolvedValue({ kind: "target", tag: "v2.0.0", sourceSha, channelDigest: `sha256:${"b".repeat(64)}`, platformManifestDigest: `sha256:${"d".repeat(64)}`, configDigest: `sha256:${"c".repeat(64)}`, platformOs: "linux", platformArchitecture: "amd64" });
     vi.mocked(getDeployedSha).mockResolvedValue("e".repeat(40));
     vi.mocked(isShaFresh).mockReturnValue(false);
     const result = await getSelfUpgradeStatus();
-
-    expect(result.targetSha).toBe(sourceSha);
+    expect(result).toMatchObject({ targetSha: sourceSha, targetTag: "v2.0.0", targetAvailability: "resolved" });
     expect(resolveTargetSha).not.toHaveBeenCalled();
   });
 

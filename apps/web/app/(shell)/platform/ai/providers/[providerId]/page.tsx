@@ -23,6 +23,7 @@ import { ProviderAccountPostureForm } from "@/components/platform/ProviderAccoun
 import { ProviderTrustEvidencePanel } from "@/components/platform/ProviderTrustEvidencePanel";
 import { resolveProviderTrustEvidence, type ProviderTrustClaimKey } from "@/lib/routing/provider-suitability/evidence";
 import { connectionPosture } from "@/lib/routing/provider-suitability/provider-onboarding-data";
+import { shouldShowProviderAccountPosture } from "@/components/platform/local-models/provider-detail-policy";
 
 type Props = { params: Promise<{ providerId: string }> };
 
@@ -102,6 +103,7 @@ export default async function ProviderDetailPage({ params }: Props) {
   const session = await auth();
   const user = session?.user;
   const canWrite = !!user && can({ platformRole: user.platformRole, isSuperuser: user.isSuperuser }, "manage_provider_connections");
+  const showPosture = shouldShowProviderAccountPosture(providerId, pw.provider.endpointType);
 
   // Fetch hardware info for local providers via Neo4j InfraCI.
   // Wrapped in try/catch — Neo4j is best-effort; a graph error must never crash the page.
@@ -187,7 +189,7 @@ export default async function ProviderDetailPage({ params }: Props) {
 
       {pw.provider.endpointType === "service" ? (
         <McpServiceDetail provider={pw.provider} connectionStatus={providerConnection?.status ?? null} />
-      ) : (
+      ) : showPosture ? (
         <>
           <ProviderAccountPostureForm
             providerId={providerId}
@@ -254,7 +256,7 @@ export default async function ProviderDetailPage({ params }: Props) {
           {/* Execution Recipes */}
           <RecipePanel recipes={recipes} />
         </>
-      )}
+      ) : null}
 
       <EndpointPerformancePanel
         endpointId={providerId}
@@ -276,7 +278,7 @@ function McpServiceDetail({ provider, connectionStatus }: { provider: import("@/
 
   return (
     <div style={{ background: "var(--dpf-surface-1)", border: "1px solid var(--dpf-border)", borderRadius: 8, padding: 20 }}>
-      <h2 style={{ fontSize: 14, fontWeight: 600, color: "var(--dpf-text)", marginBottom: 16 }}>MCP Service Configuration</h2>
+      <h2 style={{ fontSize: 14, fontWeight: 600, color: "var(--dpf-text)", marginBottom: 16 }}>MCP service</h2>
 
       {isPluginManaged && (
         <div style={{
@@ -295,7 +297,7 @@ function McpServiceDetail({ provider, connectionStatus }: { provider: import("@/
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
         <div>
-          <div style={{ fontSize: 10, color: "var(--dpf-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Endpoint Type</div>
+          <div style={{ fontSize: 10, color: "var(--dpf-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Endpoint</div>
           <div style={{ fontSize: 13, color: "var(--dpf-text)" }}>{provider.endpointType}</div>
         </div>
         <div>
@@ -322,11 +324,11 @@ function McpServiceDetail({ provider, connectionStatus }: { provider: import("@/
           )}
         </div>
         <div>
-          <div style={{ fontSize: 10, color: "var(--dpf-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Capability Tier</div>
+          <div style={{ fontSize: 10, color: "var(--dpf-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Capability</div>
           <div style={{ fontSize: 13, color: "var(--dpf-text)" }}>{provider.capabilityTier ?? "basic"}</div>
         </div>
         <div>
-          <div style={{ fontSize: 10, color: "var(--dpf-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Routing Cost Band</div>
+          <div style={{ fontSize: 10, color: "var(--dpf-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Cost</div>
           <div style={{ fontSize: 13, color: "var(--dpf-text)" }}>{provider.costBand || "unspecified"}</div>
         </div>
       </div>

@@ -21,6 +21,45 @@ import { spawn } from "node:child_process";
 
 let callId = 0;
 
+// Loopback hostnames the local portal is ever published on. `new URL(...)`
+// keeps the brackets on an IPv6 host, so the bracketed form is the literal to
+// compare against.
+const LOOPBACK_MCP_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
+
+// Shape of a loopback MCP endpoint, as written by scripts/sync-mcp-worktrees.ps1.
+// Requiring `/` (or end of string) straight after the optional port is what
+// rejects a credentials-in-authority redirect such as
+// `http://127.0.0.1@example.com/api/mcp/v1`, where the loopback literal is the
+// username and the real host is remote.
+const LOOPBACK_MCP_URL = /^https?:\/\/(?:127\.0\.0\.1|localhost|\[::1\])(?::\d{1,5})?(?:\/.*)?$/i;
+
+/**
+ * Is this an MCP endpoint a `dpfmcp_...` bearer token may be sent to?
+ *
+ * A bearer token is a live DPF credential carrying a read/write/admin scope
+ * (AGENTS.md section 6). Callers that resolve an endpoint from on-disk config
+ * rather than from explicit operator input must run the candidate through this
+ * check first: a copied-in, stale or tampered `.mcp.json` otherwise redirects
+ * the token to whatever host it names, which is uncontrolled credential
+ * disclosure (CWE-200) rather than a connection failure.
+ *
+ * Operators who genuinely front the portal from another host say so explicitly
+ * with `DPF_MCP_URL` / `--mcp-url`, which is intent rather than ambient state
+ * and is not narrowed here.
+ */
+export function isAllowedMcpEndpoint(candidate) {
+  if (typeof candidate !== "string" || !LOOPBACK_MCP_URL.test(candidate)) return false;
+  let parsed;
+  try {
+    parsed = new URL(candidate);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
+  if (parsed.username !== "" || parsed.password !== "") return false;
+  return LOOPBACK_MCP_HOSTS.has(parsed.hostname);
+}
+
 /**
  * Call an MCP tool and return its parsed result payload.
  *

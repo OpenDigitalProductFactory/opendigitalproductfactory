@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { assignTierFromModelId } from "./quality-tiers";
+import {
+  assignTierFromModelId,
+  classifyTierFromModelId,
+  QUALITY_TIERS,
+  UNMATCHED_MODEL_TIER,
+} from "./quality-tiers";
 
 describe("assignTierFromModelId", () => {
   describe("cloud models (unchanged behaviour)", () => {
@@ -112,5 +117,56 @@ describe("assignTierFromModelId", () => {
     it("returns adequate as conservative default", () => {
       expect(assignTierFromModelId("some-unknown-model")).toBe("adequate");
     });
+  });
+});
+
+// BI-07F1A95F / operator escalation: a vendor ships a new generation every few
+// weeks. A tier table keyed to one generation demotes the next one to the
+// unknown-model fallback, which sits BELOW "strong" — so a new flagship is
+// excluded by every minimumTier: "strong" floor while the previous
+// generation's cheapest model passes it. Observed live on 2026-08-23.
+describe("a new model generation is not silently demoted", () => {
+  it("classifies a Claude generation with no explicit entry", () => {
+    expect(assignTierFromModelId("claude-opus-5")).toBe("frontier");
+    expect(assignTierFromModelId("claude-sonnet-5")).toBe("frontier");
+    expect(assignTierFromModelId("claude-haiku-5")).toBe("strong");
+  });
+
+  it("keeps a flagship above the previous generation's cheapest model", () => {
+    // The live inversion this fixes: opus-5 "adequate" (measured toolFidelity
+    // 90) ranked under haiku-4-5 "strong" (measured 75).
+    const flagship = assignTierFromModelId("claude-opus-5");
+    const cheap = assignTierFromModelId("claude-haiku-4-5-20251001");
+    expect(QUALITY_TIERS.indexOf(flagship)).toBeLessThan(QUALITY_TIERS.indexOf(cheap));
+  });
+
+  it("still lets a generation-specific entry win by longest prefix", () => {
+    expect(assignTierFromModelId("claude-3-haiku-20240307")).toBe("adequate");
+    expect(assignTierFromModelId("claude-opus-4-6")).toBe("frontier");
+  });
+
+  it("survives a future generation without a code change", () => {
+    for (const id of ["claude-opus-6", "claude-opus-9-20301231", "claude-sonnet-7"]) {
+      expect(assignTierFromModelId(id)).toBe("frontier");
+    }
+  });
+
+  it("reports whether the tier was matched or merely assumed", () => {
+    const known = classifyTierFromModelId("claude-opus-5");
+    expect(known).toMatchObject({ tier: "frontier", matched: true, matchedFamily: "claude-opus" });
+
+    // "Unknown" is not "weak" — an unmatched model must be reportable as such
+    // rather than presented as an established adequate.
+    const unknown = classifyTierFromModelId("some-vendor-model-x1");
+    expect(unknown.matched).toBe(false);
+    expect(unknown.matchedFamily).toBeNull();
+    expect(unknown.tier).toBe(UNMATCHED_MODEL_TIER);
+  });
+
+  it("keeps the assumed fallback below strong, so the report is load-bearing", () => {
+    // If the fallback were ever raised to strong, an unmeasured model would
+    // silently satisfy a judging role's floor. Pin the invariant.
+    expect(QUALITY_TIERS.indexOf(UNMATCHED_MODEL_TIER))
+      .toBeGreaterThan(QUALITY_TIERS.indexOf("strong"));
   });
 });

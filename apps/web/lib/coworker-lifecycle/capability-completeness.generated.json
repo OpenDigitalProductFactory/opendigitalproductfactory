@@ -128,14 +128,14 @@
   "summary": {
     "agents": 82,
     "sources": {
-      "canonicalRegistry": 71,
+      "canonicalRegistry": 72,
       "workforceRoster": 27,
       "professionRoles": 94,
       "note": "Joined via COWORKER_SLUG_TO_CANONICAL_AGENT_ID; a handle-only join over-counts."
     },
     "byClass": {
       "active-roster": {
-        "count": 12,
+        "count": 13,
         "meaning": "Active in the canonical registry and seeded onto the workforce roster.",
         "medianAttainablePct": 76
       },
@@ -145,7 +145,7 @@
         "medianAttainablePct": 12
       },
       "roster-only": {
-        "count": 11,
+        "count": 10,
         "meaning": "On the workforce roster but absent from the canonical agent registry.",
         "medianAttainablePct": 44
       },
@@ -160,7 +160,7 @@
         "medianAttainablePct": 12
       }
     },
-    "atFullAttainable": 0,
+    "atFullAttainable": 1,
     "medianAttainablePct": 12,
     "medianAbsolutePct": 11,
     "planeLevels": {
@@ -171,11 +171,11 @@
         "blocker": null,
         "distribution": {
           "0": 0,
-          "1": 66,
+          "1": 65,
           "2": 4,
-          "3": 12
+          "3": 13
         },
-        "atCeiling": 12
+        "atCeiling": 13
       },
       "corpus": {
         "label": "Corpus / WSID",
@@ -198,10 +198,10 @@
         "distribution": {
           "0": 54,
           "1": 0,
-          "2": 11,
-          "3": 17
+          "2": 10,
+          "3": 18
         },
-        "atCeiling": 17
+        "atCeiling": 18
       },
       "shape": {
         "label": "Shape",
@@ -237,10 +237,10 @@
         "distribution": {
           "0": 53,
           "1": 12,
-          "2": 5,
-          "3": 12
+          "2": 4,
+          "3": 13
         },
-        "atCeiling": 12
+        "atCeiling": 13
       },
       "evidence": {
         "label": "Evidence",
@@ -249,15 +249,15 @@
         "blocker": "A passing AssuranceRun is runtime state a static scan cannot see. Ceiling rises to 3 when the measure reads the ledger.",
         "distribution": {
           "0": 55,
-          "1": 21,
-          "2": 6,
+          "1": 20,
+          "2": 7,
           "3": 0
         },
-        "atCeiling": 6
+        "atCeiling": 7
       }
     },
     "skills": {
-      "total": 69,
+      "total": 70,
       "stranded": 0,
       "cadenceCapable": 1,
       "unresolvedAssignTargets": [
@@ -271,7 +271,6 @@
     },
     "unbackedSkillIds": [
       "build-sensitive-domain-requirements",
-      "compliance-requirements-review",
       "customer-intake-triage",
       "external-catalog-scout",
       "marketing-collaboration-intake",
@@ -288,12 +287,12 @@
       ],
       "byConsequenceClass": {
         "outward": 17,
-        "irreversible": 19,
+        "irreversible": 21,
         "authority": 17
       },
-      "sideEffectingTools": 174,
-      "gateClassified": 54,
-      "ungated": 120,
+      "sideEffectingTools": 178,
+      "gateClassified": 56,
+      "ungated": 122,
       "coveragePct": 31,
       "classifiedTools": [
         "abandon_stalled_build",
@@ -305,6 +304,7 @@
         "claim_workroom_scope",
         "configure_gateway_scan",
         "contribute_to_hive",
+        "create_bank_account",
         "create_employee",
         "create_policy",
         "create_portal_pr",
@@ -319,6 +319,7 @@
         "execute_promotion",
         "extract_brand_design_system",
         "grok_signin_start",
+        "import_bank_statement",
         "invite_room_participant",
         "manage_coworker_tool_grant",
         "merge_backlog_items",
@@ -401,8 +402,8 @@
             "registry_read"
           ],
           "escalatesTo": "HR-300",
-          "reachableSideEffectingTools": 17,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "holds no grants at all — no tool surface is authorised",
           "levelKey": "absent",
@@ -547,8 +548,8 @@
             "registry_read"
           ],
           "escalatesTo": "HR-000",
-          "reachableSideEffectingTools": 17,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "holds no grants at all — no tool surface is authorised",
           "levelKey": "absent",
@@ -693,8 +694,8 @@
             "registry_read"
           ],
           "escalatesTo": "HR-100",
-          "reachableSideEffectingTools": 17,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "holds no grants at all — no tool surface is authorised",
           "levelKey": "absent",
@@ -839,8 +840,8 @@
             "registry_read"
           ],
           "escalatesTo": "HR-100",
-          "reachableSideEffectingTools": 17,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "holds no grants at all — no tool surface is authorised",
           "levelKey": "absent",
@@ -985,8 +986,8 @@
             "registry_read"
           ],
           "escalatesTo": "HR-100",
-          "reachableSideEffectingTools": 17,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "holds no grants at all — no tool surface is authorised",
           "levelKey": "absent",
@@ -1131,8 +1132,8 @@
             "registry_read"
           ],
           "escalatesTo": "HR-100",
-          "reachableSideEffectingTools": 17,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "holds no grants at all — no tool surface is authorised",
           "levelKey": "absent",
@@ -1277,8 +1278,8 @@
             "registry_read"
           ],
           "escalatesTo": "HR-000",
-          "reachableSideEffectingTools": 17,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "holds no grants at all — no tool surface is authorised",
           "levelKey": "absent",
@@ -1423,8 +1424,8 @@
             "registry_read"
           ],
           "escalatesTo": "HR-200",
-          "reachableSideEffectingTools": 17,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "holds no grants at all — no tool surface is authorised",
           "levelKey": "absent",
@@ -1569,8 +1570,8 @@
             "registry_read"
           ],
           "escalatesTo": "HR-300",
-          "reachableSideEffectingTools": 17,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "holds no grants at all — no tool surface is authorised",
           "levelKey": "absent",
@@ -1715,8 +1716,8 @@
             "registry_read"
           ],
           "escalatesTo": "HR-200",
-          "reachableSideEffectingTools": 17,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "holds no grants at all — no tool surface is authorised",
           "levelKey": "absent",
@@ -1861,8 +1862,8 @@
             "registry_read"
           ],
           "escalatesTo": "HR-200",
-          "reachableSideEffectingTools": 17,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "holds no grants at all — no tool surface is authorised",
           "levelKey": "absent",
@@ -2007,8 +2008,8 @@
             "registry_read"
           ],
           "escalatesTo": "HR-200",
-          "reachableSideEffectingTools": 17,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "holds no grants at all — no tool surface is authorised",
           "levelKey": "absent",
@@ -2153,8 +2154,8 @@
             "registry_read"
           ],
           "escalatesTo": "HR-200",
-          "reachableSideEffectingTools": 17,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "holds no grants at all — no tool surface is authorised",
           "levelKey": "absent",
@@ -2299,8 +2300,8 @@
             "registry_read"
           ],
           "escalatesTo": "HR-500",
-          "reachableSideEffectingTools": 17,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "holds no grants at all — no tool surface is authorised",
           "levelKey": "absent",
@@ -2445,8 +2446,8 @@
             "registry_read"
           ],
           "escalatesTo": "HR-500",
-          "reachableSideEffectingTools": 17,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "holds no grants at all — no tool surface is authorised",
           "levelKey": "absent",
@@ -2591,8 +2592,8 @@
             "registry_read"
           ],
           "escalatesTo": "HR-500",
-          "reachableSideEffectingTools": 17,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "holds no grants at all — no tool surface is authorised",
           "levelKey": "absent",
@@ -2737,8 +2738,8 @@
             "registry_read"
           ],
           "escalatesTo": "HR-100",
-          "reachableSideEffectingTools": 17,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "holds no grants at all — no tool surface is authorised",
           "levelKey": "absent",
@@ -2883,8 +2884,8 @@
             "registry_read"
           ],
           "escalatesTo": "HR-100",
-          "reachableSideEffectingTools": 17,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "holds no grants at all — no tool surface is authorised",
           "levelKey": "absent",
@@ -3029,8 +3030,8 @@
             "registry_read"
           ],
           "escalatesTo": "HR-400",
-          "reachableSideEffectingTools": 17,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "holds no grants at all — no tool surface is authorised",
           "levelKey": "absent",
@@ -3175,8 +3176,8 @@
             "registry_read"
           ],
           "escalatesTo": "HR-200",
-          "reachableSideEffectingTools": 17,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "holds no grants at all — no tool surface is authorised",
           "levelKey": "absent",
@@ -3321,8 +3322,8 @@
             "registry_read"
           ],
           "escalatesTo": "HR-500",
-          "reachableSideEffectingTools": 17,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "holds no grants at all — no tool surface is authorised",
           "levelKey": "absent",
@@ -3467,8 +3468,8 @@
             "registry_read"
           ],
           "escalatesTo": "HR-500",
-          "reachableSideEffectingTools": 17,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "holds no grants at all — no tool surface is authorised",
           "levelKey": "absent",
@@ -3613,8 +3614,8 @@
             "registry_read"
           ],
           "escalatesTo": "HR-500",
-          "reachableSideEffectingTools": 17,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "holds no grants at all — no tool surface is authorised",
           "levelKey": "absent",
@@ -3759,8 +3760,8 @@
             "registry_read"
           ],
           "escalatesTo": "HR-500",
-          "reachableSideEffectingTools": 17,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "holds no grants at all — no tool surface is authorised",
           "levelKey": "absent",
@@ -3905,8 +3906,8 @@
             "registry_read"
           ],
           "escalatesTo": "HR-500",
-          "reachableSideEffectingTools": 17,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "holds no grants at all — no tool surface is authorised",
           "levelKey": "absent",
@@ -4051,8 +4052,8 @@
             "registry_read"
           ],
           "escalatesTo": "HR-300",
-          "reachableSideEffectingTools": 17,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "holds no grants at all — no tool surface is authorised",
           "levelKey": "absent",
@@ -4197,8 +4198,8 @@
             "registry_read"
           ],
           "escalatesTo": "HR-300",
-          "reachableSideEffectingTools": 17,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "holds no grants at all — no tool surface is authorised",
           "levelKey": "absent",
@@ -4343,8 +4344,8 @@
             "registry_read"
           ],
           "escalatesTo": "HR-300",
-          "reachableSideEffectingTools": 17,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "holds no grants at all — no tool surface is authorised",
           "levelKey": "absent",
@@ -4489,8 +4490,8 @@
             "registry_read"
           ],
           "escalatesTo": "HR-300",
-          "reachableSideEffectingTools": 17,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "holds no grants at all — no tool surface is authorised",
           "levelKey": "absent",
@@ -4635,8 +4636,8 @@
             "registry_read"
           ],
           "escalatesTo": "HR-400",
-          "reachableSideEffectingTools": 17,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "holds no grants at all — no tool surface is authorised",
           "levelKey": "absent",
@@ -4781,8 +4782,8 @@
             "registry_read"
           ],
           "escalatesTo": "HR-300",
-          "reachableSideEffectingTools": 17,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "holds no grants at all — no tool surface is authorised",
           "levelKey": "absent",
@@ -4927,8 +4928,8 @@
             "registry_read"
           ],
           "escalatesTo": "HR-300",
-          "reachableSideEffectingTools": 17,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "holds no grants at all — no tool surface is authorised",
           "levelKey": "absent",
@@ -5073,8 +5074,8 @@
             "registry_read"
           ],
           "escalatesTo": "HR-300",
-          "reachableSideEffectingTools": 17,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "holds no grants at all — no tool surface is authorised",
           "levelKey": "absent",
@@ -5219,8 +5220,8 @@
             "registry_read"
           ],
           "escalatesTo": "AGT-ORCH-000",
-          "reachableSideEffectingTools": 17,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "holds no grants at all — no tool surface is authorised",
           "levelKey": "absent",
@@ -5365,8 +5366,8 @@
             "registry_read"
           ],
           "escalatesTo": "AGT-ORCH-300",
-          "reachableSideEffectingTools": 17,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "holds no grants at all — no tool surface is authorised",
           "levelKey": "absent",
@@ -5511,8 +5512,8 @@
             "registry_read"
           ],
           "escalatesTo": "AGT-ORCH-300",
-          "reachableSideEffectingTools": 17,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "holds no grants at all — no tool surface is authorised",
           "levelKey": "absent",
@@ -5657,8 +5658,8 @@
             "registry_read"
           ],
           "escalatesTo": "AGT-ORCH-300",
-          "reachableSideEffectingTools": 17,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "holds no grants at all — no tool surface is authorised",
           "levelKey": "absent",
@@ -5803,8 +5804,8 @@
             "registry_read"
           ],
           "escalatesTo": "AGT-ORCH-300",
-          "reachableSideEffectingTools": 17,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "holds no grants at all — no tool surface is authorised",
           "levelKey": "absent",
@@ -5949,8 +5950,8 @@
             "registry_read"
           ],
           "escalatesTo": "HR-100",
-          "reachableSideEffectingTools": 17,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "holds no grants at all — no tool surface is authorised",
           "levelKey": "absent",
@@ -6095,8 +6096,8 @@
             "registry_read"
           ],
           "escalatesTo": "HR-200",
-          "reachableSideEffectingTools": 17,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "holds no grants at all — no tool surface is authorised",
           "levelKey": "absent",
@@ -6241,8 +6242,8 @@
             "registry_read"
           ],
           "escalatesTo": "HR-200",
-          "reachableSideEffectingTools": 17,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "holds no grants at all — no tool surface is authorised",
           "levelKey": "absent",
@@ -6387,8 +6388,8 @@
             "registry_read"
           ],
           "escalatesTo": "HR-500",
-          "reachableSideEffectingTools": 17,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "holds no grants at all — no tool surface is authorised",
           "levelKey": "absent",
@@ -6533,8 +6534,8 @@
             "registry_read"
           ],
           "escalatesTo": "HR-100",
-          "reachableSideEffectingTools": 17,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "holds no grants at all — no tool surface is authorised",
           "levelKey": "absent",
@@ -6679,8 +6680,8 @@
             "registry_read"
           ],
           "escalatesTo": "HR-200",
-          "reachableSideEffectingTools": 17,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "holds no grants at all — no tool surface is authorised",
           "levelKey": "absent",
@@ -6825,8 +6826,8 @@
             "registry_read"
           ],
           "escalatesTo": "HR-500",
-          "reachableSideEffectingTools": 17,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "holds no grants at all — no tool surface is authorised",
           "levelKey": "absent",
@@ -6971,8 +6972,8 @@
             "registry_read"
           ],
           "escalatesTo": "HR-300",
-          "reachableSideEffectingTools": 17,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "holds no grants at all — no tool surface is authorised",
           "levelKey": "absent",
@@ -7117,8 +7118,8 @@
             "registry_read"
           ],
           "escalatesTo": "HR-200",
-          "reachableSideEffectingTools": 17,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "holds no grants at all — no tool surface is authorised",
           "levelKey": "absent",
@@ -7263,8 +7264,8 @@
             "registry_read"
           ],
           "escalatesTo": "HR-100",
-          "reachableSideEffectingTools": 17,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "holds no grants at all — no tool surface is authorised",
           "levelKey": "absent",
@@ -7409,8 +7410,8 @@
             "registry_read"
           ],
           "escalatesTo": "HR-300",
-          "reachableSideEffectingTools": 17,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "holds no grants at all — no tool surface is authorised",
           "levelKey": "absent",
@@ -7555,8 +7556,8 @@
             "registry_read"
           ],
           "escalatesTo": "AGT-SOC-IR-LEAD",
-          "reachableSideEffectingTools": 17,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "holds no grants at all — no tool surface is authorised",
           "levelKey": "absent",
@@ -7701,8 +7702,8 @@
             "registry_read"
           ],
           "escalatesTo": "AGT-SOC-IR-LEAD",
-          "reachableSideEffectingTools": 17,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "holds no grants at all — no tool surface is authorised",
           "levelKey": "absent",
@@ -7847,8 +7848,8 @@
             "registry_read"
           ],
           "escalatesTo": "AGT-ORCH-000",
-          "reachableSideEffectingTools": 17,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "holds no grants at all — no tool surface is authorised",
           "levelKey": "absent",
@@ -7993,8 +7994,8 @@
             "registry_read"
           ],
           "escalatesTo": "AGT-SOC-IR-LEAD",
-          "reachableSideEffectingTools": 17,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "holds no grants at all — no tool surface is authorised",
           "levelKey": "absent",
@@ -8139,8 +8140,8 @@
             "registry_read"
           ],
           "escalatesTo": "HR-300",
-          "reachableSideEffectingTools": 17,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "holds no grants at all — no tool surface is authorised",
           "levelKey": "absent",
@@ -8275,8 +8276,8 @@
           "level": 2,
           "missingGrants": [],
           "escalatesTo": null,
-          "reachableSideEffectingTools": 26,
-          "reachableGatedTools": 3,
+          "reachableSideEffectingTools": 31,
+          "reachableGatedTools": 5,
           "ungatedConsequenceNote": null,
           "detail": "principle_decide reachable, but no escalation target is declared",
           "levelKey": "reachable",
@@ -8417,8 +8418,8 @@
           "level": 2,
           "missingGrants": [],
           "escalatesTo": null,
-          "reachableSideEffectingTools": 26,
-          "reachableGatedTools": 5,
+          "reachableSideEffectingTools": 31,
+          "reachableGatedTools": 7,
           "ungatedConsequenceNote": null,
           "detail": "principle_decide reachable, but no escalation target is declared",
           "levelKey": "reachable",
@@ -8561,8 +8562,8 @@
           "level": 2,
           "missingGrants": [],
           "escalatesTo": null,
-          "reachableSideEffectingTools": 51,
-          "reachableGatedTools": 11,
+          "reachableSideEffectingTools": 56,
+          "reachableGatedTools": 13,
           "ungatedConsequenceNote": null,
           "detail": "principle_decide reachable, but no escalation target is declared",
           "levelKey": "reachable",
@@ -8703,8 +8704,8 @@
           "level": 2,
           "missingGrants": [],
           "escalatesTo": null,
-          "reachableSideEffectingTools": 51,
-          "reachableGatedTools": 10,
+          "reachableSideEffectingTools": 56,
+          "reachableGatedTools": 12,
           "ungatedConsequenceNote": null,
           "detail": "principle_decide reachable, but no escalation target is declared",
           "levelKey": "reachable",
@@ -8847,8 +8848,8 @@
           "level": 2,
           "missingGrants": [],
           "escalatesTo": null,
-          "reachableSideEffectingTools": 20,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 25,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "principle_decide reachable, but no escalation target is declared",
           "levelKey": "reachable",
@@ -8990,8 +8991,8 @@
           "level": 2,
           "missingGrants": [],
           "escalatesTo": null,
-          "reachableSideEffectingTools": 52,
-          "reachableGatedTools": 11,
+          "reachableSideEffectingTools": 57,
+          "reachableGatedTools": 13,
           "ungatedConsequenceNote": null,
           "detail": "principle_decide reachable, but no escalation target is declared",
           "levelKey": "reachable",
@@ -9134,8 +9135,8 @@
           "level": 2,
           "missingGrants": [],
           "escalatesTo": null,
-          "reachableSideEffectingTools": 70,
-          "reachableGatedTools": 15,
+          "reachableSideEffectingTools": 75,
+          "reachableGatedTools": 17,
           "ungatedConsequenceNote": null,
           "detail": "principle_decide reachable, but no escalation target is declared",
           "levelKey": "reachable",
@@ -9280,8 +9281,8 @@
           "level": 2,
           "missingGrants": [],
           "escalatesTo": null,
-          "reachableSideEffectingTools": 18,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 23,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "principle_decide reachable, but no escalation target is declared",
           "levelKey": "reachable",
@@ -9422,8 +9423,8 @@
           "level": 3,
           "missingGrants": [],
           "escalatesTo": "AGT-ORCH-000",
-          "reachableSideEffectingTools": 52,
-          "reachableGatedTools": 10,
+          "reachableSideEffectingTools": 57,
+          "reachableGatedTools": 12,
           "ungatedConsequenceNote": null,
           "detail": "principle_decide reachable; escalates to AGT-ORCH-000",
           "levelKey": "proven",
@@ -9559,8 +9560,8 @@
           "level": 3,
           "missingGrants": [],
           "escalatesTo": "HR-300",
-          "reachableSideEffectingTools": 21,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 26,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "principle_decide reachable; escalates to HR-300",
           "levelKey": "proven",
@@ -9696,8 +9697,8 @@
           "level": 3,
           "missingGrants": [],
           "escalatesTo": "AGT-WS-HR",
-          "reachableSideEffectingTools": 19,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 24,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "principle_decide reachable; escalates to AGT-WS-HR",
           "levelKey": "proven",
@@ -9823,8 +9824,8 @@
           "level": 2,
           "missingGrants": [],
           "escalatesTo": null,
-          "reachableSideEffectingTools": 28,
-          "reachableGatedTools": 4,
+          "reachableSideEffectingTools": 33,
+          "reachableGatedTools": 6,
           "ungatedConsequenceNote": null,
           "detail": "principle_decide reachable, but no escalation target is declared",
           "levelKey": "reachable",
@@ -9959,8 +9960,8 @@
           "level": 3,
           "missingGrants": [],
           "escalatesTo": "AGT-ORCH-000",
-          "reachableSideEffectingTools": 37,
-          "reachableGatedTools": 9,
+          "reachableSideEffectingTools": 42,
+          "reachableGatedTools": 11,
           "ungatedConsequenceNote": null,
           "detail": "principle_decide reachable; escalates to AGT-ORCH-000",
           "levelKey": "proven",
@@ -10093,8 +10094,8 @@
           "level": 3,
           "missingGrants": [],
           "escalatesTo": "AGT-ORCH-300",
-          "reachableSideEffectingTools": 20,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 25,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "principle_decide reachable; escalates to AGT-ORCH-300",
           "levelKey": "proven",
@@ -10220,8 +10221,8 @@
           "level": 3,
           "missingGrants": [],
           "escalatesTo": "AGT-ORCH-300",
-          "reachableSideEffectingTools": 68,
-          "reachableGatedTools": 15,
+          "reachableSideEffectingTools": 73,
+          "reachableGatedTools": 17,
           "ungatedConsequenceNote": null,
           "detail": "principle_decide reachable; escalates to AGT-ORCH-300",
           "levelKey": "proven",
@@ -10363,8 +10364,8 @@
           "level": 3,
           "missingGrants": [],
           "escalatesTo": "AGT-ORCH-600",
-          "reachableSideEffectingTools": 26,
-          "reachableGatedTools": 5,
+          "reachableSideEffectingTools": 31,
+          "reachableGatedTools": 7,
           "ungatedConsequenceNote": null,
           "detail": "principle_decide reachable; escalates to AGT-ORCH-600",
           "levelKey": "proven",
@@ -10496,8 +10497,8 @@
           "level": 3,
           "missingGrants": [],
           "escalatesTo": "AGT-ORCH-200",
-          "reachableSideEffectingTools": 48,
-          "reachableGatedTools": 9,
+          "reachableSideEffectingTools": 53,
+          "reachableGatedTools": 11,
           "ungatedConsequenceNote": null,
           "detail": "principle_decide reachable; escalates to AGT-ORCH-200",
           "levelKey": "proven",
@@ -10626,8 +10627,8 @@
           "level": 2,
           "missingGrants": [],
           "escalatesTo": null,
-          "reachableSideEffectingTools": 20,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 25,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "principle_decide reachable, but no escalation target is declared",
           "levelKey": "reachable",
@@ -10765,8 +10766,8 @@
           "level": 3,
           "missingGrants": [],
           "escalatesTo": "HR-000",
-          "reachableSideEffectingTools": 60,
-          "reachableGatedTools": 16,
+          "reachableSideEffectingTools": 65,
+          "reachableGatedTools": 18,
           "ungatedConsequenceNote": null,
           "detail": "principle_decide reachable; escalates to HR-000",
           "levelKey": "proven",
@@ -10856,140 +10857,6 @@
       ]
     },
     {
-      "key": "compliance-officer",
-      "displayName": "Compliance Officer",
-      "identityClass": "roster-only",
-      "handles": [
-        "compliance-officer"
-      ],
-      "registryStatus": null,
-      "valueStream": null,
-      "tier": null,
-      "score": {
-        "earned": 18,
-        "attainableMax": 25,
-        "absoluteMax": 27,
-        "attainablePct": 72,
-        "absolutePct": 67
-      },
-      "planes": {
-        "identity": {
-          "level": 1,
-          "detail": "on the workforce roster but absent from the canonical agent registry",
-          "handles": [
-            "compliance-officer"
-          ],
-          "levelKey": "declared",
-          "ceiling": 3,
-          "atCeiling": false
-        },
-        "corpus": {
-          "level": 3,
-          "professionKey": "legal-compliance",
-          "corpusPages": 16,
-          "missingGrants": [],
-          "detail": "16 corpus pages, reachable",
-          "levelKey": "proven",
-          "ceiling": 3,
-          "atCeiling": true
-        },
-        "governance": {
-          "level": 2,
-          "missingGrants": [],
-          "escalatesTo": null,
-          "reachableSideEffectingTools": 54,
-          "reachableGatedTools": 11,
-          "ungatedConsequenceNote": null,
-          "detail": "principle_decide reachable, but no escalation target is declared",
-          "levelKey": "reachable",
-          "ceiling": 3,
-          "atCeiling": false
-        },
-        "shape": {
-          "level": 2,
-          "detail": "accountable for a stage of a declared work shape with stages and governed-decision gates",
-          "levelKey": "reachable",
-          "ceiling": 2,
-          "atCeiling": true
-        },
-        "cadence": {
-          "level": 3,
-          "detail": "self-task PLUS a cadence declared on skill \"obligation-deadline-watch\" (11 6 * * *)",
-          "levelKey": "proven",
-          "ceiling": 3,
-          "atCeiling": true
-        },
-        "toolsAndSkills": {
-          "level": 2,
-          "directSkills": 5,
-          "wildcardSkills": 5,
-          "reachableTools": 116,
-          "heldGrants": [
-            "policy_write",
-            "data_governance_validate",
-            "file_read",
-            "backlog_read",
-            "backlog_write",
-            "tool_evaluation_create",
-            "registry_read"
-          ],
-          "services": 1,
-          "unbackedSkillIds": [
-            "compliance-requirements-review"
-          ],
-          "detail": "5 skill(s), 116 tool(s); 1 service backing skill(s) missing: compliance-requirements-review",
-          "levelKey": "reachable",
-          "ceiling": 3,
-          "atCeiling": false
-        },
-        "evidence": {
-          "level": 1,
-          "detail": "derivedReadProbe only — passes certification with zero domain capability",
-          "levelKey": "declared",
-          "ceiling": 2,
-          "atCeiling": false
-        }
-      },
-      "gaps": [
-        {
-          "plane": "identity",
-          "level": 1,
-          "ceiling": 3,
-          "detail": "on the workforce roster but absent from the canonical agent registry"
-        },
-        {
-          "plane": "governance",
-          "level": 2,
-          "ceiling": 3,
-          "detail": "principle_decide reachable, but no escalation target is declared"
-        },
-        {
-          "plane": "toolsAndSkills",
-          "level": 2,
-          "ceiling": 3,
-          "detail": "5 skill(s), 116 tool(s); 1 service backing skill(s) missing: compliance-requirements-review"
-        },
-        {
-          "plane": "evidence",
-          "level": 1,
-          "ceiling": 2,
-          "detail": "derivedReadProbe only — passes certification with zero domain capability"
-        }
-      ],
-      "blockedPlanes": [
-        {
-          "plane": "shape",
-          "ceiling": 2,
-          "blocker": "The work-shape registry has landed (apps/web/lib/work-management/work-shapes.ts). Level 3 needs an observed running instance, which nothing records yet — the ceiling rises to 3 when instance evidence lands."
-        },
-        {
-          "plane": "evidence",
-          "ceiling": 2,
-          "blocker": "A passing AssuranceRun is runtime state a static scan cannot see. Ceiling rises to 3 when the measure reads the ledger."
-        }
-      ]
-    },
-    {
       "key": "AGT-WS-ADMIN",
       "displayName": "System Admin",
       "identityClass": "active-roster",
@@ -11031,8 +10898,8 @@
           "level": 3,
           "missingGrants": [],
           "escalatesTo": "AGT-ORCH-000",
-          "reachableSideEffectingTools": 32,
-          "reachableGatedTools": 11,
+          "reachableSideEffectingTools": 37,
+          "reachableGatedTools": 13,
           "ungatedConsequenceNote": null,
           "detail": "principle_decide reachable; escalates to AGT-ORCH-000",
           "levelKey": "proven",
@@ -11156,8 +11023,8 @@
           "level": 3,
           "missingGrants": [],
           "escalatesTo": "AGT-ORCH-200",
-          "reachableSideEffectingTools": 24,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 29,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "principle_decide reachable; escalates to AGT-ORCH-200",
           "levelKey": "proven",
@@ -11281,8 +11148,8 @@
           "level": 3,
           "missingGrants": [],
           "escalatesTo": "AGT-ORCH-000",
-          "reachableSideEffectingTools": 55,
-          "reachableGatedTools": 14,
+          "reachableSideEffectingTools": 60,
+          "reachableGatedTools": 16,
           "ungatedConsequenceNote": null,
           "detail": "principle_decide reachable; escalates to AGT-ORCH-000",
           "levelKey": "proven",
@@ -11408,8 +11275,8 @@
           "level": 3,
           "missingGrants": [],
           "escalatesTo": "AGT-ORCH-100",
-          "reachableSideEffectingTools": 18,
-          "reachableGatedTools": 1,
+          "reachableSideEffectingTools": 23,
+          "reachableGatedTools": 3,
           "ungatedConsequenceNote": null,
           "detail": "principle_decide reachable; escalates to AGT-ORCH-100",
           "levelKey": "proven",
@@ -11530,8 +11397,8 @@
           "level": 3,
           "missingGrants": [],
           "escalatesTo": "AGT-ORCH-600",
-          "reachableSideEffectingTools": 39,
-          "reachableGatedTools": 6,
+          "reachableSideEffectingTools": 44,
+          "reachableGatedTools": 8,
           "ungatedConsequenceNote": null,
           "detail": "principle_decide reachable; escalates to AGT-ORCH-600",
           "levelKey": "proven",
@@ -11655,8 +11522,8 @@
           "level": 3,
           "missingGrants": [],
           "escalatesTo": "AGT-ORCH-300",
-          "reachableSideEffectingTools": 50,
-          "reachableGatedTools": 10,
+          "reachableSideEffectingTools": 55,
+          "reachableGatedTools": 12,
           "ungatedConsequenceNote": null,
           "detail": "principle_decide reachable; escalates to AGT-ORCH-300",
           "levelKey": "proven",
@@ -11773,8 +11640,8 @@
           "level": 3,
           "missingGrants": [],
           "escalatesTo": "AGT-ORCH-000",
-          "reachableSideEffectingTools": 59,
-          "reachableGatedTools": 18,
+          "reachableSideEffectingTools": 64,
+          "reachableGatedTools": 20,
           "ungatedConsequenceNote": null,
           "detail": "principle_decide reachable; escalates to AGT-ORCH-000",
           "levelKey": "proven",
@@ -11900,8 +11767,8 @@
           "level": 3,
           "missingGrants": [],
           "escalatesTo": "AGT-ORCH-200",
-          "reachableSideEffectingTools": 55,
-          "reachableGatedTools": 11,
+          "reachableSideEffectingTools": 60,
+          "reachableGatedTools": 13,
           "ungatedConsequenceNote": null,
           "detail": "principle_decide reachable; escalates to AGT-ORCH-200",
           "levelKey": "proven",
@@ -11974,6 +11841,114 @@
           "blocker": "A passing AssuranceRun is runtime state a static scan cannot see. Ceiling rises to 3 when the measure reads the ledger."
         }
       ]
+    },
+    {
+      "key": "AGT-WS-COMPLIANCE",
+      "displayName": "Compliance Officer",
+      "identityClass": "active-roster",
+      "handles": [
+        "compliance-officer"
+      ],
+      "registryStatus": "active",
+      "valueStream": "cross-cutting",
+      "tier": "specialist",
+      "score": {
+        "earned": 25,
+        "attainableMax": 25,
+        "absoluteMax": 27,
+        "attainablePct": 100,
+        "absolutePct": 93
+      },
+      "planes": {
+        "identity": {
+          "level": 3,
+          "detail": "bridged across registries and active",
+          "handles": [
+            "compliance-officer"
+          ],
+          "levelKey": "proven",
+          "ceiling": 3,
+          "atCeiling": true
+        },
+        "corpus": {
+          "level": 3,
+          "professionKey": "legal-compliance",
+          "corpusPages": 16,
+          "missingGrants": [],
+          "detail": "16 corpus pages, reachable",
+          "levelKey": "proven",
+          "ceiling": 3,
+          "atCeiling": true
+        },
+        "governance": {
+          "level": 3,
+          "missingGrants": [],
+          "escalatesTo": "AGT-ORCH-000",
+          "reachableSideEffectingTools": 60,
+          "reachableGatedTools": 14,
+          "ungatedConsequenceNote": null,
+          "detail": "principle_decide reachable; escalates to AGT-ORCH-000",
+          "levelKey": "proven",
+          "ceiling": 3,
+          "atCeiling": true
+        },
+        "shape": {
+          "level": 2,
+          "detail": "accountable for a stage of a declared work shape with stages and governed-decision gates",
+          "levelKey": "reachable",
+          "ceiling": 2,
+          "atCeiling": true
+        },
+        "cadence": {
+          "level": 3,
+          "detail": "self-task PLUS a cadence declared on skill \"obligation-deadline-watch\" (11 6 * * *)",
+          "levelKey": "proven",
+          "ceiling": 3,
+          "atCeiling": true
+        },
+        "toolsAndSkills": {
+          "level": 3,
+          "directSkills": 6,
+          "wildcardSkills": 5,
+          "reachableTools": 120,
+          "heldGrants": [
+            "policy_write",
+            "data_governance_validate",
+            "file_read",
+            "backlog_read",
+            "backlog_write",
+            "tool_evaluation_create",
+            "web_search",
+            "registry_read"
+          ],
+          "services": 1,
+          "unbackedSkillIds": [],
+          "detail": "6 skill(s), 120 tool(s), all service backings resolve",
+          "levelKey": "proven",
+          "ceiling": 3,
+          "atCeiling": true
+        },
+        "evidence": {
+          "level": 2,
+          "detail": "curated golden journey exercising a domain act",
+          "levelKey": "reachable",
+          "ceiling": 2,
+          "atCeiling": true
+        }
+      },
+      "gaps": [],
+      "blockedPlanes": [
+        {
+          "plane": "shape",
+          "ceiling": 2,
+          "blocker": "The work-shape registry has landed (apps/web/lib/work-management/work-shapes.ts). Level 3 needs an observed running instance, which nothing records yet — the ceiling rises to 3 when instance evidence lands."
+        },
+        {
+          "plane": "evidence",
+          "ceiling": 2,
+          "blocker": "A passing AssuranceRun is runtime state a static scan cannot see. Ceiling rises to 3 when the measure reads the ledger."
+        }
+      ]
     }
   ],
   "orphans": {
@@ -12009,7 +11984,6 @@
     ],
     "unbackedSkillIds": [
       "build-sensitive-domain-requirements",
-      "compliance-requirements-review",
       "customer-intake-triage",
       "external-catalog-scout",
       "marketing-collaboration-intake",

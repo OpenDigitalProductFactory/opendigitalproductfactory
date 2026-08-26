@@ -50,6 +50,14 @@ export function providersBusyHandoff(): string {
   });
 }
 
+export function modelMissingHandoff(): string {
+  return buildHumanHandoff({
+    blocker: "The selected AI model is no longer available from its provider, so the platform could not answer this turn.",
+    steps: ["Open Platform > AI Operations > Providers & Routing and refresh that provider's models."],
+    verify: "re-check the available models and pick this straight back up",
+  });
+}
+
 
 /**
  * The local model is present and healthy, but a background job on this host
@@ -69,12 +77,43 @@ export function providersBusyHandoff(): string {
  * nothing is misconfigured — so this deliberately names NO settings surface.
  * Respects IDENTITY_BLOCK rule #5: no lease names, reason codes, or job ids.
  */
-export function localCapacityHeldHandoff(unprovenCapacity = false): string {
+/**
+ * "about 3 minutes" from a lease expiry, or null when there is nothing useful
+ * to say (BI-94D44FDB).
+ *
+ * Deliberately RELATIVE rather than a clock time: the reply is read in the
+ * owner's browser and the window is short, so "a couple of minutes" is both
+ * more useful and free of any timezone question. `now` is injected so the
+ * behaviour is pinned by tests rather than by the wall clock.
+ */
+export function describeCapacityWindow(
+  expectedFreeAt: Date | null | undefined,
+  now: Date,
+): string | null {
+  if (!(expectedFreeAt instanceof Date) || Number.isNaN(expectedFreeAt.getTime())) return null;
+  const remainingMs = expectedFreeAt.getTime() - now.getTime();
+  // A window already past, or implausibly far out, tells the owner nothing
+  // trustworthy — better to say the honest generic thing than a wrong number.
+  if (remainingMs <= 0 || remainingMs > 30 * 60_000) return null;
+  const minutes = Math.max(1, Math.round(remainingMs / 60_000));
+  return minutes === 1 ? "about a minute" : `about ${minutes} minutes`;
+}
+
+export function localCapacityHeldHandoff(
+  unprovenCapacity = false,
+  expectedFreeAt: Date | null = null,
+  now: Date = new Date(),
+): string {
+  const window = describeCapacityWindow(expectedFreeAt, now);
   return buildHumanHandoff({
     blocker: unprovenCapacity
       ? "I couldn't confirm the local AI model was free to use, so I held off rather than risk disrupting something else running on this machine. Nothing is misconfigured."
       : "The only AI model allowed to handle this request is tied up with a background job on this machine, so I couldn't answer. Nothing is misconfigured.",
-    steps: ["Give it a couple of minutes, then send the message again."],
+    steps: [
+      window
+        ? `Send the message again in ${window}, when that job is due to finish.`
+        : "Give it a couple of minutes, then send the message again.",
+    ],
     verify: "check the moment it frees up",
   });
 }
@@ -122,6 +161,24 @@ export function isLocalCapacityDeferral(error: unknown, message: string): boolea
 }
 
 /**
+ * The window the routing layer attached to a capacity deferral, if it survived.
+ *
+ * Read structurally rather than by importing the error class, for the same
+ * bundle reason as isLocalCapacityDeferral above. Absent when the error crossed
+ * a boundary that kept only its message.
+ */
+function readExpectedFreeAt(error: unknown): Date | null {
+  if (typeof error !== "object" || error === null || !("expectedFreeAt" in error)) return null;
+  const value = (error as { expectedFreeAt?: unknown }).expectedFreeAt;
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+  if (typeof value === "string" || typeof value === "number") {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+  return null;
+}
+
+/**
  * Plain-language, non-technical explanation for a turn that failed because
  * routing could not complete a tool-using call (BI-23E0714C).
  *
@@ -144,7 +201,7 @@ export function isLocalCapacityDeferral(error: unknown, message: string): boolea
  *  - genuinely no tool-capable endpoint active → point to the REAL surface.
  *  - anything else → say we do not know, and offer the check.
  */
-export function describeToolRouteFailure(
+function describeToolRouteFailureMessage(
   errorMessage: string,
   toolCount: number,
   error?: unknown,
@@ -159,7 +216,10 @@ export function describeToolRouteFailure(
   // is a host-capacity state, not a configuration one, and every branch below
   // that names a settings surface would be wrong advice for it.
   if (isLocalCapacityDeferral(error, msg)) {
-    return localCapacityHeldHandoff(/capacity-reservation-unavailable/i.test(msg));
+    return localCapacityHeldHandoff(
+      /capacity-reservation-unavailable/i.test(msg),
+      readExpectedFreeAt(error),
+    );
   }
 
   // Local runner rejected the request because prompt + tool schemas exceed the
@@ -233,4 +293,44 @@ export function describeToolRouteFailure(
   }
 
   return unexplainedDeadEndHandoff();
+}
+
+export type InferenceDeadEndKind =
+  | "model-missing"
+  | "credentials"
+  | "capacity"
+  | "policy-or-capability"
+  | "context"
+  | "busy"
+  | "unknown";
+
+export type InferenceDeadEndOutcome = {
+  kind: InferenceDeadEndKind;
+  message: string;
+};
+
+export function describeToolRouteFailureOutcome(
+  errorMessage: string,
+  toolCount: number,
+  error?: unknown,
+): InferenceDeadEndOutcome {
+  const msg = errorMessage ?? "";
+  if (/model[_ ]not[_ ]found|model not found|provider model inventory changed/i.test(msg)) {
+    return { kind: "model-missing", message: modelMissingHandoff() };
+  }
+  const message = describeToolRouteFailureMessage(msg, toolCount, error);
+  if (/REQUEST_TOO_LARGE|exceed_context_size|available context size/i.test(msg)) return { kind: "context", message };
+  if (isLocalCapacityDeferral(error, msg)) return { kind: "capacity", message };
+  if (/No credential|auth(?:entication|orization)? (?:failed|error)|unauthorized/i.test(msg)) return { kind: "credentials", message };
+  if (/No eligible endpoints|toolUse required|tool-capable/i.test(msg)) return { kind: "policy-or-capability", message };
+  if (/rate.?limit|overload|\bbusy\b|status(?:Code)?[\"']?:\s*(?:429|529)/i.test(msg)) return { kind: "busy", message };
+  return { kind: "unknown", message };
+}
+
+export function describeToolRouteFailure(
+  errorMessage: string,
+  toolCount: number,
+  error?: unknown,
+): string {
+  return describeToolRouteFailureOutcome(errorMessage, toolCount, error).message;
 }

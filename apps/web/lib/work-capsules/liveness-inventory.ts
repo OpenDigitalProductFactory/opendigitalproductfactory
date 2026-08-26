@@ -39,6 +39,7 @@ type InventoryDb = {
 export type CapsuleLivenessSummary = {
   scanned: number;
   live: number;
+  history: number;
   reapable: number;
   byLiveness: Record<string, number>;
 };
@@ -94,6 +95,7 @@ export async function loadCapsuleLivenessInventory(
     livenessSummary: {
       scanned: capsulesAll.length,
       live: capsulesAll.filter((c) => c.isLive).length,
+      history: capsulesAll.filter((c) => !c.isLive).length,
       reapable: capsulesAll.filter((c) => c.isReapable).length,
       byLiveness,
     },

@@ -143,6 +143,10 @@ export default defineConfig({
       },
       { find: "@", replacement: webDir },
       {
+        find: "@dpf/db/installation-peer-pairing",
+        replacement: resolve(rootDir, "packages/db/src/installation-peer-pairing.ts"),
+      },
+      {
         find: "@dpf/db/installation-instance-stance",
         replacement: resolve(rootDir, "packages/db/src/installation-instance-stance.ts"),
       },
