@@ -3,10 +3,7 @@ import { getErrorMessage } from "@/lib/shared/get-error-message";
 // Do NOT hand-roll a second one: only this function is modelled as a taint
 // barrier, so a local copy would leave js/log-injection unbroken.
 import { sanitizeForLog } from "@/lib/security/safe-log";
-import {
-  assertShortCallLocalCapacityAvailable,
-  LocalProviderCapacityDeferredError,
-} from "@/lib/routing/local-provider-capacity";
+import { LocalProviderCapacityDeferredError } from "@/lib/routing/local-provider-capacity";
 // apps/web/lib/embedding.ts
 // Generate text embeddings via local LLM inference (Docker Model Runner or compatible).
 // Uses OpenAI-compatible /v1/embeddings endpoint.
@@ -108,10 +105,11 @@ export async function generateEmbeddingDetailed(text: string): Promise<Embedding
   ];
 
   try {
-    // BI-0AA939DF / DI-405E6765ED90: the short-call policy — defer only on an
-    // ACTIVE lease, after a bounded wait. A queued gate has not taken the host,
-    // and a 30ms embedding does not take the window away from it.
-    await assertShortCallLocalCapacityAvailable();
+    // BI-0AA939DF / DI-7F674966B4B2: no host-capacity check here. Measured at
+    // 10-20ms whether or not a local-CI gate holds the slot, with no observable
+    // effect on the gate — so gating it only suppressed retrieval platform-wide
+    // for the duration of every gate run. The `deferred` branch below is kept
+    // for any caller that still raises the error; nothing here raises it now.
 
     for (let attempt = 0; attempt < lengths.length; attempt++) {
       const limit = lengths[attempt]!;
