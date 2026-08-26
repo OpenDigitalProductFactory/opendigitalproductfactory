@@ -34,19 +34,15 @@ import { withLocalInferenceLock } from "@/lib/queue/resource-lane";
 import { buildAnthropicSystem } from "./anthropic-cache";
 import { parseOpenRouterRoutingEvidence } from "./provider-suitability/openrouter-policy";
 import { resolveOpenAiCompatibleApiBase } from "./openai-base";
+import {
+  createInferenceTimeoutSignal,
+  resolveInferenceRuntimePolicy,
+} from "./local-inference-runtime-policy";
 
 // ─── Inference HTTP timeouts ──────────────────────────────────────────────────
-// A hung local Docker Model Runner endpoint must fail fast so callWithFallbackChain
-// can advance to a cloud endpoint (or surface a clear error) instead of leaving the
-// coworker on a "still working" spinner for three minutes — the failure observed in
-// the fresh-install audit (R1-*-O-001). Cloud providers keep the longer ceiling.
-// Both are env-overridable for operators on slow local hardware / cold model loads.
-const DEFAULT_INFERENCE_TIMEOUT_MS = Number(process.env.DPF_INFERENCE_TIMEOUT_MS) || 180_000;
-const LOCAL_INFERENCE_TIMEOUT_MS = Number(process.env.DPF_LOCAL_INFERENCE_TIMEOUT_MS) || 120_000;
-
-function resolveInferenceTimeoutMs(providerId: string): number {
-  return providerId === "local" ? LOCAL_INFERENCE_TIMEOUT_MS : DEFAULT_INFERENCE_TIMEOUT_MS;
-}
+// The runtime-policy module separates the governed, deliberately slower 27B
+// reviewer from generic local models. Both operator overrides and defaults stay
+// bounded, while the reviewer always receives its approved ten-minute window.
 
 // A single-GPU local endpoint (Docker Model Runner / Ollama) serves ONE request
 // at a time. The platform routinely fires inference concurrently — reviewBuildPlan
@@ -383,7 +379,10 @@ export const chatAdapter: ExecutionAdapterHandler = {
         method: "POST",
         headers: requestHeaders,
         body: JSON.stringify(body),
-        signal: AbortSignal.timeout(resolveInferenceTimeoutMs(providerId)),
+        signal: createInferenceTimeoutSignal(resolveInferenceRuntimePolicy(providerId, modelId, {
+          defaultTimeoutMs: process.env.DPF_INFERENCE_TIMEOUT_MS,
+          localTimeoutMs: process.env.DPF_LOCAL_INFERENCE_TIMEOUT_MS,
+        }).effectiveTimeoutMs),
       });
       res = providerId === "local" ? await withLocalInferenceLock(doFetch) : await doFetch();
     } catch (e) {

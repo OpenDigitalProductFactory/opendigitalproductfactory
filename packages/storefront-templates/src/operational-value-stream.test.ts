@@ -16,19 +16,22 @@ describe("deriveOperationalValueStream — invariants across all archetypes", ()
     expect(ALL_ARCHETYPES.length).toBeGreaterThanOrEqual(56);
     for (const archetype of ALL_ARCHETYPES) {
       const ovs = deriveOperationalValueStream(archetype);
-      // The six primary stages + two cross-cuts are always present.
+      // Generic archetypes retain the six primary stages + two cross-cuts;
+      // a leaf-authored process replaces that commercial backbone.
       const keys = ovs.stages.map((s) => s.key);
-      for (const required of [
-        "attract",
-        "capture",
-        "qualify",
-        "deliver",
-        "settle",
-        "retain",
-        "trust-compliance",
-        "operate-improve",
-      ]) {
-        expect(keys).toContain(required);
+      if (!archetype.activationProfile?.processProfile?.valueStreams?.length) {
+        for (const required of [
+          "attract",
+          "capture",
+          "qualify",
+          "deliver",
+          "settle",
+          "retain",
+          "trust-compliance",
+          "operate-improve",
+        ]) {
+          expect(keys).toContain(required);
+        }
       }
       // Stages are ordered.
       const orders = ovs.stages.map((s) => s.order);
@@ -41,9 +44,11 @@ describe("deriveOperationalValueStream — invariants across all archetypes", ()
       // Exactly the load-bearing stages are flagged.
       const flagged = ovs.stages.filter((s) => s.loadBearing).map((s) => s.key).sort();
       expect(flagged).toEqual([...ovs.loadBearingStageKeys].sort());
-      // Trust gates live on the trust-compliance stage.
+      // Generic trust gates live on the trust-compliance cross-cut. Leaf
+      // profiles bind gates to the stage where the decision is made.
       const trustStage = ovs.stages.find((s) => s.key === "trust-compliance");
-      expect(trustStage?.trustGateKeys).toEqual(ovs.trustGates);
+      if (trustStage) expect(trustStage.trustGateKeys).toEqual(ovs.trustGates);
+      else expect(new Set(ovs.stages.flatMap((s) => s.trustGateKeys))).toEqual(new Set(ovs.trustGates));
     }
   });
 
@@ -62,6 +67,70 @@ describe("deriveOperationalValueStream — invariants across all archetypes", ()
 });
 
 describe("deriveOperationalValueStream — representative archetypes", () => {
+  it("pet-rescue: projects intake, welfare, and placement instead of a commercial funnel", () => {
+    const ovs = ovsmFor("pet-rescue");
+
+    expect(ovs.streams.map((stream) => stream.label)).toEqual([
+      "Intake and safe placement",
+      "Health and welfare",
+      "Adoption and placement",
+    ]);
+    expect(ovs.stages.map((stage) => stage.key)).not.toContain("capture");
+    expect(ovs.stages.map((stage) => stage.label)).not.toContain("Capture Demand");
+    expect(ovs.stages.map((stage) => stage.key)).toEqual(
+      expect.arrayContaining([
+        "intake-capacity-decision",
+        "intake-quarantine-placement",
+        "welfare-medical-treatment",
+        "welfare-exception",
+        "welfare-adoption-readiness",
+        "placement-custody-transfer",
+        "placement-return-reentry",
+      ]),
+    );
+    expect(ovs.supportingCapabilities).toEqual([
+      "Fundraising",
+      "Volunteer Coordination",
+      "Supplies",
+      "Compliance",
+      "Reporting",
+    ]);
+  });
+
+  it("pet-rescue: carries the acceptance paths and exception decisions operators must verify", () => {
+    const ovs = ovsmFor("pet-rescue");
+    const byKey = new Map(ovs.stages.map((stage) => [stage.key, stage]));
+    const acceptancePaths = {
+      intake: ["intake-report-handoff", "intake-identify-triage", "intake-capacity-decision", "intake-quarantine-placement"],
+      welfareException: ["welfare-daily-care", "welfare-exception", "welfare-adoption-readiness"],
+      adoption: ["placement-promotion", "placement-application-screening", "placement-meet-home-check", "placement-match-reservation", "placement-custody-transfer", "placement-follow-up"],
+      failedPlacementReturn: ["placement-follow-up", "placement-return-reentry", "intake-identify-triage"],
+    };
+
+    for (const path of Object.values(acceptancePaths)) {
+      for (const stageKey of path) expect(byKey.has(stageKey)).toBe(true);
+    }
+    expect(byKey.get("intake-capacity-decision")).toMatchObject({
+      output: expect.stringMatching(/partner-transfer|safe waitlist/i),
+      trustGateKeys: ["safe-capacity-decision"],
+    });
+    expect(byKey.get("welfare-exception")).toMatchObject({
+      responsibleRole: "Duty manager",
+      trustGateKeys: ["welfare-escalation"],
+    });
+    expect(byKey.get("placement-custody-transfer")?.output).toMatch(/custody transfer/i);
+    expect(byKey.get("placement-return-reentry")).toMatchObject({
+      handoffToStageKey: "intake-identify-triage",
+      trustGateKeys: ["return-and-reentry-safety"],
+    });
+  });
+
+  it("keeps a generic commercial stream for archetypes without a leaf process definition", () => {
+    const ovs = ovsmFor("hair-salon");
+    expect(ovs.streams).toHaveLength(1);
+    expect(ovs.streams[0]?.stages.map((stage) => stage.key)).toContain("capture");
+  });
+
   it("hair-salon: appointment-checkout, load-bearing qualify, slot-hours", () => {
     const ovs = ovsmFor("hair-salon");
     expect(ovs.loadBearingStageKeys).toContain("qualify");

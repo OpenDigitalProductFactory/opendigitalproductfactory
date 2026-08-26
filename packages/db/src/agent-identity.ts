@@ -96,6 +96,10 @@ export const COWORKER_SLUG_TO_CANONICAL_AGENT_ID: Readonly<Record<string, string
   // guard (dual-seed-coverage) now fails the build on any future uncovered pair.
   "ux-design-critic": "AGT-906",
   "farm-ranch-steward": "AGT-WS-FARM-RANCH",
+  // BI-620EBA53: the compliance coworker was roster-only, so it inherited no
+  // canonical record — and therefore no escalation target, which is what the
+  // Governance plane needs to reach level 3.
+  "compliance-officer": "AGT-WS-COMPLIANCE",
 };
 
 /** Reverse map: canonical AGT-* → preferred slug handle. */

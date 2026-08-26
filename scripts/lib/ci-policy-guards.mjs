@@ -37,6 +37,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
   source: Object.freeze([
     guard("repo-guard-loop", "Repo Guard Loop", [
       node("--test", "scripts/check-guards.test.mjs"),
+      node("--test", "scripts/host-resource-runner.test.mjs"),
       node("scripts/check-guards.mjs"),
       node("--test", "scripts/check-capability-compose-profiles.test.mjs"),
       node("scripts/check-capability-compose-profiles.mjs"),
@@ -57,7 +58,11 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("release-asset-contract", "Release Asset Contract", [
       // The consumer install has no git checkout: whatever the installer copies
       // out of the install dir must ship in the image's /dpf-release-assets.
-      node("--test", "scripts/check-release-asset-contract.test.mjs"),
+      node(
+        "--test",
+        "scripts/check-release-asset-contract.test.mjs",
+        "scripts/installer/local-model-policy-contract.test.mjs",
+      ),
     ]),
     guard("db-commandment-coverage", "DB Commandment Coverage", [
       // The never-wipe-db commandment guarded two spellings and allowed three
@@ -102,7 +107,11 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("published-image-freshness", "Published Image Freshness", [
       // Decision logic only — the live registry check needs Docker and runs on a
       // schedule (.github/workflows/published-image-freshness.yml).
-      node("--test", "scripts/lib/published-image-freshness.test.mjs"),
+      node(
+        "--test",
+        "scripts/lib/published-image-freshness.test.mjs",
+        "scripts/publish-image-release-identity.test.mjs",
+      ),
     ]),
     guard("docs-link-integrity", "Docs Link Integrity", [
       node("scripts/gen-doc-index.mjs", "--check"),
@@ -140,6 +149,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/ci-build-artifact-discovery.test.mjs",
         "scripts/lib/ci-build-artifact.test.mjs",
         "scripts/lib/ci-evidence-plan.test.mjs",
+        "scripts/lib/documentation-evidence-lane.test.mjs",
         "scripts/ci-policy-guards.test.mjs",
         "scripts/lib/host-command-invocation.test.mjs",
         // BI-812C676D: every covered-root *.test.mjs must appear here or on the

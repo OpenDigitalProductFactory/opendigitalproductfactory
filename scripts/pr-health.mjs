@@ -31,6 +31,10 @@
 
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import {
+  createEvidencePlan,
+  loadEvidencePolicy,
+} from "./lib/ci-evidence-plan.mjs";
 
 // Single SoT for override codes (BI-563F6AB6) — shared with PreToolUse guards.
 import {
@@ -64,11 +68,28 @@ export function parseLocalCiAttestation(prBody, commitMessages = []) {
   return null;
 }
 
-const DOCS_ONLY_RE = /^docs\/|^memory\/|\.md$/;
+const evidencePolicy = loadEvidencePolicy();
 
 export function isDocsOnlyFileSet(files) {
   if (!Array.isArray(files) || files.length === 0) return false;
-  return files.every((f) => DOCS_ONLY_RE.test(typeof f === "string" ? f : f?.path ?? ""));
+  const changedFiles = files.map((file) => (
+    typeof file === "string" ? file : file?.path ?? ""
+  ));
+  const plan = createEvidencePlan({
+    eventName: "pull_request",
+    baseSha: "pr-health-base",
+    headSha: "pr-health-head",
+    baseTreeSha: "pr-health-base-tree",
+    headTreeSha: "pr-health-head-tree",
+    changedFiles,
+    knownTests: [],
+    relatedTestsBySource: {},
+    routeAdviceBySource: {},
+    packageDependencies: {},
+    totalTestCount: 0,
+    policy: evidencePolicy,
+  });
+  return plan.scope.docsOnly && !plan.fullSuite;
 }
 
 /**

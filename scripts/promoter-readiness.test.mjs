@@ -14,7 +14,7 @@ test("readiness contract is non-mutating and reports every required dependency",
     "state_mount_unreadable", "install_state_invalid",
     "capability_projection_failed", "compose_identity_missing",
     "recovery_parent_unavailable", "transition_secret_parent_unavailable",
-    "promoter_build_context_incomplete",
+    "promoter_build_context_incomplete", "release_identity_invalid",
   ]) assert.match(block, new RegExp(code));
   assert.match(block, /"quiescenceBegan":false/);
   assert.match(block, /validate-install-state\.mjs.*\$_state_file/s);
@@ -46,9 +46,11 @@ test("the probe's COPY parser sees every COPY source in Dockerfile.promoter", as
     .filter((line) => line.startsWith("COPY "))
     .flatMap((line) => line.split(/\s+/).slice(1, -1).filter((a) => !a.startsWith("--")));
 
-  assert.ok(parsed.length > 10, `expected the promoter to COPY many files, parsed ${parsed.length}`);
-  // The file whose absence produced the opaque BuildKit failure this probe exists for.
-  assert.ok(parsed.includes("scripts/installer/install-release-assets.mjs"));
+  // Dockerfile.promoter intentionally copies the scripts closure as one
+  // directory so an N-1 caller does not have to predict candidate file names.
+  // promoter-build-context.test.mjs separately proves that closure contains
+  // every contract-required file.
+  assert.deepEqual(parsed, ["promoter-contract.json", "Dockerfile", "scripts/"]);
   for (const source of parsed) {
     assert.doesNotMatch(source, /^--/, `flag leaked into COPY sources: ${source}`);
     assert.doesNotMatch(source, /^\//, `destination leaked into COPY sources: ${source}`);

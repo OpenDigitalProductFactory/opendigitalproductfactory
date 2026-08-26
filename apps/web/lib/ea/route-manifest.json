@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 626,
+  "routeCount": 633,
   "routes": [
     {
       "routePath": "/",
@@ -1172,6 +1172,20 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/api/ops/self-upgrade/status/route.ts"
+    },
+    {
+      "routePath": "/api/platform/ai/local-models/status",
+      "kind": "route",
+      "segments": [
+        "api",
+        "platform",
+        "ai",
+        "local-models",
+        "status"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/platform/ai/local-models/status/route.ts",
+      "exposure": "authenticated"
     },
     {
       "routePath": "/api/platform/alerts",
@@ -3294,6 +3308,48 @@
       "file": "apps/web/app/api/v1/integrations/coverage/route.ts"
     },
     {
+      "routePath": "/api/v1/mileage/consent",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "mileage",
+        "consent"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/mileage/consent/route.ts",
+      "exposure": "authenticated"
+    },
+    {
+      "routePath": "/api/v1/mileage/trips",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "mileage",
+        "trips"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/mileage/trips/route.ts",
+      "exposure": "authenticated"
+    },
+    {
+      "routePath": "/api/v1/mileage/trips/[tripId]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "mileage",
+        "trips",
+        "[tripId]"
+      ],
+      "dynamicParams": [
+        "tripId"
+      ],
+      "file": "apps/web/app/api/v1/mileage/trips/[tripId]/route.ts",
+      "exposure": "authenticated"
+    },
+    {
       "routePath": "/api/v1/notifications",
       "kind": "route",
       "segments": [
@@ -4605,6 +4661,16 @@
       "file": "apps/web/app/(shell)/ea/views/[id]/page.tsx"
     },
     {
+      "routePath": "/ea/workrooms",
+      "kind": "page",
+      "segments": [
+        "ea",
+        "workrooms"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/ea/workrooms/page.tsx"
+    },
+    {
       "routePath": "/employee",
       "kind": "page",
       "segments": [
@@ -4859,6 +4925,16 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/finance/invoices/new/page.tsx"
+    },
+    {
+      "routePath": "/finance/mileage",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "mileage"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/finance/mileage/page.tsx"
     },
     {
       "routePath": "/finance/my-expenses",
@@ -5425,6 +5501,16 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/ops/teardown/page.tsx"
+    },
+    {
+      "routePath": "/ops/workrooms",
+      "kind": "page",
+      "segments": [
+        "ops",
+        "workrooms"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/ops/workrooms/page.tsx"
     },
     {
       "routePath": "/performance",

@@ -26,7 +26,7 @@ import { CoworkerHealthStatus } from "@/components/monitoring/CoworkerHealthStat
 import { SetupActionButtonsWrapper } from "@/components/setup/SetupActionButtonsWrapper";
 import { resolveCoworkerRuntimeMode } from "./coworker-runtime-mode";
 import type { QuestionPacket } from "@/lib/tak/question-packet";
-import { presentStandingCoo, resolveCooPresentationName } from "@/lib/coworker-presentation/coo-name";
+import { isStandingCooAgentId, presentStandingCoo, resolveCooPresentationIdentity, resolveCooPresentationName } from "@/lib/coworker-presentation/coo-name";
 import {
   loadElevatedAssistPreference,
   saveElevatedAssistPreference,
@@ -279,6 +279,7 @@ export function AgentCoworkerPanel({
 
   const routeAgent: AgentInfo = resolveAgentForRouteSync(effectiveRoute, userContext);
   const agent = presentStandingCoo(routeAgent, cooConversationalName);
+  const agentIdentity = resolveCooPresentationIdentity({ agentId: agent.agentId, canonicalName: agent.agentName, conversationalName: cooConversationalName });
   const webAccessAvailable = agentHoldsWebSearchGrant(agent.agentId);
   const canUseDev = userContext.isSuperuser || userContext.platformRole === "HR-000" || userContext.platformRole === "HR-300";
   const preferenceUserKey = userContext.userId ?? `${userContext.isSuperuser ? "super" : "role"}:${userContext.platformRole ?? "none"}`;
@@ -935,6 +936,7 @@ export function AgentCoworkerPanel({
         marketingSkillRules={marketingSkillRules}
         isDocked={isDocked}
         routeContextLabel={resolvePanelRouteContextLabel(effectiveRoute)}
+        presentationIdentity={agentIdentity}
       />
 
       {/* Voice activity indicator — shown when voice synthesis is active */}
@@ -979,11 +981,6 @@ export function AgentCoworkerPanel({
         />
       )}
 
-      {/* EP-A2A: collapsed/summarized sub-agent activity disclosure (quiet for
-          1-1). Visibility only — shows what the active coworker is tasking and
-          a summary of what each peer is doing. The human does NOT pick or task
-          coworkers; the active coworker decides that via request_coworker /
-          summon_coworker. */}
       <CollaborationActivityPanel participants={participants} cards={collaborationCardsToShow} />
 
       <div
@@ -995,11 +992,10 @@ export function AgentCoworkerPanel({
       >
         {messages.map((msg, i) => {
           const prevAgentId = i > 0 ? messages[i - 1]?.agentId : null;
-          const showAgentLabel = msg.role === "assistant" && msg.agentId !== prevAgentId;
-          // Button-decisions are actionable only on the latest turn while idle:
-          // clicking submits the option as the human's reply and continues the
-          // turn. Superseded decisions (a newer message exists) or an in-flight
-          // turn (isBusy) render without buttons — the prose closeout still shows.
+          const activeAgent = msg.agentId === agent.agentId
+            || (isStandingCooAgentId(msg.agentId) && isStandingCooAgentId(agent.agentId));
+          const showAgentLabel = msg.role === "assistant" && !activeAgent && msg.agentId !== prevAgentId;
+          // Decisions are actionable only on the latest idle turn.
           const isLatest = i === messages.length - 1;
           const decisionActive = isLatest && !isBusy && msg.role === "assistant";
           return (
@@ -1007,7 +1003,7 @@ export function AgentCoworkerPanel({
               key={msg.id}
               message={msg}
               showAgentLabel={showAgentLabel}
-              agentName={showAgentLabel && msg.agentId ? resolveCooPresentationName({
+              agentName={msg.agentId ? resolveCooPresentationName({
                 agentId: msg.agentId,
                 canonicalName: AGENT_NAME_MAP[msg.agentId] ?? msg.agentId,
                 conversationalName: cooConversationalName,
@@ -1067,12 +1063,12 @@ export function AgentCoworkerPanel({
                   : orchestratorStatus
                     ? orchestratorStatus
                     : currentTool
-                      ? `${agent.agentName} is using ${currentTool.replace(/_/g, " ")}...`
+                      ? `${agentIdentity.primaryName} is using ${currentTool.replace(/_/g, " ")}...`
                       : thinkingSeconds < 5
-                        ? `${agent.agentName} is thinking`
+                        ? `${agentIdentity.primaryName} is thinking`
                         : thinkingSeconds < 15
-                          ? `${agent.agentName} is working on it`
-                          : `${agent.agentName} is still working (${thinkingSeconds}s)`}
+                          ? `${agentIdentity.primaryName} is working on it`
+                          : `${agentIdentity.primaryName} is still working (${thinkingSeconds}s)`}
               </span>
               {/* Animated bouncing dots */}
               <span style={{ display: "inline-flex", gap: 2, alignItems: "center" }}>
@@ -1297,6 +1293,7 @@ export function AgentCoworkerPanel({
         onFileUploaded={setPendingAttachment}
         onFileClear={() => setPendingAttachment(null)}
         voiceSynthAvailable={voiceSynth.available}
+        voiceSynthChecking={voiceSynth.checking}
         voicePlaybackUnavailableReason={voiceSynth.unavailableReason}
         voicePlaybackEnabled={voicePlaybackEnabled}
         onVoicePlaybackToggle={toggleVoicePlayback}

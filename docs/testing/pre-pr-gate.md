@@ -240,6 +240,24 @@ Run it standalone with `pnpm run pregate:preflight`
 still enforces every guard. Routing probes (`--dry-run`) and evidence replays
 (`--finalize-evidence`) skip the preflight automatically.
 
+**Documentation evidence lane (BI-B2E9FC9D).** After preflight and before any
+`local-integration-ci` lease claim, the Node gate checks whether the committed
+candidate is an exact documentation-only tree. This lane is deliberately
+fail-closed: `HEAD` must equal the requested SHA, the worktree must be clean,
+the candidate must contain the current `origin/main`, and the authoritative CI
+evidence planner must select `executionLane: documentation` with no full suite.
+Two architecture documents that need the workspace runtime remain excluded.
+If any check is missing, stale, or ambiguous, the gate falls through to the
+normal exhaustive sandbox path.
+
+An eligible documentation tree runs doc-index freshness, link integrity, and
+the complete repository guard loop in the worktree. It records the planner
+digest, candidate tree, commands, output, and result through
+`record_local_integration_result`, then writes the same SHA-bound local gate
+state used by `pregate:status`. Its evidence carries no lease id because it
+never enters the scarce sandbox. A failed documentation check is a failed gate;
+it does not retry by consuming the heavyweight lane.
+
 **Host-native/Node-first entry point (BI-2272D840, BI-52500C0D, BI-4BE30454).** `pregate.mjs`
 routes to `scripts/gate-worktree.mjs` by default on every host. The Node-native
 gate owns the lease-claim / heartbeat / fenced-run / descendant-quiescence /
@@ -249,14 +267,15 @@ and delegates to the Node gate; set `DPF_PREGATE_FORCE_SH=1` only for focused
 shell-adapter debugging. Missing native `sh` is therefore classified as
 **sandbox-routable, never a build blocker**.
 
-Either path produces the same evidence shape (manifest version and slot,
-branch/SHA, integration tree, database and Compose identity, production
-artifact, lease id, freshness verdict, toolchain fingerprint, expiry) and
-writes the same
-`.git/dpf-local-ci-gate.json` state file, so the pre-push gate below accepts
-either without caring which one ran. `DPF_PREGATE_FORCE_NODE=1` preserves the
-default. `DPF_PREGATE_FORCE_SH=1` is explicit legacy-shell debugging and still
-requires a working shell.
+The exhaustive Node and compatibility-shell paths produce the same sandbox
+evidence shape (manifest version and slot, branch/SHA, integration tree,
+database and Compose identity, production artifact, lease id, freshness
+verdict, toolchain fingerprint, expiry). The documentation lane produces a
+smaller planner-bound evidence record. All three write the same
+`.git/dpf-local-ci-gate.json` state file, so the pre-push gate accepts a fresh
+pass without caring which eligible lane produced it. `DPF_PREGATE_FORCE_NODE=1`
+preserves the default. `DPF_PREGATE_FORCE_SH=1` is explicit legacy-shell
+debugging and still requires a working shell.
 
 The gate claims a `local-integration-ci` lease (waiting if the sandbox is
 already leased). A canonical waiter refreshes its idempotent claim well inside
@@ -279,6 +298,24 @@ records the failure and retries only inside its last known authority window. A
 separate deadline terminates the child tree before that window expires if no
 successful renewal advances it. MCP requests have their own bounded transport
 deadline, so a hung heartbeat cannot outlive the lease silently.
+
+**Equivalent gate requests are single-flight.** Before admission, the gate
+builds the exact merge-tree evidence plan and fingerprints the host toolchain.
+The server derives one immutable key from repository, integration tree, plan
+digest, toolchain fingerprint, and gate kind; caller session identity is only
+attribution and never part of that key. The first caller owns the queued or
+admitted lease. A later equivalent caller receives `subscribed` and observes
+the canonical execution without renewing, releasing, recording evidence, or
+starting the command. Once the owner links a fresh terminal pass or fail
+receipt, later callers receive `reused` and stop without recomputation.
+Missing, mismatched, inconclusive, or expired evidence remains fail-closed.
+
+The same identity rule coordinates assembled semantic review through the
+existing `TaskRun` carrier: one caller dispatches, concurrent callers subscribe,
+and fresh pass/fail receipts are reused. Durable suspension and notification
+after the current bounded observation window are a separate workflow concern;
+single-flight does not invent a second queue, waiter table, or process authority.
+
 Admission also takes an atomic slot-local owner fence in the shared Git
 directory. A competing claimant for that slot waits while the fence's PID is alive even if
 an older database TTL has elapsed; a dead PID is reaped as an orphan. The
@@ -364,7 +401,7 @@ the reader exists (BI-B1065D41):
 
 | Signal | How it lies |
 | --- | --- |
-| The **exit code** | `pregate …; echo $?; tail …` reports *tail's* status. A run that gives up while queued, or reports 0 with no PASS record at HEAD, now exits **7** instead of 0 (BI-A9CF0D69; the historical exit-0 lie was BI-2C7F51BA) — but a chained/piped reading still surfaces someone else's status, so the record remains the verdict. |
+| The **exit code** | `pregate …; echo $?; tail …` reports *tail's* status. A run that gives up while queued, or reports 0 with no PASS record at HEAD, now exits **7** instead of 0 (the historical exit-0 lie was BI-2C7F51BA) — but a chained/piped reading still surfaces someone else's status, so the record remains the verdict. |
 | The **log tail** | A *tolerated* `GuardRuntimeEnvironmentError` prints `Error:` and a red ✖ ~28,000 lines before a **passing** verdict. A watcher grepping `Error:` fabricates a failure. |
 | **`gate passed`** | True about the run you watched; silent about whether HEAD has moved since. `pregate:status` compares. |
 
@@ -758,13 +795,12 @@ bump, restore the pin or extend the workaround. Upstream:
 Modules that probe their environment (does `.git` exist? is `package.json`
 readable? did the remote answer?) must be unit-tested against the world
 production actually is — **partial, stale, absent, empty, plural** — not only
-the healthy fixture. The dominant late-defect escape class (~30%, BI-927D64C0)
-is a probe whose every test fixture modelled the healthy world: an image-synced
-partial tree passed the availability probe and true citations were "refuted"
-(BI-EE2B243D); a federation guard "only ever passed because unit tests reused
-one linkId fixture" (BI-AF675A20); a >1MB diff crashed the default exec
-maxBuffer (BI-DC6BE37C); a transient failure was collapsed to a terminal state
-(BI-2B9E16CC).
+the healthy fixture. The dominant late-defect escape class is a probe whose
+every test fixture modelled the healthy world: an image-synced partial tree
+passed the availability probe and true citations were "refuted"; a federation
+guard only passed because unit tests reused one link-id fixture; a large diff
+exhausted the default exec buffer; and a transient failure was collapsed to a
+terminal state.
 
 Use the shared, dependency-free fixture kit
 [`apps/web/lib/testing/degenerate-env/`](../../apps/web/lib/testing/degenerate-env/index.ts)
@@ -794,7 +830,7 @@ Name them so you catch yourself.
 | Reaching for `DPF_SKIP_*` to get past a hook | Bypasses are for verified false positives only | Fix the underlying error; CI gates it anyway |
 | Verifying UX against worktree `next dev` | Not the production-bundled runtime | Use the canonical install or sandbox lease (AGENTS.md §13) |
 | Treating a local green as the merge gate | The binding gate is the CI **Unit Tests** check | Local pass = evidence; CI pass = the gate |
-| Reading a `pregate` exit code as the verdict | A pipeline surfaces the last command's status, not pregate's (an abandoned/uncorroborated run itself now exits 7, not 0 — BI-A9CF0D69) | `pnpm run pregate:status` — it reads the SHA-bound record and exits 0 only for a PASS at HEAD |
+| Reading a `pregate` exit code as the verdict | A pipeline surfaces the last command's status, not pregate's (an abandoned or uncorroborated run itself now exits 7, not 0) | `pnpm run pregate:status` — it reads the SHA-bound record and exits 0 only for a PASS at HEAD |
 | Piping `pregate` to `head`/`grep` | The verdict is the LAST line, so a truncating reader removes exactly what you wanted (and it used to SIGPIPE-kill the run mid-install) | Let it print its ~30 lines; open the log path it prints for detail |
 | Backgrounding `pregate` (`&` / `run_in_background`) | The harness caps and kills a backgrounded run mid-install | Run it in the FOREGROUND — on timeout the harness migrates it and it continues |
 | Wrapping `pregate` in `timeout` | Cuts it off mid-queue and manufactures a false green | Run it unbounded in the foreground |
@@ -810,12 +846,11 @@ cites a **closed** `BI-`/`EP-` id from user-facing text — a message that tells
 the reader a fixed defect is their live blocker.
 
 It is the missing half of Doc Anchor Existence. That guard proves a cited id
-EXISTS; nothing proved it was still OPEN. `record_plan_backlog_coverage` spent
-two days instructing every caller to "cite BI-B9403248 for the blocked
-receipt" after BI-B9403248 shipped, so contributors recorded the wrong cause in
-their plans and auditors reading those plans found a closed id and concluded the
-block was stale. Remediation text is written inline as a literal and then never
-revisited when the referenced work closes.
+EXISTS; nothing proved it was still OPEN. A coverage tool once spent two days
+instructing every caller to cite an already-shipped blocker, so contributors
+recorded the wrong cause and auditors correctly concluded the block was stale.
+Remediation text is written inline as a literal and then easily missed when the
+referenced work closes.
 
 The scope is deliberately narrow, because a guard that invents a defect is worse
 than one that hides a defect:

@@ -48,6 +48,8 @@ export type ScreenInferencePayloadInput = {
   organizationId?: string | null;
   messages: ChatMessage[];
   systemPrompt: string;
+  /** Platform-authored instruction spans within `systemPrompt` (BI-463BE12A). */
+  systemPromptInstructionSpans?: string[];
   tools?: Array<Record<string, unknown>>;
   taskType?: string;
   routeContext?: ScreenRouteContextInput;
@@ -85,6 +87,7 @@ export function screenInferencePayload(
   const classification = classifyInferencePayload({
     messages: input.messages,
     systemPrompt: input.systemPrompt,
+    systemPromptInstructionSpans: input.systemPromptInstructionSpans,
     tools: input.tools,
     taskType: input.taskType,
     governedData,

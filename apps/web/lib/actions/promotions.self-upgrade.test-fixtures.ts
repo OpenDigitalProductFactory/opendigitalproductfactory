@@ -29,6 +29,7 @@ export const consumerReleaseSupport = {
 export const consumerReleaseContext = {
   installMode: "consumer",
   imageTag: "v1.0.0",
+  channelTag: "latest",
   installPath: "D:\\DPF",
   composeFiles: ["docker-compose.yml", "docker-compose.release.yml"],
   ghcrOwner: "opendigitalproductfactory",

@@ -59,10 +59,10 @@ describe("useVoiceSynth (streaming)", () => {
     const readable = new ReadableStream({
       start(controller) { controller.enqueue(chunk); controller.close() },
     })
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true, body: readable,
-      headers: new Headers({ "X-Sentence-Count": "1" }),
-    }) as unknown as typeof fetch
+    global.fetch = vi.fn(async (input: RequestInfo | URL) => String(input).includes("service-status")
+      ? new Response(JSON.stringify({ available: true, state: "ready", reason: null }), { status: 200 })
+      : ({ ok: true, body: readable, headers: new Headers({ "X-Sentence-Count": "1" }) } as Response)
+    ) as typeof fetch
 
     const { result } = renderHook(() => useVoiceSynth())
     await act(async () => { await result.current.synthesize("Hello world") })
@@ -74,23 +74,27 @@ describe("useVoiceSynth (streaming)", () => {
   })
 
   it("marks available false on 503 tts_unavailable", async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: false, status: 503,
-      json: () => Promise.resolve({ code: "tts_unavailable" }),
-    }) as unknown as typeof fetch
+    global.fetch = vi.fn(async (input: RequestInfo | URL) => String(input).includes("service-status")
+      ? new Response(JSON.stringify({ available: true, state: "ready", reason: null }), { status: 200 })
+      : ({ ok: false, status: 503, json: () => Promise.resolve({ code: "tts_unavailable" }) } as Response)
+    ) as typeof fetch
 
     const { result } = renderHook(() => useVoiceSynth())
+    await waitFor(() => expect(result.current.checking).toBe(false))
     await act(async () => { await result.current.synthesize("Hello") })
 
     await waitFor(() => {
       expect(result.current.available).toBe(false)
-      expect(result.current.unavailableReason).toBe("Text-to-speech service is not running.")
+      expect(result.current.unavailableReason).toBe("Text-to-speech is unavailable.")
     })
   })
 
   it("stop() aborts the stream and clears state", async () => {
     let abortCalled = false
-    global.fetch = vi.fn().mockImplementation((_url: string, opts: RequestInit) => {
+    global.fetch = vi.fn().mockImplementation((url: string, opts: RequestInit) => {
+      if (url.includes("service-status")) {
+        return Promise.resolve(new Response(JSON.stringify({ available: true, state: "ready", reason: null }), { status: 200 }))
+      }
       (opts.signal as AbortSignal).addEventListener("abort", () => { abortCalled = true })
       return new Promise(() => {})
     }) as unknown as typeof fetch
@@ -102,5 +106,37 @@ describe("useVoiceSynth (streaming)", () => {
     expect(abortCalled).toBe(true)
     expect(result.current.isPlaying).toBe(false)
     expect(result.current.isSynthesizing).toBe(false)
+  })
+
+  it("probes playback capability on mount before enabling the speaker", async () => {
+    global.fetch = vi.fn(async () => new Response(JSON.stringify({
+      available: false,
+      state: "profile_missing",
+      reason: "No ready voice profile is available.",
+    }), { status: 200 })) as typeof fetch
+
+    const { result } = renderHook(() => useVoiceSynth())
+    expect(result.current.checking).toBe(true)
+    expect(result.current.available).toBe(false)
+    await waitFor(() => expect(result.current.checking).toBe(false))
+    expect(result.current.readinessState).toBe("profile_missing")
+    expect(result.current.unavailableReason).toMatch(/No ready voice profile/)
+  })
+
+  it("requests preview readiness without requiring narration to be enabled", async () => {
+    global.fetch = vi.fn(async () => new Response(JSON.stringify({
+      available: true,
+      state: "ready",
+      reason: null,
+    }), { status: 200 })) as typeof fetch
+
+    const { result } = renderHook(() => useVoiceSynth({ purpose: "preview" }))
+    await waitFor(() => expect(result.current.checking).toBe(false))
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "/api/voice/service-status?purpose=preview",
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
+    expect(result.current.available).toBe(true)
   })
 })

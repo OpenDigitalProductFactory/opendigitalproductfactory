@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import {
+  DERIVED_ARTIFACTS,
+  matchesAnyGlob,
+} from "./derived-artifacts-registry.mjs";
 
 export const CI_EVIDENCE_PLAN_SCHEMA_VERSION = 1;
 const DEFAULT_POLICY_PATH = fileURLToPath(
@@ -55,6 +59,27 @@ function classifyPath(path, compiled) {
   if (matchesAny(path, compiled.tests)) return "test";
   if (matchesAny(path, compiled.production)) return "production";
   return "other";
+}
+
+function documentationDerivedArtifacts(changedFiles, compiled) {
+  const artifacts = new Set();
+  for (const definition of DERIVED_ARTIFACTS) {
+    const changedArtifacts = changedFiles.filter((path) => (
+      matchesAnyGlob(path, definition.artifactPaths)
+    ));
+    if (changedArtifacts.length === 0) continue;
+
+    const changedSources = changedFiles.filter((path) => (
+      matchesAnyGlob(path, definition.sourceGlobs)
+    ));
+    if (
+      changedSources.length > 0
+      && changedSources.every((path) => classifyPath(path, compiled) === "docs")
+    ) {
+      changedArtifacts.forEach((path) => artifacts.add(path));
+    }
+  }
+  return artifacts;
 }
 
 function packageOwner(path, packageRoots) {
@@ -175,7 +200,11 @@ export function createEvidencePlan(input) {
     code: rule.code,
     patterns: compilePatterns(rule.patterns),
   }));
-  const kinds = new Map(changedFiles.map((path) => [path, classifyPath(path, compiled)]));
+  const documentationArtifacts = documentationDerivedArtifacts(changedFiles, compiled);
+  const kinds = new Map(changedFiles.map((path) => [
+    path,
+    documentationArtifacts.has(path) ? "docs" : classifyPath(path, compiled),
+  ]));
   const productionFiles = changedFiles.filter((path) => kinds.get(path) === "production");
   const changedTests = changedFiles.filter((path) => kinds.get(path) === "test");
   const workspaceRequired = changedFiles.some((path) => (
@@ -202,7 +231,9 @@ export function createEvidencePlan(input) {
     const kind = kinds.get(path);
     const owner = packageOwner(path, policy.packageRoots);
     if (owner) affectedPackages.add(owner);
-    const risks = riskCodesForPath(path, riskRules);
+    const risks = riskCodesForPath(path, riskRules).filter((code) => !(
+      code === "generated-contract" && documentationArtifacts.has(path)
+    ));
     for (const code of risks) addEscalation(escalations, `risk:${code}`, path);
 
     if (kind === "docs") {
@@ -316,6 +347,11 @@ export function createEvidencePlan(input) {
   }
 
   const routes = sortedUnique([...affectedRoutes]);
+  const executionLane = escalations.length > 0
+    ? "exhaustive"
+    : docsOnly
+      ? "documentation"
+      : "affected";
   const semanticPlan = {
     schemaVersion: CI_EVIDENCE_PLAN_SCHEMA_VERSION,
     plannerVersion: policy.plannerVersion,
@@ -346,6 +382,7 @@ export function createEvidencePlan(input) {
     routeFamilies: sortedUnique(routes.map(routeFamily)),
     globalGuards: sortedUnique(policy.globalGuards),
     uxMode: routes.length > 0 ? "changed-routes" : "none",
+    executionLane,
     fullSuite: escalations.length > 0,
     evidenceTier: escalations.length > 0 ? "exhaustive" : "affected",
     escalations: escalations.sort((left, right) => left.code.localeCompare(right.code)),

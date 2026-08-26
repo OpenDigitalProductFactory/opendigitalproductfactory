@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { GitBranch, RefreshCcw } from "lucide-react";
 
 import { PortalContextStrip } from "@/components/portal-context/PortalContextStrip";
+import { StatCard } from "@/components/ui/report-kit/StatCard";
 import type { PortalContextEnvelope } from "@/lib/portal-context";
+import type { CapsuleLivenessSummary } from "@/lib/work-capsules/liveness-inventory";
 import { AdoptableWorktreeTable, type AdoptableWorktreeRow } from "./AdoptableWorktreeTable";
 import { CreateGovernedWorkForm, type CreateGovernedWorkAction } from "./CreateGovernedWorkForm";
 import { WorkCapsuleTable, type WorkCapsuleRow } from "./WorkCapsuleTable";
@@ -10,12 +11,14 @@ import { WorkCapsuleTable, type WorkCapsuleRow } from "./WorkCapsuleTable";
 export function WorkControlPanel({
   capsules,
   adoptable,
+  livenessSummary = { scanned: capsules.length, live: capsules.length, history: 0, reapable: 0, byLiveness: {} },
   createAction,
   canCreateGovernedWork = false,
   portalContext,
 }: {
   capsules: WorkCapsuleRow[];
   adoptable: AdoptableWorktreeRow[];
+  livenessSummary?: CapsuleLivenessSummary;
   createAction: CreateGovernedWorkAction;
   // BI-E167A8A6: gates door 2's create form to manage_backlog holders so a
   // non-technical operator never faces a second "start work" intake they
@@ -27,7 +30,7 @@ export function WorkControlPanel({
     <section className="space-y-6 px-4 py-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-xl font-bold text-[var(--dpf-text)]">Work Control</h1>
+          <h1 className="text-xl font-bold text-[var(--dpf-text)]">Development Workrooms</h1>
         </div>
       </div>
 
@@ -37,7 +40,7 @@ export function WorkControlPanel({
           Build Studio. Making the relationship explicit is the fix for the
           dual-intake IA confusion. */}
       <p className="max-w-2xl text-sm leading-relaxed text-[var(--dpf-muted)]">
-        The governed engineering substrate for Build Studio — git branches,
+        Build Studio&rsquo;s governed engineering context — git branches,
         worktrees, and workrooms for hands-on development and AI coding
         agents. Every build you start already manages its own workroom here. To
         describe a feature in plain English and have your AI Coworker design,
@@ -53,21 +56,16 @@ export function WorkControlPanel({
 
       <PortalContextStrip envelope={portalContext ?? null} />
 
-      <div className="grid gap-3 md:grid-cols-2">
-        <div className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3">
-          <div className="flex items-center gap-2 text-xs text-[var(--dpf-muted)]">
-            <GitBranch className="h-4 w-4" aria-hidden="true" />
-            <span>Active workrooms</span>
-          </div>
-          <div className="mt-2 text-2xl font-semibold text-[var(--dpf-text)]">{capsules.length}</div>
-        </div>
-        <div className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3">
-          <div className="flex items-center gap-2 text-xs text-[var(--dpf-muted)]">
-            <RefreshCcw className="h-4 w-4" aria-hidden="true" />
-            <span>Adoptable work</span>
-          </div>
-          <div className="mt-2 text-2xl font-semibold text-[var(--dpf-text)]">{adoptable.length}</div>
-        </div>
+      <div className="grid gap-3 md:grid-cols-3">
+        <StatCard
+          label="Live Workrooms"
+          value={livenessSummary.live}
+          intent="success"
+          href="/ops/workrooms"
+          hint={`${livenessSummary.history} inactive`}
+        />
+        <StatCard label="Adoptable work" value={adoptable.length} />
+        <StatCard label="Definitions" value="Architecture" href="/ea/workrooms" />
       </div>
 
       {canCreateGovernedWork ? (

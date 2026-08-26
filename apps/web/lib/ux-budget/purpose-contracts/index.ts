@@ -8,21 +8,25 @@ export type PurposeContractModule = readonly PurposeContractSource[];
 import { ARCHETYPE_READINESS_PURPOSE_CONTRACTS } from "./archetype-readiness";
 import { GRAPH_EXPLORER_PURPOSE_CONTRACTS } from "./graph-explorer";
 import { RIGHT_NOW_PURPOSE_CONTRACTS } from "./right-now";
+import { MILEAGE_PURPOSE_CONTRACTS } from "./mileage";
 import { RECRUITING_PIPELINE_PURPOSE_CONTRACTS } from "./recruiting-pipeline";
 import { COWORKER_IDENTITY_PURPOSE_CONTRACTS } from "./coworker-identity";
 import { STACK_CURRENCY_PURPOSE_CONTRACTS } from "./stack-currency";
 import { GOVERNED_TEARDOWN_PURPOSE_CONTRACTS } from "./governed-teardown";
 import { WORDPRESS_PURPOSE_CONTRACTS } from "./wordpress";
+import { WORKROOM_PURPOSE_CONTRACTS } from "./workrooms";
 
 const CONTRACT_MODULES: readonly PurposeContractModule[] = [
   ARCHETYPE_READINESS_PURPOSE_CONTRACTS,
   GRAPH_EXPLORER_PURPOSE_CONTRACTS,
   RIGHT_NOW_PURPOSE_CONTRACTS,
+  MILEAGE_PURPOSE_CONTRACTS,
   RECRUITING_PIPELINE_PURPOSE_CONTRACTS,
   COWORKER_IDENTITY_PURPOSE_CONTRACTS,
   STACK_CURRENCY_PURPOSE_CONTRACTS,
   GOVERNED_TEARDOWN_PURPOSE_CONTRACTS,
   WORDPRESS_PURPOSE_CONTRACTS,
+  WORKROOM_PURPOSE_CONTRACTS,
 ];
 
 export function buildPurposeContractSourceIndex(

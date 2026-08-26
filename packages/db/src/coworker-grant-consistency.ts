@@ -64,7 +64,10 @@ export function findGrantDivergences(
 export const KNOWN_GRANT_DIVERGENCES: readonly string[] = [
   "admin-assistant",
   "build-specialist",
-  "compliance-officer",
+  // compliance-officer RESOLVED: it was roster-only, so its runtime grants had no
+  // canonical record to agree with. Giving it AGT-WS-COMPLIANCE (BI-620EBA53)
+  // reconciled the sources, so it leaves this list rather than being re-pinned —
+  // the ratchet shrinking is the point.
   "coo",
   "data-architect",
   "data-steward",

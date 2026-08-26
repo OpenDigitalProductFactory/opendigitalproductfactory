@@ -61,6 +61,8 @@ The runtime grants for this coworker are intentionally narrow. The core tool is:
 
 Invoke `run_hive_scout_ingest` once before writing any summary.
 
+If the call fails, do not call `run_hive_scout_ingest` again with the same arguments. Report the failure and the single next action instead. A returned result is final for that turn; summarize it without repeating the call.
+
 Always report:
 - catalog entries parsed
 - gaps detected

@@ -12,6 +12,7 @@ vi.mock("@/lib/nonprod/environment-lease", () => lease);
 
 import { nonprodLeasePack } from "./nonprod-lease-pack";
 import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
+import { deriveGateKey } from "@/lib/gates/gate-run-identity";
 
 const EXPECTED_TOOLS = [
   "list_nonprod_environment_leases",
@@ -61,6 +62,9 @@ describe("nonprod-lease pack — registration", () => {
     const renew = nonprodLeasePack.definitions.find((d) => d.name === "renew_nonprod_environment_lease");
     expect(claim?.inputSchema.properties).toHaveProperty("slotManifestVersion");
     expect(claim?.inputSchema.properties).toHaveProperty("hostPressure");
+    expect(claim?.inputSchema.properties).toHaveProperty("resourceClass");
+    expect(claim?.inputSchema.properties).toHaveProperty("hostResource");
+    expect(claim?.inputSchema.properties).toHaveProperty("ownerProcessIdentity");
     expect(renew?.inputSchema.properties).toHaveProperty("slotBinding");
     expect(renew?.inputSchema.properties).toHaveProperty("hostPressure");
   });
@@ -150,6 +154,84 @@ describe("nonprod-lease pack — handler behavior (delegation preserved)", () =>
     });
   });
 
+  it("derives the immutable local-CI claim key on the server and projects subscribers", async () => {
+    const gateIdentity = {
+      repository: "OpenDigitalProductFactory/OpenDigitalProductFactory",
+      integrationTreeSha: "a".repeat(40),
+      evidencePlanDigest: "b".repeat(64),
+      toolchainFingerprint: "c".repeat(64),
+      gateKind: "local-integration-ci" as const,
+    };
+    const gateKey = deriveGateKey(gateIdentity);
+    lease.claimNonprodEnvironmentLease.mockResolvedValue({
+      status: "subscribed",
+      lease: { leaseId: "NPEL-WINNER", ownerSessionId: "winner" },
+      executionStatus: "admitted",
+      poolPolicy: { effectiveCapacity: 1 },
+    });
+
+    const res = await nonprodLeasePack.handlers.claim_nonprod_environment_lease({
+      environmentKey: "local-integration-ci",
+      ownerProvider: "codex",
+      ownerSessionId: "subscriber",
+      claimKey: "caller-must-not-control-this",
+      gateIdentity,
+      purpose: "test",
+      url: "http://localhost:3010",
+      ports: [3010],
+      expiresAt: new Date(Date.now() + 60 * 60_000).toISOString(),
+    }, "u1");
+
+    expect(lease.claimNonprodEnvironmentLease).toHaveBeenCalledWith(
+      expect.objectContaining({ claimKey: `gate:${gateKey}` }),
+    );
+    expect(res).toMatchObject({
+      success: true,
+      entityId: "NPEL-WINNER",
+      data: {
+        gateKey,
+        admission: { status: "subscribed", executionStatus: "admitted" },
+      },
+    });
+  });
+
+  it("projects reusable terminal gate evidence without another admission", async () => {
+    const gateIdentity = {
+      repository: "opendigitalproductfactory/opendigitalproductfactory",
+      integrationTreeSha: "a".repeat(40),
+      evidencePlanDigest: "b".repeat(64),
+      toolchainFingerprint: "c".repeat(64),
+      gateKind: "local-integration-ci" as const,
+    };
+    const gateKey = deriveGateKey(gateIdentity);
+    lease.claimNonprodEnvironmentLease.mockResolvedValue({
+      status: "reused",
+      lease: { leaseId: "NPEL-DONE" },
+      evidenceRecordId: "EXT-DONE",
+      resultClass: "pass",
+    });
+
+    const res = await nonprodLeasePack.handlers.claim_nonprod_environment_lease({
+      environmentKey: "local-integration-ci",
+      ownerProvider: "codex",
+      ownerSessionId: "later-caller",
+      gateIdentity,
+      purpose: "test",
+      url: "http://localhost:3010",
+      ports: [3010],
+      expiresAt: new Date(Date.now() + 60 * 60_000).toISOString(),
+    }, "u1");
+
+    expect(res).toMatchObject({
+      success: true,
+      entityId: "EXT-DONE",
+      data: {
+        gateKey,
+        admission: { status: "reused", resultClass: "pass" },
+      },
+    });
+  });
+
   it("passes a slot-aware claim and recent host observation to durable admission", async () => {
     lease.claimNonprodEnvironmentLease.mockResolvedValue({
       status: "queued",
@@ -184,6 +266,58 @@ describe("nonprod-lease pack — handler behavior (delegation preserved)", () =>
     expect(lease.claimNonprodEnvironmentLease).toHaveBeenCalledWith(
       expect.objectContaining({ slotManifestVersion: 1, hostPressure }),
     );
+  });
+
+  it("passes a typed host resource claim and serializes BigInt lease metadata", async () => {
+    lease.claimNonprodEnvironmentLease.mockResolvedValue({
+      status: "admitted",
+      lease: {
+        leaseId: "NPEL-HOST",
+        expectedMemoryBytes: BigInt(8 * 1024 ** 3),
+        resourceClass: "vitest",
+        ownerProcessIdentity: "win32:638917704000000000",
+      },
+      slotKey: "slot-0",
+      waitAgeMs: 0,
+      poolPolicy: { source: "host-resource-profile", effectiveCapacity: 1 },
+    });
+    const hostResource = {
+      totalMemoryBytes: 64 * 1024 ** 3,
+      availableMemoryBytes: 30 * 1024 ** 3,
+      inferenceResident: true,
+      ungovernedProcesses: [],
+    };
+
+    const result = await nonprodLeasePack.handlers.claim_nonprod_environment_lease({
+      environmentKey: "host-heavy-resource",
+      ownerProvider: "codex",
+      ownerSessionId: "s-host",
+      claimKey: "host-resource:s-host:42",
+      purpose: "host-resource:vitest",
+      expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
+      resourceClass: "vitest",
+      expectedMemoryBytes: 8 * 1024 ** 3,
+      ownerProcessId: 42,
+      ownerProcessIdentity: "win32:638917704000000000",
+      hostResource,
+    }, "u1");
+
+    expect(lease.claimNonprodEnvironmentLease).toHaveBeenCalledWith(
+      expect.objectContaining({
+        environmentKey: "host-heavy-resource",
+        url: "host://localhost",
+        ports: [],
+        resourceClass: "vitest",
+        ownerProcessIdentity: "win32:638917704000000000",
+        hostResource,
+      }),
+    );
+    expect(result).toMatchObject({
+      success: true,
+      data: { lease: { expectedMemoryBytes: 8 * 1024 ** 3 } },
+    });
+    expect(result.data?.lease).not.toHaveProperty("ownerProcessIdentity");
+    expect(() => JSON.stringify(result)).not.toThrow();
   });
 
   it("binds only the server-assigned slot through the existing renewal tool", async () => {
@@ -231,9 +365,15 @@ describe("nonprod-lease pack — handler behavior (delegation preserved)", () =>
   });
 
   it("release delegates to the service with the leaseId", async () => {
-    lease.releaseNonprodEnvironmentLease.mockResolvedValue({ id: "L1", status: "released" });
+    lease.releaseNonprodEnvironmentLease.mockResolvedValue({
+      id: "L1",
+      leaseId: "L1",
+      status: "released",
+      expectedMemoryBytes: BigInt(8 * 1024 ** 3),
+    });
     const res = await nonprodLeasePack.handlers.release_nonprod_environment_lease({ leaseId: "L1" }, "u1");
     expect(res.success).toBe(true);
+    expect(() => JSON.stringify(res)).not.toThrow();
     expect(lease.releaseNonprodEnvironmentLease).toHaveBeenCalledWith({ leaseId: "L1" });
   });
 });

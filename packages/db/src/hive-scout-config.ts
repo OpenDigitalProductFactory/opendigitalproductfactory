@@ -10,6 +10,7 @@ export function buildHiveScoutScheduledPrompt(): string {
   return [
     "Run the daily external catalog scout pass for autonomous coworker archetype discovery.",
     "Invoke run_hive_scout_ingest once before writing any summary.",
+    "If the call fails, do not call run_hive_scout_ingest again with the same arguments. Report the failure and the single next action instead.",
     "Report how many external catalog entries were parsed, how many gaps were detected, how many backlog suggestions were created, how many duplicates were skipped, and how many items were deferred for human review.",
     "Call out the highest-value follow-up when the run finds ambiguous patterns or new coworker opportunities.",
     "Then review the marketSources material in the same tool result: fetched excerpts from the approved product/market source list, each backed by a citable source URL (BI-B8E4317D).",

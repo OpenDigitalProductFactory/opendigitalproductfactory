@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 682,
+  "pageCount": 683,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -874,7 +874,8 @@
         "archetype-business-value-streams",
         "0-why-this-document-exists",
         "1-two-senses-of-value-stream-keep-them-distinct",
-        "2-the-universal-small-business-value-stream",
+        "2-the-default-small-business-value-stream",
+        "21-leaf-process-profiles-replace-the-fallback-when-the-business-works-differently",
         "3-the-commercial-model-decides-the-value-stream-shape",
         "4-the-bridge-value-stream-stage-platform-surface-audit-phase",
         "5-the-value-stream-stages-map-onto-substrate-the-platform-already-carries",
@@ -1379,6 +1380,7 @@
         "13-workroom-vs-featurebuild-vs-sandbox-vs-runtimetarget-pick-the-right-substrate",
         "14-propose-acknowledge-reassign-par-concurrent-session-ownership-protocol",
         "15-governance-approves-evidence-not-provenance",
+        "16-host-heavy-work-uses-durable-resource-leases-not-waiting-processes",
         "2-dpf-anti-patterns-defaults-the-kernel-forbids",
         "21-wiping-db-volumes-to-fix-a-code-bug",
         "22-hardcoding-a-provider-in-the-seed-or-agentmodelconfig",
@@ -1540,6 +1542,7 @@
         "92-work-unit-definition",
         "93-physical-and-non-digital-work",
         "94-capacity",
+        "95-dpf-workroom-definition-and-instance-projection",
         "10-performer-and-work-allocation-model",
         "101-performer-kinds",
         "102-allocation-is-a-governed-decision",
@@ -1945,8 +1948,6 @@
         "ai-provider-failure-detection-and-recovery",
         "graph-mirror-sync-integrity",
         "hardware-guidance",
-        "practical-tiers",
-        "current-local-model-auto-selection",
         "summary"
       ]
     },
@@ -2352,6 +2353,9 @@
       "anchors": [
         "workroom-vocabulary-boundary",
         "the-three-layers",
+        "definition-and-instance-are-an-orthogonal-axis",
+        "implemented-projection-seam",
+        "composition-duration-and-evidence",
         "naming-rules",
         "a-known-tension-accepted-deliberately",
         "what-is-deliberately-not-renamed-yet",
@@ -2593,6 +2597,7 @@
         "before-you-start",
         "the-phases",
         "what-to-look-for",
+        "budget-for-the-model-download",
         "what-to-record",
         "where-findings-go",
         "augmenting-this-playbook",
@@ -4923,6 +4928,24 @@
         "cross-references"
       ]
     },
+    "docs/install/hardware.md": {
+      "publicHref": "/install/hardware/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "choosing-hardware-for-dpf",
+        "the-short-recommendation",
+        "machines-available-now",
+        "provider-assisted-operations",
+        "local-first-windows-with-nvidia",
+        "local-first-apple-unified-memory",
+        "why-unified-memory-changes-the-calculation",
+        "model-and-context-sizing",
+        "shared-memory-systems-not-yet-in-the-standard-profile",
+        "before-ordering"
+      ]
+    },
     "docs/install/linux.md": {
       "publicHref": "/install/linux/",
       "portalHref": null,
@@ -4957,6 +4980,7 @@
       "anchors": [
         "dpf-install-guide-macos-apple-silicon",
         "supported-environment",
+        "recommended-hardware",
         "prerequisites",
         "quick-start",
         "contributor-separate-dev-workspace-from-install-recommended-bi-0856a4ce-phase-1",
@@ -5045,6 +5069,7 @@
       "anchors": [
         "dpf-install-guide-windows-1011",
         "supported-environment",
+        "recommended-hardware",
         "prerequisites",
         "quick-start",
         "what-the-installer-does",
@@ -5460,6 +5485,7 @@
       "publishedPortal": false,
       "anchors": [
         "local-ci-sandbox-slots",
+        "host-wide-heavyweight-resource-admission",
         "current-operating-mode",
         "peer-slot-host-fencing",
         "design-grounding",
@@ -10605,6 +10631,7 @@
         "oauth-sign-in",
         "device-code-sign-in-xai-grok",
         "none",
+        "managing-models-on-this-computer",
         "local-capacity-during-platform-verification",
         "how-oauth-works",
         "choosing-the-right-method",
@@ -10875,6 +10902,7 @@
       "publishedPortal": true,
       "anchors": [
         "what-the-packs-do",
+        "what-counts-as-sensitive-detail-and-what-does-not",
         "possible-outcomes",
         "initial-boundaries",
         "masking-and-correctness",
@@ -10890,6 +10918,7 @@
       "anchors": [
         "overview",
         "key-concepts",
+        "workroom-definitions",
         "what-you-can-do",
         "ai-coworker-identity",
         "following-a-concern-across-views"
@@ -10934,6 +10963,7 @@
       "publishedPortal": true,
       "anchors": [
         "overview",
+        "development-workrooms",
         "the-operator-workspace",
         "current-maturity",
         "key-concepts",
@@ -11168,6 +11198,7 @@
         "spin-up-an-isolated-thread",
         "commit-and-push-fast",
         "worktrees-are-source-control-isolation-not-runtime-isolation",
+        "heavy-local-commands-use-a-shared-host-resource-lane",
         "clean-up-when-merged",
         "webhooks-closing-the-promotion-loop",
         "adhering-to-the-portals-processes",
@@ -11396,6 +11427,7 @@
         "owner-first-overview-food-hospitality",
         "readiness-notes",
         "recording-a-payment-run",
+        "mileage",
         "reporting-and-close-boundaries",
         "route-guide"
       ]
@@ -11575,6 +11607,7 @@
       "publishedPortal": true,
       "anchors": [
         "overview",
+        "workroom-inventory",
         "key-concepts",
         "what-you-can-do",
         "reading-epic-progress",

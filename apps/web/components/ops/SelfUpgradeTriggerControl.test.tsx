@@ -43,6 +43,7 @@ import SelfUpgradeTriggerControl from "./SelfUpgradeTriggerControl";
 
 const baseProps = {
   enabled: true,
+  actionState: "update-available" as const,
   channel: "stable",
   latestRun: null,
 };
@@ -108,6 +109,25 @@ describe("SelfUpgradeTriggerControl – enabled", () => {
     const html = renderToStaticMarkup(<SelfUpgradeTriggerControl {...baseProps} />);
     expect(html).toContain("Enabled");
     expect(html).toContain("stable");
+  });
+
+  it("does not expose upgrade or emergency controls when the install is current", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeTriggerControl {...baseProps} actionState="no-update" />,
+    );
+    expect(html).toContain("No update is ready");
+    expect(html).not.toContain('aria-label="Upgrade now"');
+    expect(html).not.toContain("Emergency override");
+  });
+
+  it("does not expose a mutation when update availability could not be verified", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeTriggerControl {...baseProps} actionState="unavailable" />,
+    );
+    expect(html).toContain("Update status unavailable");
+    expect(html).not.toContain('aria-label="Upgrade now"');
+    expect(html).not.toContain("Emergency override");
+    expect(html).not.toContain("Upgrade queued.");
   });
 
   it("renders the Upgrade now button, marked as the primary / next action (BI-D77BF495)", () => {

@@ -52,6 +52,8 @@ type AgentPromptInfo = {
 
 export type AutonomousWorkRunInput = {
   trigger: AutonomousWorkTrigger;
+  /** Server-derived public identity for idempotent external work. */
+  taskRunId?: string;
   userId: string;
   agentId: string;
   routeContext: string;
@@ -113,7 +115,7 @@ export async function createAutonomousWorkRun(
     await admitRuntimeGuardedWork(tx as never, `task-run:${source}`);
     return tx.taskRun.create({
     data: {
-      taskRunId: createPublicTaskRunId(input.trigger),
+      taskRunId: input.taskRunId ?? createPublicTaskRunId(input.trigger),
       userId: input.userId,
       threadId,
       contextId: threadId,
@@ -198,6 +200,11 @@ export async function resolveAutonomousWorkTools(input: {
    *  it within each priority tier so the attachment cap keeps the tools this
    *  run actually needs (BI-ACE1EBA4). */
   intentQuery?: string;
+  /** Exact tools declared by a governed workflow packet. They remain subject to
+   *  the normal user/agent grant filter above; this only keeps already-authorized
+   *  schemas inside the attachment budget so the model never has to discover a
+   *  known governed writer through the public marketplace. */
+  requiredToolNames?: readonly string[];
 }): Promise<{
   tools: ToolDefinition[];
   toolsForProvider: Array<Record<string, unknown>>;
@@ -262,7 +269,11 @@ export async function resolveAutonomousWorkTools(input: {
       tools: authorized,
       roleGrants,
       pageActionNames: new Set(routeDomainToolNames),
-      alwaysIncludeNames: new Set([LOAD_TOOLS_TOOL_NAME, ...AUTHORIZED_SURFACE_TOOL_NAMES]),
+      alwaysIncludeNames: new Set([
+        LOAD_TOOLS_TOOL_NAME,
+        ...AUTHORIZED_SURFACE_TOOL_NAMES,
+        ...(input.requiredToolNames ?? []).slice(0, 4),
+      ]),
       cap: effectiveCap,
       intentQuery: input.intentQuery,
     });
@@ -293,6 +304,8 @@ export async function resolveAutonomousWorkTools(input: {
 
 export async function executeAutonomousAgenticLoop(input: {
   systemPrompt: string;
+  /** Instruction spans within `systemPrompt`, forwarded to routing (BI-463BE12A). */
+  systemPromptInstructionSpans?: string[];
   chatHistory: ChatMessage[];
   sensitivity: RouteSensitivity;
   tools: ToolDefinition[];
@@ -430,6 +443,7 @@ export async function executeAutonomousAgenticLoop(input: {
     result = await withInferenceOrigin(inferenceOrigin, () =>
       runAgenticLoop({
         systemPrompt,
+        systemPromptInstructionSpans: input.systemPromptInstructionSpans,
         chatHistory: input.chatHistory,
         sensitivity: input.sensitivity,
         tools: input.tools,
@@ -586,6 +600,7 @@ export async function executeAutonomousWorkTool(input: {
   threadId: string;
   taskRunId: string;
   apiTokenId?: string | null;
+  tokenScope?: "read" | "write" | "admin";
   externalAccessEnabled?: boolean;
 }): Promise<ToolResult> {
   const { governedExecuteTool } = await import("@/lib/mcp-governed-execute");
@@ -602,6 +617,7 @@ export async function executeAutonomousWorkTool(input: {
       threadId: input.threadId,
       taskRunId: input.taskRunId,
       apiTokenId: input.apiTokenId ?? undefined,
+      tokenScope: input.tokenScope,
       externalAccessEnabled: input.externalAccessEnabled,
     },
   });

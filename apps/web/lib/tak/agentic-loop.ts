@@ -59,10 +59,6 @@ import {
 // Re-export for importers (certification-oracles, tests) that pull from agentic-loop.
 export { detectToolRefusedDespiteAvailability } from "./tool-refused-recovery";
 
-// Safety ceiling — NOT a behavioral limit. The loop terminates when the model
-// responds with text only (no tool calls), matching the Anthropic API pattern
-// where the loop runs until stop_reason === "end_turn". This limit only prevents
-// runaway loops. The model decides when it's done.
 // Safety ceiling — the loop exits naturally when the model responds with text-only
 // (no tool calls). This limit only catches true infinite loops from bugs.
 // The actual guardrails are: sandbox circuit breaker, repetition detector, duration
@@ -102,7 +98,7 @@ export const HARD_COMPLETION_CLAIM_PATTERN =
   /\bI(?:'ve| have| just)?\s*(?:have\s+)?(?:saved|created|published|posted|sent|scheduled|recorded|queued|logged|added|drafted and saved|placed)\b|\b(?:saved|published|posted|sent|scheduled|queued|added|recorded)\s+(?:it|that|your|the)\b|\b(?:is|are|has been|have been)\s+(?:now\s+)?(?:live|saved|published|sent|scheduled|posted|queued|recorded)\b|in\s+(?:your\s+)?approval\s+queue|\b(?:prospect\s+)?account\s+created\b|\bACCT-[A-Z0-9]{4,}\b/i;
 
 // The dead-end classifier and its copy live in ./inference-dead-ends (BI-A89E4827).
-import { describeToolRouteFailure } from "./inference-dead-ends";
+import { describeToolRouteFailure, describeToolRouteFailureOutcome, type InferenceDeadEndOutcome } from "./inference-dead-ends";
 export { describeToolRouteFailure };
 
 // Narration patterns: agent describes code or announces intent instead of calling tools.
@@ -792,6 +788,7 @@ export type AgenticResult = {
   executedTools: ExecutedTool[];
   /** If a proposal tool was called, return it for approval card rendering */
   proposal: { name: string; arguments: Record<string, unknown>; content: string } | null;
+  failure?: InferenceDeadEndOutcome;
   /**
    * BI-2AC48661: the execution plan as it stood when the loop returned, when
    * `enableExecutionPlan` was set. Null when planning was off or the model
@@ -1038,6 +1035,8 @@ export type RunAgenticLoopParams = {
 
   chatHistory: ChatMessage[];
   systemPrompt: string;
+  /** Instruction spans in `systemPrompt`; see RouteAndCallOptions (BI-463BE12A). */
+  systemPromptInstructionSpans?: string[];
   sensitivity: import("@/lib/agent-sensitivity").RouteSensitivity;
   tools: ToolDefinition[];
   toolsForProvider: Array<Record<string, unknown>> | undefined;
@@ -1190,6 +1189,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
   const {
     chatHistory,
     systemPrompt,
+    systemPromptInstructionSpans,
     sensitivity,
     tools,
     toolsForProvider,
@@ -1280,6 +1280,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
   // Build routeAndCall options once (reused every iteration)
   const routeOptions = {
     ...(toolsForProvider ? { tools: toolsForProvider } : {}),
+    ...(systemPromptInstructionSpans?.length ? { systemPromptInstructionSpans } : {}),
     taskType: turnRoute.taskType,
     ...effectiveConfig,
     ...(requireTools ? { requireTools: true } : {}),
@@ -1683,10 +1684,11 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       }
     } catch (routeErr) {
       const msg = routeErr instanceof Error ? routeErr.message : String(routeErr);
+      const failure = describeToolRouteFailureOutcome(msg, routeOptions.tools?.length ?? 0, routeErr);
       console.warn(`[agentic-loop] routeAndCall threw: ${msg}`);
       logTurnSummary("unknown", "unknown");
       return {
-        content: describeToolRouteFailure(msg, routeOptions.tools?.length ?? 0, routeErr),
+        content: failure.message,
         providerId: "unknown",
         modelId: "unknown",
         downgraded: false,
@@ -1695,6 +1697,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         totalOutputTokens,
         executedTools,
         proposal: null,
+        failure,
       };
     }
     // Track response ID for conversation chaining (Responses API)

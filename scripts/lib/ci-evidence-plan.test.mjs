@@ -115,8 +115,45 @@ describe("createEvidencePlan", () => {
     assert.equal(plan.scope.docsOnly, true);
     assert.equal(plan.scope.heavy, false);
     assert.equal(plan.fullSuite, false);
+    assert.equal(plan.executionLane, "documentation");
     assert.equal(plan.uxMode, "none");
     assert.deepEqual(plan.escalations, []);
+  });
+
+  it("keeps a docs-only change non-portal when it includes its generated doc index", () => {
+    const plan = createEvidencePlan(input({
+      changedFiles: [
+        "docs/architecture/archetype-operating-model-audit.md",
+        "docs/architecture/platform-overview.md",
+        "apps/web/lib/docs/doc-index.generated.json",
+      ],
+    }));
+
+    assert.equal(plan.scope.docsOnly, true);
+    assert.equal(plan.scope.heavy, false);
+    assert.equal(plan.fullSuite, false);
+    assert.equal(plan.uxMode, "none");
+    assert.deepEqual(plan.escalations, []);
+  });
+
+  it("does not treat runtime code under a docs-named module as documentation", () => {
+    const plan = createEvidencePlan(input({
+      changedFiles: ["apps/web/lib/docs/doc-link-resolver.mjs"],
+    }));
+
+    assert.equal(plan.scope.docsOnly, false);
+    assert.equal(plan.scope.heavy, true);
+    assert.equal(plan.fullSuite, true);
+  });
+
+  it("keeps a generated doc index exhaustive when no documentation source changed", () => {
+    const plan = createEvidencePlan(input({
+      changedFiles: ["apps/web/lib/docs/doc-index.generated.json"],
+    }));
+
+    assert.equal(plan.scope.docsOnly, false);
+    assert.equal(plan.scope.heavy, true);
+    assert.equal(plan.fullSuite, true);
   });
 
   for (const executableStandardPath of [
@@ -175,6 +212,7 @@ describe("createEvidencePlan", () => {
     ]);
     assert.equal(plan.graph.trusted, true);
     assert.equal(plan.fullSuite, false);
+    assert.equal(plan.executionLane, "affected");
   });
 
   it("accepts a different commit alias when graph advice matches the exact tree", () => {
@@ -213,6 +251,7 @@ describe("createEvidencePlan", () => {
       }));
 
       assert.equal(plan.fullSuite, true);
+      assert.equal(plan.executionLane, "exhaustive");
       assert.ok(escalationCodes(plan).includes(code));
     });
   }

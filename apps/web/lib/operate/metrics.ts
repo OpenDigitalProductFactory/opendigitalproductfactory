@@ -509,3 +509,12 @@ export const queueArrivalsTotal = new Counter({
   labelNames: ["queue_key"] as const,
   registers: [metricsRegistry],
 });
+
+// Immutable gate single-flight. Keep labels bounded: exact keys and executor
+// ids stay in structured evidence rather than the time-series index.
+export const gateRunDispositionsTotal = new Counter({
+  name: "dpf_gate_run_dispositions_total",
+  help: "Immutable gate claims by gate kind, coordination disposition, and terminal result class.",
+  labelNames: ["gate_kind", "disposition", "result_class"] as const,
+  registers: [metricsRegistry],
+});

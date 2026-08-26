@@ -196,6 +196,16 @@ export interface OpsInngestRetentionRequestedEvent {
   data: { dryRun?: boolean };
 }
 
+export interface LocalModelInstallEvent {
+  name: "inference/local-model.install";
+  data: {
+    jobId: string;
+    attempt: number;
+    modelReference: string;
+    requestedByUserId: string;
+  };
+}
+
 // ─── Activity Quiescence Protocol events (BI-QUIESCE-002) ────────────────
 
 /** Sent by callers to start a quiescence drain. The coordinator function

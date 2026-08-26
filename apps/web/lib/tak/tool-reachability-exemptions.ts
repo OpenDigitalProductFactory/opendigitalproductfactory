@@ -75,4 +75,34 @@ export const TOOL_REACHABILITY_EXEMPTIONS: Readonly<Record<string, string>> = {
     "NO ENTRY: absent from TOOL_TO_GRANTS entirely (deny-by-default) — fleet-readiness is read by platform surfaces, not coworkers; needs an owning-epic decision on whether to expose it.",
   record_surface_readiness:
     "NO ENTRY: absent from TOOL_TO_GRANTS entirely (deny-by-default) — surface-readiness recording is runtime-internal today; exposing it to coworkers is an owning-epic decision.",
+  // ── Banking books loop (S-FIN, BI-DE27D34E) — consumer sequenced next ─────
+  // These 12 tools have banking_read/banking_write TOOL_TO_GRANTS entries, but
+  // no registry agent holds a banking grant YET: the decomposition ships the
+  // governed tool substrate (S-FIN) before the coworker that wields it. The
+  // Bookkeeper coworker (BI-7D50DC56, slice S-BK) holds banking_read/banking_write
+  // via the factory door; these entries shrink out the moment that lands.
+  list_bank_accounts:
+    "SEALED: requires banking_read, held by no registry agent yet — the Bookkeeper coworker (BI-7D50DC56, S-BK) will hold it; S-FIN ships the tools first.",
+  get_bank_account:
+    "SEALED: requires banking_read, held by no registry agent yet — held by the Bookkeeper coworker (BI-7D50DC56, S-BK), sequenced after this tool slice.",
+  get_bank_transactions:
+    "SEALED: requires banking_read, held by no registry agent yet — held by the Bookkeeper coworker (BI-7D50DC56, S-BK), sequenced after this tool slice.",
+  suggest_transaction_matches:
+    "SEALED: requires banking_read, held by no registry agent yet — held by the Bookkeeper coworker (BI-7D50DC56, S-BK), sequenced after this tool slice.",
+  list_bank_rules:
+    "SEALED: requires banking_read, held by no registry agent yet — held by the Bookkeeper coworker (BI-7D50DC56, S-BK), sequenced after this tool slice.",
+  get_reconciliation_summary:
+    "SEALED: requires banking_read, held by no registry agent yet — held by the Bookkeeper coworker (BI-7D50DC56, S-BK), sequenced after this tool slice.",
+  create_bank_account:
+    "SEALED: requires banking_write, held by no registry agent yet — the Bookkeeper coworker (BI-7D50DC56, S-BK) will hold it; consequential, so it also routes the governance gate for owner approval.",
+  import_bank_statement:
+    "SEALED: requires banking_write, held by no registry agent yet — the Bookkeeper coworker (BI-7D50DC56, S-BK) will hold it; consequential, so it also routes the governance gate for owner approval.",
+  match_transaction:
+    "SEALED: requires banking_write, held by no registry agent yet — held by the Bookkeeper coworker (BI-7D50DC56, S-BK), sequenced after this tool slice.",
+  unmatch_transaction:
+    "SEALED: requires banking_write, held by no registry agent yet — held by the Bookkeeper coworker (BI-7D50DC56, S-BK), sequenced after this tool slice.",
+  create_bank_rule:
+    "SEALED: requires banking_write, held by no registry agent yet — held by the Bookkeeper coworker (BI-7D50DC56, S-BK), sequenced after this tool slice.",
+  delete_bank_rule:
+    "SEALED: requires banking_write, held by no registry agent yet — held by the Bookkeeper coworker (BI-7D50DC56, S-BK), sequenced after this tool slice.",
 };

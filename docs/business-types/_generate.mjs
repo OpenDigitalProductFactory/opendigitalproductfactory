@@ -1,16 +1,20 @@
 // ============================================================================
 // Generator for the /business-types/ hub + per-business pages.
-// Run from this directory:   node _generate.mjs
+// Run from the repository root: pnpm docs:business-types
+// Verify committed output without writing: pnpm docs:business-types:check
 // Emits: index.html (hub) and one <slug>.html per business type.
 // Files starting with "_" are ignored by Jekyll, so this script + the content
 // module are never published — only the HTML they produce.
 // ============================================================================
 
-import { writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import storefrontTemplates from "../../packages/storefront-templates/src/index.ts";
 import { groups, pages, pagesByGroup, groupMock, judgement } from "./_content.mjs";
 import { analyze, band, TIERS } from "./_readability.mjs";
+
+const { ALL_ARCHETYPES, deriveOperationalValueStream } = storefrontTemplates;
 
 // Target reading level for BUSINESS-FACING copy — the "archetype" tier of the
 // platform readability policy (high-school, plain English). Technical sections
@@ -18,6 +22,10 @@ import { analyze, band, TIERS } from "./_readability.mjs";
 const READING_TARGET = TIERS.archetype.maxGrade;
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const processProjection = JSON.parse(
+  readFileSync(join(__dirname, "_process-projection.generated.json"), "utf8"),
+);
+const leafProcesses = Object.values(processProjection.archetypes ?? {});
 
 const esc = (s) =>
   String(s)
@@ -25,6 +33,72 @@ const esc = (s) =>
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+
+const PUBLIC_LEAF_ALIASES = {
+  "Pressure washing": "pressure-washing",
+  "Windshield & auto glass": "auto-glass",
+  "Mobile detailing": "mobile-detailing",
+  "Mobile tyre service": "mobile-tire",
+  "Courier & delivery": "courier-delivery",
+  "Last-mile freight": "last-mile-freight",
+  "Security guard & patrol": "guard-patrol",
+  "Alarm & CCTV installation & monitoring": "alarm-cctv-install",
+  "Mobile phlebotomy": "mobile-phlebotomy",
+  "Medical equipment delivery": "dme-delivery",
+  "Mobile grooming": "mobile-pet-grooming",
+  "Member-owned cooperative": "cooperative",
+  "Agricultural co-op (shared machinery)": "agricultural-cooperative",
+  "Municipal utility": "municipal-utility",
+  "Law-enforcement agency": "law-enforcement-agency",
+  "Mortgage lending": "mortgage-lending",
+  "Field inspection": "field-inspection",
+  "Open Digital Product Factory (and software products like it)": "software-platform",
+};
+
+const normalizeLabel = (value) =>
+  String(value)
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+
+/**
+ * Resolve the public-facing category labels to the canonical registry. The
+ * alias table only bridges deliberately shorter public labels; every returned
+ * object remains the canonical ArchetypeDefinition used by the portal.
+ */
+export function resolveCanonicalLeaves(page) {
+  return page.leaf.map((label) => {
+    const alias = PUBLIC_LEAF_ALIASES[label];
+    const matches = ALL_ARCHETYPES.filter((archetype) =>
+      alias
+        ? archetype.archetypeId === alias
+        : normalizeLabel(archetype.name) === normalizeLabel(label),
+    );
+    if (matches.length !== 1) {
+      throw new Error(
+        `Public leaf "${label}" on ${page.slug} resolved to ${matches.length} canonical archetypes.`,
+      );
+    }
+    return matches[0];
+  });
+}
+
+const pageForArchetype = new Map();
+for (const page of pages) {
+  for (const archetype of resolveCanonicalLeaves(page)) {
+    // A public category can intentionally cross-list a leaf (for example a
+    // dance studio under fitness and training). The leaf still has one URL and
+    // one canonical definition; the first curated category is its breadcrumb.
+    if (!pageForArchetype.has(archetype.archetypeId)) pageForArchetype.set(archetype.archetypeId, page);
+  }
+}
+
+const humanize = (value) =>
+  String(value)
+    .split("-")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
 
 // ---- per-group "operating model" parameters (drive the SVG diagram) --------
 const OP = {
@@ -203,7 +277,9 @@ function operatingModelSVG(groupId, title) {
 }
 
 // ---- value-stream strip (CSS, reflows vertical on mobile) ------------------
-function vstreamStrip(stages) {
+function vstreamStrip(stages, lanes = {}) {
+  const topLane = lanes.top ?? "Governance, trust, and evidence — across every step";
+  const bottomLane = lanes.bottom ?? "Capacity and demand signals — measured across the flow";
   const items = stages
     .map((s, i) => {
       const conn = i < stages.length - 1 ? `<li class="vconn" aria-hidden="true"></li>` : "";
@@ -215,11 +291,11 @@ function vstreamStrip(stages) {
     })
     .join("\n        ");
   return `<div class="vstream-card">
-      <p class="vstream-lane">Trust &amp; licence checks — across every step</p>
+      <p class="vstream-lane">${esc(topLane)}</p>
       <ul class="vstream">
         ${items}
       </ul>
-      <p class="vstream-lane bottom">Your AI coworker — turns enquiries into work, in your words</p>
+      <p class="vstream-lane bottom">${esc(bottomLane)}</p>
     </div>`;
 }
 
@@ -250,9 +326,8 @@ function topbar() {
     <a class="topbar-brand" href="/"><img src="/assets/logos/OpenDigitalProductFactory.png" alt="" width="934" height="688"/>Open Digital Product Factory</a>
     <nav class="topbar-nav" aria-label="Primary">
       <a href="/business-types/">All business types</a>
-      <a href="#archetype-engine">Architecture</a>
-      <a href="#standards">Standards</a>
-      <a href="#resell">Resellers</a>
+      <a href="/business-types/partners.html">Partners &amp; builders</a>
+      <a href="/business-types/architecture.html">Architecture</a>
       <a href="/#install">Install</a>
     </nav>
   </div></header>`;
@@ -261,15 +336,23 @@ function topbar() {
 function footer() {
   return `<footer class="site"><div class="wrap">
     <p>Open Digital Product Factory · <a href="/">Home</a> · <a href="/business-types/">All business types</a> · <a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory">GitHub repository</a></p>
-    <p class="muted" style="margin:6px 0 0; font-size:13px;">Internally, each business type is seeded from a market <em>archetype</em> — the single source of truth that shapes the storefront, vocabulary, scheduling, finance, and compliance defaults. <a href="/#archetypes">More for builders &amp; resellers →</a></p>
+    <p class="muted" style="margin:6px 0 0; font-size:13px;">Running an organization? Start with its business type. <a href="/business-types/partners.html">Partners and builders</a> and <a href="/business-types/architecture.html">architecture reviewers</a> have separate paths.</p>
   </div></footer>`;
+}
+
+function secondaryAudienceLinks() {
+  return `<aside class="secondary-paths" aria-label="Other audiences">
+    <p><strong>Not running this organization?</strong></p>
+    <a href="/business-types/partners.html">For resellers, builders, and delivery partners →</a>
+    <a href="/business-types/architecture.html">For architects and standards reviewers →</a>
+  </aside>`;
 }
 
 // ---- core-message callout --------------------------------------------------
 function calloutHTML() {
   return `<div class="callout">
       <p class="ck">In plain terms</p>
-      <p>One install gives you a <b>website your customers can use</b>, a <b>place to run the work</b>, and <b>AI coworkers that already speak your line of work</b>. You approve the important moves, and everything stays on your own computers.</p>
+      <p>One install gives you a <b>website your community can use</b>, a <b>place to run the work</b>, and <b>AI coworkers that already speak your line of work</b>. You approve the important moves, and everything stays on your own computers.</p>
     </div>`;
 }
 
@@ -290,7 +373,7 @@ function surfaceFor(cap) {
   return "AI coworker & workflow";
 }
 
-// ---- audience split (Use it · Resell it · Understand it) --------------------
+// ---- short operator summaries used by the readability projection ------------
 const USE_LINE = {
   field: "Capture urgent jobs, dispatch the right technician, hold maintenance plans, and invoice from the field.",
   book: "Fill the calendar with the right people, keep the records on hand, and nudge the rebooking.",
@@ -298,36 +381,6 @@ const USE_LINE = {
   members: "Take applications, donations, and requests through a trust gate — and account for every fee or receipt.",
   build: "Move from inquiry to proposal to milestone billing, with each client’s estate kept clean and isolated.",
 };
-function audienceSplit(page) {
-  return `<section id="audiences" aria-label="Three audiences">
-    <p class="section-eyebrow">Three ways in</p>
-    <h2>Use it · Resell it · Understand it</h2>
-    <div class="audience-split">
-      <div class="aud use">
-        <div class="role">Use it</div>
-        <h3>Run your ${esc(page.display.toLowerCase())} business</h3>
-        <p>${esc(USE_LINE[page.group])}</p>
-        <a class="more" href="#how">See the value &amp; capabilities &darr;</a>
-        <div class="who">For owners &amp; operators</div>
-      </div>
-      <div class="aud resell">
-        <div class="role">Resell it</div>
-        <h3>Package it for clients</h3>
-        <p>One platform you set up per client — brand it, support it, repeat for the next client. No custom app each time.</p>
-        <a class="more" href="#resell">Explore the reseller path &darr;</a>
-        <div class="who">For partners, MSPs &amp; consultants</div>
-      </div>
-      <div class="aud understand">
-        <div class="role">Understand it</div>
-        <h3>Inspect the architecture</h3>
-        <p>How it's built, how every AI action is approved and logged, and where it stands against emerging AI-agent standards — auditable, not a black box.</p>
-        <a class="more" href="#for-builders">See under the hood &darr;</a>
-        <div class="who">For architects &amp; standards reviewers</div>
-      </div>
-    </div>
-  </section>`;
-}
-
 // ---- archetype engine (the architectural invention) ------------------------
 function archetypeEngine(page) {
   return `<section id="archetype-engine" aria-label="The archetype engine">
@@ -581,9 +634,124 @@ function judgementSection(page) {
 }
 
 // ---- per-business page -----------------------------------------------------
+function leafProcessPageHTML(model, parentSlug) {
+  const stageByKey = new Map(
+    model.streams.flatMap((stream) => stream.stages.map((stage) => [stage.key, stage])),
+  );
+  const streamSections = model.streams
+    .map((stream, streamIndex) => {
+      const stages = stream.stages
+        .map((stage, stageIndex) => {
+          const handoff = stage.handoffToStageKey
+            ? stageByKey.get(stage.handoffToStageKey)?.label ?? humanize(stage.handoffToStageKey)
+            : stageIndex < stream.stages.length - 1
+              ? stream.stages[stageIndex + 1].label
+              : streamIndex < model.streams.length - 1
+                ? model.streams[streamIndex + 1].label
+                : "Outcome review";
+          const gates = stage.trustGateKeys.length
+            ? stage.trustGateKeys.map(humanize).join(", ")
+            : "Routine work within approved care policy";
+          return `<tr>
+            <td><strong>${esc(stage.label)}</strong></td>
+            <td>${esc(stage.input)}</td>
+            <td>${esc(stage.output)}</td>
+            <td>${esc(stage.responsibleRole)}</td>
+            <td>${esc(gates)}</td>
+            <td>${esc(handoff)}</td>
+          </tr>`;
+        })
+        .join("\n");
+
+      return `<section aria-labelledby="stream-${esc(stream.key)}">
+        <p class="section-eyebrow">Primary value stream ${streamIndex + 1}</p>
+        <h2 id="stream-${esc(stream.key)}">${esc(stream.label)}</h2>
+        <p class="sub">${esc(stream.purpose)}</p>
+        <div class="twocol">
+          <div class="card"><h3>Starts with</h3><p>${esc(stream.input)}</p></div>
+          <div class="card"><h3>Finishes with</h3><p>${esc(stream.output)}</p></div>
+        </div>
+        <p class="sub"><strong>Accountable lead:</strong> ${esc(stream.responsibleRole)}</p>
+        <div class="diagram-scroll" role="region" aria-label="${esc(stream.label)} stage details" tabindex="0">
+          <table style="width:100%;border-collapse:collapse;min-width:980px">
+            <thead><tr><th scope="col">Stage</th><th scope="col">Input</th><th scope="col">Output</th><th scope="col">Responsible</th><th scope="col">Approval or trust gate</th><th scope="col">Handoff</th></tr></thead>
+            <tbody>${stages}</tbody>
+          </table>
+        </div>
+      </section>`;
+    })
+    .join("\n");
+
+  const support = model.supportingCapabilities
+    .map((capability) => `<li class="chip">${esc(capability)}</li>`)
+    .join("");
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>${esc(model.name)} operating model — Open Digital Product Factory</title>
+<meta name="description" content="The intake, health and welfare, and adoption value streams that define how a pet rescue operates."/>
+<link rel="stylesheet" href="/assets/css/business.css"/>
+</head>
+<body id="top" data-canonical-archetype-id="${esc(model.archetypeId)}">
+${topbar()}
+<section class="hero"><div class="wrap">
+  <p class="eyebrow"><span class="dot"></span>Pet rescue · operating model</p>
+  <h1>How ${esc(model.name)} protects an animal from intake to placement</h1>
+  <p class="tagline">Three connected flows keep the animal—not fundraising or sales—at the centre of the work.</p>
+  <p class="lede">Use this view to see what starts each stream, who is responsible, what evidence allows work to advance, and where the animal is handed to the next team.</p>
+  <div class="cta-row"><a class="btn" href="/business-types/${esc(parentSlug)}.html">← Nonprofits &amp; community</a><a class="btn primary" href="/#install">Install the platform</a></div>
+</div></section>
+<main class="wrap">
+  <section aria-label="Definition status">
+    <div class="evidence-note">
+      <span class="badge">Canonical projection · shipped definition</span>
+      <h2>This process comes from the installed Pet Rescue definition</h2>
+      <p>The public stages below are generated from the same archetype process model used by the platform. The generation check fails if this page or its process projection drifts from source.</p>
+    </div>
+  </section>
+  <section aria-label="Operating model summary">
+    <p class="section-eyebrow">The animal journey</p>
+    <h2>One journey, three accountable value streams</h2>
+    <p class="sub">An animal enters through intake, remains in health and welfare care until it is ready, then moves through adoption and placement. A failed placement returns safely to intake and care; it does not disappear from the record.</p>
+  </section>
+  ${streamSections}
+  <section aria-labelledby="supporting-work">
+    <p class="section-eyebrow">Enabling work</p>
+    <h2 id="supporting-work">Supporting capabilities</h2>
+    <p class="sub">These capabilities sustain the rescue, but they do not replace the animal's progression through intake, care, and placement.</p>
+    <ul class="chips">${support}</ul>
+  </section>
+</main>
+${footer()}
+<a class="back-top" href="#top" aria-label="Back to top">↑ Top</a>
+</body>
+</html>`;
+}
+
 function pageHTML(page) {
   const g = groups.find((x) => x.id === page.group);
-  const chips = page.leaf.map((l) => `<li class="chip">${esc(l)}</li>`).join("");
+  const canonicalLeaves = resolveCanonicalLeaves(page);
+  const chips = canonicalLeaves
+    .map(
+      (leaf) =>
+        `<li class="chip"><a href="/business-types/archetypes/${esc(leaf.archetypeId)}.html">${esc(leaf.name)}</a></li>`,
+    )
+    .join("");
+  const leafCards = canonicalLeaves
+    .map((leaf) => {
+      const model = deriveOperationalValueStream(leaf);
+      const loadBearing = model.stages.filter((stage) => stage.loadBearing).map((stage) => stage.label);
+      return `<a class="card linkcard archetype-card" href="/business-types/archetypes/${esc(leaf.archetypeId)}.html">
+        <span class="status-kicker">Canonical profile</span>
+        <h3>${esc(leaf.name)} <span class="arrow" aria-hidden="true">→</span></h3>
+        <p>${esc(loadBearing.length ? `Current load-bearing stage: ${loadBearing.join(" and ")}.` : "Open the current operating definition.")}</p>
+        <p class="leafline">${esc(model.capacityUnit.replaceAll("-", " "))} · ${esc(model.demandSignature.replaceAll("-", " "))}</p>
+      </a>`;
+    })
+    .join("\n        ");
   const problems = page.problems
     .map(
       (p) =>
@@ -607,7 +775,6 @@ function pageHTML(page) {
         page.compliance
       )}</div></section>`
     : "";
-  const judged = judgementSection(page);
 
   return `<!doctype html>
 <html lang="en">
@@ -637,49 +804,39 @@ ${topbar()}
   <ul class="chips">${chips}</ul>
   <div class="cta-row">
     <a class="btn primary" href="/#install">Install the platform</a>
-    <a class="btn" href="#how">See what you get</a>
-    <a class="btn" href="#for-builders">For resellers &amp; builders</a>
+    <a class="btn" href="#choose-type">Choose your exact organization</a>
   </div>
 </div></section>
 
 <main class="wrap">
 
-  <section aria-label="The bigger picture">
-    ${calloutHTML()}
-  </section>
-
-  ${audienceSplit(page)}
-
-  <section id="how" aria-label="How the work flows">
-    <p class="section-eyebrow">How the work flows</p>
-    <h2>How a ${esc(page.display.toLowerCase())} business works</h2>
-    <p class="sub">${esc(page.model)}</p>
-    <div class="opmodel">
-      <div class="diagram-scroll">${operatingModelSVG(page.group, page.display)}</div>
-      <p class="scroll-hint">Scroll the diagram sideways to read every stage →</p>
-      <p class="legend">DPF sets all this up for you out of the box — your public website, the words your AI coworker uses, your scheduling, your pricing, and the licence checks you need all come ready.</p>
+  <section id="choose-type" aria-label="Choose an exact organization type">
+    <p class="section-eyebrow">Choose the work you actually do</p>
+    <h2>One category, different operating models</h2>
+    <p class="sub">These organizations share some concerns, but they do not share one value stream. Choose the closest match to see its current stages, constraints, and configured capabilities.</p>
+    <div class="grid leaf-grid">
+      ${leafCards}
     </div>
   </section>
 
-  <section aria-label="Value stream">
-    <p class="section-eyebrow">Start to finish</p>
-    <h2>Your work, one step at a time</h2>
-    <p class="sub">Every business finds customers, takes the work, does the job, gets paid, and keeps them coming back. What changes is the step that makes or breaks <em>your</em> kind of business — highlighted below.</p>
-    ${vstreamStrip(page.stages)}
+  <section aria-label="Shared category concerns">
+    <p class="section-eyebrow">Shared concerns — not a universal workflow</p>
+    <h2>What this category has in common</h2>
+    <p class="sub">${esc(page.model)} The exact operating flow belongs to each organization type above.</p>
   </section>
 
   <section aria-label="Problems and capabilities">
     <div class="twocol">
       <div>
-        <p class="section-eyebrow">The pain today</p>
-        <h2>Problems we solve</h2>
+        <p class="section-eyebrow">Common pressure points</p>
+        <h2>Problems often seen here</h2>
         <ul class="tlist problems">
           ${problems}
         </ul>
       </div>
       <div>
-        <p class="section-eyebrow">Out of the box · each tied to a part of DPF</p>
-        <h2>What DPF gives you</h2>
+        <p class="section-eyebrow">Profile patterns</p>
+        <h2>What the category prepares for</h2>
         <ul class="tlist caps">
           ${caps}
         </ul>
@@ -687,47 +844,23 @@ ${topbar()}
     </div>
   </section>
 
-  ${proofVisuals(page)}
-
-  ${judged}
-
   ${compliance}
 
-  <section id="mobile" aria-label="Mobile vision">
-    <div class="proof-grid" style="align-items:start;">
-      <div>${mobileVisionCard(page)}</div>
-      ${phoneMock(page)}
+  <section aria-label="Definition evidence">
+    <div class="evidence-note">
+      <span class="badge">Shipped definition</span>
+      <h2>Public detail comes from the installed archetype registry</h2>
+      <p>The organization links above are generated from the same source definitions the platform uses. They are not a second hand-written value stream. <a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/tree/main/packages/storefront-templates/src">Inspect the current definitions →</a></p>
     </div>
   </section>
 
-  <section id="for-builders" aria-label="For builders, resellers and architects">
-    <div style="border-top:1px solid var(--border); padding-top:30px;">
-      <p class="section-eyebrow">For builders, resellers &amp; architects</p>
-      <h2>Under the hood — how DPF builds this</h2>
-      <p class="sub">The rest of this page is the technical detail for people who extend, resell, or evaluate the platform. In one line: one install becomes a governed system for your whole business — the business type shapes everything, every AI action is approved and logged (the <strong>TAK</strong> runtime), and each AI coworker carries a checkable identity and an evidence trail (<strong>GAID</strong>). Most owners can stop above.</p>
-    </div>
-  </section>
-
-  ${archetypeEngine(page)}
-
-  ${standardsSection()}
-
-  <section aria-label="Authority and audit evidence">
-    <p class="section-eyebrow">For architects · the evidence trail</p>
-    <h2>Every AI action is identified and logged</h2>
-    <p class="sub">A supervisor-ready snapshot of any coworker: who it is, what it may touch, the mode it runs in, and the evidence behind its last action.</p>
-    ${agentCardMock(page)}
-  </section>
-
-  ${partnersBand(page)}
+  ${secondaryAudienceLinks()}
 
   <section aria-label="Get started">
     <div class="grid">
       <div class="card">
-        <h3>Ready to see it for your business?</h3>
-        <p style="margin-bottom:12px;">Install on your own computers in minutes — the setup asks one question and sets up everything else for ${esc(
-          page.display.toLowerCase()
-        )} automatically.</p>
+        <h3>Ready to set up your organization?</h3>
+        <p style="margin-bottom:12px;">Install on your own computers, then choose the exact organization type that matches your work.</p>
         <a class="btn primary" href="/#install">Install</a>
         <a class="btn" href="/business-types/">All business types</a>
       </div>
@@ -745,9 +878,115 @@ ${footer()}
 `;
 }
 
+function canonicalLeafHTML(archetype) {
+  const categoryPage = pageForArchetype.get(archetype.archetypeId);
+  const model = deriveOperationalValueStream(archetype);
+  const profile = archetype.activationProfile;
+  const process = profile?.processProfile;
+  const modules = profile?.modules ?? [];
+  const trustGates = model.trustGates.length
+    ? model.trustGates.map((gate) => `<li>${esc(gate.replaceAll("-", " "))}</li>`).join("")
+    : "<li>No additional archetype-specific trust gate is declared.</li>";
+  const moduleDetail = modules.length
+    ? modules.map((module) => `<li><code>${esc(module)}</code></li>`).join("")
+    : "<li>No optional operational modules are activated by this definition.</li>";
+  const subjectLine = process?.subjectTypes?.length
+    ? process.subjectTypes.join(", ")
+    : "not specialized";
+  const categoryHref = categoryPage
+    ? `/business-types/${categoryPage.slug}.html`
+    : "/business-types/";
+  const categoryLabel = categoryPage?.display ?? archetype.category.replaceAll("-", " ");
+  const stages = model.stages.map((stage) => ({ label: stage.label, key: stage.loadBearing }));
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>${esc(archetype.name)} operating model — Open Digital Product Factory</title>
+<meta name="description" content="The canonical DPF operating definition for ${esc(archetype.name)}: value-stream stages, constraints, demand pattern, and configured modules."/>
+<link rel="stylesheet" href="/assets/css/business.css"/>
+</head>
+<body id="top" data-canonical-archetype-id="${esc(archetype.archetypeId)}">
+${topbar()}
+
+<section class="hero leaf-hero"><div class="wrap">
+  <p class="eyebrow"><span class="dot"></span>${esc(categoryLabel)} · exact organization type</p>
+  <h1>${esc(archetype.name)}</h1>
+  <p class="tagline">See how this organization is defined in DPF today: the work stages, the load-bearing point, capacity, demand, and trust constraints.</p>
+  <p class="lede">This is a generated projection of the installed archetype definition, not another hand-written operating model.</p>
+  <div class="cta-row">
+    <a class="btn primary" href="/#install">Install the platform</a>
+    <a class="btn" href="${esc(categoryHref)}">Back to ${esc(categoryLabel)}</a>
+  </div>
+</div></section>
+
+<main class="wrap">
+  <section aria-label="Definition status">
+    <div class="evidence-note">
+      <span class="badge">Canonical projection · shipped definition</span>
+      <h2>One source, two views</h2>
+      <p>This page calls the same <code>deriveOperationalValueStream</code> projection used from the storefront archetype substrate. A generation check fails if this public page drifts from source. <a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/tree/main/packages/storefront-templates/src">Inspect the source definition →</a></p>
+    </div>
+  </section>
+
+  <section aria-label="Value stream">
+    <p class="section-eyebrow">Current operating definition</p>
+    <h2>The work from start to finish</h2>
+    <p class="sub">Highlighted stages are the load-bearing points derived from this exact archetype profile.</p>
+    ${vstreamStrip(stages, {
+      top: model.trustGates.length ? `Trust gates: ${model.trustGates.join(", ")}` : "Governance and evidence across every stage",
+      bottom: `Capacity: ${model.capacityUnit.replaceAll("-", " ")} · Demand: ${model.demandSignature.replaceAll("-", " ")}`,
+    })}
+  </section>
+
+  <section aria-label="Operating facts">
+    <p class="section-eyebrow">Definition facts</p>
+    <h2>What shapes this flow</h2>
+    <dl class="profile-facts">
+      <div><dt>Primary public action</dt><dd>${esc(archetype.ctaType.replaceAll("-", " "))}</dd></div>
+      <div><dt>Subject of the work</dt><dd>${esc(subjectLine)}</dd></div>
+      <div><dt>Capacity constraint</dt><dd>${esc(model.capacityUnit.replaceAll("-", " "))}</dd></div>
+      <div><dt>Demand pattern</dt><dd>${esc(model.demandSignature.replaceAll("-", " "))}</dd></div>
+      <div><dt>Houses subjects</dt><dd>${process?.housesSubjects ? "Yes" : "No"}</dd></div>
+      <div><dt>Schedules subjects</dt><dd>${process?.schedulesSubjects ? "Yes" : "No"}</dd></div>
+    </dl>
+  </section>
+
+  <section aria-label="Constraints and configured modules">
+    <div class="twocol">
+      <div>
+        <p class="section-eyebrow">Trust constraints</p>
+        <h2>What cannot be skipped</h2>
+        <ul class="plain-list">${trustGates}</ul>
+      </div>
+      <div>
+        <p class="section-eyebrow">Definition evidence</p>
+        <h2>Configured modules</h2>
+        <ul class="plain-list">${moduleDetail}</ul>
+      </div>
+    </div>
+  </section>
+
+  <section aria-label="Product status">
+    <div class="note"><strong>Definition versus delivery.</strong> This page proves what the archetype definition currently says. It does not claim that every domain workflow shown by the definition is complete in the running product. Future mobile experience is documented separately and labelled as vision.</div>
+  </section>
+
+  ${secondaryAudienceLinks()}
+</main>
+
+${footer()}
+<a class="back-top" href="#top" aria-label="Back to top">↑ Top</a>
+</body>
+</html>
+`;
+}
+
 // ---- hub page --------------------------------------------------------------
 function hubHTML() {
   const grouped = pagesByGroup();
+  const publicLeafCount = pageForArchetype.size;
   const groupSections = grouped
     .map((g) => {
       const cards = g.items
@@ -784,71 +1023,31 @@ ${topbar()}
 
 <section class="hero"><div class="wrap">
   <p class="eyebrow"><span class="dot"></span>Find your business</p>
-  <h1>Built for how your business actually works</h1>
-  <p class="lede">DPF isn’t a blank tool you configure for weeks. Pick what you do and the whole platform — your public storefront, the words your AI coworkers use, your scheduling, your finances, your compliance defaults — reshapes itself to match. Fifteen market categories and 56 ready business types ship in the box.</p>
+  <h1>Start with the organization you actually run</h1>
+  <p class="lede">Choose a category, then drill into the exact organization type. Each detail page is generated from the same archetype definition used by DPF, so a category never pretends every member works the same way. This public guide currently covers ${pages.length} categories and ${publicLeafCount} exact organization types.</p>
   <div class="cta-row">
     <a class="btn primary" href="/#install">Install the platform</a>
-    <a class="btn" href="#archetype-engine">Inspect the architecture</a>
-    <a class="btn" href="#standards">Standards posture</a>
+    <a class="btn" href="#categories">Find your organization</a>
   </div>
 </div></section>
 
 <main class="wrap">
 
-  <section aria-label="The bigger picture">
+  <section aria-label="What operators get">
     ${calloutHTML()}
   </section>
 
-  <section aria-label="The universal model">
-    <p class="section-eyebrow">One backbone, many shapes</p>
-    <h2>Every small business runs the same five moves</h2>
-    <p class="sub">Attract someone, capture their intent, deliver the thing they pay for, account for the money, and keep the relationship. What differs is <em>which</em> move is make-or-break — and DPF tunes itself to that for each business below.</p>
-    <div class="opmodel">
-      <div class="diagram-scroll">${operatingModelSVG("universal", "small")}</div>
-      <p class="scroll-hint">Scroll the diagram sideways →</p>
-      <p class="legend">The same governed backbone underneath; a different load-bearing stage on top. That’s why a salon, a plumber, a credit union, and a food bank each get a platform that feels purpose-built.</p>
-    </div>
-  </section>
-
-  <p class="section-eyebrow" style="margin-top:8px;">Grouped by how you operate — not by industry jargon</p>
+  <p id="categories" class="section-eyebrow" style="margin-top:8px;">Grouped by shared concerns — exact workflows live one level down</p>
 
   ${groupSections}
 
-  <section id="for-builders" aria-label="For builders, resellers and architects">
-    <div style="border-top:1px solid var(--border); padding-top:30px;">
-      <p class="section-eyebrow">For builders, resellers &amp; architects</p>
-      <h2>Under the hood</h2>
-      <p class="sub">Everything above is for the people running a business. The rest is the technical detail for those who extend, resell, or evaluate the platform.</p>
-    </div>
-  </section>
-
-  <section id="archetype-engine" aria-label="How it's built">
-    <p class="section-eyebrow">How it's built</p>
-    <h2>One business type generates the whole setup</h2>
-    <p class="sub">The business type you pick at setup is the single source of truth (<code>StorefrontConfig.archetypeId</code> in the data model). From it, DPF generates the website wording, scheduling defaults, finance assumptions, licence hints, the words each AI coworker uses, and the direction of the mobile app — which is how one platform covers ${pages.length} business types without a custom app for each. <em>(For builders, the precise internal term is the “archetype”.)</em></p>
-    <div class="pipeline">
-      <div class="pipe-stage src"><span class="pk">SOURCE OF TRUTH</span><span class="pl">Business type</span><code>StorefrontConfig.archetypeId</code></div>
-      <div class="pipe-arrow" aria-hidden="true"></div>
-      <div class="pipe-stage"><span class="pk">DERIVES</span><span class="pl">Generated setup</span><code>activationProfile · axes · vocabulary</code></div>
-      <div class="pipe-arrow" aria-hidden="true"></div>
-      <div class="pipe-out">
-        <div class="o">Storefront<span>intake, CTAs, sections</span></div>
-        <div class="o">AI coworker<span>vocabulary, tools, routing</span></div>
-        <div class="o">Workflows<span>scheduling, finance, compliance</span></div>
-        <div class="o">Mobile manifest<span>capability direction (vision)</span></div>
-      </div>
-    </div>
-  </section>
-
-  ${standardsSection()}
-
-  ${mobileVision({ display: "your business", mobile: false })}
+  ${secondaryAudienceLinks()}
 
   <section aria-label="Get started">
     <div class="grid">
       <div class="card">
         <h3>Don’t see an exact match?</h3>
-        <p style="margin-bottom:12px;">The 56 business types are starting points — the platform adapts further to your specifics during setup, and your AI coworkers keep tailoring as you go. Install and choose the closest fit.</p>
+        <p style="margin-bottom:12px;">Install and choose the closest current definition. The public guide only claims the organization types it can project from source today.</p>
         <a class="btn primary" href="/#install">Install</a>
         <a class="btn" href="/">Back to overview</a>
       </div>
@@ -864,43 +1063,225 @@ ${footer()}
 `;
 }
 
-// ---- write everything ------------------------------------------------------
-let count = 0;
-writeFileSync(join(__dirname, "index.html"), hubHTML(), "utf8");
-count++;
-for (const page of pages) {
-  writeFileSync(join(__dirname, `${page.slug}.html`), pageHTML(page), "utf8");
-  count++;
+function partnersHTML() {
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Partners and builders — Open Digital Product Factory</title>
+<meta name="description" content="How resellers, builders, MSPs, and delivery partners package and support Open Digital Product Factory installs."/>
+<link rel="stylesheet" href="/assets/css/business.css"/>
+</head>
+<body id="top">
+${topbar()}
+<section class="hero"><div class="wrap">
+  <p class="eyebrow"><span class="dot"></span>Partner path</p>
+  <h1>For resellers, builders, and delivery partners</h1>
+  <p class="tagline">Package, configure, and support one governed platform for each client without mixing partner go-to-market language into the client’s own operating model.</p>
+  <p class="lede">This path is for MSPs, consultants, integrators, and builders. Organization operators can stay in the business-type guide.</p>
+  <div class="cta-row">
+    <a class="btn primary" href="/#install">Install for a client</a>
+    <a class="btn" href="/business-types/">See organization types</a>
+  </div>
+</div></section>
+<main class="wrap">
+  <section aria-label="Partner operating model">
+    <p class="section-eyebrow">Repeatable delivery</p>
+    <h2>One platform, one isolated install per client</h2>
+    <div class="grid">
+      <div class="card"><h3>Choose the client’s definition</h3><p>Start from the organization’s canonical archetype rather than a blank template or a generic commercial flow.</p></div>
+      <div class="card"><h3>Configure and brand</h3><p>Apply the client’s identity, approved integrations, operating rules, and local constraints.</p></div>
+      <div class="card"><h3>Support with evidence</h3><p>Keep changes, approvals, releases, and coworker actions traceable inside the client’s governed install.</p></div>
+    </div>
+  </section>
+  <section aria-label="Partner evidence">
+    <div class="evidence-note">
+      <span class="badge">Partner material</span>
+      <h2>Keep the client’s page about the client</h2>
+      <p>Reseller packaging and platform go-to-market belong here. The operator-facing pages only carry small links to this route. <a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory">Inspect the current platform source →</a></p>
+    </div>
+  </section>
+  <section aria-label="Partner next steps">
+    <div class="twocol">
+      <div class="card"><h3>Need the technical model?</h3><p>Review how public pages project the canonical archetype registry and how drift is checked.</p><a class="more" href="/business-types/architecture.html">Open architecture →</a></div>
+      <div class="card"><h3>Need the client’s operating model?</h3><p>Choose the exact organization type and share that operator-first page.</p><a class="more" href="/business-types/">Open business types →</a></div>
+    </div>
+  </section>
+</main>
+${footer()}
+<a class="back-top" href="#top" aria-label="Back to top">↑ Top</a>
+</body>
+</html>
+`;
 }
-console.log(`Generated ${count} pages (1 hub + ${pages.length} business types) into ${__dirname}`);
 
-// ---- readability gate: score business-facing copy (the MS-Word metrics) ----
-const scored = pages
-  .map((p) => ({ slug: p.slug, ...analyze(businessCopy(p)) }))
-  .sort((a, b) => b.gradeLevel - a.gradeLevel);
-const failing = scored.filter((s) => s.gradeLevel > READING_TARGET);
-const mean = (scored.reduce((n, s) => n + s.gradeLevel, 0) / scored.length).toFixed(1);
-
-console.log(`\nReadability of business-facing copy (target ≤ Grade ${READING_TARGET}):`);
-for (const s of scored) {
-  const flag = s.gradeLevel > READING_TARGET ? "  ✗ OVER" : "  ✓";
-  console.log(`  ${s.slug.padEnd(34)} Grade ${String(s.gradeLevel).padStart(4)}  ease ${String(s.readingEase).padStart(4)}  ${band(s.gradeLevel)}${flag}`);
+function architectureHTML() {
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Archetype projection architecture — Open Digital Product Factory</title>
+<meta name="description" content="How the public business-type guide projects DPF's canonical archetype and operational value-stream definitions, with automated drift checks."/>
+<link rel="stylesheet" href="/assets/css/business.css"/>
+</head>
+<body id="top">
+${topbar()}
+<section class="hero"><div class="wrap">
+  <p class="eyebrow"><span class="dot"></span>Architecture path</p>
+  <h1>How archetype definitions become public pages</h1>
+  <p class="tagline">The public guide is a read model over the platform’s canonical archetype registry. It does not maintain another value-stream definition.</p>
+  <p class="lede">This path is for architects, standards reviewers, and contributors who need the source, projection, and conformance contract.</p>
+  <div class="cta-row">
+    <a class="btn primary" href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/tree/main/packages/storefront-templates/src">Inspect canonical source</a>
+    <a class="btn" href="/business-types/">See the public projection</a>
+  </div>
+</div></section>
+<main class="wrap">
+  <section aria-label="Projection architecture">
+    <p class="section-eyebrow">Single source of truth</p>
+    <h2>Definition → derivation → public read model</h2>
+    <div class="pipeline">
+      <div class="pipe-stage src"><span class="pk">CANONICAL SOURCE</span><span class="pl">ArchetypeDefinition</span><code>packages/storefront-templates/src</code></div>
+      <div class="pipe-arrow" aria-hidden="true"></div>
+      <div class="pipe-stage"><span class="pk">PURE DERIVATION</span><span class="pl">Operational value stream</span><code>deriveOperationalValueStream</code></div>
+      <div class="pipe-arrow" aria-hidden="true"></div>
+      <div class="pipe-out">
+        <div class="o">Internal architecture<span>governed model projection</span></div>
+        <div class="o">Public leaf pages<span>operator-readable projection</span></div>
+        <div class="o">Conformance check<span>regenerate and compare</span></div>
+      </div>
+    </div>
+  </section>
+  <section aria-label="Conformance contract">
+    <div class="twocol">
+      <div>
+        <p class="section-eyebrow">Drift prevention</p>
+        <h2>Generated pages are checked</h2>
+        <p>The generator resolves every published leaf against <code>ALL_ARCHETYPES</code>, calls the canonical operational-value-stream derivation, and fails in <code>--check</code> mode when committed HTML differs.</p>
+      </div>
+      <div>
+        <p class="section-eyebrow">Deliberate boundary</p>
+        <h2>Category copy is only shared context</h2>
+        <p>Category pages may explain common concerns. They do not define one category-wide process. Exact stages, constraints, and modules appear only on canonical leaf projections.</p>
+      </div>
+    </div>
+  </section>
+  <section aria-label="Current evidence">
+    <div class="evidence-note">
+      <span class="badge">Current evidence</span>
+      <h2>${pageForArchetype.size} published leaf profiles resolve to source</h2>
+      <p>The committed artifacts are generated from <code>packages/storefront-templates/src</code>. Broader platform architecture and standards remain in the <a href="/architecture/platform-overview">architecture documentation</a>.</p>
+    </div>
+  </section>
+  ${standardsSection()}
+  ${secondaryAudienceLinks()}
+</main>
+${footer()}
+<a class="back-top" href="#top" aria-label="Back to top">↑ Top</a>
+</body>
+</html>
+`;
 }
-console.log(`  mean Grade ${mean} · ${scored.length - failing.length}/${scored.length} within target`);
-if (failing.length) {
-  console.warn(`\n⚠  ${failing.length} page(s) above the high-school target: ${failing.map((f) => `${f.slug} (${f.gradeLevel})`).join(", ")}`);
+
+// ---- deterministic artifact set + drift check ------------------------------
+function readabilityResult() {
+  const scored = pages
+    .map((p) => ({ slug: p.slug, ...analyze(businessCopy(p)) }))
+    .sort((a, b) => b.gradeLevel - a.gradeLevel);
+  const failing = scored.filter((s) => s.gradeLevel > READING_TARGET);
+  const mean = (scored.reduce((n, s) => n + s.gradeLevel, 0) / scored.length).toFixed(1);
+  const report =
+    `# Readability report — business-facing copy\n\n` +
+    `Metric: Flesch–Kincaid (the test Microsoft Word reports). Target: Grade ≤ ${READING_TARGET} ` +
+    `(high-school, plain English). Architecture and partner pages are scored under their own audience tiers and excluded here.\n\n` +
+    `Mean Grade: **${mean}** · within target: **${scored.length - failing.length}/${scored.length}**\n\n` +
+    `| Page | Grade | Reading ease | Words/sentence | Band |\n|---|---|---|---|---|\n` +
+    scored
+      .map((s) => `| ${s.slug} | ${s.gradeLevel} | ${s.readingEase} | ${s.wordsPerSentence} | ${band(s.gradeLevel)} |`)
+      .join("\n") +
+    `\n`;
+  return { scored, failing, mean, report };
 }
 
-// Persist a readability report artifact (Jekyll-ignored: starts with "_").
-const report =
-  `# Readability report — business-facing copy\n\n` +
-  `Metric: Flesch–Kincaid (the test Microsoft Word reports). Target: Grade ≤ ${READING_TARGET} ` +
-  `(high-school, plain English). Technical sections (standards, archetype-engine) are excluded by design.\n\n` +
-  `Mean Grade: **${mean}** · within target: **${scored.length - failing.length}/${scored.length}**\n\n` +
-  `| Page | Grade | Reading ease | Words/sentence | Band |\n|---|---|---|---|---|\n` +
-  scored
-    .map((s) => `| ${s.slug} | ${s.gradeLevel} | ${s.readingEase} | ${s.wordsPerSentence} | ${band(s.gradeLevel)} |`)
-    .join("\n") +
-  `\n`;
-writeFileSync(join(__dirname, "_readability-report.md"), report, "utf8");
-console.log("\nWrote _readability-report.md");
+export function buildOutputs() {
+  const outputs = new Map();
+  outputs.set("index.html", hubHTML());
+  outputs.set("partners.html", partnersHTML());
+  outputs.set("architecture.html", architectureHTML());
+  for (const page of pages) {
+    outputs.set(`${page.slug}.html`, pageHTML(page));
+    for (const archetype of resolveCanonicalLeaves(page)) {
+      const processModel = leafProcesses.find(
+        (candidate) => candidate.archetypeId === archetype.archetypeId,
+      );
+      outputs.set(
+        `archetypes/${archetype.archetypeId}.html`,
+        processModel ? leafProcessPageHTML(processModel, page.slug) : canonicalLeafHTML(archetype),
+      );
+    }
+  }
+  outputs.set("_readability-report.md", readabilityResult().report);
+  return outputs;
+}
+
+export function unexpectedLeafArtifacts(outputs, existingLeafFiles) {
+  return existingLeafFiles
+    .filter((file) => file.endsWith(".html") && !outputs.has(`archetypes/${file}`))
+    .map((file) => `archetypes/${file}`)
+    .sort();
+}
+
+function writeOrCheckOutputs(outputs, checkOnly) {
+  const stale = [];
+  for (const [relativePath, content] of outputs) {
+    const outputPath = join(__dirname, relativePath);
+    if (checkOnly) {
+      if (!existsSync(outputPath) || readFileSync(outputPath, "utf8") !== content) stale.push(relativePath);
+      continue;
+    }
+    mkdirSync(dirname(outputPath), { recursive: true });
+    writeFileSync(outputPath, content, "utf8");
+  }
+  if (checkOnly) {
+    const leafDirectory = join(__dirname, "archetypes");
+    const existingLeafFiles = existsSync(leafDirectory) ? readdirSync(leafDirectory) : [];
+    stale.push(...unexpectedLeafArtifacts(outputs, existingLeafFiles));
+  }
+  if (stale.length) {
+    console.error(`Public archetype projection is stale: ${stale.join(", ")}`);
+    process.exitCode = 1;
+  }
+  return stale;
+}
+
+function printReadability(result) {
+  console.log(`\nReadability of business-facing copy (target ≤ Grade ${READING_TARGET}):`);
+  for (const score of result.scored) {
+    const flag = score.gradeLevel > READING_TARGET ? "  ✗ OVER" : "  ✓";
+    console.log(`  ${score.slug.padEnd(34)} Grade ${String(score.gradeLevel).padStart(4)}  ease ${String(score.readingEase).padStart(4)}  ${band(score.gradeLevel)}${flag}`);
+  }
+  console.log(`  mean Grade ${result.mean} · ${result.scored.length - result.failing.length}/${result.scored.length} within target`);
+  if (result.failing.length) {
+    console.warn(`\n⚠  ${result.failing.length} page(s) above the high-school target: ${result.failing.map((f) => `${f.slug} (${f.gradeLevel})`).join(", ")}`);
+  }
+}
+
+const invokedPath = process.argv[1] ? resolve(process.argv[1]) : "";
+export function generateBusinessTypeOutputs(checkOnly = false) {
+  const outputs = buildOutputs();
+  const stale = writeOrCheckOutputs(outputs, checkOnly);
+  const pageCount = Array.from(outputs.keys()).filter((path) => path.endsWith(".html")).length;
+  if (checkOnly && stale.length === 0) {
+    console.log(`Public archetype projection is current (${pageCount} HTML pages).`);
+  } else if (!checkOnly) {
+    console.log(`Generated ${pageCount} HTML pages into ${__dirname}.`);
+  }
+  printReadability(readabilityResult());
+  return stale;
+}
+
+if (invokedPath === fileURLToPath(import.meta.url)) {
+  generateBusinessTypeOutputs(process.argv.includes("--check"));
+}

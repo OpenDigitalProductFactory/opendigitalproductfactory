@@ -24,6 +24,11 @@ export const TAB_REGISTRY: TabSpec[] = [
   { key: "ops", personas: ["operator", "employee", "admin"] },
   { key: "jobs", personas: ["operator", "employee", "admin"], capability: "work-items" },
   { key: "portfolio", personas: ["operator", "admin"] },
+  // Mileage is capability-gated: a field-mobile install (field service, trades,
+  // automotive, mobile beauty) exposes "mileage" and its drivers get the tab; a
+  // fixed-premises install never sees it. This is the archetype fit — the tab
+  // follows what the install actually does, not a global default.
+  { key: "mileage", personas: ["operator", "employee", "admin"], capability: "mileage" },
   { key: "customers", personas: ["operator", "employee", "customer", "admin"] },
   { key: "more", personas: ["operator", "employee", "customer", "admin"] },
 ];

@@ -1,6 +1,11 @@
 FROM node:24-alpine
 ARG DPF_PROMOTER_SOURCE_SHA=unknown
+ARG DPF_PROMOTER_RELEASE_TAG=unknown
+ARG DPF_PROMOTER_RELEASE_OWNER=unknown
 ARG DPF_PROMOTER_CONTRACT_DIGEST=unknown
+ENV DPF_CANDIDATE_SOURCE_SHA="${DPF_PROMOTER_SOURCE_SHA}" \
+    DPF_CANDIDATE_RELEASE_TAG="${DPF_PROMOTER_RELEASE_TAG}" \
+    DPF_CANDIDATE_RELEASE_OWNER="${DPF_PROMOTER_RELEASE_OWNER}"
 LABEL org.opencontainers.image.title="DPF Promoter"
 LABEL org.opencontainers.image.description="One-shot container that executes sandbox-to-production promotions"
 LABEL org.opencontainers.image.revision="${DPF_PROMOTER_SOURCE_SHA}"

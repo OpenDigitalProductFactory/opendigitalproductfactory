@@ -82,8 +82,9 @@ export function RunImpactDetail({
       return;
     }
     setExpanded(true);
-    // Fetch once per row — a second expand replays what is already held.
-    if (loadedRef.current || isPending) return;
+    // Fetch once per row — a second expand replays what is already held, and
+    // while reconnecting the retry effect already owns the next attempt.
+    if (loadedRef.current || isPending || reconnecting) return;
     setError(null);
     load();
   }

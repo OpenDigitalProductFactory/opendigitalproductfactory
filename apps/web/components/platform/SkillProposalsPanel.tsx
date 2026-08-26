@@ -169,7 +169,19 @@ function ProposalRow({
                   onClick={() =>
                     startTransition(async () => {
                       const result = await approveSkillProposalAction(proposal.proposalId);
-                      setFeedback(result.ok ? "Approved." : `Failed: ${result.error}`);
+                      if (!result.ok) {
+                        setFeedback(`Failed: ${result.error}`);
+                        return;
+                      }
+                      // Never report a bare success: an approval that did not
+                      // reach the seed file is reverted by the next reseed
+                      // (BI-5798BBA3), so say which happened.
+                      const p = result.data.propagation;
+                      setFeedback(
+                        p.status === "written"
+                          ? `Approved, and written to ${p.path}. Commit that file so the change survives a reseed.`
+                          : `Approved in the catalog only — NOT written to the shipped skill (${p.reason ?? p.status}). A reseed will revert it.`,
+                      );
                     })
                   }
                   style={primaryBtn}

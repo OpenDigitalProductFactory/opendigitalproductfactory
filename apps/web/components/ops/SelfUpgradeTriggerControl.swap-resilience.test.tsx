@@ -43,6 +43,7 @@ function makeE394(): Error {
 
 const baseProps = {
   enabled: true,
+  actionState: "update-available" as const,
   channel: "stable",
   latestRun: null,
 } as const;

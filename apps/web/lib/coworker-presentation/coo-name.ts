@@ -73,6 +73,27 @@ export function isStandingCooAgentId(agentId: string | null | undefined): boolea
   return agentId === "AGT-ORCH-000" || agentId === "coo";
 }
 
+export type CoworkerPresentationIdentity = {
+  primaryName: string;
+  roleName: string | null;
+};
+
+export function resolveCooPresentationIdentity({
+  agentId,
+  canonicalName,
+  conversationalName,
+}: {
+  agentId: string | null | undefined;
+  canonicalName: string;
+  conversationalName: string | null | undefined;
+}): CoworkerPresentationIdentity {
+  if (!isStandingCooAgentId(agentId)) return { primaryName: canonicalName, roleName: null };
+  const primaryName = normalizeCooConversationalName(conversationalName);
+  return primaryName
+    ? { primaryName, roleName: "AI COO" }
+    : { primaryName: canonicalName, roleName: null };
+}
+
 export function resolveCooPresentationName({
   agentId,
   canonicalName,
@@ -82,9 +103,8 @@ export function resolveCooPresentationName({
   canonicalName: string;
   conversationalName: string | null | undefined;
 }): string {
-  if (!isStandingCooAgentId(agentId)) return canonicalName;
-  const normalized = normalizeCooConversationalName(conversationalName);
-  return normalized ? `${normalized} · AI COO` : canonicalName;
+  const identity = resolveCooPresentationIdentity({ agentId, canonicalName, conversationalName });
+  return identity.roleName ? `${identity.primaryName} · ${identity.roleName}` : identity.primaryName;
 }
 
 export function presentStandingCoo<T extends { agentId: string; agentName: string }>(

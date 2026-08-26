@@ -11,13 +11,11 @@ import { generatePromotionId } from "@/lib/version-tracking";
 import { getSelfUpgradeConfig, nextMaintenanceWindowStart } from "@/lib/self-upgrade/config";
 import { resolveReleaseBatchStatus } from "@/lib/self-upgrade/release-batch-status";
 import { readSelfUpgradeSupport } from "@/lib/self-upgrade/support";
-import {
-  loadReleaseInstallContext,
-  resolveReleaseUpgradeCandidate,
-} from "@/lib/self-upgrade/release-target";
+import { resolveSelfUpgradeStatusTarget } from "@/lib/self-upgrade/status-target";
 import { computeNextScheduledUpgradeCheckAt } from "@/lib/self-upgrade/next-check";
-import { resolveTargetSha, isShaFresh } from "@/lib/self-upgrade/version";
+import { isShaFresh } from "@/lib/self-upgrade/version";
 import { getDeployedSha } from "@/lib/self-upgrade/completion";
+import { readCurrentContainerConfigDigest } from "@/lib/self-upgrade/runtime-image-identity";
 import { getJobEngineHealth } from "@/lib/queue/job-engine-health";
 import { createRun, failRun, getLatestRun, getLatestSucceededRun } from "@/lib/self-upgrade/run-store";
 import {
@@ -588,6 +586,7 @@ export async function getSelfUpgradeStatus() {
     latestSucceededRun,
     platformVersion,
     deployedSha,
+    currentConfigDigest,
     lastCheckedAt,
     quiescence,
     cooldownUntil,
@@ -602,6 +601,7 @@ export async function getSelfUpgradeStatus() {
     getLatestSucceededRun(),
     loadPlatformVersion(),
     getDeployedSha(),
+    readCurrentContainerConfigDigest(),
     getLastCheckedAt(),
     // Live drain activity (what's holding an upgrade) + the post-defer/fail
     // backoff window, so the panel can explain "what's happening" truthfully.
@@ -688,27 +688,13 @@ export async function getSelfUpgradeStatus() {
     checkIntervalHours: config.checkIntervalHours,
     now,
   });
-  let targetSha: string | null = null;
-  if (support.supported && support.targetKind === "release-artifact") {
-    const releaseContext = await loadReleaseInstallContext({
-      hostSourcePath:
-        config.hostSourceMountPath ??
-        process.env.DPF_SELF_UPGRADE_HOST_SOURCE_MOUNT ??
-        "/host-dpf",
-    });
-    if (releaseContext) {
-      const releaseTarget = await resolveReleaseUpgradeCandidate({
-        context: releaseContext,
-        currentSourceSha: deployedSha,
-      }).catch(() => null);
-      targetSha =
-        !releaseTarget || releaseTarget.kind === "no-published-target"
-          ? null
-          : releaseTarget.sourceSha;
-    }
-  } else if (support.supported) {
-    targetSha = await resolveTargetSha(config.channel, config);
-  }
+  const {
+    targetSha,
+    targetTag,
+    availability: targetAvailability,
+    unavailableReason: targetUnavailableReason,
+    releaseFreshness,
+  } = await resolveSelfUpgradeStatusTarget({ support, config, currentConfigDigest });
   // Merge-mode-aware freshness. In upstream/merge mode the deployed stamp is the
   // merge-commit identity, which CONTAINS but never EQUALS the upstream target —
   // so strict deployedSha===targetSha alone reports "Update available" forever,
@@ -719,10 +705,10 @@ export async function getSelfUpgradeStatus() {
   // already equals the target. This is the same signal the §5.0 worker skip-gate
   // (self-upgrade.ts: `lastOk?.targetSha === upstreamSha`) and the impact summary
   // use, so all three surfaces agree.
-  const isFresh = support.supported && targetSha
+  const isFresh = releaseFreshness ?? (support.supported && targetSha
     ? isShaFresh(deployedSha, targetSha) ||
       isShaFresh(latestSucceededRun?.targetSha ?? null, targetSha)
-    : false;
+    : false);
 
   // Release-batch tally for the panel ("N of M merged updates accumulated").
   // No fetch here — display rides the hourly scheduled fetch; a stale-by-
@@ -752,6 +738,10 @@ export async function getSelfUpgradeStatus() {
     deployedSha,
     deployedShaSource: platformVersion.imageVersion?.source ?? "unknown",
     targetSha,
+    targetTag,
+    targetAvailability,
+    targetUnavailableReason,
+    currentConfigDigest,
     isFresh,
     releaseBatch: {
       applicable: support.supported && releaseBatch.applicable,

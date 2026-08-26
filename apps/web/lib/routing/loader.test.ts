@@ -10,7 +10,7 @@ import type { InferenceDataScreenReceipt } from "@/lib/inference/data-screening/
 import type { RouteDecision } from "./types";
 import { MODEL_ROUTING_ENDPOINT_TYPES } from "./provider-eligibility";
 
-const { mockPrisma } = vi.hoisted(() => ({
+const { mockPrisma, mockProviderHasConfiguredCredential } = vi.hoisted(() => ({
   mockPrisma: {
     routeDecisionLog: {
       create: vi.fn().mockResolvedValue({ id: "decision-log-1" }),
@@ -25,9 +25,13 @@ const { mockPrisma } = vi.hoisted(() => ({
       findMany: vi.fn().mockResolvedValue([]),
     },
   },
+  mockProviderHasConfiguredCredential: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({ prisma: mockPrisma }));
+vi.mock("@/lib/ai-provider-internals", () => ({
+  providerHasConfiguredCredential: mockProviderHasConfiguredCredential,
+}));
 
 describe("persistRouteDecision", () => {
   beforeEach(() => {
@@ -122,6 +126,7 @@ describe("loadEndpointManifests", () => {
     vi.clearAllMocks();
     invalidateRoutingLoaderCache();
     mockPrisma.modelProfile.findMany.mockResolvedValue([]);
+    mockProviderHasConfiguredCredential.mockResolvedValue(true);
   });
 
   it("loads all model-routing endpoint types, including responses providers", async () => {
@@ -218,6 +223,31 @@ describe("routing-loader cache (BI-OPT-ROUTING-CACHE)", () => {
     mockPrisma.modelProfile.findMany.mockResolvedValue([profileRow]);
     mockPrisma.policyRule.findMany.mockResolvedValue([policyRow]);
     mockPrisma.endpointTaskPerformance.findMany.mockResolvedValue([overrideRow]);
+    mockProviderHasConfiguredCredential.mockResolvedValue(true);
+  });
+
+  it("excludes a credentialed provider that has no usable credential material", async () => {
+    mockPrisma.modelProfile.findMany.mockResolvedValue([
+      { ...profileRow, provider: { ...profileRow.provider, authMethod: "api_key" } },
+    ]);
+    mockProviderHasConfiguredCredential.mockResolvedValue(false);
+
+    expect(await loadEndpointManifests(900_000)).toEqual([]);
+    expect(mockProviderHasConfiguredCredential).toHaveBeenCalledWith("anthropic", "api_key");
+  });
+
+  it("keeps a no-auth local provider eligible", async () => {
+    mockPrisma.modelProfile.findMany.mockResolvedValue([
+      {
+        ...profileRow,
+        providerId: "docker-model-runner",
+        provider: { ...profileRow.provider, authMethod: "none" },
+      },
+    ]);
+
+    const manifests = await loadEndpointManifests(900_001);
+    expect(manifests).toHaveLength(1);
+    expect(mockProviderHasConfiguredCredential).toHaveBeenCalledWith("docker-model-runner", "none");
   });
 
   it("loads each loader's DB rows exactly once across a 200-iteration turn", async () => {

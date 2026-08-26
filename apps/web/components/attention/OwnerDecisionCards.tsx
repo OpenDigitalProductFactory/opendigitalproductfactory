@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import type { OwnerAttentionEntry } from "@/lib/attention/owner-projection";
 import { ExpandableCard, StatusBadge } from "@/components/ui/report-kit";
+import { CoworkerEnvelopeApproval } from "./CoworkerEnvelopeApproval";
 import { CoworkerProposalActions } from "./CoworkerProposalActions";
 import { ProactivityProposalActions } from "./ProactivityProposalActions";
 import { ResearchProposalActions } from "./ResearchProposalActions";
@@ -111,6 +112,13 @@ function DecisionSummary({ entry }: { entry: OwnerAttentionEntry }) {
 }
 
 function DecisionActions({ entry }: { entry: OwnerAttentionEntry }) {
+  // First, and by source — an envelope decision never falls through to the
+  // AgentActionProposal branches below (BI-7CB2CCDE).
+  if (entry.item.source === "coworker-envelope") {
+    return entry.item.envelope ? (
+      <CoworkerEnvelopeApproval approval={entry.item.envelope} />
+    ) : null;
+  }
   if (entry.item.source === "research-proposal") {
     return (
       <ResearchProposalActions

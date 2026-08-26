@@ -488,7 +488,9 @@ describe("generated route-shell registry", () => {
     // 200 -> 201: /platform/tools/integrations/wordpress is a bounded operator detail
     // route over connection, projection, receipt, and drift read models; its measured
     // preview is deterministic and carries an explicit page-purpose contract.
-    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(201);
+    // 201 -> 202: /finance/mileage is a net-new driver-facing route (EP-MILEAGE-ABSORB)
+    // — the surface that makes the mileage substrate reachable.
+    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(204);
     // 110 -> 113: the three exclusions above. Product Direction then adds seven
     // explicitly classified dynamic routes, bringing the combined total to 120.
     // 120 -> 121: /platform/ai/operations-map.
