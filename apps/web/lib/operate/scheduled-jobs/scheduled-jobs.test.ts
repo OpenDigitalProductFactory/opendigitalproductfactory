@@ -1,9 +1,8 @@
 // BI-5A42E572 / EP-PROACTIVE-OPS — Scheduled Jobs core + catalog tests.
 //
-// Focuses on the policy that must never regress: classification correctness
-// and the core-locked refusal that protects platform-integrity crons from both
-// operators and coworkers. These paths short-circuit before any DB/Inngest I/O,
-// so no mocks are needed.
+// Focuses on catalog classification correctness. The mutation-policy guards
+// (core-locked refusal, cadence validation, one-shot refusal) moved with the
+// mutations themselves and are covered in ./control.test.ts.
 
 import { describe, it, expect } from "vitest";
 
@@ -12,12 +11,7 @@ import {
   getCatalogEntry,
   isCatalogJobLocked,
 } from "./catalog";
-import {
-  updateJobSchedule,
-  setJobEnabled,
-  runJobNow,
-  EDITABLE_SCHEDULE_OPTIONS,
-} from "./core";
+import { EDITABLE_SCHEDULE_OPTIONS } from "./control";
 
 describe("scheduled-job catalog", () => {
   it("has unique jobIds and inngestIds", () => {
@@ -46,37 +40,9 @@ describe("scheduled-job catalog", () => {
   });
 });
 
-describe("core-locked enforcement (shared by operator + coworker paths)", () => {
-  it("refuses to edit a core-locked job's schedule", async () => {
-    const res = await updateJobSchedule("code-graph-reconcile", "hourly", "test");
-    expect(res.ok).toBe(false);
-    if (!res.ok) expect(res.error).toMatch(/core-locked/);
-  });
-
-  it("refuses to enable/disable a core-locked job", async () => {
-    const res = await setJobEnabled("code-graph-reconcile", false, "test");
-    expect(res.ok).toBe(false);
-    if (!res.ok) expect(res.error).toMatch(/core-locked/);
-  });
-});
-
-describe("editable-job validation", () => {
-  it("rejects an unknown schedule token before touching the DB", async () => {
-    const res = await updateJobSchedule("issue-report-triage", "every-3000-years", "test");
-    expect(res.ok).toBe(false);
-    if (!res.ok) expect(res.error).toMatch(/Invalid schedule/);
-  });
-
-  it("exposes the canonical editable cadence options including disabled", () => {
+describe("editable cadence presets", () => {
+  it("exposes the canonical presets including disabled", () => {
     expect(EDITABLE_SCHEDULE_OPTIONS).toContain("hourly");
     expect(EDITABLE_SCHEDULE_OPTIONS).toContain("disabled");
-  });
-});
-
-describe("run-now eligibility", () => {
-  it("refuses run-now for a job with no manual-trigger event", async () => {
-    const res = await runJobNow("infra-prune", "test");
-    expect(res.ok).toBe(false);
-    if (!res.ok) expect(res.error).toMatch(/no manual-trigger event/);
   });
 });

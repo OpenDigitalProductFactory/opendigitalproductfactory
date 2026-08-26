@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 687,
+  "pageCount": 688,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -4327,6 +4327,20 @@
         "anti-pattern",
         "penalty",
         "related-principles"
+      ]
+    },
+    "docs/founder-kernel/wiki/principles/prose-is-not-a-control-gate.md": {
+      "publicHref": "/founder-kernel/wiki/principles/prose-is-not-a-control-gate/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "prose-is-not-a-control-gate",
+        "why-this-is-a-commandment",
+        "where-this-was-named",
+        "what-this-requires",
+        "relationship-to-neighbouring-principles",
+        "counter-case"
       ]
     },
     "docs/founder-kernel/wiki/principles/reap-sidecars-to-upgrade-tools.md": {
@@ -10674,7 +10688,8 @@
         "key-concepts",
         "what-you-can-do",
         "graph-explorer",
-        "hive-result-review"
+        "hive-result-review",
+        "scheduled-work"
       ]
     },
     "docs/user-guide/ai-workforce/ai-cost-governance.md": {
@@ -11700,7 +11715,11 @@
         "being-reached-when-you-are-away",
         "business-journeys",
         "promoter-timeout",
-        "platform-stack-currency"
+        "platform-stack-currency",
+        "what-this-installation-is",
+        "who-runs-this-installation",
+        "what-your-ai-coworkers-may-do-here",
+        "correcting-the-identity"
       ]
     },
     "docs/user-guide/operations/infrastructure-discovery.md": {
@@ -12101,7 +12120,7 @@
         "operations-and-performance",
         "spatial-operations-for-tables-and-rooms",
         "confirming-an-operational-suggestion",
-        "what-this-installation-is",
+        "which-installation-you-are-on",
         "correcting-the-identity",
         "key-concepts",
         "what-you-can-do"

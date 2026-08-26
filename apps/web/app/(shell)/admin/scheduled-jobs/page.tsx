@@ -1,21 +1,18 @@
 import { AdminTabNav } from "@/components/admin/AdminTabNav";
 
 import { listScheduledJobsAction } from "@/lib/actions/scheduled-jobs";
-import { SCHEDULING_MAP } from "@/lib/operate/scheduled-jobs/scheduling-map";
 
 import { ScheduledJobsClient } from "./ScheduledJobsClient";
-import { SchedulingTimeline } from "./SchedulingTimeline";
 
 export const dynamic = "force-dynamic";
 
 /**
  * Admin → Advanced → Scheduled Jobs.
  *
- * BI-5A42E572 / EP-PROACTIVE-OPS. Operational visibility + control for the
- * platform's background schedule — born from a code-graph reconcile cron that
- * sat silently off for 13 days. Lists every scheduled job (code-defined Inngest
- * crons + data-driven ScheduledJob rows), badged core-locked vs editable, with
- * last/next run, health, and operator controls for editable jobs.
+ * EP-SCHEDULING-SURFACE (BI-5A42E572 origin) — operational visibility and
+ * control over everything the platform runs on a cadence, across both
+ * scheduling substrates: code-defined Inngest crons and the proactive AI
+ * coworker tasks the agent dispatcher drives.
  *
  * Operator sees clicks only — never CLI — per the never-ask-user-to-run-commands
  * kernel commandment.
@@ -26,17 +23,13 @@ export default async function ScheduledJobsAdminPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-[var(--dpf-text)]">Scheduled Jobs</h1>
+        <h1 className="text-xl font-bold text-[var(--dpf-text)]">Scheduled work</h1>
         <p className="text-sm text-[var(--dpf-muted)] mt-0.5">
-          Every background job on the platform schedule. Core-locked jobs are
-          essential to platform integrity (read-only); editable jobs can be
-          retuned, enabled/disabled, or run on demand.
+          Coworker tasks and platform crons. Run on demand, or retire what is spent.
         </p>
       </div>
 
       <AdminTabNav />
-
-      <SchedulingTimeline entries={SCHEDULING_MAP} />
 
       <ScheduledJobsClient initialJobs={jobs} />
     </div>
