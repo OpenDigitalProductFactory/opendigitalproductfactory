@@ -9,6 +9,8 @@ import { prisma } from "@dpf/db";
 import { dockerSocketGet } from "./docker-socket.mjs";
 export { boundedDockerSocketGet } from "./docker-socket.mjs";
 
+import { getErrorMessage } from "@/lib/shared/get-error-message";
+
 import {
   diagnoseCapabilityStateDivergence,
   isCapabilityStateStaleError,
@@ -73,9 +75,7 @@ export function createOperationalCapabilityState(input: {
       enabledRuntimeCapabilities: input.installSnapshot.enabledRuntimeCapabilities,
       capabilityStates: input.capabilityStates,
     });
-    const enriched = new Error(
-      `${error instanceof Error ? error.message : String(error)} — ${report.summary}`,
-    );
+    const enriched = new Error(`${getErrorMessage(error)} — ${report.summary}`);
     // Keep the machine-readable report on the error so a caller that wants to
     // render the condition does not have to re-derive it from prose.
     (enriched as Error & { divergence?: unknown }).divergence = report;

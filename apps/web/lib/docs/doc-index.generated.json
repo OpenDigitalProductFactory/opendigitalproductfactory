@@ -1187,6 +1187,7 @@
         "install-upgrade-consumer-assets-and-rollback",
         "backup-and-health-semantics",
         "observation-and-diagnostics-boundary",
+        "diagnosing-capability-drift-bi-5acbac50",
         "safe-operating-rules"
       ]
     },
