@@ -215,7 +215,7 @@ describe("buildRemoteProvisioningPlan", () => {
       nativeRelease: release(),
     });
     expect(plan.commands[0]?.kind).toBe("native");
-    expect(plan.nativeBinaryNote).toContain("sees the host's real NICs");
+    expect(plan.nativeBinaryNote).toContain("sees the real network");
     expect(plan.nativeBinaryNote).not.toContain("not published");
   });
 
@@ -226,7 +226,7 @@ describe("buildRemoteProvisioningPlan", () => {
       os: "linux",
       nativeRelease: release(),
     });
-    expect(plan.nativeBinaryNote).toContain("no native agent");
+    expect(plan.nativeBinaryNote).toContain("No native agent is published");
     expect(plan.commands.every((command) => command.kind === "container")).toBe(true);
   });
 

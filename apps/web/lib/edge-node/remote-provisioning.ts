@@ -406,11 +406,11 @@ export function renderEdgeInstallCommands(input: {
 
 /** Shown when this release publishes no native asset for the chosen host. */
 const NATIVE_BINARY_UNAVAILABLE_NOTE =
-  "This release publishes no native agent for this operating system and architecture, so only the container command is offered. On Docker Desktop that enrols the node and proves the path but cannot see the host's real LAN. Build one with `make build-all` from services/edge-node-go, or use a release that carries the asset.";
+  "No native agent is published for this system, so only the container command is offered. On Docker Desktop that enrols the node but cannot see the real LAN.";
 
 /** Shown when the native path IS offered. */
 const NATIVE_BINARY_AVAILABLE_NOTE =
-  "The native agent sees the host's real NICs, which the Docker Desktop container cannot. Its download is verified against the release's published SHA-256 manifest before it runs, and `--preflight` names the cause if it cannot reach the Authority.";
+  "The native agent sees the real network, which a Docker Desktop container cannot. Its download is checksum-verified, and `--preflight` names any connection problem.";
 
 /**
  * Compose a full remote-provisioning plan: assess the URL, render the
