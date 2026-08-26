@@ -30,6 +30,33 @@ A review turn that runs no tools writes no evidence. The gate reads evidence, so
 the work stops until a human intervenes. A 30-second rate-limit becomes an
 open-ended block.
 
+## Evidence
+
+The cap flips on one install, same agent, minutes apart, with no configuration
+change between runs:
+
+```
+23:58:51 AGT-WS-PORTFOLIO authorized=189 attached=15 cap=15
+00:02:59 AGT-WS-PORTFOLIO authorized=189 attached=48 cap=48
+00:07:43 AGT-WS-PORTFOLIO authorized=189 attached=15 cap=15
+```
+
+That install carries no measured fidelity, so its selection ceiling is 15 and a
+cap of 48 can only come from a null served window. The probe is the only input
+that varies. Probed from inside the portal container it answers `/v1/models` and
+`/engines/_configure` in about 4 ms when idle — so the failure is intermittent
+and load-dependent, which is exactly when a coworker turn runs.
+
+`resolveLocalServedContextTokens` returns null from four branches. One means
+absence. Three mean an unread probe. Nothing distinguishes them, and the module
+logs nothing on any of them, so the degrade left no trace.
+
+`fallback.ts` asserted the two ends already agreed: "the coworker-tool-budget
+caps its total attachment to the same constant, so a budgeted surface is never
+disqualified here". The assertion is false in both directions — a null posture
+widens the budget past the gate, and a measured fidelity ceiling would widen it
+further while the gate stayed at 15.
+
 ## Contracts
 
 **CONTRACT-POSTURE.** `resolveLocalServingPosture` returns served tokens plus a
