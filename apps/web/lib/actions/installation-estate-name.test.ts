@@ -43,7 +43,7 @@ describe("declareEstateName", () => {
   it("stores a valid name with its source and who set it", async () => {
     const result = await declareEstateName("Northwind");
 
-    expect(result).toEqual({ ok: true, estateName: "Northwind" });
+    expect(result).toEqual({ ok: true, data: { estateName: "Northwind" } });
     const written = mocks.platformConfig.upsert.mock.calls[0]?.[0]?.create?.value;
     expect(written).toMatchObject({
       schemaVersion: 1,
@@ -55,13 +55,13 @@ describe("declareEstateName", () => {
 
   it("normalizes sloppy whitespace rather than refusing it", async () => {
     const result = await declareEstateName("  Northwind   Group  ");
-    expect(result).toEqual({ ok: true, estateName: "Northwind Group" });
+    expect(result).toEqual({ ok: true, data: { estateName: "Northwind Group" } });
   });
 
   it("clears the record on an empty submission, keeping unnamed a single state", async () => {
     const result = await declareEstateName("   ");
 
-    expect(result).toEqual({ ok: true, estateName: null });
+    expect(result).toEqual({ ok: true, data: { estateName: null } });
     expect(mocks.platformConfig.deleteMany).toHaveBeenCalled();
     expect(mocks.platformConfig.upsert).not.toHaveBeenCalled();
   });

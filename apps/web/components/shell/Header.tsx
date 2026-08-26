@@ -140,7 +140,7 @@ export function Header({ platformRole, brandName, brandLogoUrl, brandLogoUrlLigh
             href={installationHref}
             data-testid="installation-badge"
             title={`${installationBadge} installation — open the details`}
-            className="shrink-0 rounded-full border border-[var(--dpf-warning)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--dpf-warning)]"
+            className="shrink-0 rounded-full border border-[var(--dpf-warning)] px-2 py-0.5 text-dpf-caption font-bold uppercase tracking-wider text-[var(--dpf-warning)]"
           >
             {installationBadge}
           </Link>

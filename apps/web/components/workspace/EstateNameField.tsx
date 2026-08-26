@@ -47,8 +47,8 @@ export function EstateNameField({
         return;
       }
       setMessage(
-        result.estateName
-          ? `Saved. Your coworkers now see this installation as ${result.estateName}.`
+        result.data.estateName
+          ? `Saved. Your coworkers now see this installation as ${result.data.estateName}.`
           : "Saved. This installation no longer carries a name.",
       );
       router.refresh();

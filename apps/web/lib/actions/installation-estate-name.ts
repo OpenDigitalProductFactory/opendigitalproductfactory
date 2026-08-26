@@ -30,11 +30,14 @@ import {
   type PortalEstateIdentityDeclarationV1,
 } from "@/lib/install/estate-identity-contract";
 import { requireCapability } from "@/lib/actions/shared/guards";
+import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 import { resolvePrincipalIdForUser } from "@/lib/identity/principal-linking";
 
-export type DeclareEstateNameResult =
-  | { ok: true; estateName: string | null }
-  | { ok: false; error: string };
+/** Composed from the canonical ActionResult primitive (BI-1CED89B9) rather than
+ *  hand-inlined, so the discriminant cannot drift and the one-ActionResult
+ *  ratchet stays green. The payload carries the name now in force, which is null
+ *  when the operator cleared it. */
+export type DeclareEstateNameResult = ActionResult<{ estateName: string | null }>;
 
 /**
  * Record — or clear — the estate name for this installation.
@@ -54,17 +57,15 @@ export async function declareEstateName(
   if (trimmed.length === 0) {
     await prisma.platformConfig.deleteMany({ where: { key: ESTATE_IDENTITY_CONFIG_KEY } });
     revalidatePath("/ops/installation");
-    return { ok: true, estateName: null };
+    return ok({ estateName: null });
   }
 
   const estateName = normalizeEstateName(trimmed);
   if (estateName === null) {
-    return {
-      ok: false,
-      error:
-        `Use letters, numbers, spaces, dots, dashes or underscores, starting with a letter or number, up to ${ESTATE_NAME_MAX_LENGTH} characters. ` +
+    return err(
+      `Use letters, numbers, spaces, dots, dashes or underscores, starting with a letter or number, up to ${ESTATE_NAME_MAX_LENGTH} characters. ` +
         "The name is published to peers on your network and to connected agents, so it has to survive both.",
-    };
+    );
   }
 
   const principalId = (await resolvePrincipalIdForUser(userId)) ?? userId;
@@ -88,5 +89,5 @@ export async function declareEstateName(
   // The badge is rendered by the shell layout, so the whole tree has to revalidate
   // for a rename to reach the header rather than only this page.
   revalidatePath("/", "layout");
-  return { ok: true, estateName };
+  return ok({ estateName });
 }
