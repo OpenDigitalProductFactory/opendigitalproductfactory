@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 688,
+  "pageCount": 689,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -6803,6 +6803,18 @@
       "anchors": [
         "heuristic",
         "sources"
+      ]
+    },
+    "docs/professions/finance/wiki/bank-reconciliation.md": {
+      "publicHref": "/professions/finance/wiki/bank-reconciliation/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "definition",
+        "the-loop",
+        "discipline",
+        "why-it-matters"
       ]
     },
     "docs/professions/finance/wiki/double-entry-invariant.md": {
