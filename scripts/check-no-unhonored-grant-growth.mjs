@@ -59,6 +59,13 @@ export const TOOL_TO_GRANTS_SOURCES = Object.freeze([
     path: "apps/web/lib/tak/initiative-readiness-tool-grants.ts",
     pattern: /INITIATIVE_READINESS_TOOL_GRANTS[^=]*= \{([\s\S]*?)\n\}/,
   },
+  {
+    // Banking books-loop domain map (S-FIN, BI-DE27D34E), spread into
+    // TOOL_TO_GRANTS. Registering it here so banking_read/banking_write read as
+    // honored — the Bookkeeper coworker (S-BK) holds them.
+    path: "apps/web/lib/tak/banking-tool-grants.ts",
+    pattern: /BANKING_TOOL_GRANTS[^=]*= \{([\s\S]*?)\n\}/,
+  },
 ]);
 
 const BUDGET = Object.freeze({ owner: "platform-architecture", expiry: "2026-11-16" });

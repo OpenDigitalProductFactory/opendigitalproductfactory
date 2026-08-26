@@ -265,6 +265,22 @@ export const COWORKER_AGENT_SEEDS: readonly CoworkerAgentSeed[] = [
     valueStream: "cross-cutting",
     sensitivity: "confidential",
   },
+  // Bookkeeper (BI-7D50DC56, slice S-BK of the Bookkeeping Work Room). Distinct
+  // from the Finance Controller's oversight role: the bookkeeper does the
+  // day-to-day transaction-level work — set up bank/card accounts, import
+  // statements, categorize via bank rules, and reconcile against payments,
+  // through the governed banking tools (BI-DE27D34E, S-FIN). Money-of-record
+  // writes (account setup, statement import) route the governance gate.
+  {
+    agentId: "bookkeeper",
+    slugId: "bookkeeper",
+    name: "Bookkeeper",
+    tier: 2,
+    type: "coworker",
+    description: "Keeps the books current from bank/card statements: account setup, statement import, bank-rule categorization, and reconciliation, with owner approval for money-of-record writes",
+    valueStream: "operate",
+    sensitivity: "confidential",
+  },
   // Field-dispatch coordinator for field-service archetypes. It coordinates the
   // field-service job lifecycle: scheduling, crew assignment, and customer
   // notification proposals.
@@ -480,6 +496,24 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
   ],
   "legal-operations-counsel": ["file_read", "document_read", "document_write", "registry_read"],
   "finance-controller": ["registry_read", "backlog_read", "portfolio_read"],
+  // Bookkeeper (S-BK): the day-to-day books loop. banking_read/banking_write drive
+  // the governed banking tools (S-FIN); enrichment_write resolves vendor→supplier
+  // (BI-B2497DFB); crm_read/write for counterparties; document_read for
+  // receipts/statements; work_room_read/write to participate in the Bookkeeping
+  // Work Room. These MATCH the agent_registry.json config_profile.tool_grants for
+  // bookkeeper, so there is no seed↔registry divergence to sanction.
+  bookkeeper: [
+    "banking_read",
+    "banking_write",
+    "enrichment_write",
+    "crm_read",
+    "crm_write",
+    "document_read",
+    "work_room_read",
+    "work_room_write",
+    "registry_read",
+    "backlog_read",
+  ],
   // Reads field-service jobs and customer contact data, updates job status, and
   // proposes customer notifications for approval.
   dispatcher: ["backlog_read", "backlog_write", "consumer_read", "consumer_write", "registry_read"],

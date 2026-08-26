@@ -464,6 +464,29 @@ ON THIS PAGE: The user is in Finance. When asked for income vs expenses this mon
       { label: "Report an issue", description: "Report a bug or give feedback", capability: null, prompt: "I'd like to report an issue or give feedback about this page." },
     ],
   },
+  // Bookkeeper on the banking pages (S-BK). Longest-prefix match: the bookkeeper
+  // wins on /finance/banking* while the Finance Specialist keeps /finance. Its
+  // home is the books loop — account setup, statement import, rule-based
+  // categorization, and reconciliation — driven by the governed banking tools.
+  "/finance/banking": {
+    agentId: "bookkeeper",
+    agentName: "Bookkeeper",
+    agentDescription: "Keeps the books current from bank/card statements: account setup, statement import, bank-rule categorization, and reconciliation",
+    capability: "view_finance",
+    sensitivity: "confidential",
+    systemPrompt: `You are the Bookkeeper.
+
+INTERPRETIVE MODEL: You keep the books current and trustworthy. A healthy account has its statements imported for the period, recurring transactions categorized by bank rules, and every line reconciled against a recorded payment — with the exceptions surfaced, not hidden. You never invent an amount: figures come from the statement, and a gap (a missing receipt, an unparseable row, a statement not yet provided) is raised as an open item.
+
+ON THIS PAGE: The user is in Banking. Work the reconciliation loop: use list_bank_accounts to find the account, get_reconciliation_summary to see how current it is and what remains, and get_bank_transactions to inspect unmatched lines. To categorize automatically, propose bank rules with create_bank_rule. To reconcile a line, use suggest_transaction_matches then match_transaction against the right payment; unmatch_transaction corrects a wrong match. Setting up an account (create_bank_account) and importing a statement (import_bank_statement) are money-of-record actions that route to the owner for approval — surface what you intend and let the owner confirm. When you need a real statement export you do not have, ask for it with the exact account and period rather than proceeding on assumptions. End with the one reconciliation step that most improves how current the books are.`,
+    skills: [
+      { label: "How current are our books?", description: "Reconciliation status per account: matched vs unmatched, balance, last reconciled", capability: "view_finance", prompt: "Give me the reconciliation status of each bank/card account — what's matched, what's still unmatched, and how current the books are." },
+      { label: "Reconcile unmatched transactions", description: "Walk the unmatched lines and match them against recorded payments", capability: "manage_finance", prompt: "Walk our unmatched bank transactions and reconcile each one against the right recorded payment, surfacing anything you can't match." },
+      { label: "Set up categorization rules", description: "Propose bank rules to auto-categorize recurring vendors", capability: "manage_finance", prompt: "Look at our recent transactions and propose bank rules to auto-categorize the recurring vendors." },
+      { label: "Import a statement", description: "Import a bank/card statement export (owner-approved)", capability: "manage_finance", prompt: "Help me import a bank or card statement — tell me exactly which account and what the export needs to contain, then walk the import and surface any rows that couldn't be parsed." },
+      { label: "Report an issue", description: "Report a bug or give feedback", capability: null, prompt: "I'd like to report an issue or give feedback about this page." },
+    ],
+  },
   "/ops": {
     agentId: "ops-coordinator",
     agentName: "Scrum Master",

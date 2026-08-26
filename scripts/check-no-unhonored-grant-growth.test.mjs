@@ -129,5 +129,5 @@ test("live tree: extraction finds a non-trivial honored set (regex not rotted)",
 });
 
 test("live tree: the composed sources all exist and parse", () => {
-  assert.equal(TOOL_TO_GRANTS_SOURCES.length, 3);
+  assert.equal(TOOL_TO_GRANTS_SOURCES.length, 4);
 });

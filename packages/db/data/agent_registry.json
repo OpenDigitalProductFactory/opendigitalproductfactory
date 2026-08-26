@@ -3528,6 +3528,57 @@
           "web_search"
         ]
       }
+    },
+    {
+      "agent_id": "AGT-907",
+      "agent_name": "bookkeeper",
+      "tier": "operate",
+      "value_stream": "operate",
+      "role": "specialist",
+      "capability_domain": "Day-to-day bookkeeping: bank/card account setup, statement import, bank-rule categorization, and reconciliation of transactions against recorded payments; money-of-record writes route the governance gate for owner approval (BI-7D50DC56, S-BK)",
+      "human_supervisor_id": "HR-400",
+      "hitl_tier_default": 1,
+      "delegates_to": [],
+      "escalates_to": "HR-400",
+      "it4it_sections": [
+        "ITFM"
+      ],
+      "status": "defined",
+      "config_profile": {
+        "model_binding": {
+          "model_id": "claude-haiku-4-5-20251001",
+          "temperature": 0.1,
+          "max_tokens": 2048,
+          "provider_id": "anthropic",
+          "credential_ref": "anthropic-prod",
+          "auth_type": "api_key"
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 60
+        },
+        "token_budget": {
+          "daily_limit": 100000,
+          "per_task_limit": 5000
+        },
+        "tool_grants": [
+          "banking_read",
+          "banking_write",
+          "enrichment_write",
+          "crm_read",
+          "crm_write",
+          "document_read",
+          "work_room_read",
+          "work_room_write",
+          "registry_read",
+          "backlog_read"
+        ],
+        "memory": {
+          "type": "none",
+          "backend": null
+        },
+        "concurrency_limit": 8
+      }
     }
   ]
 }
