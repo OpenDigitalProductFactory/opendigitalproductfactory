@@ -55,7 +55,46 @@ const ALLOWLIST = new Set([
   // (BI-ED117C82).
   "apps/web/lib/wiki/embedding-coverage-workroom.ts",]);
 
-const PATTERNS = [/status:\s*["']working["']/];
+const WORKING_WRITE_RE = /status:\s*["']working["']/;
+
+/**
+ * BI-3B6DC1DC: only a TASK RUN write is this guard's business.
+ *
+ * The guard exists so `TaskRun.status = "working"` always lands with
+ * `lastHeartbeatAt`, or the stall watchdog false-positives. It used to match
+ * the literal anywhere in a file, so a Workroom upsert — a different model,
+ * with no heartbeat contract at all — tripped a TaskRun guard and had to be
+ * allowlisted. Every such entry makes the allowlist a weaker signal about the
+ * thing the guard actually protects.
+ *
+ * A hit counts only when the same statement touches a taskRun delegate or a
+ * TaskRun-shaped identifier. `sliceStatement` keeps that check local: a
+ * Workroom write ten lines above a TaskRun write must not launder it.
+ */
+const TASK_RUN_CONTEXT_RE =
+  /\b(taskRun|taskRuns|TaskRun|task_run)\b|\btaskRunId\b/;
+
+/** The statement around an index — bounded by braces, semicolons or blank lines. */
+export function sliceStatement(body, index) {
+  const start = Math.max(
+    body.lastIndexOf("await ", index),
+    body.lastIndexOf("\n\n", index),
+    body.lastIndexOf(";", index),
+  );
+  const end = body.indexOf(";", index);
+  return body.slice(start === -1 ? 0 : start, end === -1 ? body.length : end + 1);
+}
+
+/** Every bare working-write in `body` that belongs to a TaskRun. */
+export function findTaskRunWorkingWrites(body) {
+  const hits = [];
+  const re = new RegExp(WORKING_WRITE_RE.source, "g");
+  for (const match of body.matchAll(re)) {
+    const statement = sliceStatement(body, match.index ?? 0);
+    if (TASK_RUN_CONTEXT_RE.test(statement)) hits.push(statement.trim().slice(0, 200));
+  }
+  return hits;
+}
 
 function* walk(dir) {
   for (const entry of readdirSync(dir)) {
@@ -83,8 +122,8 @@ for (const file of walk(SCAN_DIR)) {
   } catch {
     continue;
   }
-  const hit = PATTERNS.some((p) => p.test(body));
-  if (!hit) continue;
+  const hits = findTaskRunWorkingWrites(body);
+  if (hits.length === 0) continue;
 
   const rel = relative(ROOT, file).replace(/\\/g, "/");
   if (ALLOWLIST.has(rel)) continue;

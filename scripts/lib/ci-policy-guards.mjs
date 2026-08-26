@@ -37,6 +37,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
   source: Object.freeze([
     guard("repo-guard-loop", "Repo Guard Loop", [
       node("--test", "scripts/check-guards.test.mjs"),
+      // BI-3B6DC1DC: the TaskRun working-write guard now scopes by model, so its
+      // own behaviour is under test rather than trusted.
+      node("--test", "scripts/check-no-bare-working-write.test.mjs"),
       node("--test", "scripts/host-resource-runner.test.mjs"),
       node("scripts/check-guards.mjs"),
       node("--test", "scripts/check-capability-compose-profiles.test.mjs"),
