@@ -81,7 +81,10 @@ const CLASS_RULES: readonly ClassRule[] = [
     dataClass: "employee-records",
     reason: "employee-record-field",
     confidence: "inferred",
-    pathPattern: /\b(?:employee|salary|discipline|payroll|performance[-_ ]?review)\b/i,
+    // `disciplinary` and `employeeDiscipline` name employment records and nothing
+    // else. Bare `discipline` does not — it is a field of practice as often as an
+    // HR action — so it sits in the corroboration-gated rule below (BI-3F608240).
+    pathPattern: /\b(?:employee|salary|disciplinary|employee[-_ ]?discipline|payroll|performance[-_ ]?review)\b/i,
   },
   {
     dataClass: "employee-records",
@@ -99,7 +102,7 @@ const CLASS_RULES: readonly ClassRule[] = [
     reason: "employee-record-ambiguous-term",
     confidence: "inferred",
     ambiguousVocabulary: true,
-    pathPattern: /\b(?:worker|compensation|benefit|performance|manager)\b/i,
+    pathPattern: /\b(?:worker|compensation|benefit|performance|manager|discipline)\b/i,
     textPattern: EMPLOYEE_RECORD_AMBIGUOUS_VALUE_PATTERN,
   },
   {
