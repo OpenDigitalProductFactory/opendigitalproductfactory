@@ -177,7 +177,14 @@ export function BuildStudioWorkflowActionCard({
     setLastOutcome(null);
     try {
       if (action.kind === "approve-start") {
-        await approveBuildStart(build.buildId);
+        // BI-CE1AB982: the dispatch pre-flight reports "no engine can run this"
+        // as a value, so the owner reads the real cause instead of a stripped
+        // production digest. Same contract as advance-phase below.
+        const outcome = await approveBuildStart(build.buildId);
+        if (!outcome.ok) {
+          setError(outcome.message);
+          return;
+        }
       } else if (action.kind === "record-acceptance") {
         await recordBuildAcceptance(build.buildId);
       } else if (action.kind === "run-review-verification") {
