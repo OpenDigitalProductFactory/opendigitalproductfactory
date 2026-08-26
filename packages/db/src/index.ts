@@ -392,6 +392,7 @@ export {
   DOC_IMPACT_SOURCE_LABEL,
   DOC_PAGE_LABEL,
   docPageKey,
+  countDocPagesInManifest,
   planDocImpactProjection,
   routeKey,
   sourceFileKey,
@@ -400,6 +401,17 @@ export {
 } from "./doc-impact-graph";
 export { projectDocImpactManifest } from "./doc-impact-graph-sync";
 export { rebuildKnowledgeAndPortfolioGraph } from "./knowledge-portfolio-graph-sync";
+// Import-safe by construction (no dotenv, no CLI specifiers) — the same split that
+// keeps a runner out of the Next bundle applies here (BI-FEDFABF6).
+export {
+  classifyProjection,
+  hasProjectionFault,
+  PORTFOLIO_LABELS,
+  reconcileGraphProjections,
+  WIKI_LABEL_PREFIX,
+  type ProjectionReconciliation,
+  type ProjectionStatus,
+} from "./graph-projection-reconcile";
 export {
   readCanonicalPrismaSchema,
   listCanonicalPrismaSchemaFiles,
