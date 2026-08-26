@@ -53,10 +53,23 @@ export function WorkroomDefaultControl({
     });
   }
 
+  // Collapsed by default. /platform/ai/assignments already carries ~1208
+  // default-visible words; adding an always-open control block to it would
+  // regress the route's measured budget for a setting most visits do not change.
+  // Same reasoning as the room's own control, which lives inside the existing
+  // collapsed section rather than beside it.
+  const summary = isSet
+    ? `How work rooms behave — ${currentPace ?? "default"} pace${currentAuthority ? `, ${currentAuthority}` : ""}`
+    : "How work rooms behave — not set";
+
   return (
     <Surface className="p-5">
-      <h3 className="text-sm font-medium text-[var(--dpf-fg)]">How work rooms behave</h3>
-      <p className="mt-1 text-xs text-[var(--dpf-fg-muted)]">
+      <details>
+        <summary className="min-h-11 cursor-pointer list-none text-sm font-medium text-[var(--dpf-fg)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]">
+          {summary}
+        </summary>
+        <div className="mt-3 border-t border-[var(--dpf-border)] pt-3">
+      <p className="text-xs text-[var(--dpf-fg-muted)]">
         The default for every room, unless the room or the work says otherwise. Separate
         from the coworker settings above: a room and a coworker are different questions.
       </p>
@@ -130,6 +143,8 @@ export function WorkroomDefaultControl({
           {error}
         </p>
       ) : null}
+        </div>
+      </details>
     </Surface>
   );
 }
