@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Branch Plan: Deployment Architecture + Public Documentation Rollout
 
 > Branch: `claude/mac-docker-compatibility-uN4Ya`
@@ -433,6 +437,9 @@ lines; no test rig needed because we don't claim support.
 | D (Cloud Single VM Terraform) | 2 | release-gate cloud rental, one substrate at a time |
 | E (TAPPaaS) | 3 | homelab Proxmox or community partner |
 | F (Identity Edge `customer-provided`) | 1 | bundled authentik in compose, CI |
+
+> **Superseded stance (2026-08-26, EP-24741BBF / `BI-5167932D`).** Bundling authentik in compose is **reversed** — DPF absorbs the directory over its own `Principal` spine and adds no IdP to any install. `customer-provided` (consuming an external IdP as an upstream) remains supported and optional. See [Directory Service — Identity Absorption Design](../specs/2026-08-23-directory-service-identity-absorption-design.md).
+
 | G (Mobile) | 1 + 3 | Expo simulator in CI; physical devices when graduating from preview |
 | H (Storefront principal convergence) | 1 | standard CI |
 

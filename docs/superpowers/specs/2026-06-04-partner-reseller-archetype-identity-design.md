@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Partner / Reseller Archetype Extension, Capability Activation, And Partner Identity Design
 
 **Date:** 2026-06-04
@@ -98,6 +102,9 @@ Sources:
 
 Adopted patterns: partner login is its own population (not overloaded onto customer auth); federated OIDC/SAML; delegated partner-admin; SCIM provisioning; per-partner-org policy isolation.
 Why this fits DPF cleanly: the enterprise-auth spec **already chose** an authentik identity edge with OIDC/SAML + SCIM and a DPF authority core. Partner login is the partner-population projection of that same edge — no new protocol stack. Rejected pattern: a parallel partner auth stack (see §7 WWMD and §11 doctrine).
+
+> **Superseded stance (2026-08-26, EP-24741BBF / `BI-5167932D`).** The enterprise-auth spec's choice to adopt authentik as a runtime identity edge has been **reversed**. DPF absorbs the directory over its own `Principal` spine and adds no IdP to any install. Consuming an external IdP as an *upstream* remains supported and optional. See [Directory Service — Identity Absorption Design](2026-08-23-directory-service-identity-absorption-design.md) and [the authentik evaluation](../../security/tool-evaluations/2026-08-23-authentik.md).
+
 
 2026-06-05 refresh: Microsoft Entra External ID continues to treat external business collaborators as their own governed population with cross-tenant inbound/outbound access settings, application targeting, MFA/device-claim trust, and lifecycle governance. This reinforces DPF's direction: partner access is a scoped external-identity policy surface, not a customer-contact role flag.
 

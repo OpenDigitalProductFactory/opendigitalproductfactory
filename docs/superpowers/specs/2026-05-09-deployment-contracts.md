@@ -106,6 +106,9 @@ Per `docs/superpowers/specs/2026-04-22-enterprise-auth-directory-federation-desi
 protocol presentation."
 
 Identity Edge can be **dpf-managed** (DPF deploys its own authentik),
+
+> **Superseded stance (2026-08-26, EP-24741BBF / `BI-5167932D`).** The enterprise-auth spec's choice to adopt authentik as a runtime identity edge has been **reversed**. DPF absorbs the directory over its own `Principal` spine and adds no IdP to any install. Consuming an external IdP as an *upstream* remains supported and optional. See [Directory Service — Identity Absorption Design](2026-08-23-directory-service-identity-absorption-design.md) and [the authentik evaluation](../../security/tool-evaluations/2026-08-23-authentik.md).
+
 **customer-provided** (existing identity edge wired in), or
 **tappaas-upstream** (TAPPaaS Authentik used as upstream OIDC into
 DPF's identity edge, only when isolation and automation are
