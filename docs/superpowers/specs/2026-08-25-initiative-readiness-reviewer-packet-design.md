@@ -202,12 +202,32 @@ which is not a hot path.
 4. Documentation impact: the MCP authorization runbook describes recovery
    routes and is updated in the same branch.
 
-## 12. Out of scope — recorded, not fixed here
+## 12. Corroborating evidence, and one open ergonomic gap
 
-Recording plain `evidence` activity does not move readiness. On `BI-7A38F667`
-the author recorded `source_verified` evidence at `2026-08-26T00:17:49Z`
-(`cmt9chl9i016a01qvyvm3jbbt`) and the readiness `factsDigest` stayed byte-
-identical at `0d69fc1daf7f...` across it and both later retries. Readiness counts
-only `initiative_gate_receipt` activities. This is a distinct defect on the same
-epic and needs its own backlog item; an executable packet is a precondition for
-fixing it, not a substitute.
+On `BI-7A38F667` the author recorded `source_verified` evidence at
+`2026-08-26T00:17:49Z` (`cmt9chl9i016a01qvyvm3jbbt`) naming the design at
+`e5f86ccb...`, and the readiness `factsDigest` stayed byte-identical at
+`0d69fc1daf7f...` across it and both later retries.
+
+That is **correct behaviour, not a second defect.** Readiness counts
+`initiative_gate_receipt` activities; a plain `evidence` row is a note, not a
+governed receipt, and must not move a gate. It is the *symptom* of the defect
+fixed here: the author could not reach `record_initiative_evidence` — no grant,
+and the recovery route that should have summoned a holder was unexecutable — so
+they recorded the nearest thing they could reach instead.
+
+The one genuine gap left is ergonomic: nothing told the author their evidence
+would not count. `record_initiative_evidence` is the governed writer, and the
+generic evidence tool is silently adjacent to it. Worth a separate item once
+this lands and the reachable path is proven; not worth guessing at now.
+
+## 13. Relationship to `BI-329AD58D`
+
+`BI-329AD58D` covers the consumer half — carrying a binding through threadless
+`request_coworker` / `summon_coworker` into `mcp-task-submit`, and narrowing the
+attached tool surface. That half is already on `main`: `coworker-pack.ts`
+declares both fields and `external-coworker-task-adapter.ts` validates and
+forwards them. This change is the producer half that half was waiting on, and it
+is what makes that item's acceptance criterion 1 — "a readiness recovery packet
+passed through threadless request/summon carries an immutable
+`initiativeReviewBinding` and exact required tool names" — reachable end to end.
