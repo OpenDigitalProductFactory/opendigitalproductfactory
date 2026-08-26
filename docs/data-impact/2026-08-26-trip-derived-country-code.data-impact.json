@@ -1,0 +1,43 @@
+{
+  "version": "1",
+  "accountableOwner": "developer-platform",
+  "affectedCopies": [
+    "Mileage trip API responses (/api/v1/mileage/trips)",
+    "Driver mileage list at /finance/mileage",
+    "Mobile mileage capture payloads",
+    "Expense-claim mileage lines produced by period monetisation",
+    "Prisma-to-EA current-state data-model mirror"
+  ],
+  "migration": {
+    "name": "20260826032918_add_trip_derived_country_code",
+    "backfill": "none \u2014 the column is nullable and historical rows stay NULL on purpose. We do not know which country a past drive happened in, and inventing one would fabricate the very fact the column exists to record. NULL prices a trip on the employee's country of record, which is exactly how those trips price today, so no historical reimbursement changes."
+  },
+  "tests": [
+    "apps/web/lib/mileage/jurisdiction-rates.test.ts",
+    "apps/web/lib/mileage/country-of-record.test.ts",
+    "apps/web/lib/mileage/monetisation.test.ts",
+    "apps/web/lib/mileage/trip-service.test.ts",
+    "apps/mobile/src/features/mileage/trip-detection.test.ts",
+    "packages/db/src/mileage-absorption-substrate.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:trip#derived-country",
+      "prismaModel": "Trip",
+      "lifecycleDisposition": "Follows the existing Trip RecordLifecycle. Set once at capture and never edited afterwards: a trip's country is an observation of where the drive happened, not a preference to revise.",
+      "fields": [
+        {
+          "fieldId": "data:trip#countryCode",
+          "resolution": "governed",
+          "reason": "Selects which MileageRatePlan prices the drive, so a mile driven abroad reimburses on that country's policy rather than the employee's home rate (DI-5E5AFE040A1F).",
+          "provenance": "Reverse-geocoded by the capturing device from its own location and reported as ISO 3166-1 alpha-2. Never chosen by the driver \u2014 no country picker exists on any surface \u2014 and never inferred server-side from an address.",
+          "flags": [
+            "sensitive"
+          ],
+          "fieldPolicy": "Coarse location inference: a country code is a deliberately low-resolution derivative of location data the driver already consented to capture, and it is recorded only for trips captured under an active DriverLocationConsent. It is retained and disposed with its parent Trip under the same consent and retention terms; it grants no additional location precision beyond the start/end coordinates already stored, and must not be used to infer an employee's whereabouts outside mileage pricing and reporting. NULL is a legitimate value \u2014 an older client, no signal, or a withheld location permission \u2014 and must degrade to the employee's country of record rather than holding the trip or defaulting to a guessed country."
+        }
+      ]
+    }
+  ]
+}

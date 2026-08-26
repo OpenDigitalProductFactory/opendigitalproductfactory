@@ -24,6 +24,13 @@ export interface LocationFix {
   speed?: number | null;
   /** Horizontal accuracy in metres; a poor fix is treated as suspect. */
   accuracy?: number | null;
+  /**
+   * ISO 3166-1 alpha-2 the platform reverse-geocoded for this fix, when it
+   * supplied one. The DEVICE knows what country it is in — the driver is never
+   * asked. Absent on most fixes by design: reverse geocoding every fix would
+   * burn battery and quota for an answer that only changes at a border.
+   */
+  isoCountryCode?: string | null;
 }
 
 export interface DetectedTrip {
@@ -34,6 +41,17 @@ export interface DetectedTrip {
   /** Summed great-circle distance along the retained fixes, in metres. */
   distanceMetres: number;
   fixCount: number;
+  /**
+   * Where the drive BEGAN, as ISO 3166-1 alpha-2, or null when no fix carried
+   * a country.
+   *
+   * A drive that crosses a border prices on the country it started in. That is
+   * a deliberate, documented simplification rather than an oversight: splitting
+   * one drive across two rate plans needs per-segment distance attribution and
+   * a reverse geocode far denser than the one or two the device actually makes.
+   * Recording the start honestly beats inventing a split.
+   */
+  countryCode: string | null;
 }
 
 export interface DetectionOptions {
@@ -82,6 +100,20 @@ function usable(fix: LocationFix, options: DetectionOptions): boolean {
   return fix.accuracy <= options.maximumAccuracyMetres;
 }
 
+/**
+ * The first country any fix carries, scanning forward from the start.
+ *
+ * Falls forward rather than demanding the very first fix carry one, because a
+ * device commonly resolves its country a beat after the drive begins.
+ */
+function firstCountry(fixes: readonly LocationFix[]): string | null {
+  for (const fix of fixes) {
+    const code = fix.isoCountryCode?.trim().toUpperCase();
+    if (code) return code;
+  }
+  return null;
+}
+
 function buildTrip(fixes: LocationFix[], options: DetectionOptions): DetectedTrip | null {
   if (fixes.length < 2) return null;
 
@@ -100,6 +132,7 @@ function buildTrip(fixes: LocationFix[], options: DetectionOptions): DetectedTri
     end: { latitude: last.latitude, longitude: last.longitude },
     distanceMetres: Math.round(distanceMetres),
     fixCount: fixes.length,
+    countryCode: firstCountry(fixes),
   };
 }
 

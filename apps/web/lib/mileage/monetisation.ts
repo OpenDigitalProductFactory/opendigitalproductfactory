@@ -10,7 +10,7 @@
 // (an IRS-compliant log needs total, business and personal miles) but never
 // produce money.
 
-import { resolveRateForDate, reimbursableAmount, metresToMiles, type ResolvableRate } from "./rates";
+import { resolveRateForTrip, reimbursableAmount, metresToMiles, type ResolvableRate } from "./rates";
 import type { TripClassification } from "./classification";
 
 export type PriceableTrip = {
@@ -22,6 +22,8 @@ export type PriceableTrip = {
   startPlaceLabel: string | null;
   endPlaceLabel: string | null;
   customerAccountId: string | null;
+  /** ISO 3166-1 alpha-2 the device derived, or null when it could not. */
+  countryCode?: string | null;
 };
 
 export type MileageExpenseLine = {
@@ -68,6 +70,12 @@ export function priceTrips(
   trips: readonly PriceableTrip[],
   rates: readonly ResolvableRate[],
   currencyFallback = "USD",
+  /**
+   * The driver's country of record, governing any trip whose own country is
+   * unknown or has no plan. Undefined prices every trip on an unscoped plan,
+   * which is exactly how this behaved before jurisdictions existed.
+   */
+  employeeCountryCode?: string | null,
 ): PricingResult {
   const lines: MileageExpenseLine[] = [];
   const skipped: PricingSkip[] = [];
@@ -82,7 +90,13 @@ export function priceTrips(
       continue;
     }
 
-    const rate = resolveRateForDate(rates, trip.startedAt, "business");
+    // Where the mile was actually driven selects the plan, falling back to the
+    // employee's country of record (DI-5E5AFE040A1F).
+    const rate = resolveRateForTrip(rates, trip.startedAt, {
+      tripCountryCode: trip.countryCode,
+      employeeCountryCode,
+      purpose: "business",
+    });
     if (!rate) {
       // Cannot price yet — surfaced, never zero-filled.
       skipped.push({ tripId: trip.tripId, reason: "no-rate-in-force" });

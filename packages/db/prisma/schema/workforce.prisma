@@ -1442,6 +1442,12 @@ model Trip {
   endLongitude         Decimal                @db.Decimal(10, 7)
   startPlaceLabel      String?
   endPlaceLabel        String?
+  /// ISO 3166-1 alpha-2 of where the drive happened, DERIVED by the capturing
+  /// device from its own location — never chosen by the driver. NULL means the
+  /// device could not resolve one (no signal, permission withheld, an older
+  /// client), which prices the trip on the employee's country of record rather
+  /// than guessing at a country.
+  countryCode          String?
   distanceMeters       Int
   captureKind          TripCaptureKind
   classification       TripClassificationKind @default(unclassified)
