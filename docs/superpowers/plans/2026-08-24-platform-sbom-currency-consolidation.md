@@ -99,7 +99,7 @@ Verification: runtime evidence, UX critique, and `pnpm pr:health` including revi
 - Resolve graph-linked and colocated tests for `ops-nav.ts`, the removed `platform-stack.ts`, the removed purpose contract, and `seed.ts` before implementation.
 - Run `pnpm run check:prose-lint:test`, `pnpm run check:prose-lint`, and `node scripts/check-style-drift.mjs`.
 - Regenerate and verify `apps/web/lib/ux-budget/route-purpose.generated.json` and the document index if plan indexing requires it.
-- PR body must carry `Design-Grounding-Decision` and `Seed-Fit-Decision` sections.
+- PR body must carry a `## Design grounding` section and a `Seed-Fit-Decision:` line.
 - The active overlap on `apps/web/components/ops/ops-nav.ts` is limited to WC-261E0B3D adding a Workrooms tab; preserve that line when reconciling with main.
 
 ## Risks and rollback
