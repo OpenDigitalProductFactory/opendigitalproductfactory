@@ -5,6 +5,7 @@ import path from "node:path";
 import { test } from "node:test";
 import {
   CRITICAL_PACKAGES,
+  EXIT_CHILD_SIGNAL_DEATH,
   EXIT_GREEN,
   EXIT_SANDBOX_DRIFT,
   EXIT_SANDBOX_NOT_READY,
@@ -364,4 +365,36 @@ test("classifyGateOutcome distinguishes repeated Vitest runner termination from 
   assert.equal(outcome.gatePassed, false);
   assert.equal(outcome.productEvidence, false);
   assert.match(outcome.summary, /runner evidence, NOT a product test failure/);
+});
+
+// BI-F22B4EEE. A child killed by a signal is infrastructure evidence, not a
+// product build failure. Before this, `result.status ?? 1` collapsed SIGKILL
+// into exit 1 and the gate recorded "local-CI lease gate failed." — a product
+// verdict for a host that ran out of memory.
+test("a signal-killed child is blocked, not failed", () => {
+  const outcome = classifyGateOutcome({ freshnessVerdict: "green", gateExitCode: EXIT_CHILD_SIGNAL_DEATH });
+
+  assert.equal(outcome.status, "blocked_child_signal_death");
+  assert.equal(outcome.gatePassed, false);
+  assert.equal(outcome.productEvidence, false, "a signal death must never count as product evidence");
+  assert.match(outcome.summary, /NOT a product build failure/);
+});
+
+test("the signal-death code does not collide with the other blocked codes", () => {
+  const codes = new Set([
+    EXIT_GREEN,
+    EXIT_SANDBOX_DRIFT,
+    EXIT_SANDBOX_NOT_READY,
+    EXIT_CHILD_SIGNAL_DEATH,
+  ]);
+  assert.equal(codes.size, 4, "each outcome needs its own exit code to stay distinguishable");
+});
+
+test("an ordinary non-zero exit is still a product failure", () => {
+  // The point of the change is to separate the two, not to make every failure
+  // look like infrastructure.
+  const outcome = classifyGateOutcome({ freshnessVerdict: "green", gateExitCode: 1 });
+
+  assert.equal(outcome.status, "failed");
+  assert.equal(outcome.productEvidence, true);
 });
