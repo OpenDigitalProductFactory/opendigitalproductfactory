@@ -874,6 +874,9 @@
     "apps/web/lib/platform-runtime/capability-service-projection.ts": [
       "docs/architecture/capability-driven-runtime-profiles.md"
     ],
+    "apps/web/lib/platform-runtime/capability-state-divergence.ts": [
+      "docs/architecture/capability-driven-runtime-profiles.md"
+    ],
     "apps/web/lib/platform-runtime/operational-state.ts": [
       "docs/architecture/capability-driven-runtime-profiles.md",
       "docs/maintenance/staleness-report.md"
@@ -2318,6 +2321,7 @@
     ],
     "docs/architecture/capability-driven-runtime-profiles.md": [
       "apps/web/lib/platform-runtime/capability-service-projection.ts",
+      "apps/web/lib/platform-runtime/capability-state-divergence.ts",
       "apps/web/lib/platform-runtime/operational-state.ts",
       "packages/db/data/platform-runtime-capabilities.json",
       "scripts/capability-service-catalog.generated.json",
