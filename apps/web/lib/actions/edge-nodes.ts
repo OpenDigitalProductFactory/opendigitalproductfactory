@@ -19,6 +19,7 @@ import { prisma } from "@dpf/db";
 import { resolveAppBaseUrl } from "@/lib/app-url";
 import { auth } from "@/lib/auth";
 import { issueBootstrapToken } from "@/lib/edge-node/enrollment";
+import { resolveNativeReleaseAssets } from "@/lib/edge-node/native-release-assets";
 import {
   buildRemoteProvisioningPlan,
   EDGE_HOST_OSES,
@@ -238,10 +239,16 @@ export async function prepareRemoteEdgeProvisioningAction(input: {
   });
   if (!issued.ok) return issued;
 
+  // Ask the release what it actually publishes, rather than believing a
+  // hardcoded list (BI-BB919901). Null — offline, rate-limited, air-gapped —
+  // renders the container path only and never blocks issuance.
+  const nativeRelease = await resolveNativeReleaseAssets();
+
   const plan = buildRemoteProvisioningPlan({
     resolvedAuthorityUrl: resolveAppBaseUrl(),
     bootstrapToken: issued.plaintext,
     os: input.os,
+    ...(nativeRelease ? { nativeRelease } : {}),
     ...(input.nodeName?.trim() ? { nodeName: input.nodeName.trim() } : {}),
     ...(input.composeRef?.trim() ? { composeRef: input.composeRef.trim() } : {}),
   });
