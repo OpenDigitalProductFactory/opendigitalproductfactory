@@ -81,6 +81,15 @@ export async function dispatchIdeateForApprovedBuild(params: {
     });
   };
 
+  /** BI-CE1AB982 — durable "refused before start" marker read by progress-visibility. */
+  const recordDispatchBlocked = async (reason: string): Promise<void> => {
+    await prisma.buildActivity.create({
+      data: { buildId, tool: "dispatch_blocked", summary: reason },
+    }).catch((err) => {
+      console.warn("[ideate-on-approval] Failed to log dispatch_blocked:", { buildId, reason }, err);
+    });
+  };
+
   try {
     // Fetch the build with the linked BI and current designDoc evidence.
     // NOTE: businessContext is intentionally NOT selected here — it is not a
@@ -183,6 +192,12 @@ export async function dispatchIdeateForApprovedBuild(params: {
         reason: selection?.action ?? "No allowed healthy Build Studio engine remains. Review AI Readiness and retry.",
       };
       await logActivity(`Skipped auto-dispatch: ${outcome.reason}`);
+      // BI-CE1AB982: the line above is the ONLY trace a refused dispatch used to
+      // leave, and nothing on the owner surface reads `ideate_dispatch` prose —
+      // so the panel kept animating "Build Studio is working on this change" on a
+      // build that never started. This row is the durable, queryable signal the
+      // progress projection reads to render the build as blocked instead.
+      await recordDispatchBlocked(outcome.reason);
       return outcome;
     }
     await logActivity(formatBuildEngineSelectionEvidence(selection));
