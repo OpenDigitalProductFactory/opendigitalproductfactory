@@ -25,6 +25,28 @@ Give an operator one product-scoped place to answer four different questions wit
 
 The single operator home is `Digital Product > Operate > Dependencies`. One home means one navigation destination and one source graph, not one overloaded database table.
 
+## Governed scope manifest
+
+- **OBJ-PSCC-001:** Persist the generated platform CycloneDX document as the sole platform software-composition source linked to the `dpf-portal` DigitalProduct, with deterministic and idempotent install behavior.
+- **OBJ-PSCC-002:** Make product `Operate > Dependencies` the single discoverable operator home while preserving the distinct semantics of product relationships, deployed estate, and software composition.
+- **OBJ-PSCC-003:** Derive component currency only from canonical `CatalogIdentity` lifecycle milestones and preserve explicit provenance when support data is unavailable.
+- **OBJ-PSCC-004:** Retire route-owned platform stack facts and duplicate navigation without breaking existing bookmarks.
+- **OBJ-PSCC-005:** Add a repository invariant and verification evidence that prevent the competing route-local inventory pattern from recurring.
+
+| Acceptance ID | Objective IDs | Acceptance statement |
+| --- | --- | --- |
+| AC-PSCC-001 | OBJ-PSCC-001 | A fresh install persists one current platform CycloneDX BOM linked to `dpf-portal` with nonzero component occurrences. |
+| AC-PSCC-002 | OBJ-PSCC-001 | Reprocessing the same source digest is idempotent, while a changed source digest supersedes the older platform document without changing build-scoped BOMs. |
+| AC-PSCC-003 | OBJ-PSCC-001, OBJ-PSCC-003 | Persisted platform components link through the existing SBOM bridge to canonical catalog identities where resolvable. |
+| AC-PSCC-004 | OBJ-PSCC-002 | Product Operate presents product relationships, attributed estate, and software composition as distinct sections of one Dependencies destination. |
+| AC-PSCC-005 | OBJ-PSCC-002 | Each section has an independent mixed or empty state, and an empty section does not hide populated sibling sections. |
+| AC-PSCC-006 | OBJ-PSCC-003 | Component currency and support end are derived with the canonical lifecycle helpers; unavailable milestones render `Not sourced` rather than an inferred date. |
+| AC-PSCC-007 | OBJ-PSCC-004 | `/ops/stack-currency` and product `/supply-chain` bookmarks redirect to the canonical software-composition section. |
+| AC-PSCC-008 | OBJ-PSCC-004 | The Stack Currency operations tab, separate Supply Chain product destination, static `PLATFORM_STACK` owner, and route-owned purpose contract are removed. |
+| AC-PSCC-009 | OBJ-PSCC-005 | A repository guard fails if a route-local platform component inventory, duplicate product destination, non-redirect compatibility route, or missing seed invocation is reintroduced. |
+| AC-PSCC-010 | OBJ-PSCC-001, OBJ-PSCC-002, OBJ-PSCC-003, OBJ-PSCC-004, OBJ-PSCC-005 | Automated tests cover persistence identity and replacement, catalog linkage, lifecycle derivation, unified surface states, redirects, navigation, and the architectural invariant. |
+| AC-PSCC-011 | OBJ-PSCC-002, OBJ-PSCC-005 | Shared nonproduction verification proves first-viewport discoverability, responsive layout, usable empty and error behavior, one current platform BOM, and no duplicate navigation. |
+
 ## Canonical model
 
 ```text
@@ -123,4 +145,3 @@ No schema migration. All writes use existing models. The first corrected seed is
 - Architecture: single-home guard fixtures and repository scan.
 - Functional: seed a nonproduction install twice and prove one current platform document for the source digest and nonzero occurrences.
 - UX: desktop and narrow first viewport, clear facet labels, keyboard navigation, no duplicate tab.
-

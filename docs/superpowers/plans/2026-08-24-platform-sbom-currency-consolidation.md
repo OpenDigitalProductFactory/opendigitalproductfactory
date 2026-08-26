@@ -32,7 +32,7 @@ The phases below are internal sequencing, not independently shippable deliverabl
 
 ## Phase 1 — Red: canonical persistence and idempotence
 
-Requirements: `R1` one platform composition source; `R2` idempotent install/upgrade ingestion; `R3` component-to-catalog linkage.
+Requirements: `AC-PSCC-001` one platform composition source; `AC-PSCC-002` idempotent install/upgrade ingestion; `AC-PSCC-003` component-to-catalog linkage.
 
 1. Extract BOM component keys, normalized types, and persistence from the web-only assurance folder into `@dpf/db` so Build Studio and seed ingestion use one implementation.
 2. Add a pure platform-CycloneDX normalizer and a seed service that:
@@ -48,7 +48,7 @@ Verification: package DB unit tests, web assurance unit tests, and DB typecheck.
 
 ## Phase 2 — Red: one product Operate surface
 
-Requirements: `R4` one visible operator home; `R5` correct facet separation; `R6` catalog-derived currency.
+Requirements: `AC-PSCC-004` one visible operator home; `AC-PSCC-005` correct mixed/empty facet behavior; `AC-PSCC-006` catalog-derived currency.
 
 1. Rename the product Operate subitem to `Dependencies`; remove the separate `Supply Chain` subitem.
 2. Extend the Dependencies page to load:
@@ -63,7 +63,7 @@ Verification: render tests for first-viewport headings, mixed/empty states, life
 
 ## Phase 3 — Remove the duplicate and prevent recurrence
 
-Requirements: `R7` compatibility redirect; `R8` no route-owned stack facts; `R9` prospective guard.
+Requirements: `AC-PSCC-007` compatibility redirects; `AC-PSCC-008` no route-owned stack facts or duplicate navigation; `AC-PSCC-009` prospective guard.
 
 1. Change `/ops/stack-currency` to resolve `dpf-portal` and redirect to its canonical Dependencies section.
 2. Remove the Stack Currency operations tab, static source, table-only component, tests, and route purpose contract; regenerate the route-purpose artifact.
@@ -78,7 +78,7 @@ Verification: route redirect test, navigation tests, guard tests, prose lint, st
 
 ## Phase 4 — Functional and UX proof
 
-Requirements: `R10` install data exists; `R11` usable responsive experience.
+Requirements: `AC-PSCC-010` complete automated verification; `AC-PSCC-011` usable responsive experience and runtime proof.
 
 1. Run the focused red-green suites and package typechecks.
 2. Run `pnpm run pregate:preflight`, then the branch exact-tree `pnpm run pregate` through the governed local-CI path.
