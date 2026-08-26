@@ -55,12 +55,13 @@ function grantRow(grantKey: string, agentId: string, displayName: string) {
 }
 
 describe("initiative readiness recovery routing", () => {
-  it("returns deterministic executable packets for research and plan coverage without dispatching", async () => {
+  it("sequences independent spec approval before plan coverage when no baseline exists", async () => {
     const findMany = vi.fn().mockResolvedValue([
       grantRow("initiative_evidence_write", "AGT-WS-PORTFOLIO", "Portfolio Management"),
       grantRow("backlog_write", "AGT-WS-PORTFOLIO", "Portfolio Management"),
       grantRow("initiative_evidence_write", "AGT-WS-BUILD", "Build Specialist"),
       grantRow("backlog_write", "AGT-WS-BUILD", "Build Specialist"),
+      grantRow("initiative_design_review", "AGT-WS-REVIEW", "Independent Reviewer"),
     ]);
 
     const recovery = await resolveInitiativeReviewerRecovery({
@@ -104,26 +105,35 @@ describe("initiative readiness recovery routing", () => {
         },
       },
       {
-        accountableRole: "implementation-planner",
-        toolName: "record_plan_backlog_coverage",
-        grant: "backlog_write",
-        gate: "dependency-disposition",
-        targetAgentId: "AGT-WS-BUILD",
+        accountableRole: "design-checklist-reviewer",
+        toolName: "record_initiative_design_review",
+        grant: "initiative_design_review",
+        gate: "spec-approval",
+        targetAgentId: "AGT-WS-REVIEW",
         requestCoworker: {
-          targetAgent: "AGT-WS-BUILD",
-          requestKey: `initiative-readiness:BI-A45D744A:dependency-disposition:${dispatchContext.headSha}`,
+          targetAgent: "AGT-WS-REVIEW",
+          requestKey: `initiative-readiness:BI-A45D744A:spec-approval:${dispatchContext.headSha}`,
           tier: 2,
           enteredVia: "handoff",
+          requiredToolNames: ["record_initiative_design_review", "read_source_at_version"],
+          initiativeReviewBinding: {
+            writerToolName: "record_initiative_design_review",
+            itemId: "BI-A45D744A",
+            gate: "spec-approval",
+            expectedCurrentBaselineId: null,
+            artifactRef: {
+              kind: "repo-blob-at-commit",
+              repositoryFullName: dispatchContext.repositoryFullName,
+              commitSha: dispatchContext.headSha,
+              path: canonicalArtifact.path,
+              providerBlobId: canonicalArtifact.providerBlobId,
+            },
+          },
         },
       },
     ]);
-    // `record_plan_backlog_coverage` is not a `record_initiative_*` writer, so
-    // parseInitiativeReviewBinding would reject a binding for it. That lane
-    // reviews no immutable bytes, so it carries neither field (BI-9FE775F9).
-    const coverage = recovery.reviewerRoutes
-      .find((route) => route.toolName === "record_plan_backlog_coverage");
-    expect(coverage?.requestCoworker).not.toHaveProperty("initiativeReviewBinding");
-    expect(coverage?.requestCoworker).not.toHaveProperty("requiredToolNames");
+    expect(recovery.reviewerRoutes.map((route) => route.toolName))
+      .not.toContain("record_plan_backlog_coverage");
   });
 
   it("carries the current baseline id into the binding so a superseded design cannot be reviewed", async () => {
@@ -149,19 +159,23 @@ describe("initiative readiness recovery routing", () => {
       db: { agentToolGrant: { findMany: vi.fn().mockResolvedValue([
         grantRow("initiative_evidence_write", "AGT-WS-BUILD", "Build Specialist"),
         grantRow("backlog_write", "AGT-WS-BUILD", "Build Specialist"),
+        grantRow("initiative_design_review", "AGT-WS-REVIEW", "Independent Reviewer"),
       ]) } },
       dispatchContext,
       canonicalArtifact: { resolved: false, nextAction: "Commit the canonical design under docs/superpowers/specs/, push it, then retry." },
     });
 
-    // Only the lanes that need immutable bytes are blocked. Plan coverage is not
-    // one of them, so it still routes — an unresolvable design must not strand
-    // work that never depended on it (BI-9FE775F9).
-    expect(recovery.reviewerRoutes.map((route) => route.toolName))
-      .toEqual(["record_plan_backlog_coverage"]);
+    // The missing baseline makes spec approval the prerequisite. Both remaining
+    // routes inspect immutable bytes, so neither may be emitted without one.
+    expect(recovery.reviewerRoutes).toEqual([]);
     expect(recovery.escalations).toMatchObject([
       {
         accountableRole: "design-author",
+        reason: "no-canonical-artifact",
+        nextAction: "Commit the canonical design under docs/superpowers/specs/, push it, then retry.",
+      },
+      {
+        accountableRole: "design-checklist-reviewer",
         reason: "no-canonical-artifact",
         nextAction: "Commit the canonical design under docs/superpowers/specs/, push it, then retry.",
       },
@@ -200,6 +214,7 @@ describe("initiative readiness recovery routing", () => {
       db: { agentToolGrant: { findMany: vi.fn().mockResolvedValue([
         grantRow("initiative_evidence_write", "AGT-WS-BUILD", "Build Specialist"),
         grantRow("backlog_write", "AGT-WS-BUILD", "Build Specialist"),
+        grantRow("initiative_design_review", "AGT-WS-REVIEW", "Independent Reviewer"),
       ]) } },
       dispatchContext: null,
       canonicalArtifact,
@@ -218,14 +233,83 @@ describe("initiative readiness recovery routing", () => {
         reason: "dispatch-context-required",
       },
       {
-        accountableRole: "implementation-planner",
-        toolName: "record_plan_backlog_coverage",
-        grant: "backlog_write",
+        accountableRole: "design-checklist-reviewer",
+        toolName: "record_initiative_design_review",
+        grant: "initiative_design_review",
         reason: "dispatch-context-required",
       },
     ]);
     // and it must name the reviewer it found, so the caller can see the roster is healthy
     expect(recovery.escalations[0]!.nextAction).toContain("AGT-WS-BUILD");
+  });
+
+  it("exposes generic plan coverage only after a baseline exists", async () => {
+    const recovery = await resolveInitiativeReviewerRecovery({
+      decision: {
+        ...decision,
+        unmet: [
+          { code: "PLAN_REQUIRED", state: "missing", accountableRole: "implementation-planner", evidenceRefs: [] },
+        ],
+      },
+      currentAgentId: "AGT-AUTHOR",
+      db: { agentToolGrant: { findMany: vi.fn().mockResolvedValue([
+        grantRow("backlog_write", "AGT-WS-BUILD", "Build Specialist"),
+      ]) } },
+      dispatchContext,
+      canonicalArtifact,
+      expectedCurrentBaselineId: "IBL-CANONICAL",
+    });
+
+    expect(recovery.escalations).toEqual([]);
+    expect(recovery.reviewerRoutes).toHaveLength(1);
+    expect(recovery.reviewerRoutes[0]).toMatchObject({
+      accountableRole: "implementation-planner",
+      toolName: "record_plan_backlog_coverage",
+      grant: "backlog_write",
+      gate: "dependency-disposition",
+    });
+    expect(recovery.reviewerRoutes[0]?.requestCoworker)
+      .not.toHaveProperty("initiativeReviewBinding");
+    expect(recovery.reviewerRoutes[0]?.requestCoworker)
+      .not.toHaveProperty("requiredToolNames");
+  });
+
+  it("turns a plan-only missing-baseline state into one executable spec-approval route", async () => {
+    const recovery = await resolveInitiativeReviewerRecovery({
+      decision: {
+        ...decision,
+        unmet: [
+          { code: "PLAN_REQUIRED", state: "missing", accountableRole: "implementation-planner", evidenceRefs: [] },
+        ],
+      },
+      currentAgentId: "AGT-AUTHOR",
+      db: { agentToolGrant: { findMany: vi.fn().mockResolvedValue([
+        grantRow("initiative_design_review", "AGT-WS-REVIEW", "Independent Reviewer"),
+        grantRow("backlog_write", "AGT-WS-BUILD", "Build Specialist"),
+      ]) } },
+      dispatchContext,
+      canonicalArtifact,
+      expectedCurrentBaselineId: null,
+    });
+
+    expect(recovery.reviewerRoutes).toHaveLength(1);
+    expect(recovery.reviewerRoutes[0]).toMatchObject({
+      accountableRole: "design-checklist-reviewer",
+      toolName: "record_initiative_design_review",
+      grant: "initiative_design_review",
+      gate: "spec-approval",
+      targetAgentId: "AGT-WS-REVIEW",
+      requestCoworker: {
+        requiredToolNames: ["record_initiative_design_review", "read_source_at_version"],
+        initiativeReviewBinding: {
+          expectedCurrentBaselineId: null,
+          artifactRef: {
+            commitSha: dispatchContext.headSha,
+            providerBlobId: canonicalArtifact.providerBlobId,
+          },
+        },
+      },
+    });
   });
 
   it("reports no-eligible-reviewer ONLY when nobody holds the grant", async () => {
