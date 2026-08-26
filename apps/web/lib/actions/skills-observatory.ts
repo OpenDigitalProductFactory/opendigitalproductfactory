@@ -344,3 +344,13 @@ export async function getSkillsObservatoryStats() {
     totalBuildActivities: buildActivityCount,
   };
 }
+
+/**
+ * Pending skill proposals, projected as attention items so the catalog can link
+ * straight to the decision (BI-2F9EE2E9). The catalog previously gave no sign a
+ * proposal existed, and its detail view is reachable only via `?skill=`.
+ */
+export async function getPendingSkillProposals() {
+  const { loadSkillProposalItems } = await import("@/lib/attention/sources/skill-proposal");
+  return loadSkillProposalItems(prisma);
+}

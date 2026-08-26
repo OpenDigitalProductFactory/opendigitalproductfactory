@@ -126,8 +126,11 @@ Before recording any "X does not exist" conclusion:
 2. **Prove the instrument is live.** For the code graph, call `mcp__dpf__get_code_graph_freshness` and read `trust.tier` / `trust.action`. A `low` tier or a `qualify` action means an empty result is NO EVIDENCE.
 3. **Prove you swept the merge target.** A worktree can be 100+ PRs behind. `git grep ... origin/main` answers the question that actually matters.
 4. **Say which sweep produced the null.** Report "not found on `origin/main` in `packages/db/prisma/schema/`" — never a bare "does not exist". The cite is what lets a reviewer catch a bad sweep.
+5. **Prove your filter did not eat the hits.** If the sweep excluded anything — `grep -v`, `--exclude`, a suppression pattern chosen to cut noise — re-run it with NO exclusions and state the raw count. A filtered-to-zero result is indistinguishable from a real absence, and it reads as *more* rigorous than a plain grep because it cites a methodology.
 
 Worked failure (BI-FA950F74): an agent grepped `packages/db/prisma/schema.prisma`, a path deleted by the schema split, got silence, and reported `PayRun` and `Payslip` as missing. Both were already on `main`. The sweep was clean; the conclusion was false.
+
+Worked failure (BI-5798BBA3): a brief recorded "Nothing in the repo queries `/engines/_configure` — confirmed by grep across apps, packages, scripts, docs; every hit is `not_configured` or `user_configured`." The path was right and the grep matched 95 times. The exclusion added to cut those two tokens removed every true hit along with them. Six source files queried the endpoint, including a boot-and-interval reconcile that already did the work the brief went on to recommend building. One `grep -rc` with no exclusions would have caught it.
 
 ## Output template
 

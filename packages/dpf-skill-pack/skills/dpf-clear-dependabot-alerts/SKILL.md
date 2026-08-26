@@ -59,7 +59,7 @@ The two edges:
 
 5. **Verify the fix functionally.** Confirm every vulnerable version is gone and only patched versions resolve: `grep -oE '<pkg>@[0-9.]+' pnpm-lock.yaml | sort -u`. Confirm the diff is scoped to the intended packages + their direct fallout (dropped old platform binaries, etc.) with no unrelated drift.
 
-6. **Ship via `dpf-pr-with-dco`.** DCO-sign every commit (`-s`), reference the GHSA/Dependabot numbers in the body, one concern per PR. Let CI (including the OSV scan, SBOM Divergence Guard, and Override Provenance Guard) confirm.
+6. **Ship via `dpf-pr-with-dco`.** DCO-sign every commit (`-s`), reference the GHSA/Dependabot numbers in the body, and batch the bumps that revert together rather than opening one PR per advisory. Let CI (including the OSV scan, SBOM Divergence Guard, and Override Provenance Guard) confirm.
 
 ## Guardrails
 

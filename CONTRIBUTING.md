@@ -25,7 +25,7 @@ Use a short prefix that names the **intent**, not the issue number:
 - `clean/<slug>` — repo hygiene, dead-code removal, config cleanup
 - `customer/<id>` — reserved for the future customer-branch contribution model; do not use for solo maintainer work
 
-One concern per branch, one concern per PR. If you find a refactor that's adjacent but not entangled, open a separate PR for it.
+Scope a PR to what one reviewer can attribute and one revert can cleanly undo. Batch related work — every extra PR costs another serialized gate run. Split when a reviewer could not tell which lines did which job, when a revert would force a choice between two things you want independently revertible, or when one half is risky and the other is not.
 
 ## Repo bootstrap (contributors)
 
@@ -93,7 +93,7 @@ Configure provider choices in **Admin > AI Workforce > Providers & Routing**; do
 
 ## Pull request expectations
 
-- **Scope:** one concern per PR. Refactors that ride along with a feature change are fine only if they're genuinely entangled.
+- **Scope:** one clean revert per PR. Batch related work; split when the diff would be unattributable or the revert would force an unwanted choice.
 - **Commits:** write them in imperative mood (`add`, `fix`, `move`, `remove`). Conventional-commit prefixes (`feat(...)`, `fix(...)`, `docs(...)`, `chore(...)`) are used across the existing history. Every commit must include a DCO `Signed-off-by:` trailer; use `git commit -s`.
 - **Tests:** new features need Vitest coverage. Bug fixes need a regression test that fails before the fix and passes after.
 - **Docs:** if you change behavior, update the doc that describes it. Most user-facing docs live under [docs/user-guide/](docs/user-guide/).

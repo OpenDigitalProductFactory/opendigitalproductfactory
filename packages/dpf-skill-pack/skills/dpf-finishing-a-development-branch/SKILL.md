@@ -47,7 +47,7 @@ This is the **decision** step; `dpf-pr-with-dco` is the **execution** step that 
 
 ## Steps
 
-1. **Decide the integration shape.** Default to **one concern per PR** (`one-concern-per-pr`). If the branch mixes concerns (a fix + an unrelated refactor + a doc change), plan to split — by file set or by interactive cherry-pick onto separate branches off `origin/main`. A stack is appropriate when later work genuinely depends on earlier work; otherwise prefer independent PRs.
+1. **Decide the integration shape.** Scope a PR to **one clean revert** (`one-concern-per-pr`), not to one concern. Batch related work: every extra PR costs another serialized gate run on a contended slot. Split — by file set or by interactive cherry-pick onto separate branches off `origin/main` — when a reviewer could not tell which lines did which job, when a revert would force a choice between two things you want independently revertible, or when one half is risky and the other is not. A stack is appropriate when later work genuinely depends on earlier work.
 
 2. **Confirm the branch is green — in the right place.** `build-gate-mandatory`: the required gates must pass before the branch lands. The thread worktree is source-control isolation, not a runtime, so run gates where they belong ([AGENTS.md §5](../../../../AGENTS.md)):
    - Source-local checks (typecheck, targeted unit tests, lint) — in the worktree.
