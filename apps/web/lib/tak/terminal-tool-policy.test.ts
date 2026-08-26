@@ -143,6 +143,25 @@ describe("terminal tool policy", () => {
 });
 
 describe("agent loop terminal writer integration", () => {
+  const response = (content: string, toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }> = []) => ({
+    content, toolCalls, inputTokens: 10, outputTokens: 5,
+    providerId: "local", modelId: "local-test", downgraded: false,
+    downgradeMessage: null, toolsStripped: false, routeDecision: {},
+  });
+  const names = ["read_source_at_version", "search_source_at_version", policy.writerToolName];
+  const toolDefs = names.map((name) => ({
+    name, description: name, inputSchema: {}, requiredCapability: null,
+    executionMode: "immediate" as const, sideEffect: name === policy.writerToolName,
+  }));
+  const providerTools = names.map((name) => ({ type: "function", function: { name, parameters: {} } }));
+  const params = {
+    chatHistory: [{ role: "user" as const, content: "Review the bound design." }],
+    systemPrompt: "Review independently and record the assessment.",
+    sensitivity: "internal" as const, tools: toolDefs, toolsForProvider: providerTools,
+    userId: "user-1", routeContext: "/review", agentId: "initiative-design-reviewer",
+    threadId: "thread-1", terminalToolPolicy: policy,
+  };
+
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(prisma.agentModelConfig.findUnique).mockResolvedValue(null as never);
@@ -157,11 +176,6 @@ describe("agent loop terminal writer integration", () => {
   });
 
   it("removes readers after their budget and treats the writer attempt as terminal", async () => {
-    const response = (content: string, toolCalls: Array<{ id: string; name: string; arguments: {} }> = []) => ({
-      content, toolCalls, inputTokens: 10, outputTokens: 5,
-      providerId: "local", modelId: "local-test", downgraded: false,
-      downgradeMessage: null, toolsStripped: false, routeDecision: {},
-    });
     const readers = Array.from({ length: 7 }, (_, index) => ({
       id: `read-${index}`,
       name: index % 2 ? "search_source_at_version" : "read_source_at_version",
@@ -172,25 +186,27 @@ describe("agent loop terminal writer integration", () => {
       .mockResolvedValueOnce(response("I have enough evidence to assess this change.") as never)
       .mockResolvedValueOnce(response("", [{ id: "writer", name: policy.writerToolName, arguments: {} }]) as never)
       .mockResolvedValueOnce(response("The governed writer rejected the assessment, so no receipt exists.") as never);
-    const names = ["read_source_at_version", "search_source_at_version", policy.writerToolName];
-    const toolDefs = names.map((name) => ({
-      name, description: name, inputSchema: {}, requiredCapability: null,
-      executionMode: "immediate" as const, sideEffect: name === policy.writerToolName,
-    }));
-    const providerTools = names.map((name) => ({ type: "function", function: { name, parameters: {} } }));
-
-    const result = await runAgenticLoop({
-      chatHistory: [{ role: "user", content: "Review the bound design." }],
-      systemPrompt: "Review independently and record the assessment.",
-      sensitivity: "internal", tools: toolDefs, toolsForProvider: providerTools,
-      userId: "user-1", routeContext: "/review", agentId: "initiative-design-reviewer",
-      threadId: "thread-1", terminalToolPolicy: policy,
-    } as Parameters<typeof runAgenticLoop>[0]);
+    const result = await runAgenticLoop(params);
 
     const secondTools = (vi.mocked(routeAndCall).mock.calls[1]![3] as { tools: typeof providerTools }).tools;
     expect(secondTools.map((tool) => tool.function.name)).toEqual([policy.writerToolName]);
     expect(vi.mocked(governedExecuteTool).mock.calls.filter(([call]) => call.toolName !== policy.writerToolName)).toHaveLength(6);
     expect(result.executedTools.at(-1)).toMatchObject({ name: policy.writerToolName, result: { success: false } });
     expect(vi.mocked(routeAndCall)).toHaveBeenCalledTimes(4);
+  });
+
+  it("re-exposes the writer immediately after a reader-only recovery succeeds", async () => {
+    vi.mocked(routeAndCall)
+      .mockResolvedValueOnce(response("I should inspect the immutable evidence first.") as never)
+      .mockResolvedValueOnce(response("", [{ id: "read", name: "read_source_at_version", arguments: {} }]) as never)
+      .mockResolvedValueOnce(response("", [{ id: "writer", name: policy.writerToolName, arguments: {} }]) as never)
+      .mockResolvedValueOnce(response("The governed writer rejected the assessment, so no receipt exists.") as never);
+
+    await runAgenticLoop(params);
+
+    const secondTools = (vi.mocked(routeAndCall).mock.calls[1]![3] as { tools: typeof providerTools }).tools;
+    const thirdTools = (vi.mocked(routeAndCall).mock.calls[2]![3] as { tools: typeof providerTools }).tools;
+    expect(secondTools.map((tool) => tool.function.name)).toEqual(policy.readerToolNames);
+    expect(thirdTools.map((tool) => tool.function.name)).toContain(policy.writerToolName);
   });
 });
