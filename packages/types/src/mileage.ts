@@ -38,6 +38,12 @@ export interface RecordTripRequest {
   distanceMetres: number;
   captureKind: MileageCaptureKind;
   vehicleId?: string | null;
+  /**
+   * ISO 3166-1 alpha-2 the DEVICE derived from its own location — the app
+   * reverse-geocodes, the driver never picks. Omit when the device could not
+   * resolve one; the server then prices on the driver's country of record.
+   */
+  countryCode?: string | null;
 }
 
 export interface ClassifyTripRequest {

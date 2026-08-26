@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "bundleId": "capture-ep-build-67a41a",
+  "description": "Backlog captured from this installation on 2026-08-26T03:02:44.748Z.",
+  "source": {
+    "capturedAt": "2026-08-26T03:57:53.481Z",
+    "repository": "OpenDigitalProductFactory/opendigitalproductfactory",
+    "planPath": "docs/superpowers/plans/2026-08-22-instance-identity-and-purpose.md"
+  },
+  "epic": {
+    "epicId": "EP-BUILD-67A41A",
+    "title": "Add local build capacity precedence note to CONTRIBUTING (robustness probe 2)",
+    "description": "Temporary Build Studio robustness probe that checked local build-capacity precedence in CONTRIBUTING; retained for audit and backlog recovery.",
+    "status": "open",
+    "scopeKind": "unknown",
+    "createdAt": "2026-08-23T14:33:48.173Z"
+  },
+  "items": [
+    {
+      "itemId": "BI-E0D4CBDD",
+      "epicId": "EP-BUILD-67A41A",
+      "title": "Add local build capacity precedence note to CONTRIBUTING (robustness probe 2)",
+      "body": "Legacy intake recorded no supporting body. The complete known problem statement is: Add local build capacity precedence note to CONTRIBUTING (robustness probe 2). This audit repair adds no requirements beyond that title.",
+      "status": "retired",
+      "type": "product",
+      "workType": "doc",
+      "source": "user-request",
+      "scopeKind": "unknown",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [],
+      "effortSize": "small",
+      "triageOutcome": "build",
+      "createdAt": "2026-08-23T14:33:44.377Z"
+    }
+  ]
+}

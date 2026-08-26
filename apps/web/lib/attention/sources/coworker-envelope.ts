@@ -22,10 +22,15 @@
 
 import type { prisma } from "@dpf/db";
 
+import { observeEnvelopeBacklog } from "@/lib/coworker/envelope-observability";
 import {
   envelopeApproveRoute,
   envelopeDeclineRoute,
 } from "@/lib/coworker/envelope-routes";
+import {
+  coworkerEnvelopesAwaitingDecision,
+  coworkerEnvelopesExpiredUnactioned,
+} from "@/lib/operate/metrics";
 import { parseInitiativeReviewBinding } from "@/lib/mcp-task-submit";
 
 import { attentionAuthorForAgent } from "../attribution";
@@ -184,6 +189,39 @@ export async function loadCoworkerEnvelopeItems(
       taskRun: { select: { a2aMetadata: true } },
     },
   });
+  // Fire-and-forget backlog observation (BI-78D3CF1E). The query above
+  // deliberately EXCLUDES expired envelopes, because an expired one is not
+  // actionable — which is exactly why nothing could see them lapsing. This
+  // publishes the two gauges beside it: how many are waiting on a person, and
+  // how many closed unanswered. Install-wide, because the operator's question is
+  // "are consent requests lapsing here", not "are mine".
+  void observeEnvelopeBacklog(
+    {
+      countProposedWithin: (at) =>
+        db.coworkerActionEnvelope.count({
+          where: {
+            status: DECIDABLE_STATUS,
+            OR: [{ expiresAt: null }, { expiresAt: { gt: at } }],
+          },
+        }),
+      countProposedExpired: (at) =>
+        db.coworkerActionEnvelope.count({
+          where: {
+            status: DECIDABLE_STATUS,
+            resolvedAt: null,
+            expiresAt: { lte: at },
+          },
+        }),
+    },
+    {
+      awaiting: coworkerEnvelopesAwaitingDecision,
+      expiredUnactioned: coworkerEnvelopesExpiredUnactioned,
+    },
+    now,
+  ).catch(() => {
+    // Observability must never affect the inbox it rides on.
+  });
+
   return (rows as unknown as CoworkerEnvelopeRow[]).map((row) =>
     coworkerEnvelopeToAttentionItem(row, nowMs),
   );

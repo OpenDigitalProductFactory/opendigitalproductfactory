@@ -396,9 +396,9 @@ describe("rankByCostPerSuccess", () => {
       contract,
     );
     expect(result[0]!.endpoint.id).toBe("ep-expensive");
-    // rankScore = successProb * 100
-    expect(result[0]!.rankScore).toBeCloseTo(95);
-    expect(result[1]!.rankScore).toBeCloseTo(80);
+    // rankScore = successProb * 100 * tierFactor (no explicit tier → adequate 0.6)
+    expect(result[0]!.rankScore).toBeCloseTo(95 * 0.6);
+    expect(result[1]!.rankScore).toBeCloseTo(80 * 0.6);
   });
 
   it("balanced: blends cost efficiency with quality", () => {
@@ -430,7 +430,7 @@ describe("rankByCostPerSuccess", () => {
     // Null pricing endpoint should be penalized
     const nullResult = result.find((r) => r.endpoint.id === "ep-null")!;
     const cheapResult = result.find((r) => r.endpoint.id === "ep-cheap")!;
-    expect(nullResult.rankScore).toBe(0.85 * 50); // 42.5
+    expect(nullResult.rankScore).toBe(0.85 * 50 * 0.6); // successProb*50*tierFactor(adequate)
     expect(nullResult.estimatedCost).toBeNull();
     // Cheap should rank higher (known cost, high efficiency)
     expect(cheapResult.rankScore).toBeGreaterThan(nullResult.rankScore);
@@ -446,8 +446,25 @@ describe("rankByCostPerSuccess", () => {
       contract,
     );
     const freeResult = result.find((r) => r.endpoint.id === "ep-free")!;
-    expect(freeResult.rankScore).toBe(0.7 * 100); // 70
+    expect(freeResult.rankScore).toBe(0.7 * 100 * 0.6); // successProb*100*tierFactor(adequate)
     expect(freeResult.estimatedCost).toBe(0);
+  });
+
+  it("prefers a free FRONTIER endpoint over a free ADEQUATE one at equal successProb (BI-654EE2E9)", () => {
+    // The live bug: Claude/Codex (frontier, free) tied local qwen (adequate, free)
+    // on success-probability, and the stable sort kept local. Tier must break it.
+    const contract = makeContract({ budgetClass: "minimize_cost" });
+    const frontierFree = { ...freeModel, id: "ep-frontier", qualityTier: "frontier" as const };
+    const adequateFree = { ...freeModel, id: "ep-local", qualityTier: "adequate" as const };
+    const result = rankByCostPerSuccess(
+      [
+        { endpoint: adequateFree, successProb: 0.9 },
+        { endpoint: frontierFree, successProb: 0.9 },
+      ],
+      contract,
+    );
+    expect(result[0]!.endpoint.id).toBe("ep-frontier");
+    expect(result[0]!.rankScore).toBeGreaterThan(result[1]!.rankScore);
   });
 
   it("sorts descending by rankScore", () => {
@@ -473,8 +490,8 @@ describe("rankByCostPerSuccess", () => {
       ],
       contract,
     );
-    // quality_first: rankScore = successProb * 100 for ALL, regardless of pricing
+    // quality_first: rankScore = successProb * 100 * tierFactor, regardless of pricing
     expect(result[0]!.endpoint.id).toBe("ep-null");
-    expect(result[0]!.rankScore).toBeCloseTo(95);
+    expect(result[0]!.rankScore).toBeCloseTo(95 * 0.6);
   });
 });

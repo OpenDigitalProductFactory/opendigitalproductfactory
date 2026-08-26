@@ -22,6 +22,7 @@ import { classifyMac } from "./discovery-mac-classification";
 import { placeDeviceClass } from "./device-placement";
 import { recordFingerprintReview } from "./discovery-fingerprint-store";
 import type { FingerprintRuleObservation, FingerprintMatchExpression, ResolvedIdentity } from "./discovery-fingerprint-rules";
+import { buildCommonsFingerprint, type CommonsFingerprint } from "./fingerprint-commons-contribution";
 
 export type InvestigationOutcome = "auto_resolve" | "escalate" | "dismiss";
 
@@ -54,6 +55,12 @@ export type InvestigationResult = {
   rationale: string;
   draftRule?: DraftFingerprintRule;
   escalation?: EscalationQuestion;
+  /**
+   * Privacy-scrubbed, generalizable vendor->device-class fingerprint safe to
+   * contribute to the shared commons (BI-57C27DE1). Null unless the device is a
+   * clean, non-proprietary known — proprietary/unplaceable devices stay local.
+   */
+  commonsContribution?: CommonsFingerprint | null;
 };
 
 export type WebSearchResult = { title: string; url: string; snippet: string };
@@ -185,8 +192,31 @@ function classifyFromObservedSignals(
 /**
  * Investigate a layer-0 miss. Deterministic heuristics run first; web research
  * (when injected) is the fallback for genuinely unknown vendors.
+ *
+ * The exported entry attaches a privacy-scrubbed commons contribution (BI-57C27DE1)
+ * derived ONLY from the draft rule's generalizable {vendor, deviceClass} — never
+ * from the observation's IP/host/MAC. When the device is proprietary/unplaceable
+ * (no draft rule, no clean class) the contribution is null and nothing is shared.
  */
 export async function investigateUnidentifiedDevice(
+  observation: FingerprintRuleObservation,
+  options: InvestigationOptions = {},
+): Promise<InvestigationResult> {
+  const result = await investigateUnidentifiedDeviceInner(observation, options);
+  const identity = result.draftRule?.resolvedIdentity;
+  // Vendor source: the resolved identity's vendor, else the observation's OUI
+  // vendor (a generalizable manufacturer string — never an identifier).
+  const observedVendor = typeof ev(observation).vendor === "string" ? (ev(observation).vendor as string) : null;
+  const commonsContribution = identity
+    ? buildCommonsFingerprint({
+        vendor: identity.vendor ?? observedVendor,
+        deviceClass: identity.deviceClass ?? null,
+      })
+    : null;
+  return { ...result, commonsContribution };
+}
+
+async function investigateUnidentifiedDeviceInner(
   observation: FingerprintRuleObservation,
   options: InvestigationOptions = {},
 ): Promise<InvestigationResult> {

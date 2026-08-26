@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 1,
+  "bundleId": "capture-ep-build-e32f28",
+  "description": "Backlog captured from this installation on 2026-08-26T03:02:44.748Z.",
+  "source": {
+    "capturedAt": "2026-08-26T03:57:53.481Z",
+    "repository": "OpenDigitalProductFactory/opendigitalproductfactory",
+    "planPath": "docs/superpowers/plans/2026-08-22-instance-identity-and-purpose.md"
+  },
+  "epic": {
+    "epicId": "EP-BUILD-E32F28",
+    "title": "Add local build capacity precedence note to CONTRIBUTING (probe 3)",
+    "description": "Temporary Build Studio robustness probe that checked local build-capacity precedence in CONTRIBUTING; retained for audit and backlog recovery.",
+    "status": "open",
+    "scopeKind": "unknown",
+    "createdAt": "2026-08-23T14:41:48.292Z"
+  },
+  "items": [
+    {
+      "itemId": "BI-5FFCDDB5",
+      "epicId": "EP-BUILD-E32F28",
+      "title": "Add local build capacity precedence note to CONTRIBUTING (probe 3)",
+      "body": "Legacy intake recorded no supporting body. The complete known problem statement is: Add local build capacity precedence note to CONTRIBUTING (probe 3). This audit repair adds no requirements beyond that title.",
+      "status": "retired",
+      "type": "product",
+      "workType": "doc",
+      "source": "user-request",
+      "scopeKind": "unknown",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [],
+      "effortSize": "small",
+      "triageOutcome": "build",
+      "createdAt": "2026-08-23T14:41:44.551Z"
+    },
+    {
+      "itemId": "BI-EB1F6E81",
+      "epicId": "EP-BUILD-E32F28",
+      "title": "Add local build capacity precedence note to CONTRIBUTING (coder run)",
+      "body": "Legacy intake recorded no supporting body. The complete known problem statement is: Add local build capacity precedence note to CONTRIBUTING (coder rerun). This audit repair adds no requirements beyond that title.",
+      "status": "in-progress",
+      "type": "product",
+      "workType": "doc",
+      "source": "user-request",
+      "scopeKind": "unknown",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-eb1f6e81-cmt6rsn5z0fv501mxsnpx1mjs",
+          "kind": "status_change",
+          "summary": "open → in-progress — Claimed by WC-9FC23BB2 for the compact backlog-drain batch on fix/stop-repeated-coworker-tool-calls-and-document-l.",
+          "recordedAt": "2026-08-24T05:03:00.935Z",
+          "payload": {
+            "to": "in-progress",
+            "from": "open",
+            "reason": "Claimed by WC-9FC23BB2 for the compact backlog-drain batch on fix/stop-repeated-coworker-tool-calls-and-document-l.",
+            "resolution": null,
+            "claimAction": "acquired",
+            "forcedClaim": false
+          }
+        },
+        {
+          "recoveryKey": "bi-eb1f6e81-cmt6tmj0b0hwe01mxoy4vevga",
+          "kind": "evidence",
+          "summary": "PR #4629 documents contributor-visible local provider and exact local-CI capacity precedence.",
+          "recordedAt": "2026-08-24T05:54:14.843Z",
+          "payload": {
+            "url": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/4629",
+            "body": "Commit 49dfc4078 passed TDD regression tests, 52/52 preflight guards, scoped and exact-tree typechecks, the full exact-tree test suite, and the production Docker build. Governed local-CI evidence: cmt6taleg0hme01mx42vxr0h2. UX and migration are not applicable because no UI surface, schema, or data shape changed.",
+            "evidenceKind": "test_pass",
+            "toolExecutionId": null
+          }
+        },
+        {
+          "recoveryKey": "bi-eb1f6e81-cmt9ib8wb042r01qvysak0dd7",
+          "kind": "epic_link",
+          "summary": "(no epic) → EP-BUILD-E32F28",
+          "recordedAt": "2026-08-26T03:00:51.275Z",
+          "payload": {
+            "toEpicId": "EP-BUILD-E32F28",
+            "fromEpicId": null
+          }
+        }
+      ],
+      "effortSize": "small",
+      "triageOutcome": "build",
+      "createdAt": "2026-08-23T18:06:53.546Z"
+    }
+  ]
+}

@@ -3,7 +3,7 @@
   "bundleId": "veterinary-clinic-operating-system",
   "description": "Operator-invoked recovery input for the veterinary clinic operating system epic (archetype acceptance-scenario contract and fixtures).",
   "source": {
-    "capturedAt": "2026-08-23T02:00:56.767Z",
+    "capturedAt": "2026-08-26T03:57:53.481Z",
     "repository": "OpenDigitalProductFactory/opendigitalproductfactory",
     "planPath": "docs/architecture/archetype-operating-model-audit.md"
   },
@@ -22,17 +22,37 @@
       "itemId": "BI-757C91D4",
       "epicId": "EP-55AF36AC",
       "title": "Author the Oak & Prairie Julia veterinary acceptance fixture",
-      "body": "## Problem\nThe design defines Oak & Prairie and Julia, but executable demo flavor still names Meadowbrook/Iris and the audit contains another clinic identity. The canonical journeys, roles, animals, resources, stock, policies, integrations, and failure states are not loadable as one fixture.\n\n## Scope\nAuthor the Oak & Prairie scenario from the approved design: Julia and staff, guardians and animals, rooms/equipment/kennels, appointments/urgent reserve, encounters/procedures, medication and lot stock, controlled and waste evidence, retail food, workforce call-out, lab/payment/distributor stubs, clocked exceptions, export/restore, and deterministic cleanup. Regulated facts remain evidence-labelled and reviewer-gated.\n\n## Acceptance criteria\n- Fixture covers every named golden journey in design §12 and minimum acceptance journey in §14 that belongs to the scenario slice.\n- Julia, DVM, technician, CSR/manager, and client views have deterministic expected outcomes.\n- Wrong-tenant/animal/guardian, insufficient role, duplicate/out-of-order, stock/temperature/recall, interruption, offline, and recovery cases are represented.\n- Demo flavor and audit identity converge on Oak & Prairie; no parallel practice authority remains.\n- Reset/reload produces the same state and export/restore reconciles.\n- 20% refactoring allocation removes conflicting fixture identities and leaf-local helpers.\n\nBlocked by: canonical scenario-contract BI. Blocks live role/job runner and rollout BI.\n\nParent: BI-79449954.",
-      "status": "open",
+      "body": "## Problem\r\nThe design defines Oak & Prairie and Julia, but executable demo flavor still names Meadowbrook/Iris and the audit contains another clinic identity. The canonical journeys, roles, animals, resources, stock, policies, integrations, and failure states are not loadable as one fixture.\r\n\r\n## Scope\r\nAuthor the Oak & Prairie scenario from the canonical design: Julia and staff, guardians and animals, rooms/equipment/kennels, appointments/urgent reserve, encounters/procedures, medication and lot stock, controlled and waste evidence, retail food, workforce call-out, lab/payment/distributor stubs, clocked exceptions, export/restore, and deterministic cleanup. Regulated facts remain evidence-labelled and reviewer-gated.\r\n\r\n## Acceptance criteria\r\n- Fixture covers every named golden journey in design §12 and minimum acceptance journey in §14 that belongs to the scenario slice.\r\n- Julia, DVM, technician, CSR/manager, and client views have deterministic expected outcomes.\r\n- Wrong-tenant/animal/guardian, insufficient role, duplicate/out-of-order, stock/temperature/recall, interruption, offline, and recovery cases are represented.\r\n- Demo flavor and audit identity converge on Oak & Prairie; no parallel practice authority remains.\r\n- Reset/reload produces the same state and export/restore reconciles.\r\n- 20% refactoring allocation removes conflicting fixture identities and leaf-local helpers.\r\n\r\nBlocked by: canonical scenario-contract BI. Blocks live role/job runner and rollout BI.\r\n\r\nParent: BI-79449954.\r\n\r\n## Governed traceability\r\n\r\n- Requirements: `OBJ-VET-002`, `OBJ-VET-003`; `AC-VET-002`, `AC-VET-003`, `AC-VET-005`.\r\n- Contract: plan §5 and design §12.\r\n- Flow and verification: plan §10.",
+      "status": "deferred",
       "type": "product",
       "workType": "feature",
       "source": "user-request",
       "scopeKind": "archetype-leaf",
       "dependsOn": [],
       "externalDependencies": [],
-      "activities": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-757c91d4-cmt7z8a6a0f7z01mgabrysl64",
+          "kind": "status_change",
+          "summary": "Retired BI-757C91D4 as defer",
+          "recordedAt": "2026-08-25T01:18:54.082Z",
+          "payload": {
+            "to": "deferred",
+            "from": "open",
+            "reason": "The Oak & Prairie fixture depends on the canonical acceptance-scenario contract and stable veterinary domain semantics; authoring it first would create another incompatible fixture shape.",
+            "outcome": "defer",
+            "deferral": {
+              "reason": "The Oak & Prairie fixture depends on the canonical acceptance-scenario contract and stable veterinary domain semantics; authoring it first would create another incompatible fixture shape.",
+              "trigger": "Resume when BI-8424E0E6's contract is approved and implemented, then fund the veterinary sentinel fixture with domain review and deterministic cleanup.",
+              "reviewAt": "2026-09-08T20:00:00.000Z"
+            },
+            "rationale": "Valid archetype-acceptance roadmap demand, but it forms a sequenced cross-package program. Shipping an isolated fragment in the pre-reinstall drain would increase fixture and runner drift.",
+            "duplicateOfId": null
+          }
+        }
+      ],
       "effortSize": "large",
-      "triageOutcome": "build",
+      "triageOutcome": "defer",
       "scopeRationale": "This is the deterministic deep fixture for the existing veterinary-clinic leaf.",
       "priority": 2,
       "createdAt": "2026-08-23T00:44:44.091Z"
@@ -41,7 +61,7 @@
       "itemId": "BI-79449954",
       "epicId": "EP-55AF36AC",
       "title": "Canonical Oak & Prairie veterinary fixture and reusable archetype acceptance-scenario convergence",
-      "body": "## Problem\n\nThe approved veterinary design defines Oak & Prairie and Julia as the canonical acceptance scenario, but no executable plan or shared fixture contract connects that scenario to the deterministic Demo Business generator, business-activity simulator, live exercise harness, UX/job validation, and audit. Current definitions already conflict (Oak & Prairie/Julia in the design, Meadowbrook/Iris in demo flavor, and an older clinic identity in the audit), so further archetype tests would multiply drift.\n\n## Scope\n\nIn scope:\n- one validated declarative archetype acceptance-scenario overlay that extends the existing DemoBusiness substrate;\n- adapters for deterministic demo projection, simulator flows, live HTTP exercise, persona/job UX checks, and audit reporting;\n- the complete Oak & Prairie/Julia fixture with reset/replay, negative, safety, compliance, inventory, staffing, retail, export/restore, and mobile/desktop cases;\n- lessons from the Pet Rescue dogfood cycle, including subject/resource generalization, archetype-aware vocabulary and WWWD starters, inventory, occupancy, care schedules, veterinary coordination, first-viewport relevance, and live fresh-install readiness;\n- a tiered rollout model for all archetypes and an explicit 20% refactoring allocation to remove duplicate fixture authorities.\n\nOut of scope:\n- implementing the clinical, controlled-substance, or jurisdiction-specific product slices themselves;\n- claiming legal or clinical correctness without the external reviewers required by the design;\n- a parallel veterinary-only harness or duplicate business identity store.\n\n## Acceptance criteria\n\n- A committed plan maps every independently shippable deliverable to a live BI and carries a validated backlog-coverage receipt.\n- Exactly one scenario definition owns business identity, roles, personas/subjects, resources, catalog, demand/events, stock, policies, integrations, clock, expected outcomes, UX oracles, and cleanup.\n- Demo, simulator, live harness, audit, and future archetype tests consume projections/adapters from that definition rather than restating it.\n- Oak & Prairie exercises Julia and all named staff/client journeys from the canonical design, including negative and recovery states.\n- The plan specifies first-viewport, job-step, accessibility, mobile, compliance/safety, replay, teardown, export/restore, and cross-archetype regression evidence.\n- Pet Rescue findings are traced to generalized fixture requirements or explicitly excluded with rationale.\n- At least 20% of each implementation slice is reserved for fixture/substrate convergence and removal of superseded definitions.\n\n## Dependencies\n\nBlocked by regulated-slice promotion on the veterinary, technician, Illinois legal/compliance, controlled-substance/waste, security, and accessibility reviews named in the design. Fixture-framework implementation and non-clinical test data authoring may proceed before those reviews, but regulated assertions may not.\n\n## Context\n\n- Design: `docs/superpowers/specs/2026-08-08-veterinary-clinic-operating-system-design.md`\n- Existing demo plan: `docs/superpowers/plans/2026-07-15-archetype-demo-factory-execution.md`\n- Live exercise playbook: `docs/testing/archetype-exercise-playbook.md`\n- Pet Rescue findings: `EP-5102F494`\n- Architecture decision: `DI-BFA0999EA4C1` (extend Demo Business with a companion acceptance-scenario overlay).",
+      "body": "## Problem\r\n\r\nThe canonical veterinary design defines Oak & Prairie and Julia as the canonical acceptance scenario, but no executable plan or shared fixture contract connects that scenario to the deterministic Demo Business generator, business-activity simulator, live exercise harness, UX/job validation, and audit. Current definitions already conflict (Oak & Prairie/Julia in the design, Meadowbrook/Iris in demo flavor, and an older clinic identity in the audit), so further archetype tests would multiply drift.\r\n\r\n## Scope\r\n\r\nIn scope:\r\n- one validated declarative archetype acceptance-scenario overlay that extends the existing DemoBusiness substrate;\r\n- adapters for deterministic demo projection, simulator flows, live HTTP exercise, persona/job UX checks, and audit reporting;\r\n- the complete Oak & Prairie/Julia fixture with reset/replay, negative, safety, compliance, inventory, staffing, retail, export/restore, and mobile/desktop cases;\r\n- lessons from the Pet Rescue dogfood cycle, including subject/resource generalization, archetype-aware vocabulary and WWWD starters, inventory, occupancy, care schedules, veterinary coordination, first-viewport relevance, and live fresh-install readiness;\r\n- a tiered rollout model for all archetypes and an explicit 20% refactoring allocation to remove duplicate fixture authorities.\r\n\r\nOut of scope:\r\n- implementing the clinical, controlled-substance, or jurisdiction-specific product slices themselves;\r\n- claiming legal or clinical correctness without the external reviewers required by the design;\r\n- a parallel veterinary-only harness or duplicate business identity store.\r\n\r\n## Acceptance criteria\r\n\r\n- A committed plan maps every independently shippable deliverable to a live BI and carries a validated backlog-coverage receipt.\r\n- Exactly one scenario definition owns business identity, roles, personas/subjects, resources, catalog, demand/events, stock, policies, integrations, clock, expected outcomes, UX oracles, and cleanup.\r\n- Demo, simulator, live harness, audit, and future archetype tests consume projections/adapters from that definition rather than restating it.\r\n- Oak & Prairie exercises Julia and all named staff/client journeys from the canonical design, including negative and recovery states.\r\n- The plan specifies first-viewport, job-step, accessibility, mobile, compliance/safety, replay, teardown, export/restore, and cross-archetype regression evidence.\r\n- Pet Rescue findings are traced to generalized fixture requirements or explicitly excluded with rationale.\r\n- At least 20% of each implementation slice is reserved for fixture/substrate convergence and removal of superseded definitions.\r\n\r\n## Dependencies\r\n\r\nBlocked by regulated-slice promotion on the veterinary, technician, Illinois legal/compliance, controlled-substance/waste, security, and accessibility reviews named in the design. Fixture-framework implementation and non-clinical test data authoring may proceed before those reviews, but regulated assertions may not.\r\n\r\n## Context\r\n\r\n- Design: `docs/superpowers/specs/2026-08-08-veterinary-clinic-operating-system-design.md`\r\n- Existing demo plan: `docs/superpowers/plans/2026-07-15-archetype-demo-factory-execution.md`\r\n- Live exercise playbook: `docs/testing/archetype-exercise-playbook.md`\r\n- Pet Rescue findings: `EP-5102F494`\r\n- Architecture decision: `DI-BFA0999EA4C1` (extend Demo Business with a companion acceptance-scenario overlay).\r\n\r\n## Governed traceability\r\n\r\n- Design objectives: `OBJ-VET-001` through `OBJ-VET-006`.\r\n- Design acceptance: `AC-VET-001` through `AC-VET-008`.\r\n- Plan: `docs/superpowers/plans/2026-08-22-veterinary-archetype-acceptance-fixture.md`.\r\n- Coverage boundary: five independently shippable child BIs; the immutable coverage receipt remains a separate fail-closed gate.",
       "status": "open",
       "type": "portfolio",
       "workType": "feature",
@@ -51,192 +71,15 @@
       "externalDependencies": [],
       "activities": [
         {
-          "recoveryKey": "bi-79449954-cmt53clkg00fs01rm4hep54zc",
-          "kind": "initiative_readiness_decision",
-          "summary": "plan readiness: input-required",
-          "recordedAt": "2026-08-23T00:50:55.408Z",
+          "recoveryKey": "bi-79449954-cmt745ew30myr01mxfak579rm",
+          "kind": "evidence",
+          "summary": "Readiness repair merged but is not deployed; veterinary coverage replay remains prohibited",
+          "recordedAt": "2026-08-24T10:48:52.131Z",
           "payload": {
-            "unmet": [
-              {
-                "code": "CANONICAL_DESIGN_REQUIRED",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "design-checklist-reviewer"
-              },
-              {
-                "code": "RESEARCH_REQUIRED",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "design-author"
-              },
-              {
-                "code": "SPEC_APPROVAL_REQUIRED",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "design-checklist-reviewer"
-              },
-              {
-                "code": "REVIEW_REQUIRED",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "architecture-reviewer"
-              },
-              {
-                "code": "REVIEW_REQUIRED",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "data-reviewer"
-              },
-              {
-                "code": "REVIEW_REQUIRED",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "ux-reviewer"
-              },
-              {
-                "code": "REVIEW_REQUIRED",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "security-reviewer"
-              },
-              {
-                "code": "REVIEW_REQUIRED",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "compliance-reviewer"
-              },
-              {
-                "code": "REVIEW_REQUIRED",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "domain-reviewer"
-              },
-              {
-                "code": "OBJECTIVE_BASELINE_REQUIRED",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "design-checklist-reviewer"
-              },
-              {
-                "code": "ARTIFACT_AUTHOR_REQUIRED",
-                "state": "missing",
-                "evidenceRefs": [],
-                "accountableRole": "artifact-resolver"
-              }
-            ],
-            "target": "plan",
-            "profile": "archetype",
-            "subject": {
-              "id": "BI-79449954",
-              "kind": "backlog-item"
-            },
-            "verdict": "input-required",
-            "blockers": [],
-            "authority": {
-              "actionKey": "claim_backlog_item_for_work",
-              "enforcementState": "enforced"
-            },
-            "satisfied": [
-              {
-                "code": "CLASSIFICATION_REQUIRED",
-                "state": "pass",
-                "evidenceRefs": [],
-                "accountableRole": "product-owner"
-              },
-              {
-                "code": "AUTHORIZATION_DENIED",
-                "state": "pass",
-                "evidenceRefs": [],
-                "accountableRole": "platform-governance"
-              }
-            ],
-            "decisionId": "IRD-EF7FE6E00C13",
-            "workIntent": "plan",
-            "evaluatedAt": "2026-08-23T00:50:55.405Z",
-            "factsDigest": "fdf83010e2f751aa702870fb18f8710ce4e30765ffa02e42d87677dce8131036",
-            "stableCodes": {
-              "unmet": [
-                "CANONICAL_DESIGN_REQUIRED",
-                "RESEARCH_REQUIRED",
-                "SPEC_APPROVAL_REQUIRED",
-                "REVIEW_REQUIRED",
-                "REVIEW_REQUIRED",
-                "REVIEW_REQUIRED",
-                "REVIEW_REQUIRED",
-                "REVIEW_REQUIRED",
-                "REVIEW_REQUIRED",
-                "OBJECTIVE_BASELINE_REQUIRED",
-                "ARTIFACT_AUTHOR_REQUIRED"
-              ],
-              "blockers": [],
-              "satisfied": [
-                "CLASSIFICATION_REQUIRED",
-                "AUTHORIZATION_DENIED"
-              ]
-            },
-            "policyVersion": "initiative-readiness.v1",
-            "schemaVersion": 1,
-            "transitionObject": {
-              "id": "OpenDigitalProductFactory/opendigitalproductfactory#doc/write-the-governed-oak-prairie-acceptance-fixtur",
-              "kind": "work-capsule",
-              "targetState": "plan",
-              "expectedVersion": "claim.v1"
-            }
-          }
-        },
-        {
-          "recoveryKey": "bi-79449954-cmt53dais00gb01rma5uqvwhc",
-          "kind": "initiative_readiness_decision",
-          "summary": "design readiness: allowed",
-          "recordedAt": "2026-08-23T00:51:27.748Z",
-          "payload": {
-            "unmet": [],
-            "target": "design",
-            "profile": "archetype",
-            "subject": {
-              "id": "BI-79449954",
-              "kind": "backlog-item"
-            },
-            "verdict": "allowed",
-            "blockers": [],
-            "authority": {
-              "actionKey": "claim_backlog_item_for_work",
-              "enforcementState": "enforced"
-            },
-            "satisfied": [
-              {
-                "code": "CLASSIFICATION_REQUIRED",
-                "state": "pass",
-                "evidenceRefs": [],
-                "accountableRole": "product-owner"
-              },
-              {
-                "code": "AUTHORIZATION_DENIED",
-                "state": "pass",
-                "evidenceRefs": [],
-                "accountableRole": "platform-governance"
-              }
-            ],
-            "decisionId": "IRD-CEF01997A993",
-            "workIntent": "design",
-            "evaluatedAt": "2026-08-23T00:51:27.732Z",
-            "factsDigest": "b19cb54a2a1237b487190a47bba8033ffaa7f26881bb468054dc53e22bd230f0",
-            "stableCodes": {
-              "unmet": [],
-              "blockers": [],
-              "satisfied": [
-                "CLASSIFICATION_REQUIRED",
-                "AUTHORIZATION_DENIED"
-              ]
-            },
-            "policyVersion": "initiative-readiness.v1",
-            "schemaVersion": 1,
-            "transitionObject": {
-              "id": "OpenDigitalProductFactory/opendigitalproductfactory#doc/write-the-governed-oak-prairie-acceptance-fixtur",
-              "kind": "work-capsule",
-              "targetState": "design",
-              "expectedVersion": "claim.v1"
-            }
+            "url": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/4633",
+            "body": "Dependency handoff from task 019fe344-e9d3-7a13-8268-d4639f5e6f86. PR #4633 merged on origin/main at ddd1ae31e2d63b44cffd18a13d095948ce2fb6bf. The development install remains at d104cd3 with initiative-readiness.v1. Governed self-upgrade SUR-F8885052 failed before quiescence/swap because release-artifact mode required a source-only /host-source capability adapter. Corrective BI-5AA89F68 is triaged build/medium. Do not retry veterinary plan coverage against this install until the corrective deployment succeeds and install version is reverified.",
+            "evidenceKind": "external_link",
+            "toolExecutionId": null
           }
         }
       ],
@@ -250,17 +93,37 @@
       "itemId": "BI-8424E0E6",
       "epicId": "EP-55AF36AC",
       "title": "Define the canonical archetype acceptance-scenario contract and DemoBusiness derivation",
-      "body": "## Problem\nDemoBusiness supplies deterministic demo state, while simulator and live-harness scenarios carry separate behavior definitions. There is no validated companion contract for jobs, subjects, resources, events, expected outcomes, UX oracles, or cleanup.\n\n## Scope\nDefine a typed, versioned acceptance-scenario overlay in @dpf/storefront-templates, derived from and linked to DemoBusiness. Include identity, clock, roles, personas/subjects, resources, catalog, demand/events, inventory, policy/applicability, integration stubs, expected outcomes, UX oracles, evidence labels, and cleanup. Reject duplicate business identity and nondeterministic clocks.\n\n## Acceptance criteria\n- Schema and validator reject duplicate identity, unknown references, unsupported capabilities, unsafe regulated claims, and nondeterminism.\n- Every scenario references one archetype and one DemoBusiness authority.\n- Unit/property/snapshot tests prove stable derivation and backward compatibility.\n- 20% refactoring allocation is used to consolidate existing demo schema/helpers exposed by the change.\n\nBlocked by: none. Blocks the adapter and Oak & Prairie fixture BIs.\n\nParent: BI-79449954.",
-      "status": "open",
+      "body": "## Problem\r\nDemoBusiness supplies deterministic demo state, while simulator and live-harness scenarios carry separate behavior definitions. There is no validated companion contract for jobs, subjects, resources, events, expected outcomes, UX oracles, or cleanup.\r\n\r\n## Scope\r\nDefine a typed, versioned acceptance-scenario overlay in @dpf/storefront-templates, derived from and linked to DemoBusiness. Include identity, clock, roles, personas/subjects, resources, catalog, demand/events, inventory, policy/applicability, integration stubs, expected outcomes, UX oracles, evidence labels, and cleanup. Reject duplicate business identity and nondeterministic clocks.\r\n\r\n## Acceptance criteria\r\n- Schema and validator reject duplicate identity, unknown references, unsupported capabilities, unsafe regulated claims, and nondeterminism.\r\n- Every scenario references one archetype and one DemoBusiness authority.\r\n- Unit/property/snapshot tests prove stable derivation and backward compatibility.\r\n- 20% refactoring allocation is used to consolidate existing demo schema/helpers exposed by the change.\r\n\r\nBlocked by: none. Blocks the adapter and Oak & Prairie fixture BIs.\r\n\r\nParent: BI-79449954.\r\n\r\n## Governed traceability\r\n\r\n- Requirements: `OBJ-VET-001`, `OBJ-VET-005`; `AC-VET-001`, `AC-VET-006`.\r\n- Contract: plan §3.3 and design §§6–7.\r\n- Flow and verification: plan §8.",
+      "status": "deferred",
       "type": "product",
       "workType": "feature",
       "source": "user-request",
       "scopeKind": "multi-archetype",
       "dependsOn": [],
       "externalDependencies": [],
-      "activities": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-8424e0e6-cmt7z8a200f7w01mg4f1u6jth",
+          "kind": "status_change",
+          "summary": "Retired BI-8424E0E6 as defer",
+          "recordedAt": "2026-08-25T01:18:53.928Z",
+          "payload": {
+            "to": "deferred",
+            "from": "open",
+            "reason": "The typed acceptance-scenario contract is the architectural root for fixture, simulator, live-harness, audit, cleanup, and UX oracles; it needs a dedicated cross-package design and rollout.",
+            "outcome": "defer",
+            "deferral": {
+              "reason": "The typed acceptance-scenario contract is the architectural root for fixture, simulator, live-harness, audit, cleanup, and UX oracles; it needs a dedicated cross-package design and rollout.",
+              "trigger": "Resume after reinstall when the acceptance-architecture design is approved and a funded epic owns the versioned contract, compatibility adapters, migration, and staged rollout.",
+              "reviewAt": "2026-09-08T20:00:00.000Z"
+            },
+            "rationale": "Valid archetype-acceptance roadmap demand, but it forms a sequenced cross-package program. Shipping an isolated fragment in the pre-reinstall drain would increase fixture and runner drift.",
+            "duplicateOfId": null
+          }
+        }
+      ],
       "effortSize": "medium",
-      "triageOutcome": "build",
+      "triageOutcome": "defer",
       "scopeRationale": "The contract is shared test substrate; veterinary-clinic is its first deep consumer.",
       "priority": 1,
       "createdAt": "2026-08-23T00:44:44.000Z"
@@ -269,17 +132,37 @@
       "itemId": "BI-B39A796D",
       "epicId": "EP-55AF36AC",
       "title": "Converge demo, simulator, live harness, and audit on scenario adapters",
-      "body": "## Problem\nThe Demo Business generator, business-activity simulator, live exercise harness, and archetype audit currently restate business behavior in incompatible shapes. The playbook already identifies this drift risk.\n\n## Scope\nBuild thin projections from the canonical acceptance-scenario contract into deterministic demo load, simulator flows, live HTTP exercise, audit/job reports, and cleanup. Preserve each runner's purpose; do not create a new runner. Remove or redirect duplicate scenario definitions after parity proof.\n\n## Acceptance criteria\n- One source scenario produces all runner inputs.\n- Restaurant remains behaviorally equivalent through a compatibility adapter.\n- Load/unload is idempotent and source-tag isolated.\n- Adapter contract tests cover reference integrity, unsupported steps, failures, and deterministic replay.\n- Superseded duplicate definitions are removed only after snapshot and live parity evidence.\n- At least 20% of the slice is explicit convergence/debt removal.\n\nBlocked by: canonical scenario-contract BI. Blocks live Oak & Prairie execution and rollout BI.\n\nParent: BI-79449954.",
-      "status": "open",
+      "body": "## Problem\r\nThe Demo Business generator, business-activity simulator, live exercise harness, and archetype audit currently restate business behavior in incompatible shapes. The playbook already identifies this drift risk.\r\n\r\n## Scope\r\nBuild thin projections from the canonical acceptance-scenario contract into deterministic demo load, simulator flows, live HTTP exercise, audit/job reports, and cleanup. Preserve each runner's purpose; do not create a new runner. Remove or redirect duplicate scenario definitions after parity proof.\r\n\r\n## Acceptance criteria\r\n- One source scenario produces all runner inputs.\r\n- Restaurant remains behaviorally equivalent through a compatibility adapter.\r\n- Load/unload is idempotent and source-tag isolated.\r\n- Adapter contract tests cover reference integrity, unsupported steps, failures, and deterministic replay.\r\n- Superseded duplicate definitions are removed only after snapshot and live parity evidence.\r\n- At least 20% of the slice is explicit convergence/debt removal.\r\n\r\nBlocked by: canonical scenario-contract BI. Blocks live Oak & Prairie execution and rollout BI.\r\n\r\nParent: BI-79449954.\r\n\r\n## Governed traceability\r\n\r\n- Requirements: `OBJ-VET-005`; `AC-VET-001`, `AC-VET-006`.\r\n- Contract: plan §§3.1–3.2.\r\n- Flow and verification: plan §9.",
+      "status": "deferred",
       "type": "product",
       "workType": "refactor",
       "source": "user-request",
       "scopeKind": "multi-archetype",
       "dependsOn": [],
       "externalDependencies": [],
-      "activities": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-b39a796d-cmt7z8aam0f8201mg65rvihp4",
+          "kind": "status_change",
+          "summary": "Retired BI-B39A796D as defer",
+          "recordedAt": "2026-08-25T01:18:54.238Z",
+          "payload": {
+            "to": "deferred",
+            "from": "open",
+            "reason": "Converging demo, simulator, live harness, and audit is a cross-runner refactor whose safe sequence depends on the canonical scenario contract and compatibility adapters.",
+            "outcome": "defer",
+            "deferral": {
+              "reason": "Converging demo, simulator, live harness, and audit is a cross-runner refactor whose safe sequence depends on the canonical scenario contract and compatibility adapters.",
+              "trigger": "Resume when BI-8424E0E6's contract is implemented and its migration plan funds runner-by-runner projections with parity tests and deletion criteria.",
+              "reviewAt": "2026-09-08T20:00:00.000Z"
+            },
+            "rationale": "Valid archetype-acceptance roadmap demand, but it forms a sequenced cross-package program. Shipping an isolated fragment in the pre-reinstall drain would increase fixture and runner drift.",
+            "duplicateOfId": null
+          }
+        }
+      ],
       "effortSize": "large",
-      "triageOutcome": "build",
+      "triageOutcome": "defer",
       "scopeRationale": "This removes cross-platform duplicate fixture authority used by every archetype exercise.",
       "priority": 2,
       "createdAt": "2026-08-23T00:44:44.046Z"
@@ -288,17 +171,37 @@
       "itemId": "BI-CCECF71B",
       "epicId": "EP-55AF36AC",
       "title": "Establish tiered archetype fixture CI, replay, and rollout governance",
-      "body": "## Problem\nRunning every deep live journey for every archetype is too costly, while shallow generation alone misses runtime, vocabulary, authority, and workflow failures. Counts and fixture identities have also drifted in documentation.\n\n## Scope\nImplement coverage tiers: deterministic contract tests for all archetypes; lightweight scenario-delta checks for all; category sentinel live tests; operational-twin shape tests; risk-selected deep fixtures; external domain validation for regulated leaves. Add replay, teardown, export/restore, evidence retention, dynamic catalog counts, and a learning register that routes durable findings to shared substrate/BIs.\n\n## Acceptance criteria\n- CI selects tiers by changed substrate, archetype risk, category, and operational shape.\n- All current archetypes are enumerated dynamically; no hand-maintained counts.\n- Every live run proves setup, execution, cleanup, replay, and finding capture.\n- Pet Rescue lessons are represented as regression requirements, including subject/resource generalization, inventory, occupancy, scheduled care, veterinary coordination, archetype-aware vocabulary/stances, and first-viewport relevance.\n- Runtime-heavy gates only run when their impact contract requires them.\n- 20% refactoring allocation removes stale counts, duplicate docs, and runner-specific scenario rules.\n\nBlocked by: scenario adapters and acceptance runner BIs. Parent: BI-79449954.",
-      "status": "open",
+      "body": "## Problem\r\nRunning every deep live journey for every archetype is too costly, while shallow generation alone misses runtime, vocabulary, authority, and workflow failures. Counts and fixture identities have also drifted in documentation.\r\n\r\n## Scope\r\nImplement coverage tiers: deterministic contract tests for all archetypes; lightweight scenario-delta checks for all; category sentinel live tests; operational-twin shape tests; risk-selected deep fixtures; external domain validation for regulated leaves. Add replay, teardown, export/restore, evidence retention, dynamic catalog counts, and a learning register that routes durable findings to shared substrate/BIs.\r\n\r\n## Acceptance criteria\r\n- CI selects tiers by changed substrate, archetype risk, category, and operational shape.\r\n- All current archetypes are enumerated dynamically; no hand-maintained counts.\r\n- Every live run proves setup, execution, cleanup, replay, and finding capture.\r\n- Pet Rescue lessons are represented as regression requirements, including subject/resource generalization, inventory, occupancy, scheduled care, veterinary coordination, archetype-aware vocabulary/stances, and first-viewport relevance.\r\n- Runtime-heavy gates only run when their impact contract requires them.\r\n- 20% refactoring allocation removes stale counts, duplicate docs, and runner-specific scenario rules.\r\n\r\nBlocked by: scenario adapters and acceptance runner BIs. Parent: BI-79449954.\r\n\r\n## Governed traceability\r\n\r\n- Requirements: `OBJ-VET-006`; `AC-VET-007`, `AC-VET-008`.\r\n- Contract: plan §§6 and 13.\r\n- Flow and verification: plan §12.",
+      "status": "deferred",
       "type": "product",
       "workType": "feature",
       "source": "user-request",
       "scopeKind": "multi-archetype",
       "dependsOn": [],
       "externalDependencies": [],
-      "activities": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-ccecf71b-cmt7z8aev0f8501mgcc8147df",
+          "kind": "status_change",
+          "summary": "Retired BI-CCECF71B as defer",
+          "recordedAt": "2026-08-25T01:18:54.391Z",
+          "payload": {
+            "to": "deferred",
+            "from": "open",
+            "reason": "Tiered archetype CI is a rollout and operating-cost policy over the canonical scenario substrate; it cannot be selected responsibly before contract and sentinel evidence exist.",
+            "outcome": "defer",
+            "deferral": {
+              "reason": "Tiered archetype CI is a rollout and operating-cost policy over the canonical scenario substrate; it cannot be selected responsibly before contract and sentinel evidence exist.",
+              "trigger": "Resume when the canonical scenario contract and at least one category sentinel fixture are green, then approve coverage tiers, budgets, risk selection, and CI rollout.",
+              "reviewAt": "2026-09-08T20:00:00.000Z"
+            },
+            "rationale": "Valid archetype-acceptance roadmap demand, but it forms a sequenced cross-package program. Shipping an isolated fragment in the pre-reinstall drain would increase fixture and runner drift.",
+            "duplicateOfId": null
+          }
+        }
+      ],
       "effortSize": "medium",
-      "triageOutcome": "build",
+      "triageOutcome": "defer",
       "scopeRationale": "Coverage tiers and rollout governance apply across the entire archetype catalog.",
       "priority": 4,
       "createdAt": "2026-08-23T00:44:44.180Z"
@@ -307,17 +210,37 @@
       "itemId": "BI-F49B0C85",
       "epicId": "EP-55AF36AC",
       "title": "Add role, job, first-viewport, safety, and accessibility acceptance execution",
-      "body": "## Problem\nCurrent live harness drives catalog demand but does not execute per-role jobs or prove that DPF reduces burden against a pre-DPF baseline. It also lacks systematic first-viewport, mobile, accessibility, safety, denial, and recovery assertions.\n\n## Scope\nExtend the existing live exercise path to authenticate seeded roles, execute scenario job steps, capture step/time/error baselines, assert first-viewport relevance and drill-through, check accessibility/mobile states, and record safety/compliance denials and recovery evidence. Use shared UX primitives and the canonical runtime/leased preview only.\n\n## Acceptance criteria\n- Each Julia/staff/client job records pre-DPF baseline, DPF step count, completion, errors, evidence, and unresolved findings.\n- First viewport shows role-relevant urgent work without a duplicate dashboard.\n- Desktop plus Julia/technician mobile widths, keyboard, screen-reader labels, focus, contrast, loading/empty/error/offline/denied states are tested.\n- Unsafe prescribing/release/controlled actions fail closed and capture evidence.\n- Findings automatically map to live BIs without mutating the tested fixture's authority.\n- 20% refactoring allocation consolidates job/oracle/login helpers.\n\nBlocked by: scenario adapters and Oak & Prairie fixture BIs. Blocks rollout BI.\n\nParent: BI-79449954.",
-      "status": "open",
+      "body": "## Problem\r\nCurrent live harness drives catalog demand but does not execute per-role jobs or prove that DPF reduces burden against a pre-DPF baseline. It also lacks systematic first-viewport, mobile, accessibility, safety, denial, and recovery assertions.\r\n\r\n## Scope\r\nExtend the existing live exercise path to authenticate seeded roles, execute scenario job steps, capture step/time/error baselines, assert first-viewport relevance and drill-through, check accessibility/mobile states, and record safety/compliance denials and recovery evidence. Use shared UX primitives and the canonical runtime/leased preview only.\r\n\r\n## Acceptance criteria\r\n- Each Julia/staff/client job records pre-DPF baseline, DPF step count, completion, errors, evidence, and unresolved findings.\r\n- First viewport shows role-relevant urgent work without a duplicate dashboard.\r\n- Desktop plus Julia/technician mobile widths, keyboard, screen-reader labels, focus, contrast, loading/empty/error/offline/denied states are tested.\r\n- Unsafe prescribing/release/controlled actions fail closed and capture evidence.\r\n- Findings automatically map to live BIs without mutating the tested fixture's authority.\r\n- 20% refactoring allocation consolidates job/oracle/login helpers.\r\n\r\nBlocked by: scenario adapters and Oak & Prairie fixture BIs. Blocks rollout BI.\r\n\r\nParent: BI-79449954.\r\n\r\n## Governed traceability\r\n\r\n- Requirements: `OBJ-VET-004`; `AC-VET-004`.\r\n- Contract: plan §§5.2–5.3 and design §8.\r\n- Flow and verification: plan §11.",
+      "status": "deferred",
       "type": "product",
       "workType": "feature",
       "source": "user-request",
       "scopeKind": "multi-archetype",
       "dependsOn": [],
       "externalDependencies": [],
-      "activities": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-f49b0c85-cmt7z8aj30f8801mgo7qa5i4z",
+          "kind": "status_change",
+          "summary": "Retired BI-F49B0C85 as defer",
+          "recordedAt": "2026-08-25T01:18:54.543Z",
+          "payload": {
+            "to": "deferred",
+            "from": "open",
+            "reason": "Role/job/first-viewport/accessibility/safety execution is broad live-harness and UX acceptance work that depends on stable scenario roles, jobs, denials, recovery, and measurement semantics.",
+            "outcome": "defer",
+            "deferral": {
+              "reason": "Role/job/first-viewport/accessibility/safety execution is broad live-harness and UX acceptance work that depends on stable scenario roles, jobs, denials, recovery, and measurement semantics.",
+              "trigger": "Resume when BI-8424E0E6 and BI-B39A796D establish the scenario and runner adapters, then fund UX/accessibility/safety acceptance with explicit browser and live-runtime gates.",
+              "reviewAt": "2026-09-08T20:00:00.000Z"
+            },
+            "rationale": "Valid archetype-acceptance roadmap demand, but it forms a sequenced cross-package program. Shipping an isolated fragment in the pre-reinstall drain would increase fixture and runner drift.",
+            "duplicateOfId": null
+          }
+        }
+      ],
       "effortSize": "large",
-      "triageOutcome": "build",
+      "triageOutcome": "defer",
       "scopeRationale": "The runner is shared; Oak & Prairie supplies the first regulated, multi-role depth case.",
       "priority": 3,
       "createdAt": "2026-08-23T00:44:44.135Z"

@@ -54,6 +54,9 @@ export const AGENT_MODEL_CONFIG_DEFAULTS: AgentModelConfigDefault[] = [
   { agentId: "data-architect", minimumTier: "adequate", budgetClass: "balanced", minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
   { agentId: "compliance-officer", minimumTier: "strong", budgetClass: "balanced", minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
   { agentId: "finance-controller", minimumTier: "strong", budgetClass: "balanced", minimumCapabilities: { toolUse: true }, minimumContextTokens: 16000 },
+  // Bookkeeper (S-BK): confidential money-of-record work — a weak local model must
+  // not import statements or reconcile, so floor at strong with tool use.
+  { agentId: "bookkeeper", minimumTier: "strong", budgetClass: "balanced", minimumCapabilities: { toolUse: true }, minimumContextTokens: 16000 },
   // Floors added by the EP-COWORKER-LIFECYCLE conformance gate (LIFE-005):
   // these three roster coworkers had no minimum tier at all, so a weak local
   // model could serve confidential merge/dispatch/legal work.

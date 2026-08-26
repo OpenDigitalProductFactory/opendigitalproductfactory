@@ -8,6 +8,7 @@ import {
   DEFAULT_SKILL_SUMMARY_CAP,
   type RankableSkill,
 } from "./skill-relevance";
+import { MANDATED_DECISION_SKILL_IDS } from "@dpf/db/mandated-skills";
 
 function skill(id: string, over: Partial<RankableSkill> = {}): RankableSkill {
   return {
@@ -205,5 +206,80 @@ describe("skill-eligibility ratchet (BI-8AD9D018, corrected by BI-4B0C27D4)", ()
       .map(([role, count]) => `${role}: ${count} > ${ELIGIBLE_BASELINE[role] ?? 0}`);
 
     expect(grew).toEqual([]);
+  });
+});
+
+describe("mandated skills are pinned, not ranked (BI-43920DD1)", () => {
+  // The measured failure: an inventory-specialist turn about stock has no
+  // vocabulary overlap with the decision stack, so before the pin the four
+  // mandated skills lost every slot to the role's own skills. 61.4% of 1,175
+  // real turns on the live install dropped at least one this way.
+  const irrelevantTurn = "how many blue widgets are left in the warehouse";
+
+  function corpus(roleSkillCount: number): RankableSkill[] {
+    return [
+      ...MANDATED_DECISION_SKILL_IDS.map((id) => skill(id, { category: "decision" })),
+      ...Array.from({ length: roleSkillCount }, (_, i) =>
+        skill(`stock-skill-${i}`, {
+          label: `Warehouse widgets ${i}`,
+          description: "blue widgets left in the warehouse stock count",
+          tags: ["inventory"],
+        }),
+      ),
+    ];
+  }
+
+  it("keeps every mandated skill on a turn that matches none of them", () => {
+    const kept = rankSkillsByRelevance(corpus(20), irrelevantTurn).map((s) => s.skillId);
+
+    for (const id of MANDATED_DECISION_SKILL_IDS) expect(kept).toContain(id);
+  });
+
+  it("pinning spends slots rather than adding them — the cap still holds", () => {
+    // Raising the cap was the option the kernel rejected (DI-E68BCB1767BD): it
+    // taxes every coworker's turn, worst on the local models this platform targets.
+    // If pinning ever grows the output, that rejected cost arrives by the back door.
+    expect(rankSkillsByRelevance(corpus(20), irrelevantTurn)).toHaveLength(
+      DEFAULT_SKILL_SUMMARY_CAP,
+    );
+  });
+
+  it("still fills the remaining slots by relevance", () => {
+    const kept = rankSkillsByRelevance(corpus(20), irrelevantTurn).map((s) => s.skillId);
+    const contested = kept.filter((id) => !MANDATED_DECISION_SKILL_IDS.includes(id));
+
+    expect(contested).toHaveLength(DEFAULT_SKILL_SUMMARY_CAP - MANDATED_DECISION_SKILL_IDS.length);
+    // Every one of them scored on this turn — the pin did not displace relevance.
+    for (const id of contested) expect(id).toMatch(/^stock-skill-/);
+  });
+
+  it("returns the mandated stack ahead of the ranked remainder", () => {
+    const kept = rankSkillsByRelevance(corpus(20), irrelevantTurn).map((s) => s.skillId);
+
+    expect(kept.slice(0, MANDATED_DECISION_SKILL_IDS.length)).toEqual([
+      ...MANDATED_DECISION_SKILL_IDS,
+    ]);
+  });
+
+  it("changes nothing for a set already within the cap", () => {
+    // The regression guard the original ranker documented: a small-set coworker
+    // must come back byte-for-byte unchanged. Agents at or under the cap were the
+    // ones that never dropped a mandated skill in the measurement, and they must
+    // stay that way.
+    const small = corpus(4);
+    expect(rankSkillsByRelevance(small, irrelevantTurn)).toBe(small);
+  });
+
+  it("keeps the mandate whole when it alone would exceed the cap", () => {
+    const kept = rankSkillsByRelevance(corpus(20), irrelevantTurn, 3).map((s) => s.skillId);
+
+    expect(kept).toEqual([...MANDATED_DECISION_SKILL_IDS].slice(0, 3));
+  });
+
+  it("does not duplicate a mandated skill that is also the most relevant", () => {
+    const onTopic = "which option should we choose — compare the options";
+    const kept = rankSkillsByRelevance(corpus(20), onTopic).map((s) => s.skillId);
+
+    expect(new Set(kept).size).toBe(kept.length);
   });
 });

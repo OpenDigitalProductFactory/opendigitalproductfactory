@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 688,
+  "pageCount": 689,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -1015,6 +1015,7 @@
         "5-required-entities",
         "6-what-exists-today-measured-2026-08-25",
         "7-ux-requirements",
+        "7b-the-adoption-listing-researched-against-the-industry-standard",
         "8-definition-of-done"
       ]
     },
@@ -1574,6 +1575,7 @@
         "maturity-labels-closed-set",
         "finance-matrix-snapshot",
         "payroll-absorption-stance-reversal-2026-08-22",
+        "mileage-jurisdiction-resolution-2026-08-26",
         "finance-doc-reconciliation-rules",
         "workforce-matrix-snapshot",
         "workforce-doc-reconciliation-rules",
@@ -5541,7 +5543,8 @@
         "dpf-doctor",
         "reconcile-installed-plugins-flag",
         "what-install-dpf-does-not-do",
-        "see-also"
+        "see-also",
+        "mapping-a-network-from-another-machine"
       ]
     },
     "docs/operations/integrations/email-postmark-setup.md": {
@@ -5634,6 +5637,7 @@
         "the-core-principle-why-outages-were-missed",
         "scrape-targets",
         "portal-side-health-gauges-apimetrics-refreshed-per-scrape",
+        "coworker-approval-envelopes-bi-78d3cf1e",
         "platform-split-linux-vs-windows-hostinfra-alerts",
         "status-decisions-2026-06-25-objective-completed",
         "new-alert-checklist-a-detector-is-a-feature-verify-it-functionally",
@@ -6800,6 +6804,18 @@
       "anchors": [
         "heuristic",
         "sources"
+      ]
+    },
+    "docs/professions/finance/wiki/bank-reconciliation.md": {
+      "publicHref": "/professions/finance/wiki/bank-reconciliation/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "definition",
+        "the-loop",
+        "discipline",
+        "why-it-matters"
       ]
     },
     "docs/professions/finance/wiki/double-entry-invariant.md": {
