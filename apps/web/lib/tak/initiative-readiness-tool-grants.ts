@@ -197,7 +197,11 @@ export async function resolveInitiativeReviewerRecovery(input: {
         ?? `No writer lane records ${entry.code}. Resolve it through the ${entry.accountableRole} surface that owns it.`,
     });
   }
-  const distinct = [...new Map(requested.map((entry) => [
+  const sequenced = sequenceBaselineBeforePlanCoverage(
+    requested,
+    input.expectedCurrentBaselineId ?? null,
+  );
+  const distinct = [...new Map(sequenced.map((entry) => [
     `${entry.role}:${entry.route.toolName}:${entry.gate}`,
     entry,
   ])).values()];
@@ -298,6 +302,57 @@ export async function resolveInitiativeReviewerRecovery(input: {
     });
   }
   return { reviewerRoutes, escalations, unroutable };
+}
+
+type RequestedRecoveryLane = {
+  entry: ReadinessRequirementResult;
+  role: string;
+  route: NonNullable<ReturnType<typeof readinessLaneForRole>>;
+  gate: InitiativeGateKey;
+};
+
+/**
+ * Plan coverage is validated against the canonical initiative scope baseline.
+ * When that baseline does not exist, exposing coverage first produces a packet
+ * that is executable but guaranteed to fail. Route the independent approval
+ * that creates the baseline first; a later readiness projection will expose
+ * coverage after the receipt exists.
+ */
+function sequenceBaselineBeforePlanCoverage(
+  requested: RequestedRecoveryLane[],
+  expectedCurrentBaselineId: string | null,
+): RequestedRecoveryLane[] {
+  if (expectedCurrentBaselineId !== null
+    || !requested.some((entry) => entry.route.toolName === "record_plan_backlog_coverage")) {
+    return requested;
+  }
+
+  const withoutCoverage = requested.filter(
+    (entry) => entry.route.toolName !== "record_plan_backlog_coverage",
+  );
+  if (withoutCoverage.some((entry) =>
+    entry.route.toolName === "record_initiative_design_review"
+    && entry.gate === "spec-approval")) {
+    return withoutCoverage;
+  }
+
+  const role = "design-checklist-reviewer";
+  const route = readinessLaneForRole(role);
+  if (!route) return withoutCoverage;
+  return [
+    ...withoutCoverage,
+    {
+      entry: {
+        code: "OBJECTIVE_BASELINE_REQUIRED",
+        state: "missing",
+        accountableRole: role,
+        evidenceRefs: [],
+      },
+      role,
+      route,
+      gate: "spec-approval",
+    },
+  ];
 }
 
 /**
