@@ -88,8 +88,14 @@ export type InitiativeReviewerRecovery = {
       requestKey: string;
       tier: 2;
       enteredVia: "handoff";
-      requiredToolNames: string[];
-      initiativeReviewBinding: InitiativeReviewBindingPacket;
+      /**
+       * Present together or not at all. Absent only for a lane whose writer the
+       * binding contract does not cover (`record_plan_backlog_coverage` is not a
+       * `record_initiative_*` writer, so `parseInitiativeReviewBinding` rejects
+       * it); that lane reviews no immutable bytes and needs no artifact identity.
+       */
+      requiredToolNames?: string[];
+      initiativeReviewBinding?: InitiativeReviewBindingPacket;
     };
   }>;
   escalations: Array<{
@@ -233,12 +239,19 @@ export async function resolveInitiativeReviewerRecovery(input: {
         });
         continue;
       }
-      // A route without a binding is not a lesser route — it is an unusable one:
-      // `request_coworker` rejects `requiredToolNames` unless the binding comes
-      // with it, so emitting it would spend a dispatch and a TaskRun to fail at
-      // the callee. Escalate with the remedy instead (BI-9FE775F9).
+      // Only an initiative-review writer can carry a binding: the consumer's
+      // `parseInitiativeReviewBinding` requires `record_initiative_*`, so
+      // binding `record_plan_backlog_coverage` produces a route the callee
+      // rejects — the very defect this lane routing exists to end. Plan coverage
+      // is not a review of immutable bytes, so it carries no artifact identity
+      // and is not blocked by one being unresolvable (BI-9FE775F9).
+      const bindable = entry.route.toolName.startsWith("record_initiative_");
       const artifact = input.canonicalArtifact ?? null;
-      if (!artifact || !artifact.resolved) {
+      if (bindable && (!artifact || !artifact.resolved)) {
+        // A route without a binding is not a lesser route — it is an unusable
+        // one: `request_coworker` rejects `requiredToolNames` unless the binding
+        // comes with it, so emitting it would spend a dispatch and a TaskRun to
+        // fail at the callee. Escalate with the remedy instead.
         escalations.push({
           accountableRole: entry.role,
           toolName: entry.route.toolName,
@@ -257,7 +270,7 @@ export async function resolveInitiativeReviewerRecovery(input: {
         targetAgentId: candidate.agent.agentId,
         dispatch: input.dispatchContext,
         independent: entry.route.lane.independent,
-        artifact,
+        artifact: bindable && artifact?.resolved ? artifact : null,
         expectedCurrentBaselineId: input.expectedCurrentBaselineId ?? null,
       });
       reviewerRoutes.push({
@@ -342,17 +355,28 @@ function requestCoworkerPacket(args: {
   targetAgentId: string;
   dispatch: InitiativeRecoveryDispatchContext;
   independent: boolean;
-  artifact: { path: string; providerBlobId: string };
+  /** Null for a lane whose writer the binding contract does not cover. */
+  artifact: { path: string; providerBlobId: string } | null;
   expectedCurrentBaselineId: string | null;
 }) {
   const reviewConstraint = args.independent ? "independently " : "";
-  return {
+  const base = {
     targetAgent: args.targetAgentId,
-    objective: `For ${args.decision.subject.id} in ${args.dispatch.workroomId} on ${args.dispatch.repositoryFullName}#${args.dispatch.branchName} at ${args.dispatch.headSha}, ${reviewConstraint}address ${args.gate} using ${args.toolName}. Read ${args.artifact.path} at that commit with ${IMMUTABLE_READER_TOOL}, then record a governed receipt only when the gate passes.`,
+    objective: `For ${args.decision.subject.id} in ${args.dispatch.workroomId} on ${args.dispatch.repositoryFullName}#${args.dispatch.branchName} at ${args.dispatch.headSha}, ${reviewConstraint}address ${args.gate} using ${args.toolName}.${
+      args.artifact
+        ? ` Read ${args.artifact.path} at that commit with ${IMMUTABLE_READER_TOOL},`
+        : ""
+    } record a governed receipt only when the gate passes.`,
     questionPacketSummary: `${args.gate} for ${args.decision.subject.id} at ${args.dispatch.headSha.slice(0, 12)}`,
     requestKey: `initiative-readiness:${args.decision.subject.id}:${args.gate}:${args.dispatch.headSha}`,
     tier: 2 as const,
     enteredVia: "handoff" as const,
+  };
+  // The two fields travel together or not at all: the adapter refuses one
+  // without the other, so a partial packet is an unexecutable packet.
+  if (!args.artifact) return base;
+  return {
+    ...base,
     requiredToolNames: [args.toolName, IMMUTABLE_READER_TOOL],
     initiativeReviewBinding: {
       writerToolName: args.toolName,
