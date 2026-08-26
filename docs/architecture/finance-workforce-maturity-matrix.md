@@ -57,6 +57,44 @@ statutory engine consumes effective-dated rules with a `sourceUrl` instead. Unti
 are seeded, **no install can run a real payroll or file a real return**, and no public
 claim may imply otherwise.
 
+### Mileage jurisdiction resolution (2026-08-26)
+
+The organization operates in several countries and sends people abroad, so a mile
+driven in Mexico may reimburse differently from one driven in the US. Kernel decision
+**DI-5E5AFE040A1F** (composite 9.355, margin 1.876, autonomy eligible) sets the
+precedence for choosing which `MileageRatePlan` prices a trip:
+
+1. a plan for the country the trip was **driven** in, when the org has one
+2. otherwise a plan for the **employee's country of record**
+3. otherwise an unscoped plan — an org-wide override, or a statutory plan carrying
+   no jurisdiction
+
+The tier is decided first and never mixed. An org override wins **within** a
+jurisdiction, never across one: a US override must not outrank the statutory rate for
+Mexico when the drive happened in Mexico.
+
+**Country is derived, never picked.** `Trip.countryCode` is ISO 3166-1 alpha-2 that the
+capturing device reverse-geocoded from its own location. No driver-facing country
+picker exists on any surface, and the server never infers a country from an address.
+NULL is a legitimate value — an older client, no signal, or a withheld location
+permission — and prices the trip on the employee's country of record rather than
+holding it. A driver who declined location still gets paid.
+
+**Country of record has no new column.** It is read through the canonical MDM chain
+`EmployeeAddress -> Address -> City -> Region -> Country.iso2`. An employee with several
+addresses and no single primary resolves to NULL rather than an arbitrary row, because
+paying someone against an arbitrary address is worse than falling back to an unscoped
+plan.
+
+**Known simplification.** A drive that crosses a border prices entirely on the country
+it started in. Splitting one drive across two plans needs per-segment distance
+attribution and a far denser reverse geocode than a device makes; recording the start
+honestly beats inventing a split. Revisit if cross-border driving becomes common.
+
+As with the payroll rows above, the mechanism is tested but the **statutory per-country
+rates are still unseeded** (BI-4EB27955). Jurisdiction-aware resolution does not by
+itself make any install able to pay a real mileage claim.
+
 ### Finance doc reconciliation rules
 
 1. **Do not** say "DPF has no ledger" — the models exist; say **experimental** or **usable-now** per row.

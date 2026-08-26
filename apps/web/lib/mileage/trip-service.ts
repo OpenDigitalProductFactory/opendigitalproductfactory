@@ -16,7 +16,7 @@
 //      again, so re-running a period cannot pay a driver twice for one drive.
 
 import { priceTrips, type PriceableTrip, type PricingResult } from "./monetisation";
-import type { ResolvableRate } from "./rates";
+import { normaliseCountryCode, type ResolvableRate } from "./rates";
 import type { TripClassification } from "./classification";
 
 /**
@@ -36,6 +36,13 @@ export type RecordTripPayload = {
   endPlaceLabel?: string | null;
   distanceMeters: number;
   captureKind: "automatic" | "manual" | "imported";
+  /**
+   * ISO 3166-1 alpha-2 the CAPTURING DEVICE derived from its own location.
+   * Never a driver choice and never a server guess — omitted when the device
+   * could not resolve one, which prices the trip on the driver's country of
+   * record instead (DI-5E5AFE040A1F).
+   */
+  countryCode?: string | null;
 };
 
 export type RecordTripInput = {
@@ -51,6 +58,8 @@ export type RecordTripInput = {
   endPlaceLabel?: string | null;
   distanceMeters: number;
   captureKind: "automatic" | "manual" | "imported";
+  /** ISO 3166-1 alpha-2 the capturing device derived; see RecordTripPayload. */
+  countryCode?: string | null;
 };
 
 /** Why a drive was refused. Closed set — a caller must be able to explain it. */
@@ -154,6 +163,7 @@ export async function recordTrip(
       endPlaceLabel: input.endPlaceLabel ?? null,
       distanceMeters: Math.round(input.distanceMeters),
       captureKind: input.captureKind,
+      countryCode: normaliseCountryCode(input.countryCode),
     },
   });
 
@@ -201,6 +211,12 @@ export async function monetisePeriod(
     periodEnd: Date;
     rates: readonly ResolvableRate[];
     currency?: string;
+    /**
+     * The driver's country of record. Governs any trip whose own country the
+     * device could not derive, or which was driven somewhere the org holds no
+     * rate plan (DI-5E5AFE040A1F).
+     */
+    employeeCountryCode?: string | null;
   },
 ): Promise<MonetisationOutcome> {
   const rows = await db.trip.findMany({
@@ -230,11 +246,12 @@ export async function monetisePeriod(
       startPlaceLabel: (row.startPlaceLabel as string | null) ?? null,
       endPlaceLabel: (row.endPlaceLabel as string | null) ?? null,
       customerAccountId: (row.customerAccountId as string | null) ?? null,
+      countryCode: (row.countryCode as string | null) ?? null,
     });
   }
 
   return {
-    pricing: priceTrips(priceable, args.rates, args.currency ?? "USD"),
+    pricing: priceTrips(priceable, args.rates, args.currency ?? "USD", args.employeeCountryCode),
     alreadyMonetised,
   };
 }

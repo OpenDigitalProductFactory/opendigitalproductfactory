@@ -163,6 +163,16 @@ choose. You can change your mind until the drive is claimed.
 it, not today's rate. A drive that has not been priced yet says so, rather than
 showing zero — no amount yet is not the same as nothing owed.
 
+**Driving abroad.** Your phone knows which country it is in, so you are never asked
+to pick one. If your company has set a rate for the country you drove in, that rate
+is used. If it has not, you are paid at your own country's rate — the country on
+your employee record. A drive that crosses a border is paid at the rate for the
+country you set off from.
+
+If your phone could not work out the country — no signal, or you did not give it
+permission — you are still paid, at your own country's rate. You never lose a
+drive over it.
+
 **Getting paid.** Someone with finance permission turns a month of business drives
 into an expense claim. That claim can be paid on its own or added to your pay as a
 reimbursement, which is not taxed because it repays money you already spent.
