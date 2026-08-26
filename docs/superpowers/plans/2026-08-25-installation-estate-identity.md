@@ -160,3 +160,62 @@ Per `AGENTS.md` section 4, all four apply:
    and `/ops/installation`.
 4. No migration is added; the estate record is `PlatformConfig`, so criterion 4 is
    not applicable and is recorded as such rather than skipped silently.
+
+---
+
+## Delivery record (2026-08-25)
+
+Written at the end of the implementation pass. It states what landed and what did
+not, so the next reader does not have to infer it from commits.
+
+### Landed
+
+| Phase | Item | Evidence |
+| --- | --- | --- |
+| 1 | Estate identity contract, precedence chain, resolver | 43 unit tests |
+| 2 | Header badge, panel demoted to `/ops/installation` | 8 badge tests, workspace assertions inverted, production build |
+| 2b | Ratified page-purpose contract for the new route | identity ratchet passes, 13 ratified routes |
+| 3 | MCP `serverInfo` per installation + `INSTALLATION` briefing line | 8 handshake tests |
+| 4 | Copy rewritten off self-declarative fragments | reading grade **6.6** against a cap of 9 |
+| 5 | Operator field to set the estate name | 9 action tests |
+| — | `prose-is-not-a-control-gate` kernel commandment | golden-decisions guard passes at margin 0.3152 |
+
+### NOT landed, and why
+
+- **Edge Node provisioning and mDNS estate-name pre-fill (`BI-6052C2C2`).** Not
+  started. The prerequisite is an Edge Node carrying `federation.discovery`, which
+  this installation does not run at all (`EdgeNode` = 0 rows), and acceptance
+  criterion 5 needs two installations on one LAN. It could have been written
+  blind and could not have been verified, so it was left rather than shipped
+  unproven.
+- **`evaluateOrganizationEnrollment` still has no production caller.** Out of
+  scope by design (plan Phase 5) and unchanged.
+- **The prose-lint fragment rule (`BI-06005FE0`).** The copy is fixed; the
+  incentive that produced it is not. Without a rule the style regrows, because
+  the reading-grade cap still rewards fragments.
+- **Envelope expiry observability (`BI-78D3CF1E`).** Still open.
+- **`request_coworker` timeout-versus-parked reporting (`BI-B9312D74`).** The
+  traps are now documented in the backlog-and-planning runbook; the tool
+  behaviour is unchanged.
+
+### Gate status
+
+1. Unit tests — pass for every affected package.
+2. Production build — `pnpm --filter web build` compiles, `/ops/installation`
+   present, no client-bundle regression.
+3. **UX verification — NOT performed.** AGENTS.md §4.3 wants the path exercised
+   against the running app; the running portal is a released image and these
+   changes are branch-only. This is a real gap, not a formality: the badge's
+   placement and the panel's new home are exactly the kind of thing a test cannot
+   confirm looks right.
+4. Migration — not applicable. The estate record is `PlatformConfig`, so no
+   migration was added.
+
+### Governance note
+
+Implementation proceeded under an explicit founder waiver of `RESEARCH_REQUIRED`
+and `PLAN_REQUIRED`, recorded on `WC-DF6943D2`. The reviewer coworker
+(`AGT-WS-PORTFOLIO`) did evaluate the design and returned `decision: pass`; it
+could not record that because three successive approval envelopes expired
+unactioned. The waiver's original premise — that no approval surface existed —
+was **wrong** and is corrected on `BI-78D3CF1E`.
