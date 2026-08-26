@@ -54,11 +54,11 @@ export function WorkCapsuleTable({ capsules }: { capsules: WorkCapsuleRow[] }) {
   return (
     <section aria-labelledby="work-capsules-heading" className="space-y-3">
       <h2 id="work-capsules-heading" className="text-base font-semibold text-[var(--dpf-text)]">
-        Active workrooms
+        Live Workrooms
       </h2>
       {capsules.length === 0 ? (
         <div className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4 text-sm text-[var(--dpf-muted)]">
-          No active workrooms yet.
+          No live Workrooms.
         </div>
       ) : (
         <div className="overflow-x-auto rounded-md border border-[var(--dpf-border)]">

@@ -18,6 +18,7 @@
 // writes are the governed ToolExecution audit rows and the assurance records
 // this module owns.
 
+import { coworkerBriefSpans } from "@/lib/tak/coworker-prompt-provenance";
 import { prisma } from "@dpf/db";
 import { COWORKER_AGENT_SEEDS } from "@dpf/db/workforce-seed";
 import { runAgenticLoop } from "@/lib/tak/agentic-loop";
@@ -110,6 +111,8 @@ export type CertificationDeps = {
   runLoop: (params: {
     journey: GoldenJourney;
     systemPrompt: string;
+    /** Instruction spans within systemPrompt (BI-CE93E314). */
+    systemPromptInstructionSpans?: string[];
     sensitivity: RouteSensitivity;
     tools: Parameters<typeof toolsToOpenAIFormat>[0];
     toolsForProvider: Array<Record<string, unknown>>;
@@ -145,6 +148,7 @@ async function defaultRunLoop(
   const result = await runAgenticLoop({
     chatHistory: [{ role: "user", content: params.journey.prompt }],
     systemPrompt: params.systemPrompt,
+    systemPromptInstructionSpans: params.systemPromptInstructionSpans,
     sensitivity: params.sensitivity,
     tools: params.tools,
     toolsForProvider: params.toolsForProvider,
@@ -298,6 +302,7 @@ async function executeJourney(
     const loop = await deps.runLoop({
       journey,
       systemPrompt: agentInfo.systemPrompt,
+      systemPromptInstructionSpans: coworkerBriefSpans(agentInfo.systemPrompt),
       sensitivity: agentInfo.sensitivity ?? "internal",
       tools: readOnlyTools,
       toolsForProvider,

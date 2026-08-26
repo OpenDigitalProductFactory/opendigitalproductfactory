@@ -92,6 +92,8 @@ h1 { font-size: clamp(28px, 4.2vw, 44px); line-height: 1.12; margin: 0 0 12px; l
   display: inline-block; font-size: 13px; padding: 5px 11px; border-radius: 999px;
   border: 1px solid var(--border); background: var(--surface-2); color: var(--fg);
 }
+.chip a { color: var(--fg); font-weight: 600; }
+.chip a:hover { color: var(--accent); text-decoration: none; }
 .chip strong { font-weight: 600; }
 
 .cta-row { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 22px; }
@@ -232,7 +234,7 @@ footer.site a { color: var(--accent); }
 .back-top:hover { text-decoration: none; color: var(--fg); }
 
 /* ===========================================================================
-   v2 — three-audience layout (operators · resellers · architects/standards)
+   Operator-first archetype pages + explicit partner / architecture paths
    ========================================================================= */
 
 /* hero: architectural weight ---------------------------------------------- */
@@ -259,21 +261,42 @@ footer.site a { color: var(--accent); }
 .callout p { margin: 0; font-size: clamp(16px, 1.7vw, 19px); line-height: 1.45; color: var(--fg); }
 .callout p b { color: var(--accent-2); font-weight: 700; }
 
-/* audience split (Use it / Resell it / Understand it) ---------------------- */
-.audience-split { display: grid; gap: 14px; grid-template-columns: 1fr; }
-@media (min-width: 760px) { .audience-split { grid-template-columns: repeat(3, 1fr); } }
-.aud {
-  border: 1px solid var(--border); background: var(--surface); border-radius: 12px;
-  padding: 18px; display: flex; flex-direction: column;
+/* operator/partner/architecture separation -------------------------------- */
+.secondary-paths {
+  border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+  padding: 18px 0; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 20px;
 }
-.aud .role { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 800; margin: 0 0 4px; }
-.aud.use .role { color: var(--accent-2); }
-.aud.resell .role { color: var(--accent-3); }
-.aud.understand .role { color: var(--accent); }
-.aud h3 { margin: 0 0 8px; font-size: 17px; }
-.aud p { margin: 0 0 12px; color: var(--fg-muted); font-size: 14px; }
-.aud .who { font-size: 12px; color: var(--fg-muted); margin-top: auto; padding-top: 10px; border-top: 1px dashed var(--border); }
-.aud a.more { font-weight: 600; font-size: 13.5px; }
+.secondary-paths p { margin: 0; color: var(--fg-muted); }
+.secondary-paths a { font-weight: 600; }
+.evidence-note {
+  border: 1px solid color-mix(in srgb, var(--accent-2) 45%, var(--border));
+  border-left: 4px solid var(--accent-2); border-radius: 12px; padding: 18px 20px;
+  background: var(--surface); box-shadow: var(--shadow);
+}
+.evidence-note .badge, .status-kicker {
+  display: inline-block; color: var(--accent-2); font-size: 11px; font-weight: 800;
+  letter-spacing: .08em; text-transform: uppercase; margin-bottom: 7px;
+}
+.evidence-note h2 { margin: 0 0 8px; font-size: 20px; }
+.evidence-note p { margin: 0; color: var(--fg-muted); }
+.archetype-card { min-height: 142px; }
+.profile-facts {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 12px; margin: 0;
+}
+.profile-facts div { border: 1px solid var(--border); border-radius: 10px; padding: 13px 14px; background: var(--surface); }
+.profile-facts dt { color: var(--fg-muted); font-size: 12px; }
+.profile-facts dd { margin: 4px 0 0; color: var(--fg); font-weight: 700; text-transform: capitalize; }
+.plain-list { margin: 0; padding-left: 20px; color: var(--fg-muted); }
+.plain-list li + li { margin-top: 7px; }
+
+@media (max-width: 720px) {
+  .topbar-inner { height: auto; min-height: 56px; padding-top: 8px; padding-bottom: 8px; flex-wrap: wrap; }
+  .topbar-brand { min-height: 44px; }
+  .topbar-nav { width: 100%; margin-left: 0; gap: 4px 12px; }
+  .topbar-nav a { display: inline-flex; align-items: center; min-height: 44px; }
+  .secondary-paths { align-items: flex-start; flex-direction: column; }
+}
 
 /* archetype-engine pipeline ----------------------------------------------- */
 .pipeline { display: flex; flex-direction: column; gap: 10px; align-items: stretch; }

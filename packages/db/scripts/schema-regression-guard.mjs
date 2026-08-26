@@ -205,6 +205,21 @@ function isDefaultValueChange(baseLine, headLine) {
 // drops the column, in a PR reviewed by the schema steward; prune entries once
 // they have shipped to every environment.
 export const INTENTIONAL_FIELD_REMOVALS = new Set([
+  // 2026-08-26 BI-947F8703 / DI-31F2D7D10E25: TaxObligationPeriod's sales-shaped
+  // component totals move into TaxObligationPeriodComponent rows keyed by a
+  // typed TaxPeriodComponentKind, so payroll's employee-withheld and
+  // employer-contribution totals share one shape instead of adding two more
+  // columns (and the next tax family two more again).
+  //
+  // DATA SAFETY: the migration INSERTs a component row for every existing
+  // period's salesTaxAmount and inputTaxAmount BEFORE the DROP, including
+  // recorded zeros, so no filed or draft period loses a figure. netTaxAmount is
+  // untouched, so no period's bottom line moves. Migration:
+  // 20260826054627_normalize_tax_period_components_and_deposit_schedule.
+  // Record: docs/architecture/tax-period-component-migration.md
+  // Prune once shipped fleet-wide.
+  "TaxObligationPeriod.salesTaxAmount",
+  "TaxObligationPeriod.inputTaxAmount",
   // 2026-07-31 EP-LIFECYCLE: refinementLevel becomes required after the
   // reconcile migration normalizes every existing row and installs a default.
   // The parser represents optionality tightening as removal of the nullable

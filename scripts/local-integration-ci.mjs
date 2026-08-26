@@ -134,6 +134,7 @@ if (metadataOut) {
     integrationCommitSha,
     synthesizedTreeSha,
     buildStrategy: plan.buildStrategy,
+    executionLane: evidencePlan?.executionLane ?? plan.executionLane,
     productionArtifact,
     execution: {
       status: execution.status === 0 ? "passed" : "failed",
@@ -151,12 +152,20 @@ if (metadataOut) {
       plannerVersion: evidencePlan.plannerVersion,
       policyVersion: evidencePlan.policyVersion,
       evidenceTier: evidencePlan.evidenceTier,
+      executionLane: evidencePlan.executionLane,
       fullSuite: evidencePlan.fullSuite,
     } : null,
     ...collectToolchainFingerprint({ buildStrategy: plan.buildStrategy }),
     commands: plan.commands.map((command) => command.join(" ")),
     startedAt,
     completedAt: new Date().toISOString(),
+    // BI-465B3D60 — the RUN's identity, not the commit's. Re-running the gate on
+    // an unchanged SHA produces several runs whose candidateSha is identical, so
+    // a SHA cannot tell them apart; a reader comparing SHAs concludes this
+    // metadata describes the current run when it describes a previous one. The
+    // lease is per-run, so it is the thing that actually distinguishes them.
+    // Null when the runner is invoked outside a governed lease.
+    runLeaseId: process.env.DPF_NONPROD_LEASE_ID || null,
   };
   writeFileSync(metadataOut, `${JSON.stringify(payload, null, 2)}\n`);
   const artifactOut = process.env.DPF_LOCAL_CI_ARTIFACT_FILE;

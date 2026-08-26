@@ -3,13 +3,13 @@
   "selectionCliff": 15,
   "entries": {
     "registry.toolDefinitions": {
-      "value": 393,
-      "reason": "Adds describe_committed_model (BI-F9CAF214): a READ-ONLY door onto the committed Prisma schema that needs no Build Studio build and no sandbox, so an external CLI surface (Claude Code, Codex, Grok) can inspect the data model at all — today describe_model returns \"No active build.\" to every one of them, leaving the platform unable to answer questions about its own schema from outside a build. It earns a permanent place because it is the only governed path to the schema for the surfaces that do most of the work, and because it never answers anonymously: every result names the tree, branch and sha it read and carries a trust vector that scores an off-default branch down, so a stale checkout is visible rather than silent. Kept separate from describe_model per kernel decision DI-7A4DFF0A1809, which scored a separate tool above an in-tool fallback on legibility_of_consequence — a single tool that silently switches trees is the ambiguity behind BI-6CFC5429 and BI-86EF5900. Adds nothing to the ACTING surface: read-only, idempotent, file_read grant.",
+      "value": 405,
+      "reason": "The 12 banking books-loop tools (S-FIN, BI-DE27D34E): the loop existed only as UI server actions, so no coworker could keep the books current. A bookkeeper needs to set up accounts, import a statement, categorize via rules, and reconcile through governed tools; no existing tool carries account setup, CSV statement import, or transaction matching. Six reads/banking_read, six writes/banking_write; the two money-of-record writes route the governance gate.",
       "recordedAt": "2026-08-23"
     },
     "registry.packFiles": {
-      "value": 97,
-      "reason": "Adds committed-schema-source.ts to the model-provider pack's file set — the reader that resolves the split schema (packages/db/prisma/schema/*.prisma) with explicit tree provenance and a trust vector. Kept as its own module rather than inlined into model-provider-pack.ts so the provenance contract is testable without a build, and so the module-size cap on the pack file is not spent on it.",
+      "value": 98,
+      "reason": "New banking-pack.ts groups the S-FIN books-loop tools as thin adapters over the existing, tested banking actions — a distinct finance domain that does not belong in any current pack.",
       "recordedAt": "2026-08-23"
     },
     "tier.coreToolNames": {

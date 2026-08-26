@@ -841,6 +841,14 @@
       "docs/architecture/section-navigation.md",
       "docs/maintenance/staleness-report.md"
     ],
+    "apps/web/lib/nonprod/host-resource-policy.ts": [
+      "docs/architecture/dpf-patterns.md",
+      "docs/user-guide/contributing/agent-dev-environments.md"
+    ],
+    "apps/web/lib/nonprod/host-resource-profiles.json": [
+      "docs/architecture/dpf-patterns.md",
+      "docs/user-guide/contributing/agent-dev-environments.md"
+    ],
     "apps/web/lib/operate/db-continuity.ts": [
       "docs/architecture/delivery-surfaces-runbook.md"
     ],
@@ -864,6 +872,9 @@
       "docs/architecture/operations-hot-path.md"
     ],
     "apps/web/lib/platform-runtime/capability-service-projection.ts": [
+      "docs/architecture/capability-driven-runtime-profiles.md"
+    ],
+    "apps/web/lib/platform-runtime/capability-state-divergence.ts": [
       "docs/architecture/capability-driven-runtime-profiles.md"
     ],
     "apps/web/lib/platform-runtime/operational-state.ts": [
@@ -1019,6 +1030,9 @@
     ],
     "apps/web/lib/shell/shell-action-contract.ts": [
       "docs/platform-usability-standards.md"
+    ],
+    "apps/web/lib/skills/skill-relevance.ts": [
+      "docs/architecture/skill-surfaces-runbook.md"
     ],
     "apps/web/lib/storefront/archetype-reset.ts": [
       "docs/testing/findings/run-1-swap-findings.md"
@@ -1262,7 +1276,8 @@
     ],
     "packages/db/prisma/schema/build-delivery.prisma": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
-      "docs/architecture/dpf-patterns.md"
+      "docs/architecture/dpf-patterns.md",
+      "docs/user-guide/contributing/agent-dev-environments.md"
     ],
     "packages/db/prisma/schema/resource-scheduling.prisma": [
       "docs/architecture/data-model-stewardship-runbook.md"
@@ -1282,6 +1297,9 @@
     "packages/db/scripts/index-integrity-guard.mjs": [
       "docs/professions/data-architect/wiki/index-and-collation-integrity.md",
       "docs/runbooks/2026-07-20-collation-drift-index-corruption.md"
+    ],
+    "packages/db/scripts/schema-regression-guard.mjs": [
+      "docs/architecture/tax-period-component-migration.md"
     ],
     "packages/db/scripts/seed-cada-regulation.ts": [
       "docs/strategy/2026-09-cada-architects-forum-deck.md"
@@ -1339,6 +1357,9 @@
     ],
     "packages/db/src/hive-scout-config.ts": [
       "docs/specs/device-identification-and-portfolio-placement-spec.md"
+    ],
+    "packages/db/src/mandated-skills.ts": [
+      "docs/architecture/skill-surfaces-runbook.md"
     ],
     "packages/db/src/migrations/exact-key-repair.ts": [
       "docs/professions/data-architect/wiki/dedupe-migration-means-the-constraint-is-wrong.md",
@@ -1665,6 +1686,7 @@
       "docs/testing/archetype-audit-plan.md"
     ],
     "scripts/gate-worktree.mjs": [
+      "docs/architecture/context-engineering-standards.md",
       "docs/testing/pre-pr-gate.md"
     ],
     "scripts/gate-worktree.sh": [
@@ -1684,6 +1706,11 @@
       "docs/install/platform-support-watchlist.md",
       "docs/operations/session-transcript-recovery.md"
     ],
+    "scripts/host-resource-runner.mjs": [
+      "docs/architecture/dpf-patterns.md",
+      "docs/operations/local-ci-sandbox-slots.md",
+      "docs/user-guide/contributing/agent-dev-environments.md"
+    ],
     "scripts/install-worktree-janitor-schedule.sh": [
       "docs/install/worktree-janitor-schedule.md"
     ],
@@ -1699,6 +1726,7 @@
       "docs/install/edge-node-multi-host.md"
     ],
     "scripts/lib/bootstrap-worktree-deps.mjs": [
+      "docs/architecture/build-gate-runbook.md",
       "docs/architecture/mcp-tool-authorization-runbook.md"
     ],
     "scripts/lib/ci-policy-guards.mjs": [
@@ -1733,6 +1761,9 @@
     ],
     "scripts/lib/local-integration-ci.mjs": [
       "docs/testing/pre-pr-gate.md"
+    ],
+    "scripts/lib/mcp-client.mjs": [
+      "docs/architecture/mcp-tool-authorization-runbook.md"
     ],
     "scripts/lib/published-doc-roots.mjs": [
       "docs/architecture/enforced-ci-gates.md"
@@ -2277,6 +2308,7 @@
       "apps/web/lib/build/coding-agent.ts",
       "apps/web/lib/queue/functions/build-review-verification.ts",
       "pnpm-lock.yaml",
+      "scripts/lib/bootstrap-worktree-deps.mjs",
       "scripts/lib/dco-signoff.mjs",
       "scripts/pre-push-dco-check.mjs",
       "scripts/pregate-preflight.mjs"
@@ -2294,6 +2326,7 @@
     ],
     "docs/architecture/capability-driven-runtime-profiles.md": [
       "apps/web/lib/platform-runtime/capability-service-projection.ts",
+      "apps/web/lib/platform-runtime/capability-state-divergence.ts",
       "apps/web/lib/platform-runtime/operational-state.ts",
       "packages/db/data/platform-runtime-capabilities.json",
       "scripts/capability-service-catalog.generated.json",
@@ -2315,6 +2348,7 @@
       "apps/web/lib/tool-description-hygiene.test.ts",
       "packages/dpf-skill-pack/hooks/tool-economy-precheck.mjs",
       "scripts/check-instruction-plane-size.mjs",
+      "scripts/gate-worktree.mjs",
       "scripts/lib/ci-policy-guards.mjs"
     ],
     "docs/architecture/contributor-procedure-runbook.md": [
@@ -2374,8 +2408,11 @@
       "scripts/sbom/scan-dependencies.mjs"
     ],
     "docs/architecture/dpf-patterns.md": [
+      "apps/web/lib/nonprod/host-resource-policy.ts",
+      "apps/web/lib/nonprod/host-resource-profiles.json",
       "packages/db/prisma/schema/build-delivery.prisma",
-      "packages/db/prisma/schema/work-coordination.prisma"
+      "packages/db/prisma/schema/work-coordination.prisma",
+      "scripts/host-resource-runner.mjs"
     ],
     "docs/architecture/enforced-ci-gates.md": [
       "apps/web/lib/docs-route-map.ts",
@@ -2415,7 +2452,8 @@
       "apps/web/lib/tak/tool-result-budget.ts",
       "apps/web/lib/tool-description-hygiene.test.ts",
       "scripts/check-no-adhoc-mcp-protocol-versions.mjs",
-      "scripts/lib/bootstrap-worktree-deps.mjs"
+      "scripts/lib/bootstrap-worktree-deps.mjs",
+      "scripts/lib/mcp-client.mjs"
     ],
     "docs/architecture/mcp-tool-packs.md": [
       "apps/web/lib/mcp/packs/deliberation-siem-pack.ts",
@@ -2477,8 +2515,13 @@
     ],
     "docs/architecture/skill-surfaces-runbook.md": [
       "apps/web/lib/decision/dimension-catalog.ts",
+      "apps/web/lib/skills/skill-relevance.ts",
+      "packages/db/src/mandated-skills.ts",
       "packages/db/src/seed-skills.ts",
       "packages/dpf-skill-pack/hooks/process-spine-health-check.mjs"
+    ],
+    "docs/architecture/tax-period-component-migration.md": [
+      "packages/db/scripts/schema-regression-guard.mjs"
     ],
     "docs/architecture/theme-aware-styling-runbook.md": [
       "apps/web/components/storefront-admin/ItemsManager.tsx",
@@ -2697,6 +2740,7 @@
     ],
     "docs/operations/local-ci-sandbox-slots.md": [
       "scripts/check-host-port-range.test.mjs",
+      "scripts/host-resource-runner.mjs",
       "scripts/lib/local-ci-slot-manifest.mjs",
       "scripts/local-ci-pilot-report.mjs"
     ],
@@ -2992,8 +3036,12 @@
       "apps/web/lib/build/build-orchestrator.ts"
     ],
     "docs/user-guide/contributing/agent-dev-environments.md": [
+      "apps/web/lib/nonprod/host-resource-policy.ts",
+      "apps/web/lib/nonprod/host-resource-profiles.json",
+      "packages/db/prisma/schema/build-delivery.prisma",
       "scripts/dpf-bootstrap-agent-toolchain.ps1",
-      "scripts/dpf-bootstrap-agent-toolchain.sh"
+      "scripts/dpf-bootstrap-agent-toolchain.sh",
+      "scripts/host-resource-runner.mjs"
     ],
     "docs/user-guide/contributing/dev-container.md": [
       "packages/db/scripts/dev-preview-migrate-deploy.mjs"

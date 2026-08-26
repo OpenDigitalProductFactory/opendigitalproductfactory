@@ -8,6 +8,7 @@ export * from "./composition";
 export * from "./archetypes/index";
 export * from "./media-profile";
 export * from "./operational-value-stream";
+export * from "./public-process-projection";
 export * from "./twin-profile";
 export * from "./resource-capacity-profile";
 export * from "./scene-layout";

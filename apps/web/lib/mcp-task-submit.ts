@@ -1,3 +1,4 @@
+import { coworkerBriefSpans } from "@/lib/tak/coworker-prompt-provenance";
 import { prisma } from "@dpf/db";
 import type { Prisma } from "@dpf/db";
 import { resolveCanonicalAgentId } from "@dpf/db/agent-identity";
@@ -32,7 +33,7 @@ export type RemoteTaskSubmitParams = {
   initiativeReviewBinding?: InitiativeReviewBinding;
 };
 
-type InitiativeReviewBinding = {
+export type InitiativeReviewBinding = {
   writerToolName: string;
   itemId: string;
   gate: string;
@@ -84,7 +85,7 @@ function requiresInitiativeReviewEffort(toolNames: readonly string[]): boolean {
   return researchWriterRequired || independentReviewWriterRequired;
 }
 
-function parseInitiativeReviewBinding(value: unknown): InitiativeReviewBinding | null {
+export function parseInitiativeReviewBinding(value: unknown): InitiativeReviewBinding | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const binding = value as Record<string, unknown>;
   const artifact = binding["artifactRef"];
@@ -128,6 +129,20 @@ function parseInitiativeReviewBinding(value: unknown): InitiativeReviewBinding |
   };
 }
 
+export function validateInitiativeReviewAuthorityScope(
+  binding: InitiativeReviewBinding,
+  authorityScope: readonly string[] | undefined,
+): string | null {
+  const exactTools = requiredToolNames(authorityScope);
+  if (!exactTools.includes(binding.writerToolName)) {
+    return "initiativeReviewBinding writer must match the exact tool authority scope";
+  }
+  if (!authorityScope?.includes(`backlog-item:${binding.itemId}`)) {
+    return "initiativeReviewBinding item must match the backlog authority scope";
+  }
+  return null;
+}
+
 function narrowInitiativeReviewTools<T extends {
   tools: ToolDefinition[];
   toolsForProvider: Array<Record<string, unknown>>;
@@ -135,19 +150,18 @@ function narrowInitiativeReviewTools<T extends {
 }>(input: T, requiredNames: readonly string[], binding: InitiativeReviewBinding | undefined): T {
   if (!binding) return input;
   const exactNames = new Set(requiredNames);
+  const compactResearchReceipt = binding.gate === "research"
+    && binding.writerToolName === "record_initiative_evidence";
+  const baseJudgmentNames = compactResearchReceipt
+    ? ["decision"]
+    : ["decision", "reason", "findings", "resolvedFindingRefs"];
   const judgmentPropertyNames = [
-    "decision",
-    "reason",
-    "findings",
-    "resolvedFindingRefs",
+    ...baseJudgmentNames,
     ...(binding.gate === "spec-approval" ? ["profile", "artifactRole", "supersessionDispositions"] : []),
     ...(binding.gate === "classification" ? ["profile"] : []),
   ];
   const requiredJudgmentNames = [
-    "decision",
-    "reason",
-    "findings",
-    "resolvedFindingRefs",
+    ...baseJudgmentNames,
     ...(binding.gate === "spec-approval" ? ["profile", "artifactRole"] : []),
     ...(binding.gate === "classification" ? ["profile"] : []),
   ];
@@ -155,19 +169,52 @@ function narrowInitiativeReviewTools<T extends {
     const properties = schema.properties && typeof schema.properties === "object" && !Array.isArray(schema.properties)
       ? schema.properties as Record<string, unknown>
       : {};
+    const narrowedProperties = Object.fromEntries(
+      judgmentPropertyNames.flatMap((name) => name in properties ? [[name, properties[name]]] : []),
+    );
     return {
       type: "object",
-      properties: Object.fromEntries(
-        judgmentPropertyNames.flatMap((name) => name in properties ? [[name, properties[name]]] : []),
-      ),
+      properties: narrowedProperties,
       required: requiredJudgmentNames,
+      additionalProperties: false,
     };
   };
+  const narrowReaderSchema = (name: string, schema: Record<string, unknown>) => {
+    const properties = schema.properties && typeof schema.properties === "object" && !Array.isArray(schema.properties)
+      ? schema.properties as Record<string, unknown>
+      : {};
+    if (name === "read_source_at_version") {
+      return {
+        type: "object",
+        properties: {
+          path: { type: "string", enum: [binding.artifactRef.path] },
+          version: { type: "string", enum: [binding.artifactRef.commitSha] },
+        },
+        required: ["path", "version"],
+        additionalProperties: false,
+      };
+    }
+    if (name === "search_source_at_version") {
+      return {
+        type: "object",
+        properties: {
+          query: properties["query"] ?? { type: "string" },
+          version: { type: "string", enum: [binding.artifactRef.commitSha] },
+          glob: { type: "string", enum: [binding.artifactRef.path] },
+        },
+        required: ["query", "version", "glob"],
+        additionalProperties: false,
+      };
+    }
+    return schema;
+  };
+  const boundSchema = (name: string, schema: Record<string, unknown>) =>
+    name === binding.writerToolName
+      ? narrowSchema(schema)
+      : narrowReaderSchema(name, schema);
   const tools = input.tools
     .filter((tool) => exactNames.has(tool.name))
-    .map((tool) => tool.name === binding.writerToolName
-      ? { ...tool, inputSchema: narrowSchema(tool.inputSchema) }
-      : tool);
+    .map((tool) => ({ ...tool, inputSchema: boundSchema(tool.name, tool.inputSchema) }));
   const toolsForProvider = input.toolsForProvider
     .filter((entry) => {
       const fn = entry["function"];
@@ -176,9 +223,8 @@ function narrowInitiativeReviewTools<T extends {
     })
     .map((entry) => {
       const fn = entry["function"] as Record<string, unknown>;
-      return fn["name"] === binding.writerToolName
-        ? { ...entry, function: { ...fn, parameters: narrowSchema((fn["parameters"] ?? {}) as Record<string, unknown>) } }
-        : entry;
+      const name = String(fn["name"] ?? "");
+      return { ...entry, function: { ...fn, parameters: boundSchema(name, (fn["parameters"] ?? {}) as Record<string, unknown>) } };
     });
   return { ...input, tools, toolsForProvider, deferredTools: [] };
 }
@@ -211,11 +257,8 @@ export function parseRemoteTaskSubmitParams(params: Record<string, unknown> | un
     return "tasks/submit requires a valid immutable initiativeReviewBinding";
   }
   if (initiativeReviewBinding) {
-    const exactTools = requiredToolNames(authorityScope);
-    if (
-      !exactTools.includes(initiativeReviewBinding.writerToolName)
-      || !authorityScope?.includes(`backlog-item:${initiativeReviewBinding.itemId}`)
-    ) return "tasks/submit initiativeReviewBinding must match the exact tool and backlog authority scope";
+    const scopeError = validateInitiativeReviewAuthorityScope(initiativeReviewBinding, authorityScope);
+    if (scopeError) return `tasks/submit ${scopeError}`;
   }
 
   return {
@@ -651,6 +694,7 @@ export async function submitRemoteCoworkerTask(input: {
   try {
     const result = await executeAutonomousAgenticLoop({
       systemPrompt: agent.systemPrompt,
+      systemPromptInstructionSpans: coworkerBriefSpans(agent.systemPrompt),
       chatHistory: [{ role: "user", content: parsed.prompt }],
       sensitivity: agent.sensitivity ?? "internal",
       tools: tools.tools,

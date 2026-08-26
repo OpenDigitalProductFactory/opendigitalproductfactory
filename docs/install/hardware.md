@@ -26,7 +26,7 @@ After choosing the host, continue with the [Windows](windows.md),
 | --- | --- |
 | Provider-assisted operations | **8–12 modern CPU cores · 32 GB RAM · 1 TB NVMe SSD · no discrete GPU required.** Choose 64 GB for heavy browser or document work. This profile handles routine operations with approved external AI providers. |
 | Local-first operations, discrete GPU | **12–16 modern CPU cores · 64 GB system RAM · 2 TB NVMe SSD · 24 GB VRAM supported; 32 GB recommended for a new purchase.** This profile handles local tool-using coworkers at 32K context, with modest headroom for voice or another AI service. |
-| Local-first operations, Apple unified memory | **Apple Silicon · 2 TB SSD · 64 GB unified memory practical; 128 GB recommended for a new serious-use purchase.** This profile can run larger local models and longer context without a separate VRAM ceiling. |
+| Local-first operations, Apple unified memory | **Apple Silicon · 2 TB SSD · 64 GB unified memory practical; 128 GB recommended when the host must run larger local models or double as a development machine.** This profile can run larger local models and longer context without a separate VRAM ceiling. |
 | Contributor/development workstation | **16–24 modern CPU cores · 128 GB memory · 4 TB NVMe SSD · 32 GB VRAM or 128 GB unified memory.** This profile adds capacity for source work, worktrees, builds, tests, browser automation, and local model evaluation. |
 
 The customer profiles exclude Build Studio, local coding-model capacity, source

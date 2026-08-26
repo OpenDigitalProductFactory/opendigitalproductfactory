@@ -14,6 +14,8 @@ import {
   stageIdentityMatches,
 } from "./lib/local-ci-stage-receipt.mjs";
 
+const DEFAULT_VITEST_MAX_DURATION_MS = 30 * 60 * 1_000;
+
 function valueAfter(flag, fallback) {
   const index = process.argv.indexOf(flag);
   return index >= 0 ? process.argv[index + 1] : fallback;
@@ -22,6 +24,13 @@ function valueAfter(flag, fallback) {
 function positiveInteger(value, fallback) {
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+export function resolveVitestMaxDurationMs(env = process.env) {
+  return positiveInteger(
+    env.DPF_LOCAL_CI_VITEST_MAX_DURATION_MS,
+    DEFAULT_VITEST_MAX_DURATION_MS,
+  );
 }
 
 function resolveGit(ref) {
@@ -103,6 +112,13 @@ export function createAttemptRunner({
   stderr = process.stderr,
   sampleIntervalMs = 5_000,
   onProgress = () => {},
+  maxDurationMs = resolveVitestMaxDurationMs(),
+  terminationGraceMs = 10_000,
+  closeGraceMs = 10_000,
+  terminateProcessTreeImpl,
+  setTimeoutImpl,
+  clearTimeoutImpl,
+  now,
 } = {}) {
   const runObservedProcess = createObservedProcessRunner({
     spawnImpl,
@@ -110,6 +126,13 @@ export function createAttemptRunner({
     stdout,
     stderr,
     sampleIntervalMs,
+    maxDurationMs,
+    terminationGraceMs,
+    closeGraceMs,
+    ...(terminateProcessTreeImpl ? { terminateProcessTreeImpl } : {}),
+    ...(setTimeoutImpl ? { setTimeoutImpl } : {}),
+    ...(clearTimeoutImpl ? { clearTimeoutImpl } : {}),
+    ...(now ? { now } : {}),
     onProgress: (progress) => onProgress({
       ...progress,
       lastCompletedTest: lastCompletedTestLine(progress.outputTail ?? ""),
@@ -135,6 +158,7 @@ export function createAttemptRunner({
 async function main() {
   const initialWorkers = positiveInteger(valueAfter("--initial-workers", "4"), 4);
   const retryWorkers = positiveInteger(valueAfter("--retry-workers", "2"), 2);
+  const maxDurationMs = resolveVitestMaxDurationMs();
   const metadataPath = process.env.DPF_LOCAL_CI_METADATA_FILE ?? "";
   const diagnosticsPath = resolve(
     process.env.DPF_LOCAL_CI_VITEST_DIAGNOSTICS_FILE
@@ -145,6 +169,7 @@ async function main() {
   const identity = {
     integrationTreeSha: resolveGit("HEAD^{tree}"),
     command: `pnpm --filter web exec vitest run --maxWorkers=${initialWorkers} --reporter=verbose`,
+    maxDurationMs,
   };
   const priorReceipt = readStageReceipt(diagnosticsPath);
   if (reusablePassedStage({
@@ -181,6 +206,7 @@ async function main() {
   });
   receipt.start({
     bi: "BI-872CB1BF",
+    maxDurationMs,
     executionProfile: recoveryPlan.executionProfile,
     recoveredFrom: recoveryPlan.recoveringPriorTermination
       ? {
@@ -208,6 +234,7 @@ async function main() {
   }
 
   const observedAttempt = createAttemptRunner({
+    maxDurationMs,
     onProgress: (progress) => receipt.heartbeat(progress),
   });
 

@@ -28,6 +28,8 @@ export type RegistryReleaseCandidate = Readonly<{
   channelDigest: string;
   platformManifestDigest: string;
   configDigest: string;
+  platformOs: "linux";
+  platformArchitecture: string;
 }>;
 
 export type RegistryReleaseFailureReason =
@@ -388,6 +390,8 @@ export async function readRegistryReleaseCandidate(input: {
         channelDigest: channel.digest,
         platformManifestDigest,
         configDigest,
+        platformOs: "linux",
+        platformArchitecture: architecture,
       }),
     };
   } catch (error) {

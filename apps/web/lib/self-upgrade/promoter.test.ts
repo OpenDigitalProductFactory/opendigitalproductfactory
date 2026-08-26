@@ -223,7 +223,11 @@ describe("buildPromoterCommand", () => {
       release: {
         tag: "v2026.08.23",
         ghcrOwner: "opendigitalproductfactory",
+        channelDigest: `sha256:${"a".repeat(64)}`,
+        platformManifestDigest: `sha256:${"b".repeat(64)}`,
         configDigest: `sha256:${"c".repeat(64)}`,
+        platformOs: "linux",
+        platformArchitecture: "amd64",
       },
     });
     expect(args).toContain("/Users/me/dpf:/host-source");
@@ -231,6 +235,10 @@ describe("buildPromoterCommand", () => {
     expect(args).toContain("DPF_PROMOTION_MODE=release");
     expect(args).toContain("DPF_RELEASE_TAG=v2026.08.23");
     expect(args).toContain(`DPF_RELEASE_CONFIG_DIGEST=sha256:${"c".repeat(64)}`);
+    expect(args).toContain(`DPF_RELEASE_CHANNEL_DIGEST=sha256:${"a".repeat(64)}`);
+    expect(args).toContain(`DPF_RELEASE_PLATFORM_MANIFEST_DIGEST=sha256:${"b".repeat(64)}`);
+    expect(args).toContain("DPF_RELEASE_PLATFORM_OS=linux");
+    expect(args).toContain("DPF_RELEASE_PLATFORM_ARCHITECTURE=amd64");
     expect(args).toContain("GHCR_OWNER=opendigitalproductfactory");
     expect(args).toContain("PROMOTE_TARGET_SHA=abc1234");
   });

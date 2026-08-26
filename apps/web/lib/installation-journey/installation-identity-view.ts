@@ -68,12 +68,12 @@ export function buildIdentityHeadline(input: {
 }): string {
   const environmentWord = ENVIRONMENT_CLASS_LABEL[input.environment.environmentClass].toLowerCase();
   if (!input.environment.declared) {
-    return `Treated as a ${environmentWord} installation. Nobody has said what this one is.`;
+    return `Nobody has said what this installation is, so we treat it as ${environmentWord}.`;
   }
   if (input.intentStatus !== "valid") {
-    return `A ${environmentWord} installation. Nobody has said what its job is.`;
+    return `This installation is set up for ${environmentWord} work. Nobody has said what its job is.`;
   }
-  return `A ${environmentWord} installation. Its job: ${PURPOSE_LABEL[input.purpose].toLowerCase()}.`;
+  return `This installation is set up for ${environmentWord} work. Its job is to ${PURPOSE_LABEL[input.purpose].toLowerCase()}.`;
 }
 
 function stanceRows(stance: InstanceStanceProfile): StanceRow[] {

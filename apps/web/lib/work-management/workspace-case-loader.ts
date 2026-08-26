@@ -25,6 +25,7 @@ import {
 import type { WorkroomStructure } from "./room-structure";
 import type { WorkroomPostureContext } from "./room-posture";
 import { readWorkroomShapeClaim } from "./workroom-shape-claim";
+import { readWorkroomPostureClaim } from "./workroom-posture-claim";
 import { deriveWorkroomShape } from "./derive-workroom-shape";
 import type { WorkroomParticipantView, WorkroomView } from "./room-types";
 import { getWorkCaseSourceEntry } from "./source-registry";
@@ -94,6 +95,8 @@ type WorkspaceWorkItemMessageRecord = {
 };
 
 export type WorkspaceWorkCapsuleRecord = {
+  /** The row the operator posture control writes back to. */
+  id?: string;
   capsuleId: string;
   status: string;
   title: string;
@@ -500,6 +503,10 @@ export async function loadWorkspaceWorkCaseDetail({
       // one of the four shape axes. Both ride the existing query — no extra
       // round trip for the posture.
       select: {
+        // `id` is the row the operator control writes back to. Without it the
+        // control would render with nothing to target — the write path would
+        // exist and be unusable, which is the failure this whole epic is about.
+        id: true,
         capsuleId: true,
         status: true,
         title: true,
@@ -557,11 +564,22 @@ export async function loadWorkspaceWorkCaseDetail({
         now,
       })
     : null;
+  // The identity the operator control needs to write back. Only present when a
+  // capsule actually anchors this case — a case with no room is not editable as
+  // a room, and the control is then not rendered at all.
+  const editablePosture = anchoredCapsule?.id
+    ? {
+        roomRowId: anchoredCapsule.id,
+        caseKey,
+        declaredShape: readWorkroomShapeClaim(anchoredCapsule.scopeClaims),
+        hasDeclaration: readWorkroomPostureClaim(anchoredCapsule.scopeClaims) !== null,
+      }
+    : null;
   const room = buildWorkroomView({
     caseKey,
     detail,
     structure,
-    postureContext,
+    postureContext: postureContext ? { ...postureContext, editable: editablePosture } : null,
     // A DECLARED shape always wins. Most rooms have never declared one
     // (0 of 330 on the reference install), so fall back to deriving from what
     // the room already is — and accept null when it does not say enough,

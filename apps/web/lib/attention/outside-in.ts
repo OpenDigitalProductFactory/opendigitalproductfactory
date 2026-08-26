@@ -76,6 +76,8 @@ const SOURCE_PORTFOLIO: Record<AttentionSource, AttentionPortfolio> = {
   "paused-ai": "for-employees", // a coworker paused, needs input/credential
   "scheduled-task": "for-employees", // a coworker cadence errored
   "agent-proposal": "for-employees", // a coworker wants approval to act
+  "coworker-envelope": "for-employees", // a coworker is held until this employee decides
+  "skill-proposal": "foundational", // a change to what every coworker knows how to do
   // Build / delivery pipeline (deeper inside).
   escalation: "manufacturing-and-delivery", // Build Studio could not self-repair
   "research-proposal": "manufacturing-and-delivery", // internal capability R&D

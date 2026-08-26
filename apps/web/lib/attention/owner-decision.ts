@@ -174,12 +174,40 @@ function tagsFor(item: AttentionItem, nowMs: number): OwnerDecisionTag[] {
   return tags;
 }
 
+const MINUTE_MS = 60_000;
+const HOUR_MS = 3_600_000;
+const DAY_MS = 86_400_000;
+
+/**
+ * How long the reader has, in the largest unit that is still honest.
+ *
+ * This used to round every remaining span up to whole days, so ANY future
+ * deadline under 24h read "Due in 1 day" — and "Due today" could not fire at
+ * all, because Math.ceil of a positive fraction is never 0. That was harmless
+ * while every deadline-bearing source was day-scale (bills, filings), and
+ * actively misleading the moment one was not: a coworker approval envelope
+ * whose window closes in three minutes was labelled "Due in 1 day", directly
+ * contradicting the exact expiry printed on the same card (BI-7CB2CCDE
+ * follow-up, caught on the live install).
+ *
+ * Minutes and hours are therefore reported as minutes and hours. Day-scale
+ * deadlines keep their existing wording and rounding.
+ */
 function dueLabel(deadlineIso: string | undefined, nowMs: number): string | null {
   if (!deadlineIso) return null;
   const deadline = new Date(deadlineIso).getTime();
   if (!Number.isFinite(deadline)) return null;
-  const days = Math.ceil((deadline - nowMs) / 86_400_000);
-  if (days < 0) return "Past due";
-  if (days === 0) return "Due today";
+  const msLeft = deadline - nowMs;
+  if (msLeft <= 0) return "Past due";
+  if (msLeft < HOUR_MS) {
+    // Never round a live window down to "0 minutes" — it still needs an answer.
+    const minutes = Math.max(1, Math.round(msLeft / MINUTE_MS));
+    return `Due in ${minutes} minute${minutes === 1 ? "" : "s"}`;
+  }
+  if (msLeft < DAY_MS) {
+    const hours = Math.round(msLeft / HOUR_MS);
+    return `Due in ${hours} hour${hours === 1 ? "" : "s"}`;
+  }
+  const days = Math.ceil(msLeft / DAY_MS);
   return `Due in ${days} day${days === 1 ? "" : "s"}`;
 }

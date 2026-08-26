@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { ALL_ARCHETYPES } from "./archetypes/index";
 import { deriveTwinProfile } from "./twin-profile";
+import { deriveTwinValueStreamBinding } from "./twin-value-stream";
 import {
   deriveDemoBusiness,
   evaluateDemoDelight,
@@ -77,7 +78,11 @@ describe("deriveDemoBusiness", () => {
       const queueKeys = new Set(profile.queues.map((q) => q.key));
       for (const d of demo.demand) {
         if (d.queueKey) expect(queueKeys.has(d.queueKey)).toBe(true);
-        expect(typeof d.stageKey).toBe("string");
+        expect(
+          deriveTwinValueStreamBinding(archetype).stages.some(
+            (stage) => stage.stageKey === d.stageKey,
+          ),
+        ).toBe(true);
       }
     }
   });

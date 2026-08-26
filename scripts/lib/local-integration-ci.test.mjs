@@ -211,7 +211,7 @@ describe("createLocalIntegrationPlan", () => {
     assert.ok(preflightIndex < firstGateIndex);
   });
 
-  it("writes the shadow plan beside governed local-CI metadata when requested", () => {
+  it("writes the evidence plan beside governed local-CI metadata when requested", () => {
     const plan = createLocalIntegrationPlan({
       candidateBranch: "feat/x",
       mode: "single-branch",
@@ -223,6 +223,29 @@ describe("createLocalIntegrationPlan", () => {
     assert.ok(plan.commands.map((command) => command.join(" ")).includes(
       "node scripts/ci-evidence-plan.mjs --event local-ci --base origin/main --head HEAD --output artifacts/dpf-ci-evidence-plan.json",
     ));
+  });
+
+  it("runs only exact documentation evidence for an authoritative documentation lane", () => {
+    const plan = createLocalIntegrationPlan({
+      candidateBranch: "docs/gate-flow",
+      mode: "single-branch",
+      siblingBranches: [],
+      hostPlatform: "win32",
+      evidencePlan: {
+        executionLane: "documentation",
+        digest: "plan-digest",
+      },
+    });
+
+    assert.deepEqual(plan.commands.map((command) => command.join(" ")), [
+      "git checkout -B local-integration/docs-gate-flow origin/main",
+      "git merge --no-ff --no-edit docs/gate-flow",
+      "node scripts/ci-evidence-plan.mjs --event local-ci --base origin/main --head HEAD",
+      "node scripts/gen-doc-index.mjs --check",
+      "node scripts/check-doc-links.mjs",
+      "node scripts/check-guards.mjs",
+    ]);
+    assert.equal(plan.executionLane, "documentation");
   });
 
   it("runs fast PR guard parity before the expensive test/build gates", () => {

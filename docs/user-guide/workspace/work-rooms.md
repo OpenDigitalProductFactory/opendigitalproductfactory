@@ -31,7 +31,16 @@ The top of a Workroom answers four questions:
 3. Who is accountable and who is participating?
 4. What is the next action?
 
-Source identifiers, integration status, and projection confidence remain available under **Room details**. They do not displace the outcome or the people doing the work.
+Below that header, **Room definition** names the reusable room pattern and its version.
+**This room** identifies whether you are seeing one occurrence, a standing stream, or its
+active cycle. **Overview** is the default and keeps the room boundary and shape in view.
+Open **Details** for cycles, activity, participants, context, evidence, receipts, and
+technical references. A business room does not need a repository, worktree, or pull
+request; those appear only when development work actually produces them.
+
+Source identifiers, integration status, and projection confidence remain available under
+**Room details** inside **Details**. They do not displace the outcome or the people doing
+the work.
 
 ## Activity and Participants
 
@@ -55,7 +64,10 @@ Across rooms, you can see **where each AI coworker is engaged**—which active r
 
 An authorized coworker can also open a relevant product surface from the room's work type, resources, or task intent—even when no browser page is rendered. These silent/headless surfaces use the same semantic fields, validation, and governed actions as the human browser or mobile view. Room membership still does not expand authority: the surface catalog and every action apply the human role, coworker grants, room/work context, token scope, and approval rules together.
 
-Open **Participants** to see why each person or coworker is in the room, what they are working on, their authority summary, and an AI coworker's accountable sponsor. Coworkers created by the active thread's governed lineage appear automatically; the room does not provide an unrestricted coworker picker.
+Open **Details**, then **Participants**, to see why each person or coworker is in the room,
+what they are working on, their authority summary, and an AI coworker's accountable
+sponsor. Coworkers created by the active thread's governed lineage appear automatically;
+the room does not provide an unrestricted coworker picker.
 
 ## Access and Other Channels
 
@@ -121,6 +133,46 @@ because those problems get worse while nobody is looking.
 
 If a room has nothing of its own to say about pace, it says so — "Running on defaults" —
 rather than implying a decision nobody made.
+
+### Changing it
+
+Open **Pace and priority** and the settings are there, under what the room is currently
+doing. Three choices, in the order that matters:
+
+1. **What kind of work is this?** — the shape. This decides what may happen in the room at
+   all, so it is the one worth getting right.
+2. **How hard should it push?** — quiet, follows up, or pushes.
+3. **May it act without asking?** — advises only, asks first, or acts alone.
+
+Anything you set here applies to everyone working in that room, and you can clear it again
+to go back to following the work.
+
+One rule is worth knowing before you use the third setting: **stricter always applies.**
+Choosing a looser option cannot give a coworker more freedom than its own permissions
+already allow. If a coworker is only permitted to propose, setting the room to "acts alone"
+leaves it proposing. The room can restrain a coworker; it cannot promote one.
+
+### Setting a default for every room
+
+Most businesses want one answer for most rooms. Under **Priority & Models** in the AI
+section, *How work rooms behave* sets the default: how hard rooms push, and whether they
+may act without asking.
+
+It is deliberately separate from the per-coworker settings on the same page, because a room
+and a coworker are different questions. "How does this coworker behave" and "how does work
+in a room behave" have different answers, and the room default only governs work happening
+in a room.
+
+The order of precedence, strongest first:
+
+1. A policy floor — regulated work, for instance — which nothing overrides.
+2. What the room itself declares.
+3. What the work actually is: its shape, the business it serves, and the clock.
+4. **Your default for rooms.**
+5. The coworker's own settings, then the organisation's, then the platform's.
+
+Your default sits below what the work is on purpose. A blanket preference about rooms
+should not overrule the shape of the job in front of you.
 
 ## Giving a Room Its Shape
 

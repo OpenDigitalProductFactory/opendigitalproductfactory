@@ -1,6 +1,6 @@
 # Work shapes and the decision gate
 
-**Backlog item:** `BI-C8C4031C`
+**Scope:** canonical Workroom shape and decision-gate architecture
 **Epic:** `EP-WORK-CONVERGENCE`
 **Status:** Current
 
@@ -61,7 +61,7 @@ each owned by a different part of the substrate. A room picks one value on each.
 | **Collaboration shape** — how a gate inside it routes | `specialist-alignment`, `approval-sign-off`, `outward-review`, `change-consequential`, `escalation`, `craft-stewardship` | `WORKROOM_SHAPE_KEYS` in `apps/web/lib/work-management/room-shapes.ts` |
 
 The first three are live code. The fourth **is now a registry with a write path**
-⟦runtime: `BI-8C54B216`, 2026-08-23⟧: `WORKROOM_SHAPE_KEYS` in
+⟦runtime: 2026-08-23⟧: `WORKROOM_SHAPE_KEYS` in
 `apps/web/lib/work-management/room-shapes.ts` is the enum, and a room is convened with a
 shape by passing `workroomShape` to `create_workroom` or `adopt_worktree`. It persists as a
 `scopeClaims` entry — no migration — and is read back by `readWorkroomShapeClaim`.
@@ -81,6 +81,13 @@ was **declared or derived**, and expect most older rooms to have neither.
 
 Finite and standing rooms are explained for end users in
 [Work Rooms](../user-guide/workspace/work-rooms.md).
+
+Definition and occurrence identity are not a fifth shape axis. The Work Case source
+registry owns a stable, versioned room-definition projection. The Work Case owns the room
+instance, with its primary source, current cycle, and active execution carriers forming
+the occurrence trace. This keeps the same definition useful for business-only and
+development rooms: repository, worktree, pull-request, token, and CI records are optional
+execution evidence, never prerequisites for room identity.
 
 ## The gate: which scope decides
 
@@ -126,7 +133,7 @@ this coworker takes the turn or hands it to a human. That projection lives in
 | `supervised-action` | acts, with a supervising human in the loop |
 | `autonomous-action` | **the sole mode that permits acting without a human turn** |
 
-**The two ladders are now one projection** ⟦runtime: `BI-13ED1BE1` / `BI-06C41FDC`, 2026-08-23⟧.
+**The two ladders are now one projection** ⟦runtime: 2026-08-23⟧.
 The decision mode above and the proactivity `actionBoundary` (`advise` · `propose` ·
 `preauthorized`) used to decide the same question separately and never meet, so a
 `preauthorized` posture could imply autonomy the envelope would deny and vice versa.
@@ -202,6 +209,27 @@ The unresolved-work list is the load-bearing part of an outcome packet: a shape 
 with silent remainders is how work escapes the room. Naming the remainder with a
 disposition is what keeps the next cycle honest.
 
+## Setting the posture, and the default for rooms
+
+⟦runtime: shipped 2026-08-23⟧ Both write paths are operator-facing, which they were not
+when the posture first shipped: `WorkroomPosture.tsx` displayed a pace and priority with
+zero interactive elements and no server action behind it, while every settable control was
+per-coworker.
+
+- **Per room** — shape, pace and action boundary, inside the room's existing collapsed
+  section (`WorkroomPostureControl`, actions in `lib/actions/workroom-posture.ts`). The
+  shape claim REPLACES any prior entry rather than appending, because
+  `readWorkroomShapeClaim` returns the first valid declaration and a stale entry would win.
+- **Decreed default for rooms** — `WorkroomDefaultControl` on the priority surface, stored
+  migration-free under `autonomyPolicy.workroomPostureDefault`
+  (`workroom-posture-defaults.ts`).
+
+Ladder position for the default: **above** the coworker ladder, because it is specifically
+about rooms and they are not; **below** derivation, because what the work actually is
+outranks a blanket preference about rooms. Both paths run the action boundary through the
+tighten-only clamp, so neither control can widen authority — and the UI states that, since
+an invariant the operator cannot see is one they will be surprised by.
+
 ## Known gaps
 
 Stated plainly so nobody plans against a capability that is not there:
@@ -215,25 +243,26 @@ Stated plainly so nobody plans against a capability that is not there:
   `classifyConsequentialTool` runs on the governed execution path, so every governed tool
   call is classified. The workroom-shape hook
   (`lib/governance/workroom-shape-governance-hook.ts`) governs consequential calls bound to
-  a room, and as of `BI-06C41FDC` its computed decision mode actually decides the turn
+  a room, and its computed decision mode actually decides the turn
   rather than only being recorded in the shadow verdict. The full interceptor over every
-  consequential call, room-bound or not, remains EP-1C37C089.
+  consequential call, room-bound or not, remains the platform-wide decision gate.
 
 Three gaps listed here previously have closed; they are recorded so a reader returning to
 this page does not plan against a stale limitation:
 
-- **Collaboration shape is a registry** ⟦runtime: `BI-8C54B216`, 2026-08-23⟧ —
+- **Collaboration shape is a registry** ⟦runtime: 2026-08-23⟧ —
   `WORKROOM_SHAPE_KEYS` is the enum, `bindWorkroomShape` is the binding, and a room's shape
   is queryable through `readWorkroomShapeClaim`. Six shapes, not five: `craft-stewardship`
   joined the five originally specified.
 - **Classification is no longer a hand-listed pair** — the legacy name-keyed list survives
   only for tools that predate the declared `ToolDefinition.consequence` axis, and a
   conformance test now asserts every name in it resolves to a real tool.
-- **The shape view is rendered** ⟦runtime: `BI-C7E2E924`⟧ — `WorkroomShapeSection` on the
-  room and `CoworkerShapePanel` on the coworker record draw the same picture, behind the
-  same Shape / Detail toggle.
+- **The shape view is rendered** — `WorkroomShapeSection` on the
+  room and `CoworkerShapePanel` on the coworker record draw the same picture. The room now
+  presents that picture in the default **Overview** and defers cycles, activity, evidence,
+  receipts, and technical references to **Details**.
 
-**Shape now also sets posture** ⟦runtime: added 2026-08-22, `BI-4F468192`⟧. The same four
+**Shape now also sets posture** ⟦runtime: added 2026-08-22⟧. The same four
 axes feed the room's *posture* — how persistently the coworker follows up and how it trades
 cost against quality against time — through `resolveWorkroomPosture`
 (`apps/web/lib/work-management/room-posture.ts`), layered over the existing proactivity and

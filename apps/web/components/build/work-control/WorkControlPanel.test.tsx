@@ -33,17 +33,22 @@ describe("WorkControlPanel", () => {
           updatedAt: "2026-05-14T00:00:00.000Z",
         }]}
         adoptable={[]}
+        livenessSummary={{ scanned: 2, live: 1, history: 1, reapable: 1, byLiveness: { live: 1, "lease-expired": 1 } }}
         createAction={vi.fn()}
       />,
     );
 
-    expect(html).toContain("Work Control");
+    expect(html).toContain("Development Workrooms");
     expect(html).toContain("Adopt work");
     expect(html).toContain("WWWD");
     expect(html).toContain("Goods and Services for Sale");
     expect(html).toContain("customer");
     expect(html).toContain("Onboard Contoso");
     expect(html).toContain("feat/adopt");
+    expect(html).toContain("Live Workrooms");
+    expect(html).toContain("1 inactive");
+    expect(html).toContain('href="/ops/workrooms"');
+    expect(html).toContain('href="/ea/workrooms"');
   });
 
   it("renders empty state", () => {
@@ -51,7 +56,7 @@ describe("WorkControlPanel", () => {
       <WorkControlPanel capsules={[]} adoptable={[]} createAction={vi.fn()} canCreateGovernedWork />,
     );
 
-    expect(html).toContain("No active workrooms yet.");
+    expect(html).toContain("No live Workrooms.");
     expect(html).toContain("Plan governed work");
   });
 

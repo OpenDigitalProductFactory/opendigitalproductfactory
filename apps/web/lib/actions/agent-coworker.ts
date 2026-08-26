@@ -708,14 +708,16 @@ export async function sendMessage(input: {
   // heavy coworker (36-38 skills) can still overflow after the tool cap. Reads the
   // DMR served-context truth; null/unknown (or a capable window) → Infinity cap =
   // no change (cloud + large-window installs are byte-identical).
-  const { resolveLocalServedContextTokens } = await import(
+  const { resolveLocalServingPosture } = await import(
     "@/lib/inference/local-model-context-reconcile"
   );
   const { deriveSkillCatalogCap, capSkillCatalog } = await import(
     "@/lib/actions/coworker-tool-budget"
   );
-  const localServedContext = await resolveLocalServedContextTokens();
-  const skillCatalogCap = deriveSkillCatalogCap(localServedContext);
+  // Presence rides with the window: a null window cannot tell an absent local
+  // model from an unread one, and the tool cap below needs that (BI-A8BFEFCE).
+  const { servedContextTokens: localServedContext, presence: localPresence } = await resolveLocalServingPosture();
+  const skillCatalogCap = deriveSkillCatalogCap(localServedContext, { localPresence });
   // Computed once; an explicitly-invoked skill is pinned into the catalog so the
   // cap never breaks a `Use the <id> skill.` request (reused for telemetry below).
   const invokedSkillId = extractInvokedSkillId(input.content);
@@ -1342,7 +1344,7 @@ export async function sendMessage(input: {
   // surface; unmeasured → null → Phase-1 fail-safe. Best-effort (never throws).
   const { resolveLocalToolFidelityCeiling } = await import("@/lib/routing/local-tool-fidelity");
   const measuredToolFidelityCeiling = await resolveLocalToolFidelityCeiling();
-  const toolCap = deriveCoworkerToolCap(localServedContext, { measuredToolFidelityCeiling });
+  const toolCap = deriveCoworkerToolCap(localServedContext, { measuredToolFidelityCeiling, localPresence });
   // BI-B5C358B1 — the route's declared domain tools are the ones a turn on this
   // route is most likely to need (e.g. /ops → backlog query/update). They were
   // only injected as system-prompt PROSE, never attached, so the intent ranker's
@@ -1388,8 +1390,8 @@ export async function sendMessage(input: {
   const { attached: budgetedTools, deferred: deferredTools } = selectCoworkerToolBudget({
     tools: availableTools,
     roleGrants,
-    pageActionNames: new Set([...pageActions.map((t) => t.name), ...routeDomainToolNames, ...brokeredToolNames]),
-    alwaysIncludeNames: new Set([LOAD_TOOLS_TOOL_NAME, ...AUTHORIZED_SURFACE_TOOL_NAMES]),
+    pageActionNames: new Set([...pageActions.map((t) => t.name), ...routeDomainToolNames, ...brokeredToolNames, ...AUTHORIZED_SURFACE_TOOL_NAMES]),
+    alwaysIncludeNames: new Set([LOAD_TOOLS_TOOL_NAME]),
     cap: availableTools.length > toolCap ? Math.max(1, toolCap - 1) : toolCap,
     // BI-ACE1EBA4 — when the cap forces deferral, keep the tools most relevant to
     // this turn's intent within each priority tier.

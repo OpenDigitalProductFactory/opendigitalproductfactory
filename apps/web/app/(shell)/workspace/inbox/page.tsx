@@ -26,6 +26,7 @@ export default async function WorkspaceInboxPage() {
 
   const { items, failedSources } = await loadAttentionItems(prisma, {
     aiReadinessUserId: session.user.id,
+    delegatingUserId: session.user.id,
   });
   // V1 operator-view; worker scoping (own approvals only) is BI-AS-4.
   const visible = filterAttentionForAudience(items, { operator: true });

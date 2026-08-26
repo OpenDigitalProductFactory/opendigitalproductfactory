@@ -815,6 +815,43 @@ Capacity projections **MUST** expose the limiting resource and freshness of obse
 AI for one activity does not remove residual human exception, approval, supervision, or recovery
 capacity.
 
+### 9.5 DPF Workroom definition and instance projection
+
+DPF may present the formal work model through the qualified business phrases **Workroom definition**
+and **Workroom instance**. These are projections, not additional standard entities:
+
+- a Workroom definition projects one or more versioned WorkUnitDefinitions with their owning
+  OperatingFlow, Stage, applicable archetype/Profile, and convening policy; and
+- a Workroom instance projects one root WorkOccurrence through its domain or coordination WorkCase.
+  A composite instance may contain child WorkOccurrences, each of which remains independently
+  identifiable and governed.
+
+The canonical DPF vocabulary and persistence boundary is defined in
+[`workroom-vocabulary-boundary.md`](workroom-vocabulary-boundary.md). A DPF implementation **MUST**
+refactor the existing Work Case source registry and Workroom projections toward this mapping; it
+**MUST NOT** create a parallel room-template store, occurrence ledger, agent task bus, or portfolio
+ledger.
+
+Every Workroom instance **MUST** reference the exact definition version used and preserve approved
+instance tailoring. A standing instance uses bounded cycles for a stream of repeated activity. A
+finite instance seals after acceptance. A schedule, domain event, exception, or prior occurrence may
+spawn an instance. Temporary workspaces or execution resources may be torn down, but retained
+definition identity, occurrence identity, actions, receipts, outcome evidence, and required measures
+**MUST NOT** be deleted as a side effect.
+
+A sub-room is a contained Workroom instance with an independently meaningful objective or control
+boundary. A cycle is not a sub-room unless it needs its own accountability, authority, lifecycle, or
+outcome evidence. Work coordination distinguishes structural containment, spawn provenance,
+dependency, blocking, and outcome contribution. These coordination relations do not replace Section
+6.3 portfolio dependencies or the authoritative relations of a domain system.
+
+Portfolio placement remains aspect-based. A Workroom definition may declare a default primary
+coordinated portfolio role and directional dependencies; an instance records their effective values
+and exceptions. The room references canonical Products, Performers, Resources, work, and evidence—it
+does not own copies of them. Definition estimates, targets, and evidence policy remain distinguishable
+from instance actuals such as elapsed time, cost, capacity, token/tool use, exceptions, and accepted
+outcomes.
+
 ## 10. Performer and work-allocation model
 
 ### 10.1 Performer kinds
@@ -2153,6 +2190,11 @@ a new ID or major-version change.
 | `FPAW-WORK-027` | Every WorkforceTransitionAssessment **MUST** version its baseline and target allocation, affected Jobs/SkillRequirements/human Principals or populations, reskilling/redeployment/displacement treatment, decision state, effective period, accountable owner, outcome evidence, and rollback/fallback. | `R5` |
 | `FPAW-WORK-028` | Each AllocationDecision **MUST** use one Section 10.3 pattern and its exact assignment/coordination cardinality; when Collaboration is required, the decision **MUST** reference exactly one Collaboration containing `2..*` unique atomic WorkAssignments from the same WorkOccurrence and decision, with explicit sequence/parallelism, handoffs, reconciliation, and shared acceptance. A plural assignee field **MUST NOT** substitute. | `R5` |
 | `FPAW-WORK-029` | Every WorkforceTransitionAssessment **MUST** use the exhaustive Section 10.5 state machine, immutable assessed snapshots, non-overlapping effective versions, and total baseline/target activity conservation: every retained/transferred baseline maps to `1..*` targets and every target has exactly one such predecessor or is exclusively `new`. Verified closure is mandatory; deleting a Job or completing rollout work **MUST NOT** silently retire work or prove the transition outcome. | `R5` |
+| `FPAW-WORK-030` | A DPF Workroom definition **MUST** project versioned WorkUnitDefinition, OperatingFlow/Stage, Profile, and convening policy rather than become a parallel work-definition authority. | `R4` |
+| `FPAW-WORK-031` | A DPF Workroom instance **MUST** reference its exact definition version, one root WorkOccurrence/WorkCase, approved tailoring, accountable Principal, effective portfolio coordination, and retained outcome evidence. | `R5` |
+| `FPAW-WORK-032` | Standing and finite Workroom instances **MUST** preserve definition and occurrence identity; teardown of temporary execution resources **MUST NOT** delete required actions, receipts, actual measures, or outcome evidence. | `R5` |
+| `FPAW-WORK-033` | A Workroom sub-room **MUST** have an independently meaningful objective or control boundary; cycles and coordination relationships **MUST NOT** be collapsed into an undifferentiated parent/child hierarchy. | `R4` |
+| `FPAW-WORK-034` | Workroom portfolio fields **MUST** reference canonical governed aspects and Section 6.3 dependencies; they **MUST NOT** create a second portfolio placement or asset ledger. | `R4` |
 
 ### 16.5 Physical and non-digital work requirements
 
@@ -2397,7 +2439,7 @@ These are gaps, not failures of the standard. They establish an honest starting 
 | identity/workforce | `Principal`, `EmployeeProfile`, `Position`, `OccupationProfile`; `Agent` is configuration/template substrate, not identity |
 | agent assurance | TAK, GAID, TAK-JSI, agent registry, authority and execution evidence |
 | coworker services | `CoworkerService`, `CoworkerOffer`, `CoworkerEngagement` |
-| work and allocation | `WorkItem`, `WorkQueue`, `WorkEngagement`, staffing/scheduling and domain transactions |
+| work and allocation | Workroom definition/instance projections over `WORK_CASE_SOURCE_REGISTRY`, `Workroom`, `WorkItem`, `WorkQueue`, `WorkEngagement`, cycles, staffing/scheduling, and domain transactions; WorkUnitDefinition/WorkOccurrence realization remains incomplete |
 | physical state | vertical-owned records, `InventoryEntity`, `WorkLocation`, `CustomerSite`; twins remain projections |
 | conformance/gaps | `EaReferenceAssessment`, `EaConformanceIssue`, `LifecycleGap`, `PortfolioQualityIssue`, `BacklogItem` |
 
@@ -2431,6 +2473,9 @@ implementation work is deliberately identified rather than prematurely built:
     fifth general-purpose Gap authority
 14. add a canonical generalized intended-Outcome target and Objective→Outcome→OutcomeObservation
     cardinalities without recasting append-only `ProductOutcomeObservation` evidence as intent
+15. refactor the Work Case source registry and Workroom read model into the Section 9.5
+    WorkUnitDefinition/WorkOccurrence bridge, preserving domain authorities and existing cycle,
+    evidence, estimate, token/tool telemetry, backlog, worktree, PR, and receipt records
 
 ### 18.4 Documentation convergence in this release
 
@@ -2840,7 +2885,7 @@ parallel persistence.
 | `CoworkerService/CoworkerServiceOffering/engagement` | `CoworkerService`, `CoworkerOffer`, `CoworkerEngagement` | present; typed FPAW mapping required |
 | `ValueStream/Stage` | archetype OVSM and EA projection | derived; Stage contract incomplete |
 | `Capability` | `BusinessCapability` and corpus | present; Stage relation thin |
-| `OperatingFlow/WorkUnitDefinition` | domain flows, `WorkItem`, staffing, process/case records | fragmented; normative bridge missing |
+| `OperatingFlow/WorkUnitDefinition/WorkOccurrence` | Workroom definition/instance projections over `WORK_CASE_SOURCE_REGISTRY`, `Workroom`, domain `WorkCase` sources, `WorkItem`, cycles, staffing, scheduling, and process/case records | architecture bridge specified in Section 9.5; runtime definition identity/version, composition relations, and complete occurrence trace remain fragmented |
 | `Job/Occupation/Skill` | `Position`, `OccupationProfile`, skills and profession corpora | present but fragmented |
 | `Performer` | `Principal`, `EmployeeProfile`, partner/domain models; `Agent` is configuration/template, not identity | convergence incomplete |
 | `WorkAssignment/Collaboration` | `WorkItem`, schedules, staffing, agent engagements | atomic assignment arity and human/AI/robot/partner collaboration union incomplete |

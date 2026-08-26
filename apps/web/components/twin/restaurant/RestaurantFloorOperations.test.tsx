@@ -386,12 +386,17 @@ describe("RestaurantFloorOperations", () => {
     render(<RestaurantFloorOperations {...props} />);
     fireEvent.click(screen.getByRole("button", { name: "Confirm seating" }));
 
-    await waitFor(() => expect(mocks.refresh).toHaveBeenCalledTimes(1));
-    const alert = screen.getByRole("alert");
+    // BI-F0C4FDE0: wait for the END STATE, not for the refresh call. The call
+    // is the trigger; the alert, the focus move and the button's removal all
+    // land in the effect that follows it. Waiting only on the call left a
+    // window where refresh had fired and React had not yet flushed the rest —
+    // which passed locally and failed intermittently on a loaded CI runner.
+    const alert = await screen.findByRole("alert");
+    await waitFor(() => expect(document.activeElement).toBe(alert));
+    expect(mocks.refresh).toHaveBeenCalledTimes(1);
     expect(alert.getAttribute("aria-live")).toBe("assertive");
     expect(alert.textContent).toContain("Floor changed before confirmation");
     expect(alert.textContent).toContain("Review refreshed choices, then retry");
-    expect(document.activeElement).toBe(alert);
     expect(screen.queryByRole("button", { name: "Confirm seating" })).toBeNull();
     expect(screen.getByText("Choose a party for a safe seating choice.")).toBeTruthy();
   });

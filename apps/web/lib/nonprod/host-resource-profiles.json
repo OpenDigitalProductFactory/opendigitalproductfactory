@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "hostReserveMiB": 8192,
+  "inferenceGrowthReserveMiB": 4096,
+  "singletonHostCeilingMiB": 65536,
+  "profiles": {
+    "typescript": { "expectedMemoryMiB": 6144 },
+    "vitest": { "expectedMemoryMiB": 8192 },
+    "next-build": { "expectedMemoryMiB": 16384 },
+    "docker-build": { "expectedMemoryMiB": 16384 },
+    "preview": { "expectedMemoryMiB": 8192 },
+    "inference": { "expectedMemoryMiB": 24576 },
+    "semantic-review": { "expectedMemoryMiB": 12288 }
+  }
+}

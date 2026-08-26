@@ -1,3 +1,39 @@
+---
+status: superseded
+supersededBy: docs/superpowers/specs/2026-08-23-directory-service-identity-absorption-design.md
+---
+
+> # ⚠ SUPERSEDED — do not implement from this document
+>
+> Superseded on 2026-08-26 by
+> [Directory Service — Identity Absorption Design](../specs/2026-08-23-directory-service-identity-absorption-design.md)
+> (epic EP-24741BBF, umbrella `BI-C7362CA5`), which **reverses this document's
+> central decision**.
+>
+> **What was reversed.** This design chose to *adopt* authentik as the identity
+> edge runtime and provision DPF principals outward into it via SCIM. The
+> platform now *absorbs* the capability instead: DPF is the directory, over its
+> own `Principal` spine, and no third-party IdP is added to any install.
+>
+> **Why.** The choice was ratified here with **no tool evaluation on record** —
+> authentik was named across eleven DPF documents and never evaluated. The
+> evaluation now exists at
+> [`docs/security/tool-evaluations/2026-08-23-authentik.md`](../../security/tool-evaluations/2026-08-23-authentik.md)
+> and rejects adoption as a runtime on three verified grounds: adoption
+> relocates the dependency rather than removing it (DPF becomes a provisioning
+> source, not the authority); it requires a second copy of workforce personal
+> identity; and there is no in-process option, because authentik's LDAP edge is
+> a separate Go outpost and no maintained Node LDAP *server* library exists.
+>
+> **What was NOT wrong.** Chunks 1-3 and 7-9 of this plan were largely right and
+> are largely delivered — the `Principal`/`PrincipalAlias` spine, the richer auth
+> context, manager scope, the application registry and the `/platform/identity`
+> workspace all trace to this document. The disposition table below records what
+> shipped, what moved, and what was rejected.
+>
+> Nothing here should be read as current intent. Live work is tracked under
+> EP-24741BBF.
+
 # Enterprise Auth, Directory, And Federation Design
 
 **Date:** 2026-04-22  

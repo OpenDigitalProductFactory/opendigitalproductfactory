@@ -179,8 +179,10 @@ describe("buildFilingPacketNotes", () => {
     const notes = buildFilingPacketNotes({
       periodStart: new Date("2026-01-01T00:00:00Z"),
       periodEnd: new Date("2026-03-31T00:00:00Z"),
-      salesTaxAmount: 1000,
-      inputTaxAmount: 250,
+      components: [
+        { componentKind: "sales_output" as const, amount: 1000 },
+        { componentKind: "sales_input" as const, amount: 250 },
+      ],
       netTaxAmount: 750,
       registration: {
         taxType: "vat",
@@ -199,8 +201,7 @@ describe("buildFilingPacketNotes", () => {
     const notes = buildFilingPacketNotes({
       periodStart: new Date("2026-01-01T00:00:00Z"),
       periodEnd: new Date("2026-03-31T00:00:00Z"),
-      salesTaxAmount: 0,
-      inputTaxAmount: 0,
+      components: [],
       netTaxAmount: 0,
       registration: {
         taxType: "gst",
@@ -209,6 +210,30 @@ describe("buildFilingPacketNotes", () => {
       },
     });
     expect(notes).toContain("Registration: pending");
+  });
+
+  it("lists payroll components and omits the sales lines entirely", () => {
+    // A payroll packet reading "Sales tax captured: 0.00" would state a fact
+    // about sales tax that the filing never concerned.
+    const notes = buildFilingPacketNotes({
+      periodStart: new Date("2026-01-01T00:00:00Z"),
+      periodEnd: new Date("2026-03-31T00:00:00Z"),
+      components: [
+        { componentKind: "employee_withheld" as const, amount: 4200 },
+        { componentKind: "employer_contribution" as const, amount: 1800 },
+      ],
+      netTaxAmount: 6000,
+      registration: {
+        taxType: "federal_withholding",
+        registrationNumber: "EIN-12",
+        jurisdictionReference: { authorityName: "IRS" },
+      },
+    });
+    expect(notes).toContain("Employee withheld: 4200.00");
+    expect(notes).toContain("Employer contribution: 1800.00");
+    expect(notes).toContain("Net tax due: 6000.00");
+    expect(notes).not.toContain("Sales tax captured");
+    expect(notes).not.toContain("Input tax captured");
   });
 });
 

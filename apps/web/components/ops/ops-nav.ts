@@ -26,6 +26,7 @@ export const OPS_NAV_GROUPS: ReadonlyArray<{
     label: "Runtime & Releases",
     tabs: [
       { label: "Business Journeys", href: "/ops/journeys" },
+      { label: "Workrooms", href: "/ops/workrooms" },
       { label: "Changes", href: "/ops/changes" },
       { label: "Promotions", href: "/ops/promotions" },
       { label: "Self-upgrade", href: "/ops/self-upgrade" },

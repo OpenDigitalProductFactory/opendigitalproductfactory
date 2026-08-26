@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 631,
+  "routeCount": 634,
   "routes": [
     {
       "routePath": "/",
@@ -4661,6 +4661,16 @@
       "file": "apps/web/app/(shell)/ea/views/[id]/page.tsx"
     },
     {
+      "routePath": "/ea/workrooms",
+      "kind": "page",
+      "segments": [
+        "ea",
+        "workrooms"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/ea/workrooms/page.tsx"
+    },
+    {
       "routePath": "/employee",
       "kind": "page",
       "segments": [
@@ -5423,6 +5433,16 @@
       "redirectTo": "/ops"
     },
     {
+      "routePath": "/ops/installation",
+      "kind": "page",
+      "segments": [
+        "ops",
+        "installation"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/ops/installation/page.tsx"
+    },
+    {
       "routePath": "/ops/journeys",
       "kind": "page",
       "segments": [
@@ -5491,6 +5511,16 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/ops/teardown/page.tsx"
+    },
+    {
+      "routePath": "/ops/workrooms",
+      "kind": "page",
+      "segments": [
+        "ops",
+        "workrooms"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/ops/workrooms/page.tsx"
     },
     {
       "routePath": "/performance",

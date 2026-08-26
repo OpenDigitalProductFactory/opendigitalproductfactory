@@ -1,11 +1,11 @@
 {
   "generator": "apps/web/scripts/build-route-shells.ts",
-  "pageRouteCount": 327,
+  "pageRouteCount": 330,
   "migratedCount": 1,
   "summary": {
     "cockpit": 17,
     "list": 6,
-    "detail": 253,
+    "detail": 256,
     "settings": 12,
     "form": 18,
     "public": 21,
@@ -1131,6 +1131,18 @@
       "confidence": "high"
     },
     {
+      "routePath": "/ea/workrooms",
+      "shell": "detail",
+      "audience": "admin",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "sweepEligible": true,
+      "confidence": "high"
+    },
+    {
       "routePath": "/employee",
       "shell": "cockpit",
       "audience": "owner",
@@ -1988,6 +2000,18 @@
       "confidence": "high"
     },
     {
+      "routePath": "/ops/installation",
+      "shell": "detail",
+      "audience": "admin",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "sweepEligible": true,
+      "confidence": "high"
+    },
+    {
       "routePath": "/ops/journeys",
       "shell": "detail",
       "audience": "admin",
@@ -2072,6 +2096,18 @@
       ],
       "sweepEligible": false,
       "sweepExclusionReason": "wall-clock-collection",
+      "confidence": "high"
+    },
+    {
+      "routePath": "/ops/workrooms",
+      "shell": "detail",
+      "audience": "admin",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {

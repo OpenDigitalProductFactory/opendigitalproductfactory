@@ -330,7 +330,8 @@ describe("success path", () => {
         release: {
           tag: "v2.0.0",
           ghcrOwner: "opendigitalproductfactory",
-          configDigest: targetConfigDigest,
+          channelDigest: `sha256:${"b".repeat(64)}`, platformManifestDigest: `sha256:${"c".repeat(64)}`,
+          configDigest: targetConfigDigest, platformOs: "linux", platformArchitecture: "amd64",
         },
       }));
     } finally {

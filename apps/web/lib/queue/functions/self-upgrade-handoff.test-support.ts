@@ -41,7 +41,7 @@ export function configureReleaseUpgradeTest(input: {
   input.mocks.readCurrentContainerConfigDigest.mockResolvedValue(input.currentConfigDigest);
   input.mocks.readRegistryReleaseCandidate.mockResolvedValue({
     ...ok(),
-    candidate: { tag: "v2.0.0", sourceSha: input.sourceSha, channelDigest: `sha256:${"b".repeat(64)}`, platformManifestDigest: `sha256:${"c".repeat(64)}`, configDigest: input.targetConfigDigest },
+    candidate: { tag: "v2.0.0", sourceSha: input.sourceSha, channelDigest: `sha256:${"b".repeat(64)}`, platformManifestDigest: `sha256:${"c".repeat(64)}`, configDigest: input.targetConfigDigest, platformOs: "linux", platformArchitecture: "amd64" },
   });
 }
 

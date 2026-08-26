@@ -9,10 +9,73 @@ import {
   type LocalCiHostPressure,
   type ResolvedLocalCiPoolPolicy,
 } from "./local-ci-pool-policy";
+import {
+  resolveHostResourceAdmission,
+  type ActiveHeavyReservation,
+  type HeavyResourceClass,
+} from "./host-resource-policy";
 
 type PlatformConfigReader = Parameters<
   typeof loadLocalCiPoolConfig
 >[0]["platformConfig"];
+
+export interface HostResourcePressure {
+  totalMemoryBytes: number;
+  availableMemoryBytes: number;
+  inferenceResident: boolean;
+}
+
+export interface HostResourceLeaseEvidence extends HostResourcePressure {
+  ungovernedProcesses?: Array<{
+    pid: number;
+    parentPid: number;
+    resourceClass: string;
+    commandLine: string;
+    disposition: "evidence-only";
+  }>;
+}
+
+export interface ResolvedHostResourcePoolPolicy {
+  policyVersion: 1;
+  source: "host-resource-profile";
+  requestedCapacity: number;
+  manifestCapacity: 1;
+  hostSafeCapacity: number;
+  effectiveCapacity: 0 | 1;
+  slotKeys: ["slot-0"] | [];
+  rollbackReason: string | null;
+  config: null;
+}
+
+/** Adapter from the typed host policy to the durable lease pool shape. */
+export function resolveHostResourcePoolPolicy(input: {
+  resourceClass: HeavyResourceClass;
+  expectedMemoryBytes: number;
+  hostResource: HostResourcePressure;
+  activeReservations: ActiveHeavyReservation[];
+}): ResolvedHostResourcePoolPolicy {
+  const admission = resolveHostResourceAdmission({
+    resourceClass: input.resourceClass,
+    expectedMemoryBytes: input.expectedMemoryBytes,
+    totalMemoryBytes: input.hostResource.totalMemoryBytes,
+    availableMemoryBytes: input.hostResource.availableMemoryBytes,
+    inferenceResident: input.hostResource.inferenceResident,
+    activeHeavyReservations: input.activeReservations,
+  });
+  const admitted = admission.status === "admitted";
+  const requestedCapacity = "capacity" in admission ? admission.capacity : 1;
+  return {
+    policyVersion: 1,
+    source: "host-resource-profile",
+    requestedCapacity,
+    manifestCapacity: 1,
+    hostSafeCapacity: admitted ? 1 : 0,
+    effectiveCapacity: admitted ? 1 : 0,
+    slotKeys: admitted ? ["slot-0"] : [],
+    rollbackReason: admitted ? null : admission.reason,
+    config: null,
+  };
+}
 
 export async function resolveNonprodPoolPolicy(input: {
   platformConfig: PlatformConfigReader | undefined;

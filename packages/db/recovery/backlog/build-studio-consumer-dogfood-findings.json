@@ -1,0 +1,337 @@
+{
+  "schemaVersion": 1,
+  "bundleId": "build-studio-consumer-dogfood-findings",
+  "description": "Operator-invoked recovery input for the Build Studio consumer dogfood findings epic — intake quality, dispatch honesty, and build state visibility.",
+  "source": {
+    "capturedAt": "2026-08-26T03:57:53.481Z",
+    "repository": "OpenDigitalProductFactory/opendigitalproductfactory",
+    "planPath": "docs/superpowers/plans/2026-08-22-instance-identity-and-purpose.md"
+  },
+  "epic": {
+    "epicId": "EP-F09D63B3",
+    "title": "Build Studio consumer dogfood findings: intake, dispatch, and progress honesty",
+    "description": "Defects found by exercising Build Studio as a consumer owner on an installed instance. Three clusters: (1) intake quality — the whole request paragraph is stored as the item title, no duplicate check runs even though the detector scores the duplicate at 1.0, and the mandatory business-area picker offers a commercial-manufacturing taxonomy to a nonprofit; (2) dispatch honesty — a governed build starts with no dispatchable engine and then reports \"Working\" indefinitely, a data-governance refusal is reported as a missing engine, and a design-review failure is unrecoverable when ideate cannot dispatch; (3) state visibility — a captured-but-unstarted outcome disappears on refresh, and the build coworker resolves a stale or abandoned build when several share a subject. Collected so the work survives instance teardown; grouped here because these are Build Studio product defects rather than install, lifecycle, or CI-gate findings.",
+    "status": "open",
+    "scopeKind": "platform",
+    "scopeRationale": "Build Studio is platform substrate exercised by every archetype; none of these defects are specific to a vertical.",
+    "createdAt": "2026-08-26T02:59:10.935Z"
+  },
+  "items": [
+    {
+      "itemId": "BI-1242AA1D",
+      "epicId": "EP-F09D63B3",
+      "title": "Build Studio's mandatory \"Choose business area\" offers a commercial-manufacturing taxonomy no rescue can answer",
+      "body": "## Problem\n\nBuild Studio's intake requires the owner to pick a \"business area\" from four fixed options that are the same on every installation and are drawn from a commercial-manufacturing vocabulary. A pet rescue cannot answer the question correctly, is given no guidance and no \"not sure\" option, and the field silently defaults to the vaguest choice.\n\nObserved on the consumer install `D:\\DPF` (Second Chance Animal Rescue), driven through the portal UI as a shelter director.\n\n## Evidence\n\nThe picker is populated from the `Portfolio` table, which on this install holds exactly four rows — the platform defaults, untouched by the Pet Rescue archetype:\n\n- Foundational *(selected by default)*\n- Goods and Services for Sale\n- Manufacturing and Delivery\n- Workforce\n\nAsked where a foster-home program belongs, a shelter director has no correct answer. \"Manufacturing and Delivery\" is meaningless for animal rescue. \"Goods and Services for Sale\" is actively wrong and, for a nonprofit placing animals, offensive on its face. The default, \"Foundational\", is the one option that carries no meaning at all — so the most likely real-world outcome is that every rescue request is filed as Foundational by inaction.\n\nThere is no help text explaining what the areas mean, no \"I'm not sure\" option, and no indication that the choice matters. It does matter: the selected portfolio is carried into the build as `portfolioId` and shows up in the work warrant's taxonomy attribution (\"context: nonprofit-community / … → compliance evidence\").\n\nThe platform already knows this org is `Pet Rescue · nonprofit-community`, and already knows the right vocabulary for it — BI-1FA2BD37 specifies the rescue operating model as three value streams: intake and safe placement, health and welfare, adoption and placement. A foster-home roster belongs cleanly in the first two. None of that reaches this dropdown.\n\n## Why this matters for a real owner\n\nThis is the second field a non-technical owner ever touches in Build Studio, and it asks them to classify their mission in a stranger's vocabulary. Either they guess — poisoning attribution and routing — or they stall on the very first screen. It also undercuts the credibility of everything after it: an owner who is asked whether rescuing dogs is \"Manufacturing and Delivery\" has already learned the system does not know what they do.\n\n## Scope\n\nIn:\n\n- Source the intake business areas from the installation's archetype-projected value streams rather than the four fixed platform Portfolio rows.\n- Give each option a one-line, owner-language description of the work it covers.\n- Add an explicit \"not sure\" path that lets the coworker infer the area from the description and confirm it back to the owner, instead of defaulting silently.\n- Do not preselect a value the owner has not chosen; require a deliberate answer or the inferred-and-confirmed path.\n- Keep the underlying portfolio mapping intact — project archetype streams onto it rather than forking a second taxonomy.\n\nOut:\n\n- The canonical Pet Rescue value-chain definition, owned by BI-1FA2BD37.\n- Archetype vocabulary generalisation, owned by BI-2C80E6EA.\n\n## Acceptance criteria\n\n- On a Pet Rescue installation, the intake areas read in rescue language and none of them is \"Manufacturing and Delivery\" or \"Goods and Services for Sale\".\n- Each option carries a plain-language description; reading grade stays within the portal budget.\n- No business area is preselected; \"not sure\" is available and results in an inferred area confirmed back to the owner before the build starts.\n- The chosen or inferred area is the one recorded as the build's portfolio attribution.\n- Regression test asserts the picker derives from archetype projection, and fails against today's fixed four rows.\n\n## Related\n\nBI-1FA2BD37 (Pet Rescue value streams), BI-2C80E6EA (archetype vocabulary), BI-896D6D97 and BI-AFD79A73 (same intake screen). Evidence: consumer dogfood of Build Studio on the Pet Rescue install, 2026-08-25.",
+      "status": "open",
+      "type": "portfolio",
+      "workType": "bug",
+      "source": "user-request",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-1242aa1d-cmt9i9t0f03v301qvr9yqath4",
+          "kind": "epic_link",
+          "summary": "(no epic) → EP-F09D63B3",
+          "recordedAt": "2026-08-26T02:59:44.031Z",
+          "payload": {
+            "toEpicId": "EP-F09D63B3",
+            "fromEpicId": null
+          }
+        }
+      ],
+      "effortSize": "medium",
+      "triageOutcome": "build",
+      "scopeRationale": "The intake picker reads the same four fixed Portfolio rows on every installation regardless of archetype.",
+      "createdAt": "2026-08-26T00:10:34.951Z"
+    },
+    {
+      "itemId": "BI-16A1B4A3",
+      "epicId": "EP-F09D63B3",
+      "title": "Quality-first routes every substantive build to a frontier floor no endpoint can meet, so no build can dispatch on a stock install",
+      "body": "## Correction\n\nAn earlier revision of this item attributed the block to the installation's data-governance stance (\"DPF blocks … source-code … from unproven cloud connections\"). **That was wrong.** That stance exists on `/platform/ai/providers`, but it is not the mechanism excluding endpoints: `endpointClearsSensitivity` treats the `development` class as satisfied by `public` clearance, and codex's clearance is `{public, internal, confidential}` — so it clears code-gen. The real cause is arithmetic in the quality floor, below.\n\n## Problem\n\nQuality-first rightsizing is ON by default and routes all substantive work to the `robust` tier, which resolves to the `frontier` quality floor. That floor is:\n\n```\nfrontier: { codegen: 85, toolFidelity: 85, reasoning: 85 }   // routing/quality-tiers.ts\nstrong:   { codegen: 70, toolFidelity: 70, reasoning: 70 }\n```\n\nLive endpoint scores on the consumer install `D:\\DPF` (Second Chance Animal Rescue):\n\n| provider | model | codegen | **toolFidelity** | reasoning | evalCount | source |\n|---|---|---|---|---|---|---|\n| local | qwen3.8-27b | 96 | **82** | 90 | 4 | evaluated |\n| codex | gpt-5.4 | 97 | **80** | 95 | 0 | catalog |\n| codex | gpt-5.3-codex | 96 | **80** | 88 | 0 | catalog |\n| chatgpt | gpt-5.4 | 90 | **10** | 85 | 0 | catalog |\n\n**Every endpoint clears codegen and reasoning and fails only on toolFidelity — the best on the box is 82 against a floor of 85.** So no substantive build can dispatch at all, by three points. At the `strong` floor every one of them passes comfortably.\n\nThis is why `ideate` and `build` report \"No eligible endpoints for task type 'code-gen'\" and `plan` reports \"5 of 5 endpoints scored below the quality floor\", while `design-review` and `plan-review` (task type `analysis`, no frontier floor) route fine. The install looks half-working for exactly this reason.\n\nWorse, the numbers doing the excluding are mostly **not measurements**. Codex's 80 is a catalog placeholder with `evalCount = 0` — it has never been probed. A frontier-class coding model is being refused code-gen work on a guessed score. The platform's own flag text already suspects this (\"an unprofiled model carries placeholder scores and can be excluded despite being capable\") but nothing acts on it.\n\n## Why this matters\n\nThis is the single condition that makes Build Studio inert on a stock install. Every other symptom in this dogfood — the false \"Working\" status (BI-CE1AB982), the unrecoverable design-review loop and auto-abandon (BI-E492F313), the dead-end remediation (BI-A38D5B08) — is downstream of it. A rescue that installs DPF, connects a frontier coding provider, and asks for a feature gets nothing, forever, with no usable explanation.\n\n## Scope\n\nIn:\n\n- Do not let an unmeasured placeholder dimension exclude an endpoint from a tier it otherwise qualifies for. Either treat an unprofiled dimension as unknown-and-attemptable (the tri-state precedent already used for `supportsToolUse` in BI-DFC30977) or measure it before enforcing it.\n- Reconcile the frontier floor with reality: no shipped catalog entry reaches toolFidelity 85, so the floor as written excludes the entire catalog. Either the floor or the catalog scores are wrong — decide which, with evidence.\n- When a floor excludes every endpoint, say so as a floor problem and name the dimension and the gap (\"toolFidelity 82 against a floor of 85\"), not as \"no eligible endpoint\".\n- Make the measured path real: `run_endpoint_tests` must actually profile the dimension it is being recommended for (see BI-A38D5B08 — it currently returns an empty result set).\n- Prefer a graceful step-down to the next tier over returning nothing, and record that the step-down happened.\n\nOut:\n\n- Blocked-state rendering, owned by BI-CE1AB982 (merged as PR #4664).\n- Recovery-loop and auto-abandon behaviour, owned by BI-E492F313.\n- Diagnostic dead ends, owned by BI-A38D5B08.\n\n## Acceptance criteria\n\n- On an install whose best endpoint scores toolFidelity 82, a substantive build dispatches rather than returning no eligible endpoint.\n- An endpoint with an unmeasured dimension is not excluded solely on the placeholder value.\n- When a floor excludes every candidate, the operator-facing reason names the dimension, the best observed value, and the floor.\n- A tier step-down is recorded as evidence rather than being silent.\n- Regression test pins the live shape above — codegen/reasoning clear, toolFidelity 82 vs floor 85 — and fails against today's behaviour.\n\n## Related\n\nBI-CE1AB982 (merged), BI-E492F313, BI-A38D5B08, BI-D25F867D, BI-DFC30977 (the tri-state capability precedent). Evidence: consumer dogfood of Build Studio on the Pet Rescue install, 2026-08-25/26.",
+      "status": "triaging",
+      "type": "portfolio",
+      "workType": "bug",
+      "source": "user-request",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-16a1b4a3-cmt9i9t5b03v701qv0aqifd0r",
+          "kind": "epic_link",
+          "summary": "(no epic) → EP-F09D63B3",
+          "recordedAt": "2026-08-26T02:59:44.207Z",
+          "payload": {
+            "toEpicId": "EP-F09D63B3",
+            "fromEpicId": null
+          }
+        },
+        {
+          "recoveryKey": "bi-16a1b4a3-cmt9k3mpa05t001qvpm4i6uob",
+          "kind": "evidence",
+          "summary": "Diagnostics half shipped in PR #4684: 413 files / 4750 tests pass, both new tests verified Red against origin/main first",
+          "recordedAt": "2026-08-26T03:50:55.150Z",
+          "payload": {
+            "url": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/4684",
+            "body": "Scope shipped: `getExclusionReasonV2` now names the failing dimension and gap (\"Minimum quality dimensions not met (toolFidelity 80 < 85)\"), and Build Studio's blocked action reuses the existing `routing-exclusion-buckets` explanation instead of the generic \"Connect, provision, or wait\" — scoped to route-contract rejections so genuine readiness failures keep the accurate advice.\n\nNo routing decision changes: the same endpoints are excluded and the same one is selected. This is the diagnostics half only.\n\nStill open on this item (product policy, deliberately not decided inside a diagnostics fix): whether an unmeasured placeholder dimension should exclude an endpoint at all, and whether a floor that excludes every candidate should step down a tier rather than return nothing.\n\nVerification: tsc 0 errors; guard loop 37/37; module-size, style-drift, One-ActionResult, docs-impact, spec/plan/doc and design-grounding gates clean. All 34 CI checks green.",
+            "evidenceKind": "test_pass",
+            "toolExecutionId": null
+          }
+        }
+      ],
+      "scopeRationale": "The engine-selection remediation copy and its missing link to the governance decision apply to every installation.",
+      "createdAt": "2026-08-26T02:57:55.236Z"
+    },
+    {
+      "itemId": "BI-2C1C8476",
+      "epicId": "EP-F09D63B3",
+      "title": "Build coworker resolves the wrong (stale/abandoned) build when several builds share the /build thread",
+      "body": "Legacy intake recorded no supporting body. The complete known problem statement is: Build coworker resolves the wrong (stale/abandoned) build when several builds share the /build thread. This audit repair adds no requirements beyond that title.",
+      "status": "retired",
+      "type": "product",
+      "workType": "bug",
+      "source": "user-request",
+      "scopeKind": "unknown",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-2c1c8476-cmt6qx4vz0ex101mx63s1r7b6",
+          "kind": "status_change",
+          "summary": "Retired BI-2C1C8476 as discard",
+          "recordedAt": "2026-08-24T04:38:30.911Z",
+          "payload": {
+            "to": "retired",
+            "from": "open",
+            "reason": "Verified existing on current main.",
+            "outcome": "discard",
+            "rationale": "Current main excludes complete, failed, and abandoned builds from automatic resolution, honors explicit FB-* hints, and refuses ambiguous multi-build fallbacks. The legacy title's stale/abandoned shadowing case was implemented and regression-tested in build-tool-helpers.ts (history includes PR #2988 and #3086).",
+            "duplicateOfId": null
+          }
+        },
+        {
+          "recoveryKey": "bi-2c1c8476-cmt9i9t9t03vb01qvaezdan9e",
+          "kind": "epic_link",
+          "summary": "(no epic) → EP-F09D63B3",
+          "recordedAt": "2026-08-26T02:59:44.369Z",
+          "payload": {
+            "toEpicId": "EP-F09D63B3",
+            "fromEpicId": null
+          }
+        }
+      ],
+      "effortSize": "medium",
+      "triageOutcome": "discard",
+      "createdAt": "2026-08-23T14:53:01.843Z"
+    },
+    {
+      "itemId": "BI-3D0AC90F",
+      "epicId": "EP-F09D63B3",
+      "title": "A Build Studio outcome captured but not yet started disappears from Build Studio on refresh, stranding the item",
+      "body": "## Problem\n\nBuild Studio's intake is a two-step commit: **Continue** creates the backlog item and shows \"OUTCOME CAPTURED\" with a **Start governed build** button; only that second button actually starts anything. The intermediate state is client-side only. If the owner refreshes, navigates away, or closes the tab in between, the item still exists on the server but vanishes from Build Studio entirely — and with it the only route to starting the build.\n\nObserved on the consumer install `D:\\DPF` (Second Chance Animal Rescue), driven through the portal UI as a shelter director.\n\n## Evidence\n\nTwo items were created through intake and left between the two steps:\n\n- `BI-EA7F9811` — status `open`\n- `BI-98F16015` — status `open`\n\nBoth exist in the database. Reloading `/build` immediately afterwards showed **\"No builds yet — Describe the outcome above and choose Continue when it is clear.\"** with no reference to either item. With a third item started as `FB-615DE356`, the Builds list reads **\"1 open\"** and lists only that build; page source contains neither stranded item id.\n\nSo the owner's request is filed, invisible where they filed it, and only reachable from `/ops` — a surface a non-technical owner has no reason to visit and, in this session, one they were never pointed at.\n\n## Why this matters for a real owner\n\nA shelter director gets interrupted constantly. Describing the foster problem, hitting Continue, then being pulled away by an intake call is the *normal* case, not the edge case. They come back to a page that says \"No builds yet\" — which reads as \"the system lost my request.\" Their most likely next move is to type it again, which is precisely how the duplicate pile in BI-AFD79A73 was produced. The two defects compound: ephemeral capture generates the refiles, and absent duplicate detection lets every one of them through.\n\nThe page even promises the opposite behaviour elsewhere: \"You can leave this page and return; Build Studio will show the latest recorded state.\"\n\n## Scope\n\nIn:\n\n- Persist and re-render the captured-but-not-started state so returning to `/build` shows the item with its **Start governed build** action still available.\n- List owner-captured items that have not yet become builds in the Build Studio list, visibly distinct from running builds, so \"No builds yet\" is never shown while the owner has captured work.\n- Give the owner a way to discard a captured item they no longer want, so the list cannot silently accumulate.\n- Reconcile the two-step commit: either create the item only on start, or make step one durable and resumable. Do not leave a server-side item with no client-side route to it.\n\nOut:\n\n- Duplicate detection, owned by BI-AFD79A73.\n- Title/body capture shape, owned by BI-896D6D97.\n\n## Acceptance criteria\n\n- Capturing an outcome and reloading `/build` shows that outcome with its start action intact.\n- Build Studio never shows \"No builds yet\" while unstarted captured items exist for the owner.\n- Captured-but-unstarted items are visually distinguishable from running builds and can be discarded by the owner.\n- Regression test reproduces the BI-EA7F9811 sequence — capture, reload, assert the item is still reachable and startable from Build Studio.\n\n## Related\n\nBI-AFD79A73 (duplicate detection — the refiles this defect generates), BI-896D6D97, BI-CE1AB982. Evidence: consumer dogfood of Build Studio on the Pet Rescue install, 2026-08-25.",
+      "status": "open",
+      "type": "portfolio",
+      "workType": "bug",
+      "source": "user-request",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-3d0ac90f-cmt9i9t3f03v501qv2zezqofj",
+          "kind": "epic_link",
+          "summary": "(no epic) → EP-F09D63B3",
+          "recordedAt": "2026-08-26T02:59:44.139Z",
+          "payload": {
+            "toEpicId": "EP-F09D63B3",
+            "fromEpicId": null
+          }
+        }
+      ],
+      "effortSize": "medium",
+      "triageOutcome": "build",
+      "scopeRationale": "Intake state persistence affects the consumer Build Studio path on every installation.",
+      "createdAt": "2026-08-26T00:11:26.321Z"
+    },
+    {
+      "itemId": "BI-896D6D97",
+      "epicId": "EP-F09D63B3",
+      "title": "Build Studio intake stores the owner's whole paragraph as the item title and derives OUTCOME by first-sentence truncation",
+      "body": "## Problem\n\nBuild Studio's intake asks for plain words — \"Say what should change, who it helps, and what must stay the same\" — which invites a paragraph. It then files that entire paragraph as the backlog item **title**, with no description field, and derives the displayed OUTCOME by taking the first sentence. Both are wrong in the same way: the owner's meaning is truncated or smeared instead of summarized.\n\nObserved on the consumer install `D:\\DPF` (Second Chance Animal Rescue), driven through the portal UI, build `FB-615DE356` / `BI-4C608C04`.\n\n## Evidence\n\nThe owner typed:\n\n> \"Our foster families take dogs that are not ready for adoption yet. Today that lives on a whiteboard and a group text, so nobody knows which foster home has room or when a dog is due back. I want a page listing each foster home, the animals staying there, how many more they can take, and the date each animal is due back. A dog in foster care must not appear on our public adoption list until the vet clears it.\"\n\nResults:\n\n- The **entire 400-character paragraph became the `BacklogItem.title`**. The client action files `{ title: description, portfolioId }` — there is no description/body field in the intake payload at all. An earlier capture in the same session produced a 756-character title.\n- The build card headline is that same paragraph.\n- The derived branch name is `dpf/b3377281/our-foster-families-take-dogs-that-are-not-ready-f`.\n- The panel shows **OUTCOME: \"Our foster families take dogs that are not ready for adoption yet.\"** — the first sentence, which is the *background*, not the request. The actual outcome (a foster-home roster with capacity and due-back dates) is dropped, and so is the stated constraint (fostered animals stay off the public adoption list until vet clearance).\n\n## Why this matters for a real owner\n\nA shelter director reading \"OUTCOME: Our foster families take dogs that are not ready for adoption yet\" would say \"that is not an outcome, that is just how things are.\" The one line meant to prove the platform understood them proves the opposite. Meanwhile the paragraph-as-title propagates into every list, epic, branch, and PR title downstream, where it is unreadable and unsearchable.\n\n## Scope\n\nIn:\n\n- Split intake into a summarized title and a retained verbatim body: the owner's full text must be preserved exactly as the item body, never discarded.\n- Derive the title and the displayed OUTCOME by summarizing intent — the change being asked for — not by truncating to the first sentence or the first N characters.\n- Surface the derived title/outcome back to the owner at capture time so they can correct it before the build starts, in their own words.\n- Preserve stated constraints (\"what must stay the same\") as a distinct, visible field rather than letting them fall off the end.\n- Enforce a title length ceiling at the intake boundary so no downstream consumer receives a paragraph.\n\nOut:\n\n- Duplicate detection at intake (separate item).\n- Business-area selection (separate item).\n\n## Acceptance criteria\n\n- Intake persists the owner's full text as the item body and a bounded, summarized title; no item created via Build Studio intake exceeds the title ceiling.\n- The displayed OUTCOME states the requested change, and for the foster-home example above does not resolve to the first background sentence.\n- Stated constraints are captured and rendered separately from the request.\n- The owner can correct the derived title/outcome before approving the start.\n- Regression test covers a multi-sentence intake where the first sentence is background, asserting the derived outcome is not that sentence.\n\n## Related\n\nEvidence: consumer dogfood of Build Studio on the Pet Rescue install, 2026-08-25. Same session as BI-CE1AB982.",
+      "status": "triaging",
+      "type": "portfolio",
+      "workType": "bug",
+      "source": "user-request",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-896d6d97-cmt9i9svg03uz01qv8svgverr",
+          "kind": "epic_link",
+          "summary": "(no epic) → EP-F09D63B3",
+          "recordedAt": "2026-08-26T02:59:43.852Z",
+          "payload": {
+            "toEpicId": "EP-F09D63B3",
+            "fromEpicId": null
+          }
+        }
+      ],
+      "scopeRationale": "Intake capture shape affects every install that uses the consumer Build Studio path.",
+      "createdAt": "2026-08-26T00:09:34.771Z"
+    },
+    {
+      "itemId": "BI-A38D5B08",
+      "epicId": "EP-F09D63B3",
+      "title": "The remediation path for a blocked build engine is a dead end: endpoint tests return nothing and Build Runtime contradicts itself",
+      "body": "## Problem\n\nFollowing the platform's own advice for a blocked build engine leads nowhere. The recommended diagnostic returns an empty result with no explanation, and the page that configures the engine states two contradictory things at once.\n\nObserved on the consumer install `D:\\DPF` (Second Chance Animal Rescue).\n\n## Evidence\n\n**1. The recommended remediation is a silent no-op.**\n\n`resolve_model_selection` flags the Plan phase with:\n\n> \"Check whether those models have actually been measured — an unprofiled model carries placeholder scores and can be excluded despite being capable. **Re-run endpoint tests**, install a stronger model, or lower the tier floor.\"\n\nRunning exactly that:\n\n```\nrun_endpoint_tests(endpointId: \"codex\", modelId: \"gpt-5.4\", probesOnly: true)\n  → {\"results\": [], \"scope\": {...}}\n```\n\nNo results, no error, no reason. The operator cannot tell whether the harness ran and found nothing, refused, or silently failed — and the flag that sent them there still stands afterwards.\n\n**2. Build Runtime contradicts itself.**\n\nUnder BUILD DISPATCH ENGINE the page reads:\n\n> Auto (recommended)\n> **Selected now: agentic. No engine currently meets readiness and policy.**\n\nIt names a selected engine and simultaneously says none qualifies. Pinning changes the noun but keeps the contradiction — \"Selected now: codex. No engine currently meets readiness and policy.\" A reader cannot tell whether an engine is in force.\n\nThe auto fallback also lands on `agentic` (Legacy), which cannot run ideate or build at all — both report `mechanism: \"unsupported\"`. So auto's failure mode is to select an engine that structurally cannot do the two phases that produce the change, and then describe that as a selection.\n\n**3. Pinning silently disables fallback.**\n\nChoosing a specific engine under Advanced execution policy is the natural response to \"no engine meets policy\", but it converts a soft condition into a hard one: \"automatic fallback was disabled by the hard pin\". The page warns that hard pinning disables fallback, but the flag that led the operator there does not, and the pin persists after the diagnosis is over.\n\n**4. The diagnostic that does work is not reachable from the failure.**\n\n`resolve_model_selection` and `/platform/ai/runtime-health` give per-phase truth, but nothing in the blocked build or on Build Runtime links to them, and the readiness console simultaneously reports \"Build Execution: READY — Agentic Loop ready for Build Studio work. Ready engines: 5\" beside \"Routing Confidence: BLOCKED\" (also noted in BI-CE1AB982).\n\n## Scope\n\nIn:\n\n- `run_endpoint_tests` must report what it did: which endpoint/model it probed, what ran, and why a result set is empty. An empty array is never an acceptable answer to a diagnostic request.\n- Build Runtime must state one engine status: either an engine is in force, or none qualifies and the phases that cannot run are named. Never both.\n- Auto must not present an engine that cannot run the code-gen phases as a selection; if the only qualifying engine is `agentic` (Legacy), say that ideate and build cannot run and why.\n- Warn, at the point the operator pins, that the pin disables fallback and persists; offer a way back to auto from the same place.\n- Link the blocked engine state to the runtime-health/model-selection view that explains it.\n\nOut:\n\n- Governance-vs-readiness wording, owned by BI-16A1B4A3.\n- Blocked-state rendering in Build Studio, owned by BI-CE1AB982 (merged).\n\n## Acceptance criteria\n\n- `run_endpoint_tests` never returns an empty result set without a stated reason.\n- Build Runtime never renders \"Selected now: X\" together with \"No engine currently meets readiness and policy\".\n- When auto resolves to an engine that cannot run a phase, the page names the unsupported phases.\n- Pinning surfaces the fallback-disabled consequence at the moment of choice and offers a return to auto.\n- Regression tests cover the empty-probe response and the contradictory-status render.\n\n## Related\n\nBI-CE1AB982 (merged), BI-16A1B4A3, BI-D25F867D. Evidence: consumer dogfood of Build Studio on the Pet Rescue install, 2026-08-25/26.",
+      "status": "triaging",
+      "type": "portfolio",
+      "workType": "bug",
+      "source": "user-request",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-a38d5b08-cmt9ib8ta042p01qvohgjcxay",
+          "kind": "epic_link",
+          "summary": "(no epic) → EP-F09D63B3",
+          "recordedAt": "2026-08-26T03:00:51.166Z",
+          "payload": {
+            "toEpicId": "EP-F09D63B3",
+            "fromEpicId": null
+          }
+        }
+      ],
+      "scopeRationale": "Both surfaces are platform admin tooling present on every installation.",
+      "createdAt": "2026-08-26T02:58:20.036Z"
+    },
+    {
+      "itemId": "BI-AFD79A73",
+      "epicId": "EP-F09D63B3",
+      "title": "Build Studio intake runs no duplicate check, so an owner silently refiles work that already exists",
+      "body": "## Problem\n\nBuild Studio's consumer intake files a new backlog item on every Continue with no overlap check — against existing work, or against what the same owner filed sixty seconds earlier. The platform already has a working duplicate detector; intake does not call it.\n\nObserved on the consumer install `D:\\DPF` (Second Chance Animal Rescue), driven through the portal UI as a shelter director.\n\n## Evidence\n\nOne shelter-director session about foster homes produced three backlog items in about five minutes, with no warning at any point:\n\n- `BI-EA7F9811` — \"When a dog is not ready to be adopted yet we send it to live with a foster family…\"\n- `BI-98F16015` — \"Our foster families take dogs that are not ready for adoption yet…\"\n- `BI-4C608C04` — same text again; this is the one that became build FB-615DE356\n\nA substantively overlapping item already existed from 2026-08-22, and was never surfaced:\n\n- `BI-D2A51B36` — \"Animals have no housing: model kennels/foster placements as canonical Resource occupancy\"\n\nRunning the existing tool against the item intake actually built:\n\n```\nfind_duplicate_candidates(BI-4C608C04, threshold 0.4)\n  → BI-98F16015  similarity 1.0     (exact duplicate)\n  → BI-EA7F9811  similarity 0.792\n```\n\nThe detector works and would have caught both at any sane threshold. Intake never invokes it.\n\n## Why this matters for a real owner\n\nA shelter director does not hold the backlog in their head. If they describe the foster problem on Monday and again on Thursday — or re-word it once because the first attempt looked wrong — they have no way to know they just forked their own request. Worse, the platform had already modelled foster placement as an unsolved housing problem (BI-D2A51B36) and stayed silent, so the owner cannot benefit from work already scoped. Demand fragments across duplicates, which is exactly what the duplicate detector exists to prevent.\n\nNote the compounding effect with BI-896D6D97: because the whole paragraph is the title, near-identical requests are visually indistinguishable in any list, so a human cannot catch the duplication either.\n\n## Scope\n\nIn:\n\n- Call the existing duplicate/overlap detection at intake, before the item is created, and show the owner what already exists in their own words.\n- Offer the owner a real choice: add to the existing item, or file a genuinely new one with a stated reason — never a silent create.\n- Cover both near-identical refiles and substantively overlapping existing work, including items in `triaging`.\n- Reuse `find_duplicate_candidates` and the existing merge path (`merge_backlog_items`); do not build a second similarity implementation.\n\nOut:\n\n- Title/body capture shape, owned by BI-896D6D97.\n- Dispatch pre-flight, owned by BI-CE1AB982.\n- Retrospective de-duplication of the existing backlog.\n\n## Acceptance criteria\n\n- Continue on intake surfaces existing candidate matches above threshold before creating anything.\n- The owner can attach their words to an existing item instead of creating a new one, in one step.\n- Re-submitting identical text does not silently create a second item; reproducing the BI-EA7F9811 / BI-98F16015 / BI-4C608C04 sequence yields at most one new item plus explicit owner choices.\n- Candidate matches are rendered in owner language, not as raw similarity scores.\n- Regression test asserts intake calls duplicate detection and blocks the silent-create path.\n\n## Related\n\nBI-896D6D97 (intake capture shape), BI-D2A51B36 (the overlapping foster/kennel occupancy work that was never surfaced). Evidence: consumer dogfood of Build Studio on the Pet Rescue install, 2026-08-25.",
+      "status": "open",
+      "type": "portfolio",
+      "workType": "bug",
+      "source": "user-request",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-afd79a73-cmt9i9sxx03v101qv9tsdoyl5",
+          "kind": "epic_link",
+          "summary": "(no epic) → EP-F09D63B3",
+          "recordedAt": "2026-08-26T02:59:43.941Z",
+          "payload": {
+            "toEpicId": "EP-F09D63B3",
+            "fromEpicId": null
+          }
+        }
+      ],
+      "effortSize": "small",
+      "triageOutcome": "build",
+      "scopeRationale": "Intake deduplication protects the backlog on every installation.",
+      "createdAt": "2026-08-26T00:10:10.947Z"
+    },
+    {
+      "itemId": "BI-CE1AB982",
+      "epicId": "EP-F09D63B3",
+      "title": "Build Studio starts a governed build with no dispatchable engine and then reports \"Working\" indefinitely",
+      "body": "## Problem\n\nA non-technical owner can describe an outcome, approve the start, and be told the platform is building it — when in fact nothing was dispatched and nothing ever will be. Build Studio never checks whether an engine can run the work, and its owner-facing panel reports progress that is not happening.\n\nObserved on the consumer install `D:\\DPF` (Second Chance Animal Rescue), driven entirely through the portal UI as a shelter director, build `FB-615DE356` / `BI-4C608C04`.\n\n## Evidence\n\n`BuildActivity` for FB-615DE356, in order:\n\n- `23:55:21` `backlog_row_start_build` — draft created from backlog row BI-4C608C04\n- `23:56:17` `approve_start` — owner approved the start\n- `23:56:17` `ideate_dispatch` — **\"Skipped auto-dispatch: Connect, provision, or wait for one allowed Build Studio engine, then retry.\"**\n\nThe dispatch was skipped. Nothing else ran. Fifteen-plus minutes later the owner-facing panel still read:\n\n- NOW: **\"Working / In progress / Work in progress / Build Studio is working on this change.\"**\n- NEXT: \"continue implementation until verification evidence is ready.\"\n- \"You can leave this page and return; Build Studio will show the latest recorded state.\"\n- Coworker card: \"This build is still being defined — the coworker is drafting your Feature Brief from your description. **Nothing is wrong.**\"\n- \"Show why\" expanded to: \"The build is being defined from your description; **no evidence is missing yet.**\"\n\nNo error, no warning, no retry control, and no mention of an engine anywhere in the consumer panel. The only trace is inside the collapsed \"Technical details\" drawer, as the builder-jargon line \"No build is currently driving the sandbox.\"\n\n## This was knowable before the owner typed anything\n\n`resolve_model_selection` is read-only and side-effect-free, and at the same moment returned three `severity: error` flags:\n\n- `ideate-no-eligible-engine` — \"No allowed healthy engine can run Ideate.\"\n- `build-no-eligible-engine` — \"No allowed healthy engine can run the build phase.\"\n- `no-eligible-endpoint` (plan) — \"4 of 4 endpoints scored below the quality floor for this work.\"\n\nOnly `design-review` and `plan-review` resolve (codex / gpt-5.4). So the two phases that produce the change cannot run, while the two that critique it can. All four CLI engines are installed and `present` in `build_engine_state`; the block is the routing contract, not missing binaries.\n\n`/platform/ai/readiness` already renders this as \"AI READINESS: BLOCKED — Routing Confidence: BLOCKED, 3 routing blockers found in phase preview\". Build Studio does not consult it and never links to it. That page is also self-contradictory: it shows \"Build Execution: READY — Agentic Loop ready for Build Studio work. Ready engines: 5\" beside the BLOCKED routing verdict.\n\n## Why this matters for a real owner\n\nThe whole promise of the consumer path is \"say what should change, see one clear status, choose only when asked.\" Here the owner made a decision, was thanked for it, and was then shown a status that was false. A shelter director would wait days before suspecting anything, and the one page that knows the answer is buried under Platform Hub → AI Workforce → Readiness.\n\n## Scope\n\nIn:\n\n- Gate intake and start-approval on a dispatch pre-flight using the existing `resolve_model_selection` / readiness substrate — refuse to promise work that cannot be dispatched, and say so in owner language before the owner invests.\n- When a dispatch is skipped, record it as a terminal blocked state on the build and render it as blocked, not \"Working\". Status must be derived from recorded dispatch outcomes, not assumed from phase.\n- Give the blocked state one owner-legible cause and one next action, with a direct link to the readiness console.\n- Never emit reassurance (\"Nothing is wrong\", \"no evidence is missing yet\") from a branch that has not checked dispatch state.\n- Reconcile \"Build Execution: READY\" with the routing verdict on `/platform/ai/readiness` so one console cannot report both.\n- Offer a retry once the blocker clears.\n- Refactor the duplicated status/why/coworker-card copy branches into one typed state presenter (target ~80% reuse of the existing readiness and flag substrate rather than new state).\n\nOut:\n\n- Router readiness/misattribution semantics owned by BI-D25F867D (this item consumes its verdict, it does not re-derive it).\n- Provisioning or installing engines and models.\n- New persistence tables for readiness.\n\n## Acceptance criteria\n\n- With no dispatchable engine, starting a build is refused at approval time with a plain-language cause and next action; no build is created that cannot run.\n- A build whose dispatch was skipped renders as blocked within one poll, naming the blocking phase, and never renders \"Working\"/\"In progress\".\n- The blocked state links to the readiness console and exposes a retry.\n- \"Show why\" and the coworker card both reflect the blocked cause; neither asserts that nothing is wrong.\n- `/platform/ai/readiness` cannot show \"Build Execution: READY\" while phase preview reports `*-no-eligible-engine`.\n- Regression test reproduces FB-615DE356: approve-start with zero eligible engines must yield a blocked build, asserted against BuildActivity, and must fail against today's code.\n\n## Related\n\nBI-D25F867D (router readiness and failure attribution). Evidence: consumer dogfood of Build Studio on the Pet Rescue install, 2026-08-25.",
+      "status": "open",
+      "type": "portfolio",
+      "workType": "bug",
+      "source": "user-request",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-ce1ab982-cmt9db4js01os01qvnuhvqy9b",
+          "kind": "status_change",
+          "summary": "open → in-progress — Dispatch pre-flight + honest blocked rendering implemented on fix/build-studio-honest-dispatch-status; PR #4664 open (WC-8389D1EA). Awaiting CI and merge.",
+          "recordedAt": "2026-08-26T00:40:47.560Z",
+          "payload": {
+            "to": "in-progress",
+            "from": "open",
+            "reason": "Dispatch pre-flight + honest blocked rendering implemented on fix/build-studio-honest-dispatch-status; PR #4664 open (WC-8389D1EA). Awaiting CI and merge.",
+            "resolution": null,
+            "claimAction": "acquired",
+            "forcedClaim": false
+          }
+        },
+        {
+          "recoveryKey": "bi-ce1ab982-cmt9f1op302nf01qvp9jwrzog",
+          "kind": "evidence",
+          "summary": "238 test files / 2580 tests pass; the two behavioural regressions verified Red against origin/main before the fix",
+          "recordedAt": "2026-08-26T01:29:26.343Z",
+          "payload": {
+            "url": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/4664",
+            "body": "Local: `vitest run components/build lib/build lib/actions/build-governed` — 238 files / 2580 passed, 5 todo. `tsc --noEmit -p apps/web` — 0 errors. Guard loop 37/37, style-drift and prose-lint clean.\n\nRed verified by restoring origin/main's owner-status-reconciliation.ts: \"renders a refused-before-start dispatch as blocked, never as working\" and \"does not claim work is in progress while no task or dispatch exists in ideate\" both fail (2 failed | 29 passed), then pass with the fix.\n\nCI on PR #4664: Production Build, Typecheck, all four web unit shards, Unit Tests (packages), Policy Guards (PR/source/workspace), Routing Invariants, Routing Tier Contract, UX Route Sweep Runtime — all green. Merged 2026-08-26T01:24:36Z.",
+            "evidenceKind": "test_pass",
+            "toolExecutionId": null
+          }
+        },
+        {
+          "recoveryKey": "bi-ce1ab982-cmt9f1w3402ni01qv1olvg4yi",
+          "kind": "evidence",
+          "summary": "Runtime UX verification NOT performed — the merged fix is not yet running on the live install, so the blocked panel has not been seen by a human",
+          "recordedAt": "2026-08-26T01:29:35.920Z",
+          "payload": {
+            "url": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/4664",
+            "body": "Recorded as a gap, not a pass, so this item is not closed on structural evidence alone (`structural-verification-is-not-functional`) — the defect this BI fixes is precisely a surface reporting success it had not verified.\n\nWhat is verified: the owner-status seam is covered by unit tests that fail against the previous code, and the live repro FB-615DE356 on the D:\\DPF consumer install demonstrates the defect.\n\nWhat is not: the corrected panel has not been rendered against a running app. The fix reaches this installation only through /ops/self-upgrade, which owns quiescence, recovery points and rollback; that deploy was outside this thread's scope.\n\nTo close: upgrade the install to a build containing PR #4664, open FB-615DE356 (dispatch already refused, dispatch_blocked activity present) and confirm the panel reads blocked with the cause and next action instead of \"Working / In progress\", and that approving a fresh backlog draft is refused up front while no engine is eligible.",
+            "evidenceKind": "ux_fail",
+            "toolExecutionId": null
+          }
+        },
+        {
+          "recoveryKey": "bi-ce1ab982-cmt9i9st903ux01qvoq06k3gs",
+          "kind": "epic_link",
+          "summary": "(no epic) → EP-F09D63B3",
+          "recordedAt": "2026-08-26T02:59:43.773Z",
+          "payload": {
+            "toEpicId": "EP-F09D63B3",
+            "fromEpicId": null
+          }
+        }
+      ],
+      "effortSize": "medium",
+      "triageOutcome": "build",
+      "scopeRationale": "Build Studio dispatch pre-flight and owner-facing status apply to every installation, not one archetype.",
+      "createdAt": "2026-08-26T00:09:01.041Z"
+    },
+    {
+      "itemId": "BI-E492F313",
+      "epicId": "EP-F09D63B3",
+      "title": "A design-review failure is unrecoverable when ideate cannot dispatch: the build auto-abandons and parks the owner's request as deferred",
+      "body": "## Problem\n\nWhen the ideate phase cannot dispatch, a failed design review becomes unrecoverable — and the platform resolves that by **abandoning the build and moving the owner's backlog item to `deferred`**. The rescue's request left the open backlog without anyone deciding it should.\n\nObserved on the consumer install `D:\\DPF` (Second Chance Animal Rescue), build `FB-615DE356` / `BI-4C608C04`.\n\n## Evidence\n\n`BuildActivity` for FB-615DE356:\n\n```\n00:19:09  saveBuildEvidence      Evidence \"designDoc\" saved.\n00:22:39  reviewDesignDoc        Design review: fail (2 reviewers, 3 critical + 3 important)\n00:22:43  design_fix_loop        Design review failed - queued the in-place repair loop.\n00:22:44  design_fix_loop        Design review failed — regenerating (round 1/2) against 6 issue(s)\n00:22:44  ideate_dispatch        Skipped auto-dispatch: Connect, provision, or wait for one\n                                 allowed Build Studio engine, then retry.\n00:22:44  design_fix_loop        Design regeneration round 1 produced no designDoc\n                                 (skipped-no-provider) — stopping.\n00:22:44  build:escalate-human   Escalated to the owner (needs-human) after 1 self-repair round(s)\n                                 at ideate review — PIR-TGSZZ. WIP freed; backlog item parked.\n```\n\n`FeatureBuild.phase = abandoned`, `abandonReason = \"Escalated to the owner after 1 self-repair round(s) at ideate review (needs-human); tracked as PIR-TGSZZ. Freed a Build Studio WIP slot. (BI-3E0EE3BA)\"`.\n\n`BacklogItem BI-4C608C04.status = deferred`.\n\nElapsed from review failure to abandoned build and deferred item: **five seconds**.\n\n## Why this is wrong\n\nThe repair loop is designed around a real assumption — a failed review is fixed by regenerating the design. But regeneration runs through the *same* dispatch path that is already known to be blocked, so round 1 was guaranteed to fail before it was attempted. The loop then spent its only round on an action that could not succeed, and treated the result as \"self-repair exhausted\".\n\nThree separate harms follow:\n\n1. **The work is destroyed rather than paused.** The design doc and a good two-reviewer critique both exist and are still valid; abandoning throws away a recoverable position over an infrastructure condition that will clear on its own when routing is fixed.\n2. **The owner's request silently leaves the backlog.** `deferred` is a governed state meaning \"we decided not to do this now, here is the trigger and review date\". Nothing about a blocked engine is a decision about the rescue's foster-home request. A shelter director who looks at their backlog will not find it.\n3. **The escalation never reaches the owner in their own language.** \"Escalated to the owner (needs-human) … PIR-TGSZZ\" is recorded as build activity; nothing tells the owner in plain words that their request was parked, why, or what clears it.\n\n## Scope\n\nIn:\n\n- Do not consume a self-repair round on a regeneration whose dispatch path is already blocked — check dispatchability first and hold the build in a recoverable blocked state instead.\n- When a build stops for an infrastructure condition rather than a substantive one, hold it as blocked-and-resumable; reserve abandonment for substantive exhaustion. Distinguish these using the existing infrastructure/substantive split in `lib/build/blocked-cause.ts` rather than a new classifier.\n- Never move an owner's backlog item to `deferred` as a side effect of an infrastructure failure. `deferred` requires an owner, trigger and review horizon — a blocked engine supplies none of them. Return the item to its prior status when the build ends for a non-substantive reason.\n- Tell the owner in plain words when their request is parked, why, and what clears it.\n\nOut:\n\n- The dispatch pre-flight and blocked rendering, owned by BI-CE1AB982 (merged as PR #4664) — this item is the recovery-loop half.\n- Fixing the underlying routing/governance block itself.\n\n## Acceptance criteria\n\n- With ideate undispatchable, a failed design review leaves the build in a resumable blocked state and does not mark it abandoned.\n- A self-repair round is not consumed by a regeneration whose dispatch is already known to be blocked.\n- No backlog item reaches `deferred` without owner, trigger and review horizon; reproducing this sequence leaves BI-4C608C04's status unchanged.\n- The owner sees a plain-language statement that the request is parked, the cause, and what clears it.\n- Regression test reproduces the FB-615DE356 sequence and fails against today's code.\n\n## Related\n\nBI-CE1AB982 (merged), BI-3E0EE3BA (the escalation path cited in the abandon reason), BI-D25F867D. Evidence: consumer dogfood of Build Studio on the Pet Rescue install, 2026-08-25/26.",
+      "status": "triaging",
+      "type": "portfolio",
+      "workType": "bug",
+      "source": "user-request",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-e492f313-cmt9i9t7r03v901qvs44vowph",
+          "kind": "epic_link",
+          "summary": "(no epic) → EP-F09D63B3",
+          "recordedAt": "2026-08-26T02:59:44.295Z",
+          "payload": {
+            "toEpicId": "EP-F09D63B3",
+            "fromEpicId": null
+          }
+        }
+      ],
+      "scopeRationale": "The self-repair loop and its escalation path are platform behaviour on every installation.",
+      "createdAt": "2026-08-26T02:57:30.095Z"
+    }
+  ]
+}

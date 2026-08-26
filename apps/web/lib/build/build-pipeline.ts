@@ -464,7 +464,10 @@ async function stepGenerateCode(
     designSystem,
     gateContext,
   });
-  const systemPrompt = `You are an AI coworker building a feature in the sandbox.\n${buildContext}`;
+  // BI-CE93E314: the lead sentence is the brief; buildContext is build state,
+  // i.e. the turn's DATA, and stays undeclared.
+  const buildLead = "You are an AI coworker building a feature in the sandbox.";
+  const systemPrompt = `${buildLead}\n${buildContext}`;
 
   // Get sandbox tools — scoped to build phase only.
   // Filtering by buildPhases: ["build"] gives the agent the file-editing surface
@@ -609,6 +612,7 @@ async function stepGenerateCode(
   // Run the agentic loop — this gives us iterative tool use with the full
   // read-edit-test-fix workflow instead of single-shot code generation
   const result = await runAgenticLoop({
+    systemPromptInstructionSpans: [buildLead],
     chatHistory: [{ role: "user", content: userMessage }],
     systemPrompt,
     sensitivity: "development", // code clearance; payload screening still applies

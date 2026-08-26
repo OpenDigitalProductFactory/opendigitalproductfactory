@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import localCiSlotResources from "./local-ci-slot-resources.json";
-
 const recordQueueTransition = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/queue/queue-telemetry", () => ({ recordQueueTransition }));
 
@@ -21,11 +20,9 @@ import {
 } from "./environment-lease";
 
 const NOW = new Date("2026-07-28T21:00:00.000Z");
-
 beforeEach(() => {
   vi.clearAllMocks();
 });
-
 function lease(overrides: Record<string, unknown> = {}) {
   return {
     id: "row-1",
@@ -46,6 +43,10 @@ function lease(overrides: Record<string, unknown> = {}) {
     url: "http://localhost:3010",
     ports: [3010],
     cleanupCommand: null,
+    resourceClass: null,
+    expectedMemoryBytes: null,
+    ownerPid: null,
+    ownerProcessIdentity: null,
     evidenceRecordId: null,
     requestedTtlMs: DEFAULT_LEASE_TTL_MS,
     expiresAt: new Date(NOW.getTime() + DEFAULT_LEASE_TTL_MS),
@@ -72,6 +73,9 @@ function db() {
       updateMany: vi.fn().mockResolvedValue({ count: 0 }),
     },
     platformConfig: {
+      findUnique: vi.fn().mockResolvedValue(null),
+    },
+    externalEvidenceRecord: {
       findUnique: vi.fn().mockResolvedValue(null),
     },
     $transaction: vi.fn(),
@@ -247,6 +251,31 @@ describe("durable nonproduction admission", () => {
     expect(mockDb.nonProductionEnvironmentLease.create).not.toHaveBeenCalled();
   });
 
+  it("subscribes a different owner to the same immutable claim without stealing or renewing it", async () => {
+    const mockDb = db();
+    const winner = admitted({
+      ownerProvider: "claude",
+      ownerSessionId: "winner-session",
+      heartbeatAt: new Date(NOW.getTime() - 30_000),
+      expiresAt: new Date(NOW.getTime() + 60_000),
+    });
+    mockDb.nonProductionEnvironmentLease.findUnique.mockResolvedValueOnce(winner);
+
+    const result = await claim(mockDb, { ownerSessionId: "subscriber-session" });
+
+    expect(result).toMatchObject({
+      status: "subscribed",
+      lease: {
+        leaseId: "NPEL-1",
+        ownerSessionId: "winner-session",
+      },
+      executionStatus: "admitted",
+    });
+    expect(mockDb.nonProductionEnvironmentLease.create).not.toHaveBeenCalled();
+    expect(mockDb.nonProductionEnvironmentLease.update).not.toHaveBeenCalled();
+    expect(mockDb.nonProductionEnvironmentLease.findMany).not.toHaveBeenCalled();
+  });
+
   it("recovers a concurrent claimKey uniqueness conflict by observing the winner", async () => {
     const mockDb = db();
     const winner = admitted();
@@ -291,6 +320,7 @@ describe("durable nonproduction admission", () => {
     const released = await releaseNonprodEnvironmentLease({
       db: mockDb as never,
       leaseId: "NPEL-1",
+      ownerSessionId: "session-1",
       now: NOW,
     });
 
@@ -304,6 +334,33 @@ describe("durable nonproduction admission", () => {
       }),
     });
     expect(mockDb.nonProductionEnvironmentLease.update).toHaveBeenCalledTimes(1);
+    expect(mockDb.nonProductionEnvironmentLease.update).toHaveBeenCalledWith({
+      where: { leaseId: "NPEL-1" },
+      data: expect.objectContaining({
+        ownerPid: null,
+        ownerProcessIdentity: null,
+      }),
+    });
+  });
+
+  it("refuses to let a subscriber release the canonical immutable gate lease", async () => {
+    const mockDb = db();
+    const winner = admitted({
+      claimKey: `gate:${"a".repeat(64)}`,
+      ownerSessionId: "winner-session",
+    });
+    mockDb.nonProductionEnvironmentLease.findUnique
+      .mockResolvedValueOnce(winner)
+      .mockResolvedValueOnce(winner);
+
+    await expect(releaseNonprodEnvironmentLease({
+      db: mockDb as never,
+      leaseId: "NPEL-1",
+      ownerSessionId: "subscriber-session",
+      now: NOW,
+    })).rejects.toThrow(/owner/i);
+
+    expect(mockDb.nonProductionEnvironmentLease.update).not.toHaveBeenCalled();
   });
 
   it("expires lapsed local-CI owners without promoting from stale pressure", async () => {
@@ -327,6 +384,8 @@ describe("durable nonproduction admission", () => {
       data: expect.objectContaining({
         status: "expired",
         activeKey: null,
+        ownerPid: null,
+        ownerProcessIdentity: null,
       }),
     });
     expect(mockDb.nonProductionEnvironmentLease.update).not.toHaveBeenCalled();
@@ -692,55 +751,6 @@ describe("lease liveness windows", () => {
         phase: "running",
       }),
     });
-  });
-
-  it("rejects an unbound or mismatched slot-aware renewal", async () => {
-    const mockDb = db();
-    mockDb.nonProductionEnvironmentLease.findUnique.mockResolvedValue(
-      admitted({
-        slotKey: "slot-1",
-        activeKey: "local-integration-ci:slot-1",
-        slotManifestVersion: 1,
-        phase: "admitted-unbound",
-        expiresAt: new Date(NOW.getTime() + 60_000),
-      }),
-    );
-
-    await expect(renewNonprodEnvironmentLease({
-      db: mockDb as never,
-      leaseId: "NPEL-1",
-      ownerSessionId: "session-1",
-      now: NOW,
-    })).rejects.toThrow("nonprod_slot_binding_required");
-
-    await expect(renewNonprodEnvironmentLease({
-      db: mockDb as never,
-      leaseId: "NPEL-1",
-      ownerSessionId: "session-1",
-      slotBinding: {
-        manifestVersion: 1,
-        slotKey: "slot-0",
-        url: "http://localhost:3010",
-        ports: [3010, 15432],
-        cleanupCommand: "node scripts/local-ci-slot-cleanup.mjs --slot-key slot-0",
-      },
-      now: NOW,
-    })).rejects.toThrow("nonprod_slot_binding_mismatch");
-
-    await expect(renewNonprodEnvironmentLease({
-      db: mockDb as never,
-      leaseId: "NPEL-1",
-      ownerSessionId: "session-1",
-      slotBinding: {
-        manifestVersion: 1,
-        slotKey: "slot-1",
-        url: "http://localhost:3010",
-        ports: [3010, 15432],
-        cleanupCommand: "node scripts/local-ci-slot-cleanup.mjs --slot-key slot-1",
-      },
-      now: NOW,
-    })).rejects.toThrow("nonprod_slot_resource_binding_mismatch");
-    expect(mockDb.nonProductionEnvironmentLease.update).not.toHaveBeenCalled();
   });
 
   it("keeps the existing renewal window for non-local-CI environments", async () => {

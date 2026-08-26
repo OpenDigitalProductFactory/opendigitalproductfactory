@@ -5,6 +5,30 @@ a versioned slot manifest. The lease decides who may run; the manifest decides
 which physical resources that admitted owner may mutate. These are separate
 safety layers.
 
+## Host-wide heavyweight resource admission
+
+The local-CI slots are not the only processes capable of exhausting a
+developer host. Canonical TypeScript, Vitest, Next build, Docker build,
+preview, inference, and semantic-review entry points declare a resource class
+through `scripts/host-resource-runner.mjs`. The runner requests the durable
+`host-heavy-resource` lease before starting its child, supervises that child
+and its descendants, renews while it runs, and releases only after the owned
+process group exits.
+
+The versioned profile is
+`apps/web/lib/nonprod/host-resource-profiles.json`. On a host with at most 64
+GiB of memory, inference residency contracts non-inference heavyweight
+capacity to one even when a second command would appear to fit. Admission also
+preserves the host reserve and an inference-growth reserve. Cheap Node guards
+such as documentation, policy, and change-impact checks do not enter this lane
+and remain concurrent.
+
+A full lane produces a typed `host_resource_queued` response and exits without
+leaving a waiting Node process. Stray matching processes are included as
+`evidence-only` diagnostics; the broker never kills a process merely because
+its command line resembles a heavy workload. Only the admitted runner's own
+descendant group may be terminated when lease authority is lost.
+
 ## Current operating mode
 
 Capacity is governed by the versioned

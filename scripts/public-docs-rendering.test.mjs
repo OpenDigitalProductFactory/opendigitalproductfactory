@@ -145,3 +145,57 @@ test("homepage headings use the compact shared type scale", () => {
   assert.match(homepage, /h1\s*\{[^}]*font-size:\s*var\(--type-display\)/s);
   assert.match(homepage, /h2\s*\{[^}]*font-size:\s*var\(--type-section\)/s);
 });
+
+test("homepage install cards expose both customer hardware profiles for each GA host", () => {
+  const homepage = fs.readFileSync(
+    path.join(repoRoot, "docs", "index.html"),
+    "utf8",
+  );
+  const installSection = homepage.match(
+    /<section id="install">(?<content>[\s\S]*?)<\/section>/,
+  )?.groups?.content;
+
+  assert.ok(installSection, "the public homepage needs an install decision surface");
+  const windowsCard = installSection.match(
+    /data-install-target="windows"(?<content>[\s\S]*?)<\/article>/,
+  )?.groups?.content;
+  const macCard = installSection.match(
+    /data-install-target="macos"(?<content>[\s\S]*?)<\/article>/,
+  )?.groups?.content;
+
+  assert.ok(windowsCard, "Windows must have a first-class install card");
+  assert.match(windowsCard, /Provider-assisted operations/);
+  assert.match(windowsCard, /32 GB system RAM/);
+  assert.match(windowsCard, /Local-first operations/);
+  assert.match(windowsCard, /32 GB recommended for a new purchase/);
+  assert.match(windowsCard, /href="\/install\/windows\/"/);
+  const windowsLinks = [...windowsCard.matchAll(/href="([^"]+)"/g)].map(
+    ([, href]) => href,
+  );
+  assert.deepEqual(windowsLinks, ["/install/windows/"]);
+
+  assert.ok(macCard, "macOS must have a first-class install card");
+  assert.match(macCard, /Provider-assisted operations/);
+  assert.match(macCard, /32 GB unified memory/);
+  assert.match(macCard, /Local-first operations/);
+  assert.match(macCard, /128 GB for larger models or combined operations and development/);
+  assert.match(macCard, /href="\/install\/macos\/"/);
+});
+
+test("both tested OS guides carry the same visible hardware decision and canonical comparison", () => {
+  const windows = fs.readFileSync(
+    path.join(repoRoot, "docs", "install", "windows.md"),
+    "utf8",
+  );
+  const macos = fs.readFileSync(
+    path.join(repoRoot, "docs", "install", "macos.md"),
+    "utf8",
+  );
+
+  for (const [name, guide] of [["Windows", windows], ["macOS", macos]]) {
+    assert.match(guide, /^## Recommended hardware$/m, `${name} guide needs hardware before setup`);
+    assert.match(guide, /Provider-assisted operations/);
+    assert.match(guide, /Local-first operations/);
+    assert.match(guide, /\[Choosing Hardware for DPF\]\(hardware\.md\)/);
+  }
+});

@@ -4,6 +4,7 @@ import {
 } from "./case-types";
 import type {
   WorkroomCycleView,
+  WorkroomDefinitionIdentity,
   WorkroomMode,
   WorkroomOutcomePacketCategory,
 } from "./room-types";
@@ -17,6 +18,7 @@ export const WORK_CASE_WORK_ITEM_SOURCE_TYPES = [
   "scheduled",
   "field-service-job",
   "data-control-operation",
+  "bookkeeping-period",
 ] as const;
 
 export type WorkCaseWorkItemSourceType =
@@ -52,6 +54,7 @@ export interface WorkCaseRoomProjectionPolicy {
 
 export interface WorkCaseSourceRegistryEntry {
   sourceKey: string;
+  definitionVersion: number;
   displayLabel: string;
   owningArea: string;
   domainCategory: string;
@@ -128,9 +131,22 @@ const STANDING_ROOM_PROJECTION = {
   },
 } as const satisfies WorkCaseRoomProjectionPolicy;
 
+// The Bookkeeping Work Room (BI-F8B6CF81, S-ROOM). A standing room — the books loop recurs each
+// period (monthly close). Its Outcome Packet must carry reconciliation `evidence`, the
+// `receipts` for every governed banking write, and the `decisions` the owner signed off — the
+// three things that make "period books reconciled" auditable rather than asserted.
+const BOOKKEEPING_ROOM_PROJECTION = {
+  mode: "standing",
+  cycleCarrierPrecedence: ["work-item", "work-capsule", "task-run"],
+  outcomePacket: {
+    requiredCategories: ["evidence", "receipts", "decisions"],
+  },
+} as const satisfies WorkCaseRoomProjectionPolicy;
+
 export const WORK_CASE_SOURCE_REGISTRY = [
   {
     sourceKey: "task-node",
+    definitionVersion: 1,
     displayLabel: "Task node",
     owningArea: "workflow-orchestration",
     domainCategory: "workflow",
@@ -144,6 +160,7 @@ export const WORK_CASE_SOURCE_REGISTRY = [
   },
   {
     sourceKey: "backlog-item",
+    definitionVersion: 1,
     displayLabel: "Backlog item",
     owningArea: "platform-backlog",
     domainCategory: "platform-development",
@@ -157,6 +174,7 @@ export const WORK_CASE_SOURCE_REGISTRY = [
   },
   {
     sourceKey: "work-capsule",
+    definitionVersion: 1,
     displayLabel: "Work capsule",
     owningArea: "work-convergence",
     domainCategory: "platform-development",
@@ -170,6 +188,7 @@ export const WORK_CASE_SOURCE_REGISTRY = [
   },
   {
     sourceKey: "approval",
+    definitionVersion: 1,
     displayLabel: "Approval request",
     owningArea: "decision-ledger",
     domainCategory: "approval",
@@ -183,6 +202,7 @@ export const WORK_CASE_SOURCE_REGISTRY = [
   },
   {
     sourceKey: "data-control-operation",
+    definitionVersion: 1,
     displayLabel: "Data control operation",
     owningArea: "data-governance",
     domainCategory: "data-control",
@@ -196,6 +216,7 @@ export const WORK_CASE_SOURCE_REGISTRY = [
   },
   {
     sourceKey: "manual-task",
+    definitionVersion: 1,
     displayLabel: "Manual task",
     owningArea: "workspace",
     domainCategory: "human-work",
@@ -209,6 +230,7 @@ export const WORK_CASE_SOURCE_REGISTRY = [
   },
   {
     sourceKey: "scheduled",
+    definitionVersion: 1,
     displayLabel: "Scheduled work",
     owningArea: "scheduler",
     domainCategory: "scheduled-work",
@@ -221,7 +243,25 @@ export const WORK_CASE_SOURCE_REGISTRY = [
     roomProjection: STANDING_ROOM_PROJECTION,
   },
   {
+    // Bookkeeping Work Room (BI-F8B6CF81, S-ROOM). A standing, cyclic room — the day-to-day books
+    // loop recurs each period. Governed receipts because its writes (statement import, account
+    // create, rule mutation) are consequential; decision scope is the customer's own books (WWWD).
+    sourceKey: "bookkeeping-period",
+    definitionVersion: 1,
+    displayLabel: "Bookkeeping period",
+    owningArea: "finance",
+    domainCategory: "bookkeeping",
+    defaultDecisionScope: "wwwd",
+    accountResolverKey: null,
+    titleProjection: "Use the period label (e.g. the month being closed) and the accounts in scope.",
+    summaryProjection: "Use the reconciliation state, open exceptions, and the decisions awaiting the owner.",
+    supportedTransitions: SCHEDULED_TRANSITIONS,
+    receiptPolicy: GOVERNED_RECEIPT_POLICY,
+    roomProjection: BOOKKEEPING_ROOM_PROJECTION,
+  },
+  {
     sourceKey: "engagement",
+    definitionVersion: 1,
     displayLabel: "Engagement",
     owningArea: "crm",
     domainCategory: "customer-engagement",
@@ -235,6 +275,7 @@ export const WORK_CASE_SOURCE_REGISTRY = [
   },
   {
     sourceKey: "opportunity",
+    definitionVersion: 1,
     displayLabel: "Opportunity",
     owningArea: "crm",
     domainCategory: "sales",
@@ -248,6 +289,7 @@ export const WORK_CASE_SOURCE_REGISTRY = [
   },
   {
     sourceKey: "booking",
+    definitionVersion: 1,
     displayLabel: "Storefront booking",
     owningArea: "storefront",
     domainCategory: "customer-service",
@@ -261,6 +303,7 @@ export const WORK_CASE_SOURCE_REGISTRY = [
   },
   {
     sourceKey: "storefront-booking",
+    definitionVersion: 1,
     displayLabel: "Storefront booking",
     owningArea: "storefront",
     domainCategory: "customer-service",
@@ -274,6 +317,7 @@ export const WORK_CASE_SOURCE_REGISTRY = [
   },
   {
     sourceKey: "activity",
+    definitionVersion: 1,
     displayLabel: "Activity",
     owningArea: "crm",
     domainCategory: "customer-activity",
@@ -290,6 +334,7 @@ export const WORK_CASE_SOURCE_REGISTRY = [
     // Account resolution flows through the originating booking, so this source
     // is not itself an account-resolver key.
     sourceKey: "field-service-job",
+    definitionVersion: 1,
     displayLabel: "Field service job",
     owningArea: "storefront",
     domainCategory: "field-dispatch",
@@ -318,6 +363,22 @@ export function getWorkCaseSourceEntry(
   const normalized = sourceKey?.trim();
   if (!normalized) return null;
   return SOURCE_REGISTRY_BY_KEY.get(normalized) ?? null;
+}
+
+export function getWorkroomDefinitionIdentity(
+  sourceKey: string | null | undefined,
+): WorkroomDefinitionIdentity | null {
+  const entry = getWorkCaseSourceEntry(sourceKey);
+  if (!entry) return null;
+
+  return {
+    definitionId: `workroom-definition:${entry.sourceKey}`,
+    version: entry.definitionVersion,
+    sourceKey: entry.sourceKey,
+    label: entry.displayLabel,
+    mode: entry.roomProjection.mode,
+    decisionScope: entry.defaultDecisionScope,
+  };
 }
 
 export function getWorkCaseAccountResolverKey(

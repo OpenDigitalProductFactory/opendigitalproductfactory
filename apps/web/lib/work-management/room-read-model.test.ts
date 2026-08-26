@@ -99,6 +99,29 @@ describe("Work Room read model", () => {
       purpose: "Coordinate the repair without losing customer context.",
       mode: "finite",
       state: "active",
+      identity: {
+        definition: {
+          definitionId: "workroom-definition:booking",
+          version: 1,
+          sourceKey: "booking",
+          label: "Storefront booking",
+          mode: "finite",
+          decisionScope: "wwwd",
+        },
+        instance: {
+          instanceId: "workroom-instance:booking:BK-100",
+          occurrenceTrace: {
+            caseRef: {
+              caseId: "booking:BK-100",
+              sourceType: "booking",
+              sourceId: "BK-100",
+            },
+            sourceRef,
+            cycleRef: null,
+            executionRefs: [],
+          },
+        },
+      },
       outcome: {
         statement: "Cooling is restored and verified.",
         sourceRefs: [sourceRef],
@@ -138,6 +161,42 @@ describe("Work Room read model", () => {
     expect(room.mode).toBe("standing");
   });
 
+  it("traces the current cycle and execution carriers without requiring development evidence", () => {
+    const detail = caseDetail();
+    detail.timeline = [{
+      eventId: "capsule:1",
+      label: "Delivery room claimed.",
+      sourceRef: { kind: "work-capsule", id: "WC-100", status: "working" },
+    }];
+    const room = buildWorkroomView({
+      caseKey: "booking%3ABK-100",
+      detail,
+      currentCycle: {
+        cycleKey: "visit-1",
+        carrierKind: "work-item",
+        carrierId: "WI-VISIT-1",
+        trigger: "Customer confirmed the visit.",
+        objective: "Complete the scheduled repair.",
+        accountablePrincipalRef: "prn-user-1",
+        openedAt: "2026-07-30T14:00:00.000Z",
+        expectedReviewAt: null,
+        stopConditions: [],
+        measureSummary: null,
+        status: "open",
+        outcomePacket: null,
+        sourceRefs: [{ kind: "work-item", id: "WI-VISIT-1" }],
+      },
+    });
+
+    expect(room.identity.instance.occurrenceTrace).toMatchObject({
+      cycleRef: { kind: "work-item", id: "WI-VISIT-1", status: "open" },
+      executionRefs: [
+        { kind: "work-capsule", id: "WC-100", status: "working" },
+        { kind: "work-item", id: "WI-VISIT-1" },
+      ],
+    });
+  });
+
   it("defaults unknown sources to finite with low confidence and complete gap reporting", () => {
     const unknownRef: WorkCaseSourceRef = {
       kind: "source",
@@ -161,6 +220,16 @@ describe("Work Room read model", () => {
       confidence: "low",
       incompleteBoundary: true,
       sourceHealth: "partial",
+    });
+    expect(room.identity).toMatchObject({
+      definition: null,
+      instance: {
+        instanceId: "workroom-instance:external-ticket:EXT-1",
+        occurrenceTrace: {
+          sourceRef: unknownRef,
+          cycleRef: null,
+        },
+      },
     });
     expect(room.boundary.gaps).toEqual([
       "purpose",

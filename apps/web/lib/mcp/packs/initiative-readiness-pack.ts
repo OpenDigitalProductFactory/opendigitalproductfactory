@@ -240,6 +240,13 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
         ...(Object.prototype.hasOwnProperty.call(binding, "expectedCurrentBaselineId")
           ? { expectedCurrentBaselineId: binding.expectedCurrentBaselineId }
           : {}),
+        ...(actionKey === "record_initiative_evidence" && binding.gate === "research"
+          ? {
+              findings: [],
+              resolvedFindingRefs: [],
+              reason: `Independent reviewer ${context?.agentId ?? "unknown"} recorded ${String(params.decision ?? "unknown")} for the immutable research artifact bound to TaskRun ${context?.taskRunId ?? "unknown"}.`,
+            }
+          : {}),
       };
     }
     const operation = params.operation ?? "gate-receipt";
@@ -348,9 +355,22 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
   };
 }
 
+// `LANES` is the single registry for disclosure, receipt validation AND recovery
+// routing, so it deliberately carries lanes this pack does not own as tools —
+// `record_plan_backlog_coverage` is routed here for the implementation-planner
+// role but is IMPLEMENTED by decomposition-pack with a different schema
+// (`decision: decomposed|atomic` + `deliverables`, not `gate` + `decision: pass`).
+// Deriving handlers from every lane registered a second handler under that name
+// and shadowed the real one, so the documented schema was rejected with
+// `gate-not-authorized` and no plan coverage could be recorded (BI-17CBD21F).
+// Bind handlers to the names this pack actually defines; the lane stays in
+// `LANES` so `readinessLaneForRole` still resolves its recovery route.
+const OWNED_TOOL_NAMES = definitions.map((definition) => definition.name);
+const ownedLanes = Object.entries(LANES).filter(([name]) => OWNED_TOOL_NAMES.includes(name));
+
 export const initiativeReadinessPack: ToolPack = {
   packId: "initiative-readiness",
   definitions,
-  handlers: Object.fromEntries(Object.entries(LANES).map(([name, lane]) => [name, handlerFor(name, lane)])),
-  grants: Object.fromEntries(Object.entries(LANES).map(([name, lane]) => [name, [lane.grant]])),
+  handlers: Object.fromEntries(ownedLanes.map(([name, lane]) => [name, handlerFor(name, lane)])),
+  grants: Object.fromEntries(ownedLanes.map(([name, lane]) => [name, [lane.grant]])),
 };

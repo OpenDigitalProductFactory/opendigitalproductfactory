@@ -20,6 +20,8 @@ const HEADLINE: Record<AttentionSource, string> = {
   "storefront-inquiry": "Reply to this enquiry?",
   "business-journey": "How should we fix this for customers?",
   "compliance-source-freshness": "Renew this compliance evidence?",
+  "coworker-envelope": "Approve this coworker action?",
+  "skill-proposal": "Approve this change to a coworker skill?",
 };
 
 const SPECIALIST: Record<AttentionSource, string> = {
@@ -42,6 +44,8 @@ const SPECIALIST: Record<AttentionSource, string> = {
   "storefront-inquiry": "Front of house",
   "business-journey": "Front of house",
   "compliance-source-freshness": "Legal and compliance",
+  "coworker-envelope": "Digital workforce",
+  "skill-proposal": "Digital workforce",
 };
 
 export function specialistFor(source: AttentionSource): string {
@@ -103,6 +107,7 @@ export function whyItMattersFor(item: AttentionItem): string {
     case "paused-ai":
     case "ai-decision":
     case "agent-proposal":
+    case "coworker-envelope":
       return "Your team cannot finish this work without a choice from you.";
     case "research-proposal":
       return "This research may improve how your team serves customers.";
@@ -153,6 +158,8 @@ export function consequenceFor(item: AttentionItem): string {
     case "ai-decision":
     case "agent-proposal":
       return "If you do nothing, your coworker stays stuck here and the work behind it waits.";
+    case "coworker-envelope":
+      return "If you do nothing, the approval window closes and your coworker stops.";
     default:
       return "If you do nothing, this work stays paused while your digital team keeps it safe.";
   }
@@ -169,6 +176,8 @@ export function recommendationFor(item: AttentionItem): string {
       return "check the recipient and due date before filing.";
     case "agent-proposal":
       return "accept only the stated boundary; this does not give the coworker new authority.";
+    case "coworker-envelope":
+      return "check the exact record and the time left, then approve only if both are right.";
     case "research-proposal":
       return "keep this in the weekly review unless it affects a decision due sooner.";
     case "coworker-memory":

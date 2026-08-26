@@ -21,6 +21,7 @@ import {
   getLatestSkillCuratorReport,
   getSkillLifecycleState,
   getSkillSeedWarnings,
+  getPendingSkillProposals,
 } from "@/lib/actions/skills-observatory";
 import { isSkillLifecycleState } from "@/lib/skills/lifecycle";
 
@@ -87,6 +88,7 @@ export default async function SkillsObservatoryPage({
     curatorReport,
     lifecycleRow,
     seedWarnings,
+    pendingProposals,
   ] = await Promise.all([
     getSkillCatalog(),
     getSkillCatalogStats(),
@@ -99,6 +101,7 @@ export default async function SkillsObservatoryPage({
     getLatestSkillCuratorReport(),
     focusedSkillId ? getSkillLifecycleState(focusedSkillId) : Promise.resolve(null),
     getSkillSeedWarnings(),
+    getPendingSkillProposals(),
   ]);
 
   const focusedLifecycleState =
@@ -123,10 +126,34 @@ export default async function SkillsObservatoryPage({
       // Rendered only when something is genuinely wrong. A permanent "all clear"
       // banner trains people to skip the band that carries the real warnings.
       attention={
-        seedWarnings.length > 0 ? (
+        // A pending proposal leads: it is the only item here that is waiting on
+        // a person. Before BI-2F9EE2E9 the catalog gave no sign one existed and
+        // the detail page was reachable only by hand-typing ?skill=, so a
+        // decision could wait indefinitely with nobody told.
+        pendingProposals.length > 0 || seedWarnings.length > 0 ? (
           <>
-            {seedWarnings.length} skill{seedWarnings.length !== 1 ? "s have" : " has"} drifted from
-            the seed, so a fresh install would not match this one. Detail is under Technical details.
+            {pendingProposals.length > 0 && (
+              <>
+                {pendingProposals.length} skill change
+                {pendingProposals.length !== 1 ? "s are" : " is"} waiting for your review:{" "}
+                {pendingProposals.map((item, index) => (
+                  <span key={item.id}>
+                    {index > 0 && ", "}
+                    <a href={item.deepLink} className="underline">
+                      {item.title.replace("Review a change to ", "")}
+                    </a>
+                  </span>
+                ))}
+                .{" "}
+              </>
+            )}
+            {seedWarnings.length > 0 && (
+              <>
+                {seedWarnings.length} skill{seedWarnings.length !== 1 ? "s have" : " has"} drifted
+                from the seed, so a fresh install would not match this one. Detail is under
+                Technical details.
+              </>
+            )}
           </>
         ) : undefined
       }

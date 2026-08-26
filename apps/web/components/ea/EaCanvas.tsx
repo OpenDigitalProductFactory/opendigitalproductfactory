@@ -27,6 +27,8 @@ import { EaRelationshipEdge } from "./EaRelationshipEdge";
 import { ElementPalette } from "./ElementPalette";
 import { ElementInspector } from "./ElementInspector";
 import { ReferencePopup } from "./ReferencePopup";
+import { buildOperationalValueStreamRows, OperationalValueStreamTable } from "./OperationalValueStreamTable";
+import { EdgeVariantToggle, PresentationToggle, type EdgeVariant, type PresentationMode } from "./EaViewControls";
 import {
   addElementToView,
   createEaRelationship,
@@ -44,8 +46,6 @@ const DEFAULT_CANVAS_STATE: CanvasState = {
   viewport: { x: 0, y: 0, zoom: 1 },
   nodes: {},
 };
-
-type EdgeVariant = "straight" | "bezier" | "step";
 
 type ElementTypeOption = { id: string; slug: string; name: string; neoLabel: string };
 
@@ -381,11 +381,6 @@ async function buildNestedGraph(
   return { nodes, edges: buildEdges(crossEdges, onDelete, edgeVariant) };
 }
 
-const EDGE_VARIANT_LABELS: Record<EdgeVariant, string> = {
-  straight: "━ Straight",
-  bezier:   "⌒ Curved",
-  step:     "⌐ Angled",
-};
 export function EaCanvas({
   viewId, viewName, viewStatus, notationSlug, viewpoint, allElementTypes,
   initialElements, initialEdges, initialCanvasState, initialFocusElementId, isReadOnly,
@@ -439,6 +434,7 @@ export function EaCanvas({
     ).map((edge) => edge.id),
   );
   const visibleEdges = initialEdges.filter((edge) => visibleEdgeIds.has(edge.id));
+  const hasOperationalTable = buildOperationalValueStreamRows(visibleElements).length > 0;
 
   const layoutEdges = buildLayoutEdges(visibleElements, visibleEdges);
   const initialNodeLayout = buildNodes(visibleElements, initialCanvasState, layoutEdges);
@@ -450,6 +446,7 @@ export function EaCanvas({
   const [revMenuOpen, setRevMenuOpen] = useState(false);
   const [layoutMenuOpen, setLayoutMenuOpen] = useState(false);
   const [nestedMode, setNestedMode] = useState(false);
+  const [presentationMode, setPresentationMode] = useState<PresentationMode>("diagram");
   const [pendingDrop, setPendingDrop] = useState<{
     elementId: string; name: string; typeName: string;
     lifecycleStage: string; lifecycleStatus: string;
@@ -805,11 +802,13 @@ export function EaCanvas({
 
   return (
     <div style={{ display: "flex", height: "100%", background: "var(--dpf-bg)" }}>
-      <ElementPalette
-        elementTypes={paletteTypes}
-        onDragStart={handleDragStart}
-        onSearchExisting={() => { /* ExistingElementSearch deferred to Phase EA-3 */ }}
-      />
+      {presentationMode === "diagram" && (
+        <ElementPalette
+          elementTypes={paletteTypes}
+          onDragStart={handleDragStart}
+          onSearchExisting={() => { /* ExistingElementSearch deferred to Phase EA-3 */ }}
+        />
+      )}
 
       <div style={{ flex: 1, position: "relative" }}>
         {/* Status bar */}
@@ -831,6 +830,11 @@ export function EaCanvas({
 
           {/* Right-side controls */}
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            {hasOperationalTable && (
+              <PresentationToggle value={presentationMode} onChange={setPresentationMode} />
+            )}
+            {presentationMode === "diagram" && (
+              <>
             <button
               onClick={() => { if (nestedMode) exitNested(); else void enterNested(); }}
               title="Containment view — nest Packages/Parts as boxes (from 'contains' relationships)"
@@ -961,32 +965,23 @@ export function EaCanvas({
             )}
 
             {/* Edge style toggle */}
-            <div style={{ display: "flex", gap: 4 }}>
-              {(["straight", "bezier", "step"] as EdgeVariant[]).map((v) => (
-                <button
-                  key={v}
-                  onClick={() => handleSetEdgeVariant(v)}
-                  title={v.charAt(0).toUpperCase() + v.slice(1)}
-                  style={{
-                    fontSize: 10, padding: "2px 7px", borderRadius: 3, cursor: "pointer",
-                    background: edgeVariant === v ? "#2a2a50" : "transparent",
-                    border: `1px solid ${edgeVariant === v ? "var(--dpf-accent)" : "#2a2a40"}`,
-                    color: edgeVariant === v ? "var(--dpf-accent)" : "var(--dpf-muted)",
-                  }}
-                >
-                  {EDGE_VARIANT_LABELS[v]}
-                </button>
-              ))}
-            </div>
+            <EdgeVariantToggle value={edgeVariant} onChange={handleSetEdgeVariant} />
+              </>
+            )}
           </div>
         </div>
 
-        <div
-          style={{ height: "calc(100% - 41px)" }}
-          onDrop={handleDrop}
-          onDragOver={(e) => e.preventDefault()}
-        >
-          <ReactFlow
+        {presentationMode === "table" ? (
+          <div style={{ height: "calc(100% - 41px)" }}>
+            <OperationalValueStreamTable elements={visibleElements} />
+          </div>
+        ) : (
+          <div
+            style={{ height: "calc(100% - 41px)" }}
+            onDrop={handleDrop}
+            onDragOver={(e) => e.preventDefault()}
+          >
+            <ReactFlow
             proOptions={{ hideAttribution: true }}
             nodes={nodes}
             edges={edges}
@@ -1011,15 +1006,18 @@ export function EaCanvas({
           >
             <Background color="#2a2a40" gap={20} />
             <Controls style={{ background: "var(--dpf-surface-1)", border: "1px solid var(--dpf-border)" }} />
-          </ReactFlow>
-        </div>
+            </ReactFlow>
+          </div>
+        )}
       </div>
 
-      <ElementInspector
-        selected={selectedViewElement}
-        notationSlug={notationSlug}
-        onUpdated={() => window.location.reload()}
-      />
+      {presentationMode === "diagram" && (
+        <ElementInspector
+          selected={selectedViewElement}
+          notationSlug={notationSlug}
+          onUpdated={() => window.location.reload()}
+        />
+      )}
 
       {/* Phase EA-2: anchorEl is null because ExistingElementSearch is deferred to Phase EA-3. */}
       {pendingDrop && (

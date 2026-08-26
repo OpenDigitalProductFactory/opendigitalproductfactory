@@ -4,8 +4,8 @@ This is the end-user install guide for the Open Digital Product Factory
 on **Windows 10 / 11** with Docker Desktop (WSL2 backend).
 
 > **Status: GA.** Windows is DPF's primary, generally-available install
-> surface — the one CI and the maintainers exercise most. macOS (Apple
-> Silicon) and Linux are [early access](macos.md). If something here is
+> surface — the one CI and the maintainers exercise most. Apple Silicon
+> macOS is also GA; Linux remains early access. If something here is
 > wrong or stale, please [open an issue](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/issues/new).
 
 For the architectural background, see the
@@ -18,12 +18,31 @@ and the [platform support watch-list](platform-support-watchlist.md).
 |-----------|----------|
 | OS | Windows 10 (21H2+) or Windows 11, x64 |
 | Backend | Docker Desktop with the **WSL2** backend (not Hyper-V/Windows-containers) |
-| Disk | ~10 GB free (Docker Desktop + images). The installer can suggest a roomier non-`C:` drive. |
-| RAM | 16 GB host recommended for the local-LLM tier; 8 GB works with an external `LLM_BASE_URL` |
+| Disk | ~10 GB free for the application images; buy at least 1 TB, or 2 TB when local models will run on the host. The installer can suggest a roomier non-`C:` drive. |
+| RAM | 32 GB recommended with an external AI provider; 64 GB system RAM recommended for local-first operation. |
 | Docker VM memory | **≥ 6 GB (8 GB recommended)** for the **Customizable** source-build path — see [Docker memory](#docker-memory). Consumer installs pull pre-built images and are lighter. |
 
 Out of scope (per the [watch-list](platform-support-watchlist.md)):
 Windows-on-ARM, and WSL2 *without* Docker Desktop.
+
+## Recommended hardware
+
+Choose the profile that matches where primary AI inference will run:
+
+| Deployment model | Recommended Windows configuration | Best fit |
+| --- | --- | --- |
+| Provider-assisted operations | **8–12 modern CPU cores, 32 GB system RAM, 1 TB NVMe SSD, no dedicated GPU required** | Routine DPF operations using approved external AI providers |
+| Local-first operations | **12–16 modern CPU cores, 64 GB system RAM, 2 TB NVMe SSD, 24 GB GPU memory supported; 32 GB recommended for a new purchase** | Local tool-using coworkers with a practical 32K context baseline |
+| Contributor/development workstation | **16–24 modern CPU cores, 128 GB system RAM, 4 TB NVMe SSD, 32 GB GPU memory** | Source work, builds, tests, browser automation, and local model evaluation |
+
+An existing RTX 4090 with 24 GB remains capable; the RTX 5090's 32 GB is the
+new-purchase recommendation because the extra model memory provides context and
+service headroom. It does not make the same model more knowledgeable. GPU memory
+does not replace system RAM: Windows, Docker, DPF services, browser work, and
+model mappings still use the host's regular memory.
+
+See [Choosing Hardware for DPF](hardware.md) for current machine examples,
+Apple unified-memory tradeoffs, model sizing, and purchase checks.
 
 ## Prerequisites
 

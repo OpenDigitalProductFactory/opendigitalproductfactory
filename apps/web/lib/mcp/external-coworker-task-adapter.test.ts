@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const remote = vi.hoisted(() => ({ submit: vi.fn() }));
-vi.mock("@/lib/mcp-task-submit", () => ({
+vi.mock("@/lib/mcp-task-submit", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/mcp-task-submit")>(),
   submitRemoteCoworkerTask: (...args: unknown[]) => remote.submit(...args),
 }));
 
@@ -15,6 +16,19 @@ const verifiedContext = {
   callerClient: "claude-code/2.1",
   routeContext: "/platform/build",
   userContext: { platformRole: "developer", isSuperuser: false },
+};
+
+const initiativeReviewBinding = {
+  writerToolName: "record_initiative_evidence",
+  itemId: "BI-9DC21917",
+  gate: "research",
+  artifactRef: {
+    kind: "repo-blob-at-commit" as const,
+    repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+    commitSha: "6dad5759f9e88176c59fecd2c13e6d5b5bdd344d",
+    path: "docs/superpowers/plans/2026-08-24-local-ci-control-plane-fencing.md",
+    providerBlobId: "a".repeat(40),
+  },
 };
 
 beforeEach(() => {
@@ -67,6 +81,8 @@ describe("dispatchExternalCoworkerTask", () => {
       objective,
       requestKey: "initiative-review:BI-B131F357:544830a",
       title: "Independent initiative design review",
+      requiredToolNames: ["read_source_at_version", "record_initiative_evidence"],
+      initiativeReviewBinding,
       userId: "user-1",
       context: verifiedContext,
     });
@@ -83,10 +99,74 @@ describe("dispatchExternalCoworkerTask", () => {
         prompt: objective,
         idempotencyKey: "initiative-review:BI-B131F357:544830a",
         riskClass: "bounded-write",
-        authorityScope: ["initiative_design_review"],
+        authorityScope: [
+          "initiative_design_review",
+          "backlog-item:BI-9DC21917",
+          "tool:read_source_at_version",
+          "tool:record_initiative_evidence",
+        ],
+        initiativeReviewBinding,
         collaborationKind: "summon",
       },
     });
+  });
+
+  it("rejects initiative-review tool widening before task submission", async () => {
+    const result = await dispatchExternalCoworkerTask({
+      collaborationKind: "handoff",
+      targetAgent: "AGT-WS-BUILD",
+      objective: "Review immutable control-plane evidence.",
+      requestKey: "initiative-review:BI-9DC21917:research:6dad5759",
+      requiredToolNames: [
+        "read_source_at_version",
+        "record_initiative_evidence",
+        "search_tool_marketplace",
+      ],
+      initiativeReviewBinding,
+      userId: "user-1",
+      context: verifiedContext,
+    });
+
+    expect(result).toMatchObject({
+      success: false,
+      error: "invalid_initiative_review_packet",
+    });
+    expect(remote.submit).not.toHaveBeenCalled();
+  });
+
+  it("replaces generic tool and backlog scopes with the exact bound review scope", async () => {
+    remote.submit.mockResolvedValue({
+      kind: "result",
+      result: { taskRunId: "TR-MCP-BOUND", status: "working", isError: false },
+    });
+    await dispatchExternalCoworkerTask({
+      collaborationKind: "handoff",
+      targetAgent: "AGT-WS-BUILD",
+      objective: "Review immutable control-plane evidence.",
+      requestKey: "initiative-review:BI-9DC21917:research:6dad5759:bound",
+      requiredToolNames: ["read_source_at_version", "record_initiative_evidence"],
+      initiativeReviewBinding,
+      userId: "user-1",
+      context: {
+        ...verifiedContext,
+        tokenGrantScopes: [
+          "initiative_evidence_write",
+          "tool:search_tool_marketplace",
+          "backlog-item:BI-OTHER",
+        ],
+      },
+    });
+
+    expect(remote.submit).toHaveBeenCalledWith(expect.objectContaining({
+      params: expect.objectContaining({
+        authorityScope: [
+          "initiative_evidence_write",
+          "backlog-item:BI-9DC21917",
+          "tool:read_source_at_version",
+          "tool:record_initiative_evidence",
+        ],
+      }),
+    }));
   });
 
   it("preserves structured governance refusals from the task owner", async () => {

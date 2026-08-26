@@ -75,7 +75,7 @@ const NAMED_TAG_RE = /<\/?([a-zA-Z][a-zA-Z0-9-]*)\b[^>]*>/g;
  * `visibleText` deliberately flattens all of that into a single space-joined
  * string, which is right for counting words and wrong for anything that needs
  * sentence boundaries: a UI carries its boundaries in its ELEMENTS, not in full
- * stops (BI-0ED0F6B3). Pair this with `analyzeUtteranceReadability`.
+ * stops (BI-0ED0F6B3). Pair this with `analyzeUiReadability`.
  */
 export function visibleUtterances(html: string): string[] {
   const marked = String(html).replace(NAMED_TAG_RE, (_m, name: string) =>

@@ -385,12 +385,15 @@ export function deriveDemoBusiness(
   // In-flight work being delivered right now (assigned to resources).
   const inFlight = intIn(3, 6, seed, "inflight-count");
   for (let i = 0; i < inFlight; i += 1) {
+    const resource = resources[draw(seed, `if-res-${i}`) % resources.length];
     demand.push({
       key: `dm-${demandIndex}`,
       label: `${titleCase(workNoun)} #${1000 + demandIndex}`,
-      stageKey: "deliver",
+      stageKey: binding.stages.some((stage) => stage.stageKey === "deliver")
+        ? "deliver"
+        : binding.zoneToStage[resource.zoneKey] ?? binding.primaryStageKey,
       waitingMinutes: 0,
-      assignedResourceKey: resources[draw(seed, `if-res-${i}`) % resources.length].key,
+      assignedResourceKey: resource.key,
       customerKey: nextCustomer(`if-cust-${i}`),
       amount: value + intIn(0, Math.max(1, Math.round(value * 0.4)), seed, `if-amt-${i}`),
     });
@@ -399,6 +402,12 @@ export function deriveDemoBusiness(
 
   // Recently settled work — feeds paid invoices (the outcome signal).
   const settled = intIn(2, 4, seed, "settled-count");
+  const finalLoadBearingStage = [...binding.stages].reverse().find((stage) => stage.loadBearing);
+  const settledStageKey = binding.stages.some((stage) => stage.stageKey === "settle")
+    ? "settle"
+    : finalLoadBearingStage?.stageKey
+      ?? binding.stages[binding.stages.length - 1]?.stageKey
+      ?? binding.primaryStageKey;
   const settledKeys: Array<{ key: string; amount: number; customerKey: string }> = [];
   for (let i = 0; i < settled; i += 1) {
     const customerKey = nextCustomer(`st-cust-${i}`);
@@ -406,7 +415,7 @@ export function deriveDemoBusiness(
     demand.push({
       key: `dm-${demandIndex}`,
       label: `${titleCase(workNoun)} #${1000 + demandIndex}`,
-      stageKey: "settle",
+      stageKey: settledStageKey,
       waitingMinutes: 0,
       assignedResourceKey: resources[draw(seed, `st-res-${i}`) % resources.length].key,
       customerKey,

@@ -1,6 +1,11 @@
 import type { UserContext } from "@/lib/permissions";
 import type { ToolExecutionContext, ToolResult } from "@/lib/mcp-tools";
-import { submitRemoteCoworkerTask } from "@/lib/mcp-task-submit";
+import {
+  parseInitiativeReviewBinding,
+  submitRemoteCoworkerTask,
+  validateInitiativeReviewAuthorityScope,
+  type InitiativeReviewBinding,
+} from "@/lib/mcp-task-submit";
 
 export type ExternalCoworkerTaskInput = {
   collaborationKind: "handoff" | "summon";
@@ -8,6 +13,8 @@ export type ExternalCoworkerTaskInput = {
   objective: string;
   requestKey?: string;
   title?: string;
+  requiredToolNames?: unknown;
+  initiativeReviewBinding?: unknown;
   userId: string;
   context?: ToolExecutionContext;
 };
@@ -33,6 +40,44 @@ function verifiedPatContext(context: ToolExecutionContext | undefined): {
     capability: context.tokenScope === "write" || context.tokenScope === "admin" ? "write" : "read",
     userContext: context.userContext,
   };
+}
+
+type InitiativeReviewPacket = {
+  binding: InitiativeReviewBinding;
+  authorityScope: string[];
+};
+
+function initiativeReviewPacket(input: ExternalCoworkerTaskInput): InitiativeReviewPacket | string | null {
+  const hasBinding = input.initiativeReviewBinding !== undefined;
+  const hasRequiredTools = input.requiredToolNames !== undefined;
+  if (!hasBinding && !hasRequiredTools) return null;
+  if (!hasBinding || !hasRequiredTools || !Array.isArray(input.requiredToolNames)) {
+    return "initiativeReviewBinding and requiredToolNames must be supplied together";
+  }
+
+  const binding = parseInitiativeReviewBinding(input.initiativeReviewBinding);
+  if (!binding) return "initiativeReviewBinding is not a valid immutable repository binding";
+  const names = [...new Set(input.requiredToolNames.flatMap((value) =>
+    typeof value === "string" && value.trim() ? [value.trim()] : []))];
+  const allowedReaders = new Set(["read_source_at_version", "search_source_at_version"]);
+  if (
+    names.length < 2
+    || names.length > 4
+    || !names.includes(binding.writerToolName)
+    || !names.some((name) => allowedReaders.has(name))
+    || names.some((name) => name !== binding.writerToolName && !allowedReaders.has(name))
+  ) {
+    return "requiredToolNames must contain only the bound writer and one or both immutable source readers";
+  }
+
+  const authorityScope = [
+    ...(input.context?.tokenGrantScopes ?? []).filter((scope) =>
+      !scope.startsWith("tool:") && !scope.startsWith("backlog-item:")),
+    `backlog-item:${binding.itemId}`,
+    ...names.map((name) => `tool:${name}`),
+  ];
+  const scopeError = validateInitiativeReviewAuthorityScope(binding, authorityScope);
+  return scopeError ? scopeError : { binding, authorityScope };
 }
 
 /**
@@ -61,6 +106,16 @@ export async function dispatchExternalCoworkerTask(input: ExternalCoworkerTaskIn
     };
   }
 
+  const reviewPacket = initiativeReviewPacket(input);
+  if (typeof reviewPacket === "string") {
+    return {
+      success: false,
+      error: "invalid_initiative_review_packet",
+      message: reviewPacket,
+      data: { action: "Use the exact server-issued readiness packet without adding tools or changing immutable identity." },
+    };
+  }
+
   let outcome: Awaited<ReturnType<typeof submitRemoteCoworkerTask>>;
   try {
     outcome = await submitRemoteCoworkerTask({
@@ -79,7 +134,8 @@ export async function dispatchExternalCoworkerTask(input: ExternalCoworkerTaskIn
         prompt: input.objective,
         idempotencyKey: requestKey,
         riskClass: "bounded-write",
-        authorityScope: input.context?.tokenGrantScopes ?? [],
+        authorityScope: reviewPacket?.authorityScope ?? input.context?.tokenGrantScopes ?? [],
+        ...(reviewPacket ? { initiativeReviewBinding: reviewPacket.binding } : {}),
         collaborationKind: input.collaborationKind,
       },
     });

@@ -27,12 +27,31 @@ and the [deployment doctrine](../superpowers/specs/2026-05-09-deployment-contrac
 |-----------|----------|
 | OS | macOS 14 (Sonoma) or newer |
 | Architecture | Apple Silicon (`arm64`). Intel Macs are not supported. |
-| Disk | ~10 GB free (Docker Desktop + multi-arch GHCR images) |
-| RAM | 16 GB minimum for a small local model; 64 GB practical and 128 GB recommended for serious local-first use. See [Choosing Hardware for DPF](hardware.md). An external `LLM_BASE_URL` reduces local memory pressure. |
+| Disk | ~10 GB free for the application images; buy at least 1 TB, or 2 TB when local models will run on the host. |
+| RAM | 32 GB recommended with an external AI provider; 64 GB practical for local-first use; choose 128 GB for larger models or combined operations and development. |
 
 The installer refuses to run on unsupported hosts (Intel Mac, older
 macOS) unless you pass `--force-unsupported-host` — see
 [Preflight refusals](#preflight-refusals).
+
+## Recommended hardware
+
+Choose the profile that matches where primary AI inference will run:
+
+| Deployment model | Recommended Apple Silicon configuration | Best fit |
+| --- | --- | --- |
+| Provider-assisted operations | **32 GB unified memory, 1 TB SSD** | Routine DPF operations using approved external AI providers |
+| Local-first operations | **64 GB unified memory practical; 128 GB for larger models or combined operations and development; 2 TB SSD** | Local tool-using coworkers, larger models, and longer context |
+| Contributor/development workstation | **128 GB unified memory, 4 TB SSD** | Operations plus source work, builds, tests, browser automation, and local model evaluation |
+
+Apple Silicon lets the CPU and GPU share one memory pool. DPF's planning rule
+reserves 25% for macOS and the application stack, leaving about 48 GB on a
+64 GB Mac and 96 GB on a 128 GB Mac for local AI workloads. Memory cannot be
+upgraded after purchase, so buy 128 GB when the Mac must handle larger local
+models or serve as both the DPF host and a development workstation.
+
+See [Choosing Hardware for DPF](hardware.md) for current Mac and Windows machine
+examples, NVIDIA speed tradeoffs, model sizing, and purchase checks.
 
 ## Prerequisites
 

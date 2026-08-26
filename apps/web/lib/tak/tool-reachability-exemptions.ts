@@ -75,4 +75,7 @@ export const TOOL_REACHABILITY_EXEMPTIONS: Readonly<Record<string, string>> = {
     "NO ENTRY: absent from TOOL_TO_GRANTS entirely (deny-by-default) — fleet-readiness is read by platform surfaces, not coworkers; needs an owning-epic decision on whether to expose it.",
   record_surface_readiness:
     "NO ENTRY: absent from TOOL_TO_GRANTS entirely (deny-by-default) — surface-readiness recording is runtime-internal today; exposing it to coworkers is an owning-epic decision.",
+  // The 12 banking books-loop tools (S-FIN, BI-DE27D34E) left this list when the
+  // Bookkeeper coworker (BI-7D50DC56, S-BK) landed holding banking_read/banking_write
+  // in agent_registry.json — they are reachable now, so the ratchet shrinks.
 };

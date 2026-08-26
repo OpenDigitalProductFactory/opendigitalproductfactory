@@ -24,10 +24,14 @@ const CONFIRMED_DEV_INTENT = {
   },
 };
 
-function configStore(rows: Record<string, unknown>) {
+function configStore(
+  rows: Record<string, unknown>,
+  links: ReadonlyArray<Record<string, unknown>> = [],
+) {
   const store = {
     readConfig: async (key: string) => rows[key] ?? null,
     countBacklogItemsByStatus: async () => 0,
+    listFederationLinks: async () => links as never,
   };
   const db: InstallationIntentDb = {
     platformConfig: {
@@ -67,7 +71,7 @@ describe("buildIdentityHeadline", () => {
         purpose: "evolve-dpf",
         intentStatus: "valid",
       }),
-    ).toBe("A development installation. Its job: safely improve another dpf.");
+    ).toBe("This installation is set up for development work. Its job is to safely improve another dpf.");
   });
 
   it("says plainly that nothing was declared, rather than showing a blank", () => {
@@ -81,7 +85,7 @@ describe("buildIdentityHeadline", () => {
         purpose: "operate-organization",
         intentStatus: "missing",
       }),
-    ).toBe("Treated as a production installation. Nobody has said what this one is.");
+    ).toBe("Nobody has said what this installation is, so we treat it as production.");
   });
 
   it("separates a declared environment from an unreadable job", () => {
@@ -91,7 +95,7 @@ describe("buildIdentityHeadline", () => {
         purpose: "evolve-dpf",
         intentStatus: "invalid",
       }),
-    ).toBe("A test installation. Nobody has said what its job is.");
+    ).toBe("This installation is set up for test work. Nobody has said what its job is.");
   });
 });
 
@@ -106,7 +110,7 @@ describe("loadInstallationIdentityView", () => {
       env: {},
     });
 
-    expect(view.headline).toBe("A development installation. Its job: safely improve another dpf.");
+    expect(view.headline).toBe("This installation is set up for development work. Its job is to safely improve another dpf.");
     expect(view.detail).toBe("Paired with dpf-prod-acme. The installer set the environment.");
     expect(view.confirmationStatus).toBe("confirmed");
     expect(view.declaration).toEqual({
@@ -124,13 +128,11 @@ describe("loadInstallationIdentityView", () => {
     const peer = view.stances.find((row) => row.stance === "peerWrite");
     expect(peer).toMatchObject({ valueLabel: "Read only", intent: "warning" });
     expect(peer?.rationale).toContain("never mutate a record it owns");
-    // Mirroring work we own is not a peer write, so it reads as its own row.
+    // A declared peer with no established link cannot carry work, so the row
+    // reports that rather than claiming the backlog is mirrored.
     const workSync = view.stances.find((row) => row.stance === "workSync");
-    expect(workSync).toMatchObject({
-      valueLabel: "Mirrored to the organization",
-      intent: "neutral",
-    });
-    expect(workSync?.rationale).toContain("only this side may change");
+    expect(workSync).toMatchObject({ valueLabel: "Nowhere to mirror", intent: "warning" });
+    expect(workSync?.rationale).toContain("no established federation link");
   });
 
   it("reports the resolved class, not the class a portal declaration asked for", async () => {
@@ -173,7 +175,7 @@ describe("loadInstallationIdentityView", () => {
     expect(view.intentStatus).toBe("missing");
     expect(view.confirmationStatus).toBe("needs-review");
     expect(view.environment.declared).toBe(false);
-    expect(view.headline).toContain("Nobody has said what this one is.");
+    expect(view.headline).toContain("Nobody has said what this installation is");
     expect(view.detail).toBeNull();
     expect(view.stances.find((row) => row.stance === "credentials")?.valueLabel).toBe(
       "Operator only",
@@ -210,5 +212,30 @@ describe("loadInstallationIdentityView", () => {
     expect(view.stances.find((row) => row.stance === "sourceAuthority")?.valueLabel).toBe(
       "Not here",
     );
+  });
+
+  it("mirrors work once a same-organization link backs the declared peer", async () => {
+    const { store, db } = configStore({ [OPERATING_INTENT_CONFIG_KEY]: CONFIRMED_DEV_INTENT }, [
+      {
+        linkId: "FL-0001",
+        linkState: "active",
+        relationshipPreset: "same-organization",
+        peerLabel: "dpf-prod-acme",
+        revokedAt: null,
+        quarantinedAt: null,
+      },
+    ]);
+
+    const view = await loadInstallationIdentityView(db, store, {
+      readText: stateText("development"),
+      env: {},
+    });
+
+    const workSync = view.stances.find((row) => row.stance === "workSync");
+    expect(workSync).toMatchObject({
+      valueLabel: "Mirrored to the organization",
+      intent: "neutral",
+    });
+    expect(workSync?.rationale).toContain("only this side may change");
   });
 });

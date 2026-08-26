@@ -283,7 +283,7 @@ describe("getSelfUpgradeStatus", () => {
     const sourceSha = "f".repeat(40);
     vi.mocked(readSelfUpgradeSupport).mockResolvedValue(consumerReleaseSupport);
     vi.mocked(loadReleaseInstallContext).mockResolvedValue(consumerReleaseContext);
-    vi.mocked(resolveReleaseUpgradeCandidate).mockResolvedValue({ kind: "target", tag: "v2.0.0", sourceSha, channelDigest: `sha256:${"b".repeat(64)}`, configDigest: `sha256:${"c".repeat(64)}` });
+    vi.mocked(resolveReleaseUpgradeCandidate).mockResolvedValue({ kind: "target", tag: "v2.0.0", sourceSha, channelDigest: `sha256:${"b".repeat(64)}`, platformManifestDigest: `sha256:${"d".repeat(64)}`, configDigest: `sha256:${"c".repeat(64)}`, platformOs: "linux", platformArchitecture: "amd64" });
     vi.mocked(getDeployedSha).mockResolvedValue("e".repeat(40));
     vi.mocked(isShaFresh).mockReturnValue(false);
     const result = await getSelfUpgradeStatus();

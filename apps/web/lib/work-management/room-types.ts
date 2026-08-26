@@ -12,6 +12,28 @@ import type { WorkroomPostureView } from "./room-posture";
 
 export type WorkroomMode = "finite" | "standing";
 
+export interface WorkroomDefinitionIdentity {
+  definitionId: string;
+  version: number;
+  sourceKey: string;
+  label: string;
+  mode: WorkroomMode;
+  decisionScope: "wwmd" | "wwwd" | "wsid";
+}
+
+export interface WorkroomIdentityView {
+  definition: WorkroomDefinitionIdentity | null;
+  instance: {
+    instanceId: string;
+    occurrenceTrace: {
+      caseRef: WorkCaseRef;
+      sourceRef: WorkCaseSourceRef;
+      cycleRef: WorkCaseSourceRef | null;
+      executionRefs: WorkCaseSourceRef[];
+    };
+  };
+}
+
 export type WorkroomActivityKind =
   | "message"
   | "ask"
@@ -183,6 +205,7 @@ export interface WorkroomOutcomeView {
 export interface WorkroomView {
   roomKey: string;
   caseRef: WorkCaseRef;
+  identity: WorkroomIdentityView;
   title: string;
   purpose: string | null;
   mode: WorkroomMode;

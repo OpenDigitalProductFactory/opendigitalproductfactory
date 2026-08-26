@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
-import type { ReadinessOwner } from "./promoter";
+import type { ReadinessOwner, VerifiedReleaseIdentity } from "./promoter";
 import { signTransitionPayload } from "@/lib/platform-runtime/transition-protocol";
 import { verifyInstallStateMigrationEnvelope } from "../../../../scripts/lib/transition-signing.mjs";
 import { resolveSelfUpgradeHostIdentity, type SelfUpgradeHostIdentity } from "./config";
@@ -15,7 +15,6 @@ type PromoterRuntime = Pick<
 type RecordReadiness = typeof import("./run-store").recordPromoterReadiness;
 type FailRun = typeof import("./run-store").failRun;
 type ReadinessFailure = { code: string; message: string; remediation?: string };
-type ReleaseIdentity = { tag: string; ghcrOwner: string; configDigest: string };
 
 export type CandidatePreflightResult =
   | { ok: true; resolvedPromoterDigest?: string; migrationHandoff?: InstallStateMigrationHandoff }
@@ -47,7 +46,7 @@ export async function runCandidatePreflight(params: {
   /** Published immutable release promoter; bypasses source compilation. */
   candidatePromoterReference?: string;
   /** Verified release identity carried into candidate readiness. */
-  release?: ReleaseIdentity;
+  release?: VerifiedReleaseIdentity;
   callerProtocolVersion?: number;
   sourcePath: string;
   hostInstallPath: string;

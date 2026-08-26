@@ -17,9 +17,25 @@ type Props = {
   brandLogoUrlLight?: string | null;
   userId?: string | null;
   navMode?: PortalAudienceMode;
+  /**
+   * Pre-formatted badge for a NON-PRODUCTION installation, e.g. `NORTHWIND DEV`
+   * — or null on production, which is the unmarked default (BI-7626A660).
+   *
+   * Resolved on the server and passed in as a plain string. This component must
+   * never import the resolver: its siblings reach `node:fs/promises`, and a
+   * client graph that touches Node breaks the production build with an error
+   * neither typecheck nor vitest surfaces.
+   *
+   * Marking only the exception is deliberate. A badge that is always present
+   * stops being read, and this way a failure to resolve degrades to no badge
+   * rather than to a false "PROD".
+   */
+  installationBadge?: string | null;
+  /** Where the badge links for the full identity detail. */
+  installationHref?: string;
 };
 
-export function Header({ platformRole, brandName, brandLogoUrl, brandLogoUrlLight, userId, navMode = "operator" }: Props) {
+export function Header({ platformRole, brandName, brandLogoUrl, brandLogoUrlLight, userId, navMode = "operator", installationBadge = null, installationHref = "/ops/installation" }: Props) {
   // Common Shell Action-Result Contract (BI-9C0954D0) C6 + Simple-mode delta:
   // in Simple (worker) view the header sheds builder-flavored chrome (the
   // "Internal cockpit" badge and the specialist-team tagline) so the owner sees a
@@ -51,6 +67,10 @@ export function Header({ platformRole, brandName, brandLogoUrl, brandLogoUrlLigh
   return (
     <header className="border-b border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
       <div className="flex w-full items-center justify-between gap-2 px-3 py-2 sm:gap-4 sm:px-4 sm:py-2.5 lg:px-6">
+        {/* The brand link and the installation badge are SIBLINGS, not nested.
+            The badge navigates somewhere else, and an anchor inside an anchor is
+            invalid HTML that browsers resolve unpredictably. */}
+        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
         <Link
           href="/workspace"
           aria-label={`${companyName} home`}
@@ -110,6 +130,22 @@ export function Header({ platformRole, brandName, brandLogoUrl, brandLogoUrlLigh
             )}
           </div>
         </Link>
+
+        {/* Non-production only. Stays visible in Simple mode and on small
+            screens, unlike the builder chrome above: knowing you are not on
+            production is not a builder concern, it is the one fact that stops
+            an operator acting on the wrong installation. */}
+        {installationBadge ? (
+          <Link
+            href={installationHref}
+            data-testid="installation-badge"
+            title={`${installationBadge} installation — open the details`}
+            className="shrink-0 rounded-full border border-[var(--dpf-warning)] px-2 py-0.5 text-dpf-caption font-bold uppercase tracking-wider text-[var(--dpf-warning)]"
+          >
+            {installationBadge}
+          </Link>
+        ) : null}
+        </div>
 
         <div className="flex items-center gap-1 sm:gap-2">
           <ContextualDocsButton compact />

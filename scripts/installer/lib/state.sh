@@ -83,9 +83,20 @@ dpf_state_active_reclaim_first() {
 
 dpf_state_lock_acquire() {
   local path="$1" lock="${1}.lock" owner_id run_id host now expires deadline
-  owner_id="$(dpf_state_owner_id)"; run_id="${DPF_RUN_ID:-$(dpf_state_owner_id)}"; host="$(hostname)"; deadline=$(( $(date +%s) + 30 ))
+  owner_id="$(dpf_state_owner_id)"; run_id="${DPF_RUN_ID:-$(dpf_state_owner_id)}"; host="$(hostname)"; deadline=$(( $(date +%s) + ${DPF_STATE_LOCK_TIMEOUT_SECONDS:-30} ))
   while :; do
-    if dpf_state_active_reclaim_first "$lock" >/dev/null; then now="$(date +%s)"; [ "$now" -ge "$deadline" ] && return 1; sleep 0.05; continue; fi
+    # Both deadline paths in this function mean the same thing -- we gave up
+    # waiting for the install-state lock -- so both must say so. This one used
+    # to `return 1` bare, which install-dpf.sh surfaces as an unexplained exit 1
+    # under `set -euo pipefail`: the exact undiagnosable shape #4367 fixed on the
+    # neighbouring cleanup path. The suffix distinguishes losing the reclaim race
+    # from losing the lock-file race below.
+    if dpf_state_active_reclaim_first "$lock" >/dev/null; then
+      now="$(date +%s)"
+      [ "$now" -ge "$deadline" ] && { echo "install_state_lock_timeout: reclaim in progress by another install on $lock" >&2; return 1; }
+      sleep 0.05
+      continue
+    fi
     if ( set -C; : > "$lock" ) 2>/dev/null; then
       if dpf_state_active_reclaim_first "$lock" >/dev/null; then rm -f "$lock"; sleep 0.05; continue; fi
       break
@@ -116,7 +127,7 @@ dpf_state_lock_acquire() {
         continue
       fi
     fi
-    [ "$now" -ge "$deadline" ] && { echo "install_state_lock_timeout" >&2; return 1; }
+    [ "$now" -ge "$deadline" ] && { echo "install_state_lock_timeout: lock held by another install on $lock" >&2; return 1; }
     sleep 0.05
   done
   now="$(date +%s)"; expires=$((now + 30))

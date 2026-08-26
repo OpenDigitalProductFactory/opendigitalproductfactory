@@ -112,9 +112,6 @@ describe("initiative readiness reviewer tools", () => {
       gate: "classification",
       artifactRef: { kind: "document-version", versionId: "spoofed" },
       decision: "pass",
-      reason: "The immutable evidence is complete.",
-      findings: [],
-      resolvedFindingRefs: [],
     }, "user-1", {
       taskRunId: "TR-MCP-BOUND",
       agentId: "AGT-WS-BUILD",
@@ -130,6 +127,9 @@ describe("initiative readiness reviewer tools", () => {
       gate: "research",
       artifactRef,
       decision: "pass",
+      findings: [],
+      resolvedFindingRefs: [],
+      reason: "Independent reviewer AGT-WS-BUILD recorded pass for the immutable research artifact bound to TaskRun TR-MCP-BOUND.",
     }));
     expect(result).toMatchObject({ success: true, entityId: "IRR-RESEARCH-1" });
   });

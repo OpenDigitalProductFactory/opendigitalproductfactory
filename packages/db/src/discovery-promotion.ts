@@ -14,6 +14,7 @@
 import {
   resolvePromotionDecision,
   classifyEstateProvenance,
+  hasObservationEvidence,
   isTerminalStructuralSkip,
   type PromotionTaxonomyNodeInput,
 } from "./discovery-promotion-policy";
@@ -185,6 +186,10 @@ export async function promoteInventoryEntities(db: PromotionDb): Promise<Promoti
           digitalProductId: entity.digitalProductId,
           taxonomyNodeId: entity.taxonomyNodeId,
           provenance,
+          // Evidence-based discovery (BI-B19C41B8): a real-estate host that never
+          // proved it's a device (no MAC/vendor/hostname/ports) is a subnet-scan
+          // phantom and must not be promoted.
+          hasObservationEvidence: hasObservationEvidence({ properties: entity.properties }),
         },
         taxonomyNode,
         portfolio,
@@ -201,15 +206,22 @@ export async function promoteInventoryEntities(db: PromotionDb): Promise<Promoti
         // low_confidence_promotion, no_portfolio_root, legacy-list/node-policy
         // type_not_promotable) still open a quality issue below.
         if (!isTerminalStructuralSkip(decision)) {
+          // Terminal-structural reasons (incl. the evidence-gate's
+          // "no_observation_evidence") never reach here — they are filtered
+          // above — so the reason is an actionable quality-issue type.
+          const actionableReason = decision.reason as Exclude<
+            typeof decision.reason,
+            "no_observation_evidence"
+          >;
           await openOrUpdateQualityIssue({
             db,
-            issueType: decision.reason,
+            issueType: actionableReason,
             scope: {
               inventoryEntityId: entity.id,
               taxonomyNodeId: taxonomyNode?.id,
               portfolioId: portfolio?.id,
             },
-            summary: skipSummaryFor(decision.reason, entity.entityKey, entity.entityType),
+            summary: skipSummaryFor(actionableReason, entity.entityKey, entity.entityType),
             details: decision.evidence,
           });
         }

@@ -15,6 +15,37 @@ import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import { dispatchExternalCoworkerTask } from "@/lib/mcp/external-coworker-task-adapter";
 
+const initiativeReviewProperties = {
+  requiredToolNames: {
+    type: "array",
+    items: { type: "string" },
+    maxItems: 4,
+    description: "Exact immutable reader and governed writer names from a server-issued initiative-readiness recovery packet.",
+  },
+  initiativeReviewBinding: {
+    type: "object",
+    properties: {
+      writerToolName: { type: "string" },
+      itemId: { type: "string" },
+      gate: { type: "string" },
+      expectedCurrentBaselineId: { type: ["string", "null"] },
+      artifactRef: {
+        type: "object",
+        properties: {
+          kind: { type: "string", enum: ["repo-blob-at-commit"] },
+          repositoryFullName: { type: "string" },
+          commitSha: { type: "string" },
+          path: { type: "string" },
+          providerBlobId: { type: "string" },
+        },
+        required: ["kind", "repositoryFullName", "commitSha", "path", "providerBlobId"],
+      },
+    },
+    required: ["writerToolName", "itemId", "gate", "artifactRef"],
+    description: "Server-validated immutable initiative-review identity. Supply only with requiredToolNames from the same recovery packet.",
+  },
+} as const;
+
 const definitions: ToolDefinition[] = [
   {
     name: "request_coworker",
@@ -29,6 +60,7 @@ const definitions: ToolDefinition[] = [
         tier: { type: "number", enum: [2, 3], description: "Interaction tier (default 2). Tier 3 requires depth-2 spawn support." },
         enteredVia: { type: "string", enum: ["handoff", "escalation", "spawn"], description: "How the peer is entering (default 'handoff')." },
         requestKey: { type: "string", description: "Stable idempotency key required for threadless external MCP handoffs." },
+        ...initiativeReviewProperties,
       },
       required: ["targetAgent", "objective"],
     },
@@ -51,6 +83,7 @@ const definitions: ToolDefinition[] = [
         objective: { type: "string", description: "What the summoned coworker should address." },
         tier: { type: "number", enum: [2, 3], description: "Interaction tier (default 2)." },
         requestKey: { type: "string", description: "Stable idempotency key required for threadless external MCP summons." },
+        ...initiativeReviewProperties,
       },
       required: ["targetAgent", "objective"],
     },
@@ -100,6 +133,8 @@ async function requestCoworkerHandler(
       objective,
       requestKey: typeof params["requestKey"] === "string" ? params["requestKey"] : undefined,
       title: typeof params["questionPacketSummary"] === "string" ? params["questionPacketSummary"] : undefined,
+      requiredToolNames: params["requiredToolNames"],
+      initiativeReviewBinding: params["initiativeReviewBinding"],
       userId,
       context,
     });
@@ -148,6 +183,8 @@ async function summonCoworkerHandler(
       targetAgent,
       objective,
       requestKey: typeof params["requestKey"] === "string" ? params["requestKey"] : undefined,
+      requiredToolNames: params["requiredToolNames"],
+      initiativeReviewBinding: params["initiativeReviewBinding"],
       userId,
       context,
     });

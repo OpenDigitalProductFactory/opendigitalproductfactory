@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "generator": "apps/web/scripts/build-page-purpose.ts",
-  "pageRouteCount": 327,
+  "pageRouteCount": 330,
   "draftCount": 317,
-  "ratifiedCount": 10,
+  "ratifiedCount": 13,
   "quarantinedCount": 0,
   "routes": [
     {
@@ -1281,6 +1281,140 @@
     },
     {
       "schemaVersion": 1,
+      "status": "intent-ratified",
+      "routePath": "/ea/workrooms",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      },
+      "intent": {
+        "primaryUser": "An owner or enterprise architect defining how recurring work collaborates across the four portfolios.",
+        "triggeringNeed": "Workroom shape, participants, queues, human triggers, and process context exist in the platform but have no coherent definition-time home.",
+        "prerequisites": [
+          "The user can open Enterprise Architecture.",
+          "Value Stream Teams are the canonical reusable coordination definitions."
+        ],
+        "job": "Review each portfolio's Workroom definitions and follow a definition to its process view or operational instances.",
+        "successOutcome": "All four portfolios stay visible and each definition exposes its shape, participants, queues, human triggers, EA links, and associated instances.",
+        "findability": {
+          "parentArea": "Enterprise Architecture",
+          "entryPoints": [
+            "/ea",
+            "Enterprise Architecture > Workrooms",
+            "/build/work"
+          ],
+          "navigationLayer": "Enterprise Architecture area tab nav",
+          "discoveryCue": "A Workrooms tab beside Value Streams and a linked definition card in Build Studio.",
+          "expectedPath": [
+            "/ea",
+            "/ea/workrooms",
+            "/ea/views/[id]"
+          ]
+        },
+        "contentRoles": {
+          "defaultVisibleKeys": [
+            "portfolio-bands",
+            "definition-shape",
+            "participants",
+            "human-triggers",
+            "instance-link"
+          ],
+          "deferredRegions": []
+        },
+        "familyConsistency": {
+          "terminology": "A definition is a Value Stream Team pattern; an instance is a Workroom. Shape, trigger, participant, queue, and portfolio retain their canonical names.",
+          "actionLocation": "Process and instance links sit on the definition card they explain.",
+          "feedbackPrimitive": "Report-kit coverage cards, status badges, and portfolio-specific empty states.",
+          "disclosurePattern": "The four portfolios are the primary hierarchy. Definition detail stays inside its portfolio band.",
+          "returnBehavior": "Opening a process or instance preserves the definition/runtime distinction and offers a normal back path."
+        }
+      },
+      "stateScenarios": {
+        "partially-defined-portfolios": {
+          "statePredicate": "At least one portfolio has an active Value Stream Team and at least one does not.",
+          "stateSource": {
+            "oracleKey": "route-owned-read-model",
+            "sourceRef": "apps/web/lib/ea/workroom-architecture.ts"
+          },
+          "essentialEvidenceKeys": [
+            "portfolio-bands",
+            "definition-shape",
+            "participants",
+            "human-triggers",
+            "instance-link"
+          ],
+          "primaryExperience": {
+            "kind": "informational",
+            "messageKey": "workroom-definitions.partial"
+          },
+          "prohibitedActionKeys": [],
+          "completionSignal": "Defined portfolios show cards while uncovered portfolios show named empty states.",
+          "errorCorrection": "An unassigned legacy team is held in Foundational rather than disappearing from the model.",
+          "recovery": {
+            "actionKey": "open-operational-instances",
+            "routePath": "/ops/workrooms"
+          }
+        },
+        "no-definitions": {
+          "statePredicate": "No active Value Stream Team exists.",
+          "stateSource": {
+            "oracleKey": "route-owned-read-model",
+            "sourceRef": "apps/web/lib/ea/workroom-architecture.ts"
+          },
+          "essentialEvidenceKeys": [
+            "portfolio-bands"
+          ],
+          "primaryExperience": {
+            "kind": "informational",
+            "messageKey": "workroom-definitions.empty"
+          },
+          "prohibitedActionKeys": [],
+          "completionSignal": "All four portfolio bands remain visible and each explains what must be defined.",
+          "errorCorrection": "The page does not invent a definition or imply that a running Workroom is a reusable pattern.",
+          "recovery": {
+            "actionKey": "open-value-streams",
+            "routePath": "/ea/value-streams"
+          }
+        }
+      },
+      "taskProtocol": {
+        "startRoute": "/ea/workrooms",
+        "taskPrompt": "Show me how Workrooms are shaped across the four portfolios and where their instances run.",
+        "completionOracle": "A definition card identifies shape, participants, queue, gate triggers, and a process or instance destination.",
+        "falseSuccessConditions": [
+          "Definitions are inferred from Workroom status rows.",
+          "A fifth definition model is introduced.",
+          "Empty portfolios disappear."
+        ],
+        "acceptanceThresholds": [
+          "Exactly four portfolio bands are visible.",
+          "Value Stream Team remains the source of truth.",
+          "Definitions link to Operations instances."
+        ]
+      },
+      "ratifiedBy": {
+        "role": "owner",
+        "ref": "operator-request:mark-bodman-2026-08-24"
+      },
+      "reviewRef": "BI-3023912F",
+      "intentEvidenceRefs": [
+        {
+          "kind": "operator-request",
+          "ref": "BI-3023912F",
+          "summary": "The operator asked for an architecture-aligned place to configure and draw Workroom shapes, triggers, participants, and portfolio-level collaboration."
+        },
+        {
+          "kind": "existing-behavior",
+          "ref": "packages/db/prisma/schema/work-coordination.prisma",
+          "summary": "ValueStreamTeam already owns teamPattern, coordinationPattern, roles, HITL gates, queues, portfolio, EA links, and WorkItems."
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
       "status": "draft",
       "routePath": "/employee",
       "derived": {
@@ -2437,6 +2571,180 @@
     },
     {
       "schemaVersion": 1,
+      "status": "intent-ratified",
+      "routePath": "/ops/installation",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      },
+      "intent": {
+        "primaryUser": "The HR-000 platform owner who runs more than one DPF installation and needs to know which one they are on.",
+        "triggeringNeed": "Identity used to occupy the top of the workspace home for every platform manager, and an operator still has to be able to read and correct it somewhere.",
+        "prerequisites": [
+          "Signed in with the manage_platform capability.",
+          "The installation has resolved an environment class, even the cautious default."
+        ],
+        "job": "Read what this installation is, see what its AI coworkers may and may not do here, and correct the declaration after reviewing the impact.",
+        "successOutcome": "The operator can state the installation's estate, role and purpose, knows which brakes apply to agents, and can change the declaration only after seeing what the change loosens.",
+        "findability": {
+          "parentArea": "Operations",
+          "entryPoints": [
+            "/ops",
+            "The installation badge in the header on any non-production installation"
+          ],
+          "navigationLayer": "Ops secondary nav, Runtime & Releases group",
+          "discoveryCue": "A few-word badge beside the logo naming the estate and role, linking here for the detail.",
+          "expectedPath": [
+            "/ops",
+            "/ops/installation"
+          ]
+        },
+        "contentRoles": {
+          "defaultVisibleKeys": [
+            "installation-identity-statement",
+            "confirmation-status",
+            "agent-stance-rows"
+          ],
+          "deferredRegions": [
+            {
+              "key": "identity-change-form",
+              "role": "The purpose, environment and pairing fields that redeclare what the installation is.",
+              "trigger": "Opened when the operator asks to change the declaration."
+            },
+            {
+              "key": "identity-change-impact",
+              "role": "What the change alters, which agent brakes loosen or tighten, and which recorded evidence goes stale.",
+              "trigger": "Rendered after the operator previews a material change and before it can be saved."
+            }
+          ]
+        },
+        "familyConsistency": {
+          "terminology": "Use installation, estate, environment class, purpose, stance and brake language shared with Teardown and Self-upgrade; never describe a stance as a permission.",
+          "actionLocation": "The identity statement and stance rows read together at the top; every mutating control stays inside the change disclosure.",
+          "feedbackPrimitive": "Inline status badges, an explicit impact preview and a confirm step; a material change cannot be saved from an unpreviewed form.",
+          "disclosurePattern": "The identity statement and the brakes are visible on arrival; the change form and its impact appear progressively.",
+          "returnBehavior": "Saving refreshes in place so the operator reads the identity now in force; the header badge updates on the next render."
+        }
+      },
+      "stateScenarios": {
+        "identity-confirmed": {
+          "statePredicate": "A readable operating intent exists and an operator has confirmed it.",
+          "stateSource": {
+            "oracleKey": "route-owned-read-model",
+            "sourceRef": "apps/web/lib/installation-journey/installation-identity-view.ts#loadInstallationIdentityView"
+          },
+          "essentialEvidenceKeys": [
+            "environment-class-in-force",
+            "primary-purpose",
+            "five-agent-stances"
+          ],
+          "primaryExperience": {
+            "kind": "informational",
+            "messageKey": "installation-identity.identity-confirmed"
+          },
+          "prohibitedActionKeys": [
+            "stance-as-permission",
+            "silent-identity-change"
+          ],
+          "completionSignal": "The operator can state the environment class, the purpose and every stance with the reason given for it.",
+          "errorCorrection": "The operator opens the change disclosure and previews a correction without mutating anything.",
+          "recovery": {
+            "actionKey": "return-to-operations",
+            "routePath": "/ops"
+          }
+        },
+        "environment-shadowed": {
+          "statePredicate": "A portal declaration exists but a higher precedence tier supplies the environment class in force.",
+          "stateSource": {
+            "oracleKey": "route-owned-read-model",
+            "sourceRef": "apps/web/lib/install/environment-class-contract.ts#resolveEnvironmentClassPrecedence"
+          },
+          "essentialEvidenceKeys": [
+            "declared-value",
+            "value-in-force",
+            "winning-authority"
+          ],
+          "primaryExperience": {
+            "kind": "informational",
+            "messageKey": "installation-identity.environment-shadowed"
+          },
+          "prohibitedActionKeys": [
+            "portal-overrides-installer",
+            "discard-declaration-silently"
+          ],
+          "completionSignal": "The operator is told their saved choice is not the one in force and which authority supplied the winner.",
+          "errorCorrection": "The operator reruns the installer with an explicit environment flag rather than editing the portal record again.",
+          "recovery": {
+            "actionKey": "return-to-operations",
+            "routePath": "/ops"
+          }
+        },
+        "identity-unreadable": {
+          "statePredicate": "The stored operating intent is missing or cannot be parsed.",
+          "stateSource": {
+            "oracleKey": "route-owned-read-model",
+            "sourceRef": "apps/web/lib/installation-journey/installation-identity-view.ts#loadInstallationIdentityView"
+          },
+          "essentialEvidenceKeys": [
+            "record-unreadable",
+            "cautious-default-applied",
+            "redeclare-path"
+          ],
+          "primaryExperience": {
+            "kind": "informational",
+            "messageKey": "installation-identity.identity-unreadable"
+          },
+          "prohibitedActionKeys": [
+            "guess-identity",
+            "assume-development"
+          ],
+          "completionSignal": "The page says the record could not be read, applies the cautious default, and offers to replace it.",
+          "errorCorrection": "The operator redeclares the identity, replacing the unreadable record.",
+          "recovery": {
+            "actionKey": "return-to-operations",
+            "routePath": "/ops"
+          }
+        }
+      },
+      "taskProtocol": {
+        "startRoute": "/ops/installation",
+        "taskPrompt": "Find out what this installation is, what your AI coworkers may do on it, and correct its declared purpose.",
+        "completionOracle": "The operator states the environment class and purpose in force, names at least one agent brake and its reason, and reaches a saved change only after seeing its impact.",
+        "falseSuccessConditions": [
+          "The identity is presented as a permission granted to agents rather than as a brake applied to them.",
+          "A material change saves without the operator seeing what it loosens.",
+          "A production installation is described using a development installation's stances."
+        ],
+        "acceptanceThresholds": [
+          "The page is reachable from Operations and from the header badge on a non-production installation.",
+          "Every stance row carries the resolver's own reason, not copy invented by the page.",
+          "The environment class shown is the one the precedence chain resolved, matching the header badge exactly.",
+          "No mutating control exists outside the change disclosure."
+        ]
+      },
+      "ratifiedBy": {
+        "role": "owner",
+        "ref": "BI-7626A660"
+      },
+      "reviewRef": "BI-7626A660",
+      "intentEvidenceRefs": [
+        {
+          "kind": "operator-request",
+          "ref": "BI-7626A660",
+          "summary": "Owner reported the identity panel taking the top of the workspace home and asked for a few-word non-production indicator beside the logo instead."
+        },
+        {
+          "kind": "design-review",
+          "ref": "docs/superpowers/specs/2026-08-25-installation-estate-identity-design.md",
+          "summary": "The design fixes the estate/role split, the badge-only-on-non-production rule, and the single-resolver requirement that keeps this page and the header from disagreeing."
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
       "status": "draft",
       "routePath": "/ops/journeys",
       "derived": {
@@ -2815,6 +3123,139 @@
           "kind": "design-review",
           "ref": "docs/superpowers/specs/2026-08-22-governed-installation-teardown-design.md",
           "summary": "The binding design fixes the four scopes, salvage-first ordering, restore-tested recovery, no-follow deletion, human hold, and external evidence boundary."
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "status": "intent-ratified",
+      "routePath": "/ops/workrooms",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      },
+      "intent": {
+        "primaryUser": "An operator who needs to see what work is genuinely running, what stopped, and where its activity is recorded.",
+        "triggeringNeed": "The stored Workroom count is much larger than the set that is still alive, and Workrooms started outside Build Studio are otherwise hard to find.",
+        "prerequisites": [
+          "The user can open Operations.",
+          "Workrooms may exist from business, coworker, or development activity."
+        ],
+        "job": "Distinguish live Workrooms from retained history and open the exact room whose activity needs attention.",
+        "successOutcome": "The operator sees a truthful live count, understands inactive and cleanup states, and reaches one Workroom activity record in one click.",
+        "findability": {
+          "parentArea": "Operations",
+          "entryPoints": [
+            "/ops",
+            "Operations > Workrooms",
+            "/build/work"
+          ],
+          "navigationLayer": "Operations area tab nav",
+          "discoveryCue": "A Workrooms tab in Runtime & Releases and a linked live-count card in Build Studio.",
+          "expectedPath": [
+            "/ops",
+            "/ops/workrooms",
+            "/workspace/cases/[caseKey]"
+          ]
+        },
+        "contentRoles": {
+          "defaultVisibleKeys": [
+            "live-count",
+            "history-count",
+            "workroom-list",
+            "activity-link"
+          ],
+          "deferredRegions": []
+        },
+        "familyConsistency": {
+          "terminology": "Workroom means one coordinated unit of work. Live is evidence-derived; stored, working, and updated never substitute for live.",
+          "actionLocation": "Each Workroom title is its activity drill-through; cleanup status stays on the same row.",
+          "feedbackPrimitive": "Report-kit status badges and honest empty states; no action is implied by color alone.",
+          "disclosurePattern": "Live work appears first. Terminal, expired, stalled, and cleanup candidates remain in a separate history section.",
+          "returnBehavior": "The Workroom detail returns to the Operations inventory without changing the room."
+        }
+      },
+      "stateScenarios": {
+        "live-and-history": {
+          "statePredicate": "At least one Workroom is live and at least one stored Workroom is not live.",
+          "stateSource": {
+            "oracleKey": "route-owned-read-model",
+            "sourceRef": "apps/web/lib/work-capsules/liveness-inventory.ts"
+          },
+          "essentialEvidenceKeys": [
+            "live-count",
+            "history-count",
+            "workroom-list",
+            "activity-link"
+          ],
+          "primaryExperience": {
+            "kind": "informational",
+            "messageKey": "workrooms.live-and-history"
+          },
+          "prohibitedActionKeys": [],
+          "completionSignal": "Live now and History and cleanup show different rows and counts.",
+          "errorCorrection": "A stored row without live evidence is never counted or labeled as active.",
+          "recovery": {
+            "actionKey": "open-workroom-activity",
+            "routePath": "/workspace/cases/[caseKey]"
+          }
+        },
+        "no-live-workrooms": {
+          "statePredicate": "No stored Workroom has a live liveness verdict.",
+          "stateSource": {
+            "oracleKey": "route-owned-read-model",
+            "sourceRef": "apps/web/lib/work-capsules/liveness-inventory.ts"
+          },
+          "essentialEvidenceKeys": [
+            "live-count",
+            "history-count"
+          ],
+          "primaryExperience": {
+            "kind": "informational",
+            "messageKey": "workrooms.no-live"
+          },
+          "prohibitedActionKeys": [],
+          "completionSignal": "The live count reads zero and retained history remains available without being called active.",
+          "errorCorrection": "The empty state explains that new rooms appear when work is claimed or started.",
+          "recovery": {
+            "actionKey": "open-workroom-definitions",
+            "routePath": "/ea/workrooms"
+          }
+        }
+      },
+      "taskProtocol": {
+        "startRoute": "/ops/workrooms",
+        "taskPrompt": "Show me what is running now and open the room that needs attention.",
+        "completionOracle": "The selected Workroom detail shows its canonical activity timeline.",
+        "falseSuccessConditions": [
+          "Every stored row is presented as active.",
+          "Only development Workrooms appear.",
+          "The title does not link to the canonical activity view."
+        ],
+        "acceptanceThresholds": [
+          "Live and history are visibly separate.",
+          "Liveness uses the shared classifier.",
+          "A room opens in one interaction."
+        ]
+      },
+      "ratifiedBy": {
+        "role": "owner",
+        "ref": "operator-request:mark-bodman-2026-08-24"
+      },
+      "reviewRef": "BI-3023912F",
+      "intentEvidenceRefs": [
+        {
+          "kind": "operator-request",
+          "ref": "BI-3023912F",
+          "summary": "The operator reported that Workrooms outside Build Studio were invisible and asked for one place to see ongoing activity."
+        },
+        {
+          "kind": "existing-behavior",
+          "ref": "apps/web/lib/work-capsules/liveness.ts",
+          "summary": "The shared classifier already defines true liveness from leases, PRs, builds, and sync activity rather than stored status."
         }
       ]
     },

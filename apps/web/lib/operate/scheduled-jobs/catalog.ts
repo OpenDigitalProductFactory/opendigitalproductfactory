@@ -101,6 +101,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   },
   {
     jobId: CODE_GRAPH_JOB_ID, // "code-graph-reconcile"
+    honorsEnabledGate: true,
     inngestId: "ops/code-graph-reconcile-scheduled",
     name: "Code graph reconcile",
     purpose:
@@ -319,6 +320,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   },
   {
     jobId: "data-retention-sweep",
+    honorsEnabledGate: true,
     inngestId: "ops/data-retention-sweep-scheduled",
     name: "Data retention sweep",
     purpose:
@@ -331,6 +333,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   },
   {
     jobId: "inngest-retention-sweep",
+    honorsEnabledGate: true,
     inngestId: "ops/inngest-retention-sweep-scheduled",
     name: "Inngest retention sweep",
     purpose:
@@ -343,6 +346,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   },
   {
     jobId: "mdm-steward-sweep",
+    honorsEnabledGate: true,
     inngestId: "ops/mdm-steward-sweep-scheduled",
     name: "MDM Data Steward sweep",
     purpose:
@@ -704,6 +708,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   },
   {
     jobId: CATALOG_SWEEP_JOB_ID,
+    honorsEnabledGate: true,
     inngestId: CATALOG_SWEEP_SCHEDULED_INNGEST_ID,
     name: CATALOG_SWEEP_JOB_NAME,
     purpose:
@@ -716,6 +721,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   },
   {
     jobId: IDENTITY_INFERENCE_JOB_ID,
+    honorsEnabledGate: true,
     inngestId: IDENTITY_INFERENCE_SCHEDULED_INNGEST_ID,
     name: IDENTITY_INFERENCE_JOB_NAME,
     purpose:

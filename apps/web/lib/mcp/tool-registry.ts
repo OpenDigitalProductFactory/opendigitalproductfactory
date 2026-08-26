@@ -31,10 +31,26 @@ export function composeToolPacks(packs: ToolPack[]): ToolRegistry {
       seen.add(def.name);
       definitions.push(def);
     }
+    // Definitions already throw on collision above. Handlers and grants used to
+    // overwrite silently, which let a pack shadow a tool it did not define: the
+    // later pack's handler answered calls shaped for the earlier pack's schema
+    // and rejected them. That is invisible to a caller, who sees a valid request
+    // refused by a handler they never addressed (BI-17CBD21F). Bind the same
+    // rule to all three registries so a name has exactly one implementation.
     for (const [name, handler] of Object.entries(pack.handlers)) {
+      if (handlers[name]) {
+        throw new Error(
+          `Duplicate handler for tool "${name}" registered across tool packs; a tool name must have exactly one implementation`,
+        );
+      }
       handlers[name] = handler;
     }
     for (const [name, grant] of Object.entries(pack.grants)) {
+      if (grants[name]) {
+        throw new Error(
+          `Duplicate grant entry for tool "${name}" registered across tool packs; a tool name must have exactly one grant set`,
+        );
+      }
       grants[name] = grant;
     }
   }
