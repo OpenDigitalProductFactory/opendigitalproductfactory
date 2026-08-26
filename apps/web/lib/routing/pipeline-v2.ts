@@ -32,7 +32,7 @@ import { QUALITY_TIERS, type QualityTier } from "./quality-tiers";
 import {
   estimateSuccessProbability,
   rankByCostPerSuccess,
-  satisfiesMinimumDimensions,
+  firstUnmetDimension,
 } from "./cost-ranking";
 import { selectRecipeWithExploration } from "./champion-challenger";
 import {
@@ -118,8 +118,12 @@ export function getExclusionReasonV2(
     }
   }
 
-  if (!satisfiesMinimumDimensions(ep, contract.minimumDimensions)) {
-    return "Minimum quality dimensions not met";
+  // BI-16A1B4A3: name the dimension and the gap. The leading phrase is load
+  // bearing — routing-exclusion-buckets classifies on it — so the detail is
+  // appended rather than replacing it.
+  const unmet = firstUnmetDimension(ep, contract.minimumDimensions);
+  if (unmet) {
+    return `Minimum quality dimensions not met (${unmet.dimension} ${unmet.actual} < ${unmet.minimum})`;
   }
 
   // Status check — only active and degraded pass

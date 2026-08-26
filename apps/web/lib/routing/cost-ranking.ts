@@ -36,11 +36,29 @@ export function satisfiesMinimumDimensions(
   endpoint: EndpointManifest,
   minimumDimensions: Readonly<Record<string, number>> | undefined,
 ): boolean {
-  if (!minimumDimensions) return true;
-  return Object.entries(minimumDimensions).every(
-    ([dimension, minimum]) =>
-      getDimensionScore(endpoint, dimension) >= minimum,
-  );
+  return firstUnmetDimension(endpoint, minimumDimensions) === null;
+}
+
+/**
+ * BI-16A1B4A3 — which dimension actually failed, and by how much.
+ *
+ * "Minimum quality dimensions not met" is true but unactionable: on a live
+ * install every endpoint cleared codegen and reasoning and failed only
+ * toolFidelity, by three points, and nothing said so. An owner cannot act on a
+ * floor whose failing dimension is never named, so the gap is reported.
+ *
+ * Returns null when the endpoint satisfies every declared minimum.
+ */
+export function firstUnmetDimension(
+  endpoint: EndpointManifest,
+  minimumDimensions: Readonly<Record<string, number>> | undefined,
+): { dimension: string; actual: number; minimum: number } | null {
+  if (!minimumDimensions) return null;
+  for (const [dimension, minimum] of Object.entries(minimumDimensions)) {
+    const actual = getDimensionScore(endpoint, dimension);
+    if (actual < minimum) return { dimension, actual, minimum };
+  }
+  return null;
 }
 
 // ── Average Relevant Dimensions ─────────────────────────────────────────────
