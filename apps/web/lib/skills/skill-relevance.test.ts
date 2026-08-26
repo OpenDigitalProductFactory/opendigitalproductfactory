@@ -283,3 +283,34 @@ describe("mandated skills are pinned, not ranked (BI-43920DD1)", () => {
     expect(new Set(kept).size).toBe(kept.length);
   });
 });
+
+describe("the mandated list is a budget, not a wish list (BI-43920DD1 follow-up)", () => {
+  // Pinning spends slots. Every id in MANDATED_DECISION_SKILL_IDS is a slot taken
+  // from EVERY coworker's own skills on EVERY over-cap turn — 64.7% of real turns
+  // when this was measured. Before this guard, adding a valid fifth mandated skill
+  // passed all 141 tests across both planes while silently costing every coworker
+  // a slot. (A *misspelled* id was already caught: seed-skills.test.ts reads each
+  // slug's SKILL.md and throws ENOENT. Verified, so this guard deliberately does
+  // not re-check existence.)
+  const MANDATED_BASELINE = 4;
+
+  it("has not grown — a fifth mandated skill is a kernel decision, not a test edit", () => {
+    // Raising this number is the same call DI-E68BCB1767BD weighed: it re-spends
+    // the per-turn budget every coworker pays. Route it through principle_decide
+    // with the drop-rate measured again, and move the baseline in that PR — do not
+    // bump it to make a red test green.
+    expect(MANDATED_DECISION_SKILL_IDS.length).toBeLessThanOrEqual(MANDATED_BASELINE);
+  });
+
+  it("leaves the majority of the cap contestable however the baseline moves", () => {
+    // The paired half of the ratchet, and the reason the count guard cannot simply
+    // be re-baselined its way out of. If the mandate ever takes half the cap, a
+    // coworker's own skills are the minority of its own prompt — at which point
+    // "pinned, not ranked" has quietly become "ranked, but only the mandate".
+    expect(MANDATED_DECISION_SKILL_IDS.length).toBeLessThan(DEFAULT_SKILL_SUMMARY_CAP / 2);
+  });
+
+  it("names no skill twice — a duplicate would spend two slots for one skill", () => {
+    expect(new Set(MANDATED_DECISION_SKILL_IDS).size).toBe(MANDATED_DECISION_SKILL_IDS.length);
+  });
+});
