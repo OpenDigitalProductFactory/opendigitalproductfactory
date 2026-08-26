@@ -708,13 +708,17 @@ export async function sendMessage(input: {
   // heavy coworker (36-38 skills) can still overflow after the tool cap. Reads the
   // DMR served-context truth; null/unknown (or a capable window) → Infinity cap =
   // no change (cloud + large-window installs are byte-identical).
-  const { resolveLocalServedContextTokens } = await import(
+  const { resolveLocalServingPosture } = await import(
     "@/lib/inference/local-model-context-reconcile"
   );
   const { deriveSkillCatalogCap, capSkillCatalog } = await import(
     "@/lib/actions/coworker-tool-budget"
   );
-  const localServedContext = await resolveLocalServedContextTokens();
+  // Presence is carried alongside the window because a null window alone cannot
+  // tell an absent local model from an unread one (BI-A8BFEFCE); the tool cap
+  // below needs that distinction, and getting it wrong disables local fallback.
+  const { servedContextTokens: localServedContext, presence: localPresence } =
+    await resolveLocalServingPosture();
   const skillCatalogCap = deriveSkillCatalogCap(localServedContext);
   // Computed once; an explicitly-invoked skill is pinned into the catalog so the
   // cap never breaks a `Use the <id> skill.` request (reused for telemetry below).
@@ -1342,7 +1346,10 @@ export async function sendMessage(input: {
   // surface; unmeasured → null → Phase-1 fail-safe. Best-effort (never throws).
   const { resolveLocalToolFidelityCeiling } = await import("@/lib/routing/local-tool-fidelity");
   const measuredToolFidelityCeiling = await resolveLocalToolFidelityCeiling();
-  const toolCap = deriveCoworkerToolCap(localServedContext, { measuredToolFidelityCeiling });
+  const toolCap = deriveCoworkerToolCap(localServedContext, {
+    measuredToolFidelityCeiling,
+    localPresence,
+  });
   // BI-B5C358B1 — the route's declared domain tools are the ones a turn on this
   // route is most likely to need (e.g. /ops → backlog query/update). They were
   // only injected as system-prompt PROSE, never attached, so the intent ranker's

@@ -38,11 +38,47 @@ describe("deriveCoworkerToolCap", () => {
   });
 
   it("returns the full ceiling when there is NO local model in the serving path (cloud)", () => {
-    // null/undefined/0 mean no reachable local generation model — a cloud turn,
-    // unaffected by the local selection cliff.
+    // Legacy shape: with no explicit presence, an absent window still reads as a
+    // cloud turn, unaffected by the local selection cliff. Callers that CAN tell
+    // an absent model from an unread one pass localPresence — see below.
     expect(deriveCoworkerToolCap(null)).toBe(MAX_COWORKER_ATTACHED_TOOLS);
     expect(deriveCoworkerToolCap(undefined)).toBe(MAX_COWORKER_ATTACHED_TOOLS);
     expect(deriveCoworkerToolCap(0)).toBe(MAX_COWORKER_ATTACHED_TOOLS);
+    // Explicit absence is the same answer, stated honestly.
+    expect(deriveCoworkerToolCap(null, { localPresence: "absent" })).toBe(
+      MAX_COWORKER_ATTACHED_TOOLS,
+    );
+  });
+
+  it("cliff-caps an UNREADABLE local window rather than widening it (BI-A8BFEFCE)", () => {
+    // The reviewer incident: the DMR probe failed, the window read as null, and
+    // the cap lifted to 48 — the one value callWithFallbackChain refuses to run
+    // locally (48 > the 15 cliff). With the cloud provider rate-limited the turn
+    // executed zero tools and the review gate got no evidence at all. An unread
+    // local model must behave like a present one, never like an absent one.
+    expect(deriveCoworkerToolCap(null, { localPresence: "unknown" })).toBe(15);
+    expect(deriveCoworkerToolCap(null, { localPresence: "present" })).toBe(15);
+    expect(deriveCoworkerToolCap(undefined, { localPresence: "unknown" })).toBe(15);
+    expect(deriveCoworkerToolCap(0, { localPresence: "unknown" })).toBe(15);
+  });
+
+  it("keeps an unreadable window inside the measured ceiling when one exists", () => {
+    // Measured fidelity still applies without a window — it is a property of the
+    // model, not of the probe that failed to read its serving config.
+    expect(
+      deriveCoworkerToolCap(null, { localPresence: "unknown", measuredToolFidelityCeiling: 30 }),
+    ).toBe(30);
+    expect(
+      deriveCoworkerToolCap(null, { localPresence: "present", measuredToolFidelityCeiling: 200 }),
+    ).toBe(MAX_COWORKER_ATTACHED_TOOLS);
+  });
+
+  it("lets explicit presence override the window-derived guess", () => {
+    // A known window with an explicitly absent local model is a cloud turn: the
+    // window belongs to something that is no longer in the serving path.
+    expect(deriveCoworkerToolCap(131_072, { localPresence: "absent" })).toBe(
+      MAX_COWORKER_ATTACHED_TOOLS,
+    );
   });
 
   it("cliff-caps a LARGE local window — capacity is not selection fidelity (BI-B5C358B1)", () => {

@@ -22,7 +22,11 @@
 import type { ToolDefinition } from "@/lib/mcp-tools";
 import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 import { CORE_MCP_TOOL_NAMES } from "@/lib/mcp/tool-tier";
-import { LOCAL_TOOL_SELECTION_CLIFF } from "@/lib/tak/context-economy-metrics";
+import {
+  LOCAL_TOOL_SELECTION_CLIFF,
+  resolveLocalToolCeiling,
+  type LocalPresence,
+} from "@/lib/tak/context-economy-metrics";
 import {
   LOAD_TOOLS_TOOL_NAME,
   scoreToolIntentRelevance,
@@ -84,6 +88,15 @@ export interface CoworkerToolCapOptions {
    * window-fit or the 48 hard ceiling.
    */
   measuredToolFidelityCeiling?: number | null;
+  /**
+   * Whether a local generation model is in the serving path (BI-A8BFEFCE).
+   *
+   * Supply this from `resolveLocalServingPosture`. Only `absent` lifts the cap
+   * to the full 48; `present` and `unknown` both bind to the selection ceiling.
+   * Omitted → derived from `servedContextTokens` for backward compatibility,
+   * which cannot tell an absent model from an unread one.
+   */
+  localPresence?: LocalPresence;
 }
 
 /**
@@ -105,29 +118,50 @@ export interface CoworkerToolCapOptions {
  *
  * `servedContextTokens` is the LOCAL model's served context (from the DMR truth);
  * it binds even when a cloud provider is preferred, because the cloud→local
- * FALLBACK is exactly where these cliffs bite. `null`/unknown = NO local model in
- * the serving path (a pure cloud turn) → the full 48, unaffected by the cliff.
+ * FALLBACK is exactly where these cliffs bite.
  *
- * This function is the SINGLE SOURCE of the coworker tool-count policy (INV-6):
- * the cliff constant lives in `context-economy-metrics.ts` and is consumed here.
+ * PRESENCE, not the window, decides whether the cliff applies (BI-A8BFEFCE).
+ * A null window used to mean "pure cloud turn → the full 48", but the probe that
+ * produces it returns null for an unread local model too. On a flaky probe that
+ * lifted the surface to 48 — the one value the routing layer refuses to run
+ * locally — so a transient read failure silently deleted the install's only
+ * fallback, and a cloud rate-limit on top of it produced a turn that executed
+ * nothing. Now only `localPresence: "absent"` lifts the cap; `unknown` fails safe.
+ *
+ * This function is the SINGLE SOURCE of the coworker tool-count policy (INV-6),
+ * deriving its local ceiling from `resolveLocalToolCeiling` — the same function
+ * the routing-layer fallback gate uses, so the two cannot disagree.
  *
  *   131_072 (local, unmeasured) → 15   131_072 + measured 40 → 40   24_576 → 15   16_000 → 12   null (cloud) → 48
+ *   null + presence "unknown" → 15     null + presence "present" → 15
  */
 export function deriveCoworkerToolCap(
   servedContextTokens: number | null | undefined,
   opts?: CoworkerToolCapOptions,
 ): number {
+  const hasWindow = typeof servedContextTokens === "number" && servedContextTokens > 0;
+  // Legacy callers report presence only through the window, which cannot tell an
+  // absent model from an unread one. Explicit presence always wins.
+  const presence: LocalPresence = opts?.localPresence ?? (hasWindow ? "present" : "absent");
+
   // No local model in the serving path → cloud turn, no cliff, full ceiling.
-  if (!servedContextTokens || servedContextTokens <= 0) return MAX_COWORKER_ATTACHED_TOOLS;
-  const toolBudgetTokens = servedContextTokens - COWORKER_NON_TOOL_RESERVE_TOKENS;
-  const fitted = Math.floor(toolBudgetTokens / TOOL_SCHEMA_TOKEN_ESTIMATE);
+  if (presence === "absent") return MAX_COWORKER_ATTACHED_TOOLS;
+
   // Fail-safe: a local model is cliff-prone by CLASS. Only measured fidelity
   // evidence lifts the ceiling above the selection cliff; a bigger window never
   // does (that was the BI-B5C358B1 defect — capacity mistaken for fidelity).
-  const measured = opts?.measuredToolFidelityCeiling;
-  const selectionCeiling =
-    measured && measured > 0 ? measured : LOCAL_TOOL_SELECTION_CLIFF;
-  const ceiling = Math.min(MAX_COWORKER_ATTACHED_TOOLS, selectionCeiling);
+  const ceiling = Math.min(
+    MAX_COWORKER_ATTACHED_TOOLS,
+    resolveLocalToolCeiling(opts?.measuredToolFidelityCeiling),
+  );
+
+  // Window-fit needs a real window. When the probe could not read one, the
+  // selection ceiling alone binds — an unknown window must never WIDEN the
+  // surface, which is the whole defect this branch exists to prevent.
+  if (!hasWindow) return Math.max(MIN_COWORKER_ATTACHED_TOOLS, ceiling);
+
+  const toolBudgetTokens = servedContextTokens! - COWORKER_NON_TOOL_RESERVE_TOKENS;
+  const fitted = Math.floor(toolBudgetTokens / TOOL_SCHEMA_TOKEN_ESTIMATE);
   return Math.max(MIN_COWORKER_ATTACHED_TOOLS, Math.min(ceiling, fitted));
 }
 
