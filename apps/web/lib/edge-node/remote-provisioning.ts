@@ -8,22 +8,12 @@
 // action in `lib/actions/edge-nodes.ts` resolves the URL + issues the token
 // and calls this.
 //
-// Two paths are rendered:
-//
-//   - the CONTAINER path — fetch the single standalone compose file by URL and
-//     `docker compose up`. Full discovery fidelity on Linux (host networking);
-//     on Docker Desktop it enrols and proves the path but cannot see the host's
-//     real LAN.
-//   - the NATIVE path — download the signed Go binary for the host, verify it
-//     against the release's published SHA-256 manifest, and run it. This is the
-//     full-LAN-fidelity path on Windows and macOS.
-//
-// The native path is rendered ONLY for assets the caller says are actually
-// present on the release (`nativeRelease.assetNames`). It used to be gated on a
-// hardcoded "not published yet" belief in this comment, which went stale the day
-// publish-release.yml started attaching the binaries — the portal then withheld a
-// download that had existed for weeks. Deriving availability from the release
-// itself is what stops that recurring (BI-BB919901).
+// What works TODAY: the container path — fetch the single standalone compose
+// file by URL and `docker compose up` with the Authority URL + token passed
+// inline as environment. The signed, downloadable native Go binary (Mode 4,
+// the full-LAN-fidelity path on Windows/macOS) is not published for download
+// yet; it is surfaced as a note, not a runnable command, so we never hand the
+// operator a command that 404s.
 //
 // Spec: docs/superpowers/specs/2026-06-19-edge-node-deployment-topology-and-remote-provisioning-design.md §8
 
@@ -40,64 +30,6 @@ export type AuthorityUrlIssue =
 export const DEFAULT_REPO_SLUG = "OpenDigitalProductFactory/opendigitalproductfactory";
 export const DEFAULT_COMPOSE_REF = "main";
 const STANDALONE_COMPOSE_FILE = "docker-compose.edge-standalone.yml";
-
-/** The published SHA-256 manifest that accompanies the native binaries. */
-export const NATIVE_CHECKSUMS_ASSET = "dpf-edge-node-checksums.sha256";
-
-/**
- * Native build targets, and the release asset each one is published as.
- *
- * The Makefile cross-compiles all six. Which of them a given release actually
- * carries is NOT encoded here on purpose — it is read off the release, because
- * a second hardcoded list is exactly what went stale before.
- */
-export const NATIVE_ASSET_BY_TARGET = {
-  "linux-amd64": "dpf-edge-node-linux-amd64",
-  "linux-arm64": "dpf-edge-node-linux-arm64",
-  "darwin-amd64": "dpf-edge-node-darwin-amd64",
-  "darwin-arm64": "dpf-edge-node-darwin-arm64",
-  "windows-amd64": "dpf-edge-node-windows-amd64.exe",
-  "windows-arm64": "dpf-edge-node-windows-arm64.exe",
-} as const;
-
-export type EdgeNativeTarget = keyof typeof NATIVE_ASSET_BY_TARGET;
-
-/** Preference order per OS: the first target whose asset exists is rendered. */
-const NATIVE_TARGETS_BY_OS: Record<EdgeHostOs, readonly EdgeNativeTarget[]> = {
-  linux: ["linux-amd64", "linux-arm64"],
-  macos: ["darwin-arm64", "darwin-amd64"],
-  windows: ["windows-amd64", "windows-arm64"],
-};
-
-/**
- * What the caller knows about the release the binaries would come from.
- *
- * `assetNames` is the literal list of files attached to that release. An empty
- * list (or an omitted `nativeRelease`) renders no native command at all, which
- * is the correct degraded state for an air-gapped install or an unreachable
- * GitHub — never a command that 404s.
- */
-export interface NativeReleaseAssets {
-  tag: string;
-  assetNames: readonly string[];
-  repoSlug?: string;
-}
-
-/** Resolve the native target to offer for this OS, or null when none is published. */
-export function resolveNativeTarget(
-  os: EdgeHostOs,
-  assetNames: readonly string[],
-): EdgeNativeTarget | null {
-  const available = new Set(assetNames);
-  for (const target of NATIVE_TARGETS_BY_OS[os]) {
-    if (available.has(NATIVE_ASSET_BY_TARGET[target])) return target;
-  }
-  return null;
-}
-
-function releaseAssetUrl(repoSlug: string, tag: string, asset: string): string {
-  return `https://github.com/${repoSlug}/releases/download/${encodeURIComponent(tag)}/${asset}`;
-}
 
 export interface RenderedInstallCommand {
   /** Stable id for UI keys / telemetry. */
