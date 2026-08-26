@@ -89,6 +89,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node(
         "--test",
         "scripts/installer/lib/state-cleanup-temps.test.mjs",
+        "scripts/installer/lib/state-lock-timeout.test.mjs",
         "scripts/installer/install-release-assets.test.mjs",
       ),
     ]),

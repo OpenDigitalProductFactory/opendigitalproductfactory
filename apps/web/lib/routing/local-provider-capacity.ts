@@ -146,84 +146,32 @@ export async function assertProviderDispatchCapacity(
 // ─── Short-call boundary (BI-0AA939DF) ──────────────────────────────────────
 //
 // The policy above is written for a RESIDENT model: starting one while another
-// process owns the host is unsafe, and a queued claim deserves the next window,
-// so both `active` and `queued` fail closed. That is correct for a chat model
-// that will hold VRAM for the length of a conversation.
+// process owns the host is unsafe, so both `active` and `queued` fail closed.
+// That is right for a chat model holding VRAM for a whole conversation.
 //
-// It is the wrong shape for a short single-shot call against a small model that
-// is already resident. Embeddings take that path, and because the pool runs at
-// one slot, one contributor's pre-PR gate suspended semantic search, WWWD stance
-// retrieval, wiki similarity and document embeddings across the whole install —
-// for the duration of every gate run, reported as "nothing matched" until
-// BI-339C441F made the reason survive.
+// It was applied to embeddings too, and that was wrong. Embeddings are a short
+// single-shot call against an already-resident model, and on a one-slot pool
+// with steady gate traffic the gate is effectively never open — so semantic
+// search, WWWD stance retrieval, wiki similarity and document embeddings were
+// suppressed across the whole install for the duration of every gate run.
 //
-// Kernel decision DI-405E6765ED90 (composite 13.384, margin 3.401, high
-// confidence, no commandment conflict) chose "defer only on active, plus a
-// bounded wait" over exempting the boundary outright and over leaving it alone.
-// It keeps the resident-model protection, drops the queue-induced outage, and
-// every remaining deferral still reports its reason.
-
-/** How long a short call will wait for an ACTIVE lease to clear before deferring. */
-export const SHORT_CALL_CAPACITY_WAIT_MS = 1_500;
-
-/** Poll interval while waiting. Small enough to catch a lease releasing mid-call. */
-const SHORT_CALL_POLL_MS = 250;
-
-/**
- * Capacity policy for a short, single-shot local call against an already-resident
- * model. Unlike inspectLocalProviderCapacity it ignores a merely QUEUED claim —
- * a queued gate has not taken the host yet, and a 30ms embedding does not take
- * the window away from it.
- */
-export async function inspectShortCallLocalCapacity(input: {
-  listCapacityLeases?: LeaseReader;
-  waitMs?: number;
-  sleep?: (ms: number) => Promise<void>;
-} = {}): Promise<LocalProviderCapacityStatus> {
-  const listCapacityLeases = input.listCapacityLeases
-    ?? (() => listCapacityReservingNonprodEnvironmentLeases({}));
-  const waitMs = input.waitMs ?? SHORT_CALL_CAPACITY_WAIT_MS;
-  const sleep = input.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
-
-  // Bounded retry: an active lease often clears within a poll or two, and a
-  // caller that waits 1.5s beats a caller that reports the corpus as empty.
-  // Deliberately bounded — an unbounded wait would trade a wrong answer for a
-  // hung request, which is not an improvement.
-  const deadline = Math.max(0, waitMs);
-  let waited = 0;
-  for (;;) {
-    let active: Array<{ expiresAt?: Date | null }>;
-    try {
-      const reservations = await listCapacityLeases();
-      active = reservations.filter((lease) => (
-        lease.environmentKey === "local-integration-ci" && lease.status === "active"
-      ));
-    } catch {
-      // Same fail-closed reasoning as the resident path: capacity ownership that
-      // cannot be proven is not capacity that can be assumed.
-      return { available: false, reason: "local-ci-capacity-reservation-unavailable" };
-    }
-
-    if (active.length === 0) return { available: true, reason: null };
-    if (waited >= deadline) {
-      return {
-        available: false,
-        reason: "local-ci-active-capacity-reservation",
-        expectedFreeAt: earliestExpiry(active),
-      };
-    }
-    await sleep(SHORT_CALL_POLL_MS);
-    waited += SHORT_CALL_POLL_MS;
-  }
-}
-
-export async function assertShortCallLocalCapacityAvailable(input: {
-  listCapacityLeases?: LeaseReader;
-  waitMs?: number;
-  sleep?: (ms: number) => Promise<void>;
-} = {}): Promise<void> {
-  const status = await inspectShortCallLocalCapacity(input);
-  if (!status.available) {
-    throw new LocalProviderCapacityDeferredError(status.reason, status.expectedFreeAt ?? null);
-  }
-}
+// MEASURED on the live host, 2026-08-25:
+//
+//   no gate running                     10ms per embedding (after cold start)
+//   active gate + 3 queued           10-20ms per embedding
+//   observable effect on the gate      none
+//
+// A 10ms call and a multi-minute build do not contend. The first attempt at
+// this kept the gate and added a 1.5s bounded wait, which helped only with
+// sub-second gaps and so never helped at all — a lease lasts 2-4 minutes.
+//
+// Kernel decision DI-7F674966B4B2 (composite 10.166, margin 2.324, high
+// confidence, verdict proceed) exempts this boundary outright. That option had
+// ranked LAST in the earlier DI-405E6765ED90 (5.704) on a blast_radius score
+// supplied from the assumption that an embedding behaves like a resident model.
+// Re-scored against the measurement, it wins. The kernel weighed both option
+// sets correctly; only the facts it was given changed.
+//
+// There is therefore no short-call capacity function any more. The embedding
+// path simply does not consult host capacity. assertProviderDispatchCapacity
+// above is untouched and still governs chat dispatch to local providers.

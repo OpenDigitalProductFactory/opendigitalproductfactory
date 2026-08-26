@@ -22,10 +22,20 @@ type SeedConfig = {
     euVatOverview: string;
   };
   usStateCodes: string[];
+  /**
+   * States with no wage-income withholding. NH taxes only interest and
+   * dividends, WA only capital gains — neither withholds from wages, so
+   * declaring payroll_withholding for them would assert an obligation that
+   * does not exist.
+   */
+  usStatesWithoutWageWithholding?: string[];
   euCountryCodes: string[];
   defaults: {
     usState: {
       taxTypes: string[];
+      /** Employment-tax types a state authority administers. */
+      payrollTaxTypes?: string[];
+      payrollCadenceHints?: string[];
       localityModel: string;
       cadenceHints: string[];
       filingNotes: string;
@@ -102,11 +112,21 @@ function buildUsStateEntries(
       .map((region) => [region.code, region] as const),
   );
 
+  const noWageWithholding = new Set(config.usStatesWithoutWageWithholding ?? []);
+  const payrollTypes = config.defaults.usState.payrollTaxTypes ?? [];
+
   return config.usStateCodes.map((code) => {
     const region = byCode.get(code);
     if (!region) {
       throw new Error(`Missing US region seed data for state code ${code}`);
     }
+
+    // Every state runs unemployment insurance; only some withhold wage income
+    // tax. Seeding payroll_withholding for a state that has none would put a
+    // filing obligation on an install that does not owe one.
+    const statePayrollTypes = payrollTypes.filter(
+      (t) => !(t === "payroll_withholding" && noWageWithholding.has(code)),
+    );
 
     return {
       jurisdictionRefId: `TAX-JUR-US-${code}`,
@@ -115,14 +135,19 @@ function buildUsStateEntries(
       authorityName: region.name,
       authorityType: "state",
       parentJurisdictionRefId: null,
-      taxTypes: [...config.defaults.usState.taxTypes],
+      taxTypes: [...config.defaults.usState.taxTypes, ...statePayrollTypes],
       localityModel: config.defaults.usState.localityModel,
       officialWebsiteUrl: null,
       registrationUrl: null,
       filingUrl: config.sharedSources.usStateDirectory,
       paymentUrl: config.sharedSources.usStateDirectory,
       helpUrl: config.sharedSources.usStateDirectory,
-      cadenceHints: [...config.defaults.usState.cadenceHints],
+      cadenceHints: [
+        ...new Set([
+          ...config.defaults.usState.cadenceHints,
+          ...(config.defaults.usState.payrollCadenceHints ?? []),
+        ]),
+      ],
       filingNotes: config.defaults.usState.filingNotes,
       automationHints: {
         bootstrapMode: "directory_pointer",

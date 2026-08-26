@@ -4,6 +4,8 @@ import {
   enforceEvidenceIntegrity,
   resolveEvidenceRecovery,
   INV5_UNVERIFIED_MESSAGE,
+  INV5_WITHHELD_HEADING,
+
 } from "./evidence-requirement";
 
 const OPS_DOMAIN_TOOLS = ["query_backlog", "create_backlog_item", "update_backlog_item"];
@@ -61,7 +63,11 @@ describe("enforceEvidenceIntegrity", () => {
       content: fabricated,
     });
     expect(out.blocked).toBe(true);
+    // The reply is the bare refusal — a fabricated figure must never reach the
+    // reader, labelled or not (BI-B5C358B1).
     expect(out.content).toBe(INV5_UNVERIFIED_MESSAGE);
+    // But the draft is preserved for the caller, not destroyed (BI-0C0669B5).
+    expect(out.withheldContent).toBe(fabricated);
   });
 
   it("PASSES the answer through when an authoritative tool did run", () => {
@@ -121,7 +127,10 @@ describe("resolveEvidenceRecovery", () => {
       recoveryNudgesUsed: 1,
     });
     expect(second.kind).toBe("refuse");
-    if (second.kind === "refuse") expect(second.message).toBe(INV5_UNVERIFIED_MESSAGE);
+    if (second.kind === "refuse") {
+      expect(second.message).toBe(INV5_UNVERIFIED_MESSAGE);
+      expect(second.withheldContent).toBe(fabricated);
+    }
   });
 
   it("passes when a tool ran or the turn was not evidence-required", () => {
@@ -143,5 +152,53 @@ describe("resolveEvidenceRecovery", () => {
         recoveryNudgesUsed: 0,
       }).kind,
     ).toBe("pass");
+  });
+});
+
+// BI-0C0669B5. On 2026-08-26 this guard deleted a reviewer's ~5,100-character
+// explanation of why it was declining to record a governance decision, leaving
+// only generic copy that described a different situation. The reasoning existed
+// afterwards ONLY as a truncated container-log line. The invariant is that an
+// unverified claim must not reach the reader as though verified — quarantining
+// satisfies that; deletion is not required by it and destroys the one artifact
+// a human needs to tell a blocked gate from a legitimate refusal.
+describe("an unverified turn is preserved for the operator, never destroyed (BI-0C0669B5)", () => {
+  const draft = "I read the design at the pinned commit and formed a verdict, but I am "
+    + "stopping short of recording a decision — here is why, and what I found.";
+
+  it("keeps the reply as the bare refusal so no unverified claim reaches the reader", () => {
+    const action = resolveEvidenceRecovery({
+      required: true,
+      authoritativeToolExecutions: 0,
+      content: draft,
+      recoveryNudgesUsed: 1,
+    });
+    expect(action.kind).toBe("refuse");
+    if (action.kind === "refuse") expect(action.message).toBe(INV5_UNVERIFIED_MESSAGE);
+  });
+
+  it("hands the caller the withheld draft so the reasoning survives", () => {
+    const action = resolveEvidenceRecovery({
+      required: true,
+      authoritativeToolExecutions: 0,
+      content: draft,
+      recoveryNudgesUsed: 1,
+    });
+    if (action.kind === "refuse") expect(action.withheldContent).toBe(draft);
+  });
+
+  it("preserves the draft on the integrity decision too", () => {
+    const out = enforceEvidenceIntegrity({
+      required: true,
+      authoritativeToolExecutions: 0,
+      content: draft,
+    });
+    expect(out.blocked).toBe(true);
+    expect(out.content).toBe(INV5_UNVERIFIED_MESSAGE);
+    expect(out.withheldContent).toBe(draft);
+  });
+
+  it("exposes a heading for operator surfaces that render the quarantined draft", () => {
+    expect(INV5_WITHHELD_HEADING).toContain("Unverified");
   });
 });
