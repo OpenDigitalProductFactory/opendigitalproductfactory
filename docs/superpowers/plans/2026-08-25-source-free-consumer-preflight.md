@@ -29,15 +29,15 @@ status: active
   precedents: the preflight remains side-effect-free, returns one verdict, and
   leaves the governed controller as the only mutation path.
 
-## Requirement and contract map
+## Objective and contract map
 
-| Ref | Requirement | Contract | Flow | Verification |
+| Ref | Objective | Contract | Flow | Acceptance |
 | --- | --- | --- | --- | --- |
-| `REQ-EXACT-IDENTITY` | Equal immutable served and feature SHAs are testable without a checkout. | `CONTRACT-EXACT-SHA` | `FLOW-PURE-VERDICT` | `VERIFY-EXACT-SHA` |
-| `REQ-CONSUMER-ADVANCE` | Uncomputable ancestry on a validated source-free release must use the governed advance. | `CONTRACT-HOST-PROFILE` | `FLOW-SERVICE-ADAPTER` | `VERIFY-CONSUMER-ADVANCE` |
-| `REQ-FAIL-CLOSED` | Source-backed, contradictory, or unknown evidence must not infer containment. | `CONTRACT-UNKNOWN-BLOCKS` | `FLOW-SERVICE-ADAPTER` | `VERIFY-UNKNOWN-BLOCKS` |
-| `REQ-SURFACE-PARITY` | CLI and MCP use the same verdict core and one advance path. | `CONTRACT-SINGLE-CORE` | `FLOW-ADAPTERS` | `VERIFY-SURFACE-PARITY` |
-| `REQ-ACTIONABLE` | Consumer recovery must not recommend mounting Git or setting `DPF_REPO_ROOT`. | `CONTRACT-CONSUMER-GUIDANCE` | `FLOW-PURE-VERDICT` | `VERIFY-CONSUMER-GUIDANCE` |
+| `OBJ-EXACT-IDENTITY` | Equal immutable served and feature SHAs are testable without a checkout. | `CONTRACT-EXACT-SHA` | `FLOW-PURE-VERDICT` | `AC-EXACT-IDENTITY` |
+| `OBJ-CONSUMER-ADVANCE` | Uncomputable ancestry on a validated source-free release must use the governed advance. | `CONTRACT-HOST-PROFILE` | `FLOW-SERVICE-ADAPTER` | `AC-CONSUMER-ADVANCE` |
+| `OBJ-FAIL-CLOSED` | Source-backed, contradictory, or unknown evidence must not infer containment. | `CONTRACT-UNKNOWN-BLOCKS` | `FLOW-SERVICE-ADAPTER` | `AC-FAIL-CLOSED` |
+| `OBJ-SURFACE-PARITY` | CLI and MCP use the same verdict core and one advance path. | `CONTRACT-SINGLE-CORE` | `FLOW-ADAPTERS` | `AC-SURFACE-PARITY` |
+| `OBJ-ACTIONABLE` | Consumer recovery must not recommend mounting Git or setting `DPF_REPO_ROOT`. | `CONTRACT-CONSUMER-GUIDANCE` | `FLOW-PURE-VERDICT` | `AC-ACTIONABLE` |
 
 ## Atomic delivery
 

@@ -150,6 +150,26 @@ equal-SHA, proven-ancestor, and proven-not-ancestor cases, and assert that no
 source-free recovery text mentions `DPF_REPO_ROOT`, mounting `.git`, or installing
 Git.
 
+##### Governed scope manifest
+
+**OBJ-EXACT-IDENTITY:** Equal immutable served and feature SHAs are testable without a source checkout.
+
+**OBJ-CONSUMER-ADVANCE:** Uncomputable ancestry on a validated source-free release uses only the governed self-upgrade path.
+
+**OBJ-FAIL-CLOSED:** Source-backed, contradictory, or unknown installation evidence never infers containment.
+
+**OBJ-SURFACE-PARITY:** CLI and MCP adapters use the same verdict core and the same governed advance action.
+
+**OBJ-ACTIONABLE:** Source-free recovery guidance never asks an operator to mount Git or set `DPF_REPO_ROOT`.
+
+| Acceptance ID | Objective IDs | Acceptance statement |
+| --- | --- | --- |
+| AC-EXACT-IDENTITY | OBJ-EXACT-IDENTITY | Equal full or unambiguous-prefix SHAs return `CAN-TEST` without consulting a Git object store. |
+| AC-CONSUMER-ADVANCE | OBJ-CONSUMER-ADVANCE | Uncomputable ancestry on a validated consumer release returns `MUST-ADVANCE` through `/ops/self-upgrade`. |
+| AC-FAIL-CLOSED | OBJ-FAIL-CLOSED | Source-backed, contradictory, and unknown host evidence remains `BLOCKED` when ancestry cannot be computed. |
+| AC-SURFACE-PARITY | OBJ-SURFACE-PARITY | CLI and MCP produce the same verdict and next action for the same validated host evidence. |
+| AC-ACTIONABLE | OBJ-ACTIONABLE | Consumer recovery text omits `DPF_REPO_ROOT`, `.git` mounts, and Git-install guidance. |
+
 ### 3.2 The entry-point skill (decision + the stop-rule) — `BI-35A92FB6`
 
 One `dpf-platform` skill, `dpf-verify-on-live-install`, is **step zero** of any "does the feature work on the live install" task. It runs the preflight and follows the tree:
