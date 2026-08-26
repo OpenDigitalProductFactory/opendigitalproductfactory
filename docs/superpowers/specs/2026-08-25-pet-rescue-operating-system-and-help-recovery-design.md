@@ -1,0 +1,506 @@
+---
+status: draft
+---
+
+# Pet Rescue operating system and resilient Help design
+
+**Integration backlog item:** `BI-7A38F667`  
+**Covered Pet Rescue items:** `BI-D2A51B36`, `BI-97290291`, `BI-7111AF0C`,
+`BI-5A25EC37`, `BI-A442F129`, `BI-7A38F667` (`EP-5102F494`)  
+**Covered Help item:** `BI-AE7C386B` (`EP-56AE0F69`)  
+**Workroom:** `WC-16B8E810`  
+**Architecture decision:** `DI-0AFD05E602CA`
+
+## 1. Decision summary
+
+This change turns the Pet Rescue archetype from a public animal catalog into an
+operating system for the three value streams already defined in Architecture:
+
+1. **Rescue and intake** — bring an animal into custody safely and lawfully.
+2. **Health and welfare** — house the animal, coordinate clinical care, and
+   complete daily care without omissions.
+3. **Placement and continuity** — assess adopters, place the animal, and retain
+   the full history if it returns.
+
+It also repairs global Help so a renamed, removed, or unseeded document cannot
+strand an operator on a 404.
+
+The implementation is one integrated PR because the operator explicitly
+requires one source sandbox and one publication event. That is a packaging
+decision, not a data-boundary decision: every deliverable retains its existing
+backlog identity, acceptance evidence, and test seam. The branch is not allowed
+to hide partial delivery behind the integration item.
+
+## 2. Outcomes and objective baseline
+
+| Objective | Baseline | Target |
+|---|---|---|
+| `OBJ-RESCUE-IDENTITY` | `AdoptableAnimal` is a public listing and is the only animal row. | Every animal has one operational `AnimalProfile`; publication is optional. |
+| `OBJ-RESCUE-INTAKE` | No rescue intake/custody episode or legal-hold workflow. | Intake source, custody stage, legal hold, and outcome history survive re-entry. |
+| `OBJ-RESCUE-CAPACITY` | No housing or foster occupancy. | Kennels, rooms, and foster places use canonical resources and allocations with truthful free capacity. |
+| `OBJ-RESCUE-CARE` | No animal clinical history or daily care schedule. | Appointments, clinical facts, recurring care, completion, exceptions, and escalation are visible per animal. |
+| `OBJ-RESCUE-ADOPTION` | Enquiries exist, but no governed application/placement lifecycle. | Application, screening, visits, reservation, adoption, and return are one trace. |
+| `OBJ-RESCUE-STEWARDSHIP` | Donations exist without fund restrictions or animal cost attribution. | Restricted funds and animal-attributed ledger lines support stewardship and cost-per-animal readouts. |
+| `OBJ-RESCUE-HOME` | Generic nonprofit home shows programs, members, and handoffs. | Pet Rescue opens on animals, capacity, care exceptions, appointments, long stays, and stewardship signals. |
+| `OBJ-HELP-RECOVERY` | A mapped but missing doc calls `notFound()`. | Help resolves a valid canonical page or a truthful contextual index; it never dead-ends. |
+
+## 3. Research & benchmarking
+
+### 3.1 Open-source products
+
+| Product | Evidence | Adopt | Reject |
+|---|---|---|---|
+| [Animal Shelter Manager](https://github.com/sheltermanager/asm3) | GPL self-hosted shelter system. Its [current manual](https://sheltermanager.com/repo/asm3_help/animals.html) keeps movements, medical, clinic, diet, costs, transport, media, and diary against the animal history. | One durable animal record, movement/custody history, due-care alerts, and costs attached to the animal. | A monolithic animal screen whose tabs each own ad-hoc status and permissions. DPF composes bounded services and progressively discloses detail. |
+| [Hackapet / RefuPet](https://github.com/hackapet-project) | AGPL web/mobile shelter project with records, shelter operations, and adoption. | Mobile-friendly operational access and explicit shelter/adoption separation. | A rescue-only application boundary. DPF must reuse generic resources, care appointments, work, finance, identity, and storefront services. |
+| [Shelter Hub](https://github.com/Shelter-Hub/shelter-hub-management-api) | Open-source animal registry and clinical-record service covering vaccines, conditions, treatments, medications, and visits. | Subject history as normalized records with dates, status, and provenance. | Independent medical identity or a JSON medical blob on the public listing. |
+
+### 3.2 Domain standards
+
+- The [Association of Shelter Veterinarians 2022 Guidelines](https://doi.org/10.56771/asvguidelines.2022)
+  apply to shelters, foster-based organizations, sanctuaries, and other
+  population-care settings. DPF adopts capacity-aware intake, population-level
+  welfare visibility, timely medical care, daily observation, and documented
+  exceptions. It does not encode clinical judgment or automate consequential
+  welfare decisions.
+- [Shelter Animals Count data standardization resources](https://www.shelteranimalscount.org/data-standardization-resources/)
+  define animal-level intake/outcome collection and consistent reporting.
+  DPF adopts event dates and standard intake/outcome categories while retaining
+  local subtypes and reasons.
+- The [Shelter Animals Count glossary](https://www.shelteranimalscount.org/glossary)
+  distinguishes total/community intake, stray, owner relinquishment,
+  seizure/confiscation, transfer-in, adoption, return-to-owner, transfer-out,
+  and days in care. Those terms inform the closed enums and metric definitions.
+
+### 3.3 Help and web-platform standards
+
+- A route is not a durable document identity. Help links therefore target a
+  canonical doc key and resolve it server-side at request time.
+- Missing content is a recoverable content condition, not a Next.js route
+  absence. The docs route returns a valid contextual fallback with a notice;
+  `notFound()` remains reserved for deliberately invalid external URLs when no
+  recovery context exists.
+- Query context is validated and carried only as an internal route path; it
+  cannot widen organization or permission scope.
+
+## 4. Current substrate audit
+
+| Need | Existing substrate | Classification | Design action |
+|---|---|---|---|
+| Public animal listing | `AdoptableAnimal`, `MediaAttachment` | vertical-native but catalog-bound | Keep as optional projection; backfill operational identity. |
+| Animal identity/history | None beyond listing | absent | Add `AnimalProfile` and custody episodes. |
+| Housing/foster capacity | `Resource`, `ResourceAvailability`, `ResourceCapacityPool`, `ResourceCapacityAllocation` | canonical | Add animal-welfare domain vocabulary and a rescue adapter; no clone tables. |
+| Scheduled veterinary visit | subject-agnostic `CareAppointment(subjectKindSlug, subjectRef)` | canonical | Use `animal-profile` + stable animal id; no patient row. |
+| Intake forms | subject-agnostic `CareIntakePacket` and versioned `CareIntakeResponse` | canonical | Use for health/behavior assessments; keep custody stage on the custody episode. |
+| Clinical facts | Human `PatientProfile` exists but no subject-agnostic condition/medication/observation record | absent | Add one generic `CareRecord`, not an animal medical JSON blob. |
+| Recurring daily work | `RecurrenceSchedule`, `WorkEngagement`, `WorkEngagementActivity`, `WorkItem` | canonical but subjectless | Refactor `WorkEngagement` to carry optional subject and location references. |
+| Adoption lead | `StorefrontInquiry` | partial | Link an application to inquiry/contact and the animal profile. |
+| Adoption workflow/outcome | None | absent | Add application and placement records with explicit lifecycle evidence. |
+| Donations | `StorefrontDonation` | canonical | Link optional restricted fund. |
+| Restricted funds | `FundBudgetLine.fund` is municipal and string-bound | vertical-bound | Add generic finance fund; do not reuse municipal budget vocabulary. |
+| Cost per animal | `JournalLine` has customer/contact dimensions only | partial | Add optional subject dimension and fund relation to the canonical line. |
+| Pet Rescue first viewport | Generic `home-nonprofit-community` profile | partial | Add leaf profile and one bounded composed read model. |
+| Help | route map + filesystem docs loader + contextual quick help | canonical but brittle | Add canonical resolver and recovery contract. |
+
+Quoted absence checks were run across `packages/db/prisma/schema` for animal
+identity, custody/outcome, subject clinical records, adoption placement,
+restricted funds, and subject-level finance dimensions. The apparent
+`FundBudgetLine` and workforce `Application` matches are decoys for municipal
+budgeting and employment respectively.
+
+## 5. Canonical data architecture
+
+### 5.1 Animal identity boundary
+
+`AnimalProfile` is the operational aggregate and the only source of identity,
+demographics, custody state, and durable identifiers. `AdoptableAnimal` becomes
+an optional one-to-one publication projection.
+
+```
+AnimalProfile 1 ── 0..1 AdoptableAnimal
+      │
+      ├── * AnimalCustodyEpisode
+      ├── * AnimalAdoptionApplication ── 0..1 AnimalPlacement
+      ├── * CareRecord (subjectKind=animal-profile)
+      ├── * CareAppointment (subjectKind=animal-profile)
+      ├── * WorkEngagement (subjectKind=animal-profile)
+      ├── * ResourceCapacityAllocation (demandSlug=animal-housing)
+      └── * JournalLine (subjectKind=animal-profile)
+```
+
+Kernel consultation `DI-0AFD05E602CA` compared:
+
+1. expanding `AdoptableAnimal` into the operational aggregate;
+2. a canonical `AnimalProfile` with an optional public projection; and
+3. a universal human/animal `CareSubject` migration.
+
+The kernel recommended option 2 with high confidence (composite 3.779, margin
+0.896, autonomy eligible). The dominant positive contributors were Ground New
+Work In Existing Platform, Research and Use Standards, Single Source of Truth,
+and Architecture Over Shortcuts. No commandment conflict was raised.
+
+### 5.2 Closed enums
+
+All persisted closed axes are Prisma enums with hyphenated database mappings:
+
+- `AnimalLifecycleStatus`: `intake-review`, `in-care`, `adoption-ready`,
+  `reserved`, `placed`, `transferred`, `returned`, `deceased`, `entered-in-error`.
+- `AnimalCustodyStage`: `intake`, `legal-hold`, `quarantine`,
+  `health-assessment`, `procedures`, `behavior-assessment`, `care`,
+  `placement-ready`, `outcome-recorded`.
+- `AnimalIntakeType`: `stray`, `owner-relinquished`, `seizure-confiscate`,
+  `transfer-in`, `born-in-care`, `return`, `other`.
+- `AnimalOutcomeType`: `adoption`, `return-to-owner`, `return-to-field`,
+  `transfer-out`, `died-in-care`, `euthanasia`, `lost-in-care`, `other`.
+- `CareRecordKind`: `condition`, `allergy`, `medication`, `vaccination`,
+  `procedure`, `weight`, `observation`, `behavior`, `note`.
+- `AnimalAdoptionApplicationStatus`: `submitted`, `screening`,
+  `meet-and-greet`, `home-check`, `approved`, `waitlisted`, `declined`,
+  `withdrawn`, `placed`, `closed`.
+- `AnimalPlacementStatus`: `reserved`, `active`, `returned`, `cancelled`.
+- `FinancialFundRestriction`: `unrestricted`, `temporarily-restricted`,
+  `permanently-restricted`.
+
+Open local vocabularies remain slugs (`speciesSlug`, `breed`, `kindSlug`,
+`recordCode`) and are not forced into global enums.
+
+### 5.3 New and extended models
+
+#### `AnimalProfile`
+
+- stable `animalId` business id plus organization-scoped unique reference;
+- organization and storefront ownership;
+- name, species, breed, birth estimate, sex, size, microchip and identifying
+  marks;
+- current lifecycle as a projection for fast lists, updated only by the custody
+  and placement services;
+- source/provenance, record lifecycle, version, and timestamps;
+- one-to-one optional `AdoptableAnimal` relation.
+
+#### `AnimalCustodyEpisode`
+
+One row per admission through final outcome. A returned animal opens a new
+episode; history is never overwritten.
+
+- intake type, subtype/reason, source contact/organization, intake timestamp;
+- current stage and stage timestamp;
+- legal hold start/end/reason and intake capacity decision evidence;
+- outcome type, timestamp, reason, and destination contact/organization;
+- optimistic version and append-only `AnimalCustodyEvent` sequence.
+
+The profile's current lifecycle is a read projection. The episode/event stream
+is authoritative.
+
+#### `CareRecord`
+
+Subject-agnostic clinical/welfare history keyed by organization,
+`subjectKindSlug`, and `subjectRef`. It carries record kind, optional code and
+display, status, value/quantity/unit, effective interval, structured detail,
+source, author, sensitivity, retention, legal hold, correction/supersession,
+and timestamps. It does not create a second patient or animal identity.
+
+`CareIntakeResponse` remains the authored form response. A reviewed response may
+produce normalized `CareRecord` facts through an explicit service; raw answers
+are not queried as the clinical record.
+
+#### Adoption records
+
+`AnimalAdoptionApplication` links `AnimalProfile`, optional
+`StorefrontInquiry`, and `CustomerContact`. It owns screening status, assigned
+reviewer, decision reason, and timestamps. Meet-and-greet and home-check visits
+are subject-agnostic `CareAppointment` rows linked by join rows, not date
+columns duplicated on the application.
+
+`AnimalPlacement` links the approved application, animal, adopter contact,
+reservation allocation, donation/payment reference, placed date, suggested
+contribution, return date/reason, and status. Returning closes the placement and
+opens a new custody episode in one transaction.
+
+#### Finance dimensions
+
+`FinancialFund` is an organization-scoped fund with stable key, restriction,
+purpose, effective interval, currency, lifecycle, and optional donor restriction
+text. `StorefrontDonation.fundId` is optional. `JournalLine` gains optional
+`fundId`, `subjectKindSlug`, and `subjectRef`. The posting line remains the
+source of actual cost; the dashboard never sums bills separately.
+
+The municipal `FundBudgetLine` remains in place and may later reference the
+generic fund. This PR does not silently reinterpret its existing `fund` values.
+
+#### Generic work subject refactor
+
+`WorkEngagement` gains nullable `subjectKindSlug`, `subjectRef`, and
+`locationResourceId`. This is the intended refactoring share of the change:
+daily care uses the existing recurrence materializer and append-only activity
+timeline rather than a rescue-only task engine. Existing rows remain valid.
+
+Recurring templates create dated engagement instances. Each instance may
+project to a `WorkItem`; completion and exception evidence are appended to
+`WorkEngagementActivity`. Missed medication or welfare exceptions create urgent
+work and require human acknowledgement; no coworker makes a treatment or
+euthanasia decision.
+
+### 5.4 Housing and foster allocation
+
+- A kennel, room, isolation space, or foster home is `Resource(domain =
+  animal-welfare)`.
+- A capacity-only foster network may be a `ResourceCapacityPool`; a named foster
+  home is a `Resource` when placement history and suitability matter.
+- Occupancy is `ResourceCapacityAllocation` with `demandSlug =
+  animal-housing`, `demandRef = AnimalProfile.id`, and the custody interval.
+- Blocked and unavailable capacity uses `ResourceAvailability` or resource
+  lifecycle fields; it is not represented by a fake animal allocation.
+- Free capacity is computed from capacity minus overlapping active allocations.
+  Queries are time bounded and detect over-allocation; they never use a cloned
+  hospitality route.
+
+## 6. Service boundaries and invariants
+
+### 6.1 Commands
+
+- `admitAnimal` creates/locates the profile, opens a custody episode, records the
+  intake event, and applies housing only after a capacity check.
+- `advanceAnimalCustodyStage` enforces legal-hold and assessment prerequisites
+  and appends an event with actor/reason.
+- `assignAnimalHousing` uses the canonical capacity allocator and releases the
+  previous allocation transactionally.
+- `recordCareFact` writes a normalized, correctable `CareRecord` with provenance.
+- `scheduleAnimalAppointment` delegates to the care appointment service.
+- `establishCareRoutine` delegates recurrence to `WorkEngagement`.
+- `transitionAdoptionApplication` enforces the application state machine.
+- `placeAnimal` atomically reserves/releases housing, records the placement,
+  closes custody with an adoption outcome, and unpublishes the listing.
+- `returnAnimal` closes the placement and opens a new custody episode without
+  deleting prior history.
+
+All commands require organization scope and an authenticated principal. APIs
+never accept organization id as authority from the form body.
+
+### 6.2 Invariants
+
+1. One organization-scoped animal identity per stable source identity or
+   microchip when present; duplicate candidates require human merge review.
+2. At most one open custody episode per animal.
+3. At most one active housing allocation per animal for the same interval.
+4. An animal cannot be placement-ready while a legal hold is active.
+5. An active placement requires an approved application and closes active public
+   availability.
+6. A return preserves the placement, custody, care, and cost history.
+7. Corrected clinical facts supersede; they are not mutated out of history.
+8. Restricted-fund and subject dimensions sit on journal lines, so every report
+   reads posted accounting facts.
+
+Database constraints cover uniqueness and FKs. Service transactions cover
+cross-model state transitions; PostgreSQL checks/exclusions cover invariants
+that cannot be expressed in Prisma.
+
+## 7. Pet Rescue user experience
+
+### 7.1 Navigation
+
+Pet Rescue gets a leaf-specific workspace profile selected by semantic
+archetype id before the generic `nonprofit-community` category profile. It does
+not add builder terminology to Simple mode.
+
+- **Home** — rescue operating cockpit.
+- **Animals** — bounded animal list and durable detail.
+- **Intake** — staged custody queue and exceptions.
+- **Care** — today's rounds, medications, welfare exceptions, and appointments.
+- **Adoptions** — applications, visits, reservations, placements, and returns.
+- **Capacity** — housing/foster map and blocked/free capacity.
+- **Stewardship** — funds, donations, and attributed animal costs through
+  existing finance surfaces and contextual drill-ins.
+
+The first PR may compose these as tabs inside one Rescue Operations route when
+that reduces navigation churn, but each tab has a durable URL and access check.
+
+### 7.2 First viewport
+
+The Pet Rescue home answers: **Which animal or care commitment needs attention
+now?** It uses report-kit primitives and shared status intents:
+
+1. Animals in care, intake review, legal hold, and placement-ready.
+2. Free housing/foster capacity plus blocked spaces.
+3. Today's care rounds, due/missed medications, and welfare exceptions.
+4. Today's veterinary and adoption appointments.
+5. Long-stay animals and placement-ready animals with no active interest.
+6. Donations by restriction, available restricted balances, and posted cost per
+   animal.
+
+Every tile has a drill-in. Missing sources produce a named partial-result notice,
+not a zero that implies the business has no work. Empty states teach the first
+setup action. Tables are cursor/page bounded; no first viewport fetches every
+animal or activity.
+
+### 7.3 Animal detail
+
+The overview leads with identity, current custody stage, location, holds, next
+care, and placement readiness. Secondary tabs disclose timeline, care,
+appointments, routines, applications/placements, costs, and public listing.
+One summary is rendered once; detail tabs do not create competing summaries.
+
+### 7.4 Accessibility and visual rules
+
+- `StatCard`, `KpiCard`, `StatusBadge`, `DataTable`, `FilterBar`, `Notice`,
+  `EmptyState`, and `ExpandableCard` come from report-kit.
+- All colors use `--dpf-*` tokens and the shared status-intent registry.
+- Status is expressed in text and semantics, never color alone.
+- Controls meet the 44px tap target and preserve keyboard/focus order.
+- Desktop, narrow viewport, light theme, and dark theme are verified.
+
+## 8. Resilient Help contract
+
+### 8.1 Stable identity
+
+`DOCS_ROUTE_MAP` maps source routes to a canonical `docKey`, not an unchecked
+filesystem path. A server-safe registry resolves the key against the currently
+packaged docs index.
+
+Resolution order:
+
+1. exact canonical key;
+2. declared alias from a renamed key;
+3. nearest existing area index;
+4. global docs index;
+5. generated contextual quick-help page when packaged docs are absent.
+
+The resolver returns `{ href, requestedKey, resolvedKey, recoveryKind }`.
+`buildContextualDocsHref` uses the valid resolved href and includes
+`sourceRoute`; it never emits a link that the current package cannot render.
+
+### 8.2 Direct URL recovery
+
+For `/docs/[...slug]`:
+
+- an existing doc renders normally;
+- a known alias permanently redirects or renders the canonical page with a
+  clear notice;
+- a missing mapped/contextual doc renders the nearest valid index plus a notice
+  naming the unavailable page;
+- a completely unknown direct slug renders the docs index with search, not the
+  shell's record-not-found dead end.
+
+The page retains the current authenticated organization context and does not
+cross into public-site documentation.
+
+### 8.3 Tests
+
+- header Help on a valid route;
+- mapped doc present, renamed through alias, and missing;
+- docs package empty/fresh install;
+- direct valid/invalid/legacy URLs;
+- contextual source route encoded safely;
+- setup and shell layouts preserve their real permission boundary.
+
+## 9. Security, privacy, and compliance
+
+- Animal welfare records may contain adopter PII, legal-hold evidence, and
+  sensitive location data. Route repositories scope every read by organization.
+- Public animal projection exposes only explicitly published fields. Clinical,
+  legal-hold, foster-address, screening, donor, and finance data never flow
+  through the public storefront serializer.
+- Care record sensitivity/retention labels use the existing retention engine
+  contract. Legal hold prevents deletion.
+- Foster contacts and adopters remain canonical contacts/principals; animal
+  identity never masquerades as `Principal`.
+- Consequential decisions—intake beyond capacity, medical treatment, adoption
+  approval, euthanasia, and fund-restriction release—remain human-authorized.
+- Every state transition records actor, time, prior state, and reason.
+
+## 10. Migration and compatibility
+
+This is an additive expand migration:
+
+1. Create enums and new tables nullable where fleet-safe backfill requires it.
+2. Add `animalProfileId` to `AdoptableAnimal`, initially nullable and unique.
+3. Backfill one `AnimalProfile` per existing listing using the listing's
+   organization, `animalRef`, identity fields, and status translation.
+4. Link listings to profiles and add supporting indexes.
+5. Add nullable work, donation, and journal-line dimensions.
+6. Seed no operational facts. Existing listings become profiles but do not gain
+   invented custody, clinical, housing, adoption, fund, or cost history.
+
+The application dual-reads the legacy listing identity only during the same
+release's migration boundary. New writes require `AnimalProfile`; public writes
+project through the service. Contracting or making the one-to-one FK mandatory
+is a later fleet release after conformance telemetry proves all rows linked.
+
+No migration is edited after commit, no database is wiped, and no installed
+runtime files are patched.
+
+## 11. Scale and reporting
+
+- List reads use `(organizationId, status/stage, updatedAt, id)` cursor indexes.
+- Timelines use `(animalProfileId, occurredAt, id)` cursors.
+- Capacity conflicts are interval/index constrained; no N-by-N resource scan.
+- Cockpit aggregation issues bounded group/count/sum queries and returns per
+  source `{ state: available|empty|unavailable, asOf, data }`.
+- Cost per animal reads posted `JournalLine` subject dimensions for a bounded
+  fiscal window; restricted balance reads posted fund dimensions.
+- Long-stay is calculated from the open custody episode and has a configurable
+  threshold, not a hard-coded shelter-policy decision.
+
+The design holds to approximately 100,000 animal profiles, 10 million timeline
+and care rows, 10,000 active resources, and 1,000 concurrent organizations per
+installation with indexed pagination. Cross-install population benchmarking and
+federated animal matching are outside `EP-5102F494`; a future federation epic
+must add aggregate exchange and conflict contracts rather than widening these
+queries.
+
+## 12. Delivery slices and acceptance trace
+
+| Slice | Backlog item | Primary acceptance evidence |
+|---|---|---|
+| Help resolver and recovery UI | `BI-AE7C386B` | resolver/unit tests, header/direct-route tests, running Help path |
+| Identity + housing/capacity | `BI-D2A51B36` | migration/backfill tests, allocator tests, running capacity view |
+| Subject clinical history + vet coordination | `BI-97290291` | care-record and appointment tests, animal care detail |
+| Custody/intake pipeline | `BI-7111AF0C` | state-machine/legal-hold tests, running intake queue |
+| Recurring daily care | `BI-5A25EC37` | recurrence/completion/exception tests, running care board |
+| Adoption and return | `BI-A442F129` | application/placement transaction tests, running adoption flow |
+| Pet Rescue home and stewardship projection | `BI-7A38F667` | partial-result aggregation tests, responsive/themed cockpit verification |
+
+All slices are implemented test-first and committed on the same branch. The
+single PR body lists the individual BI evidence rather than claiming the root BI
+implicitly covers its children.
+
+## 13. Verification contract
+
+Before publication:
+
+1. Prisma format, generate, schema validation, and migration-from-existing-data
+   verification.
+2. Affected Vitest suites for state machines, repositories, resolvers, route
+   contracts, projections, and UI components.
+3. Web lint/typecheck and the repository's required local merge gates.
+4. One governed shared nonproduction lease—the only source sandbox claim for
+   this delivery—to exercise Help, intake, housing, care, adoption, return, and
+   the Pet Rescue cockpit.
+5. UX-fit review in narrow/wide and light/dark viewports, with screenshots.
+6. Blast-radius analysis of schema, public storefront serialization, finance
+   posting, recurrence, care appointments/intake, navigation, docs, seed,
+   archetype activation, and generated indexes.
+7. Independent semantic review of the stable committed tree, then DCO PR and
+   merge queue.
+
+## 14. Architecture review (advisory)
+
+- **Alignment summary:** aligned after choosing a canonical operational animal
+  identity with an optional public projection.
+- **Findings folded into this spec:**
+  - A public listing could not remain the operational aggregate; §5.1 now
+    establishes `AnimalProfile` and records `DI-0AFD05E602CA`.
+  - Rescue-only housing, task, appointment, or finance tables would duplicate
+    canonical services; §§5.3–5.4 instead extend resources, care, work, and
+    journal dimensions.
+  - A dashboard-first implementation would truthfully show only zeros; §12 puts
+    the cockpit last and requires partial-result contracts.
+  - Unbounded animal/timeline aggregation would fail at realistic history; §11
+    names cursor keys, limits, and the scale ceiling.
+  - Missing Help content is not a record-level 404; §8 makes it a recoverable
+    resolver outcome.
+- **Standards researched:** ASM, RefuPet, Shelter Hub, ASV 2022, and Shelter
+  Animals Count; adopted/rejected details are in §3.
+- **Escalated decisions:** canonical animal boundary, resolved by
+  `DI-0AFD05E602CA` with no commandment conflict.
+- **Recommended next step:** immutable design review through the governed
+  initiative-readiness route, then a coverage-recorded implementation plan.
+
