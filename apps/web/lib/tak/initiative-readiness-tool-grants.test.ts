@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { InitiativeReadinessDecision } from "@/lib/backlog/initiative-readiness";
 
+import { parseInitiativeReviewBinding } from "@/lib/mcp-task-submit";
+
 import { resolveInitiativeReviewerRecovery } from "./initiative-readiness-tool-grants";
 
 const decision: InitiativeReadinessDecision = {
@@ -112,14 +114,16 @@ describe("initiative readiness recovery routing", () => {
           requestKey: `initiative-readiness:BI-A45D744A:dependency-disposition:${dispatchContext.headSha}`,
           tier: 2,
           enteredVia: "handoff",
-          requiredToolNames: ["record_plan_backlog_coverage", "read_source_at_version"],
-          initiativeReviewBinding: {
-            writerToolName: "record_plan_backlog_coverage",
-            gate: "dependency-disposition",
-          },
         },
       },
     ]);
+    // `record_plan_backlog_coverage` is not a `record_initiative_*` writer, so
+    // parseInitiativeReviewBinding would reject a binding for it. That lane
+    // reviews no immutable bytes, so it carries neither field (BI-9FE775F9).
+    const coverage = recovery.reviewerRoutes
+      .find((route) => route.toolName === "record_plan_backlog_coverage");
+    expect(coverage?.requestCoworker).not.toHaveProperty("initiativeReviewBinding");
+    expect(coverage?.requestCoworker).not.toHaveProperty("requiredToolNames");
   });
 
   it("carries the current baseline id into the binding so a superseded design cannot be reviewed", async () => {
@@ -134,7 +138,7 @@ describe("initiative readiness recovery routing", () => {
       expectedCurrentBaselineId: "IBL-7C41",
     });
 
-    expect(recovery.reviewerRoutes[0]?.requestCoworker.initiativeReviewBinding.expectedCurrentBaselineId)
+    expect(recovery.reviewerRoutes[0]?.requestCoworker.initiativeReviewBinding?.expectedCurrentBaselineId)
       .toBe("IBL-7C41");
   });
 
@@ -150,14 +154,17 @@ describe("initiative readiness recovery routing", () => {
       canonicalArtifact: { resolved: false, nextAction: "Commit the canonical design under docs/superpowers/specs/, push it, then retry." },
     });
 
-    expect(recovery.reviewerRoutes).toEqual([]);
+    // Only the lanes that need immutable bytes are blocked. Plan coverage is not
+    // one of them, so it still routes — an unresolvable design must not strand
+    // work that never depended on it (BI-9FE775F9).
+    expect(recovery.reviewerRoutes.map((route) => route.toolName))
+      .toEqual(["record_plan_backlog_coverage"]);
     expect(recovery.escalations).toMatchObject([
       {
         accountableRole: "design-author",
         reason: "no-canonical-artifact",
         nextAction: "Commit the canonical design under docs/superpowers/specs/, push it, then retry.",
       },
-      { accountableRole: "implementation-planner", reason: "no-canonical-artifact" },
     ]);
   });
 
@@ -262,5 +269,97 @@ describe("initiative readiness recovery routing", () => {
     ]);
     // Two genuinely different operator actions must not collapse to one code.
     expect(reasons).toEqual(new Set(["dispatch-context-required", "no-eligible-reviewer"]));
+  });
+});
+
+/**
+ * The producer/consumer seam, tested end to end.
+ *
+ * The defect this file's fix repaired (BI-9FE775F9) was not a wrong value — it
+ * was a packet the CALLEE rejects. Asserting the emitted shape here and the
+ * validator's rules over there let a route that no coworker could execute look
+ * correct on both sides for weeks. These tests run what the generator actually
+ * emits through the real validators, so the seam cannot silently reopen.
+ */
+describe("recovery packets are executable by the real consumer", () => {
+  // Mirrors initiativeReviewPacket in external-coworker-task-adapter.ts.
+  const ALLOWED_READERS = new Set(["read_source_at_version", "search_source_at_version"]);
+
+  it("emits bindings that parseInitiativeReviewBinding accepts", async () => {
+    const recovery = await resolveInitiativeReviewerRecovery({
+      decision,
+      currentAgentId: "AGT-AUTHOR",
+      db: { agentToolGrant: { findMany: vi.fn().mockResolvedValue([
+        grantRow("initiative_evidence_write", "AGT-WS-BUILD", "Build Specialist"),
+        grantRow("backlog_write", "AGT-WS-BUILD", "Build Specialist"),
+      ]) } },
+      dispatchContext,
+      canonicalArtifact,
+      expectedCurrentBaselineId: null,
+    });
+
+    expect(recovery.reviewerRoutes.length).toBeGreaterThan(0);
+    for (const route of recovery.reviewerRoutes) {
+      if (route.requestCoworker.initiativeReviewBinding === undefined) {
+        // Only a non-record_initiative_* writer may go unbound.
+        expect(route.toolName.startsWith("record_initiative_")).toBe(false);
+        continue;
+      }
+      expect(
+        parseInitiativeReviewBinding(route.requestCoworker.initiativeReviewBinding),
+        `parseInitiativeReviewBinding rejected the packet for ${route.toolName}`,
+      ).not.toBeNull();
+    }
+  });
+
+  it("emits requiredToolNames the external coworker adapter will not refuse", async () => {
+    const recovery = await resolveInitiativeReviewerRecovery({
+      decision,
+      currentAgentId: "AGT-AUTHOR",
+      db: { agentToolGrant: { findMany: vi.fn().mockResolvedValue([
+        grantRow("initiative_evidence_write", "AGT-WS-BUILD", "Build Specialist"),
+        grantRow("backlog_write", "AGT-WS-BUILD", "Build Specialist"),
+      ]) } },
+      dispatchContext,
+      canonicalArtifact,
+      expectedCurrentBaselineId: null,
+    });
+
+    for (const route of recovery.reviewerRoutes) {
+      const { requiredToolNames, initiativeReviewBinding } = route.requestCoworker;
+      if (requiredToolNames === undefined || initiativeReviewBinding === undefined) continue;
+      const names = [...new Set(requiredToolNames)];
+      // The adapter refuses anything outside the bound writer plus one or both
+      // immutable readers, and refuses fewer than 2 or more than 4 names.
+      expect(names.length).toBeGreaterThanOrEqual(2);
+      expect(names.length).toBeLessThanOrEqual(4);
+      expect(names).toContain(initiativeReviewBinding.writerToolName);
+      expect(names.some((name) => ALLOWED_READERS.has(name))).toBe(true);
+      expect(names.every((name) =>
+        name === initiativeReviewBinding.writerToolName || ALLOWED_READERS.has(name))).toBe(true);
+    }
+  });
+
+  it("never emits one of the two coupled fields without the other", async () => {
+    // The adapter rejects "supplied together" violations, so a route carrying
+    // only one is an unexecutable route — the exact original defect.
+    const recovery = await resolveInitiativeReviewerRecovery({
+      decision,
+      currentAgentId: "AGT-AUTHOR",
+      db: { agentToolGrant: { findMany: vi.fn().mockResolvedValue([
+        grantRow("initiative_evidence_write", "AGT-WS-BUILD", "Build Specialist"),
+      ]) } },
+      dispatchContext,
+      canonicalArtifact,
+      expectedCurrentBaselineId: null,
+    });
+
+    for (const route of recovery.reviewerRoutes) {
+      const hasBinding = route.requestCoworker.initiativeReviewBinding !== undefined;
+      const hasNames = route.requestCoworker.requiredToolNames !== undefined;
+      // Coupling is the invariant, not presence: the adapter refuses one
+      // without the other, so either both travel or neither does.
+      expect(hasBinding).toBe(hasNames);
+    }
   });
 });

@@ -19,7 +19,7 @@ apps/web/components/platform/edge-nodes/EdgeNodesAdminClient.tsx	923
 apps/web/components/storefront/SlotBookingFlow.tsx	1015
 apps/web/components/workbooks/Grid.tsx	1830
 apps/web/instrumentation.test.ts	945
-apps/web/instrumentation.ts	1470
+apps/web/instrumentation.ts	1478
 apps/web/lib/actions/agent-coworker-external.test.ts	889
 apps/web/lib/actions/agent-coworker.ts	2810
 apps/web/lib/actions/agent-task-scheduler.test.ts	1132
@@ -34,8 +34,8 @@ apps/web/lib/actions/mcp-tokens.test.ts	1254
 apps/web/lib/actions/platform-dev-config.ts	1254
 apps/web/lib/actions/promotions.self-upgrade.test.ts	1098
 apps/web/lib/actions/promotions.ts	983
-apps/web/lib/actions/tax-remittance.test.ts	1080
-apps/web/lib/actions/tax-remittance.ts	978
+apps/web/lib/actions/tax-remittance.test.ts	1084
+apps/web/lib/actions/tax-remittance.ts	971
 apps/web/lib/ai-operations-map/load-map-data.test.ts	928
 apps/web/lib/deliberation/orchestrator.ts	808
 apps/web/lib/explore/build-process-matrix.ts	832
@@ -61,7 +61,7 @@ apps/web/lib/tak/agent-routing.ts	1191
 apps/web/lib/tak/agentic-loop.test.ts	2501
 apps/web/lib/tak/agentic-loop.ts	2704
 apps/web/lib/tak/route-context-map.ts	1440
-apps/web/lib/work-capsules/mcp-handlers.ts	847
+apps/web/lib/work-capsules/mcp-handlers.ts	849
 apps/web/lib/work-capsules/work-capsule-store.test.ts	1191
 apps/web/lib/work-capsules/work-capsule-store.ts	1051
 apps/web/lib/workbooks/platform-tables.ts	938

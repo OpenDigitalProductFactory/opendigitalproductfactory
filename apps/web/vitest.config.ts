@@ -143,6 +143,10 @@ export default defineConfig({
       },
       { find: "@", replacement: webDir },
       {
+        find: "@dpf/db/peer-certificate-verification",
+        replacement: resolve(rootDir, "packages/db/src/peer-certificate-verification.ts"),
+      },
+      {
         find: "@dpf/db/organization-federation-enrollment",
         replacement: resolve(rootDir, "packages/db/src/organization-federation-enrollment.ts"),
       },

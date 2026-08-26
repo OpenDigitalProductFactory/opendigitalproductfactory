@@ -49,7 +49,7 @@ Folding "a human must decide this now" into the backlog is a category error: the
 - **Clear or snooze the Friday review** as one batch, or review an item individually.
 - Ask your [digital coworker](../getting-started/ai-coworker.md) for a briefing on what is in the inbox and why.
 
-Deadline-bearing items show a plain tag such as **Due today** or **Due in 3 days**. Impact tags use words such as **Costs money**, **Goes public**, and **Reversible**.
+Deadline-bearing items show a plain tag such as **Due in 10 minutes**, **Due in 6 hours**, or **Due in 3 days** — always in the largest unit that is still accurate, so a short window is never dressed up as a long one. A window that has closed reads **Past due**. Impact tags use words such as **Costs money**, **Goes public**, and **Reversible**.
 
 ---
 

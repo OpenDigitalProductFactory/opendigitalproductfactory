@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 689,
+  "pageCount": 690,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -1187,6 +1187,7 @@
         "install-upgrade-consumer-assets-and-rollback",
         "backup-and-health-semantics",
         "observation-and-diagnostics-boundary",
+        "diagnosing-capability-drift-bi-5acbac50",
         "safe-operating-rules"
       ]
     },
@@ -1575,6 +1576,7 @@
         "maturity-labels-closed-set",
         "finance-matrix-snapshot",
         "payroll-absorption-stance-reversal-2026-08-22",
+        "payroll-tax-persistence-and-period-components-2026-08-26",
         "mileage-jurisdiction-resolution-2026-08-26",
         "finance-doc-reconciliation-rules",
         "workforce-matrix-snapshot",
@@ -2177,6 +2179,20 @@
         "use-in-dpf"
       ]
     },
+    "docs/architecture/tax-period-component-migration.md": {
+      "publicHref": "/architecture/tax-period-component-migration/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "tax-period-component-normalization-migration-record",
+        "why-a-field-drop-is-proposed-at-all",
+        "what-the-migration-does-in-order",
+        "data-safety-argument-for-the-drop",
+        "what-review-is-being-asked-to-approve",
+        "deliberately-out-of-scope"
+      ]
+    },
     "docs/architecture/theme-aware-styling-runbook.md": {
       "publicHref": "/architecture/theme-aware-styling-runbook/",
       "portalHref": null,
@@ -2409,6 +2425,7 @@
         "what-the-gate-does-to-the-turn",
         "what-is-actually-enforced-today",
         "the-shapes-next-steps-after-the-gate",
+        "setting-the-posture-and-the-default-for-rooms",
         "known-gaps",
         "related"
       ]
@@ -10838,7 +10855,8 @@
         "the-floors-nothing-crosses",
         "6-the-receipt-is-what-you-review",
         "known-limits",
-        "related"
+        "related",
+        "the-pace-a-room-runs-at"
       ]
     },
     "docs/user-guide/ai-workforce/index.md": {
@@ -10909,7 +10927,8 @@
         "reading-the-outcomes-view",
         "the-calibration-suggestion",
         "honest-limits",
-        "related"
+        "related",
+        "how-work-rooms-behave"
       ]
     },
     "docs/user-guide/ai-workforce/provider-anthropic.md": {
@@ -11801,7 +11820,8 @@
         "read-the-routing-picture",
         "architecture-and-evidence",
         "when-a-coworker-says-it-used-the-backup-model",
-        "what-to-watch"
+        "what-to-watch",
+        "defaults-for-work-rooms"
       ]
     },
     "docs/user-guide/platform/authority-and-audit.md": {
@@ -12154,6 +12174,8 @@
         "access-and-other-channels",
         "finite-and-standing-rooms",
         "pace-and-priority",
+        "changing-it",
+        "setting-a-default-for-every-room",
         "giving-a-room-its-shape",
         "incomplete-or-unavailable-rooms"
       ]

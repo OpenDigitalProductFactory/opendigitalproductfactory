@@ -8,6 +8,10 @@
 
 import { createHash } from "crypto";
 import { newId } from "@/lib/shared/new-id";
+import {
+  summariseComponents,
+  type TaxPeriodComponentKind,
+} from "@/lib/finance/tax-period-components";
 
 export const MANAGED_TAX_ISSUE_TYPES = new Set([
   "tax_setup_mode_unknown",
@@ -356,8 +360,11 @@ export function periodMonthsForFrequency(filingFrequency: string) {
 export function buildFilingPacketNotes(period: {
   periodStart: Date;
   periodEnd: Date;
-  salesTaxAmount: unknown;
-  inputTaxAmount: unknown;
+  /**
+   * Optional: a caller that forgot the `components` include should produce a
+   * packet with no component lines, not a crash on a filing path.
+   */
+  components?: readonly { componentKind: TaxPeriodComponentKind; amount: unknown }[];
   netTaxAmount: unknown;
   registration: {
     taxType: string;
@@ -367,16 +374,32 @@ export function buildFilingPacketNotes(period: {
     };
   };
 }) {
-  const salesTaxAmount = roundCurrency(decimalValue(period.salesTaxAmount));
-  const inputTaxAmount = roundCurrency(decimalValue(period.inputTaxAmount));
+  const totals = summariseComponents(
+    (period.components ?? []).map((c) => ({
+      componentKind: c.componentKind,
+      amount: roundCurrency(decimalValue(c.amount)),
+    })),
+  );
   const netTaxAmount = roundCurrency(decimalValue(period.netTaxAmount));
+
+  // Only the lines this period actually has. A payroll packet listing "Sales
+  // tax captured: 0.00" reads as a filing that charged no sales tax, rather
+  // than one that was never about sales tax at all.
+  const componentLines: string[] = [];
+  if (totals.sales_output !== 0) componentLines.push(`Sales tax captured: ${totals.sales_output.toFixed(2)}`);
+  if (totals.sales_input !== 0) componentLines.push(`Input tax captured: ${totals.sales_input.toFixed(2)}`);
+  if (totals.employee_withheld !== 0) {
+    componentLines.push(`Employee withheld: ${totals.employee_withheld.toFixed(2)}`);
+  }
+  if (totals.employer_contribution !== 0) {
+    componentLines.push(`Employer contribution: ${totals.employer_contribution.toFixed(2)}`);
+  }
 
   return [
     `${period.registration.jurisdictionReference.authorityName} ${period.registration.taxType} filing packet`,
     `Period: ${period.periodStart.toISOString().slice(0, 10)} to ${period.periodEnd.toISOString().slice(0, 10)}`,
     `Registration: ${period.registration.registrationNumber ?? "pending"}`,
-    `Sales tax captured: ${salesTaxAmount.toFixed(2)}`,
-    `Input tax captured: ${inputTaxAmount.toFixed(2)}`,
+    ...componentLines,
     `Net tax due: ${netTaxAmount.toFixed(2)}`,
   ].join("\n");
 }

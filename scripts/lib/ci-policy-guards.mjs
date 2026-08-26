@@ -37,6 +37,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
   source: Object.freeze([
     guard("repo-guard-loop", "Repo Guard Loop", [
       node("--test", "scripts/check-guards.test.mjs"),
+      // BI-3B6DC1DC: the TaskRun working-write guard now scopes by model, so its
+      // own behaviour is under test rather than trusted.
+      node("--test", "scripts/check-no-bare-working-write.test.mjs"),
       node("--test", "scripts/host-resource-runner.test.mjs"),
       node("scripts/check-guards.mjs"),
       node("--test", "scripts/check-capability-compose-profiles.test.mjs"),
@@ -157,6 +160,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // deliberate allowlist — otherwise CI stays green while the test never runs.
         "scripts/lib/ci-policy-test-inventory.test.mjs",
         "scripts/lib/git-shallow-preflight.test.mjs",
+        "scripts/lib/ensure-compile-ready.test.mjs",
         "scripts/pregate-preflight.test.mjs",
         "scripts/pregate-exit-honesty.test.mjs",
         "scripts/gate-context.test.mjs",
