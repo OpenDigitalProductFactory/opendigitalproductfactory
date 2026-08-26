@@ -36,7 +36,7 @@ Every claim below was checked against the tree at `cf29d511a` on 2026-08-23. **T
 | Chain of custody | `apps/web/lib/tak/chain-of-custody.ts`, `mcp-governed-execute.ts:138` | Live. Every agent action joins back to a human origin |
 | Human authentication | `packages/db/prisma/schema/core-identity.prisma:8` `User.passwordHash`, `PasswordResetToken`, NextAuth session in `apps/web/lib/govern/auth.ts` | Live |
 | Roles / groups | `PlatformRole`, `UserGroup`, `Team`, `TeamMembership` | Live |
-| Service accounts | `apps/web/lib/browser-drive/identity.ts:16` | Live but **feature-local** |
+| Service accounts | `apps/web/lib/identity/service-account.ts` | **Shared primitive** since Phase 1 (`BI-3181909E`). Was feature-local in `browser-drive`; that module is now a namespace-owning wrapper. An owner-less service account is refused at the module boundary. |
 | DN projection | `apps/web/app/(shell)/platform/identity/directory/page.tsx` | Live but **route-local**, hardcoded `dc=dpf,dc=internal` |
 | Upstream federation | `apps/web/app/(shell)/platform/identity/federation/page.tsx` | Live. `IntegrationCredential(provider: "ldap"｜"active_directory")` |
 | Org PKI | Step CA — `docs/security/tool-evaluations/2026-07-20-step-ca.md` | Live. Machine trust, mTLS |
