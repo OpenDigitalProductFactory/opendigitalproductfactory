@@ -17,6 +17,11 @@ import {
   type InstanceStanceProfile,
 } from "@dpf/db/installation-instance-stance";
 import {
+  pairingSupportsWorkSync,
+  resolveInstallationPairing,
+  type PairingLink,
+} from "@dpf/db/installation-peer-pairing";
+import {
   buildInstallationOperatingProfileSnapshot,
   parseOperatingIntent,
   type InstallationOperatingIntentV1,
@@ -84,6 +89,12 @@ export function holdsIrreplaceableWork(input: {
 export interface InstanceStanceStore {
   readConfig(key: string): Promise<unknown>;
   countBacklogItemsByStatus(statuses: readonly string[]): Promise<number>;
+  /**
+   * The federation links that could establish a pairing. Optional so existing
+   * callers keep working; absent means no link evidence, which leaves work sync
+   * off rather than assuming a declared peer is real.
+   */
+  listFederationLinks?(): Promise<readonly PairingLink[]>;
 }
 
 /**
@@ -95,13 +106,35 @@ export interface InstanceStanceStore {
  * a different set of rows.
  */
 export function prismaInstanceStanceStore(
-  prisma: Pick<PrismaClient, "platformConfig" | "backlogItem">,
+  prisma: Pick<PrismaClient, "platformConfig" | "backlogItem" | "federationLink">,
 ): InstanceStanceStore {
   return {
     readConfig: async (key) =>
       (await prisma.platformConfig.findUnique({ where: { key } }))?.value ?? null,
     countBacklogItemsByStatus: (statuses) =>
       prisma.backlogItem.count({ where: { status: { in: [...statuses] } } }),
+    listFederationLinks: async () => {
+      const rows = await prisma.federationLink.findMany({
+        select: {
+          linkId: true,
+          linkState: true,
+          role: true,
+          peerOrganizationRef: true,
+          revokedAt: true,
+          quarantinedAt: true,
+        },
+      });
+      return rows.map((row) => ({
+        linkId: row.linkId,
+        linkState: row.linkState,
+        // `same-org-peer` is the role a same-organization link takes; the preset
+        // itself is not a column, so the role is what identifies the pairing.
+        relationshipPreset: row.role === "same-org-peer" ? "same-organization" : row.role,
+        peerLabel: row.peerOrganizationRef,
+        revokedAt: row.revokedAt,
+        quarantinedAt: row.quarantinedAt,
+      }));
+    },
   };
 }
 
@@ -157,9 +190,25 @@ export async function loadInstanceStance(
     environmentClass,
   });
 
+  // The link is evidence; the typed ref is intent. Resolve against real links so
+  // a reseeded or never-established pairing cannot report work as mirrored.
+  let links: readonly PairingLink[] = [];
+  try {
+    links = (await store.listFederationLinks?.()) ?? [];
+  } catch {
+    links = [];
+  }
+  const pairing = resolveInstallationPairing({
+    declaredRef: snapshot.pairedProductionInstallationRef,
+    links,
+  });
+
   return resolveInstanceStance(
-    snapshot,
-    { sourceCapable: hostProfile.sourceCapable },
+    { ...snapshot, pairedProductionInstallationRef: pairing.ref ?? undefined },
+    {
+      sourceCapable: hostProfile.sourceCapable,
+      pairingIsEstablished: pairingSupportsWorkSync(pairing),
+    },
     { holdsIrreplaceableWork: holdsIrreplaceableWork({ unfinishedItemCount: unfinished, receipt }) },
   );
 }

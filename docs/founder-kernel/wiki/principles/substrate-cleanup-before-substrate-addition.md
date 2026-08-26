@@ -147,7 +147,8 @@ Before opening a PR that adds a new substrate layer:
 - [`one-data-model`](../../../professions/data-architect/wiki/one-data-model.md) — the architectural reason
   fragmentation is expensive
 - [`architecture-over-shortcuts`](architecture-over-shortcuts.md) — the
-  20% refactoring budget posture this principle operationalizes
+  refactoring budget posture this principle operationalizes (~80% refactor and
+  integration since 2026-08-23)
 
 ## Spec references
 
