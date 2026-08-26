@@ -6,7 +6,7 @@
 //                          canonical host tier is installer state
 //   - operating intent   → PlatformConfig `installation.operating-intent.v1`
 //   - source capability  → install host profile
-//   - uncaptured work    → backlog counts vs the last recorded durable capture
+//   - uncaptured work    → backlog recency vs the last recorded durable capture
 //
 // Every read fails open to the *most cautious* answer. An installation that
 // cannot prove it is disposable is treated as production.
@@ -73,22 +73,58 @@ function parseCaptureReceipt(raw: unknown): BacklogCaptureReceiptV1 | null {
  * Decide whether this instance currently holds work that exists nowhere else.
  *
  * Work is irreplaceable when unfinished backlog items exist and the last durable
- * capture no longer covers them. A capture that recorded fewer unfinished items
- * than the instance holds today is stale by definition.
+ * capture no longer covers them. Coverage is decided by *recency*, not by count:
+ * any unfinished item created or updated after the capture instant is work the
+ * bundle does not contain.
  */
 export function holdsIrreplaceableWork(input: {
   unfinishedItemCount: number;
   receipt: BacklogCaptureReceiptV1 | null;
+  /**
+   * The most recent create/update across unfinished items, or null when there
+   * are none. Compared against the receipt instant, because a count cannot tell
+   * a captured backlog from a differently-composed one of the same size.
+   */
+  latestUnfinishedChangeAt?: Date | string | null;
 }): boolean {
   if (input.unfinishedItemCount === 0) return false;
   if (!input.receipt) return true;
-  return input.receipt.unfinishedItemCount < input.unfinishedItemCount;
+
+  // Counts do not establish coverage. A backlog only ever grows if nothing is
+  // ever closed; in practice items are closed, retired and deferred while new
+  // ones are filed, so the count can fall while the *composition* changes
+  // entirely. A falling count then reads as "captured more than we hold" — the
+  // safest possible answer — at the exact moment new work is uncaptured.
+  //
+  // Observed on a dogfood reset install (BI-9CE1A6C8): receipt recorded 111
+  // unfinished, the instance held 98, and 75 of those 98 were filed after the
+  // capture. The stance reported "no uncaptured work" over 75 unbundled items.
+  // The degenerate case is worse: close one, file one, and the count never
+  // moves at all.
+  const capturedAt = Date.parse(input.receipt.capturedAt);
+  const latestChange =
+    input.latestUnfinishedChangeAt == null
+      ? Number.NaN
+      : new Date(input.latestUnfinishedChangeAt).getTime();
+
+  // An unreadable instant on either side is unknown coverage, which is
+  // uncaptured work — the guard fails closed.
+  if (!Number.isFinite(capturedAt) || !Number.isFinite(latestChange)) return true;
+
+  return latestChange > capturedAt;
 }
 
 /** Minimal store shape so callers can pass Prisma without this module importing it. */
 export interface InstanceStanceStore {
   readConfig(key: string): Promise<unknown>;
   countBacklogItemsByStatus(statuses: readonly string[]): Promise<number>;
+  /**
+   * Most recent create/update across items in those statuses, or null when
+   * there are none. Optional so existing callers keep working; absent leaves
+   * the freshness comparison without an instant, which the resolver treats as
+   * uncaptured work rather than assuming coverage.
+   */
+  latestBacklogChangeByStatus?(statuses: readonly string[]): Promise<Date | null>;
   /**
    * The federation links that could establish a pairing. Optional so existing
    * callers keep working; absent means no link evidence, which leaves work sync
@@ -113,6 +149,25 @@ export function prismaInstanceStanceStore(
       (await prisma.platformConfig.findUnique({ where: { key } }))?.value ?? null,
     countBacklogItemsByStatus: (statuses) =>
       prisma.backlogItem.count({ where: { status: { in: [...statuses] } } }),
+    latestBacklogChangeByStatus: async (statuses) => {
+      // createdAt and updatedAt are both consulted: an item edited after the
+      // capture is as uncaptured as one filed after it.
+      const [created, updated] = await Promise.all([
+        prisma.backlogItem.aggregate({
+          where: { status: { in: [...statuses] } },
+          _max: { createdAt: true },
+        }),
+        prisma.backlogItem.aggregate({
+          where: { status: { in: [...statuses] } },
+          _max: { updatedAt: true },
+        }),
+      ]);
+      const stamps = [created._max.createdAt, updated._max.updatedAt].filter(
+        (value): value is Date => value instanceof Date,
+      );
+      if (stamps.length === 0) return null;
+      return stamps.reduce((a, b) => (a.getTime() >= b.getTime() ? a : b));
+    },
     listFederationLinks: async () => {
       const rows = await prisma.federationLink.findMany({
         select: {
@@ -167,12 +222,16 @@ export async function loadInstanceStance(
 
   let unfinished = 0;
   let receipt: BacklogCaptureReceiptV1 | null = null;
+  let latestUnfinishedChangeAt: Date | null = null;
   try {
     unfinished = await store.countBacklogItemsByStatus(UNFINISHED_STATUSES);
     receipt = parseCaptureReceipt(await store.readConfig(BACKLOG_CAPTURE_CONFIG_KEY));
+    latestUnfinishedChangeAt =
+      (await store.latestBacklogChangeByStatus?.(UNFINISHED_STATUSES)) ?? null;
   } catch {
     // Unknown backlog state is treated as uncaptured work.
     unfinished = Math.max(unfinished, 1);
+    latestUnfinishedChangeAt = null;
   }
 
   const resolvedIntent: InstallationOperatingIntentV1 = intent ?? {
@@ -209,6 +268,12 @@ export async function loadInstanceStance(
       sourceCapable: hostProfile.sourceCapable,
       pairingIsEstablished: pairingSupportsWorkSync(pairing),
     },
-    { holdsIrreplaceableWork: holdsIrreplaceableWork({ unfinishedItemCount: unfinished, receipt }) },
+    {
+      holdsIrreplaceableWork: holdsIrreplaceableWork({
+        unfinishedItemCount: unfinished,
+        receipt,
+        latestUnfinishedChangeAt,
+      }),
+    },
   );
 }
