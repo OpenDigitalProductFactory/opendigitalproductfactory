@@ -51,7 +51,14 @@ The governed semantic reviewer routes according to the request it actually sends
 - [ ] Focused regression test observed red before source repair.
 - [ ] Focused test passes after the repair.
 - [ ] Web typecheck, required guards, docs checks, and source preflight pass.
-- [ ] Bootstrap semantic-review attempt is recorded honestly.
+- [x] Bootstrap attempts are recorded honestly: the current-main BI-SIG preview
+  supplied the exact immutable reader/writer surface, but TaskRun
+  `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-B48A7E92B214` stopped before
+  inference with zero tool executions and no receipt because no model was
+  eligible at that instant. The consumed request key will not be reused.
+- [x] A material provider-state change is proven independently: governed
+  EndpointTestRun `TR-D6491A4E` completed against the exact local Qwen3.8 27B
+  model with 8/8 probes passing, including native tool calling.
 - [ ] Governed exact-tree local CI passes for the published candidate.
 - [ ] Protected merge and deployment are verified.
 - [ ] BI-SIG owner receives the deployment signal and records one fresh semantic-review result.
