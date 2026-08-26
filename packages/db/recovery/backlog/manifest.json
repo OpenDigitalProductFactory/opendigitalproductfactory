@@ -1,17 +1,17 @@
 {
   "schemaVersion": 1,
-  "capturedAt": "2026-08-26T03:07:09.229Z",
+  "capturedAt": "2026-08-26T03:57:53.481Z",
   "scope": "not-done",
   "bundles": [
     {
       "epicId": "EP-129D11FD",
       "file": "initiative-readiness-governed-completion.json",
-      "itemCount": 15
+      "itemCount": 19
     },
     {
       "epicId": "EP-1FABA22D",
       "file": "purpose-aware-installation-ecosystem-productivity.json",
-      "itemCount": 24
+      "itemCount": 25
     },
     {
       "epicId": "EP-24741BBF",
@@ -24,14 +24,14 @@
       "itemCount": 5
     },
     {
-      "epicId": "EP-39F60B06",
-      "file": "value-stream-shape-graph.json",
+      "epicId": "EP-4FF5273F",
+      "file": "vertical-integration-inward.json",
       "itemCount": 4
     },
     {
       "epicId": "EP-5102F494",
       "file": "animal-welfare-operations-vertical.json",
-      "itemCount": 16
+      "itemCount": 17
     },
     {
       "epicId": "EP-55AF36AC",
@@ -41,12 +41,17 @@
     {
       "epicId": "EP-56AE0F69",
       "file": "reset-cycle-3-platform-findings.json",
-      "itemCount": 50
+      "itemCount": 55
     },
     {
       "epicId": "EP-862820FD",
       "file": "employment-lifecycle-actuator.json",
-      "itemCount": 7
+      "itemCount": 8
+    },
+    {
+      "epicId": "EP-A47377D1",
+      "file": "canonical-minimal-substrate.json",
+      "itemCount": 1
     },
     {
       "epicId": "EP-BUILD-51BE9A",
@@ -86,7 +91,7 @@
     {
       "epicId": "EP-DECISION-TIER-REBALANCE",
       "file": "ep-decision-tier-rebalance.json",
-      "itemCount": 6
+      "itemCount": 7
     },
     {
       "epicId": "EP-F09D63B3",
@@ -94,16 +99,12 @@
       "itemCount": 9
     }
   ],
-  "capturedItemCount": 156,
-  "unassignedItemCount": 48,
-  "unfinishedItemCount": 204,
+  "capturedItemCount": 170,
+  "unassignedItemCount": 47,
+  "unfinishedItemCount": 217,
   "skipped": [
     {
       "itemId": "BI-0E8B29C3",
-      "reason": "item-has-no-epic"
-    },
-    {
-      "itemId": "BI-10C34BE1",
       "reason": "item-has-no-epic"
     },
     {

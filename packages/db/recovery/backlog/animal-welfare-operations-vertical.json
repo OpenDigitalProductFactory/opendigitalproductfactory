@@ -3,7 +3,7 @@
   "bundleId": "animal-welfare-operations-vertical",
   "description": "Operator-invoked recovery input for the animal-welfare operations vertical epic (pet-rescue archetype operating model).",
   "source": {
-    "capturedAt": "2026-08-26T03:07:09.229Z",
+    "capturedAt": "2026-08-26T03:57:53.481Z",
     "repository": "OpenDigitalProductFactory/opendigitalproductfactory",
     "planPath": "docs/architecture/archetype-operating-model-audit.md"
   },
@@ -568,7 +568,7 @@
       "epicId": "EP-5102F494",
       "title": "Workspace answers commercial questions on a shelter: no animals in care, capacity, care rounds or welfare exceptions",
       "body": "The completed Workspace for a rescue answers commercial questions. A shelter's questions are different, and none of them are on the screen.\r\n\r\n## What it shows today\r\n\r\n**REVENUE IN $0**, **DELIVERED 0 jobs**, and a value chain of ATTRACT & DISCOVER -> CAPTURE DEMAND -> QUALIFY & SCHEDULE -> DELIVER THE VALUE -> SETTLE & ACCOUNT -> RETAIN & GROW -> TRUST & COMPLIANCE -> OPERATE & IMPROVE.\r\n\r\nThe header is right — *\"LIVING BUSINESS — Pet Rescue: which mission commitment needs attention today?\"* — and **LAPSING DONORS** is a genuinely archetype-specific panel. So the surface can already carry archetype-shaped content; it just mostly does not.\r\n\r\n## What a shelter operator actually needs on opening the screen\r\n\r\n- **Animals in care**, by status: intake/quarantine, in assessment, awaiting spay/neuter, ready for adoption, on hold, in foster.\r\n- **Capacity** — units free by type and size. This is the number that decides whether the shelter can say yes to today's surrender call.\r\n- **Care rounds outstanding today**, and any missed medication — the welfare-critical exception.\r\n- **Today's appointments** — vet, meet-and-greets, home checks.\r\n- **Animals with no adoption interest for N days** — the ones at risk of becoming long-stay.\r\n- **Funds**: donations this month, restricted balances, cost per animal.\r\n\r\n## The worker home already gets closer\r\n\r\nThe archetype's worker home is `Mission operations home` — *\"which mission commitment needs attention today?\"* — with Volunteer Program Board, Case Board, Communication Exceptions, Handoff Queue. Those boards are the right instinct, but nothing operational backs them: `verticals-community.prisma` holds only `GovernanceMeeting`, `RecordsRequest`, `FundBudgetLine`, `MemberEquityEntry` (HOA governance), so there is no volunteer or case substrate behind the labels.\r\n\r\n## Dependency\r\n\r\nThis item is the **last** in the epic, not the first. Every tile above reads from a model that does not exist yet. Building the dashboard before the domain would produce a screen of zeros — which is precisely what it shows today.\r\n\r\nRelationship to the copy item: the separate archetype-vocabulary finding (BI-D49C7245) covers renaming REVENUE/jobs. This item is not renaming — it is replacing the questions.\r\n\r\nProvenance: reset/dogfood cycle 3.",
-      "status": "deferred",
+      "status": "open",
       "type": "portfolio",
       "workType": "feature",
       "source": "automated-detection",
@@ -1322,6 +1322,18 @@
               "expectedVersion": "claim.v1"
             }
           }
+        },
+        {
+          "recoveryKey": "bi-7a38f667-cmt9iu08w04i901qvwhcqioox",
+          "kind": "status_change",
+          "summary": "deferred → open — Deferral trigger answered by the immutable design at e5f86ccbfb368c5cfa7571173d50a08ce66920ef (docs/superpowers/specs/2026-08-25-pet-rescue-operating-system-and",
+          "recordedAt": "2026-08-26T03:15:26.528Z",
+          "payload": {
+            "to": "open",
+            "from": "deferred",
+            "reason": "Deferral trigger answered by the immutable design at e5f86ccbfb368c5cfa7571173d50a08ce66920ef (docs/superpowers/specs/2026-08-25-pet-rescue-operating-system-and-help-recovery-design.md). The deferral rationale was that implementing the Workspace cockpit first would hard-code unstable projections against absent animal, capacity, care, adoption, funding and event contracts. The design resolves that directly: sec 5 establishes the canonical AnimalProfile identity boundary (DI-0AFD05E602CA) plus housing/foster allocation on canonical resources, sec 6 fixes commands and invariants, and sec 12 sequences the cockpit slice LAST behind identity/housing, clinical history, custody/intake, recurring care, and adoption/return, each retaining its own BI acceptance evidence. Sec 14 records the dashboard-first risk as an explicit folded-in architecture finding requiring partial-result contracts. BI-7A38F667 now serves as the integration item for EP-5102F494 rather than a dashboard-first build. Not yet satisfied and tracked separately: demand activation remains unclassified with no investment bucket, so classification, scoring and funding are still open before implementation authority.",
+            "resolution": null
+          }
         }
       ],
       "effortSize": "medium",
@@ -1544,6 +1556,32 @@
       "effortSize": "large",
       "triageOutcome": "build",
       "createdAt": "2026-08-22T04:39:13.864Z"
+    },
+    {
+      "itemId": "BI-DA2C4303",
+      "epicId": "EP-5102F494",
+      "title": "Exercising the animals surface with real data: every animal auto-publishes to the public site on creation with no intake step, operational notes become public marketing copy, and Delete destroys the record with no confirmation",
+      "body": "## Method\n\nPrevious assessments of this archetype were made against an **empty** instance (0 animals,\n0 accounts, 0 donations). This one exercised the only operational path that exists: three\nanimals entered through the admin UI, then followed to the public storefront, then a status\nchange, at desktop and tablet viewports.\n\nTwo of the findings below only appear once real records exist, and two earlier conclusions were\ntoo harsh and are corrected.\n\n## Corrections to earlier assessment — recorded first\n\n**`hold` works, and I said it did not.** `AdoptableAnimal.status` offers\n`available | pending | hold | adopted`, and setting `hold` propagates to the public storefront,\nwhich renders **\"On hold\"** against the animal. The earlier finding that holds are absent was\nabout the *entity* (typed, clocked, concurrent, blocking) and remains true; but a single status\nvalue exists and has real effect. Worth knowing before designing the hold model — the enum is\nthe seam to build on.\n\n**The tablet layout is sound.** 768x1024: no horizontal overflow (`scrollWidth == clientWidth`\nat 753px), and only five tap targets under 32px, one of which is the standard 1x1 skip link.\nGiven that rounds on a tablet are the highest-volume operator surface this archetype needs, the\nresponsive foundation being in place is a genuine positive.\n\n## 1. Every animal auto-publishes on creation\n\nThree animals entered; all three received `publishedAt` **within the same second** as creation,\n`status = available`, and appeared on `/s/rescue` immediately:\n\n```\nScout   | dog    | adult | status=available | published=2026-08-26 03:52:01\nMarbles | cat    | young | status=available | published=2026-08-26 03:52:05\nPip     | rabbit | baby  | status=available | published=2026-08-26 03:52:09\n```\n\nThere is no draft state, no intake step, and no review before an animal is publicly advertised\nas adoptable. `available` is the default and publication is automatic.\n\n**Scout was entered as \"Found as a stray on Route 9.\"** A stray is under a statutory hold during\nwhich it cannot lawfully be adopted out, because the owner may still reclaim it. The product\npublished it as adoptable in under a second, and the only way to prevent that is for a human to\nremember to change a dropdown afterwards. The safe default is inverted: publication should be\nthe deliberate act, not the automatic one.\n\n## 2. Operational data has nowhere to go but the public description\n\n\"Found as a stray on Route 9\" is now **public marketing copy**, because `description` is the only\nfree-text field on the record.\n\nIn a shelter, found-location is operational data used for owner reclaim and jurisdiction, held\nagainst the intake record. Here it must either be published or not captured at all. The same\napplies to surrender reason, bite history, medical notes and behavioural flags — every one is\neither omitted or shown to the public.\n\nThis is the storefront-shaped-model defect made concrete: there is no non-public place to write\nanything about an animal.\n\n## 3. Delete has no confirmation and no undo\n\n`apps/web/components/storefront-admin/AnimalsManager.tsx:205`\n\n```tsx\n<button type=\"button\" onClick={() => void deleteAnimal(animal.id)}\n  style={{ marginLeft: \"auto\", fontSize: 12, padding: \"4px 10px\", ... }}>\n  Delete\n</button>\n```\n\nOne tap, no `confirm`, no undo, no soft-delete. Measured at **59x28 px**, immediately beside the\nstatus dropdown that a worker changes routinely, on a surface that works on a tablet.\n\nThe animal record is the subject everything else would hang off, and its photos cascade with it.\nOn current evidence this is the fastest path to irrecoverable data loss in the archetype, and it\nsits one mis-tap away from a routine action.\n\n**Suggested fix, in order:** a confirmation naming the animal; soft-delete with a restore window;\nand moving the control out of the row's primary action area. A shelter also genuinely needs\n*archive* rather than *delete* — an adopted or deceased animal must remain in the record for\nstatistics and for the statutory reporting the archetype requires.\n\n## What this says about the archetype overall\n\nThe surface is coherent and works. It is a **catalog editor**, and it behaves correctly as one.\nEvery defect above is the same root cause already filed as `BI-4F8A484C`: the animal has no\nidentity independent of its public listing, so creating a record means publishing it, describing\nit means publishing the description, and removing it means destroying it.\n\nRelated: `BI-4F8A484C` (animal identity, keystone), `BI-6AA4C3BD` (operating model 0.05),\n`BI-9C5A3787` (vocabulary reach). Standing requirements:\n`docs/architecture/archetypes/pet-rescue-operating-model.md`.",
+      "status": "triaging",
+      "type": "portfolio",
+      "workType": "bug",
+      "source": "automated-detection",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-da2c4303-cmt9kbd2q05xb01qv1elpqtqj",
+          "kind": "epic_link",
+          "summary": "(no epic) → EP-5102F494",
+          "recordedAt": "2026-08-26T03:56:55.922Z",
+          "payload": {
+            "toEpicId": "EP-5102F494",
+            "fromEpicId": null
+          }
+        }
+      ],
+      "createdAt": "2026-08-26T03:54:47.650Z"
     },
     {
       "itemId": "BI-E861E8B8",
