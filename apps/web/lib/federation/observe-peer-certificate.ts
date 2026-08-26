@@ -14,7 +14,7 @@
 // ship. The connection is used only to read the chain; nothing is sent over it.
 
 import { isIP } from "node:net";
-import { connect, type PeerCertificate } from "node:tls";
+import { connect, type DetailedPeerCertificate } from "node:tls";
 
 import type { ObservedCertificate } from "@dpf/db/peer-certificate-verification";
 
@@ -28,7 +28,13 @@ export type ChainObservation =
   | { observed: true; chain: ObservedCertificate[] }
   | { observed: false; reason: string };
 
-function toObserved(certificate: PeerCertificate): ObservedCertificate | null {
+/** Node types a certificate CN as `string | string[]`; take the first entry. */
+function commonName(value: string | string[] | undefined): string | undefined {
+  if (Array.isArray(value)) return value[0];
+  return value;
+}
+
+function toObserved(certificate: DetailedPeerCertificate): ObservedCertificate | null {
   const fingerprint = certificate.fingerprint256;
   if (typeof fingerprint !== "string" || fingerprint.length === 0) return null;
   const validFrom = certificate.valid_from ? new Date(certificate.valid_from) : undefined;
@@ -37,8 +43,8 @@ function toObserved(certificate: PeerCertificate): ObservedCertificate | null {
     fingerprint256: fingerprint,
     // Node marks the terminal certificate by making it its own issuer.
     selfSigned: certificate.issuerCertificate === certificate,
-    subject: certificate.subject?.CN,
-    issuer: certificate.issuer?.CN,
+    subject: commonName(certificate.subject?.CN),
+    issuer: commonName(certificate.issuer?.CN),
     validFrom: validFrom && Number.isFinite(validFrom.getTime()) ? validFrom : undefined,
     validTo: validTo && Number.isFinite(validTo.getTime()) ? validTo : undefined,
   };
@@ -51,16 +57,18 @@ function toObserved(certificate: PeerCertificate): ObservedCertificate | null {
  * socket — the walk is where the cycle and depth handling live, so it is worth
  * exercising directly.
  */
-export function collectChain(leaf: PeerCertificate | null): ObservedCertificate[] {
+export function collectChain(leaf: DetailedPeerCertificate | null): ObservedCertificate[] {
   const chain: ObservedCertificate[] = [];
-  const seen = new Set<PeerCertificate>();
-  let current = leaf;
+  const seen = new Set<DetailedPeerCertificate>();
+  let current: DetailedPeerCertificate | undefined | null = leaf;
   while (current && !seen.has(current) && chain.length < MAX_CHAIN_DEPTH) {
     seen.add(current);
     const observed = toObserved(current);
     if (!observed) break;
     chain.push(observed);
-    const issuer = current.issuerCertificate;
+    // Annotated explicitly: `issuerCertificate` is self-referential, so an
+    // inferred type here resolves to `any` (TS7022).
+    const issuer: DetailedPeerCertificate | undefined = current.issuerCertificate;
     if (!issuer || issuer === current) break;
     current = issuer;
   }
