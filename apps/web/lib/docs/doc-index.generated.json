@@ -10674,7 +10674,8 @@
         "key-concepts",
         "what-you-can-do",
         "graph-explorer",
-        "hive-result-review"
+        "hive-result-review",
+        "scheduled-work"
       ]
     },
     "docs/user-guide/ai-workforce/ai-cost-governance.md": {
