@@ -647,6 +647,7 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
       "/platform/tools/discovery",
       "/platform/tools/inventory",
       "/platform/federation-links",
+      "/platform/edge-nodes",
     ],
   },
   {
@@ -715,6 +716,22 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     key: "platform-federation-links",
     label: "Connections",
     path: "/platform/federation-links",
+    parentPath: "/platform/tools",
+    domain: "platform",
+    audienceModes: ["operator"],
+    destinationKind: "section-page",
+    capabilityKey: "view_platform",
+  },
+  {
+    // Edge Nodes had a route, six operator documents, and NO way to reach it:
+    // one in-product link, from the Connections page, which an operator only
+    // opens if they are already setting up federation. The documented path
+    // "Platform > Edge Nodes" did not exist as a navigable path (BI-2EC8906A).
+    // It matters most for the shapes with more than one node: an MSP runs one
+    // per customer per site, retail one per location.
+    key: "platform-edge-nodes",
+    label: "Edge Nodes",
+    path: "/platform/edge-nodes",
     parentPath: "/platform/tools",
     domain: "platform",
     audienceModes: ["operator"],
