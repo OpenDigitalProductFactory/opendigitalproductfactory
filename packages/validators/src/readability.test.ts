@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   analyzeReadability,
-  analyzeUtteranceReadability,
+  analyzeUiReadability,
   countSyllables,
   parseReadabilityPolicy,
   resolveReadingLevel,
@@ -143,48 +143,49 @@ describe("analyzeReadability — the prose assumption it rests on", () => {
   });
 });
 
-describe("analyzeUtteranceReadability", () => {
-  it("scores each UI utterance as its own sentence", () => {
-    const ui = analyzeUtteranceReadability(UI_LABELS);
-    expect(ui.sentences).toBe(UI_LABELS.length);
-    expect(ui.wordsPerSentence).toBeLessThan(2);
+describe("analyzeUiReadability — BI-0ED0F6B3 directive 2", () => {
+  it("is punctuation-independent BY CONSTRUCTION, not by luck", () => {
+    // No sentence-length term exists in the formula, so no arrangement of full
+    // stops can move the result. Assert across the whole spectrum of ways a UI
+    // could be punctuated, not just one.
+    const bare = analyzeUiReadability(UI_LABELS).gradeLevel;
+    const perLabel = analyzeUiReadability(UI_LABELS.map((l) => `${l}.`)).gradeLevel;
+    const allOne = analyzeUiReadability([UI_LABELS.join(" ")]).gradeLevel;
+    const shouty = analyzeUiReadability(UI_LABELS.map((l) => `${l}!?!`)).gradeLevel;
+    expect(new Set([bare, perLabel, allOne, shouty]).size).toBe(1);
   });
 
-  it("cannot be gamed by adding full stops", () => {
-    const bare = analyzeUtteranceReadability(UI_LABELS);
-    const stopped = analyzeUtteranceReadability(UI_LABELS.map((l) => `${l}.`));
-    expect(stopped.gradeLevel).toBe(bare.gradeLevel);
-    expect(stopped.sentences).toBe(bare.sentences);
-  });
-
-  it("agrees with the prose analyzer on a single prose utterance", () => {
-    const prose = "the cat sat on the mat and the dog ran to the log";
-    expect(analyzeUtteranceReadability([prose])).toEqual(analyzeReadability(prose));
-    expect(analyzeUtteranceReadability([JARGON])).toEqual(analyzeReadability(JARGON));
-  });
-
-  it("still splits genuine prose inside one utterance on its full stops", () => {
-    const paragraph = "We sorted your drives. Three still need a category. Pick one for each.";
-    expect(analyzeUtteranceReadability([paragraph]).sentences).toBe(3);
-  });
-
-  it("still catches jargon on a label-shaped surface", () => {
-    // The point of the correction is a measure that separates plain from dense
-    // WITHOUT counting periods. Both surfaces are pure one-word labels.
-    const plain = analyzeUtteranceReadability(["Date", "Route", "Miles", "Sorted", "Owed"]);
-    const dense = analyzeUtteranceReadability([
+  it("separates plain product copy from dense operator prose", () => {
+    // The two cases the policy exists to tell apart, at IDENTICAL structure.
+    const plain = analyzeUiReadability(["Date", "Route", "Miles", "Sorted", "Owed"]);
+    const dense = analyzeUiReadability([
       "Infrastructure",
       "Optimization",
       "Administrative",
       "Documentation",
       "Organizational",
     ]);
-    expect(plain.wordsPerSentence).toBe(dense.wordsPerSentence);
     expect(withinReadingLevel(plain.gradeLevel, "high-school")).toBe(true);
     expect(withinReadingLevel(dense.gradeLevel, "high-school")).toBe(false);
   });
 
+  it("reads word difficulty on Flesch–Kincaid's own scale", () => {
+    // 11.8 * spw - 15.59. The BI's two anchors: 1.76 plain, 3.57 dense.
+    const at = (spw: number) => Math.round((11.8 * spw - 15.59) * 10) / 10;
+    expect(at(1.76)).toBe(5.2);
+    expect(at(3.57)).toBe(26.5);
+  });
+
+  it("counts every word once, whatever the utterance split", () => {
+    const split = analyzeUiReadability(["Date", "Route", "Miles"]);
+    const joined = analyzeUiReadability(["Date Route Miles"]);
+    expect(split.words).toBe(3);
+    expect(split.syllablesPerWord).toBe(joined.syllablesPerWord);
+    expect(split.utterances).toBe(3);
+    expect(joined.utterances).toBe(1);
+  });
+
   it("ignores utterances with no scoreable text", () => {
-    expect(analyzeUtteranceReadability(["  ", "—", "Date"]).sentences).toBe(1);
+    expect(analyzeUiReadability(["  ", "—", "Date"]).utterances).toBe(1);
   });
 });
