@@ -89,6 +89,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node(
         "--test",
         "scripts/installer/lib/state-cleanup-temps.test.mjs",
+        "scripts/installer/lib/state-lock-timeout.test.mjs",
         "scripts/installer/install-release-assets.test.mjs",
       ),
     ]),
@@ -156,6 +157,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // deliberate allowlist — otherwise CI stays green while the test never runs.
         "scripts/lib/ci-policy-test-inventory.test.mjs",
         "scripts/lib/git-shallow-preflight.test.mjs",
+        "scripts/lib/ensure-compile-ready.test.mjs",
         "scripts/pregate-preflight.test.mjs",
         "scripts/pregate-exit-honesty.test.mjs",
         "scripts/gate-context.test.mjs",

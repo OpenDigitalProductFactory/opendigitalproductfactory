@@ -74,6 +74,14 @@ describe("readInstallEnvironmentClass", () => {
 });
 
 describe("holdsIrreplaceableWork", () => {
+  const receipt = (capturedAt: string, unfinishedItemCount: number) => ({
+    schemaVersion: 1 as const,
+    capturedAt,
+    bundlePath: "/d/DPF-backups/backlog",
+    itemCount: unfinishedItemCount,
+    unfinishedItemCount,
+  });
+
   it("is false when there is no unfinished work", () => {
     expect(holdsIrreplaceableWork({ unfinishedItemCount: 0, receipt: null })).toBe(false);
   });
@@ -82,17 +90,12 @@ describe("holdsIrreplaceableWork", () => {
     expect(holdsIrreplaceableWork({ unfinishedItemCount: 3, receipt: null })).toBe(true);
   });
 
-  it("is false when a capture covers the current unfinished work", () => {
+  it("is false when every unfinished item predates the capture", () => {
     expect(
       holdsIrreplaceableWork({
         unfinishedItemCount: 3,
-        receipt: {
-          schemaVersion: 1,
-          capturedAt: "2026-08-22T10:00:00.000Z",
-          bundlePath: "/d/DPF-backups/backlog",
-          itemCount: 3,
-          unfinishedItemCount: 3,
-        },
+        receipt: receipt("2026-08-22T10:00:00.000Z", 3),
+        latestUnfinishedChangeAt: "2026-08-22T09:59:00.000Z",
       }),
     ).toBe(false);
   });
@@ -101,13 +104,62 @@ describe("holdsIrreplaceableWork", () => {
     expect(
       holdsIrreplaceableWork({
         unfinishedItemCount: 5,
-        receipt: {
-          schemaVersion: 1,
-          capturedAt: "2026-08-22T10:00:00.000Z",
-          bundlePath: "/d/DPF-backups/backlog",
-          itemCount: 3,
-          unfinishedItemCount: 3,
-        },
+        receipt: receipt("2026-08-22T10:00:00.000Z", 3),
+        latestUnfinishedChangeAt: "2026-08-22T11:00:00.000Z",
+      }),
+    ).toBe(true);
+  });
+
+  it("is true when an item was edited after the capture even though none were added", () => {
+    expect(
+      holdsIrreplaceableWork({
+        unfinishedItemCount: 3,
+        receipt: receipt("2026-08-22T10:00:00.000Z", 3),
+        latestUnfinishedChangeAt: "2026-08-22T10:00:00.001Z",
+      }),
+    ).toBe(true);
+  });
+
+  // BI-9CE1A6C8. The count-based predecessor returned false here, reporting
+  // "no uncaptured work" over 75 unbundled items, because the backlog had
+  // SHRUNK since the capture (111 -> 98) while its composition changed.
+  it("is true when the backlog shrank but newer work is uncaptured", () => {
+    expect(
+      holdsIrreplaceableWork({
+        unfinishedItemCount: 98,
+        receipt: receipt("2026-08-24T06:13:10.775Z", 111),
+        latestUnfinishedChangeAt: "2026-08-25T23:44:00.000Z",
+      }),
+    ).toBe(true);
+  });
+
+  // The degenerate case: close one, file one. The count never moves, so a
+  // count comparison can never detect it.
+  it("is true when the count is unchanged but an item is newer than the capture", () => {
+    expect(
+      holdsIrreplaceableWork({
+        unfinishedItemCount: 40,
+        receipt: receipt("2026-08-22T10:00:00.000Z", 40),
+        latestUnfinishedChangeAt: "2026-08-23T08:00:00.000Z",
+      }),
+    ).toBe(true);
+  });
+
+  it("fails closed when the recency instant is missing", () => {
+    expect(
+      holdsIrreplaceableWork({
+        unfinishedItemCount: 3,
+        receipt: receipt("2026-08-22T10:00:00.000Z", 3),
+      }),
+    ).toBe(true);
+  });
+
+  it("fails closed when the receipt instant is unparseable", () => {
+    expect(
+      holdsIrreplaceableWork({
+        unfinishedItemCount: 3,
+        receipt: receipt("not-a-date", 3),
+        latestUnfinishedChangeAt: "2026-08-22T09:00:00.000Z",
       }),
     ).toBe(true);
   });
@@ -120,6 +172,8 @@ describe("loadInstanceStance", () => {
         readConfig: async (key) =>
           key === OPERATING_INTENT_CONFIG_KEY ? CONFIRMED_DEV_INTENT : null,
         countBacklogItemsByStatus: async () => 42,
+        // Every unfinished item predates the capture, so the bundle covers them.
+        latestBacklogChangeByStatus: async () => new Date("2026-08-22T09:30:00.000Z"),
       }),
       {
         readText: stateText("development"),
@@ -157,6 +211,8 @@ describe("loadInstanceStance", () => {
           return null;
         },
         countBacklogItemsByStatus: async () => 42,
+        // Every unfinished item predates the capture, so the bundle covers them.
+        latestBacklogChangeByStatus: async () => new Date("2026-08-22T09:30:00.000Z"),
       }),
       {
         readText: stateText("development"),
@@ -170,6 +226,43 @@ describe("loadInstanceStance", () => {
       },
     );
     expect(stance.teardown).toBe("permitted");
+  });
+
+  // BI-9CE1A6C8: the composed stance must require capture when the backlog has
+  // SHRUNK since the capture but newer work is uncaptured. The count-based
+  // predecessor returned "permitted" here.
+  it("requires capture when the backlog shrank but holds work newer than the capture", async () => {
+    const stance = await loadInstanceStance(
+      store({
+        readConfig: async (key) => {
+          if (key === OPERATING_INTENT_CONFIG_KEY) return CONFIRMED_DEV_INTENT;
+          if (key === BACKLOG_CAPTURE_CONFIG_KEY) {
+            return {
+              schemaVersion: 1,
+              capturedAt: "2026-08-24T06:13:10.775Z",
+              bundlePath: "/backups/backlog-captures/2026-08-24-pre-reinstall-final",
+              itemCount: 69,
+              unfinishedItemCount: 111,
+            };
+          }
+          return null;
+        },
+        countBacklogItemsByStatus: async () => 98,
+        latestBacklogChangeByStatus: async () => new Date("2026-08-25T23:44:00.000Z"),
+      }),
+      {
+        readText: stateText("development"),
+        readHostProfile: async () => ({
+          kind: "consumer" as const,
+          installMode: "consumer",
+          sourceCapable: false,
+          releaseImage: true,
+          reason: "consumer-release-install" as const,
+        }),
+      },
+    );
+    expect(stance.teardown).toBe("capture-required");
+    expect(stance.holdsIrreplaceableWork).toBe(true);
   });
 
   it("falls back to the cautious stance when the store cannot be read", async () => {

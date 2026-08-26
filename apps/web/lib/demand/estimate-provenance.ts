@@ -92,7 +92,11 @@ export function resolveEstimateProvenance(inputs: EstimateProvenanceInputs): Est
   const identical = bothPresent && ai === human;
   const agreed = inputs.agreed === true || identical;
 
-  // Human overrules AI; otherwise whichever single side estimated.
+  // Neither side wins by provenance (BI-A5697C5E). When both exist and disagree,
+  // `diverged` below marks the estimate provisional and reconciliation is required
+  // before it can be used — so this pick is never the silent tiebreaker it reads
+  // like. When only one side estimated, that estimate stands on its own grounding,
+  // whichever side produced it.
   const effectiveJobSize = human !== null ? human : ai;
 
   let source: EstimateSource | null;

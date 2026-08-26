@@ -1,0 +1,22 @@
+{
+  "version": "1",
+  "decidedOption": "inside-existing-section",
+  "decisionInteractionId": "DI-D553722A20B6",
+  "scope": {
+    "files": [
+      "apps/web/components/workspace/workroom/WorkroomPostureControl.tsx",
+      "apps/web/components/golden-triangle/WorkroomDefaultControl.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "decisionInteractionId": "DI-D553722A20B6",
+    "consideredOptions": ["inside-existing-section", "separate-settings-section", "admin-page-only"]
+  },
+  "rationale": {
+    "inside-existing-section": "CHOSEN. Kernel composite 8.846, margin 4.028, high confidence. The settable control sits inside the existing collapsed 'Pace and priority' section, under the read-only summary it explains — reading what the room does and changing it are the same task at the same moment. Lowest human_cognitive_load (0.15) and lowest operator_effort (0.15): the section is already collapsed by default, so the room's first viewport is unchanged and default-visible words do not grow.",
+    "separate-settings-section": "REJECTED. Kernel composite 4.818. A second section splits one task across two places and adds a heading to a page already carrying participants, work, context, decisions, cycles and receipts.",
+    "admin-page-only": "REJECTED. Kernel composite 4.534. Worst operator_effort (0.85) — configuring a room from elsewhere, addressed by room id, when you are looking at the room. Scores negative against 'Do the work; don't task the operator with what an agent can do'."
+  },
+  "notes": "EP-WORK-POSTURE. Closes the defect the founder identified: posture controls existed ONLY per AI coworker (CoworkerPriorityControl, CoworkerPriorityDock, CoworkerProactivitySetting), and the room displayed a pace and priority with no way to change it — WorkroomPosture.tsx had zero interactive elements and no server action existed. Two altitudes ship together: this room, and a decreed default for all rooms (WorkroomDefaultControl on /platform/ai/assignments). The default control is placed beside the existing coworker priority panel because that is where an operator already goes to set defaults, but is stated as a separate question — a room and a coworker are not the same thing. Rendering is asserted by WorkroomPostureControl.test.tsx including an assertion that the markup carries no hardcoded colour and uses --dpf-* tokens only. Prose-lint baseline retightened after trimming new UI copy from 195 to 156 words. Sweep-measurement was not available: it needs the served DOM on the Contributor preview, and the shared lease was contended throughout."
+}

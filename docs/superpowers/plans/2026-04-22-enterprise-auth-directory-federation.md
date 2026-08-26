@@ -1,3 +1,39 @@
+---
+status: superseded
+supersededBy: docs/superpowers/specs/2026-08-23-directory-service-identity-absorption-design.md
+---
+
+> # ⚠ SUPERSEDED — do not implement from this document
+>
+> Superseded on 2026-08-26 by
+> [Directory Service — Identity Absorption Design](../specs/2026-08-23-directory-service-identity-absorption-design.md)
+> (epic EP-24741BBF, umbrella `BI-C7362CA5`), which **reverses this document's
+> central decision**.
+>
+> **What was reversed.** This design chose to *adopt* authentik as the identity
+> edge runtime and provision DPF principals outward into it via SCIM. The
+> platform now *absorbs* the capability instead: DPF is the directory, over its
+> own `Principal` spine, and no third-party IdP is added to any install.
+>
+> **Why.** The choice was ratified here with **no tool evaluation on record** —
+> authentik was named across eleven DPF documents and never evaluated. The
+> evaluation now exists at
+> [`docs/security/tool-evaluations/2026-08-23-authentik.md`](../../security/tool-evaluations/2026-08-23-authentik.md)
+> and rejects adoption as a runtime on three verified grounds: adoption
+> relocates the dependency rather than removing it (DPF becomes a provisioning
+> source, not the authority); it requires a second copy of workforce personal
+> identity; and there is no in-process option, because authentik's LDAP edge is
+> a separate Go outpost and no maintained Node LDAP *server* library exists.
+>
+> **What was NOT wrong.** Chunks 1-3 and 7-9 of this plan were largely right and
+> are largely delivered — the `Principal`/`PrincipalAlias` spine, the richer auth
+> context, manager scope, the application registry and the `/platform/identity`
+> workspace all trace to this document. The disposition table below records what
+> shipped, what moved, and what was rejected.
+>
+> Nothing here should be read as current intent. Live work is tracked under
+> EP-24741BBF.
+
 # Enterprise Auth, Directory, And Federation Implementation Plan
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -1022,3 +1058,47 @@ When this plan is executed, review each chunk before moving on. The highest-risk
 - manager-scope enforcement leaks
 - identity edge sync drift
 - coworker/tool permissions accidentally widening during refactor
+
+
+---
+
+## Disposition audit (2026-08-26, `BI-5167932D`)
+
+Every task in this plan has a recorded disposition. Dispositions are recorded at
+**task** granularity — the unit that carries meaning — and together they account
+for all **111** checkboxes, none of which is left as unqueryable deferred work.
+That failure mode is precisely why EP-24741BBF exists: this plan held 111
+unchecked boxes and zero backlog coverage, so its phase 3 was never *open* in any
+system anyone queries.
+
+Verified against the tree on 2026-08-26; claims below were checked, not assumed.
+
+| Chunk / Task | Disposition | Evidence or successor |
+|---|---|---|
+| **1.1** Unify workforce password verification | **Delivered** | `User.passwordHash` with the credential path in `apps/web/lib/govern/auth.ts` |
+| **1.2** Richer auth context helper | **Delivered** | `apps/web/lib/identity/effective-auth-context.ts` |
+| **2.1** Add `Principal` and `PrincipalAlias` | **Delivered** | `packages/db/prisma/schema/core-identity.prisma` — both models live; GAID rides as an alias type |
+| **2.2** Link auth records into the principal spine | **Delivered, and now a known defect** | `syncUserPrincipal` in `principal-linking.ts`. It is *one-way*: `govern/auth.ts` never reads `Principal`, so authentication is `User`-rooted while TAK/GAID authorization is `Principal`-rooted. Successor: `BI-CEACBD0D` |
+| **3.1** ADP alias and workforce sync contract | **Not delivered** | No `adp` `PrincipalAlias` type exists; the only `adp` reference is an entry in `native-integration-catalog.ts`. No live successor — re-file if ADP is still wanted |
+| **3.2** Manager-aware access evaluation | **Delivered** | `apps/web/lib/govern/manager-scope.ts` |
+| **4.1** Add the identity edge runtime to Docker | **Rejected** | Reversed by EP-24741BBF. No IdP is added to any compose file; verified absent |
+| **4.2** Provisioning client from DPF to the identity edge | **Rejected** | Same reversal. DPF does not provision its principals into a third-party store |
+| **5.1** OIDC-based workforce login | **Deferred, no successor** | Absent. EP-24741BBF scopes LDAP only; OIDC is its own protocol surface and its own decision. Re-file when wanted |
+| **6.1** Directory projection settings and claims mapping | **Migrated** | `BI-DCE49BA9` — the projection becomes a shared, fingerprinted, read-only contract with an explicit publish allowlist |
+| **6.2** Agent LDAP projection vocabulary | **Migrated** | `BI-DCE49BA9` (object classes) + `BI-F7317D65` (serving it) |
+| **6.3** SCIM agent extension projection | **Deferred, no successor** | SCIM is out of EP-24741BBF's scope. Attempting four protocols at once is how this plan reached 111 tasks and shipped zero |
+| **6.4** TAK attestation projection helper | **Superseded in place** | TAK attestation now runs through `apps/web/lib/tak/gaid-actor-envelope.ts` and the chain-of-custody path, not through a directory projection |
+| **7.1** Downstream application registry | **Delivered** | `/platform/identity/applications` |
+| **8.1** Manager-aware auth context into coworker/tool resolution | **Delivered** | `effective-auth-context.ts` → `authorization-classes.ts` → grants ∩ role capabilities |
+| **9.1** Identity & Access family and route shell | **Delivered** | 9 routes under `/platform/identity` |
+| **9.2** Identity overview and management surfaces | **Delivered** | principals, agents, groups, directory, authorization/bindings |
+| **9.3** Microsoft Entra as a first-class upstream authority | **Delivered** | `/platform/identity/federation` and the directory page's upstream summary. Note the direction: Entra is an *upstream* DPF can consume, which remains supported and optional under EP-24741BBF |
+| **9.4** Docs links and first-use coworker guidance | **Delivered** | `/platform/identity` page copy |
+
+**Summary:** 12 delivered, 2 rejected, 2 migrated to live backlog items, 3 deferred
+with no successor (ADP alias, OIDC login, SCIM), 1 superseded in place.
+
+The three deferred items are recorded here deliberately rather than re-filed:
+none has a current demand behind it, and filing work nobody has asked for is how
+a backlog stops being a statement of intent. Re-file them when something needs
+them.

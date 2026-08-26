@@ -1,0 +1,282 @@
+{
+  "schemaVersion": 1,
+  "bundleId": "capture-ep-decision-tier-rebalance",
+  "description": "Backlog captured from this installation on 2026-08-26T03:02:44.748Z.",
+  "source": {
+    "capturedAt": "2026-08-26T03:57:53.481Z",
+    "repository": "OpenDigitalProductFactory/opendigitalproductfactory",
+    "planPath": "docs/superpowers/plans/2026-08-22-instance-identity-and-purpose.md"
+  },
+  "epic": {
+    "epicId": "EP-DECISION-TIER-REBALANCE",
+    "title": "Decision Tier Rebalance and Policy-Derived Trusted Autonomy",
+    "description": "Restore the repository-canonical decision-governance program to the live backlog and complete the remaining bridge from governed WWMD/WWWD/WSID judgment to scoped action authority. The program treats explicit yes as derived human approval only when standing policy, owning scope, evidence freshness, autonomy quality, work shape, and action/subject/organization/artifact bindings all agree; explicit no denies; the 'messy maybe' band routes bounded evidence-changing retry or human resolution. It also governs decision-vector adequacy, policy/weight lifecycle, regulator-grade traceability, and the TAK/JSI public account of the mechanism.",
+    "status": "in-progress",
+    "scopeKind": "platform",
+    "scopeRationale": "Universal platform governance and AI-agent decision authority across all organizations and work shapes; not customer-business logic.",
+    "priority": 1,
+    "createdAt": "2026-08-23T14:59:59.858Z"
+  },
+  "items": [
+    {
+      "itemId": "BI-0E2A9B89",
+      "epicId": "EP-DECISION-TIER-REBALANCE",
+      "title": "Governed policy and weight lifecycle for narrowing the messy-maybe band safely",
+      "body": "## Problem\r\nThe three-band verdict, stakes-sensitive edges, real-margin persistence, bounded retry, reversal-rate telemetry, and weight inference have shipped. The remaining systemic requirement is a controlled lifecycle that uses those signals to improve criteria and weights without merely shrinking the middle band until it stops firing.\r\n\r\n## Scope\r\nCompose the shipped three-band decision verdict, DecisionInteraction chain, evidence reverification, corpus drift, WeightAdjustmentProposal, work-shape posture, and policy versioning. No second scoring engine.\r\n\r\n## Acceptance\r\n- Review populations are defined by owning scope, decision class, risk/stakes, organization, profession, policy version, and work shape.\r\n- Calibration reports margin distribution, messy-maybe rate, reversal/error rate in both outer bands, evidence/corpus gaps, conflicts, overrides, outcome quality, and drift.\r\n- A narrower middle band may be promoted only when outer-band reliability remains within an approved error budget; optimizing escalation count alone is prohibited.\r\n- Weight or criterion changes travel through proposal -> review -> ratification -> effective window -> supersession/revocation, with before/after versions and replayable evaluations.\r\n- Protected or regulated domains can set stricter review cadence, immutable floors, and dual-control triggers.\r\n- Historical decisions are evaluated under the policy version actually used, not silently rescored as if the new policy had always applied.\r\n\r\n## Dependencies\r\nBlocked by: Universal policy-authority bridge.\r\nExtends shipped three-band work (BI-2107B5D2 / PRs #4427, #4430, #4447) and weight inference (BI-D88DFEEA).",
+      "status": "deferred",
+      "type": "product",
+      "workType": "feature",
+      "source": "user-request",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-0e2a9b89-cmt7z96ch0f8i01mggold2oov",
+          "kind": "status_change",
+          "summary": "Retired BI-0E2A9B89 as defer",
+          "recordedAt": "2026-08-25T01:19:35.777Z",
+          "payload": {
+            "to": "deferred",
+            "from": "open",
+            "reason": "Safe calibration of the messy-maybe band depends on stable policy-authority semantics, complete outcome/reversal evidence, scoped populations, versioning, and anti-gaming limits.",
+            "outcome": "defer",
+            "deferral": {
+              "reason": "Safe calibration of the messy-maybe band depends on stable policy-authority semantics, complete outcome/reversal evidence, scoped populations, versioning, and anti-gaming limits.",
+              "trigger": "Resume after the policy-authority bridge is live and a minimum governed decision sample exists for each owning scope; then approve calibration bounds, review cadence, and rollback gates.",
+              "reviewAt": "2026-09-15T20:00:00.000Z"
+            },
+            "rationale": "Valid trusted-autonomy roadmap demand, but it changes policy, authority, evidence, fairness, and operator UX contracts. It requires a sequenced governed program, not a pre-reinstall backlog-drain patch.",
+            "duplicateOfId": null
+          }
+        }
+      ],
+      "effortSize": "large",
+      "triageOutcome": "defer",
+      "scopeRationale": "Universal DPF decision-governance substrate; organization and profession policies remain scoped to their owning domains.",
+      "priority": 2,
+      "createdAt": "2026-08-23T15:01:13.781Z"
+    },
+    {
+      "itemId": "BI-514826D3",
+      "epicId": "EP-DECISION-TIER-REBALANCE",
+      "title": "Universal policy-authority bridge from WWMD/WWWD/WSID verdicts to scoped action warrants",
+      "body": "## Problem\r\nDPF can record high-quality DecisionInteraction judgments but cannot yet project a qualifying owning-scope verdict into action-specific authority. The current initiative-readiness defect is the first concrete failure: an explicit, autonomy-eligible policy yes is auditable but cannot lawfully authorize the bounded action without a new human approval loop.\r\n\r\n## Scope\r\nExtend the existing DecisionInteraction, WorkCasePolicyEnvelope, ReceiptEnvelope, AuthorizationDecisionLog, Principal/Organization, and coworker authority-gate substrate. Do not treat DecisionInteraction as RBAC and do not create a parallel approval table.\r\n\r\n## Acceptance\r\n- Explicit yes/proceed authorizes only when the owning WWMD/WWWD/WSID scope is correct, signalQuality.autonomyEligible is true, evidence is fresh, no commandment/conflict veto exists, and the standing-policy version, human root, organization, principal/delegation chain, work shape, action, subject, artifact, constraints, expiry, and revocation conditions all match.\r\n- Explicit no/decline denies. Uncertain/defer/escalate/tie/stale/missing/corpus-gap enters the \"messy maybe\" path: bounded input-changing retry or human resolution.\r\n- The action-specific writer atomically persists the authority projection and the resulting action receipt; it cannot be fabricated through caller-supplied organization or DecisionInteraction ids.\r\n- A second human is required only when standing policy, regulation, risk floor, irreversible/outbound consequence, or commandment conflict explicitly requires dual control.\r\n- Every allow is single-use or explicitly reusable by policy, expiring, revocable, and replay-safe.\r\n- Conformance covers all three owning judgment scopes and direct-DI-as-RBAC prohibition.\r\n\r\n## Dependencies\r\nBlocked by: BI-F0715C9C (initiative-readiness bridge first slice).\r\nDecisions: DI-053D69EADEDC, DI-568FF23AF27B, DI-6A25809B4683.",
+      "status": "deferred",
+      "type": "product",
+      "workType": "feature",
+      "source": "user-request",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-514826d3-cmt7z968j0f8f01mgy34mlcap",
+          "kind": "status_change",
+          "summary": "Retired BI-514826D3 as defer",
+          "recordedAt": "2026-08-25T01:19:35.635Z",
+          "payload": {
+            "to": "deferred",
+            "from": "open",
+            "reason": "The universal policy-authority bridge changes the boundary between recorded judgment and executable authority across DecisionInteraction, policy envelopes, receipts, authorization logs, principals, and coworker gates.",
+            "outcome": "defer",
+            "deferral": {
+              "reason": "The universal policy-authority bridge changes the boundary between recorded judgment and executable authority across DecisionInteraction, policy envelopes, receipts, authorization logs, principals, and coworker gates.",
+              "trigger": "Resume after reinstall when an architecture/security review approves the exact action-envelope contract and a funded epic owns migration, denial, expiry, revocation, audit, and cross-scope conformance.",
+              "reviewAt": "2026-09-15T20:00:00.000Z"
+            },
+            "rationale": "Valid trusted-autonomy roadmap demand, but it changes policy, authority, evidence, fairness, and operator UX contracts. It requires a sequenced governed program, not a pre-reinstall backlog-drain patch.",
+            "duplicateOfId": null
+          }
+        }
+      ],
+      "effortSize": "large",
+      "triageOutcome": "defer",
+      "scopeRationale": "Universal DPF decision-governance substrate; organization and profession policies remain scoped to their owning domains.",
+      "priority": 1,
+      "createdAt": "2026-08-23T15:01:13.918Z"
+    },
+    {
+      "itemId": "BI-58B7DB63",
+      "epicId": "EP-DECISION-TIER-REBALANCE",
+      "title": "Publish the TAK/JSI article: From the messy maybe to policy-derived trusted autonomy",
+      "body": "## Outcome\r\nPublish a reader-facing article and update the normative TAK/TAK-JSI references to explain DPF's policy-derived trusted-autonomy mechanism using this initiative-readiness episode as a transparent design case study.\r\n\r\n## Required argument\r\n- Human approval is invested first in standing policy, criteria, weights, authority scope, work shape, risk ceilings, and review cadence.\r\n- WWMD, WWWD, and WSID are sibling owning judgment scopes.\r\n- Explicit proceed/yes can become derived human approval only through the policy-authority bridge and exact action envelope.\r\n- Explicit decline/no denies.\r\n- The “messy maybe” is the narrow band for genuine trade-off, conflict, missing evidence, instability, or novelty; it triggers bounded evidence-changing retry or a human decision.\r\n- The learning objective is to move well-understood cases toward reliable outer bands while measuring reversals and harms, not to manufacture certainty by narrowing thresholds.\r\n- Workrooms give this mechanism its work shape, participants, action envelope, stop conditions, and receipts.\r\n- JSI supplies job-specific criteria and qualification; TAK mediates runtime authority; GAID/Principal chains identify actors; DecisionInteraction preserves judgment; AuthorizationDecisionLog/receipts prove permitted action.\r\n- DPF currently uses normalized weighted-sum MCDA over decision vectors. AHP eigenvectors are a proposed cold-start weight-elicitation technique, not the current runtime math.\r\n- In hiring, proving race was not directly used is valuable but insufficient: proxy screening, outcome bias audits, lawful protected-class monitoring, and appeal are also required.\r\n\r\n## Deliverables\r\n- A public article under the existing architecture/standards publication structure.\r\n- Targeted amendments to docs/architecture/trusted-ai-kernel.md, job-specific-intelligence.md, vector-decisioning-and-jsi.md, autonomy-and-wwmd.md, work-shapes-and-the-decision-gate.md, TAK/JSI conformance tests, and the standards white paper, using pointers rather than duplicate normative text.\r\n- A diagram: standing policy -> owning judgment -> three bands -> scoped warrant -> action receipt -> outcome/recalibration.\r\n- External standards citations and an explicit “implemented vs proposed” register.\r\n\r\n## Dependencies\r\nBlocked by: bootstrap bridge design stabilization; implementation claims must wait for shipped evidence.\r\nDecisions: DI-053D69EADEDC, DI-568FF23AF27B, DI-6A25809B4683.",
+      "status": "deferred",
+      "type": "product",
+      "workType": "doc",
+      "source": "user-request",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-58b7db63-cmt7z96gv0f8l01mg46y0n7zj",
+          "kind": "status_change",
+          "summary": "Retired BI-58B7DB63 as defer",
+          "recordedAt": "2026-08-25T01:19:35.935Z",
+          "payload": {
+            "to": "deferred",
+            "from": "open",
+            "reason": "The TAK/JSI article is a public explanation of a system whose policy-authority bridge and learning lifecycle are not yet delivered; publishing normative claims now would get ahead of the contract.",
+            "outcome": "defer",
+            "deferral": {
+              "reason": "The TAK/JSI article is a public explanation of a system whose policy-authority bridge and learning lifecycle are not yet delivered; publishing normative claims now would get ahead of the contract.",
+              "trigger": "Resume when BI-514826D3 and BI-0E2A9B89 are shipped with audit evidence; then publish the case study and update normative references from proven behavior.",
+              "reviewAt": "2026-09-15T20:00:00.000Z"
+            },
+            "rationale": "Valid trusted-autonomy roadmap demand, but it changes policy, authority, evidence, fairness, and operator UX contracts. It requires a sequenced governed program, not a pre-reinstall backlog-drain patch.",
+            "duplicateOfId": null
+          }
+        }
+      ],
+      "effortSize": "medium",
+      "triageOutcome": "defer",
+      "scopeRationale": "Universal DPF decision-governance substrate; organization and profession policies remain scoped to their owning domains.",
+      "priority": 2,
+      "createdAt": "2026-08-23T15:01:14.309Z"
+    },
+    {
+      "itemId": "BI-5D887D7F",
+      "epicId": "EP-DECISION-TIER-REBALANCE",
+      "title": "Regulator-grade decision evidence and fairness assertions across consequential domains",
+      "body": "## Problem\r\nA regulator needs reproducible evidence of what criteria, inputs, policies, authorities, and models affected an autonomous action. Showing that race was not a direct scoring axis proves non-use of race itself; it does not by itself prove absence of proxy discrimination or disparate impact.\r\n\r\n## Scope\r\nGeneralize the shipped Trust Envelope, DecisionInteraction hash chain, EvidenceReVerification, candidate-evaluation protected-axis/proxy screening, and DecisionBiasAuditMetric into a cross-domain conformance/export profile.\r\n\r\n## Acceptance\r\n- A decision evidence package records all candidate options, scored and excluded axes, raw-to-derived feature provenance, missingness, transformations, policy/principle/corpus versions, weights, evidence grades and locators, model/provider/version, prompts/instructions by digest, identities/authority chain, work shape, band edges, margin/cause, action warrant, receipt, and observed outcome.\r\n- It distinguishes: not collected, collected but prohibited, available but unused, used directly, derived, and excluded after screening.\r\n- Protected-characteristic non-use is a precise assertion, never overclaimed as proof of no bias.\r\n- Regulated profiles add proxy screening, subgroup outcome/selection-rate analysis where lawful, adverse-impact thresholds, counterfactual or matched testing where appropriate, accessibility review, and documented human appeal/remediation.\r\n- Exports are tamper-evident, reproducible, retention-aware, privacy-minimized, jurisdiction-tagged, and independently verifiable.\r\n- Missing provenance, stale evidence, unexplained proxy risk, or failed impact thresholds prevents an outer-band autonomous assurance.\r\n\r\n## Dependencies\r\nBlocked by: Universal policy-authority bridge; composes existing Trust Envelope implementation (PR #4059).",
+      "status": "deferred",
+      "type": "product",
+      "workType": "feature",
+      "source": "user-request",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-5d887d7f-cmt7z96l10f8p01mgkvipwq3v",
+          "kind": "status_change",
+          "summary": "Retired BI-5D887D7F as defer",
+          "recordedAt": "2026-08-25T01:19:36.085Z",
+          "payload": {
+            "to": "deferred",
+            "from": "open",
+            "reason": "Regulator-grade evidence and fairness conformance spans provenance, protected/proxy screening, outcome cohorts, reproducibility, export, retention, access, and domain policy.",
+            "outcome": "defer",
+            "deferral": {
+              "reason": "Regulator-grade evidence and fairness conformance spans provenance, protected/proxy screening, outcome cohorts, reproducibility, export, retention, access, and domain policy.",
+              "trigger": "Resume after the policy-authority bridge and job-specific criterion inventory are stable, then fund an architecture/security/legal-reviewed conformance profile with representative domain validation.",
+              "reviewAt": "2026-09-15T20:00:00.000Z"
+            },
+            "rationale": "Valid trusted-autonomy roadmap demand, but it changes policy, authority, evidence, fairness, and operator UX contracts. It requires a sequenced governed program, not a pre-reinstall backlog-drain patch.",
+            "duplicateOfId": null
+          }
+        }
+      ],
+      "effortSize": "large",
+      "triageOutcome": "defer",
+      "scopeRationale": "Universal DPF decision-governance substrate; organization and profession policies remain scoped to their owning domains.",
+      "priority": 2,
+      "createdAt": "2026-08-23T15:01:14.176Z"
+    },
+    {
+      "itemId": "BI-8D79BB51",
+      "epicId": "EP-DECISION-TIER-REBALANCE",
+      "title": "AHP pairwise elicitation as a cold-start input to the governed weight proposal ladder",
+      "body": "## Problem\r\nNew organizations and job profiles lack enough historical rulings for revealed-preference inference. Asking a non-technical operator to author raw numeric weights is fragile.\r\n\r\n## Scope\r\nAdd Saaty-style pairwise comparison only as a cold-start elicitation method feeding the existing WeightAdjustmentProposal lifecycle. It is not a new scorer, authority model, or permission grant; DPF's runtime option scoring remains normalized weighted-sum MCDA.\r\n\r\n## Acceptance\r\n- The operator compares a bounded, job-relevant criterion set with a documented intensity scale.\r\n- The system derives a candidate weight vector and reports consistency ratio, inconsistent comparisons, sensitivity, and the evidence/author identity.\r\n- Inconsistent or underdetermined results remain messy-maybe and cannot become action authority.\r\n- The result enters the existing proposal/review/ratification lifecycle at an explicitly unconfirmed confidence tier.\r\n- No new spine axis can be created by elicitation; profession-local axes must already be governed and project to the spine.\r\n- Public docs use “eigenvector” only for this genuine AHP derivation, not as a synonym for DPF decision dimensions.\r\n\r\n## Dependencies\r\nBlocked by: Decision-vector adequacy and job-specific criterion inventory.\r\nSource: docs/architecture/vector-decisioning-and-jsi.md §4 and docs/superpowers/specs/2026-07-25-external-vector-decisioning-writeup-validation.md.",
+      "status": "deferred",
+      "type": "product",
+      "workType": "feature",
+      "source": "user-request",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-8d79bb51-cmt7z96oy0f8t01mgmw5h84iw",
+          "kind": "status_change",
+          "summary": "Retired BI-8D79BB51 as defer",
+          "recordedAt": "2026-08-25T01:19:36.226Z",
+          "payload": {
+            "to": "deferred",
+            "from": "open",
+            "reason": "AHP cold-start elicitation is safe only after the canonical criterion inventory and weight-proposal authority lifecycle are stable; otherwise it would formalize an incomplete axis set.",
+            "outcome": "defer",
+            "deferral": {
+              "reason": "AHP cold-start elicitation is safe only after the canonical criterion inventory and weight-proposal authority lifecycle are stable; otherwise it would formalize an incomplete axis set.",
+              "trigger": "Resume after BI-C6801B5A is implemented and the existing weight-proposal lifecycle has production evidence; then fund bounded elicitation UX, consistency/sensitivity analysis, and authority tests.",
+              "reviewAt": "2026-09-15T20:00:00.000Z"
+            },
+            "rationale": "Valid trusted-autonomy roadmap demand, but it changes policy, authority, evidence, fairness, and operator UX contracts. It requires a sequenced governed program, not a pre-reinstall backlog-drain patch.",
+            "duplicateOfId": null
+          }
+        }
+      ],
+      "effortSize": "medium",
+      "triageOutcome": "defer",
+      "scopeRationale": "Universal DPF decision-governance substrate; organization and profession policies remain scoped to their owning domains.",
+      "priority": 3,
+      "createdAt": "2026-08-23T15:01:14.045Z"
+    },
+    {
+      "itemId": "BI-A5697C5E",
+      "epicId": "EP-DECISION-TIER-REBALANCE",
+      "title": "Demand scoring judges the effort estimate by provenance, not evidence",
+      "body": "## Problem\n\nTwo rules in demand scoring decide an effort estimate's standing by who produced it rather than what grounds it. Both contradict AGENTS.md section 12: \"Governance approves evidence, not provenance — the keystone. A gate reads its required evidence fields; it never asks which surface produced them.\" They also sit against the commandment \"Do the work; don't task the operator with what an agent can do.\"\n\n**1. An AI estimate is provisional by provenance.** `apps/web/lib/demand/activation.ts:105`\n\n```\nconst provisional =\n  input.estimateDiverged ||\n  input.estimateSource === \"ai\" ||\n  (input.estimateSource !== null && input.estimateAgreed === false);\n```\n\nThe second clause needs no disagreement and no divergence. An estimate is unusable because an AI made it. `provisional` blocks `scoreReady`, which blocks `fundingReady`, which blocks the funnel to `ready` — so every AI-estimated item stalls until a human clicks confirm.\n\n**2. A human number unconditionally overrules an AI one.** `apps/web/lib/demand/estimate-provenance.ts:94`\n\n```\n// Human overrules AI; otherwise whichever single side estimated.\nconst effectiveJobSize = human !== null ? human : ai;\n```\n\nNot on better grounding. Not on cited evidence. On being human.\n\n## Why this is wrong on the merits\n\n`jobSize` here is a technical complexity measurement. The AI estimator reads the actual schema, migration surface and test surface. A reviewer who has not read them holds strictly less information, so the confirmation cannot be a judgement — it can only be a rubber stamp. Ceremony that presents itself as governance is worse than no gate: it manufactures assurance nobody actually supplied.\n\nThe genuinely human judgement in this funnel is appetite and priority — what the business chooses to spend on. That is already a separate, correctly-human blocker (`validBucket`, the investment bucket). The defect is conflating a measurement with a decision and asking the wrong party to confirm the measurement.\n\n## Expected vs actual\n\nExpected: an estimate stands on its recorded grounding; disagreement between two estimates is the exception that needs reconciliation.\nActual: an AI-sourced estimate is permanently provisional, and any human number silently wins.\n\n## Suggested fix\n\n- Drop the `estimateSource === \"ai\"` clause from `provisional`. Keep `estimateDiverged` — a competing number is a real signal.\n- Replace \"human overrules AI\" with symmetric divergence handling: neither side wins by provenance; a divergence is reconciled on stated grounds.\n- Keep the investment-bucket blocker exactly as it is. That decision is the human's and should stay.\n- Add a test asserting that an estimate with identical grounding scores identically regardless of `estimateSource`, so this cannot regress.\n\n## Scale\n\nAffects every backlog item on every installation that is estimated by an agent, which under an AI-native operating model is the default path rather than an edge case. Observed on all seven items of EP-862820FD, each reporting \"Confirm or overrule the proposed AI effort estimate\" with `estimateAgreed: false` despite complete score inputs.\n\n## Founder position\n\nRaised 2026-08-26: humans are not qualified to override an AI effort estimate, so the ask is irrational. Verified against the code above; the position is correct and is already platform doctrine in section 12.",
+      "status": "triaging",
+      "type": "product",
+      "workType": "bug",
+      "source": "user-request",
+      "scopeKind": "unknown",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-a5697c5e-cmt9kbcic05wx01qv0njj17r2",
+          "kind": "epic_link",
+          "summary": "(no epic) → EP-DECISION-TIER-REBALANCE",
+          "recordedAt": "2026-08-26T03:56:55.188Z",
+          "payload": {
+            "toEpicId": "EP-DECISION-TIER-REBALANCE",
+            "fromEpicId": null
+          }
+        }
+      ],
+      "createdAt": "2026-08-26T03:50:09.902Z"
+    },
+    {
+      "itemId": "BI-C6801B5A",
+      "epicId": "EP-DECISION-TIER-REBALANCE",
+      "title": "Decision-vector adequacy and job-specific criterion inventory for JSI",
+      "body": "## Problem\r\nTrusted autonomy depends on capturing enough materially distinct decision dimensions to discriminate alternatives. The platform has a closed shared spine and profession-local projection substrate, but the job-specific inventories remain incomplete and coverage can be concentrated on too few axes.\r\n\r\n## Scope\r\nImplement the repository-canonical design in docs/superpowers/specs/2026-07-25-job-specific-decision-vector-inventory-design.md. Reuse PRINCIPLE_DIMENSIONS, dimension scope/projection, profession corpora, evidence grades, and revealed-preference proposals.\r\n\r\n## Acceptance\r\n- Each decision class declares a versioned criterion inventory: required axes, optional axes, cost/benefit sign, source/owner, evidence expectations, applicable scope, proxy/protected-feature restrictions, and projection to the shared spine.\r\n- Adequacy checks detect missing required criteria, weak discrimination, rank deficiency, over-concentration, contradictory criteria, and options not assessed on comparable evidence.\r\n- Missing or contradictory material yields messy-maybe rather than confident zero.\r\n- Profession-local JSI axes remain namespaced and project to the shared spine; organizations reweight governed axes rather than inventing fleet-fragmenting private dimensions.\r\n- Corpus mining, external professional standards, prior decisions, and outcome evidence are distinguished and cited.\r\n- At least three deep professions are inventoried and measured before fleet expansion.\r\n\r\n## Dependencies\r\nMay proceed after the bridge contract is stable; feeds policy calibration and article evidence.",
+      "status": "deferred",
+      "type": "product",
+      "workType": "feature",
+      "source": "user-request",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-c6801b5a-cmt7z96ss0f8w01mg3ai26op2",
+          "kind": "status_change",
+          "summary": "Retired BI-C6801B5A as defer",
+          "recordedAt": "2026-08-25T01:19:36.364Z",
+          "payload": {
+            "to": "deferred",
+            "from": "open",
+            "reason": "Job-specific decision-vector adequacy is a cross-profession governance program over the shared dimension spine, evidence grades, protected/proxy restrictions, and coverage telemetry.",
+            "outcome": "defer",
+            "deferral": {
+              "reason": "Job-specific decision-vector adequacy is a cross-profession governance program over the shared dimension spine, evidence grades, protected/proxy restrictions, and coverage telemetry.",
+              "trigger": "Resume after reinstall when the canonical decision-vector design receives profession and governance review and a funded epic selects the first decision classes and rollout gates.",
+              "reviewAt": "2026-09-15T20:00:00.000Z"
+            },
+            "rationale": "Valid trusted-autonomy roadmap demand, but it changes policy, authority, evidence, fairness, and operator UX contracts. It requires a sequenced governed program, not a pre-reinstall backlog-drain patch.",
+            "duplicateOfId": null
+          }
+        }
+      ],
+      "effortSize": "large",
+      "triageOutcome": "defer",
+      "scopeRationale": "Universal DPF decision-governance substrate; organization and profession policies remain scoped to their owning domains.",
+      "priority": 2,
+      "createdAt": "2026-08-23T15:01:13.578Z"
+    }
+  ]
+}

@@ -3,7 +3,7 @@ title: Admin Graph Explorer — visual exploration of the unified graph mirror
 date: 2026-07-30
 backlog: BI-89A149A9
 epic: EP-CODE-GRAPH
-status: implemented
+status: active
 ---
 
 # Admin Graph Explorer
@@ -425,6 +425,64 @@ stays 39,380, with the 504 markers excluded.
 `Wiki__*` nodes remain at **zero** cross-domain edges, and no route reaches a
 `PrismaModel` — `schema.prisma` still has no inbound edges. The route→file→**model** hop
 and the wiki→code hop are both unbuilt, and both need derivation rather than backfill.
+
+## Projections need an invoker (BI-FEDFABF6, 2026-08-26)
+
+The mirror is written by several projections. The code graph and the EA/discovery sync
+have their own indexers, so they stay current. The knowledge corpus, the portfolio
+spine and the doc-impact bridge are projected by rebuild scripts whose **only reference
+in the repository was their own `package.json` definition** — nothing ever called them.
+
+### Measured on a freshly provisioned install
+
+| Domain | Nodes | Has an indexer? |
+| --- | --- | --- |
+| code (`CodeSymbol`/`CodeFile`/…) | 38,592 | yes |
+| EA / ArchiMate | 607 | yes |
+| knowledge (`Wiki__*`) | **0** | **no** |
+| portfolio / `DigitalProduct` / `TaxonomyNode` | **0** | **no** |
+| `DocPage` + `IMPACTS` | **0 / 0** | **no** |
+
+Every domain with a caller is populated; every domain without one is empty. This is the
+same defect BI-3045CC18 and BI-0E019B95 each reported separately, reproduced from
+scratch — which is what established it as a class rather than two incidents.
+
+Nothing fails and nothing logs. The explorer renders a confident wrong answer.
+
+### Boot is the trigger
+
+`instrumentation.register()` runs after migrations, after every self-upgrade, and on
+first start of a new install — exactly when the source data moves relative to the
+mirror. A schedule would also work but adds a cadence to tune and misses the
+fresh-install case entirely.
+
+`apps/web/lib/graph/refresh-projections.ts` holds the refresh. Three properties make a
+boot caller safe, each pinned by a test verified to fail against a straight-line
+implementation:
+
+- **Isolated** — one projection failing does not stop the others; a partially-current
+  mirror beats one that stopped at the first error.
+- **Never throws** — a stale mirror is bad, an unbootable portal is worse.
+- **Owned-scope only** — doc-impact clears only `DocPage`, the single label it owns.
+
+It is skipped under measurement runtime, like the self-heal block beside it, because a
+sweep portal measures a frozen baseline and background writers racing the crawl are a
+known source of same-tree pass/fail nondeterminism.
+
+### Importing a rebuild script must not run it
+
+`rebuild-knowledge-and-portfolio-graph.ts` executed `main()` at module scope and then
+disconnected the shared Prisma client. Importing it from the portal would have run a
+full rebuild as a side effect of an import and closed the connection under its caller.
+It now exports `rebuildKnowledgeAndPortfolioGraph` and guards the CLI entry behind an
+`argv` check.
+
+### Still open
+
+Nothing reports projection freshness, so an empty or destroyed domain remains
+indistinguishable from a true answer (BI-A73954F7). That is the observability step and
+belongs after this one; a drift guard belongs after both — shipped earlier it would sit
+permanently red and be disabled.
 
 ## Follow-ups
 

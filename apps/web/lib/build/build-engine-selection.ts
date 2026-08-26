@@ -1,4 +1,5 @@
 import { capacityRoutingExclusionReason } from "@/lib/routing/capacity-routing-exclude";
+import { dominantExclusion, explainExclusion } from "@/lib/inference/routing-exclusion-buckets";
 
 export const BUILD_ENGINE_IDS = ["claude", "codex", "grok", "opencode", "agentic"] as const;
 export type BuildEngineId = (typeof BUILD_ENGINE_IDS)[number];
@@ -213,6 +214,36 @@ export function qualifyBuildEngineCandidates(args: {
   return { eligible, rejected };
 }
 
+/**
+ * BI-16A1B4A3 — say why no engine was allowed.
+ *
+ * "Connect, provision, or wait for one allowed Build Studio engine" describes
+ * missing or unhealthy infrastructure. On a live install every engine was
+ * installed and credentialed, and the real cause was a quality floor no
+ * endpoint could clear — so the advice pointed at three actions, none of which
+ * could ever change the outcome.
+ *
+ * routing-exclusion-buckets already turns per-endpoint reasons into one
+ * actionable cause for the coworker surfaces; Build Studio simply was not using
+ * it. Reuse it here rather than growing a second explanation vocabulary. Falls
+ * back to the original string when there are no reasons to bucket (nothing was
+ * excluded, so nothing can be named).
+ */
+function blockedAction(rejected: readonly BuildEngineRejection[]): string {
+  const GENERIC = "Connect, provision, or wait for one allowed Build Studio engine, then retry.";
+  // Only ROUTE-CONTRACT rejections carry a router reason worth translating. An
+  // engine that is absent, unauthenticated or in a capacity retry window really
+  // is "connect, provision, or wait" — keep that advice where it is true.
+  const routeReasons = rejected
+    .filter((entry) => entry.code === "route-contract")
+    .map((entry) => entry.reason);
+  if (routeReasons.length === 0) return GENERIC;
+  const bucketed = dominantExclusion(routeReasons);
+  if (!bucketed) return GENERIC;
+  const explanation = explainExclusion(bucketed);
+  return `${explanation.message} ${explanation.remediation}`;
+}
+
 export function selectBuildEngineFromCandidates(args: {
   policy: BuildEnginePolicy;
   candidates: BuildEngineCandidate[];
@@ -262,7 +293,7 @@ export function selectBuildEngineFromCandidates(args: {
       fallbackDisabled: pinned,
       action: pinned
         ? `Restore ${pinnedLabel} readiness or change Advanced execution policy; automatic fallback was disabled by the hard pin.`
-        : "Connect, provision, or wait for one allowed Build Studio engine, then retry.",
+        : blockedAction(rejected),
     };
   }
 

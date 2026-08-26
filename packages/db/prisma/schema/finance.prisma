@@ -97,7 +97,7 @@ model TaxJurisdictionReference {
   lastResearchedAt        DateTime?
   lastVerifiedAt          DateTime?
   confidence              String    @default("medium")
-  staleAfterDays          Int       @default(180)
+  staleAfterDays          Int       @default(90)
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
 
@@ -136,10 +136,66 @@ model TaxRegistration {
   decisionSnapshots      TaxDecisionSnapshot[]
   liabilityEntries       TaxLiabilityEntry[]
   authorityCredentials   TaxAuthorityCredential[]
+  depositSchedules       TaxDepositSchedule[]
 
   @@index([organizationTaxProfileId])
   @@index([jurisdictionReferenceId])
   @@index([registrationStatus])
+}
+
+/// How often a determined deposit obligation falls due.
+enum TaxDepositCadence {
+  semiweekly
+  monthly
+  quarterly
+  annual
+}
+
+/// The deposit cadence in force for one registration over one span of time.
+///
+/// A payroll deposit is not simply "the period total". The cadence itself is
+/// DETERMINED by a lookback at prior liability against a published threshold,
+/// and depositing on the wrong cadence is what produces late-deposit penalties
+/// even when every amount is right.
+///
+/// Effective-dated rather than a single mutable field, because a determination
+/// made for one lookback year must stay readable after the next year's
+/// determination replaces it — that is the evidence for why a past deposit was
+/// timed the way it was.
+///
+/// The threshold and lookback are RECORDED here rather than printed into source
+/// for the same reason the rates are: the authority sets them, they change, and
+/// an uncited figure must never drive a filing (BI-4EB27955).
+model TaxDepositSchedule {
+  id                 String            @id @default(cuid())
+  taxDepositScheduleId String          @unique
+  registrationId     String
+  cadence            TaxDepositCadence
+  effectiveFrom      DateTime
+  effectiveTo        DateTime?
+  /// Total liability observed in the lookback window that produced `cadence`.
+  lookbackTotal      Decimal?
+  /// The published threshold this determination was made against.
+  lookbackThreshold  Decimal?
+  lookbackStart      DateTime?
+  lookbackEnd        DateTime?
+  /// Where the threshold came from. Without it the determination is unciteable.
+  sourceUrl          String?
+  determinedAt       DateTime          @default(now())
+  notes              String?
+  lifecycle          RecordLifecycle   @default(active)
+  lifecycleAt        DateTime?
+  lifecycleReason    String?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  registration TaxRegistration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+
+  /// One determination per registration per start date.
+  @@unique([registrationId, effectiveFrom])
+  // FK-leading (registrationId): resolve the cadence in force on a pay date.
+  @@index([registrationId, effectiveFrom, effectiveTo])
+  @@index([registrationId, lifecycle])
 }
 
 model TaxDecisionSnapshot {
@@ -201,6 +257,50 @@ model TaxLiabilityEntry {
   @@index([decisionSnapshotId])
 }
 
+/// What a period total MEANS for the family of tax that produced it.
+///
+/// Closed set, so a new tax family adds a value and rows rather than two more
+/// columns on every period ever filed (DI-31F2D7D10E25).
+///
+/// The employee/employer split is not cosmetic: withheld money is the
+/// employee's, held in trust by the business, and reporting it merged with the
+/// employer's own contribution hides that from anyone reading the liability.
+enum TaxPeriodComponentKind {
+  /// Tax charged to customers on sales.
+  sales_output
+  /// Recoverable tax paid on purchases.
+  sales_input
+  /// Withheld from employee pay and held in trust.
+  employee_withheld
+  /// Owed by the business itself on top of wages.
+  employer_contribution
+}
+
+/// One component total of one period.
+///
+/// Replaces the sales-shaped salesTaxAmount/inputTaxAmount columns that used to
+/// sit on TaxObligationPeriod. Those were the only home for a component total,
+/// and adding payroll's two would have made four, with every family's columns
+/// dead weight on every other family's rows.
+model TaxObligationPeriodComponent {
+  id            String                 @id @default(cuid())
+  taxObligationPeriodComponentId String        @unique
+  periodId      String
+  componentKind TaxPeriodComponentKind
+  amount        Decimal                @default(0)
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+
+  period TaxObligationPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
+
+  /// One total per kind per period — a second row for the same kind would make
+  /// "the withheld total" ambiguous, which is the defect this table exists to
+  /// prevent, not to reintroduce.
+  @@unique([periodId, componentKind])
+  // FK-leading (periodId): read every component of a period in one pass.
+  @@index([periodId])
+}
+
 model TaxObligationPeriod {
   id                     String    @id @default(cuid())
   periodId               String    @unique
@@ -209,8 +309,8 @@ model TaxObligationPeriod {
   periodEnd              DateTime
   dueDate                DateTime
   status                 String    @default("draft")
-  salesTaxAmount         Decimal   @default(0)
-  inputTaxAmount         Decimal   @default(0)
+  /// Net of every component, kept on the period because a filed return's
+  /// bottom line must stay frozen even if components are later corrected.
   netTaxAmount           Decimal   @default(0)
   manualAdjustmentAmount Decimal   @default(0)
   exportStatus           String    @default("not_started")
@@ -225,6 +325,7 @@ model TaxObligationPeriod {
 
   registration     TaxRegistration     @relation(fields: [registrationId], references: [id], onDelete: Cascade)
   artifacts        TaxFilingArtifact[]
+  components       TaxObligationPeriodComponent[]
   issues           TaxIssue[]
   liabilityEntries TaxLiabilityEntry[]
   remittanceRuns   TaxRemittanceRun[]

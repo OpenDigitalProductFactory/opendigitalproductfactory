@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Mobile Companion App — iOS & Android
 
 **Date:** 2026-03-19
@@ -656,6 +660,8 @@ mobileAuthMode = "local-password" | "identity-edge-oidc-pkce"
   (the v1 model in this spec). Acceptable for initial release on
   installs that don't yet have an Identity Edge.
 - **`identity-edge-oidc-pkce`** — OIDC Authorization Code + PKCE
+> **Superseded stance (2026-08-26, EP-24741BBF / `BI-5167932D`).** The enterprise-auth spec's choice to adopt authentik as a runtime identity edge has been **reversed**. DPF absorbs the directory over its own `Principal` spine and adds no IdP to any install. Consuming an external IdP as an *upstream* remains supported and optional. See [Directory Service — Identity Absorption Design](2026-08-23-directory-service-identity-absorption-design.md) and [the authentik evaluation](../../security/tool-evaluations/2026-08-23-authentik.md).
+
   against the customer's Identity Edge (typically authentik per
   the enterprise auth spec). Required for installs that have
   Identity Edge mode `dpf-managed` or `customer-provided`.

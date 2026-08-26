@@ -1919,7 +1919,10 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           continue;
         }
         if (recovery.kind === "refuse") {
-          console.warn(`[agentic-loop] evidence-required turn unverifiable; could-not-verify (INV-1/5). route=${JSON.stringify(routeContext)}`);
+          // BI-0C0669B5: log the WITHHELD length so a turn whose reasoning was
+          // quarantined is greppable, and so the extractor's zero can be
+          // compared against what the model actually produced.
+          console.warn(`[agentic-loop] evidence-required turn unverifiable; could-not-verify (INV-1/5). route=${JSON.stringify(routeContext)} withheldChars=${recovery.withheldContent.trim().length}`);
           return {
             content: recovery.message,
             providerId: result.providerId,

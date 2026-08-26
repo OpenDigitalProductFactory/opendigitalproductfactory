@@ -20,6 +20,44 @@
       "label": "Retirement",
       "exitCriteria": []
     },
+    "bookkeeping-room::closed": {
+      "label": "Closed",
+      "exitCriteria": []
+    },
+    "bookkeeping-room::gather": {
+      "label": "Gather",
+      "exitCriteria": [
+        "Statements and receipts for the period received"
+      ]
+    },
+    "bookkeeping-room::import-categorize": {
+      "label": "Import & categorize",
+      "exitCriteria": [
+        "Statement imported with provenance",
+        "Every transaction categorized/matched or surfaced as an exception"
+      ]
+    },
+    "bookkeeping-room::open": {
+      "label": "Open",
+      "exitCriteria": [
+        "Period and accounts in scope confirmed",
+        "Bookkeeper convened"
+      ]
+    },
+    "bookkeeping-room::owner-review": {
+      "label": "Owner review",
+      "exitCriteria": [
+        "Owner reviewed the Outcome Packet",
+        "Consequential writes approved"
+      ]
+    },
+    "bookkeeping-room::reconcile": {
+      "label": "Reconcile",
+      "exitCriteria": [
+        "Book balance reconciled to the statement",
+        "Any difference explained by named open items"
+      ]
+    },
     "customer-account::active": {
       "label": "Active",
       "exitCriteria": []
@@ -196,6 +234,50 @@
     "backbone::retirement::inactive": {
       "label": "Inactive",
       "band": "on-track"
+    },
+    "bookkeeping-room::closed::cancelled": {
+      "label": "Cancelled",
+      "band": "on-track"
+    },
+    "bookkeeping-room::closed::closed": {
+      "label": "Closed",
+      "band": "on-track"
+    },
+    "bookkeeping-room::gather::awaiting-documents": {
+      "label": "Awaiting documents",
+      "band": "blocked"
+    },
+    "bookkeeping-room::gather::gathering": {
+      "label": "Gathering",
+      "band": "on-track"
+    },
+    "bookkeeping-room::import-categorize::categorizing": {
+      "label": "Categorizing",
+      "band": "on-track"
+    },
+    "bookkeeping-room::import-categorize::exceptions-open": {
+      "label": "Exceptions open",
+      "band": "blocked"
+    },
+    "bookkeeping-room::open::open": {
+      "label": "Open",
+      "band": "on-track"
+    },
+    "bookkeeping-room::owner-review::changes-requested": {
+      "label": "Changes requested",
+      "band": "blocked"
+    },
+    "bookkeeping-room::owner-review::in-review": {
+      "label": "In review",
+      "band": "ready"
+    },
+    "bookkeeping-room::reconcile::reconciling": {
+      "label": "Reconciling",
+      "band": "on-track"
+    },
+    "bookkeeping-room::reconcile::unreconciled": {
+      "label": "Unreconciled",
+      "band": "blocked"
     },
     "customer-account::active::active": {
       "label": "Active",

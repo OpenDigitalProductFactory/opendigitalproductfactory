@@ -14,8 +14,11 @@ import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { readFileSync } from "node:fs";
+
 import {
   ALLOWLIST,
+  SCAN_ROOTS,
   scanRepo,
   findStaleAllowlist,
 } from "./check-test-cwd-independence.mjs";
@@ -83,6 +86,27 @@ test("does not flag cwd passed as a spawn option or saved for restore", () => {
     ].join("\n"),
   );
   assert.deepEqual(found, [], "only cwd used as a PATH BASE is a violation");
+});
+
+test("covers every pnpm workspace root that runs vitest", () => {
+  // services/ was missing from the first cut. It was clean, so no assertion
+  // failed and the omission was invisible — the reason this test names the
+  // roots explicitly rather than trusting the constant to be complete.
+  const workspace = readFileSync(join(REPO_ROOT, "pnpm-workspace.yaml"), "utf8");
+  const vitestRoots = new Set(
+    [...workspace.matchAll(/^\s*-\s*["']?([^"'\n]+)["']?\s*$/gm)]
+      .map((m) => m[1].trim())
+      .filter((entry) => !entry.startsWith("!"))
+      .map((entry) => entry.split("/")[0])
+      .filter((top) => top && !top.startsWith(".")),
+  );
+  for (const root of vitestRoots) {
+    if (root === "scripts") continue; // tsx --test from repo root, not vitest
+    assert.ok(
+      SCAN_ROOTS.includes(root),
+      `workspace root "${root}" is not scanned by the cwd-independence guard`,
+    );
+  }
 });
 
 test("the real repository is clean — the ratchet holds at its baseline", () => {

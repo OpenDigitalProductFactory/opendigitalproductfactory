@@ -334,6 +334,57 @@ describe("translateAttentionToOwnerDecision", () => {
     );
   });
 
+  // A deadline tag must never contradict the exact expiry printed on the same
+  // card. Every span below used to render "Due in 1 day" (BI-7CB2CCDE follow-up).
+  describe("deadline tag precision", () => {
+    const NOW = Date.parse("2026-08-25T23:35:00.000Z");
+
+    function tagFor(deadlineIso: string): string | undefined {
+      const card = translateAttentionToOwnerDecision(
+        item({
+          source: "approval-bill",
+          triage: {
+            timeToAct: "due-soon",
+            deadlineIso,
+            residueReason: "policy-approval",
+            decideEffort: "review",
+            irreversible: false,
+          },
+        }),
+        NOW,
+      );
+      return card.tags.find((tag) => tag.kind === "deadline")?.label;
+    }
+
+    it("reports a minutes-wide window in minutes, not as a day", () => {
+      expect(tagFor("2026-08-25T23:38:00.000Z")).toBe("Due in 3 minutes");
+      // The exact envelope observed on the live install: 3m30.687s remaining,
+      // which previously rendered "Due in 1 day".
+      expect(tagFor("2026-08-25T23:38:30.687Z")).toBe("Due in 4 minutes");
+    });
+
+    it("keeps a one-minute window singular and never rounds it to zero", () => {
+      expect(tagFor("2026-08-25T23:35:20.000Z")).toBe("Due in 1 minute");
+      expect(tagFor("2026-08-25T23:36:00.000Z")).toBe("Due in 1 minute");
+    });
+
+    it("reports an hours-wide window in hours", () => {
+      expect(tagFor("2026-08-26T05:35:00.000Z")).toBe("Due in 6 hours");
+      expect(tagFor("2026-08-26T00:35:00.000Z")).toBe("Due in 1 hour");
+    });
+
+    it("still reports day-scale deadlines in days", () => {
+      expect(tagFor("2026-08-28T23:35:00.000Z")).toBe("Due in 3 days");
+      expect(tagFor("2026-08-26T23:35:00.000Z")).toBe("Due in 1 day");
+    });
+
+    it("calls an elapsed deadline past due", () => {
+      expect(tagFor("2026-08-25T23:34:59.000Z")).toBe("Past due");
+      expect(tagFor("2026-08-25T23:35:00.000Z")).toBe("Past due");
+      expect(tagFor("2026-08-24T23:35:00.000Z")).toBe("Past due");
+    });
+  });
+
   it.each<AttentionSource>([
     "escalation",
     "ai-decision",

@@ -129,6 +129,11 @@ function loadToolToGrants(): Record<string, string[]> {
       path: "apps/web/lib/tak/initiative-readiness-tool-grants.ts",
       pattern: /INITIATIVE_READINESS_TOOL_GRANTS[^=]*= \{([\s\S]*?)\n\}/,
     },
+    {
+      // Banking books-loop domain map (S-FIN, BI-DE27D34E), spread into TOOL_TO_GRANTS.
+      path: "apps/web/lib/tak/banking-tool-grants.ts",
+      pattern: /BANKING_TOOL_GRANTS[^=]*= \{([\s\S]*?)\n\}/,
+    },
   ];
 
   for (const source of sources) {
