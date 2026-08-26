@@ -1,4 +1,6 @@
 import { Surface } from "@/components/ui/Surface";
+
+import { WorkroomPostureControl } from "./WorkroomPostureControl";
 import type { WorkroomView } from "@/lib/work-management/room-types";
 
 // EP-WORK-POSTURE Slice D (BI-4F468192) — make the room's posture observable.
@@ -109,6 +111,20 @@ export function WorkroomPosture({ room }: { room: WorkroomView }) {
               )}
             </>
           )}
+
+          {/* The control the section used to imply and not provide. Rendered
+              only when the room is actually writable — a control with nothing
+              to target would be the inert surface this epic exists to remove. */}
+          {posture?.editable ? (
+            <WorkroomPostureControl
+              roomRowId={posture.editable.roomRowId}
+              caseKey={posture.editable.caseKey}
+              currentShape={posture.editable.declaredShape as never}
+              currentPace={posture.proactivityLevel}
+              currentAuthority={posture.actionBoundary}
+              hasDeclaration={posture.editable.hasDeclaration}
+            />
+          ) : null}
         </div>
       </details>
     </Surface>

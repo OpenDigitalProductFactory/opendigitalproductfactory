@@ -232,6 +232,25 @@ The immediate consequence: a job that fires at 03:00 to discharge an obligation 
 09:00 resolves `pre-deadline`, not `out-of-hours`. Today it would resolve neither,
 because the resolver is never asked.
 
+## 8.1 The operator control ⟦runtime: shipped 2026-08-23⟧
+
+Slice D shipped the room's posture as a READ-ONLY section, and the gap that left was
+visible to the founder immediately: every settable control was per-coworker
+(`CoworkerPriorityControl`, `CoworkerPriorityDock`, `CoworkerProactivitySetting`), so the
+room displayed a posture with no way to change it. `WorkroomPosture.tsx` had zero
+interactive elements and no server action existed.
+
+Two altitudes now ship: the room's own settings inside the existing collapsed section
+(kernel consult `DI-D553722A20B6` — inside-existing-section, 8.846, over a separate
+settings section and an admin-page-only control), and a **decreed default for rooms** on
+the priority surface beside the coworker controls.
+
+The default's place in the ladder is the load-bearing decision: **above** the coworker
+ladder, because it is specifically about rooms and they are not; **below** derivation,
+because what the work actually is outranks a blanket preference about rooms. Both write
+paths pass the action boundary through the tighten-only clamp, and the UI says so in
+words — an invariant the operator cannot see is one they will be surprised by.
+
 ## 9. Decomposition
 
 Each slice is independently shippable and independently inert until the next lands.
