@@ -1,0 +1,35 @@
+{
+  "version": "1",
+  "accountableOwner": "Mark Bodman (markdbodman@gmail.com)",
+  "summary": "BI-EDE89A1E. Cap the staleness budget on acquired external reference corpora at 90 days, founder-directed 2026-08-25. LicenseRequirementReference and TaxJurisdictionReference mirror what an outside authority publishes; both already carried staleAfterDays, lastResearchedAt, lastVerifiedAt, confidence and sourceKind, but nothing read the clock, so a mirrored requirement could drift arbitrarily far from its authority while still being served as sourceKind 'official'. No new field, model, table or column is introduced and no personal data is touched. One existing integer column on each of two models has its default lowered from 180 to 90, and stored rows above the ceiling are clamped in the same migration, because a default change alone governs only future inserts while the rows already at 120 and 180 days are the ones most likely to have drifted. Migration: 20260825172000_reference_staleness_ceiling_90.",
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "LicenseRequirementReference",
+      "lifecycleDisposition": "retain-while-jurisdiction-in-scope",
+      "fields": [
+        {
+          "name": "staleAfterDays",
+          "resolution": "not-applicable",
+          "reason": "Operational freshness budget in whole days for a mirrored public licensing requirement. Describes how long the platform's copy may go unconfirmed against the issuing authority. Not personal data and not tied to a data subject; the requirement itself is public regulatory information published by an authority, not information about a person.",
+          "provenance": "Seeded from packages/db/data/license_requirement_reference.json and clamped to the 90-day ceiling. No new source of data; existing values above the ceiling are lowered in place, and non-positive values are corrected to 90 because they would otherwise evaluate as never stale.",
+          "flags": []
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "TaxJurisdictionReference",
+      "lifecycleDisposition": "retain-while-jurisdiction-in-scope",
+      "fields": [
+        {
+          "name": "staleAfterDays",
+          "resolution": "not-applicable",
+          "reason": "Operational freshness budget in whole days for a mirrored tax jurisdiction reference, identical in role to the licensing case. Not personal data and not tied to a data subject; it describes the currency of a copy of public tax authority information.",
+          "provenance": "Seeded from packages/db/src/seed-tax-jurisdictions.ts and clamped to the 90-day ceiling. No new source of data.",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}

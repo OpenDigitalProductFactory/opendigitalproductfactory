@@ -53,6 +53,21 @@ requirement can change without the record moving — the watch will tell you a
 renewal is near, not that the rule behind it was rewritten. Re-verify with the
 issuing authority before relying on a recorded requirement.
 
+**How long a requirement stays good for.** No acquired requirement may go more
+than **90 days** without being confirmed against its issuing authority. A
+reference may be re-checked sooner where the authority moves faster; it can
+never be given longer, and a stored value asking for longer is clamped to 90.
+
+Past that limit — or where a reference has never been confirmed at all — the
+requirement is treated as unconfirmed rather than as current. Being unconfirmed
+does not mean the requirement is wrong; it means nobody has checked recently
+enough for the platform to stand behind it, and you should confirm with the
+authority before acting on it.
+
+Note that the requirements shipped with a new install have been researched but
+not confirmed for your jurisdiction. They are starting points for your own
+verification, not a finished licensing position.
+
 **What it will not do.** It does not grant permission to operate, renew a
 licence, pay a fee, or convert a likely lead into a confirmed requirement.
 Resolving a readiness issue asserts that a person answered the question; it is

@@ -42,7 +42,7 @@ model LicenseRequirementReference {
   lastResearchedAt    DateTime?
   lastVerifiedAt      DateTime?
   confidence          String    @default("medium")
-  staleAfterDays      Int       @default(180)
+  staleAfterDays      Int       @default(90)
   tags                String[]  @default([])
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt

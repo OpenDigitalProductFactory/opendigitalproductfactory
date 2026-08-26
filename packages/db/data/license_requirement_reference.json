@@ -34,7 +34,7 @@
       ],
       "sourceKind": "official",
       "confidence": "medium",
-      "staleAfterDays": 120,
+      "staleAfterDays": 90,
       "tags": [
         "us",
         "bootstrap",
@@ -75,7 +75,7 @@
       ],
       "sourceKind": "official",
       "confidence": "medium",
-      "staleAfterDays": 120,
+      "staleAfterDays": 90,
       "tags": [
         "uk",
         "bootstrap",
@@ -116,7 +116,7 @@
       ],
       "sourceKind": "official",
       "confidence": "medium",
-      "staleAfterDays": 120,
+      "staleAfterDays": 90,
       "tags": [
         "au",
         "bootstrap",
@@ -152,7 +152,7 @@
       ],
       "sourceKind": "official",
       "confidence": "medium",
-      "staleAfterDays": 120,
+      "staleAfterDays": 90,
       "tags": [
         "us",
         "banking",
@@ -189,7 +189,7 @@
       ],
       "sourceKind": "official",
       "confidence": "medium",
-      "staleAfterDays": 120,
+      "staleAfterDays": 90,
       "tags": [
         "us",
         "banking",
@@ -227,7 +227,7 @@
       ],
       "sourceKind": "official",
       "confidence": "medium",
-      "staleAfterDays": 120,
+      "staleAfterDays": 90,
       "tags": [
         "us",
         "banking",
@@ -264,7 +264,7 @@
       ],
       "sourceKind": "official",
       "confidence": "medium",
-      "staleAfterDays": 120,
+      "staleAfterDays": 90,
       "tags": [
         "us",
         "credit-union",
@@ -301,7 +301,7 @@
       ],
       "sourceKind": "official",
       "confidence": "medium",
-      "staleAfterDays": 120,
+      "staleAfterDays": 90,
       "tags": [
         "us",
         "banking",
@@ -337,7 +337,7 @@
       ],
       "sourceKind": "official",
       "confidence": "medium",
-      "staleAfterDays": 120,
+      "staleAfterDays": 90,
       "tags": [
         "us",
         "banking",
@@ -375,7 +375,7 @@
       ],
       "sourceKind": "official",
       "confidence": "medium",
-      "staleAfterDays": 120,
+      "staleAfterDays": 90,
       "tags": [
         "us",
         "mortgage",
@@ -412,7 +412,7 @@
       ],
       "sourceKind": "official",
       "confidence": "medium",
-      "staleAfterDays": 120,
+      "staleAfterDays": 90,
       "tags": [
         "us",
         "mortgage",
@@ -449,7 +449,7 @@
       ],
       "sourceKind": "official",
       "confidence": "medium",
-      "staleAfterDays": 120,
+      "staleAfterDays": 90,
       "tags": [
         "us",
         "banking",
@@ -486,7 +486,7 @@
       ],
       "sourceKind": "official",
       "confidence": "medium",
-      "staleAfterDays": 120,
+      "staleAfterDays": 90,
       "tags": [
         "us",
         "banking",
@@ -524,7 +524,7 @@
       ],
       "sourceKind": "official",
       "confidence": "medium",
-      "staleAfterDays": 120,
+      "staleAfterDays": 90,
       "tags": [
         "gb",
         "banking",
@@ -561,7 +561,7 @@
       ],
       "sourceKind": "official",
       "confidence": "medium",
-      "staleAfterDays": 120,
+      "staleAfterDays": 90,
       "tags": [
         "eu",
         "banking",
@@ -597,7 +597,7 @@
       ],
       "sourceKind": "official",
       "confidence": "medium",
-      "staleAfterDays": 120,
+      "staleAfterDays": 90,
       "tags": [
         "ca",
         "banking",
@@ -634,7 +634,7 @@
       ],
       "sourceKind": "official",
       "confidence": "medium",
-      "staleAfterDays": 120,
+      "staleAfterDays": 90,
       "tags": [
         "au",
         "banking",
@@ -670,7 +670,7 @@
       ],
       "sourceKind": "official",
       "confidence": "medium",
-      "staleAfterDays": 180,
+      "staleAfterDays": 90,
       "tags": [
         "us",
         "bootstrap",
@@ -707,7 +707,7 @@
       ],
       "sourceKind": "official",
       "confidence": "medium",
-      "staleAfterDays": 180,
+      "staleAfterDays": 90,
       "tags": [
         "us",
         "bootstrap",
