@@ -10,6 +10,32 @@ import {
   reviewTaxDeadlineNotifications,
 } from "@/lib/actions/tax-remittance";
 import type { AddTaxFilingArtifactInput } from "@/lib/finance/tax-remittance-validation";
+import type { TaxPeriodComponentKind } from "@/lib/finance/tax-period-components";
+
+/** Human labels for the component kinds, in the order an operator reads them. */
+const COMPONENT_LABELS: ReadonlyArray<{ kind: TaxPeriodComponentKind; label: string }> = [
+  { kind: "sales_output", label: "Output Tax" },
+  { kind: "sales_input", label: "Input Tax" },
+  { kind: "employee_withheld", label: "Withheld" },
+  { kind: "employer_contribution", label: "Employer" },
+];
+
+/**
+ * Only the components this period actually has.
+ *
+ * A payroll period should not show an "Output Tax 0.00" tile: a stated zero
+ * reads as "we charged no sales tax", when the truth is the period was never
+ * about sales tax. Absent is not zero.
+ */
+function componentTiles(
+  components: readonly { componentKind: TaxPeriodComponentKind; amount: unknown }[] | undefined,
+): { label: string; amount: unknown }[] {
+  if (!components || components.length === 0) return [];
+  return COMPONENT_LABELS.flatMap(({ kind, label }) => {
+    const found = components.find((c) => c.componentKind === kind);
+    return found ? [{ label, amount: found.amount }] : [];
+  });
+}
 
 type ArtifactRecord = {
   id: string;
@@ -29,8 +55,7 @@ type PeriodRecord = {
   dueDate: Date | string;
   periodStart: Date | string;
   periodEnd: Date | string;
-  salesTaxAmount: unknown;
-  inputTaxAmount: unknown;
+  components?: readonly { componentKind: TaxPeriodComponentKind; amount: unknown }[];
   netTaxAmount: unknown;
   registration: {
     taxType: string;
@@ -282,22 +307,19 @@ export function TaxObligationPeriodsTable({ periods, monitoring }: Props) {
                 </div>
 
                 <div className="mt-4 grid gap-3 md:grid-cols-3">
-                  <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3">
-                    <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)]">
-                      Output Tax
-                    </p>
-                    <p className="mt-1 text-sm font-semibold text-[var(--dpf-text)]">
-                      {formatMoney(period.salesTaxAmount)}
-                    </p>
-                  </div>
-                  <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3">
-                    <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)]">
-                      Input Tax
-                    </p>
-                    <p className="mt-1 text-sm font-semibold text-[var(--dpf-text)]">
-                      {formatMoney(period.inputTaxAmount)}
-                    </p>
-                  </div>
+                  {componentTiles(period.components).map((tile) => (
+                    <div
+                      key={tile.label}
+                      className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3"
+                    >
+                      <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)]">
+                        {tile.label}
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-[var(--dpf-text)]">
+                        {formatMoney(tile.amount)}
+                      </p>
+                    </div>
+                  ))}
                   <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3">
                     <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)]">
                       Net Due

@@ -57,6 +57,53 @@ statutory engine consumes effective-dated rules with a `sourceUrl` instead. Unti
 are seeded, **no install can run a real payroll or file a real return**, and no public
 claim may imply otherwise.
 
+### Payroll tax persistence and period components (2026-08-26)
+
+The payroll tax emitter shipped as a pure function in PR #4490 and nothing wrote
+its output. That write path now exists, along with the two substrate pieces it
+needed.
+
+**Period totals are normalized.** `TaxObligationPeriod` carried `salesTaxAmount`
+and `inputTaxAmount` — the only home for a component total, and sales-shaped.
+Payroll needs employee-withheld and employer-contribution totals on the same
+spine. Kernel decision **DI-31F2D7D10E25** (composite 9.631, margin 3.581) chose
+one row per component per period over adding two more columns: a new tax family
+now adds an enum value, not a column pair that is dead weight on every other
+family's rows. The migration backfills every existing sales figure into
+component rows before dropping the columns, so no filed or draft period loses
+its numbers. The full data-safety argument for the drop is in
+[tax-period-component-migration.md](tax-period-component-migration.md). `netTaxAmount` deliberately stays on the period, because a filed
+return's bottom line must remain frozen even if a component is later corrected.
+
+**Withheld money adds to the liability, never nets off.** Sales input tax is
+recoverable and subtracts. Both payroll components are owed and add — including
+the employee-withheld portion, which the business does not own but must still
+remit. Netting it off because it "isn't the company's money" would understate
+what is due.
+
+**Deposit cadence is now recorded, not just computed.** `TaxDepositSchedule` is
+effective-dated so the cadence that governed a past pay date stays readable
+after a later determination replaces it — that is the evidence for why a past
+deposit was timed as it was. It records the lookback total, the threshold, and
+the `sourceUrl` the threshold came from. Resolution returns null when no
+determination covers a date, and callers must surface that rather than assume
+monthly: assuming the gentler cadence is how a business that should deposit
+semiweekly silently takes a penalty.
+
+**Semiweekly spans are deliberately not computed.** The federal semiweekly rule
+keys the due date off which day of the week wages were paid and needs the
+authority's banking-day and holiday calendar. `depositPeriodFor` returns null
+for it rather than fabricating a span that would produce a confident wrong due
+date.
+
+**Accruals only.** The write path records what is owed and when. It never files,
+never remits and never touches an authority credential. Filing stays
+agent-prepared and human-approved with MFA step-up.
+
+Still outstanding on EP-PAYROLL-ABSORB: the 941, 940, W-2/W-3 and 1099-NEC
+generators, which need cited form layouts under the same constraint as the
+rates, and the statutory rates themselves (BI-4EB27955).
+
 ### Mileage jurisdiction resolution (2026-08-26)
 
 The organization operates in several countries and sends people abroad, so a mile

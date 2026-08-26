@@ -1295,6 +1295,9 @@
       "docs/professions/data-architect/wiki/index-and-collation-integrity.md",
       "docs/runbooks/2026-07-20-collation-drift-index-corruption.md"
     ],
+    "packages/db/scripts/schema-regression-guard.mjs": [
+      "docs/architecture/tax-period-component-migration.md"
+    ],
     "packages/db/scripts/seed-cada-regulation.ts": [
       "docs/strategy/2026-09-cada-architects-forum-deck.md"
     ],
@@ -2510,6 +2513,9 @@
       "packages/db/src/mandated-skills.ts",
       "packages/db/src/seed-skills.ts",
       "packages/dpf-skill-pack/hooks/process-spine-health-check.mjs"
+    ],
+    "docs/architecture/tax-period-component-migration.md": [
+      "packages/db/scripts/schema-regression-guard.mjs"
     ],
     "docs/architecture/theme-aware-styling-runbook.md": [
       "apps/web/components/storefront-admin/ItemsManager.tsx",
