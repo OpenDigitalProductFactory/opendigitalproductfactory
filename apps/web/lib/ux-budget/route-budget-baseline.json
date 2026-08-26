@@ -410,7 +410,7 @@
       "ariaSnapshot": "- link\n- banner\n  - link\n    - text\n    - paragraph\n      - text\n  - link\n  - button\n  - text\n  - button\n- complementary\n  - navigation\n    - group\n      - button\n      - button [pressed]\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n- main\n  - navigation\n    - link\n    - text\n  - link\n  - paragraph\n    - text\n  - link\n  - heading [level=1]\n  - paragraph\n    - text\n  - button\n  - combobox\n    - option [selected]\n    - option\n  - button\n  - paragraph\n    - text"
     },
     "/coworker-decisions": {
-      "defaultVisibleWords": 321,
+      "defaultVisibleWords": 323,
       "leadBandWords": 0,
       "primaryActions": 1,
       "visibleFields": 0,
@@ -465,7 +465,7 @@
       "ariaSnapshot": "- link\n- banner\n  - link\n    - text\n    - paragraph\n      - text\n  - link\n  - button\n  - text\n  - button\n- complementary\n  - navigation\n    - group\n      - button\n      - button [pressed]\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n- main\n  - navigation\n    - link\n    - text\n  - heading [level=1]\n  - paragraph\n    - text\n  - text\n  - link\n  - text\n  - link\n  - text\n  - link\n  - text\n  - link\n  - text\n  - link\n  - text\n  - link\n  - text\n  - link\n  - text\n  - link\n  - text\n  - link\n  - text\n  - link\n  - text\n  - link\n  - text\n  - link\n  - text\n  - link\n  - text\n  - link\n  - text\n  - link\n  - text\n  - link\n  - text\n  - link\n  - text\n  - link\n  - text\n  - link\n  - text\n  - link\n  - text\n  - link\n  - text\n  - link\n  - text\n  - link\n  - text\n  - link\n  - text\n  - link\n  - text\n  - link\n  - text\n  - link\n  - text\n  - link\n  - text\n  - link\n  - text\n  - link"
     },
     "/coworker-decisions/proactivity": {
-      "defaultVisibleWords": 920,
+      "defaultVisibleWords": 1079,
       "leadBandWords": 0,
       "primaryActions": 1,
       "visibleFields": 0,
@@ -641,7 +641,7 @@
       "ariaSnapshot": "- link\n- banner\n  - link\n    - text\n    - paragraph\n      - text\n  - link\n  - button\n  - text\n  - button\n- complementary\n  - navigation\n    - group\n      - button\n      - button [pressed]\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n- main\n  - navigation\n    - link\n    - text\n  - link\n  - heading [level=1]\n  - paragraph\n    - text\n  - link\n  - paragraph\n    - text"
     },
     "/delivery": {
-      "defaultVisibleWords": 163,
+      "defaultVisibleWords": 164,
       "leadBandWords": 0,
       "primaryActions": 1,
       "visibleFields": 0,
@@ -1224,7 +1224,7 @@
       "ariaSnapshot": "- heading [level=1]\n- paragraph\n  - text\n- text\n- textbox\n- button\n- paragraph\n  - text"
     },
     "/inventory": {
-      "defaultVisibleWords": 943,
+      "defaultVisibleWords": 949,
       "leadBandWords": 0,
       "primaryActions": 1,
       "visibleFields": 2,
@@ -1246,12 +1246,12 @@
       "ariaSnapshot": "- link\n- banner\n  - link\n    - text\n    - paragraph\n      - text\n  - button\n  - text\n  - button\n- complementary\n  - navigation\n    - group\n      - button\n      - button [pressed]\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n- main\n  - heading [level=1]\n  - link\n  - paragraph\n    - text"
     },
     "/knowledge/new": {
-      "defaultVisibleWords": 502,
+      "defaultVisibleWords": 541,
       "leadBandWords": 0,
       "primaryActions": 2,
       "visibleFields": 5,
       "maxChoicesPerControl": 7,
-      "subLegibleControls": 151,
+      "subLegibleControls": 167,
       "buriedPrimaryAction": 0,
       "axeViolations": 4,
       "ariaSnapshot": "- link\n- banner\n  - link\n    - text\n    - paragraph\n      - text\n  - button\n  - text\n  - button\n- complementary\n  - navigation\n    - group\n      - button\n      - button [pressed]\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n- main\n  - navigation\n    - link\n    - text\n  - heading [level=1]\n  - text\n  - textbox\n  - text\n  - combobox\n    - option\n    - option [selected]\n    - option\n  - text\n  - textbox\n  - text\n  - button\n  - text\n  - button\n  - text\n  - button\n  - text\n  - textbox\n  - text\n  - spinbutton\n  - button [disabled]\n  - button"
@@ -1422,7 +1422,7 @@
       "ariaSnapshot": "- link\n- banner\n  - link\n    - text\n    - paragraph\n      - text\n  - link\n  - button\n  - text\n  - button\n- complementary\n  - navigation\n    - group\n      - button\n      - button [pressed]\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n- main\n  - navigation\n    - link\n    - text\n  - link\n  - paragraph\n    - text\n  - link\n  - heading [level=1]\n  - paragraph\n    - text\n    - link\n  - heading [level=2]\n  - paragraph\n    - text\n  - text\n  - textbox\n  - text\n  - textbox\n  - text\n  - textbox\n  - text\n  - textbox\n  - button\n  - heading [level=2]\n  - paragraph\n    - text"
     },
     "/platform/ai/build-studio": {
-      "defaultVisibleWords": 370,
+      "defaultVisibleWords": 376,
       "leadBandWords": 0,
       "primaryActions": 1,
       "visibleFields": 6,
@@ -1477,7 +1477,7 @@
       "ariaSnapshot": "- link\n- banner\n  - link\n    - text\n    - paragraph\n      - text\n  - link\n  - button\n  - text\n  - button\n- complementary\n  - navigation\n    - group\n      - button\n      - button [pressed]\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n- main\n  - navigation\n    - link\n    - text\n  - link\n  - paragraph\n    - text\n  - link\n  - heading [level=1]\n  - paragraph\n    - text\n  - text\n  - paragraph\n    - text\n  - heading [level=2]\n  - paragraph\n    - text"
     },
     "/platform/ai/overview": {
-      "defaultVisibleWords": 2943,
+      "defaultVisibleWords": 2946,
       "leadBandWords": 0,
       "primaryActions": 1,
       "visibleFields": 5,
@@ -1510,7 +1510,7 @@
       "ariaSnapshot": "- link\n- banner\n  - link\n    - text\n    - paragraph\n      - text\n  - link\n  - button\n  - text\n  - button\n- complementary\n  - navigation\n    - group\n      - button\n      - button [pressed]\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n- main\n  - navigation\n    - link\n    - text\n  - link\n  - paragraph\n    - text\n  - link\n  - heading [level=1]\n  - paragraph\n    - text\n  - text\n  - strong\n    - text\n  - text\n  - link\n  - text\n  - paragraph\n    - text\n    - link\n    - text\n  - navigation\n    - button\n      - text\n  - text"
     },
     "/platform/ai/providers": {
-      "defaultVisibleWords": 346,
+      "defaultVisibleWords": 348,
       "leadBandWords": 0,
       "primaryActions": 1,
       "visibleFields": 0,
@@ -1532,7 +1532,7 @@
       "ariaSnapshot": "- link\n- banner\n  - link\n    - text\n    - paragraph\n      - text\n  - link\n  - button\n  - text\n  - button\n- complementary\n  - navigation\n    - group\n      - button\n      - button [pressed]\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n- main\n  - navigation\n    - link\n    - text\n  - link\n  - paragraph\n    - text\n  - link\n  - heading [level=1]\n  - paragraph\n    - text\n  - text\n  - paragraph\n    - text\n  - heading [level=2]\n  - text\n  - paragraph\n    - text\n  - text\n  - link\n  - heading [level=2]\n  - text\n  - paragraph\n    - text\n  - text\n  - link\n  - heading [level=2]\n  - text\n  - paragraph\n    - text\n  - text\n  - link\n  - heading [level=2]\n  - text\n  - paragraph\n    - text\n  - text\n  - link"
     },
     "/platform/ai/runtime-health": {
-      "defaultVisibleWords": 573,
+      "defaultVisibleWords": 642,
       "leadBandWords": 0,
       "primaryActions": 1,
       "visibleFields": 0,
@@ -1543,7 +1543,7 @@
       "ariaSnapshot": "- link\n- banner\n  - link\n    - text\n    - paragraph\n      - text\n  - link\n  - button\n  - text\n  - button\n- complementary\n  - navigation\n    - group\n      - button\n      - button [pressed]\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n- main\n  - navigation\n    - link\n    - text\n  - link\n  - paragraph\n    - text\n  - link\n  - heading [level=1]\n  - paragraph\n    - text\n  - link\n  - region\n    - heading [level=2]\n    - paragraph\n      - text\n  - heading [level=2]\n  - paragraph\n    - text\n  - text\n  - button\n  - paragraph\n    - text\n  - table\n    - rowgroup\n      - row\n        - columnheader\n    - rowgroup\n      - row\n        - cell\n          - text\n  - heading [level=2]\n  - paragraph\n    - text\n  - group\n    - button\n    - table\n      - rowgroup\n        - row\n          - columnheader\n      - rowgroup\n        - row\n          - cell\n            - text\n  - heading [level=2]\n  - text\n  - code\n    - text\n  - text\n  - code\n    - text\n  - text\n  - code\n    - text\n  - text\n  - code\n    - text\n  - text\n  - code\n    - text\n  - text\n  - group\n    - button\n    - list\n      - listitem\n  - link\n  - text\n  - code\n    - text\n  - text\n  - group\n    - button\n    - paragraph\n      - text"
     },
     "/platform/ai/skills": {
-      "defaultVisibleWords": 207,
+      "defaultVisibleWords": 209,
       "leadBandWords": 31,
       "primaryActions": 1,
       "visibleFields": 3,
@@ -1719,7 +1719,7 @@
       "ariaSnapshot": "- link\n- banner\n  - link\n    - text\n    - paragraph\n      - text\n  - link\n  - button\n  - text\n  - button\n- complementary\n  - navigation\n    - group\n      - button\n      - button [pressed]\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n- main\n  - navigation\n    - link\n    - text\n  - link\n  - paragraph\n    - text\n  - link\n  - heading [level=1]\n  - paragraph\n    - text\n  - heading [level=2]\n  - paragraph\n    - text\n  - text\n  - paragraph\n    - text\n  - text\n  - paragraph\n    - text\n  - text\n  - paragraph\n    - text\n  - text\n  - heading [level=2]\n  - paragraph\n    - text\n  - heading [level=2]\n  - text"
     },
     "/platform/identity/authorization": {
-      "defaultVisibleWords": 2410,
+      "defaultVisibleWords": 2417,
       "leadBandWords": 0,
       "primaryActions": 2,
       "visibleFields": 4,
