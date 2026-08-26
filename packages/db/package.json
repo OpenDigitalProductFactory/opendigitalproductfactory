@@ -71,6 +71,7 @@
     "./healthcare-care-intake": "./src/healthcare-care-intake.ts",
     "./subject-reference": "./src/subject-reference.ts",
     "./seed-skills": "./src/seed-skills.ts",
+    "./mandated-skills": "./src/mandated-skills.ts",
     "./portfolio-sources/types": "./src/portfolio-sources/types.ts",
     "./portfolio-sources/vertical-incumbents-manifest": "./src/portfolio-sources/vertical-incumbents-manifest.ts",
     "./portfolio-sources/absorption-posture": "./src/portfolio-sources/absorption-posture.ts",

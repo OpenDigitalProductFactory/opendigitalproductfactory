@@ -2,6 +2,7 @@ import { mkdtempSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from
 import { tmpdir } from "os";
 import { join } from "path";
 import { describe, it, expect, vi } from "vitest";
+import { MANDATED_DECISION_SKILL_IDS } from "./mandated-skills";
 import {
   DPF_PLATFORM_SKILL_SOURCE_TYPE,
   LEGACY_SKILL_SOURCE_TYPE,
@@ -129,12 +130,10 @@ describe("decision-skill assignment coverage (BI-5E8E231E)", () => {
   // User-facing personas must inherit the decision stack via assignTo:["*"].
   // Narrow assignTo here would silently leave CRM/ops/marketing coworkers
   // without WWMD/WWWD decision skills.
-  const DECISION_SKILL_SLUGS = [
-    "dpf-decision-via-kernel",
-    "dpf-retrieve-decision-context",
-    "dpf-compare-options",
-    "dpf-record-decision-outcome",
-  ] as const;
+  // Single-sourced with the ranker's pin list (BI-43920DD1): the seed-time mandate
+  // and the ranking-time reservation must name the same four skills, or one of them
+  // silently stops covering a skill the other still guarantees.
+  const DECISION_SKILL_SLUGS = MANDATED_DECISION_SKILL_IDS;
 
   const USER_FACING_PERSONAS = [
     "customer-advisor",
