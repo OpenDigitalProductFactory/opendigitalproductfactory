@@ -9719,13 +9719,21 @@
     "longSentences": 0,
     "textMass": 29
   },
+  "apps/web/components/workspace/EstateNameField.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 55
+  },
   "apps/web/components/workspace/InstallationIdentityPanel.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 157
+    "textMass": 160
   },
   "apps/web/components/workspace/PlatformReadinessMatrix.tsx": {
     "vocabulary": 0,

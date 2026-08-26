@@ -71,7 +71,7 @@ describe("buildIdentityHeadline", () => {
         purpose: "evolve-dpf",
         intentStatus: "valid",
       }),
-    ).toBe("A development installation. Its job: safely improve another dpf.");
+    ).toBe("This installation is set up for development work. Its job is to safely improve another dpf.");
   });
 
   it("says plainly that nothing was declared, rather than showing a blank", () => {
@@ -85,7 +85,7 @@ describe("buildIdentityHeadline", () => {
         purpose: "operate-organization",
         intentStatus: "missing",
       }),
-    ).toBe("Treated as a production installation. Nobody has said what this one is.");
+    ).toBe("Nobody has said what this installation is, so we treat it as production.");
   });
 
   it("separates a declared environment from an unreadable job", () => {
@@ -95,7 +95,7 @@ describe("buildIdentityHeadline", () => {
         purpose: "evolve-dpf",
         intentStatus: "invalid",
       }),
-    ).toBe("A test installation. Nobody has said what its job is.");
+    ).toBe("This installation is set up for test work. Nobody has said what its job is.");
   });
 });
 
@@ -110,7 +110,7 @@ describe("loadInstallationIdentityView", () => {
       env: {},
     });
 
-    expect(view.headline).toBe("A development installation. Its job: safely improve another dpf.");
+    expect(view.headline).toBe("This installation is set up for development work. Its job is to safely improve another dpf.");
     expect(view.detail).toBe("Paired with dpf-prod-acme. The installer set the environment.");
     expect(view.confirmationStatus).toBe("confirmed");
     expect(view.declaration).toEqual({
@@ -175,7 +175,7 @@ describe("loadInstallationIdentityView", () => {
     expect(view.intentStatus).toBe("missing");
     expect(view.confirmationStatus).toBe("needs-review");
     expect(view.environment.declared).toBe(false);
-    expect(view.headline).toContain("Nobody has said what this one is.");
+    expect(view.headline).toContain("Nobody has said what this installation is");
     expect(view.detail).toBeNull();
     expect(view.stances.find((row) => row.stance === "credentials")?.valueLabel).toBe(
       "Operator only",

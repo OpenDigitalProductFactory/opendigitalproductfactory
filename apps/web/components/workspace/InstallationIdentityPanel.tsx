@@ -141,10 +141,10 @@ export function InstallationIdentityPanel({ view }: { view: InstallationIdentity
               id="installation-identity-heading"
               className="text-base font-semibold text-[var(--dpf-text)]"
             >
-              What this installation is
+              About this installation
             </h2>
             <p className="mt-1 text-sm text-[var(--dpf-muted)]">
-              Its identity decides what your AI coworkers may do here.
+              What this installation is decides what your AI coworkers may do here.
             </p>
           </div>
           <StatusBadge intent={confirmation.intent} label={confirmation.label} size="md" />
@@ -173,7 +173,7 @@ export function InstallationIdentityPanel({ view }: { view: InstallationIdentity
       ) : null}
 
       <h3 className="mt-4 text-xs font-semibold text-[var(--dpf-muted)]">
-        What agents may do here
+        What your AI coworkers may do here
       </h3>
       <ul className="mt-2 grid gap-2">
         {view.stances.map((row) => (

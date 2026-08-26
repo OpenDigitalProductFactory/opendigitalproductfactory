@@ -394,7 +394,7 @@ describe("POST — auth", () => {
       );
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.result?.serverInfo?.name).toBe("dpf-platform");
+      expect(body.result?.serverInfo?.name).toMatch(/^dpf-/); // per-installation, BI-C7151B1B
     });
 
     it("session JWT wins over PAT bearer when both are present", async () => {
@@ -569,7 +569,7 @@ describe("POST — initialize", () => {
     expect(body.id).toBe(1);
     // No protocolVersion in params → falls back to oldest supported version
     expect(body.result.protocolVersion).toBe("2024-11-05");
-    expect(body.result.serverInfo.name).toBe("dpf-platform");
+    expect(body.result.serverInfo.name).toMatch(/^dpf-/); // per-installation, BI-C7151B1B
     expect(body.result.capabilities.tools).toBeDefined();
     // Pre-Tasks fallback must NOT advertise tasks (breaks Grok Build 1.0.0 etc.).
     expect(body.result.capabilities.tasks).toBeUndefined();
