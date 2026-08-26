@@ -310,7 +310,16 @@ export function createAuthorizedSurfaceRuntime(deps: RuntimeDependencies) {
       : deps.catalog.resolve(selectorContext(input.selector));
     if (!definition) {
       deps.observe?.({ operation: "open", outcome: "surface_not_found", mode: input.context.mode, durationMs: Date.now() - started });
-      return failure("surface_not_found", "No Authorized Surface matches that identity/context.");
+      return failure(
+        "surface_not_found",
+        // Self-describing on purpose (BI-E72BA4CD): a weak model previously read
+        // "no surface matches" as "the node is empty" and told the operator a
+        // populated portfolio node had no coverage. State plainly that this is a
+        // TOOL/authorization gap, NOT evidence about the underlying data.
+        "This surface could not be opened: no Authorized Surface is registered for this identity/context " +
+          "(a tooling/authorization gap). This is NOT evidence that the node, portfolio, or estate is empty — " +
+          "the underlying data was not read. Do not report it as empty or missing; report that the surface could not be loaded.",
+      );
     }
     const boundSelector = contextSelector(input.context);
     const hasBoundSelector = Object.values(boundSelector).some((value) => value !== undefined && value !== "");

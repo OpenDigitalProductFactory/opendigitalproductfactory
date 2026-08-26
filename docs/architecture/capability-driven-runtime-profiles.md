@@ -121,6 +121,41 @@ The portal observes only containers in its own Docker Compose project. It discov
 
 Host diagnostics remain in installer-owned doctor and verification surfaces. They record the canonical Compose file chain, rendered configuration hash, container state, and redacted install state. Docker Engine itself is a host prerequisite and observation boundary, not a manifest service. Podman command aliases are rejected by installer preflight because the current contract requires standard Docker Engine.
 
+## Diagnosing capability drift (BI-5ACBAC50)
+
+Two authorities describe what is enabled: `enabledRuntimeCapabilities` in
+`install-state.json`, and `PlatformCapability.state` in the database. The
+transition protocol keeps them together — live state commits only after the
+signed host receipt proves the topology.
+
+When they disagree anyway, `projectCapabilityServices` throws
+`capability_state_stale:<capabilityId>` and refuses to project. That is
+deliberate: a projection that guessed which side to believe would hand backup,
+readiness and the health UI a topology neither source claims.
+
+The refusal used to name only the FIRST mismatch, and it happens inside the
+loader that runtime health and backup readiness call — so the surfaces that would
+explain the condition were the ones that could not render.
+`createOperationalCapabilityState` now re-raises that error with the full
+diagnosis from
+[`capability-state-divergence.ts`](../../apps/web/lib/platform-runtime/capability-state-divergence.ts):
+every drifted capability, and which way each drifted.
+
+- `live-active-not-enabled` — the database says on, the install snapshot does not
+  list it. Anything trusting capability state believes services are running that
+  the install never provisioned. This is the shape that let an installation
+  report `runtime:deep-observability` active while no collector existed, so every
+  metric-backed surface had no source and the state that would have revealed it
+  read healthy.
+- `enabled-not-live-active` — the install enabled it, the database says disabled.
+  The services may be running while the platform believes they are not, so
+  nothing tends them.
+- `missing-live-state` — no capability row at all.
+
+Reporting is not repair. The diagnosis says what diverged; it never decides which
+authority wins, because reconciling without first finding the writer that moved
+state outside the transition protocol leaves the cause in place.
+
 ## Safe operating rules
 
 - Change physical service facts in the substrate manifest and regenerate the catalog; do not hand-edit the generated catalog.

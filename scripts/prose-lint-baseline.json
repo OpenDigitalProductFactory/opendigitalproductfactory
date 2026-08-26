@@ -1645,7 +1645,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 110
+    "textMass": 115
   },
   "apps/web/app/(shell)/platform/ai/browser-sessions/BrowserSessionLedgerTable.tsx": {
     "vocabulary": 0,
@@ -6391,6 +6391,14 @@
     "longSentences": 0,
     "textMass": 11
   },
+  "apps/web/components/golden-triangle/WorkroomDefaultControl.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 72
+  },
   "apps/web/components/golden-triangle/posture-display.ts": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
@@ -9623,6 +9631,14 @@
     "longSentences": 0,
     "textMass": 21
   },
+  "apps/web/components/workspace-home/CloudProviderUnclearedNotice.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 29
+  },
   "apps/web/components/workspace-home/LocalOnlyProviderNotice.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
@@ -9838,6 +9854,14 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 16
+  },
+  "apps/web/components/workspace/workroom/WorkroomPostureControl.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 84
   },
   "apps/web/components/workspace/workroom/WorkroomShape.tsx": {
     "vocabulary": 0,

@@ -4,10 +4,57 @@ import {
   looksLikeRuntimeArtifact,
   isNonProductEntityType,
   classifyEstateProvenance,
+  hasObservationEvidence,
   resolvePromotionDecision,
   isTerminalStructuralSkip,
   TERMINAL_STRUCTURAL_SKIP_SOURCES,
 } from "./discovery-promotion-policy";
+
+describe("hasObservationEvidence (BI-B19C41B8)", () => {
+  it("is true for a host that answered ARP (has a MAC)", () => {
+    expect(hasObservationEvidence({ properties: { mac: "88:e7:12:00:00:91", address: "192.168.0.91" } })).toBe(true);
+  });
+  it("is true for a UniFi-listed client even without a per-row MAC", () => {
+    expect(hasObservationEvidence({ properties: { discoveredVia: "unifi_clients_api", address: "192.168.0.42" } })).toBe(true);
+  });
+  it("is FALSE for a bare enumerated IP that never answered (no MAC, arp sweep)", () => {
+    expect(hasObservationEvidence({ properties: { discoveredVia: "arp_table", address: "192.168.0.0" } })).toBe(false);
+    expect(hasObservationEvidence({ properties: {} })).toBe(false);
+  });
+});
+
+describe("resolvePromotionDecision — evidence gate (BI-B19C41B8)", () => {
+  const node = { id: "tn_1", nodeId: "foundational/compute/servers", governance: null };
+  const portfolio = { id: "p_1", slug: "foundational" };
+  const host = {
+    entityType: "host",
+    attributionStatus: "attributed" as const,
+    attributionConfidence: 0.95,
+    digitalProductId: null,
+    taxonomyNodeId: "tn_1",
+    provenance: "real_estate" as const,
+  };
+
+  it("skips a real-estate host with NO observation evidence (subnet phantom)", () => {
+    const d = resolvePromotionDecision(
+      { ...host, name: "LAN Host 192.168.0.0", hasObservationEvidence: false },
+      node,
+      portfolio,
+    );
+    expect(d.decision).toBe("skip");
+    expect(d.reason).toBe("no_observation_evidence");
+    expect(isTerminalStructuralSkip(d)).toBe(true);
+  });
+
+  it("promotes an evidenced real-estate device", () => {
+    const d = resolvePromotionDecision(
+      { ...host, name: "Reolink NVR", hasObservationEvidence: true },
+      node,
+      portfolio,
+    );
+    expect(d.decision).toBe("promote");
+  });
+});
 
 describe("resolvePromotionDecision", () => {
   const baseEntity = {
@@ -253,8 +300,9 @@ describe("isTerminalStructuralSkip (BI-62846516)", () => {
     taxonomyNodeId: "tn_1",
   };
 
-  it("TERMINAL_STRUCTURAL_SKIP_SOURCES is exactly the two structural gates", () => {
+  it("TERMINAL_STRUCTURAL_SKIP_SOURCES is exactly the structural gates", () => {
     expect([...TERMINAL_STRUCTURAL_SKIP_SOURCES].sort()).toEqual([
+      "evidence-gate",
       "name-gate",
       "structural-type-gate",
     ]);
