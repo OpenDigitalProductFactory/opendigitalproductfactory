@@ -102,10 +102,28 @@ export function buildDemandActivationState(
       : null;
   const evidenceReady =
     hasProblem(input.problemStatement) && input.evidenceCount > 0;
-  const provisional =
-    input.estimateDiverged ||
-    input.estimateSource === "ai" ||
-    (input.estimateSource !== null && input.estimateAgreed === false);
+  // An estimate is provisional when two estimates DISAGREE — not because of who
+  // produced it (BI-A5697C5E, founder-ratified 2026-08-26).
+  //
+  // The removed clauses judged standing by provenance. `estimateSource === "ai"`
+  // made an AI estimate permanently provisional with no disagreement and no
+  // divergence, and `estimateAgreed === false` is true for ANY single unconfirmed
+  // estimate — it means "nobody has countersigned yet", not "somebody disagreed".
+  // Together they blocked scoreReady on every agent-estimated item, which under an
+  // AI-native operating model is the default path rather than an edge case.
+  //
+  // This contradicted the AGENTS.md section 12 keystone — governance approves
+  // evidence, not provenance; a gate never asks which surface produced a field —
+  // and the commandment "Do the work; don't task the operator with what an agent
+  // can do". The confirmation it demanded could only ever be a rubber stamp: the
+  // estimator has read the schema, migration and test surface, and a confirmer who
+  // has not holds strictly less information. Ceremony that presents itself as
+  // governance is worse than no gate, because it manufactures assurance nobody
+  // actually supplied.
+  //
+  // Appetite and priority remain a human decision and are unaffected — they are
+  // the separate `validBucket` investment-bucket blocker below.
+  const provisional = input.estimateDiverged;
   const scoreReady =
     computed.score !== null &&
     confidence !== null &&
@@ -141,8 +159,6 @@ export function buildDemandActivationState(
   }
   if (input.estimateDiverged) {
     blockers.push("Reconcile the AI and human effort estimates.");
-  } else if (input.estimateSource === "ai") {
-    blockers.push("Confirm or overrule the proposed AI effort estimate.");
   }
   if (!validBucket(input.investmentBucket)) {
     blockers.push("Choose an investment bucket.");

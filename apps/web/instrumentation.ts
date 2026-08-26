@@ -983,6 +983,14 @@ export async function register() {
       }
     }
 
+    // Graph-mirror projections with no indexer of their own (BI-FEDFABF6). Boot is
+    // the trigger because it follows migrations, self-upgrade and first start of a
+    // new install. Skipped under measurement runtime like the self-heal block below;
+    // refreshGraphProjections never throws and logs its own failures.
+    if (!measurementRuntime) {
+      void import("@/lib/graph/refresh-projections").then((m) => m.refreshGraphProjections());
+    }
+
     // Operational self-heal maintenance (voice continuity, stuck-run
     // reconciles, watchdog intervals, model-context re-assertion). Skipped
     // wholesale under measurement runtime: an ephemeral sweep portal has no
@@ -1118,15 +1126,10 @@ export async function register() {
 
     void import("@/lib/onboarding/backfill-commercial-catalog-on-boot").then(({ backfillCommercialCatalogOnBoot }) => backfillCommercialCatalogOnBoot());
 
-    // Self-heal discovery attribution (BI-BAF38ED3) for any install whose estate
-    // was discovered before the fingerprint layer was wired into every ingestion
-    // path — those InventoryEntity rows were mis-binned by the coarse
-    // `host -> /servers` heuristic with no resolved identity. Re-runs the
-    // fingerprint layer over the persisted rows; idempotent and cheap once
-    // healed (diff-only writes), non-fatal, and fire-and-forget so it never
-    // delays boot.
-    void import("@/lib/onboarding/backfill-discovery-attribution-on-boot").then(
-      ({ backfillDiscoveryAttributionOnBoot }) => backfillDiscoveryAttributionOnBoot(),
+    // Discovery estate self-heal (BI-BAF38ED3 attribution + BI-B19C41B8 phantom
+    // products) — idempotent, cheap once healed, non-fatal, fire-and-forget.
+    void import("@/lib/onboarding/discovery-on-boot-self-heal").then(
+      ({ runDiscoveryOnBootSelfHeal }) => runDiscoveryOnBootSelfHeal(),
     );
     // Build Studio engine reliability (spec §3.1 engine-first / FB-78E967D4).
     // These are correctness reconcilers, not optional maintenance — skipped

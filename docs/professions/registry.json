@@ -207,7 +207,7 @@
     {
       "professionKey": "finance",
       "label": "Finance",
-      "roles": ["finance-agent", "finance-controller", "investment-analysis-agent", "portfolio-rationalization-agent"],
+      "roles": ["finance-agent", "finance-controller", "bookkeeper", "investment-analysis-agent", "portfolio-rationalization-agent"],
       "contextSlugs": ["finance"],
       "sources": [
         {

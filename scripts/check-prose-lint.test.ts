@@ -203,3 +203,42 @@ test("retiredVocabOnly scores lib files on the rename axis alone", () => {
   assert.equal(axes.textMass, 0);
   assert.equal(axes.longSentences, 0);
 });
+
+// BI-F45A2AE2. `/>...</` captures everything between a `>` and the next `<`,
+// which includes the code between two generic calls — so a component carrying
+// no copy at all scored textMass. The only exits were contorting the component
+// or `--update`, which bakes a false count into everyone's baseline.
+test("the span between two generics is code, not UI copy", () => {
+  const source = [
+    'const [mode, setMode] = useState<Mode>("idle");',
+    '  const [text, setText] = useState(proposal.draftText ?? "");',
+    "  const [result, setResult] = useState<{ ok: boolean }>(null);",
+  ].join("\n");
+  assert.deepEqual(extractCopySnippets(source), []);
+  assert.equal(analyzeFile("apps/web/components/Example.tsx", source).textMass, 0);
+});
+
+test("a type alias followed by a Promise generic is code, not UI copy", () => {
+  const source = [
+    "export type RuleResult = ActionResult<string>;",
+    "",
+    "export async function rule(input: RuleInput): Promise<RuleResult> {",
+  ].join("\n");
+  assert.deepEqual(extractCopySnippets(source), []);
+});
+
+test("a JSX ternary fragment is code, not UI copy", () => {
+  const source = "      ) : proposal.agreementNote ? (\n        <p>{proposal.agreementNote}</p>";
+  assert.deepEqual(extractCopySnippets(source), []);
+});
+
+test("real copy still counts, including copy that contains parentheses", () => {
+  assert.deepEqual(
+    extractCopySnippets("<p>Answer in your own words — it is saved as a draft for you to review.</p>"),
+    ["Answer in your own words — it is saved as a draft for you to review."],
+  );
+  assert.deepEqual(
+    extractCopySnippets("<span>Your coworkers were only moderately sure (worth a read).</span>"),
+    ["Your coworkers were only moderately sure (worth a read)."],
+  );
+});

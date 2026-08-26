@@ -164,6 +164,16 @@ An archetype has been through this audit when all of the following exist:
 ## Standards basis (do not re-derive)
 
 - [UX Archetype Audit Rubric](./ux-archetype-audit-rubric.md) — the surface counterpart; run both.
+- [Accommodation Doctrine](./accommodation-doctrine.md) — how to classify a difference this audit
+  finds as canonical, vertical or attribute, and the promotion rule. **Run this on every finding**;
+  the audit surfaces gaps, the doctrine decides where they belong.
+- [Canonical Minimal Substrate](./canonical-minimal-substrate.md) — the current element set and
+  what is already built. Check here before designing anything; most gaps are reach, not absence.
+- [Canonical Lifecycle Grammar](../superpowers/specs/2026-08-15-canonical-lifecycle-grammar-design.md)
+  — stages, in-stage states and gated advancement. Any new entity with a lifecycle declares a
+  grammar rather than a new stage enum.
+- Archetype operating models: [pet-rescue](./archetypes/pet-rescue-operating-model.md) ·
+  [campground](./archetypes/campground-operating-model.md)
 - [Archetype Business Value Streams](./archetype-business-value-streams.md)
 - [Four-Portfolio Archetype AI Workforce Operating Standard](./four-portfolio-archetype-ai-workforce-operating-standard.md)
 

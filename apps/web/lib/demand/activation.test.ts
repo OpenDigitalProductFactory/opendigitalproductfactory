@@ -30,6 +30,67 @@ function demand(overrides: Partial<DemandActivationInput> = {}): DemandActivatio
   };
 }
 
+// BI-A5697C5E, founder-ratified 2026-08-26: an estimate's standing follows its
+// evidence, never its provenance. "Humans are not qualified to override an AI
+// estimate" — the confirmation the old rule demanded could only be a rubber
+// stamp, and blocked scoreReady on every agent-estimated item.
+describe("estimate standing follows evidence, not provenance", () => {
+  const grounded = {
+    demandStage: "screened" as const,
+    problemStatement: "Employment events are recorded but nothing acts on them.",
+    evidenceCount: 1,
+    scoreInputs: { reach: 40, impact: 4, confidence: 0.9, jobSize: 3 },
+    investmentBucket: "grow",
+    estimateAgreed: false,
+    estimateDiverged: false,
+  };
+
+  it("lets an unconfirmed AI estimate reach scoreReady", () => {
+    const state = buildDemandActivationState(demand({ ...grounded, estimateSource: "ai" }));
+
+    expect(state.score.provisional).toBe(false);
+    expect(state.readiness.scoreReady).toBe(true);
+    expect(state.blockers).not.toContain("Confirm or overrule the proposed AI effort estimate.");
+  });
+
+  it("scores identical grounding identically whatever produced the estimate", () => {
+    // `estimateAgreed` tracks its source realistically: only "agreed" carries a
+    // countersignature. Under the old rule that alone split the three apart — ai
+    // and human were provisional, agreed was not — which is exactly the
+    // provenance judgement this pins closed.
+    const states = ([
+      { estimateSource: "ai" as const, estimateAgreed: false },
+      { estimateSource: "human" as const, estimateAgreed: false },
+      { estimateSource: "agreed" as const, estimateAgreed: true },
+    ]).map((provenance) =>
+      buildDemandActivationState(demand({ ...grounded, ...provenance })));
+
+    const [first] = states;
+    for (const state of states) {
+      expect(state.score.score).toBe(first!.score.score);
+      expect(state.score.provisional).toBe(first!.score.provisional);
+      expect(state.readiness.scoreReady).toBe(first!.readiness.scoreReady);
+    }
+  });
+
+  it("still blocks when two estimates genuinely disagree", () => {
+    const state = buildDemandActivationState(
+      demand({ ...grounded, estimateSource: "human", estimateDiverged: true }));
+
+    expect(state.score.provisional).toBe(true);
+    expect(state.readiness.scoreReady).toBe(false);
+    expect(state.blockers).toContain("Reconcile the AI and human effort estimates.");
+  });
+
+  it("keeps the investment bucket a human decision", () => {
+    const state = buildDemandActivationState(
+      demand({ ...grounded, estimateSource: "ai", investmentBucket: null }));
+
+    expect(state.readiness.scoreReady).toBe(false);
+    expect(state.blockers).toContain("Choose an investment bucket.");
+  });
+});
+
 describe("buildDemandActivationState", () => {
   it("keeps a null stage explicitly unclassified", () => {
     const state = buildDemandActivationState(demand());

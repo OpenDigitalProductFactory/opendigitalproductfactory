@@ -29,7 +29,8 @@ export type AttentionSource =
   | "storefront-inquiry" // a new public StorefrontInquiry awaiting the owner's first response (BI-348766E5)
   | "business-journey" // PortfolioQualityIssue issueType=journey_failure — a critical business journey failed its watchdog run (BI-E105303D)
   | "compliance-source-freshness" // governed AI-provider compliance evidence lapsing or lapsed (BI-68D44727)
-  | "coworker-envelope"; // CoworkerActionEnvelope status=proposed, bound to the reading user (BI-7CB2CCDE)
+  | "coworker-envelope" // CoworkerActionEnvelope status=proposed, bound to the reading user (BI-7CB2CCDE)
+  | "skill-proposal"; // ImprovementProposal category=skill, status=proposed — a skill change awaiting review (BI-2F9EE2E9)
 
 /** Risk vocabulary aligned with the paused-work plan (a2aMetadata.riskClass). */
 export type AttentionRiskClass = "read" | "bounded-write" | "high-risk" | "unknown";

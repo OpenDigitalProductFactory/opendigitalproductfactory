@@ -65,3 +65,40 @@ Choose **Accept** to approve the result and attempt delivery to the configured
 forge, or **Reject** to retain the audit without delivery. A GitHub outage leaves
 the accepted contribution intact and shows retry state in the ledger. Use
 **Retry forge delivery** after credentials or connectivity recover.
+
+## Scheduled work
+
+Open **Admin > Advanced > Scheduled Jobs** to see everything the platform runs on
+a cadence — proactive AI coworker tasks and platform crons together.
+
+The register is split into three lanes, because they are different kinds of thing:
+
+- **Coworker work** — a coworker doing a job on a cadence. Each row names the
+  coworker, the route its output lands on, and its last run.
+- **Platform crons** — code-defined jobs. Core-locked ones protect platform
+  integrity and are read-only.
+- **Spent & run-slots** — one-off dispatches that already fired, and run-slot
+  claims that were never scheduled work at all. Nothing here runs again;
+  **Retire** clears it from the register.
+
+**What needs attention** sits at the top and counts only real problems: a job
+that reported an error, and a job that is **overdue** — its next run came and
+went. A job that has stopped firing no longer looks healthy.
+
+Two labels are worth knowing:
+
+- **No reporting** — the job runs, but records nothing, so its last run cannot be
+  shown. This is normal for most crons and is not a fault.
+- **No kill switch** — disabling this job would not stop it, because it never
+  reads the enabled flag. The control is withheld rather than shown as a button
+  that does nothing.
+
+**What is going to run** projects the live cadences over the next day, week, or
+month. Jobs that fire more often than the chart can usefully plot are listed
+below it instead. Click any name to filter the register to it.
+
+Anything in the register can be run on demand with **Run now** — a cron dispatches
+immediately, a coworker task is queued for the next dispatcher tick. **Edit**
+opens on the cadence the job actually runs at, accepts either a frequency or a
+cron expression, and previews the next fire before you save. Coworker work cannot
+be scheduled more often than daily.

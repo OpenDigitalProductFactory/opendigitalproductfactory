@@ -279,7 +279,39 @@ export async function reconcileTaxIssues(
   });
 }
 
+/**
+ * Which countries' authorities the jurisdiction picker should offer.
+ *
+ * Returns undefined (no filter) when the install has not declared a home
+ * country — narrowing on an unknown would hide authorities the operator needs.
+ */
+export function jurisdictionCountryScope(
+  profile: { homeCountryCode?: string | null },
+  registeredCountryCodes: readonly string[],
+): { countryCode: { in: string[] } } | undefined {
+  const home = profile.homeCountryCode?.trim().toUpperCase();
+  if (!home) return undefined;
+
+  const codes = new Set<string>([home]);
+  for (const code of registeredCountryCodes) {
+    const trimmed = code?.trim().toUpperCase();
+    if (trimmed) codes.add(trimmed);
+  }
+  return { countryCode: { in: [...codes].sort() } };
+}
+
 export async function loadTaxWorkspaceState(profile: TaxProfileRecord, ownerUserId: string) {
+  // Resolved BEFORE the parallel reads: the jurisdiction picker's scope depends
+  // on which countries this org already holds registrations in, so it cannot be
+  // computed inside the same Promise.all that fetches them.
+  const registeredCountries = await prisma.taxRegistration.findMany({
+    where: { organizationTaxProfileId: profile.id },
+    select: { jurisdictionReference: { select: { countryCode: true } } },
+  });
+  const registeredCountryCodes = registeredCountries
+    .map((row) => row.jurisdictionReference?.countryCode)
+    .filter((code): code is string => Boolean(code));
+
   const [registrations, periods, jurisdictionOptions, monitoringTask, rawAuthorityCredentials] = await Promise.all([
     prisma.taxRegistration.findMany({
       where: { organizationTaxProfileId: profile.id },
@@ -305,6 +337,7 @@ export async function loadTaxWorkspaceState(profile: TaxProfileRecord, ownerUser
         },
       },
       include: {
+        components: { select: { componentKind: true, amount: true } },
         registration: {
           include: {
             jurisdictionReference: {
@@ -331,6 +364,22 @@ export async function loadTaxWorkspaceState(profile: TaxProfileRecord, ownerUser
       take: 12,
     }),
     prisma.taxJurisdictionReference.findMany({
+      // Scope the catalogue to where this install actually operates.
+      //
+      // The reference table is a GLOBAL catalogue — 50 US states, every EU
+      // country, GB, and the US federal authority. Offering all of it to every
+      // install meant a US business was shown EU VAT authorities and a UK
+      // business all 50 US states: 80 options in one control, against a budget
+      // of 20. OrganizationTaxProfile.homeCountryCode is the canonical answer to
+      // where an install operates (DI-89F317F406AA), so use it rather than
+      // inventing a second one.
+      //
+      // Countries the org ALREADY holds a registration in are always included,
+      // so a cross-border obligation someone has already set up can never
+      // disappear from the picker. An unset homeCountryCode falls back to the
+      // whole catalogue — an install that has not declared where it operates
+      // must not be silently narrowed.
+      where: jurisdictionCountryScope(profile, registeredCountryCodes),
       orderBy: [{ countryCode: "asc" }, { stateProvinceCode: "asc" }, { authorityName: "asc" }],
       take: 200,
       select: {

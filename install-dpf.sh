@@ -281,10 +281,13 @@ case "$rc" in
        info "No prior install state; dry-run leaves $(dpf_state_path) unchanged"
      else
        info "No prior install state; initializing $(dpf_state_path)"
-       dpf_state_init "$DPF_INSTALLER_VERSION" "$REPO_ROOT"
+       # Bare calls here abort the whole install with a naked exit 1 under
+       # `set -euo pipefail`, saying nothing about which stage died. Same
+       # `fail ... (see message above)` idiom the validation arm below uses.
+       dpf_state_init "$DPF_INSTALLER_VERSION" "$REPO_ROOT"          || fail "Could not initialize install state at $(dpf_state_path) (see message above)"
      fi ;;
   3) warn "Install state is from an older installer; running forward migration"
-     dpf_state_migrate ;;
+     dpf_state_migrate        || fail "Install state forward migration failed at $(dpf_state_path) (see message above)" ;;
   *) fail "Install state validation failed (see message above)" ;;
 esac
 

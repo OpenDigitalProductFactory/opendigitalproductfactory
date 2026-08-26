@@ -243,17 +243,20 @@ export async function resolveAutonomousWorkTools(input: {
       "@/lib/coworker/authorized-surface-coworker-contract"
     );
     const { getAgentToolGrantsAsync } = await import("@/lib/tak/agent-grants");
-    const { resolveLocalServedContextTokens } = await import(
+    const { resolveLocalServingPosture } = await import(
       "@/lib/inference/local-model-context-reconcile"
     );
     const { resolveLocalToolFidelityCeiling } = await import("@/lib/routing/local-tool-fidelity");
 
-    const [roleGrants, localServedContext, measuredToolFidelityCeiling] = await Promise.all([
+    const [roleGrants, localPosture, measuredToolFidelityCeiling] = await Promise.all([
       getAgentToolGrantsAsync(input.agentId),
-      resolveLocalServedContextTokens(),
+      resolveLocalServingPosture(),
       resolveLocalToolFidelityCeiling(),
     ]);
-    const cap = deriveCoworkerToolCap(localServedContext, { measuredToolFidelityCeiling });
+    const cap = deriveCoworkerToolCap(localPosture.servedContextTokens, {
+      measuredToolFidelityCeiling,
+      localPresence: localPosture.presence,
+    });
 
     let routeDomainToolNames: string[] = [];
     if (input.routeContext) {
@@ -268,12 +271,19 @@ export async function resolveAutonomousWorkTools(input: {
     const { attached, deferred } = selectCoworkerToolBudget({
       tools: authorized,
       roleGrants,
-      pageActionNames: new Set(routeDomainToolNames),
-      alwaysIncludeNames: new Set([
-        LOAD_TOOLS_TOOL_NAME,
+      // BI-95D74DE9 — surface tools and the run's required tools take tier-0
+      // PRIORITY within the cap, not exemption from it. As alwaysIncludeNames
+      // they attached unconditionally, putting a floor of up to 11 under the
+      // surface whatever the cap said, which exceeds what the routing gate will
+      // run once a measured ceiling drops the cap below that. If a cap cannot
+      // fit a run's required tools, the honest signal is a surface too small for
+      // the run — not a surface the gate then refuses outright.
+      pageActionNames: new Set([
+        ...routeDomainToolNames,
         ...AUTHORIZED_SURFACE_TOOL_NAMES,
         ...(input.requiredToolNames ?? []).slice(0, 4),
       ]),
+      alwaysIncludeNames: new Set([LOAD_TOOLS_TOOL_NAME]),
       cap: effectiveCap,
       intentQuery: input.intentQuery,
     });
@@ -281,7 +291,7 @@ export async function resolveAutonomousWorkTools(input: {
     if (deferred.length > 0) {
       console.log(
         `[autonomous-tool-budget] agent=${JSON.stringify(input.agentId)} authorized=${authorized.length} ` +
-          `attached=${tools.length} deferred=${deferred.length} cap=${cap}`,
+          `attached=${tools.length} deferred=${deferred.length} cap=${cap} localPresence=${localPosture.presence}`,
       );
     }
     return {

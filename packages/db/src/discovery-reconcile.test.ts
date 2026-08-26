@@ -98,6 +98,24 @@ describe("reconcilePromotedProducts", () => {
     });
   });
 
+  it("DEMOTES a subnet-scan phantom product (real-estate IP, no observation evidence) — BI-B19C41B8", async () => {
+    // A /24 sweep promoted a "LAN Host 192.168.0.N" per IP. These never answered
+    // (no MAC), so they are phantoms, not devices — demoted even though the
+    // address is on the operator's real LAN. The evidenced NVR beside it is kept.
+    const db = makeDb([
+      { id: "p_phantom", productId: "host-p", name: "LAN Host 192.168.0.0", inventoryEntities: [{ id: "e1", entityType: "host", name: "LAN Host 192.168.0.0", properties: { discoveredVia: "arp_table", address: "192.168.0.0" } }] },
+      { id: "p_nvr", productId: "dev-nvr", name: "Reolink NVR", inventoryEntities: [{ id: "e2", entityType: "host", name: "NVR 192.168.0.42", properties: { discoveredVia: "arp_table", address: "192.168.0.42", mac: "ec:71:db:aa:bb:cc" } }] },
+    ]);
+
+    const summary = await reconcilePromotedProducts(db as never);
+
+    expect(summary.demoted).toBe(1);
+    expect(summary.kept).toBe(1);
+    const deletedIds = db.digitalProduct.delete.mock.calls.map((c) => (c[0] as { where: { id: string } }).where.id);
+    expect(deletedIds).toContain("p_phantom");
+    expect(deletedIds).not.toContain("p_nvr");
+  });
+
   it("KEEPS a real-estate device product (host-type but UniFi-discovered)", async () => {
     // The 2026-06 estate fix: a Reolink NVR / UniFi gateway is a Foundational
     // Digital Product. Its entityType is host/gateway, but its provenance is

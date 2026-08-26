@@ -77,6 +77,9 @@ describe("mileage absorption substrate shape", () => {
       endLongitude: "-122.2712000" as unknown as Trip["endLongitude"],
       startPlaceLabel: null,
       endPlaceLabel: null,
+      // Derived by the device, so an automatic capture that could not resolve
+      // a country records null rather than a guess.
+      countryCode: null,
       distanceMeters: 21400,
       captureKind: "automatic",
       classification: "unclassified",

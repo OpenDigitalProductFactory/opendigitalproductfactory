@@ -137,6 +137,34 @@ export function reconcileBuildStudioCustomerStatus(args: {
     return { ...status, ownerState: "waiting-owner" };
   }
 
+  // BI-CE1AB982: a dispatch REFUSED before it started never produces a
+  // BuildDispatchAttempt row, an assistant turn, or a failure axis — so every
+  // signal below this point reads "nothing is wrong" and the build renders as
+  // working, forever. The owner approved a start that silently never happened.
+  // Same owner-facing shape as the `config` inference failure: this is platform
+  // setup, not something the owner can fix by waiting.
+  const dispatchBlock = progress.dispatchBlock;
+  if (dispatchBlock?.blocked) {
+    const elapsedLabel = formatElapsedLabel(
+      dispatchBlock.observedAt,
+      progress.generatedAt,
+      "Waiting",
+    );
+    return {
+      ...status,
+      ownerState: "blocked",
+      lifecyclePosition: "AI setup needs attention",
+      worker: "Build Studio has not started this change",
+      evidence: "No configured AI service can run this step, so the work was never started.",
+      technicalEvidence: dispatchBlock.reason ?? undefined,
+      nextAction: "Ask a platform administrator to check AI readiness, then start this again.",
+      owner: "platform administrator",
+      needsYou: true,
+      ...(elapsedLabel ? { elapsedLabel } : {}),
+      expectation: "This will not start on its own. Nothing is lost — the request stays here until setup is fixed.",
+    };
+  }
+
   const inFlight = latestInflightDispatch(progress);
   if (inFlight) {
     const elapsedLabel = formatElapsedLabel(inFlight.startedAt, progress.generatedAt, "Working");
@@ -154,19 +182,18 @@ export function reconcileBuildStudioCustomerStatus(args: {
     };
   }
 
-  if (
-    (phase === "build" || phase === "review")
-    && progress.tasks.totalTasks === 0
-    && progress.dispatchHistory.length === 0
-  ) {
+  // BI-CE1AB982: this guard used to be gated to build/review, on the reasoning
+  // that ideate/plan are coworker-custody. But "no task, no dispatch, nothing in
+  // flight" means no work has started in ANY phase, and the fallthrough below
+  // resolves that to "working". Claiming progress is only honest once something
+  // has actually been dispatched, so the guard now covers every live phase.
+  if (progress.tasks.totalTasks === 0 && progress.dispatchHistory.length === 0) {
     return {
       ...status,
       ownerState: "not-started",
-      lifecyclePosition: phase === "build" ? "Preparing the build" : "Preparing the checks",
-      worker: phase === "build" ? "No implementation task has started" : "No verification check has started",
-      evidence: phase === "build"
-        ? "Build Studio has not dispatched implementation work yet."
-        : "Build Studio has not dispatched verification work yet.",
+      lifecyclePosition: notStartedStageLabel(phase),
+      worker: notStartedWorkerLabel(phase),
+      evidence: notStartedEvidence(phase),
       nextAction: "No action needed unless Build Studio asks for a decision.",
       owner: "Build Studio",
       needsYou: false,
@@ -238,6 +265,37 @@ function latestInflightDispatch(progress: BuildProgressVisibility) {
   return [...progress.dispatchHistory]
     .filter((attempt) => attempt.completedAt == null)
     .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime())[0] ?? null;
+}
+
+function notStartedStageLabel(phase: BuildPhase): string {
+  switch (phase) {
+    case "ideate": return "Preparing to understand the change";
+    case "plan": return "Preparing the plan";
+    case "build": return "Preparing the build";
+    case "review": return "Preparing the checks";
+    case "ship": return "Preparing the release";
+    default: return "Preparing";
+  }
+}
+
+function notStartedWorkerLabel(phase: BuildPhase): string {
+  switch (phase) {
+    case "ideate": return "No research step has started";
+    case "plan": return "No planning step has started";
+    case "build": return "No implementation task has started";
+    case "review": return "No verification check has started";
+    default: return "No step has started";
+  }
+}
+
+function notStartedEvidence(phase: BuildPhase): string {
+  switch (phase) {
+    case "ideate": return "Build Studio has not dispatched research work yet.";
+    case "plan": return "Build Studio has not dispatched planning work yet.";
+    case "build": return "Build Studio has not dispatched implementation work yet.";
+    case "review": return "Build Studio has not dispatched verification work yet.";
+    default: return "Build Studio has not dispatched work yet.";
+  }
 }
 
 function workingStageLabel(phase: BuildPhase): string {

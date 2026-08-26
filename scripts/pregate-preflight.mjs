@@ -16,6 +16,7 @@ import {
 } from "./lib/pregate-preflight.mjs";
 import { checkStaleRootClone } from "./lib/stale-root-clone.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
+import { ensureCompileReady, getChangedFilesAgainstMain } from "./lib/ensure-compile-ready.mjs";
 
 export async function main() {
   if (process.argv.includes("--plan")) {
@@ -40,6 +41,34 @@ export async function main() {
   if (staleRoot.behind === 0 && staleRoot.rootClonePath) {
     process.stdout.write(
       `[pregate-preflight] root clone current (${staleRoot.rootClonePath})\n`,
+    );
+  }
+
+  // Stage 0 (BI-6C54223E, DOC-C263E0C9): enforce compile-readiness for code
+  // intent BEFORE the guards run. A source-only worktree used to warn and pass,
+  // letting the thread attribute unprovisioned-worktree failures to its own
+  // change (and its guards silently env-skip). Docs stay source-only; code
+  // auto-heals (managed install, lazy — only the pushing thread, once) or blocks
+  // with the exact missing artifacts. Opt-out: DPF_SKIP_COMPILE_READY_GATE="<why>".
+  const readinessGate = ensureCompileReady({
+    worktreePath: process.cwd(),
+    changedFiles: getChangedFilesAgainstMain(process.cwd()),
+  });
+  if (!readinessGate.ok) {
+    for (const line of readinessGate.banner ?? []) {
+      process.stderr.write(`[pregate-preflight] ${line}\n`);
+    }
+    process.stderr.write(
+      `[pregate-preflight] worktree is SOURCE-ONLY for a code change and auto-heal failed ` +
+        `(${readinessGate.reason}) — guards cannot run and would env-skip. Provision it, then re-run. ` +
+        `Emergency skip (recorded honesty, CI still enforces): set DPF_SKIP_COMPILE_READY_GATE="<why>".\n`,
+    );
+    process.exitCode = 1;
+    return;
+  }
+  if (readinessGate.action === "healed") {
+    process.stdout.write(
+      "[pregate-preflight] worktree auto-healed to compile-ready before guards\n",
     );
   }
 

@@ -115,3 +115,12 @@ the wording of that message matches the same cause.
 - assignment changes that solve one route but weaken another
 - capacity work that produces token spend without durable evidence, backlog movement, or reviewable output
 - capability needs without submitter context, route context, or a clear backlog follow-up
+
+## Defaults for work rooms
+
+Priority & Models also carries the default for **work rooms** — how hard rooms push and
+whether they may act without asking. It is listed separately from the per-coworker controls
+because it governs work happening in a room rather than one coworker's own behaviour.
+
+A room can override it, and what the work actually is overrides both. See
+[Priority and outcomes](../ai-workforce/priority-and-outcomes.md).

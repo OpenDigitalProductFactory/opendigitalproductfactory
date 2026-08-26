@@ -172,3 +172,57 @@ The portal first prepares the candidate promoter image, then the promoter builds
 ## Platform stack currency
 
 **Operations > Stack Currency** (`/ops/stack-currency`) shows the technology lifecycle the platform is *subject to* — its own runtimes and frameworks (Node, PostgreSQL, Next.js, and so on) on the shared currency axis: current, approaching end of life, unsupported, or end of life. It is deliberately separate from **Patches**, which covers the discovered customer estate. Current versions are read from the platform's own manifests; a support/end-of-life date that has not been recorded shows as "EOL not sourced" — an invitation to record one — rather than a made-up status, and anything approaching or past end of life is flagged for an upgrade path.
+
+## What this installation is
+
+**Operations → Installation** states what this installation is and what your AI
+coworkers may do here. It never grants access — access still comes from roles,
+grants, and approved links.
+
+You reach it from the installation badge beside the logo, which appears on every
+installation that is not production.
+
+### Who runs this installation
+
+Name the company or team that operates this installation. This is not the
+business it runs for: an IT services company operating installations for twenty
+customers is one operator with twenty businesses, and a development installation
+paired with a production one shares the operator while the businesses differ.
+
+Two installations that belong together share this name, and it is how you tell
+them apart everywhere else — in the badge, and in the name your AI coworkers see
+when they connect to this installation rather than another one.
+
+Leave it empty if you would rather not name it yet. The badge then shows the job
+alone, such as **DEV**.
+
+### What your AI coworkers may do here
+
+Five stances, each shown with the reason it resolved that way:
+
+- **Credentials** — whether an agent may generate and rotate local test
+  credentials, or whether you enter every credential yourself.
+- **Teardown** — whether this installation may be destroyed, only after its work
+  is captured, or never.
+- **Source changes** — whether platform source may be edited from a governed
+  worktree, or not from this directory at all.
+- **Paired installation** — whether a paired installation may be read, written
+  through an approved link, or is absent.
+- **Work sync** — whether the work this installation owns is mirrored to a
+  paired installation, so it survives a teardown, or has nowhere to go.
+
+An installation that has not said what it is counts as production, so every
+brake stays on until someone declares otherwise.
+
+### Correcting the identity
+
+Open **Change what this installation is** to set its main job, its environment,
+and the production installation it is paired with.
+
+Choose **Show me the impact** first. The preview lists the fields you are
+changing, what each stance becomes, any brake that gets looser, and the evidence
+that stops describing this installation. Nothing is saved until you confirm it.
+
+The operator name is different: it is a label rather than a change to what your
+coworkers may do, so it saves directly without an impact preview. The preview
+step is reserved for changes that actually move a brake.

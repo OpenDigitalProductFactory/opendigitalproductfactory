@@ -81,6 +81,34 @@ export async function dispatchIdeateForApprovedBuild(params: {
     });
   };
 
+  /**
+   * BI-7AD0759A — keep a bounded excerpt of what the model actually said when its
+   * output could not be parsed into a design document.
+   *
+   * Head AND tail are retained: a truncated or unterminated object shows its
+   * shape at both ends, and the tail is usually where it died. An empty response
+   * is recorded as such, because "the model returned nothing" is a different
+   * diagnosis from "the model returned prose".
+   */
+  const recordIdeateOutputExcerpt = async (rawOutput: string | undefined): Promise<void> => {
+    const { describeIdeateOutput } = await import("./ideate-output-excerpt");
+    const summary = describeIdeateOutput(rawOutput);
+    await prisma.buildActivity.create({
+      data: { buildId, tool: "ideate_output_excerpt", summary },
+    }).catch((err) => {
+      console.warn("[ideate-on-approval] Failed to log ideate_output_excerpt:", { buildId }, err);
+    });
+  };
+
+  /** BI-CE1AB982 — durable "refused before start" marker read by progress-visibility. */
+  const recordDispatchBlocked = async (reason: string): Promise<void> => {
+    await prisma.buildActivity.create({
+      data: { buildId, tool: "dispatch_blocked", summary: reason },
+    }).catch((err) => {
+      console.warn("[ideate-on-approval] Failed to log dispatch_blocked:", { buildId, reason }, err);
+    });
+  };
+
   try {
     // Fetch the build with the linked BI and current designDoc evidence.
     // NOTE: businessContext is intentionally NOT selected here — it is not a
@@ -183,6 +211,12 @@ export async function dispatchIdeateForApprovedBuild(params: {
         reason: selection?.action ?? "No allowed healthy Build Studio engine remains. Review AI Readiness and retry.",
       };
       await logActivity(`Skipped auto-dispatch: ${outcome.reason}`);
+      // BI-CE1AB982: the line above is the ONLY trace a refused dispatch used to
+      // leave, and nothing on the owner surface reads `ideate_dispatch` prose —
+      // so the panel kept animating "Build Studio is working on this change" on a
+      // build that never started. This row is the durable, queryable signal the
+      // progress projection reads to render the build as blocked instead.
+      await recordDispatchBlocked(outcome.reason);
       return outcome;
     }
     await logActivity(formatBuildEngineSelectionEvidence(selection));
@@ -328,6 +362,11 @@ export async function dispatchIdeateForApprovedBuild(params: {
         durationMs,
       };
       await logActivity(`Auto-dispatch failed after ${(durationMs / 1000).toFixed(1)}s: ${outcome.error.slice(0, 200)}`);
+      // BI-7AD0759A: the model's output is the ONLY thing that explains why it
+      // could not be parsed, and it was being dropped on the floor here — on a
+      // local-only install that leaves the operator a four-minute wait and a
+      // fixed sentence. Keep a bounded excerpt as evidence.
+      await recordIdeateOutputExcerpt(ideateResult.rawOutput);
       return outcome;
     }
     if (executionProfileRef) {

@@ -459,6 +459,56 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
     ],
   },
 
+  "/finance/banking": {
+    routePrefix: "/finance/banking",
+    domain: "Bookkeeping",
+    sensitivity: "confidential",
+    domainContext:
+      "This page shows bank/card accounts, imported statement transactions, categorization rules, and reconciliation status — confidential money-of-record data. Amounts come from statements, never guesses; unmatched lines and unparseable rows are surfaced, not filled in. Account setup and statement import are money-of-record actions that route to the owner for approval; categorization and matching are ordinary, reversible steps.",
+    domainTools: [
+      "list_bank_accounts",
+      "get_bank_account",
+      "get_bank_transactions",
+      "get_reconciliation_summary",
+      "suggest_transaction_matches",
+      "list_bank_rules",
+      "create_bank_account",
+      "import_bank_statement",
+      "match_transaction",
+      "unmatch_transaction",
+      "create_bank_rule",
+      "delete_bank_rule",
+      "wiki_query",
+      "search_knowledge",
+    ],
+    docsPath: "/docs/finance/index",
+    skills: [
+      {
+        label: "How current are our books?",
+        description: "Reconciliation status per account: matched vs unmatched, balance, last reconciled",
+        capability: "view_finance",
+        prompt: "Give me the reconciliation status of each bank/card account — what's matched, what's still unmatched, and how current the books are.",
+      },
+      {
+        label: "Reconcile unmatched transactions",
+        description: "Walk the unmatched lines and match them against recorded payments",
+        capability: "manage_finance",
+        prompt: "Walk our unmatched bank transactions and reconcile each one against the right recorded payment, surfacing anything you can't match.",
+      },
+      {
+        label: "Set up categorization rules",
+        description: "Propose bank rules to auto-categorize recurring vendors",
+        capability: "manage_finance",
+        prompt: "Look at our recent transactions and propose bank rules to auto-categorize the recurring vendors.",
+      },
+      {
+        label: "Report an issue",
+        description: "Report a bug or give feedback",
+        capability: null,
+        prompt: "I'd like to report an issue or give feedback about this page.",
+      },
+    ],
+  },
   "/finance": {
     routePrefix: "/finance",
     domain: "Finance Operations",

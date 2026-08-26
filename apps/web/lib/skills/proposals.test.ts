@@ -7,6 +7,17 @@ const { existsSyncMock, writeFileSyncMock } = vi.hoisted(() => ({
   writeFileSyncMock: vi.fn(),
 }));
 
+// PR emission is an external effect with its own test file
+// (seed-pull-request.test.ts); these tests are about proposal semantics.
+vi.mock("./seed-pull-request", () => ({
+  emitSeedPullRequest: vi.fn(async () => ({
+    status: "no-token",
+    prUrl: null,
+    branchName: null,
+    reason: "stubbed in unit tests",
+  })),
+}));
+
 vi.mock("fs", () => ({
   existsSync: existsSyncMock,
   writeFileSync: writeFileSyncMock,

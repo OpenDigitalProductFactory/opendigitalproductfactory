@@ -144,3 +144,56 @@ test("gate summary truncates a runaway failure summary rather than replaying the
   assert.ok(lines.length <= 24, `summary must stay bounded, got ${lines.length}`);
   assert.equal(lines.at(-1), "gate failed");
 });
+
+// BI-F22B4EEE. summarizeLocalCiOutput returns a STRUCTURED record, and the
+// summary did `String(input.failureSummary)` — printing `[object Object]` as the
+// one line an operator reads on a failed gate.
+test("formatGateSummary renders a structured failure summary as text", () => {
+  const lines = formatGateSummary({
+    branch: "fix/x",
+    sha: "abcdef1234567890",
+    verdictLine: "",
+    failureSummary: {
+      schema: "dpf-local-ci-failure-summary/v1",
+      failedTests: ["FAIL lib/a.test.ts > does the thing"],
+      failedChecks: ["Prose Lint Guard"],
+      omittedFailureLineCount: 0,
+    },
+  }).join("\n");
+
+  assert.match(lines, /FAIL lib\/a\.test\.ts/);
+  assert.match(lines, /Prose Lint Guard/);
+  assert.doesNotMatch(lines, /\[object Object\]/);
+});
+
+test("formatGateSummary says so when a failed gate captured nothing", () => {
+  // The live shape: the child was killed, so no test or check ever failed. An
+  // empty summary must not render as a blank line or an object.
+  const lines = formatGateSummary({
+    verdictLine: "",
+    failureSummary: {
+      schema: "dpf-local-ci-failure-summary/v1",
+      failedTests: [],
+      failedChecks: [],
+      omittedFailureLineCount: 0,
+    },
+  }).join("\n");
+
+  assert.match(lines, /no failing test or check was captured/);
+  assert.doesNotMatch(lines, /\[object Object\]/);
+});
+
+test("formatGateSummary still accepts a plain string summary", () => {
+  const lines = formatGateSummary({ verdictLine: "", failureSummary: "one plain line" }).join("\n");
+
+  assert.match(lines, /! one plain line/);
+});
+
+test("formatGateSummary reports omitted failure lines", () => {
+  const lines = formatGateSummary({
+    verdictLine: "",
+    failureSummary: { failedTests: ["FAIL a"], failedChecks: [], omittedFailureLineCount: 4 },
+  }).join("\n");
+
+  assert.match(lines, /4 more failure line\(s\) omitted/);
+});

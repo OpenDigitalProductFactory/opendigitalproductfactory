@@ -177,10 +177,15 @@ function ProposalRow({
                       // reach the seed file is reverted by the next reseed
                       // (BI-5798BBA3), so say which happened.
                       const p = result.data.propagation;
+                      const pr = result.data.seedPullRequest;
+                      // A pull request is what makes the approval durable on an
+                      // install with no writable checkout, so it leads.
                       setFeedback(
-                        p.status === "written"
-                          ? `Approved, and written to ${p.path}. Commit that file so the change survives a reseed.`
-                          : `Approved in the catalog only — NOT written to the shipped skill (${p.reason ?? p.status}). A reseed will revert it.`,
+                        pr.status === "pr-opened"
+                          ? `Approved. Review and merge ${pr.prUrl} to land it in the shipped skill.`
+                          : p.status === "written"
+                            ? `Approved, and written to ${p.path}. Commit that file so the change survives a reseed. No PR was opened (${pr.reason ?? pr.status}).`
+                            : `Approved in the catalog only — NOT in the shipped skill (${pr.reason ?? p.reason ?? pr.status}). A reseed will revert it.`,
                       );
                     })
                   }

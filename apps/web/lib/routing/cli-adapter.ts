@@ -304,6 +304,41 @@ function isProviderOverloadMessage(text: string): boolean {
   return /\b529\b|overloaded/i.test(text);
 }
 
+/**
+ * The CLI's own usage-limit banner (BI-QUOTA-DEAD-END).
+ *
+ * Claude CLI prints "You've hit your weekly limit · resets 4pm (UTC)" on
+ * stdout when a subscription quota is exhausted. The adapter classified auth
+ * errors and overload but had no branch for quota, so this fell through and
+ * became the assistant's reply verbatim. Measured on the live install: 23
+ * occurrences — 21 where the banner WAS the entire reply (a dead end with no
+ * routing signal, so failover never fired) and 2 where it was prepended to a
+ * genuine answer, corrupting a good reply.
+ *
+ * Deliberately narrow. It matches the banner's own shape rather than the word
+ * "limit", which appears in ordinary prose ("the weekly limit on spend is…").
+ */
+const CLI_QUOTA_BANNER = /(?:you(?:'|’)?ve\s+)?hit\s+your\s+(?:weekly|daily|monthly|usage)\s+limit/i;
+
+export function isCliQuotaBanner(text: string): boolean {
+  return CLI_QUOTA_BANNER.test(text);
+}
+
+/**
+ * Remove a leading quota banner so a genuine reply behind it survives.
+ *
+ * All 23 observed occurrences started with the banner; it is a prefix the CLI
+ * emits before whatever else it was going to say. Stripping only a LEADING
+ * match keeps the function from mangling a reply that legitimately discusses
+ * usage limits further down.
+ */
+export function stripLeadingQuotaBanner(text: string): string {
+  const firstBreak = text.search(/\n|(?<=\))\s/);
+  const head = firstBreak === -1 ? text : text.slice(0, firstBreak);
+  if (!CLI_QUOTA_BANNER.test(head)) return text;
+  return text.slice(head.length).trimStart();
+}
+
 // ─── CLI Adapter ────────────────────────────────────────────────────────────
 
 export const cliAdapter: ExecutionAdapterHandler = {
@@ -673,6 +708,23 @@ export const cliAdapter: ExecutionAdapterHandler = {
           "overloaded",
           providerId,
         );
+      }
+
+      // Quota exhaustion (BI-QUOTA-DEAD-END). Raised as rate_limit so routing
+      // can exclude this provider and fail over, exactly as it does for auth
+      // and overload above. Without this branch the banner became the reply.
+      if (parsed.toolCalls.length === 0 && isCliQuotaBanner(parsed.text)) {
+        throw new InferenceError(
+          `Claude CLI usage limit reached (from stdout): ${parsed.text.slice(0, 200)}`,
+          "rate_limit",
+          providerId,
+        );
+      }
+
+      // A banner in FRONT of a real answer is a different failure: the reply is
+      // good and the prefix is noise. Strip it rather than discarding the turn.
+      if (parsed.toolCalls.length > 0 || parsed.text.length >= 600) {
+        parsed.text = stripLeadingQuotaBanner(parsed.text);
       }
 
       // ── Durable tool-call extraction trace (mirrors codex-cli-adapter) ──
