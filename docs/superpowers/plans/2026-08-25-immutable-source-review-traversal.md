@@ -41,7 +41,7 @@ One atomic fix: pageable immutable evidence tools plus the server-owned transiti
    - any governed writer attempt satisfies the terminal transition without declaring the receipt valid.
 3. Extend `mcp-task-submit.test.ts` with failing assertions for exact blob-bound pageable schemas and policy derivation.
 4. Extend `autonomous-work-run.test.ts` with a failing forwarding assertion.
-5. Add the smallest `agentic-loop.test.ts` integration case that reproduces the local review spin and expects a writer attempt instead of the generic diagnostic.
+5. Add the smallest agent-loop integration case to the focused `terminal-tool-policy.test.ts` module; reproduce the local review spin and expect a writer attempt instead of the generic diagnostic without expanding the baselined agent-loop test module.
 
 ## Phase 4 — Implement and refactor the execution policy
 
@@ -77,7 +77,7 @@ One atomic fix: pageable immutable evidence tools plus the server-owned transiti
 ## Verification commands
 
 ```powershell
-pnpm --filter web exec vitest run apps/web/lib/mcp/packs/version-history-pack.test.ts apps/web/lib/build/git-utils.test.ts apps/web/lib/tak/terminal-tool-policy.test.ts apps/web/lib/mcp-task-submit.test.ts apps/web/lib/tak/autonomous-work-run.test.ts apps/web/lib/tak/agentic-loop.test.ts
+pnpm --filter web exec vitest run lib/mcp/packs/version-history-pack.test.ts lib/build/git-utils.test.ts lib/tak/terminal-tool-policy.test.ts lib/mcp-task-submit.test.ts lib/tak/autonomous-work-run.test.ts lib/tak/agentic-loop.test.ts lib/skills/skill-telemetry.test.ts lib/tak/hard-completion-claim.test.ts app/api/mcp/v1/route.test.ts
 pnpm --filter web typecheck
 pnpm run pregate:preflight
 pnpm run pregate

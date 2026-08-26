@@ -465,6 +465,7 @@ describe("submitRemoteCoworkerTask idempotency", () => {
       tools: Array<{ name: string; inputSchema: { properties: Record<string, unknown>; required: string[] } }>;
       toolsForProvider: Array<{ function?: { name?: string; parameters?: { properties?: Record<string, unknown>; required?: string[] } } }>;
       deferredTools?: unknown[];
+      terminalToolPolicy?: Record<string, unknown>;
     };
     expect(execution.tools.map((tool) => tool.name)).toEqual([
       "read_source_at_version",
@@ -478,8 +479,13 @@ describe("submitRemoteCoworkerTask idempotency", () => {
       properties: {
         path: { type: "string", enum: [initiativeReviewBinding.artifactRef.path] },
         version: { type: "string", enum: [initiativeReviewBinding.artifactRef.commitSha] },
+        startLine: expect.objectContaining({ type: "number", minimum: 1 }),
+        cursor: expect.objectContaining({ type: "string" }),
+        maxLines: expect.objectContaining({ type: "number", maximum: 200 }),
+        maxChars: expect.objectContaining({ type: "number", maximum: 3200 }),
+        expectedBlobId: { type: "string", enum: [initiativeReviewBinding.artifactRef.providerBlobId] },
       },
-      required: ["path", "version"],
+      required: ["path", "version", "expectedBlobId"],
       additionalProperties: false,
     });
     const providerReader = execution.toolsForProvider.find((tool) => tool.function?.name === "read_source_at_version")!;
@@ -491,9 +497,18 @@ describe("submitRemoteCoworkerTask idempotency", () => {
         query: expect.any(Object),
         version: { type: "string", enum: [initiativeReviewBinding.artifactRef.commitSha] },
         glob: { type: "string", enum: [initiativeReviewBinding.artifactRef.path] },
+        offset: expect.objectContaining({ type: "number", minimum: 0 }),
+        maxResults: expect.objectContaining({ type: "number", maximum: 50 }),
+        expectedBlobId: { type: "string", enum: [initiativeReviewBinding.artifactRef.providerBlobId] },
       },
-      required: ["query", "version", "glob"],
+      required: ["query", "version", "glob", "expectedBlobId"],
       additionalProperties: false,
+    });
+    expect(execution.terminalToolPolicy).toEqual({
+      writerToolName: "record_initiative_evidence",
+      readerToolNames: ["read_source_at_version", "search_source_at_version"],
+      minimumSuccessfulReaderCalls: 1,
+      maximumReaderCalls: 6,
     });
     const writer = execution.tools.find((tool) => tool.name === "record_initiative_evidence")!;
     expect(writer.inputSchema.properties).toEqual(expect.objectContaining({

@@ -56,6 +56,14 @@ import {
   appendToolRefusedRecoveryMessages,
   classifyToolRefusedIssue,
 } from "./tool-refused-recovery";
+import {
+  applyTerminalToolSurface,
+  buildTerminalToolReminder,
+  resolveTerminalTextExit,
+  resolveTerminalToolCall,
+  selectTerminalToolSurface,
+  type TerminalToolPolicy,
+} from "./terminal-tool-policy";
 // Re-export for importers (certification-oracles, tests) that pull from agentic-loop.
 export { detectToolRefusedDespiteAvailability } from "./tool-refused-recovery";
 
@@ -1159,6 +1167,8 @@ export type RunAgenticLoopParams = {
    * caller is byte-for-byte unchanged until it opts in.
    */
   enableExecutionPlan?: boolean;
+  /** Bounded evidence-reader surface with a reserved governed writer step. */
+  terminalToolPolicy?: TerminalToolPolicy;
 
 };
 
@@ -1319,6 +1329,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       ...planProviderTools,
     ];
   }
+  const terminalProviderTools = [...((routeOptions.tools as Array<Record<string, unknown>> | undefined) ?? [])];
 
   // EP-COWORKER-INTERACTIVITY (BI-6A745E3C): on-demand tool attachment. The chat
   // coworker path right-sizes the attached tool set and hands the remaining
@@ -1371,6 +1382,8 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     message: latestUserText(messages),
   });
   let evidenceRecoveryNudges = 0;
+  let terminalToolNudges = 0;
+  let terminalToolSurfaceOverride: string[] | null = null;
   let bestPreNudgeContent = ""; // Preserve best text from before nudge
   const startTime = Date.now();
   let inferenceCallCount = 0;
@@ -1452,6 +1465,11 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
   }
 
   for (let iteration = 0; iteration < iterationCeiling; iteration++) {
+    if (params.terminalToolPolicy) {
+      routeOptions.tools = terminalToolSurfaceOverride
+        ? selectTerminalToolSurface(terminalProviderTools, terminalToolSurfaceOverride)
+        : applyTerminalToolSurface(params.terminalToolPolicy, executedTools, terminalProviderTools);
+    }
     // EP-ASYNC-COWORKER-001: Check cancellation flag at each iteration boundary
     if (agentEventBus.isCancelled(threadId)) {
       agentEventBus.clearCancel(threadId);
@@ -1652,9 +1670,12 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     // tools→system prefix — instead of mutating tool descriptions, so the
     // Anthropic prompt-cache prefix stays byte-identical turn-over-turn even
     // after a tool fails or is review-vetoed. See buildToolSessionHintMessage.
-    const toolSessionHint = buildToolSessionHintMessage(executedTools);
-    const messagesForCall = toolSessionHint
-      ? [...assembledMessages, { role: "user" as const, content: toolSessionHint }]
+    const toolHints = [
+      buildToolSessionHintMessage(executedTools),
+      params.terminalToolPolicy ? buildTerminalToolReminder(params.terminalToolPolicy, executedTools) : null,
+    ].filter((hint): hint is string => Boolean(hint));
+    const messagesForCall = toolHints.length
+      ? [...assembledMessages, { role: "user" as const, content: toolHints.join("\n\n") }]
       : assembledMessages;
     let result: RoutedInferenceResult;
     try {
@@ -1744,6 +1765,31 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         `toolCalls=0 contentLen=${trimmed.length} nudges=${continuationNudges} ` +
         `executedTools=${executedTools.length} content=${JSON.stringify(trimmed.slice(0, 200))}`,
       );
+
+      if (params.terminalToolPolicy) {
+        const exit = resolveTerminalTextExit(params.terminalToolPolicy, executedTools, terminalToolNudges);
+        if (exit.kind === "complete") {
+          logTurnSummary(result.providerId, result.modelId);
+          return {
+            content: result.content, providerId: result.providerId, modelId: result.modelId,
+            downgraded: result.downgraded, downgradeMessage: result.downgradeMessage,
+            totalInputTokens, totalOutputTokens, executedTools, proposal: null,
+          };
+        }
+        if (exit.kind === "nudge") {
+          terminalToolNudges++;
+          terminalToolSurfaceOverride = exit.allowedToolNames;
+          messages = [...messages, { role: "assistant", content: result.content }, { role: "user", content: exit.message }];
+          continue;
+        }
+        if (exit.kind === "fail-closed") {
+          return {
+            content: exit.message, providerId: result.providerId, modelId: result.modelId,
+            downgraded: result.downgraded, downgradeMessage: result.downgradeMessage,
+            totalInputTokens, totalOutputTokens, executedTools, proposal: null,
+          };
+        }
+      }
 
       // BI-1D144CC1: truncation stop. The provider cut generation off at the
       // output-token ceiling (stop_reason=max_tokens / finish_reason=length /
@@ -2404,6 +2450,14 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           },
         });
         continue;
+      }
+
+      if (params.terminalToolPolicy) {
+        const disposition = resolveTerminalToolCall(params.terminalToolPolicy, executedTools, tc.name);
+        if (disposition.kind === "refuse") {
+          iterationResults.push({ tc, toolResult: disposition.result });
+          continue;
+        }
       }
 
       let toolDef =

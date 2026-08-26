@@ -213,6 +213,25 @@ export async function gitShow(opts: {
   }
 }
 
+/** Resolve the immutable blob object behind a validated ref:path pair. */
+export async function gitBlobId(opts: {
+  ref: string;
+  path: string;
+}): Promise<{ blobId: string } | { error: string }> {
+  if (!isSafeRef(opts.ref)) return { error: `Invalid ref: ${opts.ref}` };
+  if (!isPathAllowed(opts.path)) return { error: `Path not allowed: ${opts.path}` };
+  try {
+    const { stdout } = await exec(
+      `git rev-parse ${JSON.stringify(opts.ref + ":" + opts.path)}`,
+      { cwd: getGitRoot(), timeout: GIT_TIMEOUT_MS },
+    );
+    const blobId = stdout.trim();
+    return blobId ? { blobId } : { error: "git rev-parse returned an empty blob id" };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "git blob resolution failed" };
+  }
+}
+
 export async function gitDiffStat(opts: {
   from: string;
   to: string;
