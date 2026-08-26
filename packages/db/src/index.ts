@@ -565,6 +565,14 @@ export * from "./catalog-enrichment-sweep";
 // under a batching + per-run inference budget cost guardrail. Pure engine; the governed
 // apps/web runner wires the real prisma + a minimize_cost inference fn.
 export * from "./catalog-identity-inference";
+export {
+  buildCommonsFingerprint,
+  isContributableFingerprint,
+  looksLikeIdentifier,
+  assertNoIdentifiers,
+  type CommonsFingerprint,
+  type FingerprintContributionCandidate,
+} from "./fingerprint-commons-contribution";
 // HAM Phase D2 (BI-828998DC, spec §7): read-model correlation of discovered InventoryEntity
 // to managed CustomerConfigurationItem — no authority move, no persistence.
 export * from "./inventory-cci-bridge";
@@ -591,6 +599,7 @@ export * from "./device-catalog";
 export * from "./discovery-fingerprint-store";
 export * from "./installation-operating-intent";
 export * from "./installation-instance-stance";
+export * from "./reference-freshness";
 
 // Contributor-inventory-sync ScheduledJob constants — shared between the
 // seed helper and the apps/web Inngest runner so the heartbeat row's name +

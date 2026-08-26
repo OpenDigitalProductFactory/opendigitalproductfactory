@@ -79,8 +79,20 @@ function rank(verdict) {
  */
 function describeFailure(state, metadata) {
   const status = state?.status || "unknown";
-  const stated = state?.failureReason || state?.error || metadata?.execution?.failedCommand;
+  // Never quote a metadata record that does not describe THIS run. The gate state
+  // is written by the wrapper and is always current; the metadata is written by
+  // the sandbox run and a failing run may never rewrite it. Serving the previous
+  // run's failedCommand as this run's cause is worse than admitting the cause was
+  // not recorded — a confident wrong answer is acted on, an honest absence is
+  // re-run. The gate state's own fields stay usable either way.
+  const metadataIsForThisRun = !metadataDescribesAnotherRun(state, metadata);
+  const stated = state?.failureReason
+    || state?.error
+    || (metadataIsForThisRun ? metadata?.execution?.failedCommand : null);
   if (stated) return `gate record status ${status} — ${typeof stated === "string" ? stated : "see the gate record"}`;
+  if (!metadataIsForThisRun) {
+    return `gate record status ${status} with NO recorded reason for THIS run — the metadata file on disk describes a previous run, so it is not evidence about this one. Re-run pregate; do not treat this as a verdict on the diff.`;
+  }
 
   const events = Array.isArray(state?.leaseEvents) ? state.leaseEvents : [];
   const started = events.some((e) => e?.type === "started");
@@ -105,8 +117,27 @@ function describeFailure(state, metadata) {
  * gave it away.
  *
  * Presence of the file was always checked. Freshness never was.
+ *
+ * The SHA comparison alone was not enough (BI-465B3D60, second recurrence).
+ * Re-running the gate on an UNCHANGED commit produces runs whose candidateSha is
+ * identical by construction, so the SHAs match and this returns false while the
+ * metadata still describes a previous run. Observed live: four runs on
+ * efeb0a5a6845, three recorded failed and one passed, and the failing verdicts
+ * quoted a failedCommand from a metadata file 53 minutes older than the gate
+ * record. That sent the reader chasing a cause the run's own artifacts had
+ * already falsified.
+ *
+ * The lease is per-run, so it is the identity that actually separates two runs
+ * on one commit. Prefer it; fall back to the SHA when either side predates the
+ * stamp (an older metadata file has no runLeaseId, and an ungoverned run has no
+ * lease at all) so this never reports a false mismatch on a record that simply
+ * cannot answer.
  */
 function metadataDescribesAnotherRun(state, metadata) {
+  const boundLease = String(state?.leaseId || "");
+  const metadataLease = String(metadata?.runLeaseId || "");
+  if (boundLease && metadataLease) return boundLease !== metadataLease;
+
   const boundSha = String(state?.sha || "");
   const candidateSha = String(metadata?.candidateSha || "");
   if (!boundSha || !candidateSha) return false;

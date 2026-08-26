@@ -271,3 +271,93 @@ test("does not flag the metadata when it describes this run", () => {
   });
   assert.equal(out.staleness, "");
 });
+
+// BI-465B3D60, second recurrence. Four gate runs on ONE unchanged commit
+// (efeb0a5a6845 live): three recorded failed, one passed. Because every run had
+// the same candidateSha, the SHA comparison could not tell them apart, and the
+// failing verdicts quoted a failedCommand from a metadata file 53 minutes stale.
+// The lease is the per-run identity that separates them.
+const LEASE_THIS_RUN = "NPEL-D4D8BCC247";
+const LEASE_PRIOR_RUN = "NPEL-098CE6A455";
+
+test("a re-run on the SAME sha does not inherit the previous run's failedCommand", () => {
+  const out = classifySlotRecord({
+    state: {
+      sha: HEAD, branch: "feat/x", status: "failed", gatePassed: false,
+      leaseId: LEASE_THIS_RUN,
+      leaseEvents: [{ type: "started" }],
+    },
+    metadata: {
+      candidateSha: HEAD, // identical — this is the case the SHA check cannot see
+      runLeaseId: LEASE_PRIOR_RUN,
+      execution: { failedCommand: "node scripts/sandbox-freshness-preflight.mjs --converge" },
+    },
+    headSha: HEAD,
+    headBranch: "feat/x",
+    now: NOW,
+  });
+
+  assert.equal(out.verdict, "FAIL");
+  assert.equal(out.staleness, "metadata-describes-another-run");
+  assert.ok(
+    !out.reason.includes("sandbox-freshness-preflight"),
+    `must not quote the previous run's command; got: ${out.reason}`,
+  );
+  assert.match(out.reason, /previous run/);
+  assert.match(out.reason, /not.*verdict on the diff/);
+});
+
+test("a failedCommand from THIS run is still reported", () => {
+  const out = classifySlotRecord({
+    state: {
+      sha: HEAD, branch: "feat/x", status: "failed", gatePassed: false,
+      leaseId: LEASE_THIS_RUN,
+    },
+    metadata: {
+      candidateSha: HEAD,
+      runLeaseId: LEASE_THIS_RUN,
+      execution: { failedCommand: "pnpm --filter web build" },
+    },
+    headSha: HEAD,
+    headBranch: "feat/x",
+    now: NOW,
+  });
+
+  assert.equal(out.verdict, "FAIL");
+  assert.equal(out.staleness, "");
+  assert.match(out.reason, /pnpm --filter web build/);
+});
+
+test("an unstamped metadata record falls back to the sha check rather than crying mismatch", () => {
+  // Metadata written before runLeaseId existed, or by an ungoverned run. It has
+  // no lease to compare, so a lease-only rule would report every such record as
+  // another run's and suppress a cause that is in fact this run's.
+  const out = classifySlotRecord({
+    state: {
+      sha: HEAD, branch: "feat/x", status: "failed", gatePassed: false,
+      leaseId: LEASE_THIS_RUN,
+    },
+    metadata: { candidateSha: HEAD, execution: { failedCommand: "pnpm --filter web build" } },
+    headSha: HEAD,
+    headBranch: "feat/x",
+    now: NOW,
+  });
+
+  assert.equal(out.staleness, "");
+  assert.match(out.reason, /pnpm --filter web build/);
+});
+
+test("the state's own failureReason outranks metadata either way", () => {
+  const out = classifySlotRecord({
+    state: {
+      sha: HEAD, branch: "feat/x", status: "failed", gatePassed: false,
+      leaseId: LEASE_THIS_RUN, failureReason: "typecheck failed",
+    },
+    metadata: { candidateSha: HEAD, runLeaseId: LEASE_PRIOR_RUN, execution: { failedCommand: "stale" } },
+    headSha: HEAD,
+    headBranch: "feat/x",
+    now: NOW,
+  });
+
+  assert.match(out.reason, /typecheck failed/);
+});

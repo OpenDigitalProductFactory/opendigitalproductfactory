@@ -18,6 +18,7 @@ export const WORK_CASE_WORK_ITEM_SOURCE_TYPES = [
   "scheduled",
   "field-service-job",
   "data-control-operation",
+  "bookkeeping-period",
 ] as const;
 
 export type WorkCaseWorkItemSourceType =
@@ -130,6 +131,18 @@ const STANDING_ROOM_PROJECTION = {
   },
 } as const satisfies WorkCaseRoomProjectionPolicy;
 
+// The Bookkeeping Work Room (BI-F8B6CF81, S-ROOM). A standing room — the books loop recurs each
+// period (monthly close). Its Outcome Packet must carry reconciliation `evidence`, the
+// `receipts` for every governed banking write, and the `decisions` the owner signed off — the
+// three things that make "period books reconciled" auditable rather than asserted.
+const BOOKKEEPING_ROOM_PROJECTION = {
+  mode: "standing",
+  cycleCarrierPrecedence: ["work-item", "work-capsule", "task-run"],
+  outcomePacket: {
+    requiredCategories: ["evidence", "receipts", "decisions"],
+  },
+} as const satisfies WorkCaseRoomProjectionPolicy;
+
 export const WORK_CASE_SOURCE_REGISTRY = [
   {
     sourceKey: "task-node",
@@ -228,6 +241,23 @@ export const WORK_CASE_SOURCE_REGISTRY = [
     supportedTransitions: SCHEDULED_TRANSITIONS,
     receiptPolicy: OBSERVED_RECEIPT_POLICY,
     roomProjection: STANDING_ROOM_PROJECTION,
+  },
+  {
+    // Bookkeeping Work Room (BI-F8B6CF81, S-ROOM). A standing, cyclic room — the day-to-day books
+    // loop recurs each period. Governed receipts because its writes (statement import, account
+    // create, rule mutation) are consequential; decision scope is the customer's own books (WWWD).
+    sourceKey: "bookkeeping-period",
+    definitionVersion: 1,
+    displayLabel: "Bookkeeping period",
+    owningArea: "finance",
+    domainCategory: "bookkeeping",
+    defaultDecisionScope: "wwwd",
+    accountResolverKey: null,
+    titleProjection: "Use the period label (e.g. the month being closed) and the accounts in scope.",
+    summaryProjection: "Use the reconciliation state, open exceptions, and the decisions awaiting the owner.",
+    supportedTransitions: SCHEDULED_TRANSITIONS,
+    receiptPolicy: GOVERNED_RECEIPT_POLICY,
+    roomProjection: BOOKKEEPING_ROOM_PROJECTION,
   },
   {
     sourceKey: "engagement",
