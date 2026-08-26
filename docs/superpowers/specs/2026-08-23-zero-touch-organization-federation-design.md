@@ -198,6 +198,32 @@ Two details carry real weight:
 Verification requires a positive match against the pinned fingerprint. There is
 no path where an absent, malformed, or unmatched value yields `verified: true`.
 
+### 5.7 Observing the chain
+
+`verifyPeerChainAgainstRoot` is pure and needs a chain to judge. The observer
+opens a TLS connection, walks the presented chain leaf-to-root, and hands it over.
+Nothing else. Keeping observation apart from the rule means a change to the
+network path cannot alter what "verified" means.
+
+`rejectUnauthorized: false` on that connection is deliberate and is **not** a
+relaxation. An organization CA is a private root the public trust store does not
+contain, so Node's default verification would reject every legitimate
+organization peer. The chain is instead verified against the *pinned* root, which
+is strictly narrower than public-CA validation: it accepts exactly one root
+rather than every root a distribution happens to ship. The connection is used
+only to read the chain; nothing is sent over it.
+
+Three hardening details:
+
+- **Cycle and depth bounds.** A peer that presents a cyclic issuer graph must not
+  hold the walk open; the walk tracks seen certificates and caps depth.
+- **SNI omits IP addresses.** RFC 6066 forbids an IP in server-name indication, so
+  a LAN peer discovered by address is connected to without it.
+- **It never throws.** Every failure — unparseable endpoint, plain HTTP, timeout,
+  refused connection — is an unobserved result, which leaves the decision at
+  `operator-confirmation`. An unreachable peer costs a human confirmation, never
+  an assumption.
+
 ## 6. Lifecycle at scale
 
 The unattended cycle this enables:
