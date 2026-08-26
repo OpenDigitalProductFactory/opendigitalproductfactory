@@ -1384,6 +1384,22 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
   let evidenceRecoveryNudges = 0;
   let terminalToolNudges = 0;
   let terminalToolSurfaceOverride: string[] | null = null;
+  const completeResult = (
+    content: string,
+    source: Pick<RoutedInferenceResult, "providerId" | "modelId" | "downgraded" | "downgradeMessage"> | null = lastResult,
+    extra: Partial<Pick<AgenticResult, "failure" | "executionPlan">> = {},
+  ): AgenticResult => ({
+    content,
+    providerId: source?.providerId ?? "",
+    modelId: source?.modelId ?? "",
+    downgraded: source?.downgraded ?? false,
+    downgradeMessage: source?.downgradeMessage ?? null,
+    totalInputTokens,
+    totalOutputTokens,
+    executedTools,
+    proposal: null,
+    ...extra,
+  });
   let bestPreNudgeContent = ""; // Preserve best text from before nudge
   const startTime = Date.now();
   let inferenceCallCount = 0;
@@ -1500,17 +1516,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     // and surface the error so the user can start a sandbox rather than spinning expensively.
     if (sandboxUnavailableCount >= 2) {
       console.warn(`[agentic-loop] sandbox unavailable after ${sandboxUnavailableCount} attempts. Aborting loop.`);
-      return {
-        content: "The sandbox is not available — no slots are free. Please ensure the sandbox container is running (check Docker Desktop), then try again.",
-        providerId: lastResult?.providerId ?? "",
-        modelId: lastResult?.modelId ?? "",
-        downgraded: lastResult?.downgraded ?? false,
-        downgradeMessage: lastResult?.downgradeMessage ?? null,
-        totalInputTokens,
-        totalOutputTokens,
-        executedTools,
-        proposal: null,
-      };
+      return completeResult("The sandbox is not available — no slots are free. Please ensure the sandbox container is running (check Docker Desktop), then try again.");
     }
 
     // Grant-starvation circuit breaker — after 3 consecutive forbidden_grant
@@ -1526,20 +1532,11 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         `[agentic-loop] grant-starved: ${forbiddenGrantStreak} consecutive forbidden_grant rejections. ` +
         `agent=${JSON.stringify(agentId)} route=${JSON.stringify(routeContext)} tools=${JSON.stringify(blockedTools)}. Aborting loop.`,
       );
-      return {
-        content:
+      return completeResult(
           `Blocked — hard stop, not a retry situation. This agent's profile lacks the grant(s) required for ` +
           `the tools it needs: ${blockedTools.join(", ")}. Every attempt was rejected with \`forbidden_grant\`. ` +
           `A platform operator needs to grant \`${agentId}\` access to these tools (or hand the work to a peer that already holds them) before it can proceed.`,
-        providerId: lastResult?.providerId ?? "",
-        modelId: lastResult?.modelId ?? "",
-        downgraded: lastResult?.downgraded ?? false,
-        downgradeMessage: lastResult?.downgradeMessage ?? null,
-        totalInputTokens,
-        totalOutputTokens,
-        executedTools,
-        proposal: null,
-      };
+      );
     }
 
     // Time ceiling — phase-aware duration limits.
@@ -1601,17 +1598,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           : ` on a text answer. Exiting early with diagnostic.`) +
         ` agent=${JSON.stringify(agentId)} route=${JSON.stringify(routeContext)}`,
       );
-      return {
-        content: bestPreNudgeContent || buildLocalToolCallFailureMessage(lastResult),
-        providerId: lastResult.providerId,
-        modelId: lastResult.modelId,
-        downgraded: lastResult.downgraded,
-        downgradeMessage: lastResult.downgradeMessage,
-        totalInputTokens,
-        totalOutputTokens,
-        executedTools,
-        proposal: null,
-      };
+      return completeResult(bestPreNudgeContent || buildLocalToolCallFailureMessage(lastResult), lastResult);
     }
 
     // Repetition detector (runtime-issues). BI-PIR-2fc2106c: no-progress hard-stops
@@ -1626,10 +1613,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         repeated, routeContext: routeContext ?? null, userId,
         agentId: agentId ?? null, threadId: threadId ?? null, taskRunId: taskRunId ?? null,
       });
-      return {
-        content, providerId: "", modelId: "", downgraded: false, downgradeMessage: null,
-        totalInputTokens, totalOutputTokens, executedTools, proposal: null,
-      };
+      return completeResult(content, null);
     }
     const approaching = detectApproachingRepeatedToolCall({ executedTools });
     if (approaching && !noProgressNudgedSigs.has(approaching.signature)) {
@@ -1770,11 +1754,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         const exit = resolveTerminalTextExit(params.terminalToolPolicy, executedTools, terminalToolNudges);
         if (exit.kind === "complete") {
           logTurnSummary(result.providerId, result.modelId);
-          return {
-            content: result.content, providerId: result.providerId, modelId: result.modelId,
-            downgraded: result.downgraded, downgradeMessage: result.downgradeMessage,
-            totalInputTokens, totalOutputTokens, executedTools, proposal: null,
-          };
+          return completeResult(result.content, result);
         }
         if (exit.kind === "nudge") {
           terminalToolNudges++;
@@ -1783,11 +1763,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           continue;
         }
         if (exit.kind === "fail-closed") {
-          return {
-            content: exit.message, providerId: result.providerId, modelId: result.modelId,
-            downgraded: result.downgraded, downgradeMessage: result.downgradeMessage,
-            totalInputTokens, totalOutputTokens, executedTools, proposal: null,
-          };
+          return completeResult(exit.message, result);
         }
       }
 
@@ -1926,17 +1902,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       // Don't nudge — break immediately with a clear error.
       if (trimmed.length === 0 && executedTools.length === 0) {
         console.warn(`[agentic-loop] Empty response from ${result.providerId}/${result.modelId} on iteration ${iteration}. Model may not support tool use. Breaking.`);
-        return {
-          content: `The model (${result.modelId}) returned an empty response and did not use any tools. This typically means it does not support the tool format required for this task. Try a different model or provider.`,
-          providerId: result.providerId,
-          modelId: result.modelId,
-          downgraded: result.downgraded,
-          downgradeMessage: result.downgradeMessage,
-          totalInputTokens,
-          totalOutputTokens,
-          executedTools,
-          proposal: null,
-        };
+        return completeResult(`The model (${result.modelId}) returned an empty response and did not use any tools. This typically means it does not support the tool format required for this task. Try a different model or provider.`, result);
       }
 
       // Evidence-integrity gate (INV-1). When this turn's answer depends on live
@@ -1969,17 +1935,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           // quarantined is greppable, and so the extractor's zero can be
           // compared against what the model actually produced.
           console.warn(`[agentic-loop] evidence-required turn unverifiable; could-not-verify (INV-1/5). route=${JSON.stringify(routeContext)} withheldChars=${recovery.withheldContent.trim().length}`);
-          return {
-            content: recovery.message,
-            providerId: result.providerId,
-            modelId: result.modelId,
-            downgraded: result.downgraded,
-            downgradeMessage: result.downgradeMessage,
-            totalInputTokens,
-            totalOutputTokens,
-            executedTools,
-            proposal: null,
-          };
+          return completeResult(recovery.message, result);
         }
       }
 
@@ -2066,17 +2022,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           console.warn(
             "[agentic-loop] fabrication signal on a downgraded conversational turn — keeping the backup answer (infra failover, not fabrication).",
           );
-          return {
-            content: trimmed,
-            providerId: result.providerId,
-            modelId: result.modelId,
-            downgraded: result.downgraded,
-            downgradeMessage: result.downgradeMessage,
-            totalInputTokens,
-            totalOutputTokens,
-            executedTools,
-            proposal: null,
-          };
+          return completeResult(trimmed, result);
         }
 
         // Conversational coworker routes (e.g. the marketing strategist): the
@@ -2122,17 +2068,10 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           const base = makesHardCompletionClaim
             ? `${trimmed}\n\n${buildUnsavedAdviceNote(routeContext)}`
             : trimmed;
-          return {
-            content: applyEscalationLadderGuard(applyBacklogCreateClaimGuard(base, executedTools), executedTools),
-            providerId: result.providerId,
-            modelId: result.modelId,
-            downgraded: result.downgraded,
-            downgradeMessage: result.downgradeMessage,
-            totalInputTokens,
-            totalOutputTokens,
-            executedTools,
-            proposal: null,
-          };
+          return completeResult(
+            applyEscalationLadderGuard(applyBacklogCreateClaimGuard(base, executedTools), executedTools),
+            result,
+          );
         }
 
         // BI-PIR-cc091267 — a build-route fabrication signal (completion claim
@@ -2233,17 +2172,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           console.warn(
             `[agentic-loop] local model produced text-only response for tool-backed turn; returning diagnostic instead of issuing a second nudge. agent=${JSON.stringify(agentId)} route=${JSON.stringify(routeContext)}`,
           );
-          return {
-            content: buildLocalToolCallFailureMessage(result),
-            providerId: result.providerId,
-            modelId: result.modelId,
-            downgraded: result.downgraded,
-            downgradeMessage: result.downgradeMessage,
-            totalInputTokens,
-            totalOutputTokens,
-            executedTools,
-            proposal: null,
-          };
+          return completeResult(buildLocalToolCallFailureMessage(result), result);
         }
 
         if (shouldNudgeNow) {
@@ -2311,17 +2240,10 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         console.warn(`[agentic-loop] frustration detected (${frustrationCount}/3): ${trimmed.slice(0, 100)}`);
         if (frustrationCount >= 3) {
           // 3 strikes — break and be honest with the user
-          return {
-            content: trimmed + "\n\nI've been struggling with this. Let me be direct about what's not working so you can help me get unstuck.",
-            providerId: result.providerId,
-            modelId: result.modelId,
-            downgraded: result.downgraded,
-            downgradeMessage: result.downgradeMessage,
-            totalInputTokens,
-            totalOutputTokens,
-            executedTools,
-            proposal: null,
-          };
+          return completeResult(
+            trimmed + "\n\nI've been struggling with this. Let me be direct about what's not working so you can help me get unstuck.",
+            result,
+          );
         }
         // Phase-aware nudge: suggest tools specific to what the agent should be doing
         const phaseTools = getPhaseSpecificNudge(executedTools);
@@ -2366,18 +2288,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       // BI-41F15FD7 — observability only; content is returned unchanged.
       logGeneratedProse(finalContent, { threadId, modelId: result.modelId }, sanitizeForLog);
       logTurnSummary(result.providerId, result.modelId);
-      return {
-        content: finalContent,
-        providerId: result.providerId,
-        modelId: result.modelId,
-        downgraded: result.downgraded,
-        downgradeMessage: result.downgradeMessage,
-        totalInputTokens,
-        totalOutputTokens,
-        executedTools,
-        proposal: null,
-        executionPlan,
-      };
+      return completeResult(finalContent, result, { executionPlan });
     }
 
     // Collect all immediate tool results for this iteration
