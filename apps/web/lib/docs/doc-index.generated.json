@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 689,
+  "pageCount": 690,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -1576,6 +1576,7 @@
         "maturity-labels-closed-set",
         "finance-matrix-snapshot",
         "payroll-absorption-stance-reversal-2026-08-22",
+        "payroll-tax-persistence-and-period-components-2026-08-26",
         "mileage-jurisdiction-resolution-2026-08-26",
         "finance-doc-reconciliation-rules",
         "workforce-matrix-snapshot",
@@ -2176,6 +2177,20 @@
         "core-assertion-set",
         "evidence-publication-guidance",
         "use-in-dpf"
+      ]
+    },
+    "docs/architecture/tax-period-component-migration.md": {
+      "publicHref": "/architecture/tax-period-component-migration/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "tax-period-component-normalization-migration-record",
+        "why-a-field-drop-is-proposed-at-all",
+        "what-the-migration-does-in-order",
+        "data-safety-argument-for-the-drop",
+        "what-review-is-being-asked-to-approve",
+        "deliberately-out-of-scope"
       ]
     },
     "docs/architecture/theme-aware-styling-runbook.md": {

@@ -371,6 +371,13 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   MileageRatePlan: "internal",
   MileageRate: "internal",
 
+  // Period component totals are aggregate business figures for one filing
+  // period — no employee is identifiable from a withheld total, which is the
+  // sum across the whole payroll. The per-person detail lives on Payslip.
+  TaxObligationPeriodComponent: "internal",
+  // A deposit cadence determination is org tax configuration: a cadence, the
+  // threshold it was judged against, and the citation for that threshold.
+  TaxDepositSchedule: "internal",
 };
 
 /** Fallback for tables not yet classified — defaults to confidential (obfuscate). */

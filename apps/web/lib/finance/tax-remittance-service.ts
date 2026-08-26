@@ -337,6 +337,7 @@ export async function loadTaxWorkspaceState(profile: TaxProfileRecord, ownerUser
         },
       },
       include: {
+        components: { select: { componentKind: true, amount: true } },
         registration: {
           include: {
             jurisdictionReference: {

@@ -1,6 +1,12 @@
 "use server";
 
 import { prisma } from "@dpf/db";
+import { newId } from "@/lib/shared/new-id";
+import {
+  netFromComponents,
+  summariseComponents,
+  upsertPeriodWithComponents,
+} from "@/lib/finance/tax-period-components";
 import { applyOrgCountry } from "@/lib/actions/currency";
 import { auth } from "@/lib/auth";
 import { encryptSecret } from "@/lib/govern/credential-crypto";
@@ -408,43 +414,29 @@ export async function generateTaxObligationPeriods() {
           .filter((draft) => draft.direction === "adjustment")
           .reduce((sum, draft) => sum + draft.taxAmount, 0),
       );
-      const netTaxAmount = roundCurrency(salesTaxAmount - inputTaxAmount + adjustmentAmount);
+      const periodComponents = [
+        { componentKind: "sales_output" as const, amount: salesTaxAmount },
+        { componentKind: "sales_input" as const, amount: inputTaxAmount },
+      ];
+      const netTaxAmount = netFromComponents(
+        summariseComponents(periodComponents),
+        adjustmentAmount,
+      );
 
-      let periodRecordId: string;
-      if (existing) {
-        const updated = await prisma.taxObligationPeriod.update({
-          where: { id: existing.id },
-          data: {
-            dueDate,
-            salesTaxAmount,
-            inputTaxAmount,
-            manualAdjustmentAmount,
-            netTaxAmount,
-          },
-        });
-        periodRecordId = updated.id;
-        generatedPeriods.push({ id: updated.id, periodId: existing.periodId });
-      } else {
-        const created = await prisma.taxObligationPeriod.create({
-          data: {
-            periodId: periodPublicId(),
-            registrationId: registration.id,
-            periodStart,
-            periodEnd,
-            dueDate,
-            status: "draft",
-            salesTaxAmount,
-            inputTaxAmount,
-            netTaxAmount,
-            manualAdjustmentAmount,
-            exportStatus: "not_started",
-            dueSoonNotifiedAt: null,
-            overdueNotifiedAt: null,
-          },
-        });
-        periodRecordId = created.id;
-        generatedPeriods.push({ id: created.id, periodId: created.periodId });
-      }
+      const period = await upsertPeriodWithComponents(prisma as never, {
+        existingRecordId: existing?.id,
+        registrationId: registration.id,
+        newPeriodId: periodPublicId,
+        newComponentId: () => `TPC-${newId()}`,
+        periodStart,
+        periodEnd,
+        dueDate,
+        netTaxAmount,
+        manualAdjustmentAmount,
+        components: periodComponents,
+      });
+      const periodRecordId = period.id;
+      generatedPeriods.push({ id: period.id, periodId: period.periodId ?? existing!.periodId });
 
       await persistLiabilityDrafts(profile.id, registration.id, periodRecordId, liabilityDrafts);
 
@@ -621,6 +613,7 @@ export async function prepareTaxFilingPacket(input: PrepareTaxFilingPacketInput)
   const period = await prisma.taxObligationPeriod.findFirst({
     where: { id: parsed.periodId },
     include: {
+      components: { select: { componentKind: true, amount: true } },
       registration: {
         include: {
           jurisdictionReference: {

@@ -29,6 +29,7 @@ vi.mock("@dpf/db", () => ({
       create: vi.fn(),
       update: vi.fn(),
     },
+    taxObligationPeriodComponent: { deleteMany: vi.fn(), createMany: vi.fn() },
     taxDecisionSnapshot: {
       upsert: vi.fn(),
     },
@@ -636,7 +637,6 @@ describe("generateTaxObligationPeriods", () => {
 
     await generateTaxObligationPeriods();
 
-    expect(mockPrisma.taxObligationPeriod.create).toHaveBeenCalled();
     expect(mockPrisma.taxLiabilityEntry.deleteMany).toHaveBeenCalled();
     expect(mockPrisma.invoice.findMany).toHaveBeenCalled();
     expect(mockPrisma.bill.findMany).toHaveBeenCalled();
@@ -645,12 +645,16 @@ describe("generateTaxObligationPeriods", () => {
     expect(mockPrisma.taxObligationPeriod.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         registrationId: "reg-1",
-        salesTaxAmount: 33,
-        inputTaxAmount: 10,
         manualAdjustmentAmount: 0,
         netTaxAmount: 23,
       }),
     });
+    // Per-family figures moved to component rows; 33 - 10 = 23 net, unchanged.
+    const written = mockPrisma.taxObligationPeriodComponent.createMany.mock.calls[0][0].data;
+    expect(written.map((c: { componentKind: string; amount: number }) => [c.componentKind, c.amount])).toEqual([
+      ["sales_output", 33],
+      ["sales_input", 10],
+    ]);
   });
 });
 
