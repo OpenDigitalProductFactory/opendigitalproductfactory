@@ -276,6 +276,45 @@ given `Simple` mode still has no destination for the work they actually do.
 7. **Read the whole page for cognitive load**, including nav. The existing UX-budget gate already
    measures reading grade over the whole page including navigation.
 
+## 7b. The adoption listing — researched against the industry standard
+
+Added 2026-08-26 after the founder asked whether the listing had been researched rather than
+assumed. It had not been. This section is the corrected baseline.
+
+**This is the primary business-to-consumer interaction of the archetype.** Adoption is driven by
+a photo and a name, and the standard acquisition path is one specific animal being shared to a
+prospective adopter.
+
+**Rescues do not primarily rely on their own site.** RescueGroups.org syndicates to **40+**
+destinations including Petfinder, Adopt-a-Pet, the ASPCA and Chewy. Petfinder's animal schema is
+the de-facto standard, so listing fields must map to it or the archetype cannot reach adopters
+where they actually look.
+
+Required listing fields (Petfinder-aligned):
+
+- **type**: dog, cat, rabbit, small-furry, horse, bird, scales-fins-other, barnyard
+- **breed**: primary, secondary, mixed flag, unknown flag
+- **age**: controlled vocabulary `baby | young | adult | senior` — never free text
+- **size**: small, medium, large, xlarge · **gender** · **coat**: short, medium, long, wire,
+  hairless, curly · **colors**
+- **environment**: good_with_children, good_with_dogs, good_with_cats — typed booleans
+- **attributes**: house_trained, spayed_neutered, shots_current, special_needs, declawed
+- **status**: adoptable | adopted | found (map DPF's available/pending/hold/adopted to this)
+- **photos** (many) and **videos**; **tags**; **adoption fee**; **location + distance**
+- sort by recent and by distance; filter on every controlled field above
+
+Required listing behaviour:
+
+1. **Each animal has a stable public URL and a detail page.** Without it an animal cannot be
+   shared, and sharing is the acquisition channel.
+2. **Per-animal inquiry** carrying the animal reference, so staff know who is being asked about.
+3. **Filtering and sorting** on the typed fields.
+4. **Syndication export** to the standard schema.
+
+**Anything an adopter filters on must be a typed column.** Storing good-with/house-trained in an
+untyped `attributes` Json makes the filter impossible to build — the concrete case for the
+accommodation doctrine's rule that a cross-surface queried field graduates out of Json.
+
 ## 8. Definition of done
 
 The archetype may be described as supported when:
