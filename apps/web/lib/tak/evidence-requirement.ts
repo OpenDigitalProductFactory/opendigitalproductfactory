@@ -23,6 +23,23 @@ export const INV5_UNVERIFIED_MESSAGE =
   "operational numbers that might be wrong. Ask me again and I'll pull the current " +
   "figures directly, or check the relevant workspace view.";
 
+/** Label for the quarantined draft wherever an operator surface renders it. */
+export const INV5_WITHHELD_HEADING = "Unverified draft (no tool evidence — do not act on it as fact):";
+
+/**
+ * BI-0C0669B5. The guard returned ONLY INV5_UNVERIFIED_MESSAGE, so the turn's
+ * real content was discarded outright. On 2026-08-26 that deleted a reviewer's
+ * ~5,100-character explanation of why it was declining to record a governance
+ * decision; the reasoning survived only as a truncated container-log line, so
+ * nobody could tell a blocked gate from a legitimate refusal.
+ *
+ * The fix deliberately does NOT put the draft back in the reply. BI-B5C358B1
+ * established that a fabricated operational figure must never reach the reader,
+ * and a labelled fabrication is still a fabrication in front of someone
+ * skimming. So the user-facing content is unchanged, and the withheld text is
+ * carried alongside for the caller to persist as an internal artifact.
+ */
+
 /** Minimum length for a reply to count as a substantive (potentially-misleading)
  *  operational answer. Below this it is a terse acknowledgement, not a claim. */
 export const SUBSTANTIVE_REPLY_MIN_CHARS = 80;
@@ -95,6 +112,9 @@ export interface EvidenceIntegrityDecision {
   content: string;
   /** True when the model's factual prose was blocked and replaced. */
   blocked: boolean;
+  /** The blocked draft, preserved for the caller to persist as an internal
+   *  artifact. Never rendered to the reader — see BI-0C0669B5. */
+  withheldContent?: string;
 }
 
 /**
@@ -122,7 +142,7 @@ export function enforceEvidenceIntegrity(params: {
   const trimmed = content.trim();
   const isSubstantive = trimmed.length >= SUBSTANTIVE_REPLY_MIN_CHARS && !trimmed.endsWith("?");
   if (!isSubstantive) return { content, blocked: false };
-  return { content: INV5_UNVERIFIED_MESSAGE, blocked: true };
+  return { content: INV5_UNVERIFIED_MESSAGE, blocked: true, withheldContent: trimmed };
 }
 
 /** The nudge that pushes a model toward fetching live data before it answers. */
@@ -136,7 +156,7 @@ export const EVIDENCE_RECOVERY_NUDGE =
 export type EvidenceRecoveryAction =
   | { kind: "pass" }
   | { kind: "nudge"; nudgeMessage: string }
-  | { kind: "refuse"; message: string };
+  | { kind: "refuse"; message: string; withheldContent: string };
 
 /**
  * Decide what the loop should do when an evidence-required turn returns text.
@@ -163,5 +183,5 @@ export function resolveEvidenceRecovery(params: {
   if (params.recoveryNudgesUsed < (params.maxRecoveryNudges ?? 1)) {
     return { kind: "nudge", nudgeMessage: EVIDENCE_RECOVERY_NUDGE };
   }
-  return { kind: "refuse", message: INV5_UNVERIFIED_MESSAGE };
+  return { kind: "refuse", message: INV5_UNVERIFIED_MESSAGE, withheldContent: params.content };
 }
