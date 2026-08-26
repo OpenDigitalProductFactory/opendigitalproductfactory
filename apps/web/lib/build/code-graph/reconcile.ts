@@ -4,12 +4,13 @@ import { CODE_GRAPH_GRAPH_KEY, CODE_GRAPH_PROJECTION_VERSION } from "./constants
 import {
   getChangedFiles,
   getCurrentBranch,
-  inspectGitRoot,
   getCurrentHeadSha,
   getGitRoot,
+  inspectGitRoot,
   isWorkspaceDirty,
   listTrackedFiles,
 } from "./git-snapshot";
+import { resolveIndexSource } from "./default-branch-source";
 import {
   clearCodeGraph,
   ensureCodeGraphNeo4jSchema,
@@ -162,16 +163,34 @@ export async function reconcileCodeGraph(input: ReconcileCodeGraphInput): Promis
     };
   }
 
+  // The graph must describe the MERGE TARGET, not whatever this host checkout
+  // is parked on (BI-86EF5900 acceptance 1). resolveIndexSource pins a
+  // dedicated worktree at the default branch and returns its path; on failure
+  // it returns the host root with a warning, so a default-branch problem
+  // degrades to the previous behaviour rather than to no graph at all.
+  const indexSource = await resolveIndexSource(gitRoot);
+  const readRoot = indexSource.root;
+  if (indexSource.warning) {
+    // Say WHY we fell back. The branch recorded below already makes an
+    // off-default index visible in the trust vector, but "which branch" is not
+    // "why not the default one", and losing the reason is how a degraded
+    // instrument becomes an unexplained one.
+    console.warn(`[code-graph] ${indexSource.warning}`);
+  }
+
   try {
     [state, headSha, branch, workspaceDirty] = await Promise.all([
       findCodeGraphIndexState(graphKey),
-      getCurrentHeadSha(gitRoot),
-      getCurrentBranch(gitRoot),
-      isWorkspaceDirty(gitRoot),
+      indexSource.sha ? Promise.resolve(indexSource.sha) : getCurrentHeadSha(readRoot),
+      indexSource.branch ? Promise.resolve(indexSource.branch) : getCurrentBranch(readRoot),
+      // A pinned default-branch worktree is checked out by us and is never
+      // "dirty" in the sense the caller cares about — that flag is about
+      // someone's uncommitted edits in the host tree.
+      indexSource.usedDefaultBranch ? Promise.resolve(false) : isWorkspaceDirty(readRoot),
     ]);
 
     await markCodeGraphIndexing(graphKey, {
-      workspaceRoot: gitRoot,
+      workspaceRoot: readRoot,
       headSha,
       branch,
       previousHeadSha: state?.lastIndexedHeadSha ?? null,
@@ -183,7 +202,7 @@ export async function reconcileCodeGraph(input: ReconcileCodeGraphInput): Promis
     let diffFailed = false;
     if (state?.lastIndexedHeadSha && headSha && state.lastIndexedHeadSha !== headSha && !input.forceFull) {
       try {
-        changedFiles = await getChangedFiles(gitRoot, state.lastIndexedHeadSha, headSha);
+        changedFiles = await getChangedFiles(readRoot, state.lastIndexedHeadSha, headSha);
       } catch {
         diffFailed = true;
       }
@@ -200,21 +219,21 @@ export async function reconcileCodeGraph(input: ReconcileCodeGraphInput): Promis
     });
 
     const files = orderCodeGraphFilesForProjection(
-      plan.mode === "full" ? await listTrackedFiles(gitRoot) : plan.changedFiles,
+      plan.mode === "full" ? await listTrackedFiles(readRoot) : plan.changedFiles,
     );
     await ensureCodeGraphNeo4jSchema();
     if (plan.mode === "full") {
       await clearCodeGraph(graphKey);
       await clearCodeGraphFileHashes(graphKey);
-      await syncTrackedFilesFull(graphKey, gitRoot, files);
+      await syncTrackedFilesFull(graphKey, readRoot, files);
     } else {
       for (const filePath of files) {
-        await syncTrackedFile(graphKey, gitRoot, filePath);
+        await syncTrackedFile(graphKey, readRoot, filePath);
       }
     }
     const indexedFileCount = await countCodeGraphFileHashes(graphKey);
     await markCodeGraphReady(graphKey, {
-      workspaceRoot: gitRoot,
+      workspaceRoot: readRoot,
       headSha,
       branch,
       workspaceDirty,
