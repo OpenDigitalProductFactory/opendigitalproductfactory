@@ -3,7 +3,7 @@
  * and fallback chain. Replaces callWithFailover's dispatch loop.
  */
 import { callProvider, InferenceError } from "@/lib/ai-inference";
-import { resolveLocalToolCeiling } from "@/lib/tak/context-economy-metrics";
+import { resolveLocalToolCeiling } from "./local-tool-ceiling";
 import { resolveLocalToolFidelityCeiling } from "./local-tool-fidelity";
 import type { ChatMessage } from "@/lib/ai-inference";
 import { prisma } from "@dpf/db";

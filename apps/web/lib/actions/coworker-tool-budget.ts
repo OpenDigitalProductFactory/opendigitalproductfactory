@@ -26,7 +26,7 @@ import {
   LOCAL_TOOL_SELECTION_CLIFF,
   resolveLocalToolCeiling,
   type LocalPresence,
-} from "@/lib/tak/context-economy-metrics";
+} from "@/lib/routing/local-tool-ceiling";
 import {
   LOAD_TOOLS_TOOL_NAME,
   scoreToolIntentRelevance,

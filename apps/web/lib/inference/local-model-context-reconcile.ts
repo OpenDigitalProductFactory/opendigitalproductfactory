@@ -34,7 +34,7 @@ import {
   type HostMemory,
 } from "./local-model-policy";
 import { getServedContextTokens, setServedContextTokens } from "./dmr-runtime-config";
-import type { LocalPresence } from "@/lib/tak/context-economy-metrics";
+import type { LocalPresence } from "@/lib/routing/local-tool-ceiling";
 
 /**
  * The host memory profile + installer-selected model, normalized from the

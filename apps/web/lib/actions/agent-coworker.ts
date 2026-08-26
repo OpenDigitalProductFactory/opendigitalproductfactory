@@ -714,11 +714,9 @@ export async function sendMessage(input: {
   const { deriveSkillCatalogCap, capSkillCatalog } = await import(
     "@/lib/actions/coworker-tool-budget"
   );
-  // Presence is carried alongside the window because a null window alone cannot
-  // tell an absent local model from an unread one (BI-A8BFEFCE); the tool cap
-  // below needs that distinction, and getting it wrong disables local fallback.
-  const { servedContextTokens: localServedContext, presence: localPresence } =
-    await resolveLocalServingPosture();
+  // Presence rides with the window: a null window cannot tell an absent local
+  // model from an unread one, and the tool cap below needs that (BI-A8BFEFCE).
+  const { servedContextTokens: localServedContext, presence: localPresence } = await resolveLocalServingPosture();
   const skillCatalogCap = deriveSkillCatalogCap(localServedContext);
   // Computed once; an explicitly-invoked skill is pinned into the catalog so the
   // cap never breaks a `Use the <id> skill.` request (reused for telemetry below).
@@ -1346,10 +1344,7 @@ export async function sendMessage(input: {
   // surface; unmeasured → null → Phase-1 fail-safe. Best-effort (never throws).
   const { resolveLocalToolFidelityCeiling } = await import("@/lib/routing/local-tool-fidelity");
   const measuredToolFidelityCeiling = await resolveLocalToolFidelityCeiling();
-  const toolCap = deriveCoworkerToolCap(localServedContext, {
-    measuredToolFidelityCeiling,
-    localPresence,
-  });
+  const toolCap = deriveCoworkerToolCap(localServedContext, { measuredToolFidelityCeiling, localPresence });
   // BI-B5C358B1 — the route's declared domain tools are the ones a turn on this
   // route is most likely to need (e.g. /ops → backlog query/update). They were
   // only injected as system-prompt PROSE, never attached, so the intent ranker's

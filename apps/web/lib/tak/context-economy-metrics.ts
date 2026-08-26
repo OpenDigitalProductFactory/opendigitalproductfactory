@@ -15,53 +15,22 @@
 // Like context-pressure.ts, nothing here changes what is sent to the model — it
 // only makes the figures observable so a regression (an agent's surface
 // ballooning past the cliff, a tool that keeps failing) is loud instead of
-// silent. Pure module — no imports, no I/O — so it is unit-tested directly
-// without the loop's heavy dependency graph. The cross-task tokens-per-task
-// rollup is the staged Phase-2 companion (needs a telemetry query).
+// silent. Pure module — no I/O, and its only import is the equally pure
+// routing/local-tool-ceiling — so it is unit-tested directly without the loop's
+// heavy dependency graph. The cross-task tokens-per-task rollup is the staged
+// Phase-2 companion (needs a telemetry query).
 
-// The point past which small local models' tool-selection accuracy collapses,
-// and below which the local fallback chain is even attempted. Kept here so this
-// module stays import-free; `resolveLocalToolCeiling` below is the single place
-// the effective ceiling is derived, and both the attachment budget
-// (coworker-tool-budget.ts) and the routing gate (routing/fallback.ts) call it.
-export const LOCAL_TOOL_SELECTION_CLIFF = 15;
-
-/**
- * Whether a local generation model is in the serving path for this turn.
- *
- * The distinction that matters is `absent` vs `unknown` (BI-A8BFEFCE). Callers
- * used to report both as a null served-context window, and the cap derivation
- * read that null as "pure cloud turn" and lifted the attached surface to the
- * full 48 — the one value guaranteed to make the routing layer refuse the local
- * fallback. So a failed READ of local capacity silently deleted local from the
- * chain, and a cloud rate-limit on top of it produced a turn that executed
- * nothing at all. `unknown` must therefore behave like `present`, not `absent`.
- */
-export type LocalPresence = "present" | "absent" | "unknown";
-
-/**
- * The largest attached tool surface a LOCAL model may be handed — the SINGLE
- * source of the local tool ceiling (INV-6).
- *
- * A small local model is cliff-prone by CLASS, so the fail-safe is the selection
- * cliff. Only MEASURED tool-selection fidelity evidence (produced by the eval
- * harness, persisted on `ModelProfile.customScores`) lifts it; a bigger context
- * window never does — capacity is not fidelity.
- *
- * Both consumers call this so they cannot drift apart. Before it existed the
- * budget honoured a measured ceiling while the gate hardcoded the raw cliff, so
- * the moment fidelity was measured above 15 the budget would attach more tools
- * than the gate would agree to run. Pure.
- */
-export function resolveLocalToolCeiling(
-  measuredToolFidelityCeiling?: number | null,
-): number {
-  const measured = measuredToolFidelityCeiling;
-  if (typeof measured !== "number" || !Number.isFinite(measured) || measured <= 0) {
-    return LOCAL_TOOL_SELECTION_CLIFF;
-  }
-  return Math.floor(measured);
-}
+// The local tool ceiling now lives at the inner routing boundary, so the
+// attachment budget (lib/actions), the posture resolver (lib/inference) and the
+// fallback gate (lib/routing) can all share one derivation without a reverse
+// dependency on this context. Re-exported here so this module's existing
+// consumers are unaffected. See routing/local-tool-ceiling.ts for the rationale.
+export {
+  LOCAL_TOOL_SELECTION_CLIFF,
+  resolveLocalToolCeiling,
+  type LocalPresence,
+} from "@/lib/routing/local-tool-ceiling";
+import { LOCAL_TOOL_SELECTION_CLIFF } from "@/lib/routing/local-tool-ceiling";
 
 const CHARS_PER_TOKEN = 4;
 // Share of a known window the tool DEFINITIONS may occupy before the surface is

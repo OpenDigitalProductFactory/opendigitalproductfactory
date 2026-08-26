@@ -73,6 +73,13 @@ when the window is known; an unknown window never widens the surface.
 ceiling is derived. The budget and the fallback gate both call it, so measured
 fidelity moves both together and neither can outrun the other.
 
+It lives in `routing`, not `tak`. Three contexts need it — the budget in
+`actions`, the posture in `inference`, the gate in `routing` — and `routing` is
+the inner boundary of the application DAG: everything may depend on it, it
+depends on nothing. Placing it in `tak` forced an `inference -> tak` reverse
+edge the boundary guard correctly refused. Moving it also retires the owned
+`routing -> tak` exception that the old cliff import held open.
+
 **CONTRACT-TRACE.** A posture that degrades to `unknown` logs once, naming the
 probe failure, at the point the decision is made.
 
