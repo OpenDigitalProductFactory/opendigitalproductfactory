@@ -120,6 +120,36 @@ its paired peer. That conflated two different things:
 second. Without this separation the identity work shipped on 2026-08-22 would
 have forbidden the very sync this design depends on.
 
+### 5.4 Composing discovery with the trust decision
+
+Discovery, enrolment, and the trust decision all existed separately; nothing
+joined them, so every discovered peer routed through a SAS session in which a
+person compares a short code. `decideAutomaticPairing` is that missing step. It
+returns `auto-enroll`, `operator-confirmation`, or `blocked`.
+
+`nearby-candidates` already anticipated this: its `AutomaticPairingReadiness`
+names what *blocks* automatic pairing (`tls-validation-required`,
+`blocked-insecure-transport`). Nothing consumed it.
+
+Two orderings carry the safety:
+
+1. **Transport is evaluated before trust, and is absolute.** A peer advertised
+   over plain HTTP is `blocked` outright — an unverifiable channel cannot carry a
+   verifiable identity, however well-formed the certificate claims are. This holds
+   even when organization trust would otherwise pass.
+2. **HTTPS is not proof.** A candidate discovered over HTTPS but not yet
+   chain-validated routes to the operator. `tls-validation-required` is a to-do,
+   not a result; treating it as a result would be the vulnerability this design
+   exists to avoid.
+
+Only a chain-validated same-organization peer reaches `auto-enroll`. Every other
+outcome falls back to the confirmation flow that exists today, so a gap in
+evidence costs a human confirmation rather than an unearned trust decision.
+
+`mayPairWithoutOperator` is a named predicate rather than a `!== "blocked"` test,
+so a caller cannot skip the pairing code by treating `operator-confirmation` as a
+pass.
+
 ## 6. Lifecycle at scale
 
 The unattended cycle this enables:
@@ -139,8 +169,12 @@ the identity design remains the backstop for an install with **no** peer.
 - No change to cross-organization enrolment.
 - No new sync engine, transport, or trust root.
 - No subnet-based or trust-on-first-use joining.
-- Discovery itself is out of scope here; this design covers what happens once a
-  peer is proposed.
+- Discovery transport and advertisement remain owned by `nearby-candidates`;
+  this design consumes its readiness signal rather than replacing it. Composing
+  discovery with the trust decision is §5.4 and is no longer deferred.
+- Resolving the organization trust anchor from the recorded
+  `organization.join.import` action, and calling §5.4 from the pairing path,
+  are the remaining slices.
 
 ## 8. Acceptance criteria
 
@@ -153,6 +187,9 @@ the identity design remains the backstop for an install with **no** peer.
    existing mirror.
 5. A development install paired with an organization peer resolves
    `workSync: same-organization` while `peerWrite` stays `read-only`.
+6. A plain-HTTP candidate is `blocked` regardless of organization trust; an
+   HTTPS-but-unvalidated candidate routes to `operator-confirmation`; only a
+   chain-validated same-organization peer reaches `auto-enroll`.
 
 ## 9. Decision record
 

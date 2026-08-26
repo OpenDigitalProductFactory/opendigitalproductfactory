@@ -34,6 +34,7 @@ function stanceFor(
     holdsIrreplaceableWork?: boolean;
     pairedRef?: string;
     primaryPurpose?: InstallationOperatingPurpose;
+    pairingIsEstablished?: boolean;
   } = {},
 ) {
   const snapshot = buildInstallationOperatingProfileSnapshot({
@@ -45,7 +46,12 @@ function stanceFor(
   });
   return resolveInstanceStance(
     snapshot,
-    { sourceCapable: options.sourceCapable ?? false },
+    {
+      sourceCapable: options.sourceCapable ?? false,
+      // Default to an established pairing so the existing cases keep asserting
+      // the linked behaviour; the unestablished case is covered explicitly.
+      pairingIsEstablished: options.pairingIsEstablished ?? true,
+    },
     { holdsIrreplaceableWork: options.holdsIrreplaceableWork ?? false },
   );
 }
@@ -171,5 +177,23 @@ describe("workSync — mirroring our own work is not a peer write", () => {
       stanceFor("development", { pairedRef: "operator-production" }),
     );
     expect(briefing).toContain("Work sync — same-organization");
+  });
+});
+
+describe("workSync requires an established link, not a typed name", () => {
+  it("stays off when a peer is declared but no link confirms it", () => {
+    const stance = stanceFor("development", {
+      pairedRef: "operator-production",
+      pairingIsEstablished: false,
+    });
+    expect(stance.workSync).toBe("none");
+    expect(stance.rationale.workSync).toContain("no established federation link");
+  });
+
+  it("turns on once a link backs the declaration", () => {
+    expect(
+      stanceFor("development", { pairedRef: "operator-production", pairingIsEstablished: true })
+        .workSync,
+    ).toBe("same-organization");
   });
 });

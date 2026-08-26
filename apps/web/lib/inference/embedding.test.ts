@@ -3,15 +3,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/routing/local-provider-capacity", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/routing/local-provider-capacity")>()),
   assertLocalProviderCapacityAvailable: vi.fn(),
-  // BI-0AA939DF: embedding moved to the short-call policy, which ignores a
-  // merely queued claim and waits briefly for an active one.
-  assertShortCallLocalCapacityAvailable: vi.fn(),
 }));
 
-import {
-  assertShortCallLocalCapacityAvailable,
-  LocalProviderCapacityDeferredError,
-} from "@/lib/routing/local-provider-capacity";
+import { LocalProviderCapacityDeferredError } from "@/lib/routing/local-provider-capacity";
 import { generateEmbedding, generateEmbeddingDetailed, isOversizeRejection } from "./embedding";
 
 /** The exact rejection llama.cpp emits once n_batch is clamped to n_ubatch. */
@@ -27,22 +21,15 @@ function okEmbedding(vec: number[]): Response {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(assertShortCallLocalCapacityAvailable).mockResolvedValue(undefined);
 });
 
-describe("generateEmbedding local-CI arbitration", () => {
-  it("does not contact the local embedding provider while local CI owns capacity", async () => {
-    vi.mocked(assertShortCallLocalCapacityAvailable).mockRejectedValue(
-      new LocalProviderCapacityDeferredError("local-ci-active-capacity-reservation"),
-    );
-    const fetchSpy = vi.spyOn(globalThis, "fetch");
-
-    await expect(generateEmbedding("durable knowledge")).resolves.toBeNull();
-    expect(fetchSpy).not.toHaveBeenCalled();
-  });
-
-  it("dispatches normally when local capacity is available", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+describe("embedding is exempt from the local-CI capacity gate (BI-0AA939DF / DI-7F674966B4B2)", () => {
+  it("contacts the provider even while local CI holds the slot", async () => {
+    // Inverts the prior contract deliberately. Measured 2026-08-25: 10ms with
+    // no gate, 10-20ms with an active gate and three queued, no observable
+    // effect on the gate. Gating it suppressed retrieval platform-wide for the
+    // duration of every gate run and bought nothing.
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ data: [{ embedding: [0.1, 0.2] }] }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
@@ -50,7 +37,7 @@ describe("generateEmbedding local-CI arbitration", () => {
     );
 
     await expect(generateEmbedding("durable knowledge")).resolves.toEqual([0.1, 0.2]);
-    expect(assertShortCallLocalCapacityAvailable).toHaveBeenCalledOnce();
+    expect(fetchSpy).toHaveBeenCalled();
   });
 });
 
@@ -144,7 +131,9 @@ describe("generateEmbeddingDetailed reports WHY it produced no vector (BI-339C44
     // The regression this closes: the deferral was caught alongside real
     // errors and collapsed to null, so a colleague's pre-PR gate read as a
     // broken embedding model across the whole install.
-    vi.mocked(assertShortCallLocalCapacityAvailable).mockRejectedValue(
+    // No gate raises this any more, but the branch stays: any future capacity
+    // boundary must still report a deferral as deferred rather than failed.
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(
       new LocalProviderCapacityDeferredError("local-ci-active-capacity-reservation"),
     );
 
@@ -157,7 +146,6 @@ describe("generateEmbeddingDetailed reports WHY it produced no vector (BI-339C44
   });
 
   it("reports a genuine backend error as failed, not deferred", async () => {
-    vi.mocked(assertShortCallLocalCapacityAvailable).mockResolvedValue(undefined);
     vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("connect ECONNREFUSED"));
 
     const result = await generateEmbeddingDetailed("anything");
@@ -166,7 +154,7 @@ describe("generateEmbeddingDetailed reports WHY it produced no vector (BI-339C44
   });
 
   it("keeps generateEmbedding null-returning, so its existing callers are untouched", async () => {
-    vi.mocked(assertShortCallLocalCapacityAvailable).mockRejectedValue(
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(
       new LocalProviderCapacityDeferredError("local-ci-active-capacity-reservation"),
     );
 

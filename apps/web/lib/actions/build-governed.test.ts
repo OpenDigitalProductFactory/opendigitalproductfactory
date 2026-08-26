@@ -131,6 +131,13 @@ vi.mock("@/lib/build/decision-service", () => ({
   evaluateBuildStudioDecision: mockEvaluateBuildStudioDecision,
 }));
 
+const mockGetBuildStudioConfig = vi.fn(async () => ({
+  selection: { status: "selected", selected: { engine: "opencode" }, reason: "ok", action: null },
+}));
+vi.mock("@/lib/build/build-studio-config", () => ({
+  getBuildStudioConfig: (...args: unknown[]) => mockGetBuildStudioConfig(...(args as [])),
+}));
+
 vi.mock("@/lib/build/build-entry-gate", () => ({
   enforceBuildInitiativeReadiness: mockEnforceBuildInitiativeReadiness,
   assertBuildPhaseInitiativeReadiness: mockEnforceBuildInitiativeReadiness,
@@ -501,13 +508,47 @@ describe("governed build start approvals", () => {
 
     const result = await approveBuildStart("FB-123");
 
-    expect(result.approvedAt).toBeInstanceOf(Date);
+    expect(result.ok).toBe(true);
+    expect(result.ok && result.data.approvedAt).toBeInstanceOf(Date);
     expect(mockPrisma.featureBuild.update).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { buildId: "FB-123" },
         data: expect.objectContaining({
           draftApprovedAt: expect.any(Date),
         }),
+      }),
+    );
+  });
+
+  // BI-CE1AB982 — approval used to succeed unconditionally, so an owner
+  // approved a start that silently never dispatched and the panel then reported
+  // "working" indefinitely.
+  it("approveBuildStart refuses and does not stamp approval when no engine can run the build", async () => {
+    mockPrisma.featureBuild.findUnique.mockResolvedValue({
+      createdById: "user-1",
+      phase: "ideate",
+      originatingBacklogItemId: "backlog-row-1",
+      draftApprovedAt: null,
+    });
+    mockPrisma.platformDevConfig.findUnique.mockResolvedValue({ governedBacklogEnabled: true });
+    mockGetBuildStudioConfig.mockResolvedValueOnce({
+      selection: {
+        status: "blocked",
+        selected: null,
+        reason: "No eligible endpoints for task type 'code-gen'.",
+        action: "Connect, provision, or wait for one allowed Build Studio engine, then retry.",
+      },
+    } as never);
+
+    const result = await approveBuildStart("FB-123");
+
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.error).toContain("Connect, provision, or wait for one allowed Build Studio engine");
+    // The owner's approval must not be recorded for work that cannot start.
+    expect(mockPrisma.featureBuild.update).not.toHaveBeenCalled();
+    expect(mockPrisma.buildActivity.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ tool: "dispatch_blocked" }),
       }),
     );
   });

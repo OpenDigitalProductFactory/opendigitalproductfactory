@@ -77,6 +77,12 @@ export interface InstanceStanceProfile {
  */
 export interface InstanceStanceHostFacts {
   sourceCapable: boolean;
+  /**
+   * True when a live same-organization federation link backs the declared peer.
+   * Resolved by `resolveInstallationPairing`; false leaves work sync off, because
+   * a declared name is intent and a link is evidence.
+   */
+  pairingIsEstablished?: boolean;
 }
 
 function resolveCredentials(
@@ -173,11 +179,22 @@ function resolvePeerWrite(
  */
 function resolveWorkSync(
   pairedRef: string | undefined,
+  pairingIsEstablished: boolean,
 ): { stance: WorkSyncStance; rationale: string } {
   if (!pairedRef) {
     return {
       stance: "none",
       rationale: "No paired installation is recorded, so there is nowhere to mirror work.",
+    };
+  }
+  if (!pairingIsEstablished) {
+    // A typed peer name gives nothing to send work to. Reporting
+    // `same-organization` here would tell an agent its work is safe when no link
+    // exists to carry it.
+    return {
+      stance: "none",
+      rationale:
+        `${pairedRef} is declared but no established federation link confirms it, so there is nowhere to mirror work yet.`,
     };
   }
   return {
@@ -208,7 +225,10 @@ export function resolveInstanceStance(
     snapshot.environmentClass,
     snapshot.pairedProductionInstallationRef,
   );
-  const workSync = resolveWorkSync(snapshot.pairedProductionInstallationRef);
+  const workSync = resolveWorkSync(
+    snapshot.pairedProductionInstallationRef,
+    host.pairingIsEstablished ?? false,
+  );
 
   return {
     schemaVersion: 1,
@@ -237,10 +257,24 @@ export function resolveInstanceStance(
  * Deliberately small. It states the instance's identity and its brakes, and it
  * carries no secrets, no business data, and no tool catalogue.
  */
-export function formatInstanceStanceBriefing(stance: InstanceStanceProfile): string {
-  const lines = [
+export function formatInstanceStanceBriefing(
+  stance: InstanceStanceProfile,
+  /**
+   * Which installation this is, e.g. `Northwind DEV (did_ab12…9f0c)` (BI-C7151B1B).
+   *
+   * Optional because it is composed one layer up, where the estate name and the
+   * device id are readable. When absent the briefing still states the class and
+   * purpose, so an agent is never left with nothing — it just cannot tell two
+   * installs of one organization apart, which is the defect this closes.
+   */
+  installationLabel?: string,
+): string {
+  const lines = installationLabel
+    ? [`INSTALLATION: ${installationLabel}.`]
+    : [];
+  lines.push(
     `INSTALLATION IDENTITY: ${stance.environmentClass} installation, purpose ${stance.primaryPurpose}.`,
-  ];
+  );
   if (stance.pairedProductionInstallationRef) {
     lines.push(`Paired installation: ${stance.pairedProductionInstallationRef}.`);
   }

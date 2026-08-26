@@ -1,0 +1,11 @@
+{
+  "version": "1",
+  "decidedOption": "attention-band-link",
+  "decisionInteractionId": "DI-958CCC65FA11",
+  "scope": { "files": ["apps/web/app/(shell)/platform/ai/skills/page.tsx"] },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["attention-band-link", "per-row-badge", "inbox-only"],
+    "rationale": "Kernel consult DI-958CCC65FA11 recommended attention-band-link (composite 8.442, margin 2.028, high confidence, autonomyEligible with no blockers and no commandment conflict); inbox-only scored 6.414 and per-row-badge 3.835. attention-band-link reuses the page's existing conditional attention band, which already renders only when something is genuinely wrong — so the page gains surface only when a decision is actually waiting, and none when nothing is. per-row-badge would add permanent chrome to every row of a 146-row catalog. inbox-only adds no surface but leaves a reader on the Skills page — the natural place to go — with no sign a decision is waiting there. The control earns its surface by removing a dead end: before it, the catalog gave no indication a proposal existed and the detail view was reachable only by hand-typing ?skill=. Measured sweep evidence was not obtainable — the contributor-preview lease was held by another session (NPEL-1010900E7B, branch fix/discipline-is-not-hr) until 2026-08-26T01:30Z, so the served DOM for this change could not be measured. Recorded as propose-n-pick rather than asserting numbers that were never taken."
+  }
+}

@@ -243,17 +243,20 @@ export async function resolveAutonomousWorkTools(input: {
       "@/lib/coworker/authorized-surface-coworker-contract"
     );
     const { getAgentToolGrantsAsync } = await import("@/lib/tak/agent-grants");
-    const { resolveLocalServedContextTokens } = await import(
+    const { resolveLocalServingPosture } = await import(
       "@/lib/inference/local-model-context-reconcile"
     );
     const { resolveLocalToolFidelityCeiling } = await import("@/lib/routing/local-tool-fidelity");
 
-    const [roleGrants, localServedContext, measuredToolFidelityCeiling] = await Promise.all([
+    const [roleGrants, localPosture, measuredToolFidelityCeiling] = await Promise.all([
       getAgentToolGrantsAsync(input.agentId),
-      resolveLocalServedContextTokens(),
+      resolveLocalServingPosture(),
       resolveLocalToolFidelityCeiling(),
     ]);
-    const cap = deriveCoworkerToolCap(localServedContext, { measuredToolFidelityCeiling });
+    const cap = deriveCoworkerToolCap(localPosture.servedContextTokens, {
+      measuredToolFidelityCeiling,
+      localPresence: localPosture.presence,
+    });
 
     let routeDomainToolNames: string[] = [];
     if (input.routeContext) {
@@ -281,7 +284,7 @@ export async function resolveAutonomousWorkTools(input: {
     if (deferred.length > 0) {
       console.log(
         `[autonomous-tool-budget] agent=${JSON.stringify(input.agentId)} authorized=${authorized.length} ` +
-          `attached=${tools.length} deferred=${deferred.length} cap=${cap}`,
+          `attached=${tools.length} deferred=${deferred.length} cap=${cap} localPresence=${localPosture.presence}`,
       );
     }
     return {

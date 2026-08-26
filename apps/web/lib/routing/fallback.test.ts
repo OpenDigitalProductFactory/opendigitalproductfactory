@@ -44,6 +44,13 @@ vi.mock("./rate-recovery", () => ({
   scheduleRecovery: vi.fn(),
 }));
 
+// The local-fallback gate derives its ceiling from the MEASURED tool-fidelity
+// evidence, the same input the attachment budget uses (BI-A8BFEFCE). Default to
+// unmeasured so existing expectations keep the fail-safe cliff of 15.
+vi.mock("./local-tool-fidelity", () => ({
+  resolveLocalToolFidelityCeiling: vi.fn(async () => null),
+}));
+
 vi.mock("./loader", () => ({
   invalidateRoutingLoaderCache: vi.fn(),
 }));
@@ -1048,6 +1055,38 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
 
       // Only the primary was attempted; local fallback was skipped.
       expect(mockCallProvider).toHaveBeenCalledTimes(1);
+    });
+
+    it("admits a surface the measured fidelity ceiling covers (BI-A8BFEFCE)", async () => {
+      // The attachment budget will attach up to a MEASURED ceiling. Before this
+      // gate shared that derivation it pinned the raw cliff of 15, so a budgeted
+      // 30-tool surface was refused for exceeding a limit nothing else applied —
+      // and with the cloud provider rate-limited the turn executed no tools.
+      const { resolveLocalToolFidelityCeiling } = await import("./local-tool-fidelity");
+      vi.mocked(resolveLocalToolFidelityCeiling).mockResolvedValueOnce(30);
+
+      mockPrisma.modelProvider.findUnique
+        .mockResolvedValueOnce({ providerId: "prov1", name: "Prov1" })
+        .mockResolvedValueOnce({ providerId: "local", name: "Local" });
+
+      const pinnedErr = new InferenceError("preferred down", "auth", "prov1", 401);
+      const localErr = new InferenceError("local also down", "auth", "local", 401);
+      mockCallProvider
+        .mockRejectedValueOnce(pinnedErr)
+        .mockRejectedValueOnce(localErr);
+
+      const pending = callWithFallbackChain(
+        makeChainWithLocalFallback(),
+        [{ role: "user", content: "hi" }],
+        "system",
+        manyTools(30), // past the raw cliff, within the measured ceiling
+      );
+      const rejection = expect(pending).rejects.toThrow("All endpoints failed");
+      await vi.runAllTimersAsync();
+      await rejection;
+
+      // Local was tried rather than skipped on a count the model has proven.
+      expect(mockCallProvider).toHaveBeenCalledTimes(2);
     });
 
     it("keeps local fallback when tools.length is within threshold", async () => {

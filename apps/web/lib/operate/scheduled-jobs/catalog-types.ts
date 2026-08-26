@@ -25,6 +25,11 @@ export interface ScheduledJobCatalogEntry {
   category: JobCategory;
   /** True when a ScheduledJob row carries live run data for this job. */
   tracksRunData: boolean;
+  /** True when the job's own entry gate actually consults ScheduledJob.enabled,
+   *  so the operator's Disable is load-bearing. Default false: most crons never
+   *  read the column, and a switch that silently does nothing is worse than an
+   *  absent one (BI-7E49FA15). */
+  honorsEnabledGate?: boolean;
   /** Inngest event name that triggers a one-shot manual run, or null when no
    *  manual-trigger event function exists for this job. */
   runNowEvent: string | null;

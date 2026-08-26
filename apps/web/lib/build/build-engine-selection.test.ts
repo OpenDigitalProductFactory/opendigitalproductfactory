@@ -140,6 +140,33 @@ describe("selectBuildEngineFromCandidates", () => {
     expect(result.rejected).toHaveLength(2);
   });
 
+  // BI-16A1B4A3 — live repro: every engine installed and credentialed, every
+  // endpoint excluded by a quality floor, and the owner was told to "connect,
+  // provision, or wait" — three actions, none of which could change the outcome.
+  it("names the real routing cause instead of advising connect/provision/wait", () => {
+    const result = selectBuildEngineFromCandidates({
+      policy: { mode: "auto", pinnedEngine: null },
+      candidates: [candidate("codex", "codex"), candidate("opencode", "local")],
+      route: {
+        selectedProviderId: null,
+        selectedModelId: null,
+        reason: "No endpoint satisfied the Build Studio contract.",
+        fallbackProviderIds: [],
+        rejectedProviders: [
+          { providerId: "codex", reason: "Minimum quality dimensions not met (toolFidelity 80 < 85)" },
+          { providerId: "local", reason: "Minimum quality dimensions not met (toolFidelity 82 < 85)" },
+        ],
+      },
+      localOnly: false,
+      nowMs: NOW,
+    });
+
+    expect(result.status).toBe("blocked");
+    expect(result.action).not.toMatch(/connect, provision, or wait/i);
+    expect(result.action).toMatch(/quality floor/i);
+    expect(result.action).toMatch(/measured/i);
+  });
+
   it("projects the router fallback chain and rationale without re-ranking it", () => {
     const result = selectBuildEngineFromCandidates({
       policy: { mode: "auto", pinnedEngine: null },

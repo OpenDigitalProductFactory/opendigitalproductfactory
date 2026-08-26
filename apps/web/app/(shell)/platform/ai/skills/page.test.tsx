@@ -33,6 +33,7 @@ vi.mock("@/lib/actions/skills-observatory", () => ({
   getLatestSkillCuratorReport: vi.fn().mockResolvedValue(null),
   getSkillLifecycleState: vi.fn().mockResolvedValue(null),
   getSkillSeedWarnings: vi.fn().mockResolvedValue([]),
+  getPendingSkillProposals: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock("@/components/platform/SkillProposalsPanel", () => ({

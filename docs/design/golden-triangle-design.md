@@ -68,7 +68,7 @@ Candidate principle: the cognitive-load migration audit flags `migrate-to-the-ri
 | What is the first shippable value? | Operators choose a plain-language posture and see the decoded policy + receipt for what the agent system actually ran. |
 | What is it not? | Not a model picker, not a second router, not a new model registry, not a drag-only visualization. |
 | What must be true before UI exposure? | Slice 0 proves the substrate shape; Slice 1 proves deterministic compile output; Slice 3 proves receipt telemetry. |
-| Where does the 20% refactor budget go? | Entirely into Slice 0 substrate consolidation: naming, type boundaries, receipt joins, and deletion/avoidance of duplicate registry or ledger concepts. |
+| Where does the refactor budget go? | Entirely into Slice 0 substrate consolidation: naming, type boundaries, receipt joins, and deletion/avoidance of duplicate registry or ledger concepts. |
 | Primary UX promise | One-click default for most users; complete keyboard/numeric access for every posture; audit details available without making the default screen technical. |
 
 Enterprise architecture contract:
@@ -651,7 +651,7 @@ v1 implements WWMD and WWWD/org scopes only; WSID/profession and per-decision-ov
 
 **Status: COMPLETE** — see the companion delta [`golden-triangle-slice0-substrate-audit.md`](golden-triangle-slice0-substrate-audit.md). Resolved outcomes are marked ✓ below; the unmarked bullets remain the standing checklist for the implementing epic.
 
-Use the requested 20 percent refactor budget here. This is not cosmetic cleanup; it is the architectural work that prevents the feature from creating duplicate truth. A practical allocation for the first implementation epic is **80% feature delivery / 20% substrate refactor**, with the refactor bucket spent only on code and schema boundaries the triangle directly touches.
+Use the refactor budget here. This is not cosmetic cleanup; it is the architectural work that prevents the feature from creating duplicate truth. The practical allocation is **~80% substrate refactor and integration / ~20% new feature** (founder direction, 2026-08-23, inverting the earlier 80/20 split). The platform's parts now largely exist, so its marginal value is in hybridizing them rather than adding more surface: prefer absorbing a capability into the existing spine over standing a new subsystem beside it, and justify any case where that is not possible.
 
 - Verify exact existing fields and gaps across `ModelProfile`, `AgentModelConfig`, `RequestContract`, `TaskRequirement`, the `effort` lever, the deliberation engine, route receipts, telemetry, and decision records.
 - Normalize names and type boundaries around preference snapshot, decoded policy, orchestration budget, receipt view, and feedback verdict before adding UI.
@@ -725,7 +725,7 @@ The design is ready for implementation when:
 - A benchmark row/view joins intended posture to actual model/cost/outcome under one correlation id.
 - Calibration is driven by realized-quality signals, not posture-selection frequency.
 - Hive contribution has an explicit payload schema and exclusion list.
-- Slice 0 commits a measured UX-fit manifest (`*.ux-fit.json`) and a substrate delta naming reused tables, new fields, rejected duplicate surfaces, and the 20% refactor work completed or intentionally deferred.
+- Slice 0 commits a measured UX-fit manifest (`*.ux-fit.json`) and a substrate delta naming reused tables, new fields, rejected duplicate surfaces, and the refactor work completed or intentionally deferred.
 
 ### 14.1 Success Metrics (does the shipped feature work?)
 

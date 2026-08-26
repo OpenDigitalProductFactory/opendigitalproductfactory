@@ -25,9 +25,13 @@ vi.mock("@/lib/actions/installation-operating-intent", () => ({
   previewInstallationIdentityChange: vi.fn(),
   declareInstallationIdentity: vi.fn(),
 }));
+vi.mock("@/lib/actions/installation-estate-name", () => ({
+  declareEstateName: vi.fn(),
+}));
 
 import type { InstallationIdentityView } from "@/lib/installation-journey/identity-presentation";
 
+import { EstateNameField } from "./EstateNameField";
 import { InstallationIdentityPanel } from "./InstallationIdentityPanel";
 
 /**
@@ -170,6 +174,59 @@ describe("InstallationIdentityPanel UX budget", () => {
     // numbers come from, so re-measuring is one command, not a reconstruction.
     console.log(
       `[ux-budget] ${JSON.stringify({
+        ...measureUxBudget(container.innerHTML),
+        axeViolations: results.violations.length,
+      })}`,
+    );
+  });
+});
+
+// BI-7626A660 — /ops/installation renders the panel AND the estate-name field.
+// The panel-only measurement above is what the 2026-08-22 manifest recorded while
+// the panel lived on /workspace; it would understate the new route. This block
+// measures what the route actually composes, and its console line is where the
+// 2026-08-25 ux-fit manifest's numbers come from.
+describe("/ops/installation composition UX budget", () => {
+  function routeHtml(): string {
+    const { container } = render(
+      <div>
+        <InstallationIdentityPanel view={VIEW} />
+        <EstateNameField estateName="Northwind" badgePreview="DEV" />
+      </div>,
+    );
+    return container.innerHTML;
+  }
+
+  it("holds the cockpit shell budget at the net-new bar", () => {
+    const report = auditUxBudget(routeHtml(), "cockpit", { routeStatus: "net-new" });
+    const failed = report.findings.filter((finding) => !finding.ok);
+    expect(failed, JSON.stringify(failed, null, 2)).toEqual([]);
+  });
+
+  it("adds exactly one field and one action over the panel alone", () => {
+    const metrics = measureUxBudget(routeHtml());
+    // The estate name is a label, not a stance change, so it is answerable on
+    // arrival rather than hidden behind the impact-preview disclosure.
+    expect(metrics.visibleFields).toBe(1);
+    expect(metrics.buriedPrimaryAction).toBe(0);
+    expect(metrics.subLegibleControls).toBe(0);
+    expect(metrics.hasNextActionMarker).toBe(true);
+  });
+
+  it("publishes the measured numbers the ux-fit manifest cites", async () => {
+    const { container } = render(
+      <div>
+        <InstallationIdentityPanel view={VIEW} />
+        <EstateNameField estateName="Northwind" badgePreview="DEV" />
+      </div>,
+    );
+    const results = await axe.run(container, {
+      rules: { "color-contrast": { enabled: false } },
+    });
+    const violations = results.violations.map((v) => `${v.id}: ${v.help}`);
+    expect(violations, violations.join("; ")).toEqual([]);
+    console.log(
+      `[ux-budget /ops/installation] ${JSON.stringify({
         ...measureUxBudget(container.innerHTML),
         axeViolations: results.violations.length,
       })}`,
