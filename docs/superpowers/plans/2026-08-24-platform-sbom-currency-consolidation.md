@@ -112,10 +112,10 @@ Verification: runtime evidence, UX critique, and `pnpm pr:health` including revi
 
 ## Backlog coverage
 
-Coverage is deliberately atomic. The immutable coverage write is currently blocked because no initiative scope baseline exists for this item. The canonical design is committed at `docs/superpowers/specs/2026-08-24-platform-sbom-currency-consolidation-design.md`; an independent in-platform reviewer must pass its `spec-approval` gate before implementation may begin.
+Coverage is deliberately atomic. The immutable coverage write is currently blocked because no initiative scope baseline exists for this item. The canonical design is committed at `docs/superpowers/specs/2026-08-24-platform-sbom-currency-consolidation-design.md` with a parser-valid objective and acceptance manifest. The live readiness recovery also reports `RESEARCH_REQUIRED`: the existing `source_verified` activity is evidence input, but the designated Portfolio Advisor must record the governed `research` receipt. An independent in-platform reviewer must then pass the design's `spec-approval` gate before coverage and implementation may begin.
 
 - Decision: `atomic`
 - Umbrella BI: `BI-7D2C4F02`
 - Deliverable: `platform-sbom-currency-consolidation` → `BI-7D2C4F02`
 - Dependencies: none
-- Coverage receipt: blocked on the initiative scope baseline; do not implement until the independent `spec-approval` pass is recorded and this receipt is written
+- Coverage receipt: blocked on the governed `research` receipt and initiative scope baseline; do not implement until research, independent `spec-approval`, and this coverage receipt are recorded
