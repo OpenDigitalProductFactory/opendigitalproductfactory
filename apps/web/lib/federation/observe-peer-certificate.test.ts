@@ -73,25 +73,47 @@ describe("collectChain", () => {
   });
 });
 
+const ORG_ROOT = ["-----BEGIN CERTIFICATE-----", "MIIB", "-----END CERTIFICATE-----"].join("\n");
+const readRoot = async () => ORG_ROOT;
+
 describe("observePeerCertificateChain — never throws", () => {
   it("reports an unparseable endpoint", async () => {
-    expect(await observePeerCertificateChain("not a url")).toEqual({
-      observed: false,
-      reason: "unparseable-endpoint",
-    });
+    expect(
+      await observePeerCertificateChain("not a url", { readOrganizationRoot: readRoot }),
+    ).toEqual({ observed: false, reason: "unparseable-endpoint" });
   });
 
   it("refuses plain HTTP outright", async () => {
-    expect(await observePeerCertificateChain("http://peer.internal/")).toEqual({
-      observed: false,
-      reason: "not-https",
-    });
+    expect(
+      await observePeerCertificateChain("http://peer.internal/", { readOrganizationRoot: readRoot }),
+    ).toEqual({ observed: false, reason: "not-https" });
   });
 
   it("reports a connection failure as unobserved instead of throwing", async () => {
     // Port 1 on loopback refuses fast; the point is that it resolves, not rejects.
-    const result = await observePeerCertificateChain("https://127.0.0.1:1/", { timeoutMs: 2000 });
+    const result = await observePeerCertificateChain("https://127.0.0.1:1/", {
+      timeoutMs: 2000,
+      readOrganizationRoot: readRoot,
+    });
     expect(result.observed).toBe(false);
     if (!result.observed) expect(typeof result.reason).toBe("string");
+  });
+
+  it("fails closed when the organization root is unavailable", async () => {
+    // Without a root there is nothing to validate against. Falling back to a
+    // weaker check is exactly what CodeQL flagged, so we refuse instead.
+    const result = await observePeerCertificateChain("https://peer.internal/", {
+      readOrganizationRoot: async () => {
+        throw new Error("ENOENT");
+      },
+    });
+    expect(result).toEqual({ observed: false, reason: "organization-root-unavailable" });
+  });
+
+  it("fails closed when the mounted root is not a certificate", async () => {
+    const result = await observePeerCertificateChain("https://peer.internal/", {
+      readOrganizationRoot: async () => "not a pem",
+    });
+    expect(result).toEqual({ observed: false, reason: "organization-root-unavailable" });
   });
 });

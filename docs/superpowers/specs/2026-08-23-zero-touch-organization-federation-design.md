@@ -205,13 +205,20 @@ opens a TLS connection, walks the presented chain leaf-to-root, and hands it ove
 Nothing else. Keeping observation apart from the rule means a change to the
 network path cannot alter what "verified" means.
 
-`rejectUnauthorized: false` on that connection is deliberate and is **not** a
-relaxation. An organization CA is a private root the public trust store does not
-contain, so Node's default verification would reject every legitimate
-organization peer. The chain is instead verified against the *pinned* root, which
-is strictly narrower than public-CA validation: it accepts exactly one root
-rather than every root a distribution happens to ship. The connection is used
-only to read the chain; nothing is sent over it.
+**Certificate validation stays on.** An organization CA is a private root the
+public trust store does not contain, so the organization root is supplied as the
+only acceptable `ca` and Node performs real chain validation against it. That is
+narrower than the public trust store, not looser.
+
+An earlier draft disabled validation and compared the root fingerprint by hand.
+CodeQL flagged it (`js/disabling-certificate-validation`) and was **right**: a
+fingerprint match proves a certificate with that fingerprint appeared in the
+chain, not that the leaf was signed by it. Only the TLS stack checks the
+signature chain. The fingerprint comparison in §5.6 remains, but as defence in
+depth on top of real validation rather than instead of it.
+
+If the organization root is not readable, observation fails closed rather than
+falling back to a weaker check.
 
 Three hardening details:
 

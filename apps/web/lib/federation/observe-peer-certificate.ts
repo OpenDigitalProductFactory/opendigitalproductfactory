@@ -5,18 +5,29 @@
 // and hands it over. Keeping the two apart means a change here cannot alter what
 // "verified" means.
 //
-// On `rejectUnauthorized: false` — this is deliberate and is NOT a relaxation.
-// A DPF organization CA is a private root that the public trust store does not
-// contain, so Node's default verification would reject every legitimate
-// organization peer. The chain obtained here is then verified against the PINNED
-// organization root, which is strictly narrower than public-CA validation: it
-// accepts exactly one root rather than every root a distribution happens to
-// ship. The connection is used only to read the chain; nothing is sent over it.
+// Certificate validation stays ON. An organization CA is a private root the
+// public trust store does not contain, so the ORGANIZATION ROOT is supplied as
+// the only acceptable `ca` and Node performs real chain validation against it.
+//
+// An earlier draft disabled validation and compared the root fingerprint by
+// hand. CodeQL flagged it (js/disabling-certificate-validation) and was right:
+// a fingerprint match proves a certificate with that fingerprint appeared in the
+// chain, NOT that the leaf was signed by it. Only the TLS stack checks the
+// signature chain. The fingerprint comparison remains, but as defence in depth
+// on top of real validation rather than instead of it.
 
+import { readFile } from "node:fs/promises";
 import { isIP } from "node:net";
 import { connect, type DetailedPeerCertificate } from "node:tls";
 
 import type { ObservedCertificate } from "@dpf/db/peer-certificate-verification";
+
+/**
+ * Where the organization root is mounted, per the organization-trust overlay
+ * (`docker-compose.organization-trust.yml`). Without it there is no root to
+ * validate against, so observation fails closed.
+ */
+const ORGANIZATION_ROOT_PATH = "/etc/dpf/pki/root_ca.crt";
 
 /** How long to wait for a peer to present its chain before giving up. */
 const OBSERVE_TIMEOUT_MS = 5_000;
@@ -84,7 +95,11 @@ export function collectChain(leaf: DetailedPeerCertificate | null): ObservedCert
  */
 export async function observePeerCertificateChain(
   endpoint: string,
-  options: { timeoutMs?: number } = {},
+  options: {
+    timeoutMs?: number;
+    /** Overridable for tests; defaults to the mounted organization root. */
+    readOrganizationRoot?: () => Promise<string>;
+  } = {},
 ): Promise<ChainObservation> {
   let url: URL;
   try {
@@ -93,6 +108,19 @@ export async function observePeerCertificateChain(
     return { observed: false, reason: "unparseable-endpoint" };
   }
   if (url.protocol !== "https:") return { observed: false, reason: "not-https" };
+
+  // No organization root means nothing to validate against. Fail closed rather
+  // than fall back to a weaker check.
+  let organizationRoot: string;
+  try {
+    const read = options.readOrganizationRoot ?? (() => readFile(ORGANIZATION_ROOT_PATH, "utf8"));
+    organizationRoot = await read();
+  } catch {
+    return { observed: false, reason: "organization-root-unavailable" };
+  }
+  if (!organizationRoot.includes("BEGIN CERTIFICATE")) {
+    return { observed: false, reason: "organization-root-unavailable" };
+  }
 
   const timeoutMs = options.timeoutMs ?? OBSERVE_TIMEOUT_MS;
   return await new Promise<ChainObservation>((resolve) => {
@@ -116,10 +144,11 @@ export async function observePeerCertificateChain(
         // address would otherwise emit a deprecation warning and send a field the
         // spec forbids.
         ...(isIP(url.hostname) ? {} : { servername: url.hostname }),
-        // See the module header: the organization root is private, so Node's
-        // default trust store cannot validate it. The chain is verified against
-        // the pinned root instead, which is narrower, not looser.
-        rejectUnauthorized: false,
+        // The organization root is the ONLY acceptable issuer, and Node
+        // validates the signature chain against it. Narrower than the public
+        // trust store, and real validation rather than a fingerprint comparison.
+        ca: [organizationRoot],
+        rejectUnauthorized: true,
         timeout: timeoutMs,
       },
       () => {
