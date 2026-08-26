@@ -147,23 +147,44 @@ export function estimateSuccessProbability(
  * Rank candidates by cost-per-success, respecting the contract's budget class.
  * Returns candidates sorted descending by rankScore (highest = best).
  */
+// Capability tier is a strong prior on quality. When cost cannot differentiate
+// candidates (all free) or the budget prioritizes quality, a higher-tier
+// endpoint must outrank a lower-tier one — otherwise an active FRONTIER provider
+// (Claude / Codex) ties an ADEQUATE local model on success-probability alone and
+// the stable sort silently keeps local, stranding the good providers the
+// operator configured. The scorer previously ignored tier entirely. (BI-654EE2E9.)
+const TIER_QUALITY_MULTIPLIER: Record<string, number> = {
+  frontier: 1.0,
+  strong: 0.85,
+  adequate: 0.6,
+  basic: 0.4,
+};
+
+function tierQualityMultiplier(endpoint: EndpointManifest): number {
+  const tier = (endpoint.qualityTier ?? "adequate") as string;
+  return TIER_QUALITY_MULTIPLIER[tier] ?? TIER_QUALITY_MULTIPLIER.adequate;
+}
+
 export function rankByCostPerSuccess(
   candidates: Array<{ endpoint: EndpointManifest; successProb: number }>,
   contract: RequestContract,
 ): Array<{ endpoint: EndpointManifest; rankScore: number; estimatedCost: number | null }> {
   const ranked = candidates.map((c) => {
     const cost = estimateCost(c.endpoint, contract);
+    const tierFactor = tierQualityMultiplier(c.endpoint);
 
     let rankScore: number;
     if (contract.budgetClass === "quality_first") {
-      // Rank by success probability only
-      rankScore = c.successProb * 100;
+      // Rank by quality — success probability weighted by capability tier.
+      rankScore = c.successProb * 100 * tierFactor;
     } else if (cost === null) {
       // Unknown cost — penalized, ranked by quality only
-      rankScore = c.successProb * 50;
+      rankScore = c.successProb * 50 * tierFactor;
     } else if (cost === 0) {
-      // Free model (local) — ranked by quality
-      rankScore = c.successProb * 100;
+      // Free endpoints (local AND subscription frontier) — cost cannot rank them,
+      // so quality does: success probability weighted by capability tier, so a
+      // free frontier provider beats a free adequate one instead of tying it.
+      rankScore = c.successProb * 100 * tierFactor;
     } else {
       // Cost-per-success: lower is better
       const costPerSuccess = cost / c.successProb;
