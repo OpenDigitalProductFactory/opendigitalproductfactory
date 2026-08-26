@@ -19,6 +19,8 @@ spec: docs/superpowers/specs/2026-08-26-source-free-install-development-substrat
 
 **Umbrella:** BI-357792B1
 
+**Backlog item:** BI-357792B1
+
 **Architecture decision:** DI-3C5CDA9DAB11 (`release-assets-git-bundle`)
 
 ## Outcome
@@ -321,7 +323,41 @@ surface still promises `my-changes`, an auto-advancing source volume, or develop
 
 ## Backlog coverage
 
-Pending governed `record_plan_backlog_coverage` after this file is finalized.
+- Decision: decomposed
+- Parent: BI-357792B1
+- Receipt: pending — canonical runtime returned `gate-not-authorized` on the
+  correctly shaped `record_plan_backlog_coverage` call at immutable plan blob
+  `de75e2c742bd9cac88bdf4c18d9ea31928a3bdff`; no substitute receipt exists.
+- Dependencies: release-baseline → snapshot-intelligence → agent-engagement and
+  workroom-liveness; platform-updates-ux is parallel; canonical acceptance waits
+  for all five independent slices.
+- `release-baseline` -> BI-48951394
+- `snapshot-intelligence` -> BI-89CD90D4
+- `agent-engagement` -> BI-1BA8F46C
+- `workroom-liveness` -> BI-9A353411
+- `platform-updates-ux` -> BI-705CA714
+
+The failure is the deployed form of the handler-shadowing defect fixed on `main`
+by PR #4700 (`6c166b1c8`): the runtime publishes the decomposition schema but
+executes the initiative-readiness gate handler. The independent review routes are
+also currently non-functional: TaskRuns
+`TR-MCP-Y21xamsxOWhsMDAwMDdwcnZzZm4ybTAzOQ-C62D9729E8AE` and
+`TR-MCP-Y21xamsxOWhsMDAwMDdwcnZzZm4ybTAzOQ-30AF8A0180B6` completed with zero
+tools because the selected architecture-review model returned an empty response;
+the design/spec reviewer TaskRuns
+`TR-MCP-Y21xamsxOWhsMDAwMDdwcnZzZm4ybTAzOQ-61BA89F8B2A8` and
+`TR-MCP-Y21xamsxOWhsMDAwMDdwcnZzZm4ybTAzOQ-CBFFDB47B77A` likewise completed
+with zero tools and wrote no receipts. These are enforcement blockers, not waived
+checks. After the live install advances past #4700 and the reviewer route can
+execute its required tools:
+
+1. replay research, design-spec, architecture-review, and spec-approval against
+   spec blob `93f76484788f8b2b931665a51b1b4ac5d1ef5065`;
+2. make any required review edits in a new immutable commit and repeat the
+   affected review gates;
+3. call `record_plan_backlog_coverage` once against the final plan blob;
+4. replace this blocked record with the live receipt and validate it through
+   `check_plan_backlog_coverage` before implementation.
 
 ## Approval boundary
 
