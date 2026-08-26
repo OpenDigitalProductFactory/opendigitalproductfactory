@@ -461,3 +461,97 @@ describe("tool-pack grant coverage (registry-wide)", () => {
     expect(isToolAllowedByGrants("unknown_self_scoped_tool", ["registry_read"])).toBe(false);
   });
 });
+
+// BI-17CBD21F: a tool name must have exactly one implementation.
+//
+// `composeToolPacks` already threw on duplicate DEFINITIONS, but handlers and
+// grants overwrote silently. `initiative-readiness-pack` derived a handler for
+// every lane in `INITIATIVE_READINESS_LANES` — including
+// `record_plan_backlog_coverage`, a lane it routes for recovery but does not
+// own as a tool — and, being registered after `decomposition-pack`, shadowed
+// the real handler. Callers using the documented schema were refused with
+// `gate-not-authorized` by a handler they never addressed.
+describe("tool name ownership", () => {
+  it("registers exactly one handler and grant set per tool name", () => {
+    const seenHandlers = new Map<string, string>();
+    const seenGrants = new Map<string, string>();
+    const collisions: string[] = [];
+
+    for (const pack of TOOL_PACK_REGISTRY.packs) {
+      for (const name of Object.keys(pack.handlers)) {
+        const owner = seenHandlers.get(name);
+        if (owner) collisions.push(`handler "${name}": ${owner} and ${pack.packId}`);
+        else seenHandlers.set(name, pack.packId);
+      }
+      for (const name of Object.keys(pack.grants)) {
+        const owner = seenGrants.get(name);
+        if (owner) collisions.push(`grant "${name}": ${owner} and ${pack.packId}`);
+        else seenGrants.set(name, pack.packId);
+      }
+    }
+
+    expect(collisions).toEqual([]);
+  });
+
+  // A handler with no matching definition is legitimate for a retained alias —
+  // the Workroom rename kept the pre-rename `*capsule*` names callable, and a
+  // few deprecated names are still answered. It is NOT legitimate as a silent
+  // second implementation of a name another pack defines, which is how
+  // BI-17CBD21F happened. Pin the deliberate set so a new orphan is caught.
+  const KNOWN_UNDEFINED_HANDLERS = new Set([
+    "claim_capsule_scope",
+    "create_work_capsule",
+    "dpf_test_kernel_refuse_probe",
+    "generate_code",
+    "get_work_capsule",
+    "heartbeat_capsule",
+    "iterate_sandbox",
+    "list_work_capsules",
+    "plan_capsule_worktree",
+    "reassign_capsule_executor",
+    "record_capsule_evidence",
+    "release_capsule_scope",
+    "update_work_capsule_status",
+  ]);
+
+  it("registers a handler without a definition only for a retained alias", () => {
+    const unexpected: string[] = [];
+    for (const pack of TOOL_PACK_REGISTRY.packs) {
+      const defined = new Set(pack.definitions.map((definition) => definition.name));
+      for (const name of Object.keys(pack.handlers)) {
+        if (!defined.has(name) && !KNOWN_UNDEFINED_HANDLERS.has(name)) {
+          unexpected.push(`${pack.packId} handles undefined tool "${name}"`);
+        }
+      }
+    }
+    expect(unexpected).toEqual([]);
+  });
+
+  it("never answers a name another pack defines", () => {
+    const definedBy = new Map<string, string>();
+    for (const pack of TOOL_PACK_REGISTRY.packs) {
+      for (const definition of pack.definitions) definedBy.set(definition.name, pack.packId);
+    }
+    const shadowing: string[] = [];
+    for (const pack of TOOL_PACK_REGISTRY.packs) {
+      for (const name of Object.keys(pack.handlers)) {
+        const owner = definedBy.get(name);
+        if (owner && owner !== pack.packId) {
+          shadowing.push(`${pack.packId} handles "${name}" defined by ${owner}`);
+        }
+      }
+    }
+    expect(shadowing).toEqual([]);
+  });
+
+  it("keeps record_plan_backlog_coverage owned by the pack that implements its schema", () => {
+    const owner = TOOL_PACK_REGISTRY.packs.find((pack) =>
+      pack.definitions.some((definition) => definition.name === "record_plan_backlog_coverage"));
+    expect(owner?.packId).toBe("decomposition");
+
+    const schema = owner?.definitions.find((d) => d.name === "record_plan_backlog_coverage")?.inputSchema;
+    const properties = Object.keys((schema as { properties?: Record<string, unknown> })?.properties ?? {});
+    expect(properties).toContain("deliverables");
+    expect(properties).not.toContain("gate");
+  });
+});

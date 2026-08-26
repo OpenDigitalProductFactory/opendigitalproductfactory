@@ -118,6 +118,29 @@ function row(over: Partial<RosterRow> = {}): RosterRow {
 }
 
 describe("RosterView", () => {
+  it("shows a compact first page of the directory without hiding the roster", () => {
+    const rows = Array.from({ length: 13 }, (_, index) =>
+      row({
+        agentId: `coworker-${index + 1}`,
+        displayName: `Coworker ${String(index + 1).padStart(2, "0")}`,
+        plainJob: `Detailed work description ${index + 1}`,
+      }),
+    );
+
+    render(
+      <RosterView rows={rows} facets={facets} presentation="directory" />,
+    );
+
+    expect(screen.getByRole("searchbox", { name: "Find a coworker" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Coworker 01" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Coworker 13" })).toBeNull();
+    expect(screen.queryByText("Detailed work description 1")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Show 1 more" }));
+
+    expect(screen.getByRole("link", { name: "Coworker 13" })).toBeTruthy();
+  });
+
   it("orders areas customer-first and exposes work entry only when available", () => {
     const events: CustomEvent[] = [];
     const handler = (event: Event) => events.push(event as CustomEvent);

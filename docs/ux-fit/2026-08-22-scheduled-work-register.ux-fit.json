@@ -1,0 +1,20 @@
+{
+  "version": "1",
+  "decidedOption": "read-model-over-both-substrates",
+  "decisionInteractionId": "DI-E7AE98E2BB9D",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/admin/scheduled-jobs/ScheduledJobsClient.tsx",
+      "apps/web/app/(shell)/admin/scheduled-jobs/EditScheduleDialog.tsx",
+      "apps/web/app/(shell)/admin/scheduled-jobs/ScheduleWindowChart.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "read-model-over-both-substrates",
+      "unify-storage-migration",
+      "ui-filter-only"
+    ]
+  }
+}

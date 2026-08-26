@@ -23,6 +23,7 @@ import { queueBuildReviewVerification } from "@/lib/build-review-verification-tr
 import { saveBuildArtifactRevision, type BuildArtifactField } from "@/lib/build/build-artifact-provenance";
 import { buildAcceptanceEvidenceRecord, writeAcceptanceMet } from "@/lib/build/auto-accept";
 import { evaluateBuildStudioDecision } from "@/lib/build/decision-service";
+import { ok, err, type ActionResult } from "@/lib/shared/action-result";
 import {
   assertFeatureBuildDependencyGate,
   FEATURE_BUILD_DEPENDENCY_GATE_SELECT,
@@ -134,7 +135,17 @@ export async function createFeatureBuild(input: {
   return { ok: true, buildId: result.buildId };
 }
 
-export async function approveBuildStart(buildId: string): Promise<{ approvedAt: Date }> {
+/**
+ * Record the owner's approval to start a governed backlog draft.
+ *
+ * BI-CE1AB982 — returns a result value rather than throwing for the expected
+ * "we cannot run this" case. A thrown Error is stripped to a production digest
+ * (same reason advanceBuildPhase returns its outcome, BI-8C6AA60E), and the
+ * whole point of the pre-flight is that the owner reads the real cause.
+ */
+export async function approveBuildStart(
+  buildId: string,
+): Promise<ActionResult<{ approvedAt: Date }>> {
   const userId = await requireBuildAccess();
 
   const [build, devConfig] = await Promise.all([
@@ -171,6 +182,24 @@ export async function approveBuildStart(buildId: string): Promise<{ approvedAt: 
   // resolver renders it solely on the backlog-link condition. Aligning here.
   void devConfig;
 
+  // BI-CE1AB982 — refuse before the owner authorises work that cannot be run.
+  if (!build.draftApprovedAt) {
+    const { resolveDispatchPreflight } = await import("@/lib/build/dispatch-preflight");
+    const preflight = await resolveDispatchPreflight();
+    if (preflight) {
+      prisma.buildActivity.create({
+        data: {
+          buildId,
+          tool: "dispatch_blocked",
+          summary: preflight,
+        },
+      }).catch(() => {});
+      return err(
+        `Build Studio cannot start this yet: no configured AI service can run it. ${preflight}`,
+      );
+    }
+  }
+
   const approvedAt = build.draftApprovedAt ?? new Date();
   await prisma.featureBuild.update({
     where: { buildId },
@@ -205,7 +234,7 @@ export async function approveBuildStart(buildId: string): Promise<{ approvedAt: 
     })();
   }
 
-  return { approvedAt };
+  return ok({ approvedAt });
 }
 
 // ─── Update Feature Brief ────────────────────────────────────────────────────

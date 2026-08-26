@@ -61,17 +61,22 @@ const AUTHORITY_OPTIONS = [
   { value: "review-needed", label: "Approval rules need review" },
 ];
 
+const DIRECTORY_PAGE_SIZE = 12;
+
 export function RosterView({
   rows,
   facets,
   initialQuery = "",
   grantedCapabilities = [],
+  presentation = "cards",
 }: {
   rows: RosterRow[];
   facets: RosterFacets;
   initialQuery?: string;
   grantedCapabilities?: CapabilityKey[];
+  presentation?: "cards" | "directory";
 }) {
+  const isDirectory = presentation === "directory";
   const kindOpts = useMemo(() => kindOptions(rows), [rows]);
   const grantedCapabilitySet = useMemo(
     () => new Set(grantedCapabilities),
@@ -95,6 +100,9 @@ export function RosterView({
     ),
   );
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const [visibleDirectoryCount, setVisibleDirectoryCount] = useState(
+    DIRECTORY_PAGE_SIZE,
+  );
   useEffect(() => {
     const restoreFilters = () =>
       setFilters(
@@ -126,6 +134,13 @@ export function RosterView({
         ),
       }));
   }, [filtered]);
+  const directoryRows = useMemo(
+    () =>
+      [...filtered]
+        .sort((left, right) => left.displayName.localeCompare(right.displayName))
+        .slice(0, visibleDirectoryCount),
+    [filtered, visibleDirectoryCount],
+  );
 
   const advancedFilterCount = [
     filters.authority,
@@ -144,6 +159,7 @@ export function RosterView({
 
   function replaceFilters(next: RosterFilters) {
     setFilters(next);
+    setVisibleDirectoryCount(DIRECTORY_PAGE_SIZE);
     if (typeof window === "undefined") return;
     const params = filtersToSearchParams(
       next,
@@ -170,7 +186,13 @@ export function RosterView({
   return (
     <div>
       <div className="mb-5 border-y border-[var(--dpf-border)] py-4">
-        <div className="grid gap-3 lg:grid-cols-[minmax(260px,1fr)_repeat(3,minmax(150px,0.45fr))]">
+        <div
+          className={
+            isDirectory
+              ? "grid gap-3 md:grid-cols-[minmax(260px,1fr)_minmax(180px,0.35fr)]"
+              : "grid gap-3 lg:grid-cols-[minmax(260px,1fr)_repeat(3,minmax(150px,0.45fr))]"
+          }
+        >
           <label className="relative block">
             <span className="mb-1 block text-xs font-medium text-[var(--dpf-text-secondary)]">
               Find a coworker
@@ -183,7 +205,7 @@ export function RosterView({
               type="search"
               value={filters.query}
               onChange={(event) => set({ query: event.target.value })}
-              placeholder="Name or work"
+              placeholder="Search"
               className="h-11 w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] pl-9 pr-3 text-sm text-[var(--dpf-text)] outline-none focus:border-[var(--dpf-accent)]"
             />
           </label>
@@ -196,7 +218,7 @@ export function RosterView({
               label: area.label,
             }))}
           />
-          <button
+          {!isDirectory && <button
             type="button"
             aria-controls="coworker-core-filters coworker-secondary-filters"
             aria-expanded={mobileFiltersOpen}
@@ -212,8 +234,8 @@ export function RosterView({
             ) : (
               <ChevronDown aria-hidden className="h-4 w-4" />
             )}
-          </button>
-          <div
+          </button>}
+          {!isDirectory && <div
             id="coworker-core-filters"
             className={
               mobileFiltersOpen
@@ -233,10 +255,55 @@ export function RosterView({
               onChange={(value) => set({ availability: value })}
               options={AVAILABILITY_OPTIONS}
             />
-          </div>
+          </div>}
         </div>
 
-        <div
+        {isDirectory ? (
+          <OwnerFirstDisclosure
+            summary={`More filters${secondaryFilterCount > 0 ? ` (${secondaryFilterCount})` : ""}`}
+            hint="Availability, work, and role"
+          >
+            <div className="grid gap-3 pb-2 sm:grid-cols-2 xl:grid-cols-4">
+              <Select
+                label="Interaction"
+                value={filters.interaction}
+                onChange={(value) => set({ interaction: value })}
+                options={INTERACTION_OPTIONS}
+              />
+              <Select
+                label="Availability"
+                value={filters.availability}
+                onChange={(value) => set({ availability: value })}
+                options={AVAILABILITY_OPTIONS}
+              />
+              <AdvancedFilterFields
+                filters={filters}
+                set={set}
+                facets={facets}
+                kindOpts={kindOpts}
+              />
+              <label className="inline-flex min-h-11 items-center gap-2 text-sm text-[var(--dpf-text-secondary)]">
+                <input
+                  type="checkbox"
+                  checked={filters.attentionOnly}
+                  onChange={(event) =>
+                    set({ attentionOnly: event.target.checked })
+                  }
+                  className="h-4 w-4"
+                />
+                Needs attention
+              </label>
+              <button
+                type="button"
+                onClick={() => replaceFilters(EMPTY_FILTERS)}
+                className="inline-flex min-h-11 items-center gap-2 rounded-md px-2 text-sm text-[var(--dpf-muted)] hover:bg-[var(--dpf-surface-2)] hover:text-[var(--dpf-text)]"
+              >
+                <RotateCcw aria-hidden className="h-4 w-4" />
+                Reset
+              </button>
+            </div>
+          </OwnerFirstDisclosure>
+        ) : <div
           id="coworker-secondary-filters"
           className={mobileFiltersOpen ? "mt-3" : "hidden lg:block"}
         >
@@ -265,83 +332,18 @@ export function RosterView({
 
           <OwnerFirstDisclosure
             summary={`More filters${advancedFilterCount > 0 ? ` (${advancedFilterCount})` : ""}`}
-            hint="Profession, role, lifecycle, and knowledge"
+            hint="Role and knowledge"
           >
             <div className="grid gap-3 pb-2 sm:grid-cols-2 xl:grid-cols-4">
-              <Select
-                label="Approval and autonomy"
-                value={filters.authority}
-                onChange={(value) => set({ authority: value })}
-                options={AUTHORITY_OPTIONS}
+              <AdvancedFilterFields
+                filters={filters}
+                set={set}
+                facets={facets}
+                kindOpts={kindOpts}
               />
-              <Select
-                label="Profession"
-                value={filters.family}
-                onChange={(value) => set({ family: value })}
-                options={facets.families.map((family) => ({
-                  value: family.key,
-                  label: family.label,
-                }))}
-              />
-              <Select
-                label="Role type"
-                value={filters.kind}
-                onChange={(value) => set({ kind: value })}
-                options={kindOpts.map((kind) => ({
-                  value: kind,
-                  label: titleCase(kind),
-                }))}
-              />
-              <Select
-                label="Lifecycle"
-                value={filters.lifecycle}
-                onChange={(value) => set({ lifecycle: value })}
-                options={facets.lifecycleStages.map((value) => ({
-                  value,
-                  label: titleCase(value),
-                }))}
-              />
-              <Select
-                label="Value stream"
-                value={filters.valueStream}
-                onChange={(value) => set({ valueStream: value })}
-                options={facets.valueStreams.map((value) => ({
-                  value,
-                  label: titleCase(value),
-                }))}
-              />
-              <Select
-                label="Competency"
-                value={filters.competency}
-                onChange={(value) => set({ competency: value })}
-                options={facets.competencies.map((value) => ({
-                  value,
-                  label: titleCase(value),
-                }))}
-              />
-              <Select
-                label="Jurisdiction"
-                value={filters.jurisdiction}
-                onChange={(value) => set({ jurisdiction: value })}
-                options={facets.jurisdictions.map((value) => ({
-                  value,
-                  label: value,
-                }))}
-              />
-              <label className="inline-flex min-h-11 items-end gap-2 pb-2 text-sm text-[var(--dpf-text-secondary)]">
-                <input
-                  type="checkbox"
-                  checked={filters.coverageGap}
-                  onChange={(event) =>
-                    set({ coverageGap: event.target.checked })
-                  }
-                  className="mb-0.5 h-4 w-4"
-                />
-                Knowledge coverage gaps
-              </label>
             </div>
           </OwnerFirstDisclosure>
-        </div>
+        </div>}
       </div>
 
       <p
@@ -352,7 +354,37 @@ export function RosterView({
         {filtered.length} coworker{filtered.length === 1 ? "" : "s"}
       </p>
 
-      <div className="space-y-8">
+      {isDirectory ? (
+        <>
+          <ul
+            aria-label="Coworker directory results"
+            className="divide-y divide-[var(--dpf-border)] border-y border-[var(--dpf-border)]"
+          >
+            {directoryRows.map((row) => (
+              <li key={row.agentId}>
+                <Link
+                  href={coworkerIdentityHref(row, returnHref)}
+                  className="flex min-h-11 items-center justify-between gap-3 px-2 text-sm font-medium text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)]"
+                >
+                  <span>{row.displayName}</span>
+                  <ChevronRight aria-hidden className="h-4 w-4 shrink-0" />
+                </Link>
+              </li>
+            ))}
+          </ul>
+          {visibleDirectoryCount < filtered.length && (
+            <button
+              type="button"
+              onClick={() =>
+                setVisibleDirectoryCount((count) => count + DIRECTORY_PAGE_SIZE)
+              }
+              className="mt-4 inline-flex min-h-11 items-center rounded-md border border-[var(--dpf-border)] px-3 text-sm font-medium text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)]"
+            >
+              Show {Math.min(DIRECTORY_PAGE_SIZE, filtered.length - visibleDirectoryCount)} more
+            </button>
+          )}
+        </>
+      ) : <div className="space-y-8">
         {groups.map(({ area, rows: areaRows }) => (
           <section key={area.key} aria-labelledby={`area-${area.key}`}>
             <div className="mb-3 flex items-baseline justify-between gap-3 border-b border-[var(--dpf-border)] pb-2">
@@ -378,12 +410,12 @@ export function RosterView({
             </div>
           </section>
         ))}
-      </div>
+      </div>}
 
       {filtered.length === 0 && (
         <div className="border-y border-[var(--dpf-border)] py-8 text-center">
           <p className="text-sm font-medium text-[var(--dpf-text)]">
-            No coworkers match these filters.
+            No coworkers found.
           </p>
           <button
             type="button"
@@ -414,7 +446,7 @@ function RosterRowCard({
   // configuration affordances live.
   const identityRoute = `/workforce/${encodeURIComponent(row.agentId)}`;
   const adminRoute = `/platform/ai/agent/${encodeURIComponent(row.agentId)}`;
-  const identityHref = `${identityRoute}?returnTo=${encodeURIComponent(returnHref)}`;
+  const identityHref = coworkerIdentityHref(row, returnHref);
   const adminHref = `${adminRoute}?returnTo=${encodeURIComponent(returnHref)}`;
   const canStartConversation = row.canStartConversation;
   const attention = needsAttention(row);
@@ -503,6 +535,93 @@ function RosterRowCard({
         </Link>
       </div>
     </article>
+  );
+}
+
+function coworkerIdentityHref(row: RosterRow, returnHref: string): string {
+  return `/workforce/${encodeURIComponent(row.agentId)}?returnTo=${encodeURIComponent(returnHref)}`;
+}
+
+function AdvancedFilterFields({
+  filters,
+  set,
+  facets,
+  kindOpts,
+}: {
+  filters: RosterFilters;
+  set: (patch: Partial<RosterFilters>) => void;
+  facets: RosterFacets;
+  kindOpts: string[];
+}) {
+  return (
+    <>
+      <Select
+        label="Approval and autonomy"
+        value={filters.authority}
+        onChange={(value) => set({ authority: value })}
+        options={AUTHORITY_OPTIONS}
+      />
+      <Select
+        label="Profession"
+        value={filters.family}
+        onChange={(value) => set({ family: value })}
+        options={facets.families.map((family) => ({
+          value: family.key,
+          label: family.label,
+        }))}
+      />
+      <Select
+        label="Role type"
+        value={filters.kind}
+        onChange={(value) => set({ kind: value })}
+        options={kindOpts.map((kind) => ({
+          value: kind,
+          label: titleCase(kind),
+        }))}
+      />
+      <Select
+        label="Lifecycle"
+        value={filters.lifecycle}
+        onChange={(value) => set({ lifecycle: value })}
+        options={facets.lifecycleStages.map((value) => ({
+          value,
+          label: titleCase(value),
+        }))}
+      />
+      <Select
+        label="Value stream"
+        value={filters.valueStream}
+        onChange={(value) => set({ valueStream: value })}
+        options={facets.valueStreams.map((value) => ({
+          value,
+          label: titleCase(value),
+        }))}
+      />
+      <Select
+        label="Competency"
+        value={filters.competency}
+        onChange={(value) => set({ competency: value })}
+        options={facets.competencies.map((value) => ({
+          value,
+          label: titleCase(value),
+        }))}
+      />
+      <Select
+        label="Jurisdiction"
+        value={filters.jurisdiction}
+        onChange={(value) => set({ jurisdiction: value })}
+        options={facets.jurisdictions.map((value) => ({ value, label: value }))}
+      />
+      <label className="inline-flex min-h-11 items-end gap-2 pb-2 text-sm text-[var(--dpf-text-secondary)]">
+        <input
+          type="checkbox"
+          checked={filters.coverageGap}
+          onChange={(event) => set({ coverageGap: event.target.checked })}
+          className="mb-0.5 h-4 w-4"
+        />
+        Knowledge coverage gaps
+      </label>
+    </>
   );
 }
 

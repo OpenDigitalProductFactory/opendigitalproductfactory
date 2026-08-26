@@ -77,6 +77,9 @@ func main() {
 	printFixtureMode := flag.Bool("print-enroll-fixture", false,
 		"Print a sample EnrollRequest as JSON to stdout and exit. Used to "+
 			"seed the Authority-side wire-contract parity fixtures.")
+	preflightMode := flag.Bool("preflight", false,
+		"Check whether this host can reach and enrol with its Authority, print "+
+			"one named cause, and exit. Non-zero exit means not ready.")
 	flag.Parse()
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -84,6 +87,16 @@ func main() {
 
 	if *printFixtureMode {
 		printEnrollFixture()
+		return
+	}
+
+	// Runs BEFORE enrollment in the portal-rendered install command, so a bad
+	// Authority URL, an unsynced clock, or a container with no LAN visibility
+	// names itself on the machine where the problem is (BI-BB919901).
+	if *preflightMode {
+		if !runPreflight(context.Background()) {
+			os.Exit(1)
+		}
 		return
 	}
 

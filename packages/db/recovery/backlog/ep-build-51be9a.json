@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "bundleId": "capture-ep-build-51be9a",
+  "description": "Backlog captured from this installation on 2026-08-26T03:02:44.748Z.",
+  "source": {
+    "capturedAt": "2026-08-26T03:57:53.481Z",
+    "repository": "OpenDigitalProductFactory/opendigitalproductfactory",
+    "planPath": "docs/superpowers/plans/2026-08-22-instance-identity-and-purpose.md"
+  },
+  "epic": {
+    "epicId": "EP-BUILD-51BE9A",
+    "title": "Our foster families take dogs that are not ready for adoption yet. Today that lives on a whiteboard and a group text, so nobody knows which foster home has room or when a dog is due back. I want a pag",
+    "description": "Our foster families take dogs that are not ready for adoption yet. Today that lives on a whiteboard and a group text, so nobody knows which foster home has room or when a dog is due back. I want a pag",
+    "status": "open",
+    "scopeKind": "unknown",
+    "createdAt": "2026-08-25T23:55:21.713Z"
+  },
+  "items": [
+    {
+      "itemId": "BI-4C608C04",
+      "epicId": "EP-BUILD-51BE9A",
+      "title": "Our foster families take dogs that are not ready for adoption yet. Today that lives on a whiteboard and a group text, so nobody knows which foster home has room or when a dog is due back. I want a page listing each foster home, the animals staying there, how many more they can take, and the date each animal is due back. A dog in foster care must not appear on our public adoption list until the vet clears it.",
+      "body": "Our foster families take dogs that are not ready for adoption yet. Today that lives on a whiteboard and a group text, so nobody knows which foster home has room or when a dog is due back. I want a page listing each foster home, the animals staying there, how many more they can take, and the date each animal is due back. A dog in foster care must not appear on our public adoption list until the vet clears it.",
+      "status": "open",
+      "type": "portfolio",
+      "workType": "feature",
+      "source": "user-request",
+      "scopeKind": "unknown",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-4c608c04-cmt9bop2u00gc01qvvogrg66k",
+          "kind": "build-studio-intake",
+          "summary": "Build Studio intake filed BI-4C608C04 for Foundational.",
+          "recordedAt": "2026-08-25T23:55:21.462Z",
+          "payload": {
+            "portfolioId": "cmt6ejm5c07tj6mnwfgezeet3",
+            "portfolioName": "Foundational"
+          }
+        },
+        {
+          "recoveryKey": "bi-4c608c04-cmt9bopc200gh01qvwfmemjyq",
+          "kind": "build-studio-capsule-attached",
+          "summary": "Build Studio draft FB-615DE356 attached to Work Capsule WC-1200D5B3.",
+          "recordedAt": "2026-08-25T23:55:21.794Z",
+          "payload": {
+            "source": "build-studio",
+            "buildId": "FB-615DE356",
+            "capsuleId": "WC-1200D5B3",
+            "featureBuildId": "cmt9bopak00ge01qvrw5ap9xv"
+          }
+        },
+        {
+          "recoveryKey": "bi-4c608c04-cmt9i85bt03t701qvhu03t4nl",
+          "kind": "status_change",
+          "summary": "deferred → open — Restoring from deferred. The item was parked automatically when FB-615DE356 was abandoned because ideate could not dispatch — an infrastructure condition, not a",
+          "recordedAt": "2026-08-26T02:58:26.681Z",
+          "payload": {
+            "to": "open",
+            "from": "deferred",
+            "reason": "Restoring from deferred. The item was parked automatically when FB-615DE356 was abandoned because ideate could not dispatch — an infrastructure condition, not a business decision, and it carried no owner, trigger or review horizon. Filed as BI-E492F313.",
+            "resolution": null
+          }
+        }
+      ],
+      "effortSize": "medium",
+      "triageOutcome": "build",
+      "createdAt": "2026-08-25T23:55:21.453Z"
+    }
+  ]
+}

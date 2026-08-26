@@ -2,6 +2,7 @@
 
 import { useRef, useEffect, useState, useCallback, useMemo } from "react";
 import type { GraphData } from "@/lib/actions/graph";
+import { resolveCanvasColor, useCanvasTheme } from "./canvas-theme";
 
 export type GraphLegendEntry = { label: string; key: string; color: string };
 
@@ -54,7 +55,7 @@ const DEFAULT_LABEL_LEGEND: GraphLegendEntry[] = [
 
 const DEFAULT_LINK_LEGEND: GraphLegendEntry[] = [
   { label: "Belongs To", key: "BELONGS_TO", color: "var(--dpf-accent)" },
-  { label: "Classified As", key: "CLASSIFIED_AS", color: "#fb923c" },
+  { label: "Classification", key: "CLASSIFIED_AS", color: "#fb923c" },
   { label: "Parent Of", key: "PARENT_OF", color: "var(--dpf-muted)" },
   { label: "Depends On", key: "DEPENDS_ON", color: "#38bdf8" },
   { label: "Hosts", key: "HOSTS", color: "#22d3ee" },
@@ -84,11 +85,11 @@ type SimLink = { source: SimNode | string; target: SimNode | string; type: strin
 
 export function RelationshipGraph({
   data,
-  title = "Relationship Graph",
+  title = "Relationships",
   nodeLegend = DEFAULT_LABEL_LEGEND,
   linkLegend = DEFAULT_LINK_LEGEND,
-  emptyMessage = "No graph data available. Add products and portfolios to see relationships.",
-  hint = "Click a node to focus",
+  emptyMessage = "No graph data. Add products or portfolios.",
+  hint = "Select a node",
   onFocusChange,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -98,6 +99,7 @@ export function RelationshipGraph({
   const linksRef = useRef<SimLink[]>([]);
   const animRef = useRef<number>(0);
   const temperatureRef = useRef(1.0);
+  const palette = useCanvasTheme(canvasRef);
 
   // ─── Controls ──────────────────────────────────────────────────────────────
   const [focusNodeId, setFocusNodeId] = useState<string | null>(null);
@@ -264,13 +266,15 @@ export function RelationshipGraph({
 
       const isHighlighted = hoveredNode === source.id || hoveredNode === target.id || focusNodeId === source.id || focusNodeId === target.id;
       const linkDef = linkLegend.find((lt) => lt.key === link.type);
-      const linkColor = linkDef?.color ?? "rgba(255,255,255,0.15)";
-      ctx.strokeStyle = isHighlighted ? linkColor : `${linkColor}30`;
+      const linkColor = resolveCanvasColor(canvas, linkDef?.color, palette.border);
+      ctx.strokeStyle = linkColor;
+      ctx.globalAlpha = isHighlighted ? 1 : palette.edgeAlpha;
       ctx.lineWidth = isHighlighted ? 2 : 0.7;
       ctx.beginPath();
       ctx.moveTo(source.x, source.y!);
       ctx.lineTo(target.x, target.y!);
       ctx.stroke();
+      ctx.globalAlpha = 1;
     }
 
     for (const node of nodes) {
@@ -281,13 +285,13 @@ export function RelationshipGraph({
 
       ctx.beginPath();
       ctx.arc(node.x, node.y, radius, 0, Math.PI * 2);
-      ctx.fillStyle = node.color;
+      ctx.fillStyle = resolveCanvasColor(canvas, node.color, palette.accent);
       ctx.globalAlpha = hoveredNode && !isHovered && !isFocus ? 0.3 : 1;
       ctx.fill();
 
       // Focus ring
       if (isFocus) {
-        ctx.strokeStyle = "#fff";
+        ctx.strokeStyle = palette.text;
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.arc(node.x, node.y, radius + 3, 0, Math.PI * 2);
@@ -331,10 +335,10 @@ export function RelationshipGraph({
       ) continue;
 
       placed.push({ x0, y0, x1, y1 });
-      ctx.fillStyle = important ? "#fff" : "rgba(224,224,255,0.6)";
+      ctx.fillStyle = important ? palette.text : palette.muted;
       ctx.fillText(node.name, node.x!, y1);
     }
-  }, [dimensions, hoveredNode, focusNodeId, linkLegend]);
+  }, [dimensions, hoveredNode, focusNodeId, linkLegend, palette]);
 
   // Initialize — reset temperature on filter/data change
   useEffect(() => {

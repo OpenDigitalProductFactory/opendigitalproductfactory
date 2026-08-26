@@ -344,6 +344,25 @@ export {
   type PeerEnrollmentEvidence,
 } from "./organization-federation-enrollment";
 export {
+  PAIRING_MODES,
+  PAIRING_BLOCK_REASONS,
+  decideAutomaticPairing,
+  mayPairWithoutOperator,
+  type AutomaticPairingDecision,
+  type CandidateTransport,
+  type PairingBlockReason,
+  type PairingDecisionReason,
+  type PairingMode,
+} from "./automatic-pairing-decision";
+export {
+  PAIRING_SOURCES,
+  pairingSupportsWorkSync,
+  resolveInstallationPairing,
+  type PairingLink,
+  type PairingSource,
+  type ResolvedPairing,
+} from "./installation-peer-pairing";
+export {
   syncDigitalProduct,
   syncTaxonomyNode,
   syncPortfolio,

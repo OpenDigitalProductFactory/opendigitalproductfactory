@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 683,
+  "pageCount": 688,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -564,6 +564,26 @@
         "annex-e-suggested-receipt-verifier-pseudocode"
       ]
     },
+    "docs/architecture/accommodation-doctrine.md": {
+      "publicHref": "/architecture/accommodation-doctrine/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "accommodation-doctrine",
+        "why",
+        "the-five-patterns-already-in-the-codebase-now-named",
+        "the-classification-procedure",
+        "the-promotion-rule",
+        "worked-example-live-right-now",
+        "the-promotion-mechanic",
+        "escape-hatch-discipline",
+        "probe-discipline",
+        "recording",
+        "anti-patterns",
+        "applying-this-to-campground"
+      ]
+    },
     "docs/architecture/agent-client-capability-parity.md": {
       "publicHref": "/architecture/agent-client-capability-parity/",
       "portalHref": null,
@@ -960,6 +980,45 @@
         "8-documentation-maintenance-rule"
       ]
     },
+    "docs/architecture/archetypes/campground-operating-model.md": {
+      "publicHref": "/architecture/archetypes/campground-operating-model/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "campground-rv-park-operating-model-and-probe-result",
+        "1-the-operating-day",
+        "2-the-bad-day",
+        "3-the-periodic-cycle",
+        "4-load-bearing-obligations",
+        "5-probe-result-classification",
+        "confirmed-no-new-canonical-element",
+        "promoted-by-the-counting-rule",
+        "genuinely-new-candidates",
+        "confirmed-stress-test-long-episodes",
+        "6-doctrine-verdict",
+        "7-what-campground-still-needs-before-it-could-run",
+        "8-cross-archetype-notes"
+      ]
+    },
+    "docs/architecture/archetypes/pet-rescue-operating-model.md": {
+      "publicHref": "/architecture/archetypes/pet-rescue-operating-model/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "standing-requirements-pet-rescue-animal-shelter-archetype",
+        "1-the-operating-day",
+        "2-the-bad-day",
+        "3-the-periodic-cycle",
+        "4-load-bearing-obligations",
+        "5-required-entities",
+        "6-what-exists-today-measured-2026-08-25",
+        "7-ux-requirements",
+        "7b-the-adoption-listing-researched-against-the-industry-standard",
+        "8-definition-of-done"
+      ]
+    },
     "docs/architecture/architecture-counts.generated.md": {
       "publicHref": "/architecture/architecture-counts.generated/",
       "portalHref": null,
@@ -1088,6 +1147,30 @@
         "product-operating-context-query-boundary",
         "direction-route-and-projection-boundary",
         "fleet-safe-evolution"
+      ]
+    },
+    "docs/architecture/canonical-minimal-substrate.md": {
+      "publicHref": "/architecture/canonical-minimal-substrate/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "the-canonical-minimal-substrate",
+        "headline",
+        "the-elements",
+        "what-is-already-done-and-done-well",
+        "the-capacity-substrate-is-genuinely-canonical",
+        "care-is-already-subject-agnostic-this-corrects-an-earlier-finding",
+        "the-remaining-work",
+        "7-canonical-subject-identity-the-keystone",
+        "8-occupancy-episode-lift-hospitalityserviceturn",
+        "9-episode-stagestate-and-event-ledger-already-designed-do-not-re-invent",
+        "10-concurrent-time-bound-holds-a-genuine-gap-and-an-extension-of-the-grammar",
+        "11-jurisdiction-as-a-rule-source-promoted-at-two-sightings",
+        "also-resource-to-service-capability-map",
+        "what-pet-rescue-proved-that-restaurant-could-not",
+        "sequencing",
+        "method-note-for-the-next-archetype"
       ]
     },
     "docs/architecture/capability-driven-runtime-profiles.md": {
@@ -1380,6 +1463,7 @@
         "13-workroom-vs-featurebuild-vs-sandbox-vs-runtimetarget-pick-the-right-substrate",
         "14-propose-acknowledge-reassign-par-concurrent-session-ownership-protocol",
         "15-governance-approves-evidence-not-provenance",
+        "16-host-heavy-work-uses-durable-resource-leases-not-waiting-processes",
         "2-dpf-anti-patterns-defaults-the-kernel-forbids",
         "21-wiping-db-volumes-to-fix-a-code-bug",
         "22-hardcoding-a-provider-in-the-seed-or-agentmodelconfig",
@@ -1491,6 +1575,7 @@
         "maturity-labels-closed-set",
         "finance-matrix-snapshot",
         "payroll-absorption-stance-reversal-2026-08-22",
+        "mileage-jurisdiction-resolution-2026-08-26",
         "finance-doc-reconciliation-rules",
         "workforce-matrix-snapshot",
         "workforce-doc-reconciliation-rules",
@@ -4246,6 +4331,20 @@
         "related-principles"
       ]
     },
+    "docs/founder-kernel/wiki/principles/prose-is-not-a-control-gate.md": {
+      "publicHref": "/founder-kernel/wiki/principles/prose-is-not-a-control-gate/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "prose-is-not-a-control-gate",
+        "why-this-is-a-commandment",
+        "where-this-was-named",
+        "what-this-requires",
+        "relationship-to-neighbouring-principles",
+        "counter-case"
+      ]
+    },
     "docs/founder-kernel/wiki/principles/reap-sidecars-to-upgrade-tools.md": {
       "publicHref": "/founder-kernel/wiki/principles/reap-sidecars-to-upgrade-tools/",
       "portalHref": null,
@@ -5444,7 +5543,8 @@
         "dpf-doctor",
         "reconcile-installed-plugins-flag",
         "what-install-dpf-does-not-do",
-        "see-also"
+        "see-also",
+        "mapping-a-network-from-another-machine"
       ]
     },
     "docs/operations/integrations/email-postmark-setup.md": {
@@ -5484,6 +5584,7 @@
       "publishedPortal": false,
       "anchors": [
         "local-ci-sandbox-slots",
+        "host-wide-heavyweight-resource-admission",
         "current-operating-mode",
         "peer-slot-host-fencing",
         "design-grounding",
@@ -5856,6 +5957,7 @@
         "what-it-is",
         "operating-rule",
         "how-to-apply",
+        "a-phase-that-cannot-start-is-blocked-not-working",
         "see-also"
       ]
     },
@@ -10589,7 +10691,8 @@
         "key-concepts",
         "what-you-can-do",
         "graph-explorer",
-        "hive-result-review"
+        "hive-result-review",
+        "scheduled-work"
       ]
     },
     "docs/user-guide/ai-workforce/ai-cost-governance.md": {
@@ -11195,6 +11298,7 @@
         "spin-up-an-isolated-thread",
         "commit-and-push-fast",
         "worktrees-are-source-control-isolation-not-runtime-isolation",
+        "heavy-local-commands-use-a-shared-host-resource-lane",
         "clean-up-when-merged",
         "webhooks-closing-the-promotion-loop",
         "adhering-to-the-portals-processes",
@@ -11614,7 +11718,11 @@
         "being-reached-when-you-are-away",
         "business-journeys",
         "promoter-timeout",
-        "platform-stack-currency"
+        "platform-stack-currency",
+        "what-this-installation-is",
+        "who-runs-this-installation",
+        "what-your-ai-coworkers-may-do-here",
+        "correcting-the-identity"
       ]
     },
     "docs/user-guide/operations/infrastructure-discovery.md": {
@@ -12015,7 +12123,7 @@
         "operations-and-performance",
         "spatial-operations-for-tables-and-rooms",
         "confirming-an-operational-suggestion",
-        "what-this-installation-is",
+        "which-installation-you-are-on",
         "correcting-the-identity",
         "key-concepts",
         "what-you-can-do"

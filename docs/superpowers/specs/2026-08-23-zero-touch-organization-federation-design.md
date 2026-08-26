@@ -120,6 +120,60 @@ its paired peer. That conflated two different things:
 second. Without this separation the identity work shipped on 2026-08-22 would
 have forbidden the very sync this design depends on.
 
+### 5.4 Composing discovery with the trust decision
+
+Discovery, enrolment, and the trust decision all existed separately; nothing
+joined them, so every discovered peer routed through a SAS session in which a
+person compares a short code. `decideAutomaticPairing` is that missing step. It
+returns `auto-enroll`, `operator-confirmation`, or `blocked`.
+
+`nearby-candidates` already anticipated this: its `AutomaticPairingReadiness`
+names what *blocks* automatic pairing (`tls-validation-required`,
+`blocked-insecure-transport`). Nothing consumed it.
+
+Two orderings carry the safety:
+
+1. **Transport is evaluated before trust, and is absolute.** A peer advertised
+   over plain HTTP is `blocked` outright — an unverifiable channel cannot carry a
+   verifiable identity, however well-formed the certificate claims are. This holds
+   even when organization trust would otherwise pass.
+2. **HTTPS is not proof.** A candidate discovered over HTTPS but not yet
+   chain-validated routes to the operator. `tls-validation-required` is a to-do,
+   not a result; treating it as a result would be the vulnerability this design
+   exists to avoid.
+
+Only a chain-validated same-organization peer reaches `auto-enroll`. Every other
+outcome falls back to the confirmation flow that exists today, so a gap in
+evidence costs a human confirmation rather than an unearned trust decision.
+
+`mayPairWithoutOperator` is a named predicate rather than a `!== "blocked"` test,
+so a caller cannot skip the pairing code by treating `operator-confirmation` as a
+pass.
+
+### 5.5 Resolving the organization trust anchor
+
+Both the enrolment decision and the pairing decision need two facts: the root
+this installation pins, and the organization it belongs to. Importing a join
+package already establishes them, but the `organization.join.import` evidence
+blob deliberately records only a **truncated 12-character fingerprint prefix**.
+
+A prefix is not an identity. `resolveOrganizationTrustAnchor` therefore decrypts
+the stored package and parses the **full 64-character fingerprint**, using the
+same parser the import path used — so a package that would be rejected on import
+cannot be accepted here. Expiry is surfaced from that parser rather than
+re-checked, because the parser owns the rule and a second check could only
+disagree with the authority.
+
+Every unreadable path fails closed to *no anchor*: no join import, an
+undecryptable package (a rotated key returns null rather than throwing), an
+unparseable or expired one, or an installation with no organization. That default
+is what keeps the rest honest — a null fingerprint makes
+`evaluateOrganizationEnrollment` return `organization-trust-not-configured`, so a
+decrypt failure costs a human confirmation instead of widening trust.
+
+Decryption is injected, so the resolver never imports the credential store and a
+failure is a value rather than a thrown error.
+
 ## 6. Lifecycle at scale
 
 The unattended cycle this enables:
@@ -139,8 +193,12 @@ the identity design remains the backstop for an install with **no** peer.
 - No change to cross-organization enrolment.
 - No new sync engine, transport, or trust root.
 - No subnet-based or trust-on-first-use joining.
-- Discovery itself is out of scope here; this design covers what happens once a
-  peer is proposed.
+- Discovery transport and advertisement remain owned by `nearby-candidates`;
+  this design consumes its readiness signal rather than replacing it. Composing
+  discovery with the trust decision is §5.4 and is no longer deferred.
+- Calling §5.4 from the pairing path, so a validated same-organization peer
+  enrols without the code comparison, is the remaining slice. Trust-anchor
+  resolution is §5.5.
 
 ## 8. Acceptance criteria
 
@@ -153,6 +211,11 @@ the identity design remains the backstop for an install with **no** peer.
    existing mirror.
 5. A development install paired with an organization peer resolves
    `workSync: same-organization` while `peerWrite` stays `read-only`.
+6. A plain-HTTP candidate is `blocked` regardless of organization trust; an
+   HTTPS-but-unvalidated candidate routes to `operator-confirmation`; only a
+   chain-validated same-organization peer reaches `auto-enroll`.
+7. The trust anchor resolves the full fingerprint from the stored package, and
+   every unreadable path yields a null anchor rather than a partial match.
 
 ## 9. Decision record
 

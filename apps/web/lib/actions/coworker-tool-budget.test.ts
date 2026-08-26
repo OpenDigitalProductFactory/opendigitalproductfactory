@@ -17,6 +17,74 @@ import {
   SKILL_CATALOG_CLIFF_CAP,
 } from "./coworker-tool-budget";
 import { AUTHORIZED_SURFACE_TOOL_NAMES } from "@/lib/coworker/authorized-surface-coworker-contract";
+import { resolveLocalToolCeiling } from "@/lib/routing/local-tool-ceiling";
+
+// THE joint invariant (BI-A8BFEFCE, hardened by BI-8634F0BE).
+//
+// The attachment budget and the routing local-fallback gate are two ends of one
+// policy. Whenever a local model is in the serving path, whatever the budget
+// attaches must be something `callWithFallbackChain` will agree to run — it
+// refuses any surface above `resolveLocalToolCeiling(measured)`. When the two
+// disagree the surface is refused for exceeding a limit nothing else applied,
+// local silently leaves the fallback chain, and a cloud outage on top of that
+// produces a turn that executes no tools at all.
+//
+// Both ends were previously only tested in isolation: `fallback.test.ts` held
+// zero references to the budget, and the cases below pinned one hardcoded cap-15
+// example. This matrix is the guard that actually holds them together.
+describe("budget/gate joint invariant", () => {
+  const WINDOWS = [null, undefined, 0, 4_096, 12_000, 16_000, 24_576, 32_768, 131_072, 262_144];
+  const MEASURED = [null, undefined, -1, 0, 4, 8, 10, 12, 15, 30, 48, 200];
+  const PRESENCES = ["present", "unknown"] as const;
+
+  it("never attaches more tools than the routing gate will run locally", () => {
+    const violations: string[] = [];
+    for (const window of WINDOWS) {
+      for (const measured of MEASURED) {
+        for (const localPresence of PRESENCES) {
+          const cap = deriveCoworkerToolCap(window, {
+            localPresence,
+            measuredToolFidelityCeiling: measured,
+          });
+          const gate = resolveLocalToolCeiling(measured);
+          if (cap > gate) {
+            violations.push(
+              `window=${window} measured=${measured} presence=${localPresence} → cap=${cap} > gate=${gate}`,
+            );
+          }
+        }
+      }
+    }
+    expect(violations).toEqual([]);
+  });
+
+  it("follows a measured ceiling BELOW the minimum floor rather than overriding it", () => {
+    // The regression this guard exists for. `max(MIN, min(ceiling, fitted))` put
+    // the floor last, so a model measured at 8 was handed 12 tools and then
+    // refused by the gate at 8 — nothing ran.
+    for (const measured of [4, 8, 10]) {
+      expect(deriveCoworkerToolCap(24_576, { localPresence: "present", measuredToolFidelityCeiling: measured }))
+        .toBe(measured);
+      expect(deriveCoworkerToolCap(null, { localPresence: "unknown", measuredToolFidelityCeiling: measured }))
+        .toBe(measured);
+    }
+  });
+
+  it("still floors WINDOW-fit shrinkage at the minimum — the floor's real purpose", () => {
+    // A tiny window drives fitted below the floor; with no measured evidence the
+    // ceiling is the cliff (15), so the floor legitimately binds at 12.
+    expect(deriveCoworkerToolCap(4_096, { localPresence: "present" })).toBe(MIN_COWORKER_ATTACHED_TOOLS);
+    expect(deriveCoworkerToolCap(1_000, { localPresence: "present" })).toBe(MIN_COWORKER_ATTACHED_TOOLS);
+    expect(deriveCoworkerToolCap(16_000, { localPresence: "present" })).toBe(MIN_COWORKER_ATTACHED_TOOLS);
+  });
+
+  it("leaves a cloud turn unbounded by the local gate", () => {
+    // `absent` means local is not a candidate, so the gate never runs and the
+    // full ceiling is correct even though it exceeds the local cliff.
+    expect(deriveCoworkerToolCap(null, { localPresence: "absent" })).toBe(MAX_COWORKER_ATTACHED_TOOLS);
+    expect(deriveCoworkerToolCap(131_072, { localPresence: "absent" })).toBe(MAX_COWORKER_ATTACHED_TOOLS);
+  });
+});
 
 describe("deriveCoworkerToolCap", () => {
   it("caps an exact 32k local window at the 15-tool accuracy cliff", () => {
@@ -38,11 +106,47 @@ describe("deriveCoworkerToolCap", () => {
   });
 
   it("returns the full ceiling when there is NO local model in the serving path (cloud)", () => {
-    // null/undefined/0 mean no reachable local generation model — a cloud turn,
-    // unaffected by the local selection cliff.
+    // Legacy shape: with no explicit presence, an absent window still reads as a
+    // cloud turn, unaffected by the local selection cliff. Callers that CAN tell
+    // an absent model from an unread one pass localPresence — see below.
     expect(deriveCoworkerToolCap(null)).toBe(MAX_COWORKER_ATTACHED_TOOLS);
     expect(deriveCoworkerToolCap(undefined)).toBe(MAX_COWORKER_ATTACHED_TOOLS);
     expect(deriveCoworkerToolCap(0)).toBe(MAX_COWORKER_ATTACHED_TOOLS);
+    // Explicit absence is the same answer, stated honestly.
+    expect(deriveCoworkerToolCap(null, { localPresence: "absent" })).toBe(
+      MAX_COWORKER_ATTACHED_TOOLS,
+    );
+  });
+
+  it("cliff-caps an UNREADABLE local window rather than widening it (BI-A8BFEFCE)", () => {
+    // The reviewer incident: the DMR probe failed, the window read as null, and
+    // the cap lifted to 48 — the one value callWithFallbackChain refuses to run
+    // locally (48 > the 15 cliff). With the cloud provider rate-limited the turn
+    // executed zero tools and the review gate got no evidence at all. An unread
+    // local model must behave like a present one, never like an absent one.
+    expect(deriveCoworkerToolCap(null, { localPresence: "unknown" })).toBe(15);
+    expect(deriveCoworkerToolCap(null, { localPresence: "present" })).toBe(15);
+    expect(deriveCoworkerToolCap(undefined, { localPresence: "unknown" })).toBe(15);
+    expect(deriveCoworkerToolCap(0, { localPresence: "unknown" })).toBe(15);
+  });
+
+  it("keeps an unreadable window inside the measured ceiling when one exists", () => {
+    // Measured fidelity still applies without a window — it is a property of the
+    // model, not of the probe that failed to read its serving config.
+    expect(
+      deriveCoworkerToolCap(null, { localPresence: "unknown", measuredToolFidelityCeiling: 30 }),
+    ).toBe(30);
+    expect(
+      deriveCoworkerToolCap(null, { localPresence: "present", measuredToolFidelityCeiling: 200 }),
+    ).toBe(MAX_COWORKER_ATTACHED_TOOLS);
+  });
+
+  it("lets explicit presence override the window-derived guess", () => {
+    // A known window with an explicitly absent local model is a cloud turn: the
+    // window belongs to something that is no longer in the serving path.
+    expect(deriveCoworkerToolCap(131_072, { localPresence: "absent" })).toBe(
+      MAX_COWORKER_ATTACHED_TOOLS,
+    );
   });
 
   it("cliff-caps a LARGE local window — capacity is not selection fidelity (BI-B5C358B1)", () => {
@@ -97,9 +201,49 @@ describe("deriveSkillCatalogCap", () => {
   });
 
   it("is uncapped when the served context is unknown (no local model / cloud)", () => {
+    // Legacy shape: with no explicit presence, an absent window still reads as a
+    // cloud turn. Callers that CAN tell absent from unread pass localPresence.
     expect(deriveSkillCatalogCap(null)).toBe(Number.POSITIVE_INFINITY);
     expect(deriveSkillCatalogCap(undefined)).toBe(Number.POSITIVE_INFINITY);
     expect(deriveSkillCatalogCap(0)).toBe(Number.POSITIVE_INFINITY);
+    // Explicit absence is the same answer, stated honestly.
+    expect(deriveSkillCatalogCap(null, { localPresence: "absent" })).toBe(
+      Number.POSITIVE_INFINITY,
+    );
+  });
+
+  it("caps an UNREADABLE window rather than uncapping it (BI-DBEEC15B)", () => {
+    // The null carries two facts — no local model, and a probe that could not
+    // read one. Only the first justifies enumerating the whole catalog. Eight
+    // agents on the live install sit above this cap (platform-engineer holds 45
+    // skills ≈ 3.8k tokens), so the uncapped path is genuinely reachable.
+    expect(deriveSkillCatalogCap(null, { localPresence: "unknown" })).toBe(
+      SKILL_CATALOG_CLIFF_CAP,
+    );
+    expect(deriveSkillCatalogCap(null, { localPresence: "present" })).toBe(
+      SKILL_CATALOG_CLIFF_CAP,
+    );
+    expect(deriveSkillCatalogCap(undefined, { localPresence: "unknown" })).toBe(
+      SKILL_CATALOG_CLIFF_CAP,
+    );
+    expect(deriveSkillCatalogCap(0, { localPresence: "unknown" })).toBe(SKILL_CATALOG_CLIFF_CAP);
+  });
+
+  it("still lets a KNOWN large local window stay uncapped — this axis is fit, not fidelity", () => {
+    // Deliberately unlike the tool cap, which binds on presence alone. A local
+    // model with room for the catalog keeps the whole catalog.
+    expect(deriveSkillCatalogCap(131_072, { localPresence: "present" })).toBe(
+      Number.POSITIVE_INFINITY,
+    );
+    expect(deriveSkillCatalogCap(24_576, { localPresence: "present" })).toBe(
+      SKILL_CATALOG_CLIFF_CAP,
+    );
+  });
+
+  it("lets explicit absence override a known window", () => {
+    expect(deriveSkillCatalogCap(24_576, { localPresence: "absent" })).toBe(
+      Number.POSITIVE_INFINITY,
+    );
   });
 });
 

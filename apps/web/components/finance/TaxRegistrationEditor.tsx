@@ -11,6 +11,11 @@ import type {
 const inputClasses =
   "rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-2 text-sm text-[var(--dpf-text)] focus:border-[var(--dpf-accent)] focus:outline-none";
 
+import {
+  SearchableSelect,
+  type SearchableSelectOption,
+} from "@/components/ui/form/SearchableSelect";
+
 type JurisdictionOption = {
   id: string;
   jurisdictionRefId: string;
@@ -107,6 +112,42 @@ export function TaxRegistrationEditor({ jurisdictionOptions, registrations, issu
     const region = option.stateProvinceCode ? ` ${option.stateProvinceCode}` : "";
     return `${option.authorityName} (${option.countryCode}${region})`;
   }
+
+  const jurisdictionSelectOptions: SearchableSelectOption[] = useMemo(
+    () =>
+      jurisdictionOptions.map((option) => ({
+        value: option.id,
+        label: labelForJurisdiction(option),
+        // Searching "sales tax" or "GB" should find the row, not just its name.
+        searchText: [
+          option.authorityName,
+          option.countryCode,
+          option.stateProvinceCode ?? "",
+          option.jurisdictionRefId,
+          ...option.taxTypes,
+        ].join(" "),
+      })),
+    [jurisdictionOptions],
+  );
+
+  /**
+   * Authorities this business already registered with, offered first.
+   *
+   * The kernel ledger (DI-89F317F406AA) scored a bare search box NEGATIVE on
+   * "Do the work; don't task the operator with what an agent can do" — a search
+   * field asks the person to type what the system already knows. Opening on the
+   * authorities they actually deal with is the difference.
+   */
+  const preferredJurisdictionIds = useMemo(() => {
+    // A registration exposes the SEMANTIC jurisdictionRefId, while the option
+    // value is the row id — map across rather than assuming they are the same.
+    const registered = new Set(
+      registrations.map((registration) => registration.jurisdictionReference.jurisdictionRefId),
+    );
+    return jurisdictionOptions
+      .filter((option) => registered.has(option.jurisdictionRefId))
+      .map((option) => option.id);
+  }, [registrations, jurisdictionOptions]);
 
   function updateField<K extends keyof CreateTaxRegistrationInput>(
     key: K,
@@ -314,28 +355,28 @@ export function TaxRegistrationEditor({ jurisdictionOptions, registrations, issu
           Add Registration
         </p>
         <div className="mt-4 grid gap-4 md:grid-cols-2">
-          <label className="text-xs text-[var(--dpf-muted)]">
-            Jurisdiction
-            <select
+          <div className="text-xs text-[var(--dpf-muted)]">
+            {/* htmlFor binds the visible label to the combobox the primitive
+                renders. Wrapping alone is not binding: a screen reader would
+                announce an unlabelled field while the screenshot looks right. */}
+            <label htmlFor="tax-registration-jurisdiction">Jurisdiction</label>
+            {/* A flat select rendered every seeded authority at once — 80 choices
+                against a budget of 20. SearchableSelect already existed and was
+                unused; preferredValues opens it on the authorities this business
+                actually deals with, so search widens rather than starts empty. */}
+            <SearchableSelect
+              id="tax-registration-jurisdiction"
               value={form.jurisdictionReferenceId}
-              onChange={(event) => updateField("jurisdictionReferenceId", event.target.value)}
-              className={`mt-1 w-full ${inputClasses}`}
-              required
-            >
-              <option value="" className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]">
-                Select an authority
-              </option>
-              {jurisdictionOptions.map((option) => (
-                <option
-                  key={option.id}
-                  value={option.id}
-                  className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]"
-                >
-                  {labelForJurisdiction(option)}
-                </option>
-              ))}
-            </select>
-          </label>
+              onValueChange={(value) => updateField("jurisdictionReferenceId", value)}
+              options={jurisdictionSelectOptions}
+              preferredValues={preferredJurisdictionIds}
+              placeholder="Select an authority"
+              searchLabel="Search authorities"
+              ariaLabel="Jurisdiction"
+              emptyMessage="No authority matches that search."
+              className="mt-1 w-full"
+            />
+          </div>
 
           <label className="text-xs text-[var(--dpf-muted)]">
             Tax type

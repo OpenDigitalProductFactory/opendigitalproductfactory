@@ -75,7 +75,20 @@ export type InitiativeReviewerRecovery = {
     accountableRole: string;
     toolName: string;
     grant: string;
-    reason: "no-eligible-reviewer";
+    /**
+     * Why the caller cannot route this gate to a reviewer.
+     *
+     * - "no-eligible-reviewer": nobody holds the grant in a production, active,
+     *   unarchived state. Somebody must be assigned or activated.
+     * - "dispatch-context-required": an eligible reviewer WAS found, but no
+     *   Workroom branch + immutable head was supplied to bind the request to.
+     *   Nothing is wrong with the reviewer roster.
+     *
+     * These were one value until 2026-08-26. Reporting a found reviewer as
+     * "no-eligible-reviewer" reads as a permanent dead end and sends the caller
+     * hunting for missing grants instead of supplying the dispatch context.
+     */
+    reason: "no-eligible-reviewer" | "dispatch-context-required";
     nextAction: string;
   }>;
 };
@@ -158,8 +171,8 @@ export async function resolveInitiativeReviewerRecovery(input: {
           accountableRole: entry.role,
           toolName: entry.route.toolName,
           grant: entry.route.lane.grant,
-          reason: "no-eligible-reviewer",
-          nextAction: "Reconcile the exact Workroom branch and immutable head before dispatch; do not synthesize reviewer artifact bindings.",
+          reason: "dispatch-context-required",
+          nextAction: `Eligible reviewer ${candidate.agent.agentId} holds ${entry.route.lane.grant}; supply the Workroom branch and immutable head to dispatch. Do not synthesize reviewer artifact bindings.`,
         });
         continue;
       }

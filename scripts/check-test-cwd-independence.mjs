@@ -23,7 +23,14 @@
  *   const rootDir = join(__dirname, "..", "..", "..");   // correct
  *   const rootDir = join(process.cwd(), "..", "..");     // flagged
  *
- * SCOPE — deliberately vitest test files under apps/ and packages/ only.
+ * SCOPE — every pnpm workspace root that runs vitest: apps/, packages/ and
+ * services/ (adp, edge-node, integration-test-harness). services/ was missed on
+ * the first cut, which left a third of the vitest surface unratcheted: it was
+ * clean at the time, so nothing failed and the omission was invisible.
+ *
+ * `scripts/*.test.ts` is EXCLUDED with the same reasoning as the .mjs CLIs
+ * below — those run through `tsx --test` from package.json at the repo root, not
+ * through vitest, and have no --root-style invocation that moves their cwd.
  * `scripts/**\/*.test.mjs` is EXCLUDED on purpose: those are repo-root CLIs whose
  * cwd-dependence is by design (`export function scanRepo(root = process.cwd())`),
  * they are invoked only as `node --test scripts/…` from package.json with no
@@ -39,7 +46,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { pathToFileURL } from "node:url";
 
-export const SCAN_ROOTS = ["apps", "packages"];
+export const SCAN_ROOTS = ["apps", "packages", "services"];
 export const TEST_FILE_RE = /\.(test|spec)\.(ts|tsx|mts|js|jsx)$/;
 
 /**

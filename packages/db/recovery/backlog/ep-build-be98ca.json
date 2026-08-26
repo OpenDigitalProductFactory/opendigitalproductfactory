@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "bundleId": "capture-ep-build-be98ca",
+  "description": "Backlog captured from this installation on 2026-08-26T03:02:44.748Z.",
+  "source": {
+    "capturedAt": "2026-08-26T03:57:53.481Z",
+    "repository": "OpenDigitalProductFactory/opendigitalproductfactory",
+    "planPath": "docs/superpowers/plans/2026-08-22-instance-identity-and-purpose.md"
+  },
+  "epic": {
+    "epicId": "EP-BUILD-BE98CA",
+    "title": "Add local build capacity precedence note to CONTRIBUTING (probe qwen3-coder)",
+    "description": "Temporary Build Studio robustness probe that checked local build-capacity precedence with qwen3-coder; retained for audit and backlog recovery.",
+    "status": "open",
+    "scopeKind": "unknown",
+    "createdAt": "2026-08-23T15:17:05.186Z"
+  },
+  "items": [
+    {
+      "itemId": "BI-3FADFD64",
+      "epicId": "EP-BUILD-BE98CA",
+      "title": "Add local build capacity precedence note to CONTRIBUTING (probe qwen3-coder)",
+      "body": "Legacy intake recorded no supporting body. The complete known problem statement is: Add local build capacity precedence note to CONTRIBUTING (probe qwen3-coder). This audit repair adds no requirements beyond that title.",
+      "status": "retired",
+      "type": "product",
+      "workType": "doc",
+      "source": "user-request",
+      "scopeKind": "unknown",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-3fadfd64-cmt6pb3cy087y01mx2on5hdsk",
+          "kind": "status_change",
+          "summary": "Retired BI-3FADFD64 as discard",
+          "recordedAt": "2026-08-24T03:53:22.882Z",
+          "payload": {
+            "to": "retired",
+            "from": "in-progress",
+            "reason": "Superseded test probe after the underlying robustness fix merged.",
+            "outcome": "discard",
+            "rationale": "This was a one-off Build Studio robustness probe, not product scope. PR #4568 fixed the local-build capacity/preview failure the probe existed to test, so the probe has no remaining acceptance value.",
+            "duplicateOfId": null
+          }
+        }
+      ],
+      "effortSize": "small",
+      "triageOutcome": "discard",
+      "createdAt": "2026-08-23T15:17:00.946Z"
+    }
+  ]
+}

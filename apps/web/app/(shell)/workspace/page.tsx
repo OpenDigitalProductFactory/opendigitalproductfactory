@@ -10,10 +10,6 @@ import { WorkspaceStorefrontAttention } from "@/components/owner-first/Workspace
 import { WorkspaceTwinHero } from "@/components/workspace-home/WorkspaceTwinHero";
 import { LocalOnlyProviderNotice } from "@/components/workspace-home/LocalOnlyProviderNotice";
 import { UnconfiguredWorkspaceHomeNotice } from "@/components/workspace-home/UnconfiguredWorkspaceHomeNotice";
-import { InstallationIdentityPanel } from "@/components/workspace/InstallationIdentityPanel";
-import { can } from "@/lib/permissions";
-import { prismaInstanceStanceStore } from "@/lib/install/instance-stance";
-import { loadInstallationIdentityView } from "@/lib/installation-journey/installation-identity-view";
 import { loadPlatformWorkspaceHomeData } from "@/lib/workspace-home/platform-loader";
 import { resolveWorkspaceHomeContribution } from "@/lib/workspace-home/registry";
 import { loadWorkspaceTwinPresentation } from "@/lib/workspace-home/twin-panel-data";
@@ -31,11 +27,6 @@ export default async function WorkspacePage() {
   // BI-655418A7: Simple mode must condense the home body, not only the rail.
   const navMode = resolveNavModeFromCookie((await cookies()).get(NAV_MODE_COOKIE)?.value);
   const simpleHome = isSimpleNavMode(navMode);
-  const canManageInstallation = can(
-    { platformRole: session.user.platformRole, isSuperuser: session.user.isSuperuser },
-    "manage_platform",
-  );
-
   const platformHomeData = await loadPlatformWorkspaceHomeData({
     prismaClient: prisma,
     user: session.user,
@@ -92,11 +83,10 @@ export default async function WorkspacePage() {
 
   return (
     <div data-nav-mode={navMode}>
-      {canManageInstallation ? (
-        <InstallationIdentityPanel
-          view={await loadInstallationIdentityView(prisma, prismaInstanceStanceStore(prisma))}
-        />
-      ) : null}
+      {/* The installation identity panel used to open this page and cost roughly
+          the top third of the first viewport (BI-7626A660). It now lives at
+          /ops/installation, and the header badge — non-production only — is the
+          arrival-time signal. The operator's actual work starts here. */}
       {workspaceHomeResolution.mode === "unconfigured" && <UnconfiguredWorkspaceHomeNotice />}
       {workspaceHomeResolution.mode !== "unconfigured" && !hasCloudProvider && (
         <LocalOnlyProviderNotice />

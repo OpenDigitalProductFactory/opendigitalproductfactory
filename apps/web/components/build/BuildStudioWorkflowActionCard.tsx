@@ -176,21 +176,18 @@ export function BuildStudioWorkflowActionCard({
     setError(null);
     setLastOutcome(null);
     try {
+      // BI-8C6AA60E / BI-CE1AB982: an expected operational refusal ("no releasable
+      // source changes", "no engine can run this") comes back as a value, because a
+      // thrown Error is stripped to a production digest and the operator needs the cause.
+      let refusal: { ok: boolean; message?: string; error?: string } | null = null;
       if (action.kind === "approve-start") {
-        await approveBuildStart(build.buildId);
+        refusal = await approveBuildStart(build.buildId);
       } else if (action.kind === "record-acceptance") {
         await recordBuildAcceptance(build.buildId);
       } else if (action.kind === "run-review-verification") {
         await runBuildReviewVerification(build.buildId);
       } else if (action.kind === "advance-phase" && action.targetPhase) {
-        // BI-8C6AA60E: "no releasable source changes" is an expected operational
-        // state, returned as a value so the operator reads the real message
-        // instead of a stripped production digest.
-        const outcome = await advanceBuildPhase(build.buildId, action.targetPhase);
-        if (!outcome.ok) {
-          setError(outcome.message);
-          return;
-        }
+        refusal = await advanceBuildPhase(build.buildId, action.targetPhase);
       } else if (action.kind === "retry-inference") {
         // BI-F0005EB0 — the AI call errored. Re-drive the failed coworker turn
         // (the same recovery the user does by re-prompting today) by opening the
@@ -224,6 +221,7 @@ export function BuildStudioWorkflowActionCard({
           }),
         );
       }
+      if (refusal && !refusal.ok) return setError(refusal.error ?? refusal.message ?? "That could not be completed.");
 
       window.dispatchEvent(
         new CustomEvent("build-progress-update", {

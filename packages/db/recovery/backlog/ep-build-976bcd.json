@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 1,
+  "bundleId": "capture-ep-build-976bcd",
+  "description": "Backlog captured from this installation on 2026-08-26T03:02:44.748Z.",
+  "source": {
+    "capturedAt": "2026-08-26T03:57:53.481Z",
+    "repository": "OpenDigitalProductFactory/opendigitalproductfactory",
+    "planPath": "docs/superpowers/plans/2026-08-22-instance-identity-and-purpose.md"
+  },
+  "epic": {
+    "epicId": "EP-BUILD-976BCD",
+    "title": "Preview robustness proof: append a one-line JSDoc comment to an internal utility",
+    "description": "Temporary Build Studio preview-robustness probe that appended one JSDoc comment to an internal utility; retained for audit and backlog recovery.",
+    "status": "open",
+    "scopeKind": "unknown",
+    "createdAt": "2026-08-23T10:12:54.641Z"
+  },
+  "items": [
+    {
+      "itemId": "BI-4C964745",
+      "epicId": "EP-BUILD-976BCD",
+      "title": "Preview robustness proof: append a one-line JSDoc comment to an internal utility",
+      "body": "Trivial doc-only change to prove build ideate now routes to cloud when local inference is capacity-deferred (BI-8B4359DE fix, on contributor preview).",
+      "status": "retired",
+      "type": "portfolio",
+      "workType": "chore",
+      "source": "user-request",
+      "scopeKind": "unknown",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-4c964745-cmt6pb369087s01mx125ybyte",
+          "kind": "status_change",
+          "summary": "Retired BI-4C964745 as discard",
+          "recordedAt": "2026-08-24T03:53:22.641Z",
+          "payload": {
+            "to": "retired",
+            "from": "in-progress",
+            "reason": "Superseded test probe after the underlying robustness fix merged.",
+            "outcome": "discard",
+            "rationale": "This one-line JSDoc task was a contributor-preview routing probe, not product work. PR #4568 merged the underlying robustness repair and made the probe obsolete.",
+            "duplicateOfId": null
+          }
+        }
+      ],
+      "effortSize": "small",
+      "triageOutcome": "discard",
+      "createdAt": "2026-08-23T10:12:43.651Z"
+    },
+    {
+      "itemId": "BI-89E82256",
+      "epicId": "EP-BUILD-976BCD",
+      "title": "Preview robustness proof: add a one-line JSDoc comment to an internal utility",
+      "body": "Trivial doc-only change to verify (on the contributor preview running the modelTier-residency fix, BI-8B4359DE) that build ideate now routes to a cloud engine when local inference is capacity-deferred, instead of dying with Local provider dispatch deferred.",
+      "status": "retired",
+      "type": "portfolio",
+      "workType": "chore",
+      "source": "user-request",
+      "scopeKind": "unknown",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-89e82256-cmt6pb2wk087o01mxz830wepb",
+          "kind": "status_change",
+          "summary": "Retired BI-89E82256 as discard",
+          "recordedAt": "2026-08-24T03:53:22.292Z",
+          "payload": {
+            "to": "retired",
+            "from": "in-progress",
+            "reason": "Duplicate stale probe after the underlying robustness fix merged.",
+            "outcome": "discard",
+            "rationale": "This one-line JSDoc task duplicated the contributor-preview robustness proof. PR #4568 merged the underlying routing repair; no separate code change remains.",
+            "duplicateOfId": null
+          }
+        },
+        {
+          "recoveryKey": "bi-89e82256-cmt9ib8zg042t01qvuswlrvt4",
+          "kind": "epic_link",
+          "summary": "(no epic) → EP-BUILD-976BCD",
+          "recordedAt": "2026-08-26T03:00:51.388Z",
+          "payload": {
+            "toEpicId": "EP-BUILD-976BCD",
+            "fromEpicId": null
+          }
+        }
+      ],
+      "effortSize": "small",
+      "triageOutcome": "discard",
+      "createdAt": "2026-08-23T10:09:52.422Z"
+    }
+  ]
+}

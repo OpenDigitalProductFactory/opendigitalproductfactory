@@ -7,6 +7,7 @@ import { auth } from "@/lib/auth";
 import { resolveBrandingLogoUrl, buildBrandingStyleTag } from "@/lib/branding";
 import { redirect } from "next/navigation";
 import { Header } from "@/components/shell/Header";
+import { loadInstallationBadge } from "@/lib/install/estate-identity";
 import { AgentCoworkerShell } from "@/components/agent/AgentCoworkerShell";
 import { QueueFlusher } from "@/components/feedback/QueueFlusher";
 import { StatusBanner } from "@/components/shell/StatusBanner";
@@ -215,6 +216,10 @@ export default async function ShellLayout({ children }: { children: React.ReactN
           )}
           userId={user.id}
           navMode={navMode}
+          installationBadge={await loadInstallationBadge({
+            readConfig: async (key) =>
+              (await prisma.platformConfig.findUnique({ where: { key } }))?.value ?? null,
+          })}
         />
         <div className="flex flex-1 flex-col lg:flex-row">
           {shellNavSections.length > 0 && (

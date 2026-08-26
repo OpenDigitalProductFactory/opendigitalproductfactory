@@ -1,0 +1,24 @@
+{
+  "version": "1",
+  "decidedOption": "direct-roster-and-token-backed-surfaces",
+  "decisionInteractionId": "DI-32EFBD2643CA",
+  "scope": {
+    "files": [
+      "apps/web/components/platform/coworker-record/RosterView.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "direct-roster-and-token-backed-surfaces",
+      "default-open-directory-disclosure",
+      "preserve-current-disclosure"
+    ]
+  },
+  "rationale": {
+    "direct-roster-and-token-backed-surfaces": "CHOSEN. The operator can search and open a coworker immediately from a compact, progressively paged directory; metrics compose the shared reporting palette; and both canvases resolve the active DPF theme. The existing routes, data sources, roster semantics, and graph interactions stay authoritative.",
+    "default-open-directory-disclosure": "REJECTED. Opening the disclosure by default would reveal the roster but retain a collapse control with no useful outcome and preserve an extra interaction concept around the page's primary task.",
+    "preserve-current-disclosure": "REJECTED. The closed disclosure reproduces the reported extra click and prevents search or roster scanning on arrival. Hard-coded canvas and table colors also remain unreadable whenever their assumed theme differs from the active theme."
+  },
+  "notes": "Fits with guardrails. Platform owns Operational Metrics and Graph Explorer; Business owns AI Coworkers. The change removes one redundant link and one primary-content disclosure, gives the shared RosterView a compact directory presentation with bounded first-page results, adds no route or navigation layer, centralizes only CSS-token-to-Canvas2D translation, and preserves honest empty states."
+}

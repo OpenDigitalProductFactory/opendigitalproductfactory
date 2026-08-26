@@ -1,11 +1,11 @@
 {
   "generator": "apps/web/scripts/build-route-shells.ts",
-  "pageRouteCount": 329,
+  "pageRouteCount": 330,
   "migratedCount": 1,
   "summary": {
     "cockpit": 17,
     "list": 6,
-    "detail": 255,
+    "detail": 256,
     "settings": 12,
     "form": 18,
     "public": 21,
@@ -1997,6 +1997,18 @@
       ],
       "sweepEligible": false,
       "sweepExclusionReason": "redirects-to-dynamic-resource",
+      "confidence": "high"
+    },
+    {
+      "routePath": "/ops/installation",
+      "shell": "detail",
+      "audience": "admin",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {

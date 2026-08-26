@@ -1,17 +1,17 @@
 {
   "schemaVersion": 1,
-  "capturedAt": "2026-08-23T02:00:56.767Z",
+  "capturedAt": "2026-08-26T03:57:53.481Z",
   "scope": "not-done",
   "bundles": [
     {
       "epicId": "EP-129D11FD",
       "file": "initiative-readiness-governed-completion.json",
-      "itemCount": 5
+      "itemCount": 19
     },
     {
       "epicId": "EP-1FABA22D",
       "file": "purpose-aware-installation-ecosystem-productivity.json",
-      "itemCount": 13
+      "itemCount": 25
     },
     {
       "epicId": "EP-24741BBF",
@@ -21,12 +21,17 @@
     {
       "epicId": "EP-31C5A6C8",
       "file": "external-website-channels-cms-interoperability.json",
-      "itemCount": 3
+      "itemCount": 5
+    },
+    {
+      "epicId": "EP-4FF5273F",
+      "file": "vertical-integration-inward.json",
+      "itemCount": 4
     },
     {
       "epicId": "EP-5102F494",
       "file": "animal-welfare-operations-vertical.json",
-      "itemCount": 10
+      "itemCount": 17
     },
     {
       "epicId": "EP-55AF36AC",
@@ -36,15 +41,82 @@
     {
       "epicId": "EP-56AE0F69",
       "file": "reset-cycle-3-platform-findings.json",
+      "itemCount": 55
+    },
+    {
+      "epicId": "EP-862820FD",
+      "file": "employment-lifecycle-actuator.json",
+      "itemCount": 8
+    },
+    {
+      "epicId": "EP-A47377D1",
+      "file": "canonical-minimal-substrate.json",
+      "itemCount": 1
+    },
+    {
+      "epicId": "EP-BUILD-51BE9A",
+      "file": "ep-build-51be9a.json",
+      "itemCount": 1
+    },
+    {
+      "epicId": "EP-BUILD-67A41A",
+      "file": "ep-build-67a41a.json",
+      "itemCount": 1
+    },
+    {
+      "epicId": "EP-BUILD-962133",
+      "file": "ep-build-962133.json",
+      "itemCount": 1
+    },
+    {
+      "epicId": "EP-BUILD-976BCD",
+      "file": "ep-build-976bcd.json",
+      "itemCount": 2
+    },
+    {
+      "epicId": "EP-BUILD-BE98CA",
+      "file": "ep-build-be98ca.json",
+      "itemCount": 1
+    },
+    {
+      "epicId": "EP-BUILD-D41730",
+      "file": "ep-build-d41730.json",
+      "itemCount": 1
+    },
+    {
+      "epicId": "EP-BUILD-E32F28",
+      "file": "ep-build-e32f28.json",
+      "itemCount": 2
+    },
+    {
+      "epicId": "EP-DECISION-TIER-REBALANCE",
+      "file": "ep-decision-tier-rebalance.json",
       "itemCount": 7
+    },
+    {
+      "epicId": "EP-F09D63B3",
+      "file": "build-studio-consumer-dogfood-findings.json",
+      "itemCount": 9
     }
   ],
-  "capturedItemCount": 49,
-  "unassignedItemCount": 9,
-  "unfinishedItemCount": 58,
+  "capturedItemCount": 170,
+  "unassignedItemCount": 47,
+  "unfinishedItemCount": 217,
   "skipped": [
     {
       "itemId": "BI-0E8B29C3",
+      "reason": "item-has-no-epic"
+    },
+    {
+      "itemId": "BI-1214873D",
+      "reason": "item-has-no-epic"
+    },
+    {
+      "itemId": "BI-42B36B40",
+      "reason": "item-has-no-epic"
+    },
+    {
+      "itemId": "BI-5AA89F68",
       "reason": "item-has-no-epic"
     },
     {
@@ -52,7 +124,75 @@
       "reason": "item-has-no-epic"
     },
     {
+      "itemId": "BI-798D7E85",
+      "reason": "item-has-no-epic"
+    },
+    {
+      "itemId": "BI-86C5082D",
+      "reason": "item-has-no-epic"
+    },
+    {
+      "itemId": "BI-8C39E1F4",
+      "reason": "item-has-no-epic"
+    },
+    {
+      "itemId": "BI-CAP-0F721A03",
+      "reason": "item-has-no-epic"
+    },
+    {
+      "itemId": "BI-CAP-102915CB",
+      "reason": "item-has-no-epic"
+    },
+    {
+      "itemId": "BI-CAP-2CB0A076",
+      "reason": "item-has-no-epic"
+    },
+    {
+      "itemId": "BI-CAP-3C1DFBF8",
+      "reason": "item-has-no-epic"
+    },
+    {
+      "itemId": "BI-CAP-5ED8B082",
+      "reason": "item-has-no-epic"
+    },
+    {
+      "itemId": "BI-CAP-639DD638",
+      "reason": "item-has-no-epic"
+    },
+    {
+      "itemId": "BI-CAP-6D53CA31",
+      "reason": "item-has-no-epic"
+    },
+    {
+      "itemId": "BI-CAP-8F982709",
+      "reason": "item-has-no-epic"
+    },
+    {
+      "itemId": "BI-CAP-ACA082E6",
+      "reason": "item-has-no-epic"
+    },
+    {
+      "itemId": "BI-CAP-D779BE29",
+      "reason": "item-has-no-epic"
+    },
+    {
+      "itemId": "BI-CAP-E3B6FA0E",
+      "reason": "item-has-no-epic"
+    },
+    {
+      "itemId": "BI-CAP-F2DB7006",
+      "reason": "item-has-no-epic"
+    },
+    {
       "itemId": "BI-CAP-FC4033F6",
+      "reason": "item-has-no-epic"
+    },
+    {
+      "itemId": "BI-E6CC87A0",
+      "reason": "item-has-no-epic"
+    },
+    {
+      "itemId": "BI-FF578915",
       "reason": "item-has-no-epic"
     },
     {
@@ -60,11 +200,47 @@
       "reason": "item-has-no-epic"
     },
     {
+      "itemId": "BI-MCP-EFF-36928421",
+      "reason": "item-has-no-epic"
+    },
+    {
+      "itemId": "BI-MCP-EFF-3D83B20F",
+      "reason": "item-has-no-epic"
+    },
+    {
       "itemId": "BI-MCP-EFF-3E441834",
       "reason": "item-has-no-epic"
     },
     {
+      "itemId": "BI-MCP-EFF-3FE4E73E",
+      "reason": "item-has-no-epic"
+    },
+    {
+      "itemId": "BI-MCP-EFF-7AFED9F2",
+      "reason": "item-has-no-epic"
+    },
+    {
+      "itemId": "BI-MCP-EFF-9640010E",
+      "reason": "item-has-no-epic"
+    },
+    {
       "itemId": "BI-MCP-EFF-9E98E206",
+      "reason": "item-has-no-epic"
+    },
+    {
+      "itemId": "BI-MCP-EFF-A8B005CA",
+      "reason": "item-has-no-epic"
+    },
+    {
+      "itemId": "BI-MCP-EFF-B5F7D216",
+      "reason": "item-has-no-epic"
+    },
+    {
+      "itemId": "BI-MCP-EFF-B85BD006",
+      "reason": "item-has-no-epic"
+    },
+    {
+      "itemId": "BI-MCP-EFF-CF30543E",
       "reason": "item-has-no-epic"
     },
     {
@@ -76,7 +252,43 @@
       "reason": "item-has-no-epic"
     },
     {
+      "itemId": "BI-MCP-EFF-DFE75836",
+      "reason": "item-has-no-epic"
+    },
+    {
+      "itemId": "BI-MCP-EFF-E6F0347F",
+      "reason": "item-has-no-epic"
+    },
+    {
       "itemId": "BI-MCP-EFF-E8495F21",
+      "reason": "item-has-no-epic"
+    },
+    {
+      "itemId": "BI-OBS-b9c9bfd9",
+      "reason": "item-has-no-epic"
+    },
+    {
+      "itemId": "BI-PIR-33fc603c",
+      "reason": "item-has-no-epic"
+    },
+    {
+      "itemId": "BI-PIR-3c79612c",
+      "reason": "item-has-no-epic"
+    },
+    {
+      "itemId": "BI-PIR-7d9a6ab8",
+      "reason": "item-has-no-epic"
+    },
+    {
+      "itemId": "BI-PIR-a16d696f",
+      "reason": "item-has-no-epic"
+    },
+    {
+      "itemId": "BI-PIR-SPIKE-459068e1",
+      "reason": "item-has-no-epic"
+    },
+    {
+      "itemId": "BI-SIG-463E478D",
       "reason": "item-has-no-epic"
     }
   ]

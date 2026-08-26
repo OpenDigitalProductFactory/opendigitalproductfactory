@@ -10,6 +10,12 @@ status: active
 **Recovery base:** `f20a78f63dc1884eea0fc171d04556b4be8de32f`
 **Design:** `docs/superpowers/specs/2026-08-23-initiative-readiness-traversal-repair-design.md`
 
+> **For agentic workers:** execute this plan one independently reviewable backlog
+> item at a time — one BI, one branch, one PR. Use `dpf-tdd` for red-green
+> implementation, `dpf-local-merge-ci-before-push` plus the plan's completion gate
+> before any success claim, and `dpf-pr-with-dco` for handoff.
+
+
 ## Delivery contract
 
 The repair has seven testable slices: universal policy-authority projection,
@@ -28,22 +34,23 @@ post-amendment operator ratification makes the one-time envelope effective.
 
 ## Traceability matrix
 
-| Acceptance | Red test | Production surface |
-|---|---|---|
-| `AC-PROFILE-FIX`, `AC-PROFILE-MONOTONIC` | policy and adapter fixtures | `profiles.ts` |
-| `AC-POLICY-DIFFERENT` | table-driven fix/feature/cross-domain tests | `evaluate.ts` and policy version |
-| `AC-RECOVERY-ROUTE` | recovery resolver plus MCP-handler tests proving the full recovery object and exact no-thread packet survive serialization | lane registry, recovery adapter, `claim-backlog-item-handler.ts` |
-| `AC-UI-TARGET` | exact-target and stale-target launcher tests | recovery action / coworker launcher |
-| `AC-REVIEW-SEPARATION` | external no-thread request tests and receipt separation tests | coworker pack -> `submitRemoteCoworkerTask` |
-| `AC-REVIEWER-READ` | immediate `sideEffect=false` read under coarse approval policy `all`, plus unchanged proposal/side-effect approval cases | coworker authority decision |
-| `AC-SPEC-AUTHORITY` | authority writer and exact spec-approval traversal tests | subject derivation, authority decision log, baseline repository |
-| `AC-RECEIPT-FRESHNESS` | pre-baseline and post-baseline supersession tests | readiness entry adapter / receipt projection |
-| `AC-HEAD-RECONCILE`, `AC-REPLAY` | provider, handler, capture/adopt tests | external evidence and external session capture |
-| `AC-AUTHOR-AFTER-SYNC`, `AC-FAIL-CLOSED` | repository-artifact positive/negative fixtures | existing artifact resolver |
-| `AC-COVERAGE-TX` | slow-preflight, five-mapping commit, stale-binding, and transaction-expiry tests | plan coverage recorder and repository binding recheck |
-| `AC-POLICY-BRIDGE-YES`, `AC-POLICY-BRIDGE-DENY` | affirmative, non-affirmative, signal-quality, conflict, and owning-gate fixtures | policy-authority projector, decision ledger, authorization log/envelope |
-| `AC-POLICY-BRIDGE-SCOPE`, `AC-POLICY-NOT-RBAC`, `AC-POLICY-RECOVERY` | policy/delegation/artifact/expiry/replay, direct-DI prohibition, and exact-route tests | governed authority gate, delegation, envelope lifecycle, readiness recovery |
-| `AC-FIRST-DEPLOY-WARRANT`, `AC-FIRST-DEPLOY-INDEPENDENCE`, `AC-FIRST-DEPLOY-CONSUME` | immutable bootstrap-contract, drift/revocation/replay, exact-tree review, branch-rule, and merge-consumption evidence | design/plan, Workroom audit, DCO/review/pregate/PR boundary |
+Every path below was resolved against the tree at `origin/main`; none is assumed.
+
+| Acceptance | Task | Red test | Production surface |
+|---|---|---|---|
+| `AC-PROFILE-FIX`, `AC-PROFILE-MONOTONIC` | 2 | `initiative-readiness-policy.test.ts` profile cases | `apps/web/lib/backlog/initiative-readiness/profiles.ts` |
+| `AC-POLICY-DIFFERENT` | 3 | table-driven fix/feature/cross-domain cases in the same suite | `apps/web/lib/backlog/initiative-readiness/evaluate.ts` |
+| `AC-RECOVERY-ROUTE` | 4 | recovery resolver and claim-response tests | initiative tool-grant lane registry, recovery adapter, claim handler |
+| `AC-UI-TARGET` | 4 | exact-target and stale-target launcher tests | recovery action / coworker launcher component |
+| `AC-REVIEW-SEPARATION` | 5 | external no-thread request and receipt-separation tests | coworker pack -> `apps/web/lib/mcp-task-submit.ts` |
+| `AC-SPEC-AUTHORITY` | 6 | authority-writer and exact spec-approval traversal tests | `apps/web/lib/govern/authority/resolve-coworker-tool-authority.ts`, `.../coworker-tool-authority-gate.ts`, `.../initiative-readiness/baseline-repository.ts` |
+| `AC-RECEIPT-FRESHNESS` | 7 | pre-baseline and post-baseline supersession tests | `apps/web/lib/backlog/initiative-readiness/entry-adapter.ts` |
+| `AC-HEAD-RECONCILE`, `AC-REPLAY` | 8, 13 | provider, handler, capture/adopt tests | `apps/web/lib/work-capsules/external-session-capture.ts`, `.../work-capsule-store.ts` (`adoptWorktreeCapsule`) |
+| `AC-AUTHOR-AFTER-SYNC`, `AC-FAIL-CLOSED` | 9 | `repository-artifact.test.ts` positive/negative fixtures | `apps/web/lib/backlog/initiative-readiness/repository-artifact.ts` |
+| `AC-COVERAGE-TX` | 10 | slow-preflight, five-mapping commit, stale-binding, and transaction-expiry tests | `apps/web/lib/planning/plan-backlog-coverage.ts` (`recordPlanBacklogCoverage`) |
+| `AC-POLICY-BRIDGE-YES`, `AC-POLICY-BRIDGE-DENY` | 4A | affirmative, non-affirmative, signal-quality, conflict, and owning-gate fixtures | policy-authority projector (new), `AuthorizationDecisionLog`, `CoworkerActionEnvelope` |
+| `AC-POLICY-BRIDGE-SCOPE`, `AC-POLICY-NOT-RBAC`, `AC-POLICY-RECOVERY` | 4A | policy/delegation/artifact/expiry/replay, direct-DI prohibition, and exact-route tests | `apps/web/lib/govern/authority/coworker-tool-authority-gate.ts`, `DelegationGrant`, envelope lifecycle, readiness recovery |
+| `AC-FIRST-DEPLOY-WARRANT`, `AC-FIRST-DEPLOY-INDEPENDENCE`, `AC-FIRST-DEPLOY-CONSUME` | 0, 12 | immutable bootstrap-contract, drift/revocation/replay, exact-tree review, branch-rule, and merge-consumption evidence | design/plan documents, Workroom audit, DCO/review/pregate/PR boundary |
 
 ## Backlog coverage
 
@@ -87,6 +94,116 @@ implementation path fail-closed or would expose an incomplete recovery path.
 The receipt is bound to the immutable pre-receipt plan artifact above. This
 evidence section records the resulting identities; it does not rewrite or
 proxy that receipt.
+
+### Receipt liveness — verified 2026-08-26
+
+`check_plan_backlog_coverage` against the identities above returns
+**`receipt-not-found`**:
+
+```
+itemId=BI-F0715C9C
+planPath=docs/superpowers/plans/2026-08-23-initiative-readiness-traversal-repair.md
+receiptId=cmt6xp5k2000c51kpdb76su1t
+-> { "error": "receipt-not-found" }
+```
+
+**Cause, from `WC-7FF8A505` activity `cmt6xr47b0kjd01mxtemerijv`:** the receipt was
+minted on a **non-production preview lease**, `NPEL-0583244D50`, against the
+repaired writer — `command: "27B research/spec approved replay;
+record_plan_backlog_coverage via preview /api/mcp/v1"`. The same run produced
+research receipt `initiative-8042dea2-…`, spec-approval receipt
+`initiative-5eab8246-…`, and baseline `baseline-acd3d154-…`.
+
+This is not a database reset: `WC-2ABA65F7` and `WC-7FF8A505` both still resolve.
+The receipt simply never existed in the canonical runtime. AGENTS.md §1 is explicit
+that the canonical runtime is the only source of runtime truth; a preview-minted
+receipt is not runtime truth, and the other three identities above are open to the
+same question.
+
+Two consequences worth separating:
+
+1. **The record above stays.** These are the real historical identities the
+   delivery was reviewed and merged against; deleting them would destroy audit
+   history. They are recorded as history, not asserted as current state.
+2. **The CI gate does not catch this.** `check-plan-backlog-coverage.mjs`
+   regex-matches that a `Receipt:` line exists and is not `pending`/`none`/`n/a`.
+   It never asks the substrate whether the receipt resolves, and it cannot tell a
+   production receipt from a preview one. A plan citing a non-production receipt
+   therefore passes the gate — the same class of defect this design exists to fix:
+   evidence that *projects* as satisfied without being verified.
+   `check_plan_backlog_coverage` is the tool that would close it, and calling it
+   from the gate is the smallest repair.
+
+3. **This warrants its own backlog item.** Preview-minted governance receipts
+   reaching a merged plan is a governance-substrate defect, not a documentation
+   defect, and it is out of scope for a repair that has already shipped.
+
+Re-minting is currently impossible: `record_plan_backlog_coverage` is uncallable
+(`BI-CC9D5997`, claimed on `WC-C3B828AE`). Do not replace the identities above with
+a hand-written value — that is the substitution the design forbids.
+
+
+## Delivery status
+
+Recorded 2026-08-26 from live state. **This plan has been executed.** PR
+[#4633](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/4633)
+merged `ddd1ae31e` to `main` on 2026-08-24, DCO-signed by Mark Bodman, carrying
+Tasks 2–10 as one contribution. Read the task list below as the record of what was
+built, not as outstanding work.
+
+| Task | State | Evidence |
+|---|---|---|
+| 0 — policy-authority boundary | resolved | Envelope never consumed; the human root authored and signed the contribution directly. |
+| 1 — rebase / Workroom scope | done | — |
+| 2 — profile derivation | **live** | `profiles.ts` on `main`; `BI-F0715C9C` derives `fix` under `v2`. |
+| 3 — policy v2 | **live** | `INITIATIVE_READINESS_POLICY_VERSION = "initiative-readiness.v2"` on `main` and in live readiness decisions. |
+| 4 — authority-aware recovery | **live, with a regression** | Shipped; PR #4641's lane row caused `BI-CC9D5997`. |
+| 4A — policy-authority bridge | **live** | `policy-authority-projector.ts`, `resolve-policy-action-authority.ts` on `main`. |
+| 5 — external reviewer dispatch | **live** | `mcp-task-submit.ts` +376 lines in #4633. |
+| 6 — organization-bound authority | **live** | `authority-subject.ts`, `coworker-authority-decision.ts` on `main`. |
+| 7 — receipt freshness | **live** | `entry-adapter` / `baseline-repository` changes in #4633. |
+| 8, 9 — head reconciliation, artifact author | **live** | `external-session-capture.ts`, `repository-artifact.test.ts` in #4633. |
+| 10 — bounded plan coverage | **live** | `plan-backlog-coverage.ts` +79 lines in #4633. |
+| 11, 12 — verification, publication | done | 34 checks green through the protected merge queue. |
+| 13 — blocked-Workroom recovery proof | **outstanding** | Post-merge replay for `WC-E8275570`, `WC-B0DD2B2F`, `WC-A31DBE53` not recorded here. |
+
+### What this plan does not cover
+
+Acceptance 20 and 21 on `BI-F0715C9C` were added on 2026-08-25 and concern the
+**completion** lane — delivered work that cannot reach `done`. No task below
+addresses them; see the design's Delivery status section. They need a successor
+plan, and `BI-CC9D5997` is a prerequisite because `PLAN_REQUIRED` cannot clear
+while the coverage writer is unreachable.
+
+## Risks and rollback
+
+Every slice is additive against existing modules, so rollback is per-slice revert
+plus one policy-version decision. The ordering below is chosen so that no slice
+can land in a state where readiness is *weaker* than `initiative-readiness.v1`.
+
+| Risk | Blast radius | Detection | Rollback |
+|---|---|---|---|
+| Profile derivation (Task 2) under-classifies real cross-domain work | Every open BI with `scopeKind=platform` or `common` re-derives on next claim; a genuinely coupled change could enter implementation on `fix` obligations | Re-run readiness against the live backlog before merge and diff derived profiles against the recorded ones; any BI that *drops* a profile without a recorded stronger signal is the finding | Revert `profiles.ts` alone. The change is one function and carries no persisted state — derivation is recomputed per claim. |
+| Policy `v2` (Task 3) removes an obligation that was load-bearing | Every claim evaluated after deploy | Decision rows carry `policyVersion`; compare `v1` and `v2` verdicts over the last 30 days of claims before merge | Revert `evaluate.ts` and pin `INITIATIVE_READINESS_POLICY_VERSION` back to `v1`. Receipts are version-stamped and stay valid. |
+| Bridge (Task 4A) projects an authorization it should not | The widest risk in this plan — an incorrect projection authorizes a real action | `AC-POLICY-BRIDGE-DENY` and `AC-POLICY-BRIDGE-SCOPE`; every projection appends an `AuthorizationDecisionLog` row citing its `DecisionInteraction`, so a bad projection is queryable, not silent | Revoke outstanding envelopes (existing lifecycle), then revert the projector. Nothing consumed the projection irreversibly except an already-merged PR, which the repository boundary independently gated. |
+| Threadless dispatch (Task 5) lets a read-only PAT trigger a write | External identities | Task 5 step 4 proves read-only PAT denial explicitly | Revert the adapter branch; portal calls are untouched by construction. |
+| Organization binding (Task 6) blocks a subject kind that used to work | Any caller of the generic authority gate, not just readiness | Only `itemId` gains a resolver; §5 keeps other subject kinds on current behavior — assert that with a regression test over existing callers before merge | Revert the subject-derivation change. |
+| Head reconciliation (Task 8) adopts a wrong head | One Workroom per call | Provider branch-head equality is the precondition; `adoptWorktreeCapsule` records old and new heads | Replay evidence with the correct SHA — adoption is idempotent and the old head is in the audit trail. |
+| Coverage transaction restructure (Task 10) moves a check outside the lock | Plan coverage receipts | Task 10 step 5 proves head/owner/baseline/mapping races still fail closed with no create call | Revert `plan-backlog-coverage.ts`; the pre-existing behavior is a timeout, not corruption. |
+
+Two risks have no clean rollback and are therefore gated, not mitigated:
+
+- **The first-deployment envelope (Task 0).** Once consumed by a protected merge
+  it cannot be un-consumed. This is why it is single-use, path-confined,
+  72-hour-bounded, and requires independent exact-tree review — the envelope's
+  constraints *are* the rollback plan.
+- **Live recovery replay (Task 13).** It runs only after merge and verification,
+  touches Workroom heads through the same idempotent adoption path, and never
+  rewrites `fix/wordpress-operator-regressions`.
+
+Standing prohibition for every rollback path: no direct database edit, no
+fabricated receipt, no relabelled design mutation. A rollback that needs one of
+those is not a rollback.
 
 ## Task 0 - Establish the policy-authority boundary
 
@@ -169,8 +286,10 @@ Then encode additive profile builders and bump the decision version to
 `initiative-readiness.v2`.
 
 Refactoring allocation: centralize common requirements and additive profile
-floors instead of copying arrays. This is part of the requested 20% refactoring
-budget and may not broaden untested behavior.
+floors instead of copying arrays. The design's budget is ~80% refactor of existing
+substrate; the retired 80/20 feature-first split
+(`docs/design/golden-triangle-design.md:654`) does not apply. Refactoring may not
+broaden untested behavior.
 
 ## Task 4 - Red/green authority-aware recovery
 

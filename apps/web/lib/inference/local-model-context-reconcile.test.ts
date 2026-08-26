@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { mockPrisma } = vi.hoisted(() => ({
   mockPrisma: {
-    modelProfile: { updateMany: vi.fn() },
+    modelProfile: { updateMany: vi.fn(), findMany: vi.fn() },
     platformConfig: { findUnique: vi.fn() },
   },
 }));
@@ -11,6 +11,7 @@ vi.mock("@dpf/db", () => ({ prisma: mockPrisma, DISCOVERY_TRIAGE_AGENT_ID: "disc
 import {
   reconcileLocalModelContext,
   resolveLocalServedContextTokens,
+  resolveLocalServingPosture,
   resolveServedContextTarget,
   resolveHostMemoryProfile,
 } from "./local-model-context-reconcile";
@@ -274,5 +275,68 @@ describe("resolveLocalServedContextTokens", () => {
   it("returns null (best-effort) when the models endpoint is unreachable", async () => {
     const f = makeResolveFetch({ modelsStatus: 503 });
     expect(await resolveLocalServedContextTokens(f)).toBeNull();
+  });
+});
+
+describe("resolveLocalServingPosture (BI-A8BFEFCE)", () => {
+  beforeEach(() => {
+    mockPrisma.modelProfile.findMany.mockReset();
+  });
+
+  it("reports present with the served window when the probe answers", async () => {
+    const f = makeResolveFetch({ models: [{ id: GEN, dmr: { context_window: 4096 } }], override: 24_576 });
+    expect(await resolveLocalServingPosture(f)).toEqual({
+      servedContextTokens: 24_576,
+      presence: "present",
+    });
+    // The probe was authoritative — no need to consult the routing store.
+    expect(mockPrisma.modelProfile.findMany).not.toHaveBeenCalled();
+  });
+
+  it("reports absent when the probe answers cleanly with no generation model", async () => {
+    // A clean list holding only an embedder is a POSITIVE finding of absence.
+    const f = makeResolveFetch({ models: [{ id: EMBED, dmr: { context_window: 2048 } }], override: null });
+    expect(await resolveLocalServingPosture(f)).toEqual({
+      servedContextTokens: null,
+      presence: "absent",
+    });
+    expect(mockPrisma.modelProfile.findMany).not.toHaveBeenCalled();
+  });
+
+  it("recovers presence from ModelProfile when the probe is unreachable", async () => {
+    // The reported incident: a momentarily unreachable DMR read as a cloud-only
+    // install, which lifted the tool cap to 48 and disqualified local fallback.
+    mockPrisma.modelProfile.findMany.mockResolvedValue([{ modelId: GEN }]);
+    const f = makeResolveFetch({ modelsStatus: 503 });
+    expect(await resolveLocalServingPosture(f)).toEqual({
+      servedContextTokens: null,
+      presence: "present",
+    });
+  });
+
+  it("reports absent when the probe is unreachable and no local profile is active", async () => {
+    mockPrisma.modelProfile.findMany.mockResolvedValue([]);
+    const f = makeResolveFetch({ modelsStatus: 503 });
+    expect(await resolveLocalServingPosture(f)).toEqual({
+      servedContextTokens: null,
+      presence: "absent",
+    });
+  });
+
+  it("ignores an embedding-only ModelProfile set on the recovery path", async () => {
+    mockPrisma.modelProfile.findMany.mockResolvedValue([{ modelId: EMBED }]);
+    const f = makeResolveFetch({ modelsStatus: 503 });
+    expect((await resolveLocalServingPosture(f)).presence).toBe("absent");
+  });
+
+  it("fails SAFE to unknown when both the probe and the profile read fail", async () => {
+    // Unknown must behave like present downstream — never like absent, which is
+    // what silently removed local from the fallback chain.
+    mockPrisma.modelProfile.findMany.mockRejectedValue(new Error("db down"));
+    const f = makeResolveFetch({ modelsStatus: 503 });
+    expect(await resolveLocalServingPosture(f)).toEqual({
+      servedContextTokens: null,
+      presence: "unknown",
+    });
   });
 });

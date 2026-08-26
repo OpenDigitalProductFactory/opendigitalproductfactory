@@ -122,3 +122,31 @@ describe("DEFAULT_DETECTION", () => {
     expect(DEFAULT_DETECTION.stopGapMs).toBeGreaterThanOrEqual(3 * 60_000);
   });
 });
+
+describe("device-derived trip country (DI-5E5AFE040A1F)", () => {
+  it("reports the country the device resolved, uppercased", () => {
+    const fixes = drive(T0, 8).map((f) => ({ ...f, isoCountryCode: "mx" }));
+    expect(detectTrips(fixes, DEFAULT_DETECTION)[0]?.countryCode).toBe("MX");
+  });
+
+  it("is null when no fix carried a country", () => {
+    // No signal, permission withheld, or an older client. The server then
+    // prices on the driver's country of record rather than guessing.
+    expect(detectTrips(drive(T0, 8), DEFAULT_DETECTION)[0]?.countryCode).toBeNull();
+  });
+
+  it("falls forward when the device resolves a country a beat after the drive starts", () => {
+    const fixes = drive(T0, 8);
+    fixes[2] = { ...fixes[2]!, isoCountryCode: "US" };
+    expect(detectTrips(fixes, DEFAULT_DETECTION)[0]?.countryCode).toBe("US");
+  });
+
+  it("prices a border crossing on the country the drive STARTED in", () => {
+    // Documented simplification: one drive, one rate plan. Splitting needs
+    // per-segment attribution the device does not produce.
+    const fixes = drive(T0, 8);
+    fixes[0] = { ...fixes[0]!, isoCountryCode: "US" };
+    fixes[7] = { ...fixes[7]!, isoCountryCode: "MX" };
+    expect(detectTrips(fixes, DEFAULT_DETECTION)[0]?.countryCode).toBe("US");
+  });
+});

@@ -106,9 +106,68 @@ describe("initiative readiness recovery routing", () => {
     });
 
     expect(recovery.reviewerRoutes).toEqual([]);
+    // The reason must NOT be "no-eligible-reviewer" here: both grants above are
+    // held by an active production agent. Reporting an absent roster when the
+    // roster is fine sends the caller hunting for missing grants instead of
+    // supplying the dispatch context, which is the one thing actually missing.
     expect(recovery.escalations).toMatchObject([
-      { accountableRole: "design-author", toolName: "record_initiative_evidence", grant: "initiative_evidence_write" },
-      { accountableRole: "implementation-planner", toolName: "record_plan_backlog_coverage", grant: "backlog_write" },
+      {
+        accountableRole: "design-author",
+        toolName: "record_initiative_evidence",
+        grant: "initiative_evidence_write",
+        reason: "dispatch-context-required",
+      },
+      {
+        accountableRole: "implementation-planner",
+        toolName: "record_plan_backlog_coverage",
+        grant: "backlog_write",
+        reason: "dispatch-context-required",
+      },
     ]);
+    // and it must name the reviewer it found, so the caller can see the roster is healthy
+    expect(recovery.escalations[0]!.nextAction).toContain("AGT-WS-BUILD");
+  });
+
+  it("reports no-eligible-reviewer ONLY when nobody holds the grant", async () => {
+    const recovery = await resolveInitiativeReviewerRecovery({
+      decision,
+      currentAgentId: "AGT-AUTHOR",
+      // Empty roster: no agent holds either grant in a production, active state.
+      db: { agentToolGrant: { findMany: vi.fn().mockResolvedValue([]) } },
+      dispatchContext,
+    });
+
+    expect(recovery.reviewerRoutes).toEqual([]);
+    for (const escalation of recovery.escalations) {
+      expect(escalation.reason).toBe("no-eligible-reviewer");
+      expect(escalation.nextAction).toContain("Assign or activate");
+    }
+    expect(recovery.escalations.length).toBeGreaterThan(0);
+  });
+
+  it("keeps the two blocked states distinguishable from each other", async () => {
+    const roster = [
+      grantRow("initiative_evidence_write", "AGT-WS-BUILD", "Build Specialist"),
+      grantRow("backlog_write", "AGT-WS-BUILD", "Build Specialist"),
+    ];
+    const withoutDispatch = await resolveInitiativeReviewerRecovery({
+      decision,
+      currentAgentId: "AGT-AUTHOR",
+      db: { agentToolGrant: { findMany: vi.fn().mockResolvedValue(roster) } },
+      dispatchContext: null,
+    });
+    const withoutRoster = await resolveInitiativeReviewerRecovery({
+      decision,
+      currentAgentId: "AGT-AUTHOR",
+      db: { agentToolGrant: { findMany: vi.fn().mockResolvedValue([]) } },
+      dispatchContext,
+    });
+
+    const reasons = new Set([
+      ...withoutDispatch.escalations.map((entry) => entry.reason),
+      ...withoutRoster.escalations.map((entry) => entry.reason),
+    ]);
+    // Two genuinely different operator actions must not collapse to one code.
+    expect(reasons).toEqual(new Set(["dispatch-context-required", "no-eligible-reviewer"]));
   });
 });

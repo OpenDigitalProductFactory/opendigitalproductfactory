@@ -12,7 +12,12 @@ import { describe, expect, it, vi } from "vitest";
 // reads the static prompt record, so stub the loader seam.
 vi.mock("@/lib/tak/prompt-loader", () => ({ loadPrompt: vi.fn() }));
 
-import { SPECIALIST_PROMPTS } from "./specialist-prompts";
+import { loadPrompt } from "@/lib/tak/prompt-loader";
+import {
+  buildSpecialistPrompt,
+  buildSpecialistPromptWithProvenance,
+  SPECIALIST_PROMPTS,
+} from "./specialist-prompts";
 
 const FRONTEND_ENGINEER_PROMPT = SPECIALIST_PROMPTS["frontend-engineer"];
 
@@ -69,5 +74,53 @@ describe("specialist prompt vs enforced-guard consistency (BI-8213E88B)", () => 
   it("routes loading states through the components/ui primitives", () => {
     expect(FRONTEND_ENGINEER_PROMPT).toContain("components/ui/Spinner");
     expect(FRONTEND_ENGINEER_PROMPT).toContain("components/ui/Skeleton");
+  });
+});
+
+// BI-CE93E314. The specialist prompt concatenates the platform-authored role
+// prompt with build state, the assigned task, and another specialist's output.
+// Only the first is the brief; declaring more would let real values ride into a
+// cloud provider inside the prompt.
+describe("buildSpecialistPromptWithProvenance declares the role prompt only", () => {
+  it("declares the role prompt", async () => {
+    vi.mocked(loadPrompt).mockResolvedValue("ROLE: you implement engineering tasks.");
+
+    const result = await buildSpecialistPromptWithProvenance({
+      role: "software-engineer",
+      taskDescription: "Add an endpoint.",
+      buildContext: "BUILD STATE",
+    });
+
+    expect(result.instructionSpans).toHaveLength(1);
+    expect(result.instructionSpans[0]).toContain("ROLE: you implement engineering tasks.");
+    expect(result.text).toContain(result.instructionSpans[0]!);
+  });
+
+  it("does NOT declare build context, the task, or prior specialist output", async () => {
+    vi.mocked(loadPrompt).mockResolvedValue("ROLE: you implement engineering tasks.");
+
+    const result = await buildSpecialistPromptWithProvenance({
+      role: "software-engineer",
+      taskDescription: "Set Dana's salary to 125000.",
+      buildContext: "BUILD STATE: invoice 88213",
+      priorResults: "PRIOR: bank account 021000021",
+    });
+
+    const declared = result.instructionSpans.join("\n");
+    expect(declared).not.toContain("125000");
+    expect(declared).not.toContain("88213");
+    expect(declared).not.toContain("021000021");
+  });
+
+  it("keeps buildSpecialistPrompt returning the same text", async () => {
+    vi.mocked(loadPrompt).mockResolvedValue("ROLE: you implement engineering tasks.");
+    const params = {
+      role: "software-engineer" as const,
+      taskDescription: "Add an endpoint.",
+      buildContext: "BUILD STATE",
+    };
+
+    expect(await buildSpecialistPrompt(params))
+      .toBe((await buildSpecialistPromptWithProvenance(params)).text);
   });
 });

@@ -3,6 +3,7 @@ import agentRegistryData from "../../../../packages/db/data/agent_registry.json"
 import { AUTHORIZED_SURFACE_TOOL_GRANTS } from "@/lib/coworker/authorized-surface-coworker-contract";
 import { PRODUCT_MANAGEMENT_TOOL_GRANTS } from "./product-management-tool-grants";
 import { INITIATIVE_READINESS_TOOL_GRANTS } from "./initiative-readiness-tool-grants";
+import { BANKING_TOOL_GRANTS } from "./banking-tool-grants";
 const agentRegistry = agentRegistryData as { agents: Array<Record<string, unknown>> };
 /**
  * Implications between agent grant categories. A grant on the left of the
@@ -527,6 +528,8 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // the estate-specialist (AGT-WS-INVENTORY) via agent_registry.json.
   enrich_digital_product: ["enrichment_write"],
   request_re_enrichment: ["enrichment_write"],
+  // Banking books loop (S-FIN) — extracted to banking-tool-grants.ts, spread below.
+  ...BANKING_TOOL_GRANTS,
   configure_gateway_scan: ["agent_control_read"],
 
   // UX / Page evaluation

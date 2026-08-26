@@ -1,3 +1,4 @@
+import { coworkerBriefSpans } from "@/lib/tak/coworker-prompt-provenance";
 import { prisma } from "@dpf/db";
 import type { Prisma } from "@dpf/db";
 import { resolveCanonicalAgentId } from "@dpf/db/agent-identity";
@@ -693,6 +694,7 @@ export async function submitRemoteCoworkerTask(input: {
   try {
     const result = await executeAutonomousAgenticLoop({
       systemPrompt: agent.systemPrompt,
+      systemPromptInstructionSpans: coworkerBriefSpans(agent.systemPrompt),
       chatHistory: [{ role: "user", content: parsed.prompt }],
       sensitivity: agent.sensitivity ?? "internal",
       tools: tools.tools,

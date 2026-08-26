@@ -45,6 +45,17 @@ export function classifyOwnerAttentionLane(
     // reservation so a waiting lead is never batched into a digest (BI-A36CF68D).
     return decision("needs-you-now", "A customer is waiting on a reply.", true, appliedLevel);
   }
+  if (item.source === "coworker-envelope") {
+    // A governed coworker is HELD until this employee decides, and the approval
+    // window is minutes wide. Batching it into a digest guarantees it expires
+    // unanswered, so it is hard-floored like a waiting guest (BI-7CB2CCDE).
+    return decision(
+      "needs-you-now",
+      "A coworker cannot act until you decide, and the window closes soon.",
+      true,
+      appliedLevel,
+    );
+  }
   if (item.source === "paused-ai" && item.triage.residueReason === "needs-credential") {
     return decision("custodian", "A credential is technical access work, not owner judgment.", false, appliedLevel);
   }

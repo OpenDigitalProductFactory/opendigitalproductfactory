@@ -94,28 +94,22 @@ business action until the durable operations provider confirms it.
   was applied.
 - A rejected or failed command leaves the business state unchanged.
 
-## What this installation is
+## Which installation you are on
 
-Platform operators see a panel at the top of Operations that states what this
-installation is and what your AI coworkers may do here. Nothing else in the
-platform changes it, and it never grants access — access still comes from roles,
-grants, and approved links.
+Operations no longer opens with a panel describing this installation. The
+arrival signal is now a short badge beside the logo, for example
+**NORTHWIND DEV**, naming the company that operates this installation and the
+job it does.
 
-The panel shows four stances, each with the reason it resolved that way:
+A production installation shows no badge. Production is the unmarked default, so
+a badge always means "this is not production" — which is the one fact that stops
+you acting on the wrong installation. If the platform cannot work out what this
+installation is, it shows no badge rather than guessing.
 
-- **Credentials** — whether an agent may generate and rotate local test
-  credentials, or whether you enter every credential yourself.
-- **Teardown** — whether this installation may be destroyed, only after its work
-  is captured, or never.
-- **Source changes** — whether platform source may be edited from a governed
-  worktree, or not from this directory at all.
-- **Paired installation** — whether a paired installation may be read, written
-  through an approved link, or is absent.
+Select the badge to open [what this installation is](../operations/index.md#what-this-installation-is),
+where the full detail and the controls live.
 
-An installation that has not said what it is counts as production, so every
-brake stays on until someone declares otherwise.
-
-### Correcting the identity
+## Correcting the identity
 
 Open **Change what this installation is** to set its main job, its environment,
 and the production installation it is paired with.
@@ -148,5 +142,6 @@ Re-run the installer with `--environment-class` to change the value in force.
 - Open [Managed Documents](documents.md) to review document state, versions, and references
 - Open [My Work and Workrooms](work-rooms.md) to see the outcome, accountable participants, current attention, activity, and next action for active company work. Room access is checked before internal context loads; participant details explain each person or AI coworker's role, current work, authority, and sponsorship. Connected communication channels link back to the same canonical room and cannot treat message delivery as completed work. Each room also states the pace it works at — how persistently the coworker follows up, whether it asks before acting, and why — which quietens outside your operating hours without ever changing what the coworker is allowed to do.
 - Use your digital coworker to get a personalized briefing on what needs your attention
-- Open **Change what this installation is** to declare this installation's job, environment, and paired installation, and to see the impact before you confirm it
+- Select the installation badge beside the logo to open [what this installation is](../operations/index.md#what-this-installation-is) and correct it
 - Open the ["Needs you" inbox](attention-inbox.md) to review plain-language decision cards, weekly batches, and the full technical record when needed
+- Approve or decline a coworker action that is held waiting on you, with the exact record and the time left shown on the card

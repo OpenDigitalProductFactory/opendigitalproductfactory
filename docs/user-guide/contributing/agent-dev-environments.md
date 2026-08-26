@@ -5,6 +5,10 @@ order: 3
 relatedCode:
   - scripts/dpf-bootstrap-agent-toolchain.sh
   - scripts/dpf-bootstrap-agent-toolchain.ps1
+  - scripts/host-resource-runner.mjs
+  - apps/web/lib/nonprod/host-resource-policy.ts
+  - apps/web/lib/nonprod/host-resource-profiles.json
+  - packages/db/prisma/schema/build-delivery.prisma
 ---
 
 ## Agent Development Environments — Claude, Codex, Grok, Antigravity
@@ -273,6 +277,7 @@ All clients authenticate to the DPF MCP server with the same `DPF_MCP_BEARER_TOK
 - **Scopes.** Coarse `read` / `write` / `admin` plus granular per-tool grants. Default is `read` and cannot call side-effecting tools. Use **Issue write token** in Admin → Platform Development → MCP when an agent must create/update backlog items, evidence, workrooms, or coordination records.
 - **Scope escalation.** If a tool returns `insufficient_token_scope`, *stop* — do not fall back to `psql`/Prisma/direct DB edits. Issue a scoped token in the portal, update the client, call `/api/mcp/token/refresh`, and retry through MCP.
 - **Rotation** (no file edits): set the `DPF_MCP_BEARER_TOKEN` user environment variable to the new value, `POST /api/mcp/token/refresh` with the new token, then retry in the running session.
+- **Endpoint trust.** A gate script that falls back to reading the token out of `.mcp.json` checks the endpoint that file names first, and accepts only loopback (`127.0.0.1`, `localhost`, `[::1]`). A config naming any other host stops the run rather than sending your token there — set `DPF_MCP_BEARER_TOKEN` and `DPF_MCP_URL` to reach a portal deliberately fronted off loopback. Full rule: [MCP tool authorization runbook](../../architecture/mcp-tool-authorization-runbook.md).
 
 ---
 
@@ -352,6 +357,14 @@ claim_nonprod_environment_lease(environmentKey="local-integration-ci")
 ```
 
 Harness friction inside a worktree (missing pnpm on PATH, cross-workspace symlinks, missing Prisma client) is a *harness limitation, not a product defect* — verify via the lease. Cheap source-local checks (targeted `vitest`, `pnpm --filter <pkg> typecheck`) are fine in the worktree.
+
+#### Heavy local commands use a shared host-resource lane
+
+Full TypeScript and Vitest runs, Next builds, Docker builds, previews, local inference, and semantic review can each retain several gigabytes of memory. The repository routes these commands through a governed host-resource runner. It measures available memory, preserves operating-system and resident-inference reserves, and admits only the work that fits. Inference is always single-flight.
+
+When capacity is unavailable, the command records its queue position and exits with code `75` instead of leaving a waiting Node process alive. Retry after the active heavyweight command releases its lease. Do not start duplicate copies to race the queue, and do not kill processes based only on a familiar executable name; the runner supervises only the child whose PID and process-start identity it owns.
+
+If memory cannot be measured, heavyweight admission fails closed. Cheap repository guards still run without claiming the lane. For current resource classes, memory floors, queue inspection, and recovery, see [Local CI and host-resource lanes](../../operations/local-ci-sandbox-slots.md).
 
 #### Clean up when merged
 
