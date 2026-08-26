@@ -23,6 +23,7 @@ import { queueBuildReviewVerification } from "@/lib/build-review-verification-tr
 import { saveBuildArtifactRevision, type BuildArtifactField } from "@/lib/build/build-artifact-provenance";
 import { buildAcceptanceEvidenceRecord, writeAcceptanceMet } from "@/lib/build/auto-accept";
 import { evaluateBuildStudioDecision } from "@/lib/build/decision-service";
+import { ok, err, type ActionResult } from "@/lib/shared/action-result";
 import {
   assertFeatureBuildDependencyGate,
   FEATURE_BUILD_DEPENDENCY_GATE_SELECT,
@@ -142,11 +143,9 @@ export async function createFeatureBuild(input: {
  * (same reason advanceBuildPhase returns its outcome, BI-8C6AA60E), and the
  * whole point of the pre-flight is that the owner reads the real cause.
  */
-export type ApproveBuildStartResult =
-  | { ok: true; approvedAt: Date }
-  | { ok: false; message: string };
-
-export async function approveBuildStart(buildId: string): Promise<ApproveBuildStartResult> {
+export async function approveBuildStart(
+  buildId: string,
+): Promise<ActionResult<{ approvedAt: Date }>> {
   const userId = await requireBuildAccess();
 
   const [build, devConfig] = await Promise.all([
@@ -183,17 +182,9 @@ export async function approveBuildStart(buildId: string): Promise<ApproveBuildSt
   // resolver renders it solely on the backlog-link condition. Aligning here.
   void devConfig;
 
-  // BI-CE1AB982 — dispatch pre-flight. Approval used to be unconditional: we
-  // stamped draftApprovedAt, told the owner the build was under way, and only
-  // THEN discovered (inside fire-and-forget dispatch) that no engine could run
-  // it. The owner was thanked for a decision that changed nothing, and the panel
-  // reported progress indefinitely. Resolve the same selection the dispatcher
-  // will use, and refuse up front when it is already blocked.
-  //
-  // Deliberately fails OPEN: only a definitive `blocked` verdict stops the
-  // approval. If readiness cannot be resolved at all, approve as before rather
-  // than stranding an owner behind a diagnostic that is itself broken.
+  // BI-CE1AB982 — refuse before the owner authorises work that cannot be run.
   if (!build.draftApprovedAt) {
+    const { resolveDispatchPreflight } = await import("@/lib/build/dispatch-preflight");
     const preflight = await resolveDispatchPreflight();
     if (preflight) {
       prisma.buildActivity.create({
@@ -203,10 +194,9 @@ export async function approveBuildStart(buildId: string): Promise<ApproveBuildSt
           summary: preflight,
         },
       }).catch(() => {});
-      return {
-        ok: false,
-        message: `Build Studio cannot start this yet: no configured AI service can run it. ${preflight}`,
-      };
+      return err(
+        `Build Studio cannot start this yet: no configured AI service can run it. ${preflight}`,
+      );
     }
   }
 
@@ -244,27 +234,7 @@ export async function approveBuildStart(buildId: string): Promise<ApproveBuildSt
     })();
   }
 
-  return { ok: true, approvedAt };
-}
-
-/**
- * BI-CE1AB982 — returns the owner-facing blocking action when no allowed healthy
- * Build Studio engine can run the work, or null when dispatch may proceed.
- * Resolution failures return null (fail open) — see approveBuildStart.
- */
-async function resolveDispatchPreflight(): Promise<string | null> {
-  try {
-    const { getBuildStudioConfig } = await import("@/lib/build/build-studio-config");
-    const { selection } = await getBuildStudioConfig({});
-    if (!selection) return null;
-    if (selection.status !== "blocked" && selection.selected) return null;
-    return selection.action
-      ?? selection.reason
-      ?? "No allowed healthy Build Studio engine remains. Review AI Readiness and retry.";
-  } catch (err) {
-    console.warn("[approveBuildStart] dispatch pre-flight could not be resolved:", err);
-    return null;
-  }
+  return ok({ approvedAt });
 }
 
 // ─── Update Feature Brief ────────────────────────────────────────────────────

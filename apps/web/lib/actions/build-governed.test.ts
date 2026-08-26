@@ -509,7 +509,7 @@ describe("governed build start approvals", () => {
     const result = await approveBuildStart("FB-123");
 
     expect(result.ok).toBe(true);
-    expect(result.ok && result.approvedAt).toBeInstanceOf(Date);
+    expect(result.ok && result.data.approvedAt).toBeInstanceOf(Date);
     expect(mockPrisma.featureBuild.update).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { buildId: "FB-123" },
@@ -543,7 +543,7 @@ describe("governed build start approvals", () => {
     const result = await approveBuildStart("FB-123");
 
     expect(result.ok).toBe(false);
-    expect(!result.ok && result.message).toContain("Connect, provision, or wait for one allowed Build Studio engine");
+    expect(!result.ok && result.error).toContain("Connect, provision, or wait for one allowed Build Studio engine");
     // The owner's approval must not be recorded for work that cannot start.
     expect(mockPrisma.featureBuild.update).not.toHaveBeenCalled();
     expect(mockPrisma.buildActivity.create).toHaveBeenCalledWith(
