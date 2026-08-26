@@ -9,6 +9,11 @@ import { prisma } from "@dpf/db";
 import { dockerSocketGet } from "./docker-socket.mjs";
 export { boundedDockerSocketGet } from "./docker-socket.mjs";
 
+import {
+  diagnoseCapabilityStateDivergence,
+  isCapabilityStateStaleError,
+} from "./capability-state-divergence";
+
 export type OperationalServiceStatus = "required" | "optional_inactive" | "optional_degraded";
 export interface ObservedServiceState { composePresent: boolean; healthy: boolean | null }
 export interface ObservedProviderState {
@@ -47,10 +52,36 @@ export function createOperationalCapabilityState(input: {
   observedServices: Record<string, ObservedServiceState>;
   observedProviders: Record<string, ObservedProviderState>;
 }): OperationalCapabilityState {
-  const projection = projectCapabilityServices({
-    enabledRuntimeCapabilities: input.installSnapshot.enabledRuntimeCapabilities,
-    capabilityStates: input.capabilityStates,
-  });
+  // The projection fails closed on drift, and should: guessing which of the two
+  // authorities to believe would hand backup and readiness a topology neither
+  // source claims. But it names only the FIRST mismatch, and it throws inside
+  // the loader that the runtime-health and backup-readiness surfaces call — so
+  // the platform detected the condition and then lost it (BI-5ACBAC50).
+  //
+  // Re-raise with the full diagnosis attached: every drifted capability and the
+  // direction of each. Same failure, same fail-closed semantics, an error an
+  // operator can act on instead of one identifier out of six.
+  let projection;
+  try {
+    projection = projectCapabilityServices({
+      enabledRuntimeCapabilities: input.installSnapshot.enabledRuntimeCapabilities,
+      capabilityStates: input.capabilityStates,
+    });
+  } catch (error) {
+    if (!isCapabilityStateStaleError(error)) throw error;
+    const report = diagnoseCapabilityStateDivergence({
+      enabledRuntimeCapabilities: input.installSnapshot.enabledRuntimeCapabilities,
+      capabilityStates: input.capabilityStates,
+    });
+    const enriched = new Error(
+      `${error instanceof Error ? error.message : String(error)} — ${report.summary}`,
+    );
+    // Keep the machine-readable report on the error so a caller that wants to
+    // render the condition does not have to re-derive it from prose.
+    (enriched as Error & { divergence?: unknown }).divergence = report;
+    if (error instanceof Error) enriched.cause = error;
+    throw enriched;
+  }
   if (!/^[a-f0-9]{64}$/.test(input.installSnapshot.capabilityCatalogHash ?? "")) throw new Error("install_catalog_identity_invalid");
   if (!/^[a-f0-9]{64}$/.test(input.installSnapshot.capabilityStateVersion ?? "")) throw new Error("install_capability_state_identity_invalid");
   if (input.installSnapshot.capabilityCatalogHash !== projection.catalogHash) {
