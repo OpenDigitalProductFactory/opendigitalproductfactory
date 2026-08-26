@@ -1028,6 +1028,9 @@
     "apps/web/lib/shell/shell-action-contract.ts": [
       "docs/platform-usability-standards.md"
     ],
+    "apps/web/lib/skills/skill-relevance.ts": [
+      "docs/architecture/skill-surfaces-runbook.md"
+    ],
     "apps/web/lib/storefront/archetype-reset.ts": [
       "docs/testing/findings/run-1-swap-findings.md"
     ],
@@ -1348,6 +1351,9 @@
     ],
     "packages/db/src/hive-scout-config.ts": [
       "docs/specs/device-identification-and-portfolio-placement-spec.md"
+    ],
+    "packages/db/src/mandated-skills.ts": [
+      "docs/architecture/skill-surfaces-runbook.md"
     ],
     "packages/db/src/migrations/exact-key-repair.ts": [
       "docs/professions/data-architect/wiki/dedupe-migration-means-the-constraint-is-wrong.md",
@@ -2500,6 +2506,8 @@
     ],
     "docs/architecture/skill-surfaces-runbook.md": [
       "apps/web/lib/decision/dimension-catalog.ts",
+      "apps/web/lib/skills/skill-relevance.ts",
+      "packages/db/src/mandated-skills.ts",
       "packages/db/src/seed-skills.ts",
       "packages/dpf-skill-pack/hooks/process-spine-health-check.mjs"
     ],
