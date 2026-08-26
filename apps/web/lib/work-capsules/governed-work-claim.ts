@@ -236,9 +236,23 @@ export async function claimGovernedBacklogWorkspace(args: {
       });
       evaluated = decisionWithId(projection.decision);
       if (projection.governed && evaluated.verdict !== "allowed") {
-        const recoveryWorkroom = await tx.workroom.findFirst({
+        // Match on the branch identity, NOT on a backlog-item binding.
+        //
+        // `Workroom.backlogItemId` is written by the successful-claim path below,
+        // so requiring it here made recovery unreachable by construction: the
+        // binding recovery needs is created by the claim, and the claim returns
+        // here precisely because it refused. Recovery exists to help an initiative
+        // BECOME ready, so it cannot depend on state that only exists once it
+        // already is (BI-512214EA).
+        //
+        // Branch identity is the right key regardless. What a reviewer dispatch
+        // needs is an exact branch at an immutable head — which is what the
+        // escalation's own nextAction asks for — and `(repository, headBranch)`
+        // is already the Workroom's durable identity. An item binding, when it
+        // exists, is preferred so a room explicitly bound to this item wins over
+        // one merely sharing its branch.
+        const recoveryWorkrooms = await tx.workroom.findMany({
           where: {
-            backlogItemId: item.itemId,
             repositoryFullName: args.input.repositoryFullName,
             headBranch: args.input.headBranch,
             archivedAt: null,
@@ -248,13 +262,21 @@ export async function claimGovernedBacklogWorkspace(args: {
             repositoryFullName: true,
             headBranch: true,
             headSha: true,
+            backlogItemId: true,
           },
-        }) as {
+        }) as Array<{
           capsuleId: string;
           repositoryFullName: string;
           headBranch: string;
           headSha: string | null;
-        } | null;
+          backlogItemId: string | null;
+        }>;
+        // Deterministic: an explicit binding to THIS item wins; otherwise the
+        // first room on this branch that carries an immutable head.
+        const recoveryWorkroom =
+          recoveryWorkrooms.find((room) => room.backlogItemId === item.itemId && room.headSha)
+          ?? recoveryWorkrooms.find((room) => room.headSha)
+          ?? null;
         const recovery = await resolveInitiativeReviewerRecovery({
           decision: evaluated,
           currentAgentId: args.actor.agentId,

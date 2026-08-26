@@ -36,13 +36,22 @@ function database(activities: unknown[] = []) {
     },
     workroom: {
       create: vi.fn(),
-      findFirst: vi.fn().mockResolvedValue({
-        capsuleId: "WC-ENTRY",
-        repositoryFullName: input.repositoryFullName,
-        headBranch: input.headBranch,
-        headSha: "1111111111111111111111111111111111111111",
-        archivedAt: null,
-      }),
+      // Honour the `where` clause rather than answering unconditionally: the room
+      // on this branch carries NO item binding, which is the state a room is
+      // actually in before any claim has succeeded for its item. A mock that
+      // answers regardless of the query cannot tell the old lookup from the new
+      // one, so it would pass either way and prove nothing (BI-512214EA).
+      findFirst: vi.fn().mockImplementation((args?: { where?: { backlogItemId?: string } }) =>
+        Promise.resolve(args?.where?.backlogItemId ? null : {
+          capsuleId: "WC-ENTRY",
+          repositoryFullName: input.repositoryFullName,
+          headBranch: input.headBranch,
+          headSha: "1111111111111111111111111111111111111111",
+          archivedAt: null,
+        })),
+      // Recovery matches rooms on branch identity (BI-512214EA), so the default
+      // room here carries NO backlogItemId — the state a room is actually in
+      // before a claim has ever succeeded for its item.
       findUnique: vi.fn().mockResolvedValue({
         id: "row-wc",
         capsuleId: "WC-ENTRY",
@@ -57,7 +66,13 @@ function database(activities: unknown[] = []) {
         leaseHolderPrincipalId: actor.principalId,
         leaseExpiresAt: new Date("2099-01-01T00:00:00.000Z"),
       }),
-      findMany: vi.fn(),
+      findMany: vi.fn().mockResolvedValue([{
+        capsuleId: "WC-ENTRY",
+        repositoryFullName: input.repositoryFullName,
+        headBranch: input.headBranch,
+        headSha: "1111111111111111111111111111111111111111",
+        backlogItemId: null,
+      }]),
       update: vi.fn(),
     },
     workroomActivity: {
@@ -91,6 +106,64 @@ function database(activities: unknown[] = []) {
 }
 
 describe("claimGovernedBacklogWorkspace", () => {
+  // BI-512214EA. Recovery used to require a Workroom already bound to the item,
+  // but that binding is written by the successful-claim path — so a refused
+  // claim could never find one, and every reviewer route came back empty. These
+  // two pin the branch-identity match and its preference order.
+  it("resolves a dispatch context from a room on the branch with no item binding", async () => {
+    const db = database();
+    const result = await claimGovernedBacklogWorkspace({
+      db,
+      input,
+      actor,
+      workIntent: null,
+      now: new Date("2026-08-22T00:00:00.000Z"),
+      dependencies: { claimWorkspace: vi.fn() },
+    });
+
+    expect(result.ok).toBe(false);
+    const routes = result.ok ? [] : result.data.recovery.reviewerRoutes;
+    expect(routes.length).toBeGreaterThan(0);
+    expect(routes.every((route) => route.workroomId === "WC-ENTRY")).toBe(true);
+    expect(result.ok ? [] : result.data.recovery.escalations)
+      .not.toContainEqual(expect.objectContaining({ reason: "dispatch-context-required" }));
+  });
+
+  it("prefers a room bound to this item over one merely sharing its branch", async () => {
+    const db = database();
+    (db as unknown as { workroom: { findMany: ReturnType<typeof vi.fn> } }).workroom.findMany
+      .mockResolvedValueOnce([
+        {
+          capsuleId: "WC-BRANCH-ONLY",
+          repositoryFullName: input.repositoryFullName,
+          headBranch: input.headBranch,
+          headSha: "2222222222222222222222222222222222222222",
+          backlogItemId: null,
+        },
+        {
+          capsuleId: "WC-BOUND",
+          repositoryFullName: input.repositoryFullName,
+          headBranch: input.headBranch,
+          headSha: "3333333333333333333333333333333333333333",
+          backlogItemId: "BI-ENTRY",
+        },
+      ]);
+
+    const result = await claimGovernedBacklogWorkspace({
+      db,
+      input,
+      actor,
+      workIntent: null,
+      now: new Date("2026-08-22T00:00:00.000Z"),
+      dependencies: { claimWorkspace: vi.fn() },
+    });
+
+    const routes = result.ok ? [] : result.data.recovery.reviewerRoutes;
+    expect(routes.length).toBeGreaterThan(0);
+    expect(routes.every((route) => route.workroomId === "WC-BOUND")).toBe(true);
+    expect(routes.every((route) => route.headSha === "3333333333333333333333333333333333333333")).toBe(true);
+  });
+
   it("records a denial without mutating workspace state for a legacy implementation claim", async () => {
     const db = database();
     const claimWorkspace = vi.fn();
