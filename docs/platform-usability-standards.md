@@ -431,23 +431,38 @@ for prose, and the clearest sign the number was measuring layout rather than lan
 
 So there are **two scorers**, and picking the wrong one is a defect:
 
-| Input | Function | Sentence boundary |
+| Input | Function | What it reads |
 |---|---|---|
-| Prose — storefront copy, campaigns, docs, a marketing snippet | `analyzeReadability` | a full stop |
-| A rendered UI surface | `analyzeUtteranceReadability` | **the element boundary** |
+| Prose — storefront copy, campaigns, docs, a marketing snippet | `analyzeReadability` | full Flesch–Kincaid: sentence length **and** word difficulty |
+| A rendered UI surface | `analyzeUiReadability` | **word difficulty alone** |
 
-In a user interface the sentence boundary *is* the element boundary. Each utterance —
-one heading, one cell, one label, one list item — is at least one sentence, and real
-body copy inside an utterance still splits on its own full stops. Two consequences
-worth naming:
+Flesch–Kincaid is `0.39 × words-per-sentence + 11.8 × syllables-per-word − 15.59`.
+Its first term assumes the text has sentences. A screen does not, so for UI surfaces
+that term is **dropped** rather than repaired:
 
-- **The grade cannot be moved by punctuating labels.** Adding full stops to a screen
-  changes the number by zero. Before, it was worth five grades.
-- **The grade still rises for genuinely dense words.** A screen of one-word labels
-  reading *Infrastructure / Optimization / Administrative / Documentation* still fails
-  the high-school cap, at exactly the words-per-sentence of a screen reading *Date /
-  Route / Miles*. The measure separates difficulty from punctuation; it does not
-  excuse jargon.
+```
+UI grade = 11.8 × syllables-per-word − 15.59
+```
+
+The coefficients are FK's own, so the scale and the existing caps keep their meaning.
+Nothing about punctuation appears in the formula, which makes the measure
+punctuation-independent **by construction** — a fact about the arithmetic, not a
+property a test has to keep re-checking. Two consequences worth naming:
+
+- **No arrangement of full stops can move the grade.** Not one stop per label, not
+  none at all, not the entire screen as a single run. Under the old measure that
+  choice was worth five grades.
+- **Dense words still fail.** A screen of one-word labels reading *Infrastructure /
+  Optimization / Administrative / Documentation* fails the high-school cap; *Date /
+  Route / Miles* passes. Plain product copy runs about 1.76 syllables per word and
+  scores 5.2; genuinely dense operator prose runs about 3.57 and scores 26.5.
+
+**What this deliberately gives up.** Sentence length is a real readability signal and
+this measure is blind to it — one 60-word paragraph of simple words grades the same as
+those words in six sentences. That signal has its own home: `check-prose-lint` flags any
+copy sentence over 25 words on its `longSentences` axis, scoring one sentence at a time
+where the term is meaningful. Splitting the two concerns is what lets each be honest —
+word difficulty here, sentence length there, neither pretending to measure the other.
 
 The UI reading grade is also scored over the route's own `<main>` rather than the
 shared shell. Chrome is identical on every route and was diluting all of them equally.
@@ -459,7 +474,7 @@ are part of what the owner meets on arrival.
 - **Documentation site (today):** the `/business-types/` generator scores every page's business-facing copy at build time, warns when a page exceeds the target, writes `_readability-report.md`, and prints the grade in each page footer. Architecture and standards sections are excluded by design.
 - **Generated copy (platform) — implemented (BI-8F8C5F28):** when an AI coworker on a customer-copy surface (marketing, storefront) writes external copy, it is held to the org's readability target. The target is an **operator-adjustable policy stored on the existing `PlatformConfig` key/value table (key `content_readability_policy`) and set from the existing `/admin/settings` page — no new table or admin surface**. It is resolved at runtime (`apps/web/lib/readability/policy.ts`, honouring a per-archetype `marketingSkillRules.readingLevel` override) and injected into the coworker's prompt at **Block 5** of the assembler (`apps/web/lib/tak/prompt-assembler.ts`). The shared Flesch–Kincaid scorer + tiered-policy types live in `@dpf/validators` (`packages/validators/src/readability.ts`).
 - **Product screens (route sweep):** the UX route budget grades every page route's own
-  copy with `analyzeUtteranceReadability` against the tier in
+  copy with `analyzeUiReadability` against the tier in
   `apps/web/lib/ux-budget/budgets.ts`. Advisory on pre-existing routes, blocking on
   net-new ones. It is an absolute check, not a ratcheted axis, so it carries no entry
   in `route-budget-baseline.json`. **Every audience is held to its shell's tier** —

@@ -16,7 +16,7 @@
 // CI checker must never need a database. The policy vocabulary (ReadingLevel, the
 // grade caps) is shared; only the DB-backed override resolution stays at runtime.
 
-import { analyzeUtteranceReadability, withinReadingLevel, type ReadingLevel } from "@dpf/validators";
+import { analyzeUiReadability, withinReadingLevel, type ReadingLevel } from "@dpf/validators";
 import {
   countSmallControls,
   countWords,
@@ -134,7 +134,7 @@ export function measureUxBudget(html: string): UxBudgetMetrics {
     buriedPrimaryAction: buried ? 1 : 0,
     // An empty surface has no prose to grade; report 0 rather than a fabricated score.
     readingGradeLevel:
-      utterances.length === 0 ? 0 : analyzeUtteranceReadability(utterances).gradeLevel,
+      utterances.length === 0 ? 0 : analyzeUiReadability(utterances).gradeLevel,
   };
 }
 
