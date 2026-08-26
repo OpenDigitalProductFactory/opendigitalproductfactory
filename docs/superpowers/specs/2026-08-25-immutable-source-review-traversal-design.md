@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Immutable Source Review Traversal Design
 
 **Backlog item:** BI-SIG-463E478D  

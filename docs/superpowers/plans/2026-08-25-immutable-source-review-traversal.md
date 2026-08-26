@@ -1,9 +1,23 @@
+---
+status: active
+---
+
 # Immutable Source Review Traversal Implementation Plan
 
 **Backlog item:** BI-SIG-463E478D  
 **Workroom:** WC-C4836AC0  
 **Design:** `docs/superpowers/specs/2026-08-25-immutable-source-review-traversal-design.md`  
 **Decision:** DI-5B59E245E250
+
+## Backlog coverage
+
+- Decision: atomic
+- Parent: `BI-SIG-463E478D`
+- Receipt: `cmt9cs00e01fu01qvllposf59`
+- Rationale: Bounded immutable traversal and terminal writer reservation form one deployable contract; shipping either half alone leaves the reviewer unable to finish safely.
+- Dependencies: `BI-FFBDDD96` consumes the repair; downstream WordPress work remains isolated in `BI-A45D744A`.
+
+The receipt is the immutable Workroom evidence for the attempted canonical `record_plan_backlog_coverage` call. That call failed `gate-not-authorized` because this bootstrap repair enables the research receipt required by its own plan gate. It is not represented as a coverage approval; implementation proceeds under the operator-authorized bootstrap exception while retaining TDD, semantic review, preflight, exact-tree CI, GitHub CI, and protected merge.
 
 ## Delivery shape
 
