@@ -1714,6 +1714,7 @@
       "docs/install/edge-node-multi-host.md"
     ],
     "scripts/lib/bootstrap-worktree-deps.mjs": [
+      "docs/architecture/build-gate-runbook.md",
       "docs/architecture/mcp-tool-authorization-runbook.md"
     ],
     "scripts/lib/ci-policy-guards.mjs": [
@@ -2295,6 +2296,7 @@
       "apps/web/lib/build/coding-agent.ts",
       "apps/web/lib/queue/functions/build-review-verification.ts",
       "pnpm-lock.yaml",
+      "scripts/lib/bootstrap-worktree-deps.mjs",
       "scripts/lib/dco-signoff.mjs",
       "scripts/pre-push-dco-check.mjs",
       "scripts/pregate-preflight.mjs"
