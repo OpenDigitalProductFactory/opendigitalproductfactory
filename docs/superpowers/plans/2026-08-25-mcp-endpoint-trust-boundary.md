@@ -5,7 +5,7 @@ status: binding
 # MCP endpoint trust boundary implementation plan
 
 **Backlog item:** `BI-1819D34F`
-**Workroom:** `WC-B3CE6C6F`
+**Workroom:** `WC-710F9E03`
 **Design:** `docs/superpowers/specs/2026-08-25-mcp-endpoint-trust-boundary-design.md`
 
 ## Delivery slice
