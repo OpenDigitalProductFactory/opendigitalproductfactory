@@ -150,6 +150,30 @@ evidence costs a human confirmation rather than an unearned trust decision.
 so a caller cannot skip the pairing code by treating `operator-confirmation` as a
 pass.
 
+### 5.5 Resolving the organization trust anchor
+
+Both the enrolment decision and the pairing decision need two facts: the root
+this installation pins, and the organization it belongs to. Importing a join
+package already establishes them, but the `organization.join.import` evidence
+blob deliberately records only a **truncated 12-character fingerprint prefix**.
+
+A prefix is not an identity. `resolveOrganizationTrustAnchor` therefore decrypts
+the stored package and parses the **full 64-character fingerprint**, using the
+same parser the import path used — so a package that would be rejected on import
+cannot be accepted here. Expiry is surfaced from that parser rather than
+re-checked, because the parser owns the rule and a second check could only
+disagree with the authority.
+
+Every unreadable path fails closed to *no anchor*: no join import, an
+undecryptable package (a rotated key returns null rather than throwing), an
+unparseable or expired one, or an installation with no organization. That default
+is what keeps the rest honest — a null fingerprint makes
+`evaluateOrganizationEnrollment` return `organization-trust-not-configured`, so a
+decrypt failure costs a human confirmation instead of widening trust.
+
+Decryption is injected, so the resolver never imports the credential store and a
+failure is a value rather than a thrown error.
+
 ## 6. Lifecycle at scale
 
 The unattended cycle this enables:
@@ -172,9 +196,9 @@ the identity design remains the backstop for an install with **no** peer.
 - Discovery transport and advertisement remain owned by `nearby-candidates`;
   this design consumes its readiness signal rather than replacing it. Composing
   discovery with the trust decision is §5.4 and is no longer deferred.
-- Resolving the organization trust anchor from the recorded
-  `organization.join.import` action, and calling §5.4 from the pairing path,
-  are the remaining slices.
+- Calling §5.4 from the pairing path, so a validated same-organization peer
+  enrols without the code comparison, is the remaining slice. Trust-anchor
+  resolution is §5.5.
 
 ## 8. Acceptance criteria
 
@@ -190,6 +214,8 @@ the identity design remains the backstop for an install with **no** peer.
 6. A plain-HTTP candidate is `blocked` regardless of organization trust; an
    HTTPS-but-unvalidated candidate routes to `operator-confirmation`; only a
    chain-validated same-organization peer reaches `auto-enroll`.
+7. The trust anchor resolves the full fingerprint from the stored package, and
+   every unreadable path yields a null anchor rather than a partial match.
 
 ## 9. Decision record
 
