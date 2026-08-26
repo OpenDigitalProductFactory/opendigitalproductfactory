@@ -399,6 +399,7 @@ export {
   type DocImpactPlan,
 } from "./doc-impact-graph";
 export { projectDocImpactManifest } from "./doc-impact-graph-sync";
+export { rebuildKnowledgeAndPortfolioGraph } from "./knowledge-portfolio-graph-sync";
 export {
   readCanonicalPrismaSchema,
   listCanonicalPrismaSchemaFiles,

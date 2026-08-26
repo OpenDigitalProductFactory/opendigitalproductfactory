@@ -983,6 +983,14 @@ export async function register() {
       }
     }
 
+    // Graph-mirror projections with no indexer of their own (BI-FEDFABF6). Boot is
+    // the trigger because it follows migrations, self-upgrade and first start of a
+    // new install. Skipped under measurement runtime like the self-heal block below;
+    // refreshGraphProjections never throws and logs its own failures.
+    if (!measurementRuntime) {
+      void import("@/lib/graph/refresh-projections").then((m) => m.refreshGraphProjections());
+    }
+
     // Operational self-heal maintenance (voice continuity, stuck-run
     // reconciles, watchdog intervals, model-context re-assertion). Skipped
     // wholesale under measurement runtime: an ephemeral sweep portal has no
