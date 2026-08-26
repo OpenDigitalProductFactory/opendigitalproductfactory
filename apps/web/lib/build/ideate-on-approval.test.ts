@@ -43,6 +43,7 @@ import {
   getIdeateResearchRequest,
   dispatchApprovedIdeateBuilds,
   dispatchDesignReviewFixLoop,
+  DESIGN_FIX_MAX_ROUNDS,
 } from "./ideate-on-approval";
 
 function engineSelection(
@@ -558,4 +559,50 @@ describe("dispatchDesignReviewFixLoop (design-review fix loop)", () => {
     );
     expect(mockDispatchIdeateResearch).not.toHaveBeenCalled(); // never tried to regenerate
   });
+
+  // BI-E492F313 — live repro FB-D23311A7: round 1 drew the local model, could
+  // not parse its output, and the loop `break`ed and escalated. That abandoned
+  // the build, freed the WIP slot and parked the owner's backlog item as
+  // deferred — destroying a sound design doc and an actionable review over an
+  // infrastructure failure that said nothing about the design.
+  it("spends the remaining rounds when a regeneration cannot dispatch, and does not abandon the build", async () => {
+    const failedReview = {
+      decision: "fail",
+      issues: [{ severity: "critical", description: "Concurrency invariant missing" }],
+    };
+    mockPrisma.featureBuild.findUnique.mockResolvedValue({
+      id: "ck3",
+      title: "Foster homes",
+      kind: "feature",
+      originatingBacklogItemId: "cmpcuid1",
+      designReview: failedReview,
+      designDoc: null,
+      description: "D",
+    });
+    mockPrisma.backlogItem.findUnique.mockResolvedValue({
+      title: "BI Title", body: "Body.", effortSize: "medium", workType: "feature",
+    });
+    mockGetBuildStudioConfig.mockResolvedValue({
+      provider: "opencode",
+      claudeProviderId: "", codexProviderId: "", grokProviderId: "", opencodeProviderId: "local",
+      claudeModel: "", codexModel: "", grokModel: "", opencodeModel: "",
+      selection: engineSelection("opencode", "local"),
+    });
+    // Every attempt fails the way the local model does: it ran, but produced
+    // nothing parseable.
+    mockDispatchIdeateResearch.mockResolvedValue({
+      success: false, designDoc: null, rawOutput: "I think the design should…", durationMs: 231_800,
+      error: "Routed ideate output could not be parsed into a design document.",
+    });
+
+    const res = await dispatchDesignReviewFixLoop({ buildId: "FB-D23311A7", userId: "u-1" });
+
+    expect(res).toMatchObject({ kind: "blocked-no-regeneration" });
+    // Both rounds are spent — engine selection is re-resolved per attempt, so a
+    // later round can land on an engine that works.
+    expect(res.rounds).toBe(DESIGN_FIX_MAX_ROUNDS);
+    // The build is NOT abandoned and the backlog item is NOT deferred.
+    expect(mockEscalate).not.toHaveBeenCalled();
+  });
+
 });
