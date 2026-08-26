@@ -103,22 +103,38 @@ jobs:
           fi
 
           # 2. Build + attach the native Edge binaries from the tag's tree.
-          #    These uploaded assets are what carry per-download counters.
-          #    A build failure here must NOT delete the Release, so the make
-          #    steps run in an `if` (which suspends `set -e`); on failure we
-          #    warn and leave the source-only Release in place.
+          #
+          #    The portal offers the native download ONLY for assets actually
+          #    attached here (BI-BB919901), so a release missing them silently
+          #    degrades every Windows and macOS operator to the Docker Desktop
+          #    path, which cannot see the host's real LAN. That used to be a
+          #    `::warning::` and was therefore invisible — the release looked
+          #    successful. It now FAILS the job.
+          #
+          #    The full Makefile matrix is published, not a subset. A fleet is one
+          #    node per site, so a missing linux-amd64 or Intel-Mac binary is a
+          #    real gap even where a container would also work.
           git checkout --detach "refs/tags/${TAG}"
-          if make -C services/edge-node-go build-darwin-arm64 VERSION="${TAG}" \
-             && make -C services/edge-node-go build-windows-amd64 VERSION="${TAG}"; then
-            ( cd services/edge-node-go/bin \
-              && sha256sum dpf-edge-node-darwin-arm64 dpf-edge-node-windows-amd64.exe \
-                 > dpf-edge-node-checksums.sha256 )
-            gh release upload "${TAG}" \
-              services/edge-node-go/bin/dpf-edge-node-darwin-arm64 \
-              services/edge-node-go/bin/dpf-edge-node-windows-amd64.exe \
-              services/edge-node-go/bin/dpf-edge-node-checksums.sha256 \
-              --repo "${GITHUB_REPOSITORY}" --clobber
-            echo "Attached native Edge assets to Release ${TAG}."
-          else
-            echo "::warning::Edge binary build failed for ${TAG}; published a source-only Release. Re-run this workflow after fixing the build to attach the counted binary assets."
-          fi
+          make -C services/edge-node-go build-all VERSION="${TAG}"
+
+          EDGE_ASSETS="dpf-edge-node-linux-amd64 dpf-edge-node-linux-arm64 dpf-edge-node-darwin-amd64 dpf-edge-node-darwin-arm64 dpf-edge-node-windows-amd64.exe dpf-edge-node-windows-arm64.exe"
+
+          # Refuse to publish a partial matrix. An installable that is sometimes
+          # absent is not an installable, and the portal cannot tell "not built"
+          # apart from "not supported on this platform".
+          for asset in ${EDGE_ASSETS}; do
+            if [ ! -f "services/edge-node-go/bin/${asset}" ]; then
+              echo "::error::Edge binary ${asset} was not produced for ${TAG}. Refusing to publish a partial release."
+              exit 1
+            fi
+          done
+
+          ( cd services/edge-node-go/bin && sha256sum ${EDGE_ASSETS} > dpf-edge-node-checksums.sha256 )
+
+          UPLOAD_ARGS=""
+          for asset in ${EDGE_ASSETS} dpf-edge-node-checksums.sha256; do
+            UPLOAD_ARGS="${UPLOAD_ARGS} services/edge-node-go/bin/${asset}"
+          done
+          # shellcheck disable=SC2086
+          gh release upload "${TAG}" ${UPLOAD_ARGS} --repo "${GITHUB_REPOSITORY}" --clobber
+          echo "Attached the full native Edge asset matrix to Release ${TAG}."

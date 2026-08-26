@@ -5541,7 +5541,8 @@
         "dpf-doctor",
         "reconcile-installed-plugins-flag",
         "what-install-dpf-does-not-do",
-        "see-also"
+        "see-also",
+        "mapping-a-network-from-another-machine"
       ]
     },
     "docs/operations/integrations/email-postmark-setup.md": {

@@ -647,6 +647,7 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
       "/platform/tools/discovery",
       "/platform/tools/inventory",
       "/platform/federation-links",
+      "/platform/edge-nodes",
     ],
   },
   {
@@ -715,6 +716,19 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     key: "platform-federation-links",
     label: "Connections",
     path: "/platform/federation-links",
+    parentPath: "/platform/tools",
+    domain: "platform",
+    audienceModes: ["operator"],
+    destinationKind: "section-page",
+    capabilityKey: "view_platform",
+  },
+  {
+    // BI-2EC8906A: the route and six operator docs existed; the documented
+    // path "Platform > Edge Nodes" did not. Matters most where node count > 1
+    // (MSP: one per customer per site; retail: one per location).
+    key: "platform-edge-nodes",
+    label: "Edge Nodes",
+    path: "/platform/edge-nodes",
     parentPath: "/platform/tools",
     domain: "platform",
     audienceModes: ["operator"],
