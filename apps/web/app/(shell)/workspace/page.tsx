@@ -8,6 +8,8 @@ import { VerticalWorkspaceHome } from "@/components/workspace-home/VerticalWorks
 import { OperatorCockpit } from "@/components/workspace-home/OperatorCockpit";
 import { WorkspaceStorefrontAttention } from "@/components/owner-first/WorkspaceStorefrontAttention";
 import { WorkspaceTwinHero } from "@/components/workspace-home/WorkspaceTwinHero";
+import { resolveCloudProviderReadiness } from "@/lib/inference/cloud-provider-readiness";
+import { CloudProviderUnclearedNotice } from "@/components/workspace-home/CloudProviderUnclearedNotice";
 import { LocalOnlyProviderNotice } from "@/components/workspace-home/LocalOnlyProviderNotice";
 import { UnconfiguredWorkspaceHomeNotice } from "@/components/workspace-home/UnconfiguredWorkspaceHomeNotice";
 import { loadPlatformWorkspaceHomeData } from "@/lib/workspace-home/platform-loader";
@@ -48,10 +50,17 @@ export default async function WorkspacePage() {
   );
   const restaurantShift = Boolean(twinPresentation?.restaurantFloor);
 
-  const hasCloudProvider =
-    (await prisma.modelProvider.count({
-      where: { status: "active", NOT: { providerId: "local" } },
-    })) > 0;
+  // BI-575F0046: counting active non-local providers reported a fresh install as
+  // HAVING cloud AI the moment one was connected — while its clearance was
+  // `["public"]` and no turn is ever public, so nothing could use it and the
+  // local-only notice disappeared. Ask whether a provider can take work, not
+  // whether one exists.
+  const cloudReadiness = resolveCloudProviderReadiness(
+    await prisma.modelProvider.findMany({
+      where: { status: "active" },
+      select: { providerId: true, name: true, status: true, sensitivityClearance: true },
+    }),
+  );
   // Fire-and-forget — the metric increment is observability, not load-bearing,
   // and we don't want a Prometheus registry mishap to break the page render.
   void recordWorkspaceHomeResolution(
@@ -88,8 +97,11 @@ export default async function WorkspacePage() {
           /ops/installation, and the header badge — non-production only — is the
           arrival-time signal. The operator's actual work starts here. */}
       {workspaceHomeResolution.mode === "unconfigured" && <UnconfiguredWorkspaceHomeNotice />}
-      {workspaceHomeResolution.mode !== "unconfigured" && !hasCloudProvider && (
+      {workspaceHomeResolution.mode !== "unconfigured" && cloudReadiness.state === "none" && (
         <LocalOnlyProviderNotice />
+      )}
+      {workspaceHomeResolution.mode !== "unconfigured" && cloudReadiness.state === "public-only" && (
+        <CloudProviderUnclearedNotice providerNames={cloudReadiness.providerNames} />
       )}
       {twinPresentation ? (
         // Operator-confirmed placement (parent spec §9 option c): the operational
