@@ -59,7 +59,13 @@ export const TOOL_SCHEMA_TOKEN_ESTIMATE = 330;
 export const COWORKER_NON_TOOL_RESERVE_TOKENS = 12_000;
 
 /** Never attach fewer than this — below it a coworker is too crippled to be
- *  useful, and the agentic loop's overflow handling covers the pathological case. */
+ *  useful, and the agentic loop's overflow handling covers the pathological case.
+ *
+ *  Scope of the floor (BI-8634F0BE): it bounds the WINDOW-FIT term only. A
+ *  MEASURED tool-fidelity ceiling below this value wins, and the cap follows the
+ *  measurement. Attaching more than a model has proven it can select from is not
+ *  a kindness — `callWithFallbackChain` refuses the surface outright, so the
+ *  coworker gets nothing instead of a small working set. */
 export const MIN_COWORKER_ATTACHED_TOOLS = 12;
 
 /**
@@ -154,11 +160,18 @@ export function deriveCoworkerToolCap(
   // Window-fit needs a real window. When the probe could not read one, the
   // selection ceiling alone binds — an unknown window must never WIDEN the
   // surface, which is the whole defect this branch exists to prevent.
-  if (!hasWindow) return Math.max(MIN_COWORKER_ATTACHED_TOOLS, ceiling);
+  if (!hasWindow) return ceiling;
 
+  // The MIN floor applies to the WINDOW-FIT term only, never on top of the
+  // ceiling (BI-8634F0BE). Written as `max(MIN, min(ceiling, fitted))` the floor
+  // came last and overrode the ceiling, so a measured fidelity below 12 attached
+  // 12 tools while the routing gate refused anything above the measured value —
+  // reinstating the exact BI-A8BFEFCE failure by a different route. The floor
+  // exists to stop window arithmetic shrinking a coworker into uselessness on a
+  // small context; it was never evidence about what the model can select from.
   const toolBudgetTokens = servedContextTokens! - COWORKER_NON_TOOL_RESERVE_TOKENS;
   const fitted = Math.floor(toolBudgetTokens / TOOL_SCHEMA_TOKEN_ESTIMATE);
-  return Math.max(MIN_COWORKER_ATTACHED_TOOLS, Math.min(ceiling, fitted));
+  return Math.min(ceiling, Math.max(MIN_COWORKER_ATTACHED_TOOLS, fitted));
 }
 
 /**

@@ -17,6 +17,74 @@ import {
   SKILL_CATALOG_CLIFF_CAP,
 } from "./coworker-tool-budget";
 import { AUTHORIZED_SURFACE_TOOL_NAMES } from "@/lib/coworker/authorized-surface-coworker-contract";
+import { resolveLocalToolCeiling } from "@/lib/routing/local-tool-ceiling";
+
+// THE joint invariant (BI-A8BFEFCE, hardened by BI-8634F0BE).
+//
+// The attachment budget and the routing local-fallback gate are two ends of one
+// policy. Whenever a local model is in the serving path, whatever the budget
+// attaches must be something `callWithFallbackChain` will agree to run — it
+// refuses any surface above `resolveLocalToolCeiling(measured)`. When the two
+// disagree the surface is refused for exceeding a limit nothing else applied,
+// local silently leaves the fallback chain, and a cloud outage on top of that
+// produces a turn that executes no tools at all.
+//
+// Both ends were previously only tested in isolation: `fallback.test.ts` held
+// zero references to the budget, and the cases below pinned one hardcoded cap-15
+// example. This matrix is the guard that actually holds them together.
+describe("budget/gate joint invariant", () => {
+  const WINDOWS = [null, undefined, 0, 4_096, 12_000, 16_000, 24_576, 32_768, 131_072, 262_144];
+  const MEASURED = [null, undefined, -1, 0, 4, 8, 10, 12, 15, 30, 48, 200];
+  const PRESENCES = ["present", "unknown"] as const;
+
+  it("never attaches more tools than the routing gate will run locally", () => {
+    const violations: string[] = [];
+    for (const window of WINDOWS) {
+      for (const measured of MEASURED) {
+        for (const localPresence of PRESENCES) {
+          const cap = deriveCoworkerToolCap(window, {
+            localPresence,
+            measuredToolFidelityCeiling: measured,
+          });
+          const gate = resolveLocalToolCeiling(measured);
+          if (cap > gate) {
+            violations.push(
+              `window=${window} measured=${measured} presence=${localPresence} → cap=${cap} > gate=${gate}`,
+            );
+          }
+        }
+      }
+    }
+    expect(violations).toEqual([]);
+  });
+
+  it("follows a measured ceiling BELOW the minimum floor rather than overriding it", () => {
+    // The regression this guard exists for. `max(MIN, min(ceiling, fitted))` put
+    // the floor last, so a model measured at 8 was handed 12 tools and then
+    // refused by the gate at 8 — nothing ran.
+    for (const measured of [4, 8, 10]) {
+      expect(deriveCoworkerToolCap(24_576, { localPresence: "present", measuredToolFidelityCeiling: measured }))
+        .toBe(measured);
+      expect(deriveCoworkerToolCap(null, { localPresence: "unknown", measuredToolFidelityCeiling: measured }))
+        .toBe(measured);
+    }
+  });
+
+  it("still floors WINDOW-fit shrinkage at the minimum — the floor's real purpose", () => {
+    // A tiny window drives fitted below the floor; with no measured evidence the
+    // ceiling is the cliff (15), so the floor legitimately binds at 12.
+    expect(deriveCoworkerToolCap(4_096, { localPresence: "present" })).toBe(MIN_COWORKER_ATTACHED_TOOLS);
+    expect(deriveCoworkerToolCap(1_000, { localPresence: "present" })).toBe(MIN_COWORKER_ATTACHED_TOOLS);
+    expect(deriveCoworkerToolCap(16_000, { localPresence: "present" })).toBe(MIN_COWORKER_ATTACHED_TOOLS);
+  });
+
+  it("leaves a cloud turn unbounded by the local gate", () => {
+    // `absent` means local is not a candidate, so the gate never runs and the
+    // full ceiling is correct even though it exceeds the local cliff.
+    expect(deriveCoworkerToolCap(null, { localPresence: "absent" })).toBe(MAX_COWORKER_ATTACHED_TOOLS);
+    expect(deriveCoworkerToolCap(131_072, { localPresence: "absent" })).toBe(MAX_COWORKER_ATTACHED_TOOLS);
+  });
+});
 
 describe("deriveCoworkerToolCap", () => {
   it("caps an exact 32k local window at the 15-tool accuracy cliff", () => {
