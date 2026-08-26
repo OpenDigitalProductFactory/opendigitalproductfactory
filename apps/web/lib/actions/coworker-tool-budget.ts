@@ -22,11 +22,7 @@
 import type { ToolDefinition } from "@/lib/mcp-tools";
 import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 import { CORE_MCP_TOOL_NAMES } from "@/lib/mcp/tool-tier";
-import {
-  LOCAL_TOOL_SELECTION_CLIFF,
-  resolveLocalToolCeiling,
-  type LocalPresence,
-} from "@/lib/routing/local-tool-ceiling";
+import { resolveLocalToolCeiling, type LocalPresence } from "@/lib/routing/local-tool-ceiling";
 import {
   LOAD_TOOLS_TOOL_NAME,
   scoreToolIntentRelevance,
