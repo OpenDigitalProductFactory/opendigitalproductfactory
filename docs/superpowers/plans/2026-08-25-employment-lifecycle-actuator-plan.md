@@ -2,7 +2,7 @@
 
 - **Design:** [`2026-08-25-employment-lifecycle-actuator-design.md`](../specs/2026-08-25-employment-lifecycle-actuator-design.md)
 - **Epic:** `EP-862820FD`
-- **Status:** awaiting founder ratification of the sequencing decision in §2
+- **Status:** active. The sequencing decision in §2 is ratified — `DI-DC833C327A44`, confidence high, margin 5.86, no commandment conflict.
 
 ---
 
@@ -33,7 +33,7 @@ wave 3   D4 spawn                                                    (the actuat
 wave 4   D6 referral          D7 provisioning                        (parallel)
 ```
 
-**The control ships before the actuator, not after it.** This is deliberate and is the only sequencing choice in the plan that is not simply dependency order.
+**The control ships before the actuator, not after it.** This is deliberate and is the only sequencing choice in the plan that is not simply dependency order. It was settled through the platform decision surface rather than by author preference: decision `DI-DC833C327A44` recommends control-first at high confidence with a margin of 5.86 against a 0.2 tie threshold, no commandment conflict, and no principle that flips under sensitivity.
 
 The natural instinct is to build the actuator first — it is the item with visible value — and add the classification gate once rooms exist to gate. That ordering opens a window in which employment events spawn rooms that enrol workers in curricula, schedules and review cycles with no classification check. For a contingent worker, that window does not merely produce a wrong record; it produces exactly the timestamped conduct evidence that §3.3 of the design identifies as the liability. A gate that arrives second has already failed at the thing it exists for.
 
