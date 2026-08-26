@@ -717,7 +717,7 @@ export async function sendMessage(input: {
   // Presence rides with the window: a null window cannot tell an absent local
   // model from an unread one, and the tool cap below needs that (BI-A8BFEFCE).
   const { servedContextTokens: localServedContext, presence: localPresence } = await resolveLocalServingPosture();
-  const skillCatalogCap = deriveSkillCatalogCap(localServedContext);
+  const skillCatalogCap = deriveSkillCatalogCap(localServedContext, { localPresence });
   // Computed once; an explicitly-invoked skill is pinned into the catalog so the
   // cap never breaks a `Use the <id> skill.` request (reused for telemetry below).
   const invokedSkillId = extractInvokedSkillId(input.content);

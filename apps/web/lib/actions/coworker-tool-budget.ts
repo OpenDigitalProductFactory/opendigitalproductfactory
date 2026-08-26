@@ -165,25 +165,57 @@ export function deriveCoworkerToolCap(
  * Max skills to ENUMERATE in the coworker system-prompt catalog on a cliff-prone
  * small local window. The tool cap (above) sizes tool schemas to the window, but
  * the skills catalog ("- skillId: label - description" per skill) is the largest
- * UNCAPPED non-tool block: a heavy coworker (build/platform hold 36-38 skills ≈
- * ~4k tokens) can push the assembled prompt past a small local window even after
- * the tool cap. Bound it to the same selection-cliff the tool cap uses — a small
- * local model can't usefully choose from dozens of skills either — and rely on
- * per-turn re-ranking (rankSkillsByRelevance orders to the current message) to
- * surface others when a later turn is about them.
+ * UNCAPPED non-tool block, and it is heavier than this comment used to claim.
+ * Measured on the live install (2026-08-26, `SkillAssignment` joined to
+ * `SkillDefinition` on skillId, enabled + active only): platform-engineer holds
+ * 45 skills ≈ 15,281 chars ≈ 3.8k tokens, build-specialist 43 ≈ 3.5k, and EIGHT
+ * agents sit above this cap. That block can push the assembled prompt past a
+ * small local window even after the tool cap. Bound it to the same
+ * selection-cliff the tool cap uses — a small local model can't usefully choose
+ * from dozens of skills either — and rely on per-turn re-ranking
+ * (rankSkillsByRelevance orders to the current message) to surface others when a
+ * later turn is about them.
  */
 export const SKILL_CATALOG_CLIFF_CAP = 15;
 
 /**
  * Max skills to list in the coworker prompt, sized to the LOCAL served context —
- * the symmetric partner to deriveCoworkerToolCap. A cliff-prone small local window
- * (<= ACCURACY_CLIFF_PRONE_MAX_CONTEXT) enumerates only the most relevant skills;
- * a capable/unknown window (null or > cliff) is uncapped (Infinity) so cloud and
- * large-window installs are byte-identical.
+ * the symmetric partner to deriveCoworkerToolCap.
+ *
+ * PRESENCE gates it; the WINDOW then decides (BI-DBEEC15B). Note the axis differs
+ * from the tool cap deliberately: the tool cap binds on presence alone because
+ * tool-SELECTION accuracy is a property of the model class, whereas this is a
+ * question of context FIT. So a local model with a genuinely large window still
+ * gets an uncapped catalog, exactly as before.
+ *
+ * What changed is the unread case. This used to return Infinity for a null
+ * window, but that null carries two different facts — no local model, and a
+ * probe that could not read one (see `LocalPresence`). Only the first justifies
+ * uncapping. A failed probe on an install that does have a small local model
+ * used to enumerate the whole catalog, compounding with the tool-surface
+ * widening that BI-A8BFEFCE fixed: on a 24,576-token window that was ~11k extra
+ * tokens of tool schemas plus ~2.5k of catalog, from one unread value.
+ *
+ *   null + "absent" → Infinity   null + "unknown"/"present" → 15
+ *   24_576 → 15   131_072 → Infinity   null (no presence given) → Infinity
  */
-export function deriveSkillCatalogCap(servedContextTokens: number | null | undefined): number {
-  if (!servedContextTokens || servedContextTokens <= 0) return Number.POSITIVE_INFINITY;
-  return servedContextTokens <= ACCURACY_CLIFF_PRONE_MAX_CONTEXT
+export function deriveSkillCatalogCap(
+  servedContextTokens: number | null | undefined,
+  opts?: { localPresence?: LocalPresence },
+): number {
+  const hasWindow = typeof servedContextTokens === "number" && servedContextTokens > 0;
+  // Legacy callers report presence only through the window, which cannot tell an
+  // absent model from an unread one. Explicit presence always wins.
+  const presence: LocalPresence = opts?.localPresence ?? (hasWindow ? "present" : "absent");
+
+  // No local model in the serving path → cloud turn, nothing to fit inside.
+  if (presence === "absent") return Number.POSITIVE_INFINITY;
+
+  // Local IS in the path but its window is unreadable. Fail safe to the cliff
+  // cap: an unknown window must never be treated as a large one.
+  if (!hasWindow) return SKILL_CATALOG_CLIFF_CAP;
+
+  return servedContextTokens! <= ACCURACY_CLIFF_PRONE_MAX_CONTEXT
     ? SKILL_CATALOG_CLIFF_CAP
     : Number.POSITIVE_INFINITY;
 }
