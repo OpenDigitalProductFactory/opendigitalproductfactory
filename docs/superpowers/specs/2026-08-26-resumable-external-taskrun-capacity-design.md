@@ -78,6 +78,15 @@ The cause is therefore not model selection, endpoint health, or packet
 serialization. It is the external TaskRun terminal-state projection and the
 absence of a same-row execution reservation.
 
+A subsequent exact reviewer execution exposed a separate verification-boundary
+fact. The consumer runtime correctly rejected `read_source_at_version` for this
+branch-only design commit because its installed source checkout did not contain
+that Git object. A governed review of an unmerged artifact must therefore run
+from a source-backed preview bound to the exact worktree/head (or another
+provider-verifiable source surface that contains the object). The live consumer
+install remains appropriate for deployed-behavior verification, but must not be
+used to infer or proxy an immutable read of unpublished source.
+
 ## 4. Research and benchmarking
 
 - The [OpenAI Agents SDK human-in-the-loop guide](https://openai.github.io/openai-agents-js/guides/human-in-the-loop/)
@@ -273,6 +282,7 @@ rather than scanning prose.
 | Approval compatibility | Existing approved-envelope and `input-required` tests remain green. |
 | Event seam | Unit test loads a waiting external run and proves an event caller can invoke the same reservation without a new key or TaskRun. |
 | Live proof | One previously capacity-blocked governed reviewer resumes the same TaskRun after a genuine provider-capacity change and persists the required reader/writer executions and receipt. |
+| Review-source binding | The design/review gate is exercised from a governed source-backed preview that can provider-verify the exact unpublished commit and blob; a consumer runtime lacking the object fails closed and cannot mint the receipt. |
 
 ## 13. Planned source boundary
 
@@ -293,13 +303,16 @@ floor, readiness policy, or initiative writer changes are in scope.
 2. Run focused Vitest for `mcp-task-submit` and any extracted helper.
 3. Run web typecheck and relevant source-policy/derived-doc guards.
 4. Perform architecture and blast-radius review of the stable committed tree.
-5. Obtain an independent exact-tree semantic PASS before pregate/publication.
-6. Run preflight and the governed exact-tree local integration CI once on the
+5. For any branch-only initiative artifact, obtain its independent governed
+   review from an admitted source-backed preview bound to the exact worktree and
+   head; require a successful persisted immutable read before accepting the
+   writer receipt.
+6. Obtain an independent exact-tree semantic PASS before pregate/publication.
+7. Run preflight and the governed exact-tree local integration CI once on the
    final SHA, then DCO PR health and protected merge.
-7. Publish/deploy through the normal immutable release path, then prove same-run
+8. Publish/deploy through the normal immutable release path, then prove same-run
    live recovery without reusing any consumed historical key.
 
 Rollback is a normal revert of the source commit. Waiting rows remain valid
 `submitted` TaskRuns and are safe to inspect; rollback must not mark them
 completed or manufacture successor attempts.
-
