@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { backlogItemIdFromOutcomeAnchor } from "./mcp-handlers";
+import { backlogItemIdFromOutcomeAnchor } from "./outcome-anchor";
 
 // BI-512214EA (second site). `Workroom.backlogItemId` is what every subject
 // lookup keys on — reviewer recovery, and repository-artifact.ts's subjectWhere
