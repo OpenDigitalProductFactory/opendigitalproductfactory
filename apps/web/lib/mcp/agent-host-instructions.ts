@@ -41,6 +41,8 @@ export function buildAgentHostInstructions(
   profile: InstallHostProfile,
   token: EffectiveTokenAuthority,
   stance?: InstanceStanceProfile,
+  /** Which installation this is — see formatInstanceStanceBriefing (BI-C7151B1B). */
+  installationLabel?: string,
 ): string {
   const authority = resolveAgentAuthorityTier(token);
   const host = profile.kind === "consumer"
@@ -52,6 +54,8 @@ export function buildAgentHostInstructions(
   // The stance briefing states what this installation *is* and which brakes apply.
   // It follows the host and authority lines so an agent reads identity before it
   // reads the tool catalogue.
-  return stance ? `${base}\n\n${formatInstanceStanceBriefing(stance)}` : base;
+  return stance
+    ? `${base}\n\n${formatInstanceStanceBriefing(stance, installationLabel)}`
+    : base;
 }
 
