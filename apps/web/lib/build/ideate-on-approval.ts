@@ -697,15 +697,28 @@ export async function dispatchDesignReviewFixLoop(params: {
     const { formatPlanReviewFeedback } = await import("@/lib/build/plan-on-approval");
     const { executeTool } = await import("@/lib/mcp-tools");
     let round = 0;
+    // BI-E492F313: did any round actually produce a new design to review? A
+    // regeneration that never ran is NOT self-repair exhausted, and must not be
+    // treated as one.
+    let regenerated = false;
     while (review?.decision === "fail" && round < DESIGN_FIX_MAX_ROUNDS) {
       round += 1;
       await log(`Design review failed — regenerating (round ${round}/${DESIGN_FIX_MAX_ROUNDS}) against ${review.issues?.length ?? 0} issue(s)`);
       const feedback = formatPlanReviewFeedback(review.issues ?? []);
       const regen = await dispatchIdeateForApprovedBuild({ buildId, userId, priorReviewFeedback: feedback });
       if (regen.kind !== "dispatched-success") {
-        await log(`Design regeneration round ${round} produced no designDoc (${regen.kind}) — stopping.`);
-        break;
+        // BI-E492F313: this used to `break`, so ONE infrastructure failure both
+        // consumed a round and abandoned the rest — the advertised "round 1/2"
+        // never happened. A regeneration that could not dispatch says nothing
+        // about the design, so spend the remaining rounds instead: engine
+        // selection is re-resolved per attempt and a later round can land on an
+        // engine that works. Live repro FB-D23311A7: round 1 drew the local
+        // model, could not parse its output, and the build was destroyed —
+        // taking a sound design doc and an actionable review with it.
+        await log(`Design regeneration round ${round} produced no designDoc (${regen.kind}) — retrying if rounds remain.`);
+        continue;
       }
+      regenerated = true;
       await executeTool(
         "reviewDesignDoc",
         { buildId },
@@ -716,12 +729,30 @@ export async function dispatchDesignReviewFixLoop(params: {
       review = fresh?.designReview as DesignReviewVerdict;
     }
 
-    if (review?.decision === "fail") {
+    // BI-E492F313: escalate-to-human ABANDONS the build, frees the WIP slot and
+    // parks the owner's backlog item as deferred. The rule for when that is
+    // warranted lives in design-fix-outcome.ts so it is testable without the
+    // dispatch stack.
+    const { resolveDesignFixOutcome, outcomeKeepsBuildRecoverable } = await import(
+      "@/lib/build/design-fix-outcome"
+    );
+    const outcomeKind = resolveDesignFixOutcome({
+      reviewFailed: review?.decision === "fail",
+      regenerated,
+    });
+    if (outcomeKeepsBuildRecoverable(outcomeKind)) {
+      await log(
+        `Design repair could not regenerate a design in ${round} round(s) — no engine produced one. `
+        + "Leaving the build recoverable; the existing design and review are kept.",
+      );
+      return { kind: outcomeKind, rounds: round };
+    }
+    if (outcomeKind === "escalated-after-rounds") {
       await escalate(build, review, round);
-      return { kind: "escalated-after-rounds", rounds: round };
+      return { kind: outcomeKind, rounds: round };
     }
     await log(`Design review passed after ${round} fix round(s).`);
-    return { kind: "repaired", rounds: round };
+    return { kind: outcomeKind, rounds: round };
   } catch (err) {
     await log(`Design fix loop error: ${String(err instanceof Error ? err.message : err).slice(0, 200)}`);
     return { kind: "error", rounds: 0 };
