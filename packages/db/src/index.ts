@@ -344,6 +344,14 @@ export {
   type PeerEnrollmentEvidence,
 } from "./organization-federation-enrollment";
 export {
+  PAIRING_SOURCES,
+  pairingSupportsWorkSync,
+  resolveInstallationPairing,
+  type PairingLink,
+  type PairingSource,
+  type ResolvedPairing,
+} from "./installation-peer-pairing";
+export {
   syncDigitalProduct,
   syncTaxonomyNode,
   syncPortfolio,
