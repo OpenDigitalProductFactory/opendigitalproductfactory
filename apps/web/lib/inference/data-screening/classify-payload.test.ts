@@ -465,3 +465,92 @@ describe("a coworker's job description is instruction, not payload", () => {
     expect(result.overallSensitivity).toBe("internal");
   });
 });
+
+// BI-3F608240. Measured on the live install: of the COO's 15 turns that would
+// still route `restricted` after the prompt-provenance fix, TWELVE were this
+// single pattern — a tool-call argument NAMED `discipline`, matched as though it
+// were an employment record.
+describe("a field named 'discipline' is not evidence of an HR record", () => {
+  const disciplineToolCall = {
+    role: "assistant" as const,
+    content: "",
+    toolCalls: [{ id: "c1", name: "plan_work", arguments: { discipline: "platform-engineering" } }],
+  };
+
+  it("does not escalate on a tool argument named discipline alone", () => {
+    // The exact live shape: messages[1].toolCalls[0].arguments.discipline
+    const result = classifyInferencePayload({
+      messages: [{ role: "user", content: "What should we tackle next?" }, disciplineToolCall],
+      systemPrompt: "Be concise.",
+      taskType: "conversation",
+    });
+
+    expect(result.overallSensitivity).not.toBe("restricted");
+  });
+
+  it("still fails closed at confidential rather than dropping to internal", () => {
+    const result = classifyInferencePayload({
+      messages: [disciplineToolCall],
+      systemPrompt: "Be concise.",
+      taskType: "conversation",
+    });
+
+    expect(result.overallSensitivity).toBe("confidential");
+  });
+
+  it("keeps the unambiguous employment spellings escalating on their own", () => {
+    for (const key of ["disciplinary", "employeeDiscipline", "employee_discipline", "salary", "payroll"]) {
+      const result = classifyInferencePayload({
+        messages: [{
+          role: "assistant",
+          content: "",
+          toolCalls: [{ id: "c1", name: "update_person", arguments: { [key]: "x" } }],
+        }],
+        systemPrompt: "Be concise.",
+        taskType: "conversation",
+      });
+
+      expect(result.overallSensitivity, `${key} must still escalate alone`).toBe("restricted");
+    }
+  });
+
+  it("still escalates when discipline is corroborated by a second distinct reason", () => {
+    // Corroboration is the point of the ambiguous tier: one ordinary word is not
+    // proof, two distinct detectors are. Note it counts distinct REASONS, so a
+    // second word from the same rule (compensation, manager) does not corroborate
+    // — that is deliberate, per BI-CD13D818: many hits of one probe is one signal.
+    const result = classifyInferencePayload({
+      messages: [{
+        role: "assistant",
+        content: "",
+        toolCalls: [{
+          id: "c1",
+          name: "plan_work",
+          arguments: { discipline: "platform-engineering", incident: "INC-4" },
+        }],
+      }],
+      systemPrompt: "Be concise.",
+      taskType: "conversation",
+    });
+
+    expect(result.overallSensitivity).toBe("restricted");
+  });
+
+  it("does not let a second word from the SAME rule masquerade as corroboration", () => {
+    const result = classifyInferencePayload({
+      messages: [{
+        role: "assistant",
+        content: "",
+        toolCalls: [{
+          id: "c1",
+          name: "plan_work",
+          arguments: { discipline: "platform-engineering", compensation: "review" },
+        }],
+      }],
+      systemPrompt: "Be concise.",
+      taskType: "conversation",
+    });
+
+    expect(result.overallSensitivity).toBe("confidential");
+  });
+});
