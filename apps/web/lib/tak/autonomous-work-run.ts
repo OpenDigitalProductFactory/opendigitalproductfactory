@@ -271,12 +271,19 @@ export async function resolveAutonomousWorkTools(input: {
     const { attached, deferred } = selectCoworkerToolBudget({
       tools: authorized,
       roleGrants,
-      pageActionNames: new Set(routeDomainToolNames),
-      alwaysIncludeNames: new Set([
-        LOAD_TOOLS_TOOL_NAME,
+      // BI-95D74DE9 — surface tools and the run's required tools take tier-0
+      // PRIORITY within the cap, not exemption from it. As alwaysIncludeNames
+      // they attached unconditionally, putting a floor of up to 11 under the
+      // surface whatever the cap said, which exceeds what the routing gate will
+      // run once a measured ceiling drops the cap below that. If a cap cannot
+      // fit a run's required tools, the honest signal is a surface too small for
+      // the run — not a surface the gate then refuses outright.
+      pageActionNames: new Set([
+        ...routeDomainToolNames,
         ...AUTHORIZED_SURFACE_TOOL_NAMES,
         ...(input.requiredToolNames ?? []).slice(0, 4),
       ]),
+      alwaysIncludeNames: new Set([LOAD_TOOLS_TOOL_NAME]),
       cap: effectiveCap,
       intentQuery: input.intentQuery,
     });

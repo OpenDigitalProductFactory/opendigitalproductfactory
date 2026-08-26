@@ -1390,8 +1390,8 @@ export async function sendMessage(input: {
   const { attached: budgetedTools, deferred: deferredTools } = selectCoworkerToolBudget({
     tools: availableTools,
     roleGrants,
-    pageActionNames: new Set([...pageActions.map((t) => t.name), ...routeDomainToolNames, ...brokeredToolNames]),
-    alwaysIncludeNames: new Set([LOAD_TOOLS_TOOL_NAME, ...AUTHORIZED_SURFACE_TOOL_NAMES]),
+    pageActionNames: new Set([...pageActions.map((t) => t.name), ...routeDomainToolNames, ...brokeredToolNames, ...AUTHORIZED_SURFACE_TOOL_NAMES]),
+    alwaysIncludeNames: new Set([LOAD_TOOLS_TOOL_NAME]),
     cap: availableTools.length > toolCap ? Math.max(1, toolCap - 1) : toolCap,
     // BI-ACE1EBA4 — when the cap forces deferral, keep the tools most relevant to
     // this turn's intent within each priority tier.

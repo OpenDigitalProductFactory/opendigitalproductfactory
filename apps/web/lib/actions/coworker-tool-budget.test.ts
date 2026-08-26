@@ -353,6 +353,65 @@ describe("selectCoworkerToolBudget", () => {
     expect(deferred.map((t) => t.name)).not.toContain("query_backlog");
   });
 
+  it("holds the gate bound at EVERY cap, including caps below the surface-tool count (BI-95D74DE9)", () => {
+    // The bound BI-8634F0BE's matrix could not reach. That matrix asserts the
+    // derived CAP never exceeds the routing ceiling; this asserts the ATTACHED
+    // SURFACE does not either. The two differ because selectCoworkerToolBudget
+    // attaches alwaysIncludeNames without consulting the cap — so passing the
+    // six surface tools there put a floor of 6 (+load_tools) under every
+    // surface, whatever the cap said.
+    //
+    // Unreachable until BI-8634F0BE let a measured ceiling drop the cap below
+    // 12; at cap 4 or 6 the surface became one callWithFallbackChain refuses,
+    // which is the BI-A8BFEFCE failure a layer further down.
+    const SURFACE = [...AUTHORIZED_SURFACE_TOOL_NAMES];
+    const tools = [
+      tool(LOAD_TOOLS_TOOL_NAME),
+      ...SURFACE.map((n) => tool(n)),
+      ...Array.from({ length: 80 }, (_, i) => tool(`breadth_${i}`, "misc")),
+    ];
+    const violations: string[] = [];
+    for (let cap = 1; cap <= 48; cap++) {
+      const { attached, deferred } = selectCoworkerToolBudget({
+        tools,
+        roleGrants: [],
+        // Surface tools ride as tier-0 PRIORITY, matching both call sites.
+        pageActionNames: new Set(SURFACE),
+        alwaysIncludeNames: new Set([LOAD_TOOLS_TOOL_NAME]),
+        cap,
+      });
+      if (attached.length > cap) violations.push(`cap=${cap} → attached=${attached.length}`);
+      // The escape hatch must survive every cap, or deferred tools are lost.
+      if (deferred.length > 0 && !attached.some((t) => t.name === LOAD_TOOLS_TOOL_NAME)) {
+        violations.push(`cap=${cap} → load_tools dropped with ${deferred.length} deferred`);
+      }
+      if (attached.length + deferred.length !== tools.length) {
+        violations.push(`cap=${cap} → lost tools (authority leak)`);
+      }
+    }
+    expect(violations).toEqual([]);
+  });
+
+  it("still attaches the surface tools first on an ordinary cap — priority is unchanged", () => {
+    const SURFACE = [...AUTHORIZED_SURFACE_TOOL_NAMES];
+    const tools = [
+      tool(LOAD_TOOLS_TOOL_NAME),
+      ...SURFACE.map((n) => tool(n)),
+      ...Array.from({ length: 80 }, (_, i) => tool(`breadth_${i}`, "misc")),
+    ];
+    const { attached } = selectCoworkerToolBudget({
+      tools,
+      roleGrants: [],
+      pageActionNames: new Set(SURFACE),
+      alwaysIncludeNames: new Set([LOAD_TOOLS_TOOL_NAME]),
+      cap: 15,
+    });
+    const names = attached.map((t) => t.name);
+    expect(attached.length).toBeLessThanOrEqual(15);
+    for (const n of SURFACE) expect(names).toContain(n);
+    expect(names).toContain(LOAD_TOOLS_TOOL_NAME);
+  });
+
   it("never exceeds the local-fallback gate: cap-15 + route tools + load_tools attach ≤ 15 total", () => {
     // Regression for the live TR-SCHED-7044CD4F miss: 115 authorized, cap 15,
     // 4 route domain tools + load_tools rode on top → attached=20 → routing

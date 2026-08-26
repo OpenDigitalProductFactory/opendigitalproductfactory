@@ -363,6 +363,17 @@ export function selectCoworkerToolBudget(params: {
   // pass past it; with the real cap floor (12) route domain tools always fit.
   // The always-include set (load_tools — the escape hatch that reaches every
   // deferred tool) attaches unconditionally and counts toward the cap.
+  //
+  // `alwaysIncludeNames` therefore holds EXACTLY ONE name (BI-95D74DE9). The six
+  // AUTHORIZED_SURFACE_TOOL_NAMES were added to it later and took the cap
+  // exemption with them, putting a floor of 6 (+load_tools) under every attached
+  // surface regardless of cap. That was masked while MIN_COWORKER_ATTACHED_TOOLS
+  // floored the cap at 12; once BI-8634F0BE let a measured ceiling drop the cap
+  // below 7, the surface exceeded what callWithFallbackChain will run locally and
+  // local left the fallback chain — the BI-A8BFEFCE failure one layer down.
+  // Route-scoped and surface tools belong in `pageActionNames`: same tier-0
+  // ranking, no exemption. Only load_tools may outrank the bound, because
+  // dropping it would strand every deferred tool with no way back.
   let attachedCount = 0;
   for (const entry of ranked) {
     if (always.has(entry.t.name)) {
