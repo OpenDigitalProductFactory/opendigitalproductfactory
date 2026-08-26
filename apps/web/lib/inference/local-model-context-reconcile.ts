@@ -34,6 +34,7 @@ import {
   type HostMemory,
 } from "./local-model-policy";
 import { getServedContextTokens, setServedContextTokens } from "./dmr-runtime-config";
+import type { LocalPresence } from "@/lib/routing/local-tool-ceiling";
 
 /**
  * The host memory profile + installer-selected model, normalized from the
@@ -265,19 +266,21 @@ export async function reconcileLocalModelContext(
 }
 
 /**
- * The local generation model's EFFECTIVE served context in tokens — the DMR
- * runtime `_configure` override when set, else the model-card default (what DMR
- * actually serves with no override). Returns null when there is no reachable
- * local generation model (caller then applies no cap shrink).
+ * What a single probe of the local runtime established.
  *
- * Read this — NOT `ModelProfile.maxContextTokens` — when sizing the per-turn
- * coworker tool cap: model discovery/profiling can reset the ModelProfile column
- * to null, which silently defeats the cap (it reads null → full 48 → overflow).
- * DMR is the source of truth. Best-effort with short timeouts; never throws.
+ * The three cases are deliberately NOT collapsed (BI-A8BFEFCE): "DMR answered
+ * and has no generation model" and "DMR did not answer" are different facts
+ * about the install, and a consumer that treats the second as the first widens
+ * the coworker tool surface past what the routing layer will let local run.
  */
-export async function resolveLocalServedContextTokens(
+type LocalGenerationProbe =
+  | { status: "served"; modelId: string; contextTokens: number | null }
+  | { status: "no-model" }
+  | { status: "unreachable"; reason: string };
+
+async function probeLocalGenerationModel(
   fetchImpl: typeof fetch = fetch,
-): Promise<number | null> {
+): Promise<LocalGenerationProbe> {
   // Wrap so getServedContextTokens' internal GET also gets a timeout (it issues
   // its own fetch without a signal), so a hung DMR can never stall a coworker turn.
   const withTimeout: typeof fetch = (url, init) =>
@@ -290,21 +293,102 @@ export async function resolveLocalServedContextTokens(
     let cardDefault: number | null = null;
     try {
       const res = await withTimeout(modelsUrl, {});
-      if (!res.ok) return null;
+      if (!res.ok) {
+        return { status: "unreachable", reason: `models endpoint returned HTTP ${res.status}` };
+      }
       const body = (await res.json()) as {
         data?: Array<{ id?: string; dmr?: { context_window?: number } }>;
       };
       const gen = (body.data ?? []).find((m) => m.id && !isEmbeddingModelId(m.id));
       modelId = gen?.id ?? null;
       cardDefault = typeof gen?.dmr?.context_window === "number" ? gen.dmr.context_window : null;
-    } catch {
-      return null;
+    } catch (err) {
+      return { status: "unreachable", reason: `models endpoint unreachable: ${(err as Error).message}` };
     }
-    if (!modelId) return null;
+    // The endpoint answered cleanly and listed no generation model. That is a
+    // POSITIVE finding of absence, not a failure to read.
+    if (!modelId) return { status: "no-model" };
     const served = await getServedContextTokens(apiRoot, modelId, withTimeout);
     // Override wins; else the card default is what DMR actually serves right now.
-    return served.contextTokens ?? cardDefault ?? null;
-  } catch {
-    return null;
+    return { status: "served", modelId, contextTokens: served.contextTokens ?? cardDefault ?? null };
+  } catch (err) {
+    return { status: "unreachable", reason: `local probe failed: ${(err as Error).message}` };
+  }
+}
+
+/**
+ * The local generation model's EFFECTIVE served context in tokens — the DMR
+ * runtime `_configure` override when set, else the model-card default (what DMR
+ * actually serves with no override). Returns null when there is no reachable
+ * local generation model (caller then applies no cap shrink).
+ *
+ * Read this — NOT `ModelProfile.maxContextTokens` — when sizing the per-turn
+ * coworker tool cap: model discovery/profiling can reset the ModelProfile column
+ * to null, which silently defeats the cap (it reads null → full 48 → overflow).
+ * DMR is the source of truth. Best-effort with short timeouts; never throws.
+ *
+ * NOTE: a null here is AMBIGUOUS — it means "no window to size against", which
+ * covers both an absent model and an unread probe. Anything deciding whether the
+ * local CLIFF applies must call `resolveLocalServingPosture` instead; this
+ * function is only safe for window-fit arithmetic (BI-A8BFEFCE).
+ */
+export async function resolveLocalServedContextTokens(
+  fetchImpl: typeof fetch = fetch,
+): Promise<number | null> {
+  const probe = await probeLocalGenerationModel(fetchImpl);
+  return probe.status === "served" ? probe.contextTokens : null;
+}
+
+/**
+ * Served context PLUS an honest statement of whether a local generation model is
+ * in the serving path at all.
+ *
+ * Why both, and why presence does not come from the probe alone (BI-A8BFEFCE):
+ * the probe is a best-effort HTTP call on a 2500 ms timeout, and it runs on the
+ * coworker hot path — exactly when DMR may be busy loading or generating. When
+ * it fails, the install has not changed; only our knowledge of it has. Falling
+ * back to the active local `ModelProfile` rows recovers the fact from the same
+ * store routing uses to build the fallback chain, so a momentarily unreachable
+ * runtime no longer reads as a cloud-only install.
+ *
+ * `unknown` is reserved for the case where BOTH reads failed. Consumers must
+ * treat it as `present` — see `LocalPresence`.
+ */
+export async function resolveLocalServingPosture(
+  fetchImpl: typeof fetch = fetch,
+): Promise<{ servedContextTokens: number | null; presence: LocalPresence }> {
+  const probe = await probeLocalGenerationModel(fetchImpl);
+  if (probe.status === "served") {
+    return { servedContextTokens: probe.contextTokens, presence: "present" };
+  }
+  if (probe.status === "no-model") {
+    return { servedContextTokens: null, presence: "absent" };
+  }
+
+  // Probe unreachable — recover presence from the routing store rather than
+  // guessing. A local generation profile that is active/degraded means local is
+  // still a candidate endpoint, so the cliff must still bind.
+  try {
+    const profiles = await prisma.modelProfile.findMany({
+      where: {
+        providerId: { in: ["local", "ollama"] },
+        modelStatus: { in: ["active", "degraded"] },
+      },
+      select: { modelId: true },
+    });
+    const hasGeneration = profiles.some((p) => p.modelId && !isEmbeddingModelId(p.modelId));
+    console.warn(
+      `[local-model-context] local probe unreachable (${probe.reason}); ` +
+        `presence recovered from ModelProfile as ${hasGeneration ? "present" : "absent"}`,
+    );
+    return { servedContextTokens: null, presence: hasGeneration ? "present" : "absent" };
+  } catch (err) {
+    // Both reads failed. Fail SAFE: the cliff binds, so local stays eligible as
+    // a fallback rather than being silently excluded by an oversized surface.
+    console.warn(
+      `[local-model-context] local posture unknown — probe unreachable (${probe.reason}) ` +
+        `and ModelProfile read failed (${(err as Error).message}); treating local as present`,
+    );
+    return { servedContextTokens: null, presence: "unknown" };
   }
 }

@@ -51,7 +51,7 @@ apps/web/lib/operate/coworker-regression-detector.ts	935
 apps/web/lib/queue/functions/self-upgrade.test.ts	1380
 apps/web/lib/routing/chat-adapter.test.ts	1073
 apps/web/lib/routing/eval-runner.ts	803
-apps/web/lib/routing/fallback.test.ts	1140
+apps/web/lib/routing/fallback.test.ts	1178
 apps/web/lib/self-upgrade/quiescence.test.ts	951
 apps/web/lib/self-upgrade/quiescence.ts	1621
 apps/web/lib/skills/evidence-search.ts	803

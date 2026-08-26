@@ -15,15 +15,22 @@
 // Like context-pressure.ts, nothing here changes what is sent to the model — it
 // only makes the figures observable so a regression (an agent's surface
 // ballooning past the cliff, a tool that keeps failing) is loud instead of
-// silent. Pure module — no imports, no I/O — so it is unit-tested directly
-// without the loop's heavy dependency graph. The cross-task tokens-per-task
-// rollup is the staged Phase-2 companion (needs a telemetry query).
+// silent. Pure module — no I/O, and its only import is the equally pure
+// routing/local-tool-ceiling — so it is unit-tested directly without the loop's
+// heavy dependency graph. The cross-task tokens-per-task rollup is the staged
+// Phase-2 companion (needs a telemetry query).
 
-// Mirrors LOCAL_FALLBACK_MAX_TOOLS (apps/web/lib/routing/fallback.ts) — the
-// point past which small local models' tool-selection accuracy collapses, and
-// below which the local fallback chain is even attempted. Kept local so this
-// module stays import-free; a test asserts the value stays in sync if both move.
-export const LOCAL_TOOL_SELECTION_CLIFF = 15;
+// The local tool ceiling now lives at the inner routing boundary, so the
+// attachment budget (lib/actions), the posture resolver (lib/inference) and the
+// fallback gate (lib/routing) can all share one derivation without a reverse
+// dependency on this context. Re-exported here so this module's existing
+// consumers are unaffected. See routing/local-tool-ceiling.ts for the rationale.
+export {
+  LOCAL_TOOL_SELECTION_CLIFF,
+  resolveLocalToolCeiling,
+  type LocalPresence,
+} from "@/lib/routing/local-tool-ceiling";
+import { LOCAL_TOOL_SELECTION_CLIFF } from "@/lib/routing/local-tool-ceiling";
 
 const CHARS_PER_TOKEN = 4;
 // Share of a known window the tool DEFINITIONS may occupy before the surface is

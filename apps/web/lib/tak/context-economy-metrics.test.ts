@@ -3,8 +3,35 @@ import {
   estimateToolDefinitionTokens,
   assessToolSurface,
   computeToolSelectionAccuracy,
+  resolveLocalToolCeiling,
   LOCAL_TOOL_SELECTION_CLIFF,
 } from "./context-economy-metrics";
+
+describe("resolveLocalToolCeiling", () => {
+  it("falls back to the selection cliff without measured evidence", () => {
+    expect(resolveLocalToolCeiling(null)).toBe(LOCAL_TOOL_SELECTION_CLIFF);
+    expect(resolveLocalToolCeiling(undefined)).toBe(LOCAL_TOOL_SELECTION_CLIFF);
+    expect(resolveLocalToolCeiling(0)).toBe(LOCAL_TOOL_SELECTION_CLIFF);
+    expect(resolveLocalToolCeiling(-5)).toBe(LOCAL_TOOL_SELECTION_CLIFF);
+    expect(resolveLocalToolCeiling(Number.NaN)).toBe(LOCAL_TOOL_SELECTION_CLIFF);
+    expect(resolveLocalToolCeiling(Number.POSITIVE_INFINITY)).toBe(LOCAL_TOOL_SELECTION_CLIFF);
+  });
+
+  it("follows a positive measured ceiling, floored", () => {
+    expect(resolveLocalToolCeiling(30)).toBe(30);
+    expect(resolveLocalToolCeiling(30.9)).toBe(30);
+    expect(resolveLocalToolCeiling(1)).toBe(1);
+  });
+
+  it("is the ONE derivation the budget and the routing gate share (BI-A8BFEFCE)", () => {
+    // The attachment budget and callWithFallbackChain both call this. When they
+    // derived the ceiling separately the budget honoured measured fidelity and
+    // the gate hardcoded the cliff, so a budgeted surface could be refused for
+    // exceeding a limit nothing else applied.
+    expect(resolveLocalToolCeiling(null)).toBe(LOCAL_TOOL_SELECTION_CLIFF);
+    expect(LOCAL_TOOL_SELECTION_CLIFF).toBe(15);
+  });
+});
 
 describe("estimateToolDefinitionTokens", () => {
   it("is 0 for an empty/absent surface", () => {
