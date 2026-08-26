@@ -240,6 +240,12 @@ export function getExclusionReasonV2(
 interface HardFilterResultV2 {
   eligible: EndpointManifest[];
   excluded: CandidateTrace[];
+  /**
+   * BI-16A1B4A3 — true when no endpoint met the tier floor and below-floor
+   * endpoints were kept so the turn could still run. Never silent: the caller
+   * records it on the decision.
+   */
+  qualityFloorRelaxed: boolean;
 }
 
 function filterHardV2(
@@ -254,12 +260,63 @@ function filterHardV2(
 ): HardFilterResultV2 {
   const eligible: EndpointManifest[] = [];
   const excluded: CandidateTrace[] = [];
+  let qualityFloorRelaxed = false;
+
+  // ── Tier quality floor — SOFT exclusion (BI-16A1B4A3) ────────────────────
+  // Founder ruling 2026-08-26: the platform must never be unrunnable. The
+  // bundled local model has to work when nothing else is available, even on
+  // modest hardware.
+  //
+  // The floor used to be a HARD gate, and on a live install it excluded EVERY
+  // endpoint: all of them cleared codegen and reasoning and failed only
+  // toolFidelity — best on the box 82 against a frontier floor of 85, and the
+  // highest-scoring endpoint's 80 had never actually been measured. A tier
+  // preference silently became a total outage.
+  //
+  // So it takes the same contract the runtime circuit breaker and the capacity
+  // snapshot already use: drop below-floor endpoints ONLY while an at-floor peer
+  // remains. When nothing meets the floor, the turn proceeds against the best
+  // available rather than failing.
+  //
+  // This is a QUALITY preference, never a safety gate. Sensitivity clearance,
+  // agent capability floors, model class, status and context window stay hard —
+  // they are evaluated below and are not relaxed by this.
+  const hardContract: RequestContract = { ...contract, minimumDimensions: undefined };
+  const belowFloor: Array<{ ep: EndpointManifest; reason: string }> = [];
 
   for (const ep of endpoints) {
-    const reason = getExclusionReasonV2(ep, contract);
+    const reason = getExclusionReasonV2(ep, hardContract);
     if (reason === null) {
+      const unmet = firstUnmetDimension(ep, contract.minimumDimensions);
+      if (unmet) {
+        belowFloor.push({
+          ep,
+          reason: `Minimum quality dimensions not met (${unmet.dimension} ${unmet.actual} < ${unmet.minimum})`,
+        });
+        continue;
+      }
       eligible.push(ep);
     } else {
+      excluded.push({
+        endpointId: ep.id,
+        providerId: ep.providerId,
+        modelId: ep.modelId,
+        endpointName: ep.name,
+        fitnessScore: 0,
+        dimensionScores: {},
+        costPerOutputMToken: ep.costPerOutputMToken,
+        excluded: true,
+        excludedReason: reason,
+      });
+    }
+  }
+
+  // Apply the soft floor: keep below-floor endpoints only when no peer met it.
+  if (eligible.length === 0 && belowFloor.length > 0) {
+    qualityFloorRelaxed = true;
+    for (const { ep } of belowFloor) eligible.push(ep);
+  } else {
+    for (const { ep, reason } of belowFloor) {
       excluded.push({
         endpointId: ep.id,
         providerId: ep.providerId,
@@ -344,10 +401,10 @@ function filterHardV2(
         excludedReason: reason,
       });
     }
-    return { eligible: cap.eligible, excluded };
+    return { eligible: cap.eligible, excluded, qualityFloorRelaxed };
   }
 
-  return { eligible: afterRuntime, excluded };
+  return { eligible: afterRuntime, excluded, qualityFloorRelaxed };
 }
 
 // ── Full pipeline: routeEndpointV2 ──────────────────────────────────────────
@@ -680,12 +737,17 @@ export async function routeEndpointV2(
     ? ` Preferences: ${preferenceSelection.resolution.applied.length} applied, ` +
       `${preferenceSelection.resolution.unavailable.length} unavailable.`
     : "";
+  // BI-16A1B4A3: a relaxed floor must never be silent — the owner is getting a
+  // below-floor model and is entitled to know that is what happened.
+  const degradedReason = hardResult.qualityFloorRelaxed
+    ? " No endpoint met the quality floor for this work, so it ran on the best available rather than not running."
+    : "";
   const reason =
     `Selected ${winner.endpoint.name} (${winner.endpoint.providerId}) for task type '${contract.taskType}' ` +
     `with rankScore ${winner.rankScore.toFixed(1)}. ` +
     `Budget: ${contract.budgetClass}, reasoning depth: ${contract.reasoningDepth}. ` +
     `${allCandidates.length} endpoint(s) excluded; ` +
-    `${ranked.length} candidate(s) ranked.${preferenceReason}`;
+    `${ranked.length} candidate(s) ranked.${preferenceReason}${degradedReason}`;
 
   return {
     selectedEndpoint: winner.endpoint.id,
