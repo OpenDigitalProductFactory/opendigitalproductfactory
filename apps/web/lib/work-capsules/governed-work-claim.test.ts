@@ -7,7 +7,7 @@ const actor = { userId: "user-1", agentId: "AGT-1", principalId: "PRN-1" };
 const CANONICAL_DESIGN_PATH = "docs/superpowers/specs/2026-08-22-entry-design.md";
 const CANONICAL_BLOB_SHA = "9f2c1d4e6b8a0c2e4f6a8b0c2d4e6f8a0b2c4d6e";
 const discoverCanonicalArtifact = vi.fn().mockResolvedValue({
-  ok: true,
+  resolved: true,
   path: CANONICAL_DESIGN_PATH,
   providerBlobId: CANONICAL_BLOB_SHA,
 });

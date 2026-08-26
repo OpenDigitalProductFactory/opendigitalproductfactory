@@ -17,9 +17,9 @@ export type DiscoveredCanonicalArtifact = {
 };
 
 export type CanonicalArtifactDiscoveryResult =
-  | { ok: true; artifact: DiscoveredCanonicalArtifact }
+  | { resolved: true; artifact: DiscoveredCanonicalArtifact }
   | {
-    ok: false;
+    resolved: false;
     code: "no-canonical-design" | "ambiguous-canonical-design" | "provider-unavailable";
     nextAction: string;
   };
@@ -81,7 +81,7 @@ export async function discoverCanonicalDesignArtifact(args: {
   const db = args.db ?? (prisma as unknown as CanonicalArtifactDb);
   if (!/^[a-f0-9]{40}$/i.test(args.baseSha) || !/^[a-f0-9]{40}$/i.test(args.headSha)) {
     return {
-      ok: false,
+      resolved: false,
       code: "provider-unavailable",
       nextAction: "The workroom does not record an immutable base and head. Re-sync the branch with adopt_worktree(headBranch, headSha), then retry.",
     };
@@ -94,7 +94,7 @@ export async function discoverCanonicalDesignArtifact(args: {
     token = await resolveGithubToken(db);
   } catch {
     return {
-      ok: false,
+      resolved: false,
       code: "provider-unavailable",
       nextAction: "Repository provider credentials are unavailable, so the canonical design cannot be bound. Restore the GitHub credential in Admin > Platform Development, then retry.",
     };
@@ -102,7 +102,7 @@ export async function discoverCanonicalDesignArtifact(args: {
   const expectedFullName = `${repo.owner}/${repo.name}`;
   if (args.repositoryFullName.toLocaleLowerCase("en-US") !== expectedFullName.toLocaleLowerCase("en-US")) {
     return {
-      ok: false,
+      resolved: false,
       code: "provider-unavailable",
       nextAction: `The workroom is bound to ${args.repositoryFullName}, but this installation's canonical repository is ${expectedFullName}. Re-claim the work on the canonical repository, then retry.`,
     };
@@ -123,14 +123,14 @@ export async function discoverCanonicalDesignArtifact(args: {
     );
   } catch {
     return {
-      ok: false,
+      resolved: false,
       code: "provider-unavailable",
       nextAction: "Repository provider could not be reached to resolve the canonical design. Retry once provider access is restored.",
     };
   }
   if (!response.ok) {
     return {
-      ok: false,
+      resolved: false,
       code: "provider-unavailable",
       nextAction: `Repository provider could not compare ${args.baseSha.slice(0, 12)}...${args.headSha.slice(0, 12)}. Confirm the branch is pushed, then retry.`,
     };
@@ -141,7 +141,7 @@ export async function discoverCanonicalDesignArtifact(args: {
     payload = await response.json();
   } catch {
     return {
-      ok: false,
+      resolved: false,
       code: "provider-unavailable",
       nextAction: "Repository provider returned unreadable comparison metadata. Retry once provider access is restored.",
     };
@@ -150,7 +150,7 @@ export async function discoverCanonicalDesignArtifact(args: {
   const files = compareFiles(payload);
   if (!files) {
     return {
-      ok: false,
+      resolved: false,
       code: "provider-unavailable",
       nextAction: "Repository provider returned no comparable file list. Confirm the branch is pushed, then retry.",
     };
@@ -161,14 +161,14 @@ export async function discoverCanonicalDesignArtifact(args: {
     .sort((left, right) => left.filename.localeCompare(right.filename));
   if (candidates.length === 0) {
     return {
-      ok: false,
+      resolved: false,
       code: "no-canonical-design",
       nextAction: `No design document under ${SPEC_PREFIX} changed between ${args.baseSha.slice(0, 12)} and ${args.headSha.slice(0, 12)}. Commit the canonical design there, push it, re-sync the head with adopt_worktree, then retry.`,
     };
   }
   if (candidates.length > 1) {
     return {
-      ok: false,
+      resolved: false,
       code: "ambiguous-canonical-design",
       nextAction: `More than one design document changed on this branch (${
         candidates.map((file) => file.filename).join(", ")
@@ -177,5 +177,5 @@ export async function discoverCanonicalDesignArtifact(args: {
   }
 
   const canonical = candidates[0]!;
-  return { ok: true, artifact: { path: canonical.filename, providerBlobId: canonical.sha } };
+  return { resolved: true, artifact: { path: canonical.filename, providerBlobId: canonical.sha } };
 }

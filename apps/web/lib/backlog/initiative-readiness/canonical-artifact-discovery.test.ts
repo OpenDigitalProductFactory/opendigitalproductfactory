@@ -39,7 +39,7 @@ describe("canonical design artifact discovery", () => {
     const result = await discoverCanonicalDesignArtifact(args(fetchImpl as unknown as typeof fetch));
 
     expect(result).toEqual({
-      ok: true,
+      resolved: true,
       artifact: { path: "docs/superpowers/specs/2026-08-25-a-design.md", providerBlobId: BLOB_SHA },
     });
     // The compare RANGE, not the head commit: a design authored across several
@@ -54,8 +54,8 @@ describe("canonical design artifact discovery", () => {
 
     const result = await discoverCanonicalDesignArtifact(args(fetchImpl as unknown as typeof fetch));
 
-    expect(result).toMatchObject({ ok: false, code: "no-canonical-design" });
-    expect(result.ok === false && result.nextAction).toContain("docs/superpowers/specs/");
+    expect(result).toMatchObject({ resolved: false, code: "no-canonical-design" });
+    expect(result.resolved === false && result.nextAction).toContain("docs/superpowers/specs/");
   });
 
   it("refuses to choose when more than one spec changed, and names the candidates", async () => {
@@ -66,8 +66,8 @@ describe("canonical design artifact discovery", () => {
 
     const result = await discoverCanonicalDesignArtifact(args(fetchImpl as unknown as typeof fetch));
 
-    expect(result).toMatchObject({ ok: false, code: "ambiguous-canonical-design" });
-    expect(result.ok === false && result.nextAction).toContain("2026-08-25-b-design.md");
+    expect(result).toMatchObject({ resolved: false, code: "ambiguous-canonical-design" });
+    expect(result.resolved === false && result.nextAction).toContain("2026-08-25-b-design.md");
   });
 
   it("ignores a spec the branch deleted", async () => {
@@ -78,7 +78,7 @@ describe("canonical design artifact discovery", () => {
 
     const result = await discoverCanonicalDesignArtifact(args(fetchImpl as unknown as typeof fetch));
 
-    expect(result).toMatchObject({ ok: true, artifact: { providerBlobId: BLOB_SHA } });
+    expect(result).toMatchObject({ resolved: true, artifact: { providerBlobId: BLOB_SHA } });
   });
 
   it("does not call the provider when the workroom records no immutable base", async () => {
@@ -90,8 +90,8 @@ describe("canonical design artifact discovery", () => {
     });
 
     expect(fetchImpl).not.toHaveBeenCalled();
-    expect(result).toMatchObject({ ok: false, code: "provider-unavailable" });
-    expect(result.ok === false && result.nextAction).toContain("adopt_worktree");
+    expect(result).toMatchObject({ resolved: false, code: "provider-unavailable" });
+    expect(result.resolved === false && result.nextAction).toContain("adopt_worktree");
   });
 
   it("reports provider unavailability rather than guessing when the compare fails", async () => {
@@ -99,6 +99,6 @@ describe("canonical design artifact discovery", () => {
 
     const result = await discoverCanonicalDesignArtifact(args(fetchImpl as unknown as typeof fetch));
 
-    expect(result).toMatchObject({ ok: false, code: "provider-unavailable" });
+    expect(result).toMatchObject({ resolved: false, code: "provider-unavailable" });
   });
 });

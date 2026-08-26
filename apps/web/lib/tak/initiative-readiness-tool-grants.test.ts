@@ -34,7 +34,7 @@ const dispatchContext = {
 };
 
 const canonicalArtifact = {
-  ok: true as const,
+  resolved: true as const,
   path: "docs/superpowers/specs/2026-08-24-wordpress-operator-regressions-design.md",
   providerBlobId: "9f2c1d4e6b8a0c2e4f6a8b0c2d4e6f8a0b2c4d6e",
 };
@@ -147,7 +147,7 @@ describe("initiative readiness recovery routing", () => {
         grantRow("backlog_write", "AGT-WS-BUILD", "Build Specialist"),
       ]) } },
       dispatchContext,
-      canonicalArtifact: { ok: false, nextAction: "Commit the canonical design under docs/superpowers/specs/, push it, then retry." },
+      canonicalArtifact: { resolved: false, nextAction: "Commit the canonical design under docs/superpowers/specs/, push it, then retry." },
     });
 
     expect(recovery.reviewerRoutes).toEqual([]);

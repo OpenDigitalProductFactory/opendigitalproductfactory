@@ -142,8 +142,8 @@ export type InitiativeRecoveryDispatchContext = {
  * a pure routing decision over evidence it is handed.
  */
 export type InitiativeRecoveryCanonicalArtifact =
-  | { ok: true; path: string; providerBlobId: string }
-  | { ok: false; nextAction: string };
+  | { resolved: true; path: string; providerBlobId: string }
+  | { resolved: false; nextAction: string };
 
 type ReviewerRouteDb = {
   agentToolGrant?: {
@@ -238,13 +238,13 @@ export async function resolveInitiativeReviewerRecovery(input: {
       // with it, so emitting it would spend a dispatch and a TaskRun to fail at
       // the callee. Escalate with the remedy instead (BI-9FE775F9).
       const artifact = input.canonicalArtifact ?? null;
-      if (!artifact || !artifact.ok) {
+      if (!artifact || !artifact.resolved) {
         escalations.push({
           accountableRole: entry.role,
           toolName: entry.route.toolName,
           grant: entry.route.lane.grant,
           reason: "no-canonical-artifact",
-          nextAction: artifact?.ok === false
+          nextAction: artifact?.resolved === false
             ? artifact.nextAction
             : "The canonical design artifact could not be resolved from the repository provider, so no immutable reviewer binding can be issued. Resolve the canonical design, then retry.",
         });

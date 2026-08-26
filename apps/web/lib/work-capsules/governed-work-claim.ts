@@ -58,9 +58,9 @@ async function discoverCanonicalArtifactFromProvider(args: {
     "@/lib/backlog/initiative-readiness/canonical-artifact-discovery"
   );
   const found = await discoverCanonicalDesignArtifact(args);
-  return found.ok
-    ? { ok: true, path: found.artifact.path, providerBlobId: found.artifact.providerBlobId }
-    : { ok: false, nextAction: found.nextAction };
+  return found.resolved
+    ? { resolved: true, path: found.artifact.path, providerBlobId: found.artifact.providerBlobId }
+    : { resolved: false, nextAction: found.nextAction };
 }
 
 type ExactReadback = {
@@ -130,7 +130,7 @@ async function resolveRecoveryOutsideTransaction(args: {
       headSha: pending.dispatchContext.headSha,
     })
     : {
-      ok: false,
+      resolved: false,
       nextAction: "The workroom records no immutable base and head, so no reviewer binding can be issued. Re-sync the branch with adopt_worktree(headBranch, headSha), then retry.",
     };
 

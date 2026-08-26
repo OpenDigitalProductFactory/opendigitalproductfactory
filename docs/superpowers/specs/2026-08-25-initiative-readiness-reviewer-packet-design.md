@@ -1,4 +1,5 @@
 ---
+status: active
 title: Executable initiative-readiness recovery packets
 ---
 
