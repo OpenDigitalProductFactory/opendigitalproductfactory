@@ -14,6 +14,8 @@ import {
 import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 import {
   resolveInitiativeReviewerRecovery,
+  type InitiativeRecoveryCanonicalArtifact,
+  type InitiativeRecoveryDispatchContext,
   type InitiativeReviewerRecovery,
 } from "@/lib/tak/initiative-readiness-tool-grants";
 
@@ -38,7 +40,28 @@ type ClaimResult = Awaited<ReturnType<typeof claimBacklogItemWorkspace>>;
 type Dependencies = {
   claimWorkspace?: typeof claimBacklogItemWorkspace;
   declareIntent?: typeof declareWorkCapsuleIntent;
+  discoverCanonicalArtifact?: DiscoverCanonicalArtifact;
 };
+
+type DiscoverCanonicalArtifact = (args: {
+  repositoryFullName: string;
+  baseSha: string;
+  headSha: string;
+}) => Promise<InitiativeRecoveryCanonicalArtifact>;
+
+async function discoverCanonicalArtifactFromProvider(args: {
+  repositoryFullName: string;
+  baseSha: string;
+  headSha: string;
+}): Promise<InitiativeRecoveryCanonicalArtifact> {
+  const { discoverCanonicalDesignArtifact } = await import(
+    "@/lib/backlog/initiative-readiness/canonical-artifact-discovery"
+  );
+  const found = await discoverCanonicalDesignArtifact(args);
+  return found.ok
+    ? { ok: true, path: found.artifact.path, providerBlobId: found.artifact.providerBlobId }
+    : { ok: false, nextAction: found.nextAction };
+}
 
 type ExactReadback = {
   capsuleId: string;
@@ -76,6 +99,49 @@ export type GovernedClaimResult =
 
 function claimSuccess(data: GovernedClaimSuccess): GovernedClaimSuccessResult {
   return ok(data) as GovernedClaimSuccessResult;
+}
+
+const EMPTY_RECOVERY: InitiativeReviewerRecovery = { reviewerRoutes: [], escalations: [], unroutable: [] };
+
+type PendingRecovery = {
+  decision: InitiativeReadinessDecision;
+  baselineId: string | null;
+  dispatchContext: InitiativeRecoveryDispatchContext | null;
+  baseSha: string | null;
+};
+
+/**
+ * Binding a reviewer to the canonical design costs one repository-provider round
+ * trip, so it runs after the readiness transaction commits rather than holding
+ * it open (BI-9FE775F9). The decision itself is already recorded; this only
+ * shapes the recovery the blocked caller is handed back.
+ */
+async function resolveRecoveryOutsideTransaction(args: {
+  db: CapsuleDb;
+  actor: WorkCapsuleActor;
+  pending: PendingRecovery;
+  discover: DiscoverCanonicalArtifact;
+}): Promise<InitiativeReviewerRecovery> {
+  const { pending } = args;
+  const canonicalArtifact: InitiativeRecoveryCanonicalArtifact = pending.dispatchContext && pending.baseSha
+    ? await args.discover({
+      repositoryFullName: pending.dispatchContext.repositoryFullName,
+      baseSha: pending.baseSha,
+      headSha: pending.dispatchContext.headSha,
+    })
+    : {
+      ok: false,
+      nextAction: "The workroom records no immutable base and head, so no reviewer binding can be issued. Re-sync the branch with adopt_worktree(headBranch, headSha), then retry.",
+    };
+
+  return resolveInitiativeReviewerRecovery({
+    decision: pending.decision,
+    currentAgentId: args.actor.agentId,
+    db: args.db,
+    dispatchContext: pending.dispatchContext,
+    canonicalArtifact,
+    expectedCurrentBaselineId: pending.baselineId,
+  });
 }
 
 class CapsuleIdentityMismatch extends Error {
@@ -202,9 +268,10 @@ export async function claimGovernedBacklogWorkspace(args: {
     : <T>(fn: (tx: CapsuleDb) => Promise<T>) => fn(args.db);
   let backlogItemRowId = "";
   let evaluated: InitiativeReadinessDecision | null = null;
+  let pendingRecovery: PendingRecovery | null = null;
 
   try {
-    return await transact(async (tx) => {
+    const outcome = await transact(async (tx) => {
       if (!tx.backlogItem || !tx.backlogItemActivity) throw new Error("Readiness transaction lost backlog access.");
       const item = await tx.backlogItem.findFirst({
         where: { OR: [{ itemId: args.input.backlogItemId }, { id: args.input.backlogItemId }] },
@@ -263,6 +330,7 @@ export async function claimGovernedBacklogWorkspace(args: {
             headBranch: true,
             headSha: true,
             backlogItemId: true,
+            baseSha: true,
           },
         }) as Array<{
           capsuleId: string;
@@ -270,6 +338,7 @@ export async function claimGovernedBacklogWorkspace(args: {
           headBranch: string;
           headSha: string | null;
           backlogItemId: string | null;
+          baseSha: string | null;
         }>;
         // Deterministic: an explicit binding to THIS item wins; otherwise the
         // first room on this branch that carries an immutable head.
@@ -277,21 +346,30 @@ export async function claimGovernedBacklogWorkspace(args: {
           recoveryWorkrooms.find((room) => room.backlogItemId === item.itemId && room.headSha)
           ?? recoveryWorkrooms.find((room) => room.headSha)
           ?? null;
-        const recovery = await resolveInitiativeReviewerRecovery({
+        // Recovery needs a repository-provider round trip to bind the canonical
+        // design (BI-9FE775F9). That must not run inside this transaction, so
+        // the not-ready path records its decision here and resolves recovery
+        // after the commit.
+        pendingRecovery = {
           decision: evaluated,
-          currentAgentId: args.actor.agentId,
-          db: tx,
+          baselineId: projection.baselineId,
           dispatchContext: recoveryWorkroom?.headSha ? {
             workroomId: recoveryWorkroom.capsuleId,
             repositoryFullName: recoveryWorkroom.repositoryFullName,
             branchName: recoveryWorkroom.headBranch,
             headSha: recoveryWorkroom.headSha,
           } : null,
-        });
+          baseSha: recoveryWorkroom?.baseSha ?? null,
+        };
         await recordDecision({ db: tx, backlogItemRowId: item.id, decision: evaluated, workIntent, actor: args.actor });
         return {
           ...err(`Cannot start ${workIntent}: ${[...evaluated.blockers, ...evaluated.unmet].map((entry) => entry.code).join(", ")}.`),
-          data: { code: "initiative_not_ready" as const, workIntent, readiness: evaluated, recovery },
+          data: {
+            code: "initiative_not_ready" as const,
+            workIntent,
+            readiness: evaluated,
+            recovery: EMPTY_RECOVERY,
+          },
         };
       }
 
@@ -325,6 +403,19 @@ export async function claimGovernedBacklogWorkspace(args: {
       await recordDecision({ db: tx, backlogItemRowId: item.id, decision: evaluated, workIntent, actor: args.actor });
       return claimSuccess({ workIntent, readiness: evaluated, claim, readback });
     });
+    if (!pendingRecovery || outcome.ok) return outcome;
+    return {
+      ...outcome,
+      data: {
+        ...outcome.data,
+        recovery: await resolveRecoveryOutsideTransaction({
+          db: args.db,
+          actor: args.actor,
+          pending: pendingRecovery,
+          discover: args.dependencies?.discoverCanonicalArtifact ?? discoverCanonicalArtifactFromProvider,
+        }),
+      },
+    };
   } catch (error) {
     if (!(error instanceof CapsuleIdentityMismatch) || !evaluated || !backlogItemRowId) throw error;
     const priorDecision = evaluated as InitiativeReadinessDecision;
@@ -340,7 +431,7 @@ export async function claimGovernedBacklogWorkspace(args: {
         code: "capsule_identity_mismatch",
         workIntent,
         readiness: denied,
-        recovery: { reviewerRoutes: [], escalations: [] },
+        recovery: EMPTY_RECOVERY,
       },
     };
   }

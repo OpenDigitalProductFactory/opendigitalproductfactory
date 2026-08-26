@@ -4,6 +4,13 @@ import { claimGovernedBacklogWorkspace } from "./governed-work-claim";
 import type { CapsuleDb } from "./work-capsule-store-types";
 
 const actor = { userId: "user-1", agentId: "AGT-1", principalId: "PRN-1" };
+const CANONICAL_DESIGN_PATH = "docs/superpowers/specs/2026-08-22-entry-design.md";
+const CANONICAL_BLOB_SHA = "9f2c1d4e6b8a0c2e4f6a8b0c2d4e6f8a0b2c4d6e";
+const discoverCanonicalArtifact = vi.fn().mockResolvedValue({
+  ok: true,
+  path: CANONICAL_DESIGN_PATH,
+  providerBlobId: CANONICAL_BLOB_SHA,
+});
 const input = {
   backlogItemId: "BI-ENTRY",
   repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
@@ -47,6 +54,7 @@ function database(activities: unknown[] = []) {
           repositoryFullName: input.repositoryFullName,
           headBranch: input.headBranch,
           headSha: "1111111111111111111111111111111111111111",
+          baseSha: "3333333333333333333333333333333333333333",
           archivedAt: null,
         })),
       // Recovery matches rooms on branch identity (BI-512214EA), so the default
@@ -71,6 +79,7 @@ function database(activities: unknown[] = []) {
         repositoryFullName: input.repositoryFullName,
         headBranch: input.headBranch,
         headSha: "1111111111111111111111111111111111111111",
+        baseSha: "3333333333333333333333333333333333333333",
         backlogItemId: null,
       }]),
       update: vi.fn(),
@@ -118,7 +127,7 @@ describe("claimGovernedBacklogWorkspace", () => {
       actor,
       workIntent: null,
       now: new Date("2026-08-22T00:00:00.000Z"),
-      dependencies: { claimWorkspace: vi.fn() },
+      dependencies: { claimWorkspace: vi.fn(), discoverCanonicalArtifact },
     });
 
     expect(result.ok).toBe(false);
@@ -145,6 +154,7 @@ describe("claimGovernedBacklogWorkspace", () => {
           repositoryFullName: input.repositoryFullName,
           headBranch: input.headBranch,
           headSha: "3333333333333333333333333333333333333333",
+          baseSha: "4444444444444444444444444444444444444444",
           backlogItemId: "BI-ENTRY",
         },
       ]);
@@ -155,7 +165,7 @@ describe("claimGovernedBacklogWorkspace", () => {
       actor,
       workIntent: null,
       now: new Date("2026-08-22T00:00:00.000Z"),
-      dependencies: { claimWorkspace: vi.fn() },
+      dependencies: { claimWorkspace: vi.fn(), discoverCanonicalArtifact },
     });
 
     const routes = result.ok ? [] : result.data.recovery.reviewerRoutes;
@@ -174,9 +184,14 @@ describe("claimGovernedBacklogWorkspace", () => {
       actor,
       workIntent: null,
       now: new Date("2026-08-22T00:00:00.000Z"),
-      dependencies: { claimWorkspace },
+      dependencies: { claimWorkspace, discoverCanonicalArtifact },
     });
 
+    expect(discoverCanonicalArtifact).toHaveBeenCalledWith({
+      repositoryFullName: input.repositoryFullName,
+      baseSha: "3333333333333333333333333333333333333333",
+      headSha: "1111111111111111111111111111111111111111",
+    });
     expect(result).toMatchObject({
       ok: false,
       data: {
@@ -199,6 +214,20 @@ describe("claimGovernedBacklogWorkspace", () => {
               requestKey: "initiative-readiness:BI-ENTRY:design-spec:1111111111111111111111111111111111111111",
               tier: 2,
               enteredVia: "handoff",
+              requiredToolNames: ["record_initiative_design_review", "read_source_at_version"],
+              initiativeReviewBinding: {
+                writerToolName: "record_initiative_design_review",
+                itemId: "BI-ENTRY",
+                gate: "design-spec",
+                expectedCurrentBaselineId: null,
+                artifactRef: {
+                  kind: "repo-blob-at-commit",
+                  repositoryFullName: input.repositoryFullName,
+                  commitSha: "1111111111111111111111111111111111111111",
+                  path: CANONICAL_DESIGN_PATH,
+                  providerBlobId: CANONICAL_BLOB_SHA,
+                },
+              },
             },
           })]),
         },
@@ -241,7 +270,7 @@ describe("claimGovernedBacklogWorkspace", () => {
       actor,
       workIntent: "implementation",
       now: new Date("2026-08-22T00:00:00.000Z"),
-      dependencies: { claimWorkspace: vi.fn() },
+      dependencies: { claimWorkspace: vi.fn(), discoverCanonicalArtifact },
     });
 
     expect(result).toMatchObject({
@@ -276,7 +305,7 @@ describe("claimGovernedBacklogWorkspace", () => {
       actor,
       workIntent: "design",
       now: new Date("2026-08-22T00:00:00.000Z"),
-      dependencies: { claimWorkspace, declareIntent },
+      dependencies: { claimWorkspace, declareIntent, discoverCanonicalArtifact },
     });
 
     expect(result).toMatchObject({
@@ -327,7 +356,7 @@ describe("claimGovernedBacklogWorkspace", () => {
       actor,
       workIntent: "design",
       now: new Date("2026-08-22T00:00:00.000Z"),
-      dependencies: { claimWorkspace, declareIntent },
+      dependencies: { claimWorkspace, declareIntent, discoverCanonicalArtifact },
     });
 
     expect(result).toMatchObject({ ok: false, data: { code: "capsule_identity_mismatch" } });
