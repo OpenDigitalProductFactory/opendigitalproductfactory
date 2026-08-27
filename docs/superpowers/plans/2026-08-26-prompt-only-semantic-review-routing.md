@@ -98,6 +98,13 @@ bind the immutable plan to the approved scope.
   can execute the immutable reader; its writer failed closed on pass-plus-
   finding after truncated source, so the occurrence remains evidence rather
   than a receipt.
+- [x] The first scope-manifest spec-review identity
+  `TR-MCP-Y210YXZuNWh5MDAwMGt2cDhnNmgyeWFudQ-15059785C93E` completed with one
+  failed `read_source_at_version` and no writer or receipt because the isolated
+  preview clone had not fetched commit `c067142f770478d8ad548d6e3b929d79381c7706`.
+  The clone now resolves that exact commit and design blob
+  `5ac674c03be1b21a335ea5b8607125f830e673a5`; the consumed request key will not
+  be reused.
 - [ ] Governed exact-tree local CI passes for the published candidate.
 - [ ] Protected merge and deployment are verified.
 - [ ] BI-SIG owner receives the deployment signal and records one fresh semantic-review result.
