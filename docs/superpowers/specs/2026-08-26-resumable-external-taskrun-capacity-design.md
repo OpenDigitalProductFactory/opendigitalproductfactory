@@ -35,6 +35,11 @@ returned result. Existing `submitted`/`working`, `progressPayload`,
 request, and heartbeat substrate. `BI-MCP-EFF-0285909C` remains owner of any
 generic capacity notification service.
 
+An unpublished artifact review must run from a governed standalone source
+clone whose Git object store is inside the mounted preview. A host worktree
+whose `.git` file points outside the container must fail closed and is not a
+source-backed review surface.
+
 ## State contract
 
 A result is resumable only when all are true:
