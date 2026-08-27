@@ -5257,9 +5257,6 @@
         "evidence-weight-1-ceiling-2",
         "every-agent",
         "widest-gaps-detail",
-        "agt-ext-claude-claude-code-external-cli-active-registry-only-4-attainable",
-        "agt-ext-codex-codex-external-cli-active-registry-only-4-attainable",
-        "agt-ext-grok-grok-external-cli-active-registry-only-4-attainable",
         "agt-100-policy-enforcement-agent-declared-only-12-attainable",
         "agt-101-strategy-alignment-agent-declared-only-12-attainable",
         "agt-102-portfolio-backlog-agent-declared-only-12-attainable",
@@ -5267,6 +5264,9 @@
         "agt-111-investment-analysis-agent-declared-only-12-attainable",
         "agt-112-gap-analysis-agent-declared-only-12-attainable",
         "agt-113-scope-agreement-agent-declared-only-12-attainable",
+        "agt-120-product-backlog-prioritization-agent-declared-only-12-attainable",
+        "agt-121-architecture-definition-agent-declared-only-12-attainable",
+        "agt-122-roadmap-assembly-agent-declared-only-12-attainable",
         "assignto-health"
       ]
     },
