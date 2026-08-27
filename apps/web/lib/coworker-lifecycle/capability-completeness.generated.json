@@ -9599,7 +9599,7 @@
           "level": 1,
           "directSkills": 0,
           "wildcardSkills": 5,
-          "reachableTools": 129,
+          "reachableTools": 130,
           "heldGrants": [
             "consumer_read",
             "registry_read",
@@ -9613,7 +9613,7 @@
           ],
           "services": 0,
           "unbackedSkillIds": [],
-          "detail": "no skill authored for it (5 wildcard only), 129 reachable tool(s)",
+          "detail": "no skill authored for it (5 wildcard only), 130 reachable tool(s)",
           "levelKey": "declared",
           "ceiling": 3,
           "atCeiling": false
@@ -9655,7 +9655,7 @@
           "plane": "toolsAndSkills",
           "level": 1,
           "ceiling": 3,
-          "detail": "no skill authored for it (5 wildcard only), 129 reachable tool(s)"
+          "detail": "no skill authored for it (5 wildcard only), 130 reachable tool(s)"
         },
         {
           "plane": "evidence",
@@ -12002,7 +12002,7 @@
           "level": 2,
           "directSkills": 7,
           "wildcardSkills": 5,
-          "reachableTools": 68,
+          "reachableTools": 69,
           "heldGrants": [
             "marketing_read",
             "marketing_write",
@@ -12013,7 +12013,7 @@
           "unbackedSkillIds": [
             "marketing-collaboration-intake"
           ],
-          "detail": "7 skill(s), 68 tool(s); 1 service backing skill(s) missing: marketing-collaboration-intake",
+          "detail": "7 skill(s), 69 tool(s); 1 service backing skill(s) missing: marketing-collaboration-intake",
           "levelKey": "reachable",
           "ceiling": 3,
           "atCeiling": false
@@ -12043,7 +12043,7 @@
           "plane": "toolsAndSkills",
           "level": 2,
           "ceiling": 3,
-          "detail": "7 skill(s), 68 tool(s); 1 service backing skill(s) missing: marketing-collaboration-intake"
+          "detail": "7 skill(s), 69 tool(s); 1 service backing skill(s) missing: marketing-collaboration-intake"
         }
       ],
       "blockedPlanes": [
