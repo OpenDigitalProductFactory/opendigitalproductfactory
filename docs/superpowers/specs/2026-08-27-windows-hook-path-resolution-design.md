@@ -116,3 +116,29 @@ regression is the pre-change behaviour, which is what ships today.
 The one behavioural change beyond the fix is that a genuinely non-git context
 now prints two warnings during `postinstall`. That is intended: an install
 that cannot converge its hooks should say so.
+
+## Implementation sequence
+
+Single phase, single commit — recorded here rather than as a separate plan
+document. A `docs/superpowers/plans/` file would carry one deliverable mapping
+1:1 to BI-5CBDC146 with nothing deferred, so it would add the plan-backlog
+coverage gate without adding governance value. The backlog item is the unit of
+deferred work; there is none.
+
+1. Regression guards first, red: `scripts/lib/hooks-dir.test.mjs`. The
+   source-level assertion (that `set-hooks-path.mjs` never reads `.pathname`
+   off a module URL) is what makes this enforceable on Linux CI, where the
+   runtime defect is unreproducible.
+2. Add `scripts/lib/hooks-dir.mjs`.
+3. Correct `set-hooks-path.mjs`: resolve once, pass to both convergences,
+   replace both bare catches with catches that warn and name the consequence.
+4. Fix the adjacent pre-existing NTFS exec-bit assertion in
+   `ensure-pre-push-hook.test.mjs`; the POSIX assertion is unchanged.
+5. Register the new test in `scripts/lib/ci-policy-guards.mjs`. The inventory
+   is hand-enumerated with no glob: an omitted test never runs, and a green PR
+   says nothing about it.
+
+## Rollback
+
+Single revert. Reverting restores the pre-change behaviour, which is what
+ships today.
