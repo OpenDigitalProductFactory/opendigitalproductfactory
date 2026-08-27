@@ -108,6 +108,12 @@ bind the immutable plan to the approved scope.
 - [x] The implementation transition is allowed by
   `initiative-readiness.v2` decision `IRD-8432E5CC89D3`; research and plan are
   both current and no unmet condition remains.
+- [x] Exact-tree semantic identity `b8df549151999ebad68bb7b2535100e23e3b75ba`
+  produced receipt `cmtc3a9ui054c01k3b1nkjpah`, but policy classified it as
+  an auto-pass below the independent-review activation threshold. It is
+  preserved as evidence and is not used as the runtime-code publication gate;
+  the succeeding immutable identity requests an actual Change Reviewer at the
+  high-risk threshold.
 - [x] Bootstrap attempts are recorded honestly: the current-main BI-SIG preview
   supplied the exact immutable reader/writer surface, but TaskRun
   `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-B48A7E92B214` stopped before
