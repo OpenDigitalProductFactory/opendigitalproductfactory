@@ -37,6 +37,11 @@ const GUARD_SCRIPTS = [
   "spec-plan-doc-precheck.mjs",
   "design-grounding-precheck.mjs",
   "tool-economy-precheck.mjs",
+  // BI-0B292D84: AGENTS.md 12 requires a Workroom claim before work on every
+  // surface. This list is HAND-ENUMERATED, so a guard absent from it passes the
+  // both-planes parity check vacuously - the same enumeration trap as the CI
+  // test inventory. A new guard must be added here or it is only half-wired.
+  "workroom-claim-guard.mjs",
 ];
 const WRITE_TOOLS = ["Write", "Edit", "MultiEdit"];
 

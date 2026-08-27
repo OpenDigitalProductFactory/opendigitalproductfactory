@@ -517,6 +517,14 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "--test",
         "packages/dpf-skill-pack/hooks/plugin-hooks-wired.test.mjs",
       ),
+      // BI-0B292D84: AGENTS.md 12 requires a Workroom claim before work on
+      // every surface. It was prose - 30 of 79 live worktree branches carried
+      // no WorkCapsule binding when measured 2026-08-26. Hand-enumerated like
+      // every entry here: unlisted = never run.
+      node(
+        "--test",
+        "packages/dpf-skill-pack/hooks/workroom-claim-guard.test.mjs",
+      ),
       node(
         "--test",
         "packages/dpf-skill-pack/hooks/uncommitted-work-guard.test.mjs",
