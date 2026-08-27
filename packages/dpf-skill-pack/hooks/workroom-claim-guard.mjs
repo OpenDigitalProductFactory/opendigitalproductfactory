@@ -81,10 +81,17 @@ function currentBranch(cwd) {
 }
 
 function readMarker(cwd) {
-  const commonDir = git(cwd, ["rev-parse", "--path-format=absolute", "--git-common-dir"]);
-  if (!commonDir) return { marker: null, lookupFailed: true };
+  // --git-dir, NOT --git-common-dir. The common dir is SHARED by every worktree
+  // of the repo (D:/repo/.git), so a marker written there would be read by all
+  // of them and only one branch could ever hold a claim across the whole
+  // estate. --git-dir is per-worktree (D:/repo/.git/worktrees/<name>), which is
+  // the right scope: one claim per working tree, exactly matching
+  // "one thread = one branch + one worktree". In the root clone the two paths
+  // coincide, which is harmless — the root sits on main and main is exempt.
+  const gitDir = git(cwd, ["rev-parse", "--path-format=absolute", "--git-dir"]);
+  if (!gitDir) return { marker: null, lookupFailed: true };
   try {
-    return { marker: parseClaimMarker(readFileSync(path.join(commonDir, CLAIM_MARKER_NAME), "utf8")), lookupFailed: false };
+    return { marker: parseClaimMarker(readFileSync(path.join(gitDir, CLAIM_MARKER_NAME), "utf8")), lookupFailed: false };
   } catch (err) {
     // ENOENT is a real answer: no claim was ever recorded here. Anything else
     // (permissions, IO) is us being unable to tell, which is not the same thing.

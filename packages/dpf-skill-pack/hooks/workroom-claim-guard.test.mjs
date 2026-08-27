@@ -207,3 +207,23 @@ test("the guard reads the normalized camelCase payload keys, not the raw snake_c
     .filter((line) => /payload\.tool_(name|input)/.test(line));
   assert.deepEqual(offending, [], "guard must read payload.toolName/payload.toolInput (hook-io normalizePayload)");
 });
+
+test("the claim marker is scoped PER WORKTREE, not to the shared git dir", () => {
+  // --git-common-dir is shared by every worktree of the repo, so a marker there
+  // would be read by all of them and only ONE branch could hold a claim across
+  // the whole estate — the opposite of "one thread = one branch + one worktree".
+  // --git-dir is per-worktree (.git/worktrees/<name>). Verified by hand: with a
+  // matching marker the guard is silent; with an expired lease or a marker for
+  // another branch it denies.
+  const source = readFileSync(guardPath, "utf8");
+  const code = source.split(/\r?\n/).filter((line) => !line.trimStart().startsWith("//"));
+  assert.ok(
+    code.some((line) => line.includes('"--git-dir"')),
+    "the marker must be read from the per-worktree --git-dir",
+  );
+  assert.deepEqual(
+    code.filter((line) => line.includes('"--git-common-dir"')),
+    [],
+    "the marker must NOT be read from the shared --git-common-dir",
+  );
+});
