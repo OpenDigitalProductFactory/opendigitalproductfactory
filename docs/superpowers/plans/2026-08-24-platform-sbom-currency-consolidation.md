@@ -136,6 +136,8 @@ Task `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-17ACD0131CAE` reproduced the sam
 - Umbrella BI: `BI-7D2C4F02`
 - Deliverable: `platform-sbom-currency-consolidation` → `BI-7D2C4F02`
 - Dependencies: none
+- Requirement baseline: `OBJ-PSCC-001`, `OBJ-PSCC-002`, `OBJ-PSCC-003`, `OBJ-PSCC-004`, `OBJ-PSCC-005`
+- Verification baseline: `AC-PSCC-001`, `AC-PSCC-002`, `AC-PSCC-003`, `AC-PSCC-004`, `AC-PSCC-005`, `AC-PSCC-006`, `AC-PSCC-007`, `AC-PSCC-008`, `AC-PSCC-009`, `AC-PSCC-010`, `AC-PSCC-011`
 - Research receipt: `initiative-2345de97-e10a-4aa5-8069-afb6a31e2470` (`pass`)
 - Spec-approval baseline: `baseline-08cecc05-02ef-4bf1-bfae-f250fc5e6da0` (`pass`)
 - Coverage receipt: pending the exact atomic coverage mapping; do not implement until it is recorded
