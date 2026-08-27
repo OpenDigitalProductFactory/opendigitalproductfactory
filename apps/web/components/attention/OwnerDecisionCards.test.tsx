@@ -1,7 +1,12 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+// Deciding a card has to move the header count, not only the card
+// (BI-79E207B9), so the actions re-render the server tree.
+const refresh = vi.hoisted(() => vi.fn());
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
 
 import { OwnerDecisionCards } from "./OwnerDecisionCards";
 import type { OwnerAttentionEntry } from "@/lib/attention/owner-projection";

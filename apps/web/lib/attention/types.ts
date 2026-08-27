@@ -225,3 +225,22 @@ export type AttentionItem = {
    * the `coworker-envelope` source (BI-7CB2CCDE). */
   envelope?: AttentionEnvelopeApproval;
 };
+
+/**
+ * Blast-radius strings that name nothing concrete (BI-79E207B9).
+ *
+ * A source that cannot say what is actually blocked writes one of these. They
+ * read as vague in owner copy, and they are the evidence that a decision has no
+ * owner-facing consequence yet — so both the copy layer and the routing layer
+ * read this one set rather than each keeping its own list.
+ */
+export const GENERIC_BLAST_RADIUS: ReadonlySet<string> = new Set([
+  "a coworker task",
+  "a coworker waiting on approval",
+]);
+
+/** True when an item names no concrete consequence. Pure. */
+export function namesNoConcreteConsequence(blastRadius: string | null | undefined): boolean {
+  const value = (blastRadius ?? "").trim().toLowerCase();
+  return value.length === 0 || GENERIC_BLAST_RADIUS.has(value);
+}

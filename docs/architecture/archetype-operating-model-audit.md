@@ -174,7 +174,13 @@ Independent of archetype, because each has now failed at least once:
 
 - **The arrival surface.** Open the product as a worker starting a shift. Is what it demands the
   business's work? Count the items and classify them; an owner's attention list that is mostly
-  platform housekeeping is a defect with a number attached.
+  platform housekeeping is a defect with a number attached. *The rescue's number was 34 of 40, and
+  the classification is what fixed it: every one of the 34 was a paused platform task run carrying
+  the placeholder blast radius `a coworker task`. Resolved 2026-08-27 on `BI-79E207B9` by a rule
+  worth reusing —* **a source that cannot name what is actually blocked has not established that
+  the decision is the owner's**, *so it routes to the custodian instead of the owner's count. Ask
+  of every item on an arrival surface: what does this say is waiting? If the answer is a
+  placeholder, the item is someone else's.*
 - **Staffing.** Can the archetype hire the roles its day requires — by title, employment type and
   work location? Can a vacancy be opened at all? Are the roles on offer this business's roles, or
   the platform's?

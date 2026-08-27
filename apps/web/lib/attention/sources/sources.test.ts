@@ -150,6 +150,43 @@ describe("pausedAiToAttentionItem", () => {
     });
   });
 
+  // Thirty-four of these rendered the identical body — "A coworker paused and
+  // needs your input to continue" — with no way to tell them apart, while every
+  // run named itself in the database (BI-79E207B9).
+  it("says which run this is when the run left no summary", () => {
+    const first = pausedAiToAttentionItem({
+      ...base,
+      taskRunId: "TR-A",
+      title: "spec-approval for BI-7D2C4F02",
+      progressPayload: null,
+    });
+    const second = pausedAiToAttentionItem({
+      ...base,
+      taskRunId: "TR-B",
+      title: "Record the research gate for BI-2DB7254B",
+      progressPayload: null,
+    });
+
+    expect(first.context).toContain("spec-approval for BI-7D2C4F02");
+    expect(second.context).toContain("Record the research gate for BI-2DB7254B");
+    expect(first.context).not.toEqual(second.context);
+  });
+
+  it("names the run on a credential block too", () => {
+    const item = pausedAiToAttentionItem({
+      ...base,
+      status: "auth-required",
+      title: "Summon AGT-WS-PORTFOLIO",
+      progressPayload: null,
+    });
+    expect(item.context).toContain("Summon AGT-WS-PORTFOLIO");
+    expect(item.context).toContain("credential");
+  });
+
+  it("still prefers the run's own summary when it wrote one", () => {
+    expect(pausedAiToAttentionItem(base).context).toBe("Ready to send to 4,000 recipients.");
+  });
+
   it("treats auth-required as a missing-credential review, not judgment or irreversible", () => {
     const item = pausedAiToAttentionItem({ ...base, status: "auth-required" });
     expect(item.triage.residueReason).toBe("needs-credential");
