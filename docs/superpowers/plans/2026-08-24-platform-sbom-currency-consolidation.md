@@ -112,11 +112,11 @@ Verification: runtime evidence, UX critique, and `pnpm pr:health` including revi
 
 ## Backlog coverage
 
-Coverage is deliberately atomic. Portfolio Advisor recorded the governed research pass as receipt `initiative-112cda8a-5968-429b-8279-cceced649456` against spec blob `4fecf1fe80bfee98e40489d0f7757b91522e431a` at commit `d021725d7e13ca512bc7e102e24ce42e1ba5d045`. The immutable coverage write remains blocked until an independent in-platform reviewer passes the design's `spec-approval` gate and establishes the initiative scope baseline. Record coverage immediately after that approval and before implementation begins.
+Coverage is deliberately atomic. Portfolio Advisor recorded research receipt `initiative-112cda8a-5968-429b-8279-cceced649456` against the earlier spec blob `4fecf1fe80bfee98e40489d0f7757b91522e431a`; it remains audit history but does not approve the materially revised architecture, UX, risk, and evidence contract. The revised immutable spec requires fresh research and independent `spec-approval` before the initiative scope baseline and coverage receipt can be recorded.
 
 - Decision: `atomic`
 - Umbrella BI: `BI-7D2C4F02`
 - Deliverable: `platform-sbom-currency-consolidation` → `BI-7D2C4F02`
 - Dependencies: none
-- Research receipt: `initiative-112cda8a-5968-429b-8279-cceced649456` (`pass`)
-- Coverage receipt: blocked on independent `spec-approval` and the initiative scope baseline; do not implement until both approval and this coverage receipt are recorded
+- Prior research receipt: `initiative-112cda8a-5968-429b-8279-cceced649456` (`pass`, superseded spec blob)
+- Coverage receipt: blocked on fresh research, independent `spec-approval`, and the initiative scope baseline; do not implement until all three are recorded
