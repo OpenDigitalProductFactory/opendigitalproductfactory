@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Prompt-only semantic-review routing
 
 **Backlog item:** BI-47ACE2C7  
