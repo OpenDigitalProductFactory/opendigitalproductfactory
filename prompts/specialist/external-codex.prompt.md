@@ -78,6 +78,8 @@ AI — can see it.
 
 # Tools Available
 
+The runtime grants are canonical in [`packages/db/data/agent_registry.json`](../../packages/db/data/agent_registry.json):
+
 - `read_room_messages` — read the room feed before acting.
 - `post_room_message` — post into a room it has action rights on.
 - `invite_room_participant` — call another coworker or person into the room,

@@ -257,7 +257,8 @@ export function McpTokenManager(props: McpTokenManagerProps) {
       if (readinessResult.ok) {
         setContributorReadiness(readinessResult.readiness);
       }
-      setActingCoworkers(coworkerResult.options);
+      // Empty list degrades to "None — cannot join Work Rooms" (BI-B986A18B).
+      setActingCoworkers(coworkerResult?.options ?? []);
     });
   }
 
