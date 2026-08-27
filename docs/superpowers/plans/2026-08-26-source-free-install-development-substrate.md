@@ -13,7 +13,7 @@ spec: docs/superpowers/specs/2026-08-26-source-free-install-development-substrat
 > implementation, `dpf-local-merge-ci-before-push` plus the plan's completion gate
 > before any success claim, and `dpf-pr-with-dco` for handoff.
 
-**Date:** 2026-08-26
+**Date:** 2026-08-26; reconciled with `main` 2026-08-27
 
 **Status:** review-ready; implementation starts only after design and plan approval
 
@@ -40,7 +40,8 @@ state-specific experience.
 - `sandbox_workspace`, Build Studio per-build worktrees, Workroom lease and
   evidence fields, and the shared worktree janitors.
 - `CodeGraphIndexState`, `CodeGraphFileHash`, `CodebaseManifest`, graph projection
-  registry/reconcilers, and PR #4711's boot invoker work.
+  registry/reconcilers, PR #4711's boot invoker, and PR #4719's default-branch
+  selection.
 - Consumer host profile, MCP instruction builder, minimal agent pointer, external
   operating contract, token-grant intersection, and `decisionScope`.
 - Existing `/ops/self-upgrade` action/orchestrator, `OwnerReleaseCard`, trigger,
@@ -50,25 +51,27 @@ state-specific experience.
 
 | Order | Deliverable | Backlog | Dependency |
 |---:|---|---|---|
-| 0 | Reconcile graph invoker work already in flight | BI-86EF5900 / PR #4711 | None |
+| 0 | Reconcile landed graph invoker/default-branch work | BI-86EF5900 / PRs #4711 and #4719 | None |
 | 1 | Publish and transactionally activate verified source baseline | BI-48951394 | Existing consumer release updater |
-| 2 | Align Workroom, tools, graph, manifests, and impact to one snapshot | BI-89CD90D4 | Slice 1; PR #4711 merged or explicitly rebased |
+| 2 | Align Workroom, tools, graph, manifests, and impact to one snapshot | BI-89CD90D4 | Slice 1; preserve merged PRs #4711 and #4719 |
 | 3 | Route agent instructions by engagement scope | BI-1BA8F46C | Slice 2 projection contract |
 | 4 | Complete Workroom liveness/reaping semantics | BI-9A353411 | Slice 2 identity/overlay semantics |
 | 5 | Simplify Platform updates UX | BI-705CA714 | Existing updater state projection; may run parallel to 1–4 |
 | 6 | Canonical source-free acceptance and rollout | BI-357792B1 | Slices 1–5 |
 
-## Slice 0 — reconcile related graph work
+## Slice 0 — reconcile landed graph work
 
-**Goal:** land or account for PR #4711 before touching projection invocation.
+**Goal:** preserve the graph repairs already on `main` and establish the remaining
+source-identity gap before touching projection invocation.
 
-1. Re-sweep open PRs and inspect #4711's final files and merge SHA.
-2. If merged, branch subsequent graph work from the new `main` and treat its
-   `refresh-projections` invoker as the registry entry point.
-3. If still open, avoid those files or coordinate the dependent change explicitly;
-   do not implement a second boot scheduler.
-4. Reproduce BI-86EF5900 against the canonical source-free install and capture
+1. Treat PR #4711 (`fe30d461c`) as the existing `refresh-projections` registry
+   invoker and PR #4719 (`b88cd81c2`) as the existing default-branch selector.
+2. Do not implement a second boot scheduler or regress graph selection to the
+   incidental host checkout branch.
+3. Reproduce BI-86EF5900 against the canonical source-free install and capture
    graph identity, file count, relationship families, and known-symbol queries.
+4. Record which failures remain source-identity/coverage defects after the two
+   landed repairs; use those observations as Slice 2's red acceptance fixtures.
 
 **Verification:** captured baseline distinguishes invocation coverage from source
 identity/freshness and names the exact release/worktree snapshot.
@@ -325,9 +328,8 @@ surface still promises `my-changes`, an auto-advancing source volume, or develop
 
 - Decision: decomposed
 - Parent: BI-357792B1
-- Receipt: pending — canonical runtime returned `gate-not-authorized` on the
-  correctly shaped `record_plan_backlog_coverage` call at immutable plan blob
-  `de75e2c742bd9cac88bdf4c18d9ea31928a3bdff`; no substitute receipt exists.
+- Receipt: to be recorded against the immutable reconciled plan commit before
+  this branch enters PR readiness.
 - Dependencies: release-baseline → snapshot-intelligence → agent-engagement and
   workroom-liveness; platform-updates-ux is parallel; canonical acceptance waits
   for all five independent slices.
@@ -336,28 +338,14 @@ surface still promises `my-changes`, an auto-advancing source volume, or develop
 - `agent-engagement` -> BI-1BA8F46C
 - `workroom-liveness` -> BI-9A353411
 - `platform-updates-ux` -> BI-705CA714
+- `canonical-acceptance` -> BI-357792B1 (integration-only; depends on all five
+  independent slices)
 
-The failure is the deployed form of the handler-shadowing defect fixed on `main`
-by PR #4700 (`6c166b1c8`): the runtime publishes the decomposition schema but
-executes the initiative-readiness gate handler. The independent review routes are
-also currently non-functional: TaskRuns
-`TR-MCP-Y21xamsxOWhsMDAwMDdwcnZzZm4ybTAzOQ-C62D9729E8AE` and
-`TR-MCP-Y21xamsxOWhsMDAwMDdwcnZzZm4ybTAzOQ-30AF8A0180B6` completed with zero
-tools because the selected architecture-review model returned an empty response;
-the design/spec reviewer TaskRuns
-`TR-MCP-Y21xamsxOWhsMDAwMDdwcnZzZm4ybTAzOQ-61BA89F8B2A8` and
-`TR-MCP-Y21xamsxOWhsMDAwMDdwcnZzZm4ybTAzOQ-CBFFDB47B77A` likewise completed
-with zero tools and wrote no receipts. These are enforcement blockers, not waived
-checks. After the live install advances past #4700 and the reviewer route can
-execute its required tools:
-
-1. replay research, design-spec, architecture-review, and spec-approval against
-   spec blob `93f76484788f8b2b931665a51b1b4ac5d1ef5065`;
-2. make any required review edits in a new immutable commit and repeat the
-   affected review gates;
-3. call `record_plan_backlog_coverage` once against the final plan blob;
-4. replace this blocked record with the live receipt and validate it through
-   `check_plan_backlog_coverage` before implementation.
+The earlier handler-shadowing and reviewer-routing failures were transient
+delivery blockers, not design decisions. They are intentionally absent from the
+execution contract. This branch may advance only when the canonical runtime
+mints and revalidates a live coverage receipt for the final deliverable graph and
+the independent initiative reviews are durable.
 
 ## Approval boundary
 
