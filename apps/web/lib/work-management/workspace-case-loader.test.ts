@@ -94,6 +94,71 @@ describe("workspace Work Case loader", () => {
     expect(decodeWorkCaseKey(key)).toEqual({ sourceType: "manual-task", sourceId: "WI:42" });
   });
 
+  // BI-2310EEE1 — the list and the room must derive one state. A queued WorkItem
+  // projects "intake"; a completed capsule anchored to it projects "resolved". Before
+  // the fix the list (WorkItem only) showed "intake" while the room (with the capsule)
+  // showed "resolved" — the exact dogfood symptom "list says Intake, room says Resolved".
+  it("list and room agree on state when a capsule out-projects the WorkItem", async () => {
+    const item = {
+      ...baseItem,
+      id: "row-cap",
+      itemId: "WI-CAP",
+      sourceType: "work-capsule",
+      sourceId: "WC-9",
+      title: "Coding carrier",
+      status: "queued",
+      assignedToUserId: "user-1",
+    };
+    const prismaClient: WorkspaceCasePrismaClient = {
+      workItem: { findMany: async () => [item], findFirst: async () => item },
+      workItemMessage: { findMany: async () => [] },
+      workroom: {
+        findMany: async () => [{ workItemId: "row-cap", capsuleId: "WC-9", status: "complete", title: "Coding carrier" }],
+      },
+    };
+    const now = new Date("2026-06-28T12:00:00.000Z");
+    const list = await loadWorkspaceWorkCaseLens({ prismaClient, userId: "user-1", now });
+    const detail = await loadWorkspaceWorkCaseDetail({
+      prismaClient,
+      caseKey: encodeWorkCaseKey({ sourceType: "work-capsule", sourceId: "WC-9" }),
+      userId: "user-1",
+      now,
+    });
+
+    expect(list.cases[0]?.state).toBe("resolved");
+    expect(list.cases[0]?.state).toBe(detail?.summary.state);
+  });
+
+  // The "Active" tile counts state === active | verifying. A verifying capsule the list
+  // could not previously see read as 0 beside a listed room; now the list sees it.
+  it("the Active tile counts a verifying capsule the list can now see", async () => {
+    const item = {
+      ...baseItem,
+      id: "row-v",
+      itemId: "WI-V",
+      sourceType: "work-capsule",
+      sourceId: "WC-V",
+      title: "Coding carrier",
+      status: "queued",
+      assignedToUserId: "user-1",
+    };
+    const prismaClient: WorkspaceCasePrismaClient = {
+      workItem: { findMany: async () => [item], findFirst: async () => item },
+      workItemMessage: { findMany: async () => [] },
+      workroom: {
+        findMany: async () => [{ workItemId: "row-v", capsuleId: "WC-V", status: "verifying", title: "Coding carrier" }],
+      },
+    };
+    const list = await loadWorkspaceWorkCaseLens({
+      prismaClient,
+      userId: "user-1",
+      now: new Date("2026-06-28T12:00:00.000Z"),
+    });
+
+    expect(list.cases[0]?.state).toBe("verifying");
+    expect(list.stats.active).toBe(1);
+  });
+
   it("loads evidence-first detail from the same projected source", async () => {
     const detail = await loadWorkspaceWorkCaseDetail({
       prismaClient: prismaFor([baseItem]),
