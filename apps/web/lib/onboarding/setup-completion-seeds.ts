@@ -14,6 +14,7 @@ import { seedPortfolioDecomposition } from "./seed-portfolio-decomposition";
 import { seedMarketOffer } from "./seed-market-offer";
 import { seedOrgOperatingModelPages } from "./seed-org-operating-model-pages";
 import { seedRiskPosture } from "./seed-risk-posture";
+import { seedArchetypeWorkforce } from "./seed-archetype-workforce";
 import { applyRiskEnvelopeToOrgProfile } from "./apply-risk-envelope-to-profile";
 import { applyMissionPrompt } from "./apply-mission-prompt";
 
@@ -21,8 +22,8 @@ import { applyMissionPrompt } from "./apply-mission-prompt";
  * Persist the captured mission into the company-mission prompt (visible to
  * every coworker), seed the per-org WWWD corpus, persist the per-org portfolio
  * decomposition (BI-2D452667), seed the archetype-derived market offer into
- * the Goods and Services for Sale portfolio (BI-4503E6B9), project archetype
- * supply, and apply the seeded risk posture to the org WWWD profile.
+ * the Goods and Services for Sale portfolio (BI-4503E6B9), apply the archetype's
+ * worker classes and work locations (BI-A30152B6), project archetype supply, and apply the seeded risk posture to the org WWWD profile.
  *
  * Idempotent — safe to re-run on setup re-completion, replay, or boot backfill.
  */
@@ -36,6 +37,10 @@ export async function runSetupCompletionSeeds(organizationId: string): Promise<v
   await seedOrgWwwdCorpus({ organizationId });
   await seedPortfolioDecomposition({ organizationId });
   await seedMarketOffer({ organizationId });
+  // The active archetype's worker classes and work locations. Runs here so an
+  // install that completed setup before this existed acquires them on the next
+  // boot backfill (BI-A30152B6).
+  await seedArchetypeWorkforce({ organizationId });
   await projectArchetypeSupply({ organizationId });
   // Runs after the portfolio/market/supply seeds so the persisted operating-
   // model map it reads is complete (BI-44526F3E Phase B).

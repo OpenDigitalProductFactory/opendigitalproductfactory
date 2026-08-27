@@ -17,6 +17,36 @@ const DONATION_FORM_FIELDS = [
   { name: "notes", label: "Message", type: "textarea" as const, required: false },
 ];
 
+// Who does an animal-welfare day, and where (BI-A30152B6, requirements §5b of
+// docs/architecture/archetypes/pet-rescue-operating-model.md).
+//
+// Running the rescue for a day found the platform's answers were an office
+// business's answers. A shelter's largest labour pool is volunteers, unpaid and
+// shift-based; foster carers are a second unpaid class who house animals
+// off-site. Neither is full-time, part-time or contractor. And "where do you
+// work" is a ward, a cat room, isolation, the surgery, a foster home or an
+// offsite adoption event — headquarters / hybrid / remote does not describe
+// anywhere an animal lives.
+//
+// `classification` is set only where the label states the legal axis outright.
+// A foster carer houses an animal unpaid on the shelter's behalf, which §5b
+// records as the second unpaid class; anything an operator pays differently is
+// theirs to record, not the seed's to guess.
+const ANIMAL_WELFARE_WORKFORCE_PROFILE = {
+  employmentTypes: [
+    { employmentTypeId: "emp-foster-carer", name: "Foster carer", classification: "volunteer" as const },
+  ],
+  workLocations: [
+    { locationId: "loc-dog-ward", name: "Dog ward", locationType: "ward" },
+    { locationId: "loc-cat-room", name: "Cat room", locationType: "ward" },
+    { locationId: "loc-isolation", name: "Isolation", locationType: "ward" },
+    { locationId: "loc-intake", name: "Intake", locationType: "ward" },
+    { locationId: "loc-surgery", name: "Surgery", locationType: "clinical" },
+    { locationId: "loc-foster-home", name: "Foster home", locationType: "offsite-host" },
+    { locationId: "loc-adoption-event", name: "Offsite adoption event", locationType: "offsite-event" },
+  ],
+};
+
 const ANIMAL_WELFARE_ACTIVATION_PROFILE = {
   profileType: "standard",
   modules: [],
@@ -254,6 +284,7 @@ export const nonprofitCommunityArchetypes: ArchetypeDefinition[] = [
     ],
     formSchema: DONATION_FORM_FIELDS,
     activationProfile: ANIMAL_WELFARE_ACTIVATION_PROFILE,
+    workforceProfile: ANIMAL_WELFARE_WORKFORCE_PROFILE,
   },
   {
     archetypeId: "animal-shelter",
@@ -277,6 +308,7 @@ export const nonprofitCommunityArchetypes: ArchetypeDefinition[] = [
     ],
     formSchema: DONATION_FORM_FIELDS,
     activationProfile: ANIMAL_SHELTER_ACTIVATION_PROFILE,
+    workforceProfile: ANIMAL_WELFARE_WORKFORCE_PROFILE,
   },
   {
     archetypeId: "community-shelter",
