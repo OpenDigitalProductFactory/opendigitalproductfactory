@@ -1,9 +1,13 @@
+---
+status: draft
+---
+
 # Model-era doctrine curation: A/B measurement design
 
 - **Backlog item:** BI-58F6755A
 - **Epic:** EP-1FABA22D (Purpose-Aware Installation and Ecosystem Productivity)
 - **Date:** 2026-08-26
-- **Status:** design — measurement not yet run
+- **Measurement:** designed, not yet run
 - **Re-opens:** DI-F844365B0DCC (front-loading over progressive disclosure), on its own model-era contingency marker
 
 ## 1. Why this measurement exists
@@ -78,7 +82,7 @@ Committing to the rule in advance is what stops the result being re-narrated aft
 ## 7. Research and benchmarking
 
 - **Anthropic (Claude Code, Opus 5 release).** Deleted ~80% of the system prompt; explicit guidance to periodically delete `CLAUDE.md`, skills and hooks and observe the result. Adopted: the model-era review cadence, and the deletion experiment as a measurement. Rejected: blanket deletion — see §8.
-- **Ratchet-style budget guards** (`check-module-size.mjs`, and this repo's `check-instruction-plane-size.mjs`, BI-0020D511). Adopted: extend the existing ratchet rather than add a second mechanism. The guard already measured skill descriptions as a second always-on tier, so this work recalibrated its budget instead of building a parallel one.
+- **Ratchet-style budget guards** (`scripts/check-module-size.mjs`, and this repo's `scripts/check-instruction-plane-size.mjs`). Adopted: extend the existing ratchet rather than add a second mechanism. The guard already measured skill descriptions as a second always-on tier, so this work recalibrated its budget instead of building a parallel one.
 - **A/B evaluation practice for prompt changes** — fixed task set, blinded rating, pre-registered decision rule. Adopted wholesale. The pre-registered decision rule in §6 is the part most often skipped, and the part that makes the result binding.
 
 ## 8. What this design deliberately does not do
