@@ -42,7 +42,23 @@ The governed semantic reviewer routes according to the request it actually sends
 - Deliverable: prompt-only semantic-review eligibility contract -> `BI-47ACE2C7`
 - Rationale: the failing contract test and its two-file routing repair are one independently revertible invariant. Splitting them would create either an unguarded behavior change or a test with no delivery value.
 - Dependencies: none for source implementation. Protected deployment is the prerequisite for BI-SIG-463E478D, BI-F48D7059, and BI-A45D744A to resume.
-- Receipt: pending immutable plan coverage recording.
+- Receipt: pending the independent `spec-approval` baseline and immutable plan coverage recording.
+
+### Four-way traceability
+
+The single atomic deliverable covers all baseline objectives and acceptance
+statements. These identifiers are repeated verbatim so the coverage writer can
+bind the immutable plan to the approved scope.
+
+- Requirements: `OBJ-PSR-001`, `OBJ-PSR-002`, `OBJ-PSR-003`
+- Contracts: `CONTRACT-PSR-001` (request capabilities come from the concrete
+  tool surface), `CONTRACT-PSR-002` (context eligibility includes both prompts,
+  response reserve, and proportional headroom)
+- Flow: `FLOW-PSR-001` (`dispatchRoutedSemanticReview` constructs the bounded
+  prompt-only contract, `routeAndCall` selects an eligible endpoint, and the
+  existing reviewer fan-out produces the fail-closed disposition)
+- Verification: `AC-PSR-001`, `AC-PSR-002`, `AC-PSR-003`, `AC-PSR-004`,
+  `AC-PSR-005`, `AC-PSR-006`
 
 ## TDD implementation
 

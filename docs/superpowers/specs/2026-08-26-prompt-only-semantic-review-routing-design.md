@@ -64,20 +64,24 @@ The semantic-review route must describe the request it actually sends.
 | Endpoint selection -> verdict | Endpoint eligibility cannot turn an incomplete reviewer branch into PASS. |
 | Author -> reviewer | Independent semantic review and immutable artifact identity remain required. |
 
-## Acceptance criteria
+## Governed scope manifest
 
-1. A prompt-only semantic review can select an otherwise eligible long-context
-   endpoint whose profile reports `supportsToolUse=false`.
-2. Attaching any tool restores the canonical tool-use capability requirement.
-3. A bounded prompt that fits within a 24,576-token endpoint is not rejected by
-   a fixed 32,000-token floor.
-4. An oversized prompt remains ineligible; the repair cannot collapse context
-   safety to a permissive constant.
-5. All required reviewer branches remain mandatory and incomplete execution is
-   infrastructure-inconclusive, never PASS.
-6. Focused tests, typecheck, source preflight, independent semantic review,
-   exact-tree local CI, DCO, protected merge, deployment, and one live routing
-   verification succeed.
+- **OBJ-PSR-001:** Route semantic reviews from the capabilities of the concrete
+  request, so a prompt-only review does not require native tool use while any
+  future tool-bearing review still does.
+- **OBJ-PSR-002:** Derive a bounded context floor from both prompts, response
+  reserve, and proportional safety headroom instead of a fixed unrelated floor.
+- **OBJ-PSR-003:** Preserve independent reviewer branches, confidentiality,
+  residency, model quality, immutable evidence, and fail-closed dispositions.
+
+| Acceptance ID | Objective IDs | Acceptance statement |
+|---|---|---|
+| AC-PSR-001 | OBJ-PSR-001 | A prompt-only semantic review can select an otherwise eligible long-context endpoint whose profile reports `supportsToolUse=false`. |
+| AC-PSR-002 | OBJ-PSR-001 | Attaching any tool restores the canonical tool-use capability requirement. |
+| AC-PSR-003 | OBJ-PSR-002 | A bounded prompt that fits within a 24,576-token endpoint is not rejected by a fixed 32,000-token floor. |
+| AC-PSR-004 | OBJ-PSR-002 | An oversized prompt remains ineligible; the repair cannot collapse context safety to a permissive constant. |
+| AC-PSR-005 | OBJ-PSR-003 | All required reviewer branches remain mandatory and incomplete execution is infrastructure-inconclusive, never PASS. |
+| AC-PSR-006 | OBJ-PSR-001, OBJ-PSR-002, OBJ-PSR-003 | Focused tests, typecheck, source preflight, independent semantic review, exact-tree local CI, DCO, protected merge, deployment, and one live routing verification succeed. |
 
 ## Blast radius and rollback
 
