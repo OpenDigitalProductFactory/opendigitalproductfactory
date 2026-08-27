@@ -1,6 +1,6 @@
 ---
 name: dpf-capture-kernel-gap
-description: "Use in the DPF codebase when WWMD/kernel cannot answer a decision because principles, ownership, evidence, or domain context are missing. Captures the gap for founder review without bypassing governed MCP scope."
+description: "Use when the DPF kernel cannot answer a decision because principles, ownership, evidence, or domain context are missing."
 disable-model-invocation: false
 user-invocable: true
 allowed-tools: mcp__dpf__save_build_notes mcp__dpf__create_backlog_item

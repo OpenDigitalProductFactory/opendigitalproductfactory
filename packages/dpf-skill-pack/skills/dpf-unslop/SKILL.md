@@ -1,6 +1,6 @@
 ---
 name: dpf-unslop
-description: "Use before handing written output to a person — a PR body, backlog item, alert, wiki draft, spec, commit message, or coworker reply. Strips the tells that make text read as machine-written: puffery, superficial -ing clauses, chatbot filler, and sentences that would read identically in any other project's docs."
+description: "Use before handing written output to a person — a PR body, backlog item, alert, wiki draft, spec, commit message, or coworker reply."
 disable-model-invocation: false
 user-invocable: true
 allowed-tools: Read Edit Grep
