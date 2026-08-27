@@ -108,3 +108,26 @@ contract without data repair.
 
 See
 [`../plans/2026-08-26-prompt-only-semantic-review-routing.md`](../plans/2026-08-26-prompt-only-semantic-review-routing.md).
+
+## Implementation (delivered)
+
+`apps/web/lib/change-review/semantic-review-context-floor.ts` — one pure
+helper, `semanticReviewMinimumContextTokens({ systemPrompt, userPrompt })`,
+plus its three named constants:
+
+| Constant | Value | Why |
+|---|---|---|
+| `SEMANTIC_REVIEW_RESPONSE_RESERVE_TOKENS` | 4096 | the reviewer's JSON verdict is a fixed allowance, not a ratio of input |
+| `SEMANTIC_REVIEW_HEADROOM_RATIO` | 0.25 | absorbs the ~chars/4 estimator's error on diff-heavy input |
+| `SEMANTIC_REVIEW_MIN_CONTEXT_TOKENS` | 8192 | a one-line diff must not make a toy window look eligible |
+
+Token estimation reuses the canonical `estimatePromptTokens` (~chars/4) from
+`@/lib/build/opencode-task-context-budget` rather than adding a fourth copy of
+the heuristic.
+
+`dispatchRoutedSemanticReview` drops `minimumCapabilities: { toolUse: true }`
+and replaces `agentMinimumContextTokens: 32_000` with the derived floor. This
+narrows a claim rather than weakening a check: `routeAndCall` still infers the
+tool-use requirement from `options.tools`, so a future tool-bearing review is
+unaffected, and a review whose prompts genuinely exceed an endpoint's window
+still fails closed with observable exclusion reasons (OBJ-PSR-003).
