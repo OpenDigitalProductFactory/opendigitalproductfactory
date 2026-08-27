@@ -25,7 +25,7 @@ import {
   recordMarketingStrategistReview,
 } from "@/lib/marketing";
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
-import { planUpcomingMarketingDraftsHandler } from "./marketing-cadence-handler";
+import { planUpcomingMarketingDraftsHandler } from "../marketing-cadence-handler";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
 const definitions: ToolDefinition[] = [

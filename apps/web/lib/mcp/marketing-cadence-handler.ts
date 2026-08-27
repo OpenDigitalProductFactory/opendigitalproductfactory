@@ -1,6 +1,9 @@
 // Marketing cadence handler (BI-C26FE785), extracted from marketing-ops-pack.ts
-// to keep that pack under the module-size ceiling. Follows the same
-// one-handler-per-sibling shape as backlog-update-item-handler.ts.
+// to keep that pack under the module-size ceiling. Lives beside the other
+// lib/mcp/*-handler(s).ts modules (build-design-review-handler,
+// deliberation-handlers) rather than inside packs/, so it does not inflate the
+// tool-surface pack count with a file that defines no tools. Follows the same
+// one-handler-per-module shape as those siblings.
 //
 // This is the seam where the marketing-campaign proactivity posture becomes an
 // actual scheduling decision. The boundary it honours: cadence only. Deciding
