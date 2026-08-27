@@ -37,12 +37,19 @@
 // Emergency bypass: prefix the command with DPF_ALLOW_UNCLAIMED_WORK=1.
 
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { readHookPayload, isShellTool, emitDeny, emitContext, inDpfWorkspace, shellCommandFromInput } from "./lib/hook-io.mjs";
-import { CLAIM_MARKER_NAME, classifyClaim, denyGuidance, parseClaimMarker } from "./lib/workroom-claim-lookup.mjs";
+import {
+  CLAIM_MARKER_NAME,
+  NUDGE_STAMP_NAME,
+  classifyClaim,
+  denyGuidance,
+  parseClaimMarker,
+  shouldNudge,
+} from "./lib/workroom-claim-lookup.mjs";
 
 const GIT_TIMEOUT_MS = 3_000;
 
@@ -78,6 +85,39 @@ function git(cwd, args) {
 function currentBranch(cwd) {
   const ref = git(cwd, ["symbolic-ref", "--quiet", "--short", "HEAD"]);
   return ref || null;
+}
+
+/** Absolute path of THIS worktree's private git dir, or null. */
+function worktreeGitDir(cwd) {
+  return git(cwd, ["rev-parse", "--path-format=absolute", "--git-dir"]);
+}
+
+/**
+ * Read the nudge stamp: when this worktree was last told it has no claim, and
+ * for which branch. Unreadable reads as "never nudged" — an extra advisory is
+ * cheap, a suppressed one is the bug.
+ */
+function readNudgeStamp(gitDir) {
+  if (!gitDir) return { stampMs: null, stampBranch: null };
+  try {
+    const raw = JSON.parse(readFileSync(path.join(gitDir, NUDGE_STAMP_NAME), "utf8"));
+    const at = typeof raw?.at === "string" ? Date.parse(raw.at) : NaN;
+    return {
+      stampMs: Number.isFinite(at) ? at : null,
+      stampBranch: typeof raw?.branch === "string" ? raw.branch : null,
+    };
+  } catch {
+    return { stampMs: null, stampBranch: null };
+  }
+}
+
+function writeNudgeStamp(gitDir, branch, nowIso) {
+  if (!gitDir) return;
+  try {
+    writeFileSync(path.join(gitDir, NUDGE_STAMP_NAME), JSON.stringify({ branch, at: nowIso }), "utf8");
+  } catch {
+    /* best-effort: an unwritable stamp just means we nudge again next time */
+  }
 }
 
 function readMarker(cwd) {
@@ -132,8 +172,22 @@ function main() {
   }
 
   const guidance = denyGuidance(verdict);
+
+  // A refusal is NEVER throttled: a gate that declines to refuse because it
+  // refused recently is not a gate.
   if (process.env.DPF_WORKROOM_CLAIM_ENFORCE === "1") emitDeny(guidance);
-  emitContext(`[workroom-claim-guard] ${guidance} (advisory until bind-at-birth lands — set DPF_WORKROOM_CLAIM_ENFORCE=1 to refuse instead)`);
+
+  // The advisory IS throttled. This guard fires on every edit to any file on an
+  // unclaimed branch, so repeating a 700-character message per edit would bury
+  // the agent's context in text it has already read — and make this the guard
+  // people switch off.
+  const now = new Date();
+  const gitDir = worktreeGitDir(cwd);
+  const { stampMs, stampBranch } = readNudgeStamp(gitDir);
+  if (shouldNudge({ stampMs, stampBranch, branch: verdict.branch, nowMs: now.getTime() })) {
+    writeNudgeStamp(gitDir, verdict.branch, now.toISOString());
+    emitContext(`[workroom-claim-guard] ${guidance} (advisory until bind-at-birth lands — set DPF_WORKROOM_CLAIM_ENFORCE=1 to refuse instead)`);
+  }
   process.exit(0);
 }
 

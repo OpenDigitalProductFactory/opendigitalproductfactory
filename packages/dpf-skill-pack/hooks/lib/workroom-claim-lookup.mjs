@@ -25,6 +25,38 @@
 /** Marker filename, written beside the repo's shared git dir. */
 export const CLAIM_MARKER_NAME = "dpf-workroom-claim.json";
 
+/** Stamp recording when this worktree was last told it has no claim. */
+export const NUDGE_STAMP_NAME = "dpf-workroom-claim-nudge.stamp";
+
+/**
+ * How long to stay quiet after telling an agent its branch is unclaimed.
+ *
+ * The advisory is ~700 characters and this guard fires on EVERY edit to ANY
+ * file on an unclaimed branch — a far broader trigger than the other advisory
+ * guards here, which fire only on specific file patterns (a plan doc, a UI
+ * file, a design-sensitive path) and so never needed a throttle. Unthrottled,
+ * a 50-edit session on an unclaimed branch would inject ~35KB of identical
+ * text into the agent's context, in a repo that ships a Context Economy Guard.
+ * Repeating an instruction the reader has already seen does not make it more
+ * likely to be followed; it makes the guard the thing people turn off.
+ */
+export const NUDGE_INTERVAL_MS = 30 * 60 * 1000;
+
+/**
+ * Should the unclaimed-branch advisory be emitted now? A refusal
+ * (DPF_WORKROOM_CLAIM_ENFORCE=1) is NEVER throttled — a gate that declines to
+ * refuse because it refused recently is not a gate. This governs the advisory
+ * only.
+ *
+ * @param {{ stampMs: number|null, stampBranch: string|null, branch: string, nowMs: number, intervalMs?: number }} input
+ */
+export function shouldNudge({ stampMs, stampBranch, branch, nowMs, intervalMs = NUDGE_INTERVAL_MS }) {
+  // A different branch is a different fact about the world — say it once.
+  if (stampBranch !== branch) return true;
+  if (stampMs == null || !Number.isFinite(stampMs)) return true;
+  return nowMs - stampMs >= intervalMs;
+}
+
 /**
  * Branches that never require a claim.
  * - `main` is merge-queue governed and the root clone is read-only for feature

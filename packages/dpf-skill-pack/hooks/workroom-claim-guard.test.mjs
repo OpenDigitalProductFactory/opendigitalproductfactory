@@ -15,10 +15,12 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import {
+  NUDGE_INTERVAL_MS,
   classifyClaim,
   denyGuidance,
   isClaimExemptBranch,
   parseClaimMarker,
+  shouldNudge,
 } from "./lib/workroom-claim-lookup.mjs";
 import { isWorkCommand, isWorkInvocation } from "./workroom-claim-guard.mjs";
 
@@ -224,4 +226,43 @@ test("the claim marker is scoped PER WORKTREE, not to the shared git dir", () =>
     [],
     "the marker must NOT be read from the shared --git-common-dir",
   );
+});
+
+// ── the advisory is throttled; a refusal never is ────────────────────────────
+
+test("shouldNudge speaks once, then stays quiet for the interval", () => {
+  const now = Date.parse("2026-08-27T12:00:00.000Z");
+  const b = "fix/a";
+  assert.equal(shouldNudge({ stampMs: null, stampBranch: null, branch: b, nowMs: now }), true, "never nudged -> speak");
+  assert.equal(shouldNudge({ stampMs: now - 1000, stampBranch: b, branch: b, nowMs: now }), false, "just nudged -> quiet");
+  assert.equal(
+    shouldNudge({ stampMs: now - NUDGE_INTERVAL_MS - 1, stampBranch: b, branch: b, nowMs: now }),
+    true,
+    "interval elapsed -> speak again",
+  );
+});
+
+test("a different branch is a different fact and is always said once", () => {
+  const now = Date.parse("2026-08-27T12:00:00.000Z");
+  assert.equal(
+    shouldNudge({ stampMs: now - 1000, stampBranch: "fix/other", branch: "fix/a", nowMs: now }),
+    true,
+    "switching branches must re-notify even inside the interval",
+  );
+});
+
+test("an unreadable stamp reads as never-nudged, never as already-nudged", () => {
+  // An extra advisory is cheap; a suppressed one is the bug.
+  const now = Date.parse("2026-08-27T12:00:00.000Z");
+  assert.equal(shouldNudge({ stampMs: Number.NaN, stampBranch: "fix/a", branch: "fix/a", nowMs: now }), true);
+});
+
+test("the refusal path is not throttled — enforcement ignores the stamp", () => {
+  // A gate that declines to refuse because it refused recently is not a gate.
+  // emitDeny must be reached before any nudge bookkeeping.
+  const source = readFileSync(guardPath, "utf8");
+  const denyIdx = source.indexOf("emitDeny(guidance)");
+  const nudgeIdx = source.indexOf("shouldNudge(");
+  assert.ok(denyIdx > 0 && nudgeIdx > 0, "both paths must exist");
+  assert.ok(denyIdx < nudgeIdx, "emitDeny must come before the throttle check, so a refusal is never suppressed");
 });
