@@ -124,6 +124,8 @@ Task `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-5984EE574D6C` reproduced the sam
 
 Task `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-F8D656ECBAA9` reproduced it again at commit `4de38875f327fc1e04d8e834f7bda3fed01257f0`. The reviewer read the exact artifact and returned `pass` with no findings, but executed only one tool and emitted a suggested writer payload instead of invoking the required attached writer. That prose remains non-authoritative review evidence.
 
+Task `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-1069524C76D4` at commit `a1d8a22f259ace556bb9d557224e96f6da3ec1ac` ended through the provider-capacity fallback before any tool call. It produced no review decision or receipt and is retained only as delivery-system evidence.
+
 - Decision: `atomic`
 - Umbrella BI: `BI-7D2C4F02`
 - Deliverable: `platform-sbom-currency-consolidation` → `BI-7D2C4F02`
