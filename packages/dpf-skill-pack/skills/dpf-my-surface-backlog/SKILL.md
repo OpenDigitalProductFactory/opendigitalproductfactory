@@ -1,6 +1,6 @@
 ---
 name: dpf-my-surface-backlog
-description: "See, open, and file backlog items for your OWN area — the BIs against your surface (portfolio) and occupation — and track their status. Scope is resolved from your identity and cannot be widened, so it stays safe on a small local model and for sensitive portfolios."
+description: "Use to see, open, file, and track backlog items for your own surface and occupation only."
 
 # Agent Skills standard fields (Surface A — Claude Code)
 disable-model-invocation: true

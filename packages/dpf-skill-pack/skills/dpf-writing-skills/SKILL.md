@@ -1,6 +1,6 @@
 ---
 name: dpf-writing-skills
-description: "Use when writing a new DPF skill, editing an existing SKILL.md or .skill.md, changing a skill's assignTo, description, or invocation flags, or reviewing a PR that touches the skill corpus. Every skill costs a per-turn slot on each coworker it is assigned to and permanent bytes in the always-on instruction plane, so it is a budget decision before it is a writing one."
+description: "Use when writing a new DPF skill, editing a SKILL.md, changing a skill's assignTo or description, or reviewing a PR that touches the skill corpus."
 disable-model-invocation: true
 user-invocable: true
 allowed-tools: Read Edit Grep Glob Bash(node scripts/check-instruction-plane-size.mjs) Bash(git *)

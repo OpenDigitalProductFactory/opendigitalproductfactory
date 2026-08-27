@@ -1,6 +1,6 @@
 ---
 name: dpf-file-backlog-item
-description: "Use when working in the DPF codebase and a new piece of work needs to enter the backlog — feature gap, bug, tool gap, skill gap, doc gap, automated detection, user request. The DPF BI lifecycle gate sits in front of the planning step: a plan is for a BI, not for floating intent. This skill walks the substrate-verify → file → size → triage → link-epic flow with the live MCP backlog tools so the BI lands with the right shape and the right epic on the first try."
+description: "Use when new DPF work needs to enter the backlog — a feature gap, bug, tool, skill or doc gap, automated detection, or user request."
 
 # Agent Skills standard fields (Surface A — Claude Code)
 disable-model-invocation: false

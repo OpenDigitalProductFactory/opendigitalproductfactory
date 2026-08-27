@@ -207,6 +207,34 @@ test("oversized single description is advisory by default, hard under strict", (
   assert.ok(evaluate({ ...args, strict: true }).errors.some((e) => e.includes("a/SKILL.md")));
 });
 
+test("extractedItemStrict makes the per-description budget hard without structuralStrict", () => {
+  // BI-58F6755A: the structural signal stays Phase-0 advisory until the AGENTS.md split
+  // lands, but skill descriptions are already separate files. Their budget must be
+  // enforceable on its own, or the aggregate ratchet alone lets one description balloon
+  // while the others shrink to pay for it.
+  const args = {
+    manifest: { ...MANIFEST, maxExtractedItemChars: 300, structuralStrict: false },
+    fileTexts: { "CLAUDE.md": CLAUDE_OK, "AGENTS.md": "x".repeat(500) },
+    baseline: { "CLAUDE.md": byteLen(CLAUDE_OK), "AGENTS.md": 500, "extracted:skills": 800 },
+    extracted: [
+      { id: "skills", bytes: 800, items: [{ file: "a/SKILL.md", bytes: 800, description: "d" }] },
+    ],
+    strict: false,
+  };
+  assert.deepEqual(evaluate(args).errors, [], "advisory while the flag is absent");
+
+  const strictManifest = { ...args.manifest, extractedItemStrict: true };
+  const enforced = evaluate({ ...args, manifest: strictManifest });
+  assert.ok(
+    enforced.errors.some((e) => e.includes("a/SKILL.md") && e.includes("> 300")),
+    "flag alone must promote the per-item budget to a hard error",
+  );
+  assert.ok(
+    !enforced.warnings.some((w) => w.includes("a/SKILL.md")),
+    "a promoted finding must not also be reported as a warning",
+  );
+});
+
 test("extractGroup reads real SKILL.md frontmatter and excludes the body", () => {
   const g = extractGroup(
     { id: "dpf", glob: "packages/dpf-skill-pack/skills/*/SKILL.md", fields: ["name", "description"] },
