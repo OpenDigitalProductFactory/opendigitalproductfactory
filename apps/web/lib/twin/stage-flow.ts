@@ -30,6 +30,11 @@ function fmtWait(ms: number): string {
  * Project a per-stage demand map onto the archetype's ordered value-stream
  * backbone. Every stage the archetype has appears (count 0 where no demand), so
  * the strip always shows the full stream with the live/demo demand overlaid.
+ *
+ * A stage carries `observable` when some twin queue or zone binds to it. Most do
+ * not: of pet-rescue's sixteen stages exactly one is bound, so fifteen of them
+ * were reporting a count of 0 that no query had ever been able to produce
+ * (BI-AF50DBD5).
  */
 export function buildStageFlow(
   binding: TwinValueStreamBinding,
@@ -42,6 +47,7 @@ export function buildStageFlow(
       label: s.stageLabel,
       order: s.order,
       loadBearing: s.loadBearing,
+      observable: s.queueKeys.length > 0 || s.zoneKeys.length > 0,
       count: d?.count ?? 0,
       ...(d?.longestWaitMs && d.longestWaitMs > 0 ? { longestWait: fmtWait(d.longestWaitMs) } : {}),
     };

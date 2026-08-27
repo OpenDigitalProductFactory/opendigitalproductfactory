@@ -280,6 +280,16 @@ quarantine and place, deliver daily care, transfer custody. Every stage reads ze
 clickable. A surface that names the work correctly reads as further along than one that says
 Quotes and Orders, and is not.
 
+**A count of zero on a stage nothing can reach is not a measurement.** Resolved 2026-08-27 on
+`BI-AF50DBD5`, and the way it was resolved generalises. The rescue's sixteen stages each printed
+`0`; a binding check showed **one** of the sixteen has any queue or zone bound to it, so fifteen
+zeros were counts no query had ever been in a position to produce. Both honest options were on
+the table — route the stages to the work, or stop claiming a destination. The second was taken,
+because the records those stages would route to do not exist yet (`BI-4F8A484C`). The chevron is
+gone, and an unobservable stage now shows a dash rather than a zero. **When auditing any strip,
+tile or funnel, ask what would have to be true for the number to be non-zero; if nothing could
+make it move, the number is decoration.**
+
 **Assess the operators, or you assess a demo.** Every judgement made from a single founder account
 is a judgement about a business with one employee. If the instance has no worker persona, creating
 one is part of the audit, not preparation for it.
