@@ -112,11 +112,14 @@ Verification: runtime evidence, UX critique, and `pnpm pr:health` including revi
 
 ## Backlog coverage
 
-Coverage is deliberately atomic. Portfolio Advisor recorded research receipt `initiative-112cda8a-5968-429b-8279-cceced649456` against the earlier spec blob `4fecf1fe80bfee98e40489d0f7757b91522e431a`; it remains audit history but does not approve the materially revised architecture, UX, risk, and evidence contract. The revised immutable spec requires fresh research and independent `spec-approval` before the initiative scope baseline and coverage receipt can be recorded.
+Coverage is deliberately atomic. Portfolio Advisor recorded research receipt `initiative-112cda8a-5968-429b-8279-cceced649456`; initiative readiness continues to recognize that research gate after the spec revision. The revised immutable spec still requires independent `spec-approval` before the initiative scope baseline and coverage receipt can be recorded.
+
+Change Reviewer task `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-09E6B034FC91` independently concluded that revised spec blob `810633b17e30b82792facc7ec9e38fc25def3e0a` passes with no findings, but returned the writer payload instead of invoking `record_initiative_design_review`. That result is review evidence, not a governed gate receipt; implementation remains blocked until the writer executes.
 
 - Decision: `atomic`
 - Umbrella BI: `BI-7D2C4F02`
 - Deliverable: `platform-sbom-currency-consolidation` → `BI-7D2C4F02`
 - Dependencies: none
-- Prior research receipt: `initiative-112cda8a-5968-429b-8279-cceced649456` (`pass`, superseded spec blob)
-- Coverage receipt: blocked on fresh research, independent `spec-approval`, and the initiative scope baseline; do not implement until all three are recorded
+- Research receipt: `initiative-112cda8a-5968-429b-8279-cceced649456` (`pass`)
+- Independent review evidence: task `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-09E6B034FC91` (`pass`, receipt not written)
+- Coverage receipt: blocked on governed `spec-approval` and the initiative scope baseline; do not implement until both are recorded
