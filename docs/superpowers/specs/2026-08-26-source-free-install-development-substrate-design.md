@@ -8,7 +8,7 @@ decision_interaction: DI-3C5CDA9DAB11
 
 # Source-free install development substrate
 
-**Date:** 2026-08-26
+**Date:** 2026-08-26; reconciled with `main` 2026-08-27
 
 **Status:** review-ready; implementation requires the normal approval and plan gates
 
@@ -57,9 +57,12 @@ five structural relationship families were zero and the indexed branch was
 `my-changes`; `CodebaseManifest` similarly reported zero modules/files. An empty
 success was then interpreted as product truth or model weakness.
 
-PR #4711 correctly adds missing boot invokers for knowledge, portfolio, and
-doc-impact mirrors. It does not establish source identity or freshness and is a
-dependency, not overlapping implementation.
+PR #4711 merged as `fe30d461c` and adds missing boot invokers for knowledge,
+portfolio, and doc-impact mirrors. PR #4719 merged as `b88cd81c2` and makes the
+code graph index the configured default branch rather than the host checkout's
+incidental branch. Both repairs are retained prerequisites. Neither establishes
+the release-to-Workroom source identity, cross-projection consistency, or
+coverage invariants defined here.
 
 ## Authority and compatibility
 
@@ -224,7 +227,8 @@ root. Every dispatcher receives the resolved workdir rather than defaulting to
 
 One registry declares each source-derived projection, its reconciler, version,
 required coverage, and invalidation inputs. This extends the current graph
-projection registry; it is not a new queue.
+projection registry and the merged `refresh-projections` invoker; it is not a
+new queue or boot scheduler.
 
 A projection state is one of `pending`, `ready`, `degraded`, `failed`, or
 `not-applicable`:
@@ -271,6 +275,10 @@ The existing liveness service becomes the authority for these transitions:
 
 The immutable release baseline, canonical evidence, and operator data are never
 reaped with a Workroom. This is the implementation boundary of BI-9A353411.
+The current classifier's `live`, `lease-expired`, `build-terminal`,
+`idle-stale`, `terminal`, and `no-signal` states remain observations; the closed
+transition policy adds durable-wait and finished-but-stranded meaning above
+those observations rather than creating a second liveness engine.
 
 ## Platform updates experience
 
@@ -415,6 +423,17 @@ Required review findings folded into the design:
    only to derived overlays after evidence is durable.
 7. Keep one updater and preserve route compatibility while the Delivery IA
    converges.
+
+Current-`main` reconciliation on 2026-08-27 confirmed the integration seams:
+`/dpf-release-assets` and `SHA256SUMS` still own install assets;
+`dpf-source-code` plus the synthetic `my-changes` checkout remain compatibility
+debt; `refresh-projections` and default-branch graph selection are now landed;
+the Workroom liveness classifier still lacks durable-wait/stranded-finished
+transitions; agent host instructions still classify source capability separately
+from engagement purpose; and the update arrival still renders speculative risk,
+pre-action recovery copy, an ordinary emergency override, and auto-open advanced
+detail in Full mode. No new store, queue, route family, or Workroom concept is
+needed to close those gaps.
 
 ## Acceptance and objective measures
 
