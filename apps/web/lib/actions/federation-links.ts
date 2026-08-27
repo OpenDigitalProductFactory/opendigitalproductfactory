@@ -25,13 +25,16 @@ import {
   resolveLocalFederationAuthorityUrl,
   selfAuthorityUnreachableReason,
 } from "@/lib/federation/self-authority";
-import { auth } from "@/lib/auth";
-import type { AutomaticPairingDecision } from "@dpf/db/automatic-pairing-decision";
+import {
+  ADMIN_PATH,
+  assertManagePlatform,
+  type ActionFailure,
+} from "@/lib/actions/federation-links-shared";
 import { resolveFederationSigningIdentity } from "@/lib/federation/demand-identity";
-import { observePeerCertificateChain } from "@/lib/federation/observe-peer-certificate";
-import { resolveOrganizationTrustAnchor } from "@/lib/federation/organization-trust-anchor";
-import { createOrganizationTrustAnchorStore } from "@/lib/federation/organization-trust-anchor-store";
-import { resolveCandidatePairingMode } from "@/lib/federation/resolve-candidate-pairing-mode";
+import {
+  resolveNearbyCandidatePairing,
+  type NearbyCandidatePairingVerdict,
+} from "@/lib/federation/resolve-nearby-candidate-pairing";
 import {
   approveFederationLinkLocal,
   issueFederationBootstrap,
@@ -60,49 +63,8 @@ import {
   decryptSecret,
   encryptSecret,
 } from "@/lib/govern/credential-crypto";
-import { syncUserPrincipal } from "@/lib/identity/principal-linking";
-import { can } from "@/lib/permissions";
 import { envFlagEnabled } from "@/lib/runtime/env-flags";
 
-const ADMIN_PATH = "/platform/federation-links";
-
-type ActionFailure = {
-  ok: false;
-  error:
-    | "unauthorized"
-    | "forbidden"
-    | "not_found"
-    | "invalid_input"
-    | "invalid_transition"
-    | "internal_error";
-  message: string;
-};
-
-async function assertManagePlatform(): Promise<
-  { ok: true; principalId: string; userId: string } | ActionFailure
-> {
-  const session = await auth();
-  if (!session?.user) {
-    return { ok: false, error: "unauthorized", message: "Sign in required" };
-  }
-  if (
-    !can(
-      { platformRole: session.user.platformRole, isSuperuser: session.user.isSuperuser },
-      "manage_platform",
-    )
-  ) {
-    return { ok: false, error: "forbidden", message: "manage_platform capability required" };
-  }
-  const alias = await prisma.principalAlias.findFirst({
-    where: { aliasType: "user", aliasValue: session.user.id },
-    select: { principalId: true },
-  });
-  if (alias?.principalId) {
-    return { ok: true, principalId: alias.principalId, userId: session.user.id };
-  }
-  const synced = await syncUserPrincipal(session.user.id);
-  return { ok: true, principalId: synced.id, userId: session.user.id };
-}
 
 // ── Bootstrap (invitation) issuance ──────────────────────────────────────────
 
@@ -419,8 +381,8 @@ export type NearbyPairingActionResult =
        * `pairingReason` says which fact could not be proved, so the screen can
        * tell the operator why instead of just asking.
        */
-      pairingMode?: AutomaticPairingDecision["mode"];
-      pairingReason?: AutomaticPairingDecision["reason"];
+      pairingMode?: NearbyCandidatePairingVerdict["mode"];
+      pairingReason?: NearbyCandidatePairingVerdict["reason"];
       pairingExplanation?: string;
     }
   | ActionFailure;
@@ -461,31 +423,18 @@ export async function startNearbyPairingAction(input: {
   // the SAS exchange exactly as before. It replaces a guess about the transport
   // with the real decision, and carries the reason back so the screen can say
   // which fact could not be proved.
-  const pairing = await resolveCandidatePairingMode({
-    candidate: {
-      endpoint: candidate.endpoint,
-      secure: candidate.automaticPairing !== "blocked-insecure-transport",
-      relationshipPreset,
-      role: offeredRole,
-      peerOrganizationRef: candidate.organizationRef ?? null,
-      // The peer's join-package expiry is not carried on a discovery record.
-      // Null leaves that check open; the decision still requires a chain that
-      // validates against the pinned root, so this cannot widen trust.
-      peerJoinPackageExpiresAt: null,
-    },
-    trustAnchor: (
-      await resolveOrganizationTrustAnchor(createOrganizationTrustAnchorStore(), {
-        decrypt: decryptSecret,
-      })
-    ).anchor,
-    observeChain: (endpoint) => observePeerCertificateChain(endpoint),
-    now: new Date(),
+  const pairing = await resolveNearbyCandidatePairing({
+    endpoint: candidate.endpoint,
+    secure: candidate.automaticPairing !== "blocked-insecure-transport",
+    relationshipPreset,
+    role: offeredRole,
+    peerOrganizationRef: candidate.organizationRef ?? null,
   });
-  if (pairing.decision.reason === "insecure-transport") {
+  if (pairing.reason === "insecure-transport") {
     return {
       ok: false,
       error: "invalid_input",
-      message: `${pairing.decision.explanation} Use a manual invitation until this installation has a trusted certificate.`,
+      message: `${pairing.explanation} Use a manual invitation until this installation has a trusted certificate.`,
     };
   }
   const localAuthorityUrl = await resolveLocalFederationAuthorityUrl();
@@ -526,9 +475,9 @@ export async function startNearbyPairingAction(input: {
             ? existing.relationshipPreset
             : "same-organization",
         ),
-        pairingMode: pairing.decision.mode,
-        ...(pairing.decision.reason ? { pairingReason: pairing.decision.reason } : {}),
-        pairingExplanation: pairing.decision.explanation,
+        pairingMode: pairing.mode,
+        ...(pairing.reason ? { pairingReason: pairing.reason } : {}),
+        pairingExplanation: pairing.explanation,
       };
     }
     const [identity, organization] = await Promise.all([
@@ -586,9 +535,9 @@ export async function startNearbyPairingAction(input: {
       peerAuthorityUrl: candidate.endpoint,
       expiresAt: expiresAt.toISOString(),
       projectionSummary: requested.projectionSummary,
-      pairingMode: pairing.decision.mode,
-      ...(pairing.decision.reason ? { pairingReason: pairing.decision.reason } : {}),
-      pairingExplanation: pairing.decision.explanation,
+      pairingMode: pairing.mode,
+      ...(pairing.reason ? { pairingReason: pairing.reason } : {}),
+      pairingExplanation: pairing.explanation,
     };
   } catch (error) {
     return { ok: false, error: "internal_error", message: error instanceof Error ? error.message : "Nearby pairing failed." };
