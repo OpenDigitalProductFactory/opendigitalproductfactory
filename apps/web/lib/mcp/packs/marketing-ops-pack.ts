@@ -25,6 +25,7 @@ import {
   recordMarketingStrategistReview,
 } from "@/lib/marketing";
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import { planUpcomingMarketingDraftsHandler } from "./marketing-cadence-handler";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
 const definitions: ToolDefinition[] = [
@@ -533,49 +534,6 @@ async function tickMarketingSchedulerHandler(): Promise<ToolResult> {
     success: true,
     message: `Scheduler tick: scanned ${result.pendingScanned}, fired ${result.fired}, failed ${result.failed}.`,
     data: result,
-  };
-}
-
-async function planUpcomingMarketingDraftsHandler(
-  _params: Record<string, unknown>,
-  _userId: string,
-  context?: { agentId?: string | null; routeContext?: string | null },
-): Promise<ToolResult> {
-  const { planUpcomingForAssetTasks } = await import("@/lib/marketing/scheduler");
-  const { resolveProactivityPlan } = await import("@/lib/proactivity/proactivity-resolver");
-  const { prisma } = await import("@dpf/db");
-  const org = await prisma.organization.findFirst({ select: { id: true } });
-  if (!org) {
-    return { success: false, message: "No organization configured.", error: "no_org" };
-  }
-
-  // BI-C26FE785: this is the marketing cadence decision, so it runs under the
-  // marketing-campaign posture rather than a fixed lead time. The boundary is
-  // cadence only — nothing here publishes; drafts still land in the approval
-  // queue at pending-review.
-  const plan = resolveProactivityPlan({
-    activityFamily: "marketing-campaign",
-    agentId: context?.agentId ?? null,
-    routeContext: context?.routeContext ?? null,
-  });
-
-  const result = await planUpcomingForAssetTasks({
-    organizationId: org.id,
-    proactivity: { level: plan.resolvedLevel, policyId: plan.policyId },
-  });
-
-  if (result.suppressedByPosture) {
-    return {
-      success: true,
-      message: `No drafter runs planned — marketing proactivity is set to quiet, so campaign work is prepared only when you ask. ${plan.explanation}`,
-      data: { ...result, proactivity: { level: plan.resolvedLevel, policyId: plan.policyId } },
-    };
-  }
-
-  return {
-    success: true,
-    message: `Scheduled ${result.scheduled} drafter run${result.scheduled === 1 ? "" : "s"} ${result.advanceDays} days ahead of their due windows; skipped ${result.skipped}. Drafts go to the approval queue, not out.`,
-    data: { ...result, proactivity: { level: plan.resolvedLevel, policyId: plan.policyId } },
   };
 }
 
