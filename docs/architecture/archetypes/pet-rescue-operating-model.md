@@ -294,7 +294,12 @@ running as more than one person with a clipboard:
 3. **Operational notes are published, and cannot be taken back.** Recording an intake put a
    finder's name, telephone number and home address on the open web within seconds, and every
    descriptive field is write-once, so the only redaction is deleting the animal and its
-   photographs. *(BI-56BB6038)*
+   photographs. *(BI-56BB6038)* **Half fixed 2026-08-27**: species, breed, age, sex, size and
+   description are now correctable on the animal, behind a per-card disclosure, and a refused
+   save says so instead of leaving an edit that only looks applied. Publication itself is not
+   fixed — the description is still the animal's only text field and it is still public marketing
+   copy, so intake detail has nowhere private to go until `BI-4F8A484C` gives an animal an
+   existence independent of its listing.
 
 ### What worked, and is now a regression surface
 
@@ -315,8 +320,10 @@ anything. Two animals in the ward carry legally different obligations and are in
 screen. This is the concrete case for element 10 of the canonical minimal substrate.
 
 **Destructive controls are undersized for the tablet the work is done on.** At 768×1024 the
-per-animal Delete measures 59×28 px and the photo remove control 24×24, both unconfirmed, on the
-device a kennel technician holds one-handed.
+per-animal Delete measured 59×28 px and the photo remove control 24×24, both unconfirmed, on the
+device a kennel technician holds one-handed. The per-animal Delete was fixed on 2026-08-27 — it
+asks first, and both it and its confirmation carry a 44 px target. **The photo remove control is
+unchanged**: still 24×24 and still unconfirmed.
 
 ## 7. UX requirements
 
