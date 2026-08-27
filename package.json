@@ -43,6 +43,7 @@
     "audit:stale-overrides": "node scripts/audit-stale-overrides.mjs",
     "regen:lockfile": "node scripts/regen-lockfile.mjs",
     "check:reporting-composition": "node scripts/check-reporting-composition.mjs",
+    "check:platform-composition-home": "node --test scripts/check-platform-composition-single-home.test.mjs && node scripts/check-platform-composition-single-home.mjs",
     "check:prose-lint": "tsx scripts/check-prose-lint.ts",
     "check:prose-lint:test": "tsx --test scripts/check-prose-lint.test.ts",
     "check:fpaw-standard": "tsx scripts/check-fpaw-standard.ts",

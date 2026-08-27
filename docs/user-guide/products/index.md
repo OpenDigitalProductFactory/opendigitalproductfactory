@@ -22,6 +22,24 @@ augment it, once a real relationship and consuming workflow exist. Setup does
 not invent that trace, and it does not turn a salon service, hotel room, meal,
 or retail good into a digital product.
 
+## Understand what supports a digital product
+
+Open a digital product and choose **Operate > Dependencies**. This is the
+single product-scoped home for four related views that keep their source
+semantics separate:
+
+- product-to-product relationships;
+- deployed or discovered estate;
+- CycloneDX software composition from the current SBOM; and
+- sourced support-lifecycle milestones for shared component identities.
+
+The Digital Product Factory Portal uses the same surface for its own platform
+SBOM and technology currency. The platform seed persists the generated
+lockfile SBOM idempotently, so repeated installation or upgrade runs replace
+occurrences instead of creating parallel documents. The former **Supply
+Chain** tab and Operations **Stack Currency** page are compatibility redirects
+to the software-composition section, not additional ledgers.
+
 DPF assembles product-management summaries from a read-only operating context.
 That context follows the business hierarchy first, then includes a digital
 product only when a real operational Offering link establishes it. Research and

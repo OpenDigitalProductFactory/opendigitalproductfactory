@@ -31,22 +31,27 @@ export interface BomSummary {
   trust?: TrustAssessment;
 }
 
-export interface ProductSupplyChainComponentRow {
+export interface ProductCompositionComponentRow {
   name: string;
   version: string | null;
   componentType: string;
   ecosystem: string | null;
   packageUrl: string | null;
+  lifecycleMilestones: Array<{
+    milestone: string;
+    date: Date | null;
+    confidence: number | null;
+  }>;
 }
 
-export interface ProductSupplyChainBomRows {
+export interface ProductCompositionBomRows {
   latestBom: null | {
     documentId: string;
     generatedAt: Date;
     digest: string;
     componentCount: number;
   };
-  components: ProductSupplyChainComponentRow[];
+  components: ProductCompositionComponentRow[];
   findingSummary: AssuranceFindingSummary;
   scanner: AssuranceScannerReadiness;
 }
@@ -67,7 +72,11 @@ type ProductBomRows = {
   digest: string;
   componentCount: number;
   occurrences?: Array<{
-    component: ProductSupplyChainComponentRow;
+    component: Omit<ProductCompositionComponentRow, "lifecycleMilestones"> & {
+      catalogIdentity?: null | {
+        lifecycleMilestones?: ProductCompositionComponentRow["lifecycleMilestones"];
+      };
+    };
   }>;
 };
 
@@ -239,10 +248,10 @@ export async function getLatestBomComponentsForProduct(
   db: ProductBomReadDb,
   digitalProductId: string,
   limit = 200,
-): Promise<ProductSupplyChainBomRows> {
+): Promise<ProductCompositionBomRows> {
   const [document, findingSummary, scanner] = await Promise.all([
     db.bomDocument.findFirst({
-      where: { digitalProductId },
+      where: { digitalProductId, status: "current" },
       orderBy: { generatedAt: "desc" },
       select: {
         documentId: true,
@@ -258,6 +267,13 @@ export async function getLatestBomComponentsForProduct(
                 componentType: true,
                 ecosystem: true,
                 packageUrl: true,
+                catalogIdentity: {
+                  select: {
+                    lifecycleMilestones: {
+                      select: { milestone: true, date: true, confidence: true },
+                    },
+                  },
+                },
               },
             },
           },
@@ -280,7 +296,14 @@ export async function getLatestBomComponentsForProduct(
       digest: document.digest,
       componentCount: document.componentCount,
     },
-    components: (document.occurrences ?? []).map((occurrence) => occurrence.component),
+    components: (document.occurrences ?? []).map((occurrence) => ({
+      name: occurrence.component.name,
+      version: occurrence.component.version,
+      componentType: occurrence.component.componentType,
+      ecosystem: occurrence.component.ecosystem,
+      packageUrl: occurrence.component.packageUrl,
+      lifecycleMilestones: occurrence.component.catalogIdentity?.lifecycleMilestones ?? [],
+    })),
     findingSummary,
     scanner,
   };

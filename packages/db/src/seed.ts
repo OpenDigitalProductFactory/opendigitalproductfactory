@@ -103,6 +103,11 @@ import {
 } from "./provider-connection.js";
 import { seedIntegrationCoverage } from "../scripts/seed-integration-coverage.js";
 import { seedAbsorptionPosture } from "./seed-absorption-posture.js";
+import {
+  loadPlatformSbomFromRepository,
+  persistPlatformSbom,
+  type PlatformSbomClient,
+} from "./platform-sbom-seed.js";
 import * as crypto from "crypto";
 import bcrypt from "bcryptjs";
 
@@ -612,6 +617,21 @@ async function seedDpfSelfRegistration(): Promise<void> {
   });
 
   console.log("Seeded DPF Portal digital product (foundational/platform_services)");
+}
+
+async function seedPlatformSbom(): Promise<void> {
+  const repositoryRoot = join(__dirname, "..", "..", "..");
+  const input = await loadPlatformSbomFromRepository({
+    repositoryRoot,
+    generatedAt: new Date(),
+    gitRef: process.env.GITHUB_SHA ?? process.env.GIT_COMMIT ?? "installed-runtime",
+  });
+  const result = await persistPlatformSbom(prisma as unknown as PlatformSbomClient, input);
+  console.log(
+    `Seeded platform SBOM ${result.documentId}: ` +
+      `${result.componentCount} components, ${result.occurrenceCount} occurrences, ` +
+      `${result.supersededDocumentCount} superseded document(s)`,
+  );
 }
 
 // Epic/backlog seeding removed — managed separately via backup/restore process.
@@ -2511,6 +2531,7 @@ async function main(): Promise<void> {
   await step("eaSysmlCada", () => seedEaSysmlCada());
   await step("eaSysmlDataAuthority", () => seedEaSysmlDataAuthority());
   await step("dpfSelfRegistration", () => seedDpfSelfRegistration());
+  await step("platformSbom", () => seedPlatformSbom());
   await step("coworkerServiceCatalog", () => seedCoworkerServiceCatalog(prisma));
   await step("platformCapabilityPortfolio", () => projectPlatformCapabilities());
   // BI-8F9EDD6C: project AI coworkers as Workforce DigitalProducts under

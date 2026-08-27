@@ -169,9 +169,19 @@ Promotions and self-upgrade tell you what the platform did. **Business Journeys*
 
 The portal first prepares the candidate promoter image, then the promoter builds a fresh application image and swaps the running container. Both builds use Docker BuildKit and the same bounded wall-clock budget (default **25 minutes**). Candidate preparation happens before quiescence, so a preparation failure leaves the current portal available. If either build stalls — for example on a slow or degraded network fetch — it is killed and the deployment is marked failed with a retryable `promoter-timeout` diagnosis instead of hanging. A normal deployment completes in a few minutes; the timeout only trips on a genuine stall. Operators on unusually slow hosts can raise the shared budget by setting `DPF_PROMOTER_TIMEOUT_MS` (milliseconds) in the environment. A periodic watchdog additionally force-removes any promoter container orphaned by a mid-deployment restart, so a stalled build can never linger and cause an unexpected later swap.
 
-## Platform stack currency
+## Platform software composition and currency
 
-**Operations > Stack Currency** (`/ops/stack-currency`) shows the technology lifecycle the platform is *subject to* — its own runtimes and frameworks (Node, PostgreSQL, Next.js, and so on) on the shared currency axis: current, approaching end of life, unsupported, or end of life. It is deliberately separate from **Patches**, which covers the discovered customer estate. Current versions are read from the platform's own manifests; a support/end-of-life date that has not been recorded shows as "EOL not sourced" — an invitation to record one — rather than a made-up status, and anything approaching or past end of life is flagged for an upgrade path.
+Platform dependencies no longer have a separate Operations ledger. Open the
+**Digital Product Factory Portal** in **Products > Portfolio**, then choose
+**Operate > Dependencies**. That one surface shows product relationships,
+deployed or discovered estate, and the persisted CycloneDX software composition.
+Lifecycle milestones attached to the shared component catalogue provide the
+currency and support posture; a missing milestone remains visibly unsourced.
+
+The former `/ops/stack-currency` address remains only as a compatibility route
+to the software-composition section. **Operations > Patches** still covers
+patch work for discovered estate and is not another source of platform
+component facts.
 
 ## What this installation is
 

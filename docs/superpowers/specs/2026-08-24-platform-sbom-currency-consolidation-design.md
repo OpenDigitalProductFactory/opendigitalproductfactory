@@ -1,6 +1,10 @@
+---
+status: binding
+---
+
 # Platform SBOM and currency consolidation design
 
-Status: proposed  
+Status: binding
 Backlog item: `BI-7D2C4F02`  
 Decision: `DI-C24852C1789A`
 

@@ -12,10 +12,10 @@
       "worker": 2
     },
     "byDestinationKind": {
-      "advanced-diagnostic": 105,
-      "detail": 171,
-      "legacy-internal": 29,
-      "section-home": 33,
+      "advanced-diagnostic": 103,
+      "detail": 169,
+      "legacy-internal": 34,
+      "section-home": 32,
       "settings-config": 12,
       "workflow-step": 9
     },
@@ -587,7 +587,7 @@
     {
       "routePath": "/customer-login",
       "audience": "auth-setup",
-      "destinationKind": "section-home",
+      "destinationKind": "legacy-internal",
       "confidence": "high",
       "source": "heuristic"
     },
@@ -1252,7 +1252,7 @@
     {
       "routePath": "/ops/health",
       "audience": "admin",
-      "destinationKind": "advanced-diagnostic",
+      "destinationKind": "legacy-internal",
       "confidence": "high",
       "source": "heuristic"
     },
@@ -1308,7 +1308,7 @@
     {
       "routePath": "/ops/stack-currency",
       "audience": "admin",
-      "destinationKind": "advanced-diagnostic",
+      "destinationKind": "legacy-internal",
       "confidence": "high",
       "source": "heuristic"
     },
@@ -1735,7 +1735,7 @@
     {
       "routePath": "/platform/services/[serverId]",
       "audience": "admin",
-      "destinationKind": "detail",
+      "destinationKind": "legacy-internal",
       "confidence": "high",
       "source": "heuristic"
     },
@@ -2120,7 +2120,7 @@
     {
       "routePath": "/portfolio/product/[id]/supply-chain",
       "audience": "owner",
-      "destinationKind": "detail",
+      "destinationKind": "legacy-internal",
       "confidence": "high",
       "source": "heuristic"
     },
