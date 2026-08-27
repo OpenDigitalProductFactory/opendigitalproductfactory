@@ -9,7 +9,7 @@
 | **Author** | Claude Opus 5 for Mark Bodman |
 | **Scope (read)** | `apps/web/app/api/mcp/v1/route.ts`, `apps/web/lib/auth/mcp-api-token.ts`, `apps/web/lib/auth/mcp-host-writer.ts`, `apps/web/lib/auth/mcp-setup-snippets.ts`, `apps/web/lib/govern/auth.ts`, `apps/web/app/.well-known/`, `scripts/dpf-bootstrap-agent-toolchain.ps1`, `scripts/lib/mcp-client.mjs`, `docs/Reference/mcp/spec/basic/authorization.mdx` (snapshot `2025-11-25`) |
 | **Grounds in (do not duplicate)** | Consumer MCP bootstrap — `docs/superpowers/specs/2026-08-25-consumer-mcp-bootstrap-design.md` (not yet on `main`) · [TAK/GAID auth identity refresh](2026-04-25-tak-gaid-auth-identity-memory-refresh-design.md) · [MCP `2025-11-25` + A2A adoption](2026-08-06-mcp-2025-11-25-and-a2a-feature-adoption-design.md) · [Enterprise auth, directory, federation](2026-04-22-enterprise-auth-directory-federation-design.md) · [Platform MCP tool server](2026-04-11-platform-mcp-tool-server-design.md) · [Contributor client MCP readiness](2026-05-26-contributor-client-mcp-readiness-design.md) · [MCP tool authorization runbook](../../architecture/mcp-tool-authorization-runbook.md) |
-| **Blast radius** | HIGH — the MCP transport is the coordination plane (AGENTS.md §12). Additive by construction: the PAT path is preserved unchanged throughout. |
+| **Blast radius** | HIGH — the MCP transport is the coordination plane (AGENTS.md §12). Additive through Slice 5 — the PAT path resolves unchanged — then convergent: Slice 6 retires PAT issuance on an operator-set horizon (§9.5). |
 
 ---
 
@@ -38,7 +38,13 @@ This design deliberately covers only the *general* half. The *local* half is alr
 | Boundary | loopback only, by design | any origin the operator exposes |
 | Status | drafted, **unmerged** on `fix/bootstrap-external-agent-mcp-access-on-consumer`, no PR | this document |
 
-**Sequencing: the local half lands first.** It is smaller, it is already designed and kernel-decided, and it closes the felt daily pain on a consumer install. This design assumes it has landed and builds beside it, not on top of it. Neither subsumes the other, and the PAT path survives both.
+**Sequencing is a live tension, not a settled recommendation.** An earlier revision said flatly "the local half lands first." That is worth re-examining, because the consumer bootstrap's job is to make the environment-variable path seamless — and under §2.1 that path has an end date.
+
+- **What OAuth removes from the local half.** The catch-22 that motivates `BI-ED1BBC9E` — *"an external agent cannot obtain a token without a human using the portal UI, and the portal UI is precisely what an agent cannot use"* — dissolves under `authorization_code`. The agent does not use the portal UI; it opens a browser and the human who is right there running the installer approves once. That is the standard solve and it is strictly better than minting a token silently, because the human sees what is being granted.
+- **What survives.** Genuinely headless first-turn cases — an unattended install, CI provisioning, a container with no browser — which `client_credentials` (Slice 2b) serves. That is a materially smaller scope than the consumer-bootstrap spec currently carries.
+- **The honest trade.** The bootstrap is designed, kernel-decided (`DI-29D9F5D72C50`) and shippable now; Slices 1–2b are several PRs. Relief this week versus one system later. Slice 1 alone is small enough that it is not really a competitor to either.
+
+This is an operator call, not an implementer's. What this design does assert: **if OAuth is coming, the consumer bootstrap should be re-scoped to the headless case before it is built out**, rather than built at full scope and then partly retired. Neither half subsumes the other; the difference is only how much of the local half is worth building.
 
 **One amendment to the local half, recorded on `BI-ED1BBC9E` rather than here:** its bootstrap re-probes and re-mints a stale token, but nothing invokes the bootstrap after install, so a token that lapses on day 31 of its 30-day TTL still strands the client. The trigger already exists — `scripts/hooks/mcp-health.{ps1,sh}` is wired as a `SessionStart` hook in `.claude/settings.json` and probes this exact endpoint at every session start, resume, `clear` and `compact`. Extending that probe to re-invoke the bootstrap on an *expired/revoked/absent* verdict is a small addition to that spec's §Idempotency, not a new design.
 
@@ -117,7 +123,27 @@ The `route.ts:10-14` decision deserves a real answer, not a silent overwrite.
 3. **Consumer installs happen.** A consumer install has no source, no operator with a portal habit, and — until `BI-ED1BBC9E` lands — no token at all. The catch-22 in that item ("an external agent cannot obtain a token without a human using the portal UI, and the portal UI is precisely what an agent cannot use") is the PAT model reaching its limit.
 4. **The epic changed the frame.** `EP-24741BBF` decided that DPF *is* the directory for an installation. An install that is its own identity provider but cannot issue an OAuth token to its own agent has not finished being one.
 
-**Recommendation: supersede, do not replace.** Adopt OAuth as the default door. Keep the PAT permanently for headless, CI, cron and container callers that cannot open a browser — those are real and the PAT is the right tool for them. The `route.ts:10-14` comment gets rewritten to state the *new* two-door contract rather than deleted, so the next reader inherits the reasoning instead of the conclusion.
+### 2.1 One authorization server, two grant types — not two credential systems
+
+An earlier revision of this design recommended "supersede, do not replace": adopt OAuth, keep the PAT permanently as a second door for headless callers. **That was wrong, and it is worth saying why, because the wrong version is the tempting one.**
+
+Keeping both makes the extra steps permanent rather than removing them. A DPF install would forever carry OAuth *and* a `dpfmcp_` secret with its OS environment variable, its `.mcp.json` reference and its `/api/mcp/token/refresh` binding call. Calling that "two doors" dresses an inconsistency up as an architecture. The steps a DPF operator performs today that operators of comparable systems do not are precisely these:
+
+| Today | Under a single AS |
+|---|---|
+| A human mints a token in an admin UI | — |
+| A human sets an OS user environment variable | — |
+| A human restarts the client so it reads the variable | — |
+| A human POSTs the new token to `/api/mcp/token/refresh` | — |
+| — | The client connects; a browser opens; a human approves once |
+
+The consent click is not an extra step — it is the step every comparable system has. The four rows above it are DPF-specific and all four should go.
+
+**The headless case is a grant type, not a second system.** CI, cron, containers and any caller with no browser use the OAuth **`client_credentials`** grant against the same authorization server, with the same scope vocabulary, the same consent-time policy and the same revocation surface. The MCP spec assumes such clients exist — `authorization.mdx:545` distinguishes clients acting on a user's behalf from *"clients acting on their own behalf (`client_credentials` clients)"* when describing step-up. This is the shape GitHub installation tokens and Google service accounts already use. It is not exotic and it is not a compromise.
+
+**Recommendation.** One authorization server. Two grant types: `authorization_code` + PKCE for anything with a browser, `client_credentials` for anything without. The `dpfmcp_` PAT becomes a **migration concern with a deprecation horizon**, not a permanent path — issuance closes once `client_credentials` is live and every existing token has an equivalent client; resolution keeps working until the horizon so no configured client breaks mid-flight. §9 puts the horizon itself to the operator. The `route.ts:10-14` comment is rewritten to state the new contract rather than deleted, so the next reader inherits the reasoning and not just the conclusion.
+
+**Why not simply leave the PAT alone?** Because two credential systems means two resolution paths, two revocation surfaces, two audit shapes and two sets of documentation, and the second one is the one nobody keeps current. The 16 token rows on this install — 4 expired, 5 revoked, several hand-minted `tmp-*` — are what the unattended path looks like after four months.
 
 ---
 
@@ -201,17 +227,45 @@ The operator's experience is: point the client at the URL, a browser tab opens, 
 | `/api/oauth/register` | RFC 7591 DCR. Policy-gated (§7.3). |
 | `/api/oauth/revoke` | RFC 7009 revocation. |
 
-`scopes_supported` is the **minimum set for basic functionality**, per `:344-347` — the read-tier grant set, not the whole 34-grant development template. Everything above it arrives through step-up (§5.4), which is what makes least-privilege actually reachable instead of aspirational.
+`grant_types_supported` is `["authorization_code", "refresh_token", "client_credentials"]` — the third is the headless path (§2.1), not a separate system.
+
+`scopes_supported` advertises **`dpf.read` only**, per `:344-347` ("the minimal set of scopes necessary for basic functionality"). Everything above read arrives through step-up (§5.4). See §4.3.1 for why the vocabulary is six strings rather than the 75 internal grant names.
 
 ### 4.3 Mapping onto the existing authorization model
 
 This is the load-bearing decision and it is a projection, not a new model.
 
-- **OAuth scope strings are the existing grant names.** `scopes_supported` enumerates the same grant vocabulary `expandGrants` already understands (`registry_read`, `file_read`, …), plus the three coarse tiers. No second vocabulary, no mapping table to drift.
+- **A small public scope vocabulary maps onto the internal grants — it does not mirror them.** See §4.3.1; this is the correction to an earlier revision that proposed using the grant names directly.
 - **An issued access token resolves to the same `ResolvedMcpToken` shape** the PAT path produces — `{ tokenId, userId, agentId, scope, scopes, capability }`. `resolveMcpApiToken` gains a sibling resolver; `tokenCanUseTool`, `resolveListingAuthorityForToken` and `governedExecuteTool` are not modified. **This is the single most important constraint in the design: if the OAuth path needed a different authorization gate, it would be a fork, and a fork of the authorization gate is how false-green authorization bugs are born.**
 - **The consenting human is the `userId`.** Their `platformRole` still caps everything through `resolveWorkforcePlatformRole`; a token cannot grant what the human does not have. Consent narrows, never widens.
 - **Agent binding is preserved.** Where a token is bound to an `agentId`, the agent-grant and `sensitivityClearance` axes apply exactly as today, including `tools/list` ⇄ `tools/call` parity.
-- **Storage reuses `McpApiToken`** with a new `kind` (`oauth_access`) plus a sibling row or table for refresh tokens, `client_id`, `resource` audience and expiry. Revocation, the admin list, `lastUsedAt` and the audit trail come along for free. A `dpfmcp_` PAT and an OAuth access token are the same governed object with different issuance paths.
+- **Storage reuses `McpApiToken`** with a new `kind` (`oauth_access`) plus a sibling row or table for refresh tokens, `client_id`, `resource` audience and expiry. Revocation, the admin list, `lastUsedAt` and the audit trail come along for free. A `dpfmcp_` PAT and an OAuth access token are the same governed object with different issuance paths. Opaque-token-plus-lookup rather than signed JWTs is a deliberate choice: the transport already does a DB read per call, and immediate revocation matters more here than saving it.
+
+### 4.3.1 The public scope vocabulary
+
+**The internal grant vocabulary must not become the OAuth scope vocabulary.** `TOOL_TO_GRANTS` in `apps/web/lib/tak/agent-grants.ts:110` carries **75 distinct grant categories** — `registry_read`, `build_phase_advance`, `siem_tune`, `work_capsule_adopt`, `coworker_screen_fill` and 70 more. Exposing those as OAuth scopes breaks in three ways:
+
+1. **The consent screen becomes unreadable.** A human cannot meaningfully approve 75 checkboxes, and a consent screen nobody reads is worse than none — it converts an authorization decision into a habituated click.
+2. **Clients would request all of them.** `authorization.mdx:340-343` tells clients that when the challenge carries no `scope`, they **SHOULD** request everything in `scopes_supported`. A 75-entry `scopes_supported` therefore produces maximal grants by default, inverting least privilege while appearing to implement it.
+3. **It freezes 75 internal names as a public API.** Tool names are already an unrenameable contract for exactly this reason (CLI clients cache them). Adding the grant vocabulary to that frozen set would make every future grant refactor a breaking change for external clients.
+
+**The design instead defines a small, stable, human-legible scope vocabulary and maps it onto the grants.** Recommended shape — the exact partition is an operator decision (§9), the *smallness* is not:
+
+| Public scope | Covers | Implied coarse tier |
+|---|---|---|
+| `dpf.read` | every read-only grant across all domains | `read` |
+| `dpf.work` | the governed delivery loop — backlog, workrooms, threads, documents, decisions, evidence | `write` |
+| `dpf.build` | Build Studio — plans, phase advance, promotion, sandbox execution | `write` |
+| `dpf.business` | customer, CRM, marketing, storefront, stock, financial reporting | `write` |
+| `dpf.operate` | security, telemetry, incidents, release gates, deployment plans | `write` |
+| `dpf.admin` | platform administration, policy writes, registry writes, integration config | `admin` |
+
+Properties this has to satisfy:
+
+- **`scopes_supported` advertises `dpf.read` only.** Per `authorization.mdx:344-347` that field is "the minimal set of scopes necessary for basic functionality." Everything above read arrives through step-up (§5.4), which is what makes the default-request behaviour in point 2 above *safe* rather than dangerous — a client that requests everything advertised gets read access, and each escalation is a separate, named, human-approved decision.
+- **The coarse tier is derived, not separately requested.** The granted scope set implies `read`/`write`/`admin`; there is no independent tier parameter for a client to get wrong.
+- **The mapping is a code artifact with a completeness guard.** A single `apps/web/lib/mcp/oauth-scope-map.ts` owns it, and a test asserts every one of the 75 grants maps to exactly one public scope. **Adding a new grant without mapping it fails CI.** This is the drift guard, and without it the two vocabularies separate within a quarter — the failure this whole item exists to correct is a pointer that nobody re-checked.
+- **Grants stay refactorable.** Internal names can be split, merged or renamed freely as long as the map stays total. The public contract is six strings.
 
 ### 4.4 Client registration
 
@@ -240,7 +294,7 @@ Approvals are recorded as `AuthorizationDecisionLog` rows and listed in Admin > 
 
 ## 5. Slices
 
-Each slice is independently shippable and independently valuable. Slice 1 is worth landing on its own even if the programme stops there.
+Seven slices. Each is independently shippable and independently valuable, and Slice 1 is worth landing on its own even if the programme stops there. Slices 2b and 6 are the pair that makes §2.1 true rather than aspirational: without `client_credentials` there is nothing for headless callers to migrate *to*, and without retirement the PAT stays forever by default.
 
 ### Slice 1 — Discovery (small)
 
@@ -250,7 +304,13 @@ The point of shipping this first: today a client fails with a dead end. After Sl
 
 ### Slice 2 — Authorization server core (large)
 
-AS metadata; `authorize` + `token`; authorization-code with mandatory PKCE-S256; refresh tokens; consent screen; loopback redirect handling; `resource` (RFC 8707) validation on both requests; audience validation on the resource server. Access tokens short-lived (recommend 1h, §9); refresh tokens long-lived and rotating.
+AS metadata; `authorize` + `token`; authorization-code with mandatory PKCE-S256; refresh tokens; the public scope vocabulary and its mapping guard (§4.3.1); consent screen; loopback redirect handling; `resource` (RFC 8707) validation on both requests; audience validation on the resource server. Access tokens short-lived (recommend 1h, §9); refresh tokens long-lived and rotating.
+
+### Slice 2b — `client_credentials` for headless callers (medium)
+
+The grant that closes the second door without keeping a second system (§2.1). A headless client — CI, cron, a container, a scheduled agent task — authenticates with its own client credentials against the same AS, receives an access token carrying the same public scopes, and is resolved by the same code path. Operator-issued from Admin > Platform Development, listed and revocable beside browser-authorized clients.
+
+This is what makes the PAT deprecable rather than permanent, so it is not optional and it is not "later" — a deprecation horizon (§9) cannot start until it ships.
 
 ### Slice 3 — Registration (medium)
 
@@ -270,11 +330,19 @@ WWW-Authenticate: Bearer error="insufficient_scope",
 
 Following the spec's *recommended* inclusion strategy (`:520-524`): return existing granted scopes **plus** the newly required ones, so the client does not lose ground on re-authorization. The client re-authorizes, the operator sees a consent screen naming exactly the additional authority, and the original call is retried.
 
-This is the moment the platform's scope-escalation rule stops being a human interrupt. The rule in AGENTS.md — *never route around a scope refusal via psql, Prisma or direct DB edits* — is unchanged and is in fact easier to obey once the sanctioned path is one browser click instead of a token-minting errand. **PAT callers keep the existing `insufficient_token_scope` tool-result contract byte-for-byte**; only the OAuth path gets the 403 challenge, so nothing that reads the old contract breaks.
+This is the moment the platform's scope-escalation rule stops being a human interrupt. The rule in AGENTS.md — *never route around a scope refusal via psql, Prisma or direct DB edits* — is unchanged and is in fact easier to obey once the sanctioned path is one browser click instead of a token-minting errand. **PAT callers keep the existing `insufficient_token_scope` tool-result contract byte-for-byte** for as long as PAT resolution survives (§9.5); only the OAuth path gets the 403 challenge, so nothing that reads the old contract breaks during the migration.
 
 ### Slice 5 — Contract convergence (medium)
 
-Rewrite `route.ts:10-14` to state the two-door contract. Update the [MCP tool authorization runbook](../../architecture/mcp-tool-authorization-runbook.md): diagnosis order #2 currently says a 401 means "rotate or reseed the local client configuration," which stops being the right first move once a 401 is self-healing. Update the portal's setup surface to lead with "connect via browser" and present the PAT as the headless option. Revisit the `isAllowedMcpEndpoint` posture per §7.4.
+Rewrite `route.ts:10-14` to state the one-AS-two-grants contract. Update the [MCP tool authorization runbook](../../architecture/mcp-tool-authorization-runbook.md) in three places: diagnosis order #2 currently says a 401 means "rotate or reseed the local client configuration," which stops being the right first move once a 401 is self-healing; the token-rotation procedure (`SetEnvironmentVariable` + `POST /api/mcp/token/refresh`) describes steps that no longer exist for an OAuth client; and the scope-escalation rule gains the step-up path as its sanctioned remedy. Update the portal's setup surface to lead with browser connection and present `client_credentials` as the headless option.
+
+Revisit the `isAllowedMcpEndpoint` posture per §7.4.
+
+### Slice 6 — PAT retirement (small, gated)
+
+Close `dpfmcp_` **issuance** once Slice 2b is live: the portal stops minting new PATs and points operators at the browser flow or a `client_credentials` client. **Resolution keeps working** until the operator-set horizon (§9), so no configured client breaks mid-flight. Migration surface lists each live PAT with its last use and a one-click equivalent-client conversion. At the horizon, resolution is removed and the `dpfmcp_` code path deleted.
+
+This slice is what separates "one system with two grant types" from "two systems, one of which we stopped recommending." Without it §2.1 is a sentiment rather than a design.
 
 **Backlog coverage.** Each slice gets a `BacklogItem` linked to `BI-E4DFDCB0` before implementation begins, per `scripts/check-plan-backlog-coverage.mjs`. Not Markdown checkboxes — that is precisely the failure this item exists to correct, and repeating it here would be embarrassing.
 
@@ -288,8 +356,9 @@ Stated explicitly so review can hold the line:
 - `governedExecuteTool`, the `ToolExecution` audit row, `AuthorizationDecisionLog`.
 - Tool tiers, `?tier=full` bootstrap for Claude Code and Codex, `load_tools` progressive disclosure, the frozen tool-name contract.
 - The `X-MCP-Session` internal JWT seam for in-portal coworkers.
-- The `dpfmcp_` PAT — issuance, rotation, revocation and every current client config keep working unchanged.
 - Protocol version negotiation and the N/N-1 window.
+
+The `dpfmcp_` PAT is the one thing here with an end date. It keeps resolving unchanged through Slices 1–5 and every currently configured client keeps working; issuance closes at Slice 6 and resolution at the operator's horizon (§9). No client breaks without an operator decision and a migration surface.
 
 ---
 
@@ -309,7 +378,7 @@ An open `/register` on a reachable install lets anyone mint a `client_id`. Regis
 
 ### 7.4 The loopback guard
 
-`isAllowedMcpEndpoint` stays. What changes is that it is no longer the *only* thing standing between an ambient config file and a disclosed credential, because the OAuth path puts no long-lived secret in ambient config at all. Slice 5 revisits whether a **discovered, audience-bound** non-loopback endpoint should be permitted for the OAuth flow specifically, while a config-resolved `dpfmcp_` PAT stays loopback-only forever. That is a narrowing of the rule to the credential shape that actually needs it — and it is the concrete mechanism by which `BI-1819D34F` shrinks.
+`isAllowedMcpEndpoint` stays. What changes is that it is no longer the *only* thing standing between an ambient config file and a disclosed credential, because the OAuth path puts no long-lived secret in ambient config at all. Slice 5 revisits whether a **discovered, audience-bound** non-loopback endpoint should be permitted for the OAuth flow specifically, while a config-resolved `dpfmcp_` PAT stays loopback-only for its remaining life. That is a narrowing of the rule to the credential shape that actually needs it — and it is the concrete mechanism by which `BI-1819D34F` shrinks.
 
 ### 7.5 Local HTTP
 
@@ -323,7 +392,9 @@ Structural checks are necessary and not sufficient — `structural-verification-
 
 **Conformance (automated).** PRM documents validate against RFC 9728 at both paths; AS metadata validates against RFC 8414; 401 carries a parseable `resource_metadata` and `scope`; PKCE `plain` is refused; a missing/mismatched `resource` is refused; a token minted for audience A is refused at audience B; an authorization code cannot be replayed; a non-loopback redirect must match exactly.
 
-**Authorization parity (automated) — the one that matters most.** For an identical `(user, agent, scope set)`, the OAuth-resolved token and the PAT-resolved token **MUST** produce byte-identical `tools/list` output and identical `tools/call` verdicts across the full tool surface, including the agent-grant and clearance axes. This is the guard against the fork risk in §4.3, and it should fail CI loudly.
+**Authorization parity (automated) — the one that matters most.** For an identical `(user, agent, effective grant set)`, a token from **each** issuance path — `authorization_code`, `client_credentials`, and the surviving PAT — **MUST** produce byte-identical `tools/list` output and identical `tools/call` verdicts across the full tool surface, including the agent-grant and clearance axes. This is the guard against the fork risk in §4.3, and it should fail CI loudly.
+
+**Scope-map totality (automated).** Every one of the 75 entries in `TOOL_TO_GRANTS` maps to exactly one public scope; no grant is unmapped, none is double-mapped, and the union of the six scopes' grant sets equals the full grant vocabulary. Adding a grant without mapping it fails CI. Without this test §4.3.1 decays into the drift it exists to prevent.
 
 **Step-up (automated).** A read-scoped OAuth token calling a write tool returns 403 with `error="insufficient_scope"` and a `scope` set containing both existing and newly required scopes. The same call on a PAT returns the unchanged `insufficient_token_scope` tool result.
 
@@ -339,16 +410,17 @@ Not hidden assumptions. Each changes behaviour and none should be settled by an 
 
 1. **DCR default.** Enabled on loopback only (recommended), enabled generally, or off with CIMD/pre-registration required?
 2. **Access-token lifetime.** 1h recommended. Shorter increases refresh traffic on a local box for little gain; longer widens the replay window.
-3. **Default consented scope.** `scopes_supported` as the read-tier minimum with step-up for everything else (recommended, and what makes least-privilege real), versus consenting the development template up front for fewer interruptions.
-4. **Should OAuth become the default door in the portal's setup UI, with the PAT presented as the headless option?** Recommended yes at Slice 5, not before.
-5. **Federation.** `EP-24741BBF` scopes an identity edge (LDAP/OIDC/SAML/SCIM) and `2026-04-22` contemplated authentik. This design deliberately makes the portal its own AS so a local install needs nothing external. If an identity edge later lands, `authorization_servers` can point at it instead — the PRM indirection is exactly the seam that makes that a config change rather than a redesign. Confirm that ordering.
+3. **Default consented scope.** `dpf.read` only, with step-up for everything else (recommended, and what makes least-privilege real), versus consenting a broader set up front for fewer interruptions.
+4. **The public scope partition.** §4.3.1 recommends six — `dpf.read`, `dpf.work`, `dpf.build`, `dpf.business`, `dpf.operate`, `dpf.admin`. The *smallness* is not negotiable (§4.3.1 points 1–3); the exact cut lines are yours, and they are the vocabulary a human reads on every consent screen from here on.
+5. **PAT deprecation horizon.** How long does `dpfmcp_` resolution survive after issuance closes at Slice 6? Recommend two release cycles with the migration surface live throughout — long enough that no configured client is surprised, short enough that the second path does not become permanent by default. Setting no horizon is itself a decision, and it is the one that recreates the two-system problem §2.1 exists to close.
+6. **Federation.** `EP-24741BBF` scopes an identity edge (LDAP/OIDC/SAML/SCIM) and `2026-04-22` contemplated authentik. This design deliberately makes the portal its own AS so a local install needs nothing external. If an identity edge later lands, `authorization_servers` can point at it instead — the PRM indirection is exactly the seam that makes that a config change rather than a redesign. Confirm that ordering.
 
 ---
 
 ## 10. Non-goals
 
-- Removing or deprecating the `dpfmcp_` PAT.
-- Changing the authorization model, tool grants, tool names, tool tiers or the protocol version window.
+- Changing the authorization model, tool grants, tool names, tool tiers or the protocol version window. The *internal* grant vocabulary is untouched — §4.3.1 adds a public projection over it, not a replacement for it.
+- Breaking a configured client. PAT resolution survives through Slice 5 and beyond it until the operator's horizon (§9.5).
 - Making DPF an MCP **client** with OAuth (outbound to third-party servers) — related, separately owned, out of scope here.
 - Building a general-purpose OAuth provider for non-MCP surfaces. The AS is scoped to the MCP resource; broadening it is `EP-24741BBF`'s directory work, not this item.
 - Re-specifying the consumer bootstrap (`BI-ED1BBC9E`). Sequenced ahead of this, designed elsewhere, amended on its own item.
