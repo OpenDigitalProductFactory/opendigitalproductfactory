@@ -210,6 +210,39 @@ fiction.
 intake, the surgery, a foster home, an offsite adoption event. Headquarters / hybrid / remote does
 not describe anywhere an animal lives.
 
+**Shipped 2026-08-27 — the vocabulary, not yet the roles** (`BI-A30152B6`). `EmploymentType` and
+`WorkLocation` are open tables, not enums, and `WorkerClassification` already carried `volunteer`
+and named it "the majority classification for nonprofit and community archetypes". So this needed
+no new structure, only rows:
+
+- **Volunteer** joins the platform defaults, because the canonical enum had already anticipated it
+  and no install could record one.
+- **Foster carer** and the seven operational locations above are declared on the archetype
+  (`workforceProfile`) and applied to the install that actually runs that archetype, so a
+  restaurant never acquires a cat room. A class an archetype needs is now a row it contributes,
+  not a closed set the platform widens.
+- A classification is written on create only. The four seeded types a migration left unresolved
+  stay unresolved: an unpaid worker directed like an employee is a wage claim, and a confident
+  wrong answer is the most damaging kind available.
+- A boot reconciler applies the rows to an install that finished onboarding before the archetype
+  declared them. Without one this fix would have been invisible on every existing install: the
+  seed chain re-runs on boot only for an organization whose WWWD corpus is missing, and a healthy
+  install short-circuits that check. *A seed that only runs at setup completion has not shipped to
+  anyone who completed setup — check for the reconciler, not just the seeder.*
+
+**Still open on `BI-A30152B6`, and why:**
+
+- **The eight roles above are not seeded.** Roles live in `packages/db/data/occupation_registry.json`,
+  which has thirteen entries across healthcare, trades, agriculture and manufacturing and **none**
+  for nonprofit-community — which is why the only role vocabulary a rescue manager sees is the
+  platform's own `HR-000`..`HR-600` ladder. Each entry carries a coworker roster, a feature
+  surface and an onboarding curriculum that must all resolve, so the eight roles are a piece of
+  work in their own right, not a list to paste in.
+- **Recruiting still has no create control**, and an employee record still grants no access — the
+  sign-in is a separate create in Admin, so the counts read "2 people / 1 user" with nothing
+  joining them.
+- **Role is still write-once** in the UI.
+
 **Authorisation follows the role, and some of it is statutory.** Euthanasia authorisation belongs
 to named people. Controlled-substance draw belongs to fewer. A behavioural assessment restricts
 who may handle an animal — the colour-coded collar is an access rule, not a label. Conversely a

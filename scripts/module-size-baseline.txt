@@ -19,13 +19,13 @@ apps/web/components/platform/edge-nodes/EdgeNodesAdminClient.tsx	923
 apps/web/components/storefront/SlotBookingFlow.tsx	1015
 apps/web/components/workbooks/Grid.tsx	1830
 apps/web/instrumentation.test.ts	945
-apps/web/instrumentation.ts	1478
+apps/web/instrumentation.ts	1483
 apps/web/lib/actions/agent-coworker-external.test.ts	889
 apps/web/lib/actions/agent-coworker.ts	2810
 apps/web/lib/actions/agent-task-scheduler.test.ts	1132
 apps/web/lib/actions/agent-task-scheduler.ts	816
 apps/web/lib/actions/ai-providers.ts	914
-apps/web/lib/actions/build-governed.test.ts	1190
+apps/web/lib/actions/build-governed.test.ts	1189
 apps/web/lib/actions/build.ts	1776
 apps/web/lib/actions/compliance.ts	867
 apps/web/lib/actions/crm.ts	1043

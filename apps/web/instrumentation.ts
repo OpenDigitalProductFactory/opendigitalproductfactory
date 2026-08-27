@@ -1124,6 +1124,11 @@ export async function register() {
       await backfillOrgWwwdOnBoot();
     });
 
+    // The active archetype's worker classes + work locations, for an install that
+    // completed setup before the archetype declared them (BI-A30152B6). The WWWD
+    // backfill above runs the same chain only when a corpus is MISSING, so a
+    // healthy install short-circuits it and nothing else self-heals the rows.
+    void import("@/lib/onboarding/seed-archetype-workforce").then(({ backfillArchetypeWorkforceOnBoot }) => backfillArchetypeWorkforceOnBoot());
     void import("@/lib/onboarding/backfill-commercial-catalog-on-boot").then(({ backfillCommercialCatalogOnBoot }) => backfillCommercialCatalogOnBoot());
 
     // Discovery estate self-heal (BI-BAF38ED3 attribution + BI-B19C41B8 phantom
