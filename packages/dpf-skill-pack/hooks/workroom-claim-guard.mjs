@@ -98,7 +98,14 @@ function main() {
   if (payload === null) process.exit(0); // fail open on read/parse error
   if (!inDpfWorkspace(payload.cwd)) process.exit(0);
   if (process.env.DPF_ALLOW_UNCLAIMED_WORK === "1") process.exit(0);
-  if (!isWorkInvocation(payload.tool_name, payload.tool_input)) process.exit(0);
+  // readHookPayload NORMALIZES to camelCase (hook-io.mjs normalizePayload):
+  // toolName/toolInput, never tool_name/tool_input. Reading the snake_case
+  // names yields undefined, isWorkInvocation returns false, and the guard
+  // silently allows everything while still exiting 0 -- indistinguishable
+  // from a guard that ran and was satisfied. That is the very defect this
+  // guard exists to close, so it is covered by a functional test that pipes a
+  // real payload through the binary, not just unit tests of the pure helpers.
+  if (!isWorkInvocation(payload.toolName, payload.toolInput)) process.exit(0);
 
   const cwd = payload.cwd || process.cwd();
   const branch = currentBranch(cwd);

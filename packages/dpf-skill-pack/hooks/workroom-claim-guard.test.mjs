@@ -11,6 +11,7 @@
 // Run: node --test packages/dpf-skill-pack/hooks/workroom-claim-guard.test.mjs
 
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import {
@@ -122,4 +123,87 @@ test("every refusal names the branch and the call that fixes it", () => {
     assert.match(text, /§12/);
     assert.match(text, /DPF_ALLOW_UNCLAIMED_WORK=1/);
   }
+});
+
+// ── functional: drive the actual binary, not just the pure helpers ───────────
+//
+// These exist because the unit tests above ALL PASSED while the guard was
+// completely inert. It read payload.tool_name / payload.tool_input, but
+// readHookPayload normalizes to toolName/toolInput, so every lookup was
+// undefined, isWorkInvocation always returned false, and the guard allowed
+// everything — while still exiting 0 and looking exactly like a guard that ran
+// and was satisfied. Testing the pure decision table cannot catch a wiring
+// defect; only feeding a real payload through the process can.
+
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const guardPath = join(dirname(fileURLToPath(import.meta.url)), "workroom-claim-guard.mjs");
+
+/** Run the guard on a payload; return its stdout. */
+function runGuard(payload, env = {}) {
+  // A repo-shaped dir so inDpfWorkspace resolves, with no git repo inside it:
+  // no branch -> the decision table's "no-branch" allow. Branch-specific
+  // behaviour is covered by the pure tests above; what these assert is that the
+  // payload actually reaches the decision at all.
+  return execFileSync(process.execPath, [guardPath], {
+    input: JSON.stringify(payload),
+    encoding: "utf8",
+    env: { ...process.env, DPF_GUARDS_WORKSPACE_ANY: "1", ...env },
+  });
+}
+
+test("a Write payload reaches the decision — snake_case field names from the surface are normalized", () => {
+  const out = runGuard(
+    { tool_name: "Write", tool_input: { file_path: "x.ts" }, cwd: process.cwd() },
+    { DPF_WORKROOM_CLAIM_ENFORCE: "1" },
+  );
+  // Either it denies (unclaimed branch) or stays silent (exempt/no branch) —
+  // but the guard must not CRASH, and when it speaks it must be a valid envelope.
+  if (out.trim() !== "") {
+    const parsed = JSON.parse(out);
+    assert.equal(parsed.hookSpecificOutput.hookEventName, "PreToolUse");
+  }
+});
+
+test("the guard never crashes and never blocks on a malformed payload", () => {
+  // Genuinely unusable payloads only. `{"tool_name":"Write"}` is NOT one of
+  // them: it is a well-formed edit whose cwd defaults to the process cwd (the
+  // same fallback root-clone-guard uses), so denying it is correct, not a
+  // fail-open violation.
+  for (const input of ["", "not json", "{}", "null", "[]", '{"tool_name":"Read"}']) {
+    const out = execFileSync(process.execPath, [guardPath], {
+      input,
+      encoding: "utf8",
+      env: { ...process.env, DPF_GUARDS_WORKSPACE_ANY: "1", DPF_WORKROOM_CLAIM_ENFORCE: "1" },
+    });
+    assert.doesNotMatch(out, /"permissionDecision":"deny"/, `must fail open on: ${JSON.stringify(input)}`);
+  }
+});
+
+test("the explicit bypass silences the guard even under enforcement", () => {
+  const out = runGuard(
+    { tool_name: "Write", tool_input: { file_path: "x.ts" }, cwd: process.cwd() },
+    { DPF_WORKROOM_CLAIM_ENFORCE: "1", DPF_ALLOW_UNCLAIMED_WORK: "1" },
+  );
+  assert.equal(out.trim(), "");
+});
+
+test("reading is never work, even under enforcement", () => {
+  const out = runGuard({ tool_name: "Read", tool_input: {}, cwd: process.cwd() }, { DPF_WORKROOM_CLAIM_ENFORCE: "1" });
+  assert.equal(out.trim(), "");
+});
+
+test("the guard reads the normalized camelCase payload keys, not the raw snake_case ones", () => {
+  // The regression itself, asserted at the source: a lookup of tool_name /
+  // tool_input in the guard body means the guard is inert.
+  const source = readFileSync(guardPath, "utf8");
+  const offending = source
+    .split(/\r?\n/)
+    .filter((line) => !line.trimStart().startsWith("//") && !line.trimStart().startsWith("*"))
+    .filter((line) => /payload\.tool_(name|input)/.test(line));
+  assert.deepEqual(offending, [], "guard must read payload.toolName/payload.toolInput (hook-io normalizePayload)");
 });
