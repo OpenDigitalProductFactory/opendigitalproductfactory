@@ -36,6 +36,21 @@ In-platform coworkers, external coding agents, and the humans who operate them. 
 
 Capacity use is driven by Standing Orders (durable directives from the operator), calendar / availability state, safe work queues, and existing authority controls. Coworkers may continue low-risk governed work when humans are unavailable, but must stop at approval boundaries for consequential actions. When the safe-work queue is empty, surface the blocker — "I'm idle because the backlog is empty and no review-stale specs were found" — instead of fabricating work. Periodically review what coworkers have been doing during idle stretches and tune the standing orders if the pattern is wasteful.
 
+## What this principle does NOT cover
+
+This principle separates useful work from busywork. It does not bound how far
+useful work may wander from what was asked. An agent that is genuinely active —
+producing evidence, merging PRs, refusing to fabricate — reads as satisfied here
+even while spending days on blockers of blockers and delivering nothing that was
+named. That failure mode is bounded by the descent rule in
+[`autonomous-directives-are-blanket-approval`](autonomous-directives-are-blanket-approval.md):
+depth 1 is authorized, depth 2 is a stop-and-hand-back, and the same blocker
+class failing twice is a stop rather than a third attempt.
+
+The two principles are halves of one question. This one asks "is the capacity
+producing value?"; that one asks "is it producing the value that was asked
+for?" Both must be yes.
+
 ## Decision Dimensions
 
 - `capacity_utilization: 1.0` — this is the axis the principle is named after. Maximum positive weight.
