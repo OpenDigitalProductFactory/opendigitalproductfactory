@@ -1,0 +1,162 @@
+{
+  "version": "1",
+  "accountableOwner": "Mark Bodman (markdbodman@gmail.com)",
+  "summary": "BI-C61CEEA9, D1 of EP-862820FD. Migration 20260826190000_add_worker_classification_axis adds the legally-consequential axis behind an organisation's own EmploymentType label, plus the recorded human determination behind it and the definite term a contingent engagement carries. EmploymentType.name is free text with no legal meaning, so nothing downstream could ask whether a worker may lawfully be directed, scheduled, reviewed and provisioned as an employee. This is new information about a data subject, not a re-projection of existing values: a classification is a judgement a human makes about a worker, and it carries employment-law consequence. It is therefore governed rather than inherited, and the determination row cannot exist without a named human author. The backfill maps only labels it can read unambiguously and leaves the rest NULL as operator work, because a guess writes a legal claim into the database and every permissive guess errs toward directing someone the organisation may not direct.",
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "EmploymentType",
+      "lifecycleDisposition": "retain-for-organization-lifetime",
+      "fields": [
+        {
+          "name": "classification",
+          "resolution": "governed",
+          "reason": "The legal axis behind the organisation's display label. Not derived from the label text at read time — that is precisely the defect this replaces — and not inherited from any existing record, because no existing column carries employment-law meaning. Nullable on purpose so an unresolved type is a first-class operator-work state rather than a defaulted legal claim.",
+          "provenance": "Set by the migration only where the label reads unambiguously (volunteer, intern, board, employer-of-record, agency-qualified contractor or temp, and explicit employment shapes). Otherwise NULL, awaiting a recorded human determination. A bare 'Contractor', 'Director' or 'Temp' is deliberately not mapped.",
+          "flags": []
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "WorkerClassificationDetermination",
+      "lifecycleDisposition": "retain-for-employment-record-lifetime-then-statutory-retention",
+      "fields": [
+        {
+          "name": "classification",
+          "resolution": "governed",
+          "reason": "A judgement about a worker's legal status with direct employment-law consequence — it decides whether the organisation may direct them, whether withholding applies, and whether they accrue leave. It is an attribute of the data subject, and a wrong or unaccountable value creates misclassification exposure for the employer and lost entitlements for the worker.",
+          "provenance": "Recorded by a named human via determinedByUserId. The platform never derives, infers or defaults this value; there is no code path that writes it without a human author.",
+          "flags": ["subject"],
+          "fieldPolicy": {
+            "basis": "employment-contract-and-legal-obligation",
+            "access": "Readable by the worker themselves, their accountable manager chain, and platform roles holding workforce-administration capability. Not exposed on public or storefront surfaces.",
+            "retention": "Retained for the employment or engagement record's lifetime and any statutory retention period that follows, because it is the evidence trail for a classification challenge.",
+            "obligations": "Superseded rather than overwritten, so the worker and any auditor can see what was determined when and on what evidence. Never used as an input to any automated scoring or selection decision."
+          }
+        },
+        {
+          "name": "determinedByUserId",
+          "resolution": "inherited",
+          "reason": "Identifies the human accountable for the determination. Governance is inherited from the existing User record; this creates no second home for identity and collects nothing new about that person.",
+          "provenance": "User.id of the person recording the determination, captured at write time.",
+          "flags": []
+        },
+        {
+          "name": "jurisdictionSlug",
+          "resolution": "not-applicable",
+          "reason": "Which employment jurisdiction the determination was made under. Organisational scope rather than a data-subject attribute; the value set is the PROFESSION_JURISDICTIONS vocabulary already declared on Organization.employsIn.",
+          "provenance": "Resolved from the worker's work location by BI-9252B9EA. NULL until that lands.",
+          "flags": []
+        },
+        {
+          "name": "evidence",
+          "resolution": "governed",
+          "reason": "Free-shaped record of what the determination rested on — engagement facts, contract references, the factors weighed. Deliberately unstructured because the multi-factor tests differ by jurisdiction, which means it can hold personal data about the worker and about the engagement.",
+          "provenance": "Supplied by the human making the determination. No automated collection populates it.",
+          "flags": ["subject"],
+          "fieldPolicy": {
+            "basis": "employment-contract-and-legal-obligation",
+            "access": "Same audience as the classification itself: the worker, their accountable manager chain, and workforce administration.",
+            "retention": "Bound to its parent determination; retained and disposed with it.",
+            "obligations": "Operators must not place special-category data here. Because the shape is free, this is a stated obligation rather than a schema constraint, and it is the reason the field is flagged subject rather than not-applicable."
+          }
+        },
+        {
+          "name": "rationale",
+          "resolution": "governed",
+          "reason": "The human's stated reasoning. Narrative about a data subject's legal status, so it carries the same governance as the determination it explains.",
+          "provenance": "Written by the human making the determination.",
+          "flags": ["subject"],
+          "fieldPolicy": {
+            "basis": "employment-contract-and-legal-obligation",
+            "access": "Same audience as the classification itself.",
+            "retention": "Bound to its parent determination.",
+            "obligations": "Disclosed to the worker on request as part of the determination record."
+          }
+        },
+        {
+          "name": "determinedAt",
+          "resolution": "not-applicable",
+          "reason": "Timestamp of the determination; operational metadata, not a data-subject attribute.",
+          "provenance": "Server clock at write time.",
+          "flags": []
+        },
+        {
+          "name": "supersededAt",
+          "resolution": "not-applicable",
+          "reason": "Marks a determination replaced by a later one. Operational metadata that makes the drift history readable.",
+          "provenance": "Server clock when a successor determination is recorded.",
+          "flags": []
+        },
+        {
+          "name": "supersededById",
+          "resolution": "not-applicable",
+          "reason": "Self-relation to the successor determination. A typed join within this model, carrying no additional information about the worker.",
+          "provenance": "Set when a successor determination is recorded.",
+          "flags": []
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "WorkerEngagementTerm",
+      "lifecycleDisposition": "retain-for-employment-record-lifetime-then-statutory-retention",
+      "fields": [
+        {
+          "name": "startsOn",
+          "resolution": "governed",
+          "reason": "When the engagement was agreed to begin. An attribute of the worker's engagement rather than a re-projection of EmployeeProfile.startDate, which records when employment began — a different fact for a contingent worker whose engagement may start and end inside a longer relationship.",
+          "provenance": "Recorded from the engagement agreement by workforce administration.",
+          "flags": ["subject"],
+          "fieldPolicy": {
+            "basis": "employment-contract",
+            "access": "The worker, their accountable manager chain, and workforce administration.",
+            "retention": "Retained for the engagement record's lifetime and any statutory retention that follows.",
+            "obligations": "Never used as an input to automated selection or scoring."
+          }
+        },
+        {
+          "name": "endsOn",
+          "resolution": "governed",
+          "reason": "The agreed end of the engagement. Required, because an engagement with no end date is not a definite term and recording one as though it were is how an indefinite engagement hides. Duration is itself a factor that reclassifies a contractor as an employee, so this value has legal consequence for the worker.",
+          "provenance": "Recorded from the engagement agreement by workforce administration.",
+          "flags": ["subject"],
+          "fieldPolicy": {
+            "basis": "employment-contract",
+            "access": "The worker, their accountable manager chain, and workforce administration.",
+            "retention": "Retained for the engagement record's lifetime and any statutory retention that follows.",
+            "obligations": "A lapsed term on a continuing engagement is surfaced as drift for re-determination rather than silently extended."
+          }
+        },
+        {
+          "name": "changeReason",
+          "resolution": "governed",
+          "reason": "Why a term was extended or replaced. Narrative about the worker's engagement, forming part of the re-determination trail.",
+          "provenance": "Written by workforce administration when superseding a term.",
+          "flags": ["subject"],
+          "fieldPolicy": {
+            "basis": "employment-contract",
+            "access": "The worker, their accountable manager chain, and workforce administration.",
+            "retention": "Bound to its parent term.",
+            "obligations": "Disclosed to the worker on request as part of the engagement record."
+          }
+        },
+        {
+          "name": "supersededAt",
+          "resolution": "not-applicable",
+          "reason": "Marks a term replaced by an extension or successor. Operational metadata.",
+          "provenance": "Server clock when a successor term is recorded.",
+          "flags": []
+        },
+        {
+          "name": "supersededById",
+          "resolution": "not-applicable",
+          "reason": "Self-relation to the successor term. A typed join within this model.",
+          "provenance": "Set when a successor term is recorded.",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}
