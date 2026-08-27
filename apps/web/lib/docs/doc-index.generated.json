@@ -1902,7 +1902,9 @@
       "publishedPortal": false,
       "anchors": [
         "mcp-tool-authorization-runbook",
-        "protocol-version-window-mechanics-landed-contract-pending-ratification"
+        "protocol-version-window-mechanics-landed-contract-pending-ratification",
+        "acting-coworker-binding-what-lets-a-token-join-a-work-room-bi-b986a18b",
+        "diagnosing-requires-an-acting-coworker"
       ]
     },
     "docs/architecture/mcp-tool-packs.md": {

@@ -3579,6 +3579,144 @@
         },
         "concurrency_limit": 8
       }
+    },
+    {
+      "agent_id": "AGT-EXT-CLAUDE",
+      "agent_name": "external-claude-code",
+      "displayName": "Claude Code (external CLI)",
+      "aliases": [
+        "external-claude-code",
+        "claude"
+      ],
+      "tier": "specialist",
+      "value_stream": "integrate",
+      "role": "builder",
+      "capability_domain": "External Claude Code (external CLI) CLI session acting as a governed Work Room participant.",
+      "human_supervisor_id": "HR-100",
+      "hitl_tier_default": 1,
+      "delegates_to": [],
+      "escalates_to": "AGT-ORCH-200",
+      "it4it_sections": [
+        "6.2 Requirement to Deploy"
+      ],
+      "status": "active",
+      "config_profile": {
+        "model_binding": {
+          "model_id": null,
+          "temperature": 0.2,
+          "max_tokens": 8192
+        },
+        "execution_runtime": {
+          "type": "external_cli",
+          "timeout_seconds": 600
+        },
+        "token_budget": {
+          "daily_limit": 0,
+          "per_task_limit": 0
+        },
+        "memory": {
+          "type": "none",
+          "backend": null
+        },
+        "concurrency_limit": 4,
+        "tool_grants": [
+          "work_room_read",
+          "work_room_write",
+          "registry_read"
+        ]
+      }
+    },
+    {
+      "agent_id": "AGT-EXT-CODEX",
+      "agent_name": "external-codex",
+      "displayName": "Codex (external CLI)",
+      "aliases": [
+        "external-codex",
+        "codex"
+      ],
+      "tier": "specialist",
+      "value_stream": "integrate",
+      "role": "builder",
+      "capability_domain": "External Codex (external CLI) CLI session acting as a governed Work Room participant.",
+      "human_supervisor_id": "HR-100",
+      "hitl_tier_default": 1,
+      "delegates_to": [],
+      "escalates_to": "AGT-ORCH-200",
+      "it4it_sections": [
+        "6.2 Requirement to Deploy"
+      ],
+      "status": "active",
+      "config_profile": {
+        "model_binding": {
+          "model_id": null,
+          "temperature": 0.2,
+          "max_tokens": 8192
+        },
+        "execution_runtime": {
+          "type": "external_cli",
+          "timeout_seconds": 600
+        },
+        "token_budget": {
+          "daily_limit": 0,
+          "per_task_limit": 0
+        },
+        "memory": {
+          "type": "none",
+          "backend": null
+        },
+        "concurrency_limit": 4,
+        "tool_grants": [
+          "work_room_read",
+          "work_room_write",
+          "registry_read"
+        ]
+      }
+    },
+    {
+      "agent_id": "AGT-EXT-GROK",
+      "agent_name": "external-grok",
+      "displayName": "Grok (external CLI)",
+      "aliases": [
+        "external-grok",
+        "grok"
+      ],
+      "tier": "specialist",
+      "value_stream": "integrate",
+      "role": "builder",
+      "capability_domain": "External Grok (external CLI) CLI session acting as a governed Work Room participant.",
+      "human_supervisor_id": "HR-100",
+      "hitl_tier_default": 1,
+      "delegates_to": [],
+      "escalates_to": "AGT-ORCH-200",
+      "it4it_sections": [
+        "6.2 Requirement to Deploy"
+      ],
+      "status": "active",
+      "config_profile": {
+        "model_binding": {
+          "model_id": null,
+          "temperature": 0.2,
+          "max_tokens": 8192
+        },
+        "execution_runtime": {
+          "type": "external_cli",
+          "timeout_seconds": 600
+        },
+        "token_budget": {
+          "daily_limit": 0,
+          "per_task_limit": 0
+        },
+        "memory": {
+          "type": "none",
+          "backend": null
+        },
+        "concurrency_limit": 4,
+        "tool_grants": [
+          "work_room_read",
+          "work_room_write",
+          "registry_read"
+        ]
+      }
     }
   ]
 }
