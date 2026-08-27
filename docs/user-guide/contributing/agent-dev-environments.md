@@ -117,7 +117,7 @@ bash scripts/dpf-bootstrap-agent-toolchain.sh
 The bootstrap is **idempotent** (re-running on a converged install is a no-op) and writes the **shared client configuration that both the desktop app and the CLI read** (`~/.claude`, `~/.codex/config.toml`, `~/.grok/config.toml`, and the Antigravity MCP config it can detect/write). It:
 
 1. **Detects** which of Claude / Codex / Grok / Antigravity are installed — resolving GUI-app and non-PATH install locations, not just `which`.
-2. **Mints and persists a DPF MCP token** if one isn't present (issued inside the portal container, persisted to `~/.dpf/agent-toolchain.env` and your shell profile, never logged). Default scope is `write` so the agent can use side-effecting MCP tools (backlog, evidence, Build Studio handoff). On macOS it also injects the token via `launchctl` so GUI-launched apps — which don't read your shell profile — still pick it up.
+2. **Mints and persists a legacy DPF MCP token** if one isn't present (a client that speaks the browser flow no longer needs this — see [How a client authenticates](#how-a-client-authenticates-all-clients)) (issued inside the portal container, persisted to `~/.dpf/agent-toolchain.env` and your shell profile, never logged). Default scope is `write` so the agent can use side-effecting MCP tools (backlog, evidence, Build Studio handoff). On macOS it also injects the token via `launchctl` so GUI-launched apps — which don't read your shell profile — still pick it up.
 3. **Connects the DPF MCP server** in each client (`.mcp.json` / `.vscode/mcp.json` for Claude, `[mcp_servers.dpf]` in Codex/Grok config, and Antigravity's `mcpServers.dpf` config when available), all referencing `${DPF_MCP_BEARER_TOKEN}`.
 4. **Installs the `dpf-platform` plugin** for each client from its local marketplace/registry — this is the single package that carries the shared **skill pack** and the cross-client hook/MCP contracts (see [The plugin](#the-plugin-skills-hooks-and-mcp-in-one-package) below). For Codex, the bootstrap registers and verifies the qualified plugin key `dpf-platform@personal`; copying plugin files alone is not considered installed.
 5. **Seeds kernel-tier memory** so the agent is kernel-aware from the first turn, before any MCP retrieval round-trip.
@@ -270,14 +270,30 @@ DPF relies on local guardrails — the pre-commit secret scan + typecheck hook (
 
 ---
 
-### The DPF MCP token (all clients)
+### How a client authenticates (all clients)
 
-All clients authenticate to the DPF MCP server with the same `DPF_MCP_BEARER_TOKEN` environment variable, referenced (never inlined) from each client's config. `.mcp.json` and `.vscode/mcp.json` are **gitignored credential files** — never commit them.
+**Point the client at the MCP URL and approve it once in your browser.** The client gets a `401` that tells it where to look, discovers this installation's authorization server, and runs the standard OAuth flow. A portal page opens naming the client, this installation, and what it is asking to do; you approve, and the client refreshes its own access from then on. **No environment variable, no copy-paste, no client restart.**
+
+- **Permissions are six plain-language scopes**, not the platform's internal grant names: read your platform, do governed work, run Build Studio, act on business records, operate the platform, administer the platform. You can untick any of them on the approval screen — that grants less, never more.
+- **Least privilege is the default.** A client that asks for "everything advertised" gets read access only. Anything beyond read is a separate approval at the moment it is first needed.
+- **Needing more mid-task is a prompt, not a dead end.** When a client hits a tool it lacks permission for, it asks you to approve exactly that additional permission and retries. You are never asked to go and mint something by hand.
+- **Self-registered clients are labelled.** On a local installation a client may register itself, which means it chose its own display name. The approval screen says so. Approve it only if you started the connection.
+- **Revoke any time** in Admin → Platform Development → MCP. Revoking a client immediately revokes everything it holds.
+
+#### Headless callers (CI, cron, containers)
+
+Anything with no browser cannot approve a screen, so an operator grants its permissions once, up front: create a client in Admin → Platform Development, choose its scopes, and give it the client id and secret. It exchanges those for short-lived access at the same endpoint every other client uses. Same permissions vocabulary, same revocation, same audit trail — a different way in, not a different system.
+
+#### The legacy `dpfmcp_` token
+
+Older clients authenticate with a `DPF_MCP_BEARER_TOKEN` environment variable, referenced (never inlined) from each client's config. **This still works and nothing breaks.** It is being retired: new tokens stop being issued when the operator closes issuance, and existing ones keep working until the operator sets a horizon. Prefer connecting a client over the browser flow instead.
 
 - **Scopes.** Coarse `read` / `write` / `admin` plus granular per-tool grants. Default is `read` and cannot call side-effecting tools. Use **Issue write token** in Admin → Platform Development → MCP when an agent must create/update backlog items, evidence, workrooms, or coordination records.
-- **Scope escalation.** If a tool returns `insufficient_token_scope`, *stop* — do not fall back to `psql`/Prisma/direct DB edits. Issue a scoped token in the portal, update the client, call `/api/mcp/token/refresh`, and retry through MCP.
+- **Scope escalation.** If a tool returns `insufficient_token_scope`, *stop* — do not fall back to `psql`/Prisma/direct DB edits. Issue a scoped token in the portal, update the client, call `/api/mcp/token/refresh`, and retry through MCP. (A client connected over the browser flow never sees this; it gets the approval prompt described above.)
 - **Rotation** (no file edits): set the `DPF_MCP_BEARER_TOKEN` user environment variable to the new value, `POST /api/mcp/token/refresh` with the new token, then retry in the running session.
 - **Endpoint trust.** A gate script that falls back to reading the token out of `.mcp.json` checks the endpoint that file names first, and accepts only loopback (`127.0.0.1`, `localhost`, `[::1]`). A config naming any other host stops the run rather than sending your token there — set `DPF_MCP_BEARER_TOKEN` and `DPF_MCP_URL` to reach a portal deliberately fronted off loopback. Full rule: [MCP tool authorization runbook](../../architecture/mcp-tool-authorization-runbook.md).
+
+`.mcp.json` and `.vscode/mcp.json` remain **gitignored credential files** — never commit them. A client connected over the browser flow stores its own credential and needs neither file for authentication.
 
 ---
 
