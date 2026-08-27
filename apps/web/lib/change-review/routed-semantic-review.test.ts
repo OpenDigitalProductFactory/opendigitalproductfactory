@@ -130,4 +130,40 @@ describe("routed semantic review", () => {
     expect(result.decision).toBe("pass");
     expect(routeAndCall).toHaveBeenCalledOnce();
   });
+
+  it("describes a prompt-only review without inventing a tool-use requirement", async () => {
+    vi.mocked(routeAndCall).mockResolvedValue({
+      content: JSON.stringify({ decision: "pass", issues: [], summary: "Pass." }),
+    } as never);
+
+    await dispatchRoutedSemanticReview("review this bounded change", {
+      strategyProfile: "high-assurance",
+      reviewerId: "change-reviewer",
+      specialistIds: [],
+      surface: "external",
+    });
+
+    const options = vi.mocked(routeAndCall).mock.calls[0]![3];
+    expect(options?.minimumCapabilities).toBeUndefined();
+    expect(options?.agentMinimumContextTokens).toBeGreaterThan(4_000);
+    expect(options?.agentMinimumContextTokens).toBeLessThan(24_576);
+    expect(options).not.toHaveProperty("preferredProviderId");
+    expect(options).not.toHaveProperty("preferredModelId");
+  });
+
+  it("keeps an oversized review packet above the 24,576-token endpoint floor", async () => {
+    vi.mocked(routeAndCall).mockResolvedValue({
+      content: JSON.stringify({ decision: "pass", issues: [], summary: "Pass." }),
+    } as never);
+
+    await dispatchRoutedSemanticReview("x".repeat(100_000), {
+      strategyProfile: "high-assurance",
+      reviewerId: "change-reviewer",
+      specialistIds: [],
+      surface: "external",
+    });
+
+    const options = vi.mocked(routeAndCall).mock.calls[0]![3];
+    expect(options?.agentMinimumContextTokens).toBeGreaterThan(24_576);
+  });
 });

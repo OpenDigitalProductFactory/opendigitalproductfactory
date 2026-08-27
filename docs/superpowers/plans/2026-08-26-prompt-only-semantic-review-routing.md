@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Prompt-only semantic-review routing
 
 **Backlog item:** BI-47ACE2C7  
@@ -42,7 +46,11 @@ The governed semantic reviewer routes according to the request it actually sends
 - Deliverable: prompt-only semantic-review eligibility contract -> `BI-47ACE2C7`
 - Rationale: the failing contract test and its two-file routing repair are one independently revertible invariant. Splitting them would create either an unguarded behavior change or a test with no delivery value.
 - Dependencies: none for source implementation. Protected deployment is the prerequisite for BI-SIG-463E478D, BI-F48D7059, and BI-A45D744A to resume.
-- Receipt: pending the independent `spec-approval` baseline and immutable plan coverage recording.
+- Receipt: `cmtawpxst00794pp8ph9kerl7`
+
+The receipt was recorded atomically against plan blob
+`3f75109691b6fd1768e7e117c93ba24948664484` after independent spec approval
+established baseline `baseline-d51fb24e-0e86-46c8-9a0a-91d91801e3f3`.
 
 ### Four-way traceability
 
@@ -80,9 +88,26 @@ bind the immutable plan to the approved scope.
 
 ## Completion evidence
 
-- [ ] Focused regression test observed red before source repair.
-- [ ] Focused test passes after the repair.
-- [ ] Web typecheck, required guards, docs checks, and source preflight pass.
+- [x] Focused regression test observed red before source repair: the route still
+  supplied `{ toolUse: true }` and the new assertion failed exactly on that
+  value.
+- [x] Focused test passes after the repair: 8/8 tests pass, including the
+  bounded 24,576-token fit and oversized-packet refusal cases.
+- [x] Web typecheck, the 77-test blast-radius matrix, style/token drift guard,
+  documentation checks, and the 52-guard source preflight pass.
+- [x] Independent spec approval is durable: TaskRun
+  `TR-MCP-Y210YXdrdmpiMDAwMGVucDhxazFpY2c3aw-932874D5A7F5` persisted six
+  immutable source reads and receipt
+  `initiative-1512bfd1-5ec6-4387-8cdf-81cc2ba4b6ba`; baseline
+  `baseline-d51fb24e-0e86-46c8-9a0a-91d91801e3f3` was created from the exact
+  design artifact.
+- [x] Current research evidence is durable: TaskRun
+  `TR-MCP-Y210YXdybWVtMDAwMGptcDgzeGloOHkwcg-53733F319635` persisted six
+  immutable reads plus receipt
+  `initiative-bcd4cd0f-f038-4019-b803-d6c01afbb139` against the same baseline.
+- [x] The implementation transition is allowed by
+  `initiative-readiness.v2` decision `IRD-8432E5CC89D3`; research and plan are
+  both current and no unmet condition remains.
 - [x] Bootstrap attempts are recorded honestly: the current-main BI-SIG preview
   supplied the exact immutable reader/writer surface, but TaskRun
   `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-B48A7E92B214` stopped before

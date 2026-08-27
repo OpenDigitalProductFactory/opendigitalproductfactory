@@ -11,6 +11,22 @@ const SPECIALIST_SYSTEM_PROMPTS: Record<string, string> = {
   "AGT-181": "You are the Architecture Guardrail specialist. Review only architectural alignment and boundary risks grounded in the supplied committed diff.",
 };
 
+const ESTIMATED_CHARACTERS_PER_TOKEN = 4;
+const RESPONSE_RESERVE_TOKENS = 4_096;
+const INPUT_SAFETY_HEADROOM_RATIO = 0.25;
+
+function semanticReviewMinimumContextTokens(
+  systemPrompt: string,
+  userPrompt: string,
+): number {
+  const estimatedInputTokens = Math.ceil(
+    (systemPrompt.length + userPrompt.length) / ESTIMATED_CHARACTERS_PER_TOKEN,
+  );
+  return Math.ceil(
+    estimatedInputTokens * (1 + INPUT_SAFETY_HEADROOM_RATIO) + RESPONSE_RESERVE_TOKENS,
+  );
+}
+
 function mergeReviewResults(results: SemanticReviewResult[]): SemanticReviewResult {
   const issues = results.flatMap((result) => result.issues);
   const criticals = issues.filter((issue) => issue.severity === "critical").length;
@@ -92,8 +108,10 @@ export async function dispatchRoutedSemanticReview(
         taskType: "build-review",
         budgetClass: context.strategyProfile === "economy" ? "balanced" : "quality_first",
         modelTier: "robust",
-        minimumCapabilities: { toolUse: true },
-        agentMinimumContextTokens: 32_000,
+        agentMinimumContextTokens: semanticReviewMinimumContextTokens(
+          branch.systemPrompt,
+          prompt,
+        ),
         agentId: branch.agentId,
         agentDisplayName: branch.displayName,
         effort: context.strategyProfile === "document-authority" ? "max" : "high",
