@@ -7,7 +7,11 @@ const mocks = vi.hoisted(() => ({
   countEpics: vi.fn(),
   findEpics: vi.fn(),
   buildReferenceIndex: vi.fn(),
+  searchSpecsAndPlans: vi.fn(),
+  specPlanCorpusCaveat: vi.fn(),
 }));
+
+const CORPUS_AVAILABLE = { available: true, root: "/repo", searchedPaths: ["docs/superpowers/specs", "docs/superpowers/plans"], missingPaths: [], fileCount: 2, reason: "Searched 2 markdown file(s)." };
 
 vi.mock("@dpf/db", () => ({
   prisma: {
@@ -18,6 +22,8 @@ vi.mock("@dpf/db", () => ({
 
 vi.mock("@/lib/backlog/spec-plan-search", () => ({
   buildSpecPlanReferenceIndex: mocks.buildReferenceIndex,
+  searchSpecsAndPlans: mocks.searchSpecsAndPlans,
+  specPlanCorpusCaveat: mocks.specPlanCorpusCaveat,
 }));
 
 import { listBacklogItems } from "./backlog-pack-read-tools";
@@ -51,7 +57,9 @@ describe("backlog deferral read projection", () => {
     vi.clearAllMocks();
     mocks.count.mockResolvedValue(1);
     mocks.findMany.mockResolvedValue([]);
-    mocks.buildReferenceIndex.mockResolvedValue({ specs: new Set(), plans: new Set() });
+    mocks.buildReferenceIndex.mockResolvedValue({ specs: new Set(), plans: new Set(), corpus: CORPUS_AVAILABLE });
+    mocks.searchSpecsAndPlans.mockResolvedValue({ corpus: CORPUS_AVAILABLE, results: [] });
+    mocks.specPlanCorpusCaveat.mockReturnValue(null);
     mocks.countEpics.mockResolvedValue(0);
     mocks.findEpics.mockResolvedValue([]);
   });
@@ -75,6 +83,7 @@ describe("backlog deferral read projection", () => {
     mocks.buildReferenceIndex.mockResolvedValue({
       specs: new Set(),
       plans: new Set(["EP-PLAN-ONLY"]),
+      corpus: CORPUS_AVAILABLE,
     });
 
     const { listEpics } = await import("./backlog-pack-read-tools");
@@ -135,5 +144,39 @@ describe("backlog deferral read projection", () => {
     expect(result).toMatchObject({ success: false, error: "invalid_deferral_review_due_before" });
     expect(mocks.count).not.toHaveBeenCalled();
     expect(mocks.findMany).not.toHaveBeenCalled();
+  });
+
+  // BI-10C34BE1: with no docs/superpowers tree every epic reads hasSpec:false /
+  // hasPlan:false. That is indistinguishable from a genuinely undesigned
+  // backlog, so the response has to say the measurement did not happen.
+  it("states that spec/plan coverage was not measured when the corpus is absent", async () => {
+    mocks.countEpics.mockResolvedValue(1);
+    mocks.findEpics.mockResolvedValue([{
+      id: "epic-row",
+      epicId: "EP-NO-CORPUS",
+      title: "Undesigned looking",
+      status: "open",
+      priority: 1,
+      updatedAt: new Date("2026-08-26T00:00:00.000Z"),
+      scopeKind: "platform",
+      archetypeCategories: [],
+      archetypeIds: [],
+      scopeRationale: null,
+      lifecycleTags: [],
+      items: [],
+    }]);
+    const corpusAbsent = { ...CORPUS_AVAILABLE, available: false, fileCount: 0 };
+    mocks.buildReferenceIndex.mockResolvedValue({
+      specs: new Set(),
+      plans: new Set(),
+      corpus: corpusAbsent,
+    });
+    mocks.specPlanCorpusCaveat.mockReturnValue("Spec/plan coverage was NOT measured: no corpus.");
+
+    const { listEpics } = await import("./backlog-pack-read-tools");
+    const result = await listEpics({});
+
+    expect(result.message).toContain("NOT measured");
+    expect((result.data as { specPlanCorpus: { available: boolean } }).specPlanCorpus.available).toBe(false);
   });
 });
