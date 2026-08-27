@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Marketing Execution Loop Design
 
 | Field | Value |
