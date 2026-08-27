@@ -225,11 +225,11 @@ Rollback is one DCO PR revert. No down migration is required. Persisted platform
 
 | Acceptance | Automated evidence | Runtime/UX evidence |
 | --- | --- | --- |
-| AC-PSCC-001–003 | DB unit tests for normalization, deterministic identity, idempotent rerun, supersession isolation, stale occurrence removal, and catalog bridge | Seed shared nonproduction twice; query one current `dpf-portal` platform document, nonzero complete occurrences, unchanged build BOMs, and resolvable catalog links |
-| AC-PSCC-004–006 | Page/render tests for all three regions, mixed/empty/error states, lifecycle helper output, `Not sourced`, pagination totals, and full export | Desktop and narrow screenshots; keyboard pass; verify empty estate with populated BOM and populated estate with missing BOM |
-| AC-PSCC-007–009 | Server redirect tests, product and Operations nav tests, purpose-artifact freshness, guard fixture tests, and repository scan | Open both legacy bookmarks and confirm the stable software-composition heading and one active Dependencies destination |
-| AC-PSCC-010 | Focused suites, DB/web typechecks, prose/style/generated-artifact guards, `pregate:preflight`, exact-tree `pregate`, and `pr:health` | Workroom evidence links each acceptance row to its test/runtime result |
-| AC-PSCC-011 | UX route/render checks for heading structure, first viewport, responsive overflow, empty/error semantics, and keyboard navigation | Shared nonproduction UX critique with desktop/narrow screenshots and post-action database proof |
+| Composition persistence (criteria 1–3) | DB unit tests for normalization, deterministic identity, idempotent rerun, supersession isolation, stale occurrence removal, and catalog bridge | Seed shared nonproduction twice; query one current `dpf-portal` platform document, nonzero complete occurrences, unchanged build BOMs, and resolvable catalog links |
+| Unified experience and currency (criteria 4–6) | Page/render tests for all three regions, mixed/empty/error states, lifecycle helper output, `Not sourced`, pagination totals, and full export | Desktop and narrow screenshots; keyboard pass; verify empty estate with populated BOM and populated estate with missing BOM |
+| Compatibility and invariant (criteria 7–9) | Server redirect tests, product and Operations nav tests, purpose-artifact freshness, guard fixture tests, and repository scan | Open both legacy bookmarks and confirm the stable software-composition heading and one active Dependencies destination |
+| Automated verification (criterion 10) | Focused suites, DB/web typechecks, prose/style/generated-artifact guards, `pregate:preflight`, exact-tree `pregate`, and `pr:health` | Workroom evidence links each acceptance row to its test/runtime result |
+| Shared nonproduction proof (criterion 11) | UX route/render checks for heading structure, first viewport, responsive overflow, empty/error semantics, and keyboard navigation | Shared nonproduction UX critique with desktop/narrow screenshots and post-action database proof |
 
 ## Verification contract
 

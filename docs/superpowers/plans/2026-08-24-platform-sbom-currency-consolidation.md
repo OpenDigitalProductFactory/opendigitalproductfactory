@@ -116,6 +116,8 @@ Coverage is deliberately atomic. Portfolio Advisor recorded research receipt `in
 
 Change Reviewer tasks `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-09E6B034FC91` and `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-DB3B8F646A34` independently concluded that revised spec blob `810633b17e30b82792facc7ec9e38fc25def3e0a` passes with no findings. Both returned the writer payload instead of invoking the attached `record_initiative_design_review` tool; the second run emitted `contract-violation tool-refused-despite-availability` in the portal log. Those results are review evidence, not a governed gate receipt; implementation remains blocked until the writer executes.
 
+Task `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-914C36A37B47` invoked the approved writer, which rejected the spec because the acceptance-evidence matrix repeated canonical ID `AC-PSCC-010`. The spec now keeps each acceptance ID solely in the governed scope manifest and uses criterion-number labels in the evidence matrix.
+
 - Decision: `atomic`
 - Umbrella BI: `BI-7D2C4F02`
 - Deliverable: `platform-sbom-currency-consolidation` → `BI-7D2C4F02`
