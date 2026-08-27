@@ -128,6 +128,8 @@ Task `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-1069524C76D4` at commit `a1d8a22
 
 Task `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-FE80853C34FC` independently passed at commit `b14799ef588bcf2c57e2acbca7950953d02a4d7e` with no findings, then refused the attached writer after its immutable-reader call. Source inspection explains why the existing recovery guard does not self-correct this shape: `appendToolRefusedRecoveryMessages` declines recovery whenever any tool has executed, even when the executed tool was the reader and the refused writer remains uncalled. That root-cause evidence belongs to `BI-PIR-3c79612c`.
 
+Task `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-17ACD0131CAE` reproduced the same reader-then-writer refusal at commit `b6c83facfc8f6f38d38d8e1342488a83e5655436`. Six fresh immutable attempts in this delivery have now ended without a valid receipt (five writer refusals and one provider-capacity fallback); implementation remains fail-closed.
+
 - Decision: `atomic`
 - Umbrella BI: `BI-7D2C4F02`
 - Deliverable: `platform-sbom-currency-consolidation` → `BI-7D2C4F02`
