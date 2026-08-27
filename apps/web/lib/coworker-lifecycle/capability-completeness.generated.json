@@ -130,7 +130,7 @@
     "sources": {
       "canonicalRegistry": 76,
       "workforceRoster": 28,
-      "professionRoles": 95,
+      "professionRoles": 98,
       "note": "Joined via COWORKER_SLUG_TO_CANONICAL_AGENT_ID; a handle-only join over-counts."
     },
     "byClass": {
@@ -183,9 +183,9 @@
         "ceiling": 3,
         "blocker": null,
         "distribution": {
-          "0": 3,
+          "0": 0,
           "1": 0,
-          "2": 54,
+          "2": 57,
           "3": 29
         },
         "atCeiling": 29
@@ -356,444 +356,6 @@
     }
   },
   "agents": [
-    {
-      "key": "AGT-EXT-CLAUDE",
-      "displayName": "Claude Code (external CLI)",
-      "identityClass": "active-registry-only",
-      "handles": [
-        "external-claude-code"
-      ],
-      "registryStatus": "active",
-      "valueStream": "integrate",
-      "tier": "specialist",
-      "score": {
-        "earned": 1,
-        "attainableMax": 25,
-        "absoluteMax": 27,
-        "attainablePct": 4,
-        "absolutePct": 4
-      },
-      "planes": {
-        "identity": {
-          "level": 1,
-          "detail": "in the canonical registry only (status \"active\"), never seeded onto the roster",
-          "handles": [
-            "external-claude-code"
-          ],
-          "levelKey": "declared",
-          "ceiling": 3,
-          "atCeiling": false
-        },
-        "corpus": {
-          "level": 0,
-          "professionKey": null,
-          "corpusPages": 0,
-          "missingGrants": [
-            "registry_read"
-          ],
-          "detail": "bound to no profession family",
-          "levelKey": "absent",
-          "ceiling": 3,
-          "atCeiling": false
-        },
-        "governance": {
-          "level": 0,
-          "missingGrants": [
-            "registry_read"
-          ],
-          "escalatesTo": "AGT-ORCH-200",
-          "reachableSideEffectingTools": 22,
-          "reachableGatedTools": 3,
-          "ungatedConsequenceNote": null,
-          "detail": "holds no grants at all — no tool surface is authorised",
-          "levelKey": "absent",
-          "ceiling": 3,
-          "atCeiling": false
-        },
-        "shape": {
-          "level": 0,
-          "detail": "no declared work shape — nothing bounds what its standing work may do",
-          "levelKey": "absent",
-          "ceiling": 2,
-          "atCeiling": false
-        },
-        "cadence": {
-          "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
-          "levelKey": "absent",
-          "ceiling": 3,
-          "atCeiling": false
-        },
-        "toolsAndSkills": {
-          "level": 0,
-          "directSkills": 0,
-          "wildcardSkills": 5,
-          "reachableTools": 7,
-          "heldGrants": [],
-          "services": 0,
-          "unbackedSkillIds": [],
-          "detail": "no grants and no skills — it cannot act",
-          "levelKey": "absent",
-          "ceiling": 3,
-          "atCeiling": false
-        },
-        "evidence": {
-          "level": 0,
-          "detail": "not on the roster, so the certification sweep never exercises it",
-          "levelKey": "absent",
-          "ceiling": 2,
-          "atCeiling": false
-        }
-      },
-      "gaps": [
-        {
-          "plane": "identity",
-          "level": 1,
-          "ceiling": 3,
-          "detail": "in the canonical registry only (status \"active\"), never seeded onto the roster"
-        },
-        {
-          "plane": "corpus",
-          "level": 0,
-          "ceiling": 3,
-          "detail": "bound to no profession family"
-        },
-        {
-          "plane": "governance",
-          "level": 0,
-          "ceiling": 3,
-          "detail": "holds no grants at all — no tool surface is authorised"
-        },
-        {
-          "plane": "shape",
-          "level": 0,
-          "ceiling": 2,
-          "detail": "no declared work shape — nothing bounds what its standing work may do"
-        },
-        {
-          "plane": "cadence",
-          "level": 0,
-          "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
-        },
-        {
-          "plane": "toolsAndSkills",
-          "level": 0,
-          "ceiling": 3,
-          "detail": "no grants and no skills — it cannot act"
-        },
-        {
-          "plane": "evidence",
-          "level": 0,
-          "ceiling": 2,
-          "detail": "not on the roster, so the certification sweep never exercises it"
-        }
-      ],
-      "blockedPlanes": [
-        {
-          "plane": "shape",
-          "ceiling": 2,
-          "blocker": "The work-shape registry has landed (apps/web/lib/work-management/work-shapes.ts). Level 3 needs an observed running instance, which nothing records yet — the ceiling rises to 3 when instance evidence lands."
-        },
-        {
-          "plane": "evidence",
-          "ceiling": 2,
-          "blocker": "A passing AssuranceRun is runtime state a static scan cannot see. Ceiling rises to 3 when the measure reads the ledger."
-        }
-      ]
-    },
-    {
-      "key": "AGT-EXT-CODEX",
-      "displayName": "Codex (external CLI)",
-      "identityClass": "active-registry-only",
-      "handles": [
-        "external-codex"
-      ],
-      "registryStatus": "active",
-      "valueStream": "integrate",
-      "tier": "specialist",
-      "score": {
-        "earned": 1,
-        "attainableMax": 25,
-        "absoluteMax": 27,
-        "attainablePct": 4,
-        "absolutePct": 4
-      },
-      "planes": {
-        "identity": {
-          "level": 1,
-          "detail": "in the canonical registry only (status \"active\"), never seeded onto the roster",
-          "handles": [
-            "external-codex"
-          ],
-          "levelKey": "declared",
-          "ceiling": 3,
-          "atCeiling": false
-        },
-        "corpus": {
-          "level": 0,
-          "professionKey": null,
-          "corpusPages": 0,
-          "missingGrants": [
-            "registry_read"
-          ],
-          "detail": "bound to no profession family",
-          "levelKey": "absent",
-          "ceiling": 3,
-          "atCeiling": false
-        },
-        "governance": {
-          "level": 0,
-          "missingGrants": [
-            "registry_read"
-          ],
-          "escalatesTo": "AGT-ORCH-200",
-          "reachableSideEffectingTools": 22,
-          "reachableGatedTools": 3,
-          "ungatedConsequenceNote": null,
-          "detail": "holds no grants at all — no tool surface is authorised",
-          "levelKey": "absent",
-          "ceiling": 3,
-          "atCeiling": false
-        },
-        "shape": {
-          "level": 0,
-          "detail": "no declared work shape — nothing bounds what its standing work may do",
-          "levelKey": "absent",
-          "ceiling": 2,
-          "atCeiling": false
-        },
-        "cadence": {
-          "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
-          "levelKey": "absent",
-          "ceiling": 3,
-          "atCeiling": false
-        },
-        "toolsAndSkills": {
-          "level": 0,
-          "directSkills": 0,
-          "wildcardSkills": 5,
-          "reachableTools": 7,
-          "heldGrants": [],
-          "services": 0,
-          "unbackedSkillIds": [],
-          "detail": "no grants and no skills — it cannot act",
-          "levelKey": "absent",
-          "ceiling": 3,
-          "atCeiling": false
-        },
-        "evidence": {
-          "level": 0,
-          "detail": "not on the roster, so the certification sweep never exercises it",
-          "levelKey": "absent",
-          "ceiling": 2,
-          "atCeiling": false
-        }
-      },
-      "gaps": [
-        {
-          "plane": "identity",
-          "level": 1,
-          "ceiling": 3,
-          "detail": "in the canonical registry only (status \"active\"), never seeded onto the roster"
-        },
-        {
-          "plane": "corpus",
-          "level": 0,
-          "ceiling": 3,
-          "detail": "bound to no profession family"
-        },
-        {
-          "plane": "governance",
-          "level": 0,
-          "ceiling": 3,
-          "detail": "holds no grants at all — no tool surface is authorised"
-        },
-        {
-          "plane": "shape",
-          "level": 0,
-          "ceiling": 2,
-          "detail": "no declared work shape — nothing bounds what its standing work may do"
-        },
-        {
-          "plane": "cadence",
-          "level": 0,
-          "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
-        },
-        {
-          "plane": "toolsAndSkills",
-          "level": 0,
-          "ceiling": 3,
-          "detail": "no grants and no skills — it cannot act"
-        },
-        {
-          "plane": "evidence",
-          "level": 0,
-          "ceiling": 2,
-          "detail": "not on the roster, so the certification sweep never exercises it"
-        }
-      ],
-      "blockedPlanes": [
-        {
-          "plane": "shape",
-          "ceiling": 2,
-          "blocker": "The work-shape registry has landed (apps/web/lib/work-management/work-shapes.ts). Level 3 needs an observed running instance, which nothing records yet — the ceiling rises to 3 when instance evidence lands."
-        },
-        {
-          "plane": "evidence",
-          "ceiling": 2,
-          "blocker": "A passing AssuranceRun is runtime state a static scan cannot see. Ceiling rises to 3 when the measure reads the ledger."
-        }
-      ]
-    },
-    {
-      "key": "AGT-EXT-GROK",
-      "displayName": "Grok (external CLI)",
-      "identityClass": "active-registry-only",
-      "handles": [
-        "external-grok"
-      ],
-      "registryStatus": "active",
-      "valueStream": "integrate",
-      "tier": "specialist",
-      "score": {
-        "earned": 1,
-        "attainableMax": 25,
-        "absoluteMax": 27,
-        "attainablePct": 4,
-        "absolutePct": 4
-      },
-      "planes": {
-        "identity": {
-          "level": 1,
-          "detail": "in the canonical registry only (status \"active\"), never seeded onto the roster",
-          "handles": [
-            "external-grok"
-          ],
-          "levelKey": "declared",
-          "ceiling": 3,
-          "atCeiling": false
-        },
-        "corpus": {
-          "level": 0,
-          "professionKey": null,
-          "corpusPages": 0,
-          "missingGrants": [
-            "registry_read"
-          ],
-          "detail": "bound to no profession family",
-          "levelKey": "absent",
-          "ceiling": 3,
-          "atCeiling": false
-        },
-        "governance": {
-          "level": 0,
-          "missingGrants": [
-            "registry_read"
-          ],
-          "escalatesTo": "AGT-ORCH-200",
-          "reachableSideEffectingTools": 22,
-          "reachableGatedTools": 3,
-          "ungatedConsequenceNote": null,
-          "detail": "holds no grants at all — no tool surface is authorised",
-          "levelKey": "absent",
-          "ceiling": 3,
-          "atCeiling": false
-        },
-        "shape": {
-          "level": 0,
-          "detail": "no declared work shape — nothing bounds what its standing work may do",
-          "levelKey": "absent",
-          "ceiling": 2,
-          "atCeiling": false
-        },
-        "cadence": {
-          "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
-          "levelKey": "absent",
-          "ceiling": 3,
-          "atCeiling": false
-        },
-        "toolsAndSkills": {
-          "level": 0,
-          "directSkills": 0,
-          "wildcardSkills": 5,
-          "reachableTools": 7,
-          "heldGrants": [],
-          "services": 0,
-          "unbackedSkillIds": [],
-          "detail": "no grants and no skills — it cannot act",
-          "levelKey": "absent",
-          "ceiling": 3,
-          "atCeiling": false
-        },
-        "evidence": {
-          "level": 0,
-          "detail": "not on the roster, so the certification sweep never exercises it",
-          "levelKey": "absent",
-          "ceiling": 2,
-          "atCeiling": false
-        }
-      },
-      "gaps": [
-        {
-          "plane": "identity",
-          "level": 1,
-          "ceiling": 3,
-          "detail": "in the canonical registry only (status \"active\"), never seeded onto the roster"
-        },
-        {
-          "plane": "corpus",
-          "level": 0,
-          "ceiling": 3,
-          "detail": "bound to no profession family"
-        },
-        {
-          "plane": "governance",
-          "level": 0,
-          "ceiling": 3,
-          "detail": "holds no grants at all — no tool surface is authorised"
-        },
-        {
-          "plane": "shape",
-          "level": 0,
-          "ceiling": 2,
-          "detail": "no declared work shape — nothing bounds what its standing work may do"
-        },
-        {
-          "plane": "cadence",
-          "level": 0,
-          "ceiling": 3,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
-        },
-        {
-          "plane": "toolsAndSkills",
-          "level": 0,
-          "ceiling": 3,
-          "detail": "no grants and no skills — it cannot act"
-        },
-        {
-          "plane": "evidence",
-          "level": 0,
-          "ceiling": 2,
-          "detail": "not on the roster, so the certification sweep never exercises it"
-        }
-      ],
-      "blockedPlanes": [
-        {
-          "plane": "shape",
-          "ceiling": 2,
-          "blocker": "The work-shape registry has landed (apps/web/lib/work-management/work-shapes.ts). Level 3 needs an observed running instance, which nothing records yet — the ceiling rises to 3 when instance evidence lands."
-        },
-        {
-          "plane": "evidence",
-          "ceiling": 2,
-          "blocker": "A passing AssuranceRun is runtime state a static scan cannot see. Ceiling rises to 3 when the measure reads the ledger."
-        }
-      ]
-    },
     {
       "key": "AGT-100",
       "displayName": "policy-enforcement-agent",
@@ -6291,6 +5853,444 @@
           "level": 1,
           "ceiling": 3,
           "detail": "in the canonical registry only (status \"defined\"), never seeded onto the roster"
+        },
+        {
+          "plane": "corpus",
+          "level": 2,
+          "ceiling": 3,
+          "detail": "corpus exists (12 pages) but evaluate_profession_decision is unreachable — missing: registry_read"
+        },
+        {
+          "plane": "governance",
+          "level": 0,
+          "ceiling": 3,
+          "detail": "holds no grants at all — no tool surface is authorised"
+        },
+        {
+          "plane": "shape",
+          "level": 0,
+          "ceiling": 2,
+          "detail": "no declared work shape — nothing bounds what its standing work may do"
+        },
+        {
+          "plane": "cadence",
+          "level": 0,
+          "ceiling": 3,
+          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
+        },
+        {
+          "plane": "toolsAndSkills",
+          "level": 0,
+          "ceiling": 3,
+          "detail": "no grants and no skills — it cannot act"
+        },
+        {
+          "plane": "evidence",
+          "level": 0,
+          "ceiling": 2,
+          "detail": "not on the roster, so the certification sweep never exercises it"
+        }
+      ],
+      "blockedPlanes": [
+        {
+          "plane": "shape",
+          "ceiling": 2,
+          "blocker": "The work-shape registry has landed (apps/web/lib/work-management/work-shapes.ts). Level 3 needs an observed running instance, which nothing records yet — the ceiling rises to 3 when instance evidence lands."
+        },
+        {
+          "plane": "evidence",
+          "ceiling": 2,
+          "blocker": "A passing AssuranceRun is runtime state a static scan cannot see. Ceiling rises to 3 when the measure reads the ledger."
+        }
+      ]
+    },
+    {
+      "key": "AGT-EXT-CLAUDE",
+      "displayName": "Claude Code (external CLI)",
+      "identityClass": "active-registry-only",
+      "handles": [
+        "external-claude-code"
+      ],
+      "registryStatus": "active",
+      "valueStream": "integrate",
+      "tier": "specialist",
+      "score": {
+        "earned": 3,
+        "attainableMax": 25,
+        "absoluteMax": 27,
+        "attainablePct": 12,
+        "absolutePct": 11
+      },
+      "planes": {
+        "identity": {
+          "level": 1,
+          "detail": "in the canonical registry only (status \"active\"), never seeded onto the roster",
+          "handles": [
+            "external-claude-code"
+          ],
+          "levelKey": "declared",
+          "ceiling": 3,
+          "atCeiling": false
+        },
+        "corpus": {
+          "level": 2,
+          "professionKey": "software-engineer",
+          "corpusPages": 12,
+          "missingGrants": [
+            "registry_read"
+          ],
+          "detail": "corpus exists (12 pages) but evaluate_profession_decision is unreachable — missing: registry_read",
+          "levelKey": "reachable",
+          "ceiling": 3,
+          "atCeiling": false
+        },
+        "governance": {
+          "level": 0,
+          "missingGrants": [
+            "registry_read"
+          ],
+          "escalatesTo": "AGT-ORCH-200",
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
+          "ungatedConsequenceNote": null,
+          "detail": "holds no grants at all — no tool surface is authorised",
+          "levelKey": "absent",
+          "ceiling": 3,
+          "atCeiling": false
+        },
+        "shape": {
+          "level": 0,
+          "detail": "no declared work shape — nothing bounds what its standing work may do",
+          "levelKey": "absent",
+          "ceiling": 2,
+          "atCeiling": false
+        },
+        "cadence": {
+          "level": 0,
+          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
+          "levelKey": "absent",
+          "ceiling": 3,
+          "atCeiling": false
+        },
+        "toolsAndSkills": {
+          "level": 0,
+          "directSkills": 0,
+          "wildcardSkills": 5,
+          "reachableTools": 7,
+          "heldGrants": [],
+          "services": 0,
+          "unbackedSkillIds": [],
+          "detail": "no grants and no skills — it cannot act",
+          "levelKey": "absent",
+          "ceiling": 3,
+          "atCeiling": false
+        },
+        "evidence": {
+          "level": 0,
+          "detail": "not on the roster, so the certification sweep never exercises it",
+          "levelKey": "absent",
+          "ceiling": 2,
+          "atCeiling": false
+        }
+      },
+      "gaps": [
+        {
+          "plane": "identity",
+          "level": 1,
+          "ceiling": 3,
+          "detail": "in the canonical registry only (status \"active\"), never seeded onto the roster"
+        },
+        {
+          "plane": "corpus",
+          "level": 2,
+          "ceiling": 3,
+          "detail": "corpus exists (12 pages) but evaluate_profession_decision is unreachable — missing: registry_read"
+        },
+        {
+          "plane": "governance",
+          "level": 0,
+          "ceiling": 3,
+          "detail": "holds no grants at all — no tool surface is authorised"
+        },
+        {
+          "plane": "shape",
+          "level": 0,
+          "ceiling": 2,
+          "detail": "no declared work shape — nothing bounds what its standing work may do"
+        },
+        {
+          "plane": "cadence",
+          "level": 0,
+          "ceiling": 3,
+          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
+        },
+        {
+          "plane": "toolsAndSkills",
+          "level": 0,
+          "ceiling": 3,
+          "detail": "no grants and no skills — it cannot act"
+        },
+        {
+          "plane": "evidence",
+          "level": 0,
+          "ceiling": 2,
+          "detail": "not on the roster, so the certification sweep never exercises it"
+        }
+      ],
+      "blockedPlanes": [
+        {
+          "plane": "shape",
+          "ceiling": 2,
+          "blocker": "The work-shape registry has landed (apps/web/lib/work-management/work-shapes.ts). Level 3 needs an observed running instance, which nothing records yet — the ceiling rises to 3 when instance evidence lands."
+        },
+        {
+          "plane": "evidence",
+          "ceiling": 2,
+          "blocker": "A passing AssuranceRun is runtime state a static scan cannot see. Ceiling rises to 3 when the measure reads the ledger."
+        }
+      ]
+    },
+    {
+      "key": "AGT-EXT-CODEX",
+      "displayName": "Codex (external CLI)",
+      "identityClass": "active-registry-only",
+      "handles": [
+        "external-codex"
+      ],
+      "registryStatus": "active",
+      "valueStream": "integrate",
+      "tier": "specialist",
+      "score": {
+        "earned": 3,
+        "attainableMax": 25,
+        "absoluteMax": 27,
+        "attainablePct": 12,
+        "absolutePct": 11
+      },
+      "planes": {
+        "identity": {
+          "level": 1,
+          "detail": "in the canonical registry only (status \"active\"), never seeded onto the roster",
+          "handles": [
+            "external-codex"
+          ],
+          "levelKey": "declared",
+          "ceiling": 3,
+          "atCeiling": false
+        },
+        "corpus": {
+          "level": 2,
+          "professionKey": "software-engineer",
+          "corpusPages": 12,
+          "missingGrants": [
+            "registry_read"
+          ],
+          "detail": "corpus exists (12 pages) but evaluate_profession_decision is unreachable — missing: registry_read",
+          "levelKey": "reachable",
+          "ceiling": 3,
+          "atCeiling": false
+        },
+        "governance": {
+          "level": 0,
+          "missingGrants": [
+            "registry_read"
+          ],
+          "escalatesTo": "AGT-ORCH-200",
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
+          "ungatedConsequenceNote": null,
+          "detail": "holds no grants at all — no tool surface is authorised",
+          "levelKey": "absent",
+          "ceiling": 3,
+          "atCeiling": false
+        },
+        "shape": {
+          "level": 0,
+          "detail": "no declared work shape — nothing bounds what its standing work may do",
+          "levelKey": "absent",
+          "ceiling": 2,
+          "atCeiling": false
+        },
+        "cadence": {
+          "level": 0,
+          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
+          "levelKey": "absent",
+          "ceiling": 3,
+          "atCeiling": false
+        },
+        "toolsAndSkills": {
+          "level": 0,
+          "directSkills": 0,
+          "wildcardSkills": 5,
+          "reachableTools": 7,
+          "heldGrants": [],
+          "services": 0,
+          "unbackedSkillIds": [],
+          "detail": "no grants and no skills — it cannot act",
+          "levelKey": "absent",
+          "ceiling": 3,
+          "atCeiling": false
+        },
+        "evidence": {
+          "level": 0,
+          "detail": "not on the roster, so the certification sweep never exercises it",
+          "levelKey": "absent",
+          "ceiling": 2,
+          "atCeiling": false
+        }
+      },
+      "gaps": [
+        {
+          "plane": "identity",
+          "level": 1,
+          "ceiling": 3,
+          "detail": "in the canonical registry only (status \"active\"), never seeded onto the roster"
+        },
+        {
+          "plane": "corpus",
+          "level": 2,
+          "ceiling": 3,
+          "detail": "corpus exists (12 pages) but evaluate_profession_decision is unreachable — missing: registry_read"
+        },
+        {
+          "plane": "governance",
+          "level": 0,
+          "ceiling": 3,
+          "detail": "holds no grants at all — no tool surface is authorised"
+        },
+        {
+          "plane": "shape",
+          "level": 0,
+          "ceiling": 2,
+          "detail": "no declared work shape — nothing bounds what its standing work may do"
+        },
+        {
+          "plane": "cadence",
+          "level": 0,
+          "ceiling": 3,
+          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
+        },
+        {
+          "plane": "toolsAndSkills",
+          "level": 0,
+          "ceiling": 3,
+          "detail": "no grants and no skills — it cannot act"
+        },
+        {
+          "plane": "evidence",
+          "level": 0,
+          "ceiling": 2,
+          "detail": "not on the roster, so the certification sweep never exercises it"
+        }
+      ],
+      "blockedPlanes": [
+        {
+          "plane": "shape",
+          "ceiling": 2,
+          "blocker": "The work-shape registry has landed (apps/web/lib/work-management/work-shapes.ts). Level 3 needs an observed running instance, which nothing records yet — the ceiling rises to 3 when instance evidence lands."
+        },
+        {
+          "plane": "evidence",
+          "ceiling": 2,
+          "blocker": "A passing AssuranceRun is runtime state a static scan cannot see. Ceiling rises to 3 when the measure reads the ledger."
+        }
+      ]
+    },
+    {
+      "key": "AGT-EXT-GROK",
+      "displayName": "Grok (external CLI)",
+      "identityClass": "active-registry-only",
+      "handles": [
+        "external-grok"
+      ],
+      "registryStatus": "active",
+      "valueStream": "integrate",
+      "tier": "specialist",
+      "score": {
+        "earned": 3,
+        "attainableMax": 25,
+        "absoluteMax": 27,
+        "attainablePct": 12,
+        "absolutePct": 11
+      },
+      "planes": {
+        "identity": {
+          "level": 1,
+          "detail": "in the canonical registry only (status \"active\"), never seeded onto the roster",
+          "handles": [
+            "external-grok"
+          ],
+          "levelKey": "declared",
+          "ceiling": 3,
+          "atCeiling": false
+        },
+        "corpus": {
+          "level": 2,
+          "professionKey": "software-engineer",
+          "corpusPages": 12,
+          "missingGrants": [
+            "registry_read"
+          ],
+          "detail": "corpus exists (12 pages) but evaluate_profession_decision is unreachable — missing: registry_read",
+          "levelKey": "reachable",
+          "ceiling": 3,
+          "atCeiling": false
+        },
+        "governance": {
+          "level": 0,
+          "missingGrants": [
+            "registry_read"
+          ],
+          "escalatesTo": "AGT-ORCH-200",
+          "reachableSideEffectingTools": 22,
+          "reachableGatedTools": 3,
+          "ungatedConsequenceNote": null,
+          "detail": "holds no grants at all — no tool surface is authorised",
+          "levelKey": "absent",
+          "ceiling": 3,
+          "atCeiling": false
+        },
+        "shape": {
+          "level": 0,
+          "detail": "no declared work shape — nothing bounds what its standing work may do",
+          "levelKey": "absent",
+          "ceiling": 2,
+          "atCeiling": false
+        },
+        "cadence": {
+          "level": 0,
+          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
+          "levelKey": "absent",
+          "ceiling": 3,
+          "atCeiling": false
+        },
+        "toolsAndSkills": {
+          "level": 0,
+          "directSkills": 0,
+          "wildcardSkills": 5,
+          "reachableTools": 7,
+          "heldGrants": [],
+          "services": 0,
+          "unbackedSkillIds": [],
+          "detail": "no grants and no skills — it cannot act",
+          "levelKey": "absent",
+          "ceiling": 3,
+          "atCeiling": false
+        },
+        "evidence": {
+          "level": 0,
+          "detail": "not on the roster, so the certification sweep never exercises it",
+          "levelKey": "absent",
+          "ceiling": 2,
+          "atCeiling": false
+        }
+      },
+      "gaps": [
+        {
+          "plane": "identity",
+          "level": 1,
+          "ceiling": 3,
+          "detail": "in the canonical registry only (status \"active\"), never seeded onto the roster"
         },
         {
           "plane": "corpus",

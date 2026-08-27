@@ -32,7 +32,7 @@ the platform is not".
 ## Inventory
 
 - Distinct agent identities measured: **86**
-  - canonical agent registry: 76 · workforce roster: 28 · profession roles: 95
+  - canonical agent registry: 76 · workforce roster: 28 · profession roles: 98
   - Joined via COWORKER_SLUG_TO_CANONICAL_AGENT_ID; a handle-only join over-counts.
 - At 100% of attainable: **1**
 - Median attainable: **12%** · median absolute: **11%**
@@ -67,7 +67,7 @@ The gate is built, enforced, and its reach is derived from each tool's declared 
 | Plane | Weight | Ceiling | L0 | L1 | L2 | L3 | At ceiling |
 |---|---|---|---|---|---|---|---|
 | Identity | 1 | 3 | 0 | 68 | 5 | 13 | 13/86 |
-| Corpus / WSID | 1 | 3 | 3 | 0 | 54 | 29 | 29/86 |
+| Corpus / WSID | 1 | 3 | 0 | 0 | 57 | 29 | 29/86 |
 | Governance / WWWD | 2 | 3 | 57 | 0 | 10 | 19 | 19/86 |
 | Shape | 1 | 2 | 85 | 0 | 1 | 0 | 1/86 |
 | Cadence | 1 | 3 | 80 | 0 | 5 | 1 | 1/86 |
@@ -148,9 +148,6 @@ _Certification exercises a real domain act, not a generic probe._
 
 | Agent | Class | Attain | Abs | Id | Corp | Gov | Shp | Cad | T+S | Ev |
 |---|---|---|---|---|---|---|---|---|---|---|
-| `AGT-EXT-CLAUDE` | active-registry-only | 4% | 4% | 1 | 0 | 0 | 0 | 0 | 0 | 0 |
-| `AGT-EXT-CODEX` | active-registry-only | 4% | 4% | 1 | 0 | 0 | 0 | 0 | 0 | 0 |
-| `AGT-EXT-GROK` | active-registry-only | 4% | 4% | 1 | 0 | 0 | 0 | 0 | 0 | 0 |
 | `AGT-100` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `AGT-101` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `AGT-102` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
@@ -189,6 +186,9 @@ _Certification exercises a real domain act, not a generic probe._
 | `AGT-BUILD-FE` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `AGT-BUILD-QA` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `AGT-BUILD-SE` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
+| `AGT-EXT-CLAUDE` | active-registry-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
+| `AGT-EXT-CODEX` | active-registry-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
+| `AGT-EXT-GROK` | active-registry-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `AGT-ORCH-100` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `AGT-ORCH-200` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `AGT-ORCH-300` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
@@ -236,36 +236,6 @@ _Certification exercises a real domain act, not a generic probe._
 | `AGT-WS-COMPLIANCE` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
 
 ## Widest gaps — detail
-
-### `AGT-EXT-CLAUDE` — Claude Code (external CLI) · active-registry-only · 4% attainable
-
-- **Identity** (level 1 of 3) — in the canonical registry only (status "active"), never seeded onto the roster
-- **Corpus / WSID** (level 0 of 3) — bound to no profession family
-- **Governance / WWWD** (level 0 of 3) — holds no grants at all — no tool surface is authorised
-- **Shape** (level 0 of 2) — no declared work shape — nothing bounds what its standing work may do
-- **Cadence** (level 0 of 3) — no recurring trigger — any Proactivity setting is a silent no-op
-- **Tools + Skills** (level 0 of 3) — no grants and no skills — it cannot act
-- **Evidence** (level 0 of 2) — not on the roster, so the certification sweep never exercises it
-
-### `AGT-EXT-CODEX` — Codex (external CLI) · active-registry-only · 4% attainable
-
-- **Identity** (level 1 of 3) — in the canonical registry only (status "active"), never seeded onto the roster
-- **Corpus / WSID** (level 0 of 3) — bound to no profession family
-- **Governance / WWWD** (level 0 of 3) — holds no grants at all — no tool surface is authorised
-- **Shape** (level 0 of 2) — no declared work shape — nothing bounds what its standing work may do
-- **Cadence** (level 0 of 3) — no recurring trigger — any Proactivity setting is a silent no-op
-- **Tools + Skills** (level 0 of 3) — no grants and no skills — it cannot act
-- **Evidence** (level 0 of 2) — not on the roster, so the certification sweep never exercises it
-
-### `AGT-EXT-GROK` — Grok (external CLI) · active-registry-only · 4% attainable
-
-- **Identity** (level 1 of 3) — in the canonical registry only (status "active"), never seeded onto the roster
-- **Corpus / WSID** (level 0 of 3) — bound to no profession family
-- **Governance / WWWD** (level 0 of 3) — holds no grants at all — no tool surface is authorised
-- **Shape** (level 0 of 2) — no declared work shape — nothing bounds what its standing work may do
-- **Cadence** (level 0 of 3) — no recurring trigger — any Proactivity setting is a silent no-op
-- **Tools + Skills** (level 0 of 3) — no grants and no skills — it cannot act
-- **Evidence** (level 0 of 2) — not on the roster, so the certification sweep never exercises it
 
 ### `AGT-100` — policy-enforcement-agent · declared-only · 12% attainable
 
@@ -331,6 +301,36 @@ _Certification exercises a real domain act, not a generic probe._
 
 - **Identity** (level 1 of 3) — in the canonical registry only (status "defined"), never seeded onto the roster
 - **Corpus / WSID** (level 2 of 3) — corpus exists (7 pages) but evaluate_profession_decision is unreachable — missing: registry_read
+- **Governance / WWWD** (level 0 of 3) — holds no grants at all — no tool surface is authorised
+- **Shape** (level 0 of 2) — no declared work shape — nothing bounds what its standing work may do
+- **Cadence** (level 0 of 3) — no recurring trigger — any Proactivity setting is a silent no-op
+- **Tools + Skills** (level 0 of 3) — no grants and no skills — it cannot act
+- **Evidence** (level 0 of 2) — not on the roster, so the certification sweep never exercises it
+
+### `AGT-120` — product-backlog-prioritization-agent · declared-only · 12% attainable
+
+- **Identity** (level 1 of 3) — in the canonical registry only (status "defined"), never seeded onto the roster
+- **Corpus / WSID** (level 2 of 3) — corpus exists (8 pages) but evaluate_profession_decision is unreachable — missing: registry_read
+- **Governance / WWWD** (level 0 of 3) — holds no grants at all — no tool surface is authorised
+- **Shape** (level 0 of 2) — no declared work shape — nothing bounds what its standing work may do
+- **Cadence** (level 0 of 3) — no recurring trigger — any Proactivity setting is a silent no-op
+- **Tools + Skills** (level 0 of 3) — no grants and no skills — it cannot act
+- **Evidence** (level 0 of 2) — not on the roster, so the certification sweep never exercises it
+
+### `AGT-121` — architecture-definition-agent · declared-only · 12% attainable
+
+- **Identity** (level 1 of 3) — in the canonical registry only (status "defined"), never seeded onto the roster
+- **Corpus / WSID** (level 2 of 3) — corpus exists (13 pages) but evaluate_profession_decision is unreachable — missing: registry_read
+- **Governance / WWWD** (level 0 of 3) — holds no grants at all — no tool surface is authorised
+- **Shape** (level 0 of 2) — no declared work shape — nothing bounds what its standing work may do
+- **Cadence** (level 0 of 3) — no recurring trigger — any Proactivity setting is a silent no-op
+- **Tools + Skills** (level 0 of 3) — no grants and no skills — it cannot act
+- **Evidence** (level 0 of 2) — not on the roster, so the certification sweep never exercises it
+
+### `AGT-122` — roadmap-assembly-agent · declared-only · 12% attainable
+
+- **Identity** (level 1 of 3) — in the canonical registry only (status "defined"), never seeded onto the roster
+- **Corpus / WSID** (level 2 of 3) — corpus exists (8 pages) but evaluate_profession_decision is unreachable — missing: registry_read
 - **Governance / WWWD** (level 0 of 3) — holds no grants at all — no tool surface is authorised
 - **Shape** (level 0 of 2) — no declared work shape — nothing bounds what its standing work may do
 - **Cadence** (level 0 of 3) — no recurring trigger — any Proactivity setting is a silent no-op
