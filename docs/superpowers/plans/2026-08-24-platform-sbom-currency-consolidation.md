@@ -120,6 +120,8 @@ Task `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-914C36A37B47` invoked the approv
 
 Task `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-D711E3359E00` independently passed corrected spec blob `3652f3d223fa8eb9a2a4873de7d65a8222f114c6` with no findings, but again completed without invoking the attached writer. This recurring runner defect is already tracked by `BI-PIR-3c79612c` (false `record_initiative_design_review` refusal despite tool delivery) and the overlapping capability item `BI-CAP-6D53CA31`; no duplicate backlog item was filed. This delivery continues to require an actual governed receipt.
 
+Task `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-5984EE574D6C` reproduced the same defect at commit `90d449b24475835be09f45edba139c8a3727ae02`: the reviewer returned `pass` with no findings after one immutable-reader call, then claimed the attached writer was unavailable. The deterministic request completed without a receipt, so the next attempt must use a new immutable head rather than replaying that burned request key.
+
 - Decision: `atomic`
 - Umbrella BI: `BI-7D2C4F02`
 - Deliverable: `platform-sbom-currency-consolidation` → `BI-7D2C4F02`
