@@ -632,7 +632,7 @@ async function linkBacklogItemToEpic(
 async function getNextRecommendedWork(params: Record<string, unknown>): Promise<ToolResult> {
   const { prisma } = await import("@dpf/db");
   const { rankCandidates } = await import("@/lib/backlog/recommend");
-  const { buildSpecPlanReferenceIndex } = await import("@/lib/backlog/spec-plan-search");
+  const { buildSpecPlanReferenceIndex, specPlanCorpusCaveat } = await import("@/lib/backlog/spec-plan-search");
   const { projectBacklogItemReadinessSummary } = await import("@/lib/backlog/initiative-readiness/entry-adapter");
 
   const count = typeof params["count"] === "number" ? params["count"] : undefined;
@@ -746,12 +746,19 @@ async function getNextRecommendedWork(params: Record<string, unknown>): Promise<
     mode,
   });
 
+  // BI-10C34BE1: design-candidate ranking rewards items with no spec. On an
+  // install with no docs/superpowers tree every item scores as undesigned, so
+  // the tool confidently recommends designing work that is already designed.
+  // The recommendations still stand as a priority ordering; what cannot be
+  // trusted is the "needs a design" part of the reason.
+  const specPlanCaveat = specPlanCorpusCaveat(refIndex.corpus);
+  const baseMessage = mode === "implementation-ready"
+    ? `Recommending ${ranked.length} implementation-ready item(s).`
+    : `Recommending ${ranked.length} design candidate(s).`;
   return {
     success: true,
-    message: mode === "implementation-ready"
-      ? `Recommending ${ranked.length} implementation-ready item(s).`
-      : `Recommending ${ranked.length} design candidate(s).`,
-    data: { mode, recommendations: ranked },
+    message: specPlanCaveat ? `${baseMessage} ${specPlanCaveat}` : baseMessage,
+    data: { mode, recommendations: ranked, specPlanCorpus: refIndex.corpus },
   };
 }
 

@@ -174,8 +174,9 @@ export async function listEpics(params: Record<string, unknown>): Promise<ToolRe
     },
   });
   const wantOpenItems = params["hasOpenItems"] === true;
-  const { buildSpecPlanReferenceIndex } = await import("@/lib/backlog/spec-plan-search");
+  const { buildSpecPlanReferenceIndex, specPlanCorpusCaveat } = await import("@/lib/backlog/spec-plan-search");
   const refIndex = await buildSpecPlanReferenceIndex();
+  const specPlanCaveat = specPlanCorpusCaveat(refIndex.corpus);
   const data = epics
     .map((e) => {
       const total = e.items.length;
@@ -206,8 +207,16 @@ export async function listEpics(params: Record<string, unknown>): Promise<ToolRe
     });
   return {
     success: true,
-    message: `Listed ${data.length} epic(s) (${epics.length} of ${epicTotal} fetched).`,
-    data: { epics: data, total: epicTotal, fetched: epics.length, truncated: epics.length < epicTotal },
+    message: specPlanCaveat
+      ? `Listed ${data.length} epic(s) (${epics.length} of ${epicTotal} fetched). ${specPlanCaveat}`
+      : `Listed ${data.length} epic(s) (${epics.length} of ${epicTotal} fetched).`,
+    data: {
+      epics: data,
+      total: epicTotal,
+      fetched: epics.length,
+      truncated: epics.length < epicTotal,
+      specPlanCorpus: refIndex.corpus,
+    },
   };
 }
 
@@ -268,9 +277,10 @@ export async function listBacklogItems(params: Record<string, unknown>): Promise
     },
   });
   const { deriveLifecycleLabel } = await import("@/lib/governed-backlog-workflow");
-  const { buildSpecPlanReferenceIndex } = await import("@/lib/backlog/spec-plan-search");
+  const { buildSpecPlanReferenceIndex, specPlanCorpusCaveat } = await import("@/lib/backlog/spec-plan-search");
   const { projectBacklogItemReadinessSummary } = await import("@/lib/backlog/initiative-readiness/entry-adapter");
   const refIndex = await buildSpecPlanReferenceIndex();
+  const specPlanCaveat = specPlanCorpusCaveat(refIndex.corpus);
   const evaluatedAt = new Date().toISOString();
   const data = items.map((i) => {
     const semanticEpic = i.epic?.epicId ?? null;
@@ -325,8 +335,15 @@ export async function listBacklogItems(params: Record<string, unknown>): Promise
   });
   return {
     success: true,
-    message: `Listed ${data.length} of ${matching} backlog item(s).`,
-    data: { items: data, total: matching, truncated: data.length < matching },
+    message: specPlanCaveat
+      ? `Listed ${data.length} of ${matching} backlog item(s). ${specPlanCaveat}`
+      : `Listed ${data.length} of ${matching} backlog item(s).`,
+    data: {
+      items: data,
+      total: matching,
+      truncated: data.length < matching,
+      specPlanCorpus: refIndex.corpus,
+    },
   };
 }
 
@@ -367,12 +384,13 @@ export async function getBacklogItem(params: Record<string, unknown>): Promise<T
   if (!item)
     return { success: false, error: "not_found", message: `Item ${itemIdRaw} not found` };
   const { deriveLifecycleLabel } = await import("@/lib/governed-backlog-workflow");
-  const { searchSpecsAndPlans } = await import("@/lib/backlog/spec-plan-search");
-  const specPlanRefs = await searchSpecsAndPlans({
+  const { searchSpecsAndPlans, specPlanCorpusCaveat } = await import("@/lib/backlog/spec-plan-search");
+  const { corpus: specPlanCorpus, results: specPlanRefs } = await searchSpecsAndPlans({
     query: itemIdRaw,
     itemId: itemIdRaw,
     matches: 10,
   });
+  const specPlanCaveat = specPlanCorpusCaveat(specPlanCorpus);
   const { mapDemandRows } = await import("@/lib/demand/demand-data");
   const demandView = mapDemandRows([item])[0]!;
   const { projectBacklogItemReadinessSummary } = await import("@/lib/backlog/initiative-readiness/entry-adapter");
@@ -399,7 +417,7 @@ export async function getBacklogItem(params: Record<string, unknown>): Promise<T
   });
   return {
     success: true,
-    message: `Loaded ${item.itemId}`,
+    message: specPlanCaveat ? `Loaded ${item.itemId}. ${specPlanCaveat}` : `Loaded ${item.itemId}`,
     data: {
       itemId: item.itemId,
       title: item.title,
@@ -452,6 +470,7 @@ export async function getBacklogItem(params: Record<string, unknown>): Promise<T
           }
         : null,
       readiness,
+      specPlanCorpus,
       specPlanFiles: specPlanRefs.map((r) => ({
         path: r.path,
         kind: r.kind,
