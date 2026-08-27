@@ -25,6 +25,7 @@
 // Called from: reviewDesignDoc success path in mcp-tools.ts (fire-and-forget).
 
 import { prisma } from "@dpf/db";
+import { denialForNextAttempt, denyAfterUnparseable } from "@/lib/build/plan-generation-retry";
 import { normalizeBuildPlanPaths } from "./build-plan-paths";
 import { escalateBuildToHuman, SELF_FIX_CLASS } from "@/lib/build/escalate-build-to-human";
 
@@ -205,7 +206,15 @@ async function generateNormalizedPlan(args: {
 
   const PLAN_GEN_MAX_ATTEMPTS = 2;
   let planObj: { fileStructure?: unknown[]; tasks?: unknown[] } | null = null;
+  // BI-7AD0759A: an endpoint that just returned unparseable JSON is the least
+  // likely to return parseable JSON to the same prompt. Retrying it changes
+  // nothing but the wall-clock. Deny it on the next attempt so routing picks a
+  // different endpoint — live repro FB-62D7C0EC, where both attempts drew the
+  // local model, both truncated mid-array, and the build was lost while a
+  // capable endpoint sat unused.
+  let deniedProviders: string[] = [];
   for (let attempt = 1; attempt <= PLAN_GEN_MAX_ATTEMPTS && !planObj; attempt++) {
+    const denial = denialForNextAttempt(deniedProviders);
     const systemPrompt =
       attempt === 1
         ? "You are a senior software engineer creating a precise, actionable implementation plan. Respond with ONLY valid JSON."
@@ -214,7 +223,16 @@ async function generateNormalizedPlan(args: {
       [{ role: "user" as const, content: prompt }],
       systemPrompt,
       "internal",
-      { budgetClass: "quality_first", ...(args.modelTier ? { modelTier: args.modelTier } : {}), ...(args.buildId ? { buildId: args.buildId } : {}) },
+      {
+        budgetClass: "quality_first",
+        ...(args.modelTier ? { modelTier: args.modelTier } : {}),
+        ...(args.buildId ? { buildId: args.buildId } : {}),
+        // Empty on the first attempt; carries the endpoints that already failed
+        // to produce parseable JSON on later ones. If every endpoint is denied,
+        // routing falls back rather than refusing — the platform must stay
+        // runnable (BI-3B3F477B).
+        ...(denial ? { deniedProviders: denial } : {}),
+      },
     );
     planObj = parsePlanJson(response.content);
     if (!planObj) {
@@ -232,9 +250,10 @@ async function generateNormalizedPlan(args: {
       const raw = (response.content ?? "").trim();
       await args.log(
         raw.length === 0
-          ? "Plan output excerpt: the model returned no output at all."
-          : `Plan output excerpt (${raw.length} chars): ${excerptHeadAndTail(raw)}`,
+          ? `Plan output excerpt (${response.providerId}): the model returned no output at all.`
+          : `Plan output excerpt (${response.providerId}, ${raw.length} chars): ${excerptHeadAndTail(raw)}`,
       );
+      deniedProviders = denyAfterUnparseable(deniedProviders, response.providerId);
     }
   }
 
