@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Windows hook path resolution — implementation plan
 
 - **Backlog item:** BI-5CBDC146

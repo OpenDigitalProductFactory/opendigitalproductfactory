@@ -1,9 +1,13 @@
+---
+status: active
+---
+
 # Windows hook path resolution — design
 
 - **Backlog item:** BI-5CBDC146
 - **Work capsule:** WC-CBF01552
 - **Profile:** fix
-- **Status:** proposed
+- **Status:** active
 - **Authored:** 2026-08-27
 
 ## Problem
