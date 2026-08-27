@@ -112,7 +112,9 @@ Verification: runtime evidence, UX critique, and `pnpm pr:health` including revi
 
 ## Backlog coverage
 
-Coverage is deliberately atomic. Portfolio Advisor recorded research receipt `initiative-112cda8a-5968-429b-8279-cceced649456`; initiative readiness continues to recognize that research gate after the spec revision. The revised immutable spec still requires independent `spec-approval` before the initiative scope baseline and coverage receipt can be recorded.
+Coverage is deliberately atomic. Change Reviewer task `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-F70DE5492E9B` recorded canonical baseline `baseline-08cecc05-02ef-4bf1-bfae-f250fc5e6da0` after exact employee approval for commit `25934fda4591e2047bd66ac799a1e024353f03cd` and corrected spec blob `3652f3d223fa8eb9a2a4873de7d65a8222f114c6`. Because that new baseline correctly made the earlier research receipt stale, Portfolio Advisor task `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-D236F5EAC9E8` re-grounded the same artifact and recorded research receipt `initiative-2345de97-e10a-4aa5-8069-afb6a31e2470` after exact employee approval.
+
+The first exact dependency-disposition task, `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-2FD41B75F610`, reached the Portfolio Backlog Manager but ended through its provider-capacity fallback. It wrote no plan-coverage receipt; a fresh immutable head is required before retry.
 
 Change Reviewer tasks `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-09E6B034FC91` and `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-DB3B8F646A34` independently concluded that revised spec blob `810633b17e30b82792facc7ec9e38fc25def3e0a` passes with no findings. Both returned the writer payload instead of invoking the attached `record_initiative_design_review` tool; the second run emitted `contract-violation tool-refused-despite-availability` in the portal log. Those results are review evidence, not a governed gate receipt; implementation remains blocked until the writer executes.
 
@@ -134,6 +136,6 @@ Task `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-17ACD0131CAE` reproduced the sam
 - Umbrella BI: `BI-7D2C4F02`
 - Deliverable: `platform-sbom-currency-consolidation` → `BI-7D2C4F02`
 - Dependencies: none
-- Research receipt: `initiative-112cda8a-5968-429b-8279-cceced649456` (`pass`)
-- Independent review evidence: tasks `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-09E6B034FC91`, `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-DB3B8F646A34`, and `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-D711E3359E00` (`pass`, receipt not written)
-- Coverage receipt: blocked on governed `spec-approval` and the initiative scope baseline; do not implement until both are recorded
+- Research receipt: `initiative-2345de97-e10a-4aa5-8069-afb6a31e2470` (`pass`)
+- Spec-approval baseline: `baseline-08cecc05-02ef-4bf1-bfae-f250fc5e6da0` (`pass`)
+- Coverage receipt: pending the exact atomic coverage mapping; do not implement until it is recorded
