@@ -6,7 +6,7 @@ status: draft
 abstract: An archetype is validated by attempting a real operating day in the product with populated data, not by reading its schema or reviewing its screens. Feature audits on empty surfaces produce confident wrong answers.
 principleTier: principle
 principleDirection: Prefer evidence from attempting the operator's actual day with real records over evidence from schema reads, empty-surface review, or completed onboarding.
-principleDimensionVector: {"evidence_density": 1.0, "customer_value": 0.8, "long_term_maintainability": 0.4, "speed_to_value": -0.3, "blast_radius": -0.4}
+principleDimensionVector: {"evidence_density": 1.0, "product_fit": 0.8, "long_term_maintainability": 0.4, "speed_to_value": -0.3, "blast_radius": -0.4}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
@@ -95,8 +95,9 @@ business from one that renders a business.
 
 - `evidence_density: 1.0` — the strongest pull. The principle is entirely about attempted work as
   evidence over inspected structure as evidence.
-- `customer_value: 0.8` — an archetype is a promise to an operator that they can run their
-  business. Only running it tests the promise.
+- `product_fit: 0.8` — an archetype is a promise to an operator that the product fits how their
+  business actually works. Only attempting the work tests that promise; surface review tests
+  whether the product resembles the business, which is a different and weaker claim.
 - `long_term_maintainability: 0.4` — findings from a real day are concrete and reproducible;
   findings from a schema read tend to be restated each cycle.
 - `speed_to_value: -0.3` — a modest concession. Running a day is slower than reading a schema.
