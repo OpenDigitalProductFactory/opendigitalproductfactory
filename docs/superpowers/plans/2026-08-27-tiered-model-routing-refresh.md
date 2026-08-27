@@ -5,6 +5,8 @@
 **Related bug:** BI-78043BA3  
 **Workroom:** WC-FB12308F
 
+**Governed coverage receipt:** blocked because no initiative scope baseline exists for this item. The immutable design is committed and pushed, but the independent reviewer coworkers could not execute while their only eligible model was occupied. The traceability below remains the plan's coverage of record until the spec-approval reviewer records the baseline and `record_plan_backlog_coverage` succeeds.
+
 ## Goal
 
 Refresh DPF's static model posture for GLM-5.3-Flash and Grok 4.6, correct Grok authentication classification, and make Build Studio's Grok guidance current without replacing Auto routing or claiming unverified model quality.
@@ -116,4 +118,3 @@ After the code is available on the live install:
 - Do not weaken global alignment policy to fix one tool declaration.
 - Do not mark GLM-5.3-Flash active until successful DPF probes and evaluations exist.
 - Do not claim Build Studio or coworker success from source tests alone.
-
