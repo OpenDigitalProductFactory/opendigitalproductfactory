@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Work Room as the Multi-Agent Collaboration & Communication Substrate — Design
 
 **Status:** DRAFT (for founder review) · **Date:** 2026-08-12 · **Scope:** platform (WWMD)

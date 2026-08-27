@@ -7,7 +7,7 @@ apps/web/app/api/mcp/v1/route.test.ts	1532
 apps/web/app/api/mcp/v1/route.ts	860
 apps/web/app/api/v1/edge/discovery-runs/route.test.ts	982
 apps/web/components/admin/BusinessModelBuilder.tsx	821
-apps/web/components/admin/McpTokenManager.tsx	1326
+apps/web/components/admin/McpTokenManager.tsx	1383
 apps/web/components/agent/AgentCoworkerPanel.tsx	1312
 apps/web/components/agent/AgentMessageInput.tsx	1031
 apps/web/components/ea/EaCanvas.tsx	1045
@@ -30,7 +30,7 @@ apps/web/lib/actions/build.ts	1776
 apps/web/lib/actions/compliance.ts	867
 apps/web/lib/actions/crm.ts	1043
 apps/web/lib/actions/ea.ts	918
-apps/web/lib/actions/mcp-tokens.test.ts	1254
+apps/web/lib/actions/mcp-tokens.test.ts	1369
 apps/web/lib/actions/platform-dev-config.ts	1254
 apps/web/lib/actions/promotions.self-upgrade.test.ts	1098
 apps/web/lib/actions/promotions.ts	983
