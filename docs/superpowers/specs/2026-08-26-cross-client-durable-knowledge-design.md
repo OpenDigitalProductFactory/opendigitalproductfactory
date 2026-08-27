@@ -18,6 +18,24 @@ A Grok or Codex thread continuing the same work sees none of it. The operator as
 The cost is not only the lost finding. Each client silently accumulates a **rival source of
 truth**, so two agents on the same platform hold different beliefs about it and neither knows.
 
+### Measured scale
+
+Audited on one machine, 2026-08-26 — the Claude Code memory directory for this project:
+
+| | |
+|---|---|
+| Total memory entries | **477** |
+| Reference a BI id or a `docs/` path (recoverable) | 322 |
+| **No commons reference at all — sole home is Claude-only memory** | **155** |
+
+So roughly **one third** of accumulated agent knowledge on this machine is invisible to Grok and
+Codex. The stranded set skews heavily toward `feedback_*` entries — the operator's own standing
+instructions and corrections, which are the highest-value knowledge to share and the most costly
+to rediscover.
+
+This is not one agent's lapse. The entries span many sessions and several parallel threads, which
+is what a missing default looks like at scale.
+
 ## 2. The uncomfortable part: this is not a doctrine gap
 
 The doctrine already exists and is precise.
@@ -169,6 +187,10 @@ Dependency order, not priority order.
 
 1. **Pointer-index conversion** — define the format (§5.2), convert the existing Claude memory
    entries, leave each pointing at its commons id. Immediately removes the current divergence.
+   Sized by the §1 audit: **322 entries already carry a recoverable reference** and convert
+   mechanically; **155 have none** and need their content routed to a lane first, since for those
+   the local file *is* the finding. Triage the 155 by lane before converting — most are
+   `feedback_*`, which is the WWMD lane and therefore PR-only.
 2. **Session-boundary sweep** (§5.3) — advisory first, so the behaviour exists before it is
    enforced.
 3. **Guard** (§5.4) — resolve the client-side visibility question first; that decision gates the
