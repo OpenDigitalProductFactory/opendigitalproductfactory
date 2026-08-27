@@ -118,10 +118,12 @@ Change Reviewer tasks `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-09E6B034FC91` a
 
 Task `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-914C36A37B47` invoked the approved writer, which rejected the spec because the acceptance-evidence matrix repeated canonical ID `AC-PSCC-010`. The spec now keeps each acceptance ID solely in the governed scope manifest and uses criterion-number labels in the evidence matrix.
 
+Task `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-D711E3359E00` independently passed corrected spec blob `3652f3d223fa8eb9a2a4873de7d65a8222f114c6` with no findings, but again completed without invoking the attached writer. This recurring runner defect is already tracked by `BI-PIR-3c79612c` (false `record_initiative_design_review` refusal despite tool delivery) and the overlapping capability item `BI-CAP-6D53CA31`; no duplicate backlog item was filed. This delivery continues to require an actual governed receipt.
+
 - Decision: `atomic`
 - Umbrella BI: `BI-7D2C4F02`
 - Deliverable: `platform-sbom-currency-consolidation` → `BI-7D2C4F02`
 - Dependencies: none
 - Research receipt: `initiative-112cda8a-5968-429b-8279-cceced649456` (`pass`)
-- Independent review evidence: tasks `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-09E6B034FC91` and `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-DB3B8F646A34` (`pass`, receipt not written)
+- Independent review evidence: tasks `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-09E6B034FC91`, `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-DB3B8F646A34`, and `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-D711E3359E00` (`pass`, receipt not written)
 - Coverage receipt: blocked on governed `spec-approval` and the initiative scope baseline; do not implement until both are recorded
