@@ -26,7 +26,12 @@ import {
   selfAuthorityUnreachableReason,
 } from "@/lib/federation/self-authority";
 import { auth } from "@/lib/auth";
+import type { AutomaticPairingDecision } from "@dpf/db/automatic-pairing-decision";
 import { resolveFederationSigningIdentity } from "@/lib/federation/demand-identity";
+import { observePeerCertificateChain } from "@/lib/federation/observe-peer-certificate";
+import { resolveOrganizationTrustAnchor } from "@/lib/federation/organization-trust-anchor";
+import { createOrganizationTrustAnchorStore } from "@/lib/federation/organization-trust-anchor-store";
+import { resolveCandidatePairingMode } from "@/lib/federation/resolve-candidate-pairing-mode";
 import {
   approveFederationLinkLocal,
   issueFederationBootstrap,
@@ -408,6 +413,15 @@ export type NearbyPairingActionResult =
       expiresAt: string;
       projectionSummary: ReturnType<typeof summarizeNearbyPairingProjection>;
       linkId?: string;
+      /**
+       * What the evidence actually supports for this peer. `operator-confirmation`
+       * means the SAS code still has to be confirmed by a human on both ends;
+       * `pairingReason` says which fact could not be proved, so the screen can
+       * tell the operator why instead of just asking.
+       */
+      pairingMode?: AutomaticPairingDecision["mode"];
+      pairingReason?: AutomaticPairingDecision["reason"];
+      pairingExplanation?: string;
     }
   | ActionFailure;
 
@@ -429,9 +443,6 @@ export async function startNearbyPairingAction(input: {
   if (!candidate) {
     return { ok: false, error: "not_found", message: "That DPF candidate is no longer available. Wait for discovery or introductions to refresh." };
   }
-  if (candidate.automaticPairing === "blocked-insecure-transport") {
-    return { ok: false, error: "invalid_input", message: "Automatic pairing requires HTTPS. Use a manual invitation until this installation has a trusted certificate." };
-  }
   const offeredRole: FederationRole = candidate.source === "introducer"
     && candidate.relationshipHint
     && isFederationRole(candidate.relationshipHint)
@@ -440,6 +451,42 @@ export async function startNearbyPairingAction(input: {
   const relationshipPreset = relationshipPresetForRole(offeredRole);
   if (!relationshipPreset || !isRoleAllowedForRelationship(relationshipPreset, offeredRole)) {
     return { ok: false, error: "invalid_input", message: "The introduced relationship policy is not supported for pairing." };
+  }
+  // Actually perform the check the candidate's readiness state has always only
+  // NAMED. `nearby-candidates` sets `tls-validation-required` from the URL scheme
+  // alone; until now nothing validated anything, so an https peer went straight
+  // to pairing unexamined and every other peer got one hardcoded sentence.
+  //
+  // This does not gate the manual path: `operator-confirmation` still proceeds to
+  // the SAS exchange exactly as before. It replaces a guess about the transport
+  // with the real decision, and carries the reason back so the screen can say
+  // which fact could not be proved.
+  const pairing = await resolveCandidatePairingMode({
+    candidate: {
+      endpoint: candidate.endpoint,
+      secure: candidate.automaticPairing !== "blocked-insecure-transport",
+      relationshipPreset,
+      role: offeredRole,
+      peerOrganizationRef: candidate.organizationRef ?? null,
+      // The peer's join-package expiry is not carried on a discovery record.
+      // Null leaves that check open; the decision still requires a chain that
+      // validates against the pinned root, so this cannot widen trust.
+      peerJoinPackageExpiresAt: null,
+    },
+    trustAnchor: (
+      await resolveOrganizationTrustAnchor(createOrganizationTrustAnchorStore(), {
+        decrypt: decryptSecret,
+      })
+    ).anchor,
+    observeChain: (endpoint) => observePeerCertificateChain(endpoint),
+    now: new Date(),
+  });
+  if (pairing.decision.reason === "insecure-transport") {
+    return {
+      ok: false,
+      error: "invalid_input",
+      message: `${pairing.decision.explanation} Use a manual invitation until this installation has a trusted certificate.`,
+    };
   }
   const localAuthorityUrl = await resolveLocalFederationAuthorityUrl();
   if (!localAuthorityUrl) {
@@ -479,6 +526,9 @@ export async function startNearbyPairingAction(input: {
             ? existing.relationshipPreset
             : "same-organization",
         ),
+        pairingMode: pairing.decision.mode,
+        ...(pairing.decision.reason ? { pairingReason: pairing.decision.reason } : {}),
+        pairingExplanation: pairing.decision.explanation,
       };
     }
     const [identity, organization] = await Promise.all([
@@ -536,6 +586,9 @@ export async function startNearbyPairingAction(input: {
       peerAuthorityUrl: candidate.endpoint,
       expiresAt: expiresAt.toISOString(),
       projectionSummary: requested.projectionSummary,
+      pairingMode: pairing.decision.mode,
+      ...(pairing.decision.reason ? { pairingReason: pairing.decision.reason } : {}),
+      pairingExplanation: pairing.decision.explanation,
     };
   } catch (error) {
     return { ok: false, error: "internal_error", message: error instanceof Error ? error.message : "Nearby pairing failed." };
