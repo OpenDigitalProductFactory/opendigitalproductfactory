@@ -591,6 +591,14 @@ export const RETAINED_DATASETS: readonly RetainedDataset[] = [
   { model: "payRun", label: "Pay runs", regulatoryBasis: "Payroll/wage record retention (IRS employment-tax + FLSA payroll recordkeeping)", minRetentionYears: 7 },
   { model: "payslip", label: "Payslips", regulatoryBasis: "Payroll/wage record retention (IRS employment-tax + FLSA payroll recordkeeping)", minRetentionYears: 7 },
 
+  // Worker classification evidence (BI-C61CEEA9). A classification decides
+  // whether the organisation may direct a worker and whether they accrue
+  // entitlements, so the determination and the engagement term behind it are
+  // the record a misclassification challenge turns on. Same statutory footing
+  // as the payroll records above.
+  { model: "workerClassificationDetermination", label: "Worker classification determinations", regulatoryBasis: "Worker-classification evidence (IRS worker-classification + FLSA employment recordkeeping)", minRetentionYears: 7 },
+  { model: "workerEngagementTerm", label: "Worker engagement terms", regulatoryBasis: "Engagement-term evidence for worker classification (IRS + FLSA employment recordkeeping)", minRetentionYears: 7 },
+
   // Tax records.
   { model: "taxRemittanceRun", label: "Tax remittance runs", regulatoryBasis: "Tax record retention", minRetentionYears: 7 },
   { model: "taxDecisionSnapshot", label: "Tax decision snapshots", regulatoryBasis: "Tax record retention", minRetentionYears: 7 },
