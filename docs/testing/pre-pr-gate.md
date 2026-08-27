@@ -625,10 +625,15 @@ and summary remain the default diagnostic surface.
 gitignored (git-lfs generates it), so the enforced logic ships as the tracked
 [`.githooks/lib/pre-push-chained.sh`](../../.githooks/lib/pre-push-chained.sh)
 — Git LFS first, then [`.githooks/pre-push-gate`](../../.githooks/pre-push-gate)
-— and `postinstall` (`scripts/set-hooks-path.mjs` →
-`scripts/lib/ensure-pre-push-hook.mjs`) converges the local shim to delegate to
-it (a hand-rolled custom hook is never clobbered; the install prints a warning
-instead). The gate refuses a push when the latest local-CI gate record is
+— and convergence rewrites the local shim to delegate to it. Convergence runs
+in two places, both through the same sequencer
+([`scripts/lib/converge-hooks-dir.mjs`](../../scripts/lib/converge-hooks-dir.mjs)):
+`postinstall` (`scripts/set-hooks-path.mjs`) and **every session start**
+([`scripts/hooks/converge-git-hooks.mjs`](../../scripts/hooks/converge-git-hooks.mjs)),
+which also sweeps sibling worktrees. A hand-rolled custom hook is never
+clobbered — convergence reports it and leaves it alone — and a tree missing
+`.githooks/lib/pre-push-chained.sh` is skipped rather than given a shim that
+would exec a missing script and fail every push. The gate refuses a push when the latest local-CI gate record is
 missing, belongs to a different branch/SHA, has `gatePassed=false`, has no
 `expiresAt`, or is past `expiresAt`. Not everything needs a record: docs-only
 diffs vs the configured comparison base, delete/tag-only pushes, detached HEAD,
@@ -651,8 +656,26 @@ was dead by the same path. Resolution now goes through `fileURLToPath`
 convergence that cannot complete prints a warning naming the consequence rather
 than failing silently. If `postinstall` reports `could not converge
 .githooks/pre-push`, the gate is not protecting your pushes — repair it before
-relying on a green push. Verify with `head -4 .githooks/pre-push`: it must
-delegate to `.githooks/lib/pre-push-chained.sh`.
+relying on a green push.
+
+**Verify by sweeping, never by spot-checking (BI-3727106F).** `head -4
+.githooks/pre-push` answers for one tree, and one tree is not the estate: when
+this was measured on 2026-08-26, **68 of 85 worktrees** on a single install
+carried the stock shim and pushed with no gate. Two things made that possible.
+Convergence ran only at `pnpm install`, so any tree not reinstalled since a fix
+kept the dead shim; and it ran the tree's *own* copy of the converger, so a tree
+sitting on a base that predated the fix could never repair itself — the fix
+reached only trees that already had it. Session-start convergence closes both:
+the session that just started is by construction running current code, and it
+repairs its siblings. To check the whole estate at once:
+
+```bash
+for wt in $(git worktree list --porcelain | awk '/^worktree /{print substr($0,10)}'); do grep -q pre-push-chained.sh "$wt/.githooks/pre-push" 2>/dev/null || echo "UNGATED $wt"; done
+```
+
+Treat an ungated tree as a gate that has not run, not as a gate that passed: a
+clean push from an ungated tree is byte-identical to a clean push from a gated
+one, which is why the outage stayed invisible for a week.
 
 The bypass is **recorded, never silent** — the reason is persisted into the
 gate state file and surfaced by `pnpm pr:health` at PR time:
