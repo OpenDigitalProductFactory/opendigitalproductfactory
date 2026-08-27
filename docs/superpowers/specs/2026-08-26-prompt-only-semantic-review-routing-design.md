@@ -131,3 +131,53 @@ narrows a claim rather than weakening a check: `routeAndCall` still infers the
 tool-use requirement from `options.tools`, so a future tool-bearing review is
 unaffected, and a review whose prompts genuinely exceed an endpoint's window
 still fails closed with observable exclusion reasons (OBJ-PSR-003).
+
+## Traceability
+
+One atomic deliverable — the prompt-only semantic-review eligibility contract —
+mapping 1:1 to BI-47ACE2C7. The failing contract test and its routing repair are
+a single independently revertible invariant; splitting them would produce either
+an unguarded behaviour change or a test with no delivery value.
+
+- **Requirements:** `OBJ-PSR-001`, `OBJ-PSR-002`, `OBJ-PSR-003`
+- **Contracts:** `CONTRACT-PSR-001` (request capabilities come from the concrete
+  tool surface), `CONTRACT-PSR-002` (context eligibility includes both prompts,
+  response reserve, and proportional headroom)
+- **Flow:** `FLOW-PSR-001` — `dispatchRoutedSemanticReview` constructs the
+  bounded prompt-only contract, `routeAndCall` selects an eligible endpoint, and
+  the existing reviewer fan-out produces the fail-closed disposition
+- **Verification:** `AC-PSR-001` … `AC-PSR-006`
+
+Downstream: protected deployment of this repair is the prerequisite for
+BI-SIG-463E478D, BI-F48D7059 and BI-A45D744A to resume. No source dependencies.
+
+## Risk, blast radius, rollback
+
+- **Lowering the floor too far could select a model that cannot fit the packet.**
+  Mitigated by deriving the floor from both prompt components plus response
+  reserve and proportional headroom, and by testing both a fitting packet and an
+  oversized one that must still fail closed.
+- **Removing `minimumCapabilities` could weaken a future tool-bearing review.**
+  This call attaches no tools, and `routeAndCall` derives tool requirements from
+  `options.tools`; any future attachment restores `requiresTools` through that
+  source of truth.
+- **Blast radius:** semantic-review endpoint eligibility only. Reviewer fan-out,
+  prompt contents, parsing, findings, confidentiality, residency, quality tier
+  and effort are unchanged.
+- **Rollback:** revert the single PR. No data repair or migration.
+
+## Bootstrap evidence trail
+
+The full record of the reviewer-bootstrap attempts that preceded this repair —
+including `TR-MCP-…-BD059B8D9CDD`, which read the complete design in six
+persisted immutable-reader executions and independently returned
+`decision=pass` before its client's headers deadline revoked the token ahead of
+the receipt write — is preserved on the original branch
+`fix/prompt-only-semantic-review-routing`. That specific loss is an instance of
+BI-42CE2CE7: a transient failure consuming an immutable review identity.
+
+A separate `docs/superpowers/plans/` document is deliberately not carried here.
+Its deliverable maps 1:1 to BI-47ACE2C7 with nothing deferred, so it added the
+plan-backlog coverage gate — which requires a live MCP receipt obtainable only
+through the very reviewer route this change repairs — without adding governance
+value. The sequence, traceability and rollback live above.
