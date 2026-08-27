@@ -1,3 +1,6 @@
+// The placeholder blast-radius strings live with the type: routing reads the
+// same set to decide whether an item is the owner's at all (BI-79E207B9).
+import { GENERIC_BLAST_RADIUS } from "./types";
 import type { AttentionItem, AttentionSource } from "./types";
 
 const HEADLINE: Record<AttentionSource, string> = {
@@ -121,10 +124,6 @@ export function whyItMattersFor(item: AttentionItem): string {
       return "This technical issue matters only if it changes customer or business work.";
   }
 }
-
-// Placeholder blast-radius strings that read as vague ("a coworker task stays
-// blocked") — skip them so the consequence falls through to a source-specific line.
-const GENERIC_BLAST_RADIUS = new Set(["a coworker task", "a coworker waiting on approval"]);
 
 export function consequenceFor(item: AttentionItem): string {
   if (item.source === "reservation-exception") {
