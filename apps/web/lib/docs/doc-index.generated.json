@@ -5558,6 +5558,7 @@
         "agent-toolchain-only-update",
         "where-state-lives",
         "installation-operating-intent-and-environment-class",
+        "naming-the-installation-and-overriding-what-it-is",
         "diagnostics",
         "show-substrate-flag",
         "dpf-doctor",
