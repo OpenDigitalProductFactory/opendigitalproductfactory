@@ -23,6 +23,16 @@ export interface NearbyCandidatePairingVerdict {
   mode: AutomaticPairingDecision["mode"];
   reason?: AutomaticPairingDecision["reason"];
   explanation: string;
+  /**
+   * What the verdict was based on. Carried through because a confirmation made
+   * on organization trust has to record the evidence that justified it — a
+   * provenance marker without the evidence is a weaker record than the ceremony
+   * it replaces.
+   */
+  evidence: {
+    certificateVerified: boolean;
+    presentedRootFingerprint: string | null;
+  };
 }
 
 /**
@@ -67,5 +77,9 @@ export async function resolveNearbyCandidatePairing(input: {
     mode: resolution.decision.mode,
     ...(resolution.decision.reason ? { reason: resolution.decision.reason } : {}),
     explanation: resolution.decision.explanation,
+    evidence: {
+      certificateVerified: resolution.evidence.certificateVerified,
+      presentedRootFingerprint: resolution.evidence.presentedRootFingerprint,
+    },
   };
 }

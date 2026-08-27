@@ -290,6 +290,23 @@ rather than by ruling out `blocked`, so an `operator-confirmation` verdict can
 never fall through. A peer that refuses the confirmation leaves the session
 pending for a human, exactly as before.
 
+### 5.10 The pairing path acts on the verdict
+
+With §5.9 in place the last connection is made: after the pairing session is
+created, the action confirms it on organization trust when the verdict earns it.
+The verdict now carries its evidence through, because a provenance marker without
+the evidence that justified it is a weaker record than the ceremony it replaces.
+
+Everything short of `auto-enroll` leaves the code comparison exactly as it was,
+and a peer that refuses the confirmation does too. The entry point stays gated by
+`assertManagePlatform`: this changes which CEREMONY a pairing requires, not who
+may start one.
+
+That closes the loop. An installation that has joined an organization can now
+discover an organization peer on the LAN, validate its chain against the pinned
+root, and pair with it without anyone comparing six digits — which is what makes
+an install created and destroyed thousands of times workable.
+
 ## 6. Lifecycle at scale
 
 The unattended cycle this enables:

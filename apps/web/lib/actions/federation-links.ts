@@ -30,6 +30,8 @@ import {
   assertManagePlatform,
   type ActionFailure,
 } from "@/lib/actions/federation-links-shared";
+import { confirmPairingFromOrganizationTrust } from "@/lib/federation/confirm-pairing-from-organization-trust";
+import { prismaTrustConfirmationStore } from "@/lib/federation/confirm-pairing-store";
 import { resolveFederationSigningIdentity } from "@/lib/federation/demand-identity";
 import {
   resolveNearbyCandidatePairing,
@@ -525,11 +527,38 @@ export async function startNearbyPairingAction(input: {
         expiresAt,
       },
     });
+
+    // The session exists; now decide whether a person still has to compare the
+    // code. Organization trust already authenticated this peer more strongly
+    // than six digits can, so confirming on that evidence is what makes an
+    // installation created and destroyed repeatedly able to pair unattended.
+    // Anything short of `auto-enroll` leaves the code comparison exactly as it
+    // was, and a peer that refuses the confirmation does too.
+    const trustConfirmation = await confirmPairingFromOrganizationTrust({
+      pairingId: requested.pairingId,
+      decision: { mode: pairing.mode, explanation: pairing.explanation },
+      evidence: {
+        certificateVerified: pairing.evidence.certificateVerified,
+        presentedRootFingerprint: pairing.evidence.presentedRootFingerprint,
+        peerOrganizationRef: candidate.organizationRef ?? null,
+      },
+      store: prismaTrustConfirmationStore(prisma),
+      confirmWithPeer: async (pairingId) => {
+        const peer = await confirmNearbyPairingPeer({
+          candidateEndpoint: candidate.endpoint,
+          pairingId,
+          pairingSecret: requested.pairingSecret,
+        });
+        return { ok: peer.ok };
+      },
+      now,
+    });
+
     revalidatePath(ADMIN_PATH);
     return {
       ok: true,
       pairingId: requested.pairingId,
-      status: "pending",
+      status: trustConfirmation.confirmed ? "pending-confirmation" : "pending",
       matchingCode: requested.matchingCode,
       peerDisplayName: requested.peerDisplayName,
       peerAuthorityUrl: candidate.endpoint,
