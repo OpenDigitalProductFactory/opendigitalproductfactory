@@ -443,8 +443,13 @@ reaches the rescue at all. A shelter's inbound traffic is not one funnel:
 Four requirements follow:
 
 1. **No inbound channel may require payment.** A donation prompt in front of a found-pet report is
-   the worst failure available to this archetype, and the same form serves all seven reasons
-   today.
+   the worst failure available to this archetype. **Met 2026-08-27** (BI-7F851119): the five
+   nonprofit archetypes were seeded with a donation form in the contact-form slot, and
+   `donationAmount` was required. They now take the contact fields, including the phone number a
+   found-pet caller has to leave, and `resolveInquiryFormSchema` drops donation fields from any
+   enquiry that is not about a donation item, so an install seeded before the fix is corrected
+   without a re-seed. Donations keep their own route and their own form. **The same form still
+   serves all seven reasons** — requirement 2 below is open.
 2. **The reason for contact is a typed field**, because it sets the queue and the clock. A cruelty
    report and a bequest enquiry cannot share a lane.
 3. **An enquiry about an animal carries that animal's reference**, or staff cannot answer it.
