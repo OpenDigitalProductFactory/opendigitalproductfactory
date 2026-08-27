@@ -72,6 +72,10 @@ export function resolveEffectiveTier(
   return parseExplicitTier(rawTierParam) ?? defaultTierForClient(callerClient);
 }
 
+/** Where a resolved MCP credential came from. `oauth` joins the original two
+ *  as the default external door; `pat` is on a deprecation horizon. */
+export type McpAuthSource = "pat" | "session-jwt" | "oauth";
+
 /**
  * Auth-source-aware tier resolution (W12, BI-EE64547B). Internal AI-coworker
  * calls (`source: "session-jwt"`, the `x-mcp-session` seam) are per-call
@@ -85,9 +89,13 @@ export function resolveEffectiveTier(
 export function resolveEffectiveTierForAuthSource(
   rawTierParam: string | null | undefined,
   callerClient: string | null | undefined,
-  authSource: "pat" | "session-jwt",
+  authSource: McpAuthSource,
 ): McpToolTier {
   if (authSource === "session-jwt") return parseExplicitTier(rawTierParam) ?? "full";
+  // An OAuth-authorized client is an EXTERNAL client that happens to have a
+  // better credential; its host-side registry behaviour is unchanged, so it
+  // keeps the client-aware default rather than inheriting the internal seam's
+  // "full". Auth strength and catalog width are unrelated axes.
   return resolveEffectiveTier(rawTierParam, callerClient);
 }
 

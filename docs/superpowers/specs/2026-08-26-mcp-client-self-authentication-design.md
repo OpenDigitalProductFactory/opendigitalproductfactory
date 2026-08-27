@@ -1,10 +1,14 @@
+---
+status: active
+---
+
 # MCP Client Self-Authentication — OAuth 2.1 for the DPF MCP transport
 
 | Field | Value |
 |-------|-------|
 | **Backlog item** | `BI-E4DFDCB0` |
 | **Epic** | `EP-24741BBF` — DPF Directory Service: absorb identity instead of federating to someone else's |
-| **Status** | Design — not implemented. Operator decisions open in §9. |
+| **Status** | **Implemented** on `doc/mcp-client-self-authentication`. Operator decisions in §9 shipped at their recommended defaults, each env-overridable. |
 | **Date** | 2026-08-26 |
 | **Author** | Claude Opus 5 for Mark Bodman |
 | **Scope (read)** | `apps/web/app/api/mcp/v1/route.ts`, `apps/web/lib/auth/mcp-api-token.ts`, `apps/web/lib/auth/mcp-host-writer.ts`, `apps/web/lib/auth/mcp-setup-snippets.ts`, `apps/web/lib/govern/auth.ts`, `apps/web/app/.well-known/`, `scripts/dpf-bootstrap-agent-toolchain.ps1`, `scripts/lib/mcp-client.mjs`, `docs/Reference/mcp/spec/basic/authorization.mdx` (snapshot `2025-11-25`) |
@@ -243,11 +247,11 @@ This is the load-bearing decision and it is a projection, not a new model.
 
 ### 4.3.1 The public scope vocabulary
 
-**The internal grant vocabulary must not become the OAuth scope vocabulary.** `TOOL_TO_GRANTS` in `apps/web/lib/tak/agent-grants.ts:110` carries **75 distinct grant categories** — `registry_read`, `build_phase_advance`, `siem_tune`, `work_capsule_adopt`, `coworker_screen_fill` and 70 more. Exposing those as OAuth scopes breaks in three ways:
+**The internal grant vocabulary must not become the OAuth scope vocabulary.** `TOOL_TO_GRANTS` in `apps/web/lib/tak/agent-grants.ts:110` carries **86 distinct grant categories** — `registry_read`, `build_phase_advance`, `siem_tune`, `work_capsule_adopt`, `coworker_screen_fill` and 70 more. Exposing those as OAuth scopes breaks in three ways:
 
 1. **The consent screen becomes unreadable.** A human cannot meaningfully approve 75 checkboxes, and a consent screen nobody reads is worse than none — it converts an authorization decision into a habituated click.
 2. **Clients would request all of them.** `authorization.mdx:340-343` tells clients that when the challenge carries no `scope`, they **SHOULD** request everything in `scopes_supported`. A 75-entry `scopes_supported` therefore produces maximal grants by default, inverting least privilege while appearing to implement it.
-3. **It freezes 75 internal names as a public API.** Tool names are already an unrenameable contract for exactly this reason (CLI clients cache them). Adding the grant vocabulary to that frozen set would make every future grant refactor a breaking change for external clients.
+3. **It freezes 86 internal names as a public API.** Tool names are already an unrenameable contract for exactly this reason (CLI clients cache them). Adding the grant vocabulary to that frozen set would make every future grant refactor a breaking change for external clients.
 
 **The design instead defines a small, stable, human-legible scope vocabulary and maps it onto the grants.** Recommended shape — the exact partition is an operator decision (§9), the *smallness* is not:
 
@@ -264,7 +268,7 @@ Properties this has to satisfy:
 
 - **`scopes_supported` advertises `dpf.read` only.** Per `authorization.mdx:344-347` that field is "the minimal set of scopes necessary for basic functionality." Everything above read arrives through step-up (§5.4), which is what makes the default-request behaviour in point 2 above *safe* rather than dangerous — a client that requests everything advertised gets read access, and each escalation is a separate, named, human-approved decision.
 - **The coarse tier is derived, not separately requested.** The granted scope set implies `read`/`write`/`admin`; there is no independent tier parameter for a client to get wrong.
-- **The mapping is a code artifact with a completeness guard.** A single `apps/web/lib/mcp/oauth-scope-map.ts` owns it, and a test asserts every one of the 75 grants maps to exactly one public scope. **Adding a new grant without mapping it fails CI.** This is the drift guard, and without it the two vocabularies separate within a quarter — the failure this whole item exists to correct is a pointer that nobody re-checked.
+- **The mapping is a code artifact with a completeness guard.** A single `apps/web/lib/mcp/oauth-scope-map.ts` owns it, and a test asserts every one of the 86 grants maps to exactly one public scope. **Adding a new grant without mapping it fails CI.** This is the drift guard, and without it the two vocabularies separate within a quarter — the failure this whole item exists to correct is a pointer that nobody re-checked.
 - **Grants stay refactorable.** Internal names can be split, merged or renamed freely as long as the map stays total. The public contract is six strings.
 
 ### 4.4 Client registration
@@ -281,7 +285,11 @@ CLI clients use a loopback listener (`http://127.0.0.1:<ephemeral>/callback`); t
 
 ### 4.6 Consent screen
 
-A portal route, reusing the live session — the operator is already signed in as an admin, so this is a click, not a login. It names, in the platform's own vocabulary rather than OAuth's:
+Rendered by the authorization endpoint itself, reusing the live portal session — the operator is already signed in as an admin, so this is a click, not a login.
+
+**Not a Next page route, and the reason is worth recording.** It was one in the first implementation, and the page-purpose identity ratchet refused it: every portal page route must carry a ratified purpose contract declaring `parentArea`, `entryPoints`, `navigationLayer`, `discoveryCue` and `expectedPath`. An OAuth consent interstitial has none of those — nobody navigates to it, it belongs to no area, it is never in the nav — so that contract could only have been filled in with fiction, and ratification requires an owner reference that cannot be invented. The gate was correct about the design. Rendering consent from the authorization endpoint is also the ordinary shape for an OAuth authorization server; the cost is that the screen is self-contained HTML with inline, `prefers-color-scheme`-aware styling rather than the portal's token sheet.
+
+It names, in the platform's own vocabulary rather than OAuth's:
 
 - the requesting client (`client_name`, and for DCR the fact that it self-registered — an honest weaker provenance signal);
 - the **resource** it will be able to act against, i.e. this named installation (`.well-known/dpf-instance.json` already carries installation identity — reuse it, and close `BI-C7151B1B`'s complaint that the handshake never names which installation an agent is connected to);
@@ -394,7 +402,7 @@ Structural checks are necessary and not sufficient — `structural-verification-
 
 **Authorization parity (automated) — the one that matters most.** For an identical `(user, agent, effective grant set)`, a token from **each** issuance path — `authorization_code`, `client_credentials`, and the surviving PAT — **MUST** produce byte-identical `tools/list` output and identical `tools/call` verdicts across the full tool surface, including the agent-grant and clearance axes. This is the guard against the fork risk in §4.3, and it should fail CI loudly.
 
-**Scope-map totality (automated).** Every one of the 75 entries in `TOOL_TO_GRANTS` maps to exactly one public scope; no grant is unmapped, none is double-mapped, and the union of the six scopes' grant sets equals the full grant vocabulary. Adding a grant without mapping it fails CI. Without this test §4.3.1 decays into the drift it exists to prevent.
+**Scope-map totality (automated).** Every one of the 86 entries in `TOOL_TO_GRANTS` maps to exactly one public scope; no grant is unmapped, none is double-mapped, and the union of the six scopes' grant sets equals the full grant vocabulary. Adding a grant without mapping it fails CI. Without this test §4.3.1 decays into the drift it exists to prevent.
 
 **Step-up (automated).** A read-scoped OAuth token calling a write tool returns 403 with `error="insufficient_scope"` and a `scope` set containing both existing and newly required scopes. The same call on a PAT returns the unchanged `insufficient_token_scope` tool result.
 

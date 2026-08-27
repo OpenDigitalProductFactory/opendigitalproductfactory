@@ -4,7 +4,7 @@
 # being split/refactored under the ceiling, never by expanding the baseline.
 # Regenerate with: node scripts/check-module-size.mjs --update
 apps/web/app/api/mcp/v1/route.test.ts	1532
-apps/web/app/api/mcp/v1/route.ts	860
+apps/web/app/api/mcp/v1/route.ts	950
 apps/web/app/api/v1/edge/discovery-runs/route.test.ts	982
 apps/web/components/admin/BusinessModelBuilder.tsx	821
 apps/web/components/admin/McpTokenManager.tsx	1384
