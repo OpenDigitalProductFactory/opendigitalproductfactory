@@ -186,6 +186,13 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // build (SUR-8AB3353C, regression from #4321).
       node("scripts/check-docker-patch-context.mjs"),
       node("--test", "scripts/check-docker-patch-context.test.mjs"),
+      // Same failure family, different input: the Dockerfile copies scripts by
+      // name, so extracting a helper out of one silently drops it from the image
+      // and `pnpm install` dies on ERR_MODULE_NOT_FOUND in postinstall
+      // (BI-9B490215). `next build` and PR CI cannot see it — no PR check builds
+      // the image — so it reaches main green and breaks the release chain.
+      node("scripts/check-dockerfile-copied-script-imports.mjs"),
+      node("--test", "scripts/check-dockerfile-copied-script-imports.test.mjs"),
     ]),
     guard("bundle-boundary-guard", "Bundle Boundary Guard", [
       node("--test", "scripts/check-bundle-boundaries.test.mjs"),
