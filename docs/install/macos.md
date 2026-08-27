@@ -181,7 +181,13 @@ single-tree mode persists — current behavior, full back-compat.
     The installer uses the active private IPv4 portal address by default.
     Discovery works over HTTP; automatic pairing remains blocked until
     `DPF_LAN_AUTHORITY_URL` names a certificate-valid HTTPS origin trusted by
-    the other installation.
+    the other installation. That certificate is necessary but not sufficient:
+    an install pairs a peer automatically only when the chain validates against
+    the pinned organization root, this install has completed an organization
+    join import, both installs name the same estate, and the relationship is
+    same-organization. Otherwise pairing proceeds through the short code both
+    operators confirm, and the screen names the condition that could not be
+    proved.
 14. **Voice / TTS sidecar** (Apple Silicon only) — runs
     `scripts/tts/setup-chatterbox-tts-macos.sh` to provision the
     native-host text-to-speech sidecar (port `8771`) and wire its

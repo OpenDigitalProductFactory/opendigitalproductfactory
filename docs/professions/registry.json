@@ -51,7 +51,7 @@
     {
       "professionKey": "software-engineer",
       "label": "Software Engineer",
-      "roles": ["build-software-engineer", "software-engineer"],
+      "roles": ["build-software-engineer", "software-engineer", "external-claude-code", "external-codex", "external-grok"],
       "contextSlugs": ["engineering-flow"],
       "sources": [
         {

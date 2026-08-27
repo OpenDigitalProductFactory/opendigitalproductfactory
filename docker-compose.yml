@@ -204,6 +204,15 @@ services:
       DPF_HOST_INSTALL_PATH: ${DPF_HOST_INSTALL_PATH:-}
       DPF_HOST_PLATFORM: ${DPF_HOST_PLATFORM:-}
       DPF_HOST_ARCH: ${DPF_HOST_ARCH:-}
+      # Installation identity process-override tier (BI-7626A660 / BI-10BF6206).
+      # `environment-class-contract` and `estate-identity-contract` both document
+      # a highest-precedence process override, and neither variable was listed
+      # here — so on a consumer install, where this allow-list is the ONLY way an
+      # env var reaches the portal, the documented top tier could never be set.
+      # A precedence chain whose first rung is unreachable is not a precedence
+      # chain. Empty default keeps the tier silent unless an operator sets it.
+      DPF_ENVIRONMENT_CLASS: ${DPF_ENVIRONMENT_CLASS:-}
+      DPF_ESTATE_NAME: ${DPF_ESTATE_NAME:-}
       # Authoritative installer opt-in state for the main installation's
       # supervised host Edge service. The portal combines this intent with
       # live enrollment/heartbeat evidence; it never treats the flag as health.

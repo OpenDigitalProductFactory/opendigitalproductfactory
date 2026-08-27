@@ -1702,6 +1702,9 @@
       "docs/testing/archetype-exercise-harness.md",
       "docs/testing/archetype-exercise-playbook.md"
     ],
+    "scripts/hooks/converge-git-hooks.mjs": [
+      "docs/testing/pre-pr-gate.md"
+    ],
     "scripts/hooks/run-hook.mjs": [
       "docs/install/platform-support-watchlist.md",
       "docs/operations/session-transcript-recovery.md"
@@ -1737,20 +1740,23 @@
     "scripts/lib/compose-safety.mjs": [
       "docs/architecture/delivery-surfaces-runbook.md"
     ],
+    "scripts/lib/converge-hooks-dir.mjs": [
+      "docs/testing/pre-pr-gate.md"
+    ],
     "scripts/lib/dco-signoff.mjs": [
       "docs/architecture/build-gate-runbook.md"
     ],
     "scripts/lib/dockerfile-portal-build.test.mjs": [
       "docs/install/platform-support-watchlist.md"
     ],
-    "scripts/lib/ensure-pre-push-hook.mjs": [
-      "docs/testing/pre-pr-gate.md"
-    ],
     "scripts/lib/entry-module.mjs": [
       "docs/install/platform-support-watchlist.md"
     ],
     "scripts/lib/gate-context.mjs": [
       "docs/testing/pr-health.md"
+    ],
+    "scripts/lib/hooks-dir.mjs": [
+      "docs/testing/pre-pr-gate.md"
     ],
     "scripts/lib/junction-safe-worktree-remove.mjs": [
       "docs/architecture/delivery-surfaces-runbook.md"
@@ -2970,8 +2976,10 @@
       "scripts/ci-policy-guards.test.mjs",
       "scripts/gate-worktree.mjs",
       "scripts/gate-worktree.sh",
+      "scripts/hooks/converge-git-hooks.mjs",
       "scripts/lib/ci-policy-guards.mjs",
-      "scripts/lib/ensure-pre-push-hook.mjs",
+      "scripts/lib/converge-hooks-dir.mjs",
+      "scripts/lib/hooks-dir.mjs",
       "scripts/lib/local-integration-ci.mjs",
       "scripts/local-ci-runner.mjs",
       "scripts/pr-health.mjs",

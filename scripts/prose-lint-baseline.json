@@ -9173,7 +9173,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 2
+    "textMass": 13
   },
   "apps/web/components/twin/WorkItem.tsx": {
     "vocabulary": 0,

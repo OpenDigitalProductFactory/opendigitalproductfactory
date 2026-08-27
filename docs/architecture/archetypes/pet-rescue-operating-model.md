@@ -179,6 +179,79 @@ Grouped by dependency. Nothing below depends on anything beneath it.
 30. **Compliance calendar and statutory reports** — licence renewals, inspections, rabies and
     bite reporting, monthly statistics, controlled-substance reconciliation.
 
+## 5b. The operators
+
+§5 lists what the business holds. This section lists **who does the day**, and it is scored under
+operability rather than coverage so the thirty-entity denominator above stays comparable.
+
+Added 2026-08-26 after running the day proved that a complete §5 would still leave the rescue
+unable to staff itself.
+
+**Roles the operating day requires.** Every one appears by name in §1:
+
+| Role | Steps in §1 it performs |
+|---|---|
+| Kennel technician | 06:30 and 17:00 rounds, the highest-volume job in the building |
+| Intake officer / front desk | 08:00 stray, 09:00 surrender, 14:00 found-pet call |
+| Veterinary technician / medical lead | 09:30 exams, vaccines, medication rounds, 15:00 transport |
+| Adoption counsellor | 11:00 meet-and-greets and walk-ins, applications, home checks |
+| Foster coordinator | 13:00 placement, supplies, check-ins, returns |
+| Volunteer coordinator | Shifts, training levels, background checks, hours |
+| Shelter manager | 16:30 capacity, live release rate, compliance deadlines, euthanasia authorisation |
+| Transport driver | 15:00 vet runs, partner transfers, health certificates |
+
+**Worker classes.** A rescue's largest labour pool is **volunteers**, not employees — unpaid,
+shift-based, with training levels and background checks that gate what they may handle. Foster
+carers are a second unpaid class, housing animals off-site. Neither is an employment type in the
+usual full-time / part-time / contractor sense, and both must be first-class or the roster is
+fiction.
+
+**Work locations are operational places**, not office arrangements: dog ward, cat room, isolation,
+intake, the surgery, a foster home, an offsite adoption event. Headquarters / hybrid / remote does
+not describe anywhere an animal lives.
+
+**Shipped 2026-08-27 — the vocabulary, not yet the roles** (`BI-A30152B6`). `EmploymentType` and
+`WorkLocation` are open tables, not enums, and `WorkerClassification` already carried `volunteer`
+and named it "the majority classification for nonprofit and community archetypes". So this needed
+no new structure, only rows:
+
+- **Volunteer** joins the platform defaults, because the canonical enum had already anticipated it
+  and no install could record one.
+- **Foster carer** and the seven operational locations above are declared on the archetype
+  (`workforceProfile`) and applied to the install that actually runs that archetype, so a
+  restaurant never acquires a cat room. A class an archetype needs is now a row it contributes,
+  not a closed set the platform widens.
+- A classification is written on create only. The four seeded types a migration left unresolved
+  stay unresolved: an unpaid worker directed like an employee is a wage claim, and a confident
+  wrong answer is the most damaging kind available.
+- A boot reconciler applies the rows to an install that finished onboarding before the archetype
+  declared them. Without one this fix would have been invisible on every existing install: the
+  seed chain re-runs on boot only for an organization whose WWWD corpus is missing, and a healthy
+  install short-circuits that check. *A seed that only runs at setup completion has not shipped to
+  anyone who completed setup — check for the reconciler, not just the seeder.*
+
+**Still open on `BI-A30152B6`, and why:**
+
+- **The eight roles above are not seeded.** Roles live in `packages/db/data/occupation_registry.json`,
+  which has thirteen entries across healthcare, trades, agriculture and manufacturing and **none**
+  for nonprofit-community — which is why the only role vocabulary a rescue manager sees is the
+  platform's own `HR-000`..`HR-600` ladder. Each entry carries a coworker roster, a feature
+  surface and an onboarding curriculum that must all resolve, so the eight roles are a piece of
+  work in their own right, not a list to paste in.
+- **Recruiting still has no create control**, and an employee record still grants no access — the
+  sign-in is a separate create in Admin, so the counts read "2 people / 1 user" with nothing
+  joining them.
+- **Role is still write-once** in the UI.
+
+**Authorisation follows the role, and some of it is statutory.** Euthanasia authorisation belongs
+to named people. Controlled-substance draw belongs to fewer. A behavioural assessment restricts
+who may handle an animal — the colour-coded collar is an access rule, not a label. Conversely a
+volunteer walking dogs needs the rounds surface and nothing else.
+
+**The reachability requirement.** Each role must be able to open the surfaces its steps need,
+signed in as itself. A model only the founder can reach is a single-operator business regardless
+of how complete the model is.
+
 ## 6. What exists today — measured 2026-08-25
 
 The entire animal surface in the shipped product is `/storefront/animals`:
@@ -216,6 +289,87 @@ figure was optimistic because the day it was scored against was incomplete.
 
 Ratified direction (BI-51C95802): **generalise `verticals-care`** into a subject-agnostic care
 substrate rather than cloning it or promoting the catalog row.
+
+## 6b. What can be done today — measured by running the day, 2026-08-26
+
+§6 measured the schema. This section measures a **run**: the §1 operating day performed in order
+on a live install, as the founder and then as two newly created staff accounts.
+
+**Operability 0.30** — of ten steps, **0 completed, 6 partial, 4 impossible**. Coverage on the
+previous day was 0.05. Both figures stand; they measure different things.
+
+| Step | Outcome | What stopped it | What the operator did instead |
+|---|---|---|---|
+| 08:00 stray intake | partial | No field for finder, location, time, condition, weight, chip result, hold clock or housing | Paper intake form; hold date on the corridor whiteboard |
+| 09:00 owner surrender | partial | One admission path only; no pathway, ownership transfer, reason code, or safe place for bite history | Surrender form signed on paper; bite history on the cage card and by voice |
+| 09:30 rounds | impossible | No round, care record, medication log or observation field | Clipboard, printed grid, transcribed nowhere |
+| 10:00 medical | impossible | No vaccination record or booster dates; the calendar cannot create | Phoned the clinic; paper desk diary |
+| 11:00 walk-in adopter | partial | No per-animal page; hold shows without reason or date; reservation is free text, not a hold | Sticky note on the kennel card and a promise to call |
+| 12:00 publish and share | partial | No typed listing attributes; no per-animal URL to share; only the lead photo reaches the public | Posted the photos to social media by hand |
+| 13:00 found-pet call | impossible | Zero search or filter controls, and nothing searchable was recordable at intake | Walked the paper binder back three weeks |
+| 14:00 foster placement | impossible | No foster home, placement, supplies or return date; no status meaning in-foster | Group text and a shared spreadsheet |
+| 15:00 adoption | partial | Status change worked and reached the mission metric; no contract, fee, spay/neuter compliance, chip re-registration or typed outcome | Contract on paper, fee on the card reader, chip re-registered on the registry's own site |
+| 16:00 numbers | partial | Outcomes correct; kennels-free unanswerable; intakes not recorded as intakes | Counted the ward on foot |
+
+**One row above is half wrong, and the correction is worth keeping.** The 10:00 finding recorded
+that "the calendar cannot create". Driving the live install on 2026-08-27 found that clicking a
+day *does* open a chooser offering **Create event** and **Schedule AI coworker**, with no page
+error. What is true is that the page carried **no create control at all**, so the only way in was
+a gesture nothing announced, and the workspace agenda linked here promising "a booking, invoice,
+or appointment" — three things this calendar does not make. Both were fixed (`BI-460BFA84`): the
+calendar now has a *New event* control, and the agenda promises what the calendar does. **The
+remaining half of the 10:00 step stands:** `CareAppointment` is subject-agnostic and already
+built, but the business calendar neither reads it nor writes it, so a spay/neuter slot is a
+free-text event rather than an appointment against the animal. *A step recorded as impossible
+because a control could not be found is a discoverability finding, not a capability one — check
+which before designing the fix.*
+
+### What the run found that §6 could not
+
+Three findings sit outside the thirty entities entirely, and each alone prevents the business
+running as more than one person with a clipboard:
+
+1. **No hireable role may see an animal.** `HR-600 Workforce Member` and `HR-500 Operations
+   Manager` are both refused the only animal surface; only the superuser reaches it. Recruiting
+   has no create control, the organization has zero departments and zero positions, and employment
+   type has no volunteer. See §5b for what the day actually requires. *(BI-2777B86B, BI-A30152B6)*
+2. **Every public inbound channel requires a donation.** Both the adoption enquiry and the
+   site-wide contact form reject a submission without a donation amount, so the found-pet caller,
+   the surrendering owner and the would-be volunteer are all turned away at the door. This stands
+   in front of the §7b interaction the whole archetype depends on. *(BI-7F851119)*
+3. **Operational notes are published, and cannot be taken back.** Recording an intake put a
+   finder's name, telephone number and home address on the open web within seconds, and every
+   descriptive field is write-once, so the only redaction is deleting the animal and its
+   photographs. *(BI-56BB6038)* **Half fixed 2026-08-27**: species, breed, age, sex, size and
+   description are now correctable on the animal, behind a per-card disclosure, and a refused
+   save says so instead of leaving an edit that only looks applied. Publication itself is not
+   fixed — the description is still the animal's only text field and it is still public marketing
+   copy, so intake detail has nowhere private to go until `BI-4F8A484C` gives an animal an
+   existence independent of its listing.
+
+### What worked, and is now a regression surface
+
+- Photo handling end to end: multi-file upload, lead selection, reorder, responsive `srcSet`
+  160→1280w, lazy loading, real alt text.
+- `hold` renders publicly as "On hold"; `adopted` removes the animal from the listing.
+- One number went end to end: recording the adoption moved **Animals placed** from 0 to 1.
+- Consumer vocabulary is right — Donate, Adopt, Enquire; no price on an animal.
+- The cockpit puts storefront enquiries above the platform attention list.
+- `/performance` refuses to show numbers it has not computed.
+- No horizontal overflow at 768×1024 on any surface tried.
+
+### Two archetype-specific traps for the next run
+
+**`hold` is one word doing three statutory jobs.** A stray hold, a bite quarantine and an adoption
+reservation are all recorded as `status = hold`, with no clock, no reason and no ability to block
+anything. Two animals in the ward carry legally different obligations and are indistinguishable on
+screen. This is the concrete case for element 10 of the canonical minimal substrate.
+
+**Destructive controls are undersized for the tablet the work is done on.** At 768×1024 the
+per-animal Delete measured 59×28 px and the photo remove control 24×24, both unconfirmed, on the
+device a kennel technician holds one-handed. The per-animal Delete was fixed on 2026-08-27 — it
+asks first, and both it and its confirmation carry a 44 px target. **The photo remove control is
+unchanged**: still 24×24 and still unconfirmed.
 
 ## 7. UX requirements
 
@@ -315,6 +469,39 @@ Required listing behaviour:
 untyped `attributes` Json makes the filter impossible to build — the concrete case for the
 accommodation doctrine's rule that a cross-surface queried field graduates out of Json.
 
+## 7c. Inbound channels — every reason a stranger arrives
+
+Added 2026-08-26 after a run found the single channel that exists gated behind a donation.
+
+§7b covers the listing, which is how someone finds an animal. This section covers how anyone
+reaches the rescue at all. A shelter's inbound traffic is not one funnel:
+
+| They arrive to | Urgency | Must reach |
+|---|---|---|
+| Adopt a specific animal | days | Adoption counsellor, carrying the animal reference |
+| Report a found animal | **hours** | Intake, matched against open lost-pet reports |
+| Report a lost animal | **hours** | Intake, matched against recent stray intakes |
+| Surrender an animal | days | Intake appointment queue |
+| Report cruelty or an animal at risk | **immediate** | Manager, and often animal control |
+| Offer to foster or volunteer | weeks | Foster or volunteer coordinator |
+| Donate, or ask about a bequest | weeks | Fundraising |
+
+Four requirements follow:
+
+1. **No inbound channel may require payment.** A donation prompt in front of a found-pet report is
+   the worst failure available to this archetype. **Met 2026-08-27** (BI-7F851119): the five
+   nonprofit archetypes were seeded with a donation form in the contact-form slot, and
+   `donationAmount` was required. They now take the contact fields, including the phone number a
+   found-pet caller has to leave, and `resolveInquiryFormSchema` drops donation fields from any
+   enquiry that is not about a donation item, so an install seeded before the fix is corrected
+   without a re-seed. Donations keep their own route and their own form. **The same form still
+   serves all seven reasons** — requirement 2 below is open.
+2. **The reason for contact is a typed field**, because it sets the queue and the clock. A cruelty
+   report and a bequest enquiry cannot share a lane.
+3. **An enquiry about an animal carries that animal's reference**, or staff cannot answer it.
+4. **A reply is possible from inside the product.** Today the only action on an enquiry is to
+   convert it into an internal work item; there is no reply.
+
 ## 8. Definition of done
 
 The archetype may be described as supported when:
@@ -332,7 +519,14 @@ The archetype may be described as supported when:
 9. Restricted funds and municipal contracts are distinguishable from general donations.
 10. Each role's primary surface passes a cognitive-load review with no platform-builder
     navigation present.
-11. Coverage score re-measured and recorded, with the date.
+11. Every role in §5b can sign in and reach the surfaces its steps need, volunteers and foster
+    carers are first-class worker classes, and work locations name real places in the shelter.
+12. Every inbound reason in §7c reaches the right queue, none of them behind a payment, and staff
+    can reply from inside the product.
+13. An operational fact that must not be public — bite history, medical detail, a finder's
+    contact details — has a non-public home, and anything published can be corrected afterwards.
+14. Coverage score and operability re-measured and recorded, each with its date.
 
-An archetype below **0.6** must not be described as supported in external material.
-Current: **0.05**.
+An archetype below **0.6 coverage** must not be described as supported in external material, and
+below **0.8 operability** must not be described as operable. Current: **0.05 coverage**
+(2026-08-25), **0.30 operability** (2026-08-26).

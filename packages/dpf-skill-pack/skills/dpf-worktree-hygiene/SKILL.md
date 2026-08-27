@@ -1,6 +1,6 @@
 ---
 name: dpf-worktree-hygiene
-description: "Use when worktree or Build Studio sandbox disk is sprawling, when deciding whether to enable fleet janitor/GC flags, when running a dry-run or live Tier-A reap, or when leftovers remain after merges. Encodes primary session reaping vs flag-gated portal soak, dry-run default, explicit-go for live deletes, and junction-safe removal."
+description: "Use when DPF worktree or Build Studio sandbox disk is sprawling, when leftovers remain after merges, or when deciding on janitor/GC flags."
 
 # Agent Skills standard fields (Surface A — Claude Code)
 disable-model-invocation: false
