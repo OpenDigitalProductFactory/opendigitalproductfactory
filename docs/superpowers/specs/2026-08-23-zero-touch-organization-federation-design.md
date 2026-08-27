@@ -10,7 +10,7 @@ status: binding
 | Epic | `EP-MSP-FEDERATION` (enrollment), `EP-1FABA22D` (instance stance) |
 | Surface | `@dpf/db` federation contracts, federated record sync, instance stance |
 | Owners | Federation, installation lifecycle |
-| Related | `2026-08-22-installation-identity-and-agent-stance-design.md`; federated record sync (B3/B5); organization join package (`BI-A8399604`) |
+| Related | `2026-08-22-installation-identity-and-agent-stance-design.md`; federated record sync (B3/B5); the organization join package contract in `packages/db/src/organization-join-action.ts` |
 
 ## 1. Decision
 
