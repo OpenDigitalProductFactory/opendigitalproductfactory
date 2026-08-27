@@ -394,6 +394,11 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/sandbox-freshness-preflight.test.mjs",
         "scripts/release/re-resolve-stt-digest.test.mjs",
         "scripts/lib/ensure-pre-push-hook.test.mjs",
+        // BI-5CBDC146: hook directories must resolve through fileURLToPath.
+        // URL.pathname yields "/D:/..." on Windows, so the shim never
+        // converged and a clean push meant the gate never ran. Linux CI cannot
+        // reproduce it — these guards are the only thing that catches it.
+        "scripts/lib/hooks-dir.test.mjs",
         "scripts/lib/agent-identity.test.mjs",
         "tests/release/local-ci-gate-contract.test.mjs",
         "tests/release/pregate-node-gate-contract.test.mjs",

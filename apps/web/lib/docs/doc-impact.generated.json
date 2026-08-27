@@ -1752,6 +1752,9 @@
     "scripts/lib/gate-context.mjs": [
       "docs/testing/pr-health.md"
     ],
+    "scripts/lib/hooks-dir.mjs": [
+      "docs/testing/pre-pr-gate.md"
+    ],
     "scripts/lib/junction-safe-worktree-remove.mjs": [
       "docs/architecture/delivery-surfaces-runbook.md"
     ],
@@ -2972,6 +2975,7 @@
       "scripts/gate-worktree.sh",
       "scripts/lib/ci-policy-guards.mjs",
       "scripts/lib/ensure-pre-push-hook.mjs",
+      "scripts/lib/hooks-dir.mjs",
       "scripts/lib/local-integration-ci.mjs",
       "scripts/local-ci-runner.mjs",
       "scripts/pr-health.mjs",

@@ -638,6 +638,22 @@ changes the docs-only comparison base to a local accepted-base ref (default:
 `origin/main`); if that configured ref is missing, the hook requires the normal
 SHA-bound gate record instead of silently falling back.
 
+**Convergence failures are reported, not swallowed (BI-5CBDC146).** Until
+2026-08-27 this chain was never active on Windows. `set-hooks-path.mjs`
+resolved its hooks directory with `new URL('../.githooks/', import.meta.url)
+.pathname`, which returns `/D:/repo/.githooks/` on Windows; `path.join` turned
+that into an unopenable `\D:\repo\.githooks\`, every `fs` call threw `ENOENT`,
+and a bare `catch {}` discarded it. `postinstall` exited 0, `.githooks/pre-push`
+stayed the stock git-lfs shim, and **a clean `git push` on Windows meant the
+gate never ran — not that it passed.** The post-checkout uncommitted-work guard
+was dead by the same path. Resolution now goes through `fileURLToPath`
+([`scripts/lib/hooks-dir.mjs`](../../scripts/lib/hooks-dir.mjs)), and a
+convergence that cannot complete prints a warning naming the consequence rather
+than failing silently. If `postinstall` reports `could not converge
+.githooks/pre-push`, the gate is not protecting your pushes — repair it before
+relying on a green push. Verify with `head -4 .githooks/pre-push`: it must
+delegate to `.githooks/lib/pre-push-chained.sh`.
+
 The bypass is **recorded, never silent** — the reason is persisted into the
 gate state file and surfaced by `pnpm pr:health` at PR time:
 
