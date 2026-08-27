@@ -247,7 +247,7 @@ model EmploymentType {
 /// was determined when, on what evidence, is the audit trail.
 model WorkerClassificationDetermination {
   id                 String               @id @default(cuid())
-  determinationId    String               @unique
+  workerClassificationDeterminationId    String               @unique
   employeeProfileId  String
   classification     WorkerClassification
   /// The human who made the call. Required - see the model note.
@@ -260,19 +260,22 @@ model WorkerClassificationDetermination {
   evidence           Json?
   rationale          String?              @db.Text
   determinedAt       DateTime             @default(now())
-  supersededAt       DateTime?
-  supersededById     String?              @unique
+  /// The one record-lifecycle convention (BI-C357FA5A). A determination is
+  /// `superseded` when a later one replaces it; the current determination for a
+  /// worker is the `active` row with the newest `determinedAt`. No self-link,
+  /// because the convention already answers "is this still the one".
+  lifecycle          RecordLifecycle      @default(active)
+  lifecycleAt        DateTime?
+  lifecycleReason    String?
   createdAt          DateTime             @default(now())
   updatedAt          DateTime             @updatedAt
 
   employeeProfile    EmployeeProfile      @relation(fields: [employeeProfileId], references: [id], onDelete: Cascade)
   determinedBy       User                 @relation("ClassificationDeterminedBy", fields: [determinedByUserId], references: [id])
-  supersededBy       WorkerClassificationDetermination?  @relation("ClassificationSupersession", fields: [supersededById], references: [id], onDelete: SetNull)
-  supersedes         WorkerClassificationDetermination?  @relation("ClassificationSupersession")
 
   @@index([employeeProfileId, determinedAt(sort: Desc)])
   @@index([classification])
-  @@index([supersededAt])
+  @@index([lifecycle])
   @@index([determinedByUserId])
 }
 
@@ -286,27 +289,27 @@ model WorkerClassificationDetermination {
 /// silent continuation.
 model WorkerEngagementTerm {
   id                String    @id @default(cuid())
-  termId            String    @unique
+  workerEngagementTermId            String    @unique
   employeeProfileId String
   startsOn          DateTime
   /// The agreed end. Required - an engagement with no end date is not a term,
   /// and recording one as though it were is how an indefinite engagement hides.
   endsOn            DateTime
-  /// Set when a later term extends or replaces this one.
-  supersededAt      DateTime?
-  supersededById    String?   @unique
-  /// Why the term was extended or changed, for the re-determination trail.
-  changeReason      String?   @db.Text
+  /// The one record-lifecycle convention (BI-C357FA5A). An extension marks the
+  /// prior term `superseded` and records a new `active` one, so the drift stays
+  /// visible. `lifecycleReason` carries why it changed, for the
+  /// re-determination trail.
+  lifecycle         RecordLifecycle @default(active)
+  lifecycleAt       DateTime?
+  lifecycleReason   String?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
-  employeeProfile   EmployeeProfile       @relation(fields: [employeeProfileId], references: [id], onDelete: Cascade)
-  supersededBy      WorkerEngagementTerm? @relation("EngagementTermSupersession", fields: [supersededById], references: [id], onDelete: SetNull)
-  supersedes        WorkerEngagementTerm? @relation("EngagementTermSupersession")
+  employeeProfile   EmployeeProfile @relation(fields: [employeeProfileId], references: [id], onDelete: Cascade)
 
   @@index([employeeProfileId, startsOn(sort: Desc)])
   @@index([endsOn])
-  @@index([supersededAt])
+  @@index([lifecycle])
 }
 
 model WorkLocation {

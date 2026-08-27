@@ -1,7 +1,7 @@
 {
   "version": "1",
   "accountableOwner": "Mark Bodman (markdbodman@gmail.com)",
-  "summary": "BI-C61CEEA9, D1 of EP-862820FD. Migration 20260826190000_add_worker_classification_axis adds the legally-consequential axis behind an organisation's own EmploymentType label, plus the recorded human determination behind it and the definite term a contingent engagement carries. EmploymentType.name is free text with no legal meaning, so nothing downstream could ask whether a worker may lawfully be directed, scheduled, reviewed and provisioned as an employee. This is new information about a data subject, not a re-projection of existing values: a classification is a judgement a human makes about a worker, and it carries employment-law consequence. It is therefore governed rather than inherited, and the determination row cannot exist without a named human author. The backfill maps only labels it can read unambiguously and leaves the rest NULL as operator work, because a guess writes a legal claim into the database and every permissive guess errs toward directing someone the organisation may not direct.",
+  "summary": "BI-C61CEEA9, D1 of EP-862820FD. Migration 20260826190000_add_worker_classification_axis adds the legally-consequential axis behind an organisation's own EmploymentType label, plus the recorded human determination behind it and the definite term a contingent engagement carries. EmploymentType.name is free text with no legal meaning, so nothing downstream could ask whether a worker may lawfully be directed, scheduled, reviewed and provisioned as an employee. This is new information about a data subject, not a re-projection of existing values: a classification is a judgement a human makes about a worker, and it carries employment-law consequence. It is therefore governed rather than inherited, and the determination row cannot exist without a named human author. Supersession uses the platform RecordLifecycle convention rather than a self-link, so there is no second home for a rule the platform already states. The backfill maps only labels it can read unambiguously and leaves the rest NULL as operator work, because a guess writes a legal claim into the database and every permissive guess errs toward directing someone the organisation may not direct.",
   "changes": [
     {
       "kind": "model",
@@ -27,7 +27,9 @@
           "resolution": "governed",
           "reason": "A judgement about a worker's legal status with direct employment-law consequence — it decides whether the organisation may direct them, whether withholding applies, and whether they accrue leave. It is an attribute of the data subject, and a wrong or unaccountable value creates misclassification exposure for the employer and lost entitlements for the worker.",
           "provenance": "Recorded by a named human via determinedByUserId. The platform never derives, infers or defaults this value; there is no code path that writes it without a human author.",
-          "flags": ["subject"],
+          "flags": [
+            "subject"
+          ],
           "fieldPolicy": {
             "basis": "employment-contract-and-legal-obligation",
             "access": "Readable by the worker themselves, their accountable manager chain, and platform roles holding workforce-administration capability. Not exposed on public or storefront surfaces.",
@@ -54,7 +56,9 @@
           "resolution": "governed",
           "reason": "Free-shaped record of what the determination rested on — engagement facts, contract references, the factors weighed. Deliberately unstructured because the multi-factor tests differ by jurisdiction, which means it can hold personal data about the worker and about the engagement.",
           "provenance": "Supplied by the human making the determination. No automated collection populates it.",
-          "flags": ["subject"],
+          "flags": [
+            "subject"
+          ],
           "fieldPolicy": {
             "basis": "employment-contract-and-legal-obligation",
             "access": "Same audience as the classification itself: the worker, their accountable manager chain, and workforce administration.",
@@ -67,7 +71,9 @@
           "resolution": "governed",
           "reason": "The human's stated reasoning. Narrative about a data subject's legal status, so it carries the same governance as the determination it explains.",
           "provenance": "Written by the human making the determination.",
-          "flags": ["subject"],
+          "flags": [
+            "subject"
+          ],
           "fieldPolicy": {
             "basis": "employment-contract-and-legal-obligation",
             "access": "Same audience as the classification itself.",
@@ -83,18 +89,33 @@
           "flags": []
         },
         {
-          "name": "supersededAt",
+          "name": "lifecycle",
           "resolution": "not-applicable",
-          "reason": "Marks a determination replaced by a later one. Operational metadata that makes the drift history readable.",
-          "provenance": "Server clock when a successor determination is recorded.",
+          "reason": "The platform record-lifecycle convention (BI-C357FA5A). Marks whether this row is the current one or has been superseded by a later determination. Operational state, not a data-subject attribute.",
+          "provenance": "Set to superseded when a successor row is recorded.",
           "flags": []
         },
         {
-          "name": "supersededById",
+          "name": "lifecycleAt",
           "resolution": "not-applicable",
-          "reason": "Self-relation to the successor determination. A typed join within this model, carrying no additional information about the worker.",
-          "provenance": "Set when a successor determination is recorded.",
+          "reason": "When the lifecycle state last changed. Operational metadata.",
+          "provenance": "Server clock at the lifecycle transition.",
           "flags": []
+        },
+        {
+          "name": "lifecycleReason",
+          "resolution": "governed",
+          "reason": "Why this determination was superseded. Narrative about a change in a worker legal status, so it carries the same governance as the determination it closes.",
+          "provenance": "Written by the human recording the successor determination.",
+          "flags": [
+            "subject"
+          ],
+          "fieldPolicy": {
+            "basis": "employment-contract-and-legal-obligation",
+            "access": "Same audience as the classification itself.",
+            "retention": "Bound to its parent determination.",
+            "obligations": "Disclosed to the worker on request as part of the determination record."
+          }
         }
       ]
     },
@@ -108,7 +129,9 @@
           "resolution": "governed",
           "reason": "When the engagement was agreed to begin. An attribute of the worker's engagement rather than a re-projection of EmployeeProfile.startDate, which records when employment began — a different fact for a contingent worker whose engagement may start and end inside a longer relationship.",
           "provenance": "Recorded from the engagement agreement by workforce administration.",
-          "flags": ["subject"],
+          "flags": [
+            "subject"
+          ],
           "fieldPolicy": {
             "basis": "employment-contract",
             "access": "The worker, their accountable manager chain, and workforce administration.",
@@ -121,7 +144,9 @@
           "resolution": "governed",
           "reason": "The agreed end of the engagement. Required, because an engagement with no end date is not a definite term and recording one as though it were is how an indefinite engagement hides. Duration is itself a factor that reclassifies a contractor as an employee, so this value has legal consequence for the worker.",
           "provenance": "Recorded from the engagement agreement by workforce administration.",
-          "flags": ["subject"],
+          "flags": [
+            "subject"
+          ],
           "fieldPolicy": {
             "basis": "employment-contract",
             "access": "The worker, their accountable manager chain, and workforce administration.",
@@ -130,31 +155,33 @@
           }
         },
         {
-          "name": "changeReason",
+          "name": "lifecycle",
+          "resolution": "not-applicable",
+          "reason": "The platform record-lifecycle convention (BI-C357FA5A). Marks whether this row is the current one or has been superseded by a later determination. Operational state, not a data-subject attribute.",
+          "provenance": "Set to superseded when a successor row is recorded.",
+          "flags": []
+        },
+        {
+          "name": "lifecycleAt",
+          "resolution": "not-applicable",
+          "reason": "When the lifecycle state last changed. Operational metadata.",
+          "provenance": "Server clock at the lifecycle transition.",
+          "flags": []
+        },
+        {
+          "name": "lifecycleReason",
           "resolution": "governed",
-          "reason": "Why a term was extended or replaced. Narrative about the worker's engagement, forming part of the re-determination trail.",
+          "reason": "Why a term was extended or replaced. Narrative about the worker engagement, forming part of the re-determination trail.",
           "provenance": "Written by workforce administration when superseding a term.",
-          "flags": ["subject"],
+          "flags": [
+            "subject"
+          ],
           "fieldPolicy": {
             "basis": "employment-contract",
             "access": "The worker, their accountable manager chain, and workforce administration.",
             "retention": "Bound to its parent term.",
             "obligations": "Disclosed to the worker on request as part of the engagement record."
           }
-        },
-        {
-          "name": "supersededAt",
-          "resolution": "not-applicable",
-          "reason": "Marks a term replaced by an extension or successor. Operational metadata.",
-          "provenance": "Server clock when a successor term is recorded.",
-          "flags": []
-        },
-        {
-          "name": "supersededById",
-          "resolution": "not-applicable",
-          "reason": "Self-relation to the successor term. A typed join within this model.",
-          "provenance": "Set when a successor term is recorded.",
-          "flags": []
         }
       ]
     }

@@ -124,7 +124,7 @@ describe("engagementTermDrift", () => {
   it("flags a lapsed term still running", () => {
     expect(engagementTermDrift(
       "contractor_direct",
-      { endsOn: new Date("2026-08-01T00:00:00.000Z"), supersededAt: null },
+      { endsOn: new Date("2026-08-01T00:00:00.000Z"), lifecycle: "active" as const },
       now,
     )).toEqual({ drifted: true, reason: "term-lapsed" });
   });
@@ -132,17 +132,17 @@ describe("engagementTermDrift", () => {
   it("accepts a term still within its agreed end", () => {
     expect(engagementTermDrift(
       "contractor_direct",
-      { endsOn: new Date("2026-12-01T00:00:00.000Z"), supersededAt: null },
+      { endsOn: new Date("2026-12-01T00:00:00.000Z"), lifecycle: "active" as const },
       now,
     )).toEqual({ drifted: false });
   });
 
-  // An extension supersedes the prior term. The superseded row is history, not
-  // drift — the successor carries the current agreed end.
-  it("does not flag a superseded term", () => {
+  // An extension marks the prior term superseded. That row is history, not drift
+  // - the successor carries the current agreed end.
+  it("does not flag a term whose lifecycle is superseded", () => {
     expect(engagementTermDrift(
       "contractor_direct",
-      { endsOn: new Date("2026-08-01T00:00:00.000Z"), supersededAt: new Date("2026-07-30T00:00:00.000Z") },
+      { endsOn: new Date("2026-08-01T00:00:00.000Z"), lifecycle: "superseded" as const },
       now,
     )).toEqual({ drifted: false });
   });

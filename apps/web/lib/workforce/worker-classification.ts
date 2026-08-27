@@ -1,4 +1,4 @@
-import type { WorkerClassification } from "@dpf/db";
+import type { RecordLifecycle, WorkerClassification } from "@dpf/db";
 
 /**
  * What a worker classification MEANS, as typed values rather than prose
@@ -187,12 +187,12 @@ export function resolveClassification(worker: {
  */
 export function engagementTermDrift(
   classification: WorkerClassification,
-  term: { endsOn: Date; supersededAt: Date | null } | null,
+  term: { endsOn: Date; lifecycle: RecordLifecycle } | null,
   now: Date,
 ): { readonly drifted: boolean; readonly reason?: "missing-term" | "term-lapsed" } {
   if (!consequencesFor(classification).expectsDefiniteTerm) return { drifted: false };
   if (!term) return { drifted: true, reason: "missing-term" };
-  if (term.supersededAt) return { drifted: false };
+  if (term.lifecycle !== "active") return { drifted: false };
   return term.endsOn.getTime() < now.getTime()
     ? { drifted: true, reason: "term-lapsed" }
     : { drifted: false };
