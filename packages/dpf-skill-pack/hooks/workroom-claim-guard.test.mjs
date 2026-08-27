@@ -136,8 +136,6 @@ test("every refusal names the branch and the call that fixes it", () => {
 // defect; only feeding a real payload through the process can.
 
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
