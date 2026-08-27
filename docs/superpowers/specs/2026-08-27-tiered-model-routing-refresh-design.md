@@ -59,6 +59,25 @@ Use the kernel-recommended tiered portfolio:
 
 This is a portfolio refresh, not a universal-default change. Connecting a cloud provider remains an operator preference under the existing Stage-5b routing rule. Model and transport capability remain separate: GLM-5.3-Flash's native vision does not prove that every Z.ai/OpenCode transport supplies images, and Grok's search capability does not imply automatic access to current events.
 
+## Initiative scope manifest
+
+**OBJ-MODEL-001:** Keep DPF's checked-in model catalog and provider guidance current without treating a vendor release as measured DPF quality.
+
+**OBJ-MODEL-002:** Make the current Grok Build model easy to select while preserving Auto routing, policy filters, and diverse fallback.
+
+**OBJ-MODEL-003:** Restore the governed Grok connection path by classifying infrastructure authentication separately from outward business action.
+
+**OBJ-MODEL-004:** Ensure Grok-dispatched coworkers describe temporal knowledge and retrieval honestly.
+
+| Acceptance ID | Objective | Statement |
+|---|---|---|
+| AC-MODEL-001 | OBJ-MODEL-001 | Static catalog entries describe GLM-5.3-Flash and Grok 4.6 using first-party capability facts, while DPF-specific quality scores remain conservative until evaluated. |
+| AC-MODEL-002 | OBJ-MODEL-001 | GLM-5.3-Flash is disabled for automatic routing until provider probes and DPF evaluations pass. |
+| AC-MODEL-003 | OBJ-MODEL-002 | Build Studio keeps Server default first and uses one shared Grok 4.6 suggestion for explicit custom selection. |
+| AC-MODEL-004 | OBJ-MODEL-003 | Grok device sign-in is external-access and capability/grant gated but does not require organization market alignment. |
+| AC-MODEL-005 | OBJ-MODEL-004 | Grok specialist instructions require configured retrieval before current-event claims. |
+| AC-MODEL-006 | OBJ-MODEL-001, OBJ-MODEL-002, OBJ-MODEL-003, OBJ-MODEL-004 | Tests and exact-tree gates pass; live Build Studio and coworker success is claimed only after the canonical live-install preflight permits testing. |
+
 ## Catalog and seed behavior
 
 ### GLM-5.3-Flash
@@ -142,4 +161,3 @@ Rejected because the refusal comes from one inaccurate tool consequence declarat
 - Grok sign-in reaches device authorization without a market/segment alignment demand.
 - Grok coworkers do not claim current knowledge unless a retrieval tool supplies it.
 - Live verification evidence clearly distinguishes passed, failed, and blocked stages.
-
