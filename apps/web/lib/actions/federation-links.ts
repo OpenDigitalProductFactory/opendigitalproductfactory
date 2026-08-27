@@ -25,8 +25,16 @@ import {
   resolveLocalFederationAuthorityUrl,
   selfAuthorityUnreachableReason,
 } from "@/lib/federation/self-authority";
-import { auth } from "@/lib/auth";
+import {
+  ADMIN_PATH,
+  assertManagePlatform,
+  type ActionFailure,
+} from "@/lib/actions/federation-links-shared";
 import { resolveFederationSigningIdentity } from "@/lib/federation/demand-identity";
+import {
+  resolveNearbyCandidatePairing,
+  type NearbyCandidatePairingVerdict,
+} from "@/lib/federation/resolve-nearby-candidate-pairing";
 import {
   approveFederationLinkLocal,
   issueFederationBootstrap,
@@ -55,49 +63,8 @@ import {
   decryptSecret,
   encryptSecret,
 } from "@/lib/govern/credential-crypto";
-import { syncUserPrincipal } from "@/lib/identity/principal-linking";
-import { can } from "@/lib/permissions";
 import { envFlagEnabled } from "@/lib/runtime/env-flags";
 
-const ADMIN_PATH = "/platform/federation-links";
-
-type ActionFailure = {
-  ok: false;
-  error:
-    | "unauthorized"
-    | "forbidden"
-    | "not_found"
-    | "invalid_input"
-    | "invalid_transition"
-    | "internal_error";
-  message: string;
-};
-
-async function assertManagePlatform(): Promise<
-  { ok: true; principalId: string; userId: string } | ActionFailure
-> {
-  const session = await auth();
-  if (!session?.user) {
-    return { ok: false, error: "unauthorized", message: "Sign in required" };
-  }
-  if (
-    !can(
-      { platformRole: session.user.platformRole, isSuperuser: session.user.isSuperuser },
-      "manage_platform",
-    )
-  ) {
-    return { ok: false, error: "forbidden", message: "manage_platform capability required" };
-  }
-  const alias = await prisma.principalAlias.findFirst({
-    where: { aliasType: "user", aliasValue: session.user.id },
-    select: { principalId: true },
-  });
-  if (alias?.principalId) {
-    return { ok: true, principalId: alias.principalId, userId: session.user.id };
-  }
-  const synced = await syncUserPrincipal(session.user.id);
-  return { ok: true, principalId: synced.id, userId: session.user.id };
-}
 
 // ── Bootstrap (invitation) issuance ──────────────────────────────────────────
 
@@ -408,6 +375,15 @@ export type NearbyPairingActionResult =
       expiresAt: string;
       projectionSummary: ReturnType<typeof summarizeNearbyPairingProjection>;
       linkId?: string;
+      /**
+       * What the evidence actually supports for this peer. `operator-confirmation`
+       * means the SAS code still has to be confirmed by a human on both ends;
+       * `pairingReason` says which fact could not be proved, so the screen can
+       * tell the operator why instead of just asking.
+       */
+      pairingMode?: NearbyCandidatePairingVerdict["mode"];
+      pairingReason?: NearbyCandidatePairingVerdict["reason"];
+      pairingExplanation?: string;
     }
   | ActionFailure;
 
@@ -429,9 +405,6 @@ export async function startNearbyPairingAction(input: {
   if (!candidate) {
     return { ok: false, error: "not_found", message: "That DPF candidate is no longer available. Wait for discovery or introductions to refresh." };
   }
-  if (candidate.automaticPairing === "blocked-insecure-transport") {
-    return { ok: false, error: "invalid_input", message: "Automatic pairing requires HTTPS. Use a manual invitation until this installation has a trusted certificate." };
-  }
   const offeredRole: FederationRole = candidate.source === "introducer"
     && candidate.relationshipHint
     && isFederationRole(candidate.relationshipHint)
@@ -440,6 +413,29 @@ export async function startNearbyPairingAction(input: {
   const relationshipPreset = relationshipPresetForRole(offeredRole);
   if (!relationshipPreset || !isRoleAllowedForRelationship(relationshipPreset, offeredRole)) {
     return { ok: false, error: "invalid_input", message: "The introduced relationship policy is not supported for pairing." };
+  }
+  // Actually perform the check the candidate's readiness state has always only
+  // NAMED. `nearby-candidates` sets `tls-validation-required` from the URL scheme
+  // alone; until now nothing validated anything, so an https peer went straight
+  // to pairing unexamined and every other peer got one hardcoded sentence.
+  //
+  // This does not gate the manual path: `operator-confirmation` still proceeds to
+  // the SAS exchange exactly as before. It replaces a guess about the transport
+  // with the real decision, and carries the reason back so the screen can say
+  // which fact could not be proved.
+  const pairing = await resolveNearbyCandidatePairing({
+    endpoint: candidate.endpoint,
+    secure: candidate.automaticPairing !== "blocked-insecure-transport",
+    relationshipPreset,
+    role: offeredRole,
+    peerOrganizationRef: candidate.organizationRef ?? null,
+  });
+  if (pairing.reason === "insecure-transport") {
+    return {
+      ok: false,
+      error: "invalid_input",
+      message: `${pairing.explanation} Use a manual invitation until this installation has a trusted certificate.`,
+    };
   }
   const localAuthorityUrl = await resolveLocalFederationAuthorityUrl();
   if (!localAuthorityUrl) {
@@ -479,6 +475,9 @@ export async function startNearbyPairingAction(input: {
             ? existing.relationshipPreset
             : "same-organization",
         ),
+        pairingMode: pairing.mode,
+        ...(pairing.reason ? { pairingReason: pairing.reason } : {}),
+        pairingExplanation: pairing.explanation,
       };
     }
     const [identity, organization] = await Promise.all([
@@ -536,6 +535,9 @@ export async function startNearbyPairingAction(input: {
       peerAuthorityUrl: candidate.endpoint,
       expiresAt: expiresAt.toISOString(),
       projectionSummary: requested.projectionSummary,
+      pairingMode: pairing.mode,
+      ...(pairing.reason ? { pairingReason: pairing.reason } : {}),
+      pairingExplanation: pairing.explanation,
     };
   } catch (error) {
     return { ok: false, error: "internal_error", message: error instanceof Error ? error.message : "Nearby pairing failed." };
