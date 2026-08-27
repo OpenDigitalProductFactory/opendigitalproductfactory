@@ -328,8 +328,9 @@ surface still promises `my-changes`, an auto-advancing source volume, or develop
 
 - Decision: decomposed
 - Parent: BI-357792B1
-- Receipt: to be recorded against the immutable reconciled plan commit before
-  this branch enters PR readiness.
+- Receipt: blocked — no initiative scope baseline exists for BI-357792B1 because
+  the commit-bound independent reviewer routes completed without executing their
+  required read or receipt-writer tools. No coverage receipt has been minted.
 - Dependencies: release-baseline → snapshot-intelligence → agent-engagement and
   workroom-liveness; platform-updates-ux is parallel; canonical acceptance waits
   for all five independent slices.
@@ -341,11 +342,11 @@ surface still promises `my-changes`, an auto-advancing source volume, or develop
 - `canonical-acceptance` -> BI-357792B1 (integration-only; depends on all five
   independent slices)
 
-The earlier handler-shadowing and reviewer-routing failures were transient
-delivery blockers, not design decisions. They are intentionally absent from the
-execution contract. This branch may advance only when the canonical runtime
-mints and revalidates a live coverage receipt for the final deliverable graph and
-the independent initiative reviews are durable.
+Reviewer/runtime failures are delivery blockers, not design decisions. This
+branch may advance only when an independent reviewer writes the required
+commit-bound initiative receipts, the resulting scope baseline exists, and the
+canonical runtime mints and revalidates a live coverage receipt for the final
+deliverable graph. The coverage table above is not a substitute receipt.
 
 ## Approval boundary
 
