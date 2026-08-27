@@ -122,6 +122,8 @@ Task `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-D711E3359E00` independently pass
 
 Task `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-5984EE574D6C` reproduced the same defect at commit `90d449b24475835be09f45edba139c8a3727ae02`: the reviewer returned `pass` with no findings after one immutable-reader call, then claimed the attached writer was unavailable. The deterministic request completed without a receipt, so the next attempt must use a new immutable head rather than replaying that burned request key.
 
+Task `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-F8D656ECBAA9` reproduced it again at commit `4de38875f327fc1e04d8e834f7bda3fed01257f0`. The reviewer read the exact artifact and returned `pass` with no findings, but executed only one tool and emitted a suggested writer payload instead of invoking the required attached writer. That prose remains non-authoritative review evidence.
+
 - Decision: `atomic`
 - Umbrella BI: `BI-7D2C4F02`
 - Deliverable: `platform-sbom-currency-consolidation` → `BI-7D2C4F02`
