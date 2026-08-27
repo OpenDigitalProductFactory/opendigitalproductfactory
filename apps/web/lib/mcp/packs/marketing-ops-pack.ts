@@ -536,18 +536,46 @@ async function tickMarketingSchedulerHandler(): Promise<ToolResult> {
   };
 }
 
-async function planUpcomingMarketingDraftsHandler(): Promise<ToolResult> {
+async function planUpcomingMarketingDraftsHandler(
+  _params: Record<string, unknown>,
+  _userId: string,
+  context?: { agentId?: string | null; routeContext?: string | null },
+): Promise<ToolResult> {
   const { planUpcomingForAssetTasks } = await import("@/lib/marketing/scheduler");
+  const { resolveProactivityPlan } = await import("@/lib/proactivity/proactivity-resolver");
   const { prisma } = await import("@dpf/db");
   const org = await prisma.organization.findFirst({ select: { id: true } });
   if (!org) {
     return { success: false, message: "No organization configured.", error: "no_org" };
   }
-  const result = await planUpcomingForAssetTasks({ organizationId: org.id });
+
+  // BI-C26FE785: this is the marketing cadence decision, so it runs under the
+  // marketing-campaign posture rather than a fixed lead time. The boundary is
+  // cadence only — nothing here publishes; drafts still land in the approval
+  // queue at pending-review.
+  const plan = resolveProactivityPlan({
+    activityFamily: "marketing-campaign",
+    agentId: context?.agentId ?? null,
+    routeContext: context?.routeContext ?? null,
+  });
+
+  const result = await planUpcomingForAssetTasks({
+    organizationId: org.id,
+    proactivity: { level: plan.resolvedLevel, policyId: plan.policyId },
+  });
+
+  if (result.suppressedByPosture) {
+    return {
+      success: true,
+      message: `No drafter runs planned — marketing proactivity is set to quiet, so campaign work is prepared only when you ask. ${plan.explanation}`,
+      data: { ...result, proactivity: { level: plan.resolvedLevel, policyId: plan.policyId } },
+    };
+  }
+
   return {
     success: true,
-    message: `Scheduled ${result.scheduled} drafter run${result.scheduled === 1 ? "" : "s"}; skipped ${result.skipped}.`,
-    data: result,
+    message: `Scheduled ${result.scheduled} drafter run${result.scheduled === 1 ? "" : "s"} ${result.advanceDays} days ahead of their due windows; skipped ${result.skipped}. Drafts go to the approval queue, not out.`,
+    data: { ...result, proactivity: { level: plan.resolvedLevel, policyId: plan.policyId } },
   };
 }
 
@@ -754,7 +782,8 @@ const handlers: Record<string, ToolPackHandler> = {
   place_linkedin_ad: (params, userId) => publishApprovedDraftHandler(params, userId),
   refresh_channel_kpis: (params) => refreshChannelKpisHandler(params),
   tick_marketing_scheduler: () => tickMarketingSchedulerHandler(),
-  plan_upcoming_marketing_drafts: () => planUpcomingMarketingDraftsHandler(),
+  plan_upcoming_marketing_drafts: (params, userId, context) =>
+    planUpcomingMarketingDraftsHandler(params, userId, context),
   set_marketing_autopilot_policy: (params, userId) => setMarketingAutopilotPolicyHandler(params, userId),
   draft_marketing_asset: (params, userId, context) => draftMarketingAssetHandler(params, userId, context),
   record_marketing_kpi_checkpoint: (params, userId, context) => recordMarketingKpiCheckpointHandler(params, userId, context),
