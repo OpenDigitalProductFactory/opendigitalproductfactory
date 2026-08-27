@@ -23,6 +23,9 @@ FROM base AS deps
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
 COPY patches/ ./patches/
 COPY scripts/set-hooks-path.mjs ./scripts/
+# The postinstall entry statically imports this leaf module, so `pnpm install`
+# below cannot run without it in the build context (BI-6A4FF5E7).
+COPY scripts/lib/hooks-dir.mjs ./scripts/lib/
 COPY apps/web/package.json ./apps/web/
 COPY packages/db/package.json ./packages/db/
 COPY packages/db/prisma/schema ./packages/db/prisma/schema
@@ -56,6 +59,9 @@ FROM deps AS build
 # Copy source EXCLUDING pnpm-lock.yaml (preserve the deps stage lockfile which has no expo entries)
 COPY pnpm-workspace.yaml tsconfig.base.json .gitignore ./
 COPY scripts/set-hooks-path.mjs ./scripts/
+# The postinstall entry statically imports this leaf module, so `pnpm install`
+# below cannot run without it in the build context (BI-6A4FF5E7).
+COPY scripts/lib/hooks-dir.mjs ./scripts/lib/
 COPY scripts/capability-service-catalog.generated.json ./scripts/
 COPY scripts/lib/capability-service-projection.mjs ./scripts/lib/
 COPY scripts/lib/capability-state-hash.mjs ./scripts/lib/
@@ -94,6 +100,9 @@ COPY docker-compose.yml docker-compose.release.yml docker-compose.pki.yml docker
 COPY uninstall-dpf.sh uninstall-dpf.ps1 uninstall-dpf.bat ./
 COPY scripts/pki/edge-client.tpl ./scripts/pki/
 COPY scripts/set-hooks-path.mjs ./scripts/
+# The postinstall entry statically imports this leaf module, so `pnpm install`
+# below cannot run without it in the build context (BI-6A4FF5E7).
+COPY scripts/lib/hooks-dir.mjs ./scripts/lib/
 COPY scripts/lib/resolve-capability-compose-profiles.mjs ./scripts/lib/
 COPY scripts/lib/govern-capability-compose-args.mjs ./scripts/lib/
 COPY scripts/lib/capability-state-hash.mjs ./scripts/lib/
