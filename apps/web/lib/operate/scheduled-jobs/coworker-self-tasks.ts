@@ -15,6 +15,7 @@
 // campaign brief so the Campaigns page fills itself.
 
 import { prisma } from "@dpf/db";
+import { CANONICAL_AGENT_ID_TO_COWORKER_SLUG } from "@dpf/db/agent-identity";
 import type { ProactivityLevel } from "@/lib/proactivity/proactivity-types";
 import { isProactivityLevel } from "@/lib/proactivity/proactivity-types";
 import {
@@ -347,6 +348,31 @@ export function coworkerSelfTaskId(agentId: string, userId: string): string {
   return `self-${agentId}-${userId}`;
 }
 
+/**
+ * Resolve any coworker id — slug OR canonical AGT-* — to the key this registry
+ * is actually declared under (BI-B05E5D30).
+ *
+ * WHY THIS EXISTS. The registry is keyed by slug ("marketing-specialist"), but
+ * the proactivity roster renders through collapseDualSeedDuplicates, which for a
+ * dual-seeded coworker DROPS the slug row and keeps the canonical AGT-* row. So
+ * the only control the operator can reach writes the fact under
+ * "AGT-WS-MARKETING", the sweep looked up that key, found nothing, and skipped —
+ * the self-task was never created at ANY level. Four of the six registered
+ * coworkers were unreachable this way (marketing-specialist,
+ * inventory-specialist, platform-engineer, compliance-officer); the two that
+ * worked are simply the two that are not dual-seeded.
+ *
+ * Returning the REGISTRY KEY (not the incoming id) is what keeps the derived
+ * taskId stable: a fact written under either form resolves to one task, so an
+ * operator toggling from either surface never ends up with two.
+ */
+export function selfTaskRegistryKey(agentId: string): string | null {
+  if (COWORKER_SELF_TASKS[agentId]) return agentId;
+  const slug = CANONICAL_AGENT_ID_TO_COWORKER_SLUG[agentId];
+  if (slug && COWORKER_SELF_TASKS[slug]) return slug;
+  return null;
+}
+
 /** True when a taskId is a coworker self-task (see {@link coworkerSelfTaskId}). */
 export function isCoworkerSelfTaskId(taskId: string): boolean {
   return taskId.startsWith("self-");
@@ -505,10 +531,11 @@ export async function reconcileCoworkerSelfTask(
   agentId: string,
   level: ProactivityLevel,
 ): Promise<ReconcileSelfTaskResult> {
-  const entry = COWORKER_SELF_TASKS[agentId];
-  if (!entry) return { ok: true, action: "none" };
+  const registryKey = selfTaskRegistryKey(agentId);
+  if (!registryKey) return { ok: true, action: "none" };
+  const entry = COWORKER_SELF_TASKS[registryKey];
 
-  const taskId = coworkerSelfTaskId(agentId, userId);
+  const taskId = coworkerSelfTaskId(registryKey, userId);
 
   // Quiet (or any non-producing level) → stand the coworker down.
   if (level === "quiet") {
@@ -670,8 +697,10 @@ export async function reconcileAllCoworkerSelfTasks(): Promise<ReconcileAllSelfT
   const desiredActive = new Set<string>();
 
   for (const fact of facts) {
-    const agentId = fact.key.slice(PROACTIVITY_AGENT_KEY_PREFIX.length);
-    if (!COWORKER_SELF_TASKS[agentId]) continue;
+    // The fact may be written under either id form — the roster reaches the
+    // operator with the canonical one for a dual-seeded coworker (BI-B05E5D30).
+    const agentId = selfTaskRegistryKey(fact.key.slice(PROACTIVITY_AGENT_KEY_PREFIX.length));
+    if (!agentId) continue;
     const level = readSelfTaskFactLevel(fact.value);
     if (!level) continue;
 
