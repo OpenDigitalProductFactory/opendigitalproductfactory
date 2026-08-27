@@ -18,7 +18,11 @@
 // in this install's DiscoveredModel table rather than invented from docs, and
 // every one of them is pinned in the tests.
 
-const IMAGE_OUTPUT = /(^|-)image(-|$)|^nano-banana/;
+// `imagen-*` is Google's dedicated image family. It is not in this install's
+// DiscoveredModel table today, but it is a published Gemini-API family and an
+// account with it enabled would otherwise have those models filed as text-only
+// — the exact defect this module exists to close.
+const IMAGE_OUTPUT = /(^|-)image(-|$)|^nano-banana|^imagen-/;
 const VIDEO_OUTPUT = /^veo-/;
 const AUDIO_OUTPUT = /-tts(-|$)|native-audio/;
 const EMBEDDING = /embedding/;

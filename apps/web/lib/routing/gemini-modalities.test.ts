@@ -21,6 +21,13 @@ describe("geminiOutputModalities (BI-7C957749)", () => {
     }
   });
 
+  it("reports image output for the imagen family", () => {
+    // Not in this install's catalog, but a published Gemini-API family: an
+    // account with it enabled must not have those models filed as text-only.
+    expect(geminiOutputModalities("imagen-3.0-generate-002")).toContain("image");
+    expect(geminiOutputModalities("imagen-4.0-fast-generate-001")).toContain("image");
+  });
+
   it("reports video output for veo", () => {
     expect(geminiOutputModalities("veo-3.1-generate-preview")).toEqual(["video"]);
     expect(geminiOutputModalities("veo-3.1-fast-generate-preview")).toEqual(["video"]);
