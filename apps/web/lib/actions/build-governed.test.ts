@@ -486,9 +486,9 @@ describe("governed build start approvals", () => {
       status: "awaiting_clarification",
     });
 
-    await expect(advanceBuildPhase("FB-123", "plan")).rejects.toThrow(
-      "Accept the business build brief before moving into planning.",
-    );
+    // BI-04B112CA — a refusal is a value the owner can read, not a digest.
+    await expect(advanceBuildPhase("FB-123", "plan")).resolves.toEqual({ ok: false,
+      message: "Accept the business build brief before moving into planning." });
     expect(mockPrisma.featureBuild.update).not.toHaveBeenCalled();
   });
 
@@ -576,9 +576,8 @@ describe("governed build start approvals", () => {
       governedBacklogEnabled: true,
     });
 
-    await expect(advanceBuildPhase("FB-123", "plan")).rejects.toThrow(
-      "Approve Start before moving this governed backlog draft into planning.",
-    );
+    await expect(advanceBuildPhase("FB-123", "plan")).resolves.toEqual({ ok: false,
+      message: "Approve Start before moving this governed backlog draft into planning." });
     expect(mockPrisma.featureBuild.update).not.toHaveBeenCalled();
   });
 

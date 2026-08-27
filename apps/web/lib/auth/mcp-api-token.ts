@@ -520,6 +520,8 @@ export async function listMcpApiTokens(userId: string): Promise<
     createdAt: Date;
     kind: string;
     buildId: string | null;
+    /** Acting coworker this token speaks as; null = anonymous (BI-B986A18B). */
+    agentId: string | null;
   }>
 > {
   const rows = await prisma.mcpApiToken.findMany({
@@ -540,6 +542,7 @@ export async function listMcpApiTokens(userId: string): Promise<
       createdAt: true,
       kind: true,
       buildId: true,
+      agentId: true,
     },
   });
   return rows.map((r) => ({

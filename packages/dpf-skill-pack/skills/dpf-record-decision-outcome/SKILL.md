@@ -1,6 +1,6 @@
 ---
 name: dpf-record-decision-outcome
-description: "Use in the DPF codebase after a WWMD/kernel decision is made. Records the decision result, evidence summary, and next action through governed MCP tools so Build Studio and reviewers share one source of truth."
+description: "Use after a DPF WWMD/kernel decision is made and the outcome needs recording."
 disable-model-invocation: false
 user-invocable: true
 allowed-tools: mcp__dpf__principle_decide mcp__dpf__record_capsule_evidence mcp__dpf__wiki_query

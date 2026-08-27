@@ -1,6 +1,6 @@
 ---
 name: dpf-farm-ranch-seasonal-planning
-description: "Use for agriculture-ranching operating plans and decision briefs spanning fields, pasture, crops, hay, livestock, working animals, equipment, inputs, vendors, weather, markets, and obligations. Keeps location, evidence date, authority, and human approval explicit."
+description: "Use for agriculture-ranching operating plans and decision briefs — fields, pasture, crops, hay, livestock, equipment, inputs, vendors, weather, markets, obligations."
 disable-model-invocation: true
 user-invocable: true
 allowed-tools: mcp__dpf__wiki_query mcp__dpf__search_knowledge mcp__dpf__search_knowledge_base mcp__dpf__query_backlog mcp__dpf__create_backlog_item

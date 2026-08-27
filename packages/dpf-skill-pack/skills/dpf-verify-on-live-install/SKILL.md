@@ -1,6 +1,6 @@
 ---
 name: dpf-verify-on-live-install
-description: "Use when asked to functionally verify that a DPF feature WORKS on the live install — drive the happy path, confirm behaviour, do UX verification on the running portal. The step-zero gate: run one preflight for a deterministic CAN-TEST / MUST-ADVANCE / BLOCKED verdict and follow its decision tree rather than hand-rolling skew checks. Its load-bearing rule is the BLOCKED stop-rule: file a BI and STOP; never let verification silently become a build-infra fix."
+description: "Use when asked to functionally verify that a DPF feature works on the live install by driving the happy path on the running portal."
 # Agent Skills standard fields (Surface A — Claude Code)
 disable-model-invocation: false
 user-invocable: true

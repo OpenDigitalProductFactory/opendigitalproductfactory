@@ -1,4 +1,5 @@
 import type { ProactivityLevel } from "@/lib/proactivity/proactivity-types";
+import { namesNoConcreteConsequence } from "./types";
 import type { AttentionItem, AttentionSource } from "./types";
 
 export type OwnerAttentionLane = "needs-you-now" | "weekly-digest" | "custodian";
@@ -87,6 +88,22 @@ export function classifyOwnerAttentionLane(
       );
     }
     return decision("needs-you-now", "This still needs your judgment.", false, appliedLevel);
+  }
+  // A source that cannot say what is actually blocked has not established that
+  // this is the owner's decision. Running a rescue for a day found 34 of 40
+  // cards in the owner's inbox were paused platform task runs — spec approvals
+  // and research gates against backlog items — every one of them carrying the
+  // placeholder "a coworker task" and the platform's own advice to keep it with
+  // the specialist (BI-79E207B9). Nothing of the rescue's was waiting on any of
+  // them. This runs after the hard floors above, so money, a waiting guest, a
+  // waiting customer and a closing approval window still reach the owner.
+  if (namesNoConcreteConsequence(item.triage.blastRadius)) {
+    return decision(
+      "custodian",
+      "Nothing of yours is waiting on this — the specialist owns it.",
+      false,
+      appliedLevel,
+    );
   }
   if (item.triage.decideEffort === "judgment") {
     return decision("needs-you-now", "This still needs your judgment.", false, appliedLevel);

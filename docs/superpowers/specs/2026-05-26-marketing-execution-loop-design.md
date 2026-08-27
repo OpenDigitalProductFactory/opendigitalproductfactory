@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Marketing Execution Loop Design
 
 | Field | Value |
@@ -52,6 +56,21 @@ What exists today:
 - `apps/web/lib/tools/native-integration-catalog.ts` includes HubSpot, Google Marketing Intelligence, Facebook Lead Ads, Facebook Pages, Google Business Profile, and Mailchimp. It does not include LinkedIn or Postmark.
 - `IntegrationCredential` already exists as the encrypted polymorphic credential table for native integrations. It uses `fieldsEnc` and `tokenCacheEnc` encrypted by `apps/web/lib/govern/credential-crypto.ts` with `CREDENTIAL_ENCRYPTION_KEY`, not `AUTH_SECRET`.
 - `AgentActionProposal` and `ToolExecution` already exist. They should be reused for audit/proposal linkage where possible, but they do not by themselves provide a route-owned marketing approval queue.
+
+### 2.1 Strategy grounding had no write path (BI-06BB96F0, closed 2026-08-27)
+
+A defect this section's original inventory did not surface. `recordMarketingStrategistReview()` in `apps/web/lib/marketing.ts` is the only `prisma.marketingStrategy.update` call in the codebase, and its payload covers seven fields: `status`, `primaryChannels`, `secondaryChannels`, `reviewCadence`, `lastReviewedAt`, `nextReviewAt`, `specialistNotes`.
+
+It never wrote `targetSegments`, `idealCustomerProfiles`, `proofAssets`, `differentiators`, `constraints`, `geographicScope` or `seasonalityNotes`. Those were populated once at bootstrap and were then unreachable for the life of the install — no tool, server action or UI could set them.
+
+That mattered because the drafter reads exactly those fields: `draft-builder.ts` takes `targetSegments[0]`, falls back to `idealCustomerProfiles[0]`, and reads `proofAssets[0]`. On an install where the bootstrap derived nothing, every generated asset was built against an empty audience with no proof — the mechanism behind generic marketing output. `determineStaleAreas()` already reported "Target segments need definition", so the platform could diagnose the gap and had no way to close it.
+
+Closed by `record_marketing_grounding` (`apps/web/lib/mcp/marketing-grounding-tool.ts`) over `apps/web/lib/marketing/strategy-grounding.ts`. Two decisions worth keeping written down:
+
+- **Grounding is separate from a review.** A review is the strategist's periodic recommendation and supersedes the last one. Grounding is the durable business fact underneath it — who this organization serves, and what proof it has. Different authors (the operator knows the grounding, the coworker proposes the review), different lifetimes, different truth conditions. They are not folded into one write.
+- **Only supplied fields are written.** An interview runs over several turns, so a later round must never blank what an earlier one established. An empty string is treated as "no answer given" rather than an instruction to erase.
+
+`assessMarketingGrounding()` is the paired read: it reports which of the three drafter-critical fields are still empty, and distinguishes an untouched archetype bootstrap (`lastReviewedAt === null` on a row carrying a `sourceSummary`) from a plan someone edited and left incomplete, so the refusal copy can be accurate about which one the operator is looking at.
 
 What is missing:
 

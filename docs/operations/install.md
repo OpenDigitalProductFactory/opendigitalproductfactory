@@ -236,6 +236,32 @@ Per EP-1FABA22D (BI-A9F60372), `install-state.json` (v2 schema) captures the can
 - **`bootstrapIntent`** — Pre-DB envelope recorded by the installer before runtime database availability. On portal runtime boot, `absorbBootstrapIntent` idempotently ingests this envelope into `PlatformConfig` under key `installation.operating-intent.v1` with `status: "suggested"` and marks `absorbedAt`.
 - **Purpose Confirmation Invariant** — Expressing operating purpose (`operate-organization`, `evolve-dpf`, `deliver-managed-services`, `grow-channel`, `participate-community`) configures platform productivity and compiles work; it **never grants identity, trust, authority, qualification, or permission**.
 
+### Naming the installation, and overriding what it is
+
+Two facts describe an installation: the **environment class** (production /
+development / test) and the **estate name** — the company or team that OPERATES
+it, which is not the business it runs for. An IT services company running
+installations for twenty customers is one estate and twenty organizations.
+
+Both resolve through the same precedence chain, highest first:
+
+```
+process override  ->  installer state  ->  portal declaration  ->  default / unset
+```
+
+The process overrides are `DPF_ENVIRONMENT_CLASS` and `DPF_ESTATE_NAME`. Set
+either in the install's `.env`; both are declared on the portal service with an
+empty default, so an unset variable leaves the tier silent and the next
+authority answers (BI-10BF6206 — before that they were absent from the portal's
+environment allow-list, which meant the documented top tier could never be set on
+a consumer install).
+
+The estate name is a label, not an authorization input: it changes what the
+header badge and connected AI coworkers CALL this installation, never what they
+may do on it. A non-production installation shows a badge beside the logo
+(`ACME DEV`); production shows none, so a badge always means "this is not
+production".
+
 ## Diagnostics
 
 ### `--show-substrate` flag

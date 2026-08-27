@@ -186,6 +186,13 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // build (SUR-8AB3353C, regression from #4321).
       node("scripts/check-docker-patch-context.mjs"),
       node("--test", "scripts/check-docker-patch-context.test.mjs"),
+      // Same failure family, different input: the Dockerfile copies scripts by
+      // name, so extracting a helper out of one silently drops it from the image
+      // and `pnpm install` dies on ERR_MODULE_NOT_FOUND in postinstall
+      // (BI-9B490215). `next build` and PR CI cannot see it — no PR check builds
+      // the image — so it reaches main green and breaks the release chain.
+      node("scripts/check-dockerfile-copied-script-imports.mjs"),
+      node("--test", "scripts/check-dockerfile-copied-script-imports.test.mjs"),
     ]),
     guard("bundle-boundary-guard", "Bundle Boundary Guard", [
       node("--test", "scripts/check-bundle-boundaries.test.mjs"),
@@ -399,6 +406,16 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // converged and a clean push meant the gate never ran. Linux CI cannot
         // reproduce it — these guards are the only thing that catches it.
         "scripts/lib/hooks-dir.test.mjs",
+        // BI-3727106F: the gate must converge at SESSION START and sweep
+        // sibling worktrees. Convergence used to run only in postinstall, and
+        // only from the tree's own copy — so a tree on a stale base could never
+        // repair itself (68 of 85 worktrees were ungated when this was measured).
+        "scripts/hooks/converge-git-hooks.test.mjs",
+        // BI-9B490215: the root postinstall must keep ZERO static local imports.
+        // The Docker deps stage copies only set-hooks-path.mjs, so a static
+        // ./lib import throws ERR_MODULE_NOT_FOUND and breaks the image build,
+        // and with it the release / self-upgrade chain for every install.
+        "scripts/set-hooks-path.no-static-imports.test.mjs",
         "scripts/lib/agent-identity.test.mjs",
         "tests/release/local-ci-gate-contract.test.mjs",
         "tests/release/pregate-node-gate-contract.test.mjs",
@@ -516,6 +533,14 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node(
         "--test",
         "packages/dpf-skill-pack/hooks/plugin-hooks-wired.test.mjs",
+      ),
+      // BI-0B292D84: AGENTS.md 12 requires a Workroom claim before work on
+      // every surface. It was prose - 30 of 79 live worktree branches carried
+      // no WorkCapsule binding when measured 2026-08-26. Hand-enumerated like
+      // every entry here: unlisted = never run.
+      node(
+        "--test",
+        "packages/dpf-skill-pack/hooks/workroom-claim-guard.test.mjs",
       ),
       node(
         "--test",
