@@ -30,8 +30,8 @@ import {
   assertManagePlatform,
   type ActionFailure,
 } from "@/lib/actions/federation-links-shared";
-import { confirmPairingFromOrganizationTrust } from "@/lib/federation/confirm-pairing-from-organization-trust";
-import { prismaTrustConfirmationStore } from "@/lib/federation/confirm-pairing-store";
+import { confirmNearbyPairingOnTrust } from "@/lib/federation/confirm-nearby-pairing-on-trust";
+import { persistOutgoingPairingSession } from "@/lib/federation/persist-outgoing-pairing-session";
 import { resolveFederationSigningIdentity } from "@/lib/federation/demand-identity";
 import {
   resolveNearbyCandidatePairing,
@@ -502,55 +502,27 @@ export async function startNearbyPairingAction(input: {
     }
     const remoteExpiry = new Date(requested.expiresAt);
     const expiresAt = new Date(Math.min(remoteExpiry.getTime(), now.getTime() + 15 * 60_000));
-    await prisma.federationPairingSession.create({
-      data: {
-        pairingId: requested.pairingId,
-        direction: "outgoing",
-        status: "pending",
-        relationshipPreset,
-        projectionTemplateKey: relationshipPreset,
-        offeredRole,
-        matchingCode: requested.matchingCode,
-        sasState: {
-          protocolVersion: 1,
-          localDeviceId: identity.deviceId,
-          localSigningPublicKey: identity.signingPublicKey,
-          remoteDeviceId: requested.peerDeviceId,
-          remoteSigningPublicKey: requested.peerSigningPublicKey,
-        },
-        pairingSecretEnc: encryptSecret(requested.pairingSecret),
-        peerAuthorityUrl: candidate.endpoint,
-        peerDisplayName: requested.peerDisplayName,
-        peerInstallationId: requested.peerInstallationId,
-        candidateDiscoveryId: candidate.discoveryId,
-        requestedAt: now,
-        expiresAt,
-      },
+    await persistOutgoingPairingSession({
+      requested,
+      relationshipPreset,
+      offeredRole,
+      localDeviceId: identity.deviceId,
+      localSigningPublicKey: identity.signingPublicKey,
+      peerAuthorityUrl: candidate.endpoint,
+      candidateDiscoveryId: candidate.discoveryId,
+      requestedAt: now,
+      expiresAt,
     });
 
-    // The session exists; now decide whether a person still has to compare the
-    // code. Organization trust already authenticated this peer more strongly
-    // than six digits can, so confirming on that evidence is what makes an
-    // installation created and destroyed repeatedly able to pair unattended.
-    // Anything short of `auto-enroll` leaves the code comparison exactly as it
-    // was, and a peer that refuses the confirmation does too.
-    const trustConfirmation = await confirmPairingFromOrganizationTrust({
+    // Organization trust already authenticated this peer more strongly than six
+    // digits can, so confirm on that evidence rather than waiting for a person.
+    // Anything short of `auto-enroll` refuses inside, leaving the comparison.
+    const trustConfirmation = await confirmNearbyPairingOnTrust({
       pairingId: requested.pairingId,
-      decision: { mode: pairing.mode, explanation: pairing.explanation },
-      evidence: {
-        certificateVerified: pairing.evidence.certificateVerified,
-        presentedRootFingerprint: pairing.evidence.presentedRootFingerprint,
-        peerOrganizationRef: candidate.organizationRef ?? null,
-      },
-      store: prismaTrustConfirmationStore(prisma),
-      confirmWithPeer: async (pairingId) => {
-        const peer = await confirmNearbyPairingPeer({
-          candidateEndpoint: candidate.endpoint,
-          pairingId,
-          pairingSecret: requested.pairingSecret,
-        });
-        return { ok: peer.ok };
-      },
+      verdict: pairing,
+      candidateEndpoint: candidate.endpoint,
+      peerOrganizationRef: candidate.organizationRef ?? null,
+      pairingSecret: requested.pairingSecret,
       now,
     });
 
