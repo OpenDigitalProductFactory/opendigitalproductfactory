@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 690,
+  "pageCount": 691,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -4723,6 +4723,20 @@
         "the-formula-is-invariant",
         "only-three-axes-vary",
         "the-review-altitude-check"
+      ]
+    },
+    "docs/founder-kernel/wiki/principles/validate-an-archetype-by-running-its-business.md": {
+      "publicHref": "/founder-kernel/wiki/principles/validate-an-archetype-by-running-its-business/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "applies-to",
+        "why",
+        "how-to-apply",
+        "decision-dimensions",
+        "related"
       ]
     },
     "docs/founder-kernel/wiki/principles/verify-substrate-before-proposing-new.md": {
