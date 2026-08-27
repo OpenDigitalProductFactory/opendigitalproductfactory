@@ -1,3 +1,7 @@
+---
+status: draft
+---
+
 # Cross-client durable knowledge: commons-first defaults and enforcement
 
 Backlog item: **BI-DE1333A1**
