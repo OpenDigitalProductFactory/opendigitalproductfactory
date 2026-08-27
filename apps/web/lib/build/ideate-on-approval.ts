@@ -731,12 +731,12 @@ export async function dispatchDesignReviewFixLoop(params: {
 
     // BI-E492F313: escalate-to-human ABANDONS the build, frees the WIP slot and
     // parks the owner's backlog item as deferred. The rule for when that is
-    // warranted lives in design-fix-outcome.ts so it is testable without the
-    // dispatch stack.
-    const { resolveDesignFixOutcome, outcomeKeepsBuildRecoverable } = await import(
-      "@/lib/build/design-fix-outcome"
+    // warranted lives in review-fix-outcome.ts — shared with the plan loop — so
+    // it is testable without the dispatch stack and cannot drift per phase.
+    const { resolveReviewFixOutcome, outcomeKeepsBuildRecoverable } = await import(
+      "@/lib/build/review-fix-outcome"
     );
-    const outcomeKind = resolveDesignFixOutcome({
+    const outcomeKind = resolveReviewFixOutcome({
       reviewFailed: review?.decision === "fail",
       regenerated,
     });

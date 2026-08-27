@@ -222,6 +222,19 @@ async function generateNormalizedPlan(args: {
         `Plan generation attempt ${attempt}/${PLAN_GEN_MAX_ATTEMPTS} returned unparseable JSON` +
           (attempt < PLAN_GEN_MAX_ATTEMPTS ? " — retrying" : ""),
       );
+      // BI-7AD0759A: keep what the model actually said. "Unparseable JSON" is
+      // not a diagnosis — truncated mid-array, wrapped in prose and returned
+      // nothing are three different failures with three different fixes, and
+      // discarding the response made them indistinguishable on the install
+      // where it matters most. Bounded excerpt, both ends kept, because a
+      // truncated object fails at the END.
+      const { excerptHeadAndTail } = await import("@/lib/build/ideate-output-excerpt");
+      const raw = (response.content ?? "").trim();
+      await args.log(
+        raw.length === 0
+          ? "Plan output excerpt: the model returned no output at all."
+          : `Plan output excerpt (${raw.length} chars): ${excerptHeadAndTail(raw)}`,
+      );
     }
   }
 
@@ -420,6 +433,10 @@ export async function dispatchPlanForApprovedBuild(params: {
     const PLAN_FIX_MAX_ROUNDS = Number(process.env.PLAN_FIX_MAX_ROUNDS) || 2;
     let review = await readPlanReview(buildId);
     let round = 0;
+    // BI-E492F313: did any round actually produce a revised plan to review? A
+    // revision that never ran is NOT self-repair exhausted, and must not be
+    // treated as one.
+    let regenerated = false;
     while (review?.decision === "fail" && round < PLAN_FIX_MAX_ROUNDS) {
       round++;
       await log(`Plan review failed — revising (round ${round}/${PLAN_FIX_MAX_ROUNDS}) against ${review.issues.length} blocking issue(s)`);
@@ -435,9 +452,15 @@ export async function dispatchPlanForApprovedBuild(params: {
         log,
       });
       if ("error" in revised) {
-        await log(`Plan revision round ${round} failed: ${revised.error}`);
-        break;
+        // BI-E492F313: this used to `break`, so ONE generation failure both
+        // consumed a round and abandoned the rest. A revision that could not be
+        // produced says nothing about the plan, so spend the remaining rounds —
+        // routing is re-resolved per attempt and a later round can land on an
+        // endpoint that completes the JSON. Live repro FB-62D7C0EC.
+        await log(`Plan revision round ${round} failed: ${revised.error} — retrying if rounds remain.`);
+        continue;
       }
+      regenerated = true;
       plan = revised.plan;
       await prisma.featureBuild.update({
         where: { buildId },
@@ -448,7 +471,34 @@ export async function dispatchPlanForApprovedBuild(params: {
       review = await readPlanReview(buildId);
     }
 
-    if (review?.decision === "fail") {
+    // BI-E492F313 — the same rule the design loop uses (review-fix-outcome.ts):
+    // escalation ABANDONS the build and parks the owner's backlog item, which is
+    // right for a plan the platform could not repair and wrong for "no endpoint
+    // produced a plan to review". Live repro FB-62D7C0EC: plan generation
+    // returned unparseable JSON on both attempts and the build was destroyed,
+    // taking a plan review that had named five critical issues plus an
+    // architecture advisory with it.
+    const { resolveReviewFixOutcome, outcomeKeepsBuildRecoverable } = await import(
+      "@/lib/build/review-fix-outcome"
+    );
+    const fixOutcome = resolveReviewFixOutcome({
+      reviewFailed: review?.decision === "fail",
+      regenerated,
+    });
+
+    if (outcomeKeepsBuildRecoverable(fixOutcome)) {
+      await log(
+        `Plan repair could not generate a plan in ${round} round(s) — no endpoint produced one. `
+        + "Leaving the build recoverable; the existing plan and review are kept.",
+      );
+      return {
+        kind: "dispatched-failure",
+        error: "blocked-no-regeneration",
+        durationMs: Date.now() - t0,
+      };
+    }
+
+    if (fixOutcome === "escalated-after-rounds" && review) {
       // Bounded revisions exhausted — Build Studio cannot self-repair this plan.
       // Escalate to a human (BI-3E0EE3BA): capture a durable issue report (which
       // auto-surfaces via intake), free the WIP slot (abandon the build), and
