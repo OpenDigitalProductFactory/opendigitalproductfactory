@@ -30,6 +30,8 @@ import {
   assertManagePlatform,
   type ActionFailure,
 } from "@/lib/actions/federation-links-shared";
+import { confirmNearbyPairingOnTrust } from "@/lib/federation/confirm-nearby-pairing-on-trust";
+import { persistOutgoingPairingSession } from "@/lib/federation/persist-outgoing-pairing-session";
 import { resolveFederationSigningIdentity } from "@/lib/federation/demand-identity";
 import {
   resolveNearbyCandidatePairing,
@@ -500,36 +502,35 @@ export async function startNearbyPairingAction(input: {
     }
     const remoteExpiry = new Date(requested.expiresAt);
     const expiresAt = new Date(Math.min(remoteExpiry.getTime(), now.getTime() + 15 * 60_000));
-    await prisma.federationPairingSession.create({
-      data: {
-        pairingId: requested.pairingId,
-        direction: "outgoing",
-        status: "pending",
-        relationshipPreset,
-        projectionTemplateKey: relationshipPreset,
-        offeredRole,
-        matchingCode: requested.matchingCode,
-        sasState: {
-          protocolVersion: 1,
-          localDeviceId: identity.deviceId,
-          localSigningPublicKey: identity.signingPublicKey,
-          remoteDeviceId: requested.peerDeviceId,
-          remoteSigningPublicKey: requested.peerSigningPublicKey,
-        },
-        pairingSecretEnc: encryptSecret(requested.pairingSecret),
-        peerAuthorityUrl: candidate.endpoint,
-        peerDisplayName: requested.peerDisplayName,
-        peerInstallationId: requested.peerInstallationId,
-        candidateDiscoveryId: candidate.discoveryId,
-        requestedAt: now,
-        expiresAt,
-      },
+    await persistOutgoingPairingSession({
+      requested,
+      relationshipPreset,
+      offeredRole,
+      localDeviceId: identity.deviceId,
+      localSigningPublicKey: identity.signingPublicKey,
+      peerAuthorityUrl: candidate.endpoint,
+      candidateDiscoveryId: candidate.discoveryId,
+      requestedAt: now,
+      expiresAt,
     });
+
+    // Organization trust already authenticated this peer more strongly than six
+    // digits can, so confirm on that evidence rather than waiting for a person.
+    // Anything short of `auto-enroll` refuses inside, leaving the comparison.
+    const trustConfirmation = await confirmNearbyPairingOnTrust({
+      pairingId: requested.pairingId,
+      verdict: pairing,
+      candidateEndpoint: candidate.endpoint,
+      peerOrganizationRef: candidate.organizationRef ?? null,
+      pairingSecret: requested.pairingSecret,
+      now,
+    });
+
     revalidatePath(ADMIN_PATH);
     return {
       ok: true,
       pairingId: requested.pairingId,
-      status: "pending",
+      status: trustConfirmation.confirmed ? "pending-confirmation" : "pending",
       matchingCode: requested.matchingCode,
       peerDisplayName: requested.peerDisplayName,
       peerAuthorityUrl: candidate.endpoint,
