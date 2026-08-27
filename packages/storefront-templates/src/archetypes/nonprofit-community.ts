@@ -7,15 +7,12 @@ const CONTACT_FIELDS = [
   { name: "notes", label: "Message", type: "textarea" as const, required: false },
 ];
 
-const DONATION_FORM_FIELDS = [
-  { name: "name", label: "Full name", type: "text" as const, required: true },
-  { name: "email", label: "Email", type: "email" as const, required: true },
-  { name: "donationAmount", label: "Donation amount", type: "select" as const, required: true, options: ["£5", "£10", "£25", "£50", "£100", "Other"] },
-  { name: "customAmount", label: "Custom amount (£)", type: "text" as const, required: false, placeholder: "e.g. 30" },
-  { name: "campaignId", label: "Campaign", type: "text" as const, required: false },
-  { name: "isAnonymous", label: "Make donation anonymous?", type: "select" as const, required: false, options: ["No", "Yes"] },
-  { name: "notes", label: "Message", type: "textarea" as const, required: false },
-];
+// `formSchema` is the archetype's CONTACT form, and for most of these
+// organizations it is the only way a stranger reaches them at all. It carried a
+// donation form until 2026-08-27, so a found-pet report, a surrender request and
+// an offer to volunteer were each refused without a donation amount
+// (BI-7F851119). Donations have their own route and their own form
+// (`/s/[slug]/donate`), which is where a donation question belongs.
 
 const ANIMAL_WELFARE_ACTIVATION_PROFILE = {
   profileType: "standard",
@@ -252,7 +249,7 @@ export const nonprofitCommunityArchetypes: ArchetypeDefinition[] = [
       { type: "donate", title: "Make a Donation", sortOrder: 4 },
       { type: "contact", title: "Get in Touch", sortOrder: 5 },
     ],
-    formSchema: DONATION_FORM_FIELDS,
+    formSchema: CONTACT_FIELDS,
     activationProfile: ANIMAL_WELFARE_ACTIVATION_PROFILE,
   },
   {
@@ -275,7 +272,7 @@ export const nonprofitCommunityArchetypes: ArchetypeDefinition[] = [
       { type: "donate", title: "Donate Now", sortOrder: 4 },
       { type: "contact", title: "Contact Us", sortOrder: 5 },
     ],
-    formSchema: DONATION_FORM_FIELDS,
+    formSchema: CONTACT_FIELDS,
     activationProfile: ANIMAL_SHELTER_ACTIVATION_PROFILE,
   },
   {
@@ -297,7 +294,7 @@ export const nonprofitCommunityArchetypes: ArchetypeDefinition[] = [
       { type: "donate", title: "Donate", sortOrder: 3 },
       { type: "contact", title: "Get Involved", sortOrder: 4 },
     ],
-    formSchema: DONATION_FORM_FIELDS,
+    formSchema: CONTACT_FIELDS,
   },
   {
     archetypeId: "charity",
@@ -319,7 +316,7 @@ export const nonprofitCommunityArchetypes: ArchetypeDefinition[] = [
       { type: "donate", title: "Donate Now", sortOrder: 3 },
       { type: "contact", title: "Get in Touch", sortOrder: 4 },
     ],
-    formSchema: DONATION_FORM_FIELDS,
+    formSchema: CONTACT_FIELDS,
   },
   {
     archetypeId: "sports-club",
@@ -518,7 +515,7 @@ export const nonprofitCommunityArchetypes: ArchetypeDefinition[] = [
       { type: "donate", title: "Donate", sortOrder: 3 },
       { type: "contact", title: "Contact Us", sortOrder: 4 },
     ],
-    formSchema: DONATION_FORM_FIELDS,
+    formSchema: CONTACT_FIELDS,
     activationProfile: {
       profileType: "standard",
       modules: ["service-operations", "lifecycle-signals"],
