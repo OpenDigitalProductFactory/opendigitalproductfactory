@@ -105,6 +105,17 @@ bind the immutable plan to the approved scope.
   The clone now resolves that exact commit and design blob
   `5ac674c03be1b21a335ea5b8607125f830e673a5`; the consumed request key will not
   be reused.
+- [x] The next exact identity
+  `TR-MCP-Y210YXcyc3pxMDAwMDFscDg4N2EyMnZ6ZA-BD059B8D9CDD` successfully read
+  the full 110-line design at commit
+  `4cf2f2181463457b78d5a217305dc684f717d8e9` in six persisted immutable reader
+  executions, independently selected `decision=pass`, and proposed exact
+  envelope `cmtaw9xbz005b4pp8ucwer4ad` for
+  `record_initiative_design_review`. The external request client then reached
+  its headers deadline and revoked the short-lived token before the approved
+  same-TaskRun replay could occur. The proposal was cancelled through the
+  supported envelope state machine; no writer receipt or baseline was
+  inferred, and that request key will not be reused.
 - [ ] Governed exact-tree local CI passes for the published candidate.
 - [ ] Protected merge and deployment are verified.
 - [ ] BI-SIG owner receives the deployment signal and records one fresh semantic-review result.
