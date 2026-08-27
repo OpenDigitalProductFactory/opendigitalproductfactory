@@ -447,15 +447,13 @@ export async function advanceBuildPhase(
     );
 
   if (requiresStartApproval) {
-    throw new Error(
-      currentPhase === "ideate"
-        ? "Approve Start before moving this governed backlog draft into planning."
-        : "Approve Start before moving this backlog-linked draft into implementation.",
-    );
+    return { ok: false, message: currentPhase === "ideate"
+      ? "Approve Start before moving this governed backlog draft into planning."
+      : "Approve Start before moving this backlog-linked draft into implementation." };
   }
 
   if (!canTransitionPhase(currentPhase, targetPhase)) {
-    throw new Error(`Cannot transition from ${currentPhase} to ${targetPhase}`);
+    return { ok: false, message: `Cannot transition from ${currentPhase} to ${targetPhase}` };
   }
 
   if (targetPhase === "complete") await assertFeatureBuildCompletion({ buildId, expectedPhase: currentPhase });
@@ -470,7 +468,7 @@ export async function advanceBuildPhase(
     // explicitly non-accepted brief (draft, rejected, etc.) so builds created
     // without going through the full intake UI are not permanently deadlocked.
     if (businessBrief !== null && businessBrief.status !== "accepted") {
-      throw new Error("Accept the business build brief before moving into planning.");
+      return { ok: false, message: "Accept the business build brief before moving into planning." };
     }
   }
 
@@ -514,7 +512,9 @@ export async function advanceBuildPhase(
         },
       }).catch(() => {});
     } else {
-      throw new Error(gate.reason ?? "Phase gate check failed");
+      // BI-04B112CA — an expected "not yet" returns; thrown it is stripped to a
+      // digest and the owner sees React #441 instead of the reason (FB-05946F96).
+      return { ok: false, message: gate.reason ?? "Phase gate check failed" };
     }
   }
 
