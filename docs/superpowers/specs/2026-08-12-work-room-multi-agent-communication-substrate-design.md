@@ -98,3 +98,40 @@ This design is the **runtime of the AWC collaboration-room layer** — it should
 - Not carte-blanche cross-org access — membership is always outcome-scoped and clearance-bounded.
 - Not discarding A2A — it remains the sovereign transport beneath cross-install rooms.
 - Not removing the WorkCapsule — it stays the durable coding carrier behind a coding room (convergence addendum D3).
+
+---
+
+## 9. Delivered state (2026-08-27, BI-B986A18B)
+
+Phase 1's §4 mechanics were already in source before this entry: `post_room_message`,
+`read_room_messages`, `invite_room_participant` (agents *and* people),
+`resolveAgentRoomAccess` (discover/content/action), the `coordinator` role, and
+join-on-post presence. The bus was built.
+
+It had never carried traffic, and the reason was one field. Every `McpApiToken`
+row on the reference install had `agentId = NULL`, and every room handler
+resolves its caller from `context.agentId`. So **no external CLI agent had ever
+been able to join, post to, or read a room** — not by policy, by three
+hardcoded nulls in `apps/web/lib/actions/mcp-tokens.ts` and a missing control in
+`McpTokenManager.tsx`.
+
+Measured before the repair: **6 `WorkItemMessage` rows in total, against 604
+`TaskMessage` rows.** A single external thread ran ~58h over two days and sent
+**235** of its ~284 coordination messages through its vendor's own task bus —
+peer-to-peer injections into other agents' context windows — because the room it
+should have used was closed to it. That is the cost of the gap this section
+closes, and it is the concrete argument for §0's thesis.
+
+**Delivered:** external-CLI registry identities (`AGT-EXT-CLAUDE`,
+`AGT-EXT-CODEX`, `AGT-EXT-GROK`) with `work_room_read` / `work_room_write`;
+`agentId` bound on templated issuance and preserved across rotation; an
+**Acts as coworker** control on the token form; the binding surfaced on the
+token list so an anonymous token is visible rather than silent.
+
+**Unchanged, deliberately:** admission. Binding grants identity, not room
+access — §1's outcome-scoped, clearance-bounded membership is untouched, and a
+token with no binding is still refused. Nothing here is fail-open.
+
+**Still open:** room-keyed subscribe/push (§4 "agent read/subscribe" is served
+by pull today), agent presence beyond join-on-post, the participant relation and
+multi-holder occupancy (BI-D4C110BC), and all of Phase 2 (§5).

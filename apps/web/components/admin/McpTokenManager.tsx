@@ -27,10 +27,12 @@ import {
   issueMyMcpToken,
   issueMyTemplateMcpToken,
   issueMyWriteMcpToken,
+  listActingCoworkerOptions,
   listMyMcpTokens,
   revokeMyMcpToken,
   rotateMyMcpToken,
   rotateMyMcpTokenWithEdit,
+  type ActingCoworkerOption,
   type McpTokenTemplateSummary,
   upgradeMyMcpTokenForCodingAgent,
 } from "@/lib/actions/mcp-tokens";
@@ -221,6 +223,10 @@ export function McpTokenManager(props: McpTokenManagerProps) {
 
   const [formName, setFormName] = useState("");
   const [formTemplateId, setFormTemplateId] = useState<McpTokenTemplateId>("development");
+  // Acting-coworker binding (BI-B986A18B). Empty string = anonymous, which is
+  // the historical behaviour and leaves every Work Room tool refusing the token.
+  const [formAgentId, setFormAgentId] = useState<string>("");
+  const [actingCoworkers, setActingCoworkers] = useState<ActingCoworkerOption[]>([]);
   const [formScope, setFormScope] = useState<McpTokenScopeTier>("read");
   const [formExpires, setFormExpires] = useState<string>("90");
   // null = "issue new token" mode (default). When set to a tokenId, the
@@ -239,9 +245,10 @@ export function McpTokenManager(props: McpTokenManagerProps) {
 
   function refresh() {
     startTransition(async () => {
-      const [tokensResult, readinessResult] = await Promise.all([
+      const [tokensResult, readinessResult, coworkerResult] = await Promise.all([
         listMyMcpTokens(),
         getMyContributorMcpReadiness({ probe: false }),
+        listActingCoworkerOptions(),
       ]);
       if (tokensResult.ok) {
         setTokens(tokensResult.tokens);
@@ -250,6 +257,7 @@ export function McpTokenManager(props: McpTokenManagerProps) {
       if (readinessResult.ok) {
         setContributorReadiness(readinessResult.readiness);
       }
+      setActingCoworkers(coworkerResult.options);
     });
   }
 
@@ -354,6 +362,7 @@ export function McpTokenManager(props: McpTokenManagerProps) {
           templateId: formTemplateId,
           name: formName.trim(),
           expiresInDays,
+          agentId: formAgentId || null,
           baseUrl: props.baseUrl,
         });
         if (!result.ok) {
@@ -370,6 +379,7 @@ export function McpTokenManager(props: McpTokenManagerProps) {
         scope: formScope,
         scopes: [...formScopes],
         expiresInDays,
+        agentId: formAgentId || null,
         baseUrl: props.baseUrl,
       });
       if (!result.ok) {
@@ -634,6 +644,8 @@ export function McpTokenManager(props: McpTokenManagerProps) {
           formScope={formScope}
           formScopes={formScopes}
           formTemplateId={formTemplateId}
+          formAgentId={formAgentId}
+          actingCoworkers={actingCoworkers}
           rotateTargetId={formRotateTargetId}
           pending={pending}
           scopes={scopes}
@@ -643,6 +655,7 @@ export function McpTokenManager(props: McpTokenManagerProps) {
           onNameChange={setFormName}
           onSubmit={submit}
           onTemplateChange={applyTemplate}
+          onAgentChange={setFormAgentId}
           onToggleScope={toggleScope}
         />
       )}
@@ -847,6 +860,20 @@ function TokenListItem(props: {
               <ShieldCheck className="h-3 w-3" aria-hidden="true" />
               {token.scope}
             </span>
+            <span
+              className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium ${
+                token.agentId
+                  ? "border border-[var(--dpf-border)] text-[var(--dpf-text)]"
+                  : "border border-[var(--dpf-border)] text-[var(--dpf-muted)]"
+              }`}
+              title={
+                token.agentId
+                  ? `Acts as ${token.agentId}. Can join Work Rooms it is admitted to.`
+                  : "No acting coworker. Work Room tools refuse this token."
+              }
+            >
+              {token.agentId ?? "no coworker"}
+            </span>
             {token.kind === "ephemeral_ship" && (
               <span
                 className="inline-flex items-center gap-1 rounded-md border border-[var(--dpf-accent)] bg-[var(--dpf-surface-1)] px-2 py-0.5 text-xs font-medium text-[var(--dpf-accent)]"
@@ -1011,6 +1038,8 @@ function TokenFormDialog(props: {
   formScope: McpTokenScopeTier;
   formScopes: Set<string>;
   formTemplateId: McpTokenTemplateId;
+  formAgentId: string;
+  actingCoworkers: ActingCoworkerOption[];
   rotateTargetId: string | null;
   pending: boolean;
   scopes: string[];
@@ -1020,6 +1049,7 @@ function TokenFormDialog(props: {
   onNameChange: (value: string) => void;
   onSubmit: () => void;
   onTemplateChange: (value: McpTokenTemplateId) => void;
+  onAgentChange: (value: string) => void;
   onToggleScope: (scope: string) => void;
 }) {
   const activeTemplate = props.templates.find((t) => t.id === props.formTemplateId);
@@ -1078,6 +1108,33 @@ function TokenFormDialog(props: {
                 </optgroup>
               ))}
             </select>
+          </label>
+
+          <label className="block text-sm">
+            <span className="font-medium text-[var(--dpf-text)]">Acts as coworker</span>
+            <select
+              value={props.formAgentId}
+              onChange={(event) => props.onAgentChange(event.target.value)}
+              className="mt-1 w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-2 text-sm text-[var(--dpf-text)]"
+            >
+              <option value="" className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]">
+                None — cannot join Work Rooms
+              </option>
+              {props.actingCoworkers.map((option) => (
+                <option
+                  key={option.agentId}
+                  value={option.agentId}
+                  className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]"
+                >
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <span className="mt-1 block text-xs text-[var(--dpf-muted)]">
+              Pick the coworker this token speaks as. Work Room tools need one — a
+              token with none is refused. It grants identity, not room access:
+              each room still admits people and coworkers one at a time.
+            </span>
             {activeTemplate && (
               <p className="mt-1 text-xs text-[var(--dpf-muted)]">{activeTemplate.description}</p>
             )}

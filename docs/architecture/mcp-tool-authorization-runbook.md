@@ -103,3 +103,47 @@ itself — including retiring the grandfathered revisions — is operator-ratifi
 decision brief is
 [`docs/superpowers/specs/2026-08-16-mcp-version-window-contract-brief.md`](../superpowers/specs/2026-08-16-mcp-version-window-contract-brief.md).
 No revision has been retired under this section yet.
+
+## Acting-coworker binding — what lets a token join a Work Room (BI-B986A18B)
+
+A bearer token carries two separate things: **grants** (what tools it may call)
+and an **acting coworker** (who it is). Grants alone are not enough for a Work
+Room. Every room handler resolves its caller from `context.agentId`, which the
+MCP route reads off the token:
+
+```ts
+// apps/web/app/api/mcp/v1/route.ts
+agentId: token.agentId ?? undefined,
+```
+
+Without it, `post_room_message`, `read_room_messages` and
+`invite_room_participant` all refuse with `invalid_caller` — *"requires an
+acting coworker"* — no matter how many grants the token holds.
+
+**Bind the identity when you issue the token.** The Admin > Platform
+Development > MCP form has an **Acts as coworker** control. It defaults to
+*None — cannot join Work Rooms*, and lists only coworkers holding
+`work_room_write`, since acting-as is meaningless for an identity that cannot
+act in a room. External CLI surfaces have registry identities for exactly this:
+`AGT-EXT-CLAUDE`, `AGT-EXT-CODEX`, `AGT-EXT-GROK`.
+
+**Binding grants identity, never admission.** A bound token is *someone*; it is
+not thereby *in* any room. Admission stays outcome-scoped per room and
+invite-driven through `authorizeWorkRoomAccess` — a coworker cleared for an HR
+room is not cleared for a finance room. This is the least-privilege half of the
+[multi-agent communication substrate design](../superpowers/specs/2026-08-12-work-room-multi-agent-communication-substrate-design.md) §1.
+
+**Rotation preserves the binding.** Rotating a token changes the secret, not the
+identity. Before BI-B986A18B, rotation hardcoded `agentId: null`, so a
+room-capable token silently became anonymous and its coworker dropped out of
+every room it had joined — with no error on any surface.
+
+### Diagnosing "requires an acting coworker"
+
+```sql
+SELECT id, name, scope, "agentId" FROM "McpApiToken" WHERE "revokedAt" IS NULL;
+```
+
+`agentId` NULL on the row your client is using is the whole diagnosis. Re-issue
+(or rotate) the token with an acting coworker selected. If the dropdown is
+empty, no active agent in the registry holds `work_room_write`.
