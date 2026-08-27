@@ -48,6 +48,7 @@ function prismaFor(items: WorkItemFixture[], detail: WorkItemFixture | null = it
     workroom: {
       findMany: async () => [],
     },
+    workroomActivity: { findMany: async () => [] },
   };
 }
 
@@ -115,6 +116,7 @@ describe("workspace Work Case loader", () => {
       workroom: {
         findMany: async () => [{ workItemId: "row-cap", capsuleId: "WC-9", status: "complete", title: "Coding carrier" }],
       },
+      workroomActivity: { findMany: async () => [] },
     };
     const now = new Date("2026-06-28T12:00:00.000Z");
     const list = await loadWorkspaceWorkCaseLens({ prismaClient, userId: "user-1", now });
@@ -148,6 +150,7 @@ describe("workspace Work Case loader", () => {
       workroom: {
         findMany: async () => [{ workItemId: "row-v", capsuleId: "WC-V", status: "verifying", title: "Coding carrier" }],
       },
+      workroomActivity: { findMany: async () => [] },
     };
     const list = await loadWorkspaceWorkCaseLens({
       prismaClient,
@@ -303,6 +306,7 @@ describe("workspace Work Case loader", () => {
       workroom: {
         findMany: async () => [],
       },
+      workroomActivity: { findMany: async () => [] },
     };
 
     const detail = await loadWorkspaceWorkCaseDetail({
@@ -340,6 +344,7 @@ describe("workspace Work Case loader", () => {
       workroom: {
         findMany: async () => [],
       },
+      workroomActivity: { findMany: async () => [] },
     };
 
     const detail = await loadWorkspaceWorkCaseDetail({
@@ -450,5 +455,52 @@ describe("workspace Work Case loader", () => {
       userId: "user-1",
     })).toBeNull();
     expect(messagesLoaded).toBe(false);
+  });
+
+  // BI-1CF7B600 — a capsule-sourced room showed "No activity yet" while its execution
+  // journal (WorkroomActivity rows) had entries; those rows never reached the feed.
+  it("surfaces the capsule's activity journal in the room feed", async () => {
+    const item = {
+      ...baseItem,
+      id: "row-act",
+      itemId: "WI-ACT",
+      sourceType: "work-capsule",
+      sourceId: "WC-7",
+      title: "Coding carrier",
+      status: "in-progress",
+      assignedToUserId: "user-1",
+      evidence: [],
+    };
+    const prismaClient: WorkspaceCasePrismaClient = {
+      workItem: { findMany: async () => [item], findFirst: async () => item },
+      workItemMessage: { findMany: async () => [] },
+      workroom: {
+        findMany: async () => [{ id: "cap-row", capsuleId: "WC-7", status: "working", title: "Coding carrier" }],
+      },
+      workroomActivity: {
+        findMany: async () => [
+          {
+            id: "ACT-1",
+            workCapsuleId: "cap-row",
+            kind: "work-started",
+            summary: "Build started on the coding carrier",
+            recordedAt: new Date("2026-06-28T10:20:00.000Z"),
+            recordedByAgentId: "AGT-BUILD",
+          },
+        ],
+      },
+    };
+    const detail = await loadWorkspaceWorkCaseDetail({
+      prismaClient,
+      caseKey: encodeWorkCaseKey({ sourceType: "work-capsule", sourceId: "WC-7" }),
+      userId: "user-1",
+      now: new Date("2026-06-28T12:00:00.000Z"),
+    });
+
+    const summaries = detail?.room?.activity.map((entry) => entry.summary) ?? [];
+    expect(summaries).toContain("Build started on the coding carrier");
+    const entry = detail?.room?.activity.find((a) => a.summary === "Build started on the coding carrier");
+    expect(entry?.sourceRef).toMatchObject({ kind: "work-capsule", id: "WC-7" });
+    expect(entry?.actorRef?.actorKind).toBe("agent");
   });
 });
