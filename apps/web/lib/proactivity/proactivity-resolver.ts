@@ -73,6 +73,26 @@ export function resolveProactivityPlanForLevel(
     defaults.escalationTarget = "platform-operator";
   }
 
+  if (input.activityFamily === "marketing-campaign") {
+    // Cadence only — the same boundary crm-record-enrichment draws (BI-B2497DFB).
+    // Marketing may decide WHEN to raise creative work; it may never be the thing
+    // that publishes it or spends against it. The posture ladder only ever
+    // tightens (tightenActionBoundary picks the more restrictive of the two), so
+    // capping the boundary at "propose" here makes it a real ceiling: no room
+    // declaration, workroom default or agent preference downstream can loosen it
+    // back to "preauthorized" and let an assertive posture push an unreviewed
+    // asset to a public channel.
+    if (defaults.actionBoundary === "preauthorized") defaults.actionBoundary = "propose";
+    // Marketing spend and brand voice are the owner's call, not a queue's — an
+    // unanswered campaign nudge should reach the person accountable for the
+    // brand rather than settling on the attention surface.
+    defaults.escalationTarget = "owner";
+    // Even a missed campaign date does not earn the urgent channel. That channel
+    // is for outages and compliance; spending it on marketing trains the owner
+    // to ignore it, which costs more than the missed post.
+    if (defaults.channelPolicy === "urgent-channel") defaults.channelPolicy = "preferred-channel";
+  }
+
   if (input.regulated || input.activityFamily === "tax-compliance") {
     defaults.actionBoundary = input.regulated ? "advise" : "propose";
     defaults.spendClass = level === "assertive" ? "standard" : defaults.spendClass;
@@ -124,6 +144,17 @@ function resolveLevel(input: ProactivityResolverInput): ProactivityLevel {
     return typeof input.deadlineWindowDays === "number" && input.deadlineWindowDays <= 7 ? "assertive" : "balanced";
   }
 
+  if (input.activityFamily === "marketing-campaign") {
+    // A campaign with a committed date close enough to miss is worth warning
+    // about; routine creative production never is. Marketing that nags is the
+    // fastest way to get a coworker muted, so the assertive door is deliberately
+    // narrow — only a dated commitment opens it. Three days rather than
+    // tax-compliance's seven: an asset can be produced in a day, a filing cannot.
+    return typeof input.deadlineWindowDays === "number" && input.deadlineWindowDays <= 3
+      ? "assertive"
+      : "balanced";
+  }
+
   if (input.activityFamily === "security-incident") return "assertive";
 
   return "balanced";
@@ -157,6 +188,16 @@ function explanationFor(input: ProactivityResolverInput, level: ProactivityLevel
 
   if (input.activityFamily === "tax-compliance" && level === "assertive") {
     return "A compliance deadline is close enough to justify assertive reminders while keeping advice and filing approval-gated.";
+  }
+
+  if (input.activityFamily === "marketing-campaign") {
+    if (level === "quiet") {
+      return "Quiet: produce marketing only when asked, and never volunteer campaign work.";
+    }
+    if (level === "assertive") {
+      return "A committed campaign date is close, so the coworker should raise the work sooner — still as a proposal, and never on the urgent channel.";
+    }
+    return "Campaign and creative work is prepared on a steady cadence and offered for review; publishing and spending stay with you.";
   }
 
   if (input.activityFamily === "crm-record-enrichment") {

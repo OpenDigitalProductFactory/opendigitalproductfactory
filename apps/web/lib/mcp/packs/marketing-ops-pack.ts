@@ -25,6 +25,7 @@ import {
   recordMarketingStrategistReview,
 } from "@/lib/marketing";
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import { planUpcomingMarketingDraftsHandler } from "../marketing-cadence-handler";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
 const definitions: ToolDefinition[] = [
@@ -536,21 +537,6 @@ async function tickMarketingSchedulerHandler(): Promise<ToolResult> {
   };
 }
 
-async function planUpcomingMarketingDraftsHandler(): Promise<ToolResult> {
-  const { planUpcomingForAssetTasks } = await import("@/lib/marketing/scheduler");
-  const { prisma } = await import("@dpf/db");
-  const org = await prisma.organization.findFirst({ select: { id: true } });
-  if (!org) {
-    return { success: false, message: "No organization configured.", error: "no_org" };
-  }
-  const result = await planUpcomingForAssetTasks({ organizationId: org.id });
-  return {
-    success: true,
-    message: `Scheduled ${result.scheduled} drafter run${result.scheduled === 1 ? "" : "s"}; skipped ${result.skipped}.`,
-    data: result,
-  };
-}
-
 async function setMarketingAutopilotPolicyHandler(
   params: Record<string, unknown>,
   userId: string,
@@ -754,7 +740,8 @@ const handlers: Record<string, ToolPackHandler> = {
   place_linkedin_ad: (params, userId) => publishApprovedDraftHandler(params, userId),
   refresh_channel_kpis: (params) => refreshChannelKpisHandler(params),
   tick_marketing_scheduler: () => tickMarketingSchedulerHandler(),
-  plan_upcoming_marketing_drafts: () => planUpcomingMarketingDraftsHandler(),
+  plan_upcoming_marketing_drafts: (params, userId, context) =>
+    planUpcomingMarketingDraftsHandler(params, userId, context),
   set_marketing_autopilot_policy: (params, userId) => setMarketingAutopilotPolicyHandler(params, userId),
   draft_marketing_asset: (params, userId, context) => draftMarketingAssetHandler(params, userId, context),
   record_marketing_kpi_checkpoint: (params, userId, context) => recordMarketingKpiCheckpointHandler(params, userId, context),
