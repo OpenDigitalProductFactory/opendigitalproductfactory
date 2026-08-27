@@ -278,6 +278,19 @@ previous day was 0.05. Both figures stand; they measure different things.
 | 15:00 adoption | partial | Status change worked and reached the mission metric; no contract, fee, spay/neuter compliance, chip re-registration or typed outcome | Contract on paper, fee on the card reader, chip re-registered on the registry's own site |
 | 16:00 numbers | partial | Outcomes correct; kennels-free unanswerable; intakes not recorded as intakes | Counted the ward on foot |
 
+**One row above is half wrong, and the correction is worth keeping.** The 10:00 finding recorded
+that "the calendar cannot create". Driving the live install on 2026-08-27 found that clicking a
+day *does* open a chooser offering **Create event** and **Schedule AI coworker**, with no page
+error. What is true is that the page carried **no create control at all**, so the only way in was
+a gesture nothing announced, and the workspace agenda linked here promising "a booking, invoice,
+or appointment" — three things this calendar does not make. Both were fixed (`BI-460BFA84`): the
+calendar now has a *New event* control, and the agenda promises what the calendar does. **The
+remaining half of the 10:00 step stands:** `CareAppointment` is subject-agnostic and already
+built, but the business calendar neither reads it nor writes it, so a spay/neuter slot is a
+free-text event rather than an appointment against the animal. *A step recorded as impossible
+because a control could not be found is a discoverability finding, not a capability one — check
+which before designing the fix.*
+
 ### What the run found that §6 could not
 
 Three findings sit outside the thirty entities entirely, and each alone prevents the business
