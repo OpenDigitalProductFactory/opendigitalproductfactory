@@ -258,6 +258,38 @@ Either is defensible; inventing one silently is not. Until it is settled, the
 resolved mode and its evidence are computed and recorded, and the code comparison
 still stands.
 
+### 5.9 Confirming on organization trust, and who the record says did it
+
+The SAS code authenticates a peer this installation has no prior relationship
+with: two people read six digits off two screens and agree. That is the right
+ceremony between strangers, and it adds nothing once the organization CA has
+already authenticated the peer — a validated chain is a stronger statement than a
+six-digit comparison, from the same authority that issued the peer its identity.
+
+**Attribution was never an open question.** A federated peer is already
+`Principal(kind="federated-peer")` with `FederationLink` as its side table, per
+AGENTS.md §11 — the same shape `EdgeNode` uses. The peer HAS an identity; the
+link carries it in `principalId`. This is the ordinary mTLS/SPIFFE model, where
+the credential is the identity and the CA authorised it at issuance rather than a
+person authorising each pair.
+
+`approvedByPrincipalId` answers a different question — which PERSON on this side
+clicked approve. For an evidence-derived confirmation the honest answer is that
+none did, and the field stays null. Writing a person there would make the audit
+trail assert something untrue.
+
+What is recorded instead, on the session's `sasState`:
+
+- `confirmationProvenance: "organization-trust"`
+- the evidence — presented root fingerprint, that the chain verified, the peer
+  organization ref, and when it was decided
+
+So the record states plainly that a machine confirmed it, on what basis, and that
+no person was involved. The verdict is checked by its exact `auto-enroll` value
+rather than by ruling out `blocked`, so an `operator-confirmation` verdict can
+never fall through. A peer that refuses the confirmation leaves the session
+pending for a human, exactly as before.
+
 ## 6. Lifecycle at scale
 
 The unattended cycle this enables:
