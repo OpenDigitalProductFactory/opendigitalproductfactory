@@ -12,6 +12,8 @@
 
 import { prisma } from "@dpf/db";
 import { isLoopbackHostname } from "@/lib/auth/oauth-metadata";
+import { isCimdFetchEnabled } from "@/lib/auth/oauth-policy";
+import { verifyOutboundUrl } from "@/lib/auth/outbound-url-guard";
 import { isPublicScope, type PublicScope } from "@/lib/auth/oauth-scope-map";
 
 export type RegistrationKind = "dcr" | "cimd" | "preregistered" | "credentials";
@@ -189,15 +191,34 @@ export async function resolveCimdClient(clientIdUrl: string): Promise<Registered
   const existing = await findClientByClientId(clientIdUrl);
   if (existing) return existing;
 
+  // Outbound CIMD resolution is OFF unless the operator turns it on. A client
+  // supplies this URL, so fetching it is a server-side request to an
+  // attacker-chosen address; an install that never expects to resolve a CIMD
+  // document should not carry that surface at all. DCR is the local path.
+  if (!isCimdFetchEnabled()) return null;
+
+  // SSRF guard (CodeQL js/request-forgery). The client_id is untrusted input,
+  // so the address it resolves to must be validated as public BEFORE we fetch —
+  // blocking the string "localhost" is not enough when an attacker controls the
+  // DNS record.
+  const verdict = await verifyOutboundUrl(clientIdUrl);
+  if (!verdict.allowed) return null;
+
   let doc: Record<string, unknown>;
   try {
-    const res = await fetch(clientIdUrl, {
+    const res = await fetch(verdict.url, {
       headers: { Accept: "application/json" },
       signal: AbortSignal.timeout(5000),
+      // A redirect is how an allowed origin walks the request inward; refuse
+      // rather than follow.
       redirect: "error",
     });
     if (!res.ok) return null;
-    doc = (await res.json()) as Record<string, unknown>;
+    // Cap the body: a metadata document is small, and an unbounded read of an
+    // attacker-chosen URL is a memory-exhaustion lever.
+    const raw = await res.text();
+    if (raw.length > 64 * 1024) return null;
+    doc = JSON.parse(raw) as Record<string, unknown>;
   } catch {
     // An air-gapped install cannot fetch, and that is expected rather than
     // exceptional — DCR is the path there.

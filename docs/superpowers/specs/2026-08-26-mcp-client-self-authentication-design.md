@@ -384,6 +384,18 @@ The `2025-11-25` prohibition (and the TAK/GAID design's §MCP notes) is absolute
 
 An open `/register` on a reachable install lets anyone mint a `client_id`. Registration alone grants nothing — every token still requires an authenticated human to consent — but unbounded registration is still a junk-row and phishing-surface vector (a self-registered client can choose a misleading `client_name`, which the consent screen must therefore mark as self-asserted). Mitigations: DCR enabled by default **only** when the resource origin is loopback; rate limiting; registrations expire unused; the operator can disable DCR entirely and require CIMD or pre-registration. §9 puts the default to the operator.
 
+### 7.3b CIMD fetching is server-side request forgery unless guarded
+
+Resolving a Client ID Metadata Document means fetching a URL the **client** supplied as its `client_id`. That is a server-side request to an attacker-chosen address, and CodeQL flagged the first implementation as `js/request-forgery` (critical) — correctly. Left open it turns the authorization endpoint into a probe for the operator's internal network: `client_id=https://169.254.169.254/latest/meta-data`, an internal Elasticsearch on an odd port, a Docker-network service.
+
+Three controls, in order of strength:
+
+1. **Off by default.** `DPF_OAUTH_CIMD_FETCH` gates the outbound request entirely. A fully-local install cannot use CIMD anyway — it cannot reach the document — so the default costs nothing and removes the surface.
+2. **Address-range validation, not string matching.** `lib/auth/outbound-url-guard.ts` resolves the hostname and refuses if **any** resolved address is loopback, private, link-local, carrier-grade NAT, multicast or otherwise reserved, including IPv4-mapped IPv6 forms like `::ffff:127.0.0.1`. Blocking the literal string `localhost` would be useless: an attacker controls the DNS record. https only, no embedded credentials, no non-default port.
+3. **Request shape.** `redirect: "error"` so an allowed origin cannot 302 the request inward, a 5s timeout, and a 64 KiB body cap.
+
+**Residual risk, stated rather than papered over:** the guard resolves and validates, then hands the URL to `fetch`, which resolves again. A record that changes between the two lookups (DNS rebinding) can still slip through, because Node's `fetch` does not let the caller pin the connection to a validated address. Control 1 is what actually bounds this; controls 2 and 3 narrow it.
+
 ### 7.4 The loopback guard
 
 `isAllowedMcpEndpoint` stays. What changes is that it is no longer the *only* thing standing between an ambient config file and a disclosed credential, because the OAuth path puts no long-lived secret in ambient config at all. Slice 5 revisits whether a **discovered, audience-bound** non-loopback endpoint should be permitted for the OAuth flow specifically, while a config-resolved `dpfmcp_` PAT stays loopback-only for its remaining life. That is a narrowing of the rule to the credential shape that actually needs it — and it is the concrete mechanism by which `BI-1819D34F` shrinks.
