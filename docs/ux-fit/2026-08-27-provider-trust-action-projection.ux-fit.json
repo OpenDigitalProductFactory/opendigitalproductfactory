@@ -1,0 +1,20 @@
+{
+  "version": "1",
+  "decidedOption": "compiler-projection",
+  "decisionInteractionId": "DI-16D8DE623703",
+  "scope": {
+    "files": [
+      "apps/web/components/platform/ProviderAccountPostureForm.tsx",
+      "apps/web/components/platform/ProviderDetailForm.tsx",
+      "apps/web/components/platform/ProviderTrustEvidencePanel.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "context-filter",
+      "compiler-projection",
+      "observed-failures"
+    ]
+  }
+}
