@@ -416,6 +416,11 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // ./lib import throws ERR_MODULE_NOT_FOUND and breaks the image build,
         // and with it the release / self-upgrade chain for every install.
         "scripts/set-hooks-path.no-static-imports.test.mjs",
+        // BI-0B292D84 layer 1+4: a worktree is bound to a Workroom when it is
+        // created, and the branches that predate that are reconciled. Binding
+        // coverage was stuck at 65% for as long as the rule relied on memory.
+        "scripts/lib/workroom-bind.test.mjs",
+        "scripts/reconcile-workroom-bindings.test.mjs",
         "scripts/lib/agent-identity.test.mjs",
         "tests/release/local-ci-gate-contract.test.mjs",
         "tests/release/pregate-node-gate-contract.test.mjs",
