@@ -221,6 +221,7 @@
             "windows"
           ],
           "ports": [
+            "${DPF_LDAP_BIND_ADDRESS:-127.0.0.1}:${DPF_LDAP_PORT:-636}:${DPF_LDAP_PORT:-636}",
             "1455:3000",
             "3000:3000"
           ],
@@ -1165,7 +1166,7 @@
       ]
     }
   ],
-  "catalogHash": "c83c56c0e3602293ee01abd1d5f068380d23de3244b4d2a05b06f26a12ce3cb9",
+  "catalogHash": "ccae8c03d44382efa1ff721439255bdf7e0bcf0c5ab926afa3dd8f05c97c0740",
   "catalogVersion": 1,
   "substrateManifestVersion": 2
 }

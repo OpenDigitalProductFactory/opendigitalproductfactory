@@ -553,7 +553,7 @@
     "apps/web/components/finance/TaxAuthorityCredentialPanel.tsx": 2,
     "apps/web/components/finance/TaxExecutionPanel.tsx": 4,
     "apps/web/components/finance/TaxLiabilityLedgerCard.tsx": 5,
-    "apps/web/components/finance/TaxObligationPeriodsTable.tsx": 7,
+    "apps/web/components/finance/TaxObligationPeriodsTable.tsx": 6,
     "apps/web/components/finance/TaxRegistrationEditor.tsx": 5,
     "apps/web/components/finance/TaxRemittanceSettingsPanel.tsx": 4,
     "apps/web/components/golden-triangle/GoldenTriangleControl.tsx": 3,
