@@ -26,6 +26,8 @@
 // dispatch stack.
 
 export type ReviewFixOutcomeKind =
+  /** No reviewer returned a usable verdict, so nothing is known about the work. */
+  | "blocked-review-incomplete"
   /** The review passed after repair. */
   | "repaired"
   /** Repair ran and the work still fails — a human decision is genuinely needed. */
@@ -45,12 +47,19 @@ export type ReviewFixOutcomeKind =
 export function resolveReviewFixOutcome(args: {
   reviewFailed: boolean;
   regenerated: boolean;
+  /** True when the final review could not be completed (BI-D33F968A). */
+  reviewIncomplete?: boolean;
 }): ReviewFixOutcomeKind {
   if (!args.reviewFailed) return "repaired";
+  // An unreviewable artifact is not a rejected one. Escalating here would tell
+  // the owner the platform tried and could not fix their design, when in truth
+  // no reviewer ever read it — live repro FB-05946F96, abandoned after two
+  // rounds spent regenerating against "Both review agents failed to respond".
+  if (args.reviewIncomplete) return "blocked-review-incomplete";
   return args.regenerated ? "escalated-after-rounds" : "blocked-no-regeneration";
 }
 
 /** True when the outcome must leave the build recoverable rather than abandoned. */
 export function outcomeKeepsBuildRecoverable(kind: ReviewFixOutcomeKind): boolean {
-  return kind === "blocked-no-regeneration";
+  return kind === "blocked-no-regeneration" || kind === "blocked-review-incomplete";
 }

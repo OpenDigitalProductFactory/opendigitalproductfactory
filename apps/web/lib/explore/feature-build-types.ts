@@ -159,15 +159,15 @@ export type ReviewResult = SemanticReviewResult & {
      *  signal that the feature scope may be too large to converge. */
     oscillating?: boolean;
   };
-  /** Deterministic size assessment of the reviewed design. Populated by
-   *  reviewDesignDoc when designReview is the result of an Ideate-phase
-   *  review (not Plan-phase). Phase 2 of the design-time decomposition
-   *  rollout (BI-2E6CC391, spec
-   *  docs/superpowers/specs/2026-05-24-build-studio-design-time-
-   *  decomposition-design.md). Phase 3 reads this to render the gate
-   *  banner; Phase 4 reads it to gate the decomposition assistant.
-   *  Absent on Plan-phase reviews and on builds reviewed before Phase 2
-   *  shipped. */
+  /** Deterministic size assessment of the reviewed design, written by
+   *  reviewDesignDoc on Ideate-phase reviews only (BI-2E6CC391, spec
+   *  docs/superpowers/specs/2026-05-24-build-studio-design-time-decomposition-design.md).
+   *  Phase 3 renders the gate banner from it; Phase 4 gates the decomposition
+   *  assistant. Absent on Plan-phase reviews and on pre-Phase-2 builds. */
+  /** True when NO reviewer returned a usable verdict, so this says nothing
+   *  about the work (BI-D33F968A). `fail` is the safe default, never "examined
+   *  and rejected" — a repair budget spent on it destroys the build. */
+  reviewIncomplete?: boolean;
   sizeAssessment?: SizeAssessmentSnapshot;
   /** Operator override recorded when the build's size assessment is
    *  `decompose-required` but the operator chose to proceed

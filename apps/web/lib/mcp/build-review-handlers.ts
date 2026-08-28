@@ -409,6 +409,10 @@ export async function reviewBuildPlan(params: Record<string, unknown>, userId: s
         decision: "fail" as const,
         issues: [{ severity: "critical" as const, description: "Both review agents failed to respond" }],
         summary: "Review could not be completed — retry.",
+        // BI-D33F968A: nobody read the work. `fail` is the safe default, not a
+        // verdict — mark it so a repair loop does not spend rounds "fixing"
+        // something no reviewer looked at.
+        reviewIncomplete: true,
       };
       // Deterministic kind-aware lenience: a chore/fix/docs build must not be
       // blocked by a reviewer's missing-test-first complaint (test-first is a
