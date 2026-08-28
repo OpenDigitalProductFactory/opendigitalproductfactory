@@ -8,7 +8,10 @@ import {
 } from "@/lib/tak/autonomous-work-run";
 import { createTaskMessage } from "@/lib/tak/task-records";
 import { deriveEffortWarrant } from "@/lib/tak/effort-warrant";
-import { createInitiativeReviewTerminalToolPolicy } from "@/lib/tak/terminal-tool-policy";
+import {
+  createInitiativeReviewTerminalToolPolicy,
+  enterTerminalWriterPhase,
+} from "@/lib/tak/terminal-tool-policy";
 import {
   createResourceWaitProjection,
   preInferenceResourceWait,
@@ -101,13 +104,16 @@ export async function executeRemoteTaskAttempt(input: {
         messageChars: parsed.prompt.length,
       })
     : undefined;
-  const terminalToolPolicy = parsed.initiativeReviewBinding
+  const baseTerminalToolPolicy = parsed.initiativeReviewBinding
     ? createInitiativeReviewTerminalToolPolicy(
         parsed.initiativeReviewBinding.writerToolName,
         exactRequiredToolNames,
         parsed.initiativeReviewBinding.artifactRef,
       )
     : null;
+  const terminalToolPolicy = baseTerminalToolPolicy && input.resumeKind === "terminal-writer"
+    ? enterTerminalWriterPhase(baseTerminalToolPolicy)
+    : baseTerminalToolPolicy;
   const resumedFlag = !input.idempotentReplay
     ? {}
     : input.resumeKind === "terminal-writer"
@@ -185,7 +191,7 @@ export async function executeRemoteTaskAttempt(input: {
           idempotentReplay: input.idempotentReplay,
           ...resumedFlag,
           requiresApproval: false,
-          resumable: terminalWriterAttempt < 2,
+          resumable: true,
           waitReason: "missing-terminal-writer",
           content: remoteTaskContent(result.content),
           executedToolCount: result.executedTools?.length ?? 0,

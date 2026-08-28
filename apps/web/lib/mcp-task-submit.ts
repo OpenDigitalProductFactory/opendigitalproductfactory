@@ -209,7 +209,7 @@ function replayOrConflict(existing: ExistingRemoteTask, requestDigest: string): 
       idempotentReplay: true,
       requiresApproval: existing.status === "input-required" && !terminalWriterWait,
       ...(terminalWriterWait ? {
-        resumable: terminalWriterWait.attempt < 2,
+        resumable: true,
         waitReason: terminalWriterWait.kind,
       } : resourceWait ? {
         resumable: true,
@@ -229,30 +229,28 @@ async function reserveTerminalWriterReplay(input: {
   if (storedRequestDigest(input.existing) !== input.requestDigest) return null;
 
   const existingWait = parseTerminalWriterWait(input.existing.progressPayload);
-  const isProjectedWait = input.existing.status === "input-required" && existingWait?.attempt === 1;
+  const isProjectedWait = input.existing.status === "input-required" && existingWait !== null;
   const isRecoverableCompletedExit = input.existing.status === "completed" && !existingWait;
   if (!isProjectedWait && !isRecoverableCompletedExit) return null;
 
-  if (isRecoverableCompletedExit) {
-    const [successfulReader, writerAttempt] = await Promise.all([
-      prisma.toolExecution.findFirst({
-        where: {
-          taskRunId: input.existing.taskRunId,
-          toolName: { in: [...input.terminalToolPolicy.readerToolNames] },
-          success: true,
-        },
-        select: { id: true },
-      }),
-      prisma.toolExecution.findFirst({
-        where: {
-          taskRunId: input.existing.taskRunId,
-          toolName: input.terminalToolPolicy.writerToolName,
-        },
-        select: { id: true },
-      }),
-    ]);
-    if (!successfulReader || writerAttempt) return null;
-  }
+  const [successfulReader, writerAttempt] = await Promise.all([
+    prisma.toolExecution.findFirst({
+      where: {
+        taskRunId: input.existing.taskRunId,
+        toolName: { in: [...input.terminalToolPolicy.readerToolNames] },
+        success: true,
+      },
+      select: { id: true },
+    }),
+    prisma.toolExecution.findFirst({
+      where: {
+        taskRunId: input.existing.taskRunId,
+        toolName: input.terminalToolPolicy.writerToolName,
+      },
+      select: { id: true },
+    }),
+  ]);
+  if (!successfulReader || writerAttempt) return null;
 
   const progress = input.existing.progressPayload && typeof input.existing.progressPayload === "object"
     && !Array.isArray(input.existing.progressPayload)
@@ -264,7 +262,7 @@ async function reserveTerminalWriterReplay(input: {
     kind: "missing-terminal-writer",
     writerToolName: input.terminalToolPolicy.writerToolName,
     resumeMode: "same-taskrun",
-    attempt: 2,
+    attempt: existingWait ? existingWait.attempt + 1 : 2,
     observedAt: now,
   };
   const reservation = await prisma.taskRun.updateMany({

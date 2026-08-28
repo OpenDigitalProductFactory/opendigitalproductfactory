@@ -3,6 +3,7 @@ import {
   applyTerminalToolSurface,
   buildTerminalToolReminder,
   createInitiativeReviewTerminalToolPolicy,
+  enterTerminalWriterPhase,
   normalizeTerminalToolArguments,
   resolveTerminalTextExit,
   resolveTerminalToolCall,
@@ -220,6 +221,27 @@ describe("terminal tool policy", () => {
       writerAttempted: true,
     });
   });
+
+  it("enters a writer-only terminal phase from persisted immutable evidence", () => {
+    const resumed = enterTerminalWriterPhase(policy);
+    const providerTools = [
+      { type: "function", function: { name: "read_source_at_version" } },
+      { type: "function", function: { name: "search_source_at_version" } },
+      { type: "function", function: { name: policy.writerToolName } },
+    ];
+
+    expect(summarizeTerminalToolProgress(resumed, [])).toMatchObject({
+      evidenceAvailable: true,
+      writerAttempted: false,
+    });
+    expect(applyTerminalToolSurface(resumed, [], providerTools)).toEqual([
+      { type: "function", function: { name: policy.writerToolName } },
+    ]);
+    expect(resolveTerminalToolCall(resumed, [], "read_source_at_version")).toMatchObject({
+      kind: "refuse",
+      result: { error: "terminal_writer_phase_reader_refused" },
+    });
+  });
 });
 
 describe("agent loop terminal writer integration", () => {
@@ -322,6 +344,24 @@ describe("agent loop terminal writer integration", () => {
       kind: "terminal-writer-missing",
       message: expect.stringContaining("No receipt was created"),
     });
+  });
+
+  it("starts a resumed terminal-writer turn with only the governed writer", async () => {
+    const resumedPolicy = enterTerminalWriterPhase(policy);
+    vi.mocked(routeAndCall)
+      .mockResolvedValueOnce(response("I already have the persisted evidence.") as never)
+      .mockResolvedValueOnce(response("", [{ id: "writer", name: policy.writerToolName, arguments: {} }]) as never)
+      .mockResolvedValueOnce(response("The governed writer rejected the assessment, so no receipt exists.") as never);
+
+    const result = await runAgenticLoop({ ...params, terminalToolPolicy: resumedPolicy });
+
+    const firstTools = (vi.mocked(routeAndCall).mock.calls[0]![3] as { tools: typeof providerTools }).tools;
+    const secondTools = (vi.mocked(routeAndCall).mock.calls[1]![3] as { tools: typeof providerTools }).tools;
+    expect(firstTools.map((tool) => tool.function.name)).toEqual([policy.writerToolName]);
+    expect(secondTools.map((tool) => tool.function.name)).toEqual([policy.writerToolName]);
+    expect(result.executedTools).toEqual([
+      expect.objectContaining({ name: policy.writerToolName }),
+    ]);
   });
 
   it("preserves ordinary route-failure handling when no terminal policy applies", async () => {
