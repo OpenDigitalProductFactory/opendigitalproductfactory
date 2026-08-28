@@ -13,7 +13,7 @@
 import { prisma } from "@dpf/db";
 import { isLoopbackHostname } from "@/lib/auth/oauth-metadata";
 import { isCimdFetchEnabled } from "@/lib/auth/oauth-policy";
-import { verifyOutboundUrl } from "@/lib/auth/outbound-url-guard";
+import { assertSafeOutboundUrl } from "@/lib/security/safe-fetch";
 import { isPublicScope, type PublicScope } from "@/lib/auth/oauth-scope-map";
 
 export type RegistrationKind = "dcr" | "cimd" | "preregistered" | "credentials";
@@ -198,15 +198,21 @@ export async function resolveCimdClient(clientIdUrl: string): Promise<Registered
   if (!isCimdFetchEnabled()) return null;
 
   // SSRF guard (CodeQL js/request-forgery). The client_id is untrusted input,
-  // so the address it resolves to must be validated as public BEFORE we fetch —
-  // blocking the string "localhost" is not enough when an attacker controls the
-  // DNS record.
-  const verdict = await verifyOutboundUrl(clientIdUrl);
-  if (!verdict.allowed) return null;
+  // so it goes through the platform's outbound-URL policy — https only, and
+  // loopback / RFC1918 / link-local / metadata addresses refused — rather than
+  // straight into fetch. `assertSafeOutboundUrl` returns a URL rather than a
+  // string precisely so the validated value is shaped differently from the raw
+  // input; pass `.href` to fetch, per its contract.
+  let safeUrl: URL;
+  try {
+    safeUrl = assertSafeOutboundUrl(clientIdUrl, { allowedSchemes: ["https:"] });
+  } catch {
+    return null;
+  }
 
   let doc: Record<string, unknown>;
   try {
-    const res = await fetch(verdict.url, {
+    const res = await fetch(safeUrl.href, {
       headers: { Accept: "application/json" },
       signal: AbortSignal.timeout(5000),
       // A redirect is how an allowed origin walks the request inward; refuse
