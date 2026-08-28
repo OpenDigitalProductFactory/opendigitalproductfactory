@@ -6,6 +6,7 @@ import { canonicalJson } from "@/lib/shared/canonical-json";
 
 import { projectBacklogItemReadiness, type InitiativeReadinessActivity } from "./entry-adapter";
 import { reconcileInitiativeObjectives, type ObjectiveReconciliationActivity } from "./objective-reconciliation";
+import { readinessRequirement } from "./readiness-guidance";
 import {
   executeGovernedTerminalTransition,
   type GovernedTerminalTransitionResult,
@@ -76,7 +77,11 @@ function classificationRequired(
     verdict: "input-required",
     satisfied: [],
     blockers: [],
-    unmet: [{ code: "CLASSIFICATION_REQUIRED", state: "missing", accountableRole: "portfolio-owner", evidenceRefs: [] }],
+    unmet: [readinessRequirement({
+      code: "CLASSIFICATION_REQUIRED",
+      state: "missing",
+      accountableRole: "portfolio-owner",
+    })],
     evaluatedAt,
   };
   return { ok: false, code: "CLASSIFICATION_REQUIRED", decision, authorityDecisionId: "unpersisted" };
@@ -88,12 +93,14 @@ function withEpicFacts(args: {
   expectedStatus: string;
   childBlockers: Array<{ id: string; itemId: string; status: string }>;
 }) {
-  const dependencyBlocker = args.childBlockers.length === 0 ? [] : [{
-    code: "DEPENDENCY_UNRESOLVED" as const,
-    state: "blocked" as const,
+  const dependencyBlocker = args.childBlockers.length === 0 ? [] : [readinessRequirement({
+    code: "DEPENDENCY_UNRESOLVED",
+    state: "blocked",
     accountableRole: "delivery-coordinator",
+    profile: args.decision.profile,
     evidenceRefs: args.childBlockers.map((item) => item.itemId),
-  }];
+    reasons: [`${args.childBlockers.length} child item(s) are not done: ${args.childBlockers.map((item) => item.itemId).join(", ")}.`],
+  })];
   return {
     ...args.decision,
     subject: { kind: "epic" as const, id: args.epic.epicId },

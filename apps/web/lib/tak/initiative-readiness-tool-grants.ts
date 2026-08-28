@@ -1,3 +1,4 @@
+import { readinessRequirement } from "@/lib/backlog/initiative-readiness";
 import type {
   InitiativeGateKey,
   InitiativeReadinessDecision,
@@ -342,12 +343,11 @@ function sequenceBaselineBeforePlanCoverage(
   return [
     ...withoutCoverage,
     {
-      entry: {
+      entry: readinessRequirement({
         code: "OBJECTIVE_BASELINE_REQUIRED",
         state: "missing",
         accountableRole: role,
-        evidenceRefs: [],
-      },
+      }),
       role,
       route,
       gate: "spec-approval",
