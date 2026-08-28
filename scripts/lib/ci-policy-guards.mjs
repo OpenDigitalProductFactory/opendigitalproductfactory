@@ -244,6 +244,15 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // the image — so it reaches main green and breaks the release chain.
       node("scripts/check-dockerfile-copied-script-imports.mjs"),
       node("--test", "scripts/check-dockerfile-copied-script-imports.test.mjs"),
+      // AGENTS.md §11 Principal convergence covered Users but not agents, so a
+      // seeded install left 71 of 76 AGT-* agents with no identity. Every
+      // `independent: true` readiness lane then attributed its receipt to the
+      // delegating human — the artifact author — and could never pass
+      // (BI-53C26E60). Nothing at source level can prove the DATA converged;
+      // this guards that the seed still runs the convergence, after every
+      // agent seeder.
+      node("scripts/check-agent-principal-convergence-wired.mjs"),
+      node("--test", "scripts/check-agent-principal-convergence-wired.test.mjs"),
     ]),
     guard("bundle-boundary-guard", "Bundle Boundary Guard", [
       node("--test", "scripts/check-bundle-boundaries.test.mjs"),

@@ -942,6 +942,41 @@ Prefer naming the **condition** the reader is hitting over any id: a condition
 does not go stale when the work behind it ships. If an id genuinely belongs in
 the text, repoint it at the live item.
 
+### Agent Principal Convergence Guard
+
+`scripts/check-agent-principal-convergence-wired.mjs` fails a PR that stops the
+seed converging a `Principal` for every agent, or that hoists the convergence
+above an agent seeder.
+
+Every agent needs a Principal, because governed receipts are attributed to one
+and the independence rules are expressed entirely in terms of principals.
+Convergence was applied to `User` rows and not to `Agent` rows, so on a seeded
+install 71 of 76 `AGT-*` agents had no identity — `AGT-WS-REVIEW`, the
+designated independent Change Reviewer, among them.
+
+`resolveReviewerIdentity` falls back to the authenticated human when an agent
+alias misses, which is right on its own terms: an external CLI session label
+carries an agent id and is genuinely a human acting. With no alias it always
+missed, so a coworker that was summoned and did call the writer had its receipt
+attributed to the delegating human — the artifact's author, the one identity
+independence forbids. Every `independent: true` lane was unsatisfiable and the
+refusal advised summoning a coworker, which is what the operator had just done.
+
+No source check can prove the DATA converged; that is the seed's job at run
+time. This guard proves the seed still runs the convergence, still runs it after
+**both** agent seeders — either can introduce an agent with no identity — and
+that the convergence module still writes the `aliasType: "agent"` alias the
+reviewer lookup reads.
+
+```bash
+node scripts/check-agent-principal-convergence-wired.mjs
+node --test scripts/check-agent-principal-convergence-wired.test.mjs
+```
+
+If a summoned reviewer's receipt is refused as non-independent, check whether
+its agent id has a Principal before re-summoning: summoning again cannot fix a
+coworker that has no identity to be attributed to.
+
 ### Label Association Guard (ratchet)
 
 `scripts/check-label-association.mjs` fails a PR that adds a **net-new** form

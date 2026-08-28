@@ -44,6 +44,7 @@ export {
 export * from "./healthcare-patient-authority";
 export * from "./healthcare-care-intake";
 export * from "./subject-reference";
+export * from "./agent-principal-convergence.js";
 
 // Quality-issue lifecycle governance (BI-0B420A1D): the registry is the
 // compile-time contract; the drift sweep is the runtime half.
