@@ -81,7 +81,7 @@ minimumReaderCalls = 1 successful call
 maximumReaderCalls = 6 attempted calls
 ```
 
-Thread the policy through `executeAutonomousAgenticLoop` into `runAgenticLoop`. A small pure module owns its state transitions and messages as typed dispositions (`allow`, `refuse`, `nudge`, `fail-closed`, `complete`). The loop maps those dispositions into its existing `AgenticResult`; this does not create a parallel orchestration outcome model.
+Thread the policy through `executeAutonomousAgenticLoop` into `runAgenticLoop`. A small pure module owns its state transitions and messages as typed dispositions (`allow`, `refuse`, `nudge`, `input-required`, `complete`). The loop maps the waiting disposition to a typed failure on its existing `AgenticResult`; this does not create a parallel orchestration outcome model.
 
 The loop enforces these states:
 
@@ -93,7 +93,8 @@ evidence required -> evidence available -> writer required -> writer attempted
 
 - A writer call before one successful reader is returned to the model as a non-executed policy refusal.
 - Once six reader calls have been attempted, further reader calls are returned as non-executed policy refusals and the provider tool surface narrows to the single writer schema.
-- A text-only response before a writer attempt receives one explicit, ephemeral next-action notice. A second text-only response fails closed.
+- A text-only response before a writer attempt receives one explicit, ephemeral next-action notice. A second text-only response fails closed as `missing-terminal-writer`; the remote TaskRun remains `input-required`, has no `completedAt`, and records no receipt.
+- The same immutable request may reserve that waiting TaskRun once through a compare-and-set transition back to `working`. A second missing-writer stop remains `input-required` and is not automatically attempted again. The TaskRun id, request digest, token authority, thread, artifact binding, and writer approval path do not change.
 - Any writer call counts as the terminal attempt, whether the governed result succeeds, requests input/approval, or rejects the proposed receipt. The existing writer remains the sole authority for validation and persistence.
 - The policy is absent for every non-initiative caller, preserving their current agent-loop behavior.
 
@@ -113,7 +114,7 @@ DPF's native loop serializes `message` followed by JSON `data`. Removing file/se
 ## Architecture and scale
 
 - **Single source of truth:** the immutable binding supplies identity and the new policy module supplies the one transition algorithm. Prompts may explain the contract but do not own it.
-- **Data architecture:** no persisted state or parallel table is added. Existing TaskRun and ToolExecution rows remain the audit record.
+- **Data architecture:** no parallel table is added. Existing TaskRun `progressPayload.terminalWriterWait` carries the versioned wait reason and bounded attempt count; TaskRun and ToolExecution rows remain the audit record.
 - **Scalability:** each read is bounded by lines and characters; each search is bounded by page size and offset; each review is bounded by reader attempts. The current git helper retains its 1 MiB command buffer ceiling. Artifacts beyond that ceiling fail explicitly and require a separately governed scale-lift BI/epic for streamed blob access; no such epic is currently linked to BI-SIG-463E478D.
 - **Security:** ref/path validation remains in git-utils, the bound schemas prevent artifact escape, `expectedBlobId` detects identity drift, and a cursor is accepted only for its bound ref/path/blob tuple.
 - **Portability:** use existing Node/git helpers only; add no shell pipeline or platform-specific command.
@@ -128,7 +129,7 @@ DPF's native loop serializes `message` followed by JSON `data`. Removing file/se
 ## Verification
 
 - Unit tests for page boundaries, long-line cursor progress, search continuation, blob mismatch, and non-duplicated messages.
-- Unit tests for evidence-first, reader ceiling, writer-only transition, one nudge, fail-closed exit, and writer-attempt terminal behavior.
+- Unit tests for evidence-first, reader ceiling, writer-only transition, one nudge, resumable fail-closed exit, same-TaskRun compare-and-set resume, bounded retry exhaustion, and writer-attempt terminal behavior.
 - Submission tests proving exact path/commit/blob schemas and policy propagation.
 - An agent-loop regression proving a local initiative reviewer reaches the writer rather than the eight-call spinning diagnostic.
 - A long-artifact functional fixture proving a reviewer can reach a late section and submit a writer call bound to the same immutable artifact.

@@ -185,13 +185,15 @@ describe("terminal tool policy", () => {
     });
   });
 
-  it("nudges once and then fails closed when text arrives before the writer", () => {
+  it("nudges once and then returns an explicit resumable wait when text arrives before the writer", () => {
     expect(resolveTerminalTextExit(policy, [read()], 0)).toMatchObject({
       kind: "nudge",
       allowedToolNames: ["record_initiative_evidence"],
     });
     expect(resolveTerminalTextExit(policy, [read()], 1)).toMatchObject({
-      kind: "fail-closed",
+      kind: "input-required",
+      reason: "missing-terminal-writer",
+      writerToolName: "record_initiative_evidence",
       message: expect.stringContaining("without recording a governed assessment"),
     });
   });
@@ -286,6 +288,22 @@ describe("agent loop terminal writer integration", () => {
     const thirdTools = (vi.mocked(routeAndCall).mock.calls[2]![3] as { tools: typeof providerTools }).tools;
     expect(secondTools.map((tool) => tool.function.name)).toEqual(policy.readerToolNames);
     expect(thirdTools.map((tool) => tool.function.name)).toContain(policy.writerToolName);
+  });
+
+  it("returns a missing-writer failure after successful reads and two prose exits", async () => {
+    vi.mocked(routeAndCall)
+      .mockResolvedValueOnce(response("", [{ id: "read", name: "read_source_at_version", arguments: {} }]) as never)
+      .mockResolvedValueOnce(response("The evidence is sufficient for a judgment.") as never)
+      .mockResolvedValueOnce(response("I have reviewed the evidence but will not call the writer.") as never);
+
+    const result = await runAgenticLoop(params);
+
+    expect(result.executedTools).toHaveLength(1);
+    expect(result.failure).toEqual({
+      kind: "terminal-writer-missing",
+      message: expect.stringContaining("No receipt was created"),
+    });
+    expect(vi.mocked(routeAndCall)).toHaveBeenCalledTimes(3);
   });
 
   it("executes, records, and carries forward server-bound arguments when the provider sends an empty object", async () => {

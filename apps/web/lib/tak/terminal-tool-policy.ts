@@ -166,7 +166,12 @@ export type TerminalToolCallDisposition =
 export type TerminalTextExitDisposition =
   | { kind: "complete" }
   | { kind: "nudge"; message: string; allowedToolNames: string[] }
-  | { kind: "fail-closed"; message: string };
+  | {
+      kind: "input-required";
+      reason: "missing-terminal-writer";
+      writerToolName: string;
+      message: string;
+    };
 
 export function summarizeTerminalToolProgress(
   policy: TerminalToolPolicy,
@@ -261,7 +266,9 @@ export function resolveTerminalTextExit(
   if (progress.writerAttempted) return { kind: "complete" };
   if (nudgesUsed > 0) {
     return {
-      kind: "fail-closed",
+      kind: "input-required",
+      reason: "missing-terminal-writer",
+      writerToolName: policy.writerToolName,
       message: "The independent review stopped without recording a governed assessment. No receipt was created.",
     };
   }
