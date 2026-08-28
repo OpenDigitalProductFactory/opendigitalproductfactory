@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 641,
+  "routeCount": 642,
   "routes": [
     {
       "routePath": "/",
@@ -32,6 +32,16 @@
         "agentId"
       ],
       "file": "apps/web/app/.well-known/agent-card/[agentId]/route.ts"
+    },
+    {
+      "routePath": "/.well-known/dpf-federation.json",
+      "kind": "route",
+      "segments": [
+        ".well-known",
+        "dpf-federation.json"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/.well-known/dpf-federation.json/route.ts"
     },
     {
       "routePath": "/.well-known/dpf-instance.json",

@@ -307,6 +307,86 @@ discover an organization peer on the LAN, validate its chain against the pinned
 root, and pair with it without anyone comparing six digits — which is what makes
 an install created and destroyed thousands of times workable.
 
+### 5.11 The producer: something to find, and something looking
+
+Everything above is complete and none of it can run, because nothing produces a
+nearby candidate. `recordNearbyFederationCandidates` has exactly one caller, the
+Edge Node submission route, and the Edge Node that actually deploys
+(`services/edge-node`) never calls it — it submits discovery runs, heartbeats,
+metrics and adapter polls, and the word `federation` does not appear in it. The
+DNS-SD advertiser and browser live only in `services/edge-node-go`.
+
+Measured on 2026-08-28 against the running install: the Edge Node was enrolled and
+trusted, had recorded 2228 `DiscoveredItem` rows across 399 hosts, and had found
+zero DPF peers. `FederationLink`: 0 rows. `FederationPairingSession`: 0 rows ever.
+General host discovery and federation peer discovery are separate paths, and only
+the first was implemented.
+
+A candidate needs two halves. Both were missing, and both are supplied here.
+
+**The advertisement rides HTTP, not multicast.** The deployment matrix already
+settles this: on Docker Desktop for Windows and macOS a container cannot reach the
+host LAN at all, `network_mode: host` included, so a multicast advertiser in the
+portal container would be unreachable on the host classes DPF ships to. The
+portal published port is reachable by construction — it is how anyone uses the
+install. So an install advertises at `/.well-known/dpf-federation.json`, beside the
+`dpf-instance.json` descriptor that already answers the same question for the
+mobile app.
+
+The field set is the DNS-SD TXT allow-list unchanged — `protocol`, `install`,
+`caps`, `pair` — plus the `organization` §5.4 needs, which the estate-identity
+contract already sanctions publishing in a discovery record. No hostname, no
+device id, no organization id, no capability list. `install` is a rotating
+window-scoped HMAC under the installation-local projection secret, on the same
+fifteen-minute window as the Go advertiser, so an observer cannot follow one
+install across a day and cannot mint an id for an install it does not run. The
+schema is strict: an unexpected key is refused rather than ignored, because the
+field set IS the privacy boundary, and a peer with more to say has to say it under
+a new `protocol`.
+
+Advertising is on by default, with `DPF_FEDERATION_ADVERTISE=0` to opt out. An
+install that cannot be found cannot be paired with, and the unattended lifecycle
+in §6 has nobody to switch it on. An install that does not advertise answers 404,
+indistinguishable from one that cannot.
+
+**The scanner is a fourth Edge Node loop.** It probes its segment for that
+descriptor and submits what it finds. It runs beside the sweep loop rather than
+inside it because the Authority expires a candidate after two minutes while the
+sweep runs every five — a candidate produced by the sweep would be absent from the
+nearby list more often than present.
+
+Three properties carry the safety:
+
+- **One scope rule, not two.** `isFederationScopedEndpoint` moved to
+  `@dpf/validators`, so the scanner refuses to DIAL exactly what the Authority
+  refuses to accept. A scanner that could be pointed at a routable address would
+  be a request-forgery primitive wearing a discovery hat, and a scanner whose
+  scope merely differed would post batches the route rejects wholesale, losing the
+  good candidates in them.
+- **The endpoint is the origin the scanner dialled**, never a value the peer
+  chose. A descriptor able to nominate its own address would let one host enrol a
+  candidate for another.
+- **Probe-time certificate validation is off, and this is not the §5.7 mistake.**
+  That one turned a fingerprint comparison into a claim of verification. Here
+  nothing is claimed: a peer certificate is issued by a private organization CA
+  that a fresh Edge Node has no copy of, so validating at probe time would find
+  only the peers already trusted. An HTTPS candidate is recorded
+  `tls-validation-required`, and the Authority then opens its OWN connection with
+  the pinned root as the only acceptable issuer. The verification path is
+  unchanged and is still the only thing that can produce `certificateVerified`.
+
+The scanner also asks the Authority it is enrolled against for its own advertised
+id, so it never reports its own install as a peer. That read deliberately does not
+go through the candidate contract: the enrolled Authority URL is routinely
+something no candidate could ever be — `http://portal:3000` inside compose — and
+going through the contract returned null, silently disabling self-exclusion in
+exactly the deployment the Edge Node ships in.
+
+Where the ARP cache cannot see the segment — Docker Desktop again —
+`DPF_FEDERATION_SCAN_HOSTS` names the hosts to probe. A pass that hits its target
+ceiling reports how many origins it left out, because a silent cap reads as
+covering everything.
+
 ## 6. Lifecycle at scale
 
 The unattended cycle this enables:
@@ -326,13 +406,14 @@ the identity design remains the backstop for an install with **no** peer.
 - No change to cross-organization enrolment.
 - No new sync engine, transport, or trust root.
 - No subnet-based or trust-on-first-use joining.
-- Discovery transport and advertisement remain owned by `nearby-candidates`;
-  this design consumes its readiness signal rather than replacing it. Composing
-  discovery with the trust decision is §5.4 and is no longer deferred.
-- Calling §5.4 from the pairing path, so a validated same-organization peer
-  enrols without the code comparison, is the remaining slice. Trust-anchor
-  resolution is §5.5; peer chain verification is §5.6. The network adapter that
-  observes a live chain is part of that final slice.
+- No mDNS/DNS-SD change. The Go Edge Node keeps its advertiser and browser;
+  §5.11 adds an HTTP advertisement beside them because the host classes DPF
+  ships to cannot carry multicast out of a container.
+- No new trust decision. §5.11 produces the input §5.4-§5.10 already consume, and
+  changes nothing about what verified means.
+- Composing discovery with the trust decision (§5.4), trust-anchor resolution
+  (§5.5), peer chain verification (§5.6), the chain observer (§5.7) and the
+  pairing path (§5.9/§5.10) are all shipped, not deferred.
 
 ## 8. Acceptance criteria
 
@@ -353,6 +434,15 @@ the identity design remains the backstop for an install with **no** peer.
 8. Peer verification matches fingerprints across colon-separated and bare hex
    forms, rejects an expired certificate anywhere in the chain, and never reports
    verified without a positive match against the pinned root.
+9. An install advertises the closed field set at
+   `/.well-known/dpf-federation.json`, rotating its public id per window,
+   omitting the organization when it has never been named, and answering 404
+   when an operator turned advertising off.
+10. The shipping Edge Node probes its segment, refuses to dial an origin outside
+    it, never reports the install it is enrolled against, and submits what it
+    found to `/api/v1/edge/federation-candidates`.
+11. A candidate the scanner produced from a peer holding an organization-CA
+    certificate reaches `auto-enroll` through the unchanged §5.6/§5.7 path.
 
 ## 9. Decision record
 

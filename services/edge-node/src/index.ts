@@ -12,6 +12,9 @@
 //   - Sweep loop: periodic discovery submission.
 //   - Metrics loop: SNMP ifTable + LLDP peer collection (every 10 s,
 //     gated on SNMP_TARGET env and trustState=trusted).
+//   - Federation scan loop: probe the segment for nearby DPF installs and
+//     report them (every 90 s, trustState=trusted). Without it the Authority's
+//     nearby-candidate list has no producer at all — BI-105966A1.
 //
 // If the heartbeat or sweep loop returns (e.g. node revoked), the
 // process exits so the supervisor can restart it.
@@ -23,6 +26,7 @@
 import { AuthorityApiClient, AuthorityHttpError } from "./api-client";
 import { loadConfig } from "./config";
 import { runEnrollment } from "./enroll";
+import { runFederationScanLoop } from "./federation-scan";
 import { runHeartbeatLoop } from "./heartbeat";
 import { runMetricsLoop } from "./metrics-loop";
 import { loadState } from "./state";
@@ -118,14 +122,19 @@ async function main(): Promise<void> {
   );
 
   // Race: if the heartbeat or sweep loop returns (revocation signal),
-  // let the process exit. The metrics loop runs as a fire-and-forget
-  // peer — it never causes the process to exit on failure.
+  // let the process exit. The metrics and federation-scan loops run as
+  // fire-and-forget peers — neither causes the process to exit on failure.
   await Promise.race([
     runHeartbeatLoop({ config, api, state }),
     runSweepLoop({ config, api, state }),
     runMetricsLoop({ config, api, state }).catch((err) => {
       log("warn", `metrics-loop exited unexpectedly: ${(err as Error).message}`);
       // Don't propagate — heartbeat/sweep are the authoritative loops.
+    }),
+    runFederationScanLoop({ config, api, state }).catch((err) => {
+      log("warn", `federation-scan loop exited unexpectedly: ${(err as Error).message}`);
+      // Don't propagate — discovery of nearby peers is optional and
+      // eventually consistent; heartbeat/sweep stay authoritative.
     }),
   ]);
 }
