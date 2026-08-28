@@ -367,9 +367,19 @@ screen. This is the concrete case for element 10 of the canonical minimal substr
 
 **Destructive controls are undersized for the tablet the work is done on.** At 768×1024 the
 per-animal Delete measured 59×28 px and the photo remove control 24×24, both unconfirmed, on the
-device a kennel technician holds one-handed. The per-animal Delete was fixed on 2026-08-27 — it
-asks first, and both it and its confirmation carry a 44 px target. **The photo remove control is
-unchanged**: still 24×24 and still unconfirmed.
+device a kennel technician holds one-handed. **Both fixed** — the per-animal Delete on 2026-08-27,
+the photo remove on 2026-08-28. Each asks first, and every one of the four controls carries a 44 px
+target.
+
+**The tablet worker could not reach Simple mode — the one thing §7 credits with solving the density
+problem for them.** The Simple/Full toggle and its mode explanation lived inside
+`#primary-navigation-menu`, which is `hidden` below `lg`, so at 768px the buttons measured 0×0 with
+a null `offsetParent` and the explanation vanished. The kennel technician doing rounds was locked
+in Full mode, looking at Build Studio, Backlog, Architecture, Delivery, Platform Hub and Admin
+while recording that a dog had been fed. Fixed 2026-08-28 (`BI-6395DA89`): the mode control sits
+outside the collapsible menu and is reachable at every width; the destinations themselves still
+collapse. *A control inside a responsive disclosure is not reachable — measure the control at the
+width the work is done at, not only at desktop.*
 
 ## 7. UX requirements
 
