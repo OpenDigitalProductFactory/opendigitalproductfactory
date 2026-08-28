@@ -1,4 +1,3 @@
-import type { McpAuthSource } from "@/lib/mcp/tool-tier";
 import { prisma } from "@dpf/db";
 import type { Prisma } from "@dpf/db";
 import { resolveCanonicalAgentId } from "@dpf/db/agent-identity";
@@ -53,7 +52,7 @@ export type RemoteTaskSubmitAuth = {
   tokenId: string;
   userId: string;
   capability: "read" | "write";
-  source: McpAuthSource;
+  source: import("@/lib/mcp/tool-tier").McpAuthSource;
 };
 
 export type RemoteTaskSubmitOutcome =

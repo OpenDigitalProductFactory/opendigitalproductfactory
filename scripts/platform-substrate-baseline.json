@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-08-27T04:27:44.500Z",
-  "gitSha": "e061dfab83be249c80f347a9508c6fb572da5655",
+  "generatedAt": "2026-08-28T06:42:30.613Z",
+  "gitSha": "9d45d79b5d9bceaa7a6134af2671a0050035e544",
   "manifestVersion": 2,
   "metrics": {
     "defaultRequiredServiceCount": {
@@ -33,7 +33,7 @@
     },
     "seedCoordinatorLines": {
       "direction": "informational",
-      "value": 2831
+      "value": 2854
     },
     "serviceCount": {
       "direction": "non-increasing",
