@@ -84,7 +84,7 @@ export async function adoptWorktree(args: {
   }
 
   const binding = await resolveAdoptionBacklogBinding(args.bindingReader, params);
-  if (!binding.ok) return binding.result;
+  if (!binding.bound) return binding.refusal;
   const boundBacklogItemId = binding.backlogItemId;
 
   let capsule;

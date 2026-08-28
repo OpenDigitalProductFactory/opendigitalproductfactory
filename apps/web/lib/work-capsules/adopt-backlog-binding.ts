@@ -22,9 +22,16 @@ export type BacklogBindingReader = {
   };
 };
 
+/**
+ * Deliberately NOT the shared `ActionResult` shape. That contract's failure
+ * branch is `{ ok: false, error: string }` — a message. This one carries a whole
+ * `ToolResult` so the MCP refusal reaches the caller with its error code and
+ * remedy intact, so it discriminates on `bound` rather than borrowing `ok` for a
+ * different meaning.
+ */
 export type BacklogBindingResolution =
-  | { ok: true; backlogItemId: string | null }
-  | { ok: false; result: ToolResult };
+  | { bound: true; backlogItemId: string | null }
+  | { bound: false; refusal: ToolResult };
 
 export async function resolveAdoptionBacklogBinding(
   db: BacklogBindingReader,
@@ -34,7 +41,7 @@ export async function resolveAdoptionBacklogBinding(
   const requested = typeof raw === "string" && raw.trim()
     ? raw.trim()
     : backlogItemIdFromOutcomeAnchor(params);
-  if (!requested) return { ok: true, backlogItemId: null };
+  if (!requested) return { bound: true, backlogItemId: null };
 
   const item = await db.backlogItem.findFirst({
     where: { OR: [{ itemId: requested }, { id: requested }] },
@@ -42,8 +49,8 @@ export async function resolveAdoptionBacklogBinding(
   });
   if (!item) {
     return {
-      ok: false,
-      result: {
+      bound: false,
+      refusal: {
         success: false,
         error: "unknown_backlog_item",
         message:
@@ -54,7 +61,7 @@ export async function resolveAdoptionBacklogBinding(
       },
     };
   }
-  return { ok: true, backlogItemId: item.itemId };
+  return { bound: true, backlogItemId: item.itemId };
 }
 
 /**

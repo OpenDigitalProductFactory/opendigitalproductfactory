@@ -1567,6 +1567,9 @@
     "scripts/check-docs-impact.mjs": [
       "docs/architecture/enforced-ci-gates.md"
     ],
+    "scripts/check-guard-conformance-marks.mjs": [
+      "docs/testing/pre-pr-gate.md"
+    ],
     "scripts/check-guards.mjs": [
       "docs/architecture/theme-aware-styling-runbook.md",
       "docs/testing/pre-pr-gate.md"
@@ -2973,6 +2976,7 @@
       "apps/web/lib/testing/degenerate-env/probe-conformance.test.ts",
       "docker-compose.local-ci.yml",
       "packages/dpf-skill-pack/hooks/pregate-evidence-guard.mjs",
+      "scripts/check-guard-conformance-marks.mjs",
       "scripts/check-guards.mjs",
       "scripts/check-label-association.mjs",
       "scripts/check-live-blocker-references.mjs",
