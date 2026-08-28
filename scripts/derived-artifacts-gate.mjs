@@ -19,6 +19,8 @@
 //                         changed" is no longer treated as inherently
 //                         runtime-safe; a docs change that is a registered
 //                         artifact's source must pass that artifact's check.
+//                         Registered artifact OUTPUTS (BI-AC48D79F) are not
+//                         "runtime changes"; they ride with the docs source.
 //   check-all             CI: run every registered artifact's check command.
 //   list                  print the registry as JSON (debugging / CI
 //                         visibility).
@@ -30,7 +32,7 @@ import { existsSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { DERIVED_ARTIFACTS, affectedEntries } from "./lib/derived-artifacts-registry.mjs";
+import { DERIVED_ARTIFACTS, affectedEntries, matchesAnyGlob } from "./lib/derived-artifacts-registry.mjs";
 import { resolveHostCommandInvocation } from "./lib/host-command-invocation.mjs";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -72,8 +74,19 @@ export function planRegenerate(stagedFiles, registry = DERIVED_ARTIFACTS, binary
  * replaces the assumption "docs-only diff => safe" with "docs-only diff AND
  * no registered artifact invalidated by it is stale => safe".
  */
+function isRegisteredArtifactOutput(filePath, registry) {
+  return registry.some((entry) => matchesAnyGlob(filePath, entry.artifactPaths ?? []));
+}
+
 export function evaluatePushExemption(diffFiles, registry = DERIVED_ARTIFACTS, runCheck = () => true) {
-  const nonDocChanges = diffFiles.filter((f) => !/^docs\/|^memory\/|\.md$/.test(f));
+  // BI-AC48D79F: registered artifact outputs (e.g. doc-index.generated.json)
+  // are regenerated and staged by pre-commit when their docs sources change.
+  // They are not runtime sources. Counting them as "non-docs runtime" made
+  // the freshness branch unreachable, so every indexed-docs push needed a
+  // sandbox gate or an override.
+  const nonDocChanges = diffFiles.filter(
+    (f) => !isRegisteredArtifactOutput(f, registry) && !/^docs\/|^memory\/|\.md$/.test(f),
+  );
   if (nonDocChanges.length > 0) {
     return { exempt: false, reason: "non-docs runtime changes present", files: nonDocChanges };
   }
