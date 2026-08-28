@@ -260,9 +260,23 @@ export function classifyInferencePayload(
 
   const dedupedMatches = dedupeMatches(matches);
   const dataClasses = uniqueSorted(dedupedMatches.map((match) => match.dataClass));
+  const dataMatches = dedupedMatches.filter((match) => !isInstructionProvenance(match));
+  // The corroboration bar decides BOTH verdicts a restricted class can drive.
+  // Sensitivity was gated on it from the start; the data-evidenced set was not,
+  // and that set selects the vertical policy packs — each of which asserts its
+  // own class sensitivity in the PDP context, overriding the gated one. So an
+  // uncorroborated ambiguous match still reached `restricted-external-destination`
+  // and clamped residency to local_only, voiding the gate on the harder of the
+  // two exclusions. One predicate, both verdicts (BI-DECCF716).
+  const restrictedCorroborated = restrictedEvidenceIsCorroborated(
+    dataMatches,
+    input.governedData,
+  );
   const dataEvidencedClasses = uniqueSorted(
-    dedupedMatches
-      .filter((match) => !isInstructionProvenance(match))
+    dataMatches
+      .filter((match) =>
+        restrictedCorroborated || !RESTRICTED_CLASSES.has(match.dataClass)
+      )
       .map((match) => match.dataClass),
   );
   const overallSensitivity = inferOverallSensitivity(dedupedMatches, input.governedData);
@@ -569,6 +583,28 @@ function splitPromptByProvenance(
   return { instruction: present, data: remainder };
 }
 
+/**
+ * Does the turn's DATA carry restricted-class evidence strong enough to act on?
+ *
+ * The bar itself is unchanged (see the essay above `INSTRUCTION_PATH_PREFIX`):
+ * a caller-declared restricted hint, any precise match, or two distinct
+ * ambiguous detectors agreeing. What changed is who asks. Both the sensitivity
+ * verdict and the data-evidenced class set now call this one predicate, so a
+ * lone ambiguous word can no longer clear one and fail the other.
+ */
+function restrictedEvidenceIsCorroborated(
+  dataMatches: readonly InferencePayloadMatch[],
+  governedData: readonly GovernedPayloadHint[] | undefined,
+): boolean {
+  if (governedData?.some((hint) => hint.sensitivity === "restricted")) return true;
+  const restrictedMatches = dataMatches.filter((match) =>
+    RESTRICTED_CLASSES.has(match.dataClass)
+  );
+  if (restrictedMatches.some((match) => !AMBIGUOUS_REASONS.has(match.reason))) return true;
+  // One word echoed across many probes is one signal: count distinct reasons.
+  return new Set(restrictedMatches.map((match) => match.reason)).size >= 2;
+}
+
 function inferOverallSensitivity(
   matches: readonly InferencePayloadMatch[],
   governedData: readonly GovernedPayloadHint[] | undefined,
@@ -591,15 +627,7 @@ function inferOverallSensitivity(
   // data and escalates exactly as a message would.
   const dataMatches = matches.filter((match) => !isInstructionProvenance(match));
   const restrictedMatches = dataMatches.filter((match) => RESTRICTED_CLASSES.has(match.dataClass));
-  const hasPreciseEvidence = restrictedMatches.some(
-    (match) => !AMBIGUOUS_REASONS.has(match.reason),
-  );
-  const distinctAmbiguousReasons = new Set(
-    restrictedMatches
-      .filter((match) => AMBIGUOUS_REASONS.has(match.reason))
-      .map((match) => match.reason),
-  ).size;
-  if (hasPreciseEvidence || distinctAmbiguousReasons >= 2) {
+  if (restrictedEvidenceIsCorroborated(dataMatches, governedData)) {
     return "restricted";
   }
 
