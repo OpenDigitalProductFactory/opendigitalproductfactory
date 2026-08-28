@@ -111,6 +111,33 @@ export async function approveEnvelope(
     where: { id: envelopeId },
     data: { status: "approved" },
   });
+
+  // BI-3907AF35: approving is only half the handoff. The coworker asked for
+  // this action, was refused with `approval-required`, and its task parked at
+  // `input-required`. The authority gate finds the approved envelope on the
+  // coworker's NEXT attempt — but nothing makes it attempt again, so an
+  // approved envelope and a waiting task sit and stare at each other forever.
+  //
+  // Live repro: envelope cmtcts7a1 (record_initiative_design_review for
+  // BI-C3B5FB75) approved, task TR-...7EDD83DD497B still `input-required` with
+  // no retry; re-summoning replayed the idempotent packet without re-invoking.
+  // Nobody could record the spec approval, and spec-approval is
+  // `independent: true` so nobody else was permitted to.
+  //
+  // Marking the task working is what resumeAuthorityApprovalTask exists for.
+  // Best-effort: a failure to resume must not undo an approval the employee
+  // has already given.
+  if (updated.taskRunId) {
+    try {
+      const { resumeAuthorityApprovalTask } = await import(
+        "@/lib/coworker/authority-approval-envelope"
+      );
+      await resumeAuthorityApprovalTask(updated.taskRunId);
+    } catch {
+      // The approval stands; the task can still be resumed by any later attempt.
+    }
+  }
+
   return { ok: true, envelope: updated as EnvelopeRow };
 }
 
