@@ -9871,6 +9871,14 @@
     "longSentences": 0,
     "textMass": 84
   },
+  "apps/web/components/workspace/workroom/WorkroomPostureProvenance.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 16
+  },
   "apps/web/components/workspace/workroom/WorkroomShape.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
