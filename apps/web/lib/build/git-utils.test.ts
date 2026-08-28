@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { inferCommitType, inferModule, formatCommitMessage } from "./git-utils";
+import { gitBlobId, inferCommitType, inferModule, formatCommitMessage } from "./git-utils";
 
 describe("inferCommitType", () => {
   it("detects fix from description", () => {
@@ -55,5 +55,17 @@ describe("formatCommitMessage", () => {
     });
     expect(msg).toContain("fix(root): fix typo in readme");
     expect(msg).toContain("Build: standalone");
+  });
+});
+
+describe("gitBlobId", () => {
+  it("rejects an unsafe ref before invoking git", async () => {
+    await expect(gitBlobId({ ref: "main;whoami", path: "apps/web/x.ts" }))
+      .resolves.toEqual({ error: "Invalid ref: main;whoami" });
+  });
+
+  it("rejects a path outside the source allowlist", async () => {
+    await expect(gitBlobId({ ref: "main", path: "../secret.txt" }))
+      .resolves.toEqual({ error: "Path not allowed: ../secret.txt" });
   });
 });

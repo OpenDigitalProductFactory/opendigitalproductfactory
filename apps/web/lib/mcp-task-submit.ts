@@ -6,15 +6,10 @@ import { createHash } from "crypto";
 import type { UserContext } from "@/lib/permissions";
 import type { ToolDefinition } from "@/lib/mcp-tools";
 import { markTaskRunWorking } from "@/lib/observability/heartbeat";
-import {
-  createAutonomousWorkRun,
-  executeAutonomousAgenticLoop,
-  executeAutonomousWorkTool,
-  resolveAutonomousWorkAgent,
-  resolveAutonomousWorkTools,
-} from "@/lib/tak/autonomous-work-run";
+import { createAutonomousWorkRun, executeAutonomousAgenticLoop, executeAutonomousWorkTool, resolveAutonomousWorkAgent, resolveAutonomousWorkTools } from "@/lib/tak/autonomous-work-run";
 import { createTaskMessage } from "@/lib/tak/task-records";
 import { deriveEffortWarrant } from "@/lib/tak/effort-warrant";
+import { createInitiativeReviewTerminalToolPolicy } from "@/lib/tak/terminal-tool-policy";
 
 export const REMOTE_RISK_CLASSES = ["read", "bounded-write", "high-risk"] as const;
 export type RemoteRiskClass = (typeof REMOTE_RISK_CLASSES)[number];
@@ -189,8 +184,13 @@ function narrowInitiativeReviewTools<T extends {
         properties: {
           path: { type: "string", enum: [binding.artifactRef.path] },
           version: { type: "string", enum: [binding.artifactRef.commitSha] },
+          startLine: { type: "number", minimum: 1 },
+          cursor: { type: "string" },
+          maxLines: { type: "number", minimum: 1, maximum: 200 },
+          maxChars: { type: "number", minimum: 1, maximum: 3200 },
+          expectedBlobId: { type: "string", enum: [binding.artifactRef.providerBlobId] },
         },
-        required: ["path", "version"],
+        required: ["path", "version", "expectedBlobId"],
         additionalProperties: false,
       };
     }
@@ -201,8 +201,11 @@ function narrowInitiativeReviewTools<T extends {
           query: properties["query"] ?? { type: "string" },
           version: { type: "string", enum: [binding.artifactRef.commitSha] },
           glob: { type: "string", enum: [binding.artifactRef.path] },
+          offset: { type: "number", minimum: 0, maximum: 2000 },
+          maxResults: { type: "number", minimum: 1, maximum: 50 },
+          expectedBlobId: { type: "string", enum: [binding.artifactRef.providerBlobId] },
         },
-        required: ["query", "version", "glob"],
+        required: ["query", "version", "glob", "expectedBlobId"],
         additionalProperties: false,
       };
     }
@@ -632,10 +635,7 @@ export async function submitRemoteCoworkerTask(input: {
     routeContext: parsed.routeContext,
     userContext,
   });
-  // The prompt resolver may return a legacy slug row (for example
-  // `build-specialist`) even when the external packet targeted the canonical
-  // `AGT-WS-BUILD` identity. Tool grants and durable reviewer attribution must
-  // stay on the canonical coworker or dual-seed rows silently diverge.
+  // Keep grants and attribution on the canonical coworker when prompt lookup returns a legacy slug.
   const modelRoutingAgentId = agent.agentId ?? parsed.agentId;
   const resolvedAgentId = resolveCanonicalAgentId(modelRoutingAgentId);
   const routingConfig = await prisma.agentModelConfig?.findUnique({
@@ -669,8 +669,7 @@ export async function submitRemoteCoworkerTask(input: {
     agentId: resolvedAgentId,
     mode: toolMode,
     externalAccessEnabled: true,
-    // BI-CAP-F2D39F8F: budget the attachment to the serving model; the remote
-    // task prompt ranks which tools stay attached.
+    // Budget attachment to the serving model; the remote prompt ranks the retained tools.
     routeContext: parsed.routeContext,
     intentQuery: parsed.prompt,
     requiredToolNames: exactRequiredToolNames,
@@ -683,13 +682,13 @@ export async function submitRemoteCoworkerTask(input: {
   const effortWarrant = requiresInitiativeReviewEffort(exactRequiredToolNames)
     ? deriveEffortWarrant({
         reasoningDepth: "high",
-        availableToolNames: [
-          ...tools.tools.map((tool) => tool.name),
-          ...tools.deferredTools.map((tool) => tool.name),
-        ],
+        availableToolNames: [...tools.tools.map((tool) => tool.name), ...tools.deferredTools.map((tool) => tool.name)],
         messageChars: parsed.prompt.length,
       })
     : undefined;
+  const terminalToolPolicy = parsed.initiativeReviewBinding
+    ? createInitiativeReviewTerminalToolPolicy(parsed.initiativeReviewBinding.writerToolName, exactRequiredToolNames, parsed.initiativeReviewBinding.artifactRef)
+    : null;
 
   try {
     const result = await executeAutonomousAgenticLoop({
@@ -709,6 +708,7 @@ export async function submitRemoteCoworkerTask(input: {
       taskType: "external-mcp",
       agentDisplayName: optionalString(agent.displayName) ?? resolvedAgentId,
       ...(effortWarrant ? { effortWarrant } : {}),
+      ...(terminalToolPolicy ? { terminalToolPolicy } : {}),
       ...(modelRequirements ? { modelRequirements } : {}),
     });
 

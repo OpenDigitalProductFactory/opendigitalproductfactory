@@ -331,6 +331,8 @@ export async function executeAutonomousAgenticLoop(input: {
   taskType?: string;
   /** EP-27FD96BC · P1 — unified per-turn effort warrant, forwarded to the loop. */
   effortWarrant?: import("@/lib/tak/effort-warrant").EffortWarrant;
+  /** Evidence-first bounded workflow for an immutable initiative review. */
+  terminalToolPolicy?: import("@/lib/tak/terminal-tool-policy").TerminalToolPolicy;
   agentDisplayName?: string;
   buildPhase?: string | null;
   featureBuildId?: string | null;
@@ -467,6 +469,7 @@ export async function executeAutonomousAgenticLoop(input: {
         apiTokenId: input.apiTokenId,
         taskType: input.taskType,
         effortWarrant: input.effortWarrant,
+        terminalToolPolicy: input.terminalToolPolicy,
         agentDisplayName: input.agentDisplayName,
         buildPhase: input.buildPhase,
         featureBuildId: input.featureBuildId,

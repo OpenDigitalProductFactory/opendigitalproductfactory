@@ -465,6 +465,7 @@ describe("submitRemoteCoworkerTask idempotency", () => {
       tools: Array<{ name: string; inputSchema: { properties: Record<string, unknown>; required: string[] } }>;
       toolsForProvider: Array<{ function?: { name?: string; parameters?: { properties?: Record<string, unknown>; required?: string[] } } }>;
       deferredTools?: unknown[];
+      terminalToolPolicy?: Record<string, unknown>;
     };
     expect(execution.tools.map((tool) => tool.name)).toEqual([
       "read_source_at_version",
@@ -478,8 +479,13 @@ describe("submitRemoteCoworkerTask idempotency", () => {
       properties: {
         path: { type: "string", enum: [initiativeReviewBinding.artifactRef.path] },
         version: { type: "string", enum: [initiativeReviewBinding.artifactRef.commitSha] },
+        startLine: expect.objectContaining({ type: "number", minimum: 1 }),
+        cursor: expect.objectContaining({ type: "string" }),
+        maxLines: expect.objectContaining({ type: "number", maximum: 200 }),
+        maxChars: expect.objectContaining({ type: "number", maximum: 3200 }),
+        expectedBlobId: { type: "string", enum: [initiativeReviewBinding.artifactRef.providerBlobId] },
       },
-      required: ["path", "version"],
+      required: ["path", "version", "expectedBlobId"],
       additionalProperties: false,
     });
     const providerReader = execution.toolsForProvider.find((tool) => tool.function?.name === "read_source_at_version")!;
@@ -491,9 +497,23 @@ describe("submitRemoteCoworkerTask idempotency", () => {
         query: expect.any(Object),
         version: { type: "string", enum: [initiativeReviewBinding.artifactRef.commitSha] },
         glob: { type: "string", enum: [initiativeReviewBinding.artifactRef.path] },
+        offset: expect.objectContaining({ type: "number", minimum: 0 }),
+        maxResults: expect.objectContaining({ type: "number", maximum: 50 }),
+        expectedBlobId: { type: "string", enum: [initiativeReviewBinding.artifactRef.providerBlobId] },
       },
-      required: ["query", "version", "glob"],
+      required: ["query", "version", "glob", "expectedBlobId"],
       additionalProperties: false,
+    });
+    expect(execution.terminalToolPolicy).toEqual({
+      writerToolName: "record_initiative_evidence",
+      readerToolNames: ["read_source_at_version", "search_source_at_version"],
+      minimumSuccessfulReaderCalls: 1,
+      maximumReaderCalls: 6,
+      immutableReaderArguments: {
+        path: initiativeReviewBinding.artifactRef.path,
+        version: initiativeReviewBinding.artifactRef.commitSha,
+        expectedBlobId: initiativeReviewBinding.artifactRef.providerBlobId,
+      },
     });
     const writer = execution.tools.find((tool) => tool.name === "record_initiative_evidence")!;
     expect(writer.inputSchema.properties).toEqual(expect.objectContaining({
@@ -555,7 +575,11 @@ describe("submitRemoteCoworkerTask idempotency", () => {
     expect(autonomous.resolveAgent).not.toHaveBeenCalled();
   });
 
-  it("server-binds the spec baseline precondition instead of exposing it to the reviewer model", async () => {
+  it("pins the immutable reader beside the spec-approval writer and server-binds the baseline precondition", async () => {
+    const reader = {
+      name: "read_source_at_version",
+      inputSchema: { type: "object", properties: {} },
+    };
     const writer = {
       name: "record_initiative_design_review",
       inputSchema: {
@@ -569,8 +593,11 @@ describe("submitRemoteCoworkerTask idempotency", () => {
       },
     };
     autonomous.resolveTools.mockResolvedValue({
-      tools: [writer],
-      toolsForProvider: [{ type: "function", function: { name: writer.name, parameters: writer.inputSchema } }],
+      tools: [reader, writer],
+      toolsForProvider: [
+        { type: "function", function: { name: reader.name, parameters: reader.inputSchema } },
+        { type: "function", function: { name: writer.name, parameters: writer.inputSchema } },
+      ],
       deferredTools: [],
     });
     const initiativeReviewBinding = {
@@ -594,16 +621,42 @@ describe("submitRemoteCoworkerTask idempotency", () => {
       prompt: "Review the exact design, then record the judgment.",
       idempotencyKey: "spec-review-bound-baseline",
       riskClass: "bounded-write",
-      authorityScope: ["backlog-item:BI-F0715C9C", `tool:${writer.name}`],
+      authorityScope: [
+        "backlog-item:BI-F0715C9C",
+        `tool:${reader.name}`,
+        `tool:${writer.name}`,
+      ],
       initiativeReviewBinding,
     });
 
     const execution = autonomous.execute.mock.calls[0]?.[0] as {
       tools: Array<{ name: string; inputSchema: { properties: Record<string, unknown> } }>;
-      toolsForProvider: Array<{ function?: { parameters?: { properties?: Record<string, unknown> } } }>;
+      toolsForProvider: Array<{ function?: { name?: string; parameters?: { properties?: Record<string, unknown> } } }>;
+      terminalToolPolicy?: Record<string, unknown>;
     };
-    expect(execution.tools[0]?.inputSchema.properties).not.toHaveProperty("expectedCurrentBaselineId");
-    expect(execution.toolsForProvider[0]?.function?.parameters?.properties).not.toHaveProperty("expectedCurrentBaselineId");
+    expect(execution.tools.map((tool) => tool.name)).toEqual([
+      "read_source_at_version",
+      "record_initiative_design_review",
+    ]);
+    expect(execution.toolsForProvider.map((tool) => tool.function?.name)).toEqual([
+      "read_source_at_version",
+      "record_initiative_design_review",
+    ]);
+    expect(execution.terminalToolPolicy).toEqual({
+      writerToolName: "record_initiative_design_review",
+      readerToolNames: ["read_source_at_version"],
+      minimumSuccessfulReaderCalls: 1,
+      maximumReaderCalls: 6,
+      immutableReaderArguments: {
+        path: initiativeReviewBinding.artifactRef.path,
+        version: initiativeReviewBinding.artifactRef.commitSha,
+        expectedBlobId: initiativeReviewBinding.artifactRef.providerBlobId,
+      },
+    });
+    const boundWriter = execution.tools.find((tool) => tool.name === writer.name)!;
+    const providerWriter = execution.toolsForProvider.find((tool) => tool.function?.name === writer.name)!;
+    expect(boundWriter.inputSchema.properties).not.toHaveProperty("expectedCurrentBaselineId");
+    expect(providerWriter.function?.parameters?.properties).not.toHaveProperty("expectedCurrentBaselineId");
     expect(autonomous.create).toHaveBeenCalledWith(expect.objectContaining({
       metadata: expect.objectContaining({ initiativeReviewBinding }),
     }));
