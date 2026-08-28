@@ -395,11 +395,19 @@ export async function dispatchIdeateForApprovedBuild(params: {
     // The designDoc would then persist to the wrong build while this build's
     // activity log (correct buildId in scope) records "saved", leaving this
     // build stuck at the post-ideate gate with no design doc.
+    // BI-2D698C7B: record WHICH engine authored this design. The context was
+    // empty here, so saveBuildEvidence stored savedByAgentId = null on every
+    // design Build Studio has ever written — and resolveInitiativeArtifact
+    // requires a non-null authoring agent, so ARTIFACT_AUTHOR_REQUIRED could
+    // never clear and no design could become a canonical baseline. The engine
+    // is already resolved at this point and the activity log already names it.
+    const { authoringAgentIdForEngine } = await import("@/lib/build/authoring-engine-agent");
+    const authoringAgentId = authoringAgentIdForEngine(resolvedAttempt.engine);
     const saveResult = await executeTool(
       "saveBuildEvidence",
       { buildId, field: "designDoc", value: ideateResult.designDoc },
       userId,
-      {},
+      authoringAgentId ? { agentId: authoringAgentId } : {},
     );
 
     if (!saveResult.success) {
