@@ -1,4 +1,4 @@
-import { readinessRequirement } from "@/lib/backlog/initiative-readiness";
+import { readinessRequirement } from "@/lib/backlog/initiative-readiness/readiness-guidance";
 import type {
   InitiativeGateKey,
   InitiativeReadinessDecision,

@@ -66,6 +66,30 @@ test("spawning the script under test at a temp root is not a conformance asserti
   assert.equal(isConformanceAssertionSource(EMBEDDED_FIXTURE_SOURCE), false);
 });
 
+test("a repo-reading sample held as a STRING is fixture text, not a read", () => {
+  // This guard's own test carries conformance samples as string constants, so
+  // an unblanked scan reports the test that asserts the detector — caught by
+  // running the guard over the real registry.
+  const source = [
+    'const SAMPLE = `',
+    'const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");',
+    'readFileSync(join(REPO_ROOT, "scripts", "baseline.txt"), "utf8");',
+    '`;',
+    'test("detects it", () => { assert.ok(detect(SAMPLE)); });',
+  ].join("\n");
+  assert.equal(isConformanceAssertionSource(source), false);
+});
+
+test("blanking literals does not hide a real read that sits beside one", () => {
+  const source = [
+    'const ROOT = dirname(fileURLToPath(import.meta.url));',
+    'const SAMPLE = "readFileSync(join(ROOT, \'x\'))";',
+    'const real = readFileSync(join(ROOT, "AGENTS.md"), "utf8");',
+  ].join("\n");
+  assert.equal(isConformanceAssertionSource(source), true);
+  assert.equal(liveRepoReads(source).length, 1, "the quoted sample must not count as a second read");
+});
+
 test("spawning the guard AT the repository root is a conformance assertion", () => {
   const source = `
     const REPO_ROOT = dirname(fileURLToPath(import.meta.url));

@@ -30,7 +30,8 @@ import {
   type WorkCapsuleEvidenceKind,
   type WorkCapsuleScopeInput,
 } from "@/lib/work-capsules";
-import { backlogItemIdFromOutcomeAnchor } from "./outcome-anchor";
+import type { BacklogBindingReader } from "./adopt-backlog-binding";
+import { adoptWorktree } from "./adopt-worktree-handler";
 import {
   adoptWorktreeCapsule,
   claimWorkCapsuleScope,
@@ -267,114 +268,14 @@ export async function adoptWorktreeTool(
   userId: string,
   context: ToolContext,
 ): Promise<ToolResult> {
-  const title = stringParam(params, "title");
-  const objective = stringParam(params, "objective");
-  const repositoryFullName = stringParam(params, "repositoryFullName");
-  const headBranch = stringParam(params, "headBranch");
-  const worktreePath = stringParam(params, "worktreePath");
-  const executorKind = stringParam(params, "executorKind");
-
-  if (!title || !objective || !repositoryFullName || !headBranch || !worktreePath) {
-    return {
-      success: false,
-      error: "invalid_input",
-      message: "title, objective, repositoryFullName, headBranch, and worktreePath are required.",
-    };
-  }
-  if (executorKind && !isWorkCapsuleExecutorKind(executorKind)) {
-    return {
-      success: false,
-      error: "invalid_executorKind",
-      message: `executorKind must be one of: ${WORK_CAPSULE_EXECUTOR_KINDS.join(", ")}.`,
-    };
-  }
-  const validatedExecutorKind = executorKind && isWorkCapsuleExecutorKind(executorKind)
-    ? executorKind
-    : null;
-  try {
-    normalizeWorkCapsuleScopeInput(parseScopeInput(params));
-  } catch (error) {
-    return invalidScopeResult(error);
-  }
-
-  // BI-D526F72C: `backlogItemId` is the obvious name for the argument — it is
-  // what `claim_backlog_item_for_work` binds and what the returned capsule
-  // reports — but the schema advertised only `outcomeAnchor`, so a supplied
-  // `backlogItemId` was silently dropped. The capsule was then created unbound,
-  // which made it unclaimable AND unreleasable on a branch it permanently
-  // occupied. Accept the name callers actually use, and fail closed rather than
-  // persisting a partially-populated capsule.
-  const requestedBacklogItemId =
-    stringParam(params, "backlogItemId") ?? backlogItemIdFromOutcomeAnchor(params);
-  let boundBacklogItemId: string | null = null;
-  if (requestedBacklogItemId) {
-    const item = await prisma.backlogItem.findFirst({
-      where: { OR: [{ itemId: requestedBacklogItemId }, { id: requestedBacklogItemId }] },
-      select: { itemId: true },
-    });
-    if (!item) {
-      return {
-        success: false,
-        error: "unknown_backlog_item",
-        message:
-          `BacklogItem ${requestedBacklogItemId} does not exist, so this worktree cannot be `
-          + "bound to it. Adopting without the binding would leave a capsule occupying the "
-          + "branch that can be neither claimed nor released. Supply a real BI-* id, or omit "
-          + "it to adopt the branch unbound.",
-      };
-    }
-    boundBacklogItemId = item.itemId;
-  }
-
-  let capsule;
-  try {
-    capsule = await adoptWorktreeCapsule({
-      db: workCapsuleDb(),
-      input: {
-        title,
-        objective,
-        repositoryFullName,
-        headBranch,
-        worktreePath,
-        baseBranch: stringParam(params, "baseBranch") ?? null,
-        baseSha: stringParam(params, "baseSha") ?? null,
-        headSha: stringParam(params, "headSha") ?? null,
-        executorKind: validatedExecutorKind,
-        executorRef: stringParam(params, "sessionRef") ?? null, // session identity; see the tool schema
-        backlogItemId: boundBacklogItemId,
-        scope: parseScopeInput(params),
-      },
-      actor: await actor(userId, context),
-    });
-  } catch (error) {
-    const occupied = branchOccupiedResult(error);
-    if (occupied) return occupied;
-    throw error;
-  }
-  // Read the binding back rather than reporting the request. The original defect
-  // was invisible precisely because the tool answered `success: true` while the
-  // capsule it returned carried `backlogItemId: null` (BI-D526F72C).
-  if (boundBacklogItemId && capsule.backlogItemId !== boundBacklogItemId) {
-    return {
-      success: false,
-      error: "backlog_item_not_bound",
-      message:
-        `Adopted ${headBranch} as ${capsule.capsuleId}, but the capsule is bound to `
-        + `${capsule.backlogItemId ?? "no backlog item"} rather than ${boundBacklogItemId}. `
-        + "The branch's durable workroom identity belongs to other work; resume it for its "
-        + "own item or use a different branch.",
-      data: { capsule },
-    };
-  }
-  await ensureCapsuleWorkItemAnchorNonFatal(capsule, "adopted");
-  return {
-    success: true,
-    entityId: capsule.capsuleId,
-    message: boundBacklogItemId
-      ? `Adopted ${headBranch} as Work Capsule ${capsule.capsuleId}, bound to ${boundBacklogItemId}.`
-      : `Adopted ${headBranch} as Work Capsule ${capsule.capsuleId}.`,
-    data: { capsule },
-  };
+  return adoptWorktree({
+    params,
+    userId,
+    context,
+    db: workCapsuleDb(),
+    bindingReader: prisma as unknown as BacklogBindingReader,
+    resolveActor: actor,
+  });
 }
 
 export async function claimBacklogItemForWorkTool(

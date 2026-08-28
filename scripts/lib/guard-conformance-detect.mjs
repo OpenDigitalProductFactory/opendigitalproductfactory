@@ -33,6 +33,44 @@ const READ_CALL_RE = /\b(readFileSync|readdirSync|existsSync|statSync|globSync)\
 // repository, which is visible as `cwd: <rootBinding>`.
 const SPAWN_CALL_RE = /\b(execFileSync|spawnSync|execSync)\s*\(/g;
 
+/**
+ * Blank the CONTENTS of every string and template literal, keeping the
+ * delimiters and the overall length so offsets and paren nesting still line up.
+ *
+ * Without this the detector reads fixture text as code. Two real cases:
+ * `build-docs-staleness.test.mjs` embeds a fake pnpm script inside a template
+ * literal whose body says `const root = process.cwd()` — that is the fixture's
+ * TEMP root, the opposite of a repository read — and this guard's own test
+ * carries a repo-reading sample as a string constant. Both would be reported.
+ */
+function blankLiterals(source) {
+  let out = "";
+  let index = 0;
+  while (index < source.length) {
+    const char = source[index];
+    if (char !== '"' && char !== "'" && char !== "`") {
+      out += char;
+      index += 1;
+      continue;
+    }
+    const quote = char;
+    let cursor = index + 1;
+    while (cursor < source.length) {
+      if (source[cursor] === "\\") { cursor += 2; continue; }
+      if (source[cursor] === quote) break;
+      // A non-template string never spans a newline; treat one as unterminated
+      // rather than swallowing the rest of the file.
+      if (quote !== "`" && source[cursor] === "\n") break;
+      cursor += 1;
+    }
+    const closed = cursor < source.length && source[cursor] === quote;
+    const body = source.slice(index + 1, cursor);
+    out += quote + body.replace(/[^\n]/g, " ") + (closed ? quote : "");
+    index = closed ? cursor + 1 : cursor;
+  }
+  return out;
+}
+
 /** The parenthesised argument list starting at `open` (the index of its `(`). */
 function callText(source, open) {
   let depth = 0;
@@ -54,7 +92,7 @@ function callText(source, open) {
  * mention the root binding and is therefore not a conformance read.
  */
 export function liveRepoReads(source) {
-  const text = String(source);
+  const text = blankLiterals(String(source));
   const roots = [...text.matchAll(ROOT_BINDING_RE)].map((match) => match[1]);
   if (roots.length === 0) return [];
   const alternation = roots.join("|");

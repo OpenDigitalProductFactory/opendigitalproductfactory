@@ -220,7 +220,21 @@ guards host-natively — the same check commands CI's Policy Guards jobs run
 (module size, style drift, derived-artifact staleness, doc links, SBOM, plus
 the workspace-dependent prose ratchet, and the commit-range-driven UX-Fit and
 Design Grounding trailer gates), with guard self-tests stripped and
-PR-body-dependent gates (Seed-Fit, Decision Baseline) left to CI. A violation
+PR-body-dependent gates (Seed-Fit, Decision Baseline) left to CI.
+
+**Not every `node --test` is a self-test (BI-7B249AFE).** Some files in the
+guard profiles assert **live repository state** rather than guard logic, so
+stripping one removes the only check on the tree being pushed and the preflight
+reports clean where CI fails deterministically — measured on #4737, where the
+preflight said "52 guards clean" and CI then failed on
+`check-instruction-plane-rule-coverage.test.mjs`. Those commands are marked
+`conformanceTest(...)` in `scripts/lib/ci-policy-guards.mjs` and run host-side.
+The mark is not discretionary: `scripts/check-guard-conformance-marks.mjs`
+detects the shape (a repo root bound from `import.meta.url`, read through) and
+fails when a detected file is unmarked, so a new repository-reading self-test
+cannot quietly rejoin the stripped set. 15 files carry the mark today, costing
+about 11s. Genuine guard unit tests stay stripped — over-marking would turn the
+preflight into the full CI suite. A violation
 aborts in well under a minute **before any lease is claimed**, so a doomed run
 never occupies the contended sandbox slot. A guard this host cannot execute
 (missing isolated or workspace runtime) is reported as

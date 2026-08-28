@@ -113,7 +113,9 @@ request rather than the result.
 `planAbandonedCapsuleResume` becomes `planTerminalCapsuleResume`. An **orphan** capsule — terminal with no
 backlog item — is resumed and rebound instead of blocking the branch, and `archivedAt` is cleared so a
 resumed capsule is not ready on one surface and archived on another. A terminal capsule bound to a
-*different* item still refuses, so the BI-E363A524 history protection holds unchanged.
+*different* item still refuses, so the history protection `readBranchIdentityCapsule` documents —
+a foreign or terminal binding refuses rather than falling through to an impossible duplicate create —
+holds unchanged.
 
 The `branch_occupied` remedy no longer says "resume that capsule for the same backlog item" when the
 occupying capsule has no backlog item to resume against — an instruction that could not be followed.
