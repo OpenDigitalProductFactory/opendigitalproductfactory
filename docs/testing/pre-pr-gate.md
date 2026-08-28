@@ -325,7 +325,7 @@ receipt, later callers receive `reused` and stop without recomputation.
 Mismatched, inconclusive, or expired evidence remains fail-closed: evidence
 exists and does not fit, which is a real conclusion.
 
-**A run that DIED is not a verdict (BI-C59AC8AF).** A terminal lease carrying no
+**A run that DIED is not a verdict.** A terminal lease carrying no
 evidence record describes an execution that never reported — the executor was
 killed, or the portal rejected its status write. Since the immutable key hashes
 the integration *tree* rather than the commit, refusing such a claim used to

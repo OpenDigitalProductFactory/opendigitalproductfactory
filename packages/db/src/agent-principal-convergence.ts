@@ -24,7 +24,7 @@
  * self-heal path produces identical rows.
  */
 
-import { resolvePrincipalSensitivityClearance } from "./principal-sensitivity.js";
+import { resolvePrincipalSensitivityClearance } from "./principal-sensitivity";
 
 /** Mirrors `normalizeGaidLocalId` in apps/web/lib/identity/principal-linking.ts. */
 function normalizeGaidLocalId(value: string): string {

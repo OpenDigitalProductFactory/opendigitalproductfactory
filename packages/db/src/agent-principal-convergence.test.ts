@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { buildPrivateAgentGaid, convergeAgentPrincipals } from "./agent-principal-convergence.js";
+import { buildPrivateAgentGaid, convergeAgentPrincipals } from "./agent-principal-convergence";
 
 type Alias = { aliasType: string; aliasValue: string; principalId: string };
 
