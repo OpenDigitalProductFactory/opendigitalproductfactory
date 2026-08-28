@@ -180,3 +180,98 @@ describe("readinessRequirement is the single constructor for a hand-built result
     expect(requirement.nextAction).toMatch(/adopt_worktree/);
   });
 });
+
+// The live case, end to end. Measured against the running install 2026-08-28:
+// `update_backlog_item_status(BI-5CBDC146, done)` with a manifest citing the two
+// evidence activities that item actually holds answered
+//
+//   DELIVERY_EVIDENCE_REQUIRED  state: missing  evidenceRefs:
+//     ["cmtawlw5s055e01o0q0ian5ua", "cmtawmbs3055u01o0cp6un8b3"]
+//
+// on a fix that is merged (PR #4736, 427b2f782f) and green. It listed the
+// evidence and still said missing, and named no reason — the exact output
+// BI-28E8CB88 calls "the one output guaranteed to read as 'you supplied
+// nothing' to a caller who supplied exactly what was asked for".
+describe("the live BI-5CBDC146 refusal becomes actionable", () => {
+  const now = new Date("2026-08-28T21:16:50.777Z");
+  const recordedAt = new Date("2026-08-27T02:29:00.000Z");
+  const evidence = [
+    {
+      id: "cmtawlw5s055e01o0q0ian5ua",
+      itemId: "row-1",
+      evidenceKind: "test_pass" as const,
+      recordedAt,
+      structurallyValid: true,
+    },
+    {
+      id: "cmtawmbs3055u01o0cp6un8b3",
+      itemId: "row-1",
+      evidenceKind: "source_verified" as const,
+      recordedAt,
+      structurallyValid: true,
+    },
+  ];
+
+  it("names the dimension that is actually unmet", async () => {
+    const { evaluateCompletionEvidence } = await import("../completion-evidence-policy");
+    const verdict = evaluateCompletionEvidence({
+      item: { id: "row-1", itemId: "BI-5CBDC146", status: "in-progress", workType: "bug" },
+      rawManifest: {
+        workClass: "implementation",
+        evidenceActivityIds: evidence.map((entry) => entry.id),
+        ux: { disposition: "not-applicable", reason: "Git hook path resolution has no portal surface." },
+        migration: { disposition: "not-applicable", reason: "No schema change in this fix." },
+      },
+      evidence,
+      activeBuildEvidence: null,
+      evidenceCutoff: new Date("2026-08-01T00:00:00.000Z"),
+      now,
+    });
+
+    // The policy always knew. It said so, and nothing carried it to the caller.
+    expect(verdict.allowed).toBe(false);
+    expect(verdict.blockers.map((entry) => entry.message)).toContain(
+      "Completion evidence is missing production-build",
+    );
+
+    const nextAction = requirementNextAction({
+      code: "DELIVERY_EVIDENCE_REQUIRED",
+      profile: "fix",
+      state: "missing",
+      unreadEvidenceRefs: [],
+      reasons: [...verdict.blockers.map((entry) => entry.message), verdict.nextAction ?? ""],
+    });
+    expect(nextAction).toMatch(/missing production-build/);
+    expect(nextAction).toMatch(/record_execution_evidence/);
+  });
+
+  it("allows delivery once the named dimension is recorded — the gate was never unsatisfiable, only illegible", async () => {
+    const { evaluateCompletionEvidence } = await import("../completion-evidence-policy");
+    const withBuild = [
+      ...evidence,
+      {
+        id: "act-build-pass",
+        itemId: "row-1",
+        evidenceKind: "build_pass" as const,
+        recordedAt,
+        structurallyValid: true,
+      },
+    ];
+    const verdict = evaluateCompletionEvidence({
+      item: { id: "row-1", itemId: "BI-5CBDC146", status: "in-progress", workType: "bug" },
+      rawManifest: {
+        workClass: "implementation",
+        evidenceActivityIds: withBuild.map((entry) => entry.id),
+        ux: { disposition: "not-applicable", reason: "Git hook path resolution has no portal surface." },
+        migration: { disposition: "not-applicable", reason: "No schema change in this fix." },
+      },
+      evidence: withBuild,
+      activeBuildEvidence: null,
+      evidenceCutoff: new Date("2026-08-01T00:00:00.000Z"),
+      now,
+    });
+
+    expect(verdict.blockers).toEqual([]);
+    expect(verdict.allowed).toBe(true);
+  });
+});
