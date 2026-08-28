@@ -22,6 +22,7 @@ import {
   markerFromAdoption,
   planAdoption,
   resolveMcpAccess,
+  resolveSessionRef,
   toPosixPath,
 } from "./workroom-bind.mjs";
 
@@ -198,4 +199,44 @@ test("a claim that succeeded but could not be cached still reports bound", async
   });
   assert.equal(r.status, "bound");
   assert.match(r.reason, /marker not cached/);
+});
+
+// ── session identity (executorRef) ───────────────────────────────────────────
+//
+// A claim guard that can prove a live claim COVERS a branch, but not that it is
+// THIS session's, enforces a weaker property than AGENTS.md 12 states: two
+// sessions on one branch would both pass. claim_backlog_item_for_work has
+// required sessionRef for exactly this reason; adopt_worktree omitted it.
+
+test("a host-provided session id is preferred over the fallback", () => {
+  for (const key of ["DPF_SESSION_REF", "CLAUDE_SESSION_ID", "CODEX_SESSION_ID", "GROK_SESSION_ID"]) {
+    assert.equal(resolveSessionRef({ worktreePath: "/wt/a", env: { [key]: "sess-1" } }), "sess-1", key);
+  }
+});
+
+test("with no host session id, the worktree path is the identity — weaker but truthful", () => {
+  // Stable for the life of the tree and unique across trees. Not a real session
+  // id, but better than null, which is what every adopted worktree stored before.
+  assert.equal(resolveSessionRef({ worktreePath: "D:\\wt\\a", env: {} }), "worktree:D:/wt/a");
+});
+
+test("with neither, the session ref is null rather than invented", () => {
+  assert.equal(resolveSessionRef({ worktreePath: null, env: {} }), null);
+});
+
+test("planAdoption sends sessionRef when there is one, and omits it when there is not", () => {
+  const withRef = planAdoption({ branch: "fix/a", worktreePath: "/wt/a", repositoryFullName: REPO, sessionRef: "s1" });
+  assert.equal(withRef.sessionRef, "s1");
+  const without = planAdoption({ branch: "fix/a", worktreePath: "/wt/a", repositoryFullName: REPO });
+  assert.ok(!("sessionRef" in without), "an absent session ref must not be sent as null");
+});
+
+test("binding threads the resolved session ref through to adopt_worktree", async () => {
+  let sent = null;
+  await bindWorktreeToWorkroom({
+    branch: "fix/a", worktreePath: "/wt/a", gitDir: null, repositoryFullName: REPO,
+    env: { DPF_MCP_BEARER_TOKEN: "t", DPF_SESSION_REF: "sess-xyz" },
+    call: async (_tool, args) => { sent = args; return capsule(); },
+  });
+  assert.equal(sent.sessionRef, "sess-xyz");
 });
