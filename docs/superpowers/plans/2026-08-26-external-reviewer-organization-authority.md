@@ -102,6 +102,7 @@ treated as review completion.
 - `apps/web/lib/mcp-task-approval-recovery.ts`
 - `apps/web/lib/mcp-task-approval-recovery.test.ts`
 - `apps/web/lib/mcp-task-submit.ts`
+- `apps/web/lib/mcp-task-submit-approval-recovery.ts`
 - `apps/web/lib/mcp-task-submit-approval-recovery.test.ts`
 - `apps/web/lib/mcp-task-submit.test.ts`
 
