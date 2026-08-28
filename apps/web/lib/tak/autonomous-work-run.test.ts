@@ -569,6 +569,35 @@ describe("createAutonomousWorkRun", () => {
     );
   });
 
+  it("forwards a terminal tool policy into the agentic loop unchanged", async () => {
+    const agentic = await import("@/lib/tak/agentic-loop");
+    vi.mocked(agentic.runAgenticLoop).mockResolvedValue({ content: "Done.", executedTools: [] } as never);
+    const { executeAutonomousAgenticLoop } = await import("./autonomous-work-run");
+    const terminalToolPolicy = {
+      writerToolName: "record_initiative_evidence",
+      readerToolNames: ["read_source_at_version", "search_source_at_version"],
+      minimumSuccessfulReaderCalls: 1,
+      maximumReaderCalls: 6,
+    } as const;
+
+    await executeAutonomousAgenticLoop({
+      systemPrompt: "Review the immutable artifact.",
+      chatHistory: [{ role: "user", content: "Review it." }],
+      sensitivity: "internal",
+      tools: [],
+      toolsForProvider: [],
+      userId: "user-1",
+      routeContext: "/build/work/WC-1",
+      agentId: "AGT-WS-BUILD",
+      threadId: "thread-1",
+      terminalToolPolicy,
+    });
+
+    expect(agentic.runAgenticLoop).toHaveBeenCalledWith(
+      expect.objectContaining({ terminalToolPolicy }),
+    );
+  });
+
   it("preserves development as a routing sensitivity through the unified loop", async () => {
     const agentic = await import("@/lib/tak/agentic-loop");
     vi.mocked(agentic.runAgenticLoop).mockResolvedValue({ content: "Done.", executedTools: [] } as never);

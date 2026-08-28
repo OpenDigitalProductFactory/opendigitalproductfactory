@@ -182,12 +182,24 @@ export function reconcileBuildStudioCustomerStatus(args: {
     };
   }
 
-  // BI-CE1AB982: this guard used to be gated to build/review, on the reasoning
-  // that ideate/plan are coworker-custody. But "no task, no dispatch, nothing in
-  // flight" means no work has started in ANY phase, and the fallthrough below
-  // resolves that to "working". Claiming progress is only honest once something
-  // has actually been dispatched, so the guard now covers every live phase.
-  if (progress.tasks.totalTasks === 0 && progress.dispatchHistory.length === 0) {
+  // Only build/review record BuildDispatchAttempt rows and task results.
+  //
+  // BI-CE1AB982 generalised this guard to every phase, on the reasoning that "no
+  // task, no dispatch, nothing in flight" means no work has started. That was
+  // wrong for ideate and plan: they never write dispatch rows at all, so the
+  // condition is vacuously true there — and a build whose ideate had ALREADY
+  // produced, reviewed, repaired and passed a design document still reported
+  // "No research step has started" (live repro FB-41EA43C5).
+  //
+  // The case that generalisation was reaching for — an ideate that never
+  // dispatched — is covered honestly by the dispatchBlock branch above, which
+  // reads a durable refusal signal rather than inferring from absent rows. So
+  // this guard belongs back on the phases whose evidence it actually reads.
+  if (
+    (phase === "build" || phase === "review")
+    && progress.tasks.totalTasks === 0
+    && progress.dispatchHistory.length === 0
+  ) {
     return {
       ...status,
       ownerState: "not-started",

@@ -397,7 +397,7 @@ export function ScheduledJobsClient({ initialJobs }: { initialJobs: ScheduledWor
               <thead style={{ background: "var(--dpf-bg)" }}>
                 <tr>
                   <Th>What it is</Th>
-                  {l === "coworker" ? <Th>Coworker · lands on</Th> : <Th>Classification</Th>}
+                  {l === "coworker" ? <Th>Coworker · proactivity · lands on</Th> : <Th>Classification</Th>}
                   <Th>Cadence</Th>
                   <Th>Last run</Th>
                   <Th>{l === "spent" ? "Status" : "Next run"}</Th>
@@ -447,6 +447,19 @@ export function ScheduledJobsClient({ initialJobs }: { initialJobs: ScheduledWor
                             >
                               {job.agent.routeContext}
                             </a>
+                            {job.agent.proactivity && (
+                              <div className="text-dpf-caption mt-0.5" style={{ color: "var(--dpf-muted)" }}>
+                                <span style={{ color: "var(--dpf-text)" }}>
+                                  {job.agent.proactivity.level}
+                                </span>
+                                {job.agent.proactivity.registeredCadence
+                                  ? ` — self-task runs ${job.agent.proactivity.level === "assertive"
+                                      ? job.agent.proactivity.registeredCadence.assertive
+                                      : job.agent.proactivity.registeredCadence.balanced}`
+                                  : " — does not set this cadence"}
+                                {job.agent.proactivity.source === "reconcile-backfill" && " (inferred)"}
+                              </div>
+                            )}
                             {job.agent.lastTaskRunId && (
                               <div className="text-dpf-caption mt-0.5" style={{ color: "var(--dpf-muted)" }}>
                                 last run {job.agent.lastTaskRunId}

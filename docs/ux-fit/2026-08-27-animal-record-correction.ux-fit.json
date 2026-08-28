@@ -1,0 +1,19 @@
+{
+  "version": "1",
+  "decidedOption": "per-card-details-disclosure",
+  "decisionInteractionId": "DI-88E0F9374F4D",
+  "scope": {
+    "files": [
+      "apps/web/components/storefront-admin/AnimalsManager.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "per-card-details-disclosure",
+      "always-visible-inline-fields",
+      "per-animal-edit-route"
+    ],
+    "note": "Running the pet-rescue operating day found that an animal record is write-once: the list row rendered only name and status, so an intake note carrying a finder's name, telephone number and home address could be redacted only by deleting the animal and its photographs (BI-56BB6038). The PUT already accepted every field; the surface did not offer it. Three shapes were scored. per-card-details-disclosure won at composite 11.526 with a 2.416 margin, high confidence, no commandment conflict: it keeps a forty-animal ward scannable on the 768x1024 tablet the rounds are walked with, while putting the correction one click away. always-visible-inline-fields scored 9.110 - one click cheaper but it turns the ward into a wall of inputs, and it is the option 'human_cognitive_load' penalises. per-animal-edit-route scored 6.397: it is the right long-term home for an animal record, but it is a net-new route carrying the full UX-budget gauntlet, and the animal should not live under storefront admin at all once BI-4F8A484C gives it an existence independent of the listing. Delete is now a two-step inline confirm at a 44px target, replacing the 59x28px unconfirmed control the run measured."
+  }
+}

@@ -19,6 +19,7 @@ import { revalidatePath } from "next/cache";
 import { requireCapability, requireUser } from "@/lib/actions/shared/guards";
 import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 import { newId } from "@/lib/shared/new-id";
+import { employeeCountryOfRecord } from "@/lib/mileage/country-of-record";
 import {
   monetisePeriod,
   recordTrip,
@@ -64,6 +65,7 @@ export async function recordTripAction(
       endPlaceLabel: payload.endPlaceLabel ?? null,
       distanceMeters: payload.distanceMeters,
       captureKind: payload.captureKind,
+      countryCode: payload.countryCode ?? null,
     },
     newId(),
   );
@@ -119,7 +121,16 @@ export async function monetiseMileageAction(input: {
 
   const rateRows = await prisma.mileageRate.findMany({
     where: { plan: { lifecycle: "active" } },
-    include: { plan: { select: { isOrgOverride: true } } },
+    include: {
+      plan: {
+        select: {
+          isOrgOverride: true,
+          // The plan's country is what lets a trip driven abroad price on that
+          // country's policy rather than the employee's home rate.
+          jurisdictionReference: { select: { countryCode: true } },
+        },
+      },
+    },
   });
   const rates: ResolvableRate[] = rateRows.map((r) => ({
     id: r.id,
@@ -129,6 +140,7 @@ export async function monetiseMileageAction(input: {
     effectiveFrom: r.effectiveFrom,
     effectiveTo: r.effectiveTo,
     isOrgOverride: r.plan.isOrgOverride,
+    jurisdictionCountryCode: r.plan.jurisdictionReference?.countryCode ?? null,
   }));
 
   if (rates.length === 0) {
@@ -138,11 +150,14 @@ export async function monetiseMileageAction(input: {
   const periodStart = new Date(input.periodStart);
   const periodEnd = new Date(input.periodEnd);
 
+  const employeeCountryCode = await employeeCountryOfRecord(prisma as never, employee.id);
+
   const outcome = await monetisePeriod(prisma as never, {
     employeeProfileId: employee.id,
     periodStart,
     periodEnd,
     rates,
+    employeeCountryCode,
   });
 
   if (outcome.pricing.lines.length === 0) {

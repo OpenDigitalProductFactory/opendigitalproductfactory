@@ -78,6 +78,25 @@ export type Identity = {
   description: string | null;
   logo: { darkBg: AssetRef | null; lightBg: AssetRef | null; mark: AssetRef | null };
   voice: { tone: string; sampleCopy: string[] };
+  /**
+   * How this brand should LOOK, as opposed to how it should sound (BI-7E7E8635).
+   * `voice` already covers copy; nothing covered photography or illustration,
+   * which is what image generation needs most. Optional so every record stored
+   * before this field existed still satisfies isBrandDesignSystem() — this is
+   * an additive widening, not a schema version break.
+   */
+  imagery?: {
+    /** Subject matter and treatment: "real animals in foster homes, natural light". */
+    direction: string | null;
+    /** Concrete examples to imitate. */
+    references: AssetRef[];
+  };
+  /**
+   * Explicit do-not rules. Extraction can infer what a brand looks like; it
+   * cannot infer what a brand refuses to do, and that is usually the part a
+   * generated asset gets wrong (BI-7E7E8635).
+   */
+  avoid?: string[];
 };
 
 export type BrandDesignSystem = {

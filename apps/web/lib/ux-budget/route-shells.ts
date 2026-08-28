@@ -100,7 +100,6 @@ export const ROUTE_SWEEP_EXCLUSIONS = {
   "/rental": "fixture-capability-unavailable",
   "/service-requests": "fixture-capability-unavailable",
 
-  "/customer-login": "customer-session-required",
   "/portal": "customer-session-required",
   "/portal/account": "customer-session-required",
   "/portal/cases": "customer-session-required",
@@ -120,7 +119,6 @@ export const ROUTE_SWEEP_EXCLUSIONS = {
 
   "/setup": "setup-phase-only",
   "/welcome": "setup-phase-only",
-  "/ops/health": "redirects-to-dynamic-resource",
 
   // Wall-clock collections (BI-0C6C2153): these routes derive the SET of
   // visible entities from `new Date()` — calendar windows materialize upcoming
@@ -199,12 +197,6 @@ export const ROUTE_SWEEP_EXCLUSIONS = {
   // instrument here for the identical reasons. Remove alongside the others once
   // the fixture pins the clock and isolates platform state (BI-0C6C2153).
   "/platform/ai/right-now": "wall-clock-collection",
-  // /ops/stack-currency (BI-6328BCA6) renders wall-clock-relative currency: deriveCurrency
-  // classifies each component against `now` (approaching-eol within 180 days) and shows
-  // daysUntilEol, so its frozen ariaSnapshot flips on untouched code once EOL dates are
-  // recorded. Excluded for the same reason as the other wall-clock routes; becomes eligible
-  // when the sweep fixture pins the clock.
-  "/ops/stack-currency": "wall-clock-collection",
   // /ops/teardown reads the surviving host evidence journal on arrival. A teardown
   // sibling can append or terminalize that collection while an unrelated route sweep
   // is running, so its roles-only snapshot is not stable under concurrent operations.

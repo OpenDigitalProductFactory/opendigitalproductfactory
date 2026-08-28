@@ -15,7 +15,7 @@ import {
 function twinFixture(): TwinSnapshot {
   return {
     capacityChips: [{ key: "open", label: "Tables open", value: 4 }],
-    stageFlow: [{ stageKey: "serve", label: "Serve", order: 1, loadBearing: true, count: 2 }],
+    stageFlow: [{ stageKey: "serve", label: "Serve", order: 1, loadBearing: true, observable: true, count: 2 }],
     outcomes: [{ key: "served", label: "Served", value: "12" }],
     outcomesHeading: "Guest outcomes",
     zones: [{ key: "floor", units: [{ key: "t1", label: "Table 1", state: "Available" }] }],

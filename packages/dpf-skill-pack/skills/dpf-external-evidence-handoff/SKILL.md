@@ -1,6 +1,6 @@
 ---
 name: dpf-external-evidence-handoff
-description: "Use when Claude, Codex, or another external contributor needs to hand branch, file, test, evidence, and unresolved-question context back to Build Studio through governed MCP records."
+description: "Use when an external contributor needs to hand branch, file, test, and evidence context back to Build Studio."
 disable-model-invocation: false
 user-invocable: true
 allowed-tools: mcp__dpf__record_execution_evidence mcp__dpf__save_build_notes

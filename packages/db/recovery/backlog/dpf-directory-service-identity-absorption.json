@@ -3,7 +3,7 @@
   "bundleId": "dpf-directory-service-identity-absorption",
   "description": "Operator-invoked recovery input for the DPF Directory Service epic — absorbing identity (employees, agent identities, service accounts, LDAP) rather than federating to an external directory.",
   "source": {
-    "capturedAt": "2026-08-26T03:07:09.229Z",
+    "capturedAt": "2026-08-26T03:57:53.481Z",
     "repository": "OpenDigitalProductFactory/opendigitalproductfactory",
     "planPath": "docs/superpowers/plans/2026-08-22-instance-identity-and-purpose.md"
   },

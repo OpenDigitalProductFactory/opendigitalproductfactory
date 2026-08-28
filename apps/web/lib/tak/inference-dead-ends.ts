@@ -302,6 +302,7 @@ export type InferenceDeadEndKind =
   | "policy-or-capability"
   | "context"
   | "busy"
+  | "terminal-writer-missing"
   | "unknown";
 
 export type InferenceDeadEndOutcome = {

@@ -64,6 +64,7 @@ export async function POST(request: Request) {
         endPlaceLabel: body.endPlaceLabel ?? null,
         distanceMeters: body.distanceMetres,
         captureKind: body.captureKind,
+        countryCode: body.countryCode ?? null,
       },
       newId(),
     );

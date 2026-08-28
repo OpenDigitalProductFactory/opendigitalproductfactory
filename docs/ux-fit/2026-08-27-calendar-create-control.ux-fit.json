@@ -1,0 +1,19 @@
+{
+  "version": "1",
+  "decidedOption": "visible-new-event-control",
+  "decisionInteractionId": "DI-D6BC6BA0DDC9",
+  "scope": {
+    "files": [
+      "apps/web/components/workspace/WorkspaceCalendar.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "visible-new-event-control",
+      "announce-the-day-click-only",
+      "make-the-calendar-create-bookings-and-invoices"
+    ],
+    "note": "The operating-day run recorded /workspace/calendar as unable to create anything and fell back to a paper desk diary (BI-460BFA84). Driving the live install corrects half of that: clicking a day DOES open a chooser offering Create event and Schedule AI coworker, and no page error is thrown. What is true is that there is no visible create control on the page at all, so the gesture is undiscoverable, and the agenda links here promising a booking, an invoice and an appointment - three things this calendar cannot make. visible-new-event-control won at composite 10.783 with a 2.802 margin, high confidence, no commandment conflict. announce-the-day-click-only scored 7.981: cheaper, but it leaves the only entry point as a gesture, which is what failed. make-the-calendar-create-bookings-and-invoices scored 2.939 and is opposed by 'Do the work; don't task the operator' and 'Never ask the user to run commands' - it would put three owning surfaces' required fields into one popover, and CareAppointment needs a subject this archetype cannot yet hold (BI-4F8A484C). The link's promise is corrected to match what the calendar does instead."
+  }
+}

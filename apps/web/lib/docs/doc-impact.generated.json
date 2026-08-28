@@ -874,6 +874,9 @@
     "apps/web/lib/platform-runtime/capability-service-projection.ts": [
       "docs/architecture/capability-driven-runtime-profiles.md"
     ],
+    "apps/web/lib/platform-runtime/capability-state-divergence.ts": [
+      "docs/architecture/capability-driven-runtime-profiles.md"
+    ],
     "apps/web/lib/platform-runtime/operational-state.ts": [
       "docs/architecture/capability-driven-runtime-profiles.md",
       "docs/maintenance/staleness-report.md"
@@ -1027,6 +1030,9 @@
     ],
     "apps/web/lib/shell/shell-action-contract.ts": [
       "docs/platform-usability-standards.md"
+    ],
+    "apps/web/lib/skills/skill-relevance.ts": [
+      "docs/architecture/skill-surfaces-runbook.md"
     ],
     "apps/web/lib/storefront/archetype-reset.ts": [
       "docs/testing/findings/run-1-swap-findings.md"
@@ -1292,6 +1298,9 @@
       "docs/professions/data-architect/wiki/index-and-collation-integrity.md",
       "docs/runbooks/2026-07-20-collation-drift-index-corruption.md"
     ],
+    "packages/db/scripts/schema-regression-guard.mjs": [
+      "docs/architecture/tax-period-component-migration.md"
+    ],
     "packages/db/scripts/seed-cada-regulation.ts": [
       "docs/strategy/2026-09-cada-architects-forum-deck.md"
     ],
@@ -1348,6 +1357,9 @@
     ],
     "packages/db/src/hive-scout-config.ts": [
       "docs/specs/device-identification-and-portfolio-placement-spec.md"
+    ],
+    "packages/db/src/mandated-skills.ts": [
+      "docs/architecture/skill-surfaces-runbook.md"
     ],
     "packages/db/src/migrations/exact-key-repair.ts": [
       "docs/professions/data-architect/wiki/dedupe-migration-means-the-constraint-is-wrong.md",
@@ -1434,6 +1446,9 @@
     ],
     "packages/dpf-skill-pack/hooks/tool-economy-precheck.mjs": [
       "docs/architecture/context-engineering-standards.md"
+    ],
+    "packages/dpf-skill-pack/hooks/workroom-claim-guard.mjs": [
+      "docs/architecture/delivery-surfaces-runbook.md"
     ],
     "packages/dpf-skill-pack/hooks/worktree-create.mjs": [
       "docs/architecture/delivery-surfaces-runbook.md"
@@ -1690,6 +1705,9 @@
       "docs/testing/archetype-exercise-harness.md",
       "docs/testing/archetype-exercise-playbook.md"
     ],
+    "scripts/hooks/converge-git-hooks.mjs": [
+      "docs/testing/pre-pr-gate.md"
+    ],
     "scripts/hooks/run-hook.mjs": [
       "docs/install/platform-support-watchlist.md",
       "docs/operations/session-transcript-recovery.md"
@@ -1714,6 +1732,7 @@
       "docs/install/edge-node-multi-host.md"
     ],
     "scripts/lib/bootstrap-worktree-deps.mjs": [
+      "docs/architecture/build-gate-runbook.md",
       "docs/architecture/mcp-tool-authorization-runbook.md"
     ],
     "scripts/lib/ci-policy-guards.mjs": [
@@ -1724,20 +1743,23 @@
     "scripts/lib/compose-safety.mjs": [
       "docs/architecture/delivery-surfaces-runbook.md"
     ],
+    "scripts/lib/converge-hooks-dir.mjs": [
+      "docs/testing/pre-pr-gate.md"
+    ],
     "scripts/lib/dco-signoff.mjs": [
       "docs/architecture/build-gate-runbook.md"
     ],
     "scripts/lib/dockerfile-portal-build.test.mjs": [
       "docs/install/platform-support-watchlist.md"
     ],
-    "scripts/lib/ensure-pre-push-hook.mjs": [
-      "docs/testing/pre-pr-gate.md"
-    ],
     "scripts/lib/entry-module.mjs": [
       "docs/install/platform-support-watchlist.md"
     ],
     "scripts/lib/gate-context.mjs": [
       "docs/testing/pr-health.md"
+    ],
+    "scripts/lib/hooks-dir.mjs": [
+      "docs/testing/pre-pr-gate.md"
     ],
     "scripts/lib/junction-safe-worktree-remove.mjs": [
       "docs/architecture/delivery-surfaces-runbook.md"
@@ -2295,6 +2317,7 @@
       "apps/web/lib/build/coding-agent.ts",
       "apps/web/lib/queue/functions/build-review-verification.ts",
       "pnpm-lock.yaml",
+      "scripts/lib/bootstrap-worktree-deps.mjs",
       "scripts/lib/dco-signoff.mjs",
       "scripts/pre-push-dco-check.mjs",
       "scripts/pregate-preflight.mjs"
@@ -2312,6 +2335,7 @@
     ],
     "docs/architecture/capability-driven-runtime-profiles.md": [
       "apps/web/lib/platform-runtime/capability-service-projection.ts",
+      "apps/web/lib/platform-runtime/capability-state-divergence.ts",
       "apps/web/lib/platform-runtime/operational-state.ts",
       "packages/db/data/platform-runtime-capabilities.json",
       "scripts/capability-service-catalog.generated.json",
@@ -2373,6 +2397,7 @@
       "apps/web/lib/build/unified-wip.ts",
       "apps/web/lib/build/wip-cap.ts",
       "apps/web/lib/operate/db-continuity.ts",
+      "packages/dpf-skill-pack/hooks/workroom-claim-guard.mjs",
       "packages/dpf-skill-pack/hooks/worktree-create.mjs",
       "scripts/lib/compose-safety.mjs",
       "scripts/lib/junction-safe-worktree-remove.mjs",
@@ -2500,8 +2525,13 @@
     ],
     "docs/architecture/skill-surfaces-runbook.md": [
       "apps/web/lib/decision/dimension-catalog.ts",
+      "apps/web/lib/skills/skill-relevance.ts",
+      "packages/db/src/mandated-skills.ts",
       "packages/db/src/seed-skills.ts",
       "packages/dpf-skill-pack/hooks/process-spine-health-check.mjs"
+    ],
+    "docs/architecture/tax-period-component-migration.md": [
+      "packages/db/scripts/schema-regression-guard.mjs"
     ],
     "docs/architecture/theme-aware-styling-runbook.md": [
       "apps/web/components/storefront-admin/ItemsManager.tsx",
@@ -2950,8 +2980,10 @@
       "scripts/ci-policy-guards.test.mjs",
       "scripts/gate-worktree.mjs",
       "scripts/gate-worktree.sh",
+      "scripts/hooks/converge-git-hooks.mjs",
       "scripts/lib/ci-policy-guards.mjs",
-      "scripts/lib/ensure-pre-push-hook.mjs",
+      "scripts/lib/converge-hooks-dir.mjs",
+      "scripts/lib/hooks-dir.mjs",
       "scripts/lib/local-integration-ci.mjs",
       "scripts/local-ci-runner.mjs",
       "scripts/pr-health.mjs",

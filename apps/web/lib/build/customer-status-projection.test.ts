@@ -278,15 +278,48 @@ describe("reconcileBuildStudioCustomerStatus — canonical owner state", () => {
     expect(status.ownerState).not.toBe("blocked");
   });
 
-  it("does not claim work is in progress while no task or dispatch exists in ideate", () => {
+  // Corrects BI-CE1AB982's over-generalisation. ideate and plan never write
+  // BuildDispatchAttempt rows, so "no dispatch rows" says nothing about them —
+  // live repro FB-41EA43C5 reported "No research step has started" on a build
+  // whose ideate had already produced, reviewed, repaired and passed a design.
+  it("does not claim ideate has not started merely because it records no dispatch rows", () => {
     const status = reconcileBuildStudioCustomerStatus({
       phase: "ideate",
       status: base,
       progress: progress(),
     });
 
+    expect(status.ownerState).not.toBe("not-started");
+    expect(status.worker).not.toMatch(/no research step has started/i);
+  });
+
+  it("still reports not-started for build, which does record dispatch rows", () => {
+    const status = reconcileBuildStudioCustomerStatus({
+      phase: "build",
+      status: base,
+      progress: progress(),
+    });
+
     expect(status.ownerState).toBe("not-started");
-    expect(status.worker).not.toMatch(/working on this change/i);
+    expect(status.worker).toMatch(/no implementation task has started/i);
+  });
+
+  // The case the generalisation was reaching for is still covered — by the
+  // durable refusal signal, not by inferring from absent rows.
+  it("still renders a refused ideate dispatch as blocked", () => {
+    const status = reconcileBuildStudioCustomerStatus({
+      phase: "ideate",
+      status: base,
+      progress: progress({
+        dispatchBlock: {
+          blocked: true,
+          reason: "Connect, provision, or wait for one allowed Build Studio engine, then retry.",
+          observedAt: "2026-08-12T12:00:00.000Z",
+        },
+      }),
+    });
+
+    expect(status.ownerState).toBe("blocked");
   });
 
   it("shows a real in-flight dispatch with persisted elapsed time and a bounded expectation", () => {

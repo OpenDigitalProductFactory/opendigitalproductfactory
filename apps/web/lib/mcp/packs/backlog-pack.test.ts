@@ -66,7 +66,10 @@ const specPlanSearch = vi.hoisted(() => ({
   buildSpecPlanReferenceIndex: vi.fn(async () => ({
     specs: new Map<string, string>(),
     plans: new Map<string, string>(),
+    corpus: { available: true, root: "/repo", searchedPaths: ["docs/superpowers/specs", "docs/superpowers/plans"], missingPaths: [], fileCount: 2, reason: "Searched 2 markdown file(s)." },
   })),
+  searchSpecsAndPlans: vi.fn(async () => ({ corpus: { available: true, root: "/repo", searchedPaths: ["docs/superpowers/specs", "docs/superpowers/plans"], missingPaths: [], fileCount: 2, reason: "Searched 2 markdown file(s)." }, results: [] })),
+  specPlanCorpusCaveat: vi.fn(() => null),
 }));
 vi.mock("@/lib/backlog/spec-plan-search", () => specPlanSearch);
 

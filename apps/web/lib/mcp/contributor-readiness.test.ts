@@ -31,6 +31,8 @@ function token(overrides: Partial<ContributorMcpTokenRow> = {}): ContributorMcpT
     scopes: [...CONTRIBUTOR_MCP_READINESS_REQUIRED_GRANTS],
     kind: "operator",
     buildId: null,
+    // BI-B986A18B: the acting coworker a token speaks as; null = anonymous.
+    agentId: null,
     lastUsedAt: new Date("2026-05-26T12:00:00Z"),
     expiresAt: null,
     revokedAt: null,

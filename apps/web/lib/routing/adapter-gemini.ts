@@ -9,6 +9,7 @@ import {
   EMPTY_PRICING,
   DEFAULT_DIMENSION_SCORES,
 } from "./model-card-types";
+import { geminiInputModalities, geminiOutputModalities } from "./gemini-modalities";
 import { classifyModel } from "./model-classifier";
 import { computeMetadataHash } from "./metadata-hash";
 
@@ -148,8 +149,8 @@ export const geminiAdapter: ProviderAdapter = {
       maxInputTokens: raw.inputTokenLimit ?? null,
       maxOutputTokens: raw.outputTokenLimit ?? null,
 
-      inputModalities: ["text"],
-      outputModalities: ["text"],
+      inputModalities: geminiInputModalities(modelId),
+      outputModalities: geminiOutputModalities(modelId),
 
       capabilities: extractCapabilities(raw),
       pricing: { ...EMPTY_PRICING },

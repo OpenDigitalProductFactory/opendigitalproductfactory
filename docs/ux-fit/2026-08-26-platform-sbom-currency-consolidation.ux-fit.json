@@ -1,0 +1,21 @@
+{
+  "version": "1",
+  "decidedOption": "product-operate-canonical",
+  "decisionInteractionId": "DI-C24852C1789A",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/portfolio/product/[id]/inventory/page.tsx",
+      "apps/web/components/product/ProductRelationshipsSection.tsx",
+      "apps/web/components/product/ProductSoftwareCompositionPanel.tsx",
+      "apps/web/components/ui/Button.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "product-operate-canonical",
+      "ops-adapter",
+      "inventory-only"
+    ]
+  }
+}

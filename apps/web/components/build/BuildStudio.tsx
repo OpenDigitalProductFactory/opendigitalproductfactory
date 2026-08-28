@@ -941,7 +941,8 @@ export function BuildStudio({
                         assessment={activeBuild.designReview?.sizeAssessment ?? null}
                         initialCandidates={activeBuild.designReview?.decompositionCandidates?.latest ?? []}
                         existingOverride={activeBuild.designReview?.decompositionOverride ?? null}
-                        planOscillationEntry
+                        // BI-04B112CA: decompose-now has two entry points now.
+                        planOscillationEntry={activeBuild.phase === "plan"}
                       />
                     )}
                     {workflowAction.kind === "amend-parent-design" && (

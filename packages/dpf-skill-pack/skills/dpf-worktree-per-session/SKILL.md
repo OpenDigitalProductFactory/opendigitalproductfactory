@@ -1,6 +1,6 @@
 ---
 name: dpf-worktree-per-session
-description: "Use when starting, entering, auditing, or managing a concurrent DPF coding session that touches the working tree. Each thread gets its own git worktree (not a shared clone), seeded MCP config, isolated COMPOSE_PROJECT_NAME, and an explicit compile-ready vs source-only verification-readiness classification so agents do not claim unrun local gates."
+description: "Use when starting, entering, auditing, or managing a concurrent DPF coding session that touches the working tree."
 
 # Agent Skills standard fields (Surface A — Claude Code)
 disable-model-invocation: true

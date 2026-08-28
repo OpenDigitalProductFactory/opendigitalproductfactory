@@ -41,6 +41,7 @@ const EXPECTED_TOOLS = [
   "record_marketing_kpi_checkpoint",
   "create_marketing_automation_candidate",
   "analyze_seo_opportunity",
+  "record_marketing_grounding",
 ];
 
 const READ_TOOLS = ["get_marketing_summary", "suggest_campaign_ideas", "analyze_seo_opportunity"];
@@ -51,7 +52,7 @@ beforeEach(() => {
 });
 
 describe("marketing-ops pack — registration", () => {
-  it("exposes exactly the sixteen marketing-ops tools in definitions and handlers", () => {
+  it("exposes exactly the seventeen marketing-ops tools in definitions and handlers", () => {
     expect(marketingOpsPack.definitions.map((d) => d.name).sort()).toEqual([...EXPECTED_TOOLS].sort());
     expect(Object.keys(marketingOpsPack.handlers).sort()).toEqual([...EXPECTED_TOOLS].sort());
     expect(marketingOpsPack.packId).toBe("marketing-ops");

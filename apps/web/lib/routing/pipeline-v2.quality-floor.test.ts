@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import type { EndpointManifest } from "./types";
 import type { RequestContract } from "./request-contract";
 import { EMPTY_CAPABILITIES, EMPTY_PRICING } from "./model-card-types";
-import { getExclusionReasonV2 } from "./pipeline-v2";
+import { getExclusionReasonV2, routeEndpointV2 } from "./pipeline-v2";
 
 function makeEndpoint(overrides: Partial<EndpointManifest> = {}): EndpointManifest {
   return {
@@ -99,5 +99,86 @@ describe("getExclusionReasonV2 — quality floor names the gap (BI-16A1B4A3)", (
         makeContract({ minimumDimensions: { codegen: 85, toolFidelity: 85, reasoning: 85 } }),
       ),
     ).toBeNull();
+  });
+});
+
+// BI-16A1B4A3 — founder ruling 2026-08-26: the platform must never be
+// unrunnable; the bundled local model has to work when nothing else does.
+describe("routeEndpointV2 — the quality floor never makes the system unrunnable", () => {
+  const floor = { codegen: 85, toolFidelity: 85, reasoning: 85 };
+
+  it("runs on a below-floor local endpoint rather than failing when nothing meets the floor", async () => {
+    // The live shape: everything clears codegen and reasoning and misses only
+    // toolFidelity, by a few points.
+    const local = makeEndpoint({
+      id: "local-1",
+      providerId: "local",
+      name: "qwen3.8-27b",
+      codegen: 96,
+      reasoning: 90,
+      toolFidelity: 82,
+    });
+
+    const decision = await routeEndpointV2(
+      [local],
+      makeContract({ minimumDimensions: floor }),
+      [],
+      [],
+      { skipRecipe: true, capacityByProvider: new Map() },
+    );
+
+    expect(decision.selectedEndpoint).toBe("local-1");
+    expect(decision.reason).toMatch(/no endpoint met the quality floor/i);
+  });
+
+  it("still prefers an at-floor endpoint and excludes the below-floor one", async () => {
+    const strong = makeEndpoint({
+      id: "strong-1",
+      providerId: "codex",
+      name: "at-floor",
+      codegen: 96,
+      reasoning: 95,
+      toolFidelity: 90,
+    });
+    const weak = makeEndpoint({
+      id: "weak-1",
+      providerId: "local",
+      name: "below-floor",
+      codegen: 96,
+      reasoning: 90,
+      toolFidelity: 82,
+    });
+
+    const decision = await routeEndpointV2(
+      [strong, weak],
+      makeContract({ minimumDimensions: floor }),
+      [],
+      [],
+      { skipRecipe: true, capacityByProvider: new Map() },
+    );
+
+    expect(decision.selectedEndpoint).toBe("strong-1");
+    expect(decision.reason).not.toMatch(/no endpoint met the quality floor/i);
+  });
+
+  it("does not relax a hard gate — an uncleared endpoint stays excluded", async () => {
+    const uncleared = makeEndpoint({
+      id: "uncleared-1",
+      providerId: "local",
+      codegen: 96,
+      reasoning: 90,
+      toolFidelity: 82,
+      sensitivityClearance: [],
+    });
+
+    const decision = await routeEndpointV2(
+      [uncleared],
+      makeContract({ minimumDimensions: floor, sensitivity: "restricted" }),
+      [],
+      [],
+      { skipRecipe: true, capacityByProvider: new Map() },
+    );
+
+    expect(decision.selectedEndpoint).toBeNull();
   });
 });

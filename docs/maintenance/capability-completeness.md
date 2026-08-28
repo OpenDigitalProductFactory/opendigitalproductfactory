@@ -31,8 +31,8 @@ the platform is not".
 
 ## Inventory
 
-- Distinct agent identities measured: **82**
-  - canonical agent registry: 72 · workforce roster: 27 · profession roles: 94
+- Distinct agent identities measured: **86**
+  - canonical agent registry: 76 · workforce roster: 28 · profession roles: 98
   - Joined via COWORKER_SLUG_TO_CANONICAL_AGENT_ID; a handle-only join over-counts.
 - At 100% of attainable: **1**
 - Median attainable: **12%** · median absolute: **11%**
@@ -57,22 +57,22 @@ The gate is built, enforced, and its reach is derived from each tool's declared 
 | Class | Count | Median attainable | Meaning |
 |---|---|---|---|
 | `active-roster` | 13 | 76% | Active in the canonical registry and seeded onto the workforce roster. |
-| `active-registry-only` | 7 | 12% | Active in the canonical registry but absent from the workforce roster. |
+| `active-registry-only` | 10 | 12% | Active in the canonical registry but absent from the workforce roster. |
 | `roster-only` | 10 | 44% | On the workforce roster but absent from the canonical agent registry. |
-| `defined-roster` | 4 | 60% | Declared in the canonical registry (not active) and seeded onto the roster. |
+| `defined-roster` | 5 | 60% | Declared in the canonical registry (not active) and seeded onto the roster. |
 | `declared-only` | 48 | 12% | Declared in the canonical registry and never seeded anywhere. |
 
 ## Plane levels across the inventory
 
 | Plane | Weight | Ceiling | L0 | L1 | L2 | L3 | At ceiling |
 |---|---|---|---|---|---|---|---|
-| Identity | 1 | 3 | 0 | 65 | 4 | 13 | 13/82 |
-| Corpus / WSID | 1 | 3 | 0 | 0 | 54 | 28 | 28/82 |
-| Governance / WWWD | 2 | 3 | 54 | 0 | 10 | 18 | 18/82 |
-| Shape | 1 | 2 | 81 | 0 | 1 | 0 | 1/82 |
-| Cadence | 1 | 3 | 76 | 0 | 5 | 1 | 1/82 |
-| Tools + Skills | 2 | 3 | 53 | 12 | 4 | 13 | 13/82 |
-| Evidence | 1 | 2 | 55 | 20 | 7 | 0 | 7/82 |
+| Identity | 1 | 3 | 0 | 68 | 5 | 13 | 13/86 |
+| Corpus / WSID | 1 | 3 | 0 | 0 | 57 | 29 | 29/86 |
+| Governance / WWWD | 2 | 3 | 57 | 0 | 10 | 19 | 19/86 |
+| Shape | 1 | 2 | 85 | 0 | 1 | 0 | 1/86 |
+| Cadence | 1 | 3 | 80 | 0 | 5 | 1 | 1/86 |
+| Tools + Skills | 2 | 3 | 56 | 13 | 4 | 13 | 13/86 |
+| Evidence | 1 | 2 | 58 | 21 | 7 | 0 | 7/86 |
 
 ### Planes the substrate currently caps
 
@@ -186,6 +186,9 @@ _Certification exercises a real domain act, not a generic probe._
 | `AGT-BUILD-FE` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `AGT-BUILD-QA` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `AGT-BUILD-SE` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
+| `AGT-EXT-CLAUDE` | active-registry-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
+| `AGT-EXT-CODEX` | active-registry-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
+| `AGT-EXT-GROK` | active-registry-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `AGT-ORCH-100` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `AGT-ORCH-200` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `AGT-ORCH-300` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
@@ -210,6 +213,7 @@ _Certification exercises a real domain act, not a generic probe._
 | `security-engineer` | roster-only | 44% | 41% | 1 | 3 | 2 | 0 | 0 | 1 | 1 |
 | `storefront-advisor` | roster-only | 44% | 41% | 1 | 3 | 2 | 0 | 0 | 1 | 1 |
 | `finance-controller` | roster-only | 52% | 48% | 1 | 3 | 2 | 0 | 2 | 1 | 1 |
+| `AGT-907` | defined-roster | 56% | 52% | 2 | 3 | 3 | 0 | 0 | 1 | 1 |
 | `AGT-WS-FARM-RANCH` | defined-roster | 56% | 52% | 2 | 3 | 3 | 0 | 0 | 1 | 1 |
 | `AGT-906` | defined-roster | 60% | 56% | 2 | 3 | 3 | 0 | 0 | 1 | 2 |
 | `AGT-WS-TIME-OFF` | defined-roster | 60% | 56% | 2 | 3 | 3 | 0 | 0 | 1 | 2 |
@@ -266,7 +270,7 @@ _Certification exercises a real domain act, not a generic probe._
 ### `AGT-110` — portfolio-rationalization-agent · declared-only · 12% attainable
 
 - **Identity** (level 1 of 3) — in the canonical registry only (status "defined"), never seeded onto the roster
-- **Corpus / WSID** (level 2 of 3) — corpus exists (10 pages) but evaluate_profession_decision is unreachable — missing: registry_read
+- **Corpus / WSID** (level 2 of 3) — corpus exists (11 pages) but evaluate_profession_decision is unreachable — missing: registry_read
 - **Governance / WWWD** (level 0 of 3) — holds no grants at all — no tool surface is authorised
 - **Shape** (level 0 of 2) — no declared work shape — nothing bounds what its standing work may do
 - **Cadence** (level 0 of 3) — no recurring trigger — any Proactivity setting is a silent no-op
@@ -276,7 +280,7 @@ _Certification exercises a real domain act, not a generic probe._
 ### `AGT-111` — investment-analysis-agent · declared-only · 12% attainable
 
 - **Identity** (level 1 of 3) — in the canonical registry only (status "defined"), never seeded onto the roster
-- **Corpus / WSID** (level 2 of 3) — corpus exists (10 pages) but evaluate_profession_decision is unreachable — missing: registry_read
+- **Corpus / WSID** (level 2 of 3) — corpus exists (11 pages) but evaluate_profession_decision is unreachable — missing: registry_read
 - **Governance / WWWD** (level 0 of 3) — holds no grants at all — no tool surface is authorised
 - **Shape** (level 0 of 2) — no declared work shape — nothing bounds what its standing work may do
 - **Cadence** (level 0 of 3) — no recurring trigger — any Proactivity setting is a silent no-op

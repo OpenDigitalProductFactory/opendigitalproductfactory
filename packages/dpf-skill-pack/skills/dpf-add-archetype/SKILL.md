@@ -1,6 +1,6 @@
 ---
 name: dpf-add-archetype
-description: "Use when adding a NEW business archetype to the DPF platform — a new industry or vertical the storefront-templates taxonomy does not yet cover, or when an archetype idea is floated and needs the paved road. Covers all four provisioning dimensions (template substrate, WSID profession corpus, AI coworker decision, skills/tools) and the completeness gate that blocks a shallow archetype from shipping."
+description: "Use when adding a new business archetype, industry, or vertical the DPF storefront taxonomy does not yet cover."
 # Agent Skills standard fields (Surface A — Claude Code)
 disable-model-invocation: true
 user-invocable: true

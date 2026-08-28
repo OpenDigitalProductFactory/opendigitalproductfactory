@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 688,
+  "pageCount": 691,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -949,6 +949,7 @@
         "archetype-operating-model-audit",
         "purpose",
         "the-failure-this-exists-to-prevent",
+        "the-second-failure-this-exists-to-prevent",
         "study-unit",
         "method",
         "step-1-write-the-operating-day-before-touching-the-platform",
@@ -956,7 +957,12 @@
         "step-3-classify-each-noun-against-the-substrate",
         "step-4-hunt-the-canonical-analogue",
         "step-5-score-then-file",
+        "step-6-run-the-day",
+        "the-five-probes-that-belong-in-every-run",
+        "defect-classes-the-noun-table-cannot-express",
+        "output-of-the-run",
         "coverage-score",
+        "operability-reported-beside-coverage",
         "traps",
         "definition-of-done",
         "standards-basis-do-not-re-derive",
@@ -1013,8 +1019,15 @@
         "3-the-periodic-cycle",
         "4-load-bearing-obligations",
         "5-required-entities",
+        "5b-the-operators",
         "6-what-exists-today-measured-2026-08-25",
+        "6b-what-can-be-done-today-measured-by-running-the-day-2026-08-26",
+        "what-the-run-found-that-6-could-not",
+        "what-worked-and-is-now-a-regression-surface",
+        "two-archetype-specific-traps-for-the-next-run",
         "7-ux-requirements",
+        "7b-the-adoption-listing-researched-against-the-industry-standard",
+        "7c-inbound-channels-every-reason-a-stranger-arrives",
         "8-definition-of-done"
       ]
     },
@@ -1186,6 +1199,7 @@
         "install-upgrade-consumer-assets-and-rollback",
         "backup-and-health-semantics",
         "observation-and-diagnostics-boundary",
+        "diagnosing-capability-drift-bi-5acbac50",
         "safe-operating-rules"
       ]
     },
@@ -1574,6 +1588,8 @@
         "maturity-labels-closed-set",
         "finance-matrix-snapshot",
         "payroll-absorption-stance-reversal-2026-08-22",
+        "payroll-tax-persistence-and-period-components-2026-08-26",
+        "mileage-jurisdiction-resolution-2026-08-26",
         "finance-doc-reconciliation-rules",
         "workforce-matrix-snapshot",
         "workforce-doc-reconciliation-rules",
@@ -1898,7 +1914,9 @@
       "publishedPortal": false,
       "anchors": [
         "mcp-tool-authorization-runbook",
-        "protocol-version-window-mechanics-landed-contract-pending-ratification"
+        "protocol-version-window-mechanics-landed-contract-pending-ratification",
+        "acting-coworker-binding-what-lets-a-token-join-a-work-room-bi-b986a18b",
+        "diagnosing-requires-an-acting-coworker"
       ]
     },
     "docs/architecture/mcp-tool-packs.md": {
@@ -2175,6 +2193,20 @@
         "use-in-dpf"
       ]
     },
+    "docs/architecture/tax-period-component-migration.md": {
+      "publicHref": "/architecture/tax-period-component-migration/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "tax-period-component-normalization-migration-record",
+        "why-a-field-drop-is-proposed-at-all",
+        "what-the-migration-does-in-order",
+        "data-safety-argument-for-the-drop",
+        "what-review-is-being-asked-to-approve",
+        "deliberately-out-of-scope"
+      ]
+    },
     "docs/architecture/theme-aware-styling-runbook.md": {
       "publicHref": "/architecture/theme-aware-styling-runbook/",
       "portalHref": null,
@@ -2407,6 +2439,7 @@
         "what-the-gate-does-to-the-turn",
         "what-is-actually-enforced-today",
         "the-shapes-next-steps-after-the-gate",
+        "setting-the-posture-and-the-default-for-rooms",
         "known-gaps",
         "related"
       ]
@@ -3397,6 +3430,8 @@
         "autonomous-directives-are-blanket-approval",
         "why-this-exists",
         "what-counts-as-an-autonomous-directive",
+        "the-descent-bound-how-far-the-directive-carries",
+        "counterexample-the-58-hour-run-bi-980fe9f5",
         "what-still-requires-approval-even-under-autonomous-directives",
         "what-the-agent-should-do-mid-autonomous-run",
         "anti-pattern",
@@ -4430,6 +4465,7 @@
         "why",
         "applies-to",
         "how-to-apply",
+        "what-this-principle-does-not-cover",
         "decision-dimensions",
         "examples",
         "sources"
@@ -4701,6 +4737,20 @@
         "the-formula-is-invariant",
         "only-three-axes-vary",
         "the-review-altitude-check"
+      ]
+    },
+    "docs/founder-kernel/wiki/principles/validate-an-archetype-by-running-its-business.md": {
+      "publicHref": "/founder-kernel/wiki/principles/validate-an-archetype-by-running-its-business/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "applies-to",
+        "why",
+        "how-to-apply",
+        "decision-dimensions",
+        "related"
       ]
     },
     "docs/founder-kernel/wiki/principles/verify-substrate-before-proposing-new.md": {
@@ -5536,12 +5586,14 @@
         "agent-toolchain-only-update",
         "where-state-lives",
         "installation-operating-intent-and-environment-class",
+        "naming-the-installation-and-overriding-what-it-is",
         "diagnostics",
         "show-substrate-flag",
         "dpf-doctor",
         "reconcile-installed-plugins-flag",
         "what-install-dpf-does-not-do",
-        "see-also"
+        "see-also",
+        "mapping-a-network-from-another-machine"
       ]
     },
     "docs/operations/integrations/email-postmark-setup.md": {
@@ -5634,6 +5686,7 @@
         "the-core-principle-why-outages-were-missed",
         "scrape-targets",
         "portal-side-health-gauges-apimetrics-refreshed-per-scrape",
+        "coworker-approval-envelopes-bi-78d3cf1e",
         "platform-split-linux-vs-windows-hostinfra-alerts",
         "status-decisions-2026-06-25-objective-completed",
         "new-alert-checklist-a-detector-is-a-feature-verify-it-functionally",
@@ -6800,6 +6853,18 @@
       "anchors": [
         "heuristic",
         "sources"
+      ]
+    },
+    "docs/professions/finance/wiki/bank-reconciliation.md": {
+      "publicHref": "/professions/finance/wiki/bank-reconciliation/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "definition",
+        "the-loop",
+        "discipline",
+        "why-it-matters"
       ]
     },
     "docs/professions/finance/wiki/double-entry-invariant.md": {
@@ -8890,6 +8955,7 @@
         "integration-evidence",
         "verdict",
         "conditions",
+        "execution-record-2026-08-28",
         "re-evaluation",
         "sources"
       ]
@@ -10822,7 +10888,8 @@
         "the-floors-nothing-crosses",
         "6-the-receipt-is-what-you-review",
         "known-limits",
-        "related"
+        "related",
+        "the-pace-a-room-runs-at"
       ]
     },
     "docs/user-guide/ai-workforce/index.md": {
@@ -10893,7 +10960,8 @@
         "reading-the-outcomes-view",
         "the-calibration-suggestion",
         "honest-limits",
-        "related"
+        "related",
+        "how-work-rooms-behave"
       ]
     },
     "docs/user-guide/ai-workforce/provider-anthropic.md": {
@@ -11715,7 +11783,7 @@
         "being-reached-when-you-are-away",
         "business-journeys",
         "promoter-timeout",
-        "platform-stack-currency",
+        "platform-software-composition-and-currency",
         "what-this-installation-is",
         "who-runs-this-installation",
         "what-your-ai-coworkers-may-do-here",
@@ -11785,7 +11853,8 @@
         "read-the-routing-picture",
         "architecture-and-evidence",
         "when-a-coworker-says-it-used-the-backup-model",
-        "what-to-watch"
+        "what-to-watch",
+        "defaults-for-work-rooms"
       ]
     },
     "docs/user-guide/platform/authority-and-audit.md": {
@@ -11926,6 +11995,7 @@
       "publishedPortal": true,
       "anchors": [
         "overview",
+        "understand-what-supports-a-digital-product",
         "use-product-direction",
         "activate-product-demand-with-evidence",
         "learn-from-product-outcomes",
@@ -12138,6 +12208,8 @@
         "access-and-other-channels",
         "finite-and-standing-rooms",
         "pace-and-priority",
+        "changing-it",
+        "setting-a-default-for-every-room",
         "giving-a-room-its-shape",
         "incomplete-or-unavailable-rooms"
       ]

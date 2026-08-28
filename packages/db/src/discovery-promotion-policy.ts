@@ -59,6 +59,49 @@ export function looksLikeRuntimeArtifact(name: string): boolean {
   return NON_PRODUCT_NAME_PATTERNS.some((pattern) => pattern.test(name));
 }
 
+// Property keys that constitute OBSERVATION EVIDENCE — proof a real device was
+// actually seen, not merely an enumerated address. A device that answered ARP
+// carries a MAC; a resolved vendor, a real hostname, or observed ports/services
+// are equally decisive. A bare enumerated IP with none of these (e.g. the
+// network address "192.168.0.0", or a /24 sweep row that never replied) is a
+// phantom, not a device.
+const OBSERVATION_EVIDENCE_KEYS = ["mac", "macaddress", "mac_address", "vendor", "oui_vendor", "hostname"];
+
+// Discovery sources that only ever report REAL, present devices — a UniFi
+// controller's client list, mDNS/SNMP/LLDP/DHCP responders. Being seen through
+// one of these is observation evidence in itself, even without a per-row MAC. A
+// bare ARP *sweep* is deliberately NOT here: it enumerates every address, so an
+// ARP row is only evidence when it actually resolved a MAC (checked above).
+const OBSERVED_SOURCE_RE = /unifi|mdns|snmp|lldp|dhcp/i;
+
+/**
+ * True when a discovered host/network entity carries evidence it was actually
+ * OBSERVED (answered / resolved), not just enumerated. Discovery is
+ * evidence-based: an address with no corroborating signal is not a device and
+ * must not become inventory or a product. (BI-B19C41B8.)
+ */
+export function hasObservationEvidence(input: { properties?: unknown }): boolean {
+  const props = input.properties;
+  if (!props || typeof props !== "object") return false;
+  const bag = props as Record<string, unknown>;
+  const present = (key: string): boolean => {
+    const v = bag[key];
+    return v !== null && v !== undefined && v !== "";
+  };
+  if (Object.keys(bag).some((k) => OBSERVATION_EVIDENCE_KEYS.includes(k.toLowerCase()) && present(k))) {
+    return true;
+  }
+  // Observed ports/services also prove the host is real.
+  for (const k of ["ports", "openPorts", "services"]) {
+    const v = bag[k];
+    if (Array.isArray(v) && v.length > 0) return true;
+  }
+  // Seen through a controller/protocol that only reports real devices.
+  const via = bag.discoveredVia;
+  if (typeof via === "string" && OBSERVED_SOURCE_RE.test(via)) return true;
+  return false;
+}
+
 // Entity types that are infrastructure / transport / runtime instances —
 // never products in their own right, regardless of taxonomy promotion policy.
 // A host or network interface is something products RUN ON, not a product;
@@ -148,7 +191,8 @@ export type PromotionSkipReason =
   | "low_confidence_promotion"
   | "no_portfolio_root"
   | "type_not_promotable"
-  | "name_not_promotable";
+  | "name_not_promotable"
+  | "no_observation_evidence";
 
 /**
  * Evidence is a small, JSON-serializable bag of decision context. The set
@@ -189,6 +233,9 @@ export type PromotionDecision =
 export const TERMINAL_STRUCTURAL_SKIP_SOURCES: ReadonlySet<string> = new Set([
   "name-gate",
   "structural-type-gate",
+  // A phantom (unevidenced) address is a terminal structural classification —
+  // there is nothing an operator can "fix"; it simply isn't a device.
+  "evidence-gate",
 ]);
 
 /**
@@ -223,6 +270,11 @@ export interface PromotionEntityInput {
   // Product even though its entityType is host/network. Omitted/undefined keeps
   // the prior conservative behaviour (treated as platform_internal).
   provenance?: EstateProvenance;
+  // Whether the entity carries observation evidence (answered / resolved). A
+  // real-estate host with `false` is a whole-subnet-scan phantom, not a device,
+  // and is not promoted. Omitted/undefined keeps prior behaviour (not gated), so
+  // older callers that don't compute evidence are unaffected. (BI-B19C41B8.)
+  hasObservationEvidence?: boolean;
 }
 
 export interface PromotionTaxonomyNodeInput {
@@ -324,6 +376,29 @@ export function resolvePromotionDecision(
         source: "structural-type-gate",
         entityType: entity.entityType,
         provenance: entity.provenance ?? "platform_internal",
+      },
+    };
+  }
+
+  // Gate 5.5 (evidence, BI-B19C41B8): a real-estate host/network entity becomes
+  // a Digital Product only if it was actually OBSERVED. A /24 sweep enumerates
+  // every address and promotes a "LAN Host 192.168.0.N" per IP — including the
+  // network address .0 that can never answer — burying real devices under
+  // hundreds of phantoms. An address with no MAC/vendor/hostname/ports never
+  // proved it is a device, so it is not promoted. `undefined` (older callers
+  // that don't compute evidence) is NOT gated — only an explicit `false`.
+  if (
+    isNonProductEntityType(entity.entityType) &&
+    entity.provenance === "real_estate" &&
+    entity.hasObservationEvidence === false
+  ) {
+    return {
+      decision: "skip",
+      reason: "no_observation_evidence",
+      evidence: {
+        source: "evidence-gate",
+        name: entity.name ?? null,
+        entityType: entity.entityType,
       },
     };
   }

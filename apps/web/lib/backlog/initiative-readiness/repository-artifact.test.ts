@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 import { describe, expect, it, vi } from "vitest";
 
-import { resolveRepositoryArtifact } from "./repository-artifact";
+import { readRepositoryProviderBlob, resolveRepositoryArtifact } from "./repository-artifact";
 
 const bytes = Buffer.from("canonical plan bytes\n", "utf8");
 const locator = {
@@ -74,6 +74,59 @@ function providerFetch(signOff = "Signed-off-by: Author <author@example.com>") {
 }
 
 describe("resolveRepositoryArtifact", () => {
+  it("reads a bounded exact blob from the configured canonical repository without a local git object", async () => {
+    const fetchImpl = providerFetch();
+    const result = await readRepositoryProviderBlob({
+      repositoryFullName: locator.repositoryFullName,
+      commitSha: locator.commitSha,
+      path: locator.path,
+      expectedBlobId: locator.providerBlobId,
+      db: db() as never,
+      fetchImpl: fetchImpl as typeof fetch,
+    });
+
+    expect(result).toEqual({ ok: true, data: bytes });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(fetchImpl).toHaveBeenCalledWith(
+      expect.stringContaining(`/contents/docs/superpowers/plans/test.md?ref=${locator.commitSha}`),
+      expect.objectContaining({ cache: "no-store" }),
+    );
+  });
+
+  it("rejects a provider response whose blob identity or size exceeds the immutable contract", async () => {
+    const mismatch = vi.fn(async () => new Response(JSON.stringify({
+      type: "file",
+      sha: "c".repeat(40),
+      size: bytes.length,
+      encoding: "base64",
+      content: bytes.toString("base64"),
+    }), { status: 200 }));
+    await expect(readRepositoryProviderBlob({
+      repositoryFullName: locator.repositoryFullName,
+      commitSha: locator.commitSha,
+      path: locator.path,
+      expectedBlobId: locator.providerBlobId,
+      db: db() as never,
+      fetchImpl: mismatch as typeof fetch,
+    })).resolves.toMatchObject({ ok: false, code: "IMMUTABLE_BLOB_MISMATCH" });
+
+    const oversized = vi.fn(async () => new Response(JSON.stringify({
+      type: "file",
+      sha: locator.providerBlobId,
+      size: 1_048_577,
+      encoding: "base64",
+      content: bytes.toString("base64"),
+    }), { status: 200 }));
+    await expect(readRepositoryProviderBlob({
+      repositoryFullName: locator.repositoryFullName,
+      commitSha: locator.commitSha,
+      path: locator.path,
+      expectedBlobId: locator.providerBlobId,
+      db: db() as never,
+      fetchImpl: oversized as typeof fetch,
+    })).resolves.toMatchObject({ ok: false, code: "IMMUTABLE_SOURCE_TOO_LARGE" });
+  });
+
   it("derives bytes and SHA-256 from the exact provider blob bound to one subject capsule", async () => {
     const fetchImpl = providerFetch();
 

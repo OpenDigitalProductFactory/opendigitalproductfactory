@@ -129,4 +129,50 @@ export const PAYROLL_ASSETS: readonly DataAssetDefinition[] = [
     classification: CLASSIFICATION,
     fields: [],
   },
+  {
+    // Aggregate figures for one filing period, not per-person detail: no
+    // employee is identifiable from a withheld TOTAL summed across the whole
+    // payroll. The per-person detail stays on Payslip and PayComponentLine,
+    // which are masked. So this is operational finance, not regulated
+    // employee data, and carries no subject locator.
+    id: "data:tax-obligation-period-component",
+    physical: { prismaModel: "TaxObligationPeriodComponent" },
+    domain: "finance-accounting",
+    ownerRole: "business-operator",
+    stewardRole: "data-steward",
+    categories: ["financial", "operational"],
+    sensitivity: "internal",
+    criticality: "high",
+    subjectLocators: [],
+    // A component of a FILED return is accounting evidence and must survive as
+    // a row; it is disposed with its parent period, never time-aged.
+    lifecycleClass: "regulated-record",
+    purposeCapabilities: ["compliance-and-legal", "billing-and-payments"],
+    residencyClass: "local-only",
+    projectionClass: "content",
+    classification: CLASSIFICATION,
+    fields: [],
+  },
+  {
+    // A cadence determination is org tax configuration — a cadence, the
+    // threshold it was judged against, and the citation for that threshold.
+    // No personal data.
+    id: "data:tax-deposit-schedule",
+    physical: { prismaModel: "TaxDepositSchedule" },
+    domain: "finance-accounting",
+    ownerRole: "business-operator",
+    stewardRole: "data-steward",
+    categories: ["financial", "operational"],
+    sensitivity: "internal",
+    criticality: "high",
+    subjectLocators: [],
+    // Retained as the evidence for why a past deposit was timed as it was,
+    // which is what a late-deposit penalty dispute turns on.
+    lifecycleClass: "regulated-record",
+    purposeCapabilities: ["compliance-and-legal"],
+    residencyClass: "local-only",
+    projectionClass: "content",
+    classification: CLASSIFICATION,
+    fields: [],
+  },
 ];

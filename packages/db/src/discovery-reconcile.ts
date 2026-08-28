@@ -19,6 +19,7 @@
 import {
   isNonProductEntityType,
   classifyEstateProvenance,
+  hasObservationEvidence,
   type EstateProvenance,
 } from "./discovery-promotion-policy";
 import { INVENTORY_ENTITY_CANONICAL_WHERE } from "./inventory-entity-lifecycle";
@@ -90,6 +91,34 @@ export function isInfrastructureProduct(
   );
 }
 
+/**
+ * Decide whether a promoted product should be demoted — infrastructure OR a
+ * phantom. Consolidates the two keep-signals (BI-B19C41B8): a non-product host/
+ * network entity is KEPT when it has observation evidence (answered ARP / vendor
+ * / hostname / trustworthy source) OR a resolved catalog identity (it was
+ * positively identified). It is demoted only when platform-internal, or a bare
+ * enumerated /24 address that never answered AND was never identified — a
+ * subnet-scan phantom, not a device. A real evidenced/identified LAN device is
+ * kept.
+ */
+export function shouldDemotePromotedProduct(
+  linkedEntities: ReadonlyArray<{
+    entityType: string;
+    provenance: EstateProvenance;
+    hasEvidence: boolean;
+    hasResolvedIdentity?: boolean;
+  }>,
+): boolean {
+  return (
+    linkedEntities.length > 0 &&
+    linkedEntities.every(
+      (e) =>
+        isNonProductEntityType(e.entityType) &&
+        (e.provenance === "platform_internal" || (!e.hasEvidence && !e.hasResolvedIdentity)),
+    )
+  );
+}
+
 export async function reconcilePromotedProducts(
   db: ReconcileDb,
 ): Promise<ReconcileSummary> {
@@ -139,9 +168,10 @@ export async function reconcilePromotedProducts(
             e.name ||
             null,
         }),
+        hasEvidence: hasObservationEvidence({ properties: e.properties }),
       };
     });
-    if (!isInfrastructureProduct(linked)) {
+    if (!shouldDemotePromotedProduct(linked)) {
       summary.kept++;
       continue;
     }

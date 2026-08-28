@@ -69,6 +69,7 @@ import {
 export type PostureLayer =
   | "hard-policy"
   | "room-declaration"
+  | "workroom-default"
   | "derived"
   | "agent"
   | "organization"
@@ -119,6 +120,14 @@ export interface WorkPostureInput {
   };
   hardPolicy?: PostureHardPolicy | null;
   declaration?: RoomPostureDeclaration | null;
+  /**
+   * The DECREED DEFAULT for rooms (workroom-posture-defaults.ts): how work in a
+   * room behaves here unless the room says otherwise. Sits BELOW derivation —
+   * what the work actually is outranks a blanket preference about rooms — and
+   * ABOVE agent/org/platform, which answer a different question (how does this
+   * COWORKER behave). Absent means today's behaviour exactly.
+   */
+  workroomDefault?: RoomPostureDeclaration | null;
   shape?: RoomShapeInput | null;
   stream?: ArchetypeStreamInput | null;
   /** Everything the clock needs. Passed in — the resolver reads no ambient time. */
@@ -285,6 +294,43 @@ export function resolveWorkPosture(input: WorkPostureInput): ResolvedWorkPosture
       });
       prioritySource = "derived";
       priority = next;
+    }
+  }
+
+  // ── The decreed workroom default: applied where nothing more specific spoke ──
+  // Only fills gaps. It never overrides a derived value, because the shape of
+  // the work is more specific than a blanket preference about rooms; and its
+  // boundary still goes through the tighten-only clamp, so decreeing a default
+  // can restrict what rooms may do and can never widen it.
+  const workroomDefault = input.workroomDefault;
+  if (workroomDefault) {
+    if (workroomDefault.proactivityLevel && proactivitySource !== "derived") {
+      const next = workroomDefault.proactivityLevel;
+      record(adjustments, "proactivityLevel", proactivityLevel, next, {
+        reasonCode: "workroom_default",
+        reason: "The platform's default for rooms applies, because nothing more specific did.",
+      });
+      if (next !== proactivityLevel) proactivitySource = "workroom-default";
+      proactivityLevel = next;
+    }
+    if (workroomDefault.actionBoundary) {
+      const next = tightenActionBoundary(actionBoundary, workroomDefault.actionBoundary);
+      record(adjustments, "actionBoundary", actionBoundary, next, {
+        reasonCode: "workroom_default",
+        reason: "The platform's default for rooms applies, because nothing more specific did.",
+      });
+      actionBoundary = next;
+    }
+    if (workroomDefault.priority && prioritySource !== "derived") {
+      adjustments.push({
+        field: "priority",
+        from: priority?.preset ?? null,
+        to: workroomDefault.priority.preset,
+        reasonCode: "workroom_default",
+        reason: "The platform's default priority for rooms applies.",
+      });
+      priority = workroomDefault.priority;
+      prioritySource = "workroom-default";
     }
   }
 

@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Implementation Plan - Partner / Reseller Channel & Identity
 
 **Date:** 2026-06-04
@@ -70,6 +74,9 @@ Phase 5 federation/provisioning must follow standards, not vendor shorthand:
 - SCIM: [RFC 7643](https://datatracker.ietf.org/doc/html/rfc7643) core schema and [RFC 7644](https://datatracker.ietf.org/doc/rfc7644/) protocol. Use SCIM users/groups and PATCH semantics for lifecycle and membership where applicable.
 - SAML: [OASIS SAML 2.0 Technical Overview](https://docs.oasis-open.org/security/saml/Post2.0/sstc-saml-tech-overview-2.0.html). Treat SAML metadata/trust as identity-edge configuration, not DPF authorization policy.
 - DPF identity edge: `docs/superpowers/specs/2026-04-22-enterprise-auth-directory-federation-design.md` keeps authentik as the protocol edge and DPF Authority Core as the authorization owner.
+
+> **Superseded stance (2026-08-26, EP-24741BBF / `BI-5167932D`).** The enterprise-auth spec's choice to adopt authentik as a runtime identity edge has been **reversed**. DPF absorbs the directory over its own `Principal` spine and adds no IdP to any install. Consuming an external IdP as an *upstream* remains supported and optional. See [Directory Service — Identity Absorption Design](../specs/2026-08-23-directory-service-identity-absorption-design.md) and [the authentik evaluation](../../security/tool-evaluations/2026-08-23-authentik.md).
+
 - DPF UI: `docs/platform-usability-standards.md` and `apps/web/components/ui/report-kit/README.md` are the binding UI references. `search_design_intelligence` returned no results for partner/dashboard/reporting queries during this review, so local standards govern.
 
 ## Phase 0 - Archetype Partner Primitives - MERGED (#1454)

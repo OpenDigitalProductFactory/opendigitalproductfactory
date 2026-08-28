@@ -132,3 +132,18 @@ sales funnel, not a calibration loop.
 - [AI Operations](../platform/ai-operations.md) — the surrounding AI operations surfaces
 - [Model Routing & Lifecycle](model-routing-lifecycle.md) — what the compiled policy feeds into
 - [AI Cost Governance](ai-cost-governance.md) — spend tracking and budget controls
+
+## How work rooms behave
+
+The priority settings above answer "how does this coworker behave". *How work rooms behave*
+answers a different question: how does work happening **in a room** behave, whoever is doing
+it. It sets the default pace for every room, and whether rooms may act without asking.
+
+Your default applies where nothing more specific did. A room that states its own settings
+overrides it, and so does the work itself — an escalation pushes harder, and work that
+leaves the business is verified first, whatever the default says. That ordering is
+deliberate: a blanket preference about rooms should not overrule the shape of the job in
+front of you.
+
+Setting a looser authority default never promotes a coworker. If a coworker may only
+propose, rooms will still propose. The default can restrain; it cannot grant.

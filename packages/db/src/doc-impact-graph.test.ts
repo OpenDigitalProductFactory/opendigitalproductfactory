@@ -11,6 +11,7 @@ import {
   DOC_IMPACT_SOURCE_LABEL,
   DOC_PAGE_LABEL,
   docPageKey,
+  countDocPagesInManifest,
   planDocImpactProjection,
   routeKey,
   sourceFileKey,
@@ -139,5 +140,38 @@ describe("planDocImpactProjection", () => {
     const orphan = planDocImpactProjection({ codeToDocs: { "a.ts": [] } });
     expect(orphan.edges).toEqual([]);
     expect(orphan.nodes.map((n) => n.key)).toEqual(["source-code:a.ts"]);
+  });
+});
+
+describe("countDocPagesInManifest", () => {
+  it("counts DISTINCT doc pages, not every planned node", () => {
+    // The fixture names three distinct docs across the two forward maps, and
+    // platform-overview.md is referenced TWICE. The plan also contains
+    // DocImpactSource markers for the two code files and the one route, so a
+    // naive `plan.nodes.length` would answer 6 and a naive per-reference count
+    // would answer 4. Either would report permanent phantom drift against a
+    // correctly-projected mirror — a broken invariant is worse than none,
+    // because it trains people to ignore the alarm.
+    expect(countDocPagesInManifest(MANIFEST)).toBe(3);
+  });
+
+  it("agrees exactly with the DocPage nodes the projection writes", () => {
+    // The invariant and the projection MUST share one derivation. This asserts
+    // they cannot drift apart: if planDocImpactProjection ever changes which
+    // docs it emits, this fails rather than silently reporting false drift.
+    const planned = planDocImpactProjection(MANIFEST).nodes.filter(
+      (n) => n.label === DOC_PAGE_LABEL,
+    ).length;
+    expect(countDocPagesInManifest(MANIFEST)).toBe(planned);
+  });
+
+  it("counts nothing for an empty manifest, so a fresh install is not a false fault", () => {
+    expect(countDocPagesInManifest({})).toBe(0);
+  });
+
+  it("ignores the inverse maps the projection does not read", () => {
+    // docToRoutes/docToCode are inverses. A count taken off them would report 1
+    // here while the projection writes 0 DocPage nodes.
+    expect(countDocPagesInManifest({ docToRoutes: { "docs/only-inverse.md": ["/x"] } })).toBe(0);
   });
 });

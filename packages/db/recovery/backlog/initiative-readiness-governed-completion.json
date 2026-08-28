@@ -3,7 +3,7 @@
   "bundleId": "initiative-readiness-governed-completion",
   "description": "Operator-invoked recovery input for the initiative-readiness and governed-completion enforcement epic.",
   "source": {
-    "capturedAt": "2026-08-26T03:07:09.229Z",
+    "capturedAt": "2026-08-26T03:57:53.481Z",
     "repository": "OpenDigitalProductFactory/opendigitalproductfactory",
     "planPath": "docs/superpowers/plans/2026-08-08-initiative-readiness-and-goal-completion-reconciliation-implementation.md"
   },
@@ -95,6 +95,32 @@
       "createdAt": "2026-08-22T19:26:55.793Z"
     },
     {
+      "itemId": "BI-17CBD21F",
+      "epicId": "EP-129D11FD",
+      "title": "record_plan_backlog_coverage is shadowed by the initiative-readiness pack and cannot be called",
+      "body": "## Problem\n\n`record_plan_backlog_coverage` is registered in two MCP packs with incompatible schemas, and the initiative-readiness registration shadows the real handler. Calling the tool with its documented parameters fails, so no thread can record a plan-coverage receipt over MCP.\n\n| Registration | Schema |\n|---|---|\n| `apps/web/lib/mcp/packs/decomposition-pack.ts:131` | `itemId`, `planPath`, `planArtifactRef`, `decision: decomposed\\|atomic`, `deliverables[]` |\n| `apps/web/lib/tak/initiative-readiness-tool-grants.ts:20` via `initiative-readiness-pack.ts` | `itemId`, `gate`, `decision: pass\\|fail\\|not-applicable`, `artifactRef`, `findings` |\n\nThe readiness lane declares `gates: [\"dependency-disposition\"]`. `initiative-readiness-pack.ts:277` rejects any call whose `gate` is absent or outside that list.\n\n## Reproduction\n\nCall `record_plan_backlog_coverage` with the decomposition-pack schema (no `gate`):\n\n```\n{ \"success\": false, \"error\": \"gate-not-authorized\",\n  \"message\": \"record_plan_backlog_coverage cannot record that gate.\" }\n```\n\nAdd `gate: \"dependency-disposition\"` and the error moves to the readiness schema, proving the routing:\n\n```\n{ \"success\": false, \"error\": \"malformed-receipt\",\n  \"message\": \"decision must be pass, fail, or not-applicable.\" }\n```\n\nThe two schemas cannot be satisfied at once: the coverage handler requires `decision: decomposed`, the readiness handler requires `decision: pass`.\n\n## Expected vs actual\n\nExpected: the documented coverage schema records a receipt and returns `receiptId` plus `mappedItemIds`.\nActual: every call is refused. Reproduced 2026-08-26 both through the in-session tool registry and through the raw JSON-RPC transport at `/api/mcp/v1`, so it is server-side rather than a client artifact.\n\n## Why it matters\n\n`scripts/check-plan-backlog-coverage.mjs` requires a live MCP receipt on any plan that declares a `**Backlog item:**`, and explicitly rejects `pending` and Markdown-only evidence. With the tool unreachable, a correctly-formed plan cannot pass CI, and `PLAN_COVERAGE_REQUIRED` cannot clear on any backlog item.\n\n## Origin\n\nThe shadowing lane entry was added by `6dad5759f9` — \"fix(readiness): complete deterministic recovery routes (#4641)\", 2026-08-24 19:05 UTC. Note that BI-80BECE1E recorded coverage successfully at 2026-08-25T08:36Z, after that commit, so either that receipt was written through a different surface or disclosure order affects which registration wins. Worth establishing during the fix.\n\n## Suggested fix\n\nOne tool name, one registration. Either rename the readiness lane's dependency-disposition receipt, or drop `record_plan_backlog_coverage` from `INITIATIVE_READINESS_LANES` and let the decomposition-pack handler own the name. Add a guard that fails the build when two packs register the same tool name — this class of collision is silent today.\n\n## Grant note\n\nNot an authorization defect. Both registrations require `backlog_write`, which callers hitting this already hold.",
+      "status": "triaging",
+      "type": "product",
+      "workType": "bug",
+      "source": "user-request",
+      "scopeKind": "unknown",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-17cbd21f-cmt9kbc7a05wp01qv5k7i7u4i",
+          "kind": "epic_link",
+          "summary": "(no epic) → EP-129D11FD",
+          "recordedAt": "2026-08-26T03:56:54.790Z",
+          "payload": {
+            "toEpicId": "EP-129D11FD",
+            "fromEpicId": null
+          }
+        }
+      ],
+      "createdAt": "2026-08-26T03:26:10.327Z"
+    },
+    {
       "itemId": "BI-28E8CB88",
       "epicId": "EP-129D11FD",
       "title": "Recorded evidence does not count toward readiness and nothing says so — 35 of 38 items have evidence the gates cannot see",
@@ -122,6 +148,33 @@
       "createdAt": "2026-08-26T02:58:44.815Z"
     },
     {
+      "itemId": "BI-310EC5AF",
+      "epicId": "EP-129D11FD",
+      "title": "The plan-coverage CI gate accepts a receipt that does not exist: it regex-matches the Receipt line and never asks the substrate, so a preview-minted receipt merges to main",
+      "body": "## Observed\n\n`docs/superpowers/plans/2026-08-23-initiative-readiness-traversal-repair.md` is merged on `main` (PR #4633, `ddd1ae31e`, 2026-08-24) and its `## Backlog coverage` section cites:\n\n```\n- Decision: atomic\n- Parent: BI-F0715C9C\n- Receipt: cmt6xp5k2000c51kpdb76su1t\n```\n\nCalling the governed verifier against exactly those identities returns:\n\n```\ncheck_plan_backlog_coverage(\n  itemId   = BI-F0715C9C,\n  planPath = docs/superpowers/plans/2026-08-23-initiative-readiness-traversal-repair.md,\n  receiptId= cmt6xp5k2000c51kpdb76su1t)\n-> { \"success\": false, \"error\": \"receipt-not-found\",\n     \"message\": \"Coverage receipt cmt6xp5k2000c51kpdb76su1t was not found.\" }\n```\n\nThe plan passed CI and merged anyway.\n\n## Evidence-backed cause\n\nTwo independent defects compose.\n\n**1. The receipt was minted outside the canonical runtime.** `WC-7FF8A505` activity `cmt6xr47b0kjd01mxtemerijv` records it:\n\n```\ncommand: \"27B research/spec approved replay; record_plan_backlog_coverage via preview /api/mcp/v1\"\npreviewLeaseId: NPEL-0583244D50\nplanCoverageReceiptId: cmt6xp5k2000c51kpdb76su1t\n```\n\nThe same preview run also produced research receipt `initiative-8042dea2-327d-4a67-9b64-109c6752805c`, spec-approval receipt `initiative-5eab8246-8bc5-4a41-8e28-36669796a538`, and scope baseline `baseline-acd3d154-8d63-4939-9382-4318f7bf045e`. All four identities are cited in the merged plan and all four are open to the same question.\n\nThis is not a database reset: `WC-2ABA65F7` and `WC-7FF8A505` both still resolve with full activity history. The receipt simply never existed in production.\n\nAGENTS.md section 1 is explicit that the canonical runtime is the only source of runtime truth. A preview-minted governance receipt is not runtime truth.\n\n**2. The gate cannot tell.** `scripts/check-plan-backlog-coverage.mjs` `validatePlanText` does only lexical validation:\n\n```js\nconst receipt = section.match(/^\\s*-\\s*Receipt:\\s*`?([^`\\n]+?)`?\\s*$/im)?.[1]?.trim();\nif (!receipt || /^(?:pending|none|n\\/a)\\b/i.test(receipt)) { errors.push(...); }\n```\n\nIt asserts a `Receipt:` line exists and is not `pending`/`none`/`n/a`. It never resolves the id, never checks the parent binding, and cannot distinguish a production receipt from a preview one or from an arbitrary string of the right shape.\n\n`check_plan_backlog_coverage` already exists and is documented in `dpf-writing-plans` as \"the resumability check\". Nothing calls it from CI.\n\n## Why this matters beyond one plan\n\nThis is the exact defect class the initiative-readiness design exists to eliminate — evidence that *projects* as satisfied without being verified — reproduced inside that design's own plan. Any string matching the regex satisfies the gate today.\n\nAdjacent but distinct: `BI-28E8CB88` (recorded evidence does not count toward readiness) is the mirror failure — real evidence not counting. This item is unreal evidence counting.\n\nNot a duplicate of `BI-CC9D5997`, which is about `record_plan_backlog_coverage` resolving to the wrong handler. That blocks *minting*; this accepts a receipt that was never minted here. Note the interaction: while `BI-CC9D5997` is open the receipt cannot be re-minted, so this plan cannot currently be repaired even once the gate is strengthened. Sequence them.\n\n## Acceptance criteria\n\n1. The plan-coverage gate resolves the cited receipt against the substrate and fails when it does not exist, does not bind to the plan's parent `**Backlog item:**`, or does not bind to the plan path.\n2. A receipt minted against a non-production environment (preview lease, sandbox) is rejected by the gate, or is durably marked non-canonical at mint time so the gate can reject it.\n3. The gate degrades honestly when the substrate is unreachable: it reports \"could not verify\" and fails closed, and never silently downgrades to the current lexical check.\n4. Regression test covers: valid live receipt passes; unknown id fails; live receipt bound to a different parent or plan path fails; preview-minted receipt fails; substrate unreachable fails closed.\n5. The four identities cited in `2026-08-23-initiative-readiness-traversal-repair.md` are re-verified against production and either re-minted or explicitly recorded as historical/non-canonical. No hand-written substitute value.\n6. A sweep reports which other merged plans cite coverage receipts that no longer resolve, so the blast radius is known rather than assumed.\n\nProvenance: found while reconciling the BI-F0715C9C design and plan against delivered state, 2026-08-26. Branch `doc/initiative-readiness-doc-reconciliation` records the finding in the plan's `### Receipt liveness` section.",
+      "status": "triaging",
+      "type": "portfolio",
+      "workType": "bug",
+      "source": "automated-detection",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-310ec5af-cmt9kbcaf05wr01qvyvg9ps56",
+          "kind": "epic_link",
+          "summary": "(no epic) → EP-129D11FD",
+          "recordedAt": "2026-08-26T03:56:54.903Z",
+          "payload": {
+            "toEpicId": "EP-129D11FD",
+            "fromEpicId": null
+          }
+        }
+      ],
+      "scopeRationale": "Governance evidence substrate and the Spec/Plan/Doc CI edge; affects every plan-bearing PR on every install.",
+      "createdAt": "2026-08-26T03:20:59.774Z"
+    },
+    {
       "itemId": "BI-329AD58D",
       "epicId": "EP-129D11FD",
       "title": "Threadless readiness reviewers lose immutable binding and exceed the local tool-surface limit",
@@ -139,6 +192,58 @@
       "scopeRationale": "The defect is in the shared external MCP coworker handoff and autonomous tool-attachment substrate, first proven by initiative-readiness recovery.",
       "priority": 4,
       "createdAt": "2026-08-24T21:13:18.137Z"
+    },
+    {
+      "itemId": "BI-3AE38A1F",
+      "epicId": "EP-129D11FD",
+      "title": "External contributors cannot satisfy RESEARCH_REQUIRED: it needs an initiative_gate_receipt only an ungranted tool can write, with no eligible reviewer",
+      "body": "OBSERVED 2026-08-26 across the full lifecycle of BI-2DB7254B — a `fix`-profile item that was filed, triaged to build, implemented, CI-verified and MERGED to main (PR #4681, fe2c68cf), and still cannot be marked done.\n\nCORRECTION TO THIS ITEM'S EARLIER BODY: I previously claimed DELIVERY_EVIDENCE_REQUIRED reporting `state: \"missing\"` while listing an evidence id in its own `evidenceRefs` was an evaluator wiring defect. **That claim was wrong and is withdrawn.** Reading the code: `backlog-terminal-transition.ts` populates `evidenceRefs.DELIVERY_EVIDENCE_REQUIRED` whenever the completion manifest is *evaluated* (`completion.kind === \"evaluated\"`), while `deliveryState()` returns the *verdict*. So refs list what was supplied and considered; state reports whether it was accepted. Showing rejected refs is correct-by-design and useful. There is no bug there.\n\nTHE ACTUAL, VERIFIED DEFECT — one unmet condition with no caller-reachable path:\n\n`RESEARCH_REQUIRED` is derived at `initiative-readiness/entry-adapter.ts:259` as `state(evidence, \"research\")`, where `evidence` comes from `initiative_gate_receipt` BacklogItemActivity rows (see receipt-reader / projection). The only tool that writes such a receipt is `record_initiative_evidence` (grant `initiative_evidence_write`).\n\n- That tool is NOT granted to this contributor: `load_tools {names:[\"record_initiative_evidence\"]}` returns `newlyLoaded: [], count: 0` — \"No granted tools matched\".\n- The recovery block reports `reason: \"no-eligible-reviewer\"` with `reviewerRoutes: []`, so there is no role to escalate to either.\n\nBecause `completionRequirements` composes `implementationRequirements` -> `planRequirements`, and `planRequirements` includes RESEARCH_REQUIRED for the `fix` profile (evaluate.ts:42-46), that single unmet condition blocks THREE transitions:\n\n1. claim at implementation — IRD-307C1CA8F455\n2. claim at plan — IRD-E277B26FA99F\n3. completion of already-merged work — IRD-51CCC57DDDE8\n\n`design` intent is allowed (IRD-E3AB9B5AFA70, capsule WC-CB607773), so the lifecycle can be entered but never advanced.\n\nCONSEQUENCE: BI-2DB7254B sits `open` with its fix live on main and its delivery evidence attached (cmt9jh73705fi01qv4qpb96ym, cmt9jiiq005g401qv1lbuvbjn). The backlog understates what is delivered. The two options left to a contributor are to leave delivered work permanently open, or to fabricate readiness artifacts — the exact behaviour the gate exists to prevent.\n\nWHY I DID NOT SELF-SERVE A FIX: every available remedy either grants a capability or weakens a governance gate, and both are the platform owner's call, not an implementing contributor's. Options, for the owner to choose:\n\n- (a) Grant `initiative_evidence_write` to external-contributor executor kinds so RESEARCH_REQUIRED is self-satisfiable.\n- (b) Let a `fix`-profile item with a completed triage decision satisfy RESEARCH_REQUIRED implicitly — triage already records a rationale, and a small fix does not warrant a separate design artifact. This is a deliberate loosening of evaluate.ts:42-46 and should be decided, not slipped in.\n- (c) Populate `reviewerRoutes` with a real accountable role so `no-eligible-reviewer` becomes an escalation rather than a dead end. Least invasive; weakens nothing.\n\nIndependent of the choice: a readiness response should never name a recovery tool the caller holds no grant for. That is a UX contract on the gate itself.\n\nEVIDENCE: IRD-307C1CA8F455, IRD-E277B26FA99F, IRD-E3AB9B5AFA70, IRD-51CCC57DDDE8. Capsule WC-CB607773. Code: apps/web/lib/backlog/initiative-readiness/{evaluate.ts:42-46,106-114; entry-adapter.ts:259; backlog-terminal-transition.ts:70-76,150-163}.\n\nRELATED: a neighbouring break in this chain was recorded before — `record_plan_backlog_coverage` publishing one tool pack's schema while running another pack's handler, same user-visible symptom. PLAN_REQUIRED also appears in the completion failure above, so confirm whether that is still live before designing (b).",
+      "status": "triaging",
+      "type": "portfolio",
+      "workType": "bug",
+      "source": "automated-detection",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-3ae38a1f-cmt9k6es105ut01qv7miu9rza",
+          "kind": "evidence",
+          "summary": "Fourth blocked transition confirmed: Work Capsule completion also fails on RESEARCH_REQUIRED (IRD-43D3AFF6E3AF), leaving WC-CB607773 stuck at ready.",
+          "recordedAt": "2026-08-26T03:53:04.849Z",
+          "payload": {
+            "url": null,
+            "body": "Attempted update_workroom_status(WC-CB607773, complete) after PR #4681 merged (fe2c68cf) and the worktree was reaped. Rejected: \"Work Capsule completion is blocked by RESEARCH_REQUIRED.\" — decision IRD-43D3AFF6E3AF, transitionObject kind=work-capsule, expectedVersion=ready, targetState=complete, profile=fix.\n\nSo the single unmet RESEARCH_REQUIRED condition now demonstrably blocks FOUR transitions on the same item:\n  1. claim at plan            — IRD-E277B26FA99F\n  2. claim at implementation  — IRD-307C1CA8F455\n  3. backlog item -> done     — IRD-51CCC57DDDE8\n  4. work capsule -> complete — IRD-43D3AFF6E3AF\n\nOnly design intent is allowed (IRD-E3AB9B5AFA70).\n\nOperational consequence: a contributor who delivers merged, CI-green work cannot close the item, cannot close the capsule, and cannot release the lease cleanly. The capsule stays `ready` and the BI stays `open` indefinitely. Anything that reports on in-flight work will over-count, and anything that reaps stale capsules may treat a completed one as abandoned.\n\nWorth noting for whoever fixes this: CAPSULE_IDENTITY_MISMATCH passed with evidenceRefs [\"WC-CB607773\"], so the capsule binding itself is healthy — the block is purely the missing research receipt.\n\nNo workaround was applied. Closing any of these by writing synthetic readiness artifacts would defeat the gate; whoever holds initiative_evidence_write can clear all four in one call.",
+            "evidenceKind": "manual_check",
+            "toolExecutionId": null
+          }
+        },
+        {
+          "recoveryKey": "bi-3ae38a1f-cmt9kbcda05wt01qvn6kalm0j",
+          "kind": "epic_link",
+          "summary": "(no epic) → EP-129D11FD",
+          "recordedAt": "2026-08-26T03:56:55.006Z",
+          "payload": {
+            "toEpicId": "EP-129D11FD",
+            "fromEpicId": null
+          }
+        },
+        {
+          "recoveryKey": "bi-3ae38a1f-cmt9kc35905xv01qvzlaokfpq",
+          "kind": "evidence",
+          "summary": "Verified by code trace: the research receipt has exactly one writer, reachable only via MCP by nine tools, none granted here — and there is NO portal UI path, so no human can click it either.",
+          "recordedAt": "2026-08-26T03:57:29.709Z",
+          "payload": {
+            "url": null,
+            "body": "This replaces an inference with a verified trace. The earlier body asserted \"record_initiative_evidence is the only tool that can satisfy RESEARCH_REQUIRED\" on the strength of the readiness error's own toolName field. That was taken on trust and is now actually checked.\n\nWRITE PATH (single, verified):\n- Every occurrence of the \"initiative_gate_receipt\" activity kind across apps/web is a READ except two. The only writers are receipt-repository.ts:215-219 and baseline-repository.ts:536.\n- receipt-repository.ts exports exactly one writer: recordInitiativeGateReceipt (line 38).\n- Its only non-test caller in the entire app is apps/web/lib/mcp/packs/initiative-readiness-pack.ts:333.\n\nTOOL SURFACE (nine, not one):\nThat pack exposes nine tools, all funnelling into the same writer with a per-lane grant (line 337, requiredGrant: lane.grant): record_initiative_evidence, record_initiative_design_review, record_initiative_architecture_review, record_initiative_data_review, record_initiative_ux_review, record_initiative_security_review, record_initiative_compliance_review, record_initiative_domain_review, record_initiative_archetype_review.\n\nRequesting ALL NINE by exact name via load_tools returns newlyLoaded: [], count: 0 — \"No granted tools matched\". The earlier conclusion holds, but it now rests on testing the whole surface rather than the single name the error happened to mention.\n\nNEW AND MORE IMPORTANT: there is NO portal UI path. Grepping apps/web/app and apps/web/components for recordInitiativeGateReceipt or record_initiative_evidence returns nothing. The receipt is MCP-only.\n\nThis changes the remedy. It is not merely \"an agent lacks a permission a human could work around in the portal\" — no human can click this either. Unblocking any item stuck on RESEARCH_REQUIRED requires an MCP call carrying a token whose grants include the relevant lane. An operator looking at an item stuck at open has no control to press.\n\nConsequence for option (c) in the parent body (populate reviewerRoutes): routing to a human reviewer only helps if that reviewer can act. Today they would receive an escalation they also cannot satisfy from the UI. Option (c) should be paired with a portal surface, or dropped in favour of (a) or (b).\n\nMethod note: I asserted the single-writer claim before verifying it, and only checked it when challenged. The trace above is what should have backed the original filing.",
+            "evidenceKind": "manual_check",
+            "toolExecutionId": null
+          }
+        }
+      ],
+      "scopeRationale": "Verified single root condition: RESEARCH_REQUIRED needs an initiative_gate_receipt writable only by an ungranted tool, with an empty reviewer route. Blocks claim at plan/implementation and completion of merged work. Remedies are all grant/policy decisions reserved to the platform owner, so this is filed for decision rather than self-served.",
+      "priority": 1,
+      "createdAt": "2026-08-26T03:22:57.925Z"
     },
     {
       "itemId": "BI-441BECAC",
@@ -178,6 +283,34 @@
       "scopeRationale": "Universal TaskRun completion contract across every DPF delivery and coworker execution surface.",
       "priority": 3,
       "createdAt": "2026-08-22T05:58:28.301Z"
+    },
+    {
+      "itemId": "BI-512214EA",
+      "epicId": "EP-129D11FD",
+      "title": "Workroom creation drops backlogItemId, so reviewer dispatch reports no-eligible-reviewer",
+      "body": "## Problem\n\nNo initiative can reach implementation readiness, because the reviewer dispatch context can never be built. Two silent parameter drops break a chain that then reports a misleading cause.\n\n**1. `create_workroom` accepts `backlogItemId` and discards it.** Called with `backlogItemId: \"BI-C61CEEA9\"`, the returned capsule has `backlogItemId: null`.\n\n**2. `adopt_worktree` accepts `outcomeAnchor`, `executorKind` and `activityKind` and discards all three.** Called with `outcomeAnchor: {kind: \"backlog-item\", id: \"BI-C61CEEA9\"}`, `executorKind: \"claude-desktop\"`, `activityKind: \"delivery\"`, the returned capsule has `outcomeAnchor: {}`, `executorKind: null`, `activityKind: null`. It does correctly persist `headSha`, `baseSha` and `headBranch`.\n\n**3. The recovery lookup requires the field that was dropped.** `apps/web/lib/work-capsules/governed-work-claim.ts:239`\n\n```\nconst recoveryWorkroom = await tx.workroom.findFirst({\n  where: { backlogItemId: item.itemId, repositoryFullName, headBranch, archivedAt: null },\n```\n\nWith `backlogItemId` null the Workroom never matches, so `dispatchContext` is null.\n\n**4. The resulting escalation names the wrong cause.** `apps/web/lib/tak/initiative-readiness-tool-grants.ts:154`\n\n```\nif (candidate) {                      // an eligible reviewer WAS found\n  if (!input.dispatchContext) {\n    escalations.push({ ..., reason: \"no-eligible-reviewer\", ... });\n```\n\nThe branch is only reached when `candidate` is truthy — an eligible, active, production reviewer holding the grant. Reporting `no-eligible-reviewer` is false. The real cause is the missing dispatch context, which only the `nextAction` string hints at.\n\n## Reproduction\n\n1. `create_workroom` with a `backlogItemId` — observe it returns null.\n2. `plan_workroom_worktree`, push the branch, `adopt_worktree` with `headSha` — observe `headSha` persists and `outcomeAnchor` does not.\n3. `claim_backlog_item_for_work` for the same item and branch.\n4. Result: `initiative_not_ready` with `reviewerRoutes: []` and every accountable role escalated as `no-eligible-reviewer`.\n\nObserved across decisions `IRD-92BA60C556F4`, `IRD-B710E78028E7` and `IRD-9B1E8B873889` on 2026-08-26, against Workroom `WC-A3816A0A` (headSha `ef3ba508635461e4f21d64b1640dc46be101fda0`) and item `BI-C61CEEA9`.\n\n## Expected vs actual\n\nExpected: a Workroom bound to its backlog item and an immutable head yields populated `reviewerRoutes` with `requestCoworker` packets, so review can be dispatched.\nActual: `reviewerRoutes` is always empty and the escalation blames reviewer eligibility, which is not the fault.\n\n## Impact\n\nThis blocks implementation on every governed backlog item, not just EP-862820FD. The misleading label also costs diagnostic time: three separate investigations here concluded reviewer absence, authorization failure, and a missing Workroom before the real cause surfaced. `AGT-WS-REVIEW` and the other reviewers are registered, active and eligible throughout.\n\n## Suggested fix\n\n- Persist `backlogItemId` in `create_workroom` and resolve `outcomeAnchor` of kind `backlog-item` onto it in `adopt_worktree`; reject rather than silently drop an unpersisted parameter.\n- Split the escalation reason: keep `no-eligible-reviewer` for a genuinely absent candidate, and emit a distinct reason such as `dispatch-context-unresolved` when a candidate exists but the Workroom binding does not.\n- Add a test asserting that every accepted parameter is either persisted or rejected, since silent drops are invisible to callers today.\n\n## Related\n\n`BI-17CBD21F` — the `record_plan_backlog_coverage` two-pack schema collision, which independently blocks the coverage lane in this same chain.",
+      "status": "open",
+      "type": "product",
+      "workType": "bug",
+      "source": "user-request",
+      "scopeKind": "unknown",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-512214ea-cmt9kbcg105wv01qvf3ogalvy",
+          "kind": "epic_link",
+          "summary": "(no epic) → EP-129D11FD",
+          "recordedAt": "2026-08-26T03:56:55.105Z",
+          "payload": {
+            "toEpicId": "EP-129D11FD",
+            "fromEpicId": null
+          }
+        }
+      ],
+      "effortSize": "small",
+      "triageOutcome": "build",
+      "createdAt": "2026-08-26T03:54:50.072Z"
     },
     {
       "itemId": "BI-78D3CF1E",

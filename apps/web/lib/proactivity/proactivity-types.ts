@@ -20,6 +20,14 @@ export const PROACTIVITY_ACTIVITY_FAMILIES = [
   // enrich from public sources (permission + scope confirmed). Cadence only;
   // the write still routes through the governed apply step.
   "crm-record-enrichment",
+  // BI-C26FE785: campaign production and creative review cadence. Without this
+  // family the marketing coworker could not be described to the resolver at
+  // all, so no posture could govern it and it never acted unprompted.
+  // Deliberately NOT folded into "customer-communication": that names
+  // transactional outbound to a specific customer (a reply, a receipt), which
+  // carries a different cadence and a different approval boundary from
+  // producing campaign creative nobody asked for yet.
+  "marketing-campaign",
 ] as const;
 export type ProactivityActivityFamily = (typeof PROACTIVITY_ACTIVITY_FAMILIES)[number];
 

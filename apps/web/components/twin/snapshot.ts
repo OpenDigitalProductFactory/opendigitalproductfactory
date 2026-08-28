@@ -48,6 +48,11 @@ export interface TwinStageFlow {
   label: string;
   order: number;
   loadBearing: boolean;
+  /** Whether any twin queue or zone binds to this stage. A stage nothing binds
+   *  can never hold a record, so its count is not a measurement of zero — it is
+   *  the absence of one, and the strip must say so rather than print 0
+   *  (BI-AF50DBD5). */
+  observable: boolean;
   /** Demand units currently at this stage. */
   count: number;
   /** Longest wait among demand at this stage ("8m", "2d"); omitted when none waits. */

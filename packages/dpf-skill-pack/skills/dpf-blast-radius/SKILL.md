@@ -1,6 +1,6 @@
 ---
 name: dpf-blast-radius
-description: "Use before shipping a DPF change to find what it breaks somewhere else — a refactor, a renamed field, a contract/schema/enum edit, a shared helper, or a diff you do not trust. Traces callers, dependents and tests through the code graph, then proves the load-bearing facts by running code."
+description: "Use before shipping a DPF change to find what it breaks elsewhere — a refactor, renamed field, contract/schema/enum edit, shared helper, or a diff you do not trust."
 disable-model-invocation: false
 user-invocable: true
 allowed-tools: Bash(git diff *) Bash(git log *) Grep Glob Read mcp__dpf__explain_blast_radius mcp__dpf__trace_code_surface mcp__dpf__search_code_graph mcp__dpf__find_related_tests

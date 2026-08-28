@@ -77,7 +77,7 @@ Codex Desktop can retain a stale top-level model registry even after the server 
 
 **Operator conformance probe:** after deploying a candidate, run `node scripts/mcp-progressive-disclosure-conformance.mjs --url <nonproduction-MCP-URL>` with `DPF_MCP_BEARER_TOKEN` present only in the environment. The probe never logs the credential. It validates Codex Desktop/CLI and Claude Code full-catalog defaults, the generic-client core default, initialize guidance, exact and intent loading, append-not-swap, notification-aware SSE, notification-blind re-list, same-session use, structured unknown recovery, and authentication-vs-disconnection classification. A protocol-profile pass is not live host acceptance: separately prove a fresh Codex task can find and call a non-core tool from its host registry.
 
-**Code graph first (mandatory for code work).** Before broad text search or any symbol-level blast-radius claim, consult the committed code graph the way Build Studio agents already do: call `get_code_graph_freshness`, then `search_code_graph` / `trace_code_surface` to locate symbols, routes, Prisma models, MCP tools, and prompt sources, and confirm exact code with `read_project_file`; call `find_related_tests` for changed source files. **Do not assert symbol-level blast radius unless `trace_code_surface` returns structural edges.** `get_code_graph_freshness` reports index staleness and a dirty workspace; when the graph is stale or a result is empty, fall back to grep + file reads. **An empty code-graph result is NOT evidence of absence** — read the `trust` vector the read returns: a `low` tier or a `qualify` action means the graph could not answer, not that the substrate is missing (BI-86EF5900). This discipline is wired into the Build Studio agent prompts (`apps/web/lib/build/build-agent-prompts.ts`) — it applies identically to direct Claude Code / Codex / Grok sessions, which otherwise never learn the graph exists.
+**Code graph first (mandatory for code work).** Before broad text search or any symbol-level blast-radius claim, consult the committed code graph the way Build Studio agents already do: call `get_code_graph_freshness`, then `search_code_graph` / `trace_code_surface` to locate symbols, routes, Prisma models, MCP tools, and prompt sources, and confirm exact code with `read_project_file`; call `find_related_tests` for changed source files. **Do not assert symbol-level blast radius unless `trace_code_surface` returns structural edges.** `get_code_graph_freshness` reports index staleness and a dirty workspace; when the graph is stale or a result is empty, fall back to grep + file reads. **An empty code-graph result is NOT evidence of absence** — read the `trust` vector the read returns: a `low` tier or a `qualify` action means the graph could not answer, not that the substrate is missing (the `trust` vector ships in the code-graph read path; its originating backlog id predates a backlog reset and no longer resolves, so the behaviour is cited from source rather than from an anchor the coordination plane cannot see). This discipline is wired into the Build Studio agent prompts (`apps/web/lib/build/build-agent-prompts.ts`) — it applies identically to direct Claude Code / Codex / Grok sessions, which otherwise never learn the graph exists.
 
 **Coworker lifecycle contract (mandatory for new AI coworkers).** A coworker's lifecycle is `draft → defined → certified → active`, and it is enforced, not conventional (EP-COWORKER-LIFECYCLE; spec: `docs/superpowers/specs/2026-07-07-coworker-lifecycle-standard-design.md`):
 
@@ -103,3 +103,47 @@ itself — including retiring the grandfathered revisions — is operator-ratifi
 decision brief is
 [`docs/superpowers/specs/2026-08-16-mcp-version-window-contract-brief.md`](../superpowers/specs/2026-08-16-mcp-version-window-contract-brief.md).
 No revision has been retired under this section yet.
+
+## Acting-coworker binding — what lets a token join a Work Room (BI-B986A18B)
+
+A bearer token carries two separate things: **grants** (what tools it may call)
+and an **acting coworker** (who it is). Grants alone are not enough for a Work
+Room. Every room handler resolves its caller from `context.agentId`, which the
+MCP route reads off the token:
+
+```ts
+// apps/web/app/api/mcp/v1/route.ts
+agentId: token.agentId ?? undefined,
+```
+
+Without it, `post_room_message`, `read_room_messages` and
+`invite_room_participant` all refuse with `invalid_caller` — *"requires an
+acting coworker"* — no matter how many grants the token holds.
+
+**Bind the identity when you issue the token.** The Admin > Platform
+Development > MCP form has an **Acts as coworker** control. It defaults to
+*None — cannot join Work Rooms*, and lists only coworkers holding
+`work_room_write`, since acting-as is meaningless for an identity that cannot
+act in a room. External CLI surfaces have registry identities for exactly this:
+`AGT-EXT-CLAUDE`, `AGT-EXT-CODEX`, `AGT-EXT-GROK`.
+
+**Binding grants identity, never admission.** A bound token is *someone*; it is
+not thereby *in* any room. Admission stays outcome-scoped per room and
+invite-driven through `authorizeWorkRoomAccess` — a coworker cleared for an HR
+room is not cleared for a finance room. This is the least-privilege half of the
+[multi-agent communication substrate design](../superpowers/specs/2026-08-12-work-room-multi-agent-communication-substrate-design.md) §1.
+
+**Rotation preserves the binding.** Rotating a token changes the secret, not the
+identity. Before BI-B986A18B, rotation hardcoded `agentId: null`, so a
+room-capable token silently became anonymous and its coworker dropped out of
+every room it had joined — with no error on any surface.
+
+### Diagnosing "requires an acting coworker"
+
+```sql
+SELECT id, name, scope, "agentId" FROM "McpApiToken" WHERE "revokedAt" IS NULL;
+```
+
+`agentId` NULL on the row your client is using is the whole diagnosis. Re-issue
+(or rotate) the token with an acting coworker selected. If the dropdown is
+empty, no active agent in the registry holds `work_room_write`.

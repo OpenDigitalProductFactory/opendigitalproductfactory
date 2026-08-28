@@ -156,7 +156,7 @@ function buildUsStateEntries(
       sourceUrls: [config.sharedSources.usStateDirectory],
       sourceKind: "directory",
       confidence: "low",
-      staleAfterDays: 120,
+      staleAfterDays: 90,
       tags: ["us_state", "indirect_tax"],
     };
   });
@@ -197,7 +197,7 @@ function buildEuCountryEntries(
       sourceUrls: [config.sharedSources.euCountryInfo, config.sharedSources.euVatOverview],
       sourceKind: "directory",
       confidence: code === "DK" ? "medium" : "low",
-      staleAfterDays: 180,
+      staleAfterDays: 90,
       tags: ["eu_vat"],
     };
   });
@@ -227,7 +227,7 @@ function buildOverrideEntries(config: SeedConfig): TaxJurisdictionSeedRecord[] {
     sourceUrls: [...entry.sourceUrls],
     sourceKind: entry.sourceKind,
     confidence: entry.confidence,
-    staleAfterDays: 180,
+    staleAfterDays: 90,
     tags: [...entry.tags],
   }));
 }

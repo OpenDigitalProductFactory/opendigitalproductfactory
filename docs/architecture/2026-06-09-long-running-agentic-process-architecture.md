@@ -260,6 +260,10 @@ Already two-thirds there (`ScheduledOutboundAction` + `tickScheduler`). To make 
 - **Measure → optimize loop** is an evaluator-optimizer workflow (Anthropic pattern): pull KPIs, evaluate against targets, propose the next round of assets back into `draft`.
 - **Operator experience** — reuse the generalized process graph, gate panel, and evidence timeline rather than building a separate marketing console; the pre-publish gate *is* `DecisionPerspectiveGatePanel`, and measure→optimize renders as KPI cards feeding the next `draft`. This instance is the proof that the §3.2 experience layer actually generalizes.
 
+**Cadence is now posture-driven (BI-C26FE785, 2026-08-26).** `planUpcomingForAssetTasks()` previously scheduled every drafter run at a fixed `ADVANCE_DAYS_FOR_DUE_WINDOW = 3`. It now takes the resolved `marketing-campaign` proactivity posture and varies the lead time with it: `quiet` suppresses planning outright (planning-then-staying-silent would still spend model budget and fill the outbound queue behind the operator's back), `balanced` keeps the standard lead time, and `assertive` starts creative earlier — falling back to the standard lead time rather than skipping when the longer one would land in the past, so a more assertive posture can never schedule *less* work than a calmer one.
+
+This matters for the DAP framing above because it makes the `brief → draft` transition a governed decision rather than a constant. The HITL gate is unchanged and now doubly enforced: the resolver caps `marketing-campaign` at an `actionBoundary` of `propose` for every level, and because the posture ladder only ever tightens, no room declaration or operator preference downstream can loosen it to `preauthorized`. Publishing therefore remains reachable only through the approval queue, which is the non-bypassable boundary this section already required.
+
 ### 7.3 Monthly financial close / "balancing the books"
 
 The highest-stakes instance, and the one where durability + auditability + idempotency matter most. The finance skills already exist (`finance:close-management`, `finance:reconciliation`, `finance:journal-entry`, `finance:financial-statements`).

@@ -81,6 +81,25 @@ export async function dispatchIdeateForApprovedBuild(params: {
     });
   };
 
+  /**
+   * BI-7AD0759A — keep a bounded excerpt of what the model actually said when its
+   * output could not be parsed into a design document.
+   *
+   * Head AND tail are retained: a truncated or unterminated object shows its
+   * shape at both ends, and the tail is usually where it died. An empty response
+   * is recorded as such, because "the model returned nothing" is a different
+   * diagnosis from "the model returned prose".
+   */
+  const recordIdeateOutputExcerpt = async (rawOutput: string | undefined): Promise<void> => {
+    const { describeIdeateOutput } = await import("./ideate-output-excerpt");
+    const summary = describeIdeateOutput(rawOutput);
+    await prisma.buildActivity.create({
+      data: { buildId, tool: "ideate_output_excerpt", summary },
+    }).catch((err) => {
+      console.warn("[ideate-on-approval] Failed to log ideate_output_excerpt:", { buildId }, err);
+    });
+  };
+
   /** BI-CE1AB982 — durable "refused before start" marker read by progress-visibility. */
   const recordDispatchBlocked = async (reason: string): Promise<void> => {
     await prisma.buildActivity.create({
@@ -343,6 +362,11 @@ export async function dispatchIdeateForApprovedBuild(params: {
         durationMs,
       };
       await logActivity(`Auto-dispatch failed after ${(durationMs / 1000).toFixed(1)}s: ${outcome.error.slice(0, 200)}`);
+      // BI-7AD0759A: the model's output is the ONLY thing that explains why it
+      // could not be parsed, and it was being dropped on the floor here — on a
+      // local-only install that leaves the operator a four-minute wait and a
+      // fixed sentence. Keep a bounded excerpt as evidence.
+      await recordIdeateOutputExcerpt(ideateResult.rawOutput);
       return outcome;
     }
     if (executionProfileRef) {
@@ -371,11 +395,19 @@ export async function dispatchIdeateForApprovedBuild(params: {
     // The designDoc would then persist to the wrong build while this build's
     // activity log (correct buildId in scope) records "saved", leaving this
     // build stuck at the post-ideate gate with no design doc.
+    // BI-2D698C7B: record WHICH engine authored this design. The context was
+    // empty here, so saveBuildEvidence stored savedByAgentId = null on every
+    // design Build Studio has ever written — and resolveInitiativeArtifact
+    // requires a non-null authoring agent, so ARTIFACT_AUTHOR_REQUIRED could
+    // never clear and no design could become a canonical baseline. The engine
+    // is already resolved at this point and the activity log already names it.
+    const { authoringAgentIdForEngine } = await import("@/lib/build/authoring-engine-agent");
+    const authoringAgentId = authoringAgentIdForEngine(resolvedAttempt.engine);
     const saveResult = await executeTool(
       "saveBuildEvidence",
       { buildId, field: "designDoc", value: ideateResult.designDoc },
       userId,
-      {},
+      authoringAgentId ? { agentId: authoringAgentId } : {},
     );
 
     if (!saveResult.success) {
@@ -602,6 +634,10 @@ export async function dispatchApprovedIdeateBuilds(params: {
 /** Bounded rounds for the design-review fix loop. Operator-tunable. */
 export const DESIGN_FIX_MAX_ROUNDS = Number(process.env.DESIGN_FIX_MAX_ROUNDS) || 2;
 
+/** Bounded re-reviews when the reviewers themselves cannot return a verdict
+ *  (BI-D33F968A). Separate from the fix rounds: these attempts are not repairs. */
+export const DESIGN_REVIEW_RETRY_LIMIT = Number(process.env.DESIGN_REVIEW_RETRY_LIMIT) || 2;
+
 type DesignReviewVerdict =
   | { decision?: string; issues?: Array<{ severity: string; description: string }> }
   | null;
@@ -673,15 +709,43 @@ export async function dispatchDesignReviewFixLoop(params: {
     const { formatPlanReviewFeedback } = await import("@/lib/build/plan-on-approval");
     const { executeTool } = await import("@/lib/mcp-tools");
     let round = 0;
+    // BI-E492F313: did any round actually produce a new design to review? A
+    // regeneration that never ran is NOT self-repair exhausted, and must not be
+    // treated as one.
+    let regenerated = false;
+    let reviewRetries = 0;
     while (review?.decision === "fail" && round < DESIGN_FIX_MAX_ROUNDS) {
+      // BI-D33F968A: a review that could not be completed says nothing about the
+      // design. Regenerating against "Both review agents failed to respond"
+      // cannot fix anything — it just spends the budget and ends in escalation
+      // (live repro FB-05946F96). Re-run the reviewer instead, and only count a
+      // round once a real verdict exists.
+      if ((review as { reviewIncomplete?: boolean } | null)?.reviewIncomplete === true) {
+        if (reviewRetries >= DESIGN_REVIEW_RETRY_LIMIT) break;
+        reviewRetries += 1;
+        await log(`Design review could not be completed — re-reviewing (attempt ${reviewRetries}/${DESIGN_REVIEW_RETRY_LIMIT}); the design is not at fault.`);
+        await executeTool("reviewDesignDoc", { buildId }, userId, { featureBuildId: buildId, suppressDesignReviewAutoRepair: true });
+        const retried = await prisma.featureBuild.findUnique({ where: { buildId }, select: { designReview: true } });
+        review = retried?.designReview as DesignReviewVerdict;
+        continue;
+      }
       round += 1;
       await log(`Design review failed — regenerating (round ${round}/${DESIGN_FIX_MAX_ROUNDS}) against ${review.issues?.length ?? 0} issue(s)`);
       const feedback = formatPlanReviewFeedback(review.issues ?? []);
       const regen = await dispatchIdeateForApprovedBuild({ buildId, userId, priorReviewFeedback: feedback });
       if (regen.kind !== "dispatched-success") {
-        await log(`Design regeneration round ${round} produced no designDoc (${regen.kind}) — stopping.`);
-        break;
+        // BI-E492F313: this used to `break`, so ONE infrastructure failure both
+        // consumed a round and abandoned the rest — the advertised "round 1/2"
+        // never happened. A regeneration that could not dispatch says nothing
+        // about the design, so spend the remaining rounds instead: engine
+        // selection is re-resolved per attempt and a later round can land on an
+        // engine that works. Live repro FB-D23311A7: round 1 drew the local
+        // model, could not parse its output, and the build was destroyed —
+        // taking a sound design doc and an actionable review with it.
+        await log(`Design regeneration round ${round} produced no designDoc (${regen.kind}) — retrying if rounds remain.`);
+        continue;
       }
+      regenerated = true;
       await executeTool(
         "reviewDesignDoc",
         { buildId },
@@ -692,12 +756,34 @@ export async function dispatchDesignReviewFixLoop(params: {
       review = fresh?.designReview as DesignReviewVerdict;
     }
 
-    if (review?.decision === "fail") {
+    // BI-E492F313: escalate-to-human ABANDONS the build, frees the WIP slot and
+    // parks the owner's backlog item as deferred. The rule for when that is
+    // warranted lives in review-fix-outcome.ts — shared with the plan loop — so
+    // it is testable without the dispatch stack and cannot drift per phase.
+    const { resolveReviewFixOutcome, outcomeKeepsBuildRecoverable } = await import(
+      "@/lib/build/review-fix-outcome"
+    );
+    const outcomeKind = resolveReviewFixOutcome({
+      reviewFailed: review?.decision === "fail",
+      regenerated,
+      reviewIncomplete: (review as { reviewIncomplete?: boolean } | null)?.reviewIncomplete === true,
+    });
+    if (outcomeKeepsBuildRecoverable(outcomeKind)) {
+      await log(
+        outcomeKind === "blocked-review-incomplete"
+          ? "No reviewer could complete a design review, so nothing is known about this design. "
+            + "Leaving the build recoverable; the design is kept and untouched."
+          : `Design repair could not regenerate a design in ${round} round(s) — no engine produced one. `
+            + "Leaving the build recoverable; the existing design and review are kept.",
+      );
+      return { kind: outcomeKind, rounds: round };
+    }
+    if (outcomeKind === "escalated-after-rounds") {
       await escalate(build, review, round);
-      return { kind: "escalated-after-rounds", rounds: round };
+      return { kind: outcomeKind, rounds: round };
     }
     await log(`Design review passed after ${round} fix round(s).`);
-    return { kind: "repaired", rounds: round };
+    return { kind: outcomeKind, rounds: round };
   } catch (err) {
     await log(`Design fix loop error: ${String(err instanceof Error ? err.message : err).slice(0, 200)}`);
     return { kind: "error", rounds: 0 };

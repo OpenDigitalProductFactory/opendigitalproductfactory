@@ -209,6 +209,27 @@ The unresolved-work list is the load-bearing part of an outcome packet: a shape 
 with silent remainders is how work escapes the room. Naming the remainder with a
 disposition is what keeps the next cycle honest.
 
+## Setting the posture, and the default for rooms
+
+⟦runtime: shipped 2026-08-23⟧ Both write paths are operator-facing, which they were not
+when the posture first shipped: `WorkroomPosture.tsx` displayed a pace and priority with
+zero interactive elements and no server action behind it, while every settable control was
+per-coworker.
+
+- **Per room** — shape, pace and action boundary, inside the room's existing collapsed
+  section (`WorkroomPostureControl`, actions in `lib/actions/workroom-posture.ts`). The
+  shape claim REPLACES any prior entry rather than appending, because
+  `readWorkroomShapeClaim` returns the first valid declaration and a stale entry would win.
+- **Decreed default for rooms** — `WorkroomDefaultControl` on the priority surface, stored
+  migration-free under `autonomyPolicy.workroomPostureDefault`
+  (`workroom-posture-defaults.ts`).
+
+Ladder position for the default: **above** the coworker ladder, because it is specifically
+about rooms and they are not; **below** derivation, because what the work actually is
+outranks a blanket preference about rooms. Both paths run the action boundary through the
+tighten-only clamp, so neither control can widen authority — and the UI states that, since
+an invariant the operator cannot see is one they will be surprised by.
+
 ## Known gaps
 
 Stated plainly so nobody plans against a capability that is not there:

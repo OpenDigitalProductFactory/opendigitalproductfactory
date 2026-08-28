@@ -3,7 +3,7 @@
   "bundleId": "veterinary-clinic-operating-system",
   "description": "Operator-invoked recovery input for the veterinary clinic operating system epic (archetype acceptance-scenario contract and fixtures).",
   "source": {
-    "capturedAt": "2026-08-26T03:07:09.229Z",
+    "capturedAt": "2026-08-26T03:57:53.481Z",
     "repository": "OpenDigitalProductFactory/opendigitalproductfactory",
     "planPath": "docs/architecture/archetype-operating-model-audit.md"
   },

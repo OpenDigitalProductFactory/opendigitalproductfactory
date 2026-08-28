@@ -295,7 +295,13 @@ export function evaluate({ manifest, fileTexts, baseline, strict, extracted = []
         const msg =
           `${item.file} always-on frontmatter is ${item.bytes} bytes (> ${maxItem}) — ` +
           `a description states WHEN to use the skill; the how-to belongs in the body`;
-        (strict || manifest.structuralStrict === true ? errors : warnings).push(msg);
+        // `extractedItemStrict` makes the per-description budget hard WITHOUT waiting on
+        // `structuralStrict`. The structural signal is Phase-0 advisory because the AGENTS.md
+        // split has not landed; skill descriptions are already separate files, so their budget
+        // has no reason to be gated on that split. BI-58F6755A.
+        const itemStrict =
+          strict || manifest.structuralStrict === true || manifest.extractedItemStrict === true;
+        (itemStrict ? errors : warnings).push(msg);
       }
       if (item.descriptionChars > maxDescription) {
         errors.push(

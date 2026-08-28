@@ -107,6 +107,16 @@ re-runs without re-prompting.
    derives the active private IPv4 portal address by default. Discovery works
    over HTTP; automatic pairing requires an explicitly trusted, certificate-
    valid HTTPS `DPF_LAN_AUTHORITY_URL`.
+
+   A certificate is necessary but not sufficient. An install pairs a nearby peer
+   automatically only when every one of these can be **proved**: the peer's
+   certificate chain validates against your pinned organization root, this
+   install has completed an organization join import, both installs name the
+   same estate, and the relationship is same-organization. Anything else — a
+   peer on plain HTTP, an unnamed estate, a different organization, a chain that
+   will not validate — still pairs, but through the short code both operators
+   confirm. The pairing screen names which condition could not be proved, so a
+   peer that should be pairing automatically and is not tells you why.
 9. **Autostart** — registers a Windows **Scheduled Task** so the stack
    starts at logon (see [Autostart](#autostart)).
 

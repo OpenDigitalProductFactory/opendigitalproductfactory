@@ -767,6 +767,34 @@ Live confirmation from `BI-F0715C9C` readiness at 2026-08-26:
 
 Follow-on PRs #4603, #4605, and #4641 extended the same surface.
 
+### Superseded first-deployment boundary — retained as audit history
+
+The abandoned `WC-2ABA65F7` line carried its own ratified envelope. It never
+authorized the delivery, but destroying its identity would erase the record that
+a boundary existed, what it was bound to, and how it was superseded. Recorded
+here because its worktree is transient and `main` is not.
+
+- Ratified design-only checkpoint: commit `a537d7a1ebb19b40f9ccc1426d9fb62fc0312b89`,
+  tree `7033afb666113bb5e3dc33122a21552028c37fb0`.
+- Design blob `dedf8f19a94e5bcb126f2e5774e60237974ff4da`; plan blob
+  `de1703b6cae2f6ec1b555c20e66346b5311a6ebd`.
+- Semantic-review receipt `cmt5xkrai0jhk01rm4apogtih`.
+- Operator activation of the one-time repository contribution envelope: Workroom
+  activity `cmt5xoo250jj401rm57xnzi6f`. Stated expiry
+  `2026-08-26T15:00:06.989Z`, single-use, consumed at protected merge.
+
+**It was breached, not consumed.** `WC-2ABA65F7`'s status override records the
+reason: "Non-fast-forward publication breached the one-time envelope and later
+branch/head adoption polluted canonical identity." The envelope's own terms make
+a non-fast-forward publication a stop, so the boundary did what it was written to
+do. Recovery restarted on a fresh branch from `origin/main` and the delivery took
+the stricter route above.
+
+The standing prohibition attached to that envelope survives it and is not
+specific to this repair: no direct DB write, synthetic principal, reused human,
+AI proxy, superuser fallback, fabricated receipt, or relabelled design mutation
+is ever a valid way to satisfy a readiness prerequisite.
+
 ### Not delivered — the completion lane
 
 Acceptance 20 and 21 were added to `BI-F0715C9C` on 2026-08-25, **after** this

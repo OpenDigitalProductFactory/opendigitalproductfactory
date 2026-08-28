@@ -1088,6 +1088,10 @@ GROK_HOOK_GUARDS = (
     "plan-backlog-coverage-guard.mjs",
     "pregate-evidence-guard.mjs",
     "pregate-invocation-guard.mjs",
+    # BI-0B292D84: AGENTS.md 12 requires a Workroom claim before work on every
+    # surface. Grok ignores the plugin-bundled hooks.json entirely, so a guard
+    # absent from this tuple never reaches Grok at all.
+    "workroom-claim-guard.mjs",
 )
 # Matcher-scoped groups (BI-pretooluse): without matchers Grok runs EVERY PreToolUse
 # command on EVERY tool (6 serial node spawns per call), which looks like
@@ -1104,6 +1108,7 @@ GROK_PRETOOLUSE_GROUPS = (
             "portal-image-guard.mjs",
             "pregate-evidence-guard.mjs",
             "pregate-invocation-guard.mjs",
+            "workroom-claim-guard.mjs",
         ),
     ),
     (
@@ -1112,7 +1117,7 @@ GROK_PRETOOLUSE_GROUPS = (
     ),
     (
         "Write|Edit|MultiEdit",
-        ("plan-backlog-coverage-guard.mjs",),
+        ("plan-backlog-coverage-guard.mjs", "workroom-claim-guard.mjs"),
     ),
 )
 
@@ -1325,11 +1330,14 @@ CODEX_BASH_GUARDS = (
     "lease-punt-guard.mjs",
     "pregate-evidence-guard.mjs",
     "pregate-invocation-guard.mjs",
+    # BI-0B292D84 - also on CODEX_WRITE_GUARDS; hooks.json wires it on both matchers.
+    "workroom-claim-guard.mjs",
 )
 CODEX_ASK_GUARDS = ("decision-routing-guard.mjs",)
 CODEX_WRITE_GUARDS = (
     "root-clone-guard.mjs",
     "plan-backlog-coverage-guard.mjs",
+    "workroom-claim-guard.mjs",
 )
 
 
@@ -1500,6 +1508,7 @@ HOOK_PURPOSES = {
     "portal-image-guard.mjs": "blocks hand-building the canonical portal image, which overwrites what the live install runs",
     "lease-punt-guard.mjs": "blocks a runtime-bound gate (prisma migrate / db push) in a source-only worktree",
     "decision-routing-guard.mjs": "blocks asking the operator a platform decision with no kernel consultation",
+    "workroom-claim-guard.mjs": "blocks work on a feature branch that no live Workroom claim covers (AGENTS.md 12)",
     "plan-backlog-coverage-guard.mjs": "blocks production source edits until xlarge and independently shippable plan work has live BI coverage",
     "pregate-evidence-guard.mjs": "blocks git push / gh pr create when HEAD has no unexpired local-CI sandbox evidence",
     "pregate-invocation-guard.mjs": "blocks a pregate run shaped so it cannot succeed or cannot be read (piped, backgrounded, chained, timeout-wrapped)",

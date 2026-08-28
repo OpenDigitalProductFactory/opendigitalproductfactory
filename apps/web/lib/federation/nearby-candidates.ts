@@ -1,5 +1,7 @@
 import { isIP } from "node:net";
 
+import { normalizeOrganizationRef } from "@/lib/install/estate-identity-contract";
+
 const CANDIDATE_TTL_MS = 2 * 60_000;
 
 export type AutomaticPairingReadiness =
@@ -12,6 +14,17 @@ export interface NearbyFederationCandidateInput {
   protocol: "1";
   capabilityDigest: string;
   pairPath: "/connect/pair";
+  /**
+   * The estate the peer advertises, when its discovery record carried one.
+   *
+   * Optional on purpose. An Edge Node that predates this field, or a peer that
+   * has never been named, simply advertises nothing — and an absent ref makes
+   * `evaluateOrganizationEnrollment` answer `manual-approval`, which is the
+   * correct outcome rather than a regression. A self-asserted name grants no
+   * trust by itself: the same decision independently requires the peer's
+   * certificate chain to validate against the pinned organization root.
+   */
+  organizationRef?: string;
 }
 
 export interface NearbyFederationCandidate extends NearbyFederationCandidateInput {
@@ -105,10 +118,14 @@ export function recordNearbyFederationCandidates(input: {
     if (endpoint === local) continue;
     const protocol = new URL(endpoint).protocol;
     const key = `${candidate.discoveryId}\u0000${endpoint}`;
+    const organizationRef = normalizeOrganizationRef(candidate.organizationRef);
     candidates.set(key, {
       ...candidate,
       source: "lan",
       endpoint,
+      // Normalised on the way IN, with the same function the local ref uses, so
+      // the two are already comparable by the time a decision reads them.
+      ...(organizationRef ? { organizationRef } : { organizationRef: undefined }),
       edgeNodeId: input.edgeNodeId,
       observedAt: input.observedAt.toISOString(),
       expiresAt: new Date(now.getTime() + CANDIDATE_TTL_MS).toISOString(),

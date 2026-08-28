@@ -22,7 +22,14 @@ CMD ["/usr/local/bin/dev-portal-entrypoint.sh"]
 FROM base AS deps
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
 COPY patches/ ./patches/
+# set-hooks-path runs as the root postinstall during `pnpm install` below, and
+# it imports resolveHooksDir from scripts/lib/hooks-dir.mjs (BI-5CBDC146). The
+# lib must land with it or the postinstall throws ERR_MODULE_NOT_FOUND and the
+# whole image build fails.
 COPY scripts/set-hooks-path.mjs ./scripts/
+COPY scripts/lib/hooks-dir.mjs ./scripts/lib/
+COPY scripts/sbom/generate-platform-sbom.mjs ./scripts/sbom/
+COPY .github/workflows/publish-image.yml ./.github/workflows/
 COPY apps/web/package.json ./apps/web/
 COPY packages/db/package.json ./packages/db/
 COPY packages/db/prisma/schema ./packages/db/prisma/schema
@@ -56,6 +63,7 @@ FROM deps AS build
 # Copy source EXCLUDING pnpm-lock.yaml (preserve the deps stage lockfile which has no expo entries)
 COPY pnpm-workspace.yaml tsconfig.base.json .gitignore ./
 COPY scripts/set-hooks-path.mjs ./scripts/
+COPY scripts/lib/hooks-dir.mjs ./scripts/lib/
 COPY scripts/capability-service-catalog.generated.json ./scripts/
 COPY scripts/lib/capability-service-projection.mjs ./scripts/lib/
 COPY scripts/lib/capability-state-hash.mjs ./scripts/lib/
@@ -250,6 +258,7 @@ COPY --from=init /app/pnpm-workspace.yaml /app/pnpm-lock.yaml /app/package.json 
 # runtime install fails the same way the image build did (SUR-8AB3353C).
 COPY --from=init /app/patches ./patches
 COPY --from=init /app/scripts ./scripts
+COPY --from=init /app/.github ./.github
 # Checked-in registries read by the packaged gate-context generator. Preserve
 # their repository-relative paths because the generator is also the CLI source
 # of truth and deliberately has no portal-only path branch.

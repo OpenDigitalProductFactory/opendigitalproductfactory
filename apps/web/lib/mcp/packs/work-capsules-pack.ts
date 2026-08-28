@@ -132,6 +132,7 @@ const definitions: ToolDefinition[] = [
         baseSha: { type: "string", description: "Optional current base SHA." },
         headSha: { type: "string", description: "Optional current head SHA." },
         executorKind: { type: "string", enum: ENUMS.executors, description: "Optional executor adopting the worktree." },
+        sessionRef: { type: "string", description: "Owner/session id, stored as the workroom executorRef. Without it a claim can be shown to exist but not shown to be yours." },
         ...scopeProperties,
       },
       required: ["title", "objective", "repositoryFullName", "headBranch", "worktreePath"],

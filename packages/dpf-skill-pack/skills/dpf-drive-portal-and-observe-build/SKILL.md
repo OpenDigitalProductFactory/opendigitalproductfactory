@@ -1,6 +1,6 @@
 ---
 name: dpf-drive-portal-and-observe-build
-description: "Use when driving the live DPF portal through the browser (Claude-in-Chrome) — messaging a coworker, clicking through a build's gates, filling an admin form — OR observing what the build/inference engine is doing: which model ran a phase, why a tool call failed, where a build is stuck. Covers the DOM mechanics that fail by default on live pages, and where build truth actually lives across the database, activity events, container logs and runtime-health surfaces."
+description: "Use when driving the live DPF portal through the browser — messaging a coworker, clicking through build gates, filling an admin form — or when establishing what the build engine actually did."
 # Agent Skills standard fields (Surface A — Claude Code)
 disable-model-invocation: true
 user-invocable: true

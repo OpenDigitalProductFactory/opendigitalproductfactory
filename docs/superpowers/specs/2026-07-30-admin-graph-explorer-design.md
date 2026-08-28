@@ -3,7 +3,7 @@ title: Admin Graph Explorer — visual exploration of the unified graph mirror
 date: 2026-07-30
 backlog: BI-89A149A9
 epic: EP-CODE-GRAPH
-status: implemented
+status: active
 ---
 
 # Admin Graph Explorer
@@ -425,6 +425,132 @@ stays 39,380, with the 504 markers excluded.
 `Wiki__*` nodes remain at **zero** cross-domain edges, and no route reaches a
 `PrismaModel` — `schema.prisma` still has no inbound edges. The route→file→**model** hop
 and the wiki→code hop are both unbuilt, and both need derivation rather than backfill.
+
+## Projections need an invoker (BI-FEDFABF6, 2026-08-26)
+
+The mirror is written by several projections. The code graph and the EA/discovery sync
+have their own indexers, so they stay current. The knowledge corpus, the portfolio
+spine and the doc-impact bridge are projected by rebuild scripts whose **only reference
+in the repository was their own `package.json` definition** — nothing ever called them.
+
+### Measured on a freshly provisioned install
+
+| Domain | Nodes | Has an indexer? |
+| --- | --- | --- |
+| code (`CodeSymbol`/`CodeFile`/…) | 38,592 | yes |
+| EA / ArchiMate | 607 | yes |
+| knowledge (`Wiki__*`) | **0** | **no** |
+| portfolio / `DigitalProduct` / `TaxonomyNode` | **0** | **no** |
+| `DocPage` + `IMPACTS` | **0 / 0** | **no** |
+
+Every domain with a caller is populated; every domain without one is empty. This is the
+same defect BI-3045CC18 and BI-0E019B95 each reported separately, reproduced from
+scratch — which is what established it as a class rather than two incidents.
+
+Nothing fails and nothing logs. The explorer renders a confident wrong answer.
+
+### Boot is the trigger
+
+`instrumentation.register()` runs after migrations, after every self-upgrade, and on
+first start of a new install — exactly when the source data moves relative to the
+mirror. A schedule would also work but adds a cadence to tune and misses the
+fresh-install case entirely.
+
+`apps/web/lib/graph/refresh-projections.ts` holds the refresh. Three properties make a
+boot caller safe, each pinned by a test verified to fail against a straight-line
+implementation:
+
+- **Isolated** — one projection failing does not stop the others; a partially-current
+  mirror beats one that stopped at the first error.
+- **Never throws** — a stale mirror is bad, an unbootable portal is worse.
+- **Owned-scope only** — doc-impact clears only `DocPage`, the single label it owns.
+
+It is skipped under measurement runtime, like the self-heal block beside it, because a
+sweep portal measures a frozen baseline and background writers racing the crawl are a
+known source of same-tree pass/fail nondeterminism.
+
+### Importing a rebuild script must not run it
+
+`rebuild-knowledge-and-portfolio-graph.ts` executed `main()` at module scope and then
+disconnected the shared Prisma client. Importing it from the portal would have run a
+full rebuild as a side effect of an import and closed the connection under its caller.
+It now exports `rebuildKnowledgeAndPortfolioGraph` and guards the CLI entry behind an
+`argv` check.
+
+### Still open
+
+Nothing reports projection freshness, so an empty or destroyed domain remains
+indistinguishable from a true answer (BI-A73954F7). That is the observability step and
+belongs after this one; a drift guard belongs after both — shipped earlier it would sit
+permanently red and be disabled.
+
+*Resolved by the next section.*
+
+## The mirror checks itself (BI-A73954F7, 2026-08-26)
+
+Three mirror failures reached a user, and every one was found by a **human** comparing
+mirror contents against source-of-truth counts. Nothing in the platform performed that
+comparison, so each rendered as a confident wrong answer rather than as an error.
+
+`packages/db/src/graph-projection-reconcile.ts` now makes that comparison automatic.
+The invoker runs it after refreshing and reports the result; it does not repair, and it
+does not fail a build.
+
+### Four states, because "empty" is not one thing
+
+| status | meaning |
+| --- | --- |
+| `empty` | the source has rows and the mirror has NONE — never invoked, or destroyed |
+| `drifted` | both non-zero and unequal, or orphan debris the source no longer accounts for |
+| `source-empty` | the source is genuinely empty, so an empty mirror is CORRECT |
+| `ok` | matches |
+
+`source-empty` is deliberately distinct from `empty`. A fresh install with no wiki
+pages *should* have no wiki nodes, and reporting that as a fault would make the check
+noisy on exactly the installs that most need a signal they can trust.
+
+### Counts, not a freshness timestamp
+
+A "last run at" timestamp answers whether a job fired — not whether the mirror is
+right. The doc-impact projection was DESTROYED by an unrelated re-index minutes after a
+clean run, and a timestamp would have read green throughout. Counts catch a destroyed
+domain as readily as an unrun one, so the weaker signal was not worth a schema change.
+
+### One invariant per label — never a summed aggregate
+
+The first draft of this check reported portfolio drift of −4 against a **perfectly
+healthy** live mirror: it compared 767 distinct nodes with 771 summed source rows,
+because four nodes legitimately carry two of those labels — the code-graph projection
+UNION-merges labels rather than replacing them, shipped in PR #4215. Per label the
+projection is exact — 4/4, 488/488, 279/279.
+
+This is the load-bearing lesson of the whole section: **a permanently-red check is
+worse than no check.** It trains people to ignore the alarm, so it cannot do its job on
+the day it matters. The same shape is what makes a data-dependent frozen UX baseline
+block unrelated work.
+
+### The invariant and the projection must share one derivation
+
+`countDocPagesInManifest()` is derived from `planDocImpactProjection` rather than
+counted off the manifest's inverse maps, which the projection does not read. An earlier
+revision instead read `manifest.pages.length` — a key that does not exist — so the count
+was `undefined` and the doc-impact invariant was **silently skipped**, which is precisely
+the silent-skip this work exists to remove.
+
+### Measured on the live mirror
+
+```
+knowledge                 356/356   ok
+portfolio:Portfolio         4/4     ok
+portfolio:TaxonomyNode    488/488   ok
+portfolio:DigitalProduct  279/279   ok
+doc-impact                199/199   ok
+```
+
+### Still open
+
+Enforcement. A drift guard now has a signal to build on, and belongs after this has run
+on real installs long enough to show it stays green when the mirror is healthy.
 
 ## Follow-ups
 

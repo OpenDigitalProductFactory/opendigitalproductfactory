@@ -97,8 +97,8 @@ describe("tax remittance foundation model shape", () => {
       periodEnd: new Date("2026-03-31T23:59:59.999Z"),
       dueDate: new Date("2026-04-30T00:00:00.000Z"),
       status: "draft",
-      salesTaxAmount: new Prisma.Decimal("1250.00"),
-      inputTaxAmount: new Prisma.Decimal("0.00"),
+      // Component totals moved to TaxObligationPeriodComponent rows; the
+      // period keeps only the frozen net (BI-947F8703, DI-31F2D7D10E25).
       netTaxAmount: new Prisma.Decimal("1250.00"),
       manualAdjustmentAmount: new Prisma.Decimal("0.00"),
       exportStatus: "not_started",

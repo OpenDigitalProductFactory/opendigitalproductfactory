@@ -10,7 +10,7 @@ status: binding
 | Epic | `EP-MSP-FEDERATION` (enrollment), `EP-1FABA22D` (instance stance) |
 | Surface | `@dpf/db` federation contracts, federated record sync, instance stance |
 | Owners | Federation, installation lifecycle |
-| Related | `2026-08-22-installation-identity-and-agent-stance-design.md`; federated record sync (B3/B5); organization join package (`BI-A8399604`) |
+| Related | `2026-08-22-installation-identity-and-agent-stance-design.md`; federated record sync (B3/B5); the organization join package contract in `packages/db/src/organization-join-action.ts` |
 
 ## 1. Decision
 
@@ -150,6 +150,163 @@ evidence costs a human confirmation rather than an unearned trust decision.
 so a caller cannot skip the pairing code by treating `operator-confirmation` as a
 pass.
 
+### 5.5 Resolving the organization trust anchor
+
+Both the enrolment decision and the pairing decision need two facts: the root
+this installation pins, and the organization it belongs to. Importing a join
+package already establishes them, but the `organization.join.import` evidence
+blob deliberately records only a **truncated 12-character fingerprint prefix**.
+
+A prefix is not an identity. `resolveOrganizationTrustAnchor` therefore decrypts
+the stored package and parses the **full 64-character fingerprint**, using the
+same parser the import path used — so a package that would be rejected on import
+cannot be accepted here. Expiry is surfaced from that parser rather than
+re-checked, because the parser owns the rule and a second check could only
+disagree with the authority.
+
+Every unreadable path fails closed to *no anchor*: no join import, an
+undecryptable package (a rotated key returns null rather than throwing), an
+unparseable or expired one, or an installation with no organization. That default
+is what keeps the rest honest — a null fingerprint makes
+`evaluateOrganizationEnrollment` return `organization-trust-not-configured`, so a
+decrypt failure costs a human confirmation instead of widening trust.
+
+Decryption is injected, so the resolver never imports the credential store and a
+failure is a value rather than a thrown error.
+
+### 5.6 Verifying the peer against the pinned root
+
+§5.4 will only auto-enrol a peer whose chain was *actually* validated against the
+organization root. Nothing produced that fact: discovery reports
+`tls-validation-required`, which is a to-do, and no peer-certificate inspection
+existed anywhere in the codebase.
+
+`verifyPeerChainAgainstRoot` is the evaluation half, and it is pure — the caller
+supplies the chain it observed. Keeping it pure means the security rule is
+testable without a TLS server, and a network adapter cannot quietly change what
+"verified" means.
+
+Two details carry real weight:
+
+- **Fingerprint forms must be normalised.** Node reports `AA:BB:CC:…`; a join
+  package records 64 bare hex characters. Comparing those directly would never
+  match, so both collapse to lowercase hex, and anything that is not exactly 64
+  hex characters is rejected rather than compared loosely.
+- **Validity is checked across the whole chain**, not just the leaf. An expired
+  intermediate breaks the chain as surely as an expired leaf.
+
+Verification requires a positive match against the pinned fingerprint. There is
+no path where an absent, malformed, or unmatched value yields `verified: true`.
+
+### 5.7 Observing the chain
+
+`verifyPeerChainAgainstRoot` is pure and needs a chain to judge. The observer
+opens a TLS connection, walks the presented chain leaf-to-root, and hands it over.
+Nothing else. Keeping observation apart from the rule means a change to the
+network path cannot alter what "verified" means.
+
+**Certificate validation stays on.** An organization CA is a private root the
+public trust store does not contain, so the organization root is supplied as the
+only acceptable `ca` and Node performs real chain validation against it. That is
+narrower than the public trust store, not looser.
+
+An earlier draft disabled validation and compared the root fingerprint by hand.
+CodeQL flagged it (`js/disabling-certificate-validation`) and was **right**: a
+fingerprint match proves a certificate with that fingerprint appeared in the
+chain, not that the leaf was signed by it. Only the TLS stack checks the
+signature chain. The fingerprint comparison in §5.6 remains, but as defence in
+depth on top of real validation rather than instead of it.
+
+If the organization root is not readable, observation fails closed rather than
+falling back to a weaker check.
+
+Three hardening details:
+
+- **Cycle and depth bounds.** A peer that presents a cyclic issuer graph must not
+  hold the walk open; the walk tracks seen certificates and caps depth.
+- **SNI omits IP addresses.** RFC 6066 forbids an IP in server-name indication, so
+  a LAN peer discovered by address is connected to without it.
+- **It never throws.** Every failure — unparseable endpoint, plain HTTP, timeout,
+  refused connection — is an unobserved result, which leaves the decision at
+  `operator-confirmation`. An unreachable peer costs a human confirmation, never
+  an assumption.
+
+### 5.8 Composing the evidence, and the open attribution question
+
+`resolveCandidatePairingMode` gathers the anchor (§5.5), the observed chain
+(§5.7), the verification (§5.6), and the decision (§5.4) for one candidate, and
+returns the mode **together with the evidence that produced it** — so a caller
+records *why* a peer was or was not eligible, not merely the verdict. A peer whose
+transport already disqualifies it is never dialled.
+
+**What remains, and why it is not guessed here.** Bypassing the pairing code means
+approving a `FederationPairingSession` without a human, but
+`approveIncomingNearbyPairing` takes a required `approverPrincipalId`. Supplying a
+person's principal for a decision no person made would falsify the audit trail,
+and the whole point of this design is that trust is *derived from evidence* rather
+than asserted.
+
+So the remaining slice is an attribution decision, not wiring:
+
+- attribute an automated enrolment to a governed non-human identity (GAID already
+  models non-human actors), or
+- record approval provenance as `organization-trust` on the session, distinct
+  from principal approval, so the audit trail states plainly that no person
+  approved it and which evidence did.
+
+Either is defensible; inventing one silently is not. Until it is settled, the
+resolved mode and its evidence are computed and recorded, and the code comparison
+still stands.
+
+### 5.9 Confirming on organization trust, and who the record says did it
+
+The SAS code authenticates a peer this installation has no prior relationship
+with: two people read six digits off two screens and agree. That is the right
+ceremony between strangers, and it adds nothing once the organization CA has
+already authenticated the peer — a validated chain is a stronger statement than a
+six-digit comparison, from the same authority that issued the peer its identity.
+
+**Attribution was never an open question.** A federated peer is already
+`Principal(kind="federated-peer")` with `FederationLink` as its side table, per
+AGENTS.md §11 — the same shape `EdgeNode` uses. The peer HAS an identity; the
+link carries it in `principalId`. This is the ordinary mTLS/SPIFFE model, where
+the credential is the identity and the CA authorised it at issuance rather than a
+person authorising each pair.
+
+`approvedByPrincipalId` answers a different question — which PERSON on this side
+clicked approve. For an evidence-derived confirmation the honest answer is that
+none did, and the field stays null. Writing a person there would make the audit
+trail assert something untrue.
+
+What is recorded instead, on the session's `sasState`:
+
+- `confirmationProvenance: "organization-trust"`
+- the evidence — presented root fingerprint, that the chain verified, the peer
+  organization ref, and when it was decided
+
+So the record states plainly that a machine confirmed it, on what basis, and that
+no person was involved. The verdict is checked by its exact `auto-enroll` value
+rather than by ruling out `blocked`, so an `operator-confirmation` verdict can
+never fall through. A peer that refuses the confirmation leaves the session
+pending for a human, exactly as before.
+
+### 5.10 The pairing path acts on the verdict
+
+With §5.9 in place the last connection is made: after the pairing session is
+created, the action confirms it on organization trust when the verdict earns it.
+The verdict now carries its evidence through, because a provenance marker without
+the evidence that justified it is a weaker record than the ceremony it replaces.
+
+Everything short of `auto-enroll` leaves the code comparison exactly as it was,
+and a peer that refuses the confirmation does too. The entry point stays gated by
+`assertManagePlatform`: this changes which CEREMONY a pairing requires, not who
+may start one.
+
+That closes the loop. An installation that has joined an organization can now
+discover an organization peer on the LAN, validate its chain against the pinned
+root, and pair with it without anyone comparing six digits — which is what makes
+an install created and destroyed thousands of times workable.
+
 ## 6. Lifecycle at scale
 
 The unattended cycle this enables:
@@ -172,9 +329,10 @@ the identity design remains the backstop for an install with **no** peer.
 - Discovery transport and advertisement remain owned by `nearby-candidates`;
   this design consumes its readiness signal rather than replacing it. Composing
   discovery with the trust decision is §5.4 and is no longer deferred.
-- Resolving the organization trust anchor from the recorded
-  `organization.join.import` action, and calling §5.4 from the pairing path,
-  are the remaining slices.
+- Calling §5.4 from the pairing path, so a validated same-organization peer
+  enrols without the code comparison, is the remaining slice. Trust-anchor
+  resolution is §5.5; peer chain verification is §5.6. The network adapter that
+  observes a live chain is part of that final slice.
 
 ## 8. Acceptance criteria
 
@@ -190,6 +348,11 @@ the identity design remains the backstop for an install with **no** peer.
 6. A plain-HTTP candidate is `blocked` regardless of organization trust; an
    HTTPS-but-unvalidated candidate routes to `operator-confirmation`; only a
    chain-validated same-organization peer reaches `auto-enroll`.
+7. The trust anchor resolves the full fingerprint from the stored package, and
+   every unreadable path yields a null anchor rather than a partial match.
+8. Peer verification matches fingerprints across colon-separated and bare hex
+   forms, rejects an expired certificate anywhere in the chain, and never reports
+   verified without a positive match against the pinned root.
 
 ## 9. Decision record
 
