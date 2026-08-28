@@ -390,6 +390,12 @@ export async function executeAutonomousAgenticLoop(input: {
   // craft knowledge. Gate on !== "chat" so chat is never double-injected. Total
   // + fail-open: on any error the original prompt is used unchanged.
   let systemPrompt = input.systemPrompt;
+  // Instruction spans are computed by the CALLER from the persona, before the
+  // groundings below append to the prompt. AUTHORIZED_SURFACE_PROMPT is listed
+  // as INSTRUCTION by the provenance design, but it is appended here — after
+  // the caller computed its spans — so it landed in the data remainder and was
+  // screened as payload (BI-D9D661ED). Collect it and declare it.
+  const groundedInstructionSpans: string[] = [];
   if (input.interactionMode !== "chat") {
     const { groundPromptWithProfessionCorpus, defaultProfessionGroundingDeps } = await import(
       "@/lib/tak/profession-grounding"
@@ -403,6 +409,10 @@ export async function executeAutonomousAgenticLoop(input: {
       },
       defaultProfessionGroundingDeps,
     ).catch(() => ({ systemPrompt, grounded: false }));
+    // The profession corpus is deliberately NOT declared instruction: the
+    // ratified provenance design lists retrieved corpus content as DATA, since
+    // a corpus can carry real values. Only statically-authored platform
+    // instruction is labelled here.
     systemPrompt = grounding.systemPrompt;
   }
 
@@ -433,6 +443,9 @@ export async function executeAutonomousAgenticLoop(input: {
     authorizedToolNames,
   }).catch(() => ({ systemPrompt, grounded: false as const }));
   systemPrompt = surfaceGrounding.systemPrompt;
+  if ("instructionBlock" in surfaceGrounding && surfaceGrounding.instructionBlock) {
+    groundedInstructionSpans.push(surfaceGrounding.instructionBlock);
+  }
   const { isAuthorizedSurfaceGuidanceRequest } = await import(
     "@/lib/coworker/authorized-surface-prompt-grounding"
   );
@@ -455,7 +468,10 @@ export async function executeAutonomousAgenticLoop(input: {
     result = await withInferenceOrigin(inferenceOrigin, () =>
       runAgenticLoop({
         systemPrompt,
-        systemPromptInstructionSpans: input.systemPromptInstructionSpans,
+        systemPromptInstructionSpans: [
+          ...(input.systemPromptInstructionSpans ?? []),
+          ...groundedInstructionSpans,
+        ],
         chatHistory: input.chatHistory,
         sensitivity: input.sensitivity,
         tools: input.tools,
