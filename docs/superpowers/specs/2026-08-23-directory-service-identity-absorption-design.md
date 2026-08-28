@@ -36,7 +36,7 @@ Every claim below was checked against the tree at `cf29d511a` on 2026-08-23. **T
 | Chain of custody | `apps/web/lib/tak/chain-of-custody.ts`, `mcp-governed-execute.ts:138` | Live. Every agent action joins back to a human origin |
 | Human authentication | `packages/db/prisma/schema/core-identity.prisma:8` `User.passwordHash`, `PasswordResetToken`, NextAuth session in `apps/web/lib/govern/auth.ts` | Live |
 | Roles / groups | `PlatformRole`, `UserGroup`, `Team`, `TeamMembership` | Live |
-| Service accounts | `apps/web/lib/browser-drive/identity.ts:16` | Live but **feature-local** |
+| Service accounts | `apps/web/lib/identity/service-account.ts` | **Shared primitive** since Phase 1 (`BI-3181909E`). Was feature-local in `browser-drive`; that module is now a namespace-owning wrapper. An owner-less service account is refused at the module boundary. |
 | DN projection | `apps/web/app/(shell)/platform/identity/directory/page.tsx` | Live but **route-local**, hardcoded `dc=dpf,dc=internal` |
 | Upstream federation | `apps/web/app/(shell)/platform/identity/federation/page.tsx` | Live. `IntegrationCredential(provider: "ldap"｜"active_directory")` |
 | Org PKI | Step CA — `docs/security/tool-evaluations/2026-07-20-step-ca.md` | Live. Machine trust, mTLS |
@@ -331,6 +331,36 @@ Phases 1 and 4 are the ~80% convergence. Phase 3 is the ~20% new feature.
 | D6 | Groups are organizational, never an authorization API | Keeps capability filtering single-source per §6 |
 | D7 | Base DN derives from `Organization` | AGENTS.md §8 canonical identity model |
 | D8 | Read-only directory; no LDAP writes | Authority comes from being derived, not from being editable |
+
+## 14a. Open questions resolved by the Phase 2-4 build
+
+**Q1 — service-account bind credential: RESOLVED as mTLS only.** A client
+certificate whose subject CN names the same principal binds any class; a
+password binds humans only. Agents and service accounts deliberately have no
+password, because minting one would be a second credential store and would
+re-create the "authorized but never authenticated" gap the epic closes. The
+certificate comes from the org PKI already in place.
+
+**Q4 — absorbed protocol provenance: RESOLVED as reimplemented, not vendored.**
+The BER codec and LDAP message layer were written against RFC 4511. No authentik
+or `ldapjs` source was copied, so **no attribution obligation was incurred** —
+the evaluation's condition to carry an MIT notice does not apply because nothing
+was derived. The evaluation's other conditions still bind: nothing under
+`authentik/enterprise/` was read, the listener is read-only, bind caching cannot
+outlive revocation (there is no bind cache at all), and search requires
+authorization with bounded results.
+
+**Q2 — the fate of `User`: DEFERRED, and deliberately not forced.** `Principal`
+is now the authentication root in behaviour: `govern/auth.ts` consults the spine
+and an inactive principal cannot log in. `User` remains the credential holder.
+The schema change that would formally demote it to a side table was **not**
+needed to make the spine authoritative, and doing it in the same change as three
+new capabilities would have coupled the highest-blast-radius migration in the
+epic to everything else. It stays open.
+
+**Q3 — multi-organization installs: still deferred.** The base DN derives from
+the first `Organization`; a second one would need a decision this build did not
+need to make.
 
 ## 14. Open Questions
 

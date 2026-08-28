@@ -21,6 +21,14 @@ vi.mock("@/lib/mcp/contributor-readiness", () => ({
   getContributorMcpReadiness: vi.fn(),
 }));
 
+// BI-B986A18B: listActingCoworkerOptions reads the agent registry to offer the
+// acting-coworker binding, so the action module now imports the client.
+vi.mock("@dpf/db", () => ({
+  prisma: {
+    agentToolGrant: { findMany: vi.fn() },
+  },
+}));
+
 import { auth } from "@/lib/auth";
 import {
   addScopesToMcpApiToken,
@@ -32,6 +40,7 @@ import {
 } from "@/lib/auth/mcp-api-token";
 import { getToolGrantMapping } from "@/lib/tak/agent-grants";
 import { getContributorMcpReadiness } from "@/lib/mcp/contributor-readiness";
+import { prisma } from "@dpf/db";
 import {
   bulkRevokeMyMcpTokens,
   copyMyMcpToken,
@@ -45,6 +54,7 @@ import {
   revokeMyMcpToken,
   rotateMyMcpToken,
   rotateMyMcpTokenWithEdit,
+  listActingCoworkerOptions,
   upgradeMyMcpTokenForCodingAgent,
 } from "./mcp-tokens";
 
@@ -1249,5 +1259,110 @@ describe("listMyMcpTokens — revoked archive", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("unreachable");
     expect(result.archivedCount).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// BI-B986A18B — acting-coworker binding.
+//
+// Every Work Room handler resolves its caller from `context.agentId`, which
+// comes from the bearer token. Before this, every issuance path except
+// issueMyMcpToken hardcoded `agentId: null`, so no external CLI agent could
+// ever join, post to, or read a room. These guard the binding end to end.
+// ---------------------------------------------------------------------------
+describe("acting-coworker binding (BI-B986A18B)", () => {
+  const authed = { user: { id: "user-1" } };
+
+  beforeEach(() => {
+    vi.mocked(auth).mockResolvedValue(authed as never);
+    vi.mocked(getToolGrantMapping).mockReturnValue(FULL_GRANT_MAP as never);
+    vi.mocked(issueMcpApiToken).mockResolvedValue({
+      ok: true,
+      tokenId: "tok-new",
+      plaintext: "dpfmcp_secret",
+      prefix: "dpfmcp_",
+      tokenSuffix: "cret",
+      expiresAt: null,
+    } as never);
+  });
+
+  it("binds the acting coworker when a template token is issued", async () => {
+    await issueMyTemplateMcpToken({
+      templateId: "development",
+      name: "claude-code",
+      expiresInDays: 90,
+      agentId: "AGT-EXT-CLAUDE",
+      baseUrl: "http://localhost:3000",
+    });
+
+    expect(vi.mocked(issueMcpApiToken).mock.calls.at(-1)?.[0]).toMatchObject({
+      agentId: "AGT-EXT-CLAUDE",
+    });
+  });
+
+  it("leaves a template token anonymous when no coworker is chosen", async () => {
+    await issueMyTemplateMcpToken({
+      templateId: "development",
+      name: "anonymous",
+      expiresInDays: 90,
+      baseUrl: "http://localhost:3000",
+    });
+
+    expect(vi.mocked(issueMcpApiToken).mock.calls.at(-1)?.[0]).toMatchObject({
+      agentId: null,
+    });
+  });
+
+  it("preserves the binding across rotation — the secret changes, the identity does not", async () => {
+    vi.mocked(listMcpApiTokens).mockResolvedValue([
+      {
+        id: "tok-1",
+        name: "claude-code",
+        agentId: "AGT-EXT-CLAUDE",
+        revokedAt: null,
+        expiresAt: null,
+      },
+    ] as never);
+    vi.mocked(revokeMcpApiToken).mockResolvedValue({ ok: true } as never);
+
+    await rotateMyMcpTokenWithEdit({
+      tokenId: "tok-1",
+      name: "claude-code",
+      scope: "write",
+      scopes: ["backlog_read"],
+      expiresInDays: 90,
+      baseUrl: "http://localhost:3000",
+    });
+
+    // The regression: rotation used to hardcode null here, silently demoting a
+    // room-capable token to anonymous with no error anywhere.
+    expect(vi.mocked(issueMcpApiToken).mock.calls.at(-1)?.[0]).toMatchObject({
+      agentId: "AGT-EXT-CLAUDE",
+    });
+  });
+
+  it("offers only active coworkers that can actually act in a room", async () => {
+    vi.mocked(prisma.agentToolGrant.findMany).mockResolvedValue([
+      { agent: { agentId: "AGT-EXT-CODEX", name: "external-codex", displayName: "Codex (external CLI)", status: "active" } },
+      { agent: { agentId: "AGT-EXT-CLAUDE", name: "external-claude-code", displayName: "Claude Code (external CLI)", status: "active" } },
+      // Duplicate grant rows must not produce duplicate options.
+      { agent: { agentId: "AGT-EXT-CODEX", name: "external-codex", displayName: "Codex (external CLI)", status: "active" } },
+      // Retired coworkers are not offerable.
+      { agent: { agentId: "AGT-OLD", name: "retired", displayName: "Retired", status: "archived" } },
+      { agent: null },
+    ] as never);
+
+    const { options } = await listActingCoworkerOptions();
+
+    expect(options.map((option) => option.agentId)).toEqual([
+      "AGT-EXT-CLAUDE",
+      "AGT-EXT-CODEX",
+    ]);
+    expect(options[0]?.label).toContain("AGT-EXT-CLAUDE");
+  });
+
+  it("offers nothing to an unauthenticated caller", async () => {
+    vi.mocked(auth).mockResolvedValue(null as never);
+    await expect(listActingCoworkerOptions()).resolves.toEqual({ options: [] });
   });
 });

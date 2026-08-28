@@ -1,6 +1,6 @@
 ---
 name: dpf-elicit-tacit-knowledge
-description: "Use in the DPF codebase when durable knowledge lives only in a human's head and needs to enter the system — a founder/operator decision rationale, the 'why' behind a choice, a profession technique, domain context a new build depends on. Researches what the system already knows, then interviews in rounds of numbered questions with candidate answers to draw out the tacit part, and captures it in the shape it will be retrieved."
+description: "Use when durable DPF knowledge lives only in a human's head — a decision rationale, the why behind a choice, a profession technique, domain context a build depends on."
 disable-model-invocation: false
 user-invocable: true
 allowed-tools: Grep Glob mcp__dpf__wiki_query mcp__dpf__search_knowledge mcp__dpf__search_code_graph mcp__dpf__doc_save mcp__dpf__save_build_notes

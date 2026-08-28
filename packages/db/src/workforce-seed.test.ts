@@ -15,7 +15,25 @@ describe("workforce seed defaults", () => {
       "emp-contractor",
       "emp-intern",
       "emp-advisor",
+      "emp-volunteer",
     ]);
+  });
+
+  // A shelter's largest labour pool had no worker class at all, so a volunteer
+  // could not be recorded (BI-A30152B6). `WorkerClassification` already carried
+  // `volunteer` and named it the majority nonprofit case.
+  it("can record an unpaid worker, and says which legal axis that is", () => {
+    const volunteer = getDefaultEmploymentTypes().find((item) => item.name === "Volunteer");
+    expect(volunteer).toMatchObject({ classification: "volunteer" });
+  });
+
+  // The four rows whose classification a migration deliberately left unresolved
+  // stay unresolved: a guess here writes a legal claim into the database.
+  it("claims a classification only where the label states it outright", () => {
+    const unclassified = getDefaultEmploymentTypes()
+      .filter((item) => !("classification" in item))
+      .map((item) => item.name);
+    expect(unclassified).toEqual(["Full-time", "Part-time", "Contractor", "Intern", "Advisor"]);
   });
 
   it("returns a default remote work location", () => {

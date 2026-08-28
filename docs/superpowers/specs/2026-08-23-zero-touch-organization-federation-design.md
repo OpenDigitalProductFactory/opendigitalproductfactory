@@ -10,7 +10,7 @@ status: binding
 | Epic | `EP-MSP-FEDERATION` (enrollment), `EP-1FABA22D` (instance stance) |
 | Surface | `@dpf/db` federation contracts, federated record sync, instance stance |
 | Owners | Federation, installation lifecycle |
-| Related | `2026-08-22-installation-identity-and-agent-stance-design.md`; federated record sync (B3/B5); organization join package (`BI-A8399604`) |
+| Related | `2026-08-22-installation-identity-and-agent-stance-design.md`; federated record sync (B3/B5); the organization join package contract in `packages/db/src/organization-join-action.ts` |
 
 ## 1. Decision
 
@@ -257,6 +257,55 @@ So the remaining slice is an attribution decision, not wiring:
 Either is defensible; inventing one silently is not. Until it is settled, the
 resolved mode and its evidence are computed and recorded, and the code comparison
 still stands.
+
+### 5.9 Confirming on organization trust, and who the record says did it
+
+The SAS code authenticates a peer this installation has no prior relationship
+with: two people read six digits off two screens and agree. That is the right
+ceremony between strangers, and it adds nothing once the organization CA has
+already authenticated the peer — a validated chain is a stronger statement than a
+six-digit comparison, from the same authority that issued the peer its identity.
+
+**Attribution was never an open question.** A federated peer is already
+`Principal(kind="federated-peer")` with `FederationLink` as its side table, per
+AGENTS.md §11 — the same shape `EdgeNode` uses. The peer HAS an identity; the
+link carries it in `principalId`. This is the ordinary mTLS/SPIFFE model, where
+the credential is the identity and the CA authorised it at issuance rather than a
+person authorising each pair.
+
+`approvedByPrincipalId` answers a different question — which PERSON on this side
+clicked approve. For an evidence-derived confirmation the honest answer is that
+none did, and the field stays null. Writing a person there would make the audit
+trail assert something untrue.
+
+What is recorded instead, on the session's `sasState`:
+
+- `confirmationProvenance: "organization-trust"`
+- the evidence — presented root fingerprint, that the chain verified, the peer
+  organization ref, and when it was decided
+
+So the record states plainly that a machine confirmed it, on what basis, and that
+no person was involved. The verdict is checked by its exact `auto-enroll` value
+rather than by ruling out `blocked`, so an `operator-confirmation` verdict can
+never fall through. A peer that refuses the confirmation leaves the session
+pending for a human, exactly as before.
+
+### 5.10 The pairing path acts on the verdict
+
+With §5.9 in place the last connection is made: after the pairing session is
+created, the action confirms it on organization trust when the verdict earns it.
+The verdict now carries its evidence through, because a provenance marker without
+the evidence that justified it is a weaker record than the ceremony it replaces.
+
+Everything short of `auto-enroll` leaves the code comparison exactly as it was,
+and a peer that refuses the confirmation does too. The entry point stays gated by
+`assertManagePlatform`: this changes which CEREMONY a pairing requires, not who
+may start one.
+
+That closes the loop. An installation that has joined an organization can now
+discover an organization peer on the LAN, validate its chain against the pinned
+root, and pair with it without anyone comparing six digits — which is what makes
+an install created and destroyed thousands of times workable.
 
 ## 6. Lifecycle at scale
 

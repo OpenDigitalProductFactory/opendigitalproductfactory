@@ -1,6 +1,7 @@
 import type { BuildProgressVisibility } from "@/lib/build/progress-visibility";
 import type { FeatureBuildRow } from "@/lib/feature-build-types";
 import type { Intent } from "@/components/ui/report-kit";
+import { isAwaitingOwnerDecision } from "@/lib/build/owner-decision-pending";
 import { resolveProactivityPlan } from "@/lib/proactivity/proactivity-resolver";
 import type { ProactivityPlan, ProactivityResolverInput } from "@/lib/proactivity/proactivity-types";
 import {
@@ -124,8 +125,7 @@ export function hasNoReleasableDiff(
 /**
  * True when the system should surface the empty-diff honest card instead of a
  * generic "gone quiet" state (EP-BS-UX-HARDENING invariant 5 / BI-9C66860E).
- * Mid-coding builds with no patch yet are excluded unless they are quiet or
- * already in review/ship after coding finished.
+ * Mid-coding builds with no patch are excluded unless quiet, or past coding.
  */
 export function isEmptyDiffHonestOutcome(args: {
   build: FeatureBuildRow;
@@ -205,6 +205,7 @@ export function deriveBuildStudioCustodianPrompt({
     (build.phase === "ideate" || build.phase === "plan")
     && progressVisibility?.quietAgent.quiet === true
     && quietMinutes >= QUIET_EARLY_PHASE_THRESHOLD_MINUTES;
+  if (isAwaitingOwnerDecision(action.kind)) return null; // BI-C35F1FED
   const blockedByEvidence = action.disabledReason != null;
   const technicalRecovery =
     action.kind === "resume-implementation"
@@ -428,9 +429,8 @@ export function deriveBuildStudioCustodianPrompt({
     };
   }
 
-  // BI-9C66860E — definitive empty-diff outcome beats generic quiet copy
-  // (EP-BS-UX-HARDENING invariant 5: honest status). Retry/reset/resume kinds
-  // are handled earlier (with workflow CTA); remaining actions use coworker.
+  // BI-9C66860E — a definitive empty-diff outcome beats generic quiet copy
+  // (EP-BS-UX-HARDENING invariant 5). Recovery kinds already returned above.
   if (emptyDiff) {
     return {
       dismissKey: `${dismissKey}:empty-diff`,

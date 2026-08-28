@@ -124,8 +124,17 @@ describe("detectRedirectTarget", () => {
     expect(detectRedirectTarget(src)).toBeUndefined();
   });
 
-  it("ignores dynamic, external, and commented-out redirects", () => {
-    expect(detectRedirectTarget("redirect(`/x/${id}`)")).toBeUndefined();
+  it("normalizes parameterized compatibility redirects to canonical route paths", () => {
+    expect(detectRedirectTarget("redirect(`/portfolio/product/${id}/inventory#software-composition`)")).toBe(
+      "/portfolio/product/[id]/inventory",
+    );
+    expect(detectRedirectTarget("redirect(`/portfolio/product/${platformProduct.id}/inventory`)")).toBe(
+      "/portfolio/product/[id]/inventory",
+    );
+  });
+
+  it("ignores external, expression-driven, and commented-out redirects", () => {
+    expect(detectRedirectTarget("redirect(`/x/${resolveTarget()}`)")).toBeUndefined();
     expect(detectRedirectTarget('redirect("https://example.com")')).toBeUndefined();
     expect(detectRedirectTarget('// redirect("/ops")')).toBeUndefined();
     expect(detectRedirectTarget("/* redirect(\"/ops\") */")).toBeUndefined();

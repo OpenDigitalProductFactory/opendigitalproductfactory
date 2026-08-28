@@ -105,6 +105,26 @@ export function slugifyEstateName(value: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
+/**
+ * The normal form used when two installations compare trust roots.
+ *
+ * `evaluateOrganizationEnrollment` compares organization refs with `!==`, so both
+ * sides have to reduce an operator-typed estate name the SAME way or a genuine
+ * same-organization pair never matches. Defining it once here is what makes that
+ * true: the local ref (`organization-trust-anchor-store`) and the peer-advertised
+ * ref (`nearby-candidates`) both call this function.
+ *
+ * Deliberately NOT `slugifyEstateName`. That form is lossy by design and its own
+ * comment forbids using it for equality between installations — it would collapse
+ * "North Wind" and "North-Wind" into one trust root. This folds only whitespace
+ * and case, the drift two operators typing one name actually produce, and keeps
+ * every distinct name distinct.
+ */
+export function normalizeOrganizationRef(value: unknown): string | null {
+  const normalized = normalizeEstateName(value);
+  return normalized ? normalized.toLowerCase() : null;
+}
+
 /** Short role word for the badge and the server name. */
 export const ENVIRONMENT_ROLE_WORD: Record<InstallationEnvironmentClass, string> = {
   production: "prod",

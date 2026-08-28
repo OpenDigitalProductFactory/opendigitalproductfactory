@@ -16,6 +16,8 @@ import {
   isQuarantined,
   isRetired,
   overdueGraceMs,
+  parseProactivityFact,
+  proactivityFactKey,
   selectRegisterIds,
   stepCronIntervalMs,
 } from "./work-model";
@@ -256,6 +258,10 @@ describe("buildWorkView", () => {
     expect(view.enabled).toBe(true);
   });
 
+  it("carries no proactivity when the pair has no stored fact", () => {
+    expect(buildWorkView(task.taskId, undefined, task, NOW).agent?.proactivity).toBeNull();
+  });
+
   it("surfaces the coworker, its route and its last run", () => {
     const view = buildWorkView(task.taskId, staleMirror, task, NOW);
     expect(view.agent).toEqual({
@@ -265,6 +271,7 @@ describe("buildWorkView", () => {
       ownerUserId: "user-1",
       lastTaskRunId: "TR-SCHED-C77B43A9",
       lastThreadId: null,
+      proactivity: null,
     });
   });
 
@@ -345,6 +352,49 @@ describe("selectRegisterIds", () => {
       ["task-c"],
     );
     expect(ids.sort()).toEqual(["cron-a", "row-b", "task-c"]);
+  });
+});
+
+describe("parseProactivityFact", () => {
+  it("reads a level the operator set, and keeps its provenance", () => {
+    // Shape taken verbatim from a live UserFact row.
+    const v = {
+      scope: "agent",
+      scopeKey: "agent:coo",
+      level: "assertive",
+      source: "manual-setting",
+      acknowledgedByUserId: "u1",
+      acknowledgedAt: "2026-08-23T18:23:34.909Z",
+    };
+    expect(parseProactivityFact(v)).toEqual({
+      level: "assertive",
+      source: "manual-setting",
+      acknowledgedAt: "2026-08-23T18:23:34.909Z",
+    });
+  });
+
+  it("distinguishes a backfilled level from one the operator chose", () => {
+    // "reconcile-backfill" is the platform inferring a level from an orphaned
+    // task; presenting it as a deliberate setting would overstate it.
+    const parsed = parseProactivityFact({ level: "balanced", source: "reconcile-backfill" });
+    expect(parsed?.source).toBe("reconcile-backfill");
+  });
+
+  it("accepts the JSON-string form the column can hold", () => {
+    expect(parseProactivityFact('{"level":"quiet"}')?.level).toBe("quiet");
+  });
+
+  it("returns null rather than guessing at an unreadable fact", () => {
+    expect(parseProactivityFact("not json")).toBeNull();
+    expect(parseProactivityFact({ level: "enthusiastic" })).toBeNull();
+    expect(parseProactivityFact(null)).toBeNull();
+    expect(parseProactivityFact({})).toBeNull();
+  });
+});
+
+describe("proactivityFactKey", () => {
+  it("matches the key the platform actually stores", () => {
+    expect(proactivityFactKey("coo")).toBe("aiCoworkerProactivity:agent:coo");
   });
 });
 

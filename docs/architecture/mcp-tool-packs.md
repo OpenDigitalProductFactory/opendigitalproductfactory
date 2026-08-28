@@ -79,12 +79,14 @@ domain (static + lazy) is now extracted.**
 
 `work-capsules-pack` shares one `scopeProperties` block across `create_workroom` and
 `adopt_worktree`, so a field added there reaches both convene paths at once. That is how
-`workroomShape` landed ⟦runtime: `BI-8C54B216`, 2026-08-23⟧ — the room's collaboration
+`workroomShape` landed ⟦runtime: 2026-08-23⟧ — the room's collaboration
 shape is part of the scope it is convened with, validated against `WORK_CAPSULE_WORKROOM_SHAPES`
 and **rejected** rather than dropped when unknown, because a silently dropped shape convenes
 a room the caller believes is shaped. Its enum is mirrored from `room-shapes.ts` (the lower
 layer must not import from `work-management`) and `shape-key-parity.test.ts` is what keeps
 the mirror honest.
+
+Not every field belongs in that shared block. `sessionRef` was added to `adopt_worktree` **alone** ⟦runtime: `BI-0B292D84`, 2026-08-28⟧ because it answers a question only the adopt path had left unanswered: *whose* claim this is. `claim_backlog_item_for_work` had required a `sessionRef` all along and stored it as `WorkCapsule.executorRef`; `adopt_worktree` omitted it, so every worktree adopted through it stored `executorRef: null` and a claim guard could prove a live claim **covered** a branch but not that it belonged to the session asking. It is optional rather than required, unlike its sibling: making it required would break existing callers and refuse claims outright, and an unattributed claim is better than none.
 
 ## Fifth pack — first inline extraction
 

@@ -1,6 +1,6 @@
 ---
 name: dpf-writing-plans
-description: "Use when a filed DPF backlog item needs an implementation plan before code is written — a multi-step build, a migration, a refactor with ordering constraints. A plan is for a BI, not for floating intent: file the BI first (dpf-file-backlog-item), then write a phased plan grounded in the existing substrate and saved to docs/superpowers/plans/."
+description: "Use when a filed DPF backlog item needs an implementation plan before code is written."
 
 # Agent Skills standard fields (Surface A — Claude Code)
 disable-model-invocation: false
@@ -90,4 +90,4 @@ The order is fixed: **BI first, then plan.** [`dpf-file-backlog-item`](../dpf-fi
 
 - Predecessor: [`dpf-file-backlog-item`](../dpf-file-backlog-item/SKILL.md) — the BI the plan implements.
 - Upstream of the approach decision: [`dpf-brainstorming`](../dpf-brainstorming/SKILL.md) → [`dpf-decision-via-kernel`](../dpf-decision-via-kernel/SKILL.md).
-- Plan/spec path conventions: AGENTS.md §16.
+- Plan/spec path conventions: [AGENTS.md §5](../../../../AGENTS.md).

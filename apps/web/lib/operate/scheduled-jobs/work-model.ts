@@ -42,6 +42,7 @@
 
 import { SCHEDULE_INTERVALS_MS } from "@/lib/inference/ai-provider-types";
 import { computeNextCronRun, isOneShotCron } from "@/lib/operate/cron-next-run";
+import type { ProactivityLevel } from "@/lib/proactivity/proactivity-types";
 
 import { getCatalogEntry } from "./catalog";
 import type { JobCategory } from "./catalog-types";
@@ -82,6 +83,30 @@ export type WorkHealth =
   | "spent";
 
 /** The coworker behind an agent-backed unit of work. */
+/**
+ * Why a coworker task runs at the cadence it runs at.
+ *
+ * The register showed the cadence without the reason. Proactivity IS the reason:
+ * COWORKER_SELF_TASKS maps the level to a cron — quiet produces no task at all,
+ * balanced weekly, assertive daily — so a row that shows "Daily at 14:07" and
+ * nothing else is withholding the one fact that explains it.
+ *
+ * `source` matters as much as `level`: "manual-setting" means the operator chose
+ * it, "reconcile-backfill" means the platform inferred it from an orphaned task.
+ * Those warrant different confidence and the surface should not blur them.
+ */
+export interface WorkProactivity {
+  level: ProactivityLevel;
+  /** How the level came to be set, verbatim from the stored fact. */
+  source: string | null;
+  /** When it was last acknowledged, ISO. */
+  acknowledgedAt: string | null;
+  /** Cadence this coworker's registry entry runs at per level, when it has one.
+   *  Null when the coworker is not in COWORKER_SELF_TASKS — the task exists for
+   *  another reason and proactivity does not govern its cadence. */
+  registeredCadence: { balanced: string; assertive: string } | null;
+}
+
 export interface WorkAgentContext {
   agentId: string;
   /** Human title from the task itself (more specific than the job name). */
@@ -93,6 +118,8 @@ export interface WorkAgentContext {
   /** Public id of the TaskRun the last tick spawned, when there was one. */
   lastTaskRunId: string | null;
   lastThreadId: string | null;
+  /** Null when no proactivity fact exists for this (owner, agent) pair. */
+  proactivity: WorkProactivity | null;
 }
 
 /** Client-safe, fully-resolved row. Dates are ISO strings so the DTO crosses
@@ -461,6 +488,40 @@ export function isRetired(metadata: unknown): boolean {
   );
 }
 
+/** Key under which a per-agent proactivity fact is stored on UserFact. */
+export function proactivityFactKey(agentId: string): string {
+  return `aiCoworkerProactivity:agent:${agentId}`;
+}
+
+const LEVELS = new Set(["quiet", "balanced", "assertive"]);
+
+/**
+ * Parse a stored proactivity fact value. Returns null rather than guessing when
+ * the blob is unreadable or carries no recognised level — an unreadable
+ * preference must not be presented as a setting the operator made.
+ */
+export function parseProactivityFact(
+  value: unknown,
+): { level: ProactivityLevel; source: string | null; acknowledgedAt: string | null } | null {
+  let parsed: unknown = value;
+  if (typeof value === "string") {
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+  if (!parsed || typeof parsed !== "object") return null;
+  const rec = parsed as Record<string, unknown>;
+  const level = rec.level;
+  if (typeof level !== "string" || !LEVELS.has(level)) return null;
+  return {
+    level: level as ProactivityLevel,
+    source: typeof rec.source === "string" ? rec.source : null,
+    acknowledgedAt: typeof rec.acknowledgedAt === "string" ? rec.acknowledgedAt : null,
+  };
+}
+
 /**
  * Which ids belong in the register, given the catalog and both substrates.
  *
@@ -497,6 +558,7 @@ export function buildWorkView(
   job: JobRow | undefined,
   task: AgentTaskRow | undefined,
   now: Date,
+  proactivity: WorkProactivity | null = null,
 ): ScheduledWorkView {
   const entry = getCatalogEntry(jobId);
 
@@ -540,6 +602,7 @@ export function buildWorkView(
         ownerUserId: task.ownerUserId,
         lastTaskRunId: task.taskRunId,
         lastThreadId: task.lastThreadId,
+        proactivity,
       }
     : null;
 

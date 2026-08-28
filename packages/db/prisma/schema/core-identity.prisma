@@ -22,6 +22,7 @@ model User {
   grantedDelegations             DelegationGrant[]             @relation("DelegationGrantGrantor")
   employeeProfile                EmployeeProfile?
   authoredEmploymentEvents       EmploymentEvent[]
+  workerClassificationsDetermined WorkerClassificationDetermination[] @relation("ClassificationDeterminedBy")
   epicSubmissions                Epic[]                        @relation("EpicSubmissions")
   externalEvidenceRecords        ExternalEvidenceRecord[]
   featureBuilds                  FeatureBuild[]

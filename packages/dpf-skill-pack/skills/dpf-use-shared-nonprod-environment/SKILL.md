@@ -1,6 +1,6 @@
 ---
 name: dpf-use-shared-nonprod-environment
-description: "Use in the DPF codebase before preview or UX verification when a thread needs a nonproduction environment. Prefers the governed shared localhost environments and lease workflow over unmanaged per-thread servers."
+description: "Use before DPF preview or UX verification when a thread needs a nonproduction environment."
 disable-model-invocation: false
 user-invocable: true
 allowed-tools: mcp__dpf__list_nonprod_environment_leases mcp__dpf__claim_nonprod_environment_lease mcp__dpf__release_nonprod_environment_lease

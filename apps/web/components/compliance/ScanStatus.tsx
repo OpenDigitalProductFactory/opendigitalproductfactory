@@ -3,6 +3,14 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { triggerRegulatoryMonitorScan } from "@/lib/actions/regulatory-monitor";
+import { describeScanFreshness, type ScanTone } from "./scan-freshness";
+
+const TONE_CLASS: Record<ScanTone, string> = {
+  ok: "bg-green-900/30 text-green-400",
+  stale: "bg-yellow-900/30 text-yellow-400",
+  failed: "bg-red-900/30 text-red-400",
+  pending: "bg-yellow-900/30 text-yellow-400",
+};
 
 type ScanInfo = {
   scanId: string;
@@ -27,19 +35,24 @@ export function ScanStatus({ latestScan }: { latestScan: ScanInfo }) {
     <div className="flex items-center justify-between p-3 rounded-lg border border-[var(--dpf-border)]">
       <div>
         {latestScan ? (
-          <>
-            <p className="text-sm text-[var(--dpf-text)]">
-              Last scan: {new Date(latestScan.startedAt).toLocaleDateString()}
-              <span className={`ml-2 text-[9px] px-1.5 py-0.5 rounded-full ${
-                latestScan.status === "completed" ? "bg-green-900/30 text-green-400" :
-                latestScan.status === "failed" ? "bg-red-900/30 text-red-400" :
-                "bg-yellow-900/30 text-yellow-400"
-              }`}>{latestScan.status}</span>
-            </p>
-            <p className="text-xs text-[var(--dpf-muted)]">
-              {latestScan.regulationsChecked} checked · {latestScan.alertsGenerated} alerts
-            </p>
-          </>
+          (() => {
+            const freshness = describeScanFreshness({ status: latestScan.status, startedAt: latestScan.startedAt });
+            return (
+              <>
+                <p className="text-sm text-[var(--dpf-text)]">
+                  Last scan: {new Date(latestScan.startedAt).toLocaleDateString()}
+                  <span className="text-[var(--dpf-muted)]"> · {freshness.ageLabel}</span>
+                  <span className={`ml-2 text-[9px] px-1.5 py-0.5 rounded-full ${TONE_CLASS[freshness.tone]}`}>
+                    {freshness.chipLabel}
+                  </span>
+                </p>
+                <p className="text-xs text-[var(--dpf-muted)]">
+                  {latestScan.regulationsChecked} checked · {latestScan.alertsGenerated} alerts
+                  {freshness.isStale ? " · re-scan to confirm the current picture" : ""}
+                </p>
+              </>
+            );
+          })()
         ) : (
           <p className="text-sm text-[var(--dpf-muted)]">No scans yet</p>
         )}

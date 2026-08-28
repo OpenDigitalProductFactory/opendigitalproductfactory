@@ -45,8 +45,9 @@ import { proposeProductIntelligenceWatch } from "@/lib/product-management/produc
 import {
   PRODUCT_MANAGEMENT_PLAYBOOK_TASK_KIND,
 } from "@/lib/product-management/product-management-playbook";
-import { BUSINESS_ANALYSIS_WATCH_TASK_KIND } from "@/lib/operate/scheduled-jobs/agent-task-kind";
+import { BUSINESS_ANALYSIS_WATCH_TASK_KIND, BOOKKEEPING_CYCLE_TASK_KIND } from "@/lib/operate/scheduled-jobs/agent-task-kind";
 import { executeBusinessAnalysisWatchRun } from "@/lib/performance/business-analysis-watch-run";
+import { executeBookkeepingCycleTask } from "@/lib/finance/bookkeeping/bookkeeping-cycle-task";
 import {
   completeProductManagementPlaybookRun,
   prepareProductManagementPlaybookRun,
@@ -236,6 +237,12 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
 
   if (task.taskKind === BUSINESS_ANALYSIS_WATCH_TASK_KIND) {
     await executeBusinessAnalysisWatchRun(task);
+    return;
+  }
+
+  // S-TRIG (BI-DC738330): the weekly books cadence — deterministic, off the LLM path.
+  if (task.taskKind === BOOKKEEPING_CYCLE_TASK_KIND) {
+    await executeBookkeepingCycleTask(task);
     return;
   }
 

@@ -28,6 +28,14 @@ const Candidate = z
     protocol: z.literal("1"),
     capabilityDigest: z.string().regex(/^[a-f0-9]{8,64}$/),
     pairPath: z.literal("/connect/pair"),
+    // The estate the peer advertises in its discovery record. Optional so an
+    // Edge Node that predates the field keeps submitting successfully; the
+    // decision layer treats an absent ref as "cannot prove same organization"
+    // and routes that pairing to a human. Bounded here and normalised in
+    // `recordNearbyFederationCandidates`; never trusted on its own, because the
+    // same decision also requires a certificate chain validating against the
+    // pinned organization root.
+    organizationRef: z.string().min(1).max(48).optional(),
   })
   .strict()
   .refine((value) => isLinkLocalFederationEndpoint(value.endpoint), {

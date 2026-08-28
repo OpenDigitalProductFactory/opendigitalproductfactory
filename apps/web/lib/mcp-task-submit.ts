@@ -1,20 +1,35 @@
-import { coworkerBriefSpans } from "@/lib/tak/coworker-prompt-provenance";
 import { prisma } from "@dpf/db";
 import type { Prisma } from "@dpf/db";
 import { resolveCanonicalAgentId } from "@dpf/db/agent-identity";
-import { createHash } from "crypto";
 import type { UserContext } from "@/lib/permissions";
-import type { ToolDefinition } from "@/lib/mcp-tools";
-import { markTaskRunWorking } from "@/lib/observability/heartbeat";
+import {
+  markTaskRunWorking,
+  reserveSubmittedTaskRunWorking,
+} from "@/lib/observability/heartbeat";
 import {
   createAutonomousWorkRun,
-  executeAutonomousAgenticLoop,
   executeAutonomousWorkTool,
-  resolveAutonomousWorkAgent,
-  resolveAutonomousWorkTools,
 } from "@/lib/tak/autonomous-work-run";
 import { createTaskMessage } from "@/lib/tak/task-records";
-import { deriveEffortWarrant } from "@/lib/tak/effort-warrant";
+import {
+  deterministicExternalTaskRunId,
+  parseResourceWaitProjection,
+  remoteTaskRequestDigest,
+} from "./mcp-task-capacity-contract";
+import { executeRemoteTaskAttempt } from "./mcp-task-execution";
+import {
+  parseInitiativeReviewBinding,
+  requiredToolNames,
+  validateInitiativeReviewAuthorityScope,
+  type InitiativeReviewBinding,
+} from "./mcp-task-review-contract";
+import { createInitiativeReviewTerminalToolPolicy } from "@/lib/tak/terminal-tool-policy";
+
+export {
+  parseInitiativeReviewBinding,
+  validateInitiativeReviewAuthorityScope,
+} from "./mcp-task-review-contract";
+export type { InitiativeReviewBinding } from "./mcp-task-review-contract";
 
 export const REMOTE_RISK_CLASSES = ["read", "bounded-write", "high-risk"] as const;
 export type RemoteRiskClass = (typeof REMOTE_RISK_CLASSES)[number];
@@ -31,20 +46,6 @@ export type RemoteTaskSubmitParams = {
   authorityScope?: string[];
   collaborationKind?: "handoff" | "summon";
   initiativeReviewBinding?: InitiativeReviewBinding;
-};
-
-export type InitiativeReviewBinding = {
-  writerToolName: string;
-  itemId: string;
-  gate: string;
-  expectedCurrentBaselineId?: string | null;
-  artifactRef: {
-    kind: "repo-blob-at-commit";
-    repositoryFullName: string;
-    commitSha: string;
-    path: string;
-    providerBlobId: string;
-  };
 };
 
 export type RemoteTaskSubmitAuth = {
@@ -64,169 +65,6 @@ function optionalString(value: unknown): string | null {
 
 function remoteTaskContent(text: string) {
   return [{ type: "text", text }];
-}
-
-function requiredToolNames(authorityScope: readonly string[] | undefined): string[] {
-  return [...new Set((authorityScope ?? []).flatMap((entry) => {
-    const name = entry.startsWith("tool:") ? entry.slice("tool:".length).trim() : "";
-    return name ? [name] : [];
-  }))].slice(0, 4);
-}
-
-function requiresInitiativeReviewEffort(toolNames: readonly string[]): boolean {
-  const immutableReadRequired = toolNames.some((name) =>
-    name === "read_source_at_version" || name === "search_source_at_version"
-  );
-  const researchWriterRequired = toolNames.includes("record_initiative_evidence")
-    && immutableReadRequired;
-  const independentReviewWriterRequired = toolNames.some((name) =>
-    name.startsWith("record_initiative_") && name.endsWith("_review")
-  );
-  return researchWriterRequired || independentReviewWriterRequired;
-}
-
-export function parseInitiativeReviewBinding(value: unknown): InitiativeReviewBinding | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const binding = value as Record<string, unknown>;
-  const artifact = binding["artifactRef"];
-  if (!artifact || typeof artifact !== "object" || Array.isArray(artifact)) return null;
-  const artifactRef = artifact as Record<string, unknown>;
-  const writerToolName = optionalString(binding["writerToolName"]);
-  const itemId = optionalString(binding["itemId"]);
-  const gate = optionalString(binding["gate"]);
-  const repositoryFullName = optionalString(artifactRef["repositoryFullName"]);
-  const commitSha = optionalString(artifactRef["commitSha"]);
-  const path = optionalString(artifactRef["path"]);
-  const providerBlobId = optionalString(artifactRef["providerBlobId"]);
-  const expectedCurrentBaselineId = binding["expectedCurrentBaselineId"];
-  if (
-    !writerToolName?.startsWith("record_initiative_")
-    || !itemId?.startsWith("BI-")
-    || !gate
-    || artifactRef["kind"] !== "repo-blob-at-commit"
-    || !repositoryFullName
-    || !commitSha
-    || !path
-    || !providerBlobId
-    || (expectedCurrentBaselineId !== undefined
-      && expectedCurrentBaselineId !== null
-      && typeof expectedCurrentBaselineId !== "string")
-  ) return null;
-  return {
-    writerToolName,
-    itemId,
-    gate,
-    ...(expectedCurrentBaselineId !== undefined
-      ? { expectedCurrentBaselineId: expectedCurrentBaselineId as string | null }
-      : {}),
-    artifactRef: {
-      kind: "repo-blob-at-commit",
-      repositoryFullName,
-      commitSha,
-      path,
-      providerBlobId,
-    },
-  };
-}
-
-export function validateInitiativeReviewAuthorityScope(
-  binding: InitiativeReviewBinding,
-  authorityScope: readonly string[] | undefined,
-): string | null {
-  const exactTools = requiredToolNames(authorityScope);
-  if (!exactTools.includes(binding.writerToolName)) {
-    return "initiativeReviewBinding writer must match the exact tool authority scope";
-  }
-  if (!authorityScope?.includes(`backlog-item:${binding.itemId}`)) {
-    return "initiativeReviewBinding item must match the backlog authority scope";
-  }
-  return null;
-}
-
-function narrowInitiativeReviewTools<T extends {
-  tools: ToolDefinition[];
-  toolsForProvider: Array<Record<string, unknown>>;
-  deferredTools: ToolDefinition[];
-}>(input: T, requiredNames: readonly string[], binding: InitiativeReviewBinding | undefined): T {
-  if (!binding) return input;
-  const exactNames = new Set(requiredNames);
-  const compactResearchReceipt = binding.gate === "research"
-    && binding.writerToolName === "record_initiative_evidence";
-  const baseJudgmentNames = compactResearchReceipt
-    ? ["decision"]
-    : ["decision", "reason", "findings", "resolvedFindingRefs"];
-  const judgmentPropertyNames = [
-    ...baseJudgmentNames,
-    ...(binding.gate === "spec-approval" ? ["profile", "artifactRole", "supersessionDispositions"] : []),
-    ...(binding.gate === "classification" ? ["profile"] : []),
-  ];
-  const requiredJudgmentNames = [
-    ...baseJudgmentNames,
-    ...(binding.gate === "spec-approval" ? ["profile", "artifactRole"] : []),
-    ...(binding.gate === "classification" ? ["profile"] : []),
-  ];
-  const narrowSchema = (schema: Record<string, unknown>) => {
-    const properties = schema.properties && typeof schema.properties === "object" && !Array.isArray(schema.properties)
-      ? schema.properties as Record<string, unknown>
-      : {};
-    const narrowedProperties = Object.fromEntries(
-      judgmentPropertyNames.flatMap((name) => name in properties ? [[name, properties[name]]] : []),
-    );
-    return {
-      type: "object",
-      properties: narrowedProperties,
-      required: requiredJudgmentNames,
-      additionalProperties: false,
-    };
-  };
-  const narrowReaderSchema = (name: string, schema: Record<string, unknown>) => {
-    const properties = schema.properties && typeof schema.properties === "object" && !Array.isArray(schema.properties)
-      ? schema.properties as Record<string, unknown>
-      : {};
-    if (name === "read_source_at_version") {
-      return {
-        type: "object",
-        properties: {
-          path: { type: "string", enum: [binding.artifactRef.path] },
-          version: { type: "string", enum: [binding.artifactRef.commitSha] },
-        },
-        required: ["path", "version"],
-        additionalProperties: false,
-      };
-    }
-    if (name === "search_source_at_version") {
-      return {
-        type: "object",
-        properties: {
-          query: properties["query"] ?? { type: "string" },
-          version: { type: "string", enum: [binding.artifactRef.commitSha] },
-          glob: { type: "string", enum: [binding.artifactRef.path] },
-        },
-        required: ["query", "version", "glob"],
-        additionalProperties: false,
-      };
-    }
-    return schema;
-  };
-  const boundSchema = (name: string, schema: Record<string, unknown>) =>
-    name === binding.writerToolName
-      ? narrowSchema(schema)
-      : narrowReaderSchema(name, schema);
-  const tools = input.tools
-    .filter((tool) => exactNames.has(tool.name))
-    .map((tool) => ({ ...tool, inputSchema: boundSchema(tool.name, tool.inputSchema) }));
-  const toolsForProvider = input.toolsForProvider
-    .filter((entry) => {
-      const fn = entry["function"];
-      return !!fn && typeof fn === "object" && !Array.isArray(fn)
-        && exactNames.has(String((fn as Record<string, unknown>)["name"] ?? ""));
-    })
-    .map((entry) => {
-      const fn = entry["function"] as Record<string, unknown>;
-      const name = String(fn["name"] ?? "");
-      return { ...entry, function: { ...fn, parameters: boundSchema(name, (fn["parameters"] ?? {}) as Record<string, unknown>) } };
-    });
-  return { ...input, tools, toolsForProvider, deferredTools: [] };
 }
 
 export function parseRemoteTaskSubmitParams(params: Record<string, unknown> | undefined): RemoteTaskSubmitParams | string {
@@ -278,31 +116,25 @@ export function parseRemoteTaskSubmitParams(params: Record<string, unknown> | un
   };
 }
 
-function stableDigest(value: unknown): string {
-  return createHash("sha256").update(JSON.stringify(value)).digest("hex");
-}
-
-function deterministicExternalTaskRunId(tokenId: string, idempotencyKey: string): string {
-  // `tokenId` is the server-owned McpApiToken row id, not the bearer secret.
-  // Keep it out of a password-shaped fast hash: CodeQL correctly cannot infer
-  // that distinction across the auth boundary. The reversible base64url
-  // namespace preserves per-token isolation while only the caller-controlled,
-  // non-secret request key is digested to keep the public id bounded.
-  const tokenNamespace = Buffer.from(tokenId, "utf8").toString("base64url");
-  const suffix = createHash("sha256")
-    .update(idempotencyKey)
-    .digest("hex")
-    .slice(0, 12)
-    .toUpperCase();
-  return `TR-MCP-${tokenNamespace}-${suffix}`;
-}
-
-type ExistingRemoteTask = {
+export type ExistingRemoteTask = {
+  id: string;
   taskRunId: string;
+  userId: string;
+  threadId: string | null;
+  contextId: string | null;
   status: string;
   progressPayload: unknown;
   a2aMetadata: unknown;
   updatedAt: Date;
+};
+
+type TerminalWriterWait = {
+  schemaVersion: 1;
+  kind: "missing-terminal-writer";
+  writerToolName: string;
+  resumeMode: "same-taskrun";
+  attempt: number;
+  observedAt: string;
 };
 
 type ApprovedRemoteTaskEnvelope = {
@@ -332,6 +164,23 @@ function storedRequestDigest(existing: ExistingRemoteTask): string | null {
   return optionalString(metadata["requestDigest"]);
 }
 
+function parseTerminalWriterWait(value: unknown): TerminalWriterWait | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const candidate = (value as Record<string, unknown>)["terminalWriterWait"];
+  if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return null;
+  const wait = candidate as Record<string, unknown>;
+  if (
+    wait["schemaVersion"] !== 1
+    || wait["kind"] !== "missing-terminal-writer"
+    || !optionalString(wait["writerToolName"])
+    || wait["resumeMode"] !== "same-taskrun"
+    || !Number.isInteger(wait["attempt"])
+    || Number(wait["attempt"]) < 1
+    || !optionalString(wait["observedAt"])
+  ) return null;
+  return wait as TerminalWriterWait;
+}
+
 function replayOrConflict(existing: ExistingRemoteTask, requestDigest: string): RemoteTaskSubmitOutcome {
   const storedDigest = storedRequestDigest(existing);
   if (storedDigest && storedDigest !== requestDigest) {
@@ -350,17 +199,92 @@ function replayOrConflict(existing: ExistingRemoteTask, requestDigest: string): 
       },
     };
   }
+  const terminalWriterWait = parseTerminalWriterWait(existing.progressPayload);
+  const resourceWait = parseResourceWaitProjection(existing.progressPayload);
   return {
     kind: "result",
     result: {
       taskRunId: existing.taskRunId,
       status: existing.status,
       idempotentReplay: true,
-      requiresApproval: existing.status === "input-required",
+      requiresApproval: existing.status === "input-required" && !terminalWriterWait,
+      ...(terminalWriterWait ? {
+        resumable: terminalWriterWait.attempt < 2,
+        waitReason: terminalWriterWait.kind,
+      } : resourceWait ? {
+        resumable: true,
+        waitReason: "provider-capacity",
+      } : {}),
       progressPayload: existing.progressPayload,
       a2aMetadata: existing.a2aMetadata,
     },
   };
+}
+
+async function reserveTerminalWriterReplay(input: {
+  existing: ExistingRemoteTask;
+  requestDigest: string;
+  terminalToolPolicy: NonNullable<ReturnType<typeof createInitiativeReviewTerminalToolPolicy>>;
+}): Promise<TerminalWriterWait | null> {
+  if (storedRequestDigest(input.existing) !== input.requestDigest) return null;
+
+  const existingWait = parseTerminalWriterWait(input.existing.progressPayload);
+  const isProjectedWait = input.existing.status === "input-required" && existingWait?.attempt === 1;
+  const isRecoverableCompletedExit = input.existing.status === "completed" && !existingWait;
+  if (!isProjectedWait && !isRecoverableCompletedExit) return null;
+
+  if (isRecoverableCompletedExit) {
+    const [successfulReader, writerAttempt] = await Promise.all([
+      prisma.toolExecution.findFirst({
+        where: {
+          taskRunId: input.existing.taskRunId,
+          toolName: { in: [...input.terminalToolPolicy.readerToolNames] },
+          success: true,
+        },
+        select: { id: true },
+      }),
+      prisma.toolExecution.findFirst({
+        where: {
+          taskRunId: input.existing.taskRunId,
+          toolName: input.terminalToolPolicy.writerToolName,
+        },
+        select: { id: true },
+      }),
+    ]);
+    if (!successfulReader || writerAttempt) return null;
+  }
+
+  const progress = input.existing.progressPayload && typeof input.existing.progressPayload === "object"
+    && !Array.isArray(input.existing.progressPayload)
+    ? input.existing.progressPayload as Record<string, unknown>
+    : {};
+  const now = new Date().toISOString();
+  const wait: TerminalWriterWait = {
+    schemaVersion: 1,
+    kind: "missing-terminal-writer",
+    writerToolName: input.terminalToolPolicy.writerToolName,
+    resumeMode: "same-taskrun",
+    attempt: 2,
+    observedAt: now,
+  };
+  const reservation = await prisma.taskRun.updateMany({
+    where: {
+      taskRunId: input.existing.taskRunId,
+      status: input.existing.status,
+      updatedAt: input.existing.updatedAt,
+    },
+    data: {
+      ...(isRecoverableCompletedExit ? { status: "input-required" } : {}),
+      completedAt: null,
+      progressPayload: {
+        ...progress,
+        terminalWriterWait: wait,
+        ...(isRecoverableCompletedExit ? { recoveredFromCompletedRouteExit: true } : {}),
+        resumeReservedAt: now,
+      },
+    },
+  });
+  return reservation.count === 1 ? wait : null;
 }
 
 async function resumeApprovedRemoteTask(input: {
@@ -465,6 +389,77 @@ async function resumeApprovedRemoteTask(input: {
   };
 }
 
+export async function resumeWaitingRemoteTask(input: {
+  existing: ExistingRemoteTask;
+  requestDigest: string;
+  token: RemoteTaskSubmitAuth;
+  userContext: UserContext;
+  parsed: RemoteTaskSubmitParams;
+}): Promise<RemoteTaskSubmitOutcome | null> {
+  const wait = parseResourceWaitProjection(input.existing.progressPayload);
+  if (input.existing.status !== "submitted" || !wait) return null;
+  if (!input.existing.id || !input.existing.threadId) {
+    return {
+      kind: "result",
+      result: {
+        taskRunId: input.existing.taskRunId,
+        status: input.existing.status,
+        idempotentReplay: true,
+        content: remoteTaskContent(
+          "The original TaskRun is missing immutable execution identity and cannot be resumed.",
+        ),
+        structuredContent: {
+          error: "stored_identity_incomplete",
+          taskRunId: input.existing.taskRunId,
+        },
+        isError: true,
+      },
+    };
+  }
+
+  const progress = input.existing.progressPayload as Record<string, unknown>;
+  const reserved = await reserveSubmittedTaskRunWorking({
+    taskRunId: input.existing.taskRunId,
+    updatedAt: input.existing.updatedAt,
+    progressPayload: {
+      ...progress,
+      resumeReservedAt: new Date().toISOString(),
+    },
+  });
+  if (!reserved) {
+    const latest = await prisma.taskRun.findUnique({
+      where: { taskRunId: input.existing.taskRunId },
+      select: {
+        id: true,
+        taskRunId: true,
+        userId: true,
+        threadId: true,
+        contextId: true,
+        status: true,
+        progressPayload: true,
+        a2aMetadata: true,
+        updatedAt: true,
+      },
+    }) as ExistingRemoteTask | null;
+    return latest ? replayOrConflict(latest, input.requestDigest) : null;
+  }
+  return executeRemoteTaskAttempt({
+    run: {
+      id: input.existing.id,
+      taskRunId: input.existing.taskRunId,
+      contextId: input.existing.contextId,
+    },
+    threadId: input.existing.threadId,
+    token: input.token,
+    userContext: input.userContext,
+    parsed: input.parsed,
+    idempotentReplay: true,
+    resumeKind: "capacity",
+    capacityAttempt: wait.attempt + 1,
+    terminalWriterAttempt: 1,
+  });
+}
+
 export async function submitRemoteCoworkerTask(input: {
   token: RemoteTaskSubmitAuth;
   userContext: UserContext;
@@ -495,19 +490,15 @@ export async function submitRemoteCoworkerTask(input: {
     };
   }
 
-  const requestDigest = stableDigest({
-    agentId: parsed.agentId,
-    routeContext: parsed.routeContext,
-    title: parsed.title,
-    objective: parsed.objective,
-    prompt: parsed.prompt,
-    riskClass: parsed.riskClass,
-    authorityScope: [...(parsed.authorityScope ?? [])].sort(),
-    collaborationKind: parsed.collaborationKind ?? null,
-    ...(parsed.initiativeReviewBinding
-      ? { initiativeReviewBinding: parsed.initiativeReviewBinding }
-      : {}),
-  });
+  const requestDigest = remoteTaskRequestDigest(parsed);
+  const exactRequiredToolNames = requiredToolNames(parsed.authorityScope);
+  const terminalToolPolicy = parsed.initiativeReviewBinding
+    ? createInitiativeReviewTerminalToolPolicy(
+        parsed.initiativeReviewBinding.writerToolName,
+        exactRequiredToolNames,
+        parsed.initiativeReviewBinding.artifactRef,
+      )
+    : null;
   const taskRunId = deterministicExternalTaskRunId(token.tokenId, parsed.idempotencyKey);
   const existingQuery: Prisma.TaskRunFindFirstArgs = {
     where: {
@@ -519,7 +510,11 @@ export async function submitRemoteCoworkerTask(input: {
     },
     orderBy: [{ createdAt: "desc" }],
     select: {
+      id: true,
       taskRunId: true,
+      userId: true,
+      threadId: true,
+      contextId: true,
       status: true,
       progressPayload: true,
       a2aMetadata: true,
@@ -541,6 +536,44 @@ export async function submitRemoteCoworkerTask(input: {
         parsed,
       });
       if (resumed) return resumed;
+    }
+    if (
+      storedRequestDigest(existing) === requestDigest
+      && existing.status === "submitted"
+    ) {
+      const resumed = await resumeWaitingRemoteTask({
+        existing,
+        requestDigest,
+        token,
+        userContext,
+        parsed,
+      });
+      if (resumed) return resumed;
+    }
+    const terminalWriterWait = terminalToolPolicy
+      ? await reserveTerminalWriterReplay({
+          existing,
+          requestDigest,
+          terminalToolPolicy,
+        })
+      : null;
+    if (terminalWriterWait && existing.id && existing.threadId) {
+      await markTaskRunWorking(existing.taskRunId);
+      return executeRemoteTaskAttempt({
+        run: {
+          id: existing.id,
+          taskRunId: existing.taskRunId,
+          contextId: existing.contextId,
+        },
+        threadId: existing.threadId,
+        token,
+        userContext,
+        parsed,
+        idempotentReplay: true,
+        resumeKind: "terminal-writer",
+        capacityAttempt: 1,
+        terminalWriterAttempt: terminalWriterWait.attempt,
+      });
     }
     return replay;
   }
@@ -575,6 +608,8 @@ export async function submitRemoteCoworkerTask(input: {
         riskClass: parsed.riskClass,
         apiTokenId: token.tokenId,
         tokenSource: token.source,
+        tokenCapability: token.capability,
+        requestedAgentId: parsed.agentId,
         requestedThreadId: parsed.threadId ?? null,
         initiativeReviewBinding: parsed.initiativeReviewBinding ?? null,
       },
@@ -627,172 +662,14 @@ export async function submitRemoteCoworkerTask(input: {
     };
   }
 
-  const agent = await resolveAutonomousWorkAgent({
-    agentId: parsed.agentId,
-    routeContext: parsed.routeContext,
+  return executeRemoteTaskAttempt({
+    run,
+    threadId: thread.id,
+    token,
     userContext,
+    parsed,
+    idempotentReplay: false,
+    capacityAttempt: 1,
+    terminalWriterAttempt: 1,
   });
-  // The prompt resolver may return a legacy slug row (for example
-  // `build-specialist`) even when the external packet targeted the canonical
-  // `AGT-WS-BUILD` identity. Tool grants and durable reviewer attribution must
-  // stay on the canonical coworker or dual-seed rows silently diverge.
-  const modelRoutingAgentId = agent.agentId ?? parsed.agentId;
-  const resolvedAgentId = resolveCanonicalAgentId(modelRoutingAgentId);
-  const routingConfig = await prisma.agentModelConfig?.findUnique({
-    where: { agentId: modelRoutingAgentId },
-    select: {
-      minimumTier: true,
-      budgetClass: true,
-      pinnedProviderId: true,
-      pinnedModelId: true,
-    },
-  }).catch(() => null) ?? null;
-  const modelRequirements = routingConfig
-    ? {
-        defaultMinimumTier: routingConfig.minimumTier,
-        defaultBudgetClass: routingConfig.budgetClass,
-        ...(routingConfig.pinnedProviderId
-          ? { preferredProviderId: routingConfig.pinnedProviderId }
-          : {}),
-        ...(routingConfig.pinnedModelId
-          ? { preferredModelId: routingConfig.pinnedModelId }
-          : {}),
-        ...(routingConfig.pinnedProviderId === "local"
-          ? { residencyPolicy: "local_only" as const }
-          : {}),
-      }
-    : null;
-  const toolMode = parsed.riskClass === "read" ? "advise" : "act";
-  const exactRequiredToolNames = requiredToolNames(parsed.authorityScope);
-  const resolvedTools = await resolveAutonomousWorkTools({
-    userContext,
-    agentId: resolvedAgentId,
-    mode: toolMode,
-    externalAccessEnabled: true,
-    // BI-CAP-F2D39F8F: budget the attachment to the serving model; the remote
-    // task prompt ranks which tools stay attached.
-    routeContext: parsed.routeContext,
-    intentQuery: parsed.prompt,
-    requiredToolNames: exactRequiredToolNames,
-  });
-  const tools = narrowInitiativeReviewTools(
-    resolvedTools,
-    exactRequiredToolNames,
-    parsed.initiativeReviewBinding,
-  );
-  const effortWarrant = requiresInitiativeReviewEffort(exactRequiredToolNames)
-    ? deriveEffortWarrant({
-        reasoningDepth: "high",
-        availableToolNames: [
-          ...tools.tools.map((tool) => tool.name),
-          ...tools.deferredTools.map((tool) => tool.name),
-        ],
-        messageChars: parsed.prompt.length,
-      })
-    : undefined;
-
-  try {
-    const result = await executeAutonomousAgenticLoop({
-      systemPrompt: agent.systemPrompt,
-      systemPromptInstructionSpans: coworkerBriefSpans(agent.systemPrompt),
-      chatHistory: [{ role: "user", content: parsed.prompt }],
-      sensitivity: agent.sensitivity ?? "internal",
-      tools: tools.tools,
-      toolsForProvider: tools.toolsForProvider,
-      deferredTools: tools.deferredTools,
-      userId: token.userId,
-      routeContext: parsed.routeContext,
-      agentId: resolvedAgentId,
-      threadId: thread.id,
-      taskRunId: run.taskRunId,
-      apiTokenId: token.tokenId,
-      taskType: "external-mcp",
-      agentDisplayName: optionalString(agent.displayName) ?? resolvedAgentId,
-      ...(effortWarrant ? { effortWarrant } : {}),
-      ...(modelRequirements ? { modelRequirements } : {}),
-    });
-
-    await createTaskMessage({
-      taskRunId: run.taskRunId,
-      taskRunRecordId: run.id,
-      contextId: run.contextId,
-      role: "assistant",
-      content: result.content,
-      metadata: {
-        source: "mcp.tasks/submit",
-        executedToolCount: result.executedTools?.length ?? 0,
-      },
-    });
-
-    const currentRun = parsed.riskClass === "read"
-      ? null
-      : await prisma.taskRun.findUnique({
-          where: { taskRunId: run.taskRunId },
-          select: { status: true },
-        });
-    if (currentRun?.status === "input-required") {
-      return {
-        kind: "result",
-        result: {
-          taskRunId: run.taskRunId,
-          status: "input-required",
-          idempotentReplay: false,
-          requiresApproval: true,
-          content: remoteTaskContent(result.content),
-          executedToolCount: result.executedTools?.length ?? 0,
-          isError: false,
-        },
-      };
-    }
-
-    await prisma.taskRun.update({
-      where: { taskRunId: run.taskRunId },
-      data: {
-        status: "completed",
-        completedAt: new Date(),
-        progressPayload: {
-          summary: result.content,
-          riskClass: parsed.riskClass,
-          executedToolCount: result.executedTools?.length ?? 0,
-        },
-      },
-    });
-
-    return {
-      kind: "result",
-      result: {
-        taskRunId: run.taskRunId,
-        status: "completed",
-        idempotentReplay: false,
-        requiresApproval: false,
-        content: remoteTaskContent(result.content),
-        executedToolCount: result.executedTools?.length ?? 0,
-        isError: false,
-      },
-    };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown remote coworker execution error";
-    await prisma.taskRun.update({
-      where: { taskRunId: run.taskRunId },
-      data: {
-        status: "failed",
-        completedAt: new Date(),
-        progressPayload: {
-          summary: message,
-          riskClass: parsed.riskClass,
-        },
-      },
-    });
-    return {
-      kind: "result",
-      result: {
-        taskRunId: run.taskRunId,
-        status: "failed",
-        idempotentReplay: false,
-        requiresApproval: false,
-        content: remoteTaskContent(message),
-        isError: true,
-      },
-    };
-  }
 }

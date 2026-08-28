@@ -4,6 +4,7 @@ import type { FormField } from "@dpf/storefront-templates";
 import { loadStorefrontOperatingTimezone } from "@/lib/storefront/storefront-operating-timezone.server";
 import { listOwnerMedia, mediaAssetUrl } from "@/lib/media";
 import { getCurrencySymbol } from "@/lib/finance/currency-symbol";
+import { inquiryFieldsForItem } from "./inquiry-fields";
 import type {
   PublicStorefrontConfig,
   PublicItem,
@@ -94,9 +95,17 @@ function isFormField(value: unknown): value is FormField {
  * definitions; without this, every archetype rendered the same generic
  * name/email/phone/message form. Falls back to DEFAULT_INQUIRY_SCHEMA when the
  * archetype is missing or has no (valid) schema.
+ *
+ * Donation fields are dropped unless the enquiry is about a donation item
+ * (BI-7F851119). Five nonprofit archetypes were seeded with a donation form in
+ * the contact-form slot, so an adoption enquiry, a found-pet report and an offer
+ * to volunteer were all refused without a donation amount. The seed is fixed,
+ * but an install seeded before that fix still holds the old JSON, so the rule is
+ * applied on read as well.
  */
 export async function resolveInquiryFormSchema(
   archetypeId: string,
+  { itemCtaType }: { itemCtaType?: string | null } = {},
 ): Promise<FormField[]> {
   if (!archetypeId) return DEFAULT_INQUIRY_SCHEMA;
   const [archetype, orgSettings] = await Promise.all([
@@ -115,6 +124,7 @@ export async function resolveInquiryFormSchema(
     const validated = (schema as unknown[]).filter(isFormField);
     if (validated.length > 0) fields = validated;
   }
+  fields = inquiryFieldsForItem(fields, { itemCtaType });
   // Substitute the GBP symbol seeded into form option labels with the
   // workspace base currency symbol so a USD install doesn't show £ in
   // budget-range / donation-amount dropdowns.

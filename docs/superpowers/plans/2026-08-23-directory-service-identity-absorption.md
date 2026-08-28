@@ -72,6 +72,29 @@ for existing rows. A regression test pins it before the move.
 **Verification:** unit tests for refusal and grammar stability; a query returning
 zero owner-less service principals.
 
+### Delivered (`BI-3181909E`)
+
+`apps/web/lib/identity/service-account.ts` is the shared primitive.
+`buildServiceAccountPrincipalId(namespace, segments)` owns the grammar;
+`resolveServiceAccountPrincipal()` mints only against a resolved accountable owner
+and refuses otherwise; `findOwnerlessServiceAccounts()` is the invariant guard.
+`browser-drive/identity.ts` keeps only its namespace (`browser-svc`) and issuer.
+
+Two decisions worth carrying forward:
+
+- **Repair-forward over one-shot backfill.** An account predating the rule gains
+  its sponsor the next time it is touched, so the invariant converges rather than
+  depending on a migration being exhaustive. The guard query is what proves it.
+- **The id grammar is pinned by test, not by convention.** Browser-session
+  integration ids embed the whole `browser-svc:<site>:<account>` string, so a
+  change orphans existing credentials and bindings. `drive.ts` consumes only the
+  id builder and was deliberately left untouched.
+
+**Follow-up, not done here:** `findOwnerlessServiceAccounts()` exists but nothing
+runs it on a cadence. Wiring it into a steward sweep so an orphan surfaces without
+someone asking is a separate concern — an invariant nobody evaluates is not yet a
+guard.
+
 ## Phase 2 — The projection contract (`BI-DCE49BA9`)
 
 Extract the DN projection from `apps/web/app/(shell)/platform/identity/directory/page.tsx`
@@ -134,6 +157,42 @@ identity, not what a role may do.
 end-to-end against the running portal; an install with an upstream still works with
 tested precedence; no auth check weakened anywhere; seeded personas at real
 privilege levels.
+
+### Delivered — Phases 2, 3 and 4
+
+**Phase 2 (`BI-DCE49BA9`)** — `apps/web/lib/directory/`. `dn.ts` derives the base
+DN from `Organization` (website host, else the slug under a reserved `internal`
+domain that cannot collide with a real one) and escapes RDNs per RFC 4514.
+`schema.ts` holds the object classes and the publication **allowlist**, with each
+withheld field carrying its reason. `projection.ts` builds the read-only,
+fingerprinted tree. The admin route no longer computes a tree or carries a
+hardcoded `dc=dpf,dc=internal`; it renders exactly what a client would see.
+
+**Phase 3 (`BI-F7317D65`)** — `apps/web/lib/directory/ldap/`. BER codec, filter
+layer, protocol layer, TLS loader and listener. Written against RFC 4511 because
+no maintained Node LDAP *server* exists. Read-only by construction: writes are
+refused with `unwillingToPerform`, not merely unimplemented.
+
+**Phase 4 (`BI-CEACBD0D`)** — `apps/web/lib/identity/authentication.ts`.
+`govern/auth.ts` now consults the spine, so an inactive `Principal` cannot log in
+even when its `User` row still says active. Deactivation is one transaction
+across principal and credentials. Local-vs-upstream precedence resolves to the
+install and **surfaces** an overlap rather than resolving it silently.
+
+**Verification.** 67 directory tests, 11 authentication tests, 142 across the
+affected surface, and `tsc` clean. Six of those exercise a **real `ldapsearch`
+client** against the running listener — bind over TLS, all three identity shapes
+returned, group membership resolved by filter, wrong password rejected,
+anonymous refused, and withheld attributes absent when requested by name.
+
+Two findings worth carrying: the functional test initially deadlocked because
+`spawnSync` blocks the event loop the listener runs on, and `tsc` caught two type
+errors (Node's generic `Buffer`, and a certificate CN that may be an array) that
+67 passing tests did not.
+
+**Still open after this build:** the `User` schema demotion (design Q2), SCIM and
+OIDC, multi-organization base DNs (Q3), and running
+`findOwnerlessServiceAccounts()` on a cadence.
 
 ## Phase 5 — Retire the superseded stance (`BI-5167932D`)
 

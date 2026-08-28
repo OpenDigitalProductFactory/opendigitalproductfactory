@@ -27,12 +27,20 @@
 // - Owned-scope only. Each projection clears just the labels/relationship types it
 //   owns, so refreshing one cannot delete another's rows (BI-EC5FF1A0).
 
+import type { ProjectionReconciliation } from "@dpf/db";
+
 import docImpactManifest from "@/lib/docs/doc-impact.generated.json";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 export type GraphProjectionRefreshResult = {
   docImpact: { nodes: number; edges: number } | { error: string };
   knowledgeAndPortfolio: "ok" | { error: string };
+  /**
+   * Post-refresh comparison of each projection against its source of truth
+   * (BI-A73954F7). Absent only when the reconciliation query itself failed —
+   * which is reported, never swallowed, but must not wedge boot.
+   */
+  reconciliation?: ProjectionReconciliation[];
 };
 
 /**
@@ -69,6 +77,37 @@ export async function refreshGraphProjections(): Promise<GraphProjectionRefreshR
   } catch (error) {
     result.knowledgeAndPortfolio = { error: getErrorMessage(error) };
     console.error("[graph-projections] knowledge/portfolio refresh failed:", error);
+  }
+
+  // Reconcile AFTER refreshing, and report rather than repair (BI-A73954F7).
+  //
+  // A projection can report success and still leave the mirror wrong — doc-impact was
+  // destroyed by an unrelated re-index minutes after a clean run — so "the job fired"
+  // is not evidence the mirror is right. Only comparing counts against the source
+  // catches that, and until now nothing did: all three production failures in this
+  // class were found by a human running these comparisons by hand.
+  try {
+    const { reconcileGraphProjections, hasProjectionFault, countDocPagesInManifest } =
+      await import("@dpf/db");
+    const rows = await reconcileGraphProjections({
+      docManifestPageCount: countDocPagesInManifest(
+        docImpactManifest as Parameters<typeof countDocPagesInManifest>[0],
+      ),
+    });
+    result.reconciliation = rows;
+
+    if (hasProjectionFault(rows)) {
+      // Loud, because the whole point is that this used to be silent. Listing the
+      // healthy rows too makes the message diagnosable on its own: "knowledge empty"
+      // means something different when portfolio is also empty (nothing ran) than
+      // when portfolio is fine (one projection broke).
+      const summary = rows
+        .map((r) => `${r.projectionKey}=${r.mirrorCount}/${r.sourceCount} ${r.status}`)
+        .join("  ");
+      console.error(`[graph-projections] MIRROR DOES NOT MATCH SOURCE — ${summary}`);
+    }
+  } catch (error) {
+    console.error("[graph-projections] reconciliation failed:", error);
   }
 
   return result;

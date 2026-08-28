@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { Button } from "./Button";
+import { Button, ButtonLink } from "./Button";
 
 describe("Button", () => {
   it("renders a real <button> defaulting to type='button' (never accidental submit)", () => {
@@ -52,5 +52,13 @@ describe("Button", () => {
     expect(html).toContain('aria-label="Submit form"');
     expect(html).toContain("w-full");
     expect(html).toContain("focus-visible:outline-2");
+  });
+
+  it("renders navigation actions as real links with the shared button treatment", () => {
+    const html = renderToStaticMarkup(<ButtonLink href="/export">Export</ButtonLink>);
+    expect(html).toContain('href="/export"');
+    expect(html).toContain("bg-[var(--dpf-accent)]");
+    expect(html).toContain("text-[var(--dpf-on-accent)]");
+    expect(html).not.toContain("<button");
   });
 });

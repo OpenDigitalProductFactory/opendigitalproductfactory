@@ -1,7 +1,7 @@
 ---
 # Single fields shared by both surfaces
 name: dpf-decision-via-kernel
-description: "Use when working in the DPF codebase and facing an open question with 2+ architecturally-distinct options. Maps each option to the closed PRINCIPLE_DIMENSIONS registry, invokes the principle_decide MCP tool, surfaces the contribution ledger to the operator, and defers if a commandment conflict is flagged. Composes with dpf-brainstorming as the predecessor step."
+description: "Use when an open DPF question has two or more architecturally-distinct options that need kernel scoring."
 
 # Agent Skills standard fields (Surface A — Claude Code)
 disable-model-invocation: false
@@ -32,7 +32,7 @@ enforces:
 
 When you face an open question with 2+ architecturally-distinct options inside the DPF codebase, **do not pick by gut**. Map each option to the closed `PRINCIPLE_DIMENSIONS` registry, call the `principle_decide` MCP tool, and surface the contribution ledger to the operator. This is "What Would Mark Do" (WWMD) as a tool, not a guess — and it sits in front of `dpf-brainstorming` whenever the brainstorm produces multiple viable options.
 
-> **Surface boundary (WWMD vs WWWD).** This skill is the **platform-development (WWMD)** decision surface — it scores against the founder kernel and is for DPF contributors and Build Studio *platform* work. It is **not** the path for a customer's *business* decision: those route through the Decision Perspective Gate against the organization's **WWWD** profile, which enforces the non-inherit boundary (a customer profile does not inherit platform business judgment as authority). The two surfaces are being consolidated so the Gate is the single governed door (BI-E1FB2307). See AGENTS.md §16 and `docs/user-guide/ai-workforce/decision-perspective.md`.
+> **Surface boundary (WWMD vs WWWD).** This skill is the **platform-development (WWMD)** decision surface — it scores against the founder kernel and is for DPF contributors and Build Studio *platform* work. It is **not** the path for a customer's *business* decision: those route through the Decision Perspective Gate against the organization's **WWWD** profile, which enforces the non-inherit boundary (a customer profile does not inherit platform business judgment as authority). The two surfaces are being consolidated so the Gate is the single governed door (BI-E1FB2307). See [AGENTS.md §11](../../../../AGENTS.md) and `docs/user-guide/ai-workforce/decision-perspective.md`.
 >
 > **The org WWWD corpus is now populated at onboarding** (company mission + org-overlay `stance`/`principle` pages, seeded from the chosen archetype — BI-CC64ECE4). So "what would *we* do?" answers from the **organization's own doctrine first**: gather it with `dpf-retrieve-decision-context` (query `wiki_query` for org-overlay `stance`/`heuristic`/`principle` pages + the company mission) and let it govern. Fall back to this kernel/WWMD path **only when the org corpus is silent** on the question — never substitute Mark's platform doctrine for a business call the org has its own stance on.
 
