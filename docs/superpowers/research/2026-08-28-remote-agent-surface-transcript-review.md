@@ -276,8 +276,15 @@ principle, `docs/architecture/*.md` and `AGENTS.md` for tunnel, ngrok, port expo
 reachability returned nothing. So an agent legitimately holding the lease could satisfy every written
 rule and still publish an unauthenticated write path to the live database.
 
-The principle and `AGENTS.md` §12 now carry the clause: a lease-gated runtime is never reachable from
-beyond the host, by any mechanism, and **holding the lease authorises use, never exposure.**
+The kernel principle and the delivery-surfaces runbook now carry the clause: a lease-gated runtime is
+never reachable from outside the host, by any mechanism, and **holding the lease permits use, never
+exposure.**
+
+It is deliberately *not* in `AGENTS.md`. That file is a ratchet that may only shrink (BI-0020D511,
+the instruction-plane split), and the guard refused the 92-byte addition. Re-baselining past it was
+available and declined: the split exists so rules live in the principle rather than the always-on
+preamble, and `AGENTS.md` §12 already links the principle and delegates its detail to the runbook.
+Both are files in the repo, so an offline agent still reaches the rule.
 
 ## 7. Suggested next steps (Source A)
 
