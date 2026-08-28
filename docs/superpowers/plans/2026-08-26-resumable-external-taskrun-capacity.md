@@ -109,6 +109,9 @@ and authority guarantees that make it safe.
 |---|---|---|---|---|---|
 | `DELIV-RESUMABLE-EXTERNAL-TASKRUN` — preserve and resume one immutable external TaskRun across transient pre-inference capacity | `BI-42CE2CE7` | `REQ-RESUME-001` through `REQ-RESUME-007` | `CONTRACT-WAIT-V1`, `CONTRACT-RESUME-CAS`, `CONTRACT-STORED-AUTHORITY`, `CONTRACT-NO-SIDE-EFFECT-REPLAY`, `CONTRACT-TERMINAL-HONESTY`, `CONTRACT-STORE-IDENTITY` | `FLOW-FIRST-WAIT`, `FLOW-EXACT-REPLAY`, `FLOW-CONCURRENT-REPLAY`, `FLOW-CAPACITY-EVENT`, `FLOW-TERMINAL` | `VERIFY-CLASSIFIER`, `VERIFY-WAIT`, `VERIFY-REPLAY`, `VERIFY-CAS`, `VERIFY-AUTHORITY`, `VERIFY-TERMINAL`, `VERIFY-EVENT-SEAM`, `VERIFY-STORE-BOUNDARY`, `VERIFY-LIVE` |
 
+The deliverable maps all governed scope statements: `OBJ-RESUME-001` through
+`OBJ-RESUME-003` and `AC-RESUME-001` through `AC-RESUME-008`.
+
 ## 3. Test-first implementation sequence
 
 ### Task 1: Lock the wait classification and durable projection

@@ -25,6 +25,31 @@ unchanged. No schema, global queue, provider exception, or successor TaskRun is
 introduced. Kernel decision `DI-A76E92CF4EEE` selected this design with high
 confidence and no commandment conflict.
 
+## Governed scope manifest
+
+**OBJ-RESUME-001:** Preserve one immutable external reviewer TaskRun across a
+transient pre-inference provider-capacity outcome without consuming or
+replacing its request identity.
+
+**OBJ-RESUME-002:** Allow exactly one server-controlled same-row continuation
+that reconstructs authority exclusively from persisted state and prevents
+concurrent duplicate inference.
+
+**OBJ-RESUME-003:** Keep every non-capacity, post-tool, approval, identity, and
+database-replacement boundary fail-closed without weakening provider or
+governance policy.
+
+| Acceptance ID | Objective IDs | Statement |
+|---|---|---|
+| AC-RESUME-001 | OBJ-RESUME-001 | A typed `capacity` or `busy` result with zero executed tools leaves the original TaskRun submitted with a versioned resource-wait projection and no completion timestamp. |
+| AC-RESUME-002 | OBJ-RESUME-001 | An exact token, key, and digest replay continues the original TaskRun and thread without creating a successor row or identity. |
+| AC-RESUME-003 | OBJ-RESUME-002 | Concurrent exact continuations admit one compare-and-set winner; every loser performs no provider call and returns the same durable run. |
+| AC-RESUME-004 | OBJ-RESUME-002 | A trusted capacity event can continue by TaskRun identity only after the server reloads and validates all stored request, authority, and review-binding state. |
+| AC-RESUME-005 | OBJ-RESUME-003 | Any post-tool capacity result, non-capacity failure, digest mismatch, or incomplete stored authority remains terminal or non-mutating under the existing contract. |
+| AC-RESUME-006 | OBJ-RESUME-003 | A missing original TaskRun, request, digest, or envelope after database replacement refuses continuation and never recreates a consumed reviewer identity. |
+| AC-RESUME-007 | OBJ-RESUME-001, OBJ-RESUME-002 | Live verification continues one capacity-blocked reviewer on the same TaskRun and persists its required immutable reader, governed writer, and receipt evidence. |
+| AC-RESUME-008 | OBJ-RESUME-003 | Provider quality floors, tool grants, readiness writers, schemas, and installed-runtime source remain unchanged. |
+
 ## Evidence and existing substrate
 
 WordPress and BI-47 runs reached healthy eligible endpoints but completed before
