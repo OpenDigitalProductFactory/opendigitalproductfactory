@@ -185,7 +185,10 @@ export function buildAuthorizationServerMetadata(
     grant_types_supported: ["authorization_code", "refresh_token", "client_credentials"],
     code_challenge_methods_supported: ["S256"],
     token_endpoint_auth_methods_supported: ["none", "client_secret_post", "client_secret_basic"],
-    client_id_metadata_document_supported: true,
+    // False on purpose: this server does not FETCH a Client ID Metadata
+    // Document (see oauth-clients.resolveCimdClient). Advertising support we
+    // do not perform would send clients down a path that silently fails.
+    client_id_metadata_document_supported: false,
     resource_indicators_supported: true,
   };
   if (options.registrationEnabled) {

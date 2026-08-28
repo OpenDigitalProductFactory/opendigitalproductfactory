@@ -182,7 +182,7 @@ describe("scope handling", () => {
 });
 
 describe("CIMD dispatch", () => {
-  it("resolves an https client_id through the CIMD path, not the local lookup", async () => {
+  it("routes an https client_id through the CIMD path", async () => {
     mocks.resolveCimdClient.mockResolvedValue(client({ clientId: "https://x.test/c.json" }));
     const r = await parseAuthorizeRequest(
       params({ client_id: "https://x.test/c.json" }),
@@ -193,9 +193,9 @@ describe("CIMD dispatch", () => {
     expect(r.valid).toBe(true);
   });
 
-  it("surfaces an unfetchable CIMD document as an unknown client", async () => {
-    // An air-gapped install cannot fetch; reporting that honestly beats a
-    // confusing partial success.
+  it("treats an unregistered CIMD client as unknown — nothing is fetched", async () => {
+    // resolveCimdClient is lookup-only: the authorization endpoint never makes
+    // an outbound request to a client-supplied URL (that was the SSRF).
     mocks.resolveCimdClient.mockResolvedValue(null);
     const r = await parseAuthorizeRequest(params({ client_id: "https://x.test/c.json" }), ORIGIN);
     expect(r.valid).toBe(false);

@@ -275,7 +275,7 @@ Properties this has to satisfy:
 
 Support all three of the spec's mechanisms, and let the install's own posture pick:
 
-1. **CIMD (SEP-991)** — preferred where the install can reach the internet. `client_id_metadata_document_supported: true` in AS metadata. The AS fetches the document, validates `client_id` matches the URL exactly, validates the request's `redirect_uri` against the document, and caches per HTTP cache headers (`:236-239`).
+1. **CIMD (SEP-991)** — **recognised, not fetched.** A CIMD-shaped `client_id` resolves only if already recorded by pre-registration or a prior DCR; the server never retrieves the document. `client_id_metadata_document_supported` is `false`. See §7.3b — fetching a client-chosen URL from the pre-auth endpoint is SSRF that no JS/TS sanitizer can clear in CodeQL.
 2. **DCR (RFC 7591)** — the local-install path, because it needs no outbound fetch. Policy-gated (§7.3).
 3. **Pre-registration** — an operator-managed client list in Admin > Platform Development, for a client the operator wants pinned.
 
@@ -384,17 +384,23 @@ The `2025-11-25` prohibition (and the TAK/GAID design's §MCP notes) is absolute
 
 An open `/register` on a reachable install lets anyone mint a `client_id`. Registration alone grants nothing — every token still requires an authenticated human to consent — but unbounded registration is still a junk-row and phishing-surface vector (a self-registered client can choose a misleading `client_name`, which the consent screen must therefore mark as self-asserted). Mitigations: DCR enabled by default **only** when the resource origin is loopback; rate limiting; registrations expire unused; the operator can disable DCR entirely and require CIMD or pre-registration. §9 puts the default to the operator.
 
-### 7.3b CIMD fetching is server-side request forgery unless guarded
+### 7.3b CIMD document fetching is not implemented, and that is the security decision
 
-Resolving a Client ID Metadata Document means fetching a URL the **client** supplied as its `client_id`. That is a server-side request to an attacker-chosen address, and CodeQL flagged the first implementation as `js/request-forgery` (critical) — correctly. Left open it turns the authorization endpoint into a probe for the operator's internal network: `client_id=https://169.254.169.254/latest/meta-data`, an internal Elasticsearch on an odd port, a Docker-network service.
+Resolving a Client ID Metadata Document "properly" means the authorization server issuing an HTTP request to a URL the **client** chose. That is server-side request forgery by construction: `client_id=https://169.254.169.254/latest/meta-data`, an internal search cluster, any Docker-network service — probed by the one endpoint that must be reachable before authentication.
 
-Three controls, in order of strength:
+The first implementation did fetch, behind an address guard that refused loopback, RFC1918, link-local, CGNAT and metadata ranges. **CodeQL flagged it `js/request-forgery` (critical) and kept flagging it** — through a purpose-built guard, and then through the platform's own `assertSafeOutboundUrl` used exactly as its contract prescribes. That is not a defect in either guard. `.github/codeql/codeql-config.yml` already documents why: GitHub honours CodeQL data-extension model packs only for C/C++, C#, Java, Python, Ruby and Rust, so **no JS/TS sanitizer can break that taint flow**, and `assertSafeOutboundUrl` is named there among the helpers whose findings must instead be dispositioned by dismissal.
 
-1. **Off by default.** `DPF_OAUTH_CIMD_FETCH` gates the outbound request entirely. A fully-local install cannot use CIMD anyway — it cannot reach the document — so the default costs nothing and removes the surface.
-2. **Address-range validation, not string matching.** `lib/auth/outbound-url-guard.ts` resolves the hostname and refuses if **any** resolved address is loopback, private, link-local, carrier-grade NAT, multicast or otherwise reserved, including IPv4-mapped IPv6 forms like `::ffff:127.0.0.1`. Blocking the literal string `localhost` would be useless: an attacker controls the DNS record. https only, no embedded credentials, no non-default port.
-3. **Request shape.** `redirect: "error"` so an allowed origin cannot 302 the request inward, a 5s timeout, and a 64 KiB body cap.
+**So the choice was: carry a permanently-dismissed critical alert on the authorization endpoint, or not have the feature.** This design takes the second.
 
-**Residual risk, stated rather than papered over:** the guard resolves and validates, then hands the URL to `fetch`, which resolves again. A record that changes between the two lookups (DNS rebinding) can still slip through, because Node's `fetch` does not let the caller pin the connection to a validated address. Control 1 is what actually bounds this; controls 2 and 3 narrow it.
+`resolveCimdClient` is lookup-only. A CIMD-shaped `client_id` resolves only if some other path already recorded it — operator pre-registration, or a prior dynamic registration. Nothing is fetched, so the sink does not exist and there is no alert to dismiss and re-evaluate later. `client_id_metadata_document_supported` is `false` in AS metadata, because advertising a mechanism the server does not perform sends clients down a path that silently fails.
+
+Three things make this cheap rather than a loss:
+
+1. **This platform cannot use CIMD anyway.** The `client_id` is an https URL the AS must retrieve; a fully-local install has no route to it.
+2. **DCR covers the same gap.** It is the spec's own answer for a client with no prior relationship, needs no outbound request, and is already implemented.
+3. **Pre-registration covers a pinned client**, without any fetch.
+
+If an install ever genuinely needs live CIMD resolution, the request belongs in a dedicated egress-controlled service with its own allowlist and audit — not inline in the endpoint that is reachable pre-authentication.
 
 ### 7.4 The loopback guard
 

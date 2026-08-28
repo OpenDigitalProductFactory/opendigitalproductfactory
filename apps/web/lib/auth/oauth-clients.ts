@@ -12,8 +12,6 @@
 
 import { prisma } from "@dpf/db";
 import { isLoopbackHostname } from "@/lib/auth/oauth-metadata";
-import { isCimdFetchEnabled } from "@/lib/auth/oauth-policy";
-import { assertSafeOutboundUrl } from "@/lib/security/safe-fetch";
 import { isPublicScope, type PublicScope } from "@/lib/auth/oauth-scope-map";
 
 export type RegistrationKind = "dcr" | "cimd" | "preregistered" | "credentials";
@@ -170,12 +168,36 @@ export async function registerDynamicClient(
 }
 
 /**
- * Resolve a Client ID Metadata Document client (SEP-991).
+ * Resolve a Client ID Metadata Document client (SEP-991) — LOOKUP ONLY.
  *
- * The AS fetches the URL, and the document's own `client_id` MUST equal that
- * URL exactly (`:236-239`) — without that check anyone could host a document
- * claiming to be someone else's client. Records the client on first sight so
- * the consent screen and the admin list can show it like any other.
+ * **This deliberately does not fetch the document.** Resolving a CIMD client
+ * "properly" means the authorization server performing an HTTP request to a URL
+ * the CLIENT chose, which is server-side request forgery by construction:
+ * `client_id=https://169.254.169.254/latest/meta-data` or any internal service
+ * becomes a probe of the operator's network, executed by the one endpoint that
+ * must be reachable before authentication.
+ *
+ * An earlier revision of this file did fetch, behind an address guard. CodeQL
+ * flagged it `js/request-forgery` (critical) and kept flagging it even through
+ * the platform's own `assertSafeOutboundUrl` sanitizer — which
+ * `.github/codeql/codeql-config.yml` already lists among the helpers whose JS/TS
+ * findings cannot be modelled away, because GitHub honours CodeQL data-extension
+ * packs only for C/C++, C#, Java, Python, Ruby and Rust. The documented fallback
+ * is dismissal with justification, and a standing dismissed critical alert on an
+ * authorization endpoint is a worse artifact than not having the feature.
+ *
+ * It is also a feature this platform cannot use: a CIMD `client_id` is an https
+ * URL the AS must retrieve, and a fully-local install has no route to it. DCR
+ * (`registerDynamicClient`) is the mechanism that works here, and operator
+ * pre-registration covers a client an operator wants pinned.
+ *
+ * So a CIMD-shaped `client_id` resolves only if some other path already recorded
+ * it — pre-registration, or a prior DCR. Nothing is fetched, and the SSRF sink
+ * does not exist. If an install ever genuinely needs live CIMD resolution, it
+ * belongs behind a fetch performed by a dedicated egress-controlled service, not
+ * inline in the authorization endpoint.
+ *
+ * Design: docs/superpowers/specs/2026-08-26-mcp-client-self-authentication-design.md §4.4, §7.3b
  */
 export async function resolveCimdClient(clientIdUrl: string): Promise<RegisteredClient | null> {
   let url: URL;
@@ -184,85 +206,12 @@ export async function resolveCimdClient(clientIdUrl: string): Promise<Registered
   } catch {
     return null;
   }
-  // Spec: https scheme with a path component. A bare origin is not a CIMD id.
+  // Spec shape: https with a path component. A bare origin is not a CIMD id.
   if (url.protocol !== "https:") return null;
   if (url.pathname === "/" || url.pathname === "") return null;
 
-  const existing = await findClientByClientId(clientIdUrl);
-  if (existing) return existing;
-
-  // Outbound CIMD resolution is OFF unless the operator turns it on. A client
-  // supplies this URL, so fetching it is a server-side request to an
-  // attacker-chosen address; an install that never expects to resolve a CIMD
-  // document should not carry that surface at all. DCR is the local path.
-  if (!isCimdFetchEnabled()) return null;
-
-  // SSRF guard (CodeQL js/request-forgery). The client_id is untrusted input,
-  // so it goes through the platform's outbound-URL policy — https only, and
-  // loopback / RFC1918 / link-local / metadata addresses refused — rather than
-  // straight into fetch. `assertSafeOutboundUrl` returns a URL rather than a
-  // string precisely so the validated value is shaped differently from the raw
-  // input; pass `.href` to fetch, per its contract.
-  let safeUrl: URL;
-  try {
-    safeUrl = assertSafeOutboundUrl(clientIdUrl, { allowedSchemes: ["https:"] });
-  } catch {
-    return null;
-  }
-
-  let doc: Record<string, unknown>;
-  try {
-    const res = await fetch(safeUrl.href, {
-      headers: { Accept: "application/json" },
-      signal: AbortSignal.timeout(5000),
-      // A redirect is how an allowed origin walks the request inward; refuse
-      // rather than follow.
-      redirect: "error",
-    });
-    if (!res.ok) return null;
-    // Cap the body: a metadata document is small, and an unbounded read of an
-    // attacker-chosen URL is a memory-exhaustion lever.
-    const raw = await res.text();
-    if (raw.length > 64 * 1024) return null;
-    doc = JSON.parse(raw) as Record<string, unknown>;
-  } catch {
-    // An air-gapped install cannot fetch, and that is expected rather than
-    // exceptional — DCR is the path there.
-    return null;
-  }
-
-  if (doc.client_id !== clientIdUrl) return null;
-  const clientName = typeof doc.client_name === "string" ? doc.client_name.trim() : "";
-  const redirectUris = Array.isArray(doc.redirect_uris)
-    ? doc.redirect_uris.filter((u): u is string => typeof u === "string")
-    : [];
-  if (!clientName || redirectUris.length === 0) return null;
-  if (!redirectUris.every(isRegisterableRedirectUri)) return null;
-
-  const row = await prisma.oAuthClient.create({
-    data: {
-      oAuthClientId: clientIdUrl,
-      clientName,
-      registrationKind: "cimd",
-      redirectUris,
-      allowedScopes: [],
-      metadataJson: doc as object,
-    },
-  });
-  return {
-    rowId: row.id,
-    clientId: row.oAuthClientId,
-    clientName: row.clientName,
-    registrationKind: "cimd",
-    redirectUris: row.redirectUris,
-    allowedScopes: [],
-    ownerUserId: null,
-    agentId: null,
-    clientSecretHash: null,
-    // A CIMD name is asserted by a document at a URL the operator can inspect,
-    // which is weaker than pre-registration but stronger than pure self-claim.
-    selfAsserted: false,
-  };
+  // Lookup only — see the note above. An unknown CIMD client is simply unknown.
+  return await findClientByClientId(clientIdUrl);
 }
 
 /** Stamp last-used so the admin list can show dormant clients honestly.

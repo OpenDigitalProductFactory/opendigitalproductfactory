@@ -95,20 +95,3 @@ export function clientCredentialsTtlSeconds(): number {
   return envInt("DPF_OAUTH_CC_TTL_SECONDS", 3600, 300, 86_400);
 }
 
-/**
- * Outbound Client ID Metadata Document resolution (SEP-991).
- *
- * OFF by default. Resolving a CIMD client means fetching a URL the CLIENT
- * chose, which is a server-side request to an attacker-selected address. The
- * address guard in outbound-url-guard.ts blocks private and reserved ranges,
- * but the strongest control is not making the request at all on an install
- * that never needed it — and a fully-local install cannot use CIMD anyway,
- * because it cannot reach the public internet to fetch the document. DCR is
- * the path there.
- *
- * Turn this on only for an install deliberately exposed to the internet whose
- * clients authenticate by metadata document.
- */
-export function isCimdFetchEnabled(): boolean {
-  return envFlag("DPF_OAUTH_CIMD_FETCH") === true;
-}
