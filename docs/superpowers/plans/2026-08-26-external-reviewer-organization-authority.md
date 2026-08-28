@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # External Reviewer Organization Authority Repair
 
 **Backlog item:** BI-F48D7059  
@@ -91,9 +95,20 @@ treated as review completion.
 
 - `apps/web/lib/govern/authority/resolve-coworker-tool-authority.ts`
 - `apps/web/lib/govern/authority/resolve-coworker-tool-authority.test.ts`
+- `apps/web/lib/mcp-task-approval-recovery-contract.ts`
 - `apps/web/lib/mcp-task-approval-recovery.ts`
 - `apps/web/lib/mcp-task-approval-recovery.test.ts`
 - `apps/web/lib/mcp-task-submit.ts`
+- `apps/web/lib/mcp-task-submit-approval-recovery.test.ts`
 - `apps/web/lib/mcp-task-submit.test.ts`
 
 No schema, migration, public route, or customer-facing documentation change is expected. The operational documentation impact is this plan plus the existing resilient gate-flow documentation that this repair unblocks.
+
+## Risks and rollback
+
+The main risk is recovering a run whose authority or writer state has changed.
+The transaction therefore checks the immutable request digest, approval binding,
+stale heartbeat, compare-and-swap version, and absence of writer evidence before
+any mutation. A mismatch returns without changing the TaskRun. Rollback is the
+normal protected revert of this source change; already-cancelled expired
+envelopes remain immutable audit history and are not resurrected.
