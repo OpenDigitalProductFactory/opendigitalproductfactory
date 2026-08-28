@@ -7,11 +7,31 @@
 // (which speaks its own contract, not MCP); this route is what an MCP
 // client points at.
 //
-// Auth: Authorization: Bearer dpfmcp_<token>. Tokens are issued from
-// /admin/platform-development. We do NOT implement OAuth 2.1 resource-
-// server discovery (the GitHub-PAT pattern, intentionally) but we still
-// return a WWW-Authenticate header on 401 so clients that perform
-// discovery don't fail mysteriously.
+// Auth: ONE authorization server, two grant types — not two credential
+// systems (design 2026-08-26 §2.1).
+//
+//   authorization_code + PKCE  anything with a browser. The client discovers
+//                              the AS from the 401's `resource_metadata`, a
+//                              human consents once, and the client refreshes
+//                              silently thereafter. This is the default door.
+//   client_credentials         headless callers — CI, cron, containers. Same
+//                              AS, same scope vocabulary, same revocation
+//                              surface. A grant type, not a side door.
+//
+// This file previously read: "We do NOT implement OAuth 2.1 resource-server
+// discovery (the GitHub-PAT pattern, intentionally)." That was right for a
+// single-operator loopback surface and stopped being right once (a) five
+// external clients connect and all of them perform RFC 9728 discovery,
+// (b) `2025-11-25` made Protected Resource Metadata a server MUST while we
+// advertise that revision on the wire, and (c) consumer installs have no
+// operator with a portal habit to mint a token by hand.
+//
+// The `dpfmcp_` PAT still resolves, and every configured client keeps working.
+// It is on a deprecation horizon: issuance closes first, resolution survives
+// until the operator sets the horizon (DPF_MCP_PAT_RESOLUTION_DISABLED). Two
+// permanent credential systems would mean two resolution paths, two revocation
+// surfaces and two audit shapes — and the second is the one nobody keeps
+// current.
 import {
   resolveMcpApiToken,
   type McpTokenCapability,
@@ -21,6 +41,11 @@ import {
 import { deriveCallerClient } from "@/lib/mcp/caller-client";
 import { buildMcpInitializeResult } from "@/lib/mcp/initialize";
 import { verifyMcpSessionToken } from "@/lib/mcp/session-token";
+import { buildUnauthorizedChallenge, resolveResourceOrigin } from "@/lib/auth/oauth-metadata";
+import { resolveOAuthAccessToken } from "@/lib/auth/oauth-tokens";
+import { isPatResolutionDisabled } from "@/lib/auth/oauth-policy";
+import { type PublicScope } from "@/lib/auth/oauth-scope-map";
+import { buildStepUpChallenge, type StepUpContext } from "@/lib/auth/oauth-step-up";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import { PLATFORM_TOOLS, resolveAnnotations, type ToolDefinition } from "@/lib/mcp-tools";
 import { submitRemoteCoworkerTask } from "@/lib/mcp-task-submit";
@@ -39,6 +64,7 @@ import {
   mergeLoadedToolNames,
   LOAD_TOOLS_TOOL_NAME,
   type McpToolTier,
+  type McpAuthSource,
 } from "@/lib/mcp/tool-tier";
 import { getLoadedToolNames, loadToolsForSession } from "@/lib/mcp/tool-session-store";
 import { SUPPORTED_PROTOCOL_VERSIONS } from "@/lib/mcp/protocol-versions";
@@ -61,8 +87,9 @@ type ResolvedAuth = ResolvedMcpToken & {
   threadId?: string | null;
   routeContext?: string | null;
   /** Where the auth came from — populates `ToolExecution.executionMode` so we can
-   *  tell internal cli-adapter calls from external coding-agent calls. */
-  source: "pat" | "session-jwt";
+   *  tell internal cli-adapter calls from external coding-agent calls.
+   *  `oauth` is the default external door; `pat` is on a deprecation horizon. */
+  source: McpAuthSource;
 };
 
 // Protocol revisions: the governed N/N-1 window + grandfathered set, declared
@@ -138,7 +165,13 @@ function normalizeTokenScope(token: Pick<ResolvedMcpToken, "scope" | "capability
   return token.capability === "write" ? "write" : "read";
 }
 
-function unauthorizedResponse(detail: string): Response {
+// The 401 is the entry point to the whole authorization flow, not just a
+// refusal: `resource_metadata` tells a conformant client where to discover the
+// authorization server, and `scope` tells it the least-privilege floor to ask
+// for. Without those two parameters a client that performs RFC 9728 discovery
+// — Claude Code, Codex and VS Code all do — has nothing to act on, which is
+// exactly why connecting used to require a human minting a token by hand.
+function unauthorizedResponse(detail: string, request: Request): Response {
   return new Response(
     JSON.stringify({
       jsonrpc: "2.0",
@@ -149,7 +182,7 @@ function unauthorizedResponse(detail: string): Response {
       status: 401,
       headers: {
         "Content-Type": "application/json",
-        "WWW-Authenticate": `Bearer realm="DPF MCP", error="invalid_token", error_description="${detail}"`,
+        "WWW-Authenticate": buildUnauthorizedChallenge(resolveResourceOrigin(request), detail),
       },
     },
   );
@@ -551,6 +584,7 @@ async function handleToolsCall(
   params: Record<string, unknown> | undefined,
   callerClient?: string,
   acceptsEventStream: boolean = false,
+  stepUp?: StepUpContext,
 ): Promise<Response> {
   if (!params || typeof params["name"] !== "string") {
     return jsonRpcError(id, JSONRPC_INVALID_PARAMS, "tools/call requires params.name (string)");
@@ -578,6 +612,33 @@ async function handleToolsCall(
   const tokenScope = normalizeTokenScope(token);
   const requiredScope = requiredTokenScopeForTool(toolDef, required);
   if (!tokenScopeSatisfies(tokenScope, requiredScope)) {
+    const challenge = buildStepUpChallenge(stepUp, required, toolName, requiredScope);
+    if (challenge) {
+      // OAuth caller: a 403 carrying `error="insufficient_scope"` and the
+      // scope set needed is a FLOW, not a halt — the client re-authorizes,
+      // the human approves exactly the named additional authority, and the
+      // call is retried. This is the moment the scope-escalation rule stops
+      // being a human interrupt.
+      return new Response(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id,
+          error: {
+            code: JSONRPC_INVALID_REQUEST,
+            message: `insufficient_scope: ${toolName} requires ${requiredScope}`,
+            data: challenge.data,
+          },
+        }),
+        {
+          status: 403,
+          headers: { "Content-Type": "application/json", "WWW-Authenticate": challenge.header },
+        },
+      );
+    }
+    // PAT and session-JWT callers keep the pre-existing contract byte-for-byte:
+    // HTTP 200 with an isError tool result carrying
+    // structuredContent.error = "insufficient_token_scope". Anything reading
+    // that contract must not break while the PAT is still resolvable.
     return jsonRpcOk(
       id,
       insufficientScopeResult(toolName, tokenScope, requiredScope, required),
@@ -707,10 +768,15 @@ export async function POST(request: Request): Promise<Response> {
   // sandbox shell environment.
   const sessionHeader = request.headers.get("x-mcp-session");
   let token: ResolvedAuth;
+  // Public scopes actually consented for an OAuth caller. Empty for PAT and
+  // session-JWT callers, which is what keeps the step-up 403 scoped to OAuth
+  // and leaves the existing insufficient_token_scope contract byte-identical
+  // for everyone else.
+  let oauthGrantedScopes: PublicScope[] = [];
   if (sessionHeader) {
     const session = await verifyMcpSessionToken(sessionHeader.trim());
     if (!session) {
-      return unauthorizedResponse("invalid or expired MCP session");
+      return unauthorizedResponse("invalid or expired MCP session", request);
     }
     token = {
       tokenId: `session:${session.userId}:${session.agentId ?? "no-agent"}`,
@@ -726,14 +792,35 @@ export async function POST(request: Request): Promise<Response> {
   } else {
     const authHeader = request.headers.get("authorization");
     if (!authHeader || !authHeader.toLowerCase().startsWith("bearer ")) {
-      return unauthorizedResponse("missing Bearer token or X-MCP-Session header");
+      return unauthorizedResponse("missing Bearer token or X-MCP-Session header", request);
     }
     const plaintext = authHeader.slice("bearer ".length).trim();
-    const pat = await resolveMcpApiToken(plaintext);
-    if (!pat) {
-      return unauthorizedResponse("invalid or expired token");
+
+    // OAuth access token first — it is the default door. Audience binding is
+    // enforced inside the resolver: a token minted for another install's
+    // canonical resource URI is refused here rather than honoured, which is
+    // what stops cross-install replay (`authorization.mdx:469-483`).
+    const oauth = await resolveOAuthAccessToken(plaintext, resolveResourceOrigin(request));
+    if (oauth) {
+      token = { ...oauth.resolved, source: "oauth" };
+      oauthGrantedScopes = oauth.publicScopes;
+    } else {
+      // Falling back to the dpfmcp_ PAT. This path is on a deprecation
+      // horizon (design §9.5): issuance closes first, resolution survives
+      // until the operator sets the horizon, so no configured client breaks
+      // mid-flight.
+      if (isPatResolutionDisabled()) {
+        return unauthorizedResponse(
+          "personal access tokens are retired on this install; connect over OAuth",
+          request,
+        );
+      }
+      const pat = await resolveMcpApiToken(plaintext);
+      if (!pat) {
+        return unauthorizedResponse("invalid or expired token", request);
+      }
+      token = { ...pat, source: "pat" };
     }
-    token = { ...pat, source: "pat" };
   }
 
   // Parse JSON-RPC envelope
@@ -808,6 +895,9 @@ export async function POST(request: Request): Promise<Response> {
           body.params,
           deriveCallerClient(request.headers.get("user-agent")),
           (request.headers.get("accept") ?? "").includes("text/event-stream"),
+          token.source === "oauth"
+            ? { granted: oauthGrantedScopes, origin: resolveResourceOrigin(request) }
+            : undefined,
         );
 
       case "tasks/submit":

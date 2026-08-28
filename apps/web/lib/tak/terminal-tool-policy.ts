@@ -4,6 +4,8 @@ export type TerminalToolPolicy = {
   minimumSuccessfulReaderCalls: number;
   maximumReaderCalls: number;
   immutableReaderArguments?: ImmutableReaderArguments;
+  terminalPhase?: "writer-only";
+  persistedEvidenceAvailable?: boolean;
 };
 
 export type ImmutableReaderArguments = {
@@ -51,6 +53,19 @@ export function createInitiativeReviewTerminalToolPolicy(
         },
       }
     : null;
+}
+
+/**
+ * Resume a review that already persisted successful immutable evidence without
+ * reopening the reader surface. The resumed turn is a bounded writer phase:
+ * the model may propose only the independently selected governed assessment.
+ */
+export function enterTerminalWriterPhase(policy: TerminalToolPolicy): TerminalToolPolicy {
+  return {
+    ...policy,
+    terminalPhase: "writer-only",
+    persistedEvidenceAvailable: true,
+  };
 }
 
 export type TerminalToolArgumentDisposition =
@@ -179,7 +194,13 @@ export function summarizeTerminalToolProgress(
 ): TerminalToolProgress {
   const readers = new Set(policy.readerToolNames);
   const readerRecords = records.filter((record) => readers.has(record.name));
-  const successfulReaderCalls = readerRecords.filter((record) => record.result.success).length;
+  const persistedReaderCalls = policy.persistedEvidenceAvailable
+    ? policy.minimumSuccessfulReaderCalls
+    : 0;
+  const successfulReaderCalls = Math.max(
+    persistedReaderCalls,
+    readerRecords.filter((record) => record.result.success).length,
+  );
   return {
     readerAttempts: readerRecords.length,
     successfulReaderCalls,
@@ -195,6 +216,16 @@ export function resolveTerminalToolCall(
   toolName: string,
 ): TerminalToolCallDisposition {
   const progress = summarizeTerminalToolProgress(policy, records);
+  if (policy.terminalPhase === "writer-only" && policy.readerToolNames.includes(toolName)) {
+    return {
+      kind: "refuse",
+      result: {
+        success: false,
+        error: "terminal_writer_phase_reader_refused",
+        message: `Immutable evidence is already persisted. Call ${policy.writerToolName} now.`,
+      },
+    };
+  }
   if (toolName === policy.writerToolName && !progress.evidenceAvailable) {
     return {
       kind: "refuse",
@@ -241,6 +272,9 @@ export function applyTerminalToolSurface(
   records: readonly TerminalToolRecord[],
   providerTools: readonly Record<string, unknown>[],
 ): Array<Record<string, unknown>> {
+  if (policy.terminalPhase === "writer-only") {
+    return selectTerminalToolSurface(providerTools, [policy.writerToolName]);
+  }
   const progress = summarizeTerminalToolProgress(policy, records);
   return progress.readerBudgetExhausted && !progress.writerAttempted
     ? selectTerminalToolSurface(providerTools, [policy.writerToolName])
@@ -252,6 +286,9 @@ export function buildTerminalToolReminder(
   records: readonly TerminalToolRecord[],
 ): string {
   const progress = summarizeTerminalToolProgress(policy, records);
+  if (policy.terminalPhase === "writer-only") {
+    return `Immutable evidence is already persisted. Call ${policy.writerToolName} now; do not read again or respond with prose first.`;
+  }
   if (progress.readerBudgetExhausted) return `Call ${policy.writerToolName} now; the bounded evidence budget is complete.`;
   const remaining = policy.maximumReaderCalls - progress.readerAttempts;
   return `Use the immutable evidence readers before ${policy.writerToolName}. ${remaining} bounded evidence calls remain; reserve the terminal step for the governed writer.`;

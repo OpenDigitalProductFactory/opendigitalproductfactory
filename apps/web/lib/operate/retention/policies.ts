@@ -185,6 +185,24 @@ export const purgeStaleAgentThreads: RetentionCustomPurge = async ({
 
 export const PURGE_POLICIES: readonly PurgePolicy[] = [
   {
+    model: "oAuthAuthorizationCode",
+    label: "OAuth authorization codes",
+    category: "audit-log",
+    timestampField: "createdAt",
+    baseRetentionDays: DAYS_90,
+    rationale:
+      "Single-use OAuth codes that expire in minutes (BI-E4DFDCB0). A row is dead the moment it is exchanged or expires; the exchange itself is recorded in AuthorizationDecisionLog, so nothing of record is lost. Purged on the shortest available window purely to stop the table growing.",
+  },
+  {
+    model: "oAuthRefreshToken",
+    label: "OAuth refresh tokens",
+    category: "audit-log",
+    timestampField: "createdAt",
+    baseRetentionDays: DAYS_365,
+    rationale:
+      "Rotating refresh tokens for MCP clients (BI-E4DFDCB0). Retained past their own expiry on purpose: the rotation chain is what makes a replayed token detectable, so a purge window shorter than the refresh TTL would erase the evidence of a stolen token. One year comfortably exceeds the 30-day default TTL.",
+  },
+  {
     model: "toolExecution",
     label: "Tool execution audit log",
     category: "audit-log",

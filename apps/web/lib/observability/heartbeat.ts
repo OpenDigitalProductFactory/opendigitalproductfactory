@@ -56,19 +56,20 @@ export async function markTaskRunWorking(taskRunId: string): Promise<void> {
 }
 
 /**
- * Reserve one exact submitted TaskRun generation for work. The compare-and-set
+ * Reserve one exact TaskRun generation for work. The compare-and-set
  * and first heartbeat share one write so the watchdog can never observe a new
  * working state without liveness evidence.
  */
-export async function reserveSubmittedTaskRunWorking(input: {
+export async function reserveTaskRunGenerationWorking(input: {
   taskRunId: string;
+  expectedStatus: string;
   updatedAt: Date;
   progressPayload: Prisma.InputJsonValue;
 }): Promise<boolean> {
   const result = await prisma.taskRun.updateMany({
     where: {
       taskRunId: input.taskRunId,
-      status: "submitted",
+      status: input.expectedStatus,
       updatedAt: input.updatedAt,
     },
     data: {
@@ -79,6 +80,17 @@ export async function reserveSubmittedTaskRunWorking(input: {
     },
   });
   return result.count === 1;
+}
+
+export async function reserveSubmittedTaskRunWorking(input: {
+  taskRunId: string;
+  updatedAt: Date;
+  progressPayload: Prisma.InputJsonValue;
+}): Promise<boolean> {
+  return reserveTaskRunGenerationWorking({
+    ...input,
+    expectedStatus: "submitted",
+  });
 }
 
 export async function withHeartbeatTicker<T>(

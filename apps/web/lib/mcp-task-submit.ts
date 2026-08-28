@@ -4,6 +4,7 @@ import { resolveCanonicalAgentId } from "@dpf/db/agent-identity";
 import type { UserContext } from "@/lib/permissions";
 import {
   markTaskRunWorking,
+  reserveTaskRunGenerationWorking,
   reserveSubmittedTaskRunWorking,
 } from "@/lib/observability/heartbeat";
 import {
@@ -26,6 +27,10 @@ import {
   type InitiativeReviewBinding,
 } from "./mcp-task-review-contract";
 import { createInitiativeReviewTerminalToolPolicy } from "@/lib/tak/terminal-tool-policy";
+import {
+  hydrateTerminalWriterContext,
+  type PersistedTerminalReaderExecution,
+} from "./mcp-task-terminal-writer-context";
 
 export {
   parseInitiativeReviewBinding,
@@ -54,7 +59,7 @@ export type RemoteTaskSubmitAuth = {
   tokenId: string;
   userId: string;
   capability: "read" | "write";
-  source: "pat" | "session-jwt";
+  source: import("@/lib/mcp/tool-tier").McpAuthSource;
 };
 
 export type RemoteTaskSubmitOutcome =
@@ -168,6 +173,15 @@ function storedRequestDigest(existing: ExistingRemoteTask): string | null {
   return optionalString(metadata["requestDigest"]);
 }
 
+function approvalEnvelopeIdFromWriterAttempt(result: unknown): string | null {
+  if (!result || typeof result !== "object" || Array.isArray(result)) return null;
+  const row = result as Record<string, unknown>;
+  if (row["success"] !== false || row["error"] !== "approval_required") return null;
+  const data = row["data"];
+  if (!data || typeof data !== "object" || Array.isArray(data)) return null;
+  return optionalString((data as Record<string, unknown>)["envelopeId"]);
+}
+
 function parseTerminalWriterWait(value: unknown): TerminalWriterWait | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const candidate = (value as Record<string, unknown>)["terminalWriterWait"];
@@ -213,7 +227,7 @@ function replayOrConflict(existing: ExistingRemoteTask, requestDigest: string): 
       idempotentReplay: true,
       requiresApproval: existing.status === "input-required" && !terminalWriterWait,
       ...(terminalWriterWait ? {
-        resumable: terminalWriterWait.attempt < 2,
+        resumable: true,
         waitReason: terminalWriterWait.kind,
       } : resourceWait ? {
         resumable: true,
@@ -229,33 +243,67 @@ async function reserveTerminalWriterReplay(input: {
   existing: ExistingRemoteTask;
   requestDigest: string;
   terminalToolPolicy: NonNullable<ReturnType<typeof createInitiativeReviewTerminalToolPolicy>>;
-}): Promise<TerminalWriterWait | null> {
+}): Promise<{
+  wait: TerminalWriterWait;
+  readerExecutions: PersistedTerminalReaderExecution[];
+} | null> {
   if (storedRequestDigest(input.existing) !== input.requestDigest) return null;
 
   const existingWait = parseTerminalWriterWait(input.existing.progressPayload);
-  const isProjectedWait = input.existing.status === "input-required" && existingWait?.attempt === 1;
+  const isProjectedWait = input.existing.status === "input-required" && existingWait !== null;
   const isRecoverableCompletedExit = input.existing.status === "completed" && !existingWait;
   if (!isProjectedWait && !isRecoverableCompletedExit) return null;
 
-  if (isRecoverableCompletedExit) {
-    const [successfulReader, writerAttempt] = await Promise.all([
-      prisma.toolExecution.findFirst({
-        where: {
-          taskRunId: input.existing.taskRunId,
-          toolName: { in: [...input.terminalToolPolicy.readerToolNames] },
-          success: true,
-        },
-        select: { id: true },
-      }),
-      prisma.toolExecution.findFirst({
-        where: {
-          taskRunId: input.existing.taskRunId,
-          toolName: input.terminalToolPolicy.writerToolName,
-        },
-        select: { id: true },
-      }),
-    ]);
-    if (!successfulReader || writerAttempt) return null;
+  const [readerExecutions, successfulWriter, writerAttempt] = await Promise.all([
+    prisma.toolExecution.findMany({
+      where: {
+        taskRunId: input.existing.taskRunId,
+        toolName: "read_source_at_version",
+      },
+      orderBy: { createdAt: "asc" },
+      select: {
+        id: true,
+        toolName: true,
+        parameters: true,
+        result: true,
+        success: true,
+        createdAt: true,
+      },
+    }),
+    prisma.toolExecution.findFirst({
+      where: {
+        taskRunId: input.existing.taskRunId,
+        toolName: input.terminalToolPolicy.writerToolName,
+        success: true,
+      },
+      select: { id: true },
+    }),
+    prisma.toolExecution.findFirst({
+      where: {
+        taskRunId: input.existing.taskRunId,
+        toolName: input.terminalToolPolicy.writerToolName,
+      },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, success: true, result: true },
+    }),
+  ]);
+  if (readerExecutions.length === 0 || successfulWriter) return null;
+
+  if (writerAttempt) {
+    const proposalEnvelopeId = writerAttempt.success === false
+      ? approvalEnvelopeIdFromWriterAttempt(writerAttempt.result)
+      : null;
+    if (!proposalEnvelopeId) return null;
+    const declinedProposalEnvelope = await prisma.coworkerActionEnvelope.findFirst({
+      where: {
+        id: proposalEnvelopeId,
+        taskRunId: input.existing.taskRunId,
+        manifestActionId: input.terminalToolPolicy.writerToolName,
+        status: "declined",
+      },
+      select: { id: true },
+    });
+    if (declinedProposalEnvelope?.id !== proposalEnvelopeId) return null;
   }
 
   const progress = input.existing.progressPayload && typeof input.existing.progressPayload === "object"
@@ -268,27 +316,23 @@ async function reserveTerminalWriterReplay(input: {
     kind: "missing-terminal-writer",
     writerToolName: input.terminalToolPolicy.writerToolName,
     resumeMode: "same-taskrun",
-    attempt: 2,
+    attempt: existingWait ? existingWait.attempt + 1 : 2,
     observedAt: now,
   };
-  const reservation = await prisma.taskRun.updateMany({
-    where: {
-      taskRunId: input.existing.taskRunId,
-      status: input.existing.status,
-      updatedAt: input.existing.updatedAt,
-    },
-    data: {
-      ...(isRecoverableCompletedExit ? { status: "input-required" } : {}),
-      completedAt: null,
-      progressPayload: {
-        ...progress,
-        terminalWriterWait: wait,
-        ...(isRecoverableCompletedExit ? { recoveredFromCompletedRouteExit: true } : {}),
-        resumeReservedAt: now,
-      },
-    },
+  const reserved = await reserveTaskRunGenerationWorking({
+    taskRunId: input.existing.taskRunId,
+    expectedStatus: input.existing.status,
+    updatedAt: input.existing.updatedAt,
+    progressPayload: {
+      ...progress,
+      terminalWriterWait: wait,
+      ...(isRecoverableCompletedExit ? { recoveredFromCompletedRouteExit: true } : {}),
+      resumeReservedAt: now,
+    } as Prisma.InputJsonValue,
   });
-  return reservation.count === 1 ? wait : null;
+  return reserved
+    ? { wait, readerExecutions: readerExecutions as PersistedTerminalReaderExecution[] }
+    : null;
 }
 
 async function resumeApprovedRemoteTask(input: {
@@ -633,14 +677,88 @@ export async function submitRemoteCoworkerTask(input: {
         }
       }
     }
-    const terminalWriterWait = terminalToolPolicy
+    const terminalWriterReservation = terminalToolPolicy
       ? await reserveTerminalWriterReplay({
           existing,
           requestDigest,
           terminalToolPolicy,
         })
       : null;
-    if (terminalWriterWait && existing.id && existing.threadId) {
+    if (terminalWriterReservation && terminalToolPolicy && existing.id && existing.threadId) {
+      const hydration = await hydrateTerminalWriterContext({
+        policy: terminalToolPolicy,
+        executions: terminalWriterReservation.readerExecutions,
+        readPage: async (args) => executeAutonomousWorkTool({
+          toolName: "read_source_at_version",
+          args,
+          userId: token.userId,
+          userContext,
+          routeContext: parsed.routeContext,
+          agentId: resolveCanonicalAgentId(parsed.agentId),
+          threadId: existing.threadId!,
+          taskRunId: existing.taskRunId,
+          apiTokenId: token.tokenId,
+          tokenScope: token.capability,
+          externalAccessEnabled: true,
+        }),
+      });
+      const priorProgress = existing.progressPayload && typeof existing.progressPayload === "object"
+        && !Array.isArray(existing.progressPayload)
+        ? existing.progressPayload as Record<string, unknown>
+        : {};
+      if (!hydration.ok) {
+        await prisma.taskRun.update({
+          where: { taskRunId: existing.taskRunId },
+          data: {
+            status: "input-required",
+            completedAt: null,
+            progressPayload: {
+              ...priorProgress,
+              terminalWriterWait: terminalWriterReservation.wait,
+              resumeReservedAt: terminalWriterReservation.wait.observedAt,
+              ...(existing.status === "completed" ? { recoveredFromCompletedRouteExit: true } : {}),
+              terminalWriterContextFailure: {
+                code: hydration.code,
+                message: hydration.error,
+                observedAt: new Date().toISOString(),
+              },
+            },
+          },
+        });
+        return {
+          kind: "result",
+          result: {
+            taskRunId: existing.taskRunId,
+            status: "input-required",
+            idempotentReplay: true,
+            resumedFromTerminalWriterWait: false,
+            requiresApproval: false,
+            resumable: true,
+            waitReason: "terminal-writer-context-unavailable",
+            content: remoteTaskContent(hydration.error),
+            structuredContent: { error: hydration.code },
+            isError: true,
+          },
+        };
+      }
+      await prisma.taskRun.update({
+        where: { taskRunId: existing.taskRunId },
+        data: {
+          progressPayload: {
+            ...priorProgress,
+            terminalWriterWait: terminalWriterReservation.wait,
+            resumeReservedAt: terminalWriterReservation.wait.observedAt,
+            ...(existing.status === "completed" ? { recoveredFromCompletedRouteExit: true } : {}),
+            terminalWriterContext: {
+              schemaVersion: 1,
+              readerExecutionIds: hydration.data.readerExecutionIds,
+              hydratedPageCount: hydration.data.hydratedPageCount,
+              hydratedCharCount: hydration.data.hydratedCharCount,
+              hydratedAt: new Date().toISOString(),
+            },
+          },
+        },
+      });
       await markTaskRunWorking(existing.taskRunId);
       return executeRemoteTaskAttempt({
         run: {
@@ -654,8 +772,9 @@ export async function submitRemoteCoworkerTask(input: {
         parsed,
         idempotentReplay: true,
         resumeKind: "terminal-writer",
+        terminalWriterContext: hydration.data.context,
         capacityAttempt: 1,
-        terminalWriterAttempt: terminalWriterWait.attempt,
+        terminalWriterAttempt: terminalWriterReservation.wait.attempt,
       });
     }
     return replay;

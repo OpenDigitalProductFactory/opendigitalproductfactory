@@ -2725,7 +2725,15 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 29
+    "textMass": 31
+  },
+  "apps/web/app/api/oauth/token/route.ts": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 19
   },
   "apps/web/app/api/onboarding/business-document/route.ts": {
     "vocabulary": 0,

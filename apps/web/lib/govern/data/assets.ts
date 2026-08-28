@@ -35,6 +35,7 @@ import { FINANCE_INVOICE_DOCUMENT_ASSETS } from "./finance-invoice-document-asse
 import { RECRUITING_ASSETS } from "./recruiting-assets";
 import { WORKER_CLASSIFICATION_ASSETS } from "./worker-classification-assets";
 import { DECISION_TRUST_ENVELOPE_ASSETS } from "./decision-trust-envelope-assets";
+import { MCP_OAUTH_ASSETS } from "./mcp-oauth-assets";
 import { MCP_ASSETS } from "./mcp-assets";
 import { INITIATIVE_GOVERNANCE_ASSETS } from "./initiative-governance-assets";
 import { FEDERATION_INTRODUCTION_ASSETS } from "./federation-introduction-assets";
@@ -733,6 +734,7 @@ const SEED_ASSETS: readonly DataAssetDefinition[] = [
   ...RECRUITING_ASSETS,
   ...WORKER_CLASSIFICATION_ASSETS,
   ...DECISION_TRUST_ENVELOPE_ASSETS,
+  ...MCP_OAUTH_ASSETS,
   ...MCP_ASSETS,
   ...INITIATIVE_GOVERNANCE_ASSETS,
   ...FEDERATION_INTRODUCTION_ASSETS,

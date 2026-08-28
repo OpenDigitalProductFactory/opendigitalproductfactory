@@ -8,7 +8,10 @@ import {
 } from "@/lib/tak/autonomous-work-run";
 import { createTaskMessage } from "@/lib/tak/task-records";
 import { deriveEffortWarrant } from "@/lib/tak/effort-warrant";
-import { createInitiativeReviewTerminalToolPolicy } from "@/lib/tak/terminal-tool-policy";
+import {
+  createInitiativeReviewTerminalToolPolicy,
+  enterTerminalWriterPhase,
+} from "@/lib/tak/terminal-tool-policy";
 import {
   createResourceWaitProjection,
   preInferenceResourceWait,
@@ -40,6 +43,7 @@ export async function executeRemoteTaskAttempt(input: {
   parsed: RemoteTaskSubmitParams;
   idempotentReplay: boolean;
   resumeKind?: "capacity" | "terminal-writer";
+  terminalWriterContext?: string;
   capacityAttempt: number;
   terminalWriterAttempt?: number;
 }): Promise<RemoteTaskSubmitOutcome> {
@@ -101,13 +105,16 @@ export async function executeRemoteTaskAttempt(input: {
         messageChars: parsed.prompt.length,
       })
     : undefined;
-  const terminalToolPolicy = parsed.initiativeReviewBinding
+  const baseTerminalToolPolicy = parsed.initiativeReviewBinding
     ? createInitiativeReviewTerminalToolPolicy(
         parsed.initiativeReviewBinding.writerToolName,
         exactRequiredToolNames,
         parsed.initiativeReviewBinding.artifactRef,
       )
     : null;
+  const terminalToolPolicy = baseTerminalToolPolicy && input.resumeKind === "terminal-writer"
+    ? enterTerminalWriterPhase(baseTerminalToolPolicy)
+    : baseTerminalToolPolicy;
   const resumedFlag = !input.idempotentReplay
     ? {}
     : input.resumeKind === "terminal-writer"
@@ -118,7 +125,12 @@ export async function executeRemoteTaskAttempt(input: {
     const result = await executeAutonomousAgenticLoop({
       systemPrompt: agent.systemPrompt,
       systemPromptInstructionSpans: coworkerBriefSpans(agent.systemPrompt),
-      chatHistory: [{ role: "user", content: parsed.prompt }],
+      chatHistory: [
+        { role: "user", content: parsed.prompt },
+        ...(input.resumeKind === "terminal-writer" && input.terminalWriterContext
+          ? [{ role: "system" as const, content: input.terminalWriterContext }]
+          : []),
+      ],
       sensitivity: agent.sensitivity ?? "internal",
       tools: tools.tools,
       toolsForProvider: tools.toolsForProvider,
@@ -185,7 +197,7 @@ export async function executeRemoteTaskAttempt(input: {
           idempotentReplay: input.idempotentReplay,
           ...resumedFlag,
           requiresApproval: false,
-          resumable: terminalWriterAttempt < 2,
+          resumable: true,
           waitReason: "missing-terminal-writer",
           content: remoteTaskContent(result.content),
           executedToolCount: result.executedTools?.length ?? 0,

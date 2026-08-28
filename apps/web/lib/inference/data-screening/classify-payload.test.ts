@@ -553,4 +553,66 @@ describe("a field named 'discipline' is not evidence of an HR record", () => {
 
     expect(result.overallSensitivity).toBe("confidential");
   });
+  it("does not treat an uncorroborated ambiguous match as data-evidenced (BI-DECCF716)", () => {
+    // The live /workspace/inbox shape: a real contact detail, plus one ambiguous
+    // employee-records reason echoed across a tool-call argument key and the
+    // prompt remainder. `classifiedDataClasses` must still disclose everything;
+    // `dataEvidencedClasses` is what selects the vertical packs, and one
+    // ambiguous word must not put a `restricted`-bound class in front of the PDP.
+    const result = classifyInferencePayload({
+      messages: [
+        { role: "user", content: "Group the decisions from pat@example.com's note." },
+        {
+          role: "assistant",
+          content: "",
+          toolCalls: [{
+            id: "c1",
+            name: "get_capability_completeness",
+            arguments: { discipline: "platform-engineering" },
+          }],
+        },
+      ],
+      systemPrompt: "You keep an eye on delivery performance.",
+      taskType: "conversation",
+    });
+
+    expect(result.overallSensitivity).toBe("confidential");
+    expect(result.dataClasses).toContain("employee-records");
+    expect(result.dataEvidencedClasses).toEqual(["customer-records"]);
+  });
+
+  it("keeps a restricted class data-evidenced once corroboration is met", () => {
+    const result = classifyInferencePayload({
+      messages: [{
+        role: "assistant",
+        content: "",
+        toolCalls: [{
+          id: "c1",
+          name: "plan_work",
+          arguments: { discipline: "platform-engineering", incident: "INC-4" },
+        }],
+      }],
+      systemPrompt: "Be concise.",
+      taskType: "conversation",
+    });
+
+    expect(result.overallSensitivity).toBe("restricted");
+    expect(result.dataEvidencedClasses).toContain("employee-records");
+  });
+
+  it("keeps a caller-declared restricted hint data-evidenced on its own", () => {
+    const result = classifyInferencePayload({
+      messages: [{ role: "user", content: "Summarize this." }],
+      systemPrompt: "Be concise.",
+      taskType: "conversation",
+      governedData: [{
+        classificationKnown: true,
+        sensitivity: "restricted",
+        dataClasses: ["employee-records"],
+      }],
+    });
+
+    expect(result.overallSensitivity).toBe("restricted");
+    expect(result.dataEvidencedClasses).toContain("employee-records");
+  });
 });
