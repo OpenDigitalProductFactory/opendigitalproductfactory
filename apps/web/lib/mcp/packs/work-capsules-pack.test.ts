@@ -263,6 +263,56 @@ describe("work capsule MCP tools", () => {
     expect(result.entityId).toBe("WC-ADOPT");
   });
 
+  it("adopt_worktree records sessionRef as the workroom executorRef", async () => {
+    // Without this the guard can prove a live claim COVERS the branch but not
+    // that it is THIS session's, which is weaker than AGENTS.md 12 states.
+    // claim_backlog_item_for_work already required sessionRef for exactly this
+    // reason; adopt_worktree simply omitted it, so every worktree adopted
+    // through it stored executorRef: null.
+    mockPrisma.workroom.findFirst.mockResolvedValue(null);
+    mockPrisma.workroom.create.mockResolvedValue({ id: "row-1", capsuleId: "WC-SESSION" });
+    mockPrisma.workroomActivity.create.mockResolvedValue({ id: "activity-1" });
+
+    const { executeTool } = await import("@/lib/mcp-tools");
+    const result = await executeTool("adopt_worktree", {
+      title: "Adopt with session identity",
+      objective: "Record which session holds the claim.",
+      repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+      headBranch: "fix/session-identity",
+      worktreePath: "D:/DPF-worktrees/session-identity",
+      executorKind: "claude-desktop",
+      sessionRef: "session-abc123",
+    }, "user-1", { agentId: "claude" });
+
+    expect(result.success).toBe(true);
+    expect(mockPrisma.workroom.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ executorRef: "session-abc123" }) }),
+    );
+  });
+
+  it("adopt_worktree without sessionRef still succeeds, storing a null executorRef", async () => {
+    // Optional, not required: making it required would break every existing
+    // caller and refuse claims outright, which is worse than an unattributed
+    // claim. The gap is recorded rather than forced.
+    mockPrisma.workroom.findFirst.mockResolvedValue(null);
+    mockPrisma.workroom.create.mockResolvedValue({ id: "row-1", capsuleId: "WC-NOSESSION" });
+    mockPrisma.workroomActivity.create.mockResolvedValue({ id: "activity-1" });
+
+    const { executeTool } = await import("@/lib/mcp-tools");
+    const result = await executeTool("adopt_worktree", {
+      title: "Adopt without session identity",
+      objective: "Legacy caller path.",
+      repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+      headBranch: "fix/no-session",
+      worktreePath: "D:/DPF-worktrees/no-session",
+    }, "user-1", { agentId: "claude" });
+
+    expect(result.success).toBe(true);
+    expect(mockPrisma.workroom.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ executorRef: null }) }),
+    );
+  });
+
   it("adopt_worktree persists scope metadata", async () => {
     mockPrisma.workroom.findFirst.mockResolvedValue(null);
     mockPrisma.workroom.create.mockResolvedValue({ id: "row-1", capsuleId: "WC-ADOPTSCOPE" });

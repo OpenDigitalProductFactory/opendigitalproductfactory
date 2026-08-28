@@ -49,6 +49,30 @@ export function toPosixPath(p) {
  * than asking, so binding needs no interaction.
  * @param {string} branch
  */
+/**
+ * A stable id for the session doing the claiming, recorded as the workroom's
+ * executorRef.
+ *
+ * Without it a claim guard can prove that a live claim COVERS a branch but not
+ * that it belongs to THIS session, so two sessions on one branch would both
+ * pass. claim_backlog_item_for_work has required a sessionRef for exactly this
+ * reason; adopt_worktree omitted it, so every worktree adopted through it
+ * stored executorRef: null.
+ *
+ * Prefers whatever the host already knows. Falls back to the worktree path,
+ * which is stable for the life of the tree and unique across trees — a weaker
+ * identity than a real session id, but a truthful one, and better than null.
+ */
+export function resolveSessionRef({ worktreePath, env = process.env } = {}) {
+  return (
+    env.DPF_SESSION_REF
+    || env.CLAUDE_SESSION_ID
+    || env.CODEX_SESSION_ID
+    || env.GROK_SESSION_ID
+    || (worktreePath ? `worktree:${toPosixPath(worktreePath)}` : null)
+  );
+}
+
 export function activityKindForBranch(branch) {
   const b = String(branch ?? "");
   if (b.startsWith("fix/") || b.startsWith("hotfix/")) return "remediation";
@@ -63,7 +87,7 @@ export function activityKindForBranch(branch) {
  * than pretending to a specificity nobody supplied.
  * @param {{ branch: string, worktreePath: string, repositoryFullName: string, headSha?: string|null, baseBranch?: string }} input
  */
-export function planAdoption({ branch, worktreePath, repositoryFullName, headSha = null, baseBranch = "main" }) {
+export function planAdoption({ branch, worktreePath, repositoryFullName, headSha = null, baseBranch = "main", sessionRef = null }) {
   const slug = String(branch).split("/").slice(1).join("/") || String(branch);
   const words = slug.replace(/[-_]+/g, " ").trim();
   const title = words ? words.charAt(0).toUpperCase() + words.slice(1) : branch;
@@ -76,6 +100,7 @@ export function planAdoption({ branch, worktreePath, repositoryFullName, headSha
     baseBranch,
     ...(headSha ? { headSha } : {}),
     executorKind: "claude-desktop",
+    ...(sessionRef ? { sessionRef } : {}),
     activityKind: activityKindForBranch(branch),
     decisionScope: "wwmd",
     portfolioRole: "foundational",
@@ -149,7 +174,7 @@ export async function bindWorktreeToWorkroom({
 
   let payload;
   try {
-    payload = await call("adopt_worktree", planAdoption({ branch, worktreePath, repositoryFullName, headSha, baseBranch }), {
+    payload = await call("adopt_worktree", planAdoption({ branch, worktreePath, repositoryFullName, headSha, baseBranch, sessionRef: resolveSessionRef({ worktreePath, env }) }), {
       ...access,
       timeoutMs: BIND_TIMEOUT_MS,
     });
