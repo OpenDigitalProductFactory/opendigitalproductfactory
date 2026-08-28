@@ -31,7 +31,7 @@ import {
   isReusableLiveCapsule,
   isTerminalCapsuleStatus,
   leaseUntil,
-  planAbandonedCapsuleResume,
+  planTerminalCapsuleResume,
   readBranchIdentityCapsule,
   TERMINAL_CAPSULE_STATUSES,
   defaultPlatformRepositoryFullName,
@@ -202,7 +202,7 @@ export async function adoptWorktreeCapsule(args: {
   const { existing, repositoryUnbound } = await readBranchIdentityCapsule(args.db, args.input);
 
   const now = new Date();
-  const resumePlan = planAbandonedCapsuleResume({ existing, input: args.input, actor: args.actor, now });
+  const resumePlan = planTerminalCapsuleResume({ existing, input: args.input, actor: args.actor, now });
   if (resumePlan) {
     return inTransaction(args.db, async (tx) => {
       await admitCapsuleWork(tx, "work-capsule:external-adoption");

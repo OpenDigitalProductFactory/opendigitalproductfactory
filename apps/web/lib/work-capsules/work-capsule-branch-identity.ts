@@ -75,6 +75,26 @@ export function isReusableLiveCapsule(
   return existingSession == null || incomingSession == null || existingSession === incomingSession;
 }
 
+/**
+ * The remedy for an occupied branch, which depends on what is occupying it.
+ *
+ * BI-D526F72C: the message used to say "Resume that capsule for the same backlog
+ * item" unconditionally — including for a capsule that HAS no backlog item, where
+ * that instruction is impossible to follow. A remedy that cannot be executed
+ * reads as a dead end and sends the caller to a different branch name, which is
+ * the outcome the durable branch identity exists to avoid.
+ */
+function branchOccupiedRemedy(backlogItemId: string | null): string {
+  if (backlogItemId) {
+    return `Resume ${backlogItemId} on that capsule, or use a different branch.`;
+  }
+  return (
+    "That capsule carries no backlog item, so there is nothing to resume it "
+    + "against. Re-adopt the branch with adopt_worktree(backlogItemId) to bind and "
+    + "resume it, or use a different branch."
+  );
+}
+
 export class CapsuleBranchOccupiedError extends Error {
   readonly capsuleId: string;
   readonly status: string;
@@ -86,7 +106,7 @@ export class CapsuleBranchOccupiedError extends Error {
     super(
       `Branch ${existing.headBranch ?? "unknown"} is already bound to Work Capsule ` +
         `${existing.capsuleId} (${status}${backlogItemId ? `, ${backlogItemId}` : ""}). ` +
-        "Resume that capsule for the same backlog item or use a different branch.",
+        branchOccupiedRemedy(backlogItemId),
     );
     this.name = "CapsuleBranchOccupiedError";
     this.capsuleId = existing.capsuleId;
@@ -95,21 +115,48 @@ export class CapsuleBranchOccupiedError extends Error {
   }
 }
 
-export function planAbandonedCapsuleResume(args: {
+/**
+ * Whether a TERMINAL capsule holding this branch's durable identity may be
+ * resumed by this adoption, and whether resuming also binds a backlog item.
+ *
+ * Two shapes qualify, and the second is BI-D526F72C.
+ *
+ * 1. An abandoned capsule bound to the SAME backlog item. Resuming continues its
+ *    own history, which is what "abandoned" is for.
+ * 2. An ORPHAN capsule — terminal with no backlog item at all. `adopt_worktree`
+ *    could produce one (its schema never accepted `backlogItemId`, so a supplied
+ *    one was dropped), and the result occupied the branch permanently: unclaimable
+ *    because it matched no subject, and unreleasable because abandoning it did not
+ *    free the branch. Resuming it binds the incoming identity onto the row that
+ *    already owns the branch, so the durable identity is preserved rather than
+ *    forked, and no capsule can stay simultaneously unclaimable and unreleasable.
+ *
+ * A terminal capsule bound to a DIFFERENT backlog item still refuses. That row
+ * records real history on the branch, and rebinding it would overwrite whose work
+ * the branch was — the case `readBranchIdentityCapsule` deliberately protects.
+ */
+export function planTerminalCapsuleResume(args: {
   existing: BranchCapsuleRecord | null;
   input: CapsuleAdoptionInput;
   actor: WorkCapsuleActor;
   now: Date;
 }) {
   const { existing, input, actor, now } = args;
-  if (
-    existing?.status !== "abandoned" ||
-    existing.archivedAt != null ||
-    existing.backlogItemId == null ||
-    existing.backlogItemId !== (input.backlogItemId ?? null)
-  ) {
-    return null;
-  }
+  if (!existing || !isTerminalCapsuleStatus(existing.status)) return null;
+
+  const existingBacklogItemId = existing.backlogItemId ?? null;
+  const incomingBacklogItemId = input.backlogItemId ?? null;
+  const sameSubjectAbandoned =
+    existing.status === "abandoned"
+    && existing.archivedAt == null
+    && existingBacklogItemId != null
+    && existingBacklogItemId === incomingBacklogItemId;
+  // An orphan carries no history to overwrite: nothing was ever bound to it.
+  const orphan = existingBacklogItemId == null;
+  if (!sameSubjectAbandoned && !orphan) return null;
+
+  const previousStatus = existing.status ?? "unknown";
+  const boundBacklogItemId = existingBacklogItemId ?? incomingBacklogItemId;
 
   return {
     update: {
@@ -118,6 +165,16 @@ export function planAbandonedCapsuleResume(args: {
         status: "ready" as const,
         title: input.title,
         objective: input.objective,
+        // A resumed capsule is live again. Leaving `archivedAt` set would produce
+        // a ready-but-archived row that reads as active on one surface and gone
+        // on another — the reporting defect this fix exists to end.
+        archivedAt: null,
+        ...(orphan && incomingBacklogItemId
+          ? {
+            backlogItemId: incomingBacklogItemId,
+            ...(input.epicId && existing.epicId == null ? { epicId: input.epicId } : {}),
+          }
+          : {}),
         baseBranch: input.baseBranch ?? existing.baseBranch ?? "main",
         baseSha: input.baseSha ?? existing.baseSha ?? null,
         headSha: input.headSha ?? existing.headSha ?? null,
@@ -132,10 +189,14 @@ export function planAbandonedCapsuleResume(args: {
     activity: {
       workCapsuleId: existing.id,
       kind: "adopted" as const,
-      summary: `Resumed ${existing.capsuleId} on ${input.headBranch}`,
+      summary: boundBacklogItemId
+        ? `Resumed ${existing.capsuleId} on ${input.headBranch} for ${boundBacklogItemId}`
+        : `Resumed ${existing.capsuleId} on ${input.headBranch}`,
       payload: {
         resumed: true,
-        previousStatus: "abandoned",
+        previousStatus,
+        orphanRebind: orphan && incomingBacklogItemId != null,
+        backlogItemId: boundBacklogItemId,
         worktreePath: input.worktreePath,
         executorRef: input.executorRef ?? null,
       },
