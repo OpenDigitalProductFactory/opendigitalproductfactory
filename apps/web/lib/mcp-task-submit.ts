@@ -140,6 +140,8 @@ type TerminalWriterWait = {
   resumeMode: "same-taskrun";
   attempt: number;
   observedAt: string;
+  dispatchContract?: "required-tool-call";
+  noncompliance?: "prose-without-required-writer";
 };
 
 type ApprovedRemoteTaskEnvelope = {
@@ -191,6 +193,8 @@ function parseTerminalWriterWait(value: unknown): TerminalWriterWait | null {
     || !Number.isInteger(wait["attempt"])
     || Number(wait["attempt"]) < 1
     || !optionalString(wait["observedAt"])
+    || (wait["dispatchContract"] !== undefined && wait["dispatchContract"] !== "required-tool-call")
+    || (wait["noncompliance"] !== undefined && wait["noncompliance"] !== "prose-without-required-writer")
   ) return null;
   return wait as TerminalWriterWait;
 }
@@ -314,6 +318,7 @@ async function reserveTerminalWriterReplay(input: {
     resumeMode: "same-taskrun",
     attempt: existingWait ? existingWait.attempt + 1 : 2,
     observedAt: now,
+    dispatchContract: "required-tool-call",
   };
   const reserved = await reserveTaskRunGenerationWorking({
     taskRunId: input.existing.taskRunId,

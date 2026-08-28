@@ -1,7 +1,7 @@
 // apps/web/lib/agentic-loop.ts
 // Agentic execution loop: LLM calls tools iteratively until it responds with text only.
 // This is the core behavioral difference between a chatbot and an agent.
-import { routeAndCall, type RoutedInferenceResult } from "@/lib/routed-inference";
+import { routeAndCall, type RouteAndCallOptions, type RoutedInferenceResult } from "@/lib/routed-inference";
 import {
   detectRepeatedToolCall,
   detectApproachingRepeatedToolCall,
@@ -1290,7 +1290,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
   }
 
   // Build routeAndCall options once (reused every iteration)
-  const routeOptions = {
+  const routeOptions: RouteAndCallOptions = {
     ...(toolsForProvider ? { tools: toolsForProvider } : {}),
     ...(systemPromptInstructionSpans?.length ? { systemPromptInstructionSpans } : {}),
     taskType: turnRoute.taskType,
@@ -1487,6 +1487,9 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       routeOptions.tools = terminalToolSurfaceOverride
         ? selectTerminalToolSurface(terminalProviderTools, terminalToolSurfaceOverride)
         : applyTerminalToolSurface(params.terminalToolPolicy, executedTools, terminalProviderTools);
+      const writerOnlySurface = routeOptions.tools.length === 1
+        && selectTerminalToolSurface(routeOptions.tools, [params.terminalToolPolicy.writerToolName]).length === 1;
+      routeOptions.toolChoice = writerOnlySurface ? "required" : undefined;
     }
     // EP-ASYNC-COWORKER-001: Check cancellation flag at each iteration boundary
     if (agentEventBus.isCancelled(threadId)) {
@@ -1699,12 +1702,12 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       console.warn(`[agentic-loop] routeAndCall threw: ${msg}`);
       logTurnSummary("unknown", "unknown");
       if (params.terminalToolPolicy) {
-        const exit = resolveTerminalTextExit(params.terminalToolPolicy, executedTools, 1);
-        if (exit.kind === "input-required") {
-          return completeResult(exit.message, null, {
-            failure: { kind: "terminal-writer-missing", message: exit.message },
-          });
-        }
+        const message = routeOptions.toolChoice === "required"
+          ? `The required governed writer ${params.terminalToolPolicy.writerToolName} could not be dispatched. The same TaskRun remains resumable. No receipt was created.`
+          : `The governed review route failed before ${params.terminalToolPolicy.writerToolName} could be recorded. The same TaskRun remains resumable. No receipt was created.`;
+        return completeResult(message, null, {
+          failure: { kind: "terminal-writer-missing", message },
+        });
       }
       return {
         content: failure.message,
