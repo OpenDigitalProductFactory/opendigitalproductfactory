@@ -56,7 +56,8 @@
       "profiles": [],
       "ports": [
         "3000:3000",
-        "1455:3000"
+        "1455:3000",
+        "${DPF_LDAP_BIND_ADDRESS:-127.0.0.1}:${DPF_LDAP_PORT:-636}:${DPF_LDAP_PORT:-636}"
       ],
       "volumes": [
         "/var/run/docker.sock:/var/run/docker.sock",

@@ -2,9 +2,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   advanceStrandedBuildToReview,
   reconcileDeployedShipBuilds,
-  areOptionalStartupTasksEnabled,
-  isInngestSelfSyncOnBootEnabled,
-  isStartupModelRevalidationEnabled,
   reconcileSelfUpgradeRunsOnBoot,
   reconcileQuiescenceRunsOnBoot,
   recoverContradictoryBuildExecStatesOnBoot,
@@ -13,6 +10,7 @@ import {
   warnIfLegacyHiveTokenEnvSet,
   syncPlatformVersionOnBoot,
 } from "./instrumentation";
+import { areOptionalStartupTasksEnabled, isInngestSelfSyncOnBootEnabled, isStartupModelRevalidationEnabled } from "@/lib/runtime/env-flags";
 
 const syncPlatformVersionConfigMock = vi.fn();
 const getDeployedShaMock = vi.fn();

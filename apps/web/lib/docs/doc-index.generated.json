@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 691,
+  "pageCount": 692,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -5172,6 +5172,24 @@
         "run-the-rehearsal",
         "evidence-files",
         "backlog-and-provider-state"
+      ]
+    },
+    "docs/install/serve-the-directory.md": {
+      "publicHref": "/install/serve-the-directory/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "serving-the-directory-ldap",
+        "what-you-get",
+        "prerequisites",
+        "turning-it-on",
+        "checking-it-with-a-real-client",
+        "settings",
+        "letting-other-hosts-bind",
+        "if-you-moved-the-pki-directory",
+        "when-it-will-not-start",
+        "what-this-does-not-do"
       ]
     },
     "docs/install/verification-runbook.md": {
