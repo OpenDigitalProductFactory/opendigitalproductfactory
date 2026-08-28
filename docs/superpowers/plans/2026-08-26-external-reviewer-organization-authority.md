@@ -82,6 +82,11 @@ fresh exact approval. Preserve the recovery audit through final execution.
    while fresh approval is required.
 9. Preserve the recovery audit when the approved writer completes.
 
+The semantic-review evidence packet must embed the exact committed patch. Commit,
+tree, and digest identities alone are insufficient when the reviewer cannot read
+the contributor worktree; a cached evidence-insufficient receipt must never be
+treated as review completion.
+
 ## Expected code surface
 
 - `apps/web/lib/govern/authority/resolve-coworker-tool-authority.ts`
