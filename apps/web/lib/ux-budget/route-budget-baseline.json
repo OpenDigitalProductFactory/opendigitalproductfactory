@@ -2225,7 +2225,7 @@
       "ariaSnapshot": "- link\n- banner\n  - link\n    - text\n    - paragraph\n      - text\n  - link\n  - button\n  - text\n  - button\n- complementary\n  - navigation\n    - group\n      - button\n      - button [pressed]\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n- main\n  - navigation\n    - link\n    - text\n  - paragraph\n    - text\n  - heading [level=1]\n  - paragraph\n    - text\n  - textbox\n  - combobox\n    - option [selected]\n  - button\n  - link\n  - text"
     },
     "/workspace/inbox": {
-      "defaultVisibleWords": 143,
+      "defaultVisibleWords": 415,
       "leadBandWords": 0,
       "primaryActions": 1,
       "visibleFields": 0,
@@ -2233,7 +2233,7 @@
       "subLegibleControls": 0,
       "buriedPrimaryAction": 0,
       "axeViolations": 2,
-      "ariaSnapshot": "- link\n- banner\n  - link\n    - text\n    - paragraph\n      - text\n  - link\n  - button\n  - text\n  - button\n- complementary\n  - navigation\n    - group\n      - button\n      - button [pressed]\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n- main\n  - navigation\n    - link\n    - text\n  - main\n    - heading [level=1]\n    - paragraph\n      - text\n    - list\n      - listitem"
+      "ariaSnapshot": "- link\n- banner\n  - link\n    - text\n    - paragraph\n      - text\n  - link\n  - button\n  - text\n  - button\n- complementary\n  - navigation\n    - group\n      - button\n      - button [pressed]\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n- main\n  - navigation\n    - link\n    - text\n  - main\n    - heading [level=1]\n    - paragraph\n      - text\n    - heading [level=3]\n      - button\n        - text\n    - link\n    - heading [level=3]\n      - button\n        - text\n    - link\n    - heading [level=3]\n      - button\n        - text\n    - link\n    - complementary\n      - text"
     },
     "/workspace/my-queue": {
       "defaultVisibleWords": 116,
