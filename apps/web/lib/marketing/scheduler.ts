@@ -17,6 +17,7 @@ import {
   type ScheduledActionStatus,
 } from "./execution";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import type { ProactivityLevel } from "@/lib/proactivity/proactivity-types";
 
 const ADVANCE_DAYS_FOR_DUE_WINDOW = 3;
 
@@ -155,7 +156,25 @@ async function dispatchAction(kind: ScheduledActionKind, targetId: string): Prom
  */
 export async function planUpcomingForAssetTasks(input: {
   organizationId: string;
-}): Promise<{ scheduled: number; skipped: number }> {
+  /**
+   * Resolved marketing-campaign proactivity posture (BI-C26FE785). Omitted by
+   * callers that are not cadence-driven, which keeps the pre-posture behaviour.
+   */
+  proactivity?: { level: ProactivityLevel; policyId: string } | null;
+}): Promise<{
+  scheduled: number;
+  skipped: number;
+  advanceDays?: number;
+  suppressedByPosture?: boolean;
+}> {
+  // Quiet means exactly that: produce marketing when asked and never volunteer
+  // it. Planning drafter runs anyway and merely staying silent about them would
+  // still spend model budget and fill the outbound queue behind the owner's
+  // back, so quiet suppresses the planning itself rather than its output.
+  if (input.proactivity?.level === "quiet") {
+    return { scheduled: 0, skipped: 0, suppressedByPosture: true };
+  }
+
   const tasks = await prisma.marketingAssetTask.findMany({
     where: { organizationId: input.organizationId },
     orderBy: { createdAt: "desc" },
@@ -163,7 +182,13 @@ export async function planUpcomingForAssetTasks(input: {
   });
   let scheduled = 0;
   let skipped = 0;
-  const advanceMs = ADVANCE_DAYS_FOR_DUE_WINDOW * 24 * 60 * 60 * 1000;
+  // An assertive posture starts creative earlier so a dated campaign has slack
+  // to be reviewed and redone; balanced keeps the standard lead time.
+  const advanceDays =
+    input.proactivity?.level === "assertive"
+      ? ADVANCE_DAYS_FOR_DUE_WINDOW * 2
+      : ADVANCE_DAYS_FOR_DUE_WINDOW;
+  const advanceMs = advanceDays * 24 * 60 * 60 * 1000;
 
   for (const task of tasks) {
     if (!task.dueWindow) {
@@ -175,7 +200,15 @@ export async function planUpcomingForAssetTasks(input: {
       skipped++;
       continue;
     }
-    const scheduledFor = new Date(dueDate.getTime() - advanceMs);
+    // A longer assertive lead time must never make the coworker do LESS. Taken
+    // naively, doubling the advance pushes the run further into the past and
+    // skips tasks a balanced posture would have scheduled — the opposite of
+    // what assertive means. So fall back to the standard lead time before
+    // giving up, and only skip when even that lands in the past.
+    let scheduledFor = new Date(dueDate.getTime() - advanceMs);
+    if (scheduledFor.getTime() < Date.now() && advanceDays !== ADVANCE_DAYS_FOR_DUE_WINDOW) {
+      scheduledFor = new Date(dueDate.getTime() - ADVANCE_DAYS_FOR_DUE_WINDOW * 24 * 60 * 60 * 1000);
+    }
     if (scheduledFor.getTime() < Date.now()) {
       skipped++;
       continue;
@@ -198,13 +231,13 @@ export async function planUpcomingForAssetTasks(input: {
         kind: "draft-marketing-asset",
         targetId: task.taskId,
         scheduledFor,
-        notes: `Auto-planned ${ADVANCE_DAYS_FOR_DUE_WINDOW} days before due window: ${task.dueWindow}`,
+        notes: `Auto-planned ${Math.round((dueDate.getTime() - scheduledFor.getTime()) / (24 * 60 * 60 * 1000))} days before due window: ${task.dueWindow}`,
       },
     });
     scheduled++;
   }
 
-  return { scheduled, skipped };
+  return { scheduled, skipped, advanceDays };
 }
 
 /**

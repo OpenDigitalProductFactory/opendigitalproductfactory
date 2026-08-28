@@ -112,7 +112,7 @@ export function BusinessAgenda({
           Nothing scheduled for the business right now.
           <br />
           <a href={fullCalendarHref} className="text-[var(--dpf-accent)] hover:underline">
-            Add a booking, invoice, or appointment
+            Add something to the calendar
           </a>{" "}
           to see it here.
         </div>

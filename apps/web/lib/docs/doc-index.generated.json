@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 690,
+  "pageCount": 691,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -949,6 +949,7 @@
         "archetype-operating-model-audit",
         "purpose",
         "the-failure-this-exists-to-prevent",
+        "the-second-failure-this-exists-to-prevent",
         "study-unit",
         "method",
         "step-1-write-the-operating-day-before-touching-the-platform",
@@ -956,7 +957,12 @@
         "step-3-classify-each-noun-against-the-substrate",
         "step-4-hunt-the-canonical-analogue",
         "step-5-score-then-file",
+        "step-6-run-the-day",
+        "the-five-probes-that-belong-in-every-run",
+        "defect-classes-the-noun-table-cannot-express",
+        "output-of-the-run",
         "coverage-score",
+        "operability-reported-beside-coverage",
         "traps",
         "definition-of-done",
         "standards-basis-do-not-re-derive",
@@ -1013,9 +1019,15 @@
         "3-the-periodic-cycle",
         "4-load-bearing-obligations",
         "5-required-entities",
+        "5b-the-operators",
         "6-what-exists-today-measured-2026-08-25",
+        "6b-what-can-be-done-today-measured-by-running-the-day-2026-08-26",
+        "what-the-run-found-that-6-could-not",
+        "what-worked-and-is-now-a-regression-surface",
+        "two-archetype-specific-traps-for-the-next-run",
         "7-ux-requirements",
         "7b-the-adoption-listing-researched-against-the-industry-standard",
+        "7c-inbound-channels-every-reason-a-stranger-arrives",
         "8-definition-of-done"
       ]
     },
@@ -1902,7 +1914,9 @@
       "publishedPortal": false,
       "anchors": [
         "mcp-tool-authorization-runbook",
-        "protocol-version-window-mechanics-landed-contract-pending-ratification"
+        "protocol-version-window-mechanics-landed-contract-pending-ratification",
+        "acting-coworker-binding-what-lets-a-token-join-a-work-room-bi-b986a18b",
+        "diagnosing-requires-an-acting-coworker"
       ]
     },
     "docs/architecture/mcp-tool-packs.md": {
@@ -3416,6 +3430,8 @@
         "autonomous-directives-are-blanket-approval",
         "why-this-exists",
         "what-counts-as-an-autonomous-directive",
+        "the-descent-bound-how-far-the-directive-carries",
+        "counterexample-the-58-hour-run-bi-980fe9f5",
         "what-still-requires-approval-even-under-autonomous-directives",
         "what-the-agent-should-do-mid-autonomous-run",
         "anti-pattern",
@@ -4449,6 +4465,7 @@
         "why",
         "applies-to",
         "how-to-apply",
+        "what-this-principle-does-not-cover",
         "decision-dimensions",
         "examples",
         "sources"
@@ -4720,6 +4737,20 @@
         "the-formula-is-invariant",
         "only-three-axes-vary",
         "the-review-altitude-check"
+      ]
+    },
+    "docs/founder-kernel/wiki/principles/validate-an-archetype-by-running-its-business.md": {
+      "publicHref": "/founder-kernel/wiki/principles/validate-an-archetype-by-running-its-business/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "applies-to",
+        "why",
+        "how-to-apply",
+        "decision-dimensions",
+        "related"
       ]
     },
     "docs/founder-kernel/wiki/principles/verify-substrate-before-proposing-new.md": {
@@ -5555,6 +5586,7 @@
         "agent-toolchain-only-update",
         "where-state-lives",
         "installation-operating-intent-and-environment-class",
+        "naming-the-installation-and-overriding-what-it-is",
         "diagnostics",
         "show-substrate-flag",
         "dpf-doctor",
@@ -8923,6 +8955,7 @@
         "integration-evidence",
         "verdict",
         "conditions",
+        "execution-record-2026-08-28",
         "re-evaluation",
         "sources"
       ]

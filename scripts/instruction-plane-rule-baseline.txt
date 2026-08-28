@@ -1,6 +1,7 @@
 docs/founder-kernel/wiki/principles/all-changes-land-via-pr.md	PR creation means ready to merge.
 docs/founder-kernel/wiki/principles/always-push-after-committing.md	Always push after committing.
 docs/founder-kernel/wiki/principles/architecture-over-shortcuts.md	Architecture over shortcuts.
+docs/founder-kernel/wiki/principles/autonomous-directives-are-blanket-approval.md	An autonomous directive is bounded by descent, not effort.
 docs/founder-kernel/wiki/principles/branch-guard-before-implementation.md	Branch guard before implementation and commit:
 docs/founder-kernel/wiki/principles/build-gate-mandatory.md
 docs/founder-kernel/wiki/principles/claim-a-workroom-before-you-work.md	Claim a workroom before you work — every surface, including the external CLIs.
@@ -23,7 +24,7 @@ docs/founder-kernel/wiki/principles/no-assumptions.md	Never assume — verify.
 docs/founder-kernel/wiki/principles/no-hardcoded-colors.md	No hardcoded colors.
 docs/founder-kernel/wiki/principles/no-native-browser-dialogs.md
 docs/founder-kernel/wiki/principles/one-common-process-three-surfaces.md	Four peer surfaces, one process.
-docs/founder-kernel/wiki/principles/one-concern-per-pr.md	All changes land via PR against `main`, one concern per branch and PR, DCO-signe
+docs/founder-kernel/wiki/principles/one-concern-per-pr.md	All changes land via PR against `main`, DCO-signed, scoped to one clean revert.
 docs/founder-kernel/wiki/principles/plan-before-install-paths.md	Plan before acting on install/seed/template paths.
 docs/founder-kernel/wiki/principles/reap-sidecars-to-upgrade-tools.md	Tooling upgrade = operator-triggered quiesce → reap → upgrade → resume.
 docs/founder-kernel/wiki/principles/research-and-use-standards.md	Research and use standards.

@@ -25,6 +25,8 @@ export type McpTokenRow = {
   idleDays: number | null;
   kind: string;
   buildId: string | null;
+  /** Acting coworker this token speaks as; null = anonymous (BI-B986A18B). */
+  agentId: string | null;
   expiresAt: string | null;
   revokedAt: string | null;
   createdAt: string;

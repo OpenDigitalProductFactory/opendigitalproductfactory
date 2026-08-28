@@ -11,6 +11,7 @@ import {
   type NormalizedVerificationOutput,
 } from "@/lib/build/verification-output";
 import { derivePlanOscillationDecompositionAffordance } from "@/lib/build/plan-oscillation-decomposition";
+import { sizeGateDecompositionAction } from "@/lib/build/size-gate-decomposition-affordance";
 import {
   isContradictoryExecState,
   type ExecStateLike,
@@ -764,15 +765,13 @@ export function deriveBuildStudioWorkflowAction({
   }
 
   if (build.phase === "ideate") {
-    // BI-77A1973C: previously the ideate phase fell through to review-only,
-    // hiding the advance affordance even after design review passed and the
-    // intake gate auto-derived. The agent's chat said "Ready to advance to
-    // Plan? Confirm and I'll structure the decomposition" but there was no
-    // UI button to act on it — only chat-driven confirmation. Now there's an
-    // explicit Advance to Plan button that mirrors the existing plan→build
-    // pattern below. Disabled state surfaces the gate reason from
-    // checkPhaseGate so users see exactly what's blocking (missing
-    // designDoc, designReview pending, or intake anchors not satisfied).
+    // BI-04B112CA: a size-gated design gets the split, not a blocked advance.
+    const split = sizeGateDecompositionAction(build);
+    if (split) return { kind: "decompose-now", targetPhase: null, ...split };
+
+    // BI-77A1973C: ideate once fell through to review-only, hiding the advance
+    // even after design review passed. The disabled state surfaces the gate
+    // reason from checkPhaseGate so the owner sees what is blocking.
     return {
       kind: "advance-phase",
       title: "Ready for Planning",

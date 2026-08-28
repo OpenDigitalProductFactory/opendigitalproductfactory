@@ -204,6 +204,15 @@ services:
       DPF_HOST_INSTALL_PATH: ${DPF_HOST_INSTALL_PATH:-}
       DPF_HOST_PLATFORM: ${DPF_HOST_PLATFORM:-}
       DPF_HOST_ARCH: ${DPF_HOST_ARCH:-}
+      # Installation identity process-override tier (BI-7626A660 / BI-10BF6206).
+      # `environment-class-contract` and `estate-identity-contract` both document
+      # a highest-precedence process override, and neither variable was listed
+      # here — so on a consumer install, where this allow-list is the ONLY way an
+      # env var reaches the portal, the documented top tier could never be set.
+      # A precedence chain whose first rung is unreachable is not a precedence
+      # chain. Empty default keeps the tier silent unless an operator sets it.
+      DPF_ENVIRONMENT_CLASS: ${DPF_ENVIRONMENT_CLASS:-}
+      DPF_ESTATE_NAME: ${DPF_ESTATE_NAME:-}
       # Authoritative installer opt-in state for the main installation's
       # supervised host Edge service. The portal combines this intent with
       # live enrollment/heartbeat evidence; it never treats the flag as health.
@@ -947,7 +956,7 @@ services:
   dpf-stt:
     profiles: ["runtime-local-speech", "tts"]
     # Pinned to the multi-arch index digest for hwdsl2/whisper-server:latest
-    # resolved on 2026-08-15 (the prior 0b03ecb5… digest was deleted from the
+    # resolved on 2026-08-27 (the prior 166a8c04… digest was deleted from the
     # registry — Release Image Manifest Guard caught it again). The registry
     # owner re-pushes :latest periodically and prunes the previous index, so
     # this digest must be re-resolved every time the guard fails. Bump
@@ -957,7 +966,7 @@ services:
     # the sidecar won't start, set DPF_STT_IMAGE in .env to a reachable ref
     # (e.g. hwdsl2/whisper-server:latest) then `docker compose up -d dpf-stt`,
     # and open a PR re-resolving the digest here (this is that PR's pattern).
-    image: ${DPF_STT_IMAGE:-hwdsl2/whisper-server@sha256:166a8c04e2687608a116372e92f11bfda3e963f3c1dbf390a7c820db0f45887b}
+    image: ${DPF_STT_IMAGE:-hwdsl2/whisper-server@sha256:8f76c4f99069b533b54866388f6a6cb1cb47cfde14762dc7af0b22dd58721df2}
     restart: unless-stopped
     logging: *default-logging
     environment:

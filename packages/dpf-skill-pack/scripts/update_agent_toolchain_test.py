@@ -81,7 +81,15 @@ class InstallGrokHooksTest(unittest.TestCase):
             # Derived, not hardcoded: adding a blocking guard to hooks.json must
             # not make this assertion rot (the drift tests above already pin the
             # roster itself against hooks.json).
-            self.assertIn(f"wired {len(updater.GROK_HOOK_GUARDS)} PreToolUse guard", status)
+            #
+            # Count WIRED ENTRIES, not unique guard names. Those were the same
+            # number only while every guard sat in exactly one matcher group;
+            # workroom-claim-guard.mjs (BI-0B292D84) is wired on both the shell
+            # and the write matcher, exactly as hooks.json wires it for Claude,
+            # so len(GROK_HOOK_GUARDS) undercounts. The matchers are disjoint,
+            # so a guard in two groups still fires at most once per call.
+            wired_entries = sum(len(guards) for _matcher, guards in updater.GROK_PRETOOLUSE_GROUPS)
+            self.assertIn(f"wired {wired_entries} PreToolUse guard", status)
             self.assertIn("matcher group", status)
             self.assertIn("SessionStart+Stop", status)
             hook_file = updater.grok_hooks_file(home)
@@ -93,7 +101,9 @@ class InstallGrokHooksTest(unittest.TestCase):
             self.assertEqual(len(entries), 3)
             self.assertTrue(all(e.get("matcher") for e in entries))
             cmds = [h["command"] for e in entries for h in e["hooks"]]
-            self.assertEqual(len(cmds), len(updater.GROK_HOOK_GUARDS))
+            # Wired entries, not unique names — see the note above: a guard may be
+            # wired on more than one disjoint matcher.
+            self.assertEqual(len(cmds), wired_entries)
             self.assertTrue(any("lease-punt-guard.mjs" in c for c in cmds))
             shell_group = next(e for e in entries if "Shell" in str(e.get("matcher")))
             self.assertTrue(any("lease-guard.mjs" in h["command"] for h in shell_group["hooks"]))

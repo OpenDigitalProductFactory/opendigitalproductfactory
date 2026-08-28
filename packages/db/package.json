@@ -95,7 +95,7 @@
     "studio": "prisma studio",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "typecheck": "tsc --noEmit && tsc -p tsconfig.scripts.json --noEmit"
+    "typecheck": "prisma generate && tsc --noEmit && tsc -p tsconfig.scripts.json --noEmit"
   },
   "dependencies": {
     "@dpf/storefront-templates": "workspace:*",
