@@ -10,6 +10,12 @@ An external reviewer bound to an organization-owned initiative must carry that i
 
 This repairs the readiness path blocking BI-MCP-EFF-0285909C without weakening the receipt repository's organization-mismatch rejection.
 
+It also repairs the concrete BI-47 replay fixture without minting a sibling
+TaskRun: exact TaskRun `...96433C11CA61`, matching request digest, five successful
+immutable reads, expired approved envelope `cmtcyo4h900m001pa2ma0itjn`, and no
+writer execution or receipt after the canonical stale-row reaper projected the
+run to `stalled`.
+
 ## Reproduced evidence
 
 The BI-MCP research reviewer was created with an immutable `initiativeReviewBinding` for the initiative, gate, artifact, writer tool, reviewer, and input. Its narrow writer schema correctly exposed only `{ decision: "pass" }` to the model.
@@ -42,6 +48,23 @@ The exact replay already validates the stored request digest and immutable revie
 - **Trust a caller-provided organization on the runtime context.** External task entry points do not consistently have one, and the canonical initiative is the stronger source.
 - **Relax the receipt repository mismatch check.** That would hide the authorization defect and permit cross-organization evidence.
 - **Patch only approval replay.** The initial approval decision would still be logged under the wrong authority; first call and replay must resolve identically.
+- **Use generic `taskrunRetry`.** It creates a sibling TaskRun and loses the immutable reviewer identity required by the acceptance contract.
+- **Execute or extend the expired approval.** The schema has no durable `approvedAt`; expiry therefore remains a hard authority boundary.
+- **Rerun model inference.** The original reader work and writer choice are already persisted. Re-inference would spend a second reviewer identity and could change the decision.
+
+## Same-TaskRun recovery design
+
+Add a small transaction-focused recovery module at the external task submission
+boundary. On identical replay, it re-reads and validates the persisted digest,
+stale heartbeat, exact approved envelope binding, original writer proposal, and
+absence of a successful writer or receipt.
+
+For an unexpired envelope, compare-and-swap the same `working` or `stalled` row
+to `input-required` and continue through the existing approved-writer resume.
+For an expired envelope, atomically cancel it, create a new proposed envelope
+with the same server-stored binding, clone the failed proposal with its original
+writer parameters and the replacement envelope id, and park the same TaskRun for
+fresh exact approval. Preserve the recovery audit through final execution.
 
 ## Test-first implementation
 
@@ -51,11 +74,21 @@ The exact replay already validates the stored request digest and immutable revie
 4. Implement the smallest resolver change that makes those tests pass.
 5. Exercise the approval/replay integration path and assert the initial `require_approval` and resumed `allow` decisions use the same organization and execute the writer once.
 6. Run focused tests, typecheck, policy guards, blast-radius verification, independent semantic review, and the exact-tree local merge gate before publication.
+7. Add failing recovery tests for the exact stalled/expired BI-47 fixture, the
+   unexpired CAS path, fresh-heartbeat refusal, changed-digest refusal, and
+   existing writer/receipt refusal.
+8. Integrate the recovery transaction into identical external task replay and
+   prove no agentic inference, TaskRun creation, or direct writer execution occurs
+   while fresh approval is required.
+9. Preserve the recovery audit when the approved writer completes.
 
 ## Expected code surface
 
 - `apps/web/lib/govern/authority/resolve-coworker-tool-authority.ts`
 - `apps/web/lib/govern/authority/resolve-coworker-tool-authority.test.ts`
-- Approval/replay integration tests only if the resolver fixture does not already cover the full execution boundary
+- `apps/web/lib/mcp-task-approval-recovery.ts`
+- `apps/web/lib/mcp-task-approval-recovery.test.ts`
+- `apps/web/lib/mcp-task-submit.ts`
+- `apps/web/lib/mcp-task-submit.test.ts`
 
 No schema, migration, public route, or customer-facing documentation change is expected. The operational documentation impact is this plan plus the existing resilient gate-flow documentation that this repair unblocks.

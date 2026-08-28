@@ -17,6 +17,7 @@ import {
   remoteTaskRequestDigest,
 } from "./mcp-task-capacity-contract";
 import { executeRemoteTaskAttempt } from "./mcp-task-execution";
+import { recoverStaleApprovedRemoteTask } from "./mcp-task-approval-recovery";
 import {
   parseInitiativeReviewBinding,
   requiredToolNames,
@@ -125,6 +126,8 @@ export type ExistingRemoteTask = {
   status: string;
   progressPayload: unknown;
   a2aMetadata: unknown;
+  lastHeartbeatAt: Date | null;
+  completedAt: Date | null;
   updatedAt: Date;
 };
 
@@ -365,6 +368,10 @@ async function resumeApprovedRemoteTask(input: {
       status,
       ...(status === "input-required" ? {} : { completedAt: new Date() }),
       progressPayload: {
+        ...(input.existing.progressPayload && typeof input.existing.progressPayload === "object"
+          && !Array.isArray(input.existing.progressPayload)
+          ? input.existing.progressPayload as Record<string, unknown>
+          : {}),
         summary: result.message,
         riskClass: input.parsed.riskClass,
         executedToolCount: 1,
@@ -438,6 +445,8 @@ export async function resumeWaitingRemoteTask(input: {
         status: true,
         progressPayload: true,
         a2aMetadata: true,
+        lastHeartbeatAt: true,
+        completedAt: true,
         updatedAt: true,
       },
     }) as ExistingRemoteTask | null;
@@ -518,6 +527,8 @@ export async function submitRemoteCoworkerTask(input: {
       status: true,
       progressPayload: true,
       a2aMetadata: true,
+      lastHeartbeatAt: true,
+      completedAt: true,
       updatedAt: true,
     },
   };
@@ -549,6 +560,72 @@ export async function submitRemoteCoworkerTask(input: {
         parsed,
       });
       if (resumed) return resumed;
+    }
+    if (
+      storedRequestDigest(existing) === requestDigest
+      && terminalToolPolicy
+      && (existing.status === "working" || existing.status === "stalled")
+    ) {
+      const recovery = await recoverStaleApprovedRemoteTask({
+        taskRunId: existing.taskRunId,
+        requestDigest,
+        expectedUpdatedAt: existing.updatedAt,
+        userId: token.userId,
+        agentId: resolveCanonicalAgentId(parsed.agentId),
+        writerToolName: terminalToolPolicy.writerToolName,
+      });
+      if (recovery?.kind === "fresh-approval-required") {
+        return {
+          kind: "result",
+          result: {
+            taskRunId: existing.taskRunId,
+            status: "input-required",
+            idempotentReplay: true,
+            resumedFromApprovalRecovery: true,
+            requiresApproval: true,
+            replacementEnvelopeId: recovery.replacementEnvelopeId,
+            content: remoteTaskContent(
+              "The stale approved writer envelope expired. It was superseded on the same TaskRun with the identical stored binding and writer arguments; fresh exact approval is required.",
+            ),
+            structuredContent: {
+              recovery: "expired-approved-envelope",
+              taskRunId: existing.taskRunId,
+              sourceEnvelopeId: recovery.sourceEnvelopeId,
+              replacementEnvelopeId: recovery.replacementEnvelopeId,
+              replacementProposalExecutionId: recovery.replacementProposalExecutionId,
+              inferenceRerun: false,
+            },
+            isError: false,
+          },
+        };
+      }
+      if (recovery?.kind === "approved-resume-ready") {
+        const recovered = await prisma.taskRun.findUnique({
+          where: { taskRunId: existing.taskRunId },
+          select: {
+            id: true,
+            taskRunId: true,
+            userId: true,
+            threadId: true,
+            contextId: true,
+            status: true,
+            progressPayload: true,
+            a2aMetadata: true,
+            lastHeartbeatAt: true,
+            completedAt: true,
+            updatedAt: true,
+          },
+        }) as ExistingRemoteTask | null;
+        if (recovered) {
+          const resumed = await resumeApprovedRemoteTask({
+            existing: recovered,
+            token,
+            userContext,
+            parsed,
+          });
+          if (resumed) return resumed;
+        }
+      }
     }
     const terminalWriterWait = terminalToolPolicy
       ? await reserveTerminalWriterReplay({
