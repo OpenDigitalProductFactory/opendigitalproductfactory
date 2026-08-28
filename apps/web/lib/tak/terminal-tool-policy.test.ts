@@ -35,6 +35,7 @@ const policy: TerminalToolPolicy = {
   minimumSuccessfulReaderCalls: 1,
   maximumReaderCalls: 6,
   immutableReaderArguments: {
+    repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
     path: "docs/superpowers/specs/immutable-review.md",
     version: "9295d1ad4f750c1c2b8c4dc65b8d37330c79bbe8",
     expectedBlobId: "35dc4375910ec72ff2b186718a323e9c1d278b9a",
@@ -62,6 +63,7 @@ describe("terminal tool policy", () => {
       "read_source_at_version",
       policy.writerToolName,
     ], {
+      repositoryFullName: policy.immutableReaderArguments!.repositoryFullName,
       path: policy.immutableReaderArguments!.path,
       commitSha: policy.immutableReaderArguments!.version,
       providerBlobId: policy.immutableReaderArguments!.expectedBlobId,
@@ -70,6 +72,7 @@ describe("terminal tool policy", () => {
       policy.writerToolName,
       [policy.writerToolName],
       {
+        repositoryFullName: policy.immutableReaderArguments!.repositoryFullName,
         path: policy.immutableReaderArguments!.path,
         commitSha: policy.immutableReaderArguments!.version,
         providerBlobId: policy.immutableReaderArguments!.expectedBlobId,
@@ -109,6 +112,10 @@ describe("terminal tool policy", () => {
 
   it("fails closed on conflicting immutable identity or a missing server binding", () => {
     expect(normalizeTerminalToolArguments(policy, "read_source_at_version", { path: "other.md" })).toMatchObject({
+      kind: "refuse",
+      result: { error: "terminal_reader_identity_conflict" },
+    });
+    expect(normalizeTerminalToolArguments(policy, "read_source_at_version", { repositoryFullName: "other/repo" })).toMatchObject({
       kind: "refuse",
       result: { error: "terminal_reader_identity_conflict" },
     });

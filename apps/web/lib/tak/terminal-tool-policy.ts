@@ -7,12 +7,14 @@ export type TerminalToolPolicy = {
 };
 
 export type ImmutableReaderArguments = {
+  repositoryFullName: string;
   path: string;
   version: string;
   expectedBlobId: string;
 };
 
 type ImmutableReaderArtifactRef = {
+  repositoryFullName: string;
   path: string;
   commitSha: string;
   providerBlobId: string;
@@ -42,6 +44,7 @@ export function createInitiativeReviewTerminalToolPolicy(
         minimumSuccessfulReaderCalls: 1,
         maximumReaderCalls: 6,
         immutableReaderArguments: {
+          repositoryFullName: artifactRef.repositoryFullName,
           path: artifactRef.path,
           version: artifactRef.commitSha,
           expectedBlobId: artifactRef.providerBlobId,
@@ -57,7 +60,7 @@ export type TerminalToolArgumentDisposition =
       result: { success: false; error: string; message: string };
     };
 
-const IMMUTABLE_READER_IDENTITY_KEYS = ["path", "version", "expectedBlobId"] as const;
+const IMMUTABLE_READER_IDENTITY_KEYS = ["repositoryFullName", "path", "version", "expectedBlobId"] as const;
 
 function boundedInteger(value: unknown, minimum: number, maximum: number): value is number {
   return typeof value === "number"

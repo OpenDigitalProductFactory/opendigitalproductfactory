@@ -477,6 +477,7 @@ describe("submitRemoteCoworkerTask idempotency", () => {
     expect(reader.inputSchema).toEqual({
       type: "object",
       properties: {
+        repositoryFullName: { type: "string", enum: [initiativeReviewBinding.artifactRef.repositoryFullName] },
         path: { type: "string", enum: [initiativeReviewBinding.artifactRef.path] },
         version: { type: "string", enum: [initiativeReviewBinding.artifactRef.commitSha] },
         startLine: expect.objectContaining({ type: "number", minimum: 1 }),
@@ -485,7 +486,7 @@ describe("submitRemoteCoworkerTask idempotency", () => {
         maxChars: expect.objectContaining({ type: "number", maximum: 3200 }),
         expectedBlobId: { type: "string", enum: [initiativeReviewBinding.artifactRef.providerBlobId] },
       },
-      required: ["path", "version", "expectedBlobId"],
+      required: ["repositoryFullName", "path", "version", "expectedBlobId"],
       additionalProperties: false,
     });
     const providerReader = execution.toolsForProvider.find((tool) => tool.function?.name === "read_source_at_version")!;
@@ -510,6 +511,7 @@ describe("submitRemoteCoworkerTask idempotency", () => {
       minimumSuccessfulReaderCalls: 1,
       maximumReaderCalls: 6,
       immutableReaderArguments: {
+        repositoryFullName: initiativeReviewBinding.artifactRef.repositoryFullName,
         path: initiativeReviewBinding.artifactRef.path,
         version: initiativeReviewBinding.artifactRef.commitSha,
         expectedBlobId: initiativeReviewBinding.artifactRef.providerBlobId,
@@ -648,6 +650,7 @@ describe("submitRemoteCoworkerTask idempotency", () => {
       minimumSuccessfulReaderCalls: 1,
       maximumReaderCalls: 6,
       immutableReaderArguments: {
+        repositoryFullName: initiativeReviewBinding.artifactRef.repositoryFullName,
         path: initiativeReviewBinding.artifactRef.path,
         version: initiativeReviewBinding.artifactRef.commitSha,
         expectedBlobId: initiativeReviewBinding.artifactRef.providerBlobId,

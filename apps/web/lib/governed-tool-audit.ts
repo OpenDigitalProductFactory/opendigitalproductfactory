@@ -47,11 +47,13 @@ export async function writeGovernedToolAudit(data: {
 }): Promise<{ id: string } | null> {
   const auditClass = deriveAuditClassForTool(data.toolName);
   const isMetricsOnly = auditClass === "metrics_only";
+  const retainParameters = !isMetricsOnly || data.tool?.retainAuditParameters === true;
+  const redactedParameters = redactWriteOnlyParameters(data.rawParams, data.tool?.inputSchema);
   const row = {
     threadId: data.context?.threadId ?? "", agentId: data.context?.agentId ?? "unknown",
     userId: data.userId, taskRunId: data.context?.taskRunId ?? null, toolName: data.toolName,
-    parameters: isMetricsOnly ? {} : {
-      ...redactWriteOnlyParameters(data.rawParams, data.tool?.inputSchema),
+    parameters: retainParameters ? {
+      ...redactedParameters,
       ...(data.context?.surfaceInvocation ? { _surface: data.context.surfaceInvocation } : {}),
       ...(data.alignmentDecision ? { _takAlignment: {
         interactionId: data.alignmentDecision.interactionId,
@@ -60,7 +62,7 @@ export async function writeGovernedToolAudit(data: {
         checks: data.alignmentDecision.alignment.checks,
       } } : {}),
       ...(data.preconditionDecision ? { _takPrecondition: data.preconditionDecision } : {}),
-    },
+    } : {},
     result: isMetricsOnly ? {} : data.result as unknown as object,
     success: data.result.success, executionMode: data.source,
     routeContext: data.context?.routeContext ?? null, durationMs: data.durationMs,
