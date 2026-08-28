@@ -115,3 +115,26 @@ stale heartbeat, compare-and-swap version, and absence of writer evidence before
 any mutation. A mismatch returns without changing the TaskRun. Rollback is the
 normal protected revert of this source change; already-cancelled expired
 envelopes remain immutable audit history and are not resurrected.
+
+## Backlog coverage
+
+- Decision: atomic
+- Parent: BI-F48D7059
+- Receipt: blocked - no initiative scope baseline exists for BI-F48D7059, so record_plan_backlog_coverage returns traceability-incomplete and mints no receipt
+- Rationale: The nine test-first steps are one chain over a single authority-and-recovery contract, so no phase is independently shippable. Steps 1-3 are failing tests that only pass with the step-4 resolver change; steps 7-9 add the same-TaskRun recovery transaction that no caller can reach without that resolver and the step 5-6 approval/replay path. Shipping any subset lands either failing tests or an unreachable recovery path, and the organization-authority propagation and the expired-envelope supersession must change together or the receipt repository still rejects the writer.
+- Dependencies: none
+
+A baseline is written only when the spec-approval gate passes, and that gate
+requires a reviewer independent of the artifact's author. This plan's item is
+itself the repair for the defect that breaks independent reviewer approval
+replay: the approved replay writes `AuthorizationDecisionLog.organizationId =
+null`, so the receipt repository rejects the reviewer's write. The baseline for
+BI-F48D7059 therefore cannot be recorded until this change is merged and
+deployed. Per the coverage tool's own guidance, the coverage table above is
+recorded in the plan and names the blocking CONDITION rather than a backlog id
+that would go stale.
+
+Once this repair is deployed, acceptance for BI-F48D7059 is one independent
+spec-approval review against the canonical design blob
+`6b3629f9d31980326d228628e1ffa227ba747e93`, followed by
+`record_plan_backlog_coverage` for this plan to replace the blocked receipt above.
