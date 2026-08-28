@@ -1,3 +1,4 @@
+import { describeReadinessRefusal } from "@/lib/build/readiness-refusal-message";
 import { randomUUID } from "node:crypto";
 
 import { prisma } from "@dpf/db";
@@ -133,8 +134,10 @@ export async function enforceBuildInitiativeReadiness(args: {
   return {
     allowed: !blocked,
     ...(blocked ? { error: "initiative_not_ready" as const } : {}),
+    // BI-C5D978E9: the owner reads this. The raw enum list told a shelter
+    // director nothing — least of all that none of it was waiting on them.
     message: blocked
-      ? `Cannot enter ${args.targetPhase}: ${codes(decision).join(", ")}.`
+      ? describeReadinessRefusal(args.targetPhase, [...decision.blockers, ...decision.unmet])
       : `${args.target} readiness allowed.`,
     decision,
   };
