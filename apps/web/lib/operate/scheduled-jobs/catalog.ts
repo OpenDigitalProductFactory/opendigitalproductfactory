@@ -568,7 +568,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     inngestId: "business/metrics-aggregator",
     name: "Business metrics aggregator",
     purpose:
-      "Builds tenant-scoped owner/manager performance snapshots from canonical operational evidence. The Performance view stays fast and preserves its last valid snapshot when a refresh fails.",
+      "Builds tenant-scoped owner/manager performance snapshots from canonical operational evidence for archetypes the metrics engine covers (hospitality today). On an install with no covered storefront it refreshes nothing by design. The Performance view stays fast and preserves its last valid snapshot when a refresh fails.",
     cron: "17 * * * *",
     cadence: "Hourly at :17",
     category: "editable",
