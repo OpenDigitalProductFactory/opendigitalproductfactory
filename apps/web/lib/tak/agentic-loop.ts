@@ -59,6 +59,7 @@ import {
 import {
   applyTerminalToolSurface,
   buildTerminalToolReminder,
+  normalizeTerminalToolArguments,
   resolveTerminalTextExit,
   resolveTerminalToolCall,
   selectTerminalToolSurface,
@@ -2297,7 +2298,22 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       toolResult: ToolResult;
     }> = [];
 
-    for (const tc of result.toolCalls) {
+    for (const providerToolCall of result.toolCalls) {
+      let tc = providerToolCall;
+      if (params.terminalToolPolicy) {
+        const normalized = normalizeTerminalToolArguments(
+          params.terminalToolPolicy,
+          tc.name,
+          tc.arguments,
+        );
+        if (normalized.kind === "refuse") {
+          executedTools.push({ name: tc.name, args: tc.arguments, result: normalized.result });
+          iterationResults.push({ tc, toolResult: normalized.result });
+          continue;
+        }
+        tc = { ...tc, arguments: normalized.arguments };
+      }
+
       // BI-2AC48661: plan tools are loop-intrinsic. Intercept them here — they
       // mutate loop state and return a synthetic result; they never reach
       // governedExecuteTool, take no capability grant, and write no audit row.
@@ -2586,7 +2602,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       {
         role: "assistant" as const,
         content: result.content,
-        toolCalls: result.toolCalls,
+        toolCalls: iterationResults.map(({ tc }) => tc),
       },
       ...iterationResults.map(({ tc, toolResult }) => ({
         role: "tool" as const,

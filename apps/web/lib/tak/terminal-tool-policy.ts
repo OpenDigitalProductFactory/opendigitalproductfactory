@@ -3,6 +3,19 @@ export type TerminalToolPolicy = {
   readerToolNames: readonly string[];
   minimumSuccessfulReaderCalls: number;
   maximumReaderCalls: number;
+  immutableReaderArguments?: ImmutableReaderArguments;
+};
+
+export type ImmutableReaderArguments = {
+  path: string;
+  version: string;
+  expectedBlobId: string;
+};
+
+type ImmutableReaderArtifactRef = {
+  path: string;
+  commitSha: string;
+  providerBlobId: string;
 };
 
 export type TerminalToolRecord = {
@@ -18,6 +31,7 @@ const INITIATIVE_REVIEW_READER_NAMES = [
 export function createInitiativeReviewTerminalToolPolicy(
   writerToolName: string,
   requiredToolNames: readonly string[],
+  artifactRef: ImmutableReaderArtifactRef,
 ): TerminalToolPolicy | null {
   const required = new Set(requiredToolNames);
   const readerToolNames = INITIATIVE_REVIEW_READER_NAMES.filter((name) => required.has(name));
@@ -27,8 +41,108 @@ export function createInitiativeReviewTerminalToolPolicy(
         readerToolNames,
         minimumSuccessfulReaderCalls: 1,
         maximumReaderCalls: 6,
+        immutableReaderArguments: {
+          path: artifactRef.path,
+          version: artifactRef.commitSha,
+          expectedBlobId: artifactRef.providerBlobId,
+        },
       }
     : null;
+}
+
+export type TerminalToolArgumentDisposition =
+  | { kind: "allow"; arguments: Record<string, unknown> }
+  | {
+      kind: "refuse";
+      result: { success: false; error: string; message: string };
+    };
+
+const IMMUTABLE_READER_IDENTITY_KEYS = ["path", "version", "expectedBlobId"] as const;
+
+function boundedInteger(value: unknown, minimum: number, maximum: number): value is number {
+  return typeof value === "number"
+    && Number.isSafeInteger(value)
+    && value >= minimum
+    && value <= maximum;
+}
+
+/**
+ * Treat the server-issued initiative-review binding as authority for immutable
+ * source identity. Provider arguments may select only a bounded page within
+ * that artifact; they cannot replace or broaden the bound artifact itself.
+ */
+export function normalizeTerminalToolArguments(
+  policy: TerminalToolPolicy,
+  toolName: string,
+  providerArguments: Record<string, unknown>,
+): TerminalToolArgumentDisposition {
+  if (toolName !== "read_source_at_version" || !policy.readerToolNames.includes(toolName)) {
+    return { kind: "allow", arguments: providerArguments };
+  }
+
+  const binding = policy.immutableReaderArguments;
+  if (!binding) {
+    return {
+      kind: "refuse",
+      result: {
+        success: false,
+        error: "terminal_reader_binding_missing",
+        message: "The immutable evidence reader has no server-issued artifact binding.",
+      },
+    };
+  }
+
+  for (const key of IMMUTABLE_READER_IDENTITY_KEYS) {
+    if (Object.hasOwn(providerArguments, key) && providerArguments[key] !== binding[key]) {
+      return {
+        kind: "refuse",
+        result: {
+          success: false,
+          error: "terminal_reader_identity_conflict",
+          message: `The provider-supplied ${key} conflicts with the server-issued artifact binding.`,
+        },
+      };
+    }
+  }
+
+  const normalized: Record<string, unknown> = { ...binding };
+  const cursor = providerArguments["cursor"];
+  if (cursor !== undefined) {
+    if (typeof cursor !== "string" || cursor.length === 0 || cursor.length > 2_048) {
+      return {
+        kind: "refuse",
+        result: {
+          success: false,
+          error: "terminal_reader_pagination_invalid",
+          message: "The immutable evidence cursor must be a non-empty bounded string.",
+        },
+      };
+    }
+    normalized["cursor"] = cursor;
+  }
+
+  const boundedControls = [
+    ["startLine", 1, Number.MAX_SAFE_INTEGER],
+    ["maxLines", 1, 200],
+    ["maxChars", 1, 3_200],
+  ] as const;
+  for (const [name, minimum, maximum] of boundedControls) {
+    const value = providerArguments[name];
+    if (value === undefined) continue;
+    if (!boundedInteger(value, minimum, maximum)) {
+      return {
+        kind: "refuse",
+        result: {
+          success: false,
+          error: "terminal_reader_pagination_invalid",
+          message: `${name} is outside the immutable evidence pagination bounds.`,
+        },
+      };
+    }
+    normalized[name] = value;
+  }
+
+  return { kind: "allow", arguments: normalized };
 }
 
 export type TerminalToolProgress = {

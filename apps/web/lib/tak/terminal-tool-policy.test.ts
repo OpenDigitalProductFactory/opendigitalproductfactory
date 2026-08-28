@@ -3,6 +3,7 @@ import {
   applyTerminalToolSurface,
   buildTerminalToolReminder,
   createInitiativeReviewTerminalToolPolicy,
+  normalizeTerminalToolArguments,
   resolveTerminalTextExit,
   resolveTerminalToolCall,
   summarizeTerminalToolProgress,
@@ -33,6 +34,11 @@ const policy: TerminalToolPolicy = {
   readerToolNames: ["read_source_at_version", "search_source_at_version"],
   minimumSuccessfulReaderCalls: 1,
   maximumReaderCalls: 6,
+  immutableReaderArguments: {
+    path: "docs/superpowers/specs/immutable-review.md",
+    version: "9295d1ad4f750c1c2b8c4dc65b8d37330c79bbe8",
+    expectedBlobId: "35dc4375910ec72ff2b186718a323e9c1d278b9a",
+  },
 };
 
 const read = (success = true): TerminalToolRecord => ({
@@ -55,8 +61,73 @@ describe("terminal tool policy", () => {
     expect(createInitiativeReviewTerminalToolPolicy(policy.writerToolName, [
       "read_source_at_version",
       policy.writerToolName,
-    ])).toEqual({ ...policy, readerToolNames: ["read_source_at_version"] });
-    expect(createInitiativeReviewTerminalToolPolicy(policy.writerToolName, [policy.writerToolName])).toBeNull();
+    ], {
+      path: policy.immutableReaderArguments!.path,
+      commitSha: policy.immutableReaderArguments!.version,
+      providerBlobId: policy.immutableReaderArguments!.expectedBlobId,
+    })).toEqual({ ...policy, readerToolNames: ["read_source_at_version"] });
+    expect(createInitiativeReviewTerminalToolPolicy(
+      policy.writerToolName,
+      [policy.writerToolName],
+      {
+        path: policy.immutableReaderArguments!.path,
+        commitSha: policy.immutableReaderArguments!.version,
+        providerBlobId: policy.immutableReaderArguments!.expectedBlobId,
+      },
+    )).toBeNull();
+  });
+
+  it("binds empty provider reader arguments to the server-issued immutable identity", () => {
+    expect(normalizeTerminalToolArguments(policy, "read_source_at_version", {})).toEqual({
+      kind: "allow",
+      arguments: policy.immutableReaderArguments,
+    });
+  });
+
+  it("preserves only validated bounded pagination controls", () => {
+    expect(normalizeTerminalToolArguments(policy, "read_source_at_version", {
+      cursor: "page-2",
+      startLine: 201,
+      maxLines: 200,
+      maxChars: 3200,
+      ignored: "provider noise",
+    })).toEqual({
+      kind: "allow",
+      arguments: {
+        ...policy.immutableReaderArguments,
+        cursor: "page-2",
+        startLine: 201,
+        maxLines: 200,
+        maxChars: 3200,
+      },
+    });
+    expect(normalizeTerminalToolArguments(policy, "read_source_at_version", { maxLines: 201 })).toMatchObject({
+      kind: "refuse",
+      result: { error: "terminal_reader_pagination_invalid" },
+    });
+  });
+
+  it("fails closed on conflicting immutable identity or a missing server binding", () => {
+    expect(normalizeTerminalToolArguments(policy, "read_source_at_version", { path: "other.md" })).toMatchObject({
+      kind: "refuse",
+      result: { error: "terminal_reader_identity_conflict" },
+    });
+    expect(normalizeTerminalToolArguments(
+      { ...policy, immutableReaderArguments: undefined },
+      "read_source_at_version",
+      {},
+    )).toMatchObject({
+      kind: "refuse",
+      result: { error: "terminal_reader_binding_missing" },
+    });
+  });
+
+  it("does not alter non-review tool arguments", () => {
+    const args = { query: "unchanged", nested: { value: 1 } };
+    expect(normalizeTerminalToolArguments(policy, "unrelated_tool", args)).toEqual({
+      kind: "allow",
+      arguments: args,
+    });
   });
   it("blocks the writer until one reader succeeds", () => {
     expect(resolveTerminalToolCall(policy, [], policy.writerToolName)).toMatchObject({
@@ -179,7 +250,7 @@ describe("agent loop terminal writer integration", () => {
     const readers = Array.from({ length: 7 }, (_, index) => ({
       id: `read-${index}`,
       name: index % 2 ? "search_source_at_version" : "read_source_at_version",
-      arguments: { cursor: index },
+      arguments: { cursor: String(index) },
     }));
     vi.mocked(routeAndCall)
       .mockResolvedValueOnce(response("", readers) as never)
@@ -208,5 +279,31 @@ describe("agent loop terminal writer integration", () => {
     const thirdTools = (vi.mocked(routeAndCall).mock.calls[2]![3] as { tools: typeof providerTools }).tools;
     expect(secondTools.map((tool) => tool.function.name)).toEqual(policy.readerToolNames);
     expect(thirdTools.map((tool) => tool.function.name)).toContain(policy.writerToolName);
+  });
+
+  it("executes, records, and carries forward server-bound arguments when the provider sends an empty object", async () => {
+    vi.mocked(routeAndCall)
+      .mockResolvedValueOnce(response("", [{ id: "read", name: "read_source_at_version", arguments: {} }]) as never)
+      .mockResolvedValueOnce(response("", [{ id: "writer", name: policy.writerToolName, arguments: {} }]) as never)
+      .mockResolvedValueOnce(response("The governed writer rejected the assessment, so no receipt exists.") as never);
+
+    const result = await runAgenticLoop(params);
+
+    expect(vi.mocked(governedExecuteTool).mock.calls[0]?.[0]).toMatchObject({
+      toolName: "read_source_at_version",
+      rawParams: policy.immutableReaderArguments,
+    });
+    expect(result.executedTools[0]).toMatchObject({
+      name: "read_source_at_version",
+      args: policy.immutableReaderArguments,
+    });
+    const secondCallMessages = vi.mocked(routeAndCall).mock.calls[1]![0] as Array<{
+      role: string;
+      toolCalls?: Array<{ id: string; arguments: Record<string, unknown> }>;
+    }>;
+    expect(secondCallMessages.find((message) => message.role === "assistant")?.toolCalls?.[0]).toMatchObject({
+      id: "read",
+      arguments: policy.immutableReaderArguments,
+    });
   });
 });

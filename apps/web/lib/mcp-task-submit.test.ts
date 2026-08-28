@@ -509,6 +509,11 @@ describe("submitRemoteCoworkerTask idempotency", () => {
       readerToolNames: ["read_source_at_version", "search_source_at_version"],
       minimumSuccessfulReaderCalls: 1,
       maximumReaderCalls: 6,
+      immutableReaderArguments: {
+        path: initiativeReviewBinding.artifactRef.path,
+        version: initiativeReviewBinding.artifactRef.commitSha,
+        expectedBlobId: initiativeReviewBinding.artifactRef.providerBlobId,
+      },
     });
     const writer = execution.tools.find((tool) => tool.name === "record_initiative_evidence")!;
     expect(writer.inputSchema.properties).toEqual(expect.objectContaining({
@@ -642,6 +647,11 @@ describe("submitRemoteCoworkerTask idempotency", () => {
       readerToolNames: ["read_source_at_version"],
       minimumSuccessfulReaderCalls: 1,
       maximumReaderCalls: 6,
+      immutableReaderArguments: {
+        path: initiativeReviewBinding.artifactRef.path,
+        version: initiativeReviewBinding.artifactRef.commitSha,
+        expectedBlobId: initiativeReviewBinding.artifactRef.providerBlobId,
+      },
     });
     const boundWriter = execution.tools.find((tool) => tool.name === writer.name)!;
     const providerWriter = execution.toolsForProvider.find((tool) => tool.function?.name === writer.name)!;

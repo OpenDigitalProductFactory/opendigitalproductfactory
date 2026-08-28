@@ -687,7 +687,7 @@ export async function submitRemoteCoworkerTask(input: {
       })
     : undefined;
   const terminalToolPolicy = parsed.initiativeReviewBinding
-    ? createInitiativeReviewTerminalToolPolicy(parsed.initiativeReviewBinding.writerToolName, exactRequiredToolNames)
+    ? createInitiativeReviewTerminalToolPolicy(parsed.initiativeReviewBinding.writerToolName, exactRequiredToolNames, parsed.initiativeReviewBinding.artifactRef)
     : null;
 
   try {
