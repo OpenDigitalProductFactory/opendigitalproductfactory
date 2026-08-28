@@ -121,20 +121,24 @@ async function main(): Promise<void> {
     `Starting heartbeat (every ${state.heartbeatIntervalSec}s) + sweep (every ${state.sweepIntervalSec}s) + metrics (every ${metricsIntervalSec}s) loops.`,
   );
 
+  // The federation scan is started ALONGSIDE the race, never inside it. It
+  // returns normally when an operator sets DPF_FEDERATION_SCAN=0, and a resolved
+  // promise wins a race exactly as a rejected one does — so racing it would make
+  // turning discovery off exit the process and hand the supervisor a restart
+  // loop. Nothing about finding peers is authoritative enough to end the agent.
+  void runFederationScanLoop({ config, api, state }).catch((err) => {
+    log("warn", `federation-scan loop exited unexpectedly: ${(err as Error).message}`);
+  });
+
   // Race: if the heartbeat or sweep loop returns (revocation signal),
-  // let the process exit. The metrics and federation-scan loops run as
-  // fire-and-forget peers — neither causes the process to exit on failure.
+  // let the process exit. The metrics loop runs as a fire-and-forget
+  // peer — it never causes the process to exit on failure.
   await Promise.race([
     runHeartbeatLoop({ config, api, state }),
     runSweepLoop({ config, api, state }),
     runMetricsLoop({ config, api, state }).catch((err) => {
       log("warn", `metrics-loop exited unexpectedly: ${(err as Error).message}`);
       // Don't propagate — heartbeat/sweep are the authoritative loops.
-    }),
-    runFederationScanLoop({ config, api, state }).catch((err) => {
-      log("warn", `federation-scan loop exited unexpectedly: ${(err as Error).message}`);
-      // Don't propagate — discovery of nearby peers is optional and
-      // eventually consistent; heartbeat/sweep stay authoritative.
     }),
   ]);
 }
