@@ -62,6 +62,10 @@ import {
   dataRetentionSweepRequested,
 } from "./data-retention-sweep";
 import {
+  regulatoryMonitorScanScheduled,
+  regulatoryMonitorScanRequested,
+} from "./regulatory-monitor-scan";
+import {
   qualityIssueDriftSweepScheduled,
   qualityIssueDriftSweepRequested,
 } from "./quality-issue-drift-sweep";
@@ -156,6 +160,7 @@ export const scheduledFunctions = [
   worktreeJanitor, // BI-42FA7DD8: host worktree Tier-A fleet backstop; daily 05:40
   sandboxBuildGc, // BI-8BD61C30: BS sandbox .builds worktree + aged build/* branch GC (flag DPF_SANDBOX_BUILD_GC_ENABLED), daily 05:50
   dataRetentionSweepScheduled, // EP-DATA-RETENTION: daily DB purge of aged logs/telemetry/chat, 04:00
+  regulatoryMonitorScanScheduled, // BI-DA37A602: weekly regulatory rescan so the compliance surface self-heals instead of aging into a false green, Mon 06:00
 
   qualityIssueDriftSweepScheduled, // BI-0B420A1D: runtime governance — self-heal recovery/orphan backstop + detect per-type open-count drift vs registry budgets, daily 05:00
 
@@ -211,6 +216,7 @@ export const eventFunctions = [
   selfUpgradeManual,
   quiescenceRun,
   dataRetentionSweepRequested, // EP-DATA-RETENTION: operator "run now" / dry-run
+  regulatoryMonitorScanRequested, // BI-DA37A602: operator "run now" off-cadence regulatory rescan
   qualityIssueDriftSweepRequested, // BI-0B420A1D: operator "run now" for the quality-issue drift sweep
 
   inngestRetentionSweepRequested, // BI-0AB96FE7: operator "run now" / dry-run for the Inngest retention sweep
