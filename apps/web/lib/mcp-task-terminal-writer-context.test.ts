@@ -61,6 +61,53 @@ function page(input: {
 }
 
 describe("terminal writer context hydration", () => {
+  it("keeps the exact seven-row BI-F48 reader history recoverable through one bounded reread", async () => {
+    const readPage = vi.fn().mockResolvedValue({
+      success: true,
+      message: "complete deterministic reread",
+      data: page({
+        content: "server-verified current source",
+        startLine: 1,
+        endLine: 1,
+        totalLines: 1,
+        hasMore: false,
+        cursor: null,
+      }),
+    });
+    const executionIds = [
+      "cmtd3z0ye00gz01rtjr503slt",
+      "cmtd3zymp00hh01rtpf9ukk8z",
+      "cmtddabd1018m01p99437ddvx",
+      "cmtddabis018o01p93xfmw7iw",
+      "cmtdgbjkd007001p257plitl1",
+      "cmtdgbjsg007201p2yt66vn3r",
+      "cmtdgbk06007401p2veda56my",
+    ];
+
+    const result = await hydrateTerminalWriterContext({
+      policy,
+      executions: executionIds.map((id, index) => reader(
+        id,
+        index === 0 || index === 2 || index === 4
+          ? { startLine: 1, maxLines: 200, maxChars: 3_200 }
+          : { cursor: `historical-cursor-${index}`, maxLines: 200, maxChars: 3_200 },
+        { createdAt: new Date(index) },
+      )),
+      readPage,
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        readerExecutionIds: executionIds,
+        hydratedPageCount: 1,
+        context: expect.stringContaining("server-verified current source"),
+      },
+    });
+    expect(readPage).toHaveBeenCalledTimes(1);
+    expect(readPage).toHaveBeenCalledWith(expect.objectContaining({ startLine: 1 }));
+  });
+
   it("rehydrates the exact two-reader fixture into bounded ordered source context", async () => {
     const readPage = vi.fn()
       .mockResolvedValueOnce({
@@ -156,6 +203,80 @@ describe("terminal writer context hydration", () => {
         context: expect.stringContaining("first\nsecond"),
       },
     });
+    expect(readPage).not.toHaveBeenCalled();
+  });
+
+  it("selects the latest coherent complete attempt from a longer exact-bound history", async () => {
+    const readPage = vi.fn();
+    const firstPage = page({ content: "first\n", startLine: 1, endLine: 1, totalLines: 2, hasMore: true, cursor: "cursor-2" });
+    const secondPage = page({ content: "second", startLine: 2, endLine: 2, totalLines: 2, hasMore: false, cursor: null });
+    const executions = [
+      reader("proof-one", { startLine: 1 }, { createdAt: new Date(1) }),
+      reader("proof-two", { startLine: 1 }, { createdAt: new Date(2) }),
+      reader("attempt-one-page-one", { startLine: 1 }, { createdAt: new Date(3), result: { data: firstPage } }),
+      reader("attempt-one-page-two", { cursor: "cursor-2" }, { createdAt: new Date(4), result: { data: secondPage } }),
+      reader("proof-three", { startLine: 1 }, { createdAt: new Date(5) }),
+      reader("attempt-two-page-one", { startLine: 1 }, { createdAt: new Date(6), result: { data: firstPage } }),
+      reader("attempt-two-page-two", { cursor: "cursor-2" }, { createdAt: new Date(7), result: { data: secondPage } }),
+    ];
+
+    const result = await hydrateTerminalWriterContext({ policy, executions, readPage });
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        readerExecutionIds: executions.map((execution) => execution.id),
+        hydratedPageCount: 2,
+        context: expect.stringContaining("first\nsecond"),
+      },
+    });
+    expect(readPage).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when two complete persisted attempts disagree about bound source content", async () => {
+    const readPage = vi.fn();
+    const result = await hydrateTerminalWriterContext({
+      policy,
+      executions: [
+        reader("attempt-one", { startLine: 1 }, {
+          createdAt: new Date(1),
+          result: { data: page({ content: "first", startLine: 1, endLine: 1, totalLines: 1, hasMore: false, cursor: null }) },
+        }),
+        reader("attempt-two", { startLine: 1 }, {
+          createdAt: new Date(2),
+          result: { data: page({ content: "conflict", startLine: 1, endLine: 1, totalLines: 1, hasMore: false, cursor: null }) },
+        }),
+      ],
+      readPage,
+    });
+
+    expect(result).toMatchObject({ ok: false, code: "terminal_writer_context_attempts_conflict" });
+    expect(readPage).not.toHaveBeenCalled();
+  });
+
+  it("keeps the reader ceiling scoped to each persisted attempt", async () => {
+    const readPage = vi.fn();
+    const executions = Array.from({ length: 7 }, (_, index) => {
+      const isFirst = index === 0;
+      const isLast = index === 6;
+      return reader(`page-${index + 1}`, isFirst ? { startLine: 1 } : { cursor: `cursor-${index}` }, {
+        createdAt: new Date(index),
+        result: {
+          data: page({
+            content: isLast ? "last" : "line\n",
+            startLine: index + 1,
+            endLine: index + 1,
+            totalLines: 7,
+            hasMore: !isLast,
+            cursor: isLast ? null : `cursor-${index + 1}`,
+          }),
+        },
+      });
+    });
+
+    const result = await hydrateTerminalWriterContext({ policy, executions, readPage });
+
+    expect(result).toMatchObject({ ok: false, code: "terminal_writer_context_reader_count_invalid" });
     expect(readPage).not.toHaveBeenCalled();
   });
 
