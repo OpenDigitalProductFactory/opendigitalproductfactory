@@ -86,9 +86,7 @@ overrides:
 packageExtensionsChecksum: sha256-pFEExG4o57joHucsVi/dgGpp9BfdxYD7y4blLQUpCqI=
 
 patchedDependencies:
-  image-size@1.2.1:
-    hash: 4bb1072b86731b355f3817b3188b127fbf12c741940e2a14f664b4789a8bfac9
-    path: patches/image-size@1.2.1.patch
+  image-size@1.2.1: 4bb1072b86731b355f3817b3188b127fbf12c741940e2a14f664b4789a8bfac9
 
 importers:
 
@@ -224,9 +222,6 @@ importers:
       '@axe-core/playwright':
         specifier: ^4.12.1
         version: 4.12.1(playwright-core@1.62.0)
-      axe-core:
-        specifier: 4.12.1
-        version: 4.12.1
       '@dpf/db':
         specifier: workspace:*
         version: link:../../packages/db
@@ -278,6 +273,9 @@ importers:
       '@xyflow/react':
         specifier: ^12.11.2
         version: 12.11.2(@types/react-dom@19.2.3(@types/react@19.2.18))(@types/react@19.2.18)(immer@11.1.18)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+      axe-core:
+        specifier: 4.12.1
+        version: 4.12.1
       bcryptjs:
         specifier: ^3.0.3
         version: 3.0.3
