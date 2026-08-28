@@ -242,6 +242,15 @@ describe("terminal writer resumption", () => {
       a2aMetadata: metadata,
     });
     db.findEnvelope.mockResolvedValue(null);
+    db.findToolExecution.mockImplementation(async (query: { where?: { toolName?: unknown } }) => {
+      const toolName = query.where?.toolName;
+      if (toolName === "record_initiative_evidence") return null;
+      return {
+        id: "reader-1",
+        toolName: "read_source_at_version",
+        success: true,
+      };
+    });
     db.updateMany.mockResolvedValue({ count: 1 });
     db.update.mockResolvedValue({});
     db.findUnique.mockResolvedValue({ status: "working" });
@@ -290,7 +299,7 @@ describe("terminal writer resumption", () => {
     });
   });
 
-  it("does not execute a third attempt after the bounded missing-writer resume", async () => {
+  it("keeps the same TaskRun resumable in a writer-only phase after attempt two", async () => {
     const exhaustedParams = { ...params, idempotencyKey: "missing-writer-resume-exhausted" };
     const metadata = await persistedMetadata("PAT-WRITER-EXHAUSTED", exhaustedParams);
     vi.clearAllMocks();
@@ -314,11 +323,34 @@ describe("terminal writer resumption", () => {
       a2aMetadata: metadata,
     });
     db.findEnvelope.mockResolvedValue(null);
+    db.findToolExecution.mockImplementation(async (query: { where?: { toolName?: unknown } }) => {
+      const toolName = query.where?.toolName;
+      if (toolName === "record_initiative_evidence") return null;
+      return {
+        id: "cmtd3zymp00hh01rtpf9ukk8z",
+        toolName: "read_source_at_version",
+        success: true,
+      };
+    });
+    autonomous.execute.mockResolvedValue({
+      content: "The independent review stopped without recording a governed assessment. No receipt was created.",
+      executedTools: [],
+      failure: {
+        kind: "terminal-writer-missing",
+        message: "The independent review stopped without recording a governed assessment. No receipt was created.",
+      },
+    });
 
     const outcome = await submit("PAT-WRITER-EXHAUSTED", exhaustedParams);
 
-    expect(autonomous.execute).not.toHaveBeenCalled();
-    expect(db.updateMany).not.toHaveBeenCalled();
+    expect(autonomous.execute).toHaveBeenCalledWith(expect.objectContaining({
+      taskRunId: "TR-MCP-WRITER-EXHAUSTED",
+      terminalToolPolicy: expect.objectContaining({
+        terminalPhase: "writer-only",
+        persistedEvidenceAvailable: true,
+      }),
+    }));
+    expect(autonomous.create).not.toHaveBeenCalled();
     expect(outcome).toMatchObject({
       kind: "result",
       result: {
@@ -326,9 +358,18 @@ describe("terminal writer resumption", () => {
         status: "input-required",
         idempotentReplay: true,
         requiresApproval: false,
-        resumable: false,
+        resumable: true,
         waitReason: "missing-terminal-writer",
       },
+    });
+    expect(db.update).toHaveBeenCalledWith({
+      where: { taskRunId: "TR-MCP-WRITER-EXHAUSTED" },
+      data: expect.objectContaining({
+        status: "input-required",
+        progressPayload: expect.objectContaining({
+          terminalWriterWait: expect.objectContaining({ attempt: 3 }),
+        }),
+      }),
     });
   });
 });
