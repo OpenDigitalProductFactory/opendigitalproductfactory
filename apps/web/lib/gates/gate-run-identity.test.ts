@@ -5,6 +5,7 @@ import {
   deriveSemanticReviewGateIdentity,
   normalizeGateRunIdentity,
   projectLocalCiTerminalEvidence,
+  resolveLocalCiTerminalEvidence,
 } from "./gate-run-identity";
 
 const SHA_A = "a".repeat(40);
@@ -152,6 +153,45 @@ describe("local-CI terminal evidence projection", () => {
       evidenceRecordId: "EXT-GATE",
       resultClass: "pass",
     });
+  });
+
+  // BI-C59AC8AF. A run that never reported is not a verdict, and the gate key
+  // hashes the integration TREE — so blocking here made that tree permanently
+  // ungateable, with a fresh commit of the same content landing on the same
+  // refusal. Only evidence that EXISTS and does not fit stays blocking.
+  it("lets the gate run again when the prior run left no evidence", async () => {
+    expect(projectLocalCiTerminalEvidence({
+      claimKey: `gate:${gateKey}`,
+      evidence: null,
+      now: new Date("2026-08-25T12:00:00.000Z"),
+    })).toEqual({ status: "rerunnable" });
+
+    await expect(resolveLocalCiTerminalEvidence({
+      claimKey: `gate:${gateKey}`,
+      evidenceRecordId: null,
+      now: new Date("2026-08-25T12:00:00.000Z"),
+      loadEvidence: async () => {
+        throw new Error("must not load evidence when the id is null");
+      },
+    })).resolves.toEqual({ status: "rerunnable" });
+  });
+
+  // Observed live: a gate run died on a signal, the portal rejected the status,
+  // and the client fallback recorded it as `failed` — with no validity stamp,
+  // because the run never reached a verdict. Reading that as expired would have
+  // re-bricked the tree through the other door.
+  it("lets the gate run again when the evidence carries no validity stamp", () => {
+    const infrastructure = {
+      id: "EXT-GATE",
+      operationType: "local_integration_ci",
+      details: { gateKey, status: "failed", evidenceValidity: null },
+    };
+
+    expect(projectLocalCiTerminalEvidence({
+      claimKey: `gate:${gateKey}`,
+      evidence: infrastructure,
+      now: new Date("2026-08-25T12:00:00.000Z"),
+    })).toEqual({ status: "rerunnable" });
   });
 
   it("fails closed for expired or mismatched evidence", () => {
