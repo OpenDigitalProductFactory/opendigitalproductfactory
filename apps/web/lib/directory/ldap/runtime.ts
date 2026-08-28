@@ -94,7 +94,7 @@ function listen(server: Server, port: number): Promise<void> {
 
 let current: LdapListenerStatus = {
   state: "disabled",
-  detail: `Not started. Set ${LDAP_ENABLED_ENV}=1 to serve LDAP.`,
+  detail: `Off. Set ${LDAP_ENABLED_ENV}=1 to serve LDAP.`,
 };
 let running: Server | null = null;
 
@@ -137,7 +137,7 @@ export async function startLdapListener(
   if (!isLdapListenerEnabled(env)) {
     current = {
       state: "disabled",
-      detail: `The directory is not served. Set ${LDAP_ENABLED_ENV}=1 to turn it on.`,
+      detail: `Off. Set ${LDAP_ENABLED_ENV}=1 to turn it on.`,
     };
     logger.log("[ldap] Listener disabled; no port bound.");
     return current;
@@ -147,7 +147,7 @@ export async function startLdapListener(
     current = {
       state: "refused",
       reason,
-      detail: `${LDAP_ENABLED_ENV} is set but the listener could not start, so nothing is bound.`,
+      detail: `Turned on, but it could not start. Nothing is bound.`,
     };
     logger.error(`[ldap] Refusing to serve the directory: ${reason}`);
     return current;
@@ -195,7 +195,7 @@ export async function startLdapListener(
   current = {
     state: "listening",
     port,
-    detail: `Serving LDAPS on port ${port} using the organization CA.`,
+    detail: `Serving on port ${port} with your own CA.`,
   };
   logger.log(`[ldap] Serving the directory over LDAPS on port ${port}.`);
   return current;
@@ -209,7 +209,7 @@ export async function stopLdapListener(): Promise<void> {
   await new Promise<void>((resolve) => server.close(() => resolve()));
   current = {
     state: "disabled",
-    detail: "The listener was stopped.",
+    detail: "Stopped.",
   };
 }
 
@@ -218,6 +218,6 @@ export function resetLdapListenerStateForTest(): void {
   running = null;
   current = {
     state: "disabled",
-    detail: `Not started. Set ${LDAP_ENABLED_ENV}=1 to serve LDAP.`,
+    detail: `Off. Set ${LDAP_ENABLED_ENV}=1 to serve LDAP.`,
   };
 }

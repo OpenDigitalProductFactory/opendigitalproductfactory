@@ -79,7 +79,7 @@ export function DirectoryAuthoritiesPanel({
       <div>
         <h1 className="text-xl font-bold text-[var(--dpf-text)]">Directory</h1>
         <p className="mt-0.5 text-sm text-[var(--dpf-muted)]">
-          How DPF publishes identity as a directory, without making LDAP the canonical model.
+          How DPF shares who works here as a directory, without letting LDAP own the model.
         </p>
       </div>
 
@@ -87,9 +87,9 @@ export function DirectoryAuthoritiesPanel({
         <article className="rounded-2xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-5">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <h2 className="text-base font-semibold text-[var(--dpf-text)]">Projected directory layout</h2>
+              <h2 className="text-base font-semibold text-[var(--dpf-text)]">How the tree is laid out</h2>
               <p className="mt-1 text-sm text-[var(--dpf-muted)]">
-                Stable branches by principal type and by group. The richer authorization model stays internal.
+                Fixed branches by kind of user and by group. The fuller access rules stay inside DPF.
               </p>
             </div>
             <span className="rounded-full border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2 py-1 text-[10px] uppercase tracking-[0.14em] text-[var(--dpf-muted)]">
@@ -122,9 +122,9 @@ export function DirectoryAuthoritiesPanel({
           <ListenerCard listener={listener} />
 
           <div className="rounded-2xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-5">
-            <h2 className="text-base font-semibold text-[var(--dpf-text)]">Publication posture</h2>
+            <h2 className="text-base font-semibold text-[var(--dpf-text)]">What we publish</h2>
             <p className="mt-1 text-sm text-[var(--dpf-muted)]">
-              Consumers bind, search, and read. DPF stays the write authority.
+              Others bind, search, and read. Only DPF writes.
             </p>
             <div className="mt-4 grid grid-cols-2 gap-3">
               <div className="rounded-2xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-4">
@@ -155,11 +155,11 @@ export function DirectoryAuthoritiesPanel({
           </div>
 
           <div className="rounded-2xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-5">
-            <h2 className="text-base font-semibold text-[var(--dpf-text)]">Projection rules</h2>
+            <h2 className="text-base font-semibold text-[var(--dpf-text)]">House rules</h2>
             <div className="mt-3 space-y-2 text-sm text-[var(--dpf-muted)]">
-              <p>People, agents, services, and groups live in separate published branches.</p>
-              <p>Roles are projected as groups for LDAP compatibility.</p>
-              <p>AI coworkers stay distinguishable by branch and by explicit type attributes.</p>
+              <p>People, agents, services, and groups each get their own branch.</p>
+              <p>Roles show up as groups, so LDAP tools work.</p>
+              <p>You can still tell AI coworkers apart, by branch and by type.</p>
             </div>
           </div>
         </article>
