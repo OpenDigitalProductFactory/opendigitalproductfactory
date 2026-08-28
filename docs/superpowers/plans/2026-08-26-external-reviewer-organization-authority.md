@@ -4,8 +4,8 @@ status: active
 
 # External Reviewer Organization Authority Repair
 
-**Backlog item:** BI-F48D7059  
-**Epic:** EP-56AE0F69  
+**Backlog item:** BI-F48D7059
+**Epic:** EP-56AE0F69
 **Branch:** `fix/reviewer-org-authority-replay`
 
 ## Outcome

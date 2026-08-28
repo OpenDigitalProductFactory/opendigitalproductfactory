@@ -4,8 +4,8 @@ status: active
 
 # External Reviewer Organization Authority
 
-**Backlog item:** BI-F48D7059  
-**Epic:** EP-56AE0F69  
+**Backlog item:** BI-F48D7059
+**Epic:** EP-56AE0F69
 **Status:** Implementing approved direction plus same-TaskRun recovery extension
 
 ## Problem
