@@ -86,6 +86,8 @@ a room the caller believes is shaped. Its enum is mirrored from `room-shapes.ts`
 layer must not import from `work-management`) and `shape-key-parity.test.ts` is what keeps
 the mirror honest.
 
+Not every field belongs in that shared block. `sessionRef` was added to `adopt_worktree` **alone** ⟦runtime: `BI-0B292D84`, 2026-08-28⟧ because it answers a question only the adopt path had left unanswered: *whose* claim this is. `claim_backlog_item_for_work` had required a `sessionRef` all along and stored it as `WorkCapsule.executorRef`; `adopt_worktree` omitted it, so every worktree adopted through it stored `executorRef: null` and a claim guard could prove a live claim **covered** a branch but not that it belonged to the session asking. It is optional rather than required, unlike its sibling: making it required would break existing callers and refuse claims outright, and an unattributed claim is better than none.
+
 ## Fifth pack — first inline extraction
 
 [`feedback-pack`](../../apps/web/lib/mcp/packs/feedback-pack.ts) is the first pack whose
