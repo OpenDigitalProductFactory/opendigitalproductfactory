@@ -59,6 +59,10 @@ import {
   isVerboseGateConsole,
 } from "./lib/pregate-console.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
+import {
+  fallbackUnknownBlockedEvidence,
+  shouldFallbackUnknownBlockedStatus,
+} from "./lib/local-ci-unknown-blocked-status.mjs";
 
 const THIS_FILE = fileURLToPath(import.meta.url);
 const SCRIPT_DIR = dirname(THIS_FILE);
@@ -1848,9 +1852,19 @@ async function main() {
       message: error instanceof Error ? error.message : String(error),
     };
   }
-  if (evidenceResponse?.success !== true && outcome.status === "blocked_sandbox_drift" && evidenceResponse?.error === "invalid_status") {
-    process.stdout.write("gate-worktree: portal does not know blocked_sandbox_drift yet; recording as failed with sandbox-drift evidence\n");
-    evidenceArgs = { ...evidenceArgs, status: "failed", summary: `[SANDBOX_DRIFT — not product evidence] ${evidenceArgs.summary}` };
+  // BI-BC57E1AC: the client ships blocked_* statuses ahead of the deployed
+  // portal. A rejected unknown status must still leave an evidence row.
+  if (
+    shouldFallbackUnknownBlockedStatus({
+      outcomeStatus: outcome.status,
+      evidenceSuccess: evidenceResponse?.success === true,
+      evidenceError: evidenceResponse?.error,
+    })
+  ) {
+    process.stdout.write(
+      `gate-worktree: portal does not know ${outcome.status} yet; recording as failed with infrastructure evidence\n`,
+    );
+    evidenceArgs = fallbackUnknownBlockedEvidence(evidenceArgs, outcome.status);
     evidenceResponse = await mcpCall("record_local_integration_result", evidenceArgs, { mcpUrl: options.mcpUrl, bearerToken });
   }
 
