@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 
 import { prisma } from "@dpf/db";
 
+import { renderBuildDesignText } from "./render-build-design-text";
+
 import { readDocumentBlob } from "@/lib/documents/blob-storage";
 import { resolveRepositoryArtifact } from "./repository-artifact";
 import type { InitiativeArtifactRef, ResolvedInitiativeArtifact } from "./receipt-schema";
@@ -85,7 +87,15 @@ function initiativeTextFromBuildValue(value: unknown): string | null {
   if (typeof value === "string" && value.trim()) return value;
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const markdown = (value as Record<string, unknown>).initiativeScopeMarkdown;
-  return typeof markdown === "string" && markdown.trim() ? markdown : null;
+  if (typeof markdown === "string" && markdown.trim()) return markdown;
+  // BI-126441FA: a Build Studio design document IS the initiative's design, but
+  // it is stored structured and nothing writes initiativeScopeMarkdown — so
+  // every one of them resolved to null and was refused as "not an accepted
+  // canonical initiative design", blocking spec-approval, the canonical
+  // baseline and artifact author. Render it here rather than at save time so
+  // existing revisions resolve without rewriting stored artifacts and the
+  // pinned valueDigest keeps covering exactly what the author saved.
+  return renderBuildDesignText(value);
 }
 
 function externalLocatorMatchesSubject(locator: unknown, subject: InitiativeSubject): boolean {
