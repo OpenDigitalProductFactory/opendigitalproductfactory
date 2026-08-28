@@ -79,7 +79,7 @@ domain (static + lazy) is now extracted.**
 
 `work-capsules-pack` shares one `scopeProperties` block across `create_workroom` and
 `adopt_worktree`, so a field added there reaches both convene paths at once. That is how
-`workroomShape` landed ⟦runtime: `BI-8C54B216`, 2026-08-23⟧ — the room's collaboration
+`workroomShape` landed ⟦runtime: 2026-08-23⟧ — the room's collaboration
 shape is part of the scope it is convened with, validated against `WORK_CAPSULE_WORKROOM_SHAPES`
 and **rejected** rather than dropped when unknown, because a silently dropped shape convenes
 a room the caller believes is shaped. Its enum is mirrored from `room-shapes.ts` (the lower
