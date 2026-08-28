@@ -306,6 +306,35 @@ describe("agent loop terminal writer integration", () => {
     expect(vi.mocked(routeAndCall)).toHaveBeenCalledTimes(3);
   });
 
+  it("returns a missing-writer wait when routing fails after a successful read", async () => {
+    vi.mocked(routeAndCall)
+      .mockResolvedValueOnce(response("", [{ id: "read", name: "read_source_at_version", arguments: {} }]) as never)
+      .mockRejectedValueOnce(new Error("The only eligible local model is busy with another background job."));
+
+    const result = await runAgenticLoop(params);
+
+    expect(result.executedTools).toHaveLength(1);
+    expect(result.executedTools[0]).toMatchObject({
+      name: "read_source_at_version",
+      result: { success: true },
+    });
+    expect(result.failure).toEqual({
+      kind: "terminal-writer-missing",
+      message: expect.stringContaining("No receipt was created"),
+    });
+  });
+
+  it("preserves ordinary route-failure handling when no terminal policy applies", async () => {
+    vi.mocked(routeAndCall).mockRejectedValueOnce(
+      new Error("The only eligible local model is busy with another background job."),
+    );
+
+    const result = await runAgenticLoop({ ...params, terminalToolPolicy: undefined });
+
+    expect(result.failure?.kind).not.toBe("terminal-writer-missing");
+    expect(result.content).not.toContain("No receipt was created");
+  });
+
   it("executes, records, and carries forward server-bound arguments when the provider sends an empty object", async () => {
     vi.mocked(routeAndCall)
       .mockResolvedValueOnce(response("", [{ id: "read", name: "read_source_at_version", arguments: {} }]) as never)

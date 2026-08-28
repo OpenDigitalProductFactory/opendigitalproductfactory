@@ -1698,6 +1698,14 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       const failure = describeToolRouteFailureOutcome(msg, routeOptions.tools?.length ?? 0, routeErr);
       console.warn(`[agentic-loop] routeAndCall threw: ${msg}`);
       logTurnSummary("unknown", "unknown");
+      if (params.terminalToolPolicy) {
+        const exit = resolveTerminalTextExit(params.terminalToolPolicy, executedTools, 1);
+        if (exit.kind === "input-required") {
+          return completeResult(exit.message, null, {
+            failure: { kind: "terminal-writer-missing", message: exit.message },
+          });
+        }
+      }
       return {
         content: failure.message,
         providerId: "unknown",

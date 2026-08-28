@@ -116,6 +116,107 @@ async function persistedMetadata(tokenId: string, request = params) {
 }
 
 describe("terminal writer resumption", () => {
+  it("recovers the same completed review once when persisted evidence proves the route-exit defect", async () => {
+    const metadata = await persistedMetadata("PAT-WRITER-ROUTE-EXIT");
+    vi.clearAllMocks();
+    const updatedAt = new Date("2026-08-28T09:27:00.000Z");
+    db.findFirst.mockResolvedValue({
+      id: "task-internal",
+      taskRunId: "TR-MCP-ROUTE-EXIT",
+      threadId: "thread-external",
+      contextId: "thread-external",
+      status: "completed",
+      updatedAt,
+      progressPayload: {
+        summary: "The only eligible local model is busy with another background job.",
+        executedToolCount: 1,
+      },
+      a2aMetadata: metadata,
+    });
+    db.findEnvelope.mockResolvedValue(null);
+    db.findToolExecution.mockImplementation(async (query: { where?: { toolName?: unknown } }) => {
+      const toolName = query.where?.toolName;
+      if (toolName === "record_initiative_evidence") return null;
+      return {
+        id: "cmtcr47ow00ep01t9m6psmdgu",
+        toolName: "read_source_at_version",
+        success: true,
+      };
+    });
+    db.updateMany.mockResolvedValue({ count: 1 });
+    db.update.mockResolvedValue({});
+    db.findUnique.mockResolvedValue({ status: "working" });
+    autonomous.resolveAgent.mockResolvedValue({
+      agentId: "build-specialist",
+      displayName: "Build Lead",
+      systemPrompt: "Review the immutable artifact.",
+      sensitivity: "internal",
+    });
+    autonomous.resolveTools.mockResolvedValue({ tools: [], toolsForProvider: [], deferredTools: [] });
+    autonomous.execute.mockResolvedValue({
+      content: "Receipt recorded.",
+      executedTools: [{ name: "record_initiative_evidence", result: { success: true } }],
+    });
+
+    const outcome = await submit("PAT-WRITER-ROUTE-EXIT");
+
+    expect(db.updateMany).toHaveBeenCalledWith({
+      where: { taskRunId: "TR-MCP-ROUTE-EXIT", status: "completed", updatedAt },
+      data: {
+        status: "input-required",
+        completedAt: null,
+        progressPayload: expect.objectContaining({
+          terminalWriterWait: expect.objectContaining({ attempt: 2 }),
+          recoveredFromCompletedRouteExit: true,
+          resumeReservedAt: expect.any(String),
+        }),
+      },
+    });
+    expect(autonomous.execute).toHaveBeenCalledWith(expect.objectContaining({
+      taskRunId: "TR-MCP-ROUTE-EXIT",
+      threadId: "thread-external",
+    }));
+    expect(autonomous.create).not.toHaveBeenCalled();
+    expect(outcome).toMatchObject({
+      kind: "result",
+      result: {
+        taskRunId: "TR-MCP-ROUTE-EXIT",
+        status: "completed",
+        idempotentReplay: true,
+        resumedFromTerminalWriterWait: true,
+      },
+    });
+  });
+
+  it("does not reopen a completed review without persisted successful reader evidence", async () => {
+    const metadata = await persistedMetadata("PAT-WRITER-NO-EVIDENCE");
+    vi.clearAllMocks();
+    db.findFirst.mockResolvedValue({
+      id: "task-internal",
+      taskRunId: "TR-MCP-NO-EVIDENCE",
+      threadId: "thread-external",
+      contextId: "thread-external",
+      status: "completed",
+      updatedAt: new Date("2026-08-28T09:28:00.000Z"),
+      progressPayload: { summary: "Done.", executedToolCount: 0 },
+      a2aMetadata: metadata,
+    });
+    db.findToolExecution.mockResolvedValue(null);
+
+    const outcome = await submit("PAT-WRITER-NO-EVIDENCE");
+
+    expect(db.updateMany).not.toHaveBeenCalled();
+    expect(autonomous.execute).not.toHaveBeenCalled();
+    expect(outcome).toMatchObject({
+      kind: "result",
+      result: {
+        taskRunId: "TR-MCP-NO-EVIDENCE",
+        status: "completed",
+        idempotentReplay: true,
+      },
+    });
+  });
+
   it("resumes the same missing-writer TaskRun exactly once on an identical replay", async () => {
     const metadata = await persistedMetadata("PAT-WRITER-RESUME");
     vi.clearAllMocks();
