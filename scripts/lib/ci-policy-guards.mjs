@@ -45,6 +45,12 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/check-capability-compose-profiles.test.mjs"),
       node("scripts/check-capability-compose-profiles.mjs"),
     ]),
+    // BI-40230C6F: the gate must stop waiting on an executor that is gone, and must
+    // NOT read an unreachable control plane as proof of death. Registered here rather
+    // than added to ci-policy-test-inventory-allowlist.txt, where it would never run.
+    guard("gate-executor-liveness", "Gate Executor Liveness", [
+      node("--test", "scripts/gate-worktree-executor-liveness.test.mjs"),
+    ]),
     guard("host-port-range-guard", "Host Port Range Guard", [
       node("--test", "scripts/check-host-port-range.test.mjs"),
     ]),
