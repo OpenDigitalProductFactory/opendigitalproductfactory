@@ -11,6 +11,14 @@ title: Resumable external TaskRun capacity implementation plan
 **Design:** `docs/superpowers/specs/2026-08-26-resumable-external-taskrun-capacity-design.md`  
 **Decision:** `DI-A76E92CF4EEE`
 
+## Backlog coverage
+
+- Decision: atomic
+- Parent: `BI-42CE2CE7`
+- Receipt: `cmtcvd7p0014f01n5a8q4lp4b`
+- Rationale: The wait projection, exact replay, CAS reservation, capacity-event recovery, terminal honesty, and immutable store identity form one idempotency contract; no phase is independently safe to ship.
+- Dependencies: none
+
 ## 1. Delivery shape
 
 This plan is one atomic deliverable. The durable wait projection, same-row
