@@ -93,6 +93,13 @@ Two labels are worth knowing:
   reads the enabled flag. The control is withheld rather than shown as a button
   that does nothing.
 
+On a coworker row, the **proactivity** level explains the cadence: a coworker set
+to assertive self-drives daily, balanced weekly, and quiet produces no scheduled
+work at all. The level is shown next to the coworker, with the cadence it implies
+for that coworker's own recurring task. A level marked *inferred* was derived by
+the platform from an existing task rather than chosen by you. Tasks that are not
+the coworker's own self-task say so, because proactivity does not set their cadence.
+
 **What is going to run** projects the live cadences over the next day, week, or
 month. Jobs that fire more often than the chart can usefully plot are listed
 below it instead. Click any name to filter the register to it.

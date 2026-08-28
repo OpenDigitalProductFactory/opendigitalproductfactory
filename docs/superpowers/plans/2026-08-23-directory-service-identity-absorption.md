@@ -158,6 +158,42 @@ end-to-end against the running portal; an install with an upstream still works w
 tested precedence; no auth check weakened anywhere; seeded personas at real
 privilege levels.
 
+### Delivered — Phases 2, 3 and 4
+
+**Phase 2 (`BI-DCE49BA9`)** — `apps/web/lib/directory/`. `dn.ts` derives the base
+DN from `Organization` (website host, else the slug under a reserved `internal`
+domain that cannot collide with a real one) and escapes RDNs per RFC 4514.
+`schema.ts` holds the object classes and the publication **allowlist**, with each
+withheld field carrying its reason. `projection.ts` builds the read-only,
+fingerprinted tree. The admin route no longer computes a tree or carries a
+hardcoded `dc=dpf,dc=internal`; it renders exactly what a client would see.
+
+**Phase 3 (`BI-F7317D65`)** — `apps/web/lib/directory/ldap/`. BER codec, filter
+layer, protocol layer, TLS loader and listener. Written against RFC 4511 because
+no maintained Node LDAP *server* exists. Read-only by construction: writes are
+refused with `unwillingToPerform`, not merely unimplemented.
+
+**Phase 4 (`BI-CEACBD0D`)** — `apps/web/lib/identity/authentication.ts`.
+`govern/auth.ts` now consults the spine, so an inactive `Principal` cannot log in
+even when its `User` row still says active. Deactivation is one transaction
+across principal and credentials. Local-vs-upstream precedence resolves to the
+install and **surfaces** an overlap rather than resolving it silently.
+
+**Verification.** 67 directory tests, 11 authentication tests, 142 across the
+affected surface, and `tsc` clean. Six of those exercise a **real `ldapsearch`
+client** against the running listener — bind over TLS, all three identity shapes
+returned, group membership resolved by filter, wrong password rejected,
+anonymous refused, and withheld attributes absent when requested by name.
+
+Two findings worth carrying: the functional test initially deadlocked because
+`spawnSync` blocks the event loop the listener runs on, and `tsc` caught two type
+errors (Node's generic `Buffer`, and a certificate CN that may be an array) that
+67 passing tests did not.
+
+**Still open after this build:** the `User` schema demotion (design Q2), SCIM and
+OIDC, multi-organization base DNs (Q3), and running
+`findOwnerlessServiceAccounts()` on a cadence.
+
 ## Phase 5 — Retire the superseded stance (`BI-5167932D`)
 
 Audit all 111 tasks in the 2026-04-22 plan and record a disposition for each:

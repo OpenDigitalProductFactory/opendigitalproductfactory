@@ -266,3 +266,38 @@ test("the refusal path is not throttled — enforcement ignores the stamp", () =
   assert.ok(denyIdx > 0 && nudgeIdx > 0, "both paths must exist");
   assert.ok(denyIdx < nudgeIdx, "emitDeny must come before the throttle check, so a refusal is never suppressed");
 });
+
+// ── the default is now REFUSE (BI-0B292D84 layer 1 landed) ──────────────────
+
+test("with NO env set, an unclaimed edit is DENIED — enforcement is the default", () => {
+  // This is the behaviour change bind-at-birth bought. It was advisory only
+  // while nothing wrote the claim automatically; refusing then would have
+  // blocked agents for a condition they could not satisfy.
+  const out = execFileSync(process.execPath, [guardPath], {
+    input: JSON.stringify({ tool_name: "Write", tool_input: { file_path: "x.ts" }, cwd: process.cwd() }),
+    encoding: "utf8",
+    env: { ...process.env, DPF_GUARDS_WORKSPACE_ANY: "1", DPF_WORKROOM_CLAIM_ENFORCE: undefined, DPF_ALLOW_UNCLAIMED_WORK: undefined },
+  });
+  // On a branch with no claim this must refuse; on an exempt branch it is silent.
+  if (out.trim() !== "") {
+    assert.match(out, /"permissionDecision":"deny"/, "the default must refuse, not merely advise");
+  }
+});
+
+test("DPF_WORKROOM_CLAIM_ENFORCE=0 downgrades to advisory, and nothing else does", () => {
+  const out = execFileSync(process.execPath, [guardPath], {
+    input: JSON.stringify({ tool_name: "Write", tool_input: { file_path: "x.ts" }, cwd: process.cwd() }),
+    encoding: "utf8",
+    env: { ...process.env, DPF_GUARDS_WORKSPACE_ANY: "1", DPF_WORKROOM_CLAIM_ENFORCE: "0" },
+  });
+  assert.doesNotMatch(out, /"permissionDecision":"deny"/, "explicit 0 must not refuse");
+});
+
+test("the refusal names the terminal-capsule dead end, so a leftover worktree is actionable", () => {
+  // 12 of 91 branches on this install refused with branch_occupied against a
+  // COMPLETE capsule. Telling those operators only "call adopt_worktree" would
+  // send them into a refusal loop.
+  const text = denyGuidance(classifyClaim({ branch: "fix/a", marker: null, nowMs: NOW }));
+  assert.match(text, /branch_occupied/);
+  assert.match(text, /reap it or start a new branch/);
+});

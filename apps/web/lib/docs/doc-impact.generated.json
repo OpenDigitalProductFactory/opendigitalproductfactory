@@ -1447,6 +1447,9 @@
     "packages/dpf-skill-pack/hooks/tool-economy-precheck.mjs": [
       "docs/architecture/context-engineering-standards.md"
     ],
+    "packages/dpf-skill-pack/hooks/workroom-claim-guard.mjs": [
+      "docs/architecture/delivery-surfaces-runbook.md"
+    ],
     "packages/dpf-skill-pack/hooks/worktree-create.mjs": [
       "docs/architecture/delivery-surfaces-runbook.md"
     ],
@@ -2394,6 +2397,7 @@
       "apps/web/lib/build/unified-wip.ts",
       "apps/web/lib/build/wip-cap.ts",
       "apps/web/lib/operate/db-continuity.ts",
+      "packages/dpf-skill-pack/hooks/workroom-claim-guard.mjs",
       "packages/dpf-skill-pack/hooks/worktree-create.mjs",
       "scripts/lib/compose-safety.mjs",
       "scripts/lib/junction-safe-worktree-remove.mjs",

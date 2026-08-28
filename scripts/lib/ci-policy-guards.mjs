@@ -45,6 +45,12 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/check-capability-compose-profiles.test.mjs"),
       node("scripts/check-capability-compose-profiles.mjs"),
     ]),
+    // BI-40230C6F: the gate must stop waiting on an executor that is gone, and must
+    // NOT read an unreachable control plane as proof of death. Registered here rather
+    // than added to ci-policy-test-inventory-allowlist.txt, where it would never run.
+    guard("gate-executor-liveness", "Gate Executor Liveness", [
+      node("--test", "scripts/gate-worktree-executor-liveness.test.mjs"),
+    ]),
     guard("host-port-range-guard", "Host Port Range Guard", [
       node("--test", "scripts/check-host-port-range.test.mjs"),
     ]),
@@ -420,6 +426,11 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // ./lib import throws ERR_MODULE_NOT_FOUND and breaks the image build,
         // and with it the release / self-upgrade chain for every install.
         "scripts/set-hooks-path.no-static-imports.test.mjs",
+        // BI-0B292D84 layer 1+4: a worktree is bound to a Workroom when it is
+        // created, and the branches that predate that are reconciled. Binding
+        // coverage was stuck at 65% for as long as the rule relied on memory.
+        "scripts/lib/workroom-bind.test.mjs",
+        "scripts/reconcile-workroom-bindings.test.mjs",
         "scripts/lib/agent-identity.test.mjs",
         "tests/release/local-ci-gate-contract.test.mjs",
         "tests/release/pregate-node-gate-contract.test.mjs",
