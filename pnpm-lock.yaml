@@ -86,7 +86,9 @@ overrides:
 packageExtensionsChecksum: sha256-pFEExG4o57joHucsVi/dgGpp9BfdxYD7y4blLQUpCqI=
 
 patchedDependencies:
-  image-size@1.2.1: 4bb1072b86731b355f3817b3188b127fbf12c741940e2a14f664b4789a8bfac9
+  image-size@1.2.1:
+    hash: 4bb1072b86731b355f3817b3188b127fbf12c741940e2a14f664b4789a8bfac9
+    path: patches/image-size@1.2.1.patch
 
 importers:
 
