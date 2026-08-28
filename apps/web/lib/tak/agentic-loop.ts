@@ -108,6 +108,7 @@ export const HARD_COMPLETION_CLAIM_PATTERN =
 
 // The dead-end classifier and its copy live in ./inference-dead-ends (BI-A89E4827).
 import { describeToolRouteFailure, describeToolRouteFailureOutcome, type InferenceDeadEndOutcome } from "./inference-dead-ends";
+import { usesGovernedReviewTools } from "./governed-review-tools";
 export { describeToolRouteFailure };
 
 // Narration patterns: agent describes code or announces intent instead of calling tools.
@@ -1558,10 +1559,14 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       t.name === "reviewBuildPlan" || (t.name === "saveBuildEvidence" &&
         (t.args as Record<string, unknown> | undefined)?.field === "buildPlan")
     );
+    // BI-3907AF35: a governed initiative review is review-phase work too. It
+    // reads an artifact at an immutable version and writes a structured
+    // receipt; on the 120s conversation baseline the reviewer ran out of budget
+    // after four reads and never reached its writer (FB-EB292B9F).
     const hasReviewTools = executedTools.some(t =>
       t.name === "run_ux_test" || t.name === "evaluate_page" ||
       t.name === "check_deployment_windows"
-    );
+    ) || usesGovernedReviewTools(executedTools);
     const hasShipTools = executedTools.some(t =>
       t.name === "deploy_feature" || t.name === "execute_promotion" ||
       t.name === "register_digital_product_from_build" || t.name === "schedule_promotion"
