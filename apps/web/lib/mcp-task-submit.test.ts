@@ -125,6 +125,75 @@ describe("submitRemoteCoworkerTask idempotency", () => {
     }));
   });
 
+  it("keeps a review input-required when successful reads end without its required writer", async () => {
+    autonomous.execute.mockResolvedValue({
+      content: "The independent review stopped without recording a governed assessment. No receipt was created.",
+      executedTools: Array.from({ length: 5 }, (_, index) => ({
+        name: "read_source_at_version",
+        args: { startLine: index * 30 + 1 },
+        result: { success: true },
+      })),
+      failure: {
+        kind: "terminal-writer-missing",
+        message: "The independent review stopped without recording a governed assessment. No receipt was created.",
+      },
+    });
+
+    const outcome = await submit("PAT-WRITER-WAIT", {
+      ...immutableParams,
+      riskClass: "bounded-write",
+      authorityScope: [
+        "backlog-item:BI-F0715C9C",
+        "tool:read_source_at_version",
+        "tool:record_initiative_evidence",
+      ],
+      initiativeReviewBinding: {
+        writerToolName: "record_initiative_evidence",
+        itemId: "BI-F0715C9C",
+        gate: "research",
+        artifactRef: {
+          kind: "repo-blob-at-commit",
+          repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+          commitSha: "d47536a552c7d588b2f963e478ae99369f720783",
+          path: "docs/superpowers/specs/design.md",
+          providerBlobId: "fb57e087c19ce0a3c78b4d591bb5da63027c2b3b",
+        },
+      },
+    });
+
+    expect(db.update).toHaveBeenCalledWith({
+      where: { taskRunId: expect.stringMatching(/^TR-MCP-/) },
+      data: {
+        status: "input-required",
+        completedAt: null,
+        progressPayload: {
+          summary: expect.stringContaining("No receipt was created"),
+          riskClass: "bounded-write",
+          executedToolCount: 5,
+          terminalWriterWait: {
+            schemaVersion: 1,
+            kind: "missing-terminal-writer",
+            writerToolName: "record_initiative_evidence",
+            resumeMode: "same-taskrun",
+            attempt: 1,
+            observedAt: expect.any(String),
+          },
+        },
+      },
+    });
+    expect(outcome).toMatchObject({
+      kind: "result",
+      result: {
+        status: "input-required",
+        requiresApproval: false,
+        resumable: true,
+        waitReason: "missing-terminal-writer",
+        executedToolCount: 5,
+        isError: false,
+      },
+    });
+  });
+
   it("consumes an approved exact-call envelope on same-packet replay", async () => {
     const params = {
       agentId: "AGT-WS-BUILD",

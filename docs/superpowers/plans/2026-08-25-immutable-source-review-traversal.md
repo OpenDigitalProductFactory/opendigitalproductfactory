@@ -111,3 +111,14 @@ This phase was added after the first live deployment produced exact normalized e
 6. Add a generic metrics-only audit opt-in and test that it retains schema-redacted normalized parameters while suppressing result content. Enable it only for `read_source_at_version`.
 7. Run the expanded focused suite, original BI-SIG regression suite, typecheck, generated-artifact guards, preflight, exact-tree CI, semantic review, and protected delivery.
 8. After deployment, issue exactly one materially new BI-42 review. Accept completion only from a successful persisted reader execution with exact server-bound parameters plus the independently selected governed writer receipt.
+
+## Phase 8 — Preserve a missing terminal writer as resumable work
+
+This phase was added after the repaired live reader completed five exact immutable pages but the provider returned prose twice without calling `record_initiative_evidence`; the TaskRun incorrectly persisted `completed` with no proposal, execution, or receipt.
+
+1. Use TaskRun `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-992A316B45A0` as the red evidence identity: five successful bound reads, zero writer calls, zero proposals, and no receipt.
+2. Change the terminal text policy's second prose exit to a typed `missing-terminal-writer` input-required disposition. Do not synthesize a judgment or treat prose as a writer attempt.
+3. Persist a versioned `terminalWriterWait` projection on the same TaskRun, clear `completedAt`, and keep approval requirements distinct from the system wait.
+4. Permit one identical request replay to reserve the exact waiting TaskRun through `status + updatedAt` compare-and-set and rerun with the same thread, token authority, request digest, tool grants, and immutable artifact binding.
+5. If that bounded continuation also omits the writer, retain `input-required` and refuse a third execution attempt. A real writer proposal still follows the existing separately approved envelope path.
+6. Prove the focused policy/loop/submission tests, impacted loop tests, typecheck, size/source guards, exact-tree CI, protected PR, canonical release, and live same-TaskRun behavior before issuing a fresh BI-42 review identity.

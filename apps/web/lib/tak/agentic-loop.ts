@@ -1763,8 +1763,8 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           messages = [...messages, { role: "assistant", content: result.content }, { role: "user", content: exit.message }];
           continue;
         }
-        if (exit.kind === "fail-closed") {
-          return completeResult(exit.message, result);
+        if (exit.kind === "input-required") {
+          return completeResult(exit.message, result, { failure: { kind: "terminal-writer-missing", message: exit.message } });
         }
       }
 
