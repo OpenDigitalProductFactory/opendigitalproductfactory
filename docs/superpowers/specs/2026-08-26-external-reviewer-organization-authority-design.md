@@ -74,18 +74,26 @@ approved, but the TaskRun remained `working`; the platform stale-row reaper late
 projected it to `stalled`. By then the envelope had expired, so neither generic
 TaskRun retry nor execution under the old approval was lawful.
 
+BI-F48 then exposed the same authority state after ordinary identical replay had
+already parked the TaskRun at `input-required`: the approved envelope was expired,
+so normal approved-writer resume correctly refused it, but recovery considered
+only `working` and `stalled`. That state is recoverable under the same exact
+binding and liveness constraints; it must not consume another inference identity.
+
 An identical request-key and request-digest replay may recover this state only
 when all of the following are true:
 
-1. The TaskRun is `working` or `stalled`, its persisted request digest matches,
-   its last heartbeat is older than the canonical 15-minute liveness threshold,
-   and a compare-and-swap still sees the same status and `updatedAt`.
+1. The TaskRun is `working`, `stalled`, or `input-required`, its persisted request
+   digest matches, its last heartbeat is older than the canonical 15-minute
+   liveness threshold, and a compare-and-swap still sees the same status and
+   `updatedAt`.
 2. The latest writer envelope is `approved`, bound to the same human, coworker,
    TaskRun, writer tool, input fingerprint, and decision-version fingerprint.
 3. The original failed proposal is present with its exact persisted writer
    parameters, and no successful writer execution or receipt exists.
-4. If the envelope remains unexpired, the TaskRun is atomically returned to
-   `input-required` and the already-approved writer resumes once.
+4. If the envelope remains unexpired, only `working` or `stalled` recovery may
+   atomically return the TaskRun to `input-required`; normal input-required replay
+   remains the sole owner of unexpired approved-writer resume.
 5. If the envelope expired, the transaction cancels it, creates a new proposed
    envelope with the identical stored binding, clones the original proposal with
    only the new envelope identity, and parks the same TaskRun at
@@ -123,9 +131,11 @@ Tests must prove:
   authenticated-organization mismatch fail closed;
 - caller/model organization fields cannot widen authority; and
 - a platform-neutral initiative retains platform authority;
-- an expired approved envelope is replaced atomically on the same stalled
-  TaskRun with identical binding and writer arguments;
+- an expired approved envelope is replaced atomically on the same stale
+  `stalled` or `input-required` TaskRun with identical binding and writer
+  arguments;
 - an unexpired stale approval resumes once after a CAS reservation;
+- recovery does not replace an unexpired approval on an `input-required` row;
 - fresh activity, changed digest, changed authority binding, or an existing
   writer/receipt prevents recovery; and
 - ordinary tasks and immutable reader authority are unchanged.

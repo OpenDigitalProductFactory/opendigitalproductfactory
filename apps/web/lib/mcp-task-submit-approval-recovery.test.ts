@@ -61,7 +61,7 @@ beforeEach(() => {
 });
 
 describe("submitRemoteCoworkerTask approval recovery", () => {
-  it("recovers the same stalled review TaskRun into fresh exact approval without rerunning inference", async () => {
+  it("recovers the same stale input-required review TaskRun into fresh exact approval without rerunning inference", async () => {
     const params = {
       agentId: "AGT-WS-PORTFOLIO",
       routeContext: "/build",
@@ -100,7 +100,7 @@ describe("submitRemoteCoworkerTask approval recovery", () => {
     };
     const run = {
       id: "task-internal", taskRunId: approvalBinding.taskRunId, userId: "user-1",
-      threadId: "thread-bi47", contextId: "thread-bi47", status: "stalled",
+      threadId: "thread-bi47", contextId: "thread-bi47", status: "input-required",
       progressPayload: null,
       a2aMetadata: { idempotencyKey: params.idempotencyKey, apiTokenId: "PAT-BI47", requestDigest },
       lastHeartbeatAt: new Date(Date.now() - 20 * 60 * 1000),
@@ -109,7 +109,7 @@ describe("submitRemoteCoworkerTask approval recovery", () => {
     };
     db.findFirst.mockResolvedValue(run);
     db.findUnique.mockResolvedValue(run);
-    db.findEnvelope.mockResolvedValue({
+    const expiredEnvelope = {
       id: "ENV-EXPIRED", coworkerAgentId: params.agentId, delegatingUserId: "user-1",
       threadId: "thread-bi47", chatMessageId: null, manifestActionId: approvalBinding.toolName,
       argsJson: { approvalBinding }, rationale: "Approval is required.", status: "approved",
@@ -117,7 +117,10 @@ describe("submitRemoteCoworkerTask approval recovery", () => {
       authorityDecisionId: "AUTH-BI47", inputFingerprint: approvalBinding.inputFingerprint,
       approvalBindingFingerprint: fingerprintCoworkerApprovalBinding(approvalBinding),
       expiresAt: new Date(Date.now() - 60_000),
-    });
+    };
+    db.findEnvelope
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(expiredEnvelope);
     db.findToolExecution.mockResolvedValueOnce(null).mockResolvedValueOnce({
       id: "tool-proposal-old", threadId: "thread-bi47", agentId: params.agentId,
       userId: "user-1", toolName: approvalBinding.toolName,

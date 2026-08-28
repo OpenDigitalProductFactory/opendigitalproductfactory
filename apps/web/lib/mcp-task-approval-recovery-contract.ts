@@ -11,6 +11,21 @@ export type RecoverableTaskRun = {
   a2aMetadata: unknown;
 };
 
+const APPROVAL_RECOVERY_STALE_TASK_MS = 15 * 60 * 1000;
+
+export function isStaleApprovalRecoveryRun(
+  run: Pick<RecoverableTaskRun, "status" | "lastHeartbeatAt">,
+  now: Date = new Date(),
+): boolean {
+  if (
+    run.status !== "working"
+    && run.status !== "stalled"
+    && run.status !== "input-required"
+  ) return false;
+  if (!run.lastHeartbeatAt) return false;
+  return run.lastHeartbeatAt.getTime() <= now.getTime() - APPROVAL_RECOVERY_STALE_TASK_MS;
+}
+
 export type RecoverableEnvelope = {
   id: string;
   coworkerAgentId: string;

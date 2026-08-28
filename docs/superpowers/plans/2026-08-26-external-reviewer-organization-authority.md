@@ -65,9 +65,11 @@ absence of a successful writer or receipt.
 
 For an unexpired envelope, compare-and-swap the same `working` or `stalled` row
 to `input-required` and continue through the existing approved-writer resume.
-For an expired envelope, atomically cancel it, create a new proposed envelope
-with the same server-stored binding, clone the failed proposal with its original
-writer parameters and the replacement envelope id, and park the same TaskRun for
+An `input-required` row remains on that normal resume path and recovery never
+replaces its unexpired approval. For an expired envelope, atomically cancel it,
+create a new proposed envelope with the same server-stored binding, clone the
+failed proposal with its original writer parameters and the replacement envelope
+id, and park the same stale `working`, `stalled`, or `input-required` TaskRun for
 fresh exact approval. Preserve the recovery audit through final execution.
 
 ## Test-first implementation
@@ -79,7 +81,8 @@ fresh exact approval. Preserve the recovery audit through final execution.
 5. Exercise the approval/replay integration path and assert the initial `require_approval` and resumed `allow` decisions use the same organization and execute the writer once.
 6. Run focused tests, typecheck, policy guards, blast-radius verification, independent semantic review, and the exact-tree local merge gate before publication.
 7. Add failing recovery tests for the exact stalled/expired BI-47 fixture, the
-   unexpired CAS path, fresh-heartbeat refusal, changed-digest refusal, and
+   input-required/expired BI-F48 fixture, the unexpired CAS path, unexpired
+   input-required refusal, fresh-heartbeat refusal, changed-digest refusal, and
    existing writer/receipt refusal.
 8. Integrate the recovery transaction into identical external task replay and
    prove no agentic inference, TaskRun creation, or direct writer execution occurs

@@ -10,14 +10,13 @@ import {
   type ApprovalRecoveryDb,
   type RecoverableProposal,
   type RecoverableTaskRun,
+  isStaleApprovalRecoveryRun,
   objectRecord,
   reboundProposalResult,
   recoveryProgress,
   storedBinding,
   storedRequestDigest,
 } from "@/lib/mcp-task-approval-recovery-contract";
-
-const STALE_TASK_MS = 15 * 60 * 1000;
 
 export type StaleApprovalRecovery =
   | { kind: "approved-resume-ready"; envelopeId: string }
@@ -29,12 +28,6 @@ export type StaleApprovalRecovery =
     };
 
 class ApprovalRecoveryRace extends Error {}
-
-function isStale(run: RecoverableTaskRun, now: Date): boolean {
-  if (run.status !== "working" && run.status !== "stalled") return false;
-  if (!run.lastHeartbeatAt) return false;
-  return run.lastHeartbeatAt.getTime() <= now.getTime() - STALE_TASK_MS;
-}
 
 export async function recoverStaleApprovedRemoteTask(
   input: {
@@ -68,7 +61,7 @@ export async function recoverStaleApprovedRemoteTask(
         !run
         || run.updatedAt.getTime() !== input.expectedUpdatedAt.getTime()
         || storedRequestDigest(run) !== input.requestDigest
-        || !isStale(run, now)
+        || !isStaleApprovalRecoveryRun(run, now)
       ) return null;
 
       const envelope = await tx.coworkerActionEnvelope.findFirst({
@@ -169,6 +162,9 @@ export async function recoverStaleApprovedRemoteTask(
 
       const observedAt = now.toISOString();
       if (envelope.expiresAt.getTime() > now.getTime()) {
+        // A normal input-required replay already owns the unexpired approval
+        // path. Recovery may only replace an expired approval in this state.
+        if (run.status === "input-required") return null;
         const parked = await tx.taskRun.updateMany({
           where: {
             taskRunId: input.taskRunId,

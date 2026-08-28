@@ -18,6 +18,7 @@ import {
 } from "./mcp-task-capacity-contract";
 import { executeRemoteTaskAttempt } from "./mcp-task-execution";
 import { recoverStaleApprovedRemoteTask } from "./mcp-task-approval-recovery";
+import { isStaleApprovalRecoveryRun } from "./mcp-task-approval-recovery-contract";
 import {
   parseInitiativeReviewBinding,
   requiredToolNames,
@@ -564,7 +565,12 @@ export async function submitRemoteCoworkerTask(input: {
     if (
       storedRequestDigest(existing) === requestDigest
       && terminalToolPolicy
-      && (existing.status === "working" || existing.status === "stalled")
+      && (
+        existing.status === "working"
+        || existing.status === "stalled"
+        || existing.status === "input-required"
+      )
+      && isStaleApprovalRecoveryRun(existing)
     ) {
       const recovery = await recoverStaleApprovedRemoteTask({
         taskRunId: existing.taskRunId,

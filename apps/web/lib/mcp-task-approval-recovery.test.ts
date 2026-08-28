@@ -23,7 +23,7 @@ const binding: CoworkerApprovalBinding = {
   decisionVersionFingerprint: "54c71d9f3f5a71a93660a11ef6888bbb66540b2815e14a95f0f1f59e06a94e49",
 };
 
-function staleRun(status: "working" | "stalled" = "stalled") {
+function staleRun(status: "working" | "stalled" | "input-required" = "stalled") {
   return {
     id: "task-internal",
     taskRunId: TASK_RUN_ID,
@@ -197,6 +197,45 @@ describe("same-TaskRun approval recovery", () => {
     });
   });
 
+  it("supersedes an expired approval on the same stale input-required TaskRun", async () => {
+    const { db, tx } = fakeDb(staleRun("input-required"));
+
+    const result = await recover(db);
+
+    expect(result).toEqual({
+      kind: "fresh-approval-required",
+      sourceEnvelopeId: "cmtcyo4h900m001pa2ma0itjn",
+      replacementEnvelopeId: "ENV-REPLACEMENT",
+      replacementProposalExecutionId: "tool-proposal-new",
+    });
+    expect(tx.taskRun.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ status: "input-required" }),
+      data: expect.objectContaining({
+        status: "input-required",
+        completedAt: null,
+        progressPayload: expect.objectContaining({
+          approvalRecovery: expect.objectContaining({
+            sourceStatus: "input-required",
+            inferenceRerun: false,
+            freshApprovalRequired: true,
+          }),
+        }),
+      }),
+    }));
+  });
+
+  it("refuses to replace an unexpired approval on an input-required TaskRun", async () => {
+    const envelope = { ...expiredEnvelope(), expiresAt: new Date("2026-08-28T13:50:00.000Z") };
+    const { db, tx } = fakeDb(staleRun("input-required"), envelope);
+
+    await expect(recover(db)).resolves.toBeNull();
+
+    expect(tx.coworkerActionEnvelope.updateMany).not.toHaveBeenCalled();
+    expect(tx.coworkerActionEnvelope.create).not.toHaveBeenCalled();
+    expect(tx.toolExecution.create).not.toHaveBeenCalled();
+    expect(tx.taskRun.updateMany).not.toHaveBeenCalled();
+  });
+
   it("parks an unexpired approved envelope for immediate same-TaskRun resume without replacing it", async () => {
     const envelope = { ...expiredEnvelope(), expiresAt: new Date("2026-08-28T13:50:00.000Z") };
     const { db, tx } = fakeDb(staleRun("working"), envelope);
@@ -216,13 +255,33 @@ describe("same-TaskRun approval recovery", () => {
     }));
   });
 
-  it("refuses recovery while the TaskRun heartbeat is fresh", async () => {
-    const run = { ...staleRun("working"), lastHeartbeatAt: new Date("2026-08-28T13:44:30.000Z") };
+  it("refuses input-required recovery while the TaskRun heartbeat is fresh", async () => {
+    const run = { ...staleRun("input-required"), lastHeartbeatAt: new Date("2026-08-28T13:44:30.000Z") };
     const { db, tx } = fakeDb(run);
 
     await expect(recover(db)).resolves.toBeNull();
 
     expect(tx.coworkerActionEnvelope.findFirst).not.toHaveBeenCalled();
+    expect(tx.taskRun.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("refuses input-required recovery when the stored approval binding conflicts", async () => {
+    const conflicting = {
+      ...binding,
+      taskRunId: "TR-MCP-DIFFERENT",
+    };
+    const envelope = {
+      ...expiredEnvelope(),
+      argsJson: { approvalBinding: conflicting },
+      approvalBindingFingerprint: fingerprintCoworkerApprovalBinding(conflicting),
+    };
+    const { db, tx } = fakeDb(staleRun("input-required"), envelope);
+
+    await expect(recover(db)).resolves.toBeNull();
+
+    expect(tx.coworkerActionEnvelope.updateMany).not.toHaveBeenCalled();
+    expect(tx.coworkerActionEnvelope.create).not.toHaveBeenCalled();
+    expect(tx.toolExecution.create).not.toHaveBeenCalled();
     expect(tx.taskRun.updateMany).not.toHaveBeenCalled();
   });
 
