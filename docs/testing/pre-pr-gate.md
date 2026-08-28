@@ -240,7 +240,7 @@ Run it standalone with `pnpm run pregate:preflight`
 still enforces every guard. Routing probes (`--dry-run`) and evidence replays
 (`--finalize-evidence`) skip the preflight automatically.
 
-**Documentation evidence lane (BI-B2E9FC9D).** After preflight and before any
+**Documentation evidence lane.** After preflight and before any
 `local-integration-ci` lease claim, the Node gate checks whether the committed
 candidate is an exact documentation-only tree. This lane is deliberately
 fail-closed: `HEAD` must equal the requested SHA, the worktree must be clean,
@@ -308,7 +308,22 @@ admitted lease. A later equivalent caller receives `subscribed` and observes
 the canonical execution without renewing, releasing, recording evidence, or
 starting the command. Once the owner links a fresh terminal pass or fail
 receipt, later callers receive `reused` and stop without recomputation.
-Missing, mismatched, inconclusive, or expired evidence remains fail-closed.
+Mismatched, inconclusive, or expired evidence remains fail-closed: evidence
+exists and does not fit, which is a real conclusion.
+
+**A run that DIED is not a verdict (BI-C59AC8AF).** A terminal lease carrying no
+evidence record describes an execution that never reported — the executor was
+killed, or the portal rejected its status write. Since the immutable key hashes
+the integration *tree* rather than the commit, refusing such a claim used to
+brick that tree permanently: a fresh commit of identical content reproduces the
+key and the refusal, and `claimKey` is unique, so the dead row is the tree's only
+route back to the gate. The claim now revives that row and runs again. Nothing is
+reused, so nothing is weakened. Two rules keep it honest: the gate records
+*something* even when the portal rejects its status — an unknown status is
+recorded as `failed` with the real class in the summary — and a parity test
+asserts every status `classifyGateOutcome` can emit is one
+`record_local_integration_result` accepts, from the single closed set in
+`scripts/lib/local-integration-status.mjs`.
 
 The same identity rule coordinates assembled semantic review through the
 existing `TaskRun` carrier: one caller dispatches, concurrent callers subscribe,
@@ -643,7 +658,7 @@ changes the docs-only comparison base to a local accepted-base ref (default:
 `origin/main`); if that configured ref is missing, the hook requires the normal
 SHA-bound gate record instead of silently falling back.
 
-**Convergence failures are reported, not swallowed (BI-5CBDC146).** Until
+**Convergence failures are reported, not swallowed.** Until
 2026-08-27 this chain was never active on Windows. `set-hooks-path.mjs`
 resolved its hooks directory with `new URL('../.githooks/', import.meta.url)
 .pathname`, which returns `/D:/repo/.githooks/` on Windows; `path.join` turned
@@ -658,7 +673,7 @@ than failing silently. If `postinstall` reports `could not converge
 .githooks/pre-push`, the gate is not protecting your pushes — repair it before
 relying on a green push.
 
-**Verify by sweeping, never by spot-checking (BI-3727106F).** `head -4
+**Verify by sweeping, never by spot-checking.** `head -4
 .githooks/pre-push` answers for one tree, and one tree is not the estate: when
 this was measured on 2026-08-26, **68 of 85 worktrees** on a single install
 carried the stock shim and pushed with no gate. Two things made that possible.

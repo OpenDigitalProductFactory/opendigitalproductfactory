@@ -122,3 +122,16 @@ This phase was added after the repaired live reader completed five exact immutab
 4. Permit one identical request replay to reserve the exact waiting TaskRun through `status + updatedAt` compare-and-set and rerun with the same thread, token authority, request digest, tool grants, and immutable artifact binding.
 5. If that bounded continuation also omits the writer, retain `input-required` and refuse a third execution attempt. A real writer proposal still follows the existing separately approved envelope path.
 6. Prove the focused policy/loop/submission tests, impacted loop tests, typecheck, size/source guards, exact-tree CI, protected PR, canonical release, and live same-TaskRun behavior before issuing a fresh BI-42 review identity.
+
+## Phase 9 — Make writer-only dispatch a hard provider contract
+
+This phase is the BI-DE58CFE8 successor owned by WC-14EA9122 after live attempt five hydrated the exact BI-F48 artifact but returned prose with zero writer executions.
+
+1. Preserve TaskRun `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-95A624D36842` and its unchanged request key as the red fixture; do not replay it before deployment.
+2. Add a caller-owned required tool-choice option to routed inference and apply it after recipe/harness plan resolution.
+3. Set the option only when the initiative-review surface contains exactly its governed writer, including the post-evidence nudge and same-TaskRun writer resume.
+4. Compile required choice for OpenAI-compatible/Qwen, Gemini, Anthropic, ChatGPT, and Responses requests; fail closed before dispatch for adapters that cannot honor it.
+5. Preserve the required policy unchanged across fallback plans. Keep `requireTools`, exact grants, immutable binding, model-selected writer arguments, and separate approval unchanged.
+6. If a provider violates the hard contract, persist explicit required-call noncompliance on the same resumable TaskRun. Never synthesize a decision, envelope, execution, or receipt.
+7. Prove focused red/green tests, ordinary-turn non-regression, typecheck, size/source guards, exact-tree CI, protected PR, canonical release, and exact live CAN-TEST.
+8. Only after that live proof, replay the preserved BI-F48 key once and accept only a genuine grounded writer proposal or the explicit fail-closed noncompliance projection.

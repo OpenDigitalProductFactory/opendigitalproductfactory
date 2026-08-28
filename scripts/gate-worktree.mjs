@@ -16,6 +16,7 @@ import { fileURLToPath } from "node:url";
 import { mcpCall } from "./lib/mcp-client.mjs";
 import { summarizeLocalCiOutput } from "./lib/local-ci-failure-summary.mjs";
 import { classifyGateOutcome } from "./lib/sandbox-freshness.mjs";
+import { fallbackStatusForUnknown } from "./lib/local-integration-status.mjs";
 import {
   authoritySafetyMarginMs,
   superviseLeaseRun,
@@ -1848,9 +1849,22 @@ async function main() {
       message: error instanceof Error ? error.message : String(error),
     };
   }
-  if (evidenceResponse?.success !== true && outcome.status === "blocked_sandbox_drift" && evidenceResponse?.error === "invalid_status") {
-    process.stdout.write("gate-worktree: portal does not know blocked_sandbox_drift yet; recording as failed with sandbox-drift evidence\n");
-    evidenceArgs = { ...evidenceArgs, status: "failed", summary: `[SANDBOX_DRIFT — not product evidence] ${evidenceArgs.summary}` };
+  // BI-C59AC8AF: generalized from the blocked_sandbox_drift-only version. An
+  // installed portal cannot know a status a newer gate emits, and dropping the
+  // write is the worst available outcome: the lease releases terminal with no
+  // evidence, and because the gate key hashes the integration tree, that tree is
+  // then permanently unable to be gated. Record SOMETHING, always — `failed` is
+  // the honest floor and the prefix keeps the real class readable.
+  if (evidenceResponse?.error === "invalid_status" && evidenceResponse?.success !== true) {
+    const fallback = fallbackStatusForUnknown(outcome.status);
+    process.stdout.write(
+      `gate-worktree: portal does not know ${outcome.status} yet; recording as ${fallback.status} with the original class in the summary\n`,
+    );
+    evidenceArgs = {
+      ...evidenceArgs,
+      status: fallback.status,
+      summary: `${fallback.summaryPrefix} ${evidenceArgs.summary}`,
+    };
     evidenceResponse = await mcpCall("record_local_integration_result", evidenceArgs, { mcpUrl: options.mcpUrl, bearerToken });
   }
 

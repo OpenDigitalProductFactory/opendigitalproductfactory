@@ -68,6 +68,9 @@ COPY scripts/capability-service-catalog.generated.json ./scripts/
 COPY scripts/lib/capability-service-projection.mjs ./scripts/lib/
 COPY scripts/lib/capability-state-hash.mjs ./scripts/lib/
 COPY scripts/lib/transition-signing.mjs ./scripts/lib/
+# The local-CI status set is shared by the gate scripts and the MCP evidence
+# handler, so the build stage needs it too (BI-C59AC8AF).
+COPY scripts/lib/local-integration-status.mjs ./scripts/lib/
 COPY scripts/installer/resolve-host-identity.mjs ./scripts/installer/
 COPY scripts/installer/local-model-policy.json ./scripts/installer/
 COPY apps/web/ ./apps/web/
@@ -156,6 +159,7 @@ COPY scripts/lib/ci-policy-guards.mjs ./scripts/lib/
 COPY scripts/lib/host-command-invocation.mjs ./scripts/lib/
 COPY scripts/lib/git-fetch-shared-safe.mjs ./scripts/lib/
 COPY scripts/lib/entry-module.mjs ./scripts/lib/
+COPY scripts/lib/local-integration-status.mjs ./scripts/lib/
 COPY scripts/module-size-baseline.txt ./scripts/
 COPY scripts/prose-lint-baseline.json ./scripts/
 COPY scripts/style-drift-baseline.json ./scripts/

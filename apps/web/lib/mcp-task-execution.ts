@@ -185,6 +185,10 @@ export async function executeRemoteTaskAttempt(input: {
               resumeMode: "same-taskrun",
               attempt: terminalWriterAttempt,
               observedAt: new Date().toISOString(),
+              dispatchContract: "required-tool-call",
+              ...(result.failure.message.includes("did not honor the required writer tool-call contract")
+                ? { noncompliance: "prose-without-required-writer" }
+                : {}),
             },
           },
         },
