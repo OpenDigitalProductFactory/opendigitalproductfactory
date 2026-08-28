@@ -20,7 +20,7 @@
 //   outlive the claim it records and cannot be reused on another branch. MCP
 //   remains the only authority.
 //
-// ROLLOUT — READ THIS BEFORE CHANGING THE DEFAULT
+// ROLLOUT — NOW ENFORCING (was advisory)
 //   The deny path is complete and tested, but it is OFF by default and the
 //   guard emits advisory context instead. That is deliberate, not timidity:
 //   nothing yet writes the marker automatically. Layer 1 of BI-0B292D84
@@ -173,9 +173,20 @@ function main() {
 
   const guidance = denyGuidance(verdict);
 
+  // ENFORCING BY DEFAULT since bind-at-birth landed (BI-0B292D84 layer 1).
+  // It was advisory only while nothing wrote the claim automatically -- denying
+  // then would have refused agents for a condition they could not satisfy
+  // without a manual step. worktree-create.mjs now claims on creation and
+  // scripts/reconcile-workroom-bindings.mjs closed the pre-existing gap
+  // (coverage 65% -> 95% on this install, with every remaining unbound branch
+  // in the exempt set), so compliance is automatic and refusing is fair.
+  //
+  // DPF_WORKROOM_CLAIM_ENFORCE=0 downgrades to advisory. That escape exists for
+  // an install where binding genuinely cannot run, not as a routine setting.
+  //
   // A refusal is NEVER throttled: a gate that declines to refuse because it
   // refused recently is not a gate.
-  if (process.env.DPF_WORKROOM_CLAIM_ENFORCE === "1") emitDeny(guidance);
+  if (process.env.DPF_WORKROOM_CLAIM_ENFORCE !== "0") emitDeny(guidance);
 
   // The advisory IS throttled. This guard fires on every edit to any file on an
   // unclaimed branch, so repeating a 700-character message per edit would bury
@@ -186,7 +197,7 @@ function main() {
   const { stampMs, stampBranch } = readNudgeStamp(gitDir);
   if (shouldNudge({ stampMs, stampBranch, branch: verdict.branch, nowMs: now.getTime() })) {
     writeNudgeStamp(gitDir, verdict.branch, now.toISOString());
-    emitContext(`[workroom-claim-guard] ${guidance} (advisory until bind-at-birth lands — set DPF_WORKROOM_CLAIM_ENFORCE=1 to refuse instead)`);
+    emitContext(`[workroom-claim-guard] ${guidance} (advisory: DPF_WORKROOM_CLAIM_ENFORCE=0 is set; unset it to refuse instead)`);
   }
   process.exit(0);
 }
