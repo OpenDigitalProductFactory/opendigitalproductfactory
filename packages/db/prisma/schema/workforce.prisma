@@ -318,6 +318,24 @@ model WorkLocation {
   name         String
   locationType String
   timezone     String?
+  /// Which employment jurisdiction governs work done at this location
+  /// (BI-9252B9EA). Holds a PROFESSION_JURISDICTIONS slug - the same closed
+  /// vocabulary Organization.employsIn already carries - so the value is
+  /// accepted DIRECTLY as the RegulatoryAutonomyPolicy.jurisdiction key with no
+  /// translation layer between them.
+  ///
+  /// String rather than a Prisma enum, deliberately and against the usual
+  /// closed-set rule: the two existing homes of this same vocabulary
+  /// (Organization.employsIn and RegulatoryAutonomyPolicy.jurisdiction) are both
+  /// String. An enum here would be a THIRD representation that has to be cast at
+  /// every policy lookup, which is the translation layer AC-ELA-004 forbids.
+  /// The closed set is enforced in TypeScript by isProfessionJurisdiction.
+  ///
+  /// Nullable, and the migration leaves every existing row NULL. A location is
+  /// never assigned a jurisdiction by inference from its address, its timezone or
+  /// the organisation's first employsIn entry - a guess here produces a
+  /// confidently wrong legal answer, which is worse than no answer.
+  jurisdictionSlug String?
   status       String            @default("active")
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
@@ -328,6 +346,7 @@ model WorkLocation {
 
   @@index([status])
   @@index([addressId])
+  @@index([jurisdictionSlug])
 }
 
 model EmployeeAddress {
