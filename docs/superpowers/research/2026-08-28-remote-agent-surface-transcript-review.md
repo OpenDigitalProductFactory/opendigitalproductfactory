@@ -269,10 +269,15 @@ single shared container, bind-mounted to one worktree at a time, **writing to th
 and it is lease-gated for exactly that reason. Publishing it to the internet would expose an
 unauthenticated write path to production data. Reject unconditionally.
 
-If the doctrine does not already say so explicitly, the lease rule should be extended to state that
-a lease-gated shared runtime is never exposed beyond the host, by any mechanism, including an
-agent-provisioned tunnel. An agent reading only the current rule could conclude that holding the
-lease makes the tunnel acceptable. It does not.
+**Verified and closed, 2026-08-28.** The doctrine did not say so. `runtime-gates-via-shared-lease`
+governed *which thread may bind* the shared runtime and forbade silent re-bind, but its threat model
+was thread-vs-thread contention and live-DB mutation — not reachability. A search across every kernel
+principle, `docs/architecture/*.md` and `AGENTS.md` for tunnel, ngrok, port exposure or public
+reachability returned nothing. So an agent legitimately holding the lease could satisfy every written
+rule and still publish an unauthenticated write path to the live database.
+
+The principle and `AGENTS.md` §12 now carry the clause: a lease-gated runtime is never reachable from
+beyond the host, by any mechanism, and **holding the lease authorises use, never exposure.**
 
 ## 7. Suggested next steps (Source A)
 
