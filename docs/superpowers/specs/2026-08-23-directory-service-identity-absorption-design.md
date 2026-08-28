@@ -332,6 +332,36 @@ Phases 1 and 4 are the ~80% convergence. Phase 3 is the ~20% new feature.
 | D7 | Base DN derives from `Organization` | AGENTS.md §8 canonical identity model |
 | D8 | Read-only directory; no LDAP writes | Authority comes from being derived, not from being editable |
 
+## 14a. Open questions resolved by the Phase 2-4 build
+
+**Q1 — service-account bind credential: RESOLVED as mTLS only.** A client
+certificate whose subject CN names the same principal binds any class; a
+password binds humans only. Agents and service accounts deliberately have no
+password, because minting one would be a second credential store and would
+re-create the "authorized but never authenticated" gap the epic closes. The
+certificate comes from the org PKI already in place.
+
+**Q4 — absorbed protocol provenance: RESOLVED as reimplemented, not vendored.**
+The BER codec and LDAP message layer were written against RFC 4511. No authentik
+or `ldapjs` source was copied, so **no attribution obligation was incurred** —
+the evaluation's condition to carry an MIT notice does not apply because nothing
+was derived. The evaluation's other conditions still bind: nothing under
+`authentik/enterprise/` was read, the listener is read-only, bind caching cannot
+outlive revocation (there is no bind cache at all), and search requires
+authorization with bounded results.
+
+**Q2 — the fate of `User`: DEFERRED, and deliberately not forced.** `Principal`
+is now the authentication root in behaviour: `govern/auth.ts` consults the spine
+and an inactive principal cannot log in. `User` remains the credential holder.
+The schema change that would formally demote it to a side table was **not**
+needed to make the spine authoritative, and doing it in the same change as three
+new capabilities would have coupled the highest-blast-radius migration in the
+epic to everything else. It stays open.
+
+**Q3 — multi-organization installs: still deferred.** The base DN derives from
+the first `Organization`; a second one would need a decision this build did not
+need to make.
+
 ## 14. Open Questions
 
 1. **Which credential scheme for service-account binds** — shared secret, or mTLS from the org PKI only? mTLS is stronger and reuses existing substrate, but not every client that needs to bind can present a client certificate. Resolve in `BI-F7317D65`.
