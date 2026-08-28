@@ -26,6 +26,9 @@
 //     ambiguous response ⇒ WARN and pass, printing exactly what was skipped.
 //     CI without a live install must never hard-fail here; the gate bites on
 //     contributor machines and installs where the portal is up.
+//   - DOES NOT degrade on an unresolvable BASE_SHA (BI-B6433DC6). "I could not
+//     compute the diff" is not "the diff was empty". That case exits non-zero
+//     and must never print OK.
 //
 //   node scripts/check-doc-anchor-existence.mjs            # check (CI)
 //   node scripts/check-doc-anchor-existence.mjs --update   # regenerate the grandfather baseline
@@ -174,12 +177,53 @@ export async function verifyAnchors(pairs, lookup) {
 }
 
 const REF_RE = /^[A-Za-z0-9._\-/]{1,200}$/;
-function git(...args) {
+
+/**
+ * Run git in the repo. Distinguishes success from failure — never collapse a
+ * failed invocation into an empty string (BI-B6433DC6).
+ */
+export function runGit(args, { exec = execFileSync } = {}) {
   try {
-    return execFileSync("git", args, { cwd: REPO_ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+    const stdout = exec("git", args, {
+      cwd: REPO_ROOT,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    return { ok: true, stdout: String(stdout ?? ""), stderr: "" };
   } catch (e) {
-    return (e.stdout && e.stdout.toString()) || "";
+    return {
+      ok: false,
+      stdout: (e.stdout && e.stdout.toString()) || "",
+      stderr: (e.stderr && e.stderr.toString()) || e.message || "",
+      status: e.status ?? 1,
+    };
   }
+}
+
+/**
+ * Files changed vs `base`. An unresolvable ref or a failed three-dot diff is
+ * `unresolvable`, never an empty list — a shallow clone can name origin/main
+ * and still fail the merge-base (BI-B6433DC6).
+ */
+export function listChangedFiles(base, { git = runGit } = {}) {
+  const parsed = git(["rev-parse", "--verify", `${base}^{commit}`]);
+  if (!parsed.ok) {
+    return {
+      status: "unresolvable",
+      files: [],
+      detail: (parsed.stderr || parsed.stdout || "").trim(),
+    };
+  }
+  const diff = git(["diff", "--name-only", `${base}...HEAD`]);
+  if (!diff.ok) {
+    return {
+      status: "unresolvable",
+      files: [],
+      detail: (diff.stderr || diff.stdout || "").trim(),
+    };
+  }
+  const files = diff.stdout.split("\n").map((s) => s.trim()).filter(Boolean);
+  return { status: "ok", files, detail: "" };
 }
 
 function scanAllDocs() {
@@ -232,14 +276,18 @@ async function main() {
     console.error(`[doc-anchor] refusing unsafe BASE_SHA: ${JSON.stringify(base)}`);
     process.exit(1);
   }
-  const diffOutput = git("diff", "--name-only", `${base}...HEAD`);
-  if (!diffOutput.trim()) {
-    console.log(`[doc-anchor] No diff against ${base} (or ref unavailable) — nothing to check. OK.`);
+  const changed = listChangedFiles(base);
+  if (changed.status === "unresolvable") {
+    console.error(`[doc-anchor] cannot resolve ${base} — the guard did not run. This is not a pass.`);
+    console.error("[doc-anchor] Remedy: git fetch --deepen 50 origin  (or git fetch origin main) and re-run.");
+    if (changed.detail) console.error(`[doc-anchor] git: ${changed.detail}`);
+    process.exit(1);
+  }
+  if (changed.files.length === 0) {
+    console.log(`[doc-anchor] No diff against ${base} — nothing to check. OK.`);
     return;
   }
-  const changedDocs = diffOutput
-    .split("\n").map((s) => s.trim())
-    .filter((f) => f.startsWith("docs/") && f.endsWith(".md"));
+  const changedDocs = changed.files.filter((f) => f.startsWith("docs/") && f.endsWith(".md"));
 
   const newPairs = [];
   for (const doc of changedDocs) {
