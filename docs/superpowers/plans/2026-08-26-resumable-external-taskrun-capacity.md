@@ -120,8 +120,9 @@ The deliverable maps all governed scope statements: `OBJ-RESUME-001` through
 
 - Modify `apps/web/lib/mcp-task-submit.test.ts`
 - Modify `apps/web/lib/mcp-task-submit.ts`
-- Optionally add one narrowly named helper/test pair under `apps/web/lib/` if
-  extraction is required by module-size guidance
+- Add focused `mcp-task-review-contract`, `mcp-task-execution`, and
+  `mcp-task-capacity-*` modules/tests under `apps/web/lib/`; keep the submit
+  module as the lifecycle orchestrator and one shared execution owner
 
 1. Add failing tests for typed `capacity` and `busy` with zero tools.
 2. Add table-driven red cases proving other dead ends and any post-tool result

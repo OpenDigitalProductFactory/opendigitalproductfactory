@@ -139,10 +139,13 @@ server-owned event seam. Live evidence must resume one blocked reviewer on the
 same TaskRun and durable database without refreshing its preview store, then
 persist its required reader/writer executions and receipt.
 
-Expected source scope is `apps/web/lib/mcp-task-submit.ts`, its tests, and at
-most one narrowly named resume helper/test if extraction is required for module
-size. There is no Prisma migration, UI, model-score, reviewer-floor, readiness,
-or writer change. Implementation follows red/green TDD, architecture and blast
-review, exact-tree semantic PASS, preflight, governed local CI, DCO PR,
-protected merge, immutable release, and live same-run verification. Rollback is
-a normal revert; waiting rows remain `submitted` and are never replaced.
+Expected source scope is `apps/web/lib/mcp-task-submit.ts` plus focused modules
+for the immutable review contract, shared execution path, capacity contract,
+trusted resume seam, and their tests. This split keeps each module below the
+repository size ratchet while preserving one execution owner rather than
+copying the submit path. There is no Prisma migration, UI, model-score,
+reviewer-floor, readiness, or writer change. Implementation follows red/green
+TDD, architecture and blast review, exact-tree semantic PASS, preflight,
+governed local CI, DCO PR, protected merge, immutable release, and live
+same-run verification. Rollback is a normal revert; waiting rows remain
+`submitted` and are never replaced.
