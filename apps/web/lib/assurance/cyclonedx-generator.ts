@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
+import { createBomComponentKey, createNpmPackageUrl } from "@dpf/db/bom-component-key";
 import type { CycloneDxDocument, GeneratedBom, NormalizedBomComponent, NormalizedBomOccurrence } from "./bom-types";
-import { createComponentKey, createNpmPackageUrl } from "./component-key";
 import { parseImporterDependencies } from "./pnpm-lock-parser";
 
 export interface BomModelProfileInput {
@@ -26,7 +26,7 @@ function packageComponent(name: string, version: string): NormalizedBomComponent
   const packageUrl = version.startsWith("workspace:") ? null : createNpmPackageUrl(name, version);
   const componentType = name === "next" || name.startsWith("@dpf/") ? "framework" : "library";
   return {
-    componentKey: createComponentKey({ componentType, ecosystem: "npm", name, version, packageUrl }),
+    componentKey: createBomComponentKey({ componentType, ecosystem: "npm", name, version, packageUrl }),
     componentType,
     name,
     version,
@@ -41,7 +41,7 @@ function packageComponent(name: string, version: string): NormalizedBomComponent
 
 function modelComponent(profile: BomModelProfileInput): NormalizedBomComponent {
   return {
-    componentKey: createComponentKey({
+    componentKey: createBomComponentKey({
       componentType: "model",
       ecosystem: "ai-model",
       name: profile.modelId,

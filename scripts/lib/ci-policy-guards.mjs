@@ -220,6 +220,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("reporting-composition-guard", "Reporting Composition Guard", [
       node("scripts/check-reporting-composition.mjs"),
     ]),
+    guard("platform-composition-single-home", "Platform Composition Single-Home Guard", [
+      node("--test", "scripts/check-platform-composition-single-home.test.mjs"),
+      node("scripts/check-platform-composition-single-home.mjs"),
+    ]),
     guard("compose-env-contract-guard", "Compose Env Contract Guard", [
       node("scripts/check-compose-env-contract.mjs"),
     ]),

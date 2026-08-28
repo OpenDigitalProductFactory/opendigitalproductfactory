@@ -54,6 +54,7 @@ const EXPECTED_LEGACY_JOBS = [
   "override-provenance-guard",
   "owned-patch-regression",
   "package-boundary-guard",
+  "platform-composition-single-home",
   "pr-health-test",
   "prose-lint-guard",
   "published-image-freshness",

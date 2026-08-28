@@ -121,11 +121,23 @@ export function detectRedirectTarget(src: string): string | undefined {
   const m = code.match(/\b(?:redirect|permanentRedirect)\s*\(\s*["'`]([^"'`]+)["'`]/);
   if (!m) return undefined;
   const raw = m[1]!;
-  // Dynamic (`/x/${id}`), external, or relative targets can't be resolved to a route node.
-  if (raw.includes("${") || !raw.startsWith("/")) return undefined;
+  // Resolve simple route-parameter interpolations to their canonical App Router
+  // segment. Expression-driven targets remain unmodelled because their destination
+  // cannot be proven statically.
+  if (!raw.startsWith("/")) return undefined;
+  let unresolvedInterpolation = false;
+  const normalized = raw.replace(/\$\{([^}]+)\}/g, (_match, expression: string) => {
+    const identifier = expression.match(/^(?:[A-Za-z_$][\w$]*\.)*([A-Za-z_$][\w$]*)$/);
+    if (!identifier) {
+      unresolvedInterpolation = true;
+      return _match;
+    }
+    return `[${identifier[1]}]`;
+  });
+  if (unresolvedInterpolation || normalized.includes("${")) return undefined;
   // Any JSX render ⇒ the page shows UI ⇒ the redirect is a conditional guard, not a shim.
   if (/\/>|<\/[A-Za-z]|<>/.test(code)) return undefined;
-  return raw.split(/[?#]/)[0]!;
+  return normalized.split(/[?#]/)[0]!;
 }
 
 interface RouteNode {

@@ -500,11 +500,9 @@ describe("generated route-shell registry", () => {
     // 360 detail page is a dynamic ([agentId]) route the generator auto-excludes with
     // reason "dynamic-fixture-required": the sweep cannot render it without a per-coworker
     // fixture, so it is not measured (not a live-state exclusion, a fixture one).
-    // 123 -> 124: /ops/stack-currency (BI-6328BCA6) joins the wall-clock exclusions — it
-    // renders currency relative to `now` (approaching-eol window, daysUntilEol).
-    // 124 -> 125: /ops/teardown reads a host evidence collection that a detached
-    // lifecycle runner can update concurrently with the sweep.
-    expect(registry.routes.filter((route) => !route.sweepEligible)).toHaveLength(125);
+    // Redirect-only routes are omitted from the page registry. Parameterized redirect
+    // detection removed five compatibility shims from this count in BI-7D2C4F02.
+    expect(registry.routes.filter((route) => !route.sweepEligible)).toHaveLength(120);
   });
 
   it("keeps contextual sweep exclusions explicit, valid, and non-stale", () => {
