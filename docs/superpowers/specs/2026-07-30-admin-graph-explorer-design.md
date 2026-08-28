@@ -484,6 +484,74 @@ indistinguishable from a true answer (BI-A73954F7). That is the observability st
 belongs after this one; a drift guard belongs after both — shipped earlier it would sit
 permanently red and be disabled.
 
+*Resolved by the next section.*
+
+## The mirror checks itself (BI-A73954F7, 2026-08-26)
+
+Three mirror failures reached a user, and every one was found by a **human** comparing
+mirror contents against source-of-truth counts. Nothing in the platform performed that
+comparison, so each rendered as a confident wrong answer rather than as an error.
+
+`packages/db/src/graph-projection-reconcile.ts` now makes that comparison automatic.
+The invoker runs it after refreshing and reports the result; it does not repair, and it
+does not fail a build.
+
+### Four states, because "empty" is not one thing
+
+| status | meaning |
+| --- | --- |
+| `empty` | the source has rows and the mirror has NONE — never invoked, or destroyed |
+| `drifted` | both non-zero and unequal, or orphan debris the source no longer accounts for |
+| `source-empty` | the source is genuinely empty, so an empty mirror is CORRECT |
+| `ok` | matches |
+
+`source-empty` is deliberately distinct from `empty`. A fresh install with no wiki
+pages *should* have no wiki nodes, and reporting that as a fault would make the check
+noisy on exactly the installs that most need a signal they can trust.
+
+### Counts, not a freshness timestamp
+
+A "last run at" timestamp answers whether a job fired — not whether the mirror is
+right. The doc-impact projection was DESTROYED by an unrelated re-index minutes after a
+clean run, and a timestamp would have read green throughout. Counts catch a destroyed
+domain as readily as an unrun one, so the weaker signal was not worth a schema change.
+
+### One invariant per label — never a summed aggregate
+
+The first draft of this check reported portfolio drift of −4 against a **perfectly
+healthy** live mirror: it compared 767 distinct nodes with 771 summed source rows,
+because four nodes legitimately carry two of those labels — the code-graph projection
+UNION-merges labels rather than replacing them, shipped in PR #4215. Per label the
+projection is exact — 4/4, 488/488, 279/279.
+
+This is the load-bearing lesson of the whole section: **a permanently-red check is
+worse than no check.** It trains people to ignore the alarm, so it cannot do its job on
+the day it matters. The same shape is what makes a data-dependent frozen UX baseline
+block unrelated work.
+
+### The invariant and the projection must share one derivation
+
+`countDocPagesInManifest()` is derived from `planDocImpactProjection` rather than
+counted off the manifest's inverse maps, which the projection does not read. An earlier
+revision instead read `manifest.pages.length` — a key that does not exist — so the count
+was `undefined` and the doc-impact invariant was **silently skipped**, which is precisely
+the silent-skip this work exists to remove.
+
+### Measured on the live mirror
+
+```
+knowledge                 356/356   ok
+portfolio:Portfolio         4/4     ok
+portfolio:TaxonomyNode    488/488   ok
+portfolio:DigitalProduct  279/279   ok
+doc-impact                199/199   ok
+```
+
+### Still open
+
+Enforcement. A drift guard now has a signal to build on, and belongs after this has run
+on real installs long enough to show it stays green when the mirror is healthy.
+
 ## Follow-ups
 
 - Derive knowledge → code/data edges so the "decision that governed this route"
