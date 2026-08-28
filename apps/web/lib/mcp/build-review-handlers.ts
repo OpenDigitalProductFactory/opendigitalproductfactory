@@ -274,7 +274,7 @@ export async function saveBuildEvidence(params: Record<string, unknown>, userId:
       }
 
       const { saveBuildArtifactRevision } = await import("@/lib/build/build-artifact-provenance");
-      await saveBuildArtifactRevision({
+      const savedRevision = await saveBuildArtifactRevision({
         buildId,
         field: field as import("@/lib/build/build-artifact-provenance").BuildArtifactField,
         receiptIds: Array.isArray(params.receiptIds)
@@ -285,6 +285,27 @@ export async function saveBuildEvidence(params: Record<string, unknown>, userId:
         threadId: context?.threadId ?? null,
         value: fieldValue,
       });
+      // BI-C5D978E9: record the research the ideate phase actually performed.
+      // The readiness gate blocks ideate->plan on RESEARCH_REQUIRED and nothing
+      // ever recorded it, so every owner-composed feature build stalled with the
+      // research done and unrecorded (live repro FB-EB292B9F). The grant table
+      // marks this lane author-accountable, independent: false — unlike
+      // spec-approval and architecture-review, which still need an independent
+      // reviewer and still block. Fail-safe: saving evidence must never break.
+      if (field === "designDoc") {
+        try {
+          const { recordIdeateResearchReceipt } = await import("@/lib/build/record-ideate-research-receipt");
+          await recordIdeateResearchReceipt({
+            buildId,
+            designDoc: fieldValue,
+            revisionId: savedRevision.revisionId,
+            authorUserId: userId,
+            authorAgentId: context?.agentId ?? null,
+          });
+        } catch {
+          // A missing receipt leaves the build exactly where it already was.
+        }
+      }
       if (field === "designDoc" && updateData.brief) {
         await prisma.featureBuild.update({
           where: { buildId },
