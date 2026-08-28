@@ -495,10 +495,11 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // detection is tested, because an over-reporting checklist claims work
         // is done when it is not.
         "scripts/measure-doc-cadence-coverage.test.mjs",
-        // Same rule for the capability measure: the report is advisory, but its
-        // parsing and scoring are tested here because a mis-parsed registry
-        // under-reports gaps, and an under-reported gap reads as an all-clear.
+        // Capability completeness is a blocking ratchet. Test both the scanner
+        // and the floor/gap-growth enforcement before running the guard so a
+        // broken gate cannot manufacture its own all-clear.
         "scripts/measure-capability-completeness.test.mjs",
+        "scripts/check-agent-capability-integrity.test.mjs",
         // Archetype obligation coverage: same rule again, plus a lockstep check
         // that this measure classifies a frequency exactly as the runtime sweep
         // does — a report that disagrees with the ledger it reports on is worse

@@ -224,6 +224,9 @@ importers:
       '@axe-core/playwright':
         specifier: ^4.12.1
         version: 4.12.1(playwright-core@1.62.0)
+      axe-core:
+        specifier: 4.12.1
+        version: 4.12.1
       '@dpf/db':
         specifier: workspace:*
         version: link:../../packages/db

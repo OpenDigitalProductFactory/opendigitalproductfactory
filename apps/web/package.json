@@ -28,6 +28,7 @@
   },
   "dependencies": {
     "@axe-core/playwright": "^4.12.1",
+    "axe-core": "4.12.1",
     "@dpf/db": "workspace:*",
     "@dpf/finance-templates": "workspace:*",
     "@dpf/integration-shared": "workspace:*",
