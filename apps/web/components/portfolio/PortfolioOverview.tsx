@@ -78,7 +78,7 @@ export function PortfolioOverview({ roots, agentCounts, budgets, summary }: Prop
             label="AI Coworkers"
             value={summary.activeAgents}
             colour="var(--dpf-accent)"
-            detail={`of ${summary.totalAgents} total`}
+            detail="active roster"
           />
         </div>
       </section>
