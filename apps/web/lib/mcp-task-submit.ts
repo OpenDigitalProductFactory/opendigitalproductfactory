@@ -57,7 +57,7 @@ export type RemoteTaskSubmitAuth = {
   tokenId: string;
   userId: string;
   capability: "read" | "write";
-  source: "pat" | "session-jwt";
+  source: import("@/lib/mcp/tool-tier").McpAuthSource;
 };
 
 export type RemoteTaskSubmitOutcome =
