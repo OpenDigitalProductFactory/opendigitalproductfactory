@@ -11,6 +11,11 @@ const gitUtils = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/git-utils", () => gitUtils);
 
+const repositoryArtifact = vi.hoisted(() => ({
+  readRepositoryProviderBlob: vi.fn(),
+}));
+vi.mock("@/lib/backlog/initiative-readiness/repository-artifact", () => repositoryArtifact);
+
 const db = vi.hoisted(() => ({
   prisma: {
     productVersion: {
@@ -35,6 +40,11 @@ beforeEach(() => {
   vi.clearAllMocks();
   gitUtils.isGitAvailable.mockResolvedValue(true);
   gitUtils.gitBlobId.mockResolvedValue({ blobId: "blob-1" });
+  repositoryArtifact.readRepositoryProviderBlob.mockResolvedValue({
+    ok: false,
+    code: "IMMUTABLE_SOURCE_UNAVAILABLE",
+    error: "provider unavailable",
+  });
 });
 
 describe("version-history pack — registration", () => {
@@ -54,6 +64,14 @@ describe("version-history pack — registration", () => {
       expect(versionHistoryPack.grants[t]).toEqual(["file_read"]);
       expect(isToolAllowedByGrants(t, ["file_read"])).toBe(true);
     }
+  });
+
+  it("retains only the immutable reader's normalized audit parameters", () => {
+    const retained = versionHistoryPack.definitions
+      .filter((definition) => definition.retainAuditParameters)
+      .map((definition) => definition.name);
+
+    expect(retained).toEqual(["read_source_at_version"]);
   });
 });
 
@@ -200,6 +218,50 @@ describe("version-history pack — handler behavior (delegation preserved)", () 
     expect((res.data as { content: string }).content).toBe("export const x = 1;");
     expect(res.message).not.toContain("export const x");
     expect(gitUtils.gitShow).toHaveBeenCalledWith({ ref: "v1.0.0", path: "apps/web/x.ts" });
+  });
+
+  it("reads an exact provider blob when the live git volume lacks the bound commit", async () => {
+    gitUtils.gitBlobId.mockResolvedValue({ error: "unknown revision" });
+    repositoryArtifact.readRepositoryProviderBlob.mockResolvedValue({
+      ok: true,
+      data: Buffer.from("remote immutable bytes\n", "utf8"),
+    });
+    const res = await versionHistoryPack.handlers.read_source_at_version({
+      repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+      path: "docs/spec.md",
+      version: "a".repeat(40),
+      expectedBlobId: "b".repeat(40),
+    }, "u1");
+
+    expect(res).toMatchObject({
+      success: true,
+      data: {
+        repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+        path: "docs/spec.md",
+        version: "a".repeat(40),
+        blobId: "b".repeat(40),
+        content: "remote immutable bytes\n",
+      },
+    });
+    expect(repositoryArtifact.readRepositoryProviderBlob).toHaveBeenCalledWith({
+      repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+      commitSha: "a".repeat(40),
+      path: "docs/spec.md",
+      expectedBlobId: "b".repeat(40),
+    });
+    expect(gitUtils.gitShow).not.toHaveBeenCalled();
+  });
+
+  it("fails closed instead of falling back without a complete immutable provider identity", async () => {
+    gitUtils.gitBlobId.mockResolvedValue({ error: "unknown revision" });
+    const res = await versionHistoryPack.handlers.read_source_at_version({
+      path: "docs/spec.md",
+      version: "a".repeat(40),
+      expectedBlobId: "b".repeat(40),
+    }, "u1");
+
+    expect(res).toMatchObject({ success: false, error: "unknown revision" });
+    expect(repositoryArtifact.readRepositoryProviderBlob).not.toHaveBeenCalled();
   });
 
   it("read_source_at_version surfaces a git error", async () => {

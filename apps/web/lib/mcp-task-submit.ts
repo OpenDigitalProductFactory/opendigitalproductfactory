@@ -182,6 +182,7 @@ function narrowInitiativeReviewTools<T extends {
       return {
         type: "object",
         properties: {
+          repositoryFullName: { type: "string", enum: [binding.artifactRef.repositoryFullName] },
           path: { type: "string", enum: [binding.artifactRef.path] },
           version: { type: "string", enum: [binding.artifactRef.commitSha] },
           startLine: { type: "number", minimum: 1 },
@@ -190,7 +191,7 @@ function narrowInitiativeReviewTools<T extends {
           maxChars: { type: "number", minimum: 1, maximum: 3200 },
           expectedBlobId: { type: "string", enum: [binding.artifactRef.providerBlobId] },
         },
-        required: ["path", "version", "expectedBlobId"],
+        required: ["repositoryFullName", "path", "version", "expectedBlobId"],
         additionalProperties: false,
       };
     }

@@ -138,3 +138,13 @@ DPF's native loop serializes `message` followed by JSON `data`. Removing file/se
 ## Documentation impact
 
 This design and its implementation plan are the durable operator/contributor record. The MCP tool descriptions are updated in source so progressive tool discovery explains pagination. No end-user route or UI copy changes.
+
+## Live substrate extension (2026-08-28)
+
+The first protected deployment proved the server-side argument normalizer: provider calls with `{}` executed with the exact bound path, commit, and blob identity. The same run then failed because the live `/workspace` git volume did not contain the open-PR commit object. Its ToolExecution rows also stored `{}` because metrics-only audit policy suppressed every parameter. Neither failure permits a readiness receipt.
+
+Decision DI-D2257AD7DD7D selected `reuse-canonical-provider-blob-reader` with high confidence. The extension keeps local git as the fast path and reuses the authenticated canonical GitHub blob substrate only when local resolution fails and the call carries a complete server-bound identity: canonical repository, 40-character commit, path, and 40-character expected blob. The provider response must be a file at the exact blob id, valid UTF-8, and no larger than 1 MiB. Missing or conflicting identity, provider failure, blob mismatch, oversized content, and invalid UTF-8 all fail closed. No mutable checkout refresh or TaskRun source-byte copy is introduced.
+
+`read_source_at_version` additionally opts into redacted parameter retention while remaining `metrics_only`. This persists the normalized immutable identity and bounded page controls for evidence, but continues to suppress the returned source content. Other metrics-only tools retain the existing empty-parameter behavior.
+
+This extension remains provider-agnostic and initiative-agnostic. It changes no grants, provider floors, approval semantics, writer validation, or non-review execution behavior.

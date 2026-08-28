@@ -98,3 +98,16 @@ pnpm run pregate
 ```
 
 The final two commands remain governed gates. Their exact accepted invocation and evidence ids are recorded on the Workroom; no manual Docker or live-runtime mutation is part of this branch.
+
+## Phase 7 — Repair live open-PR source availability and audit identity
+
+This phase was added after the first live deployment produced exact normalized execution arguments but could not resolve the bound PR commit from the stale live git volume.
+
+1. Capture the live failure as RED: the same TaskRun must show exact normalized execution arguments, missing local commit `9295d1ad4f750c1c2b8c4dc65b8d37330c79bbe8`, no successful reader execution, no writer receipt, and `{}` persisted audit parameters.
+2. Extend repository-artifact tests first for an exact canonical provider blob read, blob mismatch refusal, and the 1 MiB ceiling.
+3. Extend version-history tests first for local-miss/provider-success and incomplete-identity/no-fallback behavior.
+4. Bind `repositoryFullName` from the server-issued artifact alongside path, commit, and blob id; reject provider conflicts in the terminal policy.
+5. Reuse the authenticated repository provider fetcher after local git failure. Validate canonical repository, immutable identities, provider blob id, UTF-8, and size before paging.
+6. Add a generic metrics-only audit opt-in and test that it retains schema-redacted normalized parameters while suppressing result content. Enable it only for `read_source_at_version`.
+7. Run the expanded focused suite, original BI-SIG regression suite, typecheck, generated-artifact guards, preflight, exact-tree CI, semantic review, and protected delivery.
+8. After deployment, issue exactly one materially new BI-42 review. Accept completion only from a successful persisted reader execution with exact server-bound parameters plus the independently selected governed writer receipt.

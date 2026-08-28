@@ -165,6 +165,7 @@ const definitions: ToolDefinition[] = [
     inputSchema: {
       type: "object",
       properties: {
+        repositoryFullName: { type: "string", description: "Canonical repository owner/name for immutable provider fallback" },
         path: { type: "string", description: "Relative file path" },
         version: { type: "string", description: "Git tag or ref (default: deployed version)" },
         startLine: { type: "number", description: "1-based line to start at (default 1)" },
@@ -178,6 +179,7 @@ const definitions: ToolDefinition[] = [
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
+    retainAuditParameters: true,
   },
   {
     name: "search_source_at_version",
@@ -271,25 +273,69 @@ async function queryVersionHistoryHandler(params: Record<string, unknown>): Prom
 
 async function readSourceAtVersionHandler(params: Record<string, unknown>): Promise<ToolResult> {
   const { gitBlobId, gitShow, isGitAvailable } = await import("@/lib/git-utils");
-  if (!await isGitAvailable()) return { success: false, error: "Git history is not available in this deployment. Use read_codebase_manifest for codebase orientation.", message: "Git not available." };
+  const gitUnavailable = "Git history is not available in this deployment. Use read_codebase_manifest for codebase orientation.";
   const ref = typeof params.version === "string" ? params.version : (process.env.DEPLOYED_VERSION ?? "HEAD");
   const path = String(params.path ?? "");
-  const resolvedBlob = await gitBlobId({ ref, path });
-  if ("error" in resolvedBlob) return { success: false, error: resolvedBlob.error, message: resolvedBlob.error };
-  if (typeof params.expectedBlobId === "string" && params.expectedBlobId !== resolvedBlob.blobId) {
-    return {
-      success: false,
-      error: "immutable_blob_mismatch",
-      message: `Expected blob ${params.expectedBlobId}, but ${ref}:${path} resolved to ${resolvedBlob.blobId}.`,
-    };
+  const repositoryFullName = typeof params.repositoryFullName === "string" ? params.repositoryFullName : null;
+  const expectedBlobId = typeof params.expectedBlobId === "string" ? params.expectedBlobId : null;
+  const providerBound = repositoryFullName !== null
+    && expectedBlobId !== null
+    && /^[a-f0-9]{40}$/i.test(ref)
+    && /^[a-f0-9]{40}$/i.test(expectedBlobId);
+
+  let content: string | null = null;
+  let blobId: string | null = null;
+  let localError = gitUnavailable;
+  if (await isGitAvailable()) {
+    const resolvedBlob = await gitBlobId({ ref, path });
+    if (!("error" in resolvedBlob)) {
+      if (expectedBlobId !== null && expectedBlobId !== resolvedBlob.blobId) {
+        return {
+          success: false,
+          error: "immutable_blob_mismatch",
+          message: `Expected blob ${expectedBlobId}, but ${ref}:${path} resolved to ${resolvedBlob.blobId}.`,
+        };
+      }
+      const result = await gitShow({ ref, path });
+      if (!("error" in result)) {
+        content = result.content;
+        blobId = resolvedBlob.blobId;
+      } else {
+        localError = result.error;
+      }
+    } else {
+      localError = resolvedBlob.error;
+    }
   }
-  const result = await gitShow({ ref, path });
-  if ("error" in result) return { success: false, error: result.error, message: result.error };
+
+  if (content === null || blobId === null) {
+    if (!providerBound) {
+      return {
+        success: false,
+        error: localError,
+        message: localError === gitUnavailable ? "Git not available." : localError,
+      };
+    }
+    const { readRepositoryProviderBlob } = await import("@/lib/backlog/initiative-readiness/repository-artifact");
+    const providerBlob = await readRepositoryProviderBlob({
+      repositoryFullName,
+      commitSha: ref,
+      path,
+      expectedBlobId,
+    });
+    if (!providerBlob.ok) return { success: false, error: providerBlob.code, message: providerBlob.error };
+    try {
+      content = new TextDecoder("utf-8", { fatal: true }).decode(providerBlob.data);
+    } catch {
+      return { success: false, error: "IMMUTABLE_SOURCE_NOT_UTF8", message: "Repository artifact is not valid UTF-8 source text." };
+    }
+    blobId = expectedBlobId;
+  }
   const page = pageSource({
-    content: result.content,
+    content,
     ref,
     path,
-    blobId: resolvedBlob.blobId,
+    blobId,
     cursor: params.cursor,
     startLine: params.startLine,
     maxLines: params.maxLines,
@@ -301,7 +347,7 @@ async function readSourceAtVersionHandler(params: Record<string, unknown>): Prom
   return {
     success: true,
     message: `Read ${path} lines ${startLine}-${endLine} of ${totalLines} at ${ref}${more}.`,
-    data: page,
+    data: { ...page, ...(repositoryFullName ? { repositoryFullName } : {}) },
   };
 }
 

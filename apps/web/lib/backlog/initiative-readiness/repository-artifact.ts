@@ -6,10 +6,13 @@ import {
   resolveGithubToken,
   resolveRepoIdentity,
 } from "@/lib/contributor-change-lanes/github-rest-reader";
+import { ok, type ActionSuccess } from "@/lib/shared/action-result";
 import type { InitiativeArtifactRef } from "./receipt-schema";
 import type { InitiativeSubject } from "./types";
 
 type RepositoryLocator = Extract<InitiativeArtifactRef, { kind: "repo-blob-at-commit" }>;
+
+const MAX_REPOSITORY_ARTIFACT_BYTES = 1024 * 1024;
 
 type RepositoryArtifactDb = {
   workroom: {
@@ -55,13 +58,111 @@ function encodePath(path: string): string | null {
   return pieces.map(encodeURIComponent).join("/");
 }
 
-function decodeGithubContent(payload: unknown, expectedBlobId: string): Uint8Array | null {
-  if (!payload || typeof payload !== "object") return null;
-  const row = payload as Record<string, unknown>;
-  if (row.type !== "file" || row.sha !== expectedBlobId || row.encoding !== "base64" || typeof row.content !== "string") {
-    return null;
+type RepositoryProviderBlobResult =
+  | ActionSuccess<Uint8Array>
+  | {
+      ok: false;
+      code:
+        | "CANONICAL_REPOSITORY_REQUIRED"
+        | "IMMUTABLE_SOURCE_IDENTITY_INVALID"
+        | "IMMUTABLE_SOURCE_UNAVAILABLE"
+        | "IMMUTABLE_BLOB_MISMATCH"
+        | "IMMUTABLE_SOURCE_TOO_LARGE";
+      error: string;
+    };
+
+function decodeGithubContent(payload: unknown, expectedBlobId: string): RepositoryProviderBlobResult {
+  if (!payload || typeof payload !== "object") {
+    return { ok: false, code: "IMMUTABLE_SOURCE_UNAVAILABLE", error: "Repository provider returned unreadable artifact metadata." };
   }
-  return Buffer.from(row.content.replace(/\s/g, ""), "base64");
+  const row = payload as Record<string, unknown>;
+  if (row.type !== "file" || row.encoding !== "base64" || typeof row.content !== "string") {
+    return { ok: false, code: "IMMUTABLE_SOURCE_UNAVAILABLE", error: "Repository provider returned unreadable artifact metadata." };
+  }
+  if (row.sha !== expectedBlobId) {
+    return { ok: false, code: "IMMUTABLE_BLOB_MISMATCH", error: "Repository provider blob identity does not match the requested locator." };
+  }
+  if (typeof row.size === "number" && row.size > MAX_REPOSITORY_ARTIFACT_BYTES) {
+    return { ok: false, code: "IMMUTABLE_SOURCE_TOO_LARGE", error: "Repository artifact exceeds the 1 MiB immutable reader ceiling." };
+  }
+  const bytes = Buffer.from(row.content.replace(/\s/g, ""), "base64");
+  return bytes.byteLength <= MAX_REPOSITORY_ARTIFACT_BYTES
+    ? ok(bytes)
+    : { ok: false, code: "IMMUTABLE_SOURCE_TOO_LARGE", error: "Repository artifact exceeds the 1 MiB immutable reader ceiling." };
+}
+
+async function fetchRepositoryProviderBlob(args: {
+  owner: string;
+  repo: string;
+  token: string | null;
+  commitSha: string;
+  path: string;
+  expectedBlobId: string;
+  fetchImpl: typeof fetch;
+}): Promise<RepositoryProviderBlobResult> {
+  const encodedPath = encodePath(args.path);
+  if (!encodedPath || !/^[a-f0-9]{40}$/i.test(args.commitSha) || !/^[a-f0-9]{40}$/i.test(args.expectedBlobId)) {
+    return { ok: false, code: "IMMUTABLE_SOURCE_IDENTITY_INVALID", error: "Repository artifact locator is not a recognized immutable provider blob." };
+  }
+  let response: Response;
+  try {
+    response = await args.fetchImpl(
+      `https://api.github.com/repos/${encodeURIComponent(args.owner)}/${encodeURIComponent(args.repo)}/contents/${encodedPath}?ref=${encodeURIComponent(args.commitSha)}`,
+      {
+        headers: {
+          Accept: "application/vnd.github+json",
+          "X-GitHub-Api-Version": "2022-11-28",
+          ...(args.token ? { Authorization: `Bearer ${args.token}` } : {}),
+        },
+        cache: "no-store",
+      },
+    );
+  } catch {
+    return { ok: false, code: "IMMUTABLE_SOURCE_UNAVAILABLE", error: "Repository provider could not resolve the immutable artifact." };
+  }
+  if (!response.ok) {
+    return { ok: false, code: "IMMUTABLE_SOURCE_UNAVAILABLE", error: "Repository provider could not resolve the immutable artifact." };
+  }
+  try {
+    return decodeGithubContent(await response.json(), args.expectedBlobId);
+  } catch {
+    return { ok: false, code: "IMMUTABLE_SOURCE_UNAVAILABLE", error: "Repository provider returned unreadable artifact metadata." };
+  }
+}
+
+/**
+ * Read one exact immutable blob from the installation's configured canonical
+ * repository. This is the source-provider fallback for deployments whose
+ * read-only git volume does not contain an open-PR commit object.
+ */
+export async function readRepositoryProviderBlob(args: {
+  repositoryFullName: string;
+  commitSha: string;
+  path: string;
+  expectedBlobId: string;
+  db?: Pick<RepositoryArtifactDb, "credentialEntry" | "platformDevConfig" | "scheduledJob">;
+  fetchImpl?: typeof fetch;
+}): Promise<RepositoryProviderBlobResult> {
+  const db = args.db ?? prisma;
+  let repo: Awaited<ReturnType<typeof resolveRepoIdentity>>;
+  let token: string | null;
+  try {
+    [repo, token] = await Promise.all([resolveRepoIdentity(db), resolveGithubToken(db)]);
+  } catch {
+    return { ok: false, code: "IMMUTABLE_SOURCE_UNAVAILABLE", error: "Repository provider configuration is unavailable." };
+  }
+  if (`${repo.owner}/${repo.name}`.toLocaleLowerCase("en-US") !== args.repositoryFullName.toLocaleLowerCase("en-US")) {
+    return { ok: false, code: "CANONICAL_REPOSITORY_REQUIRED", error: "Requested repository is not this installation's canonical repository." };
+  }
+  return fetchRepositoryProviderBlob({
+    owner: repo.owner,
+    repo: repo.name,
+    token,
+    commitSha: args.commitSha,
+    path: args.path,
+    expectedBlobId: args.expectedBlobId,
+    fetchImpl: args.fetchImpl ?? fetch,
+  });
 }
 
 function dcoEmail(payload: unknown): string | null {
@@ -256,40 +357,29 @@ export async function resolveRepositoryArtifact(args: {
     : [];
   const authorAgentId = soleAgentId && agentAliases.length === 1 ? soleAgentId : null;
 
-  let response: Response;
-  try {
-    response = await (args.fetchImpl ?? fetch)(
-      `https://api.github.com/repos/${encodeURIComponent(expectedRepo.owner)}/${encodeURIComponent(expectedRepo.name)}/contents/${encodedPath}?ref=${encodeURIComponent(args.locator.commitSha)}`,
-      {
-        headers: {
-          Accept: "application/vnd.github+json",
-          "X-GitHub-Api-Version": "2022-11-28",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        cache: "no-store",
-      },
-    );
-  } catch {
-    return { ok: false, code: "CANONICAL_DESIGN_REQUIRED", error: "Repository provider could not resolve the immutable artifact." };
-  }
-  if (!response.ok) {
-    return { ok: false, code: "CANONICAL_DESIGN_REQUIRED", error: "Repository provider could not resolve the immutable artifact." };
-  }
-  let providerPayload: unknown;
-  try {
-    providerPayload = await response.json();
-  } catch {
-    return { ok: false, code: "CANONICAL_DESIGN_REQUIRED", error: "Repository provider returned unreadable artifact metadata." };
-  }
-  const bytes = decodeGithubContent(providerPayload, args.locator.providerBlobId);
-  if (!bytes) {
-    return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS", error: "Repository provider blob identity does not match the requested locator." };
+  const providerBlob = await fetchRepositoryProviderBlob({
+    owner: expectedRepo.owner,
+    repo: expectedRepo.name,
+    token,
+    commitSha: args.locator.commitSha,
+    path: args.locator.path,
+    expectedBlobId: args.locator.providerBlobId,
+    fetchImpl: args.fetchImpl ?? fetch,
+  });
+  if (!providerBlob.ok) {
+    return {
+      ok: false,
+      code: providerBlob.code === "IMMUTABLE_BLOB_MISMATCH"
+        ? "CANONICAL_DESIGN_AMBIGUOUS"
+        : "CANONICAL_DESIGN_REQUIRED",
+      error: providerBlob.error,
+    };
   }
   return {
     ok: true,
     artifact: {
-      digest: `sha256:${createHash("sha256").update(bytes).digest("hex")}`,
-      bytes,
+      digest: `sha256:${createHash("sha256").update(providerBlob.data).digest("hex")}`,
+      bytes: providerBlob.data,
       authorPrincipalId,
       authorAgentId,
       authorEmail: email,
