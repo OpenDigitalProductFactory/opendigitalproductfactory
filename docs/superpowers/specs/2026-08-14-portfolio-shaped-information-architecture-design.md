@@ -1,9 +1,9 @@
 ---
-status: draft
+status: approved
 ---
 # Portfolio-shaped information architecture — design
 
-**Status:** draft for operator review · 2026-08-14
+**Status:** operator-directed implementation slice · amended 2026-08-28
 **Proposed epic home:** EP-8DC217EB (Vertical Integration Inward — recombine DPF's own functionality)
 **Supersedes nothing; extends:** the EP-NAV-COHERENCE nav model (its *mechanics* are DONE and are constraints here, not open design space).
 **Source analysis:** "The UX Has No Spine" (UX surface & navigation analysis, 2026-08-14).
@@ -54,9 +54,20 @@ Target rail spine (operator mode), each section keyed to an FPAW portfolio, plus
 
 The two cross-cuts (Workspace, Knowledge) stay first-class but are *labeled as cross-cuts*, not pretend-domains — this is the honest fix for "Workspace maps to no portfolio."
 
-### 4.2 First slice — unify Workforce (highest signal, lowest blast radius)
+### 4.2 First slice — one AI Coworkers home inside Workforce
 
-Bring `/employee`, `/platform/ai`, and `/coworker-decisions` under one **Workforce** rail section (people + AI coworkers = one portfolio in the model). Internally they remain distinct surfaces with section-scoped nav (per the coherence constraint); the change is the `shellNav.sectionKey` grouping and the section label, not the routes. This proves the reconciliation on the exact case that most violates the model, before touching the larger sections.
+The original “group the existing routes” slice is too weak. Live operator evidence on 2026-08-28 showed the failure mode: self-upgrade reported an AI coworker working, its generic link opened a live-only activity page that was already empty, and identity versus operational details were split between the top-level **AI Coworkers** and **AI Workforce** destinations. Finding the complete picture took roughly ten minutes.
+
+The slice therefore establishes `/workforce` as the one canonical AI Coworkers home:
+
+- the directory remains the front door and every row still opens the coworker's identity;
+- current and retained recent activity are part of the same page, not a competing platform-admin destination;
+- live and recent activity cover every governed AI actor that can block an upgrade, even when that actor's registry type is `specialist` rather than `coworker`;
+- a skipped self-upgrade persists the blocker task-run identity, actor identity, title, and capture time in its existing completion-evidence envelope, then deep-links to that retained activity;
+- provider/routing, skills, scheduling, governance, and build-runtime controls remain advanced links from this home and from an individual identity; they are not another top-level roster;
+- `/platform/ai/right-now` remains a compatibility deep link into the activity view, while the primary navigation exposes only the canonical home.
+
+This is still one concern: an operator must be able to answer “which AI coworker is this, what is it doing, and how do I manage it?” without choosing between identity and operations taxonomies. It reuses the existing roster, workforce-activity, TaskRun, self-upgrade evidence, and navigation models; no new registry or event store is introduced.
 
 ### 4.3 Mechanism
 
@@ -90,11 +101,21 @@ How comparable business platforms bind a domain model to primary navigation:
 
 **Adopted stance:** derive a portfolio-shaped, capability-gated two-level spine from substrate DPF already computes (FPAW placement + `getActiveOrgCapabilities` + nav-mode), rather than hand-curating per role (SAP) or exposing the module tree (Odoo).
 
+The 2026-08-28 amendment also benchmarked current agent-management control planes:
+
+- **Microsoft Agent 365.** Its Agent Registry is the central inventory and management surface, while its all-agents activity view keeps in-progress and recent completed work together and drills from an agent into activity details. Microsoft is explicitly converging previously separate registry experiences into one control plane. Adopt the unified inventory→activity journey and retained recent tasks. Reject copying the remaining split into a separate identity-admin portal: DPF already has one canonical agent record and can disclose its advanced identity controls in context. Sources: [Agent Registry](https://learn.microsoft.com/en-us/microsoft-365/admin/manage/agent-registry?view=o365-worldwide), [agent activity](https://learn.microsoft.com/en-us/microsoft-agent-365/observe-agents-microsoft-365-copilot), [registry convergence](https://learn.microsoft.com/en-us/entra/agent-id/agent-registry-convergence).
+- **ServiceNow AI Control Tower.** It unifies inventory, performance/value, risk, and governance around each AI system, agent, and workflow. Adopt one fleet cockpit with progressive disclosure for operational and governance detail. Reject a KPI-first landing that displaces the human-readable coworker directory; DPF's operator begins with “who,” not an abstract asset inventory. Source: [AI Control Tower solution brief](https://www.servicenow.com/content/dam/servicenow-assets/public/en-us/doc-type/resource-center/solution-brief/sb-ai-control-tower.pdf).
+- **Microsoft's agent tools registry.** Tools and MCP servers are centrally governed but remain a nested tools concern under Agents. Adopt advanced links nested from the coworker home; reject making Tools, Providers, or Build Runtime competing roster destinations. Source: [Agent Tools registry](https://learn.microsoft.com/en-us/microsoft-365/admin/manage/manage-tools-for-agent?view=o365-worldwide).
+
+**Amended stance:** the canonical object is the AI coworker. Inventory, current/recent work, identity, cost, and ordinary controls converge around it; fleet plumbing is disclosed from that home. Operational evidence must outlive the instantaneous live-state window that produced it.
+
 ## 6. §1 substrate check (no parallel utilities)
 
 - **No new nav model.** Extends `portal-navigation-model.ts` / `portal-shell-sections.ts`; no second registry.
 - **No new taxonomy.** Reuses the FPAW four-portfolio keys already persisted on `PortfolioDecomposition`; adds only a section→portfolio adapter map (the standard already mandates the key adapter).
 - **No new mode system.** Reuses the `nav-mode` cookie for operator preview.
+- **No new activity ledger.** Recent activity projects existing `TaskRun` rows; self-upgrade retains the exact blocker reference in `SelfUpgradeRun.completionEvidence`.
+- **Actor parity at the safety boundary.** The activity projection covers the same live TaskRun population as the self-upgrade quiescence detector instead of assuming every governed actor has `Agent.type=coworker`.
 - **No coherence regression.** Section-scoped nav, breadcrumb, and the one-renderer ratchet are unchanged; only `sectionKey` groupings move.
 
 ## 7. Phased plan
@@ -102,7 +123,7 @@ How comparable business platforms bind a domain model to primary navigation:
 | Phase | Deliverable | Size |
 |---|---|---|
 | 0 | Section→FPAW-portfolio adapter map + trace test asserting every `shellNav` entry resolves to a portfolio or an explicit cross-cut | S |
-| 1 | **Workforce unification slice** — regroup People + AI Workforce + Coworker Decisions under one Workforce section (behind nav-mode preview) | M |
+| 1 | **Workforce unification slice** — one `/workforce` directory + current/recent activity experience; compatibility deep links; one primary AI-coworker destination; retained self-upgrade blocker identity | L |
 | 2 | Label & de-dupe pass (folds in the quick wins: "Portal"→"Storefront Setup", drop `/platform/ai` vs `/overview` duplicate, "AI Coworkers"→"Agent Identities", rail-label↔H1 alignment) | S |
 | 3 | Reconcile remaining sections to the portfolio spine; make it the default after live-install validation | L |
 | 3b | **Connections cockpit (§4.5)** — unified external-dependency registry + one Foundation surface + uniform cost/billing + in-dialog provisioning (BI-2A0180A9); first concrete instance of the §4.4 capability | L |
@@ -120,5 +141,11 @@ The companion spec's lexicon rule has been corrected accordingly (*Interaction S
 
 - Every `shellNav` entry resolves — via a checked-in test — to exactly one FPAW portfolio key or an explicitly declared cross-cut; none is silently unclassified.
 - People, AI Workforce, and Coworker Decisions are reachable under one Workforce section without violating section-scoped nav or the breadcrumb guarantee.
+- The primary navigation presents one AI-coworker destination; operators do not choose between “AI Coworkers” and “AI Workforce.”
+- `/workforce` moves from fleet status to a coworker identity and ordinary controls without crossing to another main-menu domain; advanced fleet plumbing is nested, not competing.
+- Current activity includes every governed TaskRun actor that can block self-upgrade, regardless of whether its registry type is `coworker` or `specialist`.
+- Recent activity retains completed/failed/waiting TaskRuns long enough to explain an operational event after live work ends.
+- An `activity-in-flight` self-upgrade skip persists and renders the named actor and task-run identity, and its link lands on the matching retained activity.
+- `/platform/ai/right-now` remains a non-competing compatibility route into the canonical activity experience.
 - The reconciled spine is previewable via nav-mode on a live install before it becomes default.
 - No regression in the EP-NAV-COHERENCE guarantees (§3), asserted by the existing nav tests plus the new trace test.
