@@ -35,6 +35,10 @@ and authority guarantees that make it safe.
   current fail-closed or idempotent semantics.
 - `REQ-RESUME-006`: A successful resumed reviewer execution persists its
   governed reader/writer ToolExecutions and receipt normally.
+- `REQ-RESUME-007`: Resumption requires the original durable TaskRun, request
+  digest, immutable request state, and any approval envelope to remain in the
+  same database; database replacement fails closed and never recreates a
+  consumed review identity.
 
 ### Contracts
 
@@ -54,6 +58,9 @@ and authority guarantees that make it safe.
 - `CONTRACT-TERMINAL-HONESTY`: Only typed pre-tool `capacity` and `busy`
   outcomes wait. Other failures remain terminal and preserve their actionable
   diagnostics.
+- `CONTRACT-STORE-IDENTITY`: The same-row resume contract never crosses a
+  database replacement boundary. Missing persisted identity returns a
+  non-mutating refusal rather than constructing a successor run.
 
 ### Flows
 
@@ -89,6 +96,9 @@ and authority guarantees that make it safe.
   and completed replay.
 - `VERIFY-EVENT-SEAM`: A trusted server-side capacity occurrence invokes the
   same resumer and cannot supply replacement authority.
+- `VERIFY-STORE-BOUNDARY`: Missing TaskRun/request/envelope state after a store
+  replacement fails closed without invoking inference or reusing a consumed
+  request key.
 - `VERIFY-LIVE`: After protected release, one historical capacity-blocked
   governed review resumes the same TaskRun and writes genuine reader/writer
   executions plus its receipt.
@@ -97,7 +107,7 @@ and authority guarantees that make it safe.
 
 | Deliverable | Backlog mapping | Requirements | Contracts | Flows | Verification |
 |---|---|---|---|---|---|
-| `DELIV-RESUMABLE-EXTERNAL-TASKRUN` — preserve and resume one immutable external TaskRun across transient pre-inference capacity | `BI-42CE2CE7` | `REQ-RESUME-001` through `REQ-RESUME-006` | `CONTRACT-WAIT-V1`, `CONTRACT-RESUME-CAS`, `CONTRACT-STORED-AUTHORITY`, `CONTRACT-NO-SIDE-EFFECT-REPLAY`, `CONTRACT-TERMINAL-HONESTY` | `FLOW-FIRST-WAIT`, `FLOW-EXACT-REPLAY`, `FLOW-CONCURRENT-REPLAY`, `FLOW-CAPACITY-EVENT`, `FLOW-TERMINAL` | `VERIFY-CLASSIFIER`, `VERIFY-WAIT`, `VERIFY-REPLAY`, `VERIFY-CAS`, `VERIFY-AUTHORITY`, `VERIFY-TERMINAL`, `VERIFY-EVENT-SEAM`, `VERIFY-LIVE` |
+| `DELIV-RESUMABLE-EXTERNAL-TASKRUN` — preserve and resume one immutable external TaskRun across transient pre-inference capacity | `BI-42CE2CE7` | `REQ-RESUME-001` through `REQ-RESUME-007` | `CONTRACT-WAIT-V1`, `CONTRACT-RESUME-CAS`, `CONTRACT-STORED-AUTHORITY`, `CONTRACT-NO-SIDE-EFFECT-REPLAY`, `CONTRACT-TERMINAL-HONESTY`, `CONTRACT-STORE-IDENTITY` | `FLOW-FIRST-WAIT`, `FLOW-EXACT-REPLAY`, `FLOW-CONCURRENT-REPLAY`, `FLOW-CAPACITY-EVENT`, `FLOW-TERMINAL` | `VERIFY-CLASSIFIER`, `VERIFY-WAIT`, `VERIFY-REPLAY`, `VERIFY-CAS`, `VERIFY-AUTHORITY`, `VERIFY-TERMINAL`, `VERIFY-EVENT-SEAM`, `VERIFY-STORE-BOUNDARY`, `VERIFY-LIVE` |
 
 ## 3. Test-first implementation sequence
 
@@ -115,7 +125,9 @@ and authority guarantees that make it safe.
    remain terminal.
 3. Implement the smallest typed predicate and versioned resource-wait payload.
 4. Persist waiting rows as `submitted` with no completion timestamp.
-5. Run the focused Vitest file and keep existing approval tests green.
+5. Add the missing-store red case: no original TaskRun/request/envelope means a
+   non-mutating refusal and no provider call.
+6. Run the focused Vitest file and keep existing approval tests green.
 
 ### Task 2: Extract one reusable external execution path
 
@@ -166,7 +178,11 @@ and authority guarantees that make it safe.
 5. Resume a preserved provider-capacity TaskRun through the server contract and
    prove the TaskRun ID is unchanged and governed reader/writer executions plus
    a receipt are persisted.
-6. Notify the dependent WordPress task only after live same-run proof.
+6. Keep the governed preview and its database continuously alive from the
+   initial review dispatch through approval and exact same-key continuation;
+   a sanitized-clone refresh invalidates the attempt rather than authorizing a
+   replay.
+7. Notify the dependent WordPress task only after live same-run proof.
 
 ## 4. Scope and rollback
 

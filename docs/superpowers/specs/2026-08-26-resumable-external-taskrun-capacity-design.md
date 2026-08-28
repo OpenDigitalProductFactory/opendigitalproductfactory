@@ -40,6 +40,14 @@ clone whose Git object store is inside the mounted preview. A host worktree
 whose `.git` file points outside the container must fail closed and is not a
 source-backed review surface.
 
+TaskRun resumption is deliberately scoped to one durable database identity.
+Replacing a nonproduction database from a sanitized clone is not a resume
+operation: the original TaskRun, digest, approval envelope, and tool executions
+must still exist before the server may continue them. A missing row fails
+closed. Operators must keep one governed preview/database alive across an
+approval-and-resume sequence; they must never recreate a consumed request key
+after a preview refresh and call the replacement the same review.
+
 ## State contract
 
 A result is resumable only when all are true:
@@ -90,6 +98,8 @@ reconstructs every immutable field; otherwise it leaves the row submitted.
   terminal under current behavior.
 - approval proposal: existing `input-required` path; approved-envelope replay is
   unchanged.
+- missing original TaskRun, digest, approval envelope, or stored request after
+  database replacement: fail closed; no successor identity is inferred.
 - digest mismatch: existing `idempotency_conflict`, with no mutation.
 
 Caller data cannot reconstruct authority. Only a governed writer can create a
@@ -99,9 +109,10 @@ receipt; prose or transport completion never does.
 
 Tests prove the predicate and typed wait, exact identity reuse, one CAS winner,
 no inference on loss, terminal handling for every other dead end and post-tool
-capacity, approval compatibility, and a server-owned event seam. Live evidence
-must resume one blocked reviewer on the same TaskRun and persist its required
-reader/writer executions and receipt.
+capacity, approval compatibility, the missing-store boundary, and a
+server-owned event seam. Live evidence must resume one blocked reviewer on the
+same TaskRun and durable database without refreshing its preview store, then
+persist its required reader/writer executions and receipt.
 
 Expected source scope is `apps/web/lib/mcp-task-submit.ts`, its tests, and at
 most one narrowly named resume helper/test if extraction is required for module
