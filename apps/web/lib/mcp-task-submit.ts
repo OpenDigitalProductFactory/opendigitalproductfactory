@@ -23,6 +23,7 @@ import {
   validateInitiativeReviewAuthorityScope,
   type InitiativeReviewBinding,
 } from "./mcp-task-review-contract";
+import { createInitiativeReviewTerminalToolPolicy } from "@/lib/tak/terminal-tool-policy";
 
 export {
   parseInitiativeReviewBinding,
@@ -127,6 +128,15 @@ export type ExistingRemoteTask = {
   updatedAt: Date;
 };
 
+type TerminalWriterWait = {
+  schemaVersion: 1;
+  kind: "missing-terminal-writer";
+  writerToolName: string;
+  resumeMode: "same-taskrun";
+  attempt: number;
+  observedAt: string;
+};
+
 type ApprovedRemoteTaskEnvelope = {
   id: string;
   threadId: string;
@@ -154,6 +164,23 @@ function storedRequestDigest(existing: ExistingRemoteTask): string | null {
   return optionalString(metadata["requestDigest"]);
 }
 
+function parseTerminalWriterWait(value: unknown): TerminalWriterWait | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const candidate = (value as Record<string, unknown>)["terminalWriterWait"];
+  if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return null;
+  const wait = candidate as Record<string, unknown>;
+  if (
+    wait["schemaVersion"] !== 1
+    || wait["kind"] !== "missing-terminal-writer"
+    || !optionalString(wait["writerToolName"])
+    || wait["resumeMode"] !== "same-taskrun"
+    || !Number.isInteger(wait["attempt"])
+    || Number(wait["attempt"]) < 1
+    || !optionalString(wait["observedAt"])
+  ) return null;
+  return wait as TerminalWriterWait;
+}
+
 function replayOrConflict(existing: ExistingRemoteTask, requestDigest: string): RemoteTaskSubmitOutcome {
   const storedDigest = storedRequestDigest(existing);
   if (storedDigest && storedDigest !== requestDigest) {
@@ -172,17 +199,92 @@ function replayOrConflict(existing: ExistingRemoteTask, requestDigest: string): 
       },
     };
   }
+  const terminalWriterWait = parseTerminalWriterWait(existing.progressPayload);
+  const resourceWait = parseResourceWaitProjection(existing.progressPayload);
   return {
     kind: "result",
     result: {
       taskRunId: existing.taskRunId,
       status: existing.status,
       idempotentReplay: true,
-      requiresApproval: existing.status === "input-required",
+      requiresApproval: existing.status === "input-required" && !terminalWriterWait,
+      ...(terminalWriterWait ? {
+        resumable: terminalWriterWait.attempt < 2,
+        waitReason: terminalWriterWait.kind,
+      } : resourceWait ? {
+        resumable: true,
+        waitReason: "provider-capacity",
+      } : {}),
       progressPayload: existing.progressPayload,
       a2aMetadata: existing.a2aMetadata,
     },
   };
+}
+
+async function reserveTerminalWriterReplay(input: {
+  existing: ExistingRemoteTask;
+  requestDigest: string;
+  terminalToolPolicy: NonNullable<ReturnType<typeof createInitiativeReviewTerminalToolPolicy>>;
+}): Promise<TerminalWriterWait | null> {
+  if (storedRequestDigest(input.existing) !== input.requestDigest) return null;
+
+  const existingWait = parseTerminalWriterWait(input.existing.progressPayload);
+  const isProjectedWait = input.existing.status === "input-required" && existingWait?.attempt === 1;
+  const isRecoverableCompletedExit = input.existing.status === "completed" && !existingWait;
+  if (!isProjectedWait && !isRecoverableCompletedExit) return null;
+
+  if (isRecoverableCompletedExit) {
+    const [successfulReader, writerAttempt] = await Promise.all([
+      prisma.toolExecution.findFirst({
+        where: {
+          taskRunId: input.existing.taskRunId,
+          toolName: { in: [...input.terminalToolPolicy.readerToolNames] },
+          success: true,
+        },
+        select: { id: true },
+      }),
+      prisma.toolExecution.findFirst({
+        where: {
+          taskRunId: input.existing.taskRunId,
+          toolName: input.terminalToolPolicy.writerToolName,
+        },
+        select: { id: true },
+      }),
+    ]);
+    if (!successfulReader || writerAttempt) return null;
+  }
+
+  const progress = input.existing.progressPayload && typeof input.existing.progressPayload === "object"
+    && !Array.isArray(input.existing.progressPayload)
+    ? input.existing.progressPayload as Record<string, unknown>
+    : {};
+  const now = new Date().toISOString();
+  const wait: TerminalWriterWait = {
+    schemaVersion: 1,
+    kind: "missing-terminal-writer",
+    writerToolName: input.terminalToolPolicy.writerToolName,
+    resumeMode: "same-taskrun",
+    attempt: 2,
+    observedAt: now,
+  };
+  const reservation = await prisma.taskRun.updateMany({
+    where: {
+      taskRunId: input.existing.taskRunId,
+      status: input.existing.status,
+      updatedAt: input.existing.updatedAt,
+    },
+    data: {
+      ...(isRecoverableCompletedExit ? { status: "input-required" } : {}),
+      completedAt: null,
+      progressPayload: {
+        ...progress,
+        terminalWriterWait: wait,
+        ...(isRecoverableCompletedExit ? { recoveredFromCompletedRouteExit: true } : {}),
+        resumeReservedAt: now,
+      },
+    },
+  });
+  return reservation.count === 1 ? wait : null;
 }
 
 async function resumeApprovedRemoteTask(input: {
@@ -352,7 +454,9 @@ export async function resumeWaitingRemoteTask(input: {
     userContext: input.userContext,
     parsed: input.parsed,
     idempotentReplay: true,
+    resumeKind: "capacity",
     capacityAttempt: wait.attempt + 1,
+    terminalWriterAttempt: 1,
   });
 }
 
@@ -387,6 +491,14 @@ export async function submitRemoteCoworkerTask(input: {
   }
 
   const requestDigest = remoteTaskRequestDigest(parsed);
+  const exactRequiredToolNames = requiredToolNames(parsed.authorityScope);
+  const terminalToolPolicy = parsed.initiativeReviewBinding
+    ? createInitiativeReviewTerminalToolPolicy(
+        parsed.initiativeReviewBinding.writerToolName,
+        exactRequiredToolNames,
+        parsed.initiativeReviewBinding.artifactRef,
+      )
+    : null;
   const taskRunId = deterministicExternalTaskRunId(token.tokenId, parsed.idempotencyKey);
   const existingQuery: Prisma.TaskRunFindFirstArgs = {
     where: {
@@ -437,6 +549,31 @@ export async function submitRemoteCoworkerTask(input: {
         parsed,
       });
       if (resumed) return resumed;
+    }
+    const terminalWriterWait = terminalToolPolicy
+      ? await reserveTerminalWriterReplay({
+          existing,
+          requestDigest,
+          terminalToolPolicy,
+        })
+      : null;
+    if (terminalWriterWait && existing.id && existing.threadId) {
+      await markTaskRunWorking(existing.taskRunId);
+      return executeRemoteTaskAttempt({
+        run: {
+          id: existing.id,
+          taskRunId: existing.taskRunId,
+          contextId: existing.contextId,
+        },
+        threadId: existing.threadId,
+        token,
+        userContext,
+        parsed,
+        idempotentReplay: true,
+        resumeKind: "terminal-writer",
+        capacityAttempt: 1,
+        terminalWriterAttempt: terminalWriterWait.attempt,
+      });
     }
     return replay;
   }
@@ -533,5 +670,6 @@ export async function submitRemoteCoworkerTask(input: {
     parsed,
     idempotentReplay: false,
     capacityAttempt: 1,
+    terminalWriterAttempt: 1,
   });
 }

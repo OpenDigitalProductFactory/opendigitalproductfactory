@@ -1,13 +1,13 @@
 {
   "generator": "apps/web/scripts/build-route-shells.ts",
-  "pageRouteCount": 330,
+  "pageRouteCount": 325,
   "migratedCount": 1,
   "summary": {
     "cockpit": 17,
     "list": 6,
-    "detail": 256,
+    "detail": 252,
     "settings": 12,
-    "form": 18,
+    "form": 17,
     "public": 21,
     "unclassified": 0
   },
@@ -833,19 +833,6 @@
         "lead-band"
       ],
       "sweepEligible": true,
-      "confidence": "high"
-    },
-    {
-      "routePath": "/customer-login",
-      "shell": "form",
-      "audience": "auth-setup",
-      "migrated": false,
-      "exemptChecks": [
-        "next-action-marker",
-        "lead-band"
-      ],
-      "sweepEligible": false,
-      "sweepExclusionReason": "customer-session-required",
       "confidence": "high"
     },
     {
@@ -1987,19 +1974,6 @@
       "confidence": "high"
     },
     {
-      "routePath": "/ops/health",
-      "shell": "detail",
-      "audience": "admin",
-      "migrated": false,
-      "exemptChecks": [
-        "next-action-marker",
-        "lead-band"
-      ],
-      "sweepEligible": false,
-      "sweepExclusionReason": "redirects-to-dynamic-resource",
-      "confidence": "high"
-    },
-    {
       "routePath": "/ops/installation",
       "shell": "detail",
       "audience": "admin",
@@ -2061,19 +2035,6 @@
     },
     {
       "routePath": "/ops/self-upgrade",
-      "shell": "detail",
-      "audience": "admin",
-      "migrated": false,
-      "exemptChecks": [
-        "next-action-marker",
-        "lead-band"
-      ],
-      "sweepEligible": false,
-      "sweepExclusionReason": "wall-clock-collection",
-      "confidence": "high"
-    },
-    {
-      "routePath": "/ops/stack-currency",
       "shell": "detail",
       "audience": "admin",
       "migrated": false,
@@ -2678,19 +2639,6 @@
         "lead-band"
       ],
       "sweepEligible": true,
-      "confidence": "high"
-    },
-    {
-      "routePath": "/platform/services/[serverId]",
-      "shell": "detail",
-      "audience": "admin",
-      "migrated": false,
-      "exemptChecks": [
-        "next-action-marker",
-        "lead-band"
-      ],
-      "sweepEligible": false,
-      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -3331,19 +3279,6 @@
     },
     {
       "routePath": "/portfolio/product/[id]/offerings",
-      "shell": "detail",
-      "audience": "owner",
-      "migrated": false,
-      "exemptChecks": [
-        "next-action-marker",
-        "lead-band"
-      ],
-      "sweepEligible": false,
-      "sweepExclusionReason": "dynamic-fixture-required",
-      "confidence": "high"
-    },
-    {
-      "routePath": "/portfolio/product/[id]/supply-chain",
       "shell": "detail",
       "audience": "owner",
       "migrated": false,

@@ -145,7 +145,7 @@ describe("getLatestBomSummaryForProduct", () => {
 });
 
 describe("getLatestBomComponentsForProduct", () => {
-  it("returns the latest product BOM rows for the supply chain table", async () => {
+  it("returns the latest product BOM rows for the software-composition table", async () => {
     const generatedAt = new Date("2026-05-22T00:00:00.000Z");
     const db = {
       bomDocument: {
@@ -162,6 +162,15 @@ describe("getLatestBomComponentsForProduct", () => {
                 componentType: "framework",
                 ecosystem: "npm",
                 packageUrl: "pkg:npm/next@16.2.6",
+                catalogIdentity: {
+                  lifecycleMilestones: [
+                    {
+                      milestone: "eol",
+                      date: new Date("2027-01-01T00:00:00.000Z"),
+                      confidence: 0.9,
+                    },
+                  ],
+                },
               },
             },
           ],
@@ -183,10 +192,37 @@ describe("getLatestBomComponentsForProduct", () => {
           componentType: "framework",
           ecosystem: "npm",
           packageUrl: "pkg:npm/next@16.2.6",
+          lifecycleMilestones: [
+            {
+              milestone: "eol",
+              date: new Date("2027-01-01T00:00:00.000Z"),
+              confidence: 0.9,
+            },
+          ],
         },
       ],
       findingSummary: emptyFindings,
       scanner: platformNativeScanner,
     });
+    expect(db.bomDocument.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: { digitalProductId: "product-1", status: "current" },
+      select: expect.objectContaining({
+        occurrences: expect.objectContaining({
+          select: {
+            component: {
+              select: expect.objectContaining({
+                catalogIdentity: {
+                  select: {
+                    lifecycleMilestones: {
+                      select: { milestone: true, date: true, confidence: true },
+                    },
+                  },
+                },
+              }),
+            },
+          },
+        }),
+      }),
+    }));
   });
 });

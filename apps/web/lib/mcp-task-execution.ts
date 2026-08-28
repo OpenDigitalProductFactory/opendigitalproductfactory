@@ -8,6 +8,7 @@ import {
 } from "@/lib/tak/autonomous-work-run";
 import { createTaskMessage } from "@/lib/tak/task-records";
 import { deriveEffortWarrant } from "@/lib/tak/effort-warrant";
+import { createInitiativeReviewTerminalToolPolicy } from "@/lib/tak/terminal-tool-policy";
 import {
   createResourceWaitProjection,
   preInferenceResourceWait,
@@ -38,7 +39,9 @@ export async function executeRemoteTaskAttempt(input: {
   userContext: import("@/lib/permissions").UserContext;
   parsed: RemoteTaskSubmitParams;
   idempotentReplay: boolean;
+  resumeKind?: "capacity" | "terminal-writer";
   capacityAttempt: number;
+  terminalWriterAttempt?: number;
 }): Promise<RemoteTaskSubmitOutcome> {
   const { run, token, userContext, parsed } = input;
   const agent = await resolveAutonomousWorkAgent({
@@ -98,6 +101,18 @@ export async function executeRemoteTaskAttempt(input: {
         messageChars: parsed.prompt.length,
       })
     : undefined;
+  const terminalToolPolicy = parsed.initiativeReviewBinding
+    ? createInitiativeReviewTerminalToolPolicy(
+        parsed.initiativeReviewBinding.writerToolName,
+        exactRequiredToolNames,
+        parsed.initiativeReviewBinding.artifactRef,
+      )
+    : null;
+  const resumedFlag = !input.idempotentReplay
+    ? {}
+    : input.resumeKind === "terminal-writer"
+      ? { resumedFromTerminalWriterWait: true }
+      : { resumedFromCapacity: true };
 
   try {
     const result = await executeAutonomousAgenticLoop({
@@ -117,6 +132,7 @@ export async function executeRemoteTaskAttempt(input: {
       taskType: "external-mcp",
       agentDisplayName: optionalString(agent.displayName) ?? resolvedAgentId,
       ...(effortWarrant ? { effortWarrant } : {}),
+      ...(terminalToolPolicy ? { terminalToolPolicy } : {}),
       ...(modelRequirements ? { modelRequirements } : {}),
     });
 
@@ -139,6 +155,44 @@ export async function executeRemoteTaskAttempt(input: {
           where: { taskRunId: run.taskRunId },
           select: { status: true },
         });
+    if (result.failure?.kind === "terminal-writer-missing" && terminalToolPolicy) {
+      const terminalWriterAttempt = input.terminalWriterAttempt ?? 1;
+      await prisma.taskRun.update({
+        where: { taskRunId: run.taskRunId },
+        data: {
+          status: "input-required",
+          completedAt: null,
+          progressPayload: {
+            summary: result.failure.message,
+            riskClass: parsed.riskClass,
+            executedToolCount: result.executedTools?.length ?? 0,
+            terminalWriterWait: {
+              schemaVersion: 1,
+              kind: "missing-terminal-writer",
+              writerToolName: terminalToolPolicy.writerToolName,
+              resumeMode: "same-taskrun",
+              attempt: terminalWriterAttempt,
+              observedAt: new Date().toISOString(),
+            },
+          },
+        },
+      });
+      return {
+        kind: "result",
+        result: {
+          taskRunId: run.taskRunId,
+          status: "input-required",
+          idempotentReplay: input.idempotentReplay,
+          ...resumedFlag,
+          requiresApproval: false,
+          resumable: terminalWriterAttempt < 2,
+          waitReason: "missing-terminal-writer",
+          content: remoteTaskContent(result.content),
+          executedToolCount: result.executedTools?.length ?? 0,
+          isError: false,
+        },
+      };
+    }
     if (currentRun?.status === "input-required") {
       return {
         kind: "result",
@@ -146,7 +200,7 @@ export async function executeRemoteTaskAttempt(input: {
           taskRunId: run.taskRunId,
           status: "input-required",
           idempotentReplay: input.idempotentReplay,
-          ...(input.idempotentReplay ? { resumedFromCapacity: true } : {}),
+          ...resumedFlag,
           requiresApproval: true,
           content: remoteTaskContent(result.content),
           executedToolCount: result.executedTools?.length ?? 0,
@@ -177,7 +231,7 @@ export async function executeRemoteTaskAttempt(input: {
           taskRunId: run.taskRunId,
           status: "submitted",
           idempotentReplay: input.idempotentReplay,
-          ...(input.idempotentReplay ? { resumedFromCapacity: true } : {}),
+          ...resumedFlag,
           requiresApproval: false,
           executedToolCount: 0,
           resumable: true,
@@ -199,7 +253,7 @@ export async function executeRemoteTaskAttempt(input: {
             riskClass: parsed.riskClass,
             executedToolCount: result.executedTools?.length ?? 0,
             failureKind: result.failure.kind,
-            ...(input.idempotentReplay ? { resumedFromCapacity: true } : {}),
+            ...resumedFlag,
           },
         },
       });
@@ -209,7 +263,7 @@ export async function executeRemoteTaskAttempt(input: {
           taskRunId: run.taskRunId,
           status: "failed",
           idempotentReplay: input.idempotentReplay,
-          ...(input.idempotentReplay ? { resumedFromCapacity: true } : {}),
+          ...resumedFlag,
           requiresApproval: false,
           resumable: false,
           executedToolCount: result.executedTools?.length ?? 0,
@@ -228,7 +282,7 @@ export async function executeRemoteTaskAttempt(input: {
           summary: result.content,
           riskClass: parsed.riskClass,
           executedToolCount: result.executedTools?.length ?? 0,
-          ...(input.idempotentReplay ? { resumedFromCapacity: true } : {}),
+          ...resumedFlag,
         },
       },
     });
@@ -239,7 +293,7 @@ export async function executeRemoteTaskAttempt(input: {
         taskRunId: run.taskRunId,
         status: "completed",
         idempotentReplay: input.idempotentReplay,
-        ...(input.idempotentReplay ? { resumedFromCapacity: true } : {}),
+        ...resumedFlag,
         requiresApproval: false,
         content: remoteTaskContent(result.content),
         executedToolCount: result.executedTools?.length ?? 0,
@@ -256,7 +310,7 @@ export async function executeRemoteTaskAttempt(input: {
         progressPayload: {
           summary: message,
           riskClass: parsed.riskClass,
-          ...(input.idempotentReplay ? { resumedFromCapacity: true } : {}),
+          ...resumedFlag,
         },
       },
     });
@@ -266,7 +320,7 @@ export async function executeRemoteTaskAttempt(input: {
         taskRunId: run.taskRunId,
         status: "failed",
         idempotentReplay: input.idempotentReplay,
-        ...(input.idempotentReplay ? { resumedFromCapacity: true } : {}),
+        ...resumedFlag,
         requiresApproval: false,
         content: remoteTaskContent(message),
         isError: true,

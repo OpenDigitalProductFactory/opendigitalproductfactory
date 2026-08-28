@@ -101,6 +101,12 @@ export type ToolDefinition = {
   executionMode?: "proposal" | "immediate";
   sideEffect?: boolean;
   /**
+   * Keep schema-redacted input parameters in ToolExecution even when the tool
+   * is metrics-only. Results remain suppressed. Use this for compact identity
+   * evidence needed to prove an immutable or otherwise bound read.
+   */
+  retainAuditParameters?: boolean;
+  /**
    * How far this tool's effect reaches. DECLARED, not inferred: "can this be
    * undone" is not recoverable from the name, the schema, or `sideEffect`
    * (true for `update_backlog_item` and `place_linkedin_ad` alike).

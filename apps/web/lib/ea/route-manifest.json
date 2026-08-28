@@ -4399,7 +4399,8 @@
         "customer-login"
       ],
       "dynamicParams": [],
-      "file": "apps/web/app/(customer-auth)/customer-login/page.tsx"
+      "file": "apps/web/app/(customer-auth)/customer-login/page.tsx",
+      "redirectTo": "/s/[slug]/sign-in"
     },
     {
       "routePath": "/customer/[id]",
@@ -5419,7 +5420,8 @@
         "health"
       ],
       "dynamicParams": [],
-      "file": "apps/web/app/(shell)/ops/health/page.tsx"
+      "file": "apps/web/app/(shell)/ops/health/page.tsx",
+      "redirectTo": "/portfolio/product/[id]/health"
     },
     {
       "routePath": "/ops/improvements",
@@ -5500,7 +5502,8 @@
         "stack-currency"
       ],
       "dynamicParams": [],
-      "file": "apps/web/app/(shell)/ops/stack-currency/page.tsx"
+      "file": "apps/web/app/(shell)/ops/stack-currency/page.tsx",
+      "redirectTo": "/portfolio/product/[id]/inventory"
     },
     {
       "routePath": "/ops/teardown",
@@ -6185,7 +6188,8 @@
       "dynamicParams": [
         "serverId"
       ],
-      "file": "apps/web/app/(shell)/platform/services/[serverId]/page.tsx"
+      "file": "apps/web/app/(shell)/platform/services/[serverId]/page.tsx",
+      "redirectTo": "/platform/tools/services/[serverId]"
     },
     {
       "routePath": "/platform/services/activate",
@@ -6852,7 +6856,8 @@
       "dynamicParams": [
         "id"
       ],
-      "file": "apps/web/app/(shell)/portfolio/product/[id]/supply-chain/page.tsx"
+      "file": "apps/web/app/(shell)/portfolio/product/[id]/supply-chain/page.tsx",
+      "redirectTo": "/portfolio/product/[id]/inventory"
     },
     {
       "routePath": "/portfolio/product/[id]/team",

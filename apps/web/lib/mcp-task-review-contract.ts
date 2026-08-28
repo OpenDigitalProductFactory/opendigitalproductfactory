@@ -139,10 +139,16 @@ export function narrowInitiativeReviewTools<T extends {
       return {
         type: "object",
         properties: {
+          repositoryFullName: { type: "string", enum: [binding.artifactRef.repositoryFullName] },
           path: { type: "string", enum: [binding.artifactRef.path] },
           version: { type: "string", enum: [binding.artifactRef.commitSha] },
+          startLine: { type: "number", minimum: 1 },
+          cursor: { type: "string" },
+          maxLines: { type: "number", minimum: 1, maximum: 200 },
+          maxChars: { type: "number", minimum: 1, maximum: 3200 },
+          expectedBlobId: { type: "string", enum: [binding.artifactRef.providerBlobId] },
         },
-        required: ["path", "version"],
+        required: ["repositoryFullName", "path", "version", "expectedBlobId"],
         additionalProperties: false,
       };
     }
@@ -153,8 +159,11 @@ export function narrowInitiativeReviewTools<T extends {
           query: properties["query"] ?? { type: "string" },
           version: { type: "string", enum: [binding.artifactRef.commitSha] },
           glob: { type: "string", enum: [binding.artifactRef.path] },
+          offset: { type: "number", minimum: 0, maximum: 2000 },
+          maxResults: { type: "number", minimum: 1, maximum: 50 },
+          expectedBlobId: { type: "string", enum: [binding.artifactRef.providerBlobId] },
         },
-        required: ["query", "version", "glob"],
+        required: ["query", "version", "glob", "expectedBlobId"],
         additionalProperties: false,
       };
     }

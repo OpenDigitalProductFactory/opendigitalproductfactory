@@ -45,6 +45,33 @@ describe("shared across both pre-build phases", () => {
   });
 });
 
+// BI-D33F968A — live repro FB-05946F96: both reviewers failed to respond, the
+// handler fabricated decision:"fail" with "Both review agents failed to
+// respond", and the loop spent both repair rounds regenerating a design nobody
+// had read before escalating and abandoning the build.
+describe("an unreviewable artifact is not a rejected one", () => {
+  it("does not escalate when no reviewer completed a verdict", () => {
+    expect(resolveReviewFixOutcome({ reviewFailed: true, regenerated: true, reviewIncomplete: true }))
+      .toBe("blocked-review-incomplete");
+    expect(outcomeKeepsBuildRecoverable("blocked-review-incomplete")).toBe(true);
+  });
+
+  it("still escalates a design that was genuinely reviewed and could not be repaired", () => {
+    expect(resolveReviewFixOutcome({ reviewFailed: true, regenerated: true, reviewIncomplete: false }))
+      .toBe("escalated-after-rounds");
+  });
+
+  it("treats an absent marker as a real verdict, so existing behaviour is unchanged", () => {
+    expect(resolveReviewFixOutcome({ reviewFailed: true, regenerated: true }))
+      .toBe("escalated-after-rounds");
+  });
+
+  it("reports repaired when the review passed, marker or not", () => {
+    expect(resolveReviewFixOutcome({ reviewFailed: false, regenerated: true, reviewIncomplete: true }))
+      .toBe("repaired");
+  });
+});
+
 describe("outcomeKeepsBuildRecoverable", () => {
   it("keeps the build recoverable only for the no-regeneration case", () => {
     expect(outcomeKeepsBuildRecoverable("blocked-no-regeneration")).toBe(true);

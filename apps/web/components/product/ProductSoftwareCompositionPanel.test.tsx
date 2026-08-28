@@ -3,7 +3,7 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ProductSupplyChainPanel } from "./ProductSupplyChainPanel";
+import { ProductSoftwareCompositionPanel } from "./ProductSoftwareCompositionPanel";
 
 vi.mock("next/link", () => ({
   default: ({ href, children, className }: { href: string; children: React.ReactNode; className?: string }) => (
@@ -34,26 +34,28 @@ const noScanner = {
   reason: "no-approved-scanner" as const,
 };
 
-describe("ProductSupplyChainPanel", () => {
+describe("ProductSoftwareCompositionPanel", () => {
   it("shows an empty state when there is no BOM", () => {
     render(
-      <ProductSupplyChainPanel
+      <ProductSoftwareCompositionPanel
         productId="prod-1"
         latestBom={null}
         components={[]}
         findingSummary={emptyFindings}
         scanner={noScanner}
+        platformProduct
       />,
     );
 
-    expect(screen.getByText("Supply Chain")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Software composition" })).toBeInTheDocument();
     expect(screen.getByText("No BOM has been generated for this product yet.")).toBeInTheDocument();
+    expect(screen.getByText(/platform SBOM seed ingestion has not completed/i)).toBeInTheDocument();
     expect(screen.getByText("No approved vulnerability scanner")).toBeInTheDocument();
   });
 
   it("renders component rows and export link", () => {
     render(
-      <ProductSupplyChainPanel
+      <ProductSoftwareCompositionPanel
         productId="prod-1"
         latestBom={{
           documentId: "bom_abc",
@@ -68,6 +70,13 @@ describe("ProductSupplyChainPanel", () => {
             componentType: "framework",
             ecosystem: "npm",
             packageUrl: "pkg:npm/next@16.2.6",
+            lifecycleMilestones: [
+              {
+                milestone: "security_updates_end",
+                date: new Date("2026-07-01T00:00:00.000Z"),
+                confidence: 0.95,
+              },
+            ],
           },
           {
             name: "gpt-5.4",
@@ -75,6 +84,7 @@ describe("ProductSupplyChainPanel", () => {
             componentType: "model",
             ecosystem: "ai-model",
             packageUrl: null,
+            lifecycleMilestones: [],
           },
         ]}
         findingSummary={emptyFindings}
@@ -87,7 +97,10 @@ describe("ProductSupplyChainPanel", () => {
     expect(screen.getByText("2 components")).toBeInTheDocument();
     expect(screen.getByText("1 AI model")).toBeInTheDocument();
     expect(screen.getByText("0 active")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Export shareable SBOM/i })).toHaveAttribute(
+    expect(screen.getByText("End of life")).toBeInTheDocument();
+    expect(screen.getAllByText("Not sourced")).toHaveLength(2);
+    expect(screen.getByText("Jul 1, 2026")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Export full SBOM/i })).toHaveAttribute(
       "href",
       "/api/portfolio/product/prod-1/supply-chain/bom",
     );
@@ -95,7 +108,7 @@ describe("ProductSupplyChainPanel", () => {
 
   it("surfaces blocking finding posture without hiding the SBOM", () => {
     render(
-      <ProductSupplyChainPanel
+      <ProductSoftwareCompositionPanel
         productId="prod-1"
         latestBom={{
           documentId: "bom_abc",
@@ -110,6 +123,7 @@ describe("ProductSupplyChainPanel", () => {
             componentType: "framework",
             ecosystem: "npm",
             packageUrl: "pkg:npm/next@16.2.6",
+            lifecycleMilestones: [],
           },
         ]}
         findingSummary={{
@@ -135,7 +149,7 @@ describe("ProductSupplyChainPanel", () => {
 
   it("renders the active findings section in read-only mode", () => {
     render(
-      <ProductSupplyChainPanel
+      <ProductSoftwareCompositionPanel
         productId="prod-1"
         latestBom={{
           documentId: "bom_abc",
@@ -150,6 +164,7 @@ describe("ProductSupplyChainPanel", () => {
             componentType: "library",
             ecosystem: "npm",
             packageUrl: "pkg:npm/vulnerable-lib@1.2.0",
+            lifecycleMilestones: [],
           },
         ]}
         findingSummary={emptyFindings}

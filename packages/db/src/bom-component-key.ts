@@ -1,15 +1,14 @@
 import { createHash } from "node:crypto";
-import type { BomComponentType } from "./bom-types";
 
-export interface ComponentKeyInput {
-  componentType: BomComponentType;
+export type BomComponentKeyInput = {
+  componentType: "library" | "framework" | "application" | "container" | "model";
   ecosystem: string | null;
   name: string;
   version: string | null;
   packageUrl: string | null;
-}
+};
 
-export function createComponentKey(input: ComponentKeyInput): string {
+export function createBomComponentKey(input: BomComponentKeyInput): string {
   return createHash("sha256")
     .update([
       input.componentType,

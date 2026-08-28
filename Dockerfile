@@ -28,6 +28,8 @@ COPY patches/ ./patches/
 # whole image build fails.
 COPY scripts/set-hooks-path.mjs ./scripts/
 COPY scripts/lib/hooks-dir.mjs ./scripts/lib/
+COPY scripts/sbom/generate-platform-sbom.mjs ./scripts/sbom/
+COPY .github/workflows/publish-image.yml ./.github/workflows/
 COPY apps/web/package.json ./apps/web/
 COPY packages/db/package.json ./packages/db/
 COPY packages/db/prisma/schema ./packages/db/prisma/schema
@@ -256,6 +258,7 @@ COPY --from=init /app/pnpm-workspace.yaml /app/pnpm-lock.yaml /app/package.json 
 # runtime install fails the same way the image build did (SUR-8AB3353C).
 COPY --from=init /app/patches ./patches
 COPY --from=init /app/scripts ./scripts
+COPY --from=init /app/.github ./.github
 # Checked-in registries read by the packaged gate-context generator. Preserve
 # their repository-relative paths because the generator is also the CLI source
 # of truth and deliberately has no portal-only path branch.

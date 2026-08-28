@@ -311,6 +311,7 @@ export async function adoptWorktreeTool(
         baseSha: stringParam(params, "baseSha") ?? null,
         headSha: stringParam(params, "headSha") ?? null,
         executorKind: validatedExecutorKind,
+        executorRef: stringParam(params, "sessionRef") ?? null, // session identity; see the tool schema
         backlogItemId: backlogItemIdFromOutcomeAnchor(params),
         scope: parseScopeInput(params),
       },

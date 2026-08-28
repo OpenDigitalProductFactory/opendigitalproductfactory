@@ -628,6 +628,36 @@ function quiescenceBlocksWrites(status) {
     && ((status.level && status.level !== "normal") || status.writesRefused === true);
 }
 
+/**
+ * Is anything still holding the local-CI slot?
+ *
+ * Returns `true` when an active `local-integration-ci` lease exists, `false`
+ * when the control plane answers and there is none, and `null` when we could
+ * not find out.
+ *
+ * `null` is NOT `false` on purpose. Every "nothing is running" verdict has to
+ * come from an answer we actually received, because the caller turns it into a
+ * hard stop — and the failure that motivated this (BI-40230C6F) was the portal
+ * going down mid-run, which is exactly when an unreachable control plane must
+ * NOT be read as "the executor is gone".
+ */
+export async function hasActiveLocalCiLease({ mcpUrl, bearerToken, call = mcpCall }) {
+  let response;
+  try {
+    response = await call("list_nonprod_environment_leases", {}, { mcpUrl, bearerToken });
+  } catch {
+    return null;
+  }
+  if (response?.success !== true) return null;
+  const data = responseData(response);
+  // A missing `leases` key is NOT the same claim as `leases: []`. Only the latter
+  // is the control plane saying nothing holds the slot; the former is a payload we
+  // do not understand, and an unreadable answer must not stop the wait.
+  if (!Array.isArray(data?.leases)) return null;
+  return data.leases.some((lease) =>
+    (lease.environmentKey || lease.environment || lease.key) === "local-integration-ci");
+}
+
 async function cancelDeadLocalQueueObservers({
   directory,
   mcpUrl,
@@ -1352,6 +1382,29 @@ async function main() {
     ) {
       if (Date.now() >= deadline) {
         die("canonical local-CI executor ended without publishing evidence before the deadline");
+      }
+      // BI-40230C6F: "finalizing evidence" only means the slot holder has not
+      // published yet. It does NOT mean anything is still running. When the
+      // executor dies — the portal restarting mid-run is enough — the evidence
+      // it owed will never arrive, and this loop used to keep polling a corpse
+      // for the whole deadline. Measured: ~30 minutes of "finalizing evidence"
+      // after the gate had already logged the observer as proven dead.
+      //
+      // That is not merely slow. The pool is structurally ONE slot, so a wedged
+      // wait blocks every session on the host for the full deadline.
+      //
+      // Only an explicit `false` stops the wait: `null` means we could not ask,
+      // and an unreachable control plane is the very condition that kills the
+      // executor, so it must keep waiting rather than fail.
+      const slotHeld = await hasActiveLocalCiLease({
+        mcpUrl: options.mcpUrl,
+        bearerToken,
+      });
+      if (slotHeld === false) {
+        die(
+          "canonical local-CI executor is gone and its evidence will never arrive "
+            + "(no active local-integration-ci lease). Re-run pregate; this is not a verdict on the diff.",
+        );
       }
       const delayMs = retryDelayMs({ attempt: claimAttempt, pollSeconds: options.pollSeconds });
       claimAttempt += 1;

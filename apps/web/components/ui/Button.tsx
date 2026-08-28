@@ -20,11 +20,17 @@
 // Spec: docs/superpowers/specs/2026-08-16-ux-foundation-button-surface-design.md
 
 import type { ComponentPropsWithoutRef } from "react";
+import Link from "next/link";
 
 export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 export type ButtonSize = "sm" | "md";
 
 export type ButtonProps = ComponentPropsWithoutRef<"button"> & {
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+};
+
+export type ButtonLinkProps = ComponentPropsWithoutRef<typeof Link> & {
   variant?: ButtonVariant;
   size?: ButtonSize;
 };
@@ -48,6 +54,23 @@ const SIZE_CLASS: Record<ButtonSize, string> = {
   md: "px-4 py-2 text-sm",
 };
 
+function buttonClassName(
+  variant: ButtonVariant,
+  size: ButtonSize,
+  className: string,
+): string {
+  return [
+    "inline-flex items-center justify-center gap-2 rounded-md font-medium",
+    "disabled:cursor-not-allowed disabled:opacity-60",
+    "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]",
+    VARIANT_CLASS[variant],
+    SIZE_CLASS[size],
+    className,
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
 /**
  * Render a themed `<button>`. Defaults to `type="button"` so a button inside a
  * `<form>` never submits by accident — pass `type="submit"` deliberately.
@@ -62,17 +85,18 @@ export function Button({
   return (
     <button
       type={type}
-      className={[
-        "inline-flex items-center justify-center gap-2 rounded-md font-medium",
-        "disabled:cursor-not-allowed disabled:opacity-60",
-        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]",
-        VARIANT_CLASS[variant],
-        SIZE_CLASS[size],
-        className,
-      ]
-        .filter(Boolean)
-        .join(" ")}
+      className={buttonClassName(variant, size, className)}
       {...rest}
     />
   );
+}
+
+/** Render a navigation action with the same visual contract as Button. */
+export function ButtonLink({
+  variant = "primary",
+  size = "md",
+  className = "",
+  ...rest
+}: ButtonLinkProps) {
+  return <Link className={buttonClassName(variant, size, className)} {...rest} />;
 }

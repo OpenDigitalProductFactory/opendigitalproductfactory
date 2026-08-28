@@ -40,8 +40,7 @@ export function ProductTabNav({ productId }: { productId: string }) {
       description: "Monitor service health, supporting items, and dependency posture for the product.",
       subItems: [
         { label: "Health", href: `${base}/health` },
-        { label: "Dependencies & Estate", href: `${base}/inventory` },
-        { label: "Supply Chain", href: `${base}/supply-chain` },
+        { label: "Dependencies", href: `${base}/inventory` },
       ],
     },
     {
