@@ -141,6 +141,7 @@ vi.mock("@/lib/build/build-studio-config", () => ({
 vi.mock("@/lib/build/build-entry-gate", () => ({
   enforceBuildInitiativeReadiness: mockEnforceBuildInitiativeReadiness,
   assertBuildPhaseInitiativeReadiness: mockEnforceBuildInitiativeReadiness,
+  checkBuildPhaseInitiativeReadiness: async (a: unknown) => { try { await mockEnforceBuildInitiativeReadiness(a); return null; } catch (e) { return e instanceof Error && e.message ? e.message : "refused"; } }, // BI-C5D978E9
 }));
 vi.mock("@/lib/backlog/initiative-readiness/build-terminal-transition", () => ({ assertFeatureBuildCompletion: mockAssertFeatureBuildCompletion }));
 
@@ -906,8 +907,7 @@ describe("governed build start approvals", () => {
 
     expect(mockEvaluateBuildStudioPlanAdvancementGate).not.toHaveBeenCalled();
     expect(mockPrisma.featureBuild.update).not.toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { buildId: "FB-USAGE" },
+      expect.objectContaining({ where: { buildId: "FB-USAGE" },
         data: expect.objectContaining({ phase: "build" }),
       }),
     );

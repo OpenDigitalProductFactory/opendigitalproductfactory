@@ -55,7 +55,7 @@ import {
   formatResumeImplementationOutcomeMessage,
 } from "@/lib/build/build-actions-core";
 import { admitRuntimeGuardedWork } from "@/lib/platform-runtime/work-admission";
-import { assertBuildPhaseInitiativeReadiness } from "@/lib/build/build-entry-gate";
+import { assertBuildPhaseInitiativeReadiness, checkBuildPhaseInitiativeReadiness } from "@/lib/build/build-entry-gate";
 import { assertFeatureBuildCompletion } from "@/lib/backlog/initiative-readiness/build-terminal-transition";
 // ─── Auth Guard ──────────────────────────────────────────────────────────────
 
@@ -457,7 +457,7 @@ export async function advanceBuildPhase(
   }
 
   if (targetPhase === "complete") await assertFeatureBuildCompletion({ buildId, expectedPhase: currentPhase });
-  else await assertBuildPhaseInitiativeReadiness({ buildId, currentPhase, targetPhase });
+  else { const refusal = await checkBuildPhaseInitiativeReadiness({ buildId, currentPhase, targetPhase }); if (refusal) return { ok: false, message: refusal }; } // BI-C5D978E9: refusals return
 
   if (currentPhase === "ideate" && targetPhase === "plan") {
     const businessBrief = await prisma.businessBuildBrief.findUnique({
