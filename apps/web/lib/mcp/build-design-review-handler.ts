@@ -42,7 +42,7 @@ export async function reviewDesignDoc(params: Record<string, unknown>, userId: s
       // trajectory in the operator-facing gate reason (mirror of BI-4396EFEC
       // for the plan path). Live repro: FB-5E20E793 oscillated on the same
       // "missing accessibility" complaint round after round.
-      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { designDoc: true, designReview: true, kind: true, brief: true, plan: true } });
+      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { designDoc: true, designReview: true, kind: true, brief: true, plan: true, title: true, description: true } });
 
       // Fix flow: a fix build has no feature design doc — it carries a structured
       // diagnosis (fixContext) on its brief. Review the diagnosis for completeness
@@ -98,6 +98,7 @@ export async function reviewDesignDoc(params: Record<string, unknown>, userId: s
 
       if (!build?.designDoc) return { success: false, error: "No design document saved yet.", message: "Save designDoc first." };
       const { buildDesignReviewPrompt, buildArchitectureReviewPrompt, finalizeArchitectureAdvisory, parseReviewResponse, mergeReviews, collectReviewerVerdicts } = await import("@/lib/build-reviewers");
+      const { ownerAskContext } = await import("@/lib/build/owner-ask-context");
       const designDocTyped = build.designDoc as Parameters<typeof buildDesignReviewPrompt>[0];
       // BI-CE49D82E — Compute the iteration context up front so we can
       // (a) feed prior issues into the reviewer prompt and (b) populate
@@ -118,8 +119,22 @@ export async function reviewDesignDoc(params: Record<string, unknown>, userId: s
       const priorContext = priorIssues.length > 0
         ? { round: priorRound, issues: priorIssues }
         : null;
-      const prompt = buildDesignReviewPrompt(designDocTyped, "", priorContext);
-      const archPrompt = buildArchitectureReviewPrompt({ kind: "design", doc: designDocTyped }, "");
+      // BI-82E41B79 — the reviewer must see what was ASKED FOR, not only what
+      // was designed. This handler passed "" as project context, so the review
+      // ran against the design alone. The design rewrites the ask into its own
+      // `problemStatement`, and constraints do not survive that rewrite: an
+      // owner who wrote "no settings, no filters, no configuration" got a
+      // design with URL-parameter filtering, and the review then failed the
+      // build on the FILTER's edge cases — twice, until the build was
+      // abandoned. A reviewer that cannot see the ask cannot catch a design
+      // that exceeds it; it can only harden the overreach.
+      //
+      // The server-action path (lib/actions/build.ts) already passed
+      // `Build: <title>. <description>`. This is the same context, on the path
+      // the pipeline actually uses.
+      const ownerContext = ownerAskContext(build.title, build.description);
+      const prompt = buildDesignReviewPrompt(designDocTyped, ownerContext, priorContext);
+      const archPrompt = buildArchitectureReviewPrompt({ kind: "design", doc: designDocTyped }, ownerContext);
       const { routeAndCall } = await import("@/lib/routed-inference");
       const messages = [{ role: "user" as const, content: prompt }];
       // Run the two checklist reviewers PLUS the advisory architecture reviewer
