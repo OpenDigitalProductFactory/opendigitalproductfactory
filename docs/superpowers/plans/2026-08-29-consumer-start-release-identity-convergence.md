@@ -19,7 +19,7 @@ silent downgrade path, so the changes and rollback evidence remain one PR.
 
 - Decision: atomic
 - Parent: `BI-6CB35411`
-- Receipt: pending
+- Receipt: `cmte0jf1402dj01qxv20w5lsb`
 - Rationale: Canonical-root promotion and state-authoritative restart projection close one release-identity invariant; either half alone leaves a consumer install able to restart onto different bytes.
 - Dependencies: protected BI-3FD07259 caller bridge PR #4840 at `7eba6d0c2485a800f8d66f31aa1521008fa9e59b`; no independent BI decomposition.
 - Consumer start release-identity convergence -> `BI-6CB35411`
