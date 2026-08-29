@@ -138,3 +138,37 @@ destruction.
 6. On exact served-SHA/CAN-TEST, observe only the existing reconciler advancing
    `SUR-6B312E24`; require stable event identity, one dispatch acknowledgement,
    truthful terminal state, and no replacement row before unfreezing BI-F48.
+
+## Terminal old-target correction
+
+The accepted live fixture is terminal and bound to a superseded release. Add a
+first-failing admission test proving reconciliation does not mutate or dispatch
+that row. Use the existing authenticated operator action as the sole bootstrap
+contract: it accepts only a terminal superseded run plus a verified signed tagged
+release target, creates a new
+admission through the existing transaction, and persists a unique typed
+`recoveryOfRunId` self-relation to the prior run. Reject active/ambiguous or
+non-latest prior rows, an existing successor, same/untagged/Git targets, forged
+or expired bindings, and target drift. This narrowly supersedes the old
+"no replacement run" step: the terminal predecessor remains immutable, while
+one separately fingerprinted successor becomes the only lawful bootstrap
+identity. It is not a browser retry or rebind; protected CI and the existing
+quiescence/worker-CAS gates remain mandatory.
+
+Publish the protected repair without deploying the superseded c137 release.
+Before the one physical action, capture a fresh server-signed binding for the
+repair tag/SHA and prove the latest row is still the unchanged terminal
+`SUR-6B312E24`. The old runtime admits one new manual run through its existing
+authenticated path. During new-container startup, the additive migration may
+link that one in-flight run to the exact predecessor only when the singleton,
+ordering, terminal, pre-dispatch, tagged-target, and distinct-target predicates
+all hold. Verify the typed link plus served SHA/CAN-TEST and restart coherence;
+otherwise stop without a second action.
+
+Treat the typed link as audit metadata only. The successor's signed target
+verification and recomputed admission fingerprint remain the sole dispatch
+authority. Record that the SQL migration checks structural predecessor evidence
+without cryptographically recomputing the historical fingerprint, and that its
+tests are static SQL contract assertions rather than an executed migration
+fixture. In live acceptance, read back both immutable rows and the link, then
+verify the successor's independent admission and dispatch evidence.

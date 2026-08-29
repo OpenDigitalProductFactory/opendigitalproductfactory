@@ -182,6 +182,28 @@ describe("requestSelfUpgrade", () => {
     expect(mocks.inngestSend).not.toHaveBeenCalled();
   });
 
+  it("does not grant recovery authority to a plain request after a terminal failure", async () => {
+    mocks.getLatestRun.mockResolvedValue({
+      runId: "SUR-6B312E24",
+      status: "failed",
+      targetSha: "04b0b9d84251c2a91ae519bf79eedd86b662f604",
+      targetTag: "v2026.08.29-terminal-writer-failed-reader-history.1",
+      deployedSha: null,
+      completedAt: new Date("2026-08-29T14:45:34.380Z"),
+    });
+    const result = await requestSelfUpgrade({
+      requestedBy: "manual:user-ops-1",
+      actorKind: "human",
+    });
+
+    expect(result).toMatchObject({
+      success: true,
+      status: "human_override_required",
+      reason: "terminal-recovery-needs-operator-binding",
+    });
+    expect(mocks.admitSelfUpgrade).not.toHaveBeenCalled();
+  });
+
   it.each(["running", "queued", "pending"])(
     "does not dispatch a duplicate event when latest run is %s",
     async (status) => {

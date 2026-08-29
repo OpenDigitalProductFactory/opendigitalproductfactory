@@ -1369,6 +1369,12 @@ model SelfUpgradeRun {
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
+  // A recovery admission never rewrites its terminal predecessor. The unique
+  // self-relation makes the one permitted successor explicit and auditable.
+  recoveryOfRunId String?         @unique
+  recoveryOf      SelfUpgradeRun? @relation("SelfUpgradeRecovery", fields: [recoveryOfRunId], references: [runId], onDelete: Restrict, onUpdate: Cascade)
+  recoveredBy     SelfUpgradeRun? @relation("SelfUpgradeRecovery")
+
   // BI-3FD07259 — durable admission precedes queue I/O. Nullable dispatch
   // state preserves historical rows created before the admission contract.
   targetTag              String?

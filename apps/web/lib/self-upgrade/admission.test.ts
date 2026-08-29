@@ -17,6 +17,7 @@ const target: SelfUpgradeTargetBinding = {
 function record(overrides: Partial<SelfUpgradeAdmissionRecord> = {}): SelfUpgradeAdmissionRecord {
   const row: SelfUpgradeAdmissionRecord = {
     runId: "SUR-D71E8971",
+    recoveryOfRunId: null,
     status: "pending",
     trigger: "manual:user-1",
     targetSha: target.targetSha,
@@ -381,6 +382,26 @@ describe("durable self-upgrade admission", () => {
     expect(repo.failDispatch).toHaveBeenCalledWith(
       expect.objectContaining({ reason: "admission-binding-drift" }),
     );
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("does not mutate a terminal old-target row during reconciliation", async () => {
+    const repo = repository(record({
+      runId: "SUR-6B312E24",
+      status: "failed",
+      dispatchStatus: "dispatch_failed",
+      targetSha: "0".repeat(40),
+      targetTag: "v2026.08.29-terminal-writer-failed-reader-history.1",
+      completedAt: new Date("2026-08-29T14:45:34.380Z"),
+    }));
+    const { coordinator, send } = service({ repository: repo });
+
+    expect(await coordinator.dispatch("SUR-6B312E24")).toEqual({
+      status: "failed",
+      runId: "SUR-6B312E24",
+    });
+    expect(repo.failDispatch).not.toHaveBeenCalled();
+    expect(repo.markDispatchIndeterminate).not.toHaveBeenCalled();
     expect(send).not.toHaveBeenCalled();
   });
 

@@ -279,6 +279,7 @@ describe("SelfUpgradePage", () => {
   it("passes history runs and cursor to SelfUpgradeClient", async () => {
     const run: SelfUpgradeRunDto = {
       runId: "run-1",
+      recoveryOfRunId: null,
       status: "succeeded",
       trigger: null,
       currentSha: "abc123",

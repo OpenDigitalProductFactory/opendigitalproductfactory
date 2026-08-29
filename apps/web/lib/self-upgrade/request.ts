@@ -43,7 +43,7 @@ export type RequestSelfUpgradeResult =
   | {
       success: true;
       status: "human_override_required";
-      reason: "outside-window" | "no-window-needs-timezone";
+      reason: "outside-window" | "no-window-needs-timezone" | "terminal-recovery-needs-operator-binding";
       message: string;
     }
   | {
@@ -131,6 +131,14 @@ export async function requestSelfUpgrade(
       success: true,
       status: "already_active",
       runId: latestRun.runId,
+    };
+  }
+  if (latestRun?.status === "failed") {
+    return {
+      success: true,
+      status: "human_override_required",
+      reason: "terminal-recovery-needs-operator-binding",
+      message: "A terminal upgrade can only be recovered from the operator page with the current authenticated release binding.",
     };
   }
 
