@@ -156,7 +156,18 @@ jobs:
             tag_suffix: linux-arm64
 
     steps:
+      # lfs: true is load-bearing, not hygiene. This job supplies the image build
+      # context, and `.dockerignore` deliberately admits
+      # docs/Reference/IT4IT_Functional_Criteria_Taxonomy.xlsx so Dockerfile can
+      # COPY it. Without an LFS fetch, checkout leaves that path as a 130-byte
+      # pointer stub, the COPY bakes the stub in, and every install's
+      # eaReferenceModels seed step dies on "invalid zip data" with the IT4IT and
+      # BIAN reference models never importing (BI-FEE26C36). The Dockerfile
+      # asserts materialization, so removing this input fails the build rather
+      # than shipping a broken release.
       - uses: actions/checkout@v7
+        with:
+          lfs: true
 
       - name: Bind promoter image to its release contract
         id: promoter-contract
