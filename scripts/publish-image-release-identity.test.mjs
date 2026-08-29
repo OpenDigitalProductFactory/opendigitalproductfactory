@@ -47,3 +47,38 @@ test("latest is promoted only from the verified immutable release tag", () => {
   assert.match(promotion, /TAG: \$\{\{ needs\.gate\.outputs\.tag \}\}/);
   assert.match(promotion, /imagetools create --tag "\$\{IMAGE\}:latest" "\$\{IMAGE\}:\$\{TAG\}"/);
 });
+
+test("the image build context materializes Git LFS assets", () => {
+  const build = jobBlock("build", "merge");
+
+  // The build job supplies the docker context. `.dockerignore` deliberately
+  // admits docs/Reference/IT4IT_Functional_Criteria_Taxonomy.xlsx and the
+  // Dockerfile COPYs it, but that path is tracked in Git LFS. Without this
+  // input, actions/checkout leaves a ~130-byte pointer stub, the COPY bakes it
+  // in, and every install's eaReferenceModels seed dies on "invalid zip data"
+  // (BI-FEE26C36). No PR check builds the image, so this shape test is the only
+  // thing standing between a removed input and a broken published release.
+  assert.match(
+    build,
+    /uses: actions\/checkout@v7\s*\n\s*with:\s*\n\s*lfs: true/,
+    "the build job must check out with lfs: true or the image ships LFS pointer stubs",
+  );
+});
+
+test("the Dockerfile refuses to bake an unmaterialized LFS pointer", () => {
+  const dockerfile = readFileSync("Dockerfile", "utf8");
+  const copyIndex = dockerfile.indexOf(
+    "COPY docs/Reference/IT4IT_Functional_Criteria_Taxonomy.xlsx",
+  );
+  assert.notEqual(copyIndex, -1, "the IT4IT workbook COPY must exist");
+
+  // The assertion has to sit where the bytes enter the artifact: the row-count
+  // guard in seed-ea-reference-models.ts runs after the workbook read, and the
+  // xlsx parser throws on a stub before it is reached.
+  const afterCopy = dockerfile.slice(copyIndex);
+  assert.match(
+    afterCopy,
+    /head -c 2 docs\/Reference\/IT4IT_Functional_Criteria_Taxonomy\.xlsx \| grep -q '\^PK'/,
+    "the COPY must be followed by a zip-magic assertion so a pointer stub fails the publish, not the install",
+  );
+});
