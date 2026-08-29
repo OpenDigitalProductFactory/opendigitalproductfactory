@@ -60,6 +60,17 @@ consumer install into a source checkout or weakening immutable image checks.
   `/api/platform/version`, `/api/platform/image-version`, and `/api/health/sha`;
   no new identity endpoint is required.
 
+## Governed artifact identity
+
+The design-review carrier is the DCO-signed commit published on
+`fix/consumer-start-path-preserves-deployed-release-i`, not a local-only object.
+Before any governed receipt is accepted, the immutable repository provider must
+resolve that exact commit, this file's exact blob, and the same Workroom head.
+A provider lookup failure is infrastructure-inconclusive: preserve the failed
+TaskRun and envelope, record the occurrence, and create a fresh immutable review
+identity only after repository provenance is demonstrably available. It must
+never be converted into a research or design PASS from prose.
+
 ## Decision
 
 Use a **canonical install-root identity transaction plus state-authoritative
