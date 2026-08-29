@@ -19,6 +19,7 @@ import { readCurrentContainerConfigDigest } from "@/lib/self-upgrade/runtime-ima
 import { getJobEngineHealth } from "@/lib/queue/job-engine-health";
 import { getLatestRun, getLatestSucceededRun } from "@/lib/self-upgrade/run-store";
 import { admitSelfUpgrade, resolveCurrentSelfUpgradeTarget } from "@/lib/self-upgrade/admission";
+import { selectSelfUpgradeAdmissionTarget } from "@/lib/self-upgrade/target-admission";
 import {
   getCurrentImpactSummaryId,
   loadRunImpactDigest,
@@ -773,8 +774,7 @@ export async function getSelfUpgradeStatus() {
 
 export async function triggerSelfUpgrade(opts?: {
   dryRun?: boolean; force?: boolean;
-  expectedTargetSha?: string | null;
-  expectedTargetTag?: string | null;
+  targetBinding?: string;
 }) {
   const userId = await requireOpsAccess();
   const triggeredBy = `manual:${userId}`;
@@ -807,14 +807,14 @@ export async function triggerSelfUpgrade(opts?: {
     return { queued: false, reason: "already-queued", runId: latestRun.runId } as const;
   }
 
-  const target = await resolveCurrentSelfUpgradeTarget();
-  if (!target) return { queued: false, reason: "target-unavailable" } as const;
-  const shaChanged = opts?.expectedTargetSha && opts.expectedTargetSha !== target.targetSha;
-  const tagChanged = opts && "expectedTargetTag" in opts && opts.expectedTargetTag !== target.targetTag;
-  if (shaChanged || tagChanged) {
-    return { queued: false, reason: "target-changed" } as const;
-  }
-
+  const resolvedTarget = await resolveCurrentSelfUpgradeTarget();
+  const selection = selectSelfUpgradeAdmissionTarget({
+    targetBinding: opts?.targetBinding,
+    supportTargetKind: support.targetKind,
+    resolvedTarget,
+  });
+  if (!selection.ok) return { queued: false, reason: selection.error } as const;
+  const target = selection.data;
   // Attach the "What's in this update?" summary the operator just reviewed (if
   // any) so the run records the changes it carried. Best effort — the upgrade
   // proceeds whether or not a summary was generated.

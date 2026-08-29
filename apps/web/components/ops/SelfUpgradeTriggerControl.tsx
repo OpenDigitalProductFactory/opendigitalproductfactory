@@ -39,8 +39,7 @@ type Props = {
   latestRun: LatestRun | null;
   quiescence?: QuiescenceActivity | null;
   jobEngine?: JobEngineHealth;
-  targetSha?: string | null;
-  targetTag?: string | null;
+  targetBinding?: string | null;
 };
 
 export default function SelfUpgradeTriggerControl({
@@ -51,8 +50,7 @@ export default function SelfUpgradeTriggerControl({
   latestRun: initialLatestRun,
   quiescence: initialQuiescence,
   jobEngine: initialJobEngine,
-  targetSha,
-  targetTag,
+  targetBinding,
 }: Props) {
   const router = useRouter();
   const live = useOptionalSelfUpgradeLive();
@@ -142,8 +140,7 @@ export default function SelfUpgradeTriggerControl({
       try {
         const result = await triggerSelfUpgrade({
           ...(force ? { force: true } : {}),
-          expectedTargetSha: targetSha,
-          expectedTargetTag: targetTag,
+          ...(targetBinding ? { targetBinding } : {}),
         });
         setTriggerResult(result);
         setAdmissionUncertain(false);

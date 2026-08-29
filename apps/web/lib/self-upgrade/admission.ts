@@ -196,6 +196,15 @@ export function createSelfUpgradeAdmissionService(
     if (!existing) return { status: "not-claimed", runId };
 
     const currentTarget = await dependencies.resolveTarget().catch(() => null);
+    if (!currentTarget) {
+      await dependencies.repository.markDispatchIndeterminate({
+        runId,
+        leaseToken: null,
+        reason: "admission-target-unavailable",
+        observedAt: dependencies.now(),
+      });
+      return { status: "indeterminate", runId };
+    }
     if (!targetMatches(existing, currentTarget)) {
       await dependencies.repository.failDispatch({
         runId,
@@ -204,7 +213,7 @@ export function createSelfUpgradeAdmissionService(
       });
       return { status: "failed", runId };
     }
-    if (!fingerprintMatches(existing, currentTarget!)) {
+    if (!fingerprintMatches(existing, currentTarget)) {
       await dependencies.repository.failDispatch({
         runId,
         reason: "admission-binding-drift",

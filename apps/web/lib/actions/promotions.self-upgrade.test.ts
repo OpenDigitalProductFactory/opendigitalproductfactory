@@ -61,7 +61,6 @@ vi.mock("@/lib/self-upgrade/admission", () => ({
   resolveCurrentSelfUpgradeTarget: vi.fn(),
   admitSelfUpgrade: vi.fn(),
 }));
-
 vi.mock("@/lib/self-upgrade/impact", () => ({
   getCurrentImpactSummaryId: vi.fn().mockResolvedValue(null),
   loadRunImpactDigest: vi.fn().mockResolvedValue(null),
@@ -964,6 +963,7 @@ describe("triggerSelfUpgrade – dispatch", () => {
     const result = await triggerSelfUpgrade();
     expect(result).toMatchObject({ queued: true, admitted: true, runId: "SUR-QUEUED1" });
   });
+
 });
 
 // ─── triggerSelfUpgrade – maintenance window gate + emergency override ─────────

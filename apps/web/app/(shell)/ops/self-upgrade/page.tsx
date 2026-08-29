@@ -17,6 +17,7 @@ import { NAV_MODE_COOKIE, resolveNavModeFromCookie, isSimpleNavMode } from "@/li
 import { SelfUpgradeLiveProvider } from "@/components/ops/SelfUpgradeLiveProvider";
 import type { SelfUpgradeStatusSnapshot } from "@/lib/self-upgrade/status-snapshot";
 import { UNKNOWN_SELF_UPGRADE_SUPPORT } from "@/lib/self-upgrade/support";
+import { createSelfUpgradeTargetBinding } from "@/lib/self-upgrade/target-binding";
 
 export default async function SelfUpgradePage() {
   // BI-D43EB266: Self-Upgrade is the single operator entry point for "update
@@ -195,6 +196,26 @@ export default async function SelfUpgradePage() {
       )
       ? "update-available"
       : "no-update";
+  let targetBinding: string | null = null;
+  if (
+    effectiveStatus.support.targetKind === "release-artifact" &&
+    effectiveStatus.targetAvailability === "resolved" &&
+    effectiveStatus.targetSha &&
+    effectiveStatus.targetTag
+  ) {
+    try {
+      targetBinding = createSelfUpgradeTargetBinding({
+        targetKind: "release-artifact",
+        targetSha: effectiveStatus.targetSha,
+        targetTag: effectiveStatus.targetTag,
+      });
+    } catch {
+      // Missing server signing material must fail closed without taking down
+      // the operator status surface. With no binding, a later action may use
+      // only a freshly resolved server target; source-free fallback is denied.
+      targetBinding = null;
+    }
+  }
 
   return (
     <SelfUpgradeLiveProvider initialSnapshot={initialLiveSnapshot}>
@@ -222,8 +243,7 @@ export default async function SelfUpgradePage() {
               latestRun={clientProps.latestRun}
               quiescence={clientProps.quiescence}
               jobEngine={clientProps.jobEngine}
-              targetSha={effectiveStatus.targetSha}
-              targetTag={effectiveStatus.targetTag}
+              targetBinding={targetBinding}
             />
           }
         />
