@@ -1,0 +1,55 @@
+{
+  "version": "1",
+  "accountableOwner": "developer-platform",
+  "affectedCopies": [],
+  "migration": {
+    "name": "20260829040000_self_upgrade_admission_reconciliation",
+    "backfill": "none - nullable dispatch metadata preserves historical SelfUpgradeRun rows; new admissions populate the contract"
+  },
+  "tests": [
+    "apps/web/lib/self-upgrade/admission.test.ts",
+    "apps/web/lib/self-upgrade/run-store.test.ts",
+    "apps/web/lib/queue/functions/self-upgrade.test.ts",
+    "apps/web/components/ops/SelfUpgradeTriggerControl.test.tsx"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "platform:self-upgrade-run",
+      "prismaModel": "SelfUpgradeRun",
+      "lifecycleDisposition": "operational admission and dispatch evidence retained with self-upgrade history",
+      "fields": [
+        {
+          "fieldId": "platform:self-upgrade-run#targetTag",
+          "resolution": "governed",
+          "reason": "binds a release-artifact admission to the exact immutable tag shown to the operator",
+          "provenance": "server-side self-upgrade target resolver"
+        },
+        {
+          "fieldId": "platform:self-upgrade-run#admissionFingerprint",
+          "resolution": "governed",
+          "reason": "idempotently binds target, force posture, actor, and reviewed impact to one admission",
+          "provenance": "self-upgrade admission transaction"
+        },
+        {
+          "fieldId": "platform:self-upgrade-run#dispatchStatus",
+          "resolution": "governed",
+          "reason": "projects durable admission, dispatch, ambiguity, acknowledgement, and failure state",
+          "provenance": "self-upgrade dispatcher and reconciler"
+        },
+        {
+          "fieldId": "platform:self-upgrade-run#dispatchLeaseToken",
+          "resolution": "governed",
+          "reason": "prevents concurrent reconcilers from dispatching the same admission",
+          "provenance": "transactional dispatch claim"
+        },
+        {
+          "fieldId": "platform:self-upgrade-run#dispatchEventIds",
+          "resolution": "governed",
+          "reason": "correlates the server admission with provider acknowledgement without becoming execution authority",
+          "provenance": "Inngest send acknowledgement"
+        }
+      ]
+    }
+  ]
+}
