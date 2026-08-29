@@ -113,3 +113,28 @@ destruction.
 | Deliverable key | Backlog item | Independently shippable | Requirement refs | Contract refs | Flow refs | Verification refs |
 | --- | --- | --- | --- | --- | --- | --- |
 | `durable-self-upgrade-admission` | BI-3FD07259 | no | OBJ-SUA-001, OBJ-SUA-002, OBJ-SUA-003, OBJ-SUA-004 | admission-transaction, dispatch-state-machine, consumer-cas, operator-projection | admit-return, post-response-dispatch, boot-reconcile, worker-claim, live-upgrade | AC-SUA-001, AC-SUA-002, AC-SUA-003, AC-SUA-004, AC-SUA-005, AC-SUA-006, AC-SUA-007, AC-SUA-008 |
+
+## Atomic recovery extension for SUR-6B312E24
+
+1. Extract the Inngest self-registration endpoint and PUT lifecycle from the
+   oversized instrumentation module into one queue-owned helper. Red fixtures
+   cover `APP_URL` unset with an IPv4-only listener, explicit URL normalization,
+   truthful OK/failure persistence, and reconcile-only-after-success.
+2. Add the exact source-free durable-admission red fixture to
+   `admission.test.ts`: a tagged release row with a valid persisted fingerprint,
+   null target discovery, healthy job engine, and stable run id
+   `SUR-6B312E24` must dispatch once without calling `admit`.
+3. Reconstruct the persisted release binding only by validating its complete
+   admission fingerprint. Keep null-discovery Git admissions, missing tags,
+   corrupted fingerprints, resolved drift, unhealthy health, lease conflicts,
+   and newer-run conflicts fail-closed.
+4. Wire boot and periodic self-registration through the extracted helper and
+   invoke the existing reconciler only after a real successful PUT. Do not add
+   another timer, queue, run identity, or operator control.
+5. Run focused red/green tests, the adjacent admission/instrumentation suites,
+   web typecheck, module-size/style/prose guards, preflight, exact-tree CI, and
+   protected GitHub checks. Publish one canonical release and deploy it through
+   the governed live path without creating another `SelfUpgradeRun`.
+6. On exact served-SHA/CAN-TEST, observe only the existing reconciler advancing
+   `SUR-6B312E24`; require stable event identity, one dispatch acknowledgement,
+   truthful terminal state, and no replacement row before unfreezing BI-F48.
