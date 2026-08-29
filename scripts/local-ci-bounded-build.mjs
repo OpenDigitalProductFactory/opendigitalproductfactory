@@ -296,6 +296,11 @@ async function probeControlPlane(postgresProbe) {
         mcpUrl,
         bearerToken,
         timeoutMs: 2_500,
+        // DPF_CONTROL_PLANE_PORTAL_URL is an operator-set control-plane address
+        // and is routinely not loopback, so this endpoint carries intent the
+        // way DPF_MCP_URL does. Declared here rather than widening the
+        // environment allowlist inside mcpCall.
+        allowNonLoopbackEndpoint: true,
       });
       return response?.success === true;
     }),
