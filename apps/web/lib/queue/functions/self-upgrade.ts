@@ -19,8 +19,7 @@ import {
   evaluateReleaseBatch,
 } from "@/lib/self-upgrade/release-batch";
 import { prepareUpgradeSource, defaultGitRunner } from "@/lib/self-upgrade/prepare-source";
-// Pure constant from a spawn-free module — the host-only ./promoter runtime must
-// NOT be statically imported into this server bundle entrypoint (BI-98AF1066);
+// Pure constant only: never statically import the spawn-heavy promoter runtime
 // that is what the dynamic loadPromoterRuntime() below is for.
 import { PROMOTER_ALREADY_RUNNING_EXIT_CODE } from "@/lib/self-upgrade/promoter-exit-codes";
 import {
@@ -67,6 +66,7 @@ import {
   signalSwapComplete,
   failQuiescenceSwap,
 } from "@/lib/self-upgrade/quiescence";
+import { rejectDuplicateSelfUpgradeDelivery } from "@/lib/self-upgrade/delivery-admission";
 import {
   SELF_UPGRADE_CRON,
   SELF_UPGRADE_EVENT,
@@ -95,6 +95,8 @@ async function loadPromoterRuntime(): Promise<PromoterRuntime> {
 export async function runSelfUpgrade(
   params: SelfUpgradeRunEventData,
 ): Promise<Record<string, unknown>> {
+  const duplicate = await rejectDuplicateSelfUpgradeDelivery(params.runId);
+  if (duplicate) return duplicate;
   const config = await getSelfUpgradeConfig();
   const now = new Date();
   const cooldownMinutes = config.cooldownMinutes ?? DEFAULT_COOLDOWN_MINUTES;
