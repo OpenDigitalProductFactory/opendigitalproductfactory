@@ -1256,6 +1256,9 @@
     "docs/testing/ci-observation-baseline.json": [
       "docs/testing/ci-evidence.md"
     ],
+    "dpf-start.ps1": [
+      "docs/runbooks/bet5-windows-self-upgrade.md"
+    ],
     "e2e/fixtures/evidence.ts": [
       "docs/architecture/agent-client-capability-parity.md"
     ],
@@ -2850,6 +2853,7 @@
     ],
     "docs/runbooks/bet5-windows-self-upgrade.md": [
       "apps/web/lib/self-upgrade/host-memory-preflight.ts",
+      "dpf-start.ps1",
       "scripts/promote.sh"
     ],
     "docs/security/2026-05-24-shift-left-rollout.md": [
