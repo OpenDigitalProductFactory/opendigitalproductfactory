@@ -284,6 +284,24 @@ describe("durable self-upgrade admission", () => {
     expect(send).not.toHaveBeenCalled();
   });
 
+  it("keeps an exact persisted admission reconcilable while release discovery is unavailable", async () => {
+    const repo = repository();
+    const { coordinator, send } = service({
+      repository: repo,
+      resolveTarget: vi.fn(async () => null),
+    });
+
+    const outcome = await coordinator.dispatch("SUR-D71E8971");
+
+    expect(outcome).toEqual({ status: "indeterminate", runId: "SUR-D71E8971" });
+    expect(repo.markDispatchIndeterminate).toHaveBeenCalledWith(expect.objectContaining({
+      runId: "SUR-D71E8971",
+      reason: "admission-target-unavailable",
+    }));
+    expect(repo.failDispatch).not.toHaveBeenCalled();
+    expect(send).not.toHaveBeenCalled();
+  });
+
   it("fails closed when persisted admission fields no longer match the fingerprint", async () => {
     const repo = repository(record({
       requestedForce: true,
