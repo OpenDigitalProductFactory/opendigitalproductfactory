@@ -1,3 +1,4 @@
+import { requirementEvidenceLane, requirementNextAction } from "./readiness-guidance";
 import type {
   InitiativeReadinessDecision,
   InitiativeReadinessFacts,
@@ -120,17 +121,36 @@ function requirementsFor(facts: InitiativeReadinessFacts, target: ReadinessTarge
   return completionRequirements(facts);
 }
 
+/**
+ * BI-28E8CB88: a requirement result used to carry only a state and a code. That
+ * is enough to decide the verdict and not enough to act on: `missing` with an
+ * empty ref list reads as "you supplied nothing" to an author who supplied
+ * exactly what was asked for, in the lane nothing reads. Every result now says
+ * which lane its evidence is in and names the door for THIS profile
+ * (BI-3AE38A1F). The verdict arithmetic above is untouched — nothing here can
+ * turn an unmet requirement into a satisfied one.
+ */
 function result(
   facts: InitiativeReadinessFacts,
   code: ReadinessCode,
   state: ReadinessEvidenceState | "blocked",
   accountableRole: string,
 ): ReadinessRequirementResult {
+  const unreadEvidenceRefs = state === "pass" ? [] : facts.unreadEvidenceRefs?.[code] ?? [];
   return {
     code,
     state,
     accountableRole,
     evidenceRefs: facts.evidenceRefs?.[code] ?? [],
+    evidenceLane: requirementEvidenceLane({ state, unreadEvidenceRefs }),
+    unreadEvidenceRefs,
+    nextAction: requirementNextAction({
+      code,
+      profile: facts.profile,
+      state,
+      unreadEvidenceRefs,
+      reasons: facts.requirementReasons?.[code],
+    }),
   };
 }
 

@@ -242,6 +242,29 @@ export async function listBacklogItems(params: Record<string, unknown>): Promise
   if (params["hasActiveBuild"] === true) where["activeBuildId"] = { not: null };
   else if (params["hasActiveBuild"] === false) where["activeBuildId"] = null;
 
+  // BI-28E8CB88 acceptance criterion 3: the items holding evidence the gates
+  // cannot read must be enumerable, so the backlog can be reconciled rather than
+  // silently stalled. When first measured on the live install, 38 items held
+  // `evidence` activities, 4 held `initiative_gate_receipt`, and the other 35
+  // had no way to be found.
+  if (params["evidenceNotCounted"] === true) {
+    const holdingEvidence = await prisma.backlogItemActivity.findMany({
+      where: { kind: "evidence" },
+      distinct: ["backlogItemId"],
+      select: { backlogItemId: true },
+    });
+    const holdingReceipts = await prisma.backlogItemActivity.findMany({
+      where: { kind: "initiative_gate_receipt" },
+      distinct: ["backlogItemId"],
+      select: { backlogItemId: true },
+    });
+    const withReceipts = new Set(holdingReceipts.map((row) => row.backlogItemId));
+    const stalled = holdingEvidence
+      .map((row) => row.backlogItemId)
+      .filter((id) => !withReceipts.has(id));
+    where["id"] = { in: stalled };
+  }
+
   const limit = resolveListLimit(params["limit"]);
   const matching = await prisma.backlogItem.count({ where });
   const items = await prisma.backlogItem.findMany({

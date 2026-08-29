@@ -5,6 +5,14 @@ export const READINESS_PROFILES = ["doc-only", "fix", "feature", "cross-domain",
 export type ReadinessProfile = (typeof READINESS_PROFILES)[number];
 
 export type ReadinessVerdict = "allowed" | "input-required" | "denied";
+
+/**
+ * Where a requirement's evidence actually lives, as opposed to whether it exists.
+ * See `readiness-guidance.ts` for why the distinction is load-bearing
+ * (BI-28E8CB88).
+ */
+export const READINESS_EVIDENCE_LANES = ["gate-receipt", "recorded-unread", "none"] as const;
+export type ReadinessEvidenceLane = (typeof READINESS_EVIDENCE_LANES)[number];
 export type ReadinessEvidenceState =
   | "pass"
   | "fail"
@@ -102,6 +110,17 @@ export type InitiativeReadinessFacts = {
   blockingFindingsOpen?: boolean;
   projectionError?: boolean;
   evidenceRefs?: Partial<Record<ReadinessCode, string[]>>;
+  /**
+   * Non-receipt activity IDs on the subject that could be an attempt at a
+   * requirement this gate reads only from receipts (BI-28E8CB88).
+   */
+  unreadEvidenceRefs?: Partial<Record<ReadinessCode, string[]>>;
+  /**
+   * Reasons from a sub-policy that a single evidence state collapses — the
+   * completion-evidence blockers behind a bare `DELIVERY_EVIDENCE_REQUIRED:
+   * missing`, for instance.
+   */
+  requirementReasons?: Partial<Record<ReadinessCode, string[]>>;
 };
 
 export type ReadinessRequirementResult = {
@@ -109,6 +128,16 @@ export type ReadinessRequirementResult = {
   state: ReadinessEvidenceState | "blocked";
   accountableRole: string;
   evidenceRefs: string[];
+  /**
+   * Whether the evidence this requirement needs is absent, or present in a form
+   * this gate does not read. `missing` alone reads as "you supplied nothing" to
+   * a caller who supplied exactly what was asked for (BI-28E8CB88).
+   */
+  evidenceLane: ReadinessEvidenceLane;
+  /** Activity IDs behind a `recorded-unread` lane. */
+  unreadEvidenceRefs: string[];
+  /** One actionable sentence, profile-aware. Null when nothing is owed. */
+  nextAction: string | null;
 };
 
 export type InitiativeReadinessDecision = {
