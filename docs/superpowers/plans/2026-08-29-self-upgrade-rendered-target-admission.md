@@ -5,8 +5,9 @@ status: active
 # Server-Owned Rendered Target Admission Plan
 
 **Backlog item:** BI-EE81F61B  
-**Workroom:** WC-25858CAB  
-**Branch:** `fix/durable-self-upgrade-admission-and-dispatch-reco`  
+**Workroom:** WC-A48DF3B6
+**Branch:** `fix/self-upgrade-rendered-target-admission`
+**Historical predecessor Workroom:** WC-25858CAB (BI-3FD07259; unchanged)
 **Design:** `docs/superpowers/specs/2026-08-29-self-upgrade-rendered-target-admission-design.md`
 
 ## Outcome
