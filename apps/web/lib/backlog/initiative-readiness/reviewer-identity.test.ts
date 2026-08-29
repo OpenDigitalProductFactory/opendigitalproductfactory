@@ -1,9 +1,11 @@
-// BI-53C26E60 — a missing coworker identity and a genuine human reviewer are
-// different facts, and the refusal has to tell them apart.
+// BI-53C26E60 — resolveReviewerIdentity attributes a receipt to the acting
+// agent's Principal and falls back to the human when the agent alias misses.
+// That fallback was untested, and it is exactly where 71 unconverged agents
+// turned every summoned reviewer into the artifact's own author.
 
 import { describe, expect, it } from "vitest";
 
-import { independentReviewerRemedy, resolveReviewerIdentity } from "./reviewer-identity";
+import { resolveReviewerIdentity } from "./reviewer-identity";
 
 const AUTHOR = "PRN-author";
 
