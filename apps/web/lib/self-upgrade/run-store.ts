@@ -40,6 +40,7 @@ const ACTIVE_RUN_STATUSES = ["pending", "queued", "running"];
 
 function asAdmissionRecord(row: {
   runId: string;
+  recoveryOfRunId: string | null;
   status: string;
   trigger: string;
   targetSha: string | null;
@@ -82,9 +83,61 @@ export const selfUpgradeAdmissionRepository: SelfUpgradeAdmissionRepository = {
           run: asAdmissionRecord(active),
         };
       }
+      if (input.recoveryOfRunId) {
+        if (input.target.targetKind !== "release-artifact" || !input.target.targetTag) {
+          return { disposition: "recovery_refused" as const, reason: "recovery-target-invalid" as const, run: null };
+        }
+        const predecessor = await tx.selfUpgradeRun.findUnique({
+          where: { runId: input.recoveryOfRunId },
+        });
+        if (
+          !predecessor ||
+          predecessor.completedAt === null ||
+          predecessor.status !== "failed"
+        ) {
+          return {
+            disposition: "recovery_refused" as const,
+            reason: predecessor ? "recovery-predecessor-not-terminal" as const : "recovery-predecessor-missing" as const,
+            run: null,
+          };
+        }
+        if (
+          !predecessor.admissionFingerprint ||
+          !predecessor.dispatchStatus ||
+          !predecessor.targetSha ||
+          !predecessor.targetTag ||
+          predecessor.dispatchAttemptCount !== 0 ||
+          predecessor.dispatchAcknowledgedAt !== null ||
+          predecessor.dispatchEventIds.length !== 0
+        ) {
+          return { disposition: "recovery_refused" as const, reason: "recovery-predecessor-ambiguous" as const, run: null };
+        }
+        if (
+          predecessor.targetSha.toLowerCase() === input.target.targetSha.toLowerCase() ||
+          predecessor.targetTag === input.target.targetTag
+        ) {
+          return { disposition: "recovery_refused" as const, reason: "recovery-target-not-distinct" as const, run: null };
+        }
+        const latest = await tx.selfUpgradeRun.findFirst({
+          orderBy: { createdAt: "desc" },
+        });
+        if (latest?.runId !== predecessor.runId) {
+          return { disposition: "recovery_refused" as const, reason: "recovery-predecessor-not-latest" as const, run: null };
+        }
+        const existingSuccessor = await tx.selfUpgradeRun.findUnique({
+          where: { recoveryOfRunId: predecessor.runId },
+        });
+        if (existingSuccessor) {
+          return {
+            disposition: "recovery_conflict" as const,
+            run: asAdmissionRecord(existingSuccessor),
+          };
+        }
+      }
       const created = await tx.selfUpgradeRun.create({
         data: {
           runId: input.runId,
+          recoveryOfRunId: input.recoveryOfRunId ?? null,
           status: "pending",
           trigger: input.triggeredBy,
           targetSha: input.target.targetSha,

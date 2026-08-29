@@ -192,6 +192,7 @@ import { getLastCheckedAt } from "@/lib/self-upgrade/last-check";
 import { inngest } from "@/lib/queue/inngest-client";
 import { revalidatePath } from "next/cache";
 import { runSelfUpgradeRollback, SelfUpgradeRollbackError } from "@/lib/self-upgrade/rollback";
+import { createSelfUpgradeTargetBinding } from "@/lib/self-upgrade/target-binding";
 import {
   getSelfUpgradeRunImpact,
   getSelfUpgradeStatus,
@@ -258,6 +259,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.unstubAllEnvs();
 });
 
 // ─── Permission Guard ─────────────────────────────────────────────────────────
@@ -917,45 +919,43 @@ describe("triggerSelfUpgrade – access control", () => {
   });
 });
 
-// ─── triggerSelfUpgrade – dispatch ───────────────────────────────────────────
-
 describe("triggerSelfUpgrade – dispatch", () => {
-  it("returns the durable admission before queue dispatch", async () => {
+  it("does not grant recovery authority to a plain failed-run retry", async () => {
+    vi.mocked(getLatestRun).mockResolvedValue({ ...mockRun, runId: "SUR-6B312E24", status: "failed" } as never);
     const result = await triggerSelfUpgrade();
-
+    expect(admitSelfUpgrade).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ queued: false, reason: "recovery-binding-required", runId: "SUR-6B312E24" });
+  });
+  it("uses the authenticated operator action as the sole typed recovery boundary", async () => {
+    const releaseTarget = { targetKind: "release-artifact" as const, targetSha: "c137e6cdb1fe82d00565841ec683cec5c80710ab",
+      targetTag: "v2026.08.29-source-free-upgrade-reconciliation.1" };
+    vi.stubEnv("DPF_SELF_UPGRADE_TARGET_BINDING_SECRET", "test-target-binding-secret");
+    vi.mocked(readSelfUpgradeSupport).mockResolvedValue(consumerReleaseSupport);
+    vi.mocked(resolveCurrentSelfUpgradeTarget).mockResolvedValue(null);
+    vi.mocked(getLatestRun).mockResolvedValue({ ...mockRun, runId: "SUR-6B312E24", status: "failed" } as never);
+    const result = await triggerSelfUpgrade({ targetBinding: createSelfUpgradeTargetBinding(releaseTarget) });
     expect(admitSelfUpgrade).toHaveBeenCalledWith(expect.objectContaining({
-      triggeredBy: "manual:user-ops-1",
-      impactSummaryId: null,
-      target: expect.objectContaining({ targetSha: "b".repeat(40) }),
+      triggeredBy: "manual:user-ops-1", target: releaseTarget, recoveryOfRunId: "SUR-6B312E24",
     }));
-    expect(createRun).not.toHaveBeenCalled();
-    expect(vi.mocked(inngest.send)).not.toHaveBeenCalled();
     expect(result).toMatchObject({ queued: true, admitted: true, runId: "SUR-QUEUED1" });
   });
-
   it("attaches the reviewed impact summary to the run when one exists", async () => {
     vi.mocked(getCurrentImpactSummaryId).mockResolvedValueOnce("UIS-77");
-
     await triggerSelfUpgrade();
-
     expect(admitSelfUpgrade).toHaveBeenCalledWith(expect.objectContaining({
       triggeredBy: "manual:user-ops-1",
       impactSummaryId: "UIS-77",
     }));
   });
-
   it("binds the manual actor and force posture in admission", async () => {
     await triggerSelfUpgrade();
-
     expect(admitSelfUpgrade).toHaveBeenCalledWith(expect.objectContaining({
       triggeredBy: `manual:${mockSession.user.id}`,
       requestedForce: false,
     }));
   });
-
   it("passes dryRun: true when dryRun option is set", async () => {
     await triggerSelfUpgrade({ dryRun: true });
-
     expect(admitSelfUpgrade).toHaveBeenCalledWith(expect.objectContaining({ dryRun: true }));
   });
 

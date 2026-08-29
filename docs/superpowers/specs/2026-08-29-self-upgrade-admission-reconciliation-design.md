@@ -305,3 +305,56 @@ compare-and-swap contracts.
 - Live proof uses no second click or replacement run: the already persisted
   `SUR-6B312E24` must reach a truthful terminal dispatch/result through
   reconciliation.
+
+### Terminal old-target and source-free bootstrap correction
+
+The live `SUR-6B312E24` fixture closed in `failed` with an immutable target from
+an older release. A terminal row is historical evidence, not a mutable retry
+slot: reconciliation must return a fail-closed terminal disposition without
+rewriting its target, status, fingerprint, or failure evidence. It must never
+dispatch that row toward a later release.
+
+When the current release target is available only through a server-owned,
+authenticated release binding, the existing operator action is the sole
+bootstrap boundary. There is no second bootstrap export or alternate admission
+path. The action verifies the signed, expiring release binding before it supplies
+`recoveryOfRunId` to the transaction; the ordinary request path cannot supply
+that field. This boundary proves that the superseded row is the exact latest terminal run,
+accepts only a distinct tagged `release-artifact` target from the authenticated
+server binding, and creates one separately fingerprinted admission through the
+same atomic transaction. `SelfUpgradeRun.recoveryOfRunId` is a unique typed
+self-relation, so a predecessor can have at most one successor and the
+predecessor's target, status, fingerprint, failure, and timestamps remain
+untouched. This supersedes the earlier "no replacement run" acceptance only for
+the proven terminal-old-target case; predecessor immutability remains normative.
+No client-provided SHA/tag, Git fallback, row reopening, downgrade, emergency
+override, or direct queue send is accepted. Active or ambiguous predecessors,
+newer runs, an existing successor, untagged/Git targets, target drift, and
+missing or expired authentication all remain fail closed. The normal
+worker/quiescence gates still decide whether the new admission can perform a
+physical upgrade.
+
+`recoveryOfRunId` is audit metadata, not dispatch authority. Dispatch authority
+comes only from the successor admission's independently verified signed target
+binding and its own recomputed admission fingerprint. The additive migration
+checks structural predecessor evidence but does not cryptographically recompute
+the historical predecessor fingerprint. Its trust premise is the integrity of
+server-created historical rows; the residual risk is a previously corrupted
+predecessor being linked for audit. That link cannot authorize, retarget, or
+dispatch either row. Migration tests statically assert the SQL contract; live
+acceptance must separately inspect the migrated rows and the independently
+authorized successor dispatch.
+
+### Bootstrap ordering
+
+The current source-free runtime predates `recoveryOfRunId`, so publication alone
+cannot prove this contract live. After the protected repair release is published,
+the existing operator page must render a fresh signed binding for that exact tag
+and SHA. One separately authorized click may then use the already-live durable
+admission path to create and dispatch a new, separately fingerprinted run; a
+plain retry without the signed binding is refused. When the new container starts,
+the additive migration links that singular in-flight manual release admission to
+the immediately preceding failed pre-dispatch run only when every CAS predicate
+holds. Any ambiguity leaves the relation null and fails live acceptance. Served
+SHA, CAN-TEST, the successor relation, the unchanged predecessor row, and ordinary
+restart coherence are all required before downstream recovery resumes.
