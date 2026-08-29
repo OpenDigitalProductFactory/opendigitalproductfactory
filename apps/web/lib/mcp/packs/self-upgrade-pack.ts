@@ -126,9 +126,8 @@ async function requestSelfUpgradeTool(
 
   return {
     success: false,
-    error: result.message,
-    message: result.message,
-    data: result as unknown as Record<string, unknown>,
+    error: "Unexpected self-upgrade admission state.",
+    message: "Unexpected self-upgrade admission state.",
   };
 }
 

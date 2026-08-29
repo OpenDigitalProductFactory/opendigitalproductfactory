@@ -3,19 +3,29 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   create: vi.fn(),
   findUnique: vi.fn(),
+  findFirst: vi.fn(),
   update: vi.fn(),
+  updateMany: vi.fn(),
+  executeRawUnsafe: vi.fn(),
   broadcastSystem: vi.fn(),
   recordCorrectiveRecoveryEvidence: vi.fn(),
 }));
 vi.mock("@dpf/db", () => ({
-  Prisma: {},
-  prisma: {
-    selfUpgradeRun: {
+  Prisma: { TransactionIsolationLevel: { Serializable: "Serializable" } },
+  prisma: (() => {
+    const selfUpgradeRun = {
       create: mocks.create,
       findUnique: mocks.findUnique,
+      findFirst: mocks.findFirst,
       update: mocks.update,
-    },
-  },
+      updateMany: mocks.updateMany,
+    };
+    return {
+      selfUpgradeRun,
+      $transaction: (callback: (tx: { selfUpgradeRun: typeof selfUpgradeRun; $executeRawUnsafe: typeof mocks.executeRawUnsafe }) => unknown) =>
+        callback({ selfUpgradeRun, $executeRawUnsafe: mocks.executeRawUnsafe }),
+    };
+  })(),
 }));
 vi.mock("@/lib/self-upgrade/change-record", () => ({ safeSyncSelfUpgradeChangeRecord: vi.fn() }));
 vi.mock("@/lib/agent-event-bus", () => ({
@@ -33,6 +43,8 @@ import {
   recordPromoterReadiness,
   recordRunRecoveryPoint,
   sanitizePromoterReadinessReport,
+  claimAdmittedRunForWorker,
+  selfUpgradeAdmissionRepository,
 } from "./run-store";
 
 const report = {
@@ -123,5 +135,133 @@ describe("self-upgrade lifecycle invalidation", () => {
     });
     expect(errorSpy).toHaveBeenCalledOnce();
     errorSpy.mockRestore();
+  });
+});
+
+describe("admitted worker ownership", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.findUnique.mockResolvedValue({ status: "queued", dispatchStatus: "dispatched" });
+    mocks.updateMany.mockResolvedValue({ count: 1 });
+  });
+
+  it("claims the durable admission with one database compare-and-swap", async () => {
+    await expect(claimAdmittedRunForWorker("SUR-ONE")).resolves.toBe("claimed");
+    expect(mocks.updateMany).toHaveBeenCalledWith({
+      where: {
+        runId: "SUR-ONE",
+        status: { in: ["pending", "queued"] },
+        dispatchStatus: { in: ["dispatching", "dispatched"] },
+      },
+      data: { status: "running", startedAt: expect.any(Date) },
+    });
+  });
+
+  it("refuses duplicate delivery after the claim is consumed", async () => {
+    mocks.updateMany.mockResolvedValue({ count: 0 });
+    await expect(claimAdmittedRunForWorker("SUR-ONE")).resolves.toBe("duplicate");
+  });
+
+  it("preserves the legacy path for historical queued runs", async () => {
+    mocks.findUnique.mockResolvedValue({ status: "queued", dispatchStatus: null });
+    await expect(claimAdmittedRunForWorker("SUR-LEGACY")).resolves.toBe("legacy");
+    expect(mocks.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("records the queue acknowledgement even when the worker finishes before send returns", async () => {
+    mocks.findUnique.mockResolvedValue({
+      status: "succeeded",
+      dispatchStatus: "dispatching",
+      dispatchLeaseToken: "lease-1",
+    });
+    mocks.update.mockResolvedValue({});
+
+    await expect(
+      selfUpgradeAdmissionRepository.acknowledgeDispatch({
+        runId: "SUR-FAST",
+        leaseToken: "lease-1",
+        eventIds: ["event-1"],
+        acknowledgedAt: new Date("2026-08-29T04:00:00.000Z"),
+      }),
+    ).resolves.toBe(true);
+
+    expect(mocks.update).toHaveBeenCalledWith({
+      where: { runId: "SUR-FAST" },
+      data: expect.objectContaining({
+        dispatchStatus: "dispatched",
+        dispatchEventIds: ["event-1"],
+      }),
+    });
+    expect(mocks.update.mock.calls.at(-1)?.[0].data).not.toHaveProperty("status");
+  });
+});
+
+describe("self-upgrade admission transaction", () => {
+  const admittedRow = {
+    runId: "SUR-ADMITTED",
+    status: "pending",
+    trigger: "manual:user-1",
+    targetSha: "a".repeat(40),
+    targetTag: "v1",
+    requestedForce: false,
+    dryRun: false,
+    routine: false,
+    impactSummaryId: null,
+    admissionFingerprint: "fingerprint-1",
+    dispatchStatus: "admission_pending",
+    dispatchAttemptCount: 0,
+    dispatchLeaseToken: null,
+    dispatchLeaseExpiresAt: null,
+    dispatchEventIds: [],
+    completedAt: null,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.findFirst.mockResolvedValue(null);
+    mocks.create.mockResolvedValue(admittedRow);
+  });
+
+  it("persists the exact binding before any dispatcher can observe the run", async () => {
+    await expect(selfUpgradeAdmissionRepository.admit({
+      runId: admittedRow.runId,
+      triggeredBy: admittedRow.trigger,
+      target: { targetKind: "release-artifact", targetSha: admittedRow.targetSha, targetTag: admittedRow.targetTag },
+      requestedForce: false,
+      dryRun: false,
+      routine: false,
+      impactSummaryId: null,
+      admissionFingerprint: admittedRow.admissionFingerprint,
+      dispatchStatus: "admission_pending",
+    })).resolves.toMatchObject({ disposition: "created", run: admittedRow });
+
+    expect(mocks.executeRawUnsafe).toHaveBeenCalledWith(
+      "SELECT pg_advisory_xact_lock(hashtext('self-upgrade-admission'))",
+    );
+    expect(mocks.create).toHaveBeenCalledWith({ data: expect.objectContaining({
+      status: "pending",
+      targetSha: admittedRow.targetSha,
+      targetTag: admittedRow.targetTag,
+      admissionFingerprint: admittedRow.admissionFingerprint,
+      dispatchStatus: "admission_pending",
+    }) });
+  });
+
+  it("returns the same active admission for the same fingerprint", async () => {
+    mocks.findFirst.mockResolvedValue(admittedRow);
+    const result = await selfUpgradeAdmissionRepository.admit({
+      runId: "SUR-IGNORED",
+      triggeredBy: admittedRow.trigger,
+      target: { targetKind: "release-artifact", targetSha: admittedRow.targetSha, targetTag: admittedRow.targetTag },
+      requestedForce: false,
+      dryRun: false,
+      routine: false,
+      impactSummaryId: null,
+      admissionFingerprint: admittedRow.admissionFingerprint,
+      dispatchStatus: "admission_pending",
+    });
+
+    expect(result).toMatchObject({ disposition: "idempotent", run: admittedRow });
+    expect(mocks.create).not.toHaveBeenCalled();
   });
 });
