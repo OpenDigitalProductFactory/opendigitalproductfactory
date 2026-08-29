@@ -252,3 +252,56 @@ Live acceptance requires one canonical release and one governed action whose
 UI returns a run id immediately, whose persisted dispatch transitions are
 observable, and whose physical upgrade completes at most once. Served SHA,
 health, preserved data, and CAN-TEST remain mandatory.
+
+## Source-free registration and persisted-target reconciliation extension
+
+Live acceptance of `SUR-6B312E24` exposed two coupled recovery defects after
+the original admission contract shipped:
+
+1. a consumer portal with `APP_URL` unset self-registers through
+   `http://localhost:3000/api/inngest`; inside the Linux container that name can
+   resolve to `::1` while the Next listener is reachable only on IPv4, so the
+   real registration PUT fails even though `127.0.0.1:3000` is healthy; and
+2. the dispatcher asks Git-backed target discovery to rediscover a release
+   target after admission. A source-free consumer has no usable
+   `/host-dpf` Git remote, so a null discovery result leaves the already
+   authenticated, exact-bound durable run permanently indeterminate.
+
+The repair keeps `SelfUpgradeRun` as the single authority. When no explicit
+`APP_URL` is configured, the portal uses its server-owned loopback listener at
+`127.0.0.1` and the effective `PORT`. An explicit configured URL remains
+authoritative. Registration health is persisted as successful only after the
+actual PUT returns an OK response. That transition immediately invokes the
+existing idempotent admission reconciler so an accepted run does not wait for
+the maintenance interval.
+
+For dispatch, a resolved current target must still match the stored target
+exactly. If release discovery is unavailable, the dispatcher may reconstruct
+only a `release-artifact` target from the stored SHA/tag and accept it only when
+recomputing the admission fingerprint from every persisted authority field
+matches exactly. A null resolver never authorizes a `git-source` admission,
+an untagged release, or a fingerprint mismatch. No client field is re-read and
+no new run is created. A later conflicting resolved target remains terminal
+drift.
+
+`SUR-6B312E24` is the immutable live fixture. It must remain the sole run while
+this source repair is developed and published. Once the repair is served, the
+normal reconciler may claim and dispatch that same run with stable event id
+`self-upgrade:SUR-6B312E24` exactly once under the existing lease and worker
+compare-and-swap contracts.
+
+### Extension acceptance
+
+- With `APP_URL` unset and `PORT=3000`, the self-registration endpoint is
+  `http://127.0.0.1:3000/api/inngest`; explicit `APP_URL` is normalized without
+  changing its host.
+- A failed or non-OK PUT persists failure and never triggers admission
+  reconciliation; a successful PUT persists success and triggers reconciliation.
+- A null target resolver can dispatch one exact fingerprint-valid tagged
+  release admission but leaves Git-source, untagged, or corrupt bindings
+  fail-closed and indeterminate/failed according to the existing state machine.
+- Resolver drift, unhealthy job-engine state, newer runs, active leases, and
+  duplicate worker delivery retain their current refusals.
+- Live proof uses no second click or replacement run: the already persisted
+  `SUR-6B312E24` must reach a truthful terminal dispatch/result through
+  reconciliation.

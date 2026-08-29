@@ -168,6 +168,18 @@ function fingerprintMatches(
   });
 }
 
+function persistedReleaseTarget(
+  run: SelfUpgradeAdmissionRecord,
+): SelfUpgradeTargetBinding | null {
+  if (!run.targetSha || !run.targetTag) return null;
+  const target: SelfUpgradeTargetBinding = {
+    targetKind: "release-artifact",
+    targetSha: run.targetSha,
+    targetTag: run.targetTag,
+  };
+  return fingerprintMatches(run, target) ? target : null;
+}
+
 export function isDefiniteSelfUpgradeDispatchRefusal(error: unknown): boolean {
   const message = getErrorMessage(error);
   return /Inngest API Error: (400|401|403|404|406|409|412|413)\b/.test(message) ||
@@ -195,8 +207,17 @@ export function createSelfUpgradeAdmissionService(
     const existing = await dependencies.repository.read(runId);
     if (!existing) return { status: "not-claimed", runId };
 
-    const currentTarget = await dependencies.resolveTarget().catch(() => null);
+    const resolvedTarget = await dependencies.resolveTarget().catch(() => null);
+    const currentTarget = resolvedTarget ?? persistedReleaseTarget(existing);
     if (!currentTarget) {
+      if (existing.targetSha && existing.targetTag) {
+        await dependencies.repository.failDispatch({
+          runId,
+          reason: "admission-binding-drift",
+          observedAt: dependencies.now(),
+        });
+        return { status: "failed", runId };
+      }
       await dependencies.repository.markDispatchIndeterminate({
         runId,
         leaseToken: null,
@@ -205,7 +226,7 @@ export function createSelfUpgradeAdmissionService(
       });
       return { status: "indeterminate", runId };
     }
-    if (!targetMatches(existing, currentTarget)) {
+    if (resolvedTarget && !targetMatches(existing, currentTarget)) {
       await dependencies.repository.failDispatch({
         runId,
         reason: "admission-target-drift",
