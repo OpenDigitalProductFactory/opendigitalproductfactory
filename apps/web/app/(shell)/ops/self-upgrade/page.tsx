@@ -187,13 +187,16 @@ export default async function SelfUpgradePage() {
     cooldownUntil: effectiveStatus.cooldownUntil,
     jobEngine: effectiveStatus.jobEngine,
   };
+  // Single source of truth for "is there something to install": the summary's
+  // own updatePending, derived from support/target/freshness rather than from
+  // its run-state machine. This used to re-derive the failed case here
+  // (`state === "failed" && targetAvailability === "resolved" && !isFresh`),
+  // which enabled the button correctly but left the card above it still
+  // claiming "You're current" — the workaround was applied to the action and
+  // never pushed back into the summary it contradicted.
   const updateActionState = ownerSummary.state === "unavailable"
     ? "unavailable"
-    : ownerSummary.state === "update-available" || (
-        ownerSummary.state === "failed" &&
-        effectiveStatus.targetAvailability === "resolved" &&
-        !effectiveStatus.isFresh
-      )
+    : ownerSummary.updatePending
       ? "update-available"
       : "no-update";
   let targetBinding: string | null = null;
