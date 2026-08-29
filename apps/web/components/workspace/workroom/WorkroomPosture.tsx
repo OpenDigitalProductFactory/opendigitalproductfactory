@@ -1,6 +1,7 @@
 import { Surface } from "@/components/ui/Surface";
 
 import { WorkroomPostureControl } from "./WorkroomPostureControl";
+import { WorkroomPostureProvenance } from "./WorkroomPostureProvenance";
 import type { WorkroomView } from "@/lib/work-management/room-types";
 
 // EP-WORK-POSTURE Slice D (BI-4F468192) — make the room's posture observable.
@@ -95,20 +96,11 @@ export function WorkroomPosture({ room }: { room: WorkroomView }) {
                 </div>
               ) : null}
 
-              {posture.inert ? (
-                <p className="text-xs text-[var(--dpf-muted)]">Unchanged for this room.</p>
-              ) : (
-                <div>
-                  <p className="text-xs text-[var(--dpf-muted)]">Why</p>
-                  <ul className="mt-1 space-y-1 text-[var(--dpf-muted)]">
-                    {posture.adjustments.map((adjustment) => (
-                      <li key={`${adjustment.field}:${adjustment.reasonCode}`}>
-                        {adjustment.reason}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+              {/* The layer-by-layer account (BI-4EB2F1D0). It subsumes the flat
+                  "Why" list this section used to render — the same reasons, now
+                  attributed to the layer that produced them — so the reasons
+                  appear once rather than twice. */}
+              <WorkroomPostureProvenance posture={posture} />
             </>
           )}
 

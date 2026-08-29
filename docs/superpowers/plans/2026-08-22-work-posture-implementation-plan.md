@@ -21,11 +21,27 @@ status: active
 | G | `BI-BEDAFF57` | small | Archetype posture conformance test over the whole catalogue |
 | H | `BI-4EB2F1D0` | medium | Room surface renders the posture and its provenance |
 
-## Status ⟦runtime: 2026-08-23⟧
+## Status ⟦runtime: 2026-08-28⟧
 
-Seven of eight slices have landed across five PRs (#4488, #4492, #4569, and the
-posture-governs branch). **H — the rich layer-by-layer provenance surface — has not.**
-The minimal "Pace and priority" section shipped with D; H is the full provenance chain.
+All eight slices have landed. Seven went across five PRs (#4488, #4492, #4569, and the
+posture-governs branch); **H — the rich layer-by-layer provenance surface — landed on
+`feat/work-posture-provenance`.**
+
+H is a PROJECTION, not a second resolver. `resolveWorkPosture` already emitted a complete
+decision log — every clamp, in application order, with a stable `reasonCode` — so
+`lib/work-posture/provenance.ts` reads the layer and the driving input from that code by
+lookup and never recomputes them from the inputs. A second derivation would be a second
+source of truth able to disagree with the first (AGENTS.md §1). The chain renders inside
+the room surface's existing collapsed "Pace and priority" disclosure and REPLACES the flat
+"Why" list that section used to show, so the same reasons appear once, attributed to the
+layer that produced them, and the arrival view gains no words.
+
+Two follow-on wiring gaps were found while verifying H and filed rather than built: a
+scheduled tick still does not resolve posture through the room ladder (`BI-27C8484F`), and
+a coworker's ordinary in-room proactivity still resolves from the old identity ladder
+(`BI-87C9C91C`). Both are the same "posture resolves but nothing consumes it" defect on
+different execution paths, and are worth sequencing together so the room dimension is added
+to `ProactivityResolverInput` once.
 
 Two items outside the original eight were found and closed on the way: the workroom shape
 had no write path at all (`BI-8C54B216`), and the posture was display-only
