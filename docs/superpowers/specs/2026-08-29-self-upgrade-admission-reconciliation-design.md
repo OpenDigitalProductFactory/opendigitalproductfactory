@@ -88,6 +88,19 @@ records and validates the target tag/SHA it is given, but it does not change
 If those identities still disagree after this repair is live, BI-6CB35411 remains
 a hard prerequisite before any reviewer replay.
 
+### Normative dependency disposition
+
+BI-6CB35411 is an explicit out-of-scope dependency, not an omitted BI-3FD07259
+requirement. A conforming BI-3FD07259 implementation **must not** edit consumer
+start/restart selection, `DPF_IMAGE_TAG`, install-state, Compose image selection,
+or OCI labels. Its responsibility ends after it durably binds and dispatches the
+exact release-artifact tag and SHA supplied by the canonical target resolver.
+BI-6CB35411 independently makes those runtime identities converge and remains a
+hard delivery prerequisite before BI-F48 resumes. A design-review finding that
+claims this design omits runtime identity convergence contradicts this normative
+scope boundary; a genuine finding must instead identify a defect inside the
+admission, dispatch, reconciliation, worker-CAS, or operator-projection contract.
+
 ## Admission transaction
 
 `admitSelfUpgrade` resolves support and the exact target on the server, then

@@ -100,7 +100,9 @@ destruction.
 
 - Decision: atomic
 - Parent: BI-3FD07259
-- Receipt: pending independent immutable design baseline and server-issued plan coverage
+- Receipt: blocked — no initiative scope baseline exists for BI-3FD07259; the
+  atomic table below records the server-submitted mapping without claiming a
+  receipt
 - Rationale: schema, admission, dispatch, reconciliation, worker CAS, and UI
   projection are one safety contract. Shipping only a subset either keeps the
   ambiguous click, creates an unrecoverable pending row, or permits duplicate
