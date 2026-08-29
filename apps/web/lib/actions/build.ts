@@ -9,6 +9,7 @@ import {
   generateBuildId,
   bumpVersion,
   normalizeHappyPathState,
+  type FeatureBrief,
   type BuildPhase,
   type VersionBump,
   type BuildDesignDoc,
@@ -53,7 +54,7 @@ import {
 import { admitRuntimeGuardedWork } from "@/lib/platform-runtime/work-admission";
 import { assertBuildPhaseInitiativeReadiness, checkBuildPhaseInitiativeReadiness } from "@/lib/build/build-entry-gate";
 import { assertFeatureBuildCompletion } from "@/lib/backlog/initiative-readiness/build-terminal-transition";
-export { updateFeatureBrief } from "@/lib/actions/build-feature-brief";
+import { updateFeatureBrief as updateFeatureBriefAction } from "@/lib/actions/build-feature-brief";
 // ─── Auth Guard ──────────────────────────────────────────────────────────────
 
 async function requireBuildAccess(): Promise<string> {
@@ -232,6 +233,14 @@ export async function approveBuildStart(
   }
 
   return ok({ approvedAt });
+}
+
+export async function updateFeatureBrief(
+  buildId: string,
+  brief: FeatureBrief,
+  options: { actorUserId?: string } = {},
+): Promise<void> {
+  return updateFeatureBriefAction(buildId, brief, options);
 }
 
 export async function updateBusinessBuildBrief(input: {

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
 
 const mocks = vi.hoisted(() => ({
   requireCapability: vi.fn(),
@@ -77,5 +78,18 @@ describe("updateFeatureBrief (BI-7175C7DB)", () => {
     expect(mocks.requireCapability).not.toHaveBeenCalled();
     expect(mocks.prisma.featureBuild.update).not.toHaveBeenCalled();
   });
-});
 
+  it("uses an explicit async facade from the use-server build action module", () => {
+    const buildActionSource = readFileSync(
+      new URL("./build.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(buildActionSource).not.toMatch(
+      /export\s*\{\s*updateFeatureBrief\s*\}\s*from/,
+    );
+    expect(buildActionSource).toMatch(
+      /export\s+async\s+function\s+updateFeatureBrief\s*\(/,
+    );
+  });
+});
