@@ -24,6 +24,10 @@ silent downgrade path, so the changes and rollback evidence remain one PR.
 - Dependencies: protected BI-3FD07259 caller bridge PR #4840 at `7eba6d0c2485a800f8d66f31aa1521008fa9e59b`; no independent BI decomposition.
 - Consumer start release-identity convergence -> `BI-6CB35411`
 
+| Deliverable | Backlog item | Requirements | Contracts | Flows | Verification | Depends on |
+| --- | --- | --- | --- | --- | --- | --- |
+| Consumer start release-identity convergence | `BI-6CB35411` | `OBJ-CSRI-001`, `OBJ-CSRI-002`, `OBJ-CSRI-003`, `OBJ-CSRI-004`, `OBJ-CSRI-005` | `AC-CSRI-001`, `AC-CSRI-002`, `AC-CSRI-003`, `AC-CSRI-004`, `AC-CSRI-005` | Phase 1, Phase 2, Phase 3, Phase 4, Phase 5 | `AC-CSRI-001`, `AC-CSRI-002`, `AC-CSRI-003`, `AC-CSRI-004`, `AC-CSRI-005` | `BI-3FD07259` |
+
 ## Phase 1 — Lock the source/canonical-root vocabulary
 
 1. Extend `apps/web/lib/self-upgrade/promoter.test.ts` with RED command-builder
