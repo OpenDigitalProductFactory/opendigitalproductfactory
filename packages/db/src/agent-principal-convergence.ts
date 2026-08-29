@@ -26,14 +26,22 @@
 
 import { resolvePrincipalSensitivityClearance } from "./principal-sensitivity";
 
-/** Mirrors `normalizeGaidLocalId` in apps/web/lib/identity/principal-linking.ts. */
+/**
+ * Mirrors `normalizeGaidLocalId` in apps/web/lib/identity/principal-linking.ts.
+ *
+ * The dash trim is a loop rather than that function's `/^-+|-+$/g`, which
+ * CodeQL flags as `js/polynomial-redos` (high): the anchored `-+$` backtracks
+ * on a long run of dashes. Output is identical for every input — this only
+ * removes the backtracking. The original carries the same pattern and is worth
+ * the same change.
+ */
 function normalizeGaidLocalId(value: string): string {
-  const normalized = value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9._-]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return normalized || "agent";
+  const collapsed = value.trim().toLowerCase().replace(/[^a-z0-9._-]+/g, "-");
+  let start = 0;
+  let end = collapsed.length;
+  while (start < end && collapsed[start] === "-") start += 1;
+  while (end > start && collapsed[end - 1] === "-") end -= 1;
+  return collapsed.slice(start, end) || "agent";
 }
 
 /** Mirrors `buildPrivateAgentGaid` in apps/web/lib/identity/principal-linking.ts. */
