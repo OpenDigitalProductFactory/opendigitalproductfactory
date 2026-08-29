@@ -2671,6 +2671,14 @@
     "longSentences": 0,
     "textMass": 11
   },
+  "apps/web/app/.well-known/dpf-federation.json/route.ts": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 7
+  },
   "apps/web/app/.well-known/dpf-instance.json/route.ts": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
