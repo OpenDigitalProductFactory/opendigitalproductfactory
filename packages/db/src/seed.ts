@@ -7,6 +7,7 @@ import { Prisma } from "../generated/client/client";
 import { parseRoleId, parseAgentTier, parseAgentType, parseAgentPortfolioSlug } from "./seed-helpers.js";
 import { resolveAgentIdentity } from "./agent-identity.js";
 import { resolvePrincipalSensitivityClearance } from "./principal-sensitivity.js";
+import { convergeAgentPrincipals, type AgentPrincipalDb } from "./agent-principal-convergence.js";
 import { upsertCoworkerAgentTolerant } from "./coworker-agent-upsert.js";
 import { loadFingerprintCatalogIntoDb, defaultCatalogPath } from "./discovery-fingerprint-catalog-loader.js";
 import { loadOuiRegistryIntoDb, defaultOuiRegistryPath } from "./mac-oui-loader.js";
@@ -211,6 +212,18 @@ async function loadRevokedGrantSet(): Promise<Set<string>> {
     select: { agentId: true, grantKey: true },
   });
   return new Set(rows.map((r) => `${r.agentId}:${r.grantKey}`));
+}
+
+async function seedAgentPrincipals(): Promise<void> {
+  const { converged, examined } = await convergeAgentPrincipals(
+    prisma as unknown as AgentPrincipalDb,
+    () => `PRN-${crypto.randomUUID()}`,
+  );
+  if (converged.length === 0) {
+    console.log(`  Agent principals converged: ${examined} agent(s), none missing`);
+    return;
+  }
+  console.log(`  + ${converged.length} agent Principal(s) of ${examined}: ${converged.slice(0, 8).join(", ")}${converged.length > 8 ? ", …" : ""}`);
 }
 
 async function seedAgents(): Promise<void> {
@@ -2511,6 +2524,11 @@ async function main(): Promise<void> {
   await step("businessModels", () => seedBusinessModels());
   await step("agents", () => seedAgents());
   await step("coworkerAgents", () => seedCoworkerAgents());
+  // BI-53C26E60: §11 Principal convergence applies to agents too, and has to
+  // run after BOTH agent seeders — the AGT-* roster and the slug-id coworker
+  // rows — because either can introduce an agent with no identity. Without it
+  // every `independent: true` review lane attributes to the delegating human.
+  await step("agentPrincipals", () => seedAgentPrincipals());
   // EP-AI-WORKFORCE-001: Seed unified agent lifecycle data
   await step("coworkerSkills", () => seedCoworkerSkills());
   await step("agentPromptContexts", () => seedAgentPromptContexts());

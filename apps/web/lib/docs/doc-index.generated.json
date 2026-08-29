@@ -10625,6 +10625,7 @@
         "degenerate-environment-fixtures",
         "common-drift-and-how-to-stay-on-script",
         "live-blocker-references-guard",
+        "agent-principal-convergence-guard",
         "label-association-guard-ratchet",
         "what-this-gate-is-not"
       ]

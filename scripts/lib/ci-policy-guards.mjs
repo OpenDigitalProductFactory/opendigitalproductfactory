@@ -82,6 +82,11 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // liveness test above: in ci-policy-test-inventory-allowlist.txt it would
       // never run.
       node("--test", "scripts/gate-worktree-lease-timeout.test.mjs"),
+      // BI-24D5D7C2: the control-plane watchdog aborts a 13-minute build after
+      // two consecutive probe failures, and an inner mcpCall deadline was
+      // classified as "request-failed" — an operator reads that as a broken
+      // endpoint and hunts a connection fault that never happened.
+      node("--test", "scripts/local-ci-control-plane-probe.test.mjs"),
     ]),
     guard("host-port-range-guard", "Host Port Range Guard", [
       node("--test", "scripts/check-host-port-range.test.mjs"),
@@ -244,6 +249,15 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // the image — so it reaches main green and breaks the release chain.
       node("scripts/check-dockerfile-copied-script-imports.mjs"),
       node("--test", "scripts/check-dockerfile-copied-script-imports.test.mjs"),
+      // AGENTS.md §11 Principal convergence covered Users but not agents, so a
+      // seeded install left 71 of 76 AGT-* agents with no identity. Every
+      // `independent: true` readiness lane then attributed its receipt to the
+      // delegating human — the artifact author — and could never pass
+      // (BI-53C26E60). Nothing at source level can prove the DATA converged;
+      // this guards that the seed still runs the convergence, after every
+      // agent seeder.
+      node("scripts/check-agent-principal-convergence-wired.mjs"),
+      node("--test", "scripts/check-agent-principal-convergence-wired.test.mjs"),
     ]),
     guard("bundle-boundary-guard", "Bundle Boundary Guard", [
       node("--test", "scripts/check-bundle-boundaries.test.mjs"),
