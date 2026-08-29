@@ -49,6 +49,12 @@ type HydrationPageEvidence = {
   requestArguments: Record<string, unknown>;
 };
 
+type CompleteHydrationAttempt = {
+  pages: HydrationPageEvidence[];
+  totalChars: number;
+  content: string;
+};
+
 export type TerminalWriterContextHydration =
   | ActionSuccess<HydratedTerminalWriterContext>
   | TerminalWriterContextFailure;
@@ -179,22 +185,22 @@ function assessPageSet(
 function validateReaderExecutions(
   policy: TerminalToolPolicy,
   executions: readonly PersistedTerminalReaderExecution[],
-): ActionSuccess<{ ids: string[]; contentfulPages: HydrationPageEvidence[] }> | TerminalWriterContextFailure {
+): ActionSuccess<{ ids: string[]; contentfulAttempts: HydrationPageEvidence[][] }> | TerminalWriterContextFailure {
   if (!policy.immutableReaderArguments) {
     return hydrationFailure(
       "terminal_writer_context_binding_missing",
       "The terminal writer cannot resume without an immutable artifact binding.",
     );
   }
-  if (executions.length === 0 || executions.length > policy.maximumReaderCalls) {
+  if (executions.length === 0) {
     return hydrationFailure(
       "terminal_writer_context_reader_count_invalid",
-      "Persisted immutable reader evidence is missing or exceeds the bounded reader budget.",
+      "Persisted immutable reader evidence is missing.",
     );
   }
 
   const ids: string[] = [];
-  const contentfulPages: HydrationPageEvidence[] = [];
+  const contentfulAttempts: HydrationPageEvidence[][] = [];
   const seenIds = new Set<string>();
   let priorCreatedAt = Number.NEGATIVE_INFINITY;
   for (const execution of executions) {
@@ -255,14 +261,52 @@ function validateReaderExecutions(
             "Persisted immutable source content is not valid exact-bound page evidence.",
           );
         }
-        contentfulPages.push({ page, requestArguments: normalized.arguments });
+        const startsNewAttempt = normalized.arguments["cursor"] === undefined
+          && (normalized.arguments["startLine"] === undefined || normalized.arguments["startLine"] === 1);
+        let attempt = contentfulAttempts.at(-1);
+        if (!attempt || (startsNewAttempt && attempt.length > 0)) {
+          attempt = [];
+          contentfulAttempts.push(attempt);
+        }
+        attempt.push({ page, requestArguments: normalized.arguments });
+        if (attempt.length > policy.maximumReaderCalls) {
+          return hydrationFailure(
+            "terminal_writer_context_reader_count_invalid",
+            "One persisted immutable reader attempt exceeds the bounded reader budget.",
+          );
+        }
       }
     }
     seenIds.add(execution.id);
     priorCreatedAt = createdAt;
     ids.push(execution.id);
   }
-  return ok({ ids, contentfulPages });
+  return ok({ ids, contentfulAttempts });
+}
+
+function selectCompletePersistedAttempt(
+  attempts: readonly HydrationPageEvidence[][],
+): ActionSuccess<CompleteHydrationAttempt | null> | TerminalWriterContextFailure {
+  let selected: CompleteHydrationAttempt | null = null;
+  for (const pages of attempts) {
+    const assessment = assessPageSet(pages);
+    if (!assessment.ok) return assessment;
+    if (!assessment.data.complete) continue;
+
+    const candidate: CompleteHydrationAttempt = {
+      pages,
+      totalChars: assessment.data.totalChars,
+      content: pages.map((evidence) => evidence.page.content).join(""),
+    };
+    if (selected && candidate.content !== selected.content) {
+      return hydrationFailure(
+        "terminal_writer_context_attempts_conflict",
+        "Persisted immutable reader attempts disagree about the bound source content.",
+      );
+    }
+    selected = candidate;
+  }
+  return ok(selected);
 }
 
 function renderContext(input: {
@@ -302,20 +346,21 @@ export async function hydrateTerminalWriterContext(input: {
   if (!validated.ok) return validated;
   const binding = input.policy.immutableReaderArguments!;
 
-  const persistedAssessment = assessPageSet(validated.data.contentfulPages);
-  if (!persistedAssessment.ok) return persistedAssessment;
-  if (persistedAssessment.data.complete) {
-    const persistedPages = validated.data.contentfulPages.map((evidence) => evidence.page);
+  const persistedSelection = selectCompletePersistedAttempt(validated.data.contentfulAttempts);
+  if (!persistedSelection.ok) return persistedSelection;
+  if (persistedSelection.data) {
+    const persistedAttempt = persistedSelection.data;
+    const persistedPages = persistedAttempt.pages.map((evidence) => evidence.page);
     return ok({
       context: renderContext({
         binding,
-        content: persistedPages.map((page) => page.content).join(""),
+        content: persistedAttempt.content,
         readerExecutionIds: validated.data.ids,
         writerToolName: input.policy.writerToolName,
       }),
       readerExecutionIds: validated.data.ids,
       hydratedPageCount: persistedPages.length,
-      hydratedCharCount: persistedAssessment.data.totalChars,
+      hydratedCharCount: persistedAttempt.totalChars,
     });
   }
 

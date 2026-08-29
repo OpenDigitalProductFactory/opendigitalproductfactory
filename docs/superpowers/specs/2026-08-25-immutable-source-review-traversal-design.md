@@ -109,7 +109,7 @@ DPF's native loop serializes `message` followed by JSON `data`. Removing file/se
 - [Model Context Protocol tools specification](https://modelcontextprotocol.io/specification/2025-06-18/server/tools): adopt structured tool results and keep a compatible text result at the transport boundary; do not make a DPF-only wire format.
 - [Model Context Protocol schema reference](https://modelcontextprotocol.io/specification/2025-06-18/schema): adopt an opaque continuation cursor and explicit continuation metadata rather than silent truncation.
 - [LangGraph Graph API](https://docs.langchain.com/oss/python/langgraph/graph-api): adopt deterministic state-based routing for a multi-stage tool workflow; reject a separate graph runtime because DPF already has the canonical agent loop.
-- [OpenAI Agents SDK model settings](https://openai.github.io/openai-agents-js/guides/models/): adopt the principle that a workflow may require tool use; reject provider-specific `toolChoice` as the authority because DPF routes across providers and must enforce the transition server-side.
+- [OpenAI Agents SDK model settings](https://openai.github.io/openai-agents-js/guides/models/): adopt the principle that a workflow may require tool use. The server-owned terminal policy remains the authority and compiles its hard requirement into each provider's wire format; no provider-specific setting may independently decide when the requirement applies.
 
 ## Architecture and scale
 
@@ -149,3 +149,19 @@ Decision DI-D2257AD7DD7D selected `reuse-canonical-provider-blob-reader` with hi
 `read_source_at_version` additionally opts into redacted parameter retention while remaining `metrics_only`. This persists the normalized immutable identity and bounded page controls for evidence, but continues to suppress the returned source content. Other metrics-only tools retain the existing empty-parameter behavior.
 
 This extension remains provider-agnostic and initiative-agnostic. It changes no grants, provider floors, approval semantics, writer validation, or non-review execution behavior.
+
+## Required terminal-writer dispatch extension (2026-08-28)
+
+Live TaskRun `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-95A624D36842` proved that a single-writer tool surface plus prompt reminders is not a hard execution contract. After successful bound context hydration, the provider returned prose on attempt five because the routed execution plan still carried `toolChoice: "auto"`. No writer execution, envelope, or receipt existed.
+
+The server-owned terminal policy now sets a caller-scoped `toolChoice: "required"` only when the current provider surface contains exactly the governed writer. Route resolution applies that value after recipe and harness selection, preserves it across fallback construction, and adapters compile it to the provider's native required-call form. An adapter that cannot enforce the requirement fails closed before inference. Ordinary tool-backed and conversational turns retain their existing automatic policy.
+
+The model still independently supplies every writer argument, including its decision. Required dispatch neither synthesizes a judgment nor bypasses approval. A provider that nevertheless returns prose leaves the same TaskRun `input-required` and records `dispatchContract: "required-tool-call"` plus `noncompliance: "prose-without-required-writer"`; no receipt is inferred.
+
+## Persisted reader-history extension (2026-08-28)
+
+The first identical-key replay after required writer dispatch was live exposed a separate history-accounting defect on preserved TaskRun `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-95A624D36842`. Seven successful exact-bound `read_source_at_version` rows had accumulated across earlier attempts: two original proof-only rows, two subsequent proof-only rows, and three proof-only rows from the latest bounded hydration. Hydration compared that durable cross-attempt history count with the six-call single-attempt ceiling and failed `terminal_writer_context_reader_count_invalid` before it could reuse a coherent page set or reread the bound artifact. No writer, envelope, or receipt was created.
+
+The reader ceiling remains per attempt, not per TaskRun lifetime. Hydration validates every persisted reader row for success, tool authority, immutable parameters, durable ordering, uniqueness, and result binding. Content-free rows remain authority proof and do not consume a new hydration attempt. Contentful rows are partitioned at exact line-one request boundaries; each attempt remains limited to the policy reader ceiling and must be internally contiguous, cursor-progressing, blob-stable, and within the existing page and character budgets. Complete attempts may be reused only when every complete attempt agrees on the exact source content; disagreement fails closed. When no complete persisted attempt exists, the server rereads the one bound artifact from line one under the existing six-page/19,200-character ceiling and never splices persisted partial content with reread content.
+
+This extension changes no TaskRun identity, request digest, grants, provider floors, writer arguments, approval boundary, receipt semantics, or ordinary task execution. Historical proof rows can no longer make a correctly bound same-TaskRun recovery permanently unrecoverable, while conflicting, failed, malformed, out-of-order, over-budget, or ambiguous content still fails closed.

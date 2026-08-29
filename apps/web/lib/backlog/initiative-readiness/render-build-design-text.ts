@@ -24,6 +24,24 @@
 // The rendering must be DETERMINISTIC. A baseline pins a digest and reviewers
 // read this text; the same stored value must always produce the same document,
 // so the section order is fixed here rather than taken from key order.
+//
+// BI-CFD5A55A — resolving as canonical text is not enough; the text has to be
+// BASELINEABLE. `spec-approval` mints the initiative scope baseline as well as
+// recording approval, and minting parses this document with
+// parseInitiativeScopeManifest, which reads two exact shapes and refuses an
+// artifact carrying neither:
+//
+//   **OBJ-<ID>:** <statement>
+//   | AC-<ID> | <OBJ-ids> | <statement> |
+//
+// This renderer emitted prose sections and a bulleted acceptance list, so every
+// Build Studio design parsed to zero objectives and failed with "the artifact
+// has no marked objective statements" — the next refusal behind BI-126441FA.
+//
+// The raw material was already here: `problemStatement` is the initiative's one
+// objective and `acceptanceCriteria` are its criteria. Only the notation was
+// missing, so the markers are DERIVED, never generated: same stored design,
+// same ids, same digest.
 
 /** Fixed section order — never derive this from Object.keys. */
 const SECTIONS: ReadonlyArray<{ key: string; heading: string }> = [
@@ -59,6 +77,56 @@ function renderValue(value: unknown): string | null {
   return null;
 }
 
+/** The single objective a Build Studio design states, in its problem statement. */
+const OBJECTIVE_ID = "OBJ-1";
+
+/**
+ * Flatten a statement onto one line and neutralise the characters the manifest
+ * grammar treats as structure.
+ *
+ * An acceptance cell is `[^|]*`, so a literal pipe inside a criterion ends the
+ * cell early and silently truncates — or malforms — the row. A newline splits
+ * one criterion across two lines and drops the remainder. Neither may be left to
+ * corrupt a manifest a baseline is about to pin.
+ */
+function asStatement(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const flattened = value.replace(/\s+/g, " ").split("|").join("\|").trim();
+  return flattened || null;
+}
+
+/**
+ * Render the marked objective and its acceptance table.
+ *
+ * Returns null unless BOTH an objective statement and at least one acceptance
+ * criterion are present. The parser rejects an acceptance row naming an unknown
+ * objective, so criteria with no problem statement must render nothing rather
+ * than rows pointing at an objective that was never emitted.
+ */
+function renderScopeManifest(doc: Record<string, unknown>): string | null {
+  const objective = asStatement(doc.problemStatement);
+  if (!objective) return null;
+
+  const criteria = Array.isArray(doc.acceptanceCriteria) ? doc.acceptanceCriteria : [];
+  const rows = criteria
+    .map(asStatement)
+    // Index the SURVIVING criteria: a criterion that renders to nothing must not
+    // leave a gap that shifts every later id and moves the baseline digest.
+    .filter((statement): statement is string => statement !== null)
+    .map((statement, index) => `| AC-${index + 1} | ${OBJECTIVE_ID} | ${statement} |`);
+  if (rows.length === 0) return null;
+
+  return [
+    "## Scope",
+    "",
+    `**${OBJECTIVE_ID}:** ${objective}`,
+    "",
+    "| ID | Objectives | Acceptance criterion |",
+    "| --- | --- | --- |",
+    ...rows,
+  ].join("\n");
+}
+
 /**
  * Render a Build Studio design document as canonical initiative text.
  *
@@ -69,6 +137,10 @@ export function renderBuildDesignText(value: unknown): string | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const doc = value as Record<string, unknown>;
   const parts: string[] = [];
+  // The scope manifest leads: it is what the baseline parses, and a reviewer
+  // should meet the objective before the prose.
+  const manifest = renderScopeManifest(doc);
+  if (manifest) parts.push(manifest);
   for (const { key, heading } of SECTIONS) {
     const rendered = renderValue(doc[key]);
     if (rendered) parts.push(`## ${heading}\n\n${rendered}`);

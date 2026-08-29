@@ -551,6 +551,13 @@ export async function callProvider(
   const isCliAdapter =
     selector !== null &&
     (selector.kind === "claude-code-cli" || selector.kind === "codex-cli");
+  if (effectivePlan.toolPolicy.toolChoice === "required" && isCliAdapter) {
+    throw new InferenceError(
+      `Execution adapter ${selector?.kind ?? String(executionAdapterRaw)} cannot enforce required tool choice.`,
+      "provider_error",
+      providerId,
+    );
+  }
 
   // EP-COST Phase 4: consult CliPoolStatus before dispatching a CLI-backed call.
   // If the pool is known-exhausted (resetAt is in the future), throw rate_limit

@@ -129,7 +129,7 @@ it("keeps restricted OpenRouter obligations load-bearing when OpenRouter is a fa
       executionAdapter: "chat",
       maxTokens: 1024,
       providerSettings: {},
-      toolPolicy: {},
+      toolPolicy: { toolChoice: "required" },
       responsePolicy: {},
       openRouterObligations: {
         requireProviderAllowlist: true,
@@ -148,13 +148,13 @@ it("keeps restricted OpenRouter obligations load-bearing when OpenRouter is a fa
       },
     },
   );
+  expect(plan.toolPolicy.toolChoice).toBe("required");
   expect(plan.openRouterPolicy).toMatchObject({
     posture: "restricted",
     providerSettings: { only: ["anthropic"], allow_fallbacks: false, zdr: true },
     requireUnderlyingProviderEvidence: true,
   });
 });
-
 const mockPrisma = prisma as unknown as {
   modelProvider: {
     findUnique: ReturnType<typeof vi.fn>;
@@ -164,7 +164,6 @@ const mockPrisma = prisma as unknown as {
     updateMany: ReturnType<typeof vi.fn>;
   };
 };
-
 const mockCallProvider = callProvider as ReturnType<typeof vi.fn>;
 const mockRecordRequest = recordRequest as ReturnType<typeof vi.fn>;
 const mockLearnFromRateLimitResponse = learnFromRateLimitResponse as ReturnType<typeof vi.fn>;

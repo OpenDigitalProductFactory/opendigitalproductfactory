@@ -306,7 +306,7 @@ export function resolveTerminalTextExit(
       kind: "input-required",
       reason: "missing-terminal-writer",
       writerToolName: policy.writerToolName,
-      message: "The independent review stopped without recording a governed assessment. No receipt was created.",
+      message: `The provider did not honor the required writer tool-call contract for ${policy.writerToolName}. The same TaskRun remains resumable. No receipt was created.`,
     };
   }
   if (!progress.evidenceAvailable) {
