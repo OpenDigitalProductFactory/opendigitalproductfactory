@@ -88,6 +88,10 @@ the mirror honest.
 
 Not every field belongs in that shared block. `sessionRef` was added to `adopt_worktree` **alone** ⟦runtime: `BI-0B292D84`, 2026-08-28⟧ because it answers a question only the adopt path had left unanswered: *whose* claim this is. `claim_backlog_item_for_work` had required a `sessionRef` all along and stored it as `WorkCapsule.executorRef`; `adopt_worktree` omitted it, so every worktree adopted through it stored `executorRef: null` and a claim guard could prove a live claim **covered** a branch but not that it belonged to the session asking. It is optional rather than required, unlike its sibling: making it required would break existing callers and refuse claims outright, and an unattributed claim is better than none.
 
+`backlogItemId` was added to `adopt_worktree` alone for the same kind of reason ⟦runtime: `BI-D526F72C`, 2026-08-28⟧. The handler had always bound a backlog item — but only from `outcomeAnchor`, and the schema advertised no `backlogItemId`, so the name every caller reaches for (the one `claim_backlog_item_for_work` binds, and the one the returned Workroom reports) was accepted and dropped while the call answered `success: true`. The unbound Workroom then held the branch permanently: unclaimable, because it matched no subject, and unreleasable, because resuming a terminal Workroom needed a backlog item it did not have.
+
+Three properties make the binding honest rather than merely present. The id is **resolved** against the live `BacklogItem`, so an unknown one returns `unknown_backlog_item` instead of adopting unbound. The binding is **read back from the stored record**, because reporting the request rather than the result is exactly what hid the original defect. And a terminal Workroom carrying **no** backlog item is resumed and rebound rather than refusing — one bound to a *different* item still refuses, so branch provenance cannot be overwritten by a re-adopt.
+
 ## Fifth pack — first inline extraction
 
 [`feedback-pack`](../../apps/web/lib/mcp/packs/feedback-pack.ts) is the first pack whose

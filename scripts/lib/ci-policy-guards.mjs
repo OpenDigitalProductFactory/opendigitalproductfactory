@@ -14,13 +14,38 @@ const node = (...args) => ["node", args];
 const git = (...args) => ["git", args];
 const pnpm = (...args) => ["pnpm", args];
 
+/**
+ * A `node --test` command that asserts LIVE REPOSITORY STATE rather than guard
+ * logic — a CONFORMANCE ASSERTION, not a self-test (BI-7B249AFE).
+ *
+ * The host-side preflight strips `node --test` commands because a guard's unit
+ * tests prove the guard and CI runs them anyway. That reasoning does not reach a
+ * test whose assertion is about the repository: stripping it removes the only
+ * check on that tree, so the preflight reports clean where CI fails
+ * deterministically. Marking the command keeps it in the host-side plan.
+ *
+ * The mark is not a matter of taste. `scripts/check-guard-conformance-marks.mjs`
+ * detects the shape statically and fails when a detected file is unmarked, so a
+ * new repository-reading self-test cannot quietly rejoin the stripped set.
+ */
+const conformanceTest = (...args) => ["node", ["--test", ...args], { conformance: true }];
+
 export const LOCAL_READINESS_PROFILE_NAMES = Object.freeze([
   "source",
   "workspace",
   "pull-request",
 ]);
 
-export function isPolicyGuardSelfTest([command, args]) {
+/** A guard command explicitly marked as a conformance assertion over repo state. */
+export function isPolicyGuardConformanceCommand(command) {
+  return Array.isArray(command) && command[2]?.conformance === true;
+}
+
+export function isPolicyGuardSelfTest([command, args, options]) {
+  // A conformance assertion is written with `node --test` but is not a self-test:
+  // it reads the repository, so the host is the only place its answer is about
+  // the tree being pushed. Never strip it (BI-7B249AFE).
+  if (options?.conformance === true) return false;
   return command === "node" && args[0] === "--test"
     || command === "pnpm" && args[0] === "run" && args[1]?.endsWith(":test");
 }
@@ -61,6 +86,15 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("host-port-range-guard", "Host Port Range Guard", [
       node("--test", "scripts/check-host-port-range.test.mjs"),
     ]),
+    // BI-7B249AFE: the preflight strips `node --test` commands, which silently
+    // removed the ONLY check for guards whose ".test.mjs" reads the repository
+    // rather than the guard. #4558 fixed one instance by hand and the class
+    // recurred on #4737. This guard closes it: it detects the shape and refuses
+    // an unmarked one, so the next such test cannot rejoin the stripped set.
+    guard("guard-conformance-marks", "Guard Conformance Marks", [
+      node("--test", "scripts/check-guard-conformance-marks.test.mjs"),
+      node("scripts/check-guard-conformance-marks.mjs"),
+    ]),
     guard("shell-guard-shim-contract", "Shell Guard Shim Contract", [
       node("--test", "scripts/check-shell-guard-shim-contract.test.mjs"),
       // Drives the real POSIX guard under bash: a cached binary path goes stale on
@@ -69,16 +103,13 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/safety/shell-guard-stale-cache.test.mjs"),
     ]),
     guard("release-compose-pins", "Release Compose Pins", [
-      node("--test", "scripts/check-release-compose-pins.test.mjs"),
+      conformanceTest("scripts/check-release-compose-pins.test.mjs"),
     ]),
     guard("release-asset-contract", "Release Asset Contract", [
       // The consumer install has no git checkout: whatever the installer copies
       // out of the install dir must ship in the image's /dpf-release-assets.
-      node(
-        "--test",
-        "scripts/check-release-asset-contract.test.mjs",
-        "scripts/installer/local-model-policy-contract.test.mjs",
-      ),
+      conformanceTest("scripts/check-release-asset-contract.test.mjs"),
+      node("--test", "scripts/installer/local-model-policy-contract.test.mjs"),
     ]),
     guard("db-commandment-coverage", "DB Commandment Coverage", [
       // The never-wipe-db commandment guarded two spellings and allowed three
@@ -92,12 +123,12 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // docs/install/windows.md documented `install-dpf.ps1 -Help`, which had no
       // -Help parameter -- a simple param() block ignored it and ran a full
       // unattended install. Asserts documented installer flags actually exist.
-      node("--test", "scripts/check-installer-help-contract.test.mjs"),
+      conformanceTest("scripts/check-installer-help-contract.test.mjs"),
     ]),
     guard("installer-skip-visibility", "Installer Skip Visibility", [
       // A guarded install step that skips in silence reads as success, and is
       // then recorded as done by Save-Progress. Optional-script guards must say so.
-      node("--test", "scripts/check-installer-skip-visibility.test.mjs"),
+      conformanceTest("scripts/check-installer-skip-visibility.test.mjs"),
     ]),
     guard("installer-state-contract", "Installer State Contract", [
       // Drives real bash: install-dpf.sh runs under `set -euo pipefail`, and the
@@ -106,14 +137,15 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "--test",
         "scripts/installer/lib/state-cleanup-temps.test.mjs",
         "scripts/installer/lib/state-lock-timeout.test.mjs",
+        "scripts/installer/lib/doctor-redaction.test.mjs",
         "scripts/installer/install-release-assets.test.mjs",
       ),
     ]),
     guard("fresh-install-reliability", "Fresh Install Reliability", [
+      conformanceTest("scripts/installer/powershell-compose-chain.test.mjs"),
       node(
         "--test",
         "scripts/installer-image-identity.test.mjs",
-        "scripts/installer/powershell-compose-chain.test.mjs",
         "scripts/salvage-sweep.test.mjs",
       ),
     ]),
@@ -153,7 +185,6 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "--test",
         "scripts/pr-health.test.mjs",
         "scripts/check-ci-build-cache.test.mjs",
-        "scripts/lib/dev-preview-migrate-converge.test.mjs",
         "scripts/dev-postgres-pgvector-contract.test.mjs",
         "scripts/lib/ci-observation.test.mjs",
         "scripts/ci-observation.test.mjs",
@@ -175,10 +206,17 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/git-shallow-preflight.test.mjs",
         "scripts/lib/ensure-compile-ready.test.mjs",
         "scripts/pregate-preflight.test.mjs",
-        "scripts/pregate-exit-honesty.test.mjs",
         "scripts/gate-context.test.mjs",
-        "scripts/lib/gate-context-runtime-contract.test.mjs",
         "scripts/pre-push-dco-check.test.mjs",
+      ),
+      // Split out of the command above because these three read the real
+      // repository — the compose files, the Dockerfile, the pregate scripts —
+      // and assert on what they find. Stripping them host-side is exactly the
+      // false green BI-7B249AFE describes.
+      conformanceTest(
+        "scripts/lib/dev-preview-migrate-converge.test.mjs",
+        "scripts/pregate-exit-honesty.test.mjs",
+        "scripts/lib/gate-context-runtime-contract.test.mjs",
       ),
       node("scripts/check-ci-policy-test-inventory.mjs"),
     ]),
@@ -190,9 +228,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     ]),
     guard("override-provenance-guard", "Workspace Supply-Chain Policy", [
       node("scripts/check-override-comments.mjs"),
-      node("--test", "scripts/check-override-comments.test.mjs"),
+      conformanceTest("scripts/check-override-comments.test.mjs"),
       node("scripts/check-build-script-policy.mjs"),
-      node("--test", "scripts/check-build-script-policy.test.mjs"),
+      conformanceTest("scripts/check-build-script-policy.test.mjs"),
       node("--test", "scripts/check-root-script-runtime.test.mjs"),
       // A `patchedDependencies` entry whose patch file never reaches the Docker
       // build context fails `pnpm install` with ENOENT and breaks every image
@@ -308,14 +346,14 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("scripts/check-work-unit-conformance.mjs"),
     ]),
     guard("instruction-plane-guard", "Instruction Plane Guard", [
-      node("--test", "scripts/check-instruction-plane-size.test.mjs"),
+      conformanceTest("scripts/check-instruction-plane-size.test.mjs"),
       node("scripts/check-instruction-plane-size.mjs"),
     ]),
     // The size ratchet's twin: bytes measure the cut, this measures what the cut LOST.
     // A byte gate scores deleting a commandment identically to relocating it, so Phase 1
     // needs both or "58% smaller" is unfalsifiable (BI-0020D511 §12f).
     guard("instruction-plane-rule-coverage", "Instruction Plane Rule Coverage", [
-      node("--test", "scripts/check-instruction-plane-rule-coverage.test.mjs"),
+      conformanceTest("scripts/check-instruction-plane-rule-coverage.test.mjs"),
       node("scripts/check-instruction-plane-rule-coverage.mjs"),
     ]),
     // Plane-3 sibling of the instruction-plane guard, deliberately a SOFTER shape: it
@@ -347,7 +385,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     // the A2A cohort may never be grandfathered; "public" claims must agree with
     // the proxy's path-segmentation allowlist.
     guard("endpoint-classification-guard", "Endpoint Classification Guard", [
-      node("--test", "scripts/check-endpoint-classification.test.mjs"),
+      conformanceTest("scripts/check-endpoint-classification.test.mjs"),
       node("scripts/check-endpoint-classification.mjs"),
     ]),
     guard("finding-substrate-guard", "Finding Substrate Guard", [
@@ -361,7 +399,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     // platform no longer runs. Complements the doc-impact graph, whose
     // `relatedCode:` edges only protect pages someone remembered to annotate.
     guard("retired-substrate-guard", "Retired Substrate Guard", [
-      node("--test", "scripts/check-retired-substrate.test.mjs"),
+      conformanceTest("scripts/check-retired-substrate.test.mjs"),
       node("scripts/check-retired-substrate.mjs"),
     ]),
     guard("mcp-tool-pack-guard", "MCP Tool Pack Guard", [
@@ -423,11 +461,6 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // converged and a clean push meant the gate never ran. Linux CI cannot
         // reproduce it — these guards are the only thing that catches it.
         "scripts/lib/hooks-dir.test.mjs",
-        // BI-3727106F: the gate must converge at SESSION START and sweep
-        // sibling worktrees. Convergence used to run only in postinstall, and
-        // only from the tree's own copy — so a tree on a stale base could never
-        // repair itself (68 of 85 worktrees were ungated when this was measured).
-        "scripts/hooks/converge-git-hooks.test.mjs",
         // BI-9B490215: the root postinstall must keep ZERO static local imports.
         // The Docker deps stage copies only set-hooks-path.mjs, so a static
         // ./lib import throws ERR_MODULE_NOT_FOUND and breaks the image build,
@@ -452,6 +485,13 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // guard that misses makes the gate exit 0 silently (false pass).
         "scripts/lib/entry-module.test.mjs",
       ),
+      // BI-3727106F: the gate must converge at SESSION START and sweep sibling
+      // worktrees. Convergence used to run only in postinstall, and only from
+      // the tree's own copy — so a tree on a stale base could never repair
+      // itself (68 of 85 worktrees were ungated when this was measured). It
+      // reads the repository's own hook files, so it is a conformance assertion
+      // and must not be stripped from the host-side preflight (BI-7B249AFE).
+      conformanceTest("scripts/hooks/converge-git-hooks.test.mjs"),
       node("scripts/runtime-artifact-janitor.mjs", "--help"),
     ]),
   ]),

@@ -22,7 +22,7 @@ import {
   isRunnerFailureResult,
   runPreflight,
 } from "./lib/pregate-preflight.mjs";
-import { POLICY_GUARD_PROFILES } from "./lib/ci-policy-guards.mjs";
+import { POLICY_GUARD_PROFILES, isPolicyGuardConformanceCommand } from "./lib/ci-policy-guards.mjs";
 import { RUNNER_FAILURE_EXIT_CODE } from "./check-guards.mjs";
 import { loadPinnedGuardTypeScript } from "./lib/load-pinned-guard-typescript.mjs";
 import { shouldRunPreflight } from "./pregate.mjs";
@@ -71,6 +71,55 @@ test("buildPreflightPlan strips guard self-tests but keeps every check command",
   assert.deepEqual(plan[1].commands, [["pnpm", ["run", "workspace-check"]]]);
 });
 
+// BI-7B249AFE: a `node --test` command marked `{ conformance: true }` asserts
+// LIVE REPOSITORY STATE, not guard logic. Stripping it removes the only check on
+// the tree being pushed, and the preflight then reports clean where CI fails
+// deterministically — observed end to end on #4737.
+test("buildPreflightPlan keeps a conformance-marked test and still strips its unmarked twin", () => {
+  const profiles = {
+    source: [
+      {
+        id: "mixed",
+        legacyJobId: "mixed",
+        name: "Mixed",
+        commands: [
+          ["node", ["--test", "scripts/unit.test.mjs"]],
+          ["node", ["--test", "scripts/conformance.test.mjs"], { conformance: true }],
+          ["node", ["scripts/check-mixed.mjs"]],
+        ],
+      },
+      {
+        id: "conformance-only",
+        legacyJobId: "conformance-only",
+        name: "Conformance Only",
+        commands: [["node", ["--test", "scripts/only.test.mjs"], { conformance: true }]],
+      },
+    ],
+    workspace: [],
+    "pull-request": [],
+  };
+
+  const plan = buildPreflightPlan({ profiles });
+  assert.deepEqual(plan.map((entry) => entry.id), ["mixed", "conformance-only"]);
+  assert.deepEqual(plan[0].commands, [
+    ["node", ["--test", "scripts/conformance.test.mjs"], { conformance: true }],
+    ["node", ["scripts/check-mixed.mjs"]],
+  ]);
+  // A guard whose ONLY command is a conformance assertion used to vanish from
+  // the plan entirely, which reads as "clean" rather than "never checked".
+  assert.equal(plan[1].commands.length, 1);
+});
+
+test("the real plan carries the instruction-plane rule-coverage conformance assertion", () => {
+  // The exact command whose absence produced the #4737 false green.
+  const plan = buildPreflightPlan();
+  const commands = plan.flatMap((entry) => entry.commands.map(([bin, args]) => [bin, ...args].join(" ")));
+  assert.ok(
+    commands.includes("node --test scripts/check-instruction-plane-rule-coverage.test.mjs"),
+    "the rule-coverage conformance assertion must run host-side",
+  );
+});
+
 test("buildPreflightPlan includes only commit-range-safe pull-request gates", () => {
   const plan = buildPreflightPlan();
   const ids = new Set(plan.map((entry) => entry.id));
@@ -101,12 +150,19 @@ test("buildPreflightPlan runs every pull-request gate that can answer host-side"
   );
 });
 
-test("buildPreflightPlan contains no --test invocations at all", () => {
+// Was "contains no --test invocations at all" until BI-7B249AFE. That invariant
+// was the bug: it made stripping unconditional, so a conformance assertion over
+// repository state was removed along with the genuine self-tests. The invariant
+// now is that every surviving `--test` command carries the explicit mark —
+// `scripts/check-guard-conformance-marks.mjs` decides which ones earn it.
+test("buildPreflightPlan keeps no UNMARKED --test invocation", () => {
   for (const entry of buildPreflightPlan()) {
-    for (const [command, args] of entry.commands) {
+    for (const command of entry.commands) {
+      const [binary, args] = command;
+      if (binary !== "node" || args[0] !== "--test") continue;
       assert.ok(
-        !(command === "node" && args[0] === "--test"),
-        `${entry.id} kept a self-test: ${args.join(" ")}`,
+        isPolicyGuardConformanceCommand(command),
+        `${entry.id} kept an unmarked self-test: ${args.join(" ")}`,
       );
     }
   }
@@ -355,7 +411,19 @@ test("pregate-preflight.mjs --plan emits the JSON plan without running guards", 
   const plan = JSON.parse(result.stdout);
   assert.ok(plan.length > 0);
   assert.ok(plan.some((entry) => entry.id === "module-size-guard"));
-  assert.ok(plan.every((entry) => entry.commands.every((c) => !c.startsWith("node --test"))));
+  // The rendered plan flattens each command to a string, so the conformance mark
+  // is not visible here. Assert against the registry instead: every `node --test`
+  // line the plan shows must be one the registry marked (BI-7B249AFE).
+  const marked = new Set(
+    buildPreflightPlan()
+      .flatMap((entry) => entry.commands)
+      .filter((command) => isPolicyGuardConformanceCommand(command))
+      .map(([binary, args]) => [binary, ...args].join(" ")),
+  );
+  const unmarked = plan
+    .flatMap((entry) => entry.commands)
+    .filter((command) => command.startsWith("node --test") && !marked.has(command));
+  assert.deepEqual(unmarked, []);
 });
 
 // BI-FFFEFBCC (follow-on to BI-745658D7): Node realpath-resolves the ESM entry
