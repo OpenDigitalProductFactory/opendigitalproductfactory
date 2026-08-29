@@ -139,3 +139,47 @@ by asserting the input is present in the job that builds image contexts.
 - Removing `lfs: true` from the workflow fails the new workflow-shape test.
 - Feeding a pointer stub into the build context fails the image build with the
   named error rather than producing a publishable image.
+
+## Follow-on: the guard also fires on the git-source upgrade path
+
+**Backlog item:** BI-DDB48B04
+
+The blast radius above says "no runtime code change" and reasons entirely about
+the publish path. That is where this design was incomplete, and it broke every
+upgrade on the git-source install shape within two hours of merging.
+
+The Dockerfile assertion is enforced on **every** build of this Dockerfile, not
+only CI's. On a git-source install the self-upgrade promoter builds the same
+Dockerfile, and its build context is the `.upgrade-workspace` tree that the
+**portal container** clones in `apps/web/lib/self-upgrade/prepare-source.ts`.
+That path has no `actions/checkout`, so nothing was supplying `lfs: true`'s
+guarantee. Two things then made pointer stubs the only possible outcome:
+
+- the portal runner stage installed `git` but not `git-lfs`; and
+- `defaultGitRunner` sets `GIT_LFS_SKIP_SMUDGE=1` on purpose, so the mechanical
+  branch/merge operations never block on the network.
+
+Result: `SUR-8784ADFE` (08:02) and every scheduled run after it failed ~2 minutes
+into the promoter build, on the zip-magic assertion, with the cause visible only
+in raw Docker output and the run row's `reason` column left empty.
+
+The assertion itself was right and stays. What changed:
+
+- **`Dockerfile`** — the runner stage installs `git-lfs`, so the workspace clone
+  can materialize LFS objects at all. A shape test in
+  `scripts/publish-image-release-identity.test.mjs` ratchets it, alongside the
+  two this design already added.
+- **`apps/web/lib/self-upgrade/lfs-materialization.ts`** (new) — after the
+  workspace tree is final, `git lfs pull` then `git lfs ls-files`, and any path
+  still marked `-` fails the run with reason `lfs-unmaterialized`.
+
+Deliberately **generic**, not a second per-file check: `.gitattributes` LFS-tracks
+`*.pdf`, `*.xlsx`, `*.docx` and `*.pptx`, while the Dockerfile asserts only the
+one workbook it COPYs. A stub in any other tracked path was — and otherwise would
+remain — invisible until something read it.
+
+The wider lesson for this repo's two install shapes: a guard added for the
+published-image shape lands on the git-source shape too, because both build this
+Dockerfile. "Fail the publish, never the install" only holds if the install path
+can satisfy the assertion. Ask which shapes execute a guard before assuming the
+one you are fixing is the only one.
