@@ -9,7 +9,11 @@ import {
 import { isUpgradeWindowOpen } from "@/lib/self-upgrade/window";
 import { resolveReleaseBatchStatus } from "@/lib/self-upgrade/release-batch-status";
 import { createRun, failRun, getLatestRun } from "@/lib/self-upgrade/run-store";
-import { getErrorMessage } from "@/lib/shared/get-error-message";
+import {
+  describeDispatchFailure,
+  inngestEndpoint,
+  sendWithTransientRetry,
+} from "@/lib/self-upgrade/dispatch";
 import { readSelfUpgradeSupport } from "@/lib/self-upgrade/support";
 
 type RequestActorKind = "human" | "agent";
@@ -176,16 +180,18 @@ export async function requestSelfUpgrade(
 
   const run = await createRun({ triggeredBy });
   try {
-    const result = await inngest.send({
-      name: SELF_UPGRADE_EVENT,
-      data: {
-        runId: run.runId,
-        triggeredBy,
-        // Agent-requested runs stay batch-gated in the runner too (authoritative
-        // re-check); operator/manual dispatch elsewhere leaves this unset.
-        ...(input.actorKind === "agent" ? { routine: true } : {}),
-      },
-    });
+    const result = await sendWithTransientRetry(() =>
+      inngest.send({
+        name: SELF_UPGRADE_EVENT,
+        data: {
+          runId: run.runId,
+          triggeredBy,
+          // Agent-requested runs stay batch-gated in the runner too (authoritative
+          // re-check); operator/manual dispatch elsewhere leaves this unset.
+          ...(input.actorKind === "agent" ? { routine: true } : {}),
+        },
+      }),
+    );
     return {
       success: true,
       status: "queued",
@@ -194,8 +200,7 @@ export async function requestSelfUpgrade(
       eventIds: result.ids,
     };
   } catch (err) {
-    const message = getErrorMessage(err);
-    const failure = `queue-dispatch-failed: ${message}`;
+    const failure = `queue-dispatch-failed: ${describeDispatchFailure(err, inngestEndpoint())}`;
     await failRun(run.runId, failure);
     return {
       success: false,

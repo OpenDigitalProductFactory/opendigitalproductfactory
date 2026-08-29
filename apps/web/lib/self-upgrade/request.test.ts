@@ -199,12 +199,42 @@ describe("requestSelfUpgrade", () => {
       success: false,
       status: "dispatch_failed",
       runId: "SUR-QUEUED1",
-      message: "queue-dispatch-failed: inngest offline",
     });
+    // A non-transport error is not retried, and the message must say so rather
+    // than implying three exhausted attempts.
+    expect(result).toHaveProperty("message", expect.stringContaining("inngest offline"));
+    expect(result).toHaveProperty("message", expect.stringContaining("after 1 attempt"));
+    expect(mocks.inngestSend).toHaveBeenCalledTimes(1);
     expect(mocks.failRun).toHaveBeenCalledWith(
       "SUR-QUEUED1",
-      "queue-dispatch-failed: inngest offline",
+      expect.stringContaining("queue-dispatch-failed: inngest offline"),
     );
+  });
+
+  it("survives a transient connect timeout instead of failing the run", async () => {
+    // SUR-D71E8971: one lost connect race against a 10s timeout marked the run
+    // permanently failed while inngest was up and processing events throughout.
+    const timeout = new TypeError("fetch failed");
+    (timeout as { cause?: unknown }).cause = Object.assign(new Error("Connect Timeout Error"), {
+      code: "UND_ERR_CONNECT_TIMEOUT",
+    });
+    mocks.inngestSend
+      .mockRejectedValueOnce(timeout)
+      .mockResolvedValueOnce({ ids: ["evt-retry"] });
+
+    const result = await requestSelfUpgrade({
+      requestedBy: "manual:user-ops-1",
+      actorKind: "human",
+    });
+
+    expect(result).toMatchObject({
+      success: true,
+      status: "queued",
+      runId: "SUR-QUEUED1",
+      eventIds: ["evt-retry"],
+    });
+    expect(mocks.inngestSend).toHaveBeenCalledTimes(2);
+    expect(mocks.failRun).not.toHaveBeenCalled();
   });
 
   it("requires human override when an agent requests outside the effective window", async () => {

@@ -52,6 +52,7 @@ import { inngest } from "@/lib/queue/inngest-client";
 import { readBuildPipelineLimit } from "@/lib/queue/admission";
 import { buildAdmissionSnapshot } from "@/lib/queue/admission-observability";
 import { SELF_UPGRADE_EVENT } from "@/lib/queue/functions/self-upgrade";
+import { describeDispatchFailure, inngestEndpoint, sendWithTransientRetry } from "@/lib/self-upgrade/dispatch";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 async function requireOpsAccess(): Promise<string> {
@@ -815,7 +816,7 @@ export async function triggerSelfUpgrade(opts?: { dryRun?: boolean; force?: bool
   });
 
   try {
-    await inngest.send({
+    await sendWithTransientRetry(() => inngest.send({
       name: SELF_UPGRADE_EVENT,
       data: {
         runId: run.runId,
@@ -823,10 +824,9 @@ export async function triggerSelfUpgrade(opts?: { dryRun?: boolean; force?: bool
         ...(opts?.dryRun !== undefined ? { dryRun: opts.dryRun } : {}),
         ...(opts?.force ? { force: true } : {}),
       },
-    });
+    }));
   } catch (err) {
-    const message = getErrorMessage(err);
-    await failRun(run.runId, `queue-dispatch-failed: ${message}`);
+    await failRun(run.runId, `queue-dispatch-failed: ${describeDispatchFailure(err, inngestEndpoint())}`);
     return { queued: false, reason: "queue-dispatch-failed", runId: run.runId } as const;
   }
 
