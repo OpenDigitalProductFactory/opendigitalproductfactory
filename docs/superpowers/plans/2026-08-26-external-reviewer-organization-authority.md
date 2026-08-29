@@ -72,6 +72,13 @@ failed proposal with its original writer parameters and the replacement envelope
 id, and park the same stale `working`, `stalled`, or `input-required` TaskRun for
 fresh exact approval. Preserve the recovery audit through final execution.
 
+For a terminal `failed` replay whose persisted summary names only the exact
+stale-Workroom-head prerequisite, validate the server-owned initiative binding
+and require exactly one live Workroom for the bound backlog item and repository
+to record the immutable commit. Only then may the transaction re-park the same
+TaskRun. A stale, missing, or ambiguous head, an unrelated failure, absent exact
+approval, or existing writer/receipt evidence refuses without mutation.
+
 ## Test-first implementation
 
 1. Add failing authority-resolver tests proving that a validated external task binding resolves an organization-owned initiative before handler execution.
@@ -88,6 +95,10 @@ fresh exact approval. Preserve the recovery audit through final execution.
    prove no agentic inference, TaskRun creation, or direct writer execution occurs
    while fresh approval is required.
 9. Preserve the recovery audit when the approved writer completes.
+10. Add the exact failed current-head BI-F48 fixture and prove governed Workroom
+    adoption changes the result from refusal to same-TaskRun writer-only resume,
+    while stale head, unrelated failure, absent approval, binding conflict, and
+    existing writer/receipt remain fail closed.
 
 The semantic-review evidence packet must embed the exact committed patch. Commit,
 tree, and digest identities alone are insufficient when the reviewer cannot read
@@ -122,12 +133,12 @@ envelopes remain immutable audit history and are not resurrected.
 - Decision: atomic
 - Parent: BI-F48D7059
 - Receipt: blocked - no initiative scope baseline exists for BI-F48D7059, so record_plan_backlog_coverage returns traceability-incomplete and mints no receipt
-- Rationale: The nine test-first steps are one chain over a single authority-and-recovery contract, so no phase is independently shippable. Steps 1-3 are failing tests that only pass with the step-4 resolver change; steps 7-9 add the same-TaskRun recovery transaction that no caller can reach without that resolver and the step 5-6 approval/replay path. Shipping any subset lands either failing tests or an unreachable recovery path, and the organization-authority propagation and the expired-envelope supersession must change together or the receipt repository still rejects the writer.
+- Rationale: The ten test-first steps are one chain over a single authority-and-recovery contract, so no phase is independently shippable. Steps 1-3 are failing tests that only pass with the step-4 resolver change; steps 7-10 add the same-TaskRun recovery transaction and repaired-prerequisite path that no caller can reach without that resolver and the step 5-6 approval/replay path. Shipping any subset lands either failing tests or an unreachable recovery path, and the organization-authority propagation, expired-envelope supersession, and failed-prerequisite recovery must change together or the receipt repository still rejects the writer.
 - Dependencies: none
 
 | Deliverable key | Backlog item | Independently shippable | Requirement refs | Contract refs | Flow refs | Verification refs |
 | --- | --- | --- | --- | --- | --- | --- |
-| `bi-f48-authority-recovery` | BI-F48D7059 | no | OBJ-F48-001, OBJ-F48-002, OBJ-F48-003, OBJ-F48-004 | authority-boundary, same-taskrun-recovery, approval-separation, platform-authority-sentinel | initial-writer-approval, approved-writer-replay, expired-envelope-recovery, platform-objective-mapping | AC-F48-001, AC-F48-002, AC-F48-003, AC-F48-004, AC-F48-005, AC-F48-006, AC-F48-007, AC-F48-008 |
+| `bi-f48-authority-recovery` | BI-F48D7059 | no | OBJ-F48-001, OBJ-F48-002, OBJ-F48-003, OBJ-F48-004 | authority-boundary, same-taskrun-recovery, approval-separation, platform-authority-sentinel, workroom-head-prerequisite | initial-writer-approval, approved-writer-replay, expired-envelope-recovery, failed-prerequisite-recovery, platform-objective-mapping | AC-F48-001, AC-F48-002, AC-F48-003, AC-F48-004, AC-F48-005, AC-F48-006, AC-F48-007, AC-F48-008, AC-F48-009 |
 
 A baseline is written only when the spec-approval gate passes, and that gate
 requires a reviewer independent of the artifact's author. This plan's item is

@@ -157,9 +157,10 @@ export async function resumeApprovedRemoteTask(input: {
  * `working` and `stalled` are the runs the canonical reaper left behind;
  * `input-required` is the state an expired approved envelope collapses to, and
  * the ordinary replay cannot reach it because that search matches only
- * unexpired envelopes.
+ * unexpired envelopes. `failed` is accepted only by the transaction's narrower
+ * exact-Workroom-head prerequisite check.
  */
-const RECOVERABLE_STATUSES = new Set(["working", "stalled", "input-required"]);
+const RECOVERABLE_STATUSES = new Set(["working", "stalled", "input-required", "failed"]);
 
 /**
  * Recover a stale approved writer envelope on the SAME TaskRun and request
@@ -181,7 +182,7 @@ export async function recoverStaleApprovalOnReplay(input: {
 }): Promise<RemoteTaskSubmitOutcome | null> {
   const { existing } = input;
   if (!RECOVERABLE_STATUSES.has(existing.status)) return null;
-  if (!isStaleApprovalRecoveryRun(existing)) return null;
+  if (existing.status !== "failed" && !isStaleApprovalRecoveryRun(existing)) return null;
 
   const recovery = await recoverStaleApprovedRemoteTask({
     taskRunId: existing.taskRunId,

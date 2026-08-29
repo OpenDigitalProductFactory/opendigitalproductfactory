@@ -29,7 +29,10 @@ initiative subject and organization from the same validated, server-owned task
 binding. If an approved writer replay is stranded and the envelope expires, an
 identical replay recovers the same TaskRun without rerunning inference, replaces
 the expired envelope with an identical-binding proposal, and requires a fresh
-exact approval. Direct calls remain unable to assert organization authority
+exact approval. A writer replay that failed only because its Workroom still
+recorded the pre-review head becomes recoverable after governed adoption records
+the exact immutable artifact head; the cached prerequisite failure is not
+replayed as though the repair never happened. Direct calls remain unable to assert organization authority
 through tool arguments, and the receipt repository keeps rejecting mismatches.
 
 ## Governed scope manifest
@@ -57,6 +60,7 @@ through tool arguments, and the receipt repository keeps rejecting mismatches.
 | AC-F48-006 | OBJ-F48-002, OBJ-F48-003 | Fresh activity, changed digest or binding, conflicting scope, unrelated decline, or existing successful writer or receipt evidence prevents recovery without mutation. | Same-TaskRun recovery extension; Invariants |
 | AC-F48-007 | OBJ-F48-002, OBJ-F48-003 | Recovery audit identities survive the final writer transition and prove the same TaskRun, replacement envelope, cloned proposal, and `inferenceRerun: false`. | Same-TaskRun recovery extension |
 | AC-F48-008 | OBJ-F48-004 | Objective mapping requires exact stored-authority and initiative-organization equality, serializes null/null as `platform`, and rejects tenant authority for a platform initiative. | Invariants; Verification |
+| AC-F48-009 | OBJ-F48-002, OBJ-F48-003 | A failed approved replay caused solely by a stale Workroom head may re-park the same TaskRun only after exactly one live Workroom for the bound backlog item and repository records the immutable artifact head; stale or ambiguous heads remain terminal and no inference, sibling, or replacement envelope is created while the approval is unexpired. | Same-TaskRun prerequisite recovery; Invariants |
 
 ## Authority boundary
 
@@ -106,13 +110,23 @@ so normal approved-writer resume correctly refused it, but recovery considered
 only `working` and `stalled`. That state is recoverable under the same exact
 binding and liveness constraints; it must not consume another inference identity.
 
+A later current-head review exposed a third state in the same contract. The
+reviewer completed its immutable reads and received exact approval, but the
+writer's canonical artifact check failed because the owned Workroom still
+recorded the prior head. Governed `adopt_worktree` then synchronized the
+Workroom, yet identical replay returned the cached terminal failure rather than
+re-evaluating the repaired server-owned prerequisite. This state is recoverable
+without rerunning inference only when the persisted failure names that exact
+head prerequisite and the canonical Workroom record now proves the bound head.
+
 An identical request-key and request-digest replay may recover this state only
 when all of the following are true:
 
 1. The TaskRun is `working`, `stalled`, or `input-required`, its persisted request
    digest matches, its last heartbeat is older than the canonical 15-minute
    liveness threshold, and a compare-and-swap still sees the same status and
-   `updatedAt`.
+   `updatedAt`; or it is terminal `failed` with a completed timestamp and its
+   persisted summary names the exact stale-Workroom-head prerequisite.
 2. The latest writer envelope is `approved`, bound to the same human, coworker,
    TaskRun, writer tool, input fingerprint, and decision-version fingerprint.
 3. The original failed proposal is present with its exact persisted writer
@@ -124,6 +138,10 @@ when all of the following are true:
    envelope with the identical stored binding, clones the original proposal with
    only the new envelope identity, and parks the same TaskRun at
    `input-required`. A fresh exact human approval is mandatory.
+6. A `failed` prerequisite replay additionally requires exactly one live
+   Workroom for the bound backlog item and repository whose recorded head equals
+   the immutable review commit. A missing, stale, or ambiguous Workroom head
+   refuses recovery before envelope or TaskRun mutation.
 
 The recovery transaction persists source and replacement envelope identities,
 the cloned proposal identity, request digest, binding fingerprint, source
@@ -143,6 +161,8 @@ in `progressPayload` after the writer executes.
 - Expired approval is never extended, inferred, or executed.
 - Fresh heartbeat, mismatched digest/binding/scope, or existing writer evidence
   refuses recovery without mutation.
+- A failed replay cannot recover from an unrelated terminal error or from a
+  stale, missing, or ambiguous Workroom head.
 - Recovery audit survives the final writer transition.
 - No schema, migration, new receipt type, or new reviewer role is introduced.
 
@@ -161,6 +181,9 @@ Tests must prove:
   `stalled` or `input-required` TaskRun with identical binding and writer
   arguments;
 - an unexpired stale approval resumes once after a CAS reservation;
+- an unexpired approved writer whose exact Workroom-head prerequisite was
+  repaired re-parks and executes only its persisted writer on the same TaskRun;
+- unrelated failed runs and stale or ambiguous Workroom heads remain refused;
 - recovery does not replace an unexpired approval on an `input-required` row;
 - fresh activity, changed digest, changed authority binding, or an existing
   writer/receipt prevents recovery; and
