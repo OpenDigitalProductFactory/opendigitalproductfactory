@@ -222,6 +222,8 @@ export default async function SelfUpgradePage() {
               latestRun={clientProps.latestRun}
               quiescence={clientProps.quiescence}
               jobEngine={clientProps.jobEngine}
+              targetSha={effectiveStatus.targetSha}
+              targetTag={effectiveStatus.targetTag}
             />
           }
         />

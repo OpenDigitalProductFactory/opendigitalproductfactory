@@ -34,6 +34,16 @@ export type LatestRun = {
   createdAt: Date | string;
   /** The impact summary this run carried, when one was recorded at launch. */
   impactSummaryId?: string | null;
+  targetTag?: string | null;
+  dispatchStatus?:
+    | "admission_pending"
+    | "dispatching"
+    | "dispatched"
+    | "indeterminate"
+    | "dispatch_failed"
+    | null;
+  dispatchAttemptCount?: number;
+  dispatchError?: string | null;
   /**
    * "What did this run carry?" — the headline + counts persisted with the run,
    * so Run History answers which upgrade introduced a change instead of leaving

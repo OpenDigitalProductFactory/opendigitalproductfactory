@@ -17,7 +17,8 @@ import { isShaFresh } from "@/lib/self-upgrade/version";
 import { getDeployedSha } from "@/lib/self-upgrade/completion";
 import { readCurrentContainerConfigDigest } from "@/lib/self-upgrade/runtime-image-identity";
 import { getJobEngineHealth } from "@/lib/queue/job-engine-health";
-import { createRun, failRun, getLatestRun, getLatestSucceededRun } from "@/lib/self-upgrade/run-store";
+import { getLatestRun, getLatestSucceededRun } from "@/lib/self-upgrade/run-store";
+import { admitSelfUpgrade, resolveCurrentSelfUpgradeTarget } from "@/lib/self-upgrade/admission";
 import {
   getCurrentImpactSummaryId,
   loadRunImpactDigest,
@@ -48,10 +49,8 @@ import {
 } from "@/lib/self-upgrade/quiescence";
 import { getCooldownUntil } from "@/lib/self-upgrade/cooldown";
 import { loadPlatformVersion } from "@/lib/platform/version";
-import { inngest } from "@/lib/queue/inngest-client";
 import { readBuildPipelineLimit } from "@/lib/queue/admission";
 import { buildAdmissionSnapshot } from "@/lib/queue/admission-observability";
-import { SELF_UPGRADE_EVENT } from "@/lib/queue/functions/self-upgrade";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 async function requireOpsAccess(): Promise<string> {
@@ -772,7 +771,11 @@ export async function getSelfUpgradeStatus() {
   };
 }
 
-export async function triggerSelfUpgrade(opts?: { dryRun?: boolean; force?: boolean }) {
+export async function triggerSelfUpgrade(opts?: {
+  dryRun?: boolean; force?: boolean;
+  expectedTargetSha?: string | null;
+  expectedTargetTag?: string | null;
+}) {
   const userId = await requireOpsAccess();
   const triggeredBy = `manual:${userId}`;
   const config = await getSelfUpgradeConfig();
@@ -804,33 +807,30 @@ export async function triggerSelfUpgrade(opts?: { dryRun?: boolean; force?: bool
     return { queued: false, reason: "already-queued", runId: latestRun.runId } as const;
   }
 
+  const target = await resolveCurrentSelfUpgradeTarget();
+  if (!target) return { queued: false, reason: "target-unavailable" } as const;
+  const shaChanged = opts?.expectedTargetSha && opts.expectedTargetSha !== target.targetSha;
+  const tagChanged = opts && "expectedTargetTag" in opts && opts.expectedTargetTag !== target.targetTag;
+  if (shaChanged || tagChanged) {
+    return { queued: false, reason: "target-changed" } as const;
+  }
+
   // Attach the "What's in this update?" summary the operator just reviewed (if
   // any) so the run records the changes it carried. Best effort — the upgrade
   // proceeds whether or not a summary was generated.
   const impactSummaryId = await getCurrentImpactSummaryId();
 
-  const run = await createRun({
-    triggeredBy,
+  const admission = await admitSelfUpgrade({ triggeredBy, target,
+    requestedForce: opts?.force === true,
+    dryRun: opts?.dryRun === true,
+    routine: false,
     impactSummaryId,
   });
-
-  try {
-    await inngest.send({
-      name: SELF_UPGRADE_EVENT,
-      data: {
-        runId: run.runId,
-        triggeredBy,
-        ...(opts?.dryRun !== undefined ? { dryRun: opts.dryRun } : {}),
-        ...(opts?.force ? { force: true } : {}),
-      },
-    });
-  } catch (err) {
-    const message = getErrorMessage(err);
-    await failRun(run.runId, `queue-dispatch-failed: ${message}`);
-    return { queued: false, reason: "queue-dispatch-failed", runId: run.runId } as const;
+  if (!admission.admitted) {
+    return { queued: false, reason: "already-active", runId: admission.runId } as const;
   }
-
-  return { queued: true, runId: run.runId } as const;
+  return { queued: true, admitted: true, runId: admission.runId,
+    dispatchStatus: admission.dispatchStatus } as const;
 }
 
 /**
