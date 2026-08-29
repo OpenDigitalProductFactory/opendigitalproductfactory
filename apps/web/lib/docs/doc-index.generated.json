@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 692,
+  "pageCount": 693,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -4410,6 +4410,19 @@
         "anti-patterns",
         "related-principles",
         "spec-references"
+      ]
+    },
+    "docs/founder-kernel/wiki/principles/report-only-the-verdict-you-reached.md": {
+      "publicHref": "/founder-kernel/wiki/principles/report-only-the-verdict-you-reached/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "report-only-the-verdict-you-reached",
+        "why-this-exists",
+        "what-to-do",
+        "the-consequence-clause",
+        "related"
       ]
     },
     "docs/founder-kernel/wiki/principles/reporting-read-model-boundaries.md": {
