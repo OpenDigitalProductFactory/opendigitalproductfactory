@@ -36,13 +36,13 @@ consumer install into a source checkout or weakening immutable image checks.
 - **OBJ-CSRI-005:** Operators can read the deployed source identity from the
   existing public version endpoints after restart.
 
-| Acceptance criterion | Objective links | Required evidence |
-|---|---|---|
-| **AC-CSRI-001:** An isolated release promotion writes the candidate tag to the canonical install root `.env` and `.verified-release-assets-version`, while install-state records the same tag. | OBJ-CSRI-001, OBJ-CSRI-003 | Functional promoter fixture with distinct workspace and install-root directories. |
-| **AC-CSRI-002:** `dpf-start.ps1` exports a validated consumer `imageTag` from install-state before Compose interpolation; a contradictory root `.env` cannot select `latest`. | OBJ-CSRI-002, OBJ-CSRI-004 | PowerShell lifecycle contract test covering recorded-tag precedence. |
-| **AC-CSRI-003:** A consumer release install with missing or malformed recorded identity fails before `docker compose up`; contributor/source installs retain their existing behavior. | OBJ-CSRI-002, OBJ-CSRI-004 | Windows start-path negative and compatibility cases. |
-| **AC-CSRI-004:** Any failure during the canonical identity commit restores managed files, root `.env`, release marker, and install-state, and the promoter rollback uses the prior tag. | OBJ-CSRI-003 | Injected-failure transaction and promoter functional tests. |
-| **AC-CSRI-005:** `/api/platform/version` and `/api/platform/image-version` report the restarted container's baked SHA/version after the recorded tag is used. | OBJ-CSRI-005 | Existing route contracts plus live post-release verification. |
+| Acceptance ID | Objective links | Acceptance statement | Required evidence |
+|---|---|---|---|
+| AC-CSRI-001 | OBJ-CSRI-001, OBJ-CSRI-003 | An isolated release promotion writes the candidate tag to the canonical install root `.env` and `.verified-release-assets-version`, while install-state records the same tag. | Functional promoter fixture with distinct workspace and install-root directories. |
+| AC-CSRI-002 | OBJ-CSRI-002, OBJ-CSRI-004 | `dpf-start.ps1` exports a validated consumer `imageTag` from install-state before Compose interpolation; a contradictory root `.env` cannot select `latest`. | PowerShell lifecycle contract test covering recorded-tag precedence. |
+| AC-CSRI-003 | OBJ-CSRI-002, OBJ-CSRI-004 | A consumer release install with missing or malformed recorded identity fails before `docker compose up`; contributor/source installs retain their existing behavior. | Windows start-path negative and compatibility cases. |
+| AC-CSRI-004 | OBJ-CSRI-003 | Any failure during the canonical identity commit restores managed files, root `.env`, release marker, and install-state, and the promoter rollback uses the prior tag. | Injected-failure transaction and promoter functional tests. |
+| AC-CSRI-005 | OBJ-CSRI-005 | `/api/platform/version` and `/api/platform/image-version` report the restarted container's baked SHA/version after the recorded tag is used. | Existing route contracts plus live post-release verification. |
 
 ## Evidence and root cause
 
