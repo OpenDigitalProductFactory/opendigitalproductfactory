@@ -254,6 +254,7 @@ export const backlogPackDefinitions: ToolDefinition[] = [
         ...backlogScopeFilterProperties,
         unclaimed: { type: "boolean", description: "Only items with no user/agent claim" },
         hasActiveBuild: { type: "boolean", description: "Only items currently linked to a Build Studio build" },
+        evidenceNotCounted: { type: "boolean", description: "Only items holding recorded execution evidence but no initiative gate receipt — work that was done and recorded into a lane readiness does not read. Use this to reconcile items stalled by the evidence/receipt split rather than by missing work." },
         limit: { type: "number", description: "Max results (default 100, max 1000). Responses always report `total` and `truncated`, so a short list is never mistaken for a complete one." },
       },
       required: [],

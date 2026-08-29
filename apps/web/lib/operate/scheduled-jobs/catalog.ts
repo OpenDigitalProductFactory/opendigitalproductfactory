@@ -332,6 +332,18 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     runNowEvent: "ops/data-retention.requested",
   },
   {
+    jobId: "regulatory-monitor-scan",
+    inngestId: "govern/regulatory-monitor-scan-scheduled",
+    name: "Regulatory monitor scan",
+    purpose:
+      "Re-scans active regulations for changes so the compliance surface reflects a current posture instead of aging into a false green. Before this, a scan ran only when an operator pressed \"Run Scan Now\" and never refreshed. Editable so an operator can retune the cadence or run one off-cadence. BI-DA37A602.",
+    cron: "0 6 * * 1",
+    cadence: "Weekly on Monday at 06:00",
+    category: "editable",
+    tracksRunData: false,
+    runNowEvent: "govern/regulatory-monitor-scan.requested",
+  },
+  {
     jobId: "inngest-retention-sweep",
     honorsEnabledGate: true,
     inngestId: "ops/inngest-retention-sweep-scheduled",

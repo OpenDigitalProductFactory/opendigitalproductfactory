@@ -1,10 +1,15 @@
 // Next.js instrumentation hook — runs once on server startup.
 // See: https://nextjs.org/docs/app/building-your-application/optimizing/instrumentation
 
-import { envFlagEnabled } from "@/lib/runtime/env-flags";
+import {
+  areOptionalStartupTasksEnabled,
+  isInngestSelfSyncOnBootEnabled,
+  isStartupModelRevalidationEnabled,
+} from "@/lib/runtime/env-flags";
 import { isMeasurementRuntime, settleBootSync } from "@/lib/runtime/measurement-runtime";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { sweepOrphanedPromoterContainers } from "@/lib/self-upgrade/promoter-sweep";
+import { reconcileSelfUpgradeAdmissions } from "@/lib/self-upgrade/admission";
 /**
  * Logs a deprecation notice when HIVE_CONTRIBUTION_TOKEN is set in the
  * environment. Exported so the instrumentation module's startup behavior
@@ -22,24 +27,6 @@ export function warnIfLegacyHiveTokenEnvSet(
       "Support for this env var will be removed 60 days after the next release.",
   );
   return true;
-}
-
-export function isStartupModelRevalidationEnabled(
-  env: Record<string, string | undefined> = process.env,
-): boolean {
-  return envFlagEnabled(env, "DPF_STARTUP_MODEL_REVALIDATION_ENABLED");
-}
-
-export function isInngestSelfSyncOnBootEnabled(
-  env: Record<string, string | undefined> = process.env,
-): boolean {
-  return envFlagEnabled(env, "DPF_INNGEST_SELF_SYNC_ON_BOOT_ENABLED");
-}
-
-export function areOptionalStartupTasksEnabled(
-  env: Record<string, string | undefined> = process.env,
-): boolean {
-  return envFlagEnabled(env, "DPF_OPTIONAL_STARTUP_TASKS_ENABLED");
 }
 
 export function scheduleInitialCodeGraphBootstrap(input: {
@@ -1014,9 +1001,7 @@ export async function register() {
       // ("portal_quiescing") forever. Must run before reconciliation.
       void resetStuckQuiescenceLevelOnBoot();
 
-      // Close the loop on any self-upgrade run whose orchestrator died mid-swap
-      // (a real upgrade recreates this very container). Records succeeded when we
-      // came up on the target SHA; fails orphans so triggers aren't blocked.
+      void reconcileSelfUpgradeAdmissions().catch((error) => console.error("[self-upgrade] admission reconcile failed", error));
       void reconcileSelfUpgradeRunsOnBoot();
 
       // Periodic safety net — cron-independent (the boot reconcile above and the
@@ -1028,6 +1013,7 @@ export async function register() {
       // Staleness-guarded so a legitimately in-flight upgrade is never touched.
       setInterval(
         () => {
+          void reconcileSelfUpgradeAdmissions().catch((error) => console.error("[self-upgrade] admission reconcile failed", error));
           void reconcileSelfUpgradeRunsOnBoot(console, { staleAfterMs: 30 * 60 * 1000 });
           // Backstop: force-remove any promoter container orphaned by a portal
           // restart that killed runPromoter's own timeout timer (BI-3EC7FDB0).
@@ -1472,6 +1458,9 @@ export async function register() {
     // silent plaintext storage (data-at-rest vulnerability).
     // Dev mode short-circuits immediately; zero overhead outside production.
     // See docs/superpowers/specs/2026-04-24-github-auth-2fa-readiness-design.md
+    // Serve the directory (EP-24741BBF · BI-A91004A7) — off unless DPF_LDAP_ENABLED.
+    await (await import("@/lib/directory/ldap/runtime")).startLdapListener();
+
     // Wiki embedding coverage self-heal — deferred, non-blocking (BI-ED117C82).
     const { scheduleWikiEmbeddingReconcile } = await import("@/lib/wiki/embedding-reconciliation");
     scheduleWikiEmbeddingReconcile();

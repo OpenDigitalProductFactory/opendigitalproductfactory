@@ -37,6 +37,7 @@ const EXPECTED_LEGACY_JOBS = [
   "fresh-install-reliability",
   "gate-executor-liveness",
   "governed-teardown-guard",
+  "guard-conformance-marks",
   "host-port-range-guard",
   "installer-help-contract",
   "installer-skip-visibility",

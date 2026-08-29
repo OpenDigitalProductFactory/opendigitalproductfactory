@@ -220,7 +220,21 @@ guards host-natively — the same check commands CI's Policy Guards jobs run
 (module size, style drift, derived-artifact staleness, doc links, SBOM, plus
 the workspace-dependent prose ratchet, and the commit-range-driven UX-Fit and
 Design Grounding trailer gates), with guard self-tests stripped and
-PR-body-dependent gates (Seed-Fit, Decision Baseline) left to CI. A violation
+PR-body-dependent gates (Seed-Fit, Decision Baseline) left to CI.
+
+**Not every `node --test` is a self-test (BI-7B249AFE).** Some files in the
+guard profiles assert **live repository state** rather than guard logic, so
+stripping one removes the only check on the tree being pushed and the preflight
+reports clean where CI fails deterministically — measured on #4737, where the
+preflight said "52 guards clean" and CI then failed on
+`check-instruction-plane-rule-coverage.test.mjs`. Those commands are marked
+`conformanceTest(...)` in `scripts/lib/ci-policy-guards.mjs` and run host-side.
+The mark is not discretionary: `scripts/check-guard-conformance-marks.mjs`
+detects the shape (a repo root bound from `import.meta.url`, read through) and
+fails when a detected file is unmarked, so a new repository-reading self-test
+cannot quietly rejoin the stripped set. 15 files carry the mark today, costing
+about 11s. Genuine guard unit tests stay stripped — over-marking would turn the
+preflight into the full CI suite. A violation
 aborts in well under a minute **before any lease is claimed**, so a doomed run
 never occupies the contended sandbox slot. A guard this host cannot execute
 (missing isolated or workspace runtime) is reported as
@@ -311,7 +325,7 @@ receipt, later callers receive `reused` and stop without recomputation.
 Mismatched, inconclusive, or expired evidence remains fail-closed: evidence
 exists and does not fit, which is a real conclusion.
 
-**A run that DIED is not a verdict (BI-C59AC8AF).** A terminal lease carrying no
+**A run that DIED is not a verdict.** A terminal lease carrying no
 evidence record describes an execution that never reported — the executor was
 killed, or the portal rejected its status write. Since the immutable key hashes
 the integration *tree* rather than the commit, refusing such a claim used to
@@ -927,6 +941,41 @@ node scripts/check-live-blocker-references.mjs --update   # regenerate the grand
 Prefer naming the **condition** the reader is hitting over any id: a condition
 does not go stale when the work behind it ships. If an id genuinely belongs in
 the text, repoint it at the live item.
+
+### Agent Principal Convergence Guard
+
+`scripts/check-agent-principal-convergence-wired.mjs` fails a PR that stops the
+seed converging a `Principal` for every agent, or that hoists the convergence
+above an agent seeder.
+
+Every agent needs a Principal, because governed receipts are attributed to one
+and the independence rules are expressed entirely in terms of principals.
+Convergence was applied to `User` rows and not to `Agent` rows, so on a seeded
+install 71 of 76 `AGT-*` agents had no identity — `AGT-WS-REVIEW`, the
+designated independent Change Reviewer, among them.
+
+`resolveReviewerIdentity` falls back to the authenticated human when an agent
+alias misses, which is right on its own terms: an external CLI session label
+carries an agent id and is genuinely a human acting. With no alias it always
+missed, so a coworker that was summoned and did call the writer had its receipt
+attributed to the delegating human — the artifact's author, the one identity
+independence forbids. Every `independent: true` lane was unsatisfiable and the
+refusal advised summoning a coworker, which is what the operator had just done.
+
+No source check can prove the DATA converged; that is the seed's job at run
+time. This guard proves the seed still runs the convergence, still runs it after
+**both** agent seeders — either can introduce an agent with no identity — and
+that the convergence module still writes the `aliasType: "agent"` alias the
+reviewer lookup reads.
+
+```bash
+node scripts/check-agent-principal-convergence-wired.mjs
+node --test scripts/check-agent-principal-convergence-wired.test.mjs
+```
+
+If a summoned reviewer's receipt is refused as non-independent, check whether
+its agent id has a Principal before re-summoning: summoning again cannot fix a
+coworker that has no identity to be attributed to.
 
 ### Label Association Guard (ratchet)
 

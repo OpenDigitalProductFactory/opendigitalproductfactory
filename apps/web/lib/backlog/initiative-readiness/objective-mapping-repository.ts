@@ -100,11 +100,10 @@ export async function recordInitiativeObjectiveMappingProposal(args: {
     select: { decisionId: true, decision: true, actionKey: true, policyVersion: true, organizationId: true },
   });
   if (!authority || authority.decision !== "allow" || authority.actionKey !== "record_initiative_evidence"
-    || (item.organizationId && authority.organizationId !== item.organizationId)) {
+    || authority.organizationId !== item.organizationId) {
     return { ok: false, code: "AUTHORIZATION_DENIED", error: "The current tool call has no matching initiative-evidence allow decision." };
   }
-  const organizationId = authority.organizationId ?? item.organizationId;
-  if (!organizationId) return { ok: false, code: "AUTHORIZATION_DENIED", error: "Objective mapping requires organization-bound authority." };
+  const organizationId = item.organizationId ?? "platform";
   const proposerAliases = await prisma.principalAlias.findMany({
     where: { aliasType: "user", aliasValue: args.proposerUserId, issuer: "" },
     select: { principal: { select: { principalId: true } } },

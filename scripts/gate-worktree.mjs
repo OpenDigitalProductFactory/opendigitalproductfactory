@@ -14,6 +14,50 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileS
 import { dirname, resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
 import { mcpCall } from "./lib/mcp-client.mjs";
+
+// BI-46B03CAE — the lease-queue MCP calls cost more than mcpCall's 10s default.
+//
+// Their latency tracks the number of waiters, not the size of the response: with
+// four branches queued on this box, `list_nonprod_environment_leases` measured
+// 10166ms and SUCCEEDED — 166ms past the client's deadline. The portal was
+// healthy throughout (/api/health ~85ms, 4.5% CPU), so nothing was broken; the
+// gate simply stopped listening to an answer that was on its way.
+//
+// The cost of abandoning it is not one retry. A claim that times out client-side
+// after the server created the queued row leaves a gate that does not own the
+// lease it just made, so its own cleanup refuses with `nonprod_lease_not_owner`
+// (explicitly non-retryable) and the row stays queued. Each failure adds a
+// waiter to a single-slot pool, which makes the next listing slower, which
+// strands the next row. Left alone it converges on a box where no gate can ever
+// claim and every contributor is told the portal timed out.
+//
+// So these calls get real headroom, tunable without patching source. The global
+// default stays at 10s: a health probe should still fail fast.
+const LEASE_QUEUE_TIMEOUT_MS = (() => {
+  const raw = Number(process.env.DPF_GATE_MCP_TIMEOUT_MS);
+  return Number.isFinite(raw) && raw > 0 ? raw : 60_000;
+})();
+
+/** Transport options for a queue call whose latency grows with the queue. */
+export function leaseQueueCallOptions(mcpUrl, bearerToken) {
+  return { mcpUrl, bearerToken, timeoutMs: LEASE_QUEUE_TIMEOUT_MS };
+}
+
+/**
+ * Describe a failed lease-queue call in the terms the operator has to act on.
+ *
+ * "timed out after 60000ms" reads as an unreachable portal and sends people to
+ * check whether the install is up. When a queue call is what timed out, the
+ * portal is usually fine and the queue is merely deep — a different problem
+ * with a different response, so say which one it is (BI-46B03CAE).
+ */
+export function describeLeaseCallFailure(error) {
+  const message = error?.message ?? String(error);
+  if (!/timed out after/.test(message)) return message;
+  return `${message} — the portal may be reachable and merely contended; `
+    + "lease-queue calls slow down as waiters accumulate. Raise DPF_GATE_MCP_TIMEOUT_MS "
+    + "if this box regularly runs several gates at once";
+}
 import { summarizeLocalCiOutput } from "./lib/local-ci-failure-summary.mjs";
 import { classifyGateOutcome } from "./lib/sandbox-freshness.mjs";
 import { fallbackStatusForUnknown } from "./lib/local-integration-status.mjs";
@@ -671,11 +715,11 @@ async function cancelDeadLocalQueueObservers({
     response = await mcpCall(
       "list_nonprod_environment_leases",
       {},
-      { mcpUrl, bearerToken },
+      leaseQueueCallOptions(mcpUrl, bearerToken),
     );
   } catch (error) {
     process.stderr.write(
-      `gate-worktree: dead-waiter reconciliation unavailable (${error.message}); queue remains fail-closed\n`,
+      `gate-worktree: dead-waiter reconciliation unavailable (${describeLeaseCallFailure(error)}); queue remains fail-closed\n`,
     );
     return;
   }
@@ -1117,7 +1161,7 @@ async function main() {
     const response = await mcpCall("release_nonprod_environment_lease", {
       leaseId,
       ownerSessionId,
-    }, { mcpUrl: options.mcpUrl, bearerToken });
+    }, leaseQueueCallOptions(options.mcpUrl, bearerToken));
     if (response?.success !== true) {
       throw new Error(`failed to release local-CI lease: ${JSON.stringify(response)}`);
     }
@@ -1178,7 +1222,7 @@ async function main() {
         branchName: branch,
         slotManifestVersion: slotManifest.schemaVersion,
         hostPressure,
-      }, { mcpUrl: options.mcpUrl, bearerToken });
+      }, leaseQueueCallOptions(options.mcpUrl, bearerToken));
     } catch (error) {
       if (!isTransientMcpError(error) || Date.now() >= deadline) throw error;
       const delayMs = retryDelayMs({ attempt: claimAttempt, pollSeconds: options.pollSeconds });
@@ -1486,7 +1530,7 @@ async function main() {
           },
         }
         : {}),
-    }, { mcpUrl: options.mcpUrl, bearerToken });
+    }, leaseQueueCallOptions(options.mcpUrl, bearerToken));
     const renewedExpiresAt = response?.data?.lease?.expiresAt;
     if (
       response?.success === true

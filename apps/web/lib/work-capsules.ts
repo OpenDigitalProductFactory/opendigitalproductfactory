@@ -22,7 +22,45 @@ export const WORK_CAPSULE_SOURCES = [
   "git-promotion",
   "manual",
   "scheduled-steward",
+  // Employment lifecycle (BI-2624B7EA). These three are the definition keys the
+  // actuator spawns, registered in WORK_CASE_SOURCE_REGISTRY by BI-28EFA338.
+  // They are BUSINESS instances: they coordinate a worker, not a code change, so
+  // they carry no repository, worktree, PR or CI evidence (AC-ELA-006) and
+  // BUSINESS_WORK_CAPSULE_SOURCES below stops one being defaulted onto them.
+  "worker-onboarding",
+  "worker-change",
+  "worker-offboarding",
 ] as const;
+
+/**
+ * Capsule sources whose instances coordinate business work rather than a change
+ * to this repository.
+ *
+ * A development capsule without a repository is broken; a business capsule WITH
+ * one is a category error — it invites a reader to look for a branch that will
+ * never exist. `createWorkCapsule` therefore defaults a repository for the
+ * development sources only.
+ */
+export const BUSINESS_WORK_CAPSULE_SOURCES = new Set<string>([
+  "worker-onboarding",
+  "worker-change",
+  "worker-offboarding",
+]);
+
+/**
+ * The repository a new capsule records, if any.
+ *
+ * A development capsule without a repository is broken; a business capsule WITH
+ * one is a category error that sends a reader looking for a branch that will
+ * never exist (AC-ELA-006). Lives here, beside the source set the decision reads.
+ */
+export function capsuleRepositoryFullName(
+  source: string,
+  provided: string | null | undefined,
+  platformDefault: () => string,
+): string | null {
+  return provided?.trim() || (BUSINESS_WORK_CAPSULE_SOURCES.has(source) ? null : platformDefault());
+}
 
 export type WorkCapsuleSource = (typeof WORK_CAPSULE_SOURCES)[number];
 

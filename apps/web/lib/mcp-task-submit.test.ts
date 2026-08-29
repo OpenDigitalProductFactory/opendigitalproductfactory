@@ -213,7 +213,16 @@ describe("submitRemoteCoworkerTask idempotency", () => {
       taskRunId: "TR-MCP-APPROVED",
       status: "input-required",
       updatedAt: new Date("2026-08-24T07:00:00.000Z"),
-      progressPayload: { requiresApproval: true },
+      progressPayload: {
+        requiresApproval: true,
+        approvalRecovery: {
+          schemaVersion: 1,
+          kind: "expired-approved-envelope",
+          sourceEnvelopeId: "ENV-EXPIRED",
+          replacementEnvelopeId: "ENV-APPROVED",
+          inferenceRerun: false,
+        },
+      },
       a2aMetadata: {
         idempotencyKey: params.idempotencyKey,
         apiTokenId: "PAT-A",
@@ -281,6 +290,13 @@ describe("submitRemoteCoworkerTask idempotency", () => {
       },
       data: {
         progressPayload: {
+          approvalRecovery: {
+            schemaVersion: 1,
+            kind: "expired-approved-envelope",
+            sourceEnvelopeId: "ENV-EXPIRED",
+            replacementEnvelopeId: "ENV-APPROVED",
+            inferenceRerun: false,
+          },
           requiresApproval: true,
           approvalResumeReserved: true,
         },
@@ -289,6 +305,22 @@ describe("submitRemoteCoworkerTask idempotency", () => {
     expect(db.update).toHaveBeenCalledWith({
       where: { taskRunId: "TR-MCP-APPROVED" },
       data: { status: "working", lastHeartbeatAt: expect.any(Date) },
+    });
+    expect(db.update).toHaveBeenCalledWith({
+      where: { taskRunId: "TR-MCP-APPROVED" },
+      data: {
+        status: "completed",
+        completedAt: expect.any(Date),
+        progressPayload: expect.objectContaining({
+          approvalRecovery: expect.objectContaining({
+            kind: "expired-approved-envelope",
+            sourceEnvelopeId: "ENV-EXPIRED",
+            replacementEnvelopeId: "ENV-APPROVED",
+            inferenceRerun: false,
+          }),
+          resumedFromApproval: true,
+        }),
+      },
     });
     expect(outcome).toMatchObject({
       kind: "result",

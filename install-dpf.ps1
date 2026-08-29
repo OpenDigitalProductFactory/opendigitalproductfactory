@@ -639,6 +639,10 @@ if (-not (Test-Path -LiteralPath $stateLib)) { $stateLib = Join-Path $DPF_DIR "i
 if (-not (Test-Path -LiteralPath $stateLib)) { throw "capability_state_helper_missing" }
 . $stateLib
 $includeEdge = Resolve-DpfEdgeEnabled -InstallDir $DPF_DIR
+$consumerReleaseTag = Resolve-DpfConsumerReleaseImageTag -InstallDir $DPF_DIR
+if ($consumerReleaseTag) {
+    Write-Host "Using recorded consumer release tag $consumerReleaseTag" -ForegroundColor Cyan
+}
 $capabilityProjection = Resolve-DpfCapabilityComposeProfiles -InstallDir $DPF_DIR
 $env:COMPOSE_PROFILES = (@($capabilityProjection.composeProfiles) -join ',')
 

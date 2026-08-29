@@ -67,6 +67,19 @@ the page intentionally hides **Upgrade now** and queues nothing until it can pro
 A current state also has no upgrade action because the running config digest already equals the
 verified channel candidate. Both states are safe and non-mutating.
 
+### Ordinary restart after a consumer upgrade
+
+Release promotion writes the verified tag and managed assets to the canonical install directory,
+not to the temporary candidate workspace. On Windows, `dpf-start.ps1` then reads the consumer
+install's recorded `imageTag` before Compose interpolation. That immutable recorded tag overrides a
+contradictory process or root `.env` value such as `latest`, so an ordinary restart cannot silently
+replace the deployed release with older cached bytes.
+
+The start command stops before Docker mutation if a known consumer install has a missing, mutable,
+malformed, or wrong-install-path release identity. Repair that state with the governed consumer
+installer or Upgrade Center; do not edit `.env` or install-state by hand. Contributor/source installs
+retain their existing local-image behavior.
+
 ## Preconditions — capture current state first
 
 Run these and record the output before doing anything:
