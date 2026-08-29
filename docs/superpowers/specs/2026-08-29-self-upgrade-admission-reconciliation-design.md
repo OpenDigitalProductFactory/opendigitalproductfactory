@@ -65,6 +65,17 @@ failed before dispatch.
 | AC-SUA-007 | OBJ-SUA-003 | A response interruption after admission still converges from server data; no local success state is treated as evidence. | Operator projection |
 | AC-SUA-008 | OBJ-SUA-004 | Emergency override remains explicit and immutable per admission; ordinary activity/quiescence preflight remains authoritative and cannot be bypassed by reconciliation. | Authority boundary |
 
+## Governed design-review recording contract
+
+The immutable reviewer must use the canonical
+`record_initiative_design_review` disposition schema exactly. A `pass` decision
+requires both `findings = []` and `resolvedFindingRefs = []`. Positive
+observations belong only in the reviewer `reason`; they are not findings. Any
+finding requires `decision = fail` (or another canonical non-pass disposition
+supported by the server-issued schema). The writer remains fail closed when a
+proposed disposition contradicts this contract; neither approval nor replay may
+rewrite the reviewer's arguments.
+
 ## Existing substrate and ownership boundary
 
 This change extends the canonical `SelfUpgradeRun`, `triggerSelfUpgrade`,
