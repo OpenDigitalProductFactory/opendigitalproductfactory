@@ -4,7 +4,7 @@ status: active
 
 # Server-Owned Rendered Target Admission
 
-**Backlog item:** BI-EE81F61B  
+**Backlog item:** BI-EE81F61B
 **Workroom:** WC-A48DF3B6
 **Branch:** `fix/self-upgrade-rendered-target-admission`
 **Historical predecessor Workroom:** WC-25858CAB (BI-3FD07259; unchanged)
