@@ -103,13 +103,19 @@ bootstrap runs with the system interpreter.
 | G2 | CRLF line endings break shell scripts in Linux containers | Windows authors | 📌 `.gitattributes` enforces `eol=lf` on `*.sh` and `docker-entrypoint.sh`. | Don't add `.sh` without LF enforcement. |
 | G3 | Multiple agent sessions sharing one working tree → branch/HEAD collisions, files swept into the wrong commit | all | ⚠️ recurring | One session = one git worktree (AGENTS.md §4). Verify `git worktree list` and your current branch before committing when other sessions may be active. |
 | G4 | Committed `.claude/settings.json` hardcoded to a Windows host (`powershell`/`pwsh` hooks with absolute `D:\DPF\…` paths; `//d/DPF/**`, `//d/backups//**`, `MSYS_NO_PATHCONV=…` permission entries) → hooks silently no-op and entries are dead on macOS/Linux | macOS, Linux contributors | ✅ Hooks route through the pure-Node launcher [`scripts/hooks/run-hook.mjs`](../../scripts/hooks/run-hook.mjs) (Node is the only guaranteed cross-platform hook runtime — the default hook shell is PowerShell on Windows, `sh -c` on Unix, and Git Bash is **not** bundled), which dispatches to the OS-appropriate `scripts/<name>.{ps1,sh}` via `${CLAUDE_PROJECT_DIR}`. Per-machine paths/hooks moved to gitignored `settings.local.json` (template: `.claude/settings.local.json.example`). | Don't put absolute host paths, `D:\…`, or a `shell:`-pinned PowerShell/bash command in committed `settings.json`. New cross-platform hooks call `run-hook.mjs <base>`; machine-specific grants go in `settings.local.json`. |
+| G5 | Any pre-commit touching a doc with a ```mermaid fence dies with an `execFileSync` object dump — `pid: 0`, `status: null`, no stderr | **Windows** | ✅ `render-doc-diagrams.mjs` now resolves `@mermaid-js/mermaid-cli/src/cli.js` and runs it through the current Node, which needs no shell on any platform. It previously defaulted to `node_modules/.bin/mmdc`, a POSIX `sh` script Windows cannot exec (the runnable sibling is `mmdc.CMD`). A missing puppeteer browser now names `npx puppeteer browsers install chrome-headless-shell` instead of dumping the spawn object. (BI-334CB7DE) | Never spawn a `node_modules/.bin/<x>` entry directly from Node — `.bin` holds an `sh` script plus a `.CMD`, and `execFileSync` can run neither without a shell. Resolve the package's JS entry and run it through `process.execPath`. |
+| G6 | A doc's mermaid diagrams are reported stale and re-rendered although no diagram changed; `git diff` shows nothing to explain it | **Windows** authors, or any tool that rewrites a file with CRLF | ✅ `render-doc-diagrams.mjs` strips CR before hashing fence content. Line endings are not part of a diagram's identity. (BI-334CB7DE) | A generator that content-hashes source text must normalise line endings FIRST. Git normalises on commit, so a CRLF working copy looks clean in `git diff` while every hash in the file has changed — observed as 466 CRLF pairs flagging all 4 fences in one page. |
 
 ---
 
 ## Recurring meta-pattern
 
 Most entries above share one root: **a Windows-first assumption baked into a
-shared/base artifact, inherited unchanged by macOS/Linux.** When adding anything
+shared/base artifact, inherited unchanged by macOS/Linux.** G5 and G6 are the
+INVERSE — a POSIX-first assumption in shared *tooling* that breaks on Windows —
+so the question cuts both ways: a `node_modules/.bin/<x>` path, a `sh`-ism, or a
+hash over raw file bytes each assume a platform just as surely as a bind mount
+does. When adding anything
 host-coupled (a scrape target, a service, a bind mount, a host path, a default
 URL/port, a shell builtin), ask: *"does this assume Windows/GNU/Docker-Desktop,
 and which substrate overlay should own it?"* Put substrate-specific deltas in
