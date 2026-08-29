@@ -506,8 +506,8 @@ describe("success path", () => {
     await runSelfUpgrade({ triggeredBy: "ops" });
     expect(mocks.runPromoter).toHaveBeenCalledWith(
       expect.objectContaining({
-        // Promoter mounts daemon-resolved host paths, never portal paths.
         hostInstallPath: "/Users/me/dpf",
+        canonicalInstallPath: "/Users/me/dpf",
         targetSha: "abc1234deadbeef",
         backupPath: "/backups/self-upgrade/SUR-AAAABBBB",
         healthUrl: "http://localhost:3000/api/health",

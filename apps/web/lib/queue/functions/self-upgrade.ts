@@ -637,10 +637,10 @@ export async function runSelfUpgrade(
       // Daemon-resolved host path, not an in-portal path; hostSourceMountPath
       // is no longer passed — runPromoter mounts to a fixed /host-source.
       // BI-A8A7CCFD — when isolated workspace is on, the promoter builds from
-      // the workspace HOST path (which holds the merged tree), not the
-      // operator's install clone. The promoter mounts whatever we hand it
+      // the workspace HOST path, not the operator install. It mounts whatever we hand it
       // here at `/host-source:ro` — same contract, just a different host dir.
       hostInstallPath: upgradeWorkspaceHostPath ?? hostInstallPathResolved,
+      canonicalInstallPath: hostInstallPathResolved,
       // The honest built identity from source prep (merge-commit SHA in upstream
       // mode, HEAD/-dirty in local mode). promote.sh re-derives this from the
       // tree's HEAD and cross-checks against it.
