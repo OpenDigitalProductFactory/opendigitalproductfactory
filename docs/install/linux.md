@@ -394,6 +394,14 @@ kernel, your specific Docker version, with your specific user setup.
    # Secrets are redacted automatically.
    ```
 
+   > **If you attached a doctor bundle before 2026-08-28, rotate your secrets.**
+   > Until then the bundle's `compose-rendered.yml` was written straight from
+   > `docker compose config`, which expands every environment variable, so that
+   > file carried live values for `AUTH_SECRET`, `CREDENTIAL_ENCRYPTION_KEY`,
+   > `ADMIN_PASSWORD` and `INNGEST_SIGNING_KEY`. Rotate each of them in `.env`
+   > and restart the stack. `CREDENTIAL_ENCRYPTION_KEY` decrypts stored
+   > credentials, so re-enter any provider secrets after rotating it.
+
 We especially want reports from:
 
 - **Debian 12+** (similar to Ubuntu but uses different package
