@@ -65,6 +65,28 @@ request is unresolved.
 - `apps/web/components/ops/SelfUpgradeTriggerControl.test.tsx`
 - `apps/web/components/ops/SelfUpgradeTriggerControl.swap-resilience.test.tsx`
 
+## Design grounding
+
+- Existing design and plan reviewed:
+  `docs/superpowers/specs/2026-08-29-self-upgrade-admission-reconciliation-design.md`
+  and this atomic implementation plan. The separate BI-6CB35411 consumer
+  start-path design remains the owner of install-tag and runtime-identity
+  convergence; it is a delivery prerequisite, not source scope for BI-3FD07259.
+- Current code substrate inspected: `SelfUpgradeRun` persistence and status
+  projection, the self-upgrade server action and request boundary, the Inngest
+  worker and boot instrumentation, and the Upgrade Center trigger control.
+- Source of truth: the server-owned `SelfUpgradeRun` admission row, including its
+  immutable release target, actor/force fingerprint, dispatch state, lease,
+  attempt, acknowledgement, and terminal failure evidence.
+- Architectural decision: commit admission before asynchronous dispatch; reuse
+  one stable event identity; reconcile ambiguous delivery against the same row;
+  acquire worker execution by compare-and-swap; and project the durable state to
+  the UI so an unknown disposition cannot re-enable the control.
+- Rejected boundary crossings: no client-generated admission identity, no
+  synthesized dispatch success, no direct queue retry that changes target or
+  force, no emergency-override expansion, and no edits to BI-6CB35411-owned
+  start/restart or install-identity paths.
+
 ## Risks and rollback
 
 The primary risk is treating an ambiguous dispatch as a rejection or allowing a

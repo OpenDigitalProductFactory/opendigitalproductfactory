@@ -29,16 +29,24 @@ is unavailable and does not offer or queue an upgrade.
 1. Confirm the status card shows a resolved immutable update. If it says current
    or unavailable, there is no upgrade action to trigger.
 2. Review the pending upgrade and what it will change before triggering anything.
-3. Trigger the upgrade only inside an approved deployment window. Normal changes
-   respect the window; only an emergency change may override it.
-4. Watch the deployment status — the page updates automatically while the build
-   and swap are in progress. A normal upgrade completes in a few minutes.
+3. Trigger the upgrade only inside an approved deployment window. The server
+   durably admits the request and assigns its `SUR-*` run identity before queue
+   dispatch begins. Normal changes respect the window; only an emergency change
+   may override it.
+4. Watch the deployment status — the page distinguishes a request waiting for
+   dispatch, active dispatch, indeterminate dispatch reconciliation, and a
+   definite dispatch failure. It updates automatically while the build and swap
+   are in progress. A normal upgrade completes in a few minutes.
 5. Confirm the health check passed after the swap, and read the deployment log if
    it did not.
 
 You may navigate away after the upgrade has been accepted. Leaving the page stops
 only that page's live status reads; it does not cancel or pause the durable upgrade.
 When you return, the page reloads the current run state and resumes live updates.
+If the browser loses the trigger response, do not click again. The action remains
+disabled until the server reports a durable disposition for the admitted run.
+The same `SUR-*` identity is reconciled after a delayed or ambiguous dispatch, so
+a page reload or process restart cannot create a second physical upgrade.
 
 The owner status card and upgrade action stay visible on arrival. Open
 **Deploy controls & history** only when you need technical controls, run
@@ -73,6 +81,9 @@ upgrade. Nothing is lost by waiting.
 
 - If an upgrade fails, open the deployment log for the retryable diagnosis, then
   re-run the upgrade.
+- If dispatch is indeterminate, leave the action alone while the server
+  reconciles the admitted `SUR-*` run. A definite pre-dispatch refusal is shown
+  against that same run identity and means no upgrade mutation began.
 - If update status is unavailable, read the technical reason under **Deploy
   controls & history**. Repair registry access or install identity before
   retrying; the unavailable state has not queued or mutated anything.

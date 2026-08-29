@@ -7,6 +7,7 @@ import { readCurrentContainerConfigDigest } from "@/lib/self-upgrade/runtime-ima
 import { selfUpgradeAdmissionRepository } from "@/lib/self-upgrade/run-store";
 import { resolveSelfUpgradeStatusTarget } from "@/lib/self-upgrade/status-target";
 import { readSelfUpgradeSupport } from "@/lib/self-upgrade/support";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 export type SelfUpgradeDispatchStatus =
   | "admission_pending"
@@ -168,7 +169,7 @@ function fingerprintMatches(
 }
 
 export function isDefiniteSelfUpgradeDispatchRefusal(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
+  const message = getErrorMessage(error);
   return /Inngest API Error: (400|401|403|404|406|409|412|413)\b/.test(message) ||
     /couldn't find an event key/i.test(message);
 }
@@ -246,7 +247,7 @@ export function createSelfUpgradeAdmissionService(
         ? { status: "dispatched", runId }
         : { status: "not-claimed", runId };
     } catch (error) {
-      const reason = error instanceof Error ? error.message : "queue dispatch failed";
+      const reason = getErrorMessage(error) || "queue dispatch failed";
       if (isDefiniteSelfUpgradeDispatchRefusal(error)) {
         await dependencies.repository.failDispatch({
           runId,
