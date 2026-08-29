@@ -8,6 +8,7 @@ import {
   isWorkCapsuleEvidenceKind,
   isAgentActivityKind,
   type AgentActivityKind,
+  capsuleRepositoryFullName,
   isWorkCapsuleExecutorKind,
   isWorkCapsuleSource,
   isWorkCapsuleStatus,
@@ -54,7 +55,7 @@ type CapsuleCreateInput = {
   executorKind?: WorkCapsuleExecutorKind | null;
   executorRef?: string | null;
   status?: WorkCapsuleStatus;
-  /** Keyed branch identity is (repositoryFullName, headBranch) — never null (BI-F83CF689). */
+  /** Branch identity is (repositoryFullName, headBranch); null for a business capsule. */
   repositoryFullName?: string | null;
   backlogItemId?: string | null;
   epicId?: string | null;
@@ -143,7 +144,7 @@ export async function createWorkCapsule(args: {
           source: args.input.source,
           executorKind: args.input.executorKind ?? null,
           executorRef: args.input.executorRef ?? null,
-          repositoryFullName: args.input.repositoryFullName?.trim() || defaultPlatformRepositoryFullName(),
+          repositoryFullName: capsuleRepositoryFullName(args.input.source, args.input.repositoryFullName, defaultPlatformRepositoryFullName),
           backlogItemId: args.input.backlogItemId ?? null,
           epicId: args.input.epicId ?? null,
           featureBuildId: args.input.featureBuildId ?? null,
