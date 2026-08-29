@@ -284,21 +284,86 @@ describe("durable self-upgrade admission", () => {
     expect(send).not.toHaveBeenCalled();
   });
 
-  it("keeps an exact persisted admission reconcilable while release discovery is unavailable", async () => {
-    const repo = repository();
+  it("dispatches the exact persisted release admission when source-free discovery is unavailable", async () => {
+    const repo = repository(record({
+      runId: "SUR-6B312E24",
+      targetSha: "04b0b9d84251c2a91ae519bf79eedd86b662f604",
+      targetTag: "v2026.08.29-terminal-writer-failed-reader-history.1",
+    }));
+    repo.row = record({
+      ...repo.row,
+      admissionFingerprint: computeSelfUpgradeAdmissionFingerprint({
+        triggeredBy: repo.row.trigger,
+        target: {
+          targetKind: "release-artifact",
+          targetSha: repo.row.targetSha!,
+          targetTag: repo.row.targetTag,
+        },
+        requestedForce: repo.row.requestedForce,
+        dryRun: repo.row.dryRun,
+        routine: repo.row.routine,
+        impactSummaryId: repo.row.impactSummaryId,
+      }),
+    });
     const { coordinator, send } = service({
       repository: repo,
       resolveTarget: vi.fn(async () => null),
     });
 
-    const outcome = await coordinator.dispatch("SUR-D71E8971");
+    const outcome = await coordinator.dispatch("SUR-6B312E24");
 
-    expect(outcome).toEqual({ status: "indeterminate", runId: "SUR-D71E8971" });
-    expect(repo.markDispatchIndeterminate).toHaveBeenCalledWith(expect.objectContaining({
+    expect(outcome).toEqual({ status: "dispatched", runId: "SUR-6B312E24" });
+    expect(repo.failDispatch).not.toHaveBeenCalled();
+    expect(send).toHaveBeenCalledOnce();
+    expect(send.mock.calls[0]![0]).toMatchObject({ id: "self-upgrade:SUR-6B312E24" });
+  });
+
+  it("keeps a Git-source admission indeterminate when source discovery is unavailable", async () => {
+    const gitTarget: SelfUpgradeTargetBinding = {
+      targetKind: "git-source",
+      targetSha: target.targetSha,
+      targetTag: null,
+    };
+    const repo = repository(record({
+      targetTag: null,
+      admissionFingerprint: computeSelfUpgradeAdmissionFingerprint({
+        triggeredBy: "manual:user-1",
+        target: gitTarget,
+        requestedForce: false,
+        dryRun: false,
+        routine: false,
+        impactSummaryId: null,
+      }),
+    }));
+    const { coordinator, send } = service({
+      repository: repo,
+      resolveTarget: vi.fn(async () => null),
+    });
+
+    expect(await coordinator.dispatch("SUR-D71E8971")).toEqual({
+      status: "indeterminate",
       runId: "SUR-D71E8971",
+    });
+    expect(repo.markDispatchIndeterminate).toHaveBeenCalledWith(expect.objectContaining({
       reason: "admission-target-unavailable",
     }));
-    expect(repo.failDispatch).not.toHaveBeenCalled();
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("fails a tagged stored target whose persisted authority fingerprint is corrupt", async () => {
+    const repo = repository(record({ admissionFingerprint: "corrupt" }));
+    const { coordinator, send } = service({
+      repository: repo,
+      resolveTarget: vi.fn(async () => null),
+    });
+
+    expect(await coordinator.dispatch("SUR-D71E8971")).toEqual({
+      status: "failed",
+      runId: "SUR-D71E8971",
+    });
+    expect(repo.failDispatch).toHaveBeenCalledWith(expect.objectContaining({
+      reason: "admission-binding-drift",
+    }));
     expect(send).not.toHaveBeenCalled();
   });
 

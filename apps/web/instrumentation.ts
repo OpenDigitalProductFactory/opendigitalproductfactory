@@ -10,6 +10,10 @@ import { isMeasurementRuntime, settleBootSync } from "@/lib/runtime/measurement-
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { sweepOrphanedPromoterContainers } from "@/lib/self-upgrade/promoter-sweep";
 import { reconcileSelfUpgradeAdmissions } from "@/lib/self-upgrade/admission";
+import {
+  resolveInngestSelfRegistrationEndpoint,
+  syncInngestSelfRegistration,
+} from "@/lib/queue/inngest-self-registration";
 /**
  * Logs a deprecation notice when HIVE_CONTRIBUTION_TOKEN is set in the
  * environment. Exported so the instrumentation module's startup behavior
@@ -1190,39 +1194,30 @@ export async function register() {
     // register/refresh the app with the Inngest server. Runs after a small
     // delay to give Next.js time to bind the HTTP listener.
     if (process.env.INNGEST_BASE_URL && isInngestSelfSyncOnBootEnabled()) {
-      const appUrl = process.env.APP_URL ?? "http://localhost:3000";
+      const endpoint = resolveInngestSelfRegistrationEndpoint(process.env);
       setTimeout(async () => {
         let lastErr: unknown = null;
         for (let i = 0; i < 6; i++) {
-          try {
-            const res = await fetch(`${appUrl}/api/inngest`, { method: "PUT" });
-            if (res.ok) {
-              const body = await res.json().catch(() => ({}));
-              console.log(`[inngest-sync] Registered with Inngest server: ${JSON.stringify(body)}`);
-              const { recordInngestRegistration } = await import(
-                "@/lib/queue/job-engine-health"
-              );
-              await recordInngestRegistration(true);
-              return;
+          const { recordInngestRegistration } = await import("@/lib/queue/job-engine-health");
+          const result = await syncInngestSelfRegistration({
+            endpoint,
+            fetchRegistration: fetch,
+            recordRegistration: recordInngestRegistration,
+            reconcileAdmissions: reconcileSelfUpgradeAdmissions,
+          });
+          if (result.ok) {
+            console.log(`[inngest-sync] Registered with Inngest server: HTTP ${result.data.status}`);
+            if (result.data.reconciliationError) {
+              console.error(`[self-upgrade] admission reconcile failed: ${result.data.reconciliationError}`);
             }
-            lastErr = `HTTP ${res.status}`;
-          } catch (err) {
-            lastErr = getErrorMessage(err);
+            return;
           }
+          lastErr = result.error;
           await new Promise((r) => setTimeout(r, 2_000));
         }
         console.error(
           `[inngest-sync] Failed to register with Inngest server after 6 attempts: ${String(lastErr)}. ` +
           `Background jobs (brand extract, evals, etc.) will not dispatch until this succeeds.`,
-        );
-        // Persist the failure so the ops UI surfaces a dead job engine — the
-        // missing signal that let the 2026-06-14 outage hide for 4 days.
-        const { recordInngestRegistration } = await import(
-          "@/lib/queue/job-engine-health"
-        );
-        await recordInngestRegistration(
-          false,
-          `Inngest registration failed after 6 attempts: ${String(lastErr)}`,
         );
       }, 3_000);
     } else if (process.env.INNGEST_BASE_URL) {
@@ -1234,24 +1229,21 @@ export async function register() {
     // or Inngest later restarts and forgets its registration (the 2026-06-14
     // outage needed a reboot to re-register). Also keeps ops.jobEngine fresh.
     if (process.env.INNGEST_BASE_URL && isInngestSelfSyncOnBootEnabled()) {
-      const appUrl = process.env.APP_URL ?? "http://localhost:3000";
+      const endpoint = resolveInngestSelfRegistrationEndpoint(process.env);
       setInterval(
         () => {
           void (async () => {
             const { recordInngestRegistration, runInngestExecutorWatchdog } = await import(
               "@/lib/queue/job-engine-health"
             );
-            try {
-              const res = await fetch(`${appUrl}/api/inngest`, { method: "PUT" });
-              await recordInngestRegistration(
-                res.ok,
-                res.ok ? null : `Inngest re-sync failed: HTTP ${res.status}`,
-              );
-            } catch (err) {
-              await recordInngestRegistration(
-                false,
-                `Inngest re-sync failed: ${getErrorMessage(err)}`,
-              );
+            const result = await syncInngestSelfRegistration({
+              endpoint,
+              fetchRegistration: fetch,
+              recordRegistration: recordInngestRegistration,
+              reconcileAdmissions: reconcileSelfUpgradeAdmissions,
+            });
+            if (result.ok && result.data.reconciliationError) {
+              console.error(`[self-upgrade] admission reconcile failed: ${result.data.reconciliationError}`);
             }
             void runInngestExecutorWatchdog().then((r) => r.status === "degraded" && console.warn(`[inngest-watchdog] ${r.detail ?? "executor degraded"}`));
           })();
