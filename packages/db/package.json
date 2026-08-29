@@ -100,7 +100,7 @@
   },
   "dependencies": {
     "@dpf/storefront-templates": "workspace:*",
-    "@prisma/adapter-pg": "^7.9.0",
+    "@prisma/adapter-pg": "^7.9.1",
     "@prisma/client": "^7.9.0",
     "bcryptjs": "^3.0.3",
     "dotenv": "^17.4.2",
