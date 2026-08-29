@@ -11,12 +11,14 @@ type SelectionInput = Readonly<{
 export function selectSelfUpgradeAdmissionTarget(
   input: SelectionInput,
 ): ActionResult<SelfUpgradeTargetBinding> {
-  const verified = input.targetBinding
-    ? verifySelfUpgradeTargetBinding(input.targetBinding)
-    : null;
-  if (input.targetBinding && !verified?.ok) return err("target-binding-invalid");
+  // Always execute the authentication boundary. A client-controlled token may
+  // influence verification data, but it must never decide whether verification
+  // itself runs (CodeQL: user-controlled bypass of security check).
+  const bindingToken = input.targetBinding ?? "";
+  const verified = verifySelfUpgradeTargetBinding(bindingToken);
+  if (bindingToken && !verified.ok) return err("target-binding-invalid");
 
-  const boundTarget = verified?.ok ? verified.data : null;
+  const boundTarget = verified.ok ? verified.data : null;
   if (
     boundTarget &&
     input.resolvedTarget &&

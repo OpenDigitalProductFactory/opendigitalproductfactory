@@ -4,9 +4,10 @@ status: active
 
 # Server-Owned Rendered Target Admission Plan
 
-**Backlog item:** BI-EE81F61B  
-**Workroom:** WC-25858CAB  
-**Branch:** `fix/durable-self-upgrade-admission-and-dispatch-reco`  
+**Backlog item:** BI-EE81F61B
+**Workroom:** WC-A48DF3B6
+**Branch:** `fix/self-upgrade-rendered-target-admission`
+**Historical predecessor Workroom:** WC-25858CAB (BI-3FD07259; unchanged)
 **Design:** `docs/superpowers/specs/2026-08-29-self-upgrade-rendered-target-admission-design.md`
 
 ## Outcome
@@ -114,6 +115,9 @@ edit, or manual consumer environment edit is in scope.
 
 - Decision: atomic
 - Parent: BI-EE81F61B
+- Receipt: `cmte5xb7p094801pgvm1qab3a`
+- Mapping: `server-owned-rendered-target-admission` -> BI-EE81F61B
+- Dependencies: none
 - Dependency: protected BI-3FD07259 durable admission; protected BI-6CB35411
   consumer identity convergence is the live acceptance target
 - Rationale: render proof, action verification, durable admission, independent

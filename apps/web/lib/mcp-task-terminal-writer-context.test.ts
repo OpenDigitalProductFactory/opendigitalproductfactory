@@ -233,6 +233,61 @@ describe("terminal writer context hydration", () => {
     expect(readPage).not.toHaveBeenCalled();
   });
 
+  it("ignores an earlier failed exact-bound read when a later complete attempt is available", async () => {
+    const readPage = vi.fn();
+    const pageContent = (startLine: number, lineCount: number, trailingNewline = true) => {
+      const content = Array.from(
+        { length: lineCount },
+        (_, index) => `line ${startLine + index}`,
+      ).join("\n");
+      return trailingNewline ? `${content}\n` : content;
+    };
+    const executions = [
+      reader("cmtebzo9r00ea01pgcs87buqu", { startLine: 1 }, {
+        createdAt: new Date(0),
+        result: { data: page({ content: pageContent(1, 57), startLine: 1, endLine: 57, totalLines: 165, hasMore: true, cursor: "cursor-58" }) },
+      }),
+      reader("cmtec0nbg00i901pgxu9of8o9", { cursor: "cursor-58" }, {
+        createdAt: new Date(1),
+        result: { data: page({ content: pageContent(58, 39), startLine: 58, endLine: 96, totalLines: 165, hasMore: true, cursor: "cursor-97" }) },
+      }),
+      reader("cmtec0ygy00ig01pgx1ijwkz5", { cursor: "cursor-97" }, {
+        createdAt: new Date(2),
+        result: { data: page({ content: pageContent(97, 51), startLine: 97, endLine: 147, totalLines: 165, hasMore: true, cursor: "cursor-148" }) },
+      }),
+      reader("cmtec1xmm00ir01pguc730reh", { cursor: "cursor-148" }, {
+        createdAt: new Date(3),
+        result: { data: page({ content: pageContent(148, 17), startLine: 148, endLine: 164, totalLines: 165, hasMore: true, cursor: "cursor-165" }) },
+      }),
+      reader("cmtec4dvy00jb01pgq92i32xu", { startLine: 28, maxLines: 40, maxChars: 3_200 }, {
+        success: false,
+        createdAt: new Date(4),
+      }),
+      reader("cmtec4i8v00jd01pg00thenhq", { cursor: "cursor-165" }, {
+        createdAt: new Date(5),
+        result: { data: page({ content: pageContent(165, 1, false), startLine: 165, endLine: 165, totalLines: 165, hasMore: false, cursor: null }) },
+      }),
+    ];
+
+    const result = await hydrateTerminalWriterContext({ policy, executions, readPage });
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        readerExecutionIds: [
+          "cmtebzo9r00ea01pgcs87buqu",
+          "cmtec0nbg00i901pgxu9of8o9",
+          "cmtec0ygy00ig01pgx1ijwkz5",
+          "cmtec1xmm00ir01pguc730reh",
+          "cmtec4i8v00jd01pg00thenhq",
+        ],
+        hydratedPageCount: 5,
+        context: expect.stringContaining("line 165"),
+      },
+    });
+    expect(readPage).not.toHaveBeenCalled();
+  });
+
   it("fails closed when two complete persisted attempts disagree about bound source content", async () => {
     const readPage = vi.fn();
     const result = await hydrateTerminalWriterContext({
@@ -352,7 +407,7 @@ describe("terminal writer context hydration", () => {
     expect(readPage).not.toHaveBeenCalled();
   });
 
-  it("does not treat a failed persisted reader as evidence", async () => {
+  it("does not treat a lone failed persisted reader as hydration authority", async () => {
     const readPage = vi.fn();
     const result = await hydrateTerminalWriterContext({
       policy,
@@ -360,7 +415,75 @@ describe("terminal writer context hydration", () => {
       readPage,
     });
 
+    expect(result).toMatchObject({ ok: false, code: "terminal_writer_context_reader_count_invalid" });
+    expect(readPage).not.toHaveBeenCalled();
+  });
+
+  it("rejects a failed reader whose immutable binding conflicts", async () => {
+    const readPage = vi.fn();
+    const result = await hydrateTerminalWriterContext({
+      policy,
+      executions: [reader("failed-conflict", { version: "0".repeat(40) }, { success: false })],
+      readPage,
+    });
+
+    expect(result).toMatchObject({ ok: false, code: "terminal_reader_identity_conflict" });
+    expect(readPage).not.toHaveBeenCalled();
+  });
+
+  it("rejects an unauthorized failed reader instead of ignoring it as history", async () => {
+    const readPage = vi.fn();
+    const result = await hydrateTerminalWriterContext({
+      policy: { ...policy, readerToolNames: ["read_source_at_version", "search_source_at_version"] },
+      executions: [reader("failed-search", {}, {
+        toolName: "search_source_at_version",
+        success: false,
+      })],
+      readPage,
+    });
+
     expect(result).toMatchObject({ ok: false, code: "terminal_writer_context_reader_failed" });
+    expect(readPage).not.toHaveBeenCalled();
+  });
+
+  it("does not let a failed content page bridge a successful pagination gap", async () => {
+    const readPage = vi.fn();
+    const result = await hydrateTerminalWriterContext({
+      policy,
+      executions: [
+        reader("successful-first", { startLine: 1 }, {
+          createdAt: new Date(1),
+          result: { data: page({ content: "first\n", startLine: 1, endLine: 1, totalLines: 3, hasMore: true, cursor: "cursor-2" }) },
+        }),
+        reader("failed-middle", { cursor: "cursor-2" }, {
+          success: false,
+          createdAt: new Date(2),
+          result: { data: page({ content: "second\n", startLine: 2, endLine: 2, totalLines: 3, hasMore: true, cursor: "cursor-3" }) },
+        }),
+        reader("successful-last", { cursor: "cursor-3" }, {
+          createdAt: new Date(3),
+          result: { data: page({ content: "third", startLine: 3, endLine: 3, totalLines: 3, hasMore: false, cursor: null }) },
+        }),
+      ],
+      readPage,
+    });
+
+    expect(result).toMatchObject({ ok: false, code: "terminal_writer_context_page_sequence_invalid" });
+    expect(readPage).not.toHaveBeenCalled();
+  });
+
+  it("rejects malformed nonempty content on a failed reader", async () => {
+    const readPage = vi.fn();
+    const result = await hydrateTerminalWriterContext({
+      policy,
+      executions: [reader("failed-malformed", { startLine: 1 }, {
+        success: false,
+        result: { data: { content: "unbound" } },
+      })],
+      readPage,
+    });
+
+    expect(result).toMatchObject({ ok: false, code: "terminal_writer_context_page_invalid" });
     expect(readPage).not.toHaveBeenCalled();
   });
 
