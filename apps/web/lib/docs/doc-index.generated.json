@@ -1605,7 +1605,9 @@
       "publishedPublic": true,
       "publishedPortal": false,
       "anchors": [
-        "four-portfolio-archetype-and-ai-workforce-operating-standard",
+        "portfolio-aligned-agent-and-workforce-operating-standard",
+        "naming-and-harmonization-posture",
+        "revision-020-rename-and-governed-migration",
         "abstract",
         "1-status-scope-and-normative-language",
         "11-status",
