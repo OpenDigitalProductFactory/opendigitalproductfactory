@@ -175,6 +175,7 @@ describe("submitRemoteCoworkerTask idempotency", () => {
             kind: "missing-terminal-writer",
             writerToolName: "record_initiative_evidence",
             resumeMode: "same-taskrun",
+            dispatchContract: "required-tool-call",
             attempt: 1,
             observedAt: expect.any(String),
           },

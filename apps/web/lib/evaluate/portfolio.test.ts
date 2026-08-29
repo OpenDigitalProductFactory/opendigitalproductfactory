@@ -53,6 +53,29 @@ describe("buildPortfolioTree()", () => {
     expect(foundational.directCount).toBe(2);
   });
 
+  // BI-A5576D1A — products with a null taxonomyNodeId were dropped from the tree, so the
+  // estate total undercounted (225 of 375). They now surface under an Uncategorized root.
+  it("surfaces null-taxonomy products under an Uncategorized root and counts them", () => {
+    const countsWithUncategorized = [...COUNTS, { taxonomyNodeId: null, _count: { id: 150 } }];
+    const activeWithUncategorized = [...ACTIVE_COUNTS, { taxonomyNodeId: null, _count: { id: 120 } }];
+
+    const baseTotal = buildPortfolioTree(NODES, COUNTS, ACTIVE_COUNTS).reduce((s, r) => s + r.totalCount, 0);
+    const roots = buildPortfolioTree(NODES, countsWithUncategorized, activeWithUncategorized);
+
+    const uncategorized = roots.find((r) => r.nodeId === "__uncategorized__");
+    expect(uncategorized).toBeDefined();
+    expect(uncategorized!.totalCount).toBe(150);
+    expect(uncategorized!.activeCount).toBe(120);
+
+    const total = roots.reduce((s, r) => s + r.totalCount, 0);
+    expect(total).toBe(baseTotal + 150);
+  });
+
+  it("adds no Uncategorized root when every product is placed in the taxonomy", () => {
+    const roots = buildPortfolioTree(NODES, COUNTS, ACTIVE_COUNTS);
+    expect(roots.find((r) => r.nodeId === "__uncategorized__")).toBeUndefined();
+  });
+
   it("sets totalCount as sum of subtree directCounts", () => {
     const roots = buildPortfolioTree(NODES, COUNTS);
     const foundational = roots.find((r) => r.nodeId === "foundational")!;

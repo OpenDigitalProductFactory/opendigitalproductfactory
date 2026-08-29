@@ -4,8 +4,14 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { test } from "node:test";
 import {
+  fallbackStatusForUnknown,
+  isLocalIntegrationStatus,
+} from "./local-integration-status.mjs";
+import {
   CRITICAL_PACKAGES,
   EXIT_CHILD_SIGNAL_DEATH,
+  EXIT_VITEST_RUNNER_TERMINATION,
+  EXIT_CONTROL_PLANE_STARVATION,
   EXIT_GREEN,
   EXIT_SANDBOX_DRIFT,
   EXIT_SANDBOX_NOT_READY,
@@ -397,4 +403,47 @@ test("an ordinary non-zero exit is still a product failure", () => {
 
   assert.equal(outcome.status, "failed");
   assert.equal(outcome.productEvidence, true);
+});
+
+// BI-C59AC8AF. The producer and the recorder are one closed set or they drift:
+// #4703 added blocked_child_signal_death to classifyGateOutcome alone, the
+// recorder rejected it as invalid_status, the write was dropped, and the tree it
+// ran on could never be gated again. This asserts the direction that actually
+// bricks things — every status the gate can PRODUCE must be recordable.
+test("every status classifyGateOutcome can emit is one the recorder accepts", () => {
+  const exitCodes = [
+    0,
+    1,
+    EXIT_SANDBOX_DRIFT,
+    EXIT_SANDBOX_NOT_READY,
+    EXIT_CONTROL_PLANE_STARVATION,
+    EXIT_VITEST_RUNNER_TERMINATION,
+    EXIT_CHILD_SIGNAL_DEATH,
+  ];
+  const verdicts = [null, "green", "drifted", "sandbox_not_ready"];
+
+  const produced = new Set();
+  for (const gateExitCode of exitCodes) {
+    for (const freshnessVerdict of verdicts) {
+      produced.add(classifyGateOutcome({ freshnessVerdict, gateExitCode }).status);
+    }
+  }
+
+  assert.ok(produced.size > 0, "expected classifyGateOutcome to produce statuses");
+  for (const status of produced) {
+    assert.ok(
+      isLocalIntegrationStatus(status),
+      `classifyGateOutcome emits "${status}", which record_local_integration_result rejects. `
+      + "Add it to LOCAL_INTEGRATION_STATUSES in scripts/lib/local-integration-status.mjs.",
+    );
+  }
+});
+
+test("a status the recorder does not know still records rather than dropping the write", () => {
+  const fallback = fallbackStatusForUnknown("blocked_something_new");
+
+  assert.equal(fallback.status, "failed");
+  assert.ok(isLocalIntegrationStatus(fallback.status));
+  assert.match(fallback.summaryPrefix, /BLOCKED_SOMETHING_NEW/);
+  assert.match(fallback.summaryPrefix, /not product evidence/);
 });

@@ -1771,6 +1771,9 @@
     "scripts/lib/local-integration-ci.mjs": [
       "docs/testing/pre-pr-gate.md"
     ],
+    "scripts/lib/local-integration-status.mjs": [
+      "docs/testing/pre-pr-gate.md"
+    ],
     "scripts/lib/mcp-client.mjs": [
       "docs/architecture/mcp-tool-authorization-runbook.md"
     ],
@@ -2985,6 +2988,7 @@
       "scripts/lib/converge-hooks-dir.mjs",
       "scripts/lib/hooks-dir.mjs",
       "scripts/lib/local-integration-ci.mjs",
+      "scripts/lib/local-integration-status.mjs",
       "scripts/local-ci-runner.mjs",
       "scripts/pr-health.mjs",
       "scripts/set-hooks-path.mjs",

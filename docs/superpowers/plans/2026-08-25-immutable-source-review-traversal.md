@@ -122,3 +122,28 @@ This phase was added after the repaired live reader completed five exact immutab
 4. Permit one identical request replay to reserve the exact waiting TaskRun through `status + updatedAt` compare-and-set and rerun with the same thread, token authority, request digest, tool grants, and immutable artifact binding.
 5. If that bounded continuation also omits the writer, retain `input-required` and refuse a third execution attempt. A real writer proposal still follows the existing separately approved envelope path.
 6. Prove the focused policy/loop/submission tests, impacted loop tests, typecheck, size/source guards, exact-tree CI, protected PR, canonical release, and live same-TaskRun behavior before issuing a fresh BI-42 review identity.
+
+## Phase 9 — Make writer-only dispatch a hard provider contract
+
+This phase is the BI-DE58CFE8 successor owned by WC-14EA9122 after live attempt five hydrated the exact BI-F48 artifact but returned prose with zero writer executions.
+
+1. Preserve TaskRun `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-95A624D36842` and its unchanged request key as the red fixture; do not replay it before deployment.
+2. Add a caller-owned required tool-choice option to routed inference and apply it after recipe/harness plan resolution.
+3. Set the option only when the initiative-review surface contains exactly its governed writer, including the post-evidence nudge and same-TaskRun writer resume.
+4. Compile required choice for OpenAI-compatible/Qwen, Gemini, Anthropic, ChatGPT, and Responses requests; fail closed before dispatch for adapters that cannot honor it.
+5. Preserve the required policy unchanged across fallback plans. Keep `requireTools`, exact grants, immutable binding, model-selected writer arguments, and separate approval unchanged.
+6. If a provider violates the hard contract, persist explicit required-call noncompliance on the same resumable TaskRun. Never synthesize a decision, envelope, execution, or receipt.
+7. Prove focused red/green tests, ordinary-turn non-regression, typecheck, size/source guards, exact-tree CI, protected PR, canonical release, and exact live CAN-TEST.
+8. Only after that live proof, replay the preserved BI-F48 key once and accept only a genuine grounded writer proposal or the explicit fail-closed noncompliance projection.
+
+## Phase 10 — Keep cross-attempt reader history recoverable
+
+This phase is the BI-DE58CFE8 successor on Workroom `WC-14EA9122`, branch `fix/terminal-writer-reader-history-budget`. It follows the single post-`3370a769` replay that remained on the same BI-F48 TaskRun but failed `terminal_writer_context_reader_count_invalid` with seven successful exact-bound reader rows and no writer, envelope, or receipt.
+
+1. Preserve the seven live reader execution ids as the RED fixture and do not replay the TaskRun again before a material deployment.
+2. Separate TaskRun-lifetime authority history from the existing per-attempt reader ceiling. Validate every historical row for success, exact tool/binding, unique id, and durable order.
+3. Treat content-free results only as authority proof. Partition contentful results at exact line-one request boundaries and enforce the reader-call, page, character, cursor, line-contiguity, and stable-total limits independently on each attempt.
+4. Reuse the latest complete coherent attempt only when all complete attempts agree on source content. Fail closed on conflicting complete attempts or any malformed, failed, stale, conflicting, duplicated, out-of-order, gapped, overlapping, cursor-repeating, or per-attempt-over-budget evidence.
+5. If no complete contentful attempt exists, deterministically reread only the server-bound artifact from line one under the existing bounded budget. Never mix partial persisted content with reread content.
+6. Prove the exact seven-row fixture RED then GREEN, longer coherent-history reuse, conflicting-attempt refusal, per-attempt ceiling, existing negative fixtures, adjacent submission/resume tests, typecheck, source guards, preflight, exact-tree CI, protected PR, canonical single-flight release, governed upgrade, and exact live CAN-TEST.
+7. Only after live proof, obtain a new narrow authority for one identical-key replay of the preserved BI-F48 TaskRun. Accept only a genuine grounded writer proposal/envelope and separately approved writer receipt.

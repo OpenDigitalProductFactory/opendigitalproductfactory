@@ -1,7 +1,11 @@
 // Next.js instrumentation hook — runs once on server startup.
 // See: https://nextjs.org/docs/app/building-your-application/optimizing/instrumentation
 
-import { envFlagEnabled } from "@/lib/runtime/env-flags";
+import {
+  areOptionalStartupTasksEnabled,
+  isInngestSelfSyncOnBootEnabled,
+  isStartupModelRevalidationEnabled,
+} from "@/lib/runtime/env-flags";
 import { isMeasurementRuntime, settleBootSync } from "@/lib/runtime/measurement-runtime";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { sweepOrphanedPromoterContainers } from "@/lib/self-upgrade/promoter-sweep";
@@ -22,24 +26,6 @@ export function warnIfLegacyHiveTokenEnvSet(
       "Support for this env var will be removed 60 days after the next release.",
   );
   return true;
-}
-
-export function isStartupModelRevalidationEnabled(
-  env: Record<string, string | undefined> = process.env,
-): boolean {
-  return envFlagEnabled(env, "DPF_STARTUP_MODEL_REVALIDATION_ENABLED");
-}
-
-export function isInngestSelfSyncOnBootEnabled(
-  env: Record<string, string | undefined> = process.env,
-): boolean {
-  return envFlagEnabled(env, "DPF_INNGEST_SELF_SYNC_ON_BOOT_ENABLED");
-}
-
-export function areOptionalStartupTasksEnabled(
-  env: Record<string, string | undefined> = process.env,
-): boolean {
-  return envFlagEnabled(env, "DPF_OPTIONAL_STARTUP_TASKS_ENABLED");
 }
 
 export function scheduleInitialCodeGraphBootstrap(input: {
@@ -1472,6 +1458,9 @@ export async function register() {
     // silent plaintext storage (data-at-rest vulnerability).
     // Dev mode short-circuits immediately; zero overhead outside production.
     // See docs/superpowers/specs/2026-04-24-github-auth-2fa-readiness-design.md
+    // Serve the directory (EP-24741BBF · BI-A91004A7) — off unless DPF_LDAP_ENABLED.
+    await (await import("@/lib/directory/ldap/runtime")).startLdapListener();
+
     // Wiki embedding coverage self-heal — deferred, non-blocking (BI-ED117C82).
     const { scheduleWikiEmbeddingReconcile } = await import("@/lib/wiki/embedding-reconciliation");
     scheduleWikiEmbeddingReconcile();

@@ -265,6 +265,13 @@ export const chatAdapter: ExecutionAdapterHandler = {
           const fn = (t as { function?: { name?: string; description?: string; parameters?: unknown } }).function;
           return fn ? { name: fn.name, description: fn.description, input_schema: fn.parameters } : t;
         });
+        if (plan.toolPolicy.toolChoice) {
+          body.tool_choice = {
+            type: plan.toolPolicy.toolChoice === "required"
+              ? "any"
+              : plan.toolPolicy.toolChoice,
+          };
+        }
       }
 
       // Merge providerTools (e.g. computer use) into tools array
@@ -309,6 +316,18 @@ export const chatAdapter: ExecutionAdapterHandler = {
         const functionDeclarations = toGeminiFunctionDeclarations(tools);
         if (functionDeclarations.length > 0) {
           body.tools = [...((body.tools as Array<Record<string, unknown>>) ?? []), { functionDeclarations }];
+          if (plan.toolPolicy.toolChoice) {
+            body.toolConfig = {
+              functionCallingConfig: {
+                mode: plan.toolPolicy.toolChoice === "required"
+                  ? "ANY"
+                  : plan.toolPolicy.toolChoice.toUpperCase(),
+                ...(plan.toolPolicy.toolChoice === "required"
+                  ? { allowedFunctionNames: functionDeclarations.map((tool) => String(tool.name)) }
+                  : {}),
+              },
+            };
+          }
         }
       }
 
@@ -347,6 +366,7 @@ export const chatAdapter: ExecutionAdapterHandler = {
           }
           return t;
         });
+        if (plan.toolPolicy.toolChoice) body.tool_choice = plan.toolPolicy.toolChoice;
       }
 
     } else {

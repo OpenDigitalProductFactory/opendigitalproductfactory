@@ -29,6 +29,14 @@ identity product. The tree is built from the principal spine and is read-only:
 you change identity in DPF, and the directory follows. Its address is derived
 from your organization, so it reads as your namespace rather than a generic one.
 
+**Serving it is a choice you make.** The directory is off until you turn it on,
+because an install should not start answering an identity protocol just because
+it was upgraded. **Platform → Identity → Directory** tells you which of three
+things is true: it is serving, it is not served, or it was turned on and failed
+to start — with the reason. Turning it on needs your organization's own CA,
+because the connection is secured with your certificate and there is no
+self-signed fallback. See [serving the directory](../../install/serve-the-directory.md).
+
 **Two consequences worth knowing.** Disabling a principal now ends its ability to
 sign in immediately, rather than waiting for a sync — authority and sign-in can
 no longer drift apart. And people sign in with a password, while AI coworkers and

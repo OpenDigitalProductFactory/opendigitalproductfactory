@@ -50,6 +50,13 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     // than added to ci-policy-test-inventory-allowlist.txt, where it would never run.
     guard("gate-executor-liveness", "Gate Executor Liveness", [
       node("--test", "scripts/gate-worktree-executor-liveness.test.mjs"),
+      // BI-46B03CAE: the lease-queue calls cost more than mcpCall's 10s default,
+      // and abandoning one that was about to succeed strands a lease the gate
+      // then cannot release — each failure deepening a single-slot queue until
+      // no gate on the box can claim. Registered here for the same reason as the
+      // liveness test above: in ci-policy-test-inventory-allowlist.txt it would
+      // never run.
+      node("--test", "scripts/gate-worktree-lease-timeout.test.mjs"),
     ]),
     guard("host-port-range-guard", "Host Port Range Guard", [
       node("--test", "scripts/check-host-port-range.test.mjs"),
