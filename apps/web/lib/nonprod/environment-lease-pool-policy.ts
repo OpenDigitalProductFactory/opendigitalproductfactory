@@ -9,6 +9,7 @@ import {
   type LocalCiHostPressure,
   type ResolvedLocalCiPoolPolicy,
 } from "./local-ci-pool-policy";
+import { readLocalCiInstallationProfile } from "./local-ci-capacity-profile";
 import {
   resolveHostResourceAdmission,
   type ActiveHeavyReservation,
@@ -102,6 +103,14 @@ export async function resolveNonprodPoolPolicy(input: {
   const configValue = input.platformConfig
     ? await loadLocalCiPoolConfig({ platformConfig: input.platformConfig })
     : null;
+  // Consulted only when no valid config row exists (BI-D908DA0A). A read failure
+  // is not a reason to guess: an unreadable declaration resolves to null and the
+  // policy keeps the compatibility singleton.
+  const installation = input.platformConfig
+    ? await readLocalCiInstallationProfile({
+      platformConfig: input.platformConfig,
+    }).catch(() => null)
+    : null;
   const clientPressure = input.hostPressure ?? {};
   const preliminary = resolveLocalCiPoolPolicy({
     configValue,
@@ -110,6 +119,7 @@ export async function resolveNonprodPoolPolicy(input: {
     reserveAdmissionHeadroom: input.reserveAdmissionHeadroom,
     env: process.env,
     now: input.now,
+    installation,
   });
   // A missing/malformed config keeps the compatibility singleton and has no
   // broker contract to enforce. A valid configured singleton still requires
@@ -141,5 +151,6 @@ export async function resolveNonprodPoolPolicy(input: {
     reserveAdmissionHeadroom: input.reserveAdmissionHeadroom,
     env: process.env,
     now: input.now,
+    installation,
   });
 }

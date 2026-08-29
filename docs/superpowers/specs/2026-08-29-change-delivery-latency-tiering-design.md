@@ -5,7 +5,7 @@ status: active
 # Change-delivery latency — tier by risk, fail open on infrastructure
 
 - **Epic:** EP-ABB3AC9D
-- **Backlog items:** BI-D908DA0A, BI-D088D06D, BI-8CDA7F95, BI-282AE0BC, BI-C09ECA63, BI-6332DD3D, BI-397EBDD6, BI-2C0A01CD
+- **Backlog items:** BI-D908DA0A, BI-E58B57EC, BI-D088D06D, BI-8CDA7F95, BI-282AE0BC, BI-C09ECA63, BI-6332DD3D, BI-397EBDD6, BI-2C0A01CD
 - **Decision ledger:** DI-0DD38401DF9F (`principle_decide`, high stakes, no commandment conflict)
 - **Profile:** refactor
 - **Authored:** 2026-08-29
@@ -260,6 +260,86 @@ already-computed infrastructure classification rather than adding substrate.
 
 **Decision: keep all 95 guards. Attack serialisation, duplication and dishonest
 verdicts.**
+
+### Capacity belongs to the installation, not to the image
+
+This host runs the **Docker image install path under test** — a consumer install
+shape being dogfooded — while also being the machine that develops the platform.
+Those two roles want opposite resource envelopes, and the numbers that decide the
+envelope live in `local-ci-slot-resources.json`, which ships inside the image.
+One set of bytes, two incompatible jobs.
+
+Two tempting answers are both wrong. **Changing the install shape** would
+invalidate the very thing under test and would be wrong for real consumers.
+**Adding a manual capacity setting** is the original defect in a new costume: the
+pool's whole problem is that it has no activation path, and a switch a consumer
+never finds and a developer must hand-author JSON to flip does not fix that.
+
+The installation already declares what it is, and both declarations are already
+populated here:
+
+```
+installation.environment-class.v1  -> "development"
+installation.operating-intent.v1   -> primaryPurpose "evolve-dpf", confirmed
+host_profile                       -> 63.7 GB RAM, 24 cores    (written by the installer)
+container_profile                  -> 12 CPUs, 24033 MB        (refreshed every portal boot)
+```
+
+The pool policy reads none of them. So capacity gains a derived tier, mirroring
+the four-tier precedence `environment-class` already uses:
+
+| rank | source | set by |
+| --- | --- | --- |
+| 1 | `DPF_LOCAL_CI_POOL_CAPACITY` break-glass | operator, per-process — existing |
+| 2 | explicit `local_ci.sandbox_pool` row | operator — existing, and the override |
+| 3 | **installation-profile** | derived from the declaration — new |
+| 4 | compatibility singleton | nothing declared |
+
+A `development` installation whose declared job is `evolve-dpf` requests the
+capacity its host can carry. Every consumer install, every production install,
+and any installation that has not declared itself keeps the singleton —
+`UNDECLARED_ENVIRONMENT_CLASS` is `production`, so silence resolves to the
+conservative answer. Host headroom, the pilot guardrails and the circuit breaker
+still clamp the result and can only reduce it.
+
+One image, correct for both shapes, and no operator action on either.
+
+### The uncalibrated number underneath it
+
+Deriving capacity is still not enough on its own: it returns
+`host-stage-capacity-one`. Two independent memory tests gate admission and they
+read **different machines**.
+
+| test | reads | reserve per slot | verdict |
+| --- | --- | --- | --- |
+| `localCiBuildHeadroomCapacity` | Docker VM | 10 GiB, calibrated | 2 |
+| `localCiHostStageHeadroomCapacity` | Windows host | 8 GiB, **never calibrated** | 1 |
+
+`builderPolicy` carries an `admissionCalibration` block and reserves
+`min(16 GiB ceiling, 10 GiB calibrated)` against an 8 GiB observed high-water.
+`hostStagePolicy` carried no calibration at all — a flat 8 GiB. Measured
+2026-08-29, peak combined node working set on the Windows host during the
+heaviest host-side stage was **2.27 GiB** over idle baseline: a 3.5x
+over-reservation, and the sole reason a 63.7 GB host admitted one slot.
+
+Calibrating it to 6 GiB — 2.6x the measured peak — admits two. Filed as
+BI-E58B57EC.
+
+### Nothing checks CPU
+
+Each builder is capped at 8 CPUs (`cpuQuota: 800000 / cpuPeriod: 100000`); the
+Docker VM reports 12. Two slots request a 16-CPU ceiling against 12, and no code
+path compares requested quota to available CPUs. The Windows CPU probe is also
+structurally dead: `sustainedCpuPercent` is `loadavg()[0] / cpus().length`, and
+`os.loadavg()` returns `[0,0,0]` on Windows, so that half of the ceiling reads 0%
+and can never fire.
+
+Quotas are ceilings rather than reservations, so this degrades rather than fails.
+Replaying the trace with service time inflated for 8 CPUs becoming ~6: two slots
+still beat one end-to-end at +40% (1642s vs 2063s p90 wait-plus-hold), with
+break-even near +55 to 60%. An 8-to-6 shift is 25 to 33%. The gain survives the
+contention — but the contention should be modelled rather than discovered, so a
+CPU-count admission test is in scope.
 
 ### The tiering contract
 

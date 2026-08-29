@@ -35,36 +35,130 @@ The load-bearing numbers, measured 2026-08-29 against `main` @ 97b32d3:
 
 The guard surface is not the bottleneck. No phase below retires a guard.
 
-## Phase 0 — activate the second slot
+## Phase 0 — capacity follows the installation
 
-Umbrella: BI-D908DA0A. Independently shippable. No dependencies.
+Umbrella: BI-D908DA0A and BI-E58B57EC. Independently shippable. No dependencies.
 
 The largest single win, and the cheapest. Replay of the real 286-lease arrival
 trace: capacity 2 takes total queued time from **23.8h to 2.1h** across five
-days, a 91% reduction. Running the real policy functions against this host
-returns `hostBuildCapacity: 2` and `hostStageCapacity: 2` today; the only
-blocker is the absent `PlatformConfig` row.
+days, a 91% reduction, and still wins end-to-end at a pessimistic +40% CPU
+contention penalty.
 
-1. Add a governed activation action that creates and validates the
-   `local_ci.sandbox_pool` row. Shape v1: `requestedCapacity` (1 or 2),
-   `ceilings{minAvailableMemoryBytes, maxSustainedCpuPercent, minDiskFreeBytes}`,
-   `rollback{maxServiceDurationRegressionPercent ≤ 15,
-   maxInfrastructureFailureRatePercent ≤ 5, evidenceMismatchTolerance = 0}`.
-   Validation is `localCiPoolConfigError`, which already exists — call it, do
-   not restate it.
-2. Seed an explicit `requestedCapacity: 1` at install, so `config-absent` stops
-   being the silent default path and activation becomes an edit.
-3. Surface `effectiveCapacity`, `hostSafeCapacity`, `source` and
+### The constraint this has to respect
+
+This host is running the **Docker image install path under test** — a consumer
+install shape being dogfooded — while also being the machine that develops the
+platform. Those two roles want opposite resource profiles, and the resource
+numbers are currently baked into `local-ci-slot-resources.json`, which ships
+inside the image. One set of bytes, two incompatible jobs.
+
+Two obvious answers are both wrong:
+
+- **Change the install shape.** The install path is precisely what is being
+  tested. Widening its resource envelope to suit development would invalidate
+  the test and would be wrong for every real consumer.
+- **Add a manual capacity setting.** This is the original defect wearing a new
+  costume. The pool already has no activation path; adding a switch a consumer
+  will never find, and a developer must hand-author JSON to flip, reproduces it.
+
+### The decision
+
+**Capacity is a property of the installation, not a constant of the product.**
+The installation already declares the two facts that decide it, and both are
+already populated on this host:
+
+```
+installation.environment-class.v1  -> "development"
+installation.operating-intent.v1   -> primaryPurpose "evolve-dpf", confirmed
+host_profile                       -> 63.7 GB RAM, 24 cores   (installer)
+container_profile                  -> 12 CPUs, 24033 MB       (refreshed every portal boot)
+```
+
+`local-ci-pool-policy.ts` reads none of them. It should. A `development`
+installation whose declared job is `evolve-dpf` runs many gates a day and gets
+the capacity its host can carry; everything else keeps the singleton.
+
+A new precedence tier, deliberately mirroring the four-tier shape
+`environment-class` already uses:
+
+| rank | source | who sets it |
+| --- | --- | --- |
+| 1 | `DPF_LOCAL_CI_POOL_CAPACITY` break-glass | operator, per-process, existing |
+| 2 | `local_ci.sandbox_pool` row | operator, explicit, existing |
+| 3 | **installation-profile** | derived from the declaration — **new** |
+| 4 | compatibility singleton | when nothing is declared |
+
+Host headroom, the pilot guardrails and the circuit breaker all still clamp
+whatever comes back, and can only reduce it. The configurable option the
+founder asked about is retained as rank 2 — it is the override, not the
+activation path.
+
+This gives one image that is correct for both shapes: a consumer install stays
+at one slot automatically and says why; this box gets two automatically with no
+operator action.
+
+### The second blocker
+
+Seeding capacity alone still returns `host-stage-capacity-one`. Two independent
+memory tests gate admission and they read different machines:
+
+| test | reads | reserve | verdict |
+| --- | --- | --- | --- |
+| `localCiBuildHeadroomCapacity` | Docker VM | 10 GiB, calibrated | 2 |
+| `localCiHostStageHeadroomCapacity` | Windows host | 8 GiB, **never calibrated** | 1 |
+
+The builder reserve had already been measured down from a 16 GiB ceiling to
+10 GiB against an 8 GiB observed high-water. `hostStagePolicy` carried no
+calibration block at all. Measured 2026-08-29: peak combined node working set
+during the heaviest host-side stage was **2.27 GiB** over idle baseline — a
+3.5x over-reservation, and the entire reason a 63.7 GB host admitted one slot.
+
+### Steps
+
+1. Give `hostStagePolicy` an `admissionCalibration` block mirroring
+   `builderPolicy`, and reserve `min(ceiling, calibrated)` via
+   `localCiHostStageAdmissionReserveBytes`. Calibrated to 6 GiB — 2.6x the
+   measured peak, and enough for two stages with a 4 GiB floor.
+2. Derive the requested capacity from the declared environment class and
+   operating intent. The derivation is pure and lives in
+   `local-ci-pool-policy.ts` alongside the other capacity helpers; the IO that
+   reads the two `PlatformConfig` keys lives at the edge in
+   `local-ci-capacity-profile.ts`. That split is forced, not stylistic:
+   `scripts/local-ci-pool-policy.test.mjs` loads the policy under raw Node, so
+   the policy's runtime import graph must stay relative `.mjs`/`.json` only —
+   the installation types come in via `import type`, which is erased. An
+   unreadable or partial declaration returns null, so silence keeps the
+   singleton.
+3. Wire the derived tier into `resolveLocalCiPoolPolicy` beneath the explicit
+   row, and pass the profile from `resolveNonprodPoolPolicy`. A read failure is
+   caught and resolves to null rather than throwing the claim.
+4. Surface `effectiveCapacity`, `hostSafeCapacity`, `source` and
    `rollbackReason` on an operator health surface. The resolver already returns
    all four; nothing reads them.
-4. Activate at capacity 2 on this host.
+5. Add the CPU-count admission test that does not exist today, and fix or
+   retire the Windows `sustainedCpuPercent` probe — `os.loadavg()` returns
+   `[0,0,0]` on Windows, so that half of the CPU ceiling reads 0% and can never
+   fire.
 
-Rollback: `contractLocalCiPoolAfterGateResult` already contracts 2 → 1 on a bad
-slot-1 result. It ships; it is the one half of the pilot that was finished.
+Steps 1 to 3 are implemented on this branch, with 20 new behaviour tests in
+`local-ci-capacity-profile.test.ts` covering every install shape, the operator
+override, the host clamp, and the closed-admission case. Steps 4 and 5 are not.
+
+Two existing fixtures asserted host-stage refusals against the literal 8 GiB
+reserve and started admitting once it was calibrated. Both now derive their
+memory level from `hostStagePolicy.admissionReserveBytes`, so a future
+recalibration cannot silently turn a refusal into an admission — the failure
+mode that would otherwise have been introduced by this very change.
+
+Rollback: `contractLocalCiPoolAfterGateResult` already contracts 2 to 1 on a bad
+slot-1 result. It ships; it is the half of the pilot that was finished. A
+derived capacity is contracted by writing the explicit row, which then outranks
+the derivation.
 
 Verification: re-measure queue-wait percentiles over the following seven days
 against the 1053s p90 recorded here, from the same
-`NonProductionEnvironmentLease` query.
+`NonProductionEnvironmentLease` query. Record the observed service-time
+inflation at two slots against the modelled +25 to 33%.
 
 ## Phase 1 — an honest verdict
 
