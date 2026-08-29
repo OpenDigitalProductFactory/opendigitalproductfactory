@@ -24,6 +24,13 @@ import {
   deriveDeployedStamp,
 } from "./version";
 import type { UpgradeSourceMode } from "./config";
+import {
+  buildLfsLsFilesCommand,
+  buildLfsPullCommand,
+  describeUnmaterialized,
+  parseLfsLsFiles,
+  unmaterializedPaths,
+} from "./lfs-materialization";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 /** Result of running one git command. Never throws on non-zero exit. */
@@ -74,7 +81,7 @@ export type PrepareSourceResult =
     }
   | {
       ok: false;
-      reason: "no-target" | "prep-error" | "dirty-tree";
+      reason: "no-target" | "prep-error" | "dirty-tree" | "lfs-unmaterialized";
       message: string;
     };
 
@@ -444,6 +451,37 @@ async function prepareUpgradeSourceInWorkspace(
       };
     }
 
+    // ── 4b. Materialize Git LFS objects, then assert none are left as stubs. ──
+    // The workspace tree IS the promoter's Docker build context, and Dockerfile
+    // asserts real bytes for the LFS-tracked IT4IT workbook it COPYs (#4843).
+    // The prep git runner deliberately sets GIT_LFS_SKIP_SMUDGE=1 so the
+    // mechanical branch/merge ops never block on the network, which means
+    // materialization has to be an explicit step here, once the tree is final.
+    //
+    // Failing here costs one git command instead of a two-minute promoter build
+    // that dies on a zip-magic check buried in Docker output, and it writes a
+    // named reason onto the run row. `lfs pull` is best-effort: `ls-files` is
+    // the verdict, so a pull that partially succeeds is still caught.
+    await run(buildLfsPullCommand(input.workspacePath));
+    const lsFiles = await run(buildLfsLsFilesCommand(input.workspacePath));
+    // A non-zero ls-files (no git-lfs binary, or LFS not configured) is not
+    // itself proof of stubs — but it means we cannot VERIFY, and an unverified
+    // build context is exactly what shipped the pointer. Treat it as a stop.
+    if (lsFiles.code !== 0) {
+      return {
+        ok: false,
+        reason: "lfs-unmaterialized",
+        message:
+          `cannot verify Git LFS materialization in the upgrade workspace: ` +
+          `\`git lfs ls-files\` exited ${lsFiles.code}: ${trim(lsFiles.stderr) || "(no stderr)"}. ` +
+          `The portal image must provide the git-lfs binary for the git-source upgrade shape.`,
+      };
+    }
+    const stubs = unmaterializedPaths(parseLfsLsFiles(lsFiles.stdout));
+    if (stubs.length > 0) {
+      return { ok: false, reason: "lfs-unmaterialized", message: describeUnmaterialized(stubs) };
+    }
+
     // ── 5. Stamp the merged tree's HEAD and push the new install-branch tip
     //       back to the install clone (ref-only — never touches its tree). ──
     const stamp = await readHeadStamp(run, input.workspacePath);
@@ -494,13 +532,22 @@ const GIT_RUNNER_TIMEOUT_MS = 120_000;
 export async function defaultGitRunner(args: string[]): Promise<GitResult> {
   const { execFile } = await import("node:child_process");
   // Run prep's internal git ops with repo hooks DISABLED. The host clone ships a
-  // Git LFS post-checkout/post-merge hook (the repo uses filter=lfs), but the
-  // portal container has no git-lfs binary — so the hook exits non-zero and makes
-  // an otherwise-successful `git checkout`/`merge` look like it failed, aborting
-  // the whole upgrade at prep. Prep is mechanical (move branches, merge for a
-  // build) and never needs LFS smudging, so force core.hooksPath empty and skip
-  // LFS smudge. `-c` is a git GLOBAL option and must precede the subcommand —
-  // prepend it ahead of the caller's args (which start with "-C <path> <cmd>").
+  // Git LFS post-checkout/post-merge hook (the repo uses filter=lfs); the hook is
+  // noise for mechanical prep and, on any host missing the binary, makes an
+  // otherwise-successful `git checkout`/`merge` look like it failed and aborts the
+  // whole upgrade at prep. GIT_LFS_SKIP_SMUDGE keeps branch moves and the merge
+  // off the network — they only need trees and blobs, never LFS content.
+  //
+  // Skipping smudge does NOT mean the workspace may ship pointer stubs: it is the
+  // promoter's Docker build context, and Dockerfile asserts real bytes (#4843).
+  // Materialization is deferred to one explicit `git lfs pull` + `ls-files`
+  // verification once the tree is final — see lfs-materialization.ts. Prep used
+  // to claim it "never needs LFS smudging"; that stopped being true the moment
+  // the image build began asserting the workbook's content, and every upgrade on
+  // the git-source shape failed until this was split out.
+  //
+  // `-c` is a git GLOBAL option and must precede the subcommand — prepend it
+  // ahead of the caller's args (which start with "-C <path> <cmd>").
   const safeArgs = ["-c", "core.hooksPath=/dev/null", ...args];
   return new Promise<GitResult>((resolve) => {
     execFile("git", safeArgs, {
