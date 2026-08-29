@@ -194,6 +194,52 @@ describe("local-CI terminal evidence projection", () => {
     })).toEqual({ status: "rerunnable" });
   });
 
+  // BI-0F2E42D5. Observed live: a run finished its whole suite with no failures,
+  // then classified itself BLOCKED (control-plane starvation) — in the gate's own
+  // words, "infrastructure evidence, NOT a product build failure" — recorded that,
+  // and released. Reading the record back as `mismatched-evidence` bricked the
+  // tree, because the claim key hashes the tree. An honest record was strictly
+  // worse than none: a run killed before writing anything is rerunnable.
+  it("lets the gate run again when the evidence records a blocked, non-verdict status", () => {
+    for (const status of [
+      "blocked_control_plane_starvation",
+      "blocked",
+      "cancelled",
+    ]) {
+      expect(projectLocalCiTerminalEvidence({
+        claimKey: `gate:${gateKey}`,
+        evidence: {
+          id: "EXT-GATE",
+          operationType: "local_integration_ci",
+          details: {
+            gateKey,
+            status,
+            evidenceValidity: { expiresAt: "2026-08-25T12:01:00.000Z" },
+          },
+        },
+        now: new Date("2026-08-25T12:00:00.000Z"),
+      })).toEqual({ status: "rerunnable" });
+    }
+  });
+
+  // The line the fix must not cross: a record for a DIFFERENT gate is a real
+  // conclusion about this claim and still settles it, whatever its status.
+  it("still blocks a non-verdict status carried on another gate's record", () => {
+    expect(projectLocalCiTerminalEvidence({
+      claimKey: `gate:${gateKey}`,
+      evidence: {
+        id: "EXT-GATE",
+        operationType: "local_integration_ci",
+        details: {
+          gateKey: "e".repeat(64),
+          status: "blocked_control_plane_starvation",
+          evidenceValidity: { expiresAt: "2026-08-25T12:01:00.000Z" },
+        },
+      },
+      now: new Date("2026-08-25T12:00:00.000Z"),
+    })).toEqual({ status: "blocked", reason: "mismatched-evidence" });
+  });
+
   it("fails closed for expired or mismatched evidence", () => {
     expect(projectLocalCiTerminalEvidence({
       claimKey: `gate:${gateKey}`,

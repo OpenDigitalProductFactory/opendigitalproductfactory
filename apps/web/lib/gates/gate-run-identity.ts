@@ -116,12 +116,28 @@ export function projectLocalCiTerminalEvidence(input: {
     && !Array.isArray(details.evidenceValidity)
     ? details.evidenceValidity as Record<string, unknown>
     : null;
+  // Truly mismatched: this record does not describe this gate at all. That IS a
+  // real conclusion about the claim and still settles it.
   if (
     input.evidence.operationType !== "local_integration_ci"
     || details?.gateKey !== input.claimKey.slice("gate:".length)
-    || (details.status !== "passed" && details.status !== "failed")
   ) {
     return { status: "blocked", reason: "mismatched-evidence" };
+  }
+  // BI-0F2E42D5: the right record for the right gate, carrying a status that is
+  // not a product verdict — `blocked_control_plane_starvation` and its kin. The
+  // gate writes those to say, in its own words, "this is infrastructure
+  // evidence, NOT a product build failure", and then records them; reading one
+  // back as `mismatched-evidence` bricked the tree it interrupted, because the
+  // claim key hashes the tree.
+  //
+  // That made an HONEST record strictly worse than none: a run killed before it
+  // wrote anything is rerunnable (BI-C59AC8AF), while one that recorded why it
+  // could not finish was punished for saying so. It is the same reasoning the
+  // validity check below already applies one branch down — a run that reached no
+  // verdict has no verdict to protect, so re-running it lets nobody escape one.
+  if (details.status !== "passed" && details.status !== "failed") {
+    return { status: "rerunnable" };
   }
   // An expiry that was never STAMPED is not an expiry that lapsed. The gate
   // stamps validity only for a run that reached a product verdict, so evidence
