@@ -115,6 +115,8 @@ edit, or manual consumer environment edit is in scope.
 
 - Decision: atomic
 - Parent: BI-EE81F61B
+- Receipt: `cmte5xb7p094801pgvm1qab3a`
+- Mapping: `server-owned-rendered-target-admission` -> BI-EE81F61B
 - Dependency: protected BI-3FD07259 durable admission; protected BI-6CB35411
   consumer identity convergence is the live acceptance target
 - Rationale: render proof, action verification, durable admission, independent
