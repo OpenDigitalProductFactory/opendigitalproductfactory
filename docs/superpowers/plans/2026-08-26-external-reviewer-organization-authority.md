@@ -125,6 +125,10 @@ envelopes remain immutable audit history and are not resurrected.
 - Rationale: The nine test-first steps are one chain over a single authority-and-recovery contract, so no phase is independently shippable. Steps 1-3 are failing tests that only pass with the step-4 resolver change; steps 7-9 add the same-TaskRun recovery transaction that no caller can reach without that resolver and the step 5-6 approval/replay path. Shipping any subset lands either failing tests or an unreachable recovery path, and the organization-authority propagation and the expired-envelope supersession must change together or the receipt repository still rejects the writer.
 - Dependencies: none
 
+| Deliverable key | Backlog item | Independently shippable | Requirement refs | Contract refs | Flow refs | Verification refs |
+| --- | --- | --- | --- | --- | --- | --- |
+| `bi-f48-authority-recovery` | BI-F48D7059 | no | OBJ-F48-001, OBJ-F48-002, OBJ-F48-003, OBJ-F48-004 | authority-boundary, same-taskrun-recovery, approval-separation, platform-authority-sentinel | initial-writer-approval, approved-writer-replay, expired-envelope-recovery, platform-objective-mapping | AC-F48-001, AC-F48-002, AC-F48-003, AC-F48-004, AC-F48-005, AC-F48-006, AC-F48-007, AC-F48-008 |
+
 A baseline is written only when the spec-approval gate passes, and that gate
 requires a reviewer independent of the artifact's author. This plan's item is
 itself the repair for the defect that breaks independent reviewer approval
@@ -136,6 +140,6 @@ recorded in the plan and names the blocking CONDITION rather than a backlog id
 that would go stale.
 
 Once this repair is deployed, acceptance for BI-F48D7059 is one independent
-spec-approval review against the canonical design blob
-`6b3629f9d31980326d228628e1ffa227ba747e93`, followed by
-`record_plan_backlog_coverage` for this plan to replace the blocked receipt above.
+spec-approval review against the current immutable design blob, followed by
+`record_plan_backlog_coverage` for this plan to replace the blocked receipt above
+with the server-issued atomic coverage receipt.

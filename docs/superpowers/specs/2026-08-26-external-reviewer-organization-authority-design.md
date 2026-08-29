@@ -32,6 +32,32 @@ the expired envelope with an identical-binding proposal, and requires a fresh
 exact approval. Direct calls remain unable to assert organization authority
 through tool arguments, and the receipt repository keeps rejecting mismatches.
 
+## Governed scope manifest
+
+- **OBJ-F48-001:** Derive the initial reviewer writer request and its approved
+  replay from one validated, server-owned initiative binding so organization
+  authority cannot be lost or widened by model-supplied arguments.
+- **OBJ-F48-002:** Recover a stranded approved writer on the same TaskRun and
+  request digest without rerunning inference, creating a sibling TaskRun, or
+  executing an expired approval.
+- **OBJ-F48-003:** Keep recovery and evidence persistence fail closed when
+  liveness, digest, binding, writer history, receipt history, or approval state
+  conflicts with the immutable review contract.
+- **OBJ-F48-004:** Represent an organization-neutral initiative with the
+  canonical platform authority sentinel while continuing to reject tenant and
+  platform authority mismatches.
+
+| Acceptance | Objectives | Statement | Design evidence |
+| --- | --- | --- | --- |
+| AC-F48-001 | OBJ-F48-001 | A valid external TaskRun binding resolves the canonical initiative organization before both the approval-required decision and the approved writer replay. | Authority boundary; Design |
+| AC-F48-002 | OBJ-F48-001, OBJ-F48-003 | Writer mismatch, missing exact tool or backlog scope, authenticated-organization mismatch, and caller-supplied organization fields cannot widen authority. | Authority boundary; Invariants |
+| AC-F48-003 | OBJ-F48-001, OBJ-F48-004 | A platform-neutral initiative resolves and persists canonical platform authority without inventing a tenant organization. | Authority boundary; Invariants |
+| AC-F48-004 | OBJ-F48-002, OBJ-F48-003 | An expired approved envelope is superseded atomically on the same stale TaskRun with identical stored binding and writer arguments, a fresh approval requirement, and no inference rerun. | Same-TaskRun recovery extension |
+| AC-F48-005 | OBJ-F48-002, OBJ-F48-003 | An unexpired stale approval resumes once after compare-and-swap reservation, while an unexpired input-required approval remains owned by the normal resume path. | Same-TaskRun recovery extension |
+| AC-F48-006 | OBJ-F48-002, OBJ-F48-003 | Fresh activity, changed digest or binding, conflicting scope, unrelated decline, or existing successful writer or receipt evidence prevents recovery without mutation. | Same-TaskRun recovery extension; Invariants |
+| AC-F48-007 | OBJ-F48-002, OBJ-F48-003 | Recovery audit identities survive the final writer transition and prove the same TaskRun, replacement envelope, cloned proposal, and `inferenceRerun: false`. | Same-TaskRun recovery extension |
+| AC-F48-008 | OBJ-F48-004 | Objective mapping requires exact stored-authority and initiative-organization equality, serializes null/null as `platform`, and rejects tenant authority for a platform initiative. | Invariants; Verification |
+
 ## Authority boundary
 
 The resolver may use a TaskRun binding only when all of these conditions hold:
