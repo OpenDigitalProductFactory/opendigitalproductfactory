@@ -15,6 +15,15 @@ release identity to the canonical install root, and the Windows start path must
 project that recorded identity into Compose. Shipping only one half leaves a
 silent downgrade path, so the changes and rollback evidence remain one PR.
 
+## Backlog coverage
+
+- Decision: atomic
+- Parent: `BI-6CB35411`
+- Receipt: pending
+- Rationale: Canonical-root promotion and state-authoritative restart projection close one release-identity invariant; either half alone leaves a consumer install able to restart onto different bytes.
+- Dependencies: protected BI-3FD07259 caller bridge PR #4840 at `7eba6d0c2485a800f8d66f31aa1521008fa9e59b`; no independent BI decomposition.
+- Consumer start release-identity convergence -> `BI-6CB35411`
+
 ## Phase 1 — Lock the source/canonical-root vocabulary
 
 1. Extend `apps/web/lib/self-upgrade/promoter.test.ts` with RED command-builder

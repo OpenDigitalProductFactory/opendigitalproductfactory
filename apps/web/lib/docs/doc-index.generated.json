@@ -8795,6 +8795,7 @@
         "what-bet-5-does",
         "why-this-box-needs-a-one-time-bootstrap",
         "consumer-release-installs-artifact-native-upgrades",
+        "ordinary-restart-after-a-consumer-upgrade",
         "preconditions-capture-current-state-first",
         "step-1-bootstrap-the-promoter-from-current-main",
         "step-2-trigger-the-upgrade",
