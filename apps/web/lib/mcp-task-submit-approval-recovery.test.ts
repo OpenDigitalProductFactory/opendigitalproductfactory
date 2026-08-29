@@ -9,7 +9,7 @@ const db = vi.hoisted(() => ({
   findFirst: vi.fn(), findUnique: vi.fn(), findModelConfig: vi.fn(),
   findEnvelope: vi.fn(), findToolExecution: vi.fn(), createEnvelope: vi.fn(),
   updateEnvelopes: vi.fn(), createToolExecution: vi.fn(), transaction: vi.fn(),
-  update: vi.fn(), updateMany: vi.fn(), upsertThread: vi.fn(),
+  update: vi.fn(), updateMany: vi.fn(), upsertThread: vi.fn(), findWorkrooms: vi.fn(),
 }));
 const autonomous = vi.hoisted(() => ({
   create: vi.fn(), execute: vi.fn(), executeTool: vi.fn(),
@@ -33,6 +33,7 @@ vi.mock("@dpf/db", () => {
       findFirst: (...args: unknown[]) => db.findToolExecution(...args),
       create: (...args: unknown[]) => db.createToolExecution(...args),
     },
+    workroom: { findMany: (...args: unknown[]) => db.findWorkrooms(...args) },
     agentThread: { upsert: (...args: unknown[]) => db.upsertThread(...args) },
     agentModelConfig: { findUnique: (...args: unknown[]) => db.findModelConfig(...args) },
     $transaction: (callback: (tx: unknown) => unknown) => db.transaction(callback, prisma),
@@ -61,6 +62,108 @@ beforeEach(() => {
 });
 
 describe("submitRemoteCoworkerTask approval recovery", () => {
+  it("re-parks a failed approved review after its Workroom head is repaired and executes only the stored writer", async () => {
+    const taskRunId = "TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-ECA9859FC982";
+    const commitSha = "a36f5d40b7fbf9de4848b18875009622e04e77f4";
+    const params = {
+      agentId: "AGT-WS-REVIEW",
+      routeContext: "/build",
+      title: "Current marked-scope immutable design review for BI-F48D7059",
+      objective: "Review the exact marked-scope BI-F48 design.",
+      prompt: "Read the immutable artifact and record the assessment.",
+      idempotencyKey: `initiative-readiness:BI-F48D7059:spec-approval:${commitSha}:marked-scope-1`,
+      riskClass: "bounded-write" as const,
+      authorityScope: ["backlog-item:BI-F48D7059", "tool:read_source_at_version", "tool:record_initiative_design_review"],
+      initiativeReviewBinding: {
+        writerToolName: "record_initiative_design_review",
+        itemId: "BI-F48D7059",
+        gate: "spec-approval" as const,
+        expectedCurrentBaselineId: null,
+        artifactRef: {
+          kind: "repo-blob-at-commit" as const,
+          repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+          commitSha,
+          path: "docs/superpowers/specs/2026-08-26-external-reviewer-organization-authority-design.md",
+          providerBlobId: "89566fd22295c7b0841c626fda5368fbd6886722",
+        },
+      },
+    };
+    const requestDigest = createHash("sha256").update(JSON.stringify({
+      agentId: params.agentId, routeContext: params.routeContext, title: params.title,
+      objective: params.objective, prompt: params.prompt, riskClass: params.riskClass,
+      authorityScope: [...params.authorityScope].sort(), collaborationKind: null,
+      initiativeReviewBinding: params.initiativeReviewBinding,
+    })).digest("hex");
+    const approvalBinding: CoworkerApprovalBinding = {
+      actingHumanUserId: "user-1", actingAgentId: params.agentId, chainId: null,
+      taskRunId, toolName: params.initiativeReviewBinding.writerToolName,
+      subject: { kind: "platform", id: "dpf" }, routeContext: "/build",
+      inputFingerprint: "6a109f8e494f557c17f8d8333d80a2b2384bff06efae39099214c2ee74a324ca",
+      sensitivity: "internal",
+      decisionVersionFingerprint: "5405b8f3656e47f6aab8a1bcf7e33642277732782683ab5fbd49de10fde910ce",
+    };
+    const failed = {
+      id: "task-internal", taskRunId, userId: "user-1", threadId: "thread-f48",
+      contextId: "thread-f48", status: "failed",
+      progressPayload: { summary: `No live workroom for this subject records head ${commitSha}: WC-31648CD6 has an old head.` },
+      a2aMetadata: {
+        idempotencyKey: params.idempotencyKey, apiTokenId: "PAT-F48", requestDigest,
+        initiativeReviewBinding: params.initiativeReviewBinding,
+      },
+      lastHeartbeatAt: new Date(Date.now() - 60_000), completedAt: new Date(), updatedAt: new Date(),
+    };
+    const recovered = { ...failed, status: "input-required", completedAt: null, updatedAt: new Date() };
+    db.findFirst.mockResolvedValue(failed);
+    db.findUnique
+      .mockResolvedValueOnce(failed)
+      .mockResolvedValueOnce(recovered)
+      .mockResolvedValueOnce({ status: "working" });
+    db.findWorkrooms.mockResolvedValue([{ capsuleId: "WC-31648CD6", headSha: commitSha }]);
+    const envelope = {
+      id: "cmtdnvz9p00pk01njobcvcjkj", coworkerAgentId: params.agentId,
+      delegatingUserId: "user-1", threadId: "thread-f48", chatMessageId: null,
+      manifestActionId: approvalBinding.toolName, argsJson: { approvalBinding },
+      rationale: "Approval is required.", status: "approved", taskRunId,
+      delegationChainId: null, authorityDecisionId: "AUTH-F48",
+      inputFingerprint: approvalBinding.inputFingerprint,
+      approvalBindingFingerprint: fingerprintCoworkerApprovalBinding(approvalBinding),
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+    };
+    db.findEnvelope.mockResolvedValue(envelope);
+    const writerArgs = { decision: "pass", profile: "fix", artifactRole: "design-spec", findings: [] };
+    const proposal = {
+      id: "cmtdnvzar00pm01nj2a9svwna", threadId: "thread-f48", agentId: params.agentId,
+      userId: "user-1", toolName: approvalBinding.toolName, parameters: writerArgs,
+      result: { data: { envelopeId: envelope.id } }, success: false,
+      executionMode: "proposal", routeContext: "/build", auditClass: "governed",
+      capabilityId: null, summary: "Approval required", apiTokenId: "PAT-F48",
+      taskRunId, skillId: null, delegatingUserId: "user-1", chatMessageId: null,
+      envelopeId: null, delegationChainId: null,
+    };
+    db.findToolExecution
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(proposal)
+      .mockResolvedValueOnce({ parameters: writerArgs });
+    autonomous.executeTool.mockResolvedValue({ success: true, message: "Design baseline recorded.", entityId: "baseline-f48" });
+
+    const outcome = await submitRemoteCoworkerTask({
+      token: { tokenId: "PAT-F48", userId: "user-1", capability: "write", source: "pat" },
+      userContext: { platformRole: "developer", isSuperuser: false }, params,
+    });
+
+    expect(outcome).toMatchObject({ kind: "result", result: {
+      taskRunId, status: "completed", idempotentReplay: true,
+      resumedFromApproval: true, requiresApproval: false, entityId: "baseline-f48",
+    } });
+    expect(autonomous.executeTool).toHaveBeenCalledOnce();
+    expect(autonomous.executeTool).toHaveBeenCalledWith(expect.objectContaining({
+      toolName: "record_initiative_design_review", args: writerArgs, taskRunId,
+    }));
+    expect(autonomous.execute).not.toHaveBeenCalled();
+    expect(autonomous.create).not.toHaveBeenCalled();
+    expect(db.createEnvelope).not.toHaveBeenCalled();
+  });
+
   it("recovers the same stale input-required review TaskRun into fresh exact approval without rerunning inference", async () => {
     const params = {
       agentId: "AGT-WS-PORTFOLIO",

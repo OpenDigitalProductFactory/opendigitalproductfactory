@@ -10,6 +10,7 @@ import {
   type ApprovalRecoveryDb,
   type RecoverableProposal,
   type RecoverableTaskRun,
+  failedReviewWorkroomTarget,
   isStaleApprovalRecoveryRun,
   objectRecord,
   reboundProposalResult,
@@ -61,8 +62,28 @@ export async function recoverStaleApprovedRemoteTask(
         !run
         || run.updatedAt.getTime() !== input.expectedUpdatedAt.getTime()
         || storedRequestDigest(run) !== input.requestDigest
-        || !isStaleApprovalRecoveryRun(run, now)
+        || (!isStaleApprovalRecoveryRun(run, now) && run.status !== "failed")
       ) return null;
+
+      if (run.status === "failed") {
+        const target = failedReviewWorkroomTarget(run);
+        if (!target) return null;
+        const candidates = await tx.workroom.findMany({
+          where: {
+            backlogItemId: target.itemId,
+            repositoryFullName: target.repositoryFullName,
+            archivedAt: null,
+            status: { notIn: ["abandoned", "cancelled"] },
+          },
+          take: 2,
+          orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
+          select: { capsuleId: true, headSha: true },
+        });
+        const matching = candidates.filter(
+          (candidate) => candidate.headSha?.toLocaleLowerCase("en-US") === target.commitSha,
+        );
+        if (matching.length !== 1) return null;
+      }
 
       const envelope = await tx.coworkerActionEnvelope.findFirst({
         where: {

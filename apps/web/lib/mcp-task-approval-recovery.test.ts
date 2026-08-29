@@ -5,6 +5,7 @@ import {
   type CoworkerApprovalBinding,
 } from "@/lib/govern/authority/coworker-authority-decision";
 import { recoverStaleApprovedRemoteTask } from "./mcp-task-approval-recovery";
+import type { RecoverableTaskRun } from "./mcp-task-approval-recovery-contract";
 
 const NOW = new Date("2026-08-28T13:45:30.000Z");
 const TASK_RUN_ID = "TR-MCP-BI47-96433C11CA61";
@@ -23,16 +24,31 @@ const binding: CoworkerApprovalBinding = {
   decisionVersionFingerprint: "54c71d9f3f5a71a93660a11ef6888bbb66540b2815e14a95f0f1f59e06a94e49",
 };
 
-function staleRun(status: "working" | "stalled" | "input-required" = "stalled") {
+function staleRun(
+  status: "working" | "stalled" | "input-required" | "failed" = "stalled",
+): RecoverableTaskRun {
   return {
     id: "task-internal",
     taskRunId: TASK_RUN_ID,
     status,
     updatedAt: new Date("2026-08-28T13:45:27.405Z"),
     lastHeartbeatAt: new Date("2026-08-28T13:05:21.350Z"),
-    completedAt: status === "stalled" ? new Date("2026-08-28T13:45:27.398Z") : null,
+    completedAt: status === "stalled" || status === "failed"
+      ? new Date("2026-08-28T13:45:27.398Z")
+      : null,
     progressPayload: null,
-    a2aMetadata: { requestDigest: REQUEST_DIGEST },
+    a2aMetadata: {
+      requestDigest: REQUEST_DIGEST,
+      ...(status === "failed" ? {
+        initiativeReviewBinding: {
+          itemId: "BI-47ACE2C7",
+          artifactRef: {
+            repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+            commitSha: "head-reviewed",
+          },
+        },
+      } : {}),
+    },
   };
 }
 
@@ -105,11 +121,70 @@ function fakeDb(run = staleRun(), envelope = expiredEnvelope()) {
       .mockResolvedValueOnce(proposal()),
     create: vi.fn().mockResolvedValue({ id: "tool-proposal-new" }),
   };
-  const tx = { taskRun, coworkerActionEnvelope, toolExecution };
+  const workroom = {
+    findMany: vi.fn().mockResolvedValue([{ capsuleId: "WC-BI47", headSha: "head-reviewed" }]),
+  };
+  const tx = { taskRun, coworkerActionEnvelope, toolExecution, workroom };
   return {
     tx,
     db: { $transaction: vi.fn(async (callback: (value: typeof tx) => unknown) => callback(tx)) },
   };
+}
+
+function failedReviewFixture(workroomHead = "a36f5d40b7fbf9de4848b18875009622e04e77f4") {
+  const taskRunId = "TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-ECA9859FC982";
+  const commitSha = "a36f5d40b7fbf9de4848b18875009622e04e77f4";
+  const failedBinding: CoworkerApprovalBinding = {
+    ...binding,
+    actingAgentId: "AGT-WS-REVIEW",
+    taskRunId,
+    toolName: "record_initiative_design_review",
+    subject: { kind: "platform", id: "dpf" },
+    inputFingerprint: "6a109f8e494f557c17f8d8333d80a2b2384bff06efae39099214c2ee74a324ca",
+  };
+  const run = {
+    ...staleRun("failed"),
+    taskRunId,
+    progressPayload: {
+      summary: `No live workroom for this subject records head ${commitSha}: WC-31648CD6 has head 9c761214.`,
+    },
+    a2aMetadata: {
+      requestDigest: REQUEST_DIGEST,
+      initiativeReviewBinding: {
+        itemId: "BI-F48D7059",
+        artifactRef: {
+          repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+          commitSha,
+        },
+      },
+    },
+  };
+  const envelope = {
+    ...expiredEnvelope(),
+    id: "cmtdnvz9p00pk01njobcvcjkj",
+    coworkerAgentId: failedBinding.actingAgentId,
+    manifestActionId: failedBinding.toolName,
+    argsJson: { approvalBinding: failedBinding },
+    taskRunId,
+    inputFingerprint: failedBinding.inputFingerprint,
+    approvalBindingFingerprint: fingerprintCoworkerApprovalBinding(failedBinding),
+    expiresAt: new Date("2026-08-28T13:50:00.000Z"),
+  };
+  const failedProposal = {
+    ...proposal(),
+    id: "cmtdnvzar00pm01nj2a9svwna",
+    agentId: failedBinding.actingAgentId,
+    toolName: failedBinding.toolName,
+    parameters: { decision: "pass", profile: "fix", artifactRole: "design-spec", findings: [] },
+    result: { success: false, data: { envelopeId: envelope.id }, error: "approval_required" },
+    taskRunId,
+  };
+  const fixture = fakeDb(run, envelope);
+  fixture.tx.toolExecution.findFirst.mockReset()
+    .mockResolvedValueOnce(null)
+    .mockResolvedValueOnce(failedProposal);
+  fixture.tx.workroom.findMany.mockResolvedValue([{ capsuleId: "WC-31648CD6", headSha: workroomHead }]);
+  return { ...fixture, run, envelope, failedBinding };
 }
 
 function recover(db: ReturnType<typeof fakeDb>["db"]) {
@@ -253,6 +328,99 @@ describe("same-TaskRun approval recovery", () => {
       where: expect.objectContaining({ status: "working" }),
       data: expect.objectContaining({ status: "input-required", completedAt: null }),
     }));
+  });
+
+  it("re-parks a failed same-TaskRun approval replay after its exact Workroom head prerequisite is repaired", async () => {
+    const { db, tx, run, envelope, failedBinding } = failedReviewFixture();
+
+    const result = await recoverStaleApprovedRemoteTask({
+      taskRunId: run.taskRunId,
+      requestDigest: REQUEST_DIGEST,
+      expectedUpdatedAt: run.updatedAt,
+      userId: "user-1",
+      agentId: failedBinding.actingAgentId,
+      writerToolName: failedBinding.toolName,
+      now: NOW,
+    }, db as NonNullable<Parameters<typeof recoverStaleApprovedRemoteTask>[1]>);
+
+    expect(result).toEqual({ kind: "approved-resume-ready", envelopeId: envelope.id });
+    expect(tx.workroom.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        backlogItemId: "BI-F48D7059",
+        repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+      }),
+    }));
+    expect(tx.taskRun.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ status: "failed" }),
+      data: expect.objectContaining({
+        status: "input-required",
+        completedAt: null,
+        progressPayload: expect.objectContaining({
+          approvalRecovery: expect.objectContaining({
+            kind: "failed-prerequisite-approved-envelope",
+            sourceStatus: "failed",
+            inferenceRerun: false,
+            freshApprovalRequired: false,
+          }),
+        }),
+      }),
+    }));
+  });
+
+  it("refuses failed replay recovery while the Workroom still records a stale head", async () => {
+    const { db, tx, run, failedBinding } = failedReviewFixture("9c761214a76a6f0f13e24cbb7f13e1283430181b");
+
+    await expect(recoverStaleApprovedRemoteTask({
+      taskRunId: run.taskRunId,
+      requestDigest: REQUEST_DIGEST,
+      expectedUpdatedAt: run.updatedAt,
+      userId: "user-1",
+      agentId: failedBinding.actingAgentId,
+      writerToolName: failedBinding.toolName,
+      now: NOW,
+    }, db as NonNullable<Parameters<typeof recoverStaleApprovedRemoteTask>[1]>)).resolves.toBeNull();
+
+    expect(tx.coworkerActionEnvelope.findFirst).not.toHaveBeenCalled();
+    expect(tx.taskRun.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("refuses failed replay recovery without the exact approved envelope", async () => {
+    const { db, tx, run, failedBinding } = failedReviewFixture();
+    tx.coworkerActionEnvelope.findFirst.mockResolvedValue(null);
+
+    await expect(recoverStaleApprovedRemoteTask({
+      taskRunId: run.taskRunId,
+      requestDigest: REQUEST_DIGEST,
+      expectedUpdatedAt: run.updatedAt,
+      userId: "user-1",
+      agentId: failedBinding.actingAgentId,
+      writerToolName: failedBinding.toolName,
+      now: NOW,
+    }, db as NonNullable<Parameters<typeof recoverStaleApprovedRemoteTask>[1]>)).resolves.toBeNull();
+
+    expect(tx.taskRun.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("refuses an unrelated failed TaskRun even when its Workroom head matches", async () => {
+    const { db, tx, run, failedBinding } = failedReviewFixture();
+    tx.taskRun.findUnique.mockResolvedValue({
+      ...run,
+      progressPayload: { summary: "Provider request failed." },
+    });
+
+    await expect(recoverStaleApprovedRemoteTask({
+      taskRunId: run.taskRunId,
+      requestDigest: REQUEST_DIGEST,
+      expectedUpdatedAt: run.updatedAt,
+      userId: "user-1",
+      agentId: failedBinding.actingAgentId,
+      writerToolName: failedBinding.toolName,
+      now: NOW,
+    }, db as NonNullable<Parameters<typeof recoverStaleApprovedRemoteTask>[1]>)).resolves.toBeNull();
+
+    expect(tx.workroom.findMany).not.toHaveBeenCalled();
+    expect(tx.coworkerActionEnvelope.findFirst).not.toHaveBeenCalled();
+    expect(tx.taskRun.updateMany).not.toHaveBeenCalled();
   });
 
   it("refuses input-required recovery while the TaskRun heartbeat is fresh", async () => {

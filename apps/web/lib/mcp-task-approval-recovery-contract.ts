@@ -81,6 +81,9 @@ export type ApprovalRecoveryTransaction = {
     findFirst(args: unknown): Promise<{ id: string } | RecoverableProposal | null>;
     create(args: unknown): Promise<{ id: string }>;
   };
+  workroom: {
+    findMany(args: unknown): Promise<Array<{ capsuleId: string; headSha: string | null }>>;
+  };
 };
 
 export type ApprovalRecoveryDb = {
@@ -103,6 +106,36 @@ export function storedRequestDigest(run: RecoverableTaskRun): string | null {
   const metadata = objectRecord(run.a2aMetadata);
   const digest = metadata?.["requestDigest"];
   return typeof digest === "string" && digest.trim() ? digest.trim() : null;
+}
+
+export type FailedReviewWorkroomTarget = {
+  itemId: string;
+  repositoryFullName: string;
+  commitSha: string;
+};
+
+export function failedReviewWorkroomTarget(run: RecoverableTaskRun): FailedReviewWorkroomTarget | null {
+  if (run.status !== "failed" || !run.completedAt) return null;
+  const progress = objectRecord(run.progressPayload);
+  const summary = progress?.["summary"];
+  const metadata = objectRecord(run.a2aMetadata);
+  const review = objectRecord(metadata?.["initiativeReviewBinding"]);
+  const artifact = objectRecord(review?.["artifactRef"]);
+  const itemId = review?.["itemId"];
+  const repositoryFullName = artifact?.["repositoryFullName"];
+  const commitSha = artifact?.["commitSha"];
+  if (
+    typeof itemId !== "string" || !itemId.trim()
+    || typeof repositoryFullName !== "string" || !repositoryFullName.trim()
+    || typeof commitSha !== "string" || !/^[0-9a-f]{40}$/i.test(commitSha)
+    || typeof summary !== "string"
+    || !summary.includes(`No live workroom for this subject records head ${commitSha}`)
+  ) return null;
+  return {
+    itemId: itemId.trim(),
+    repositoryFullName: repositoryFullName.trim(),
+    commitSha: commitSha.toLocaleLowerCase("en-US"),
+  };
 }
 
 export function reboundProposalResult(value: unknown, envelopeId: string): Record<string, unknown> {
@@ -128,9 +161,11 @@ export function recoveryProgress(
     ...progress,
     approvalRecovery: {
       schemaVersion: 1,
-      kind: input.freshApprovalRequired
-        ? "expired-approved-envelope"
-        : "stale-approved-envelope",
+      kind: run.status === "failed"
+        ? "failed-prerequisite-approved-envelope"
+        : input.freshApprovalRequired
+          ? "expired-approved-envelope"
+          : "stale-approved-envelope",
       requestDigest: input.requestDigest,
       sourceStatus: run.status,
       sourceEnvelopeId: input.sourceEnvelopeId,
