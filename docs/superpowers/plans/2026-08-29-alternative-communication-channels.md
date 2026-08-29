@@ -44,6 +44,8 @@ Established by reading the code, not inferred.
 
 ## Backlog coverage
 
+This plan is epic-scoped, not umbrella-BI-scoped. It carries no `**Backlog item:**` header, so `scripts/check-plan-backlog-coverage.mjs` treats it as outside the coverage-receipt gate by design — that gate validates a plan bound to one umbrella BacklogItem with a live MCP receipt. Stated openly rather than passed by omission: coverage here is the epic and its eight filed items below, each independently shippable and already linked to `EP-03CC88EF`. If this work is later rebound to an umbrella BI, add the `Decision` / `Parent` / `Receipt` / `Rationale` / `Dependencies` block and record a real receipt; do not synthesize an umbrella item solely to satisfy the gate.
+
 Eight items, all under `EP-03CC88EF`.
 
 | BI | Work | Size |
