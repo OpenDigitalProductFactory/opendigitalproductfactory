@@ -30,7 +30,8 @@ import {
   type WorkCapsuleEvidenceKind,
   type WorkCapsuleScopeInput,
 } from "@/lib/work-capsules";
-import { backlogItemIdFromOutcomeAnchor } from "./outcome-anchor";
+import type { BacklogBindingReader } from "./adopt-backlog-binding";
+import { adoptWorktree } from "./adopt-worktree-handler";
 import {
   adoptWorktreeCapsule,
   claimWorkCapsuleScope,
@@ -267,68 +268,14 @@ export async function adoptWorktreeTool(
   userId: string,
   context: ToolContext,
 ): Promise<ToolResult> {
-  const title = stringParam(params, "title");
-  const objective = stringParam(params, "objective");
-  const repositoryFullName = stringParam(params, "repositoryFullName");
-  const headBranch = stringParam(params, "headBranch");
-  const worktreePath = stringParam(params, "worktreePath");
-  const executorKind = stringParam(params, "executorKind");
-
-  if (!title || !objective || !repositoryFullName || !headBranch || !worktreePath) {
-    return {
-      success: false,
-      error: "invalid_input",
-      message: "title, objective, repositoryFullName, headBranch, and worktreePath are required.",
-    };
-  }
-  if (executorKind && !isWorkCapsuleExecutorKind(executorKind)) {
-    return {
-      success: false,
-      error: "invalid_executorKind",
-      message: `executorKind must be one of: ${WORK_CAPSULE_EXECUTOR_KINDS.join(", ")}.`,
-    };
-  }
-  const validatedExecutorKind = executorKind && isWorkCapsuleExecutorKind(executorKind)
-    ? executorKind
-    : null;
-  try {
-    normalizeWorkCapsuleScopeInput(parseScopeInput(params));
-  } catch (error) {
-    return invalidScopeResult(error);
-  }
-
-  let capsule;
-  try {
-    capsule = await adoptWorktreeCapsule({
-      db: workCapsuleDb(),
-      input: {
-        title,
-        objective,
-        repositoryFullName,
-        headBranch,
-        worktreePath,
-        baseBranch: stringParam(params, "baseBranch") ?? null,
-        baseSha: stringParam(params, "baseSha") ?? null,
-        headSha: stringParam(params, "headSha") ?? null,
-        executorKind: validatedExecutorKind,
-        executorRef: stringParam(params, "sessionRef") ?? null, // session identity; see the tool schema
-        backlogItemId: backlogItemIdFromOutcomeAnchor(params),
-        scope: parseScopeInput(params),
-      },
-      actor: await actor(userId, context),
-    });
-  } catch (error) {
-    const occupied = branchOccupiedResult(error);
-    if (occupied) return occupied;
-    throw error;
-  }
-  await ensureCapsuleWorkItemAnchorNonFatal(capsule, "adopted");
-  return {
-    success: true,
-    entityId: capsule.capsuleId,
-    message: `Adopted ${headBranch} as Work Capsule ${capsule.capsuleId}.`,
-    data: { capsule },
-  };
+  return adoptWorktree({
+    params,
+    userId,
+    context,
+    db: workCapsuleDb(),
+    bindingReader: prisma as unknown as BacklogBindingReader,
+    resolveActor: actor,
+  });
 }
 
 export async function claimBacklogItemForWorkTool(
