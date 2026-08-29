@@ -69,6 +69,11 @@ describe("self-upgrade admission target selection", () => {
   });
 
   it("uses a freshly resolved target without requiring a rendered binding", () => {
+    vi.mocked(verifySelfUpgradeTargetBinding).mockReturnValue({
+      ok: false,
+      error: "malformed",
+    });
+
     expect(selectSelfUpgradeAdmissionTarget({
       supportTargetKind: "git-source",
       resolvedTarget: {
@@ -84,5 +89,7 @@ describe("self-upgrade admission target selection", () => {
         targetTag: null,
       },
     });
+    expect(verifySelfUpgradeTargetBinding).toHaveBeenCalledOnce();
+    expect(verifySelfUpgradeTargetBinding).toHaveBeenCalledWith("");
   });
 });
