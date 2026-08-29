@@ -48,6 +48,25 @@ if [ -z "${DPF_LIB_PLATFORM_LOADED:-}" ]; then
   . "$(dirname "${BASH_SOURCE[0]}")/platform.sh"
 fi
 
+# Redact a stream before it lands in the bundle.
+#
+# doctor.sh owns the redactors and sources this module, so both are normally in
+# scope. This module can also be sourced on its own, so it FAILS CLOSED: with no
+# redactor available it still applies the key-name pass inline rather than
+# writing the stream through untouched. A bundle that is documented as redacted
+# must never depend on load order for that to be true.
+_dpf_diagnostics_redact() {
+  if command -v _dpf_doctor_redact >/dev/null 2>&1; then
+    if command -v _dpf_doctor_redact_values >/dev/null 2>&1; then
+      _dpf_doctor_redact | _dpf_doctor_redact_values
+    else
+      _dpf_doctor_redact
+    fi
+  else
+    sed -E 's/((SECRET|PASSWORD|TOKEN|KEY|AUTH)[A-Z_]*)(=|: )(.*)$/\1\3***REDACTED***/Ig'
+  fi
+}
+
 # Public: write the supplementary diagnostics into $1 (existing bundle
 # directory created by doctor.sh). Best-effort throughout — every
 # section is wrapped so a failing shell-out (e.g. no systemctl on a
@@ -122,7 +141,12 @@ dpf_diagnostics_collect() {
   # 2. Full rendered compose YAML (caller already records sha256 in
   #    compose.txt; this is the content the hash summarizes).
   if dpf_compose_files "$mode" 2>/dev/null; then
-    docker compose "${DPF_COMPOSE_FILES[@]}" config > "$bundle_dir/compose-rendered.yml" 2>&1 || \
+    # `docker compose config` INTERPOLATES every environment variable, so its
+    # output carries resolved secret values. The doctor bundle is documented as
+    # redacted and the documented workflow attaches it to a public issue, so
+    # this must never be written raw (#4337).
+    docker compose "${DPF_COMPOSE_FILES[@]}" config 2>&1 \
+      | _dpf_diagnostics_redact > "$bundle_dir/compose-rendered.yml" || \
       echo "(compose config failed — see file for stderr)" >> "$bundle_dir/compose-rendered.yml"
   fi
 
