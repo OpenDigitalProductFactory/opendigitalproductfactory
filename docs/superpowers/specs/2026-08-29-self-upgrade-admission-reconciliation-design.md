@@ -401,3 +401,80 @@ the immediately preceding failed pre-dispatch run only when every CAS predicate
 holds. Any ambiguity leaves the relation null and fails live acceptance. Served
 SHA, CAN-TEST, the successor relation, the unchanged predecessor row, and ordinary
 restart coherence are all required before downstream recovery resumes.
+
+## 2026-08-30 recurrence closure: truthful terminal state and exact-target recovery
+
+This operator install exposed one residual contradiction after the earlier slices
+shipped. `SUR-826364D5` was terminally watchdog-failed with zero dispatch
+attempts, no acknowledgement, no provider event id, and no worker start, yet the
+older rendered page still described it as running. The documented recovery then
+refused the identical immutable release as `recovery-target-not-distinct`.
+
+Research on named ref `8ed70d86fbc99c5a4d339b3f1f6c9dc799b505d8`
+isolated the remaining source defect to
+`apps/web/lib/self-upgrade/run-store.ts:104-120`. The predecessor-evidence guard
+already proves that no dispatch was attempted, then a later `SHA OR tag` test
+rejects both partial identity overlap and an exact SHA-and-tag replay. The exact
+replay is the safe case the guard exists to permit. The partial-overlap cases
+remain inconsistent release identities and must stay refused.
+
+Two candidate causes are closed on the same named ref rather than expanded into
+new UI or startup code:
+
+- `SelfUpgradeLiveProvider` and its narrow no-store status snapshot were run and
+  prove that queued, pending, and running rows remain observed until the
+  authoritative terminal snapshot arrives. A normal terminal run stops the
+  observer. Navigation, reload, mount refresh, push invalidation, and bounded
+  fallback polling therefore converge without adding another visible control.
+- `inngest-self-registration` tests were run and prove that an unset `APP_URL`
+  uses the reachable IPv4 loopback listener, only a real successful PUT records
+  healthy registration, and that success invokes admission reconciliation.
+  Startup-order recovery therefore no longer requires a manual portal restart.
+
+### UX fit review - terminal self-upgrade truth
+
+- **Decision:** fits-with-guardrails.
+- **Owning area:** Platform.
+- **Route family:** `/ops/self-upgrade`; no new route or secondary home.
+- **Primary persona:** platform operator deciding whether an upgrade needs
+  attention; the operator must not remember database or queue internals.
+- **Navigation layer:** no navigation change and no new contextual action.
+- **Reuse/convergence:** retain `SelfUpgradeLiveProvider`, the narrow
+  `SelfUpgradeStatusSnapshot`, and `SelfUpgradeTriggerControl`; do not add a
+  timer, status map, banner family, or retry button.
+- **Source truth:** the canonical `SelfUpgradeRun` row plus quiescence and
+  job-engine health in the existing status snapshot.
+- **Failure behavior:** a watchdog-terminal row removes running/installing
+  presentation on the next authoritative observation; a never-dispatched exact
+  target is retried only through one typed successor.
+- **AI boundary:** no prompt or coworker action.
+- **Evidence before merge:** focused run-store RED/GREEN, live-provider and
+  self-registration regression suites, typecheck, preflight, exact-tree CI, and
+  governed live served-SHA/CAN-TEST verification.
+
+### Ordered atomic fix sequence
+
+1. Replace the existing exact-SHA-and-tag refusal fixture with a first-failing
+   test that requires one typed successor for a terminal predecessor whose
+   `dispatchAttemptCount` is zero and whose acknowledgement and event-id evidence
+   are empty.
+2. Refactor release-target comparison into explicit `exact`, `distinct`, and
+   `conflicting` relationships. Permit `exact` and `distinct` only after all
+   existing terminal, zero-dispatch, latest-predecessor, and unique-successor
+   checks pass; keep one-field overlap fail closed.
+3. Prove a repeated request returns the unique existing successor and that a
+   predecessor with any attempt, acknowledgement, or event id remains refused,
+   so at most one physical worker claim can follow the recovery action.
+4. Re-run the live-observation and self-registration suites as regression
+   evidence. No UI file changes are warranted because current source already
+   projects terminal truth and converges registration; changing that surface
+   would create a second status dialect rather than fix the residual invariant.
+5. Run affected tests, web typecheck, preflight, semantic review, exact-tree CI,
+   protected PR and merge-group checks, then publish and exercise one canonical
+   release through the governed self-upgrade path.
+
+This is one atomic safety repair. Target comparison without the typed-successor
+and worker-CAS guards could duplicate execution; presentation claims without the
+durable recovery path would leave the operator with truthful failure but no safe
+way forward. The implementation therefore keeps one clean revert boundary under
+BI-3FD07259.
