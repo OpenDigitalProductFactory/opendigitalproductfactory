@@ -49,9 +49,9 @@ The reviewer must read this entire immutable artifact before calling
 `artifactRole="design-spec"`, and one substantive decision: `pass` with an
 evidence-based reason and no findings, or `fail` with concrete findings.
 `not-applicable`, another profile, placeholder/prospective reasoning, or
-unread/truncated evidence is invalid and non-approvable. It establishes no
-baseline and is never approved or replayed. Any later review must bind to a
-materially revised artifact and fresh deterministic request identity.
+unread/truncated evidence is invalid. Invalid calls and valid calls whose
+approval window expires establish no baseline; neither is approved or replayed.
+Any later review must bind to a materially revised artifact and fresh key.
 
 ## Migration, rollback, and verification
 

@@ -109,3 +109,9 @@ do not replay it. The canonical design is therefore refactored without semantic
 loss into a bounded complete artifact that fits one reader result plus the
 reserved writer step. Any next review must bind to this new blob and remain the
 only identity for it.
+
+The subsequent concise-artifact review reached a genuine `fix`/`pass` writer
+call with no findings, but its approval window expired without human approval.
+It also remains no-baseline evidence and is never approved or replayed. This
+revision makes that expiry disposition explicit; one fresh independent review
+may bind to the new artifact identity.
