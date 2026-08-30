@@ -61,6 +61,7 @@ const EXPECTED_LEGACY_JOBS = [
   "published-image-freshness",
   "release-asset-contract",
   "release-compose-pins",
+  "rendered-backlog-pointers",
   "repo-guard-loop",
   "reporting-composition-guard",
   "retention-enrollment-guard",

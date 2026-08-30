@@ -1,3 +1,4 @@
+import { openIntent, type NextStepPointer } from "@/lib/backlog/next-step-pointer";
 import type { NativeIntegrationId } from "./native-integration-catalog";
 
 export type EmployeeWorkRole =
@@ -50,7 +51,7 @@ export type IntegrationCoverageMatrixRow = {
   maturity: IntegrationCoverageMaturity;
   csdmDomain: CsdmStructuralDomain;
   it4itValueStreams: It4ItValueStream[];
-  nextBacklogItemId: string;
+  nextStep: NextStepPointer;
   replacementCriteria: string;
   notes: string;
 };
@@ -124,7 +125,7 @@ export const INTEGRATION_COVERAGE_MATRIX: IntegrationCoverageMatrixRow[] = [
     maturity: "stage",
     csdmDomain: "service-offering",
     it4itValueStreams: ["strategy-to-portfolio", "request-to-fulfill", "detect-to-correct"],
-    nextBacklogItemId: "BI-07D76D6B",
+    nextStep: openIntent("Entity links before write-back"),
     replacementCriteria:
       "DPF stays integration-led until source-attributed import staging, entity links, reconciliation evidence, accountant collaboration, rollback/export, and governed write-back gates prove system-of-record promotion criteria.",
     notes: "QuickBooks read coverage now feeds non-editable staging posture before any entity-link or write-back work.",
@@ -148,7 +149,7 @@ export const INTEGRATION_COVERAGE_MATRIX: IntegrationCoverageMatrixRow[] = [
     maturity: "read",
     csdmDomain: "application-service",
     it4itValueStreams: ["request-to-fulfill", "detect-to-correct"],
-    nextBacklogItemId: "BI-07D76D6B",
+    nextStep: openIntent("Reconciliation parity with accounting"),
     replacementCriteria:
       "DPF should reconcile payments and customer invoices before promoting any local billing record as primary.",
     notes: "Stripe is a native payment anchor and a reconciliation dependency for accounting parity.",
@@ -172,7 +173,7 @@ export const INTEGRATION_COVERAGE_MATRIX: IntegrationCoverageMatrixRow[] = [
     maturity: "read",
     csdmDomain: "application-service",
     it4itValueStreams: ["request-to-fulfill", "detect-to-correct"],
-    nextBacklogItemId: "BI-INT-F23BC6",
+    nextStep: openIntent("Payroll handoff into finance and HR"),
     replacementCriteria:
       "Payroll remains provider-led unless DPF later has compliance, tax, and payroll-control evidence for a narrow native service.",
     notes: "Payroll context belongs in finance and HR handoffs, not in a generic employee profile view.",
@@ -195,9 +196,9 @@ export const INTEGRATION_COVERAGE_MATRIX: IntegrationCoverageMatrixRow[] = [
     maturity: "stage",
     csdmDomain: "application-service",
     it4itValueStreams: ["request-to-fulfill", "detect-to-correct"],
-    nextBacklogItemId: "BI-F3AEBF68",
+    nextStep: openIntent("Absorb ATS staging toward replacement"),
     replacementCriteria:
-      "Greenhouse stays integration-led until native recruiting (requisition-to-hire, converting into the worker record) reaches parity and a dual-run cutover is proven (BI-F3AEBF68).",
+      "Greenhouse stays integration-led until native recruiting (requisition-to-hire, converting into the worker record) reaches parity and a dual-run cutover is proven.",
     notes: "First ATS connector; imports jobs/candidates/applications/offers to read-only staging and lands hires into onboarding. Bridge -> absorb -> replace toward native recruiting.",
   },
   {
@@ -218,7 +219,7 @@ export const INTEGRATION_COVERAGE_MATRIX: IntegrationCoverageMatrixRow[] = [
     maturity: "read",
     csdmDomain: "business-service",
     it4itValueStreams: ["request-to-fulfill", "detect-to-correct"],
-    nextBacklogItemId: "BI-INT-8D4F72",
+    nextStep: openIntent("Provider custody boundary for channels"),
     replacementCriteria:
       "DPF should orchestrate work and evidence while Microsoft 365 remains the provider system for mail, calendar, and Teams.",
     notes: "Communications coverage needs both worker queue consumption and provider-level custody boundaries.",
@@ -242,7 +243,7 @@ export const INTEGRATION_COVERAGE_MATRIX: IntegrationCoverageMatrixRow[] = [
     maturity: "read",
     csdmDomain: "service-offering",
     it4itValueStreams: ["strategy-to-portfolio", "request-to-fulfill"],
-    nextBacklogItemId: "BI-9A86E2A7",
+    nextStep: openIntent("One CRM lane across sales, marketing and support"),
     replacementCriteria:
       "DPF can own work queues and customer context while CRM remains provider-led until pipeline, consent, and support handoffs are explicit.",
     notes: "CRM coverage is shared by sales, marketing, and support rather than a single route.",
@@ -265,7 +266,7 @@ export const INTEGRATION_COVERAGE_MATRIX: IntegrationCoverageMatrixRow[] = [
     maturity: "read",
     csdmDomain: "application-service",
     it4itValueStreams: ["strategy-to-portfolio", "detect-to-correct"],
-    nextBacklogItemId: "BI-INT-E76A95",
+    nextStep: openIntent("Read-first signals for daily decisions"),
     replacementCriteria:
       "DPF should interpret and route marketing signals, not replace the analytics provider.",
     notes: "Marketing intelligence is a read-first signal source for owner and marketer daily decisions.",
@@ -288,7 +289,7 @@ export const INTEGRATION_COVERAGE_MATRIX: IntegrationCoverageMatrixRow[] = [
     maturity: "read",
     csdmDomain: "service-offering",
     it4itValueStreams: ["request-to-fulfill", "detect-to-correct"],
-    nextBacklogItemId: "BI-9A86E2A7",
+    nextStep: openIntent("Local presence across marketing and support"),
     replacementCriteria:
       "DPF can stage local-presence work, but provider listings remain authoritative until write approvals and audit are designed.",
     notes: "Local presence belongs in both marketing and customer support coverage.",
@@ -311,7 +312,7 @@ export const INTEGRATION_COVERAGE_MATRIX: IntegrationCoverageMatrixRow[] = [
     maturity: "read",
     csdmDomain: "service-offering",
     it4itValueStreams: ["request-to-fulfill"],
-    nextBacklogItemId: "BI-9A86E2A7",
+    nextStep: openIntent("Land captured leads in the sales workflow"),
     replacementCriteria:
       "DPF should own lead triage and routing while Meta remains the campaign and form provider.",
     notes: "Lead capture must land in CRM/sales workflow, not just integration status.",
@@ -334,7 +335,7 @@ export const INTEGRATION_COVERAGE_MATRIX: IntegrationCoverageMatrixRow[] = [
     maturity: "read",
     csdmDomain: "service-offering",
     it4itValueStreams: ["request-to-fulfill", "detect-to-correct"],
-    nextBacklogItemId: "BI-9A86E2A7",
+    nextStep: openIntent("Split publishing from support response"),
     replacementCriteria:
       "DPF should stage response work and evidence before any social write-back is allowed.",
     notes: "Social presence coverage crosses marketing publishing and support response work.",
@@ -357,7 +358,7 @@ export const INTEGRATION_COVERAGE_MATRIX: IntegrationCoverageMatrixRow[] = [
     maturity: "read",
     csdmDomain: "service-offering",
     it4itValueStreams: ["request-to-fulfill", "detect-to-correct"],
-    nextBacklogItemId: "BI-INT-8D4F72",
+    nextStep: openIntent("Governance before outbound messaging"),
     replacementCriteria:
       "DPF should own messaging triage, template governance, and evidence while Meta remains the WhatsApp Cloud API provider until outbound send and webhook approvals are explicit.",
     notes: "Read-first WhatsApp phone and template readiness; outbound messaging stays out of scope until governance is explicit.",
@@ -380,7 +381,7 @@ export const INTEGRATION_COVERAGE_MATRIX: IntegrationCoverageMatrixRow[] = [
     maturity: "read",
     csdmDomain: "service-offering",
     it4itValueStreams: ["request-to-fulfill", "detect-to-correct"],
-    nextBacklogItemId: "BI-INT-8D4F72",
+    nextStep: openIntent("Governance before social write-back"),
     replacementCriteria:
       "DPF should stage response and publishing work with evidence before any Instagram write-back is allowed; Meta remains the media and comment provider.",
     notes: "Read-first Instagram profile, media, and comment context; social write-back stays out of scope until governance is explicit.",
@@ -403,7 +404,7 @@ export const INTEGRATION_COVERAGE_MATRIX: IntegrationCoverageMatrixRow[] = [
     maturity: "read",
     csdmDomain: "application-service",
     it4itValueStreams: ["strategy-to-portfolio", "request-to-fulfill"],
-    nextBacklogItemId: "BI-INT-E76A95",
+    nextStep: openIntent("Consent boundaries before write-back"),
     replacementCriteria:
       "DPF should coordinate audiences, approvals, and outcomes while Mailchimp remains the campaign execution provider.",
     notes: "Campaign context needs consent and customer-record boundaries before write-back.",
@@ -425,7 +426,7 @@ export const INTEGRATION_COVERAGE_MATRIX: IntegrationCoverageMatrixRow[] = [
     maturity: "write-back",
     csdmDomain: "application-service",
     it4itValueStreams: ["strategy-to-portfolio", "request-to-fulfill"],
-    nextBacklogItemId: "BI-FBC9BA03",
+    nextStep: openIntent("Member-scope publishing only"),
     replacementCriteria:
       "Conduit-only personal publishing; operator brings their own LinkedIn developer app and credentials.",
     notes: "Phase 2 of the marketing execution loop. Scope w_member_social only; no company-page write, no ads.",
@@ -447,7 +448,7 @@ export const INTEGRATION_COVERAGE_MATRIX: IntegrationCoverageMatrixRow[] = [
     maturity: "write-back",
     csdmDomain: "application-service",
     it4itValueStreams: ["strategy-to-portfolio", "request-to-fulfill"],
-    nextBacklogItemId: "BI-5133E808",
+    nextStep: openIntent("Spend ceilings before adapter calls"),
     replacementCriteria:
       "Conduit-only paid placement. Operator brings their own LinkedIn ad account; DPF enforces hard weekly spend ceilings before any campaign goes live.",
     notes: "Phase 4 of the marketing execution loop. Reuses Phase 2's LinkedIn OAuth with optional r_ads/rw_ads scopes. Spend ceiling refused before adapter API call.",
@@ -470,7 +471,7 @@ export const INTEGRATION_COVERAGE_MATRIX: IntegrationCoverageMatrixRow[] = [
     maturity: "write-back",
     csdmDomain: "application-service",
     it4itValueStreams: ["strategy-to-portfolio", "request-to-fulfill"],
-    nextBacklogItemId: "BI-5133E808",
+    nextStep: openIntent("One approval path for outbound and inbound"),
     replacementCriteria:
       "Conduit-only email send + receive; operator brings their own Postmark server and signing secret.",
     notes: "Phase 3 of the marketing execution loop. Outbound send + inbound signed-webhook with classification + holding-pattern reply through the same approval queue.",
@@ -492,7 +493,7 @@ export const INTEGRATION_COVERAGE_MATRIX: IntegrationCoverageMatrixRow[] = [
     maturity: "observe",
     csdmDomain: "service-offering",
     it4itValueStreams: ["strategy-to-portfolio", "request-to-fulfill"],
-    nextBacklogItemId: "BI-INT-A5B9E3",
+    nextStep: openIntent("Adapter after QuickBooks proves the lane"),
     replacementCriteria:
       "Use Xero as a parity benchmark for accounting read breadth before considering another native connector.",
     notes: "Benchmark-only accounting product for customers that are not QuickBooks-centered.",
@@ -514,7 +515,7 @@ export const INTEGRATION_COVERAGE_MATRIX: IntegrationCoverageMatrixRow[] = [
     maturity: "observe",
     csdmDomain: "application-service",
     it4itValueStreams: ["request-to-fulfill", "detect-to-correct"],
-    nextBacklogItemId: "BI-INT-F23BC6",
+    nextStep: openIntent("Compare SMB expectations against ADP"),
     replacementCriteria:
       "Keep payroll provider-led until HR, payroll tax, benefits, and finance posting boundaries are explicitly modeled.",
     notes: "Benchmark-only payroll product that helps compare SMB expectations against ADP coverage.",
@@ -537,7 +538,7 @@ export const INTEGRATION_COVERAGE_MATRIX: IntegrationCoverageMatrixRow[] = [
     maturity: "observe",
     csdmDomain: "business-service",
     it4itValueStreams: ["strategy-to-portfolio", "request-to-fulfill"],
-    nextBacklogItemId: "BI-9A86E2A7",
+    nextStep: openIntent("Benchmark only; no adapter planned"),
     replacementCriteria:
       "DPF should benchmark CRM breadth before deciding whether customer records become native, synchronized, or provider-led.",
     notes: "Benchmark-only CRM reference for sales pipeline, customer support, and analytics coverage.",
@@ -559,7 +560,7 @@ export const INTEGRATION_COVERAGE_MATRIX: IntegrationCoverageMatrixRow[] = [
     maturity: "observe",
     csdmDomain: "business-service",
     it4itValueStreams: ["request-to-fulfill", "detect-to-correct"],
-    nextBacklogItemId: "BI-INT-8D4F72",
+    nextStep: openIntent("Channel-adapter decision"),
     replacementCriteria:
       "DPF should orchestrate tasks and evidence while chat remains a provider channel.",
     notes: "Benchmark-only communication provider for work queue and channel-adapter decisions.",
@@ -581,7 +582,7 @@ export const INTEGRATION_COVERAGE_MATRIX: IntegrationCoverageMatrixRow[] = [
     maturity: "observe",
     csdmDomain: "service-offering",
     it4itValueStreams: ["request-to-fulfill", "detect-to-correct"],
-    nextBacklogItemId: "BI-9A86E2A7",
+    nextStep: openIntent("Support lane connector decision"),
     replacementCriteria:
       "DPF can become primary for lightweight support only after intake, SLA, assignment, knowledge, and customer portal coverage are native.",
     notes: "Benchmark-only support product for the customer support lane.",
@@ -603,7 +604,7 @@ export const INTEGRATION_COVERAGE_MATRIX: IntegrationCoverageMatrixRow[] = [
     maturity: "observe",
     csdmDomain: "service-offering",
     it4itValueStreams: ["strategy-to-portfolio", "request-to-fulfill"],
-    nextBacklogItemId: "BI-E1CFC8FB",
+    nextStep: openIntent("Inventory and procurement coverage decision"),
     replacementCriteria:
       "DPF should keep commerce provider-led until product catalog, inventory, order, payment, and fulfillment ownership are explicit.",
     notes: "Benchmark-only storefront product for inventory and procurement admin coverage.",
@@ -625,7 +626,7 @@ export const INTEGRATION_COVERAGE_MATRIX: IntegrationCoverageMatrixRow[] = [
     maturity: "observe",
     csdmDomain: "business-service",
     it4itValueStreams: ["request-to-fulfill", "detect-to-correct"],
-    nextBacklogItemId: "BI-INT-1AB7D8",
+    nextStep: openIntent("CSDM reference, not an implementation target"),
     replacementCriteria:
       "DPF can borrow structural patterns while staying narrower than a CMDB/ITSM suite until service ownership and operations are native.",
     notes: "Benchmark-only service-management product and CSDM reference point, not a verbatim implementation target.",
@@ -647,7 +648,7 @@ export const INTEGRATION_COVERAGE_MATRIX: IntegrationCoverageMatrixRow[] = [
     maturity: "observe",
     csdmDomain: "application-service",
     it4itValueStreams: ["request-to-fulfill", "detect-to-correct"],
-    nextBacklogItemId: "BI-INT-1AB7D8",
+    nextStep: openIntent("Work-queue modeling reference"),
     replacementCriteria:
       "Use as a workflow benchmark for request, incident, and change-style queue patterns before creating native equivalents.",
     notes: "Benchmark-only IT and service-ops reference for work queue modeling.",
@@ -669,7 +670,7 @@ export const INTEGRATION_COVERAGE_MATRIX: IntegrationCoverageMatrixRow[] = [
     maturity: "observe",
     csdmDomain: "technical-service",
     it4itValueStreams: ["request-to-fulfill", "detect-to-correct"],
-    nextBacklogItemId: "BI-F9E7B780",
+    nextStep: openIntent("Estate discovery before vendor RMM"),
     replacementCriteria:
       "Device and endpoint management should remain provider-led; DPF should consume posture and evidence signals.",
     notes: "Benchmark-only endpoint provider for IT/security/compliance coverage.",

@@ -431,6 +431,15 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/check-doc-reference-integrity.test.mjs"),
       node("scripts/check-doc-reference-integrity.mjs"),
     ]),
+    // BI-5BF97BAA: the integrations and finance surfaces rendered a "what
+    // happens next" backlog id that resolved to nothing — hardcoded strings that
+    // outlived the backlog reset. The backlog is resettable; source is not. The
+    // resolve check itself needs a database and so lives in a DB-gated test; this
+    // enforces the structural half, which is what CI can actually run.
+    guard("rendered-backlog-pointers", "Rendered Backlog Pointers", [
+      node("--test", "scripts/check-rendered-backlog-pointers.test.mjs"),
+      node("scripts/check-rendered-backlog-pointers.mjs"),
+    ]),
     guard("janitor-tests", "Janitor Tests", [
       node(
         "--test",
