@@ -82,6 +82,42 @@ was **declared or derived**, and expect most older rooms to have neither.
 Finite and standing rooms are explained for end users in
 [Work Rooms](../user-guide/workspace/work-rooms.md).
 
+### The coordinator is the Workroom Process Overseer
+
+Every collaboration shape includes `coordinator`. DPF does not need a second orchestrator-agent
+type: the canonical coordinator is the human-facing **Process Overseer** for both finite and
+standing rooms. The accountable participant owns the outcome; the coordinator owns conformance to
+the room's declared shape. Executors do the work, reviewers or evaluators assess it, and approvers
+authorize consequential transitions. Those responsibilities are not synonyms.
+
+The current runtime establishes the vocabulary but not the complete control loop.
+`room-coordinator.ts` selects or derives a coordinator for the read model, and
+`bindWorkroomShape` can report missing participant roles. A derived coordinator is useful for
+legacy visibility, but it is not enough to make a room execution-qualified. The target contract is:
+
+1. **Convene:** require exactly one explicit current coordinator and validate the collaboration
+   shape, WorkShapeDefinition/version, persisted roster, posture, authority, trigger, measures,
+   review point, budgets, and stop conditions.
+2. **Before a transition:** compute a deterministic shape-conformance result. Refuse or pause work
+   when the expected stage, required participant, prerequisite evidence, authority binding, budget,
+   or review obligation is not satisfied.
+3. **After a transition:** append the stage receipt, compare observed state with the declared
+   transition, and route the next permitted stage, verification, repair, escalation, or close.
+4. **Reconcile:** run the same idempotent projection on events for finite rooms and on a bounded
+   delta cadence for standing rooms. Do not continuously poll every room.
+5. **Close:** require the outcome packet to carry the last conformance result and dispositions for
+   every unresolved deviation.
+
+The controller must not silently invent an occupant, skip a gate, widen authority, or retry until a
+proxy metric passes. A mismatch produces an attributable receipt and attention item for the
+coordinator and accountable owner. The coordinator may be a person or an AI coworker. An AI
+coordinator requires job-specific qualification for process oversight plus explicit TAK authority;
+it cannot also serve as the independent evaluator or approver where the shape requires separation.
+
+The Workroom surface should make this control legible: coordinator identity, explicit versus
+derived assignment, conformance status, current and expected next stage, unresolved deviations,
+last check, and intervention reason. Presence remains separate from membership.
+
 Definition and occurrence identity are not a fifth shape axis. The Work Case source
 registry owns a stable, versioned room-definition projection. The Work Case owns the room
 instance, with its primary source, current cycle, and active execution carriers forming
@@ -236,6 +272,11 @@ Stated plainly so nobody plans against a capability that is not there:
 
 - **The consultation ledger is in-memory and per-process.** A decision consulted in one
   process is not visible to another; only the receipt it writes survives the turn.
+- **Coordinator is not yet an executable conformance controller.** The role and selection helper
+  exist, and every collaboration shape includes it, but a persisted explicit assignment and a
+  transition-level conformance result are not yet enforced across every convene, dispatch, receipt,
+  review, and close path. `BI-3913EB49` owns that implementation; `BI-4CB2EF76` and
+  `BI-EFFD97B4` provide the persisted roster and definition contracts it consumes.
 - **The decision-gate stage cannot be attributed to a coworker.** The decision record does
   not identify which coworker acted, so the shape view leaves that stage empty rather than
   attributing another coworker's decision on a guess.
