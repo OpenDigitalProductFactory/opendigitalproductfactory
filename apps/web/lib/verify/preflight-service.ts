@@ -20,6 +20,7 @@ import {
   resolveGitAncestry,
   type AncestryFailureKind,
 } from "@/lib/verify/git-ancestry";
+import { resolveProviderAncestry } from "@/lib/verify/provider-ancestry";
 
 export type ReadinessDeps = {
   /** The live install's served identity (the portal's own image marker). */
@@ -35,6 +36,8 @@ export type ReadinessDeps = {
     feature: string,
     served: string,
   ) => Promise<boolean | null | { contained: boolean | null; failureKind?: AncestryFailureKind }>;
+  /** Canonical repository fallback for validated source-free consumers only. */
+  isAncestorFromProvider: (feature: string, served: string) => Promise<boolean | null>;
 };
 
 /** Real ancestry check; never throws — returns null on any failure. */
@@ -49,6 +52,7 @@ export const defaultReadinessDeps: ReadinessDeps = {
   readImage: () => readImageVersion(),
   readInstallHostProfile: () => readInstallHostProfile(),
   isAncestor: gitAncestry,
+  isAncestorFromProvider: resolveProviderAncestry,
 };
 
 /**
@@ -86,6 +90,19 @@ export async function resolveLiveInstallReadiness(
         ancestryUncomputableDetail = ancestryFailureDetail(raw.failureKind ?? "unknown");
       }
     }
+  }
+
+  if (
+    servedImage
+    && servedImage.source === "git-sha"
+    && featureContainedInServed === null
+    && installHostProfile.kind === "consumer"
+    && !gitIdentitiesMatch(servedImage.raw, params.featureSha)
+  ) {
+    featureContainedInServed = await deps.isAncestorFromProvider(
+      params.featureSha,
+      servedImage.raw,
+    );
   }
 
   return computePreflightVerdict({

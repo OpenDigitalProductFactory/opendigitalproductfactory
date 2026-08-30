@@ -18,6 +18,7 @@ backlog:
   - BI-98AF1066  # fast static bundle-boundary guard
   - BI-C5E03376  # bind entry point into AGENTS.md + thin-adapter seam
   - BI-FFBDDD96  # source-free release ancestry disposition
+  - BI-6AE39A07  # provider-backed source-free ancestry proof
 ---
 
 # Procedural functional-verification
@@ -136,13 +137,22 @@ consumer marker paired with Git source is contradictory and therefore
 from a source checkout remain source-backed unless they consume the same
 validated host profile.
 
-This does not claim containment from a release label alone. When no repository
-can prove ancestry, the consumer-safe fact is only that containment is
-unprovable on the running bytes. The governed response is `MUST-ADVANCE`, not a
-request to mount source into a production image. After an advance, exact
-feature/served identity can establish `CAN-TEST` without Git; richer immutable
-release provenance may later prove older ancestors, but it must enter through
-the same adapter and may not add another verdict or deployment path.
+This does not claim containment from a release label alone. When local Git is
+unavailable on a validated consumer, the server adapter performs one bounded,
+read-only comparison against the installation's canonical repository provider.
+It reuses the existing GitHub repository identity and optional credential
+resolver; it does not add another repository configuration or credential path.
+The comparison is exact `featureSha...servedSha` provenance: provider status
+`ahead` or `identical` proves containment, while `behind` or `diverged` proves
+non-containment. Local Git remains authoritative whenever it returns a boolean.
+
+Provider comparison is a page-request read with a five-second deadline, no
+pagination, no persistence, and no mutation. A timeout, credential/configuration
+failure, unreadable response, unexpected status, or non-GitHub canonical
+provider returns unknown rather than guessing. On a validated source-free
+consumer that unknown result maps to `MUST-ADVANCE`; source-backed and unknown
+hosts remain `BLOCKED`. Production images never gain a checkout or `.git`, and
+the provider fallback never creates a second verdict or deployment path.
 
 The CLI and MCP/server adapters must produce the same result for the same
 validated provenance. Focused tests cover source-backed, source-free, unknown,
@@ -156,6 +166,8 @@ Git.
 
 **OBJ-CONSUMER-ADVANCE:** Uncomputable ancestry on a validated source-free release uses only the governed self-upgrade path.
 
+**OBJ-PROVIDER-ANCESTRY:** A validated consumer may prove containment through one bounded canonical-provider comparison when local Git is unavailable.
+
 **OBJ-FAIL-CLOSED:** Source-backed, contradictory, or unknown installation evidence never infers containment.
 
 **OBJ-SURFACE-PARITY:** CLI and MCP adapters use the same verdict core and the same governed advance action.
@@ -166,6 +178,9 @@ Git.
 | --- | --- | --- |
 | AC-EXACT-IDENTITY | OBJ-EXACT-IDENTITY | Equal full or unambiguous-prefix SHAs return `CAN-TEST` without consulting a Git object store. |
 | AC-CONSUMER-ADVANCE | OBJ-CONSUMER-ADVANCE | Uncomputable ancestry on a validated consumer release returns `MUST-ADVANCE` through `/ops/self-upgrade`. |
+| AC-PROVIDER-CONTAINED | OBJ-PROVIDER-ANCESTRY | When local Git is unavailable, canonical provider status `ahead` or `identical` for `feature...served` returns `CAN-TEST`. |
+| AC-PROVIDER-NOT-CONTAINED | OBJ-PROVIDER-ANCESTRY, OBJ-CONSUMER-ADVANCE | Canonical provider status `behind` or `diverged` returns `MUST-ADVANCE`. |
+| AC-PROVIDER-UNAVAILABLE | OBJ-PROVIDER-ANCESTRY, OBJ-FAIL-CLOSED | Provider timeout, configuration failure, unreadable payload, or unexpected status never infers containment; consumer returns `MUST-ADVANCE`, while source/unknown remain `BLOCKED`. |
 | AC-FAIL-CLOSED | OBJ-FAIL-CLOSED | Source-backed, contradictory, and unknown host evidence remains `BLOCKED` when ancestry cannot be computed. |
 | AC-SURFACE-PARITY | OBJ-SURFACE-PARITY | CLI and MCP produce the same verdict and next action for the same validated host evidence. |
 | AC-ACTIONABLE | OBJ-ACTIONABLE | Consumer recovery text omits `DPF_REPO_ROOT`, `.git` mounts, and Git-install guidance. |

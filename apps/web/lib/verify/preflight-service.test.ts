@@ -19,6 +19,7 @@ function deps(over: Partial<ReadinessDeps>): ReadinessDeps {
       reason: "insufficient-install-evidence",
     }),
     isAncestor: async () => null,
+    isAncestorFromProvider: async () => null,
     ...over,
   };
 }
@@ -26,6 +27,7 @@ function deps(over: Partial<ReadinessDeps>): ReadinessDeps {
 describe("resolveLiveInstallReadiness", () => {
   it("CAN-TESTs exact identity without consulting Git ancestry", async () => {
     let ancestryCalled = false;
+    let providerCalled = false;
     const r = await resolveLiveInstallReadiness(
       { featureSha: FEATURE },
       deps({
@@ -34,10 +36,15 @@ describe("resolveLiveInstallReadiness", () => {
           ancestryCalled = true;
           return null;
         },
+        isAncestorFromProvider: async () => {
+          providerCalled = true;
+          return null;
+        },
       }),
     );
     expect(r.verdict).toBe("CAN-TEST");
     expect(ancestryCalled).toBe(false);
+    expect(providerCalled).toBe(false);
   });
 
   it("CAN-TEST when the served git-sha image contains the feature commit", async () => {
@@ -82,6 +89,90 @@ describe("resolveLiveInstallReadiness", () => {
     expect(r.verdict).toBe("MUST-ADVANCE");
     expect(r.nextAction.kind).toBe("trigger-self-upgrade");
     expect(`${r.reason} ${r.nextAction.detail}`).not.toMatch(/DPF_REPO_ROOT|git fetch/i);
+  });
+
+  it("CAN-TESTs a consumer when canonical provider ancestry contains the feature", async () => {
+    const r = await resolveLiveInstallReadiness(
+      { featureSha: FEATURE },
+      deps({
+        isAncestor: async () => null,
+        isAncestorFromProvider: async () => true,
+        readInstallHostProfile: async () => ({
+          kind: "consumer",
+          installMode: "consumer",
+          sourceCapable: false,
+          releaseImage: true,
+          reason: "consumer-release-install",
+        }),
+      }),
+    );
+    expect(r.verdict).toBe("CAN-TEST");
+  });
+
+  it("MUST-ADVANCEs a consumer when canonical provider ancestry excludes the feature", async () => {
+    const r = await resolveLiveInstallReadiness(
+      { featureSha: FEATURE },
+      deps({
+        isAncestor: async () => null,
+        isAncestorFromProvider: async () => false,
+        readInstallHostProfile: async () => ({
+          kind: "consumer",
+          installMode: "consumer",
+          sourceCapable: false,
+          releaseImage: true,
+          reason: "consumer-release-install",
+        }),
+      }),
+    );
+    expect(r.verdict).toBe("MUST-ADVANCE");
+  });
+
+  it.each(["source", "unknown"] as const)(
+    "does not consult the provider for a %s host when local ancestry is unavailable",
+    async (kind) => {
+      let providerCalled = false;
+      await resolveLiveInstallReadiness(
+        { featureSha: FEATURE },
+        deps({
+          isAncestor: async () => null,
+          isAncestorFromProvider: async () => {
+            providerCalled = true;
+            return true;
+          },
+          readInstallHostProfile: async () => ({
+            kind,
+            installMode: kind === "source" ? "contributor" : null,
+            sourceCapable: kind === "source",
+            releaseImage: false,
+            reason: kind === "source" ? "git-source-present" : "insufficient-install-evidence",
+          }),
+        }),
+      );
+      expect(providerCalled).toBe(false);
+    },
+  );
+
+  it("keeps local Git authoritative without consulting the provider", async () => {
+    let providerCalled = false;
+    const r = await resolveLiveInstallReadiness(
+      { featureSha: FEATURE },
+      deps({
+        isAncestor: async () => false,
+        isAncestorFromProvider: async () => {
+          providerCalled = true;
+          return true;
+        },
+        readInstallHostProfile: async () => ({
+          kind: "consumer",
+          installMode: "consumer",
+          sourceCapable: false,
+          releaseImage: true,
+          reason: "consumer-release-install",
+        }),
+      }),
+    );
+    expect(r.verdict).toBe("MUST-ADVANCE");
+    expect(providerCalled).toBe(false);
   });
 
   it.each(["source", "unknown"] as const)(
