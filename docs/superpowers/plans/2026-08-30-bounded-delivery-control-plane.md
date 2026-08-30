@@ -119,3 +119,11 @@ Verification: ≥95% wait-call reduction, zero duplicate gate executions per key
 ## Release sequence
 
 Each BI ships through the normal DCO PR and protected merge queue. Canonical release and live verification are required for runtime changes. No live replay or upgrade is part of this design/plan authoring change. The plan coverage receipt must be recorded server-side against this immutable plan blob before implementation begins; if the coverage tool is unavailable, preserve the exact failure and stop rather than infer coverage.
+
+## Current evidence ledger
+
+- Workroom `WC-4C4D810C` is bound to `BI-7C1F43E3`, branch `doc/bounded-delivery-control-plane-design-and-plan`, head `88645e47894001351945ebab36953c64385a7055`.
+- `node scripts/check-doc-links.mjs`, `node scripts/gen-doc-index.mjs --check`, and `node scripts/check-docs-impact.mjs` passed.
+- `pnpm run check:prose-lint` could not start because this fresh worktree has no installed `tsx` dependency; this is an infrastructure limitation, not a pass.
+- `pnpm run pregate:preflight` progressed through the guard loop but stopped on the existing pinned-TypeScript bootstrap failure (`GuardRuntimeEnvironmentError: Pinned repo guard TypeScript 6.0.3 is missing`) and one dependent guard self-test. It was stopped after remaining silent work; this is recorded as `INCONCLUSIVE`, not PASS.
+- `record_plan_backlog_coverage` was attempted once with the exact committed plan blob `370fa7e2005dd843e6934cea810e40e64a422d92` and returned `plan-artifact-invalid: Repository provider could not resolve immutable commit provenance after 2 attempts (transport failure)`. No coverage receipt is claimed. Retry only after provider transport is healthy, using this same commit/blob and deliverable mapping.
