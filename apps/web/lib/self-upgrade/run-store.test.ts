@@ -44,6 +44,7 @@ import {
   recordRunRecoveryPoint,
   sanitizePromoterReadinessReport,
   claimAdmittedRunForWorker,
+  deferAdmittedRunForRedispatch,
   selfUpgradeAdmissionRepository,
 } from "./run-store";
 
@@ -160,6 +161,31 @@ describe("admitted worker ownership", () => {
   it("refuses duplicate delivery after the claim is consumed", async () => {
     mocks.updateMany.mockResolvedValue({ count: 0 });
     await expect(claimAdmittedRunForWorker("SUR-ONE")).resolves.toBe("duplicate");
+  });
+
+  it("returns a claimed worker to durable reconciliation before mutation begins", async () => {
+    await expect(
+      deferAdmittedRunForRedispatch("SUR-ONE", "release-target-registry-unavailable"),
+    ).resolves.toBe(true);
+    expect(mocks.updateMany).toHaveBeenCalledWith({
+      where: {
+        runId: "SUR-ONE",
+        status: "running",
+        completedAt: null,
+        dispatchStatus: { in: ["dispatching", "dispatched"] },
+      },
+      data: {
+        status: "pending",
+        startedAt: null,
+        dispatchStatus: "indeterminate",
+        dispatchError: "release-target-registry-unavailable",
+        dispatchLeaseToken: null,
+        dispatchLeaseExpiresAt: null,
+      },
+    });
+    expect(mocks.broadcastSystem).toHaveBeenCalledWith(
+      expect.objectContaining({ runId: "SUR-ONE", status: "pending" }),
+    );
   });
 
   it("preserves the legacy path for historical queued runs", async () => {
