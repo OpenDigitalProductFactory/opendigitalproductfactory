@@ -257,7 +257,18 @@ WORKDIR /app
 # nmap powers the fast path of the arp_scan discovery collector. Without it the
 # collector falls back to a 254-host ping sweep; with it a /24 scans in seconds.
 # (See packages/db/src/discovery-collectors/arp-scan.ts — BI-4CA890B7.)
-RUN apk add --no-cache docker-cli docker-cli-buildx docker-cli-compose postgresql16-client git curl nmap
+#
+# git-lfs is load-bearing on the git-source install shape, not hygiene. This
+# stage runs the self-upgrade source preparation (lib/self-upgrade/prepare-source.ts),
+# which clones the host install clone into .upgrade-workspace and hands that
+# tree to the promoter as its build context. `git` alone smudges LFS-tracked
+# paths to ~130-byte pointer stubs, so the promoter build then dies on the
+# zip-magic assertion this Dockerfile makes over the IT4IT workbook — failing
+# every upgrade on this shape, permanently (BI-FEE26C36 follow-on). The
+# publish path materializes LFS via `actions/checkout` with `lfs: true`; this
+# is the same guarantee for the path that has no GitHub Actions runner.
+# Dockerfile.sandbox installs it for the same class of reason.
+RUN apk add --no-cache docker-cli docker-cli-buildx docker-cli-compose postgresql16-client git git-lfs curl nmap
 ENV NODE_ENV=production
 ENV HOSTNAME=0.0.0.0
 ENV PORT=3000

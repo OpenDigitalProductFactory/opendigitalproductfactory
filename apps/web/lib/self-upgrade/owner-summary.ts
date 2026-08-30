@@ -45,6 +45,24 @@ export interface OwnerReleaseSummary {
   currentVersion: string;
   /** Human label for the update that's ready, or null when there's nothing newer. */
   availableVersion: string | null;
+  /**
+   * Whether a newer build is genuinely waiting, independent of what the run
+   * state machine is doing about it.
+   *
+   * This is deliberately NOT derived from `state`. `state` answers "what is
+   * happening right now", and its precedence puts in-progress and failed ahead
+   * of update-available — so a pending update disappears from `state` the
+   * moment a run starts or fails, which is exactly when the operator most needs
+   * to see it. Callers deciding whether to offer an install action read this,
+   * never `state === "update-available"`.
+   */
+  updatePending: boolean;
+  /**
+   * Label for the "update" side of the version pair, phrased for the current
+   * state ("Update ready" / "Installing now" / "Update still pending"). Keeps
+   * the presenter from having to infer wording from a null.
+   */
+  availableVersionLabel: string;
   /** The single next thing (if any) the owner should do, in plain words. */
   recommendedAction: { label: string; detail: string };
   /** Can the business keep working through this? */
@@ -184,18 +202,41 @@ export function buildOwnerReleaseSummary(
     ? `${input.platformVersion.version} (${currentDetail})`
     : input.platformVersion.version;
 
+  // Is a newer build actually waiting? Read from the facts — support, target
+  // resolution, freshness — never from `state`.
+  //
+  // The bug this replaces: `availableVersion` was gated on
+  // `state === "update-available"`, so a run that was merely RUNNING or FAILED
+  // collapsed it to null, and OwnerReleaseCard rendered that null as the
+  // positive claim "You're current" in success green. On a failed upgrade the
+  // card asserted the operator was up to date directly above an enabled
+  // "Upgrade now" button. page.tsx had already patched around it for the
+  // button alone (a `state === "failed" && ... && !isFresh` special case),
+  // which left the contradiction on screen and two sources of truth in the code.
+  const updatePending =
+    input.support.supported && input.targetAvailability === "resolved" && !input.isFresh;
+
   const targetShort = shortSha(input.targetSha);
   const targetDetail = input.availableMergePointLabel ?? targetShort;
-  const availableVersion =
-    state === "update-available"
-      ? input.support.targetKind === "release-artifact" && input.targetTag
-        ? input.targetTag
-        : input.latestRunImpact?.headline
-        ? input.latestRunImpact.headline
-        : targetDetail
-          ? `Latest build (${targetDetail})`
-          : "Latest build"
-      : null;
+  const availableVersion = updatePending
+    ? input.support.targetKind === "release-artifact" && input.targetTag
+      ? input.targetTag
+      : input.latestRunImpact?.headline
+      ? input.latestRunImpact.headline
+      : targetDetail
+        ? `Latest build (${targetDetail})`
+        : "Latest build"
+    : null;
+
+  // Same value, different thing being said about it, so the operator is never
+  // left to guess why an update is listed while nothing appears to happen.
+  const availableVersionLabel = !updatePending
+    ? "Update ready"
+    : inFlight
+      ? "Installing now"
+      : failed
+        ? "Update still pending"
+        : "Update ready";
 
   // "Why nothing happened" copy for the routine no-op path (run skipped).
   // A resolved, fresh target is newer evidence than an older skipped run. Do
@@ -352,6 +393,8 @@ export function buildOwnerReleaseSummary(
     headline,
     currentVersion,
     availableVersion,
+    updatePending,
+    availableVersionLabel,
     recommendedAction,
     canKeepWorking,
     keptLocally,

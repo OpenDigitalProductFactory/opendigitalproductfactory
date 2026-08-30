@@ -10,7 +10,7 @@
 
 > **Current standards authority (2026-08-01).** This document remains the detailed operational and
 > audit profile for the six-stage archetype backbone. The
-> [Four-Portfolio Archetype and AI Workforce Operating Standard](four-portfolio-archetype-ai-workforce-operating-standard.md)
+> [Portfolio Aligned Agent and Workforce Operating Standard](four-portfolio-archetype-ai-workforce-operating-standard.md)
 > now owns the distinction among industry value streams, local DigitalProduct lifecycle keys,
 > portfolios, work, performers, evidence, and candidate external mappings. External equivalence
 > requires the complete authorized mapping envelope in that standard.
@@ -49,9 +49,9 @@ This document is about the other sense: the **operational value stream of the cu
 | Whose flow | Any organization managing a DigitalProduct lifecycle | The archetype business serving its customers |
 | Canonical slugs | `evaluate … consume` | leaf-defined stage slugs, or `attract · capture · qualify · deliver · settle · retain` as the fallback (Section 3) |
 | Example | "Voice STT slice moves Explore→Integrate→Deploy" | "A vet clinic moves a pet from booking → exam → invoice → recall" |
-| Standards posture | local lifecycle vocabulary; IT4IT™ is a future authorized comparison target | FPAW Stage contract; BACM/ArchiMate® are future representation-review targets |
+| Standards posture | local lifecycle vocabulary; IT4IT™ is a future authorized comparison target | PAAW Stage contract; BACM/ArchiMate® are future representation-review targets |
 
-> **Current semantic authority:** FPAW defines a Stage as a measurable stakeholder-value state
+> **Current semantic authority:** PAAW defines a Stage as a measurable stakeholder-value state
 > transition with acceptance, capability/work realization, evidence and measures. BACM and
 > ArchiMate® are reference-only targets for future authorized representation mappings; this document
 > does not use their publications to substantiate the local contract.
@@ -62,7 +62,7 @@ The bridge is a typed, many-to-many relationship—not containment. An industry 
 own because it describes stakeholder value whether the work is digital, human, physical, or mixed.
 When a DigitalProduct enables or constitutes part of that stage, the implementation maps the exact
 touchpoint to a named DigitalProduct and local lifecycle key with relationship, rationale, evidence,
-and binding state. An external stream identifier may be added only through the authorized FPAW
+and binding state. An external stream identifier may be added only through the authorized PAAW
 mapping contract. A consumption interaction never contains the customer's complete operational
 value stream.
 
@@ -168,7 +168,7 @@ That metadata is a migration input, not a conformance assertion: a generic
 `request-to-fulfill` value cannot prove an external correspondence. The standards-grade seam is an
 explicit mapping from a specific industry stage or work definition to a specific DigitalProduct and
 local lifecycle key, with relationship, rationale, confidence, evidence and BindingState. External
-identifiers additionally require FPAW's authorized source and complete mapping envelope.
+identifiers additionally require PAAW's authorized source and complete mapping envelope.
 
 ### 5.1 Architecture and usability invariants
 

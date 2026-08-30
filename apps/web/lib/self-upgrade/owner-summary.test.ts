@@ -332,3 +332,103 @@ describe("buildOwnerReleaseSummary", () => {
     }
   });
 });
+
+// ── The pending update must survive the run state machine ────────────────────
+//
+// Regression cover for the contradiction an operator hit on /ops/self-upgrade:
+// the card's top tile read "Update ready: You're current" in success green
+// while the banner below it read "Update available", and the "Upgrade now"
+// button directly under the tile was enabled. `availableVersion` was gated on
+// `state === "update-available"`, and state precedence puts in-progress and
+// failed ahead of it — so a pending update vanished from the summary exactly
+// when a run was working on it or had just failed to.
+//
+// The existing in-progress/failed tests asserted state, tone, rollback and
+// canKeepWorking, and never asserted availableVersion. That is the gap.
+describe("buildOwnerReleaseSummary — pending update vs run state", () => {
+  const PENDING = {
+    isFresh: false,
+    targetSha: "f".repeat(40),
+    targetAvailability: "resolved" as const,
+    availableMergePointLabel: "PR #4854",
+  };
+
+  it("keeps the available build visible while a run is in flight", () => {
+    for (const status of ["queued", "pending", "running", "completing"]) {
+      const s = buildOwnerReleaseSummary(
+        baseInput({ ...PENDING, latestRun: { status, reason: null, targetSha: null } }),
+        NO_LOCAL_CHANGES,
+      );
+      expect(s.state).toBe("in-progress");
+      expect(s.updatePending).toBe(true);
+      expect(s.availableVersion).toContain("PR #4854");
+      expect(s.availableVersionLabel).toBe("Installing now");
+    }
+  });
+
+  it("keeps the available build visible after a run fails", () => {
+    const s = buildOwnerReleaseSummary(
+      baseInput({
+        ...PENDING,
+        latestRun: { status: "failed", reason: null, targetSha: null },
+      }),
+      NO_LOCAL_CHANGES,
+    );
+    expect(s.state).toBe("failed");
+    expect(s.updatePending).toBe(true);
+    expect(s.availableVersion).toContain("PR #4854");
+    expect(s.availableVersionLabel).toBe("Update still pending");
+  });
+
+  it("reports no pending update when the build is genuinely fresh", () => {
+    const s = buildOwnerReleaseSummary(baseInput({ isFresh: true }), NO_LOCAL_CHANGES);
+    expect(s.updatePending).toBe(false);
+    expect(s.availableVersion).toBeNull();
+  });
+
+  it("reports no pending update when the target cannot be resolved", () => {
+    const s = buildOwnerReleaseSummary(
+      baseInput({
+        isFresh: false,
+        targetAvailability: "unavailable",
+        targetUnavailableReason: "registry-unreachable",
+      }),
+      NO_LOCAL_CHANGES,
+    );
+    expect(s.updatePending).toBe(false);
+    expect(s.availableVersion).toBeNull();
+  });
+
+  it("reports no pending update when self-upgrade is unsupported on this install", () => {
+    const s = buildOwnerReleaseSummary(
+      baseInput({
+        ...PENDING,
+        support: {
+          supported: false,
+          targetKind: "unknown",
+          reason: "install-identity-unverified",
+          message: "Automatic updates are unavailable.",
+        },
+      }),
+      NO_LOCAL_CHANGES,
+    );
+    expect(s.updatePending).toBe(false);
+    expect(s.availableVersion).toBeNull();
+  });
+
+  // The two halves of the page must never disagree: the banner in
+  // SelfUpgradeClient renders "Update available" from `!isFresh` directly, so
+  // updatePending has to track the same fact for every run status.
+  it("agrees with the freshness flag the technical banner reads, whatever the run is doing", () => {
+    for (const status of [null, "queued", "running", "failed", "skipped", "succeeded"]) {
+      const s = buildOwnerReleaseSummary(
+        baseInput({
+          ...PENDING,
+          latestRun: status ? { status, reason: null, targetSha: null } : null,
+        }),
+        NO_LOCAL_CHANGES,
+      );
+      expect(s.updatePending).toBe(true);
+    }
+  });
+});
