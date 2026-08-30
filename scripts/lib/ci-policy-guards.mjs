@@ -335,6 +335,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     // live install is reachable). Closes the unbacked-doc-anchor pattern (P3).
     guard("doc-anchor-existence", "Doc Anchor Existence", [
       node("--test", "scripts/check-doc-anchor-existence.test.mjs"),
+      node("--test", "scripts/lib/git-changed-files.test.mjs"),
       node("scripts/check-doc-anchor-existence.mjs"),
     ]),
     // BI-38A353B2: doc-anchor-existence proves a cited id EXISTS; nothing

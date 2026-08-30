@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
-import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { requireChangedFiles } from "./lib/git-changed-files.mjs";
 
 const PLAN_PATH_RE = /^docs\/superpowers\/plans\/.*\.md$/;
 
@@ -41,14 +41,9 @@ export function validatePlanText(path, text) {
   return { ok: errors.length === 0, errors };
 }
 
-function git(...args) {
-  return execFileSync("git", args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
-}
-
 function main() {
   const base = process.env.BASE_SHA || "origin/main";
-  const paths = git("diff", "--name-only", "--diff-filter=AM", `${base}...HEAD`)
-    .split(/\r?\n/)
+  const paths = requireChangedFiles(base, "plan-backlog-coverage-gate")
     .filter((path) => PLAN_PATH_RE.test(path));
   const failures = paths.flatMap((path) => validatePlanText(path, readFileSync(path, "utf8")).errors);
   if (failures.length === 0) {

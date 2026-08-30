@@ -43,6 +43,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { requireChangedFiles } from "./lib/git-changed-files.mjs";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -189,13 +190,11 @@ function main() {
   }
 
   const base = process.env.BASE_SHA || "origin/main";
-  let changed = new Set();
-  if (REF_RE.test(base) && !base.startsWith("-")) {
-    changed = new Set(
-      git("diff", "--name-only", `${base}...HEAD`)
-        .split("\n").map((s) => s.trim()).filter(Boolean),
-    );
+  if (!REF_RE.test(base) || base.startsWith("-")) {
+    console.error(`[spec-status] refusing unsafe BASE_SHA: ${JSON.stringify(base)}`);
+    process.exit(1);
   }
+  const changed = new Set(requireChangedFiles(base, "spec-status"));
 
   const failures = [];
   for (const rel of files) {
