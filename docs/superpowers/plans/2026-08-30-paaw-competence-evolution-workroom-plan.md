@@ -173,6 +173,9 @@ These two BIs ship in one PR because the roster is the observed side of the defi
 They remain separate backlog outcomes and commits so either result stays attributable. This delivery
 does not turn on Process Overseer enforcement; `BI-3913EB49` consumes the contracts afterwards.
 
+The canonical design authority for this delivery is
+[`2026-08-30-workroom-definition-roster-contracts-design.md`](../specs/2026-08-30-workroom-definition-roster-contracts-design.md).
+
 ### Red tests first
 
 - A definition cannot omit a trigger without an explicit imperative-only justification.
