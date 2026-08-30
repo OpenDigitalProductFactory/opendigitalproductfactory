@@ -50,19 +50,19 @@ import {
   IDENTITY_INFERENCE_CRON,
   IDENTITY_INFERENCE_CADENCE,
 } from "@/lib/asset-intelligence/identity-inference-constants";
-
 /** core = platform-integrity cron, operator read-only. editable = cadence
  *  may be tuned by an operator after install. */
 import type { JobCategory, ScheduledJobCatalogEntry } from "./catalog-types";
+import { FLOW_JOB_CATALOG_ENTRIES } from "./catalog-flow";
 import { WATCH_JOB_CATALOG_ENTRIES } from "./catalog-watches";
 
 // Re-exported so existing importers of the catalog keep working; the types are
 // owned by ./catalog-types (BI-ED117C82).
 export type { JobCategory, ScheduledJobCatalogEntry };
 
-
 // Ordered roughly by operational prominence. core-locked jobs first.
 export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
+  ...FLOW_JOB_CATALOG_ENTRIES,
   {
     jobId: "index-integrity-sweep",
     inngestId: "ops/index-integrity-sweep",

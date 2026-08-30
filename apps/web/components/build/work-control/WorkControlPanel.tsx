@@ -11,7 +11,7 @@ import { WorkCapsuleTable, type WorkCapsuleRow } from "./WorkCapsuleTable";
 export function WorkControlPanel({
   capsules,
   adoptable,
-  livenessSummary = { scanned: capsules.length, live: capsules.length, history: 0, reapable: 0, byLiveness: {} },
+  livenessSummary = { scanned: capsules.length, live: capsules.length, history: 0, reapable: 0, byLiveness: {}, heavyLane: { executing: 0, nextReady: 0, dormant: 0 }, progressSlo: { oldestWaitMs: null, maxNoTransitionMs: null } },
   createAction,
   canCreateGovernedWork = false,
   portalContext,

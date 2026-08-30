@@ -2,6 +2,7 @@ import { routeAndCall } from "@/lib/inference/routed-inference";
 import { inspectLocalProviderCapacity } from "@/lib/routing/local-provider-capacity";
 import { CHANGE_REVIEWER_ROUTE_AGENT } from "@/lib/tak/change-reviewer-route";
 import { parseSemanticReviewResponse, type SemanticReviewResult } from "./semantic-change-review";
+import { semanticReviewMinimumContextTokens } from "./semantic-review-context-floor";
 import type { SemanticChangeReviewDispatchContext } from "./semantic-change-review-operation";
 
 const SPECIALIST_SYSTEM_PROMPTS: Record<string, string> = {
@@ -92,8 +93,17 @@ export async function dispatchRoutedSemanticReview(
         taskType: "build-review",
         budgetClass: context.strategyProfile === "economy" ? "balanced" : "quality_first",
         modelTier: "robust",
-        minimumCapabilities: { toolUse: true },
-        agentMinimumContextTokens: 32_000,
+        // BI-47ACE2C7: this call attaches no tools, so it must not assert a
+        // caller-level tool-use requirement — that excluded the long-context
+        // route purely on its `supportsToolUse=false` profile. `routeAndCall`
+        // still infers the requirement from `options.tools`, so a future
+        // tool-bearing review is unaffected. The context floor is likewise
+        // derived from the request actually sent rather than an unrelated flat
+        // 32,000, which excluded the local 24,576-token reviewer.
+        agentMinimumContextTokens: semanticReviewMinimumContextTokens({
+          systemPrompt: branch.systemPrompt,
+          userPrompt: prompt,
+        }),
         agentId: branch.agentId,
         agentDisplayName: branch.displayName,
         effort: context.strategyProfile === "document-authority" ? "max" : "high",

@@ -122,6 +122,7 @@ import {
 } from "./data-control-operation";
 import { indexIntegritySweep } from "./index-integrity-sweep";
 import { localModelInstall } from "./local-model-install";
+import { nonprodCapacityAvailable, nonprodLeaseWaitReconciliation } from "./nonprod-lease-wait";
 
 export const scheduledFunctions = [
   prometheusPoll,
@@ -189,6 +190,7 @@ export const scheduledFunctions = [
   dataControlOperationRecoveryScheduled, // BI-DG-014: durable cross-store data mutation recovery and reconciliation
   indexIntegritySweep, // BI-D9C20A97: daily live-database btree/collation integrity sweep
   postmarkCallbackDispatchSweep,
+  nonprodLeaseWaitReconciliation,
 ];
 
 export const eventFunctions = [
@@ -231,6 +233,7 @@ export const eventFunctions = [
   postmarkCallbackDispatchRequested,
   workPatternExperimentRun,
   dataControlOperationRecoveryRequested,
+  nonprodCapacityAvailable,
 ];
 
 export const allFunctions = [...scheduledFunctions, ...eventFunctions];

@@ -36,6 +36,34 @@ The result is a queue of active Node processes, tool traffic, memory pressure, a
 - **C6 — Local memory is a governed resource.** All heavyweight host processes use resource lanes; process naming or client provenance cannot bypass admission.
 - **C7 — Fail closed with a reason.** Stale projections, identity conflicts, and missing evidence block the affected transition and produce one actionable escalation.
 
+## 2.1 Objectives and acceptance contract
+
+**OBJ-FLOW-001:** Replace rapid nonproduction admission polling with a server-owned durable wait that preserves FIFO identity while the client process is absent.
+
+**OBJ-FLOW-002:** Wake only the exact FIFO head after capacity changes, without allowing an event or client-supplied field to grant admission.
+
+**OBJ-FLOW-003:** Make missed notifications recoverable through bounded reconciliation and idempotent event identity.
+
+**OBJ-FLOW-004:** Treat a durable capacity wait as live Workroom progress without counting it as executing work.
+
+**OBJ-FLOW-005:** Surface executing, next-ready, dormant, oldest-wait, no-transition, throughput, p95 wait, and abandonment signals through canonical operational read models.
+
+| Acceptance criterion | Objective links | Observable result |
+| --- | --- | --- |
+| AC-FLOW-001 | OBJ-FLOW-001 | A queued claim returns one deterministic TaskRun, extends only the queued lease to the bounded wait deadline, and the canonical runners exit without renew/list/claim polling or releasing queue position. |
+| AC-FLOW-002 | OBJ-FLOW-002 | Release or expiry selects only the FIFO head and persists an exact lease/claim/session/candidate-bound capacity event before advisory delivery. |
+| AC-FLOW-003 | OBJ-FLOW-003 | Duplicate events are suppressed, and a five-minute reconciler repairs missed delivery without creating a second wait identity. |
+| AC-FLOW-004 | OBJ-FLOW-004 | An exact worktree/branch durable lease prevents Workroom reaping even when its authoring lease expired; queued work remains outside the executing count. |
+| AC-FLOW-005 | OBJ-FLOW-005 | Workroom and queue projections show heavy-lane state and progress SLO breaches, including backlog with zero completions and p95 wait beyond one hour. |
+| AC-FLOW-006 | OBJ-FLOW-001, OBJ-FLOW-002, OBJ-FLOW-003 | A woken client must re-read the TaskRun and make one fresh host-pressure-aware claim; neither TaskRun nor event admits capacity. |
+
+## Design grounding
+
+- **Existing specs/plans reviewed:** this resilient-development specification and `docs/superpowers/plans/2026-08-24-resilient-gate-flow-control.md`.
+- **Current code substrate reviewed:** `NonProductionEnvironmentLease`, `TaskRun`, Workroom liveness, queue telemetry, MCP lease handlers, and the two canonical host runners.
+- **Source of truth:** the lease remains FIFO admission authority; TaskRun is the durable wait projection; queue and Workroom read models remain operational projections.
+- **Decision:** extend the existing lease and TaskRun substrate with one bounded, idempotent server-owned wait. No client event, notification, or UI state grants capacity.
+
 ## 3. Canonical identities and state
 
 No parallel queue or evidence table is introduced. Existing `Workroom`, `NonProductionEnvironmentLease`, `QueueTelemetryEvent`, task lifecycle, and local-CI evidence records remain authoritative.
@@ -95,6 +123,67 @@ The planner output records its lane, selected commands, reasons, affected tests/
 7. If a notification is missed, a low-frequency reconciliation checks durable task state. Reconciliation is a safety net, not the normal wait mechanism.
 
 MCP task notifications are optional by specification, so correctness never depends on delivery. The server-owned task and lease state is authoritative; events reduce latency and traffic.
+
+### 5.1 Durable wait projection
+
+No wait table is added. Each queued claimant or immutable-run subscriber is
+projected as a `TaskRun` whose `repeatedPatternKey` is
+`nonprod-wait:<leaseId>`. The lease remains queue authority; the task is the
+durable client-facing checkpoint. Its `progressPayload` carries a versioned
+`nonprod-lease-wait.v1` envelope with:
+
+- lease id, stable claim key, environment, owner provider, owner session, and
+  Workroom/worktree identity;
+- immutable candidate identity when the claim is a gate run;
+- wait deadline, current wait state, queue position, and last transition time;
+- the last capacity-event identity and whether a fresh claim consumed it.
+
+The MCP task remains `submitted` while its wait state is `waiting`. A capacity
+event updates the same task to `capacity-available`; admission, terminal
+evidence reuse, cancellation, or deadline expiry completes or cancels it. The
+MCP projection includes the wait envelope in task metadata, so `tasks/get` is
+the durable recovery read even when notifications were missed.
+
+### 5.2 Capacity event identity and delivery
+
+A normal wake has identity
+`nonprod-capacity:<environment>:<released-or-expired-lease>:<head-lease>`.
+Reconciliation uses
+`nonprod-reconcile:<environment>:<head-lease>:<five-minute-bucket>`.
+Task updates compare the stored event identity before writing or notifying, so
+release retries and duplicate Inngest delivery are idempotent. The event
+contains the lease, claim, owner session, task, immutable candidate, and event
+identity; adapters never reconstruct authority from prose.
+
+After the lease transaction commits, DPF persists the task transition, emits
+the matching Inngest event for suspended platform workflows, and broadcasts an
+advisory `notifications/tasks/status` message. One authenticated Streamable
+HTTP SSE connection serves all waiting tasks for a host. On reconnect it first
+replays durable `capacity-available` tasks, then follows live events. In-memory
+broadcast is latency only; TaskRun plus bounded reconciliation is correctness.
+
+### 5.3 Server-owned liveness and host resume
+
+The initial claim supplies a bounded wait deadline separately from the short
+active-lease TTL. While the task remains live, the five-minute reconciler owns
+queued expiry and may extend it only to the earlier of the next reconciliation
+window or the wait deadline. Clients do not renew queued leases. Active leases
+retain their existing short heartbeat and process-fence rules.
+
+`gate-worktree` and `host-resource-runner` write an atomic local wake descriptor
+and exit with the typed queued result. A singleton host adapter holds the one
+SSE connection, deduplicates event identities on disk, and resumes the owning
+Codex session with the immutable task/lease identity. The resumed client
+re-reads `tasks/get` and makes exactly one fresh claim with current host
+pressure. Claude/Grok adapters consume the same descriptor contract when their
+session-resume command is available; lack of a native resume command degrades
+to an operator-visible durable task, not polling.
+
+The adapter is not queue authority, does not reserve capacity, and cannot mark
+a task admitted. Its only authority is to deliver a wake hint to the recorded
+owner. If it is stopped, the next connection replays unconsumed durable events;
+if delivery is lost entirely, the five-minute reconciliation emits another
+bounded event.
 
 ## 6. Resource lanes and host memory
 
