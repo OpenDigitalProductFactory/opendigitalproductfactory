@@ -65,6 +65,8 @@ export interface RouteAndCallOptions {
    * a governed terminal action is pending.
    */
   toolChoice?: "auto" | "required" | "none";
+  /** Exact sole writer guarded by the caller's terminal-tool policy. */
+  terminalWriterToolName?: string;
   minimumCapabilities?: import("@/lib/routing/agent-capability-types").AgentMinimumCapabilities;
   agentMinimumContextTokens?: number;
   agentId?: string;

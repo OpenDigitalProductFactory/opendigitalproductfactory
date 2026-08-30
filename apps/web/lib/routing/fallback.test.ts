@@ -130,7 +130,7 @@ it("keeps restricted OpenRouter obligations load-bearing when OpenRouter is a fa
       maxTokens: 1024,
       providerSettings: {},
       toolPolicy: { toolChoice: "required" },
-      responsePolicy: {},
+      responsePolicy: { terminalWriterToolName: "record_initiative_evidence" },
       openRouterObligations: {
         requireProviderAllowlist: true,
         requireProviderBlocklist: true,
@@ -149,6 +149,7 @@ it("keeps restricted OpenRouter obligations load-bearing when OpenRouter is a fa
     },
   );
   expect(plan.toolPolicy.toolChoice).toBe("required");
+  expect(plan.responsePolicy.terminalWriterToolName).toBe("record_initiative_evidence");
   expect(plan.openRouterPolicy).toMatchObject({
     posture: "restricted",
     providerSettings: { only: ["anthropic"], allow_fallbacks: false, zdr: true },

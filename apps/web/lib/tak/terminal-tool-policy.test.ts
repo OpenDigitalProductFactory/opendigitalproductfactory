@@ -359,10 +359,14 @@ describe("agent loop terminal writer integration", () => {
     const secondTools = (vi.mocked(routeAndCall).mock.calls[1]![3] as { tools: typeof providerTools }).tools;
     const firstToolChoice = (vi.mocked(routeAndCall).mock.calls[0]![3] as { toolChoice?: string }).toolChoice;
     const secondToolChoice = (vi.mocked(routeAndCall).mock.calls[1]![3] as { toolChoice?: string }).toolChoice;
+    const firstTerminalWriter = (vi.mocked(routeAndCall).mock.calls[0]![3] as { terminalWriterToolName?: string }).terminalWriterToolName;
+    const secondTerminalWriter = (vi.mocked(routeAndCall).mock.calls[1]![3] as { terminalWriterToolName?: string }).terminalWriterToolName;
     expect(firstTools.map((tool) => tool.function.name)).toEqual([policy.writerToolName]);
     expect(secondTools.map((tool) => tool.function.name)).toEqual([policy.writerToolName]);
     expect(firstToolChoice).toBe("required");
     expect(secondToolChoice).toBe("required");
+    expect(firstTerminalWriter).toBe(policy.writerToolName);
+    expect(secondTerminalWriter).toBe(policy.writerToolName);
     expect(result.executedTools).toEqual([
       expect.objectContaining({ name: policy.writerToolName }),
     ]);
@@ -378,6 +382,7 @@ describe("agent loop terminal writer integration", () => {
     expect(result.failure?.kind).not.toBe("terminal-writer-missing");
     expect(result.content).not.toContain("No receipt was created");
     expect((vi.mocked(routeAndCall).mock.calls[0]![3] as { toolChoice?: string }).toolChoice).toBeUndefined();
+    expect((vi.mocked(routeAndCall).mock.calls[0]![3] as { terminalWriterToolName?: string }).terminalWriterToolName).toBeUndefined();
   });
 
   it("executes, records, and carries forward server-bound arguments when the provider sends an empty object", async () => {
