@@ -82,3 +82,54 @@ test("the Dockerfile refuses to bake an unmaterialized LFS pointer", () => {
     "the COPY must be followed by a zip-magic assertion so a pointer stub fails the publish, not the install",
   );
 });
+
+test("the runner stage ships git-lfs for the git-source upgrade shape", () => {
+  const dockerfile = readFileSync("Dockerfile", "utf8");
+  const runnerIndex = dockerfile.indexOf("FROM base AS runner");
+  assert.notEqual(runnerIndex, -1, "the runner stage must exist");
+
+  // The zip-magic assertion above is enforced on EVERY build of this Dockerfile,
+  // including the one the self-upgrade promoter runs on a git-source install.
+  // That build's context is a workspace the RUNNER container clones
+  // (lib/self-upgrade/prepare-source.ts). Without git-lfs in this stage the clone
+  // can only ever produce pointer stubs, so the assertion fails the operator's
+  // upgrade instead of a publish — which is what happened to every scheduled run
+  // after #4843 merged. The publish path gets materialization from
+  // actions/checkout; this stage is that guarantee for the path with no runner.
+  const runner = dockerfile.slice(runnerIndex);
+  const apkLine = runner.split("\n").find((l) => l.startsWith("RUN apk add"));
+  assert.ok(apkLine, "the runner stage must install its OS packages via apk add");
+  assert.match(
+    apkLine,
+    /\bgit-lfs\b/,
+    "the runner stage must install git-lfs or self-upgrade cannot materialize the LFS-tracked assets it then asserts",
+  );
+});
+
+test("the image carries the BIAN landscape the banking seed reads", () => {
+  const dockerfile = readFileSync("Dockerfile", "utf8");
+  const dockerignore = readFileSync(".dockerignore", "utf8");
+
+  // .dockerignore excludes docs/Reference/ wholesale. The BIAN JSON was never
+  // re-admitted, so seedBianReferenceModel's readFileSync threw on every
+  // install, its own catch swallowed the error, and the model imported zero
+  // Service Domains — including on the banking installs it exists for. The
+  // negation and the COPY have to move together or the build context loses it.
+  assert.match(
+    dockerignore,
+    /^!docs\/Reference\/bian\//m,
+    "the BIAN landscape must be re-admitted to the build context",
+  );
+
+  const copyIndex = dockerfile.indexOf(
+    "COPY docs/Reference/bian/bian-v14-service-landscape.json",
+  );
+  assert.notEqual(copyIndex, -1, "the BIAN landscape COPY must exist");
+
+  // Assert the bytes where they enter the artifact, same rule as the workbook.
+  assert.match(
+    dockerfile.slice(copyIndex),
+    /head -c 1 docs\/Reference\/bian\/bian-v14-service-landscape\.json \| grep -q '\{'/,
+    "the COPY must be followed by a JSON-shape assertion so a missing or truncated file fails the build",
+  );
+});

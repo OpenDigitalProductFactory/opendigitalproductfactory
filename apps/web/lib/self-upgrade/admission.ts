@@ -24,6 +24,7 @@ export type SelfUpgradeTargetBinding = Readonly<{
 
 export type SelfUpgradeAdmissionRecord = Readonly<{
   runId: string;
+  recoveryOfRunId: string | null;
   status: string;
   trigger: string;
   targetSha: string | null;
@@ -44,6 +45,7 @@ export type SelfUpgradeAdmissionRecord = Readonly<{
 export type SelfUpgradeAdmissionInput = Readonly<{
   triggeredBy: string;
   target: SelfUpgradeTargetBinding;
+  recoveryOfRunId?: string | null;
   requestedForce: boolean;
   dryRun: boolean;
   routine: boolean;
@@ -58,8 +60,18 @@ type PersistedAdmissionInput = SelfUpgradeAdmissionInput & {
 
 export type SelfUpgradeAdmissionRepository = {
   admit(input: PersistedAdmissionInput): Promise<{
-    disposition: "created" | "idempotent" | "already_active";
+    disposition: "created" | "idempotent" | "already_active" | "recovery_conflict";
     run: SelfUpgradeAdmissionRecord;
+  } | {
+    disposition: "recovery_refused";
+    reason:
+      | "recovery-target-invalid"
+      | "recovery-predecessor-missing"
+      | "recovery-predecessor-not-terminal"
+      | "recovery-predecessor-ambiguous"
+      | "recovery-target-not-distinct"
+      | "recovery-predecessor-not-latest";
+    run: null;
   }>;
   read(runId: string): Promise<SelfUpgradeAdmissionRecord | null>;
   claimDispatch(input: {
@@ -168,6 +180,18 @@ function fingerprintMatches(
   });
 }
 
+function persistedReleaseTarget(
+  run: SelfUpgradeAdmissionRecord,
+): SelfUpgradeTargetBinding | null {
+  if (!run.targetSha || !run.targetTag) return null;
+  const target: SelfUpgradeTargetBinding = {
+    targetKind: "release-artifact",
+    targetSha: run.targetSha,
+    targetTag: run.targetTag,
+  };
+  return fingerprintMatches(run, target) ? target : null;
+}
+
 export function isDefiniteSelfUpgradeDispatchRefusal(error: unknown): boolean {
   const message = getErrorMessage(error);
   return /Inngest API Error: (400|401|403|404|406|409|412|413)\b/.test(message) ||
@@ -195,8 +219,25 @@ export function createSelfUpgradeAdmissionService(
     const existing = await dependencies.repository.read(runId);
     if (!existing) return { status: "not-claimed", runId };
 
-    const currentTarget = await dependencies.resolveTarget().catch(() => null);
+    // Terminal rows are immutable history.  In particular, a failed row bound
+    // to an older release must never be rewritten or dispatched toward a newer
+    // target. A separately admitted recovery uses a new immutable target and
+    // typed successor relation; it never reopens this historical row.
+    if (existing.completedAt || ["failed", "succeeded", "skipped"].includes(existing.status)) {
+      return { status: "failed", runId };
+    }
+
+    const resolvedTarget = await dependencies.resolveTarget().catch(() => null);
+    const currentTarget = resolvedTarget ?? persistedReleaseTarget(existing);
     if (!currentTarget) {
+      if (existing.targetSha && existing.targetTag) {
+        await dependencies.repository.failDispatch({
+          runId,
+          reason: "admission-binding-drift",
+          observedAt: dependencies.now(),
+        });
+        return { status: "failed", runId };
+      }
       await dependencies.repository.markDispatchIndeterminate({
         runId,
         leaseToken: null,
@@ -205,7 +246,7 @@ export function createSelfUpgradeAdmissionService(
       });
       return { status: "indeterminate", runId };
     }
-    if (!targetMatches(existing, currentTarget)) {
+    if (resolvedTarget && !targetMatches(existing, currentTarget)) {
       await dependencies.repository.failDispatch({
         runId,
         reason: "admission-target-drift",
@@ -275,26 +316,37 @@ export function createSelfUpgradeAdmissionService(
     }
   }
 
-  return {
-    async admit(input: SelfUpgradeAdmissionInput) {
+  async function admit(input: SelfUpgradeAdmissionInput) {
       const admitted = await dependencies.repository.admit({
         ...input,
         runId: dependencies.createRunId(),
         admissionFingerprint: computeSelfUpgradeAdmissionFingerprint(input),
         dispatchStatus: "admission_pending",
       });
-      if (admitted.disposition !== "already_active") {
+      if (admitted.disposition === "recovery_refused") {
+        return {
+          admitted: false as const,
+          runId: input.recoveryOfRunId ?? "unadmitted",
+          disposition: admitted.disposition,
+          reason: admitted.reason,
+          dispatchStatus: "dispatch_failed" as const,
+        };
+      }
+      if (["created", "idempotent"].includes(admitted.disposition)) {
         dependencies.schedule(async () => {
           await dispatch(admitted.run.runId);
         });
       }
       return {
-        admitted: admitted.disposition !== "already_active",
+        admitted: ["created", "idempotent"].includes(admitted.disposition),
         runId: admitted.run.runId,
         disposition: admitted.disposition,
         dispatchStatus: admitted.run.dispatchStatus,
       };
-    },
+  }
+
+  return {
+    admit,
     dispatch,
     async reconcile() {
       const rows = await dependencies.repository.listRecoverable({

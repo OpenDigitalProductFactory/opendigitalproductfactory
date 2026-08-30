@@ -26,8 +26,14 @@ is unavailable and does not offer or queue an upgrade.
 
 ## Workflow
 
-1. Confirm the status card shows a resolved immutable update. If it says current
-   or unavailable, there is no upgrade action to trigger.
+1. Confirm the status card shows a resolved immutable update. The card reports
+   **You’re current** only when nothing newer is waiting; if it says that, or
+   says updates are unavailable on this install, there is no upgrade action to
+   trigger.
+
+   A waiting update stays named on the card while an upgrade is running
+   (**Installing now**) and after one fails (**Update still pending**), so a
+   failed or in-progress attempt never reads as being up to date.
 2. Review the pending upgrade and what it will change before triggering anything.
 3. Trigger the upgrade only inside an approved deployment window. The server
    durably admits the request and assigns its `SUR-*` run identity before queue

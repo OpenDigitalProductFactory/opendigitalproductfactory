@@ -342,6 +342,10 @@ export function createLocalIntegrationPlan(input) {
       HOST_TEST_INITIAL_WORKERS,
       "--retry-workers",
       HOST_TEST_RETRY_WORKERS,
+      // The integration base, so the stage can narrow to the tests this
+      // candidate can reach (BI-2227C37C). Absent or unreadable => exhaustive.
+      "--base",
+      baseRef,
     ],
     productionBuildCommand,
   ];

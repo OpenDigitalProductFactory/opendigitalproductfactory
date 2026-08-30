@@ -71,6 +71,72 @@ type RepositoryProviderBlobResult =
       error: string;
     };
 
+type GithubJsonFailure = {
+  ok: false;
+  kind: "transport" | "http" | "unreadable";
+  attempts: number;
+  status?: number;
+};
+
+type GithubJsonResult =
+  | ActionSuccess<unknown>
+  | GithubJsonFailure;
+
+const RETRYABLE_PROVIDER_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
+const MAX_PROVIDER_ATTEMPTS = 2;
+
+function providerAttemptLabel(attempts: number): string {
+  return `${attempts} ${attempts === 1 ? "attempt" : "attempts"}`;
+}
+
+function providerFailureMessage(
+  failure: GithubJsonFailure,
+  labels: { unavailable: string; unreadable: string },
+): string {
+  const attempts = providerAttemptLabel(failure.attempts);
+  if (failure.kind === "transport") {
+    return `Repository provider could not resolve ${labels.unavailable} after ${attempts} (transport failure).`;
+  }
+  if (failure.kind === "http") {
+    return `Repository provider could not resolve ${labels.unavailable} after ${attempts} (HTTP ${failure.status}).`;
+  }
+  return `Repository provider returned unreadable ${labels.unreadable} after ${attempts}.`;
+}
+
+async function fetchGithubJson(args: {
+  url: string;
+  token: string | null;
+  fetchImpl: typeof fetch;
+}): Promise<GithubJsonResult> {
+  for (let attempt = 1; attempt <= MAX_PROVIDER_ATTEMPTS; attempt += 1) {
+    let response: Response;
+    try {
+      response = await args.fetchImpl(args.url, {
+        headers: {
+          Accept: "application/vnd.github+json",
+          "X-GitHub-Api-Version": "2022-11-28",
+          ...(args.token ? { Authorization: `Bearer ${args.token}` } : {}),
+        },
+        cache: "no-store",
+      });
+    } catch {
+      if (attempt < MAX_PROVIDER_ATTEMPTS) continue;
+      return { ok: false, kind: "transport", attempts: attempt };
+    }
+    if (!response.ok) {
+      if (attempt < MAX_PROVIDER_ATTEMPTS && RETRYABLE_PROVIDER_STATUSES.has(response.status)) continue;
+      return { ok: false, kind: "http", attempts: attempt, status: response.status };
+    }
+    try {
+      const payload: unknown = await response.json();
+      return ok(payload);
+    } catch {
+      return { ok: false, kind: "unreadable", attempts: attempt };
+    }
+  }
+  return { ok: false, kind: "transport", attempts: MAX_PROVIDER_ATTEMPTS };
+}
+
 function decodeGithubContent(payload: unknown, expectedBlobId: string): RepositoryProviderBlobResult {
   if (!payload || typeof payload !== "object") {
     return { ok: false, code: "IMMUTABLE_SOURCE_UNAVAILABLE", error: "Repository provider returned unreadable artifact metadata." };
@@ -104,30 +170,22 @@ async function fetchRepositoryProviderBlob(args: {
   if (!encodedPath || !/^[a-f0-9]{40}$/i.test(args.commitSha) || !/^[a-f0-9]{40}$/i.test(args.expectedBlobId)) {
     return { ok: false, code: "IMMUTABLE_SOURCE_IDENTITY_INVALID", error: "Repository artifact locator is not a recognized immutable provider blob." };
   }
-  let response: Response;
-  try {
-    response = await args.fetchImpl(
-      `https://api.github.com/repos/${encodeURIComponent(args.owner)}/${encodeURIComponent(args.repo)}/contents/${encodedPath}?ref=${encodeURIComponent(args.commitSha)}`,
-      {
-        headers: {
-          Accept: "application/vnd.github+json",
-          "X-GitHub-Api-Version": "2022-11-28",
-          ...(args.token ? { Authorization: `Bearer ${args.token}` } : {}),
-        },
-        cache: "no-store",
-      },
-    );
-  } catch {
-    return { ok: false, code: "IMMUTABLE_SOURCE_UNAVAILABLE", error: "Repository provider could not resolve the immutable artifact." };
+  const result = await fetchGithubJson({
+    url: `https://api.github.com/repos/${encodeURIComponent(args.owner)}/${encodeURIComponent(args.repo)}/contents/${encodedPath}?ref=${encodeURIComponent(args.commitSha)}`,
+    token: args.token,
+    fetchImpl: args.fetchImpl,
+  });
+  if (!result.ok) {
+    return {
+      ok: false,
+      code: "IMMUTABLE_SOURCE_UNAVAILABLE",
+      error: providerFailureMessage(result, {
+        unavailable: "the immutable artifact",
+        unreadable: "artifact metadata",
+      }),
+    };
   }
-  if (!response.ok) {
-    return { ok: false, code: "IMMUTABLE_SOURCE_UNAVAILABLE", error: "Repository provider could not resolve the immutable artifact." };
-  }
-  try {
-    return decodeGithubContent(await response.json(), args.expectedBlobId);
-  } catch {
-    return { ok: false, code: "IMMUTABLE_SOURCE_UNAVAILABLE", error: "Repository provider returned unreadable artifact metadata." };
-  }
+  return decodeGithubContent(result.data, args.expectedBlobId);
 }
 
 /**
@@ -274,31 +332,22 @@ export async function resolveRepositoryArtifact(args: {
   } catch {
     return { ok: false, code: "CANONICAL_DESIGN_REQUIRED", error: "Repository provider credentials are unavailable." };
   }
-  let commitResponse: Response;
-  try {
-    commitResponse = await (args.fetchImpl ?? fetch)(
-      `https://api.github.com/repos/${encodeURIComponent(expectedRepo.owner)}/${encodeURIComponent(expectedRepo.name)}/commits/${encodeURIComponent(args.locator.commitSha)}`,
-      {
-        headers: {
-          Accept: "application/vnd.github+json",
-          "X-GitHub-Api-Version": "2022-11-28",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        cache: "no-store",
-      },
-    );
-  } catch {
-    return { ok: false, code: "CANONICAL_DESIGN_REQUIRED", error: "Repository provider could not resolve immutable commit provenance." };
+  const commitResult = await fetchGithubJson({
+    url: `https://api.github.com/repos/${encodeURIComponent(expectedRepo.owner)}/${encodeURIComponent(expectedRepo.name)}/commits/${encodeURIComponent(args.locator.commitSha)}`,
+    token,
+    fetchImpl: args.fetchImpl ?? fetch,
+  });
+  if (!commitResult.ok) {
+    return {
+      ok: false,
+      code: commitResult.kind === "unreadable" ? "ARTIFACT_AUTHOR_REQUIRED" : "CANONICAL_DESIGN_REQUIRED",
+      error: providerFailureMessage(commitResult, {
+        unavailable: "immutable commit provenance",
+        unreadable: "commit provenance",
+      }),
+    };
   }
-  if (!commitResponse.ok) {
-    return { ok: false, code: "CANONICAL_DESIGN_REQUIRED", error: "Repository provider could not resolve immutable commit provenance." };
-  }
-  let commitPayload: unknown;
-  try {
-    commitPayload = await commitResponse.json();
-  } catch {
-    return { ok: false, code: "ARTIFACT_AUTHOR_REQUIRED", error: "Repository commit provenance is unreadable." };
-  }
+  const commitPayload = commitResult.data;
   const email = dcoEmail(commitPayload);
   if (!email) {
     return {

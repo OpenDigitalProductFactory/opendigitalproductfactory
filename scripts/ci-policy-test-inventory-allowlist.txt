@@ -96,6 +96,7 @@ scripts/lib/local-ci-pilot-report.test.mjs
 scripts/lib/local-ci-slot-isolation.test.mjs
 scripts/lib/local-ci-slot-manifest.test.mjs
 scripts/lib/local-ci-stage-receipt.test.mjs
+scripts/lib/local-ci-vitest-selection.test.mjs
 scripts/lib/local-ci-vitest-supervisor.test.mjs
 scripts/lib/local-integration-image-retention.test.mjs
 scripts/lib/local-queue-observer.test.mjs

@@ -3,6 +3,12 @@
 import crypto from "node:crypto";
 import { prisma, type Prisma } from "@dpf/db";
 import { revalidatePath } from "next/cache";
+
+import {
+  describeActuation,
+  recordAndActuateEmploymentEvent,
+  type ActuationResult,
+} from "@/lib/workforce/employment-event-actuator-runtime";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { getUserTeamIds, createAuthorizationDecisionLog } from "@/lib/governance-data";
@@ -239,19 +245,16 @@ export async function createEmployeeProfile(input: EmployeeProfileInput): Promis
           select: { id: true, displayName: true },
         });
 
-        await tx.employmentEvent.create({
-          data: {
-            eventId: `EEVT-${crypto.randomUUID()}`,
-            employeeProfileId: createdEmployee.id,
-            eventType: buildLifecycleCreateEvent(input.status),
-            effectiveAt: input.startDate ?? new Date(),
-            reason: "employee_profile_created",
-            actorUserId: actor.id,
-            metadata: {
-              source: "employee_profile.create",
-              initialStatus: input.status,
-            } satisfies Prisma.InputJsonValue,
-          },
+        await recordAndActuateEmploymentEvent(tx as never, {
+          employeeProfileId: createdEmployee.id,
+          eventType: buildLifecycleCreateEvent(input.status),
+          effectiveAt: input.startDate ?? new Date(),
+          reason: "employee_profile_created",
+          actorUserId: actor.id,
+          metadata: {
+            source: "employee_profile.create",
+            initialStatus: input.status,
+          } satisfies Prisma.InputJsonValue,
         });
 
         await syncEmployeePrincipal(createdEmployee.id, tx as never);
@@ -439,15 +442,12 @@ export async function assignEmployeeOrg(input: AssignEmployeeOrgInput): Promise<
 
         await Promise.all(
           eventTypes.map((eventType) =>
-            tx.employmentEvent.create({
-              data: {
-                eventId: `EEVT-${crypto.randomUUID()}`,
-                employeeProfileId,
-                eventType,
-                effectiveAt,
-                reason: "org_assignment_updated",
-                actorUserId: actor.id,
-              },
+            recordAndActuateEmploymentEvent(tx as never, {
+              employeeProfileId,
+              eventType,
+              effectiveAt,
+              reason: "org_assignment_updated",
+              actorUserId: actor.id,
             }),
           ),
         );
@@ -540,15 +540,12 @@ export async function reassignEmployeeManager(input: {
 
         // Only the solid line is an employment event — a dotted line is advisory.
         if (line === "solid") {
-          await tx.employmentEvent.create({
-            data: {
-              eventId: `EEVT-${crypto.randomUUID()}`,
-              employeeProfileId,
-              eventType: "manager_changed",
-              effectiveAt: input.effectiveAt ?? new Date(),
-              reason: "org_chart_reassignment",
-              actorUserId: actor.id,
-            },
+          await recordAndActuateEmploymentEvent(tx as never, {
+            employeeProfileId,
+            eventType: "manager_changed",
+            effectiveAt: input.effectiveAt ?? new Date(),
+            reason: "org_chart_reassignment",
+            actorUserId: actor.id,
           });
         }
       });
@@ -582,6 +579,8 @@ export async function recordEmploymentLifecycleEvent(
       });
       if (!employee) return workforceDenied("Employee profile not found.");
 
+      let actuation: ActuationResult | null = null;
+
       await prisma.$transaction(async (tx) => {
         await tx.employeeProfile.update({
           where: { id: employee.id },
@@ -591,16 +590,15 @@ export async function recordEmploymentLifecycleEvent(
           },
         });
 
-        await tx.employmentEvent.create({
-          data: {
-            eventId: `EEVT-${crypto.randomUUID()}`,
-            employeeProfileId: employee.id,
-            eventType: input.eventType,
-            effectiveAt: input.effectiveAt,
-            reason: trimOptional(input.reason),
-            actorUserId: actor.id,
-            ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
-          },
+        // BI-2624B7EA — writing the event and opening the room it prescribes are
+        // ONE operation, so an event can never commit without being acted on.
+        actuation = await recordAndActuateEmploymentEvent(tx as never, {
+          employeeProfileId: employee.id,
+          eventType: input.eventType,
+          effectiveAt: input.effectiveAt,
+          reason: trimOptional(input.reason),
+          actorUserId: actor.id,
+          ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
         });
 
         if (input.eventType === "terminated" && input.terminationDate) {
@@ -626,7 +624,10 @@ export async function recordEmploymentLifecycleEvent(
 
       revalidatePath("/employee");
       revalidatePath("/admin");
-      return { ok: true, message: `Lifecycle event recorded for ${employee.displayName}.` };
+      return {
+        ok: true,
+        message: `${describeActuation(actuation, employee.displayName)}`,
+      };
     },
   });
 }

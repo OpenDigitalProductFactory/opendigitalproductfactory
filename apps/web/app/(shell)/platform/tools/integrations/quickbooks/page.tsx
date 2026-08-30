@@ -5,6 +5,7 @@ import { QuickBooksConnectPanel } from "@/components/integrations/QuickBooksConn
 import { IntegrationReadinessPanel } from "@/components/integrations/IntegrationReadinessPanel";
 import { buildQuickBooksReadinessDescriptor } from "@/lib/integrations/quickbooks/readiness";
 import { loadQuickBooksReadinessConnection } from "@/lib/integrations/quickbooks/connection-state";
+import { resolveNextSteps } from "@/lib/backlog/next-step-pointer";
 
 export default async function QuickBooksIntegrationPage() {
   const session = await auth();
@@ -21,6 +22,9 @@ export default async function QuickBooksIntegrationPage() {
 
   const initialState = await loadQuickBooksReadinessConnection();
   const readiness = buildQuickBooksReadinessDescriptor({ connection: initialState });
+  const [importReviewNextStep] = readiness.importReview
+    ? await resolveNextSteps([readiness.importReview.nextStep])
+    : [];
 
   return (
     <div className="space-y-6 p-6">
@@ -43,7 +47,7 @@ export default async function QuickBooksIntegrationPage() {
 
       <QuickBooksConnectPanel initialState={initialState} />
 
-      <IntegrationReadinessPanel descriptor={readiness} />
+      <IntegrationReadinessPanel descriptor={readiness} importReviewNextStep={importReviewNextStep} />
 
       <aside className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4 text-sm">
         <h2 className="font-semibold text-[var(--dpf-text)]">What this integration enables</h2>

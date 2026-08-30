@@ -19,6 +19,7 @@ import { fileURLToPath } from "node:url";
 import {
   canCall,
   expandGrants,
+  loadSubstrate,
   objectLiteralBody,
   normalizeGeneratedPath,
   parseSkillFrontmatter,
@@ -26,6 +27,16 @@ import {
   parseTopLevelKeys,
   stripLineComments,
 } from "./measure-capability-completeness.mjs";
+
+test("canonical registry tool grants participate in capability reachability", () => {
+  const substrate = loadSubstrate();
+  const held = substrate.heldGrants.get("policy-enforcement-agent") ?? [];
+
+  assert.ok(
+    held.includes("registry_read"),
+    "agent_registry.json config_profile.tool_grants must be measured for registry-only identities",
+  );
+});
 
 test("generated capability paths use repository-stable separators", () => {
   assert.equal(

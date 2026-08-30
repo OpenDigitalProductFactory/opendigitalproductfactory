@@ -17,6 +17,7 @@ import {
   type PostureHardPolicy,
   type ResolvedWorkPosture,
   type RoomPostureDeclaration,
+  type WorkStakesInput,
 } from "@/lib/work-posture";
 import type { ProactivityPlan } from "@/lib/proactivity/proactivity-types";
 import type { GoldenTrianglePreference } from "@/lib/golden-triangle";
@@ -73,6 +74,8 @@ export interface WorkroomPostureFacts {
   cycleActive: boolean;
   /** The room's own time boundary, when it has one. */
   dueAt: string | null;
+  /** Existing Build Studio rightsizing facts, when this room fronts a build. */
+  stakes?: WorkStakesInput | null;
   declaration: RoomPostureDeclaration | null;
 }
 
@@ -122,6 +125,7 @@ export function resolveWorkroomPosture(
       mode: facts.mode,
       cycleActive: facts.cycleActive,
     },
+    stakes: facts.stakes ?? null,
     stream: context.stream ?? null,
     temporal: {
       now,

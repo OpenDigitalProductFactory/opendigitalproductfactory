@@ -23,6 +23,12 @@ This is a BI-EE81F61B fix layered on protected BI-3FD07259 behavior. The
 historical BI-3FD design, plan, baseline, and coverage identity are inputs and
 remain unchanged.
 
+The 2026-08-30 recurrence extends that same atomic authority chain through
+worker start: live registry discovery and bounded publisher-verified evidence
+share one resolver, the resolved SHA/tag must equal the durable admission, and
+a transport-only outage returns the same run to reconciliation before
+quiescence instead of terminally inventing “no published target.”
+
 ## Atomic implementation sequence
 
 1. Freeze the live red fixture: the page rendered
@@ -61,6 +67,11 @@ remain unchanged.
 10. Run the ordinary governed consumer start path and prove that the same
     immutable identity survives restart before unfreezing BI-F48 and the
     preserved WordPress TaskRun.
+11. Freeze the worker-stage recurrence with tests for verified-evidence
+    recovery, no-evidence redispatch, durable-binding drift, and registry digest
+    failure. Consolidate target resolution, add the pre-mutation compare-and-
+    swap back to `pending`/`indeterminate`, then repeat the graph-linked tests,
+    exact-tree gate, protected merge, release, and governed live proof.
 
 ## Expected source surface
 
@@ -74,6 +85,15 @@ remain unchanged.
 - `apps/web/lib/actions/promotions.self-upgrade.test.ts`
 - `apps/web/lib/self-upgrade/admission.ts`
 - `apps/web/lib/self-upgrade/admission.test.ts`
+- `apps/web/lib/self-upgrade/status-target.ts`
+- `apps/web/lib/self-upgrade/status-target.test.ts`
+- `apps/web/lib/self-upgrade/verified-release-target.ts`
+- `apps/web/lib/self-upgrade/worker-release-target.ts`
+- `apps/web/lib/self-upgrade/run-store.ts`
+- `apps/web/lib/self-upgrade/run-store.test.ts`
+- `apps/web/lib/queue/functions/self-upgrade.ts`
+- `apps/web/lib/queue/functions/self-upgrade.test.ts`
+- `apps/web/lib/queue/functions/self-upgrade-handoff.test-support.ts`
 - `docs/superpowers/specs/2026-08-29-self-upgrade-rendered-target-admission-design.md`
 - `docs/superpowers/plans/2026-08-29-self-upgrade-rendered-target-admission.md`
 
@@ -110,6 +130,10 @@ edit, or manual consumer environment edit is in scope.
 | AC-RTA-007 | unresolved Git-source action denial fixture |
 | AC-RTA-008 | page/control/action adjacency, web typecheck, protected CI |
 | AC-RTA-009 | canonical release, one live upgrade, CAN-TEST, identity convergence, ordinary restart |
+| AC-RTA-010 | verified-evidence worker recovery fixture |
+| AC-RTA-011 | run-store compare-and-swap plus worker reconciliation fixture |
+| AC-RTA-012 | worker durable-target drift and registry digest-failure fixtures |
+| AC-RTA-013 | existing bounded admission reconciler plus architecture review |
 
 ## Backlog coverage
 
@@ -127,7 +151,7 @@ edit, or manual consumer environment edit is in scope.
 
 | Deliverable key | Backlog item | Independently shippable | Requirement refs | Contract refs | Flow refs | Verification refs |
 | --- | --- | --- | --- | --- | --- | --- |
-| `server-owned-rendered-target-admission` | BI-EE81F61B | no | OBJ-RTA-001, OBJ-RTA-002, OBJ-RTA-003, OBJ-RTA-004, OBJ-RTA-005 | opaque-target-binding, admission-transaction, dispatch-state-machine, install-support-boundary | render-sign, client-carry, action-verify, admit, reconcile, dispatch, live-upgrade, ordinary-restart | AC-RTA-001, AC-RTA-002, AC-RTA-003, AC-RTA-004, AC-RTA-005, AC-RTA-006, AC-RTA-007, AC-RTA-008, AC-RTA-009 |
+| `server-owned-rendered-target-admission` | BI-EE81F61B | no | OBJ-RTA-001, OBJ-RTA-002, OBJ-RTA-003, OBJ-RTA-004, OBJ-RTA-005 | opaque-target-binding, admission-transaction, dispatch-state-machine, install-support-boundary | render-sign, client-carry, action-verify, admit, reconcile, dispatch, worker-verify, worker-reconcile, live-upgrade, ordinary-restart | AC-RTA-001, AC-RTA-002, AC-RTA-003, AC-RTA-004, AC-RTA-005, AC-RTA-006, AC-RTA-007, AC-RTA-008, AC-RTA-009, AC-RTA-010, AC-RTA-011, AC-RTA-012, AC-RTA-013 |
 
 ## Risks and rollback
 

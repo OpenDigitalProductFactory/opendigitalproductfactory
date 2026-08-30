@@ -112,4 +112,98 @@ destruction.
 
 | Deliverable key | Backlog item | Independently shippable | Requirement refs | Contract refs | Flow refs | Verification refs |
 | --- | --- | --- | --- | --- | --- | --- |
-| `durable-self-upgrade-admission` | BI-3FD07259 | no | OBJ-SUA-001, OBJ-SUA-002, OBJ-SUA-003, OBJ-SUA-004 | admission-transaction, dispatch-state-machine, consumer-cas, operator-projection | admit-return, post-response-dispatch, boot-reconcile, worker-claim, live-upgrade | AC-SUA-001, AC-SUA-002, AC-SUA-003, AC-SUA-004, AC-SUA-005, AC-SUA-006, AC-SUA-007, AC-SUA-008 |
+| `durable-self-upgrade-admission` | BI-3FD07259 | no | OBJ-SUA-001, OBJ-SUA-002, OBJ-SUA-003, OBJ-SUA-004, OBJ-SUA-005 | admission-transaction, dispatch-state-machine, consumer-cas, operator-projection, verified-release-target-fallback | admit-return, post-response-dispatch, boot-reconcile, worker-claim, live-upgrade | AC-SUA-001, AC-SUA-002, AC-SUA-003, AC-SUA-004, AC-SUA-005, AC-SUA-006, AC-SUA-007, AC-SUA-008, AC-SUA-009 |
+
+## Volatile target-projection extension
+
+1. Add the exact oscillation RED fixture to `status-target.test.ts`: a live
+   registry success for the canonical release followed by a transient fetch
+   failure must retain the identical target, while no persisted proof remains
+   unavailable.
+2. Extend the existing `release_health.latest` JSON state with one optional
+   verified registry-target attestation. Do not add a model, migration, cache,
+   or alternate authority surface.
+3. Record the attestation only when a fresh successful publisher snapshot and
+   live registry candidate agree exactly. Bind publisher run, tag/SHA, GHCR
+   owner/channel, install identity, running config digest, platform, and all
+   verified image digests in a serializable transaction.
+4. On registry failure, accept the persisted candidate only while both evidence
+   timestamps are within 30 minutes and every binding still matches. Preserve
+   it across a matching health poll; clear it on changed/red/in-progress or
+   unsuccessful publisher identity. Keep Git-source and all malformed, stale,
+   ambiguous, or mismatched evidence fail closed.
+5. Preserve the existing server-signed expiring action binding and normal
+   action-time target/quiescence/override validation. Do not edit the #4863 UI
+   projection or add another operator control.
+6. Run the focused state/status/runner RED-GREEN suites, adjacent release-target
+   and self-upgrade action tests, web typecheck, prose/style/preflight guards,
+   exact-tree CI, protected PR/merge, and one canonical release. No live click
+   or BI-F48 replay is allowed before protected live proof.
+
+Additional source surface:
+
+- `apps/web/lib/self-upgrade/status-target.ts`
+- `apps/web/lib/self-upgrade/status-target.test.ts`
+- `apps/web/lib/release-health/state.ts`
+- `apps/web/lib/release-health/state.test.ts`
+- `apps/web/lib/release-health/runner.ts`
+- `apps/web/lib/release-health/runner.test.ts`
+
+## Atomic recovery extension for SUR-6B312E24
+
+1. Extract the Inngest self-registration endpoint and PUT lifecycle from the
+   oversized instrumentation module into one queue-owned helper. Red fixtures
+   cover `APP_URL` unset with an IPv4-only listener, explicit URL normalization,
+   truthful OK/failure persistence, and reconcile-only-after-success.
+2. Add the exact source-free durable-admission red fixture to
+   `admission.test.ts`: a tagged release row with a valid persisted fingerprint,
+   null target discovery, healthy job engine, and stable run id
+   `SUR-6B312E24` must dispatch once without calling `admit`.
+3. Reconstruct the persisted release binding only by validating its complete
+   admission fingerprint. Keep null-discovery Git admissions, missing tags,
+   corrupted fingerprints, resolved drift, unhealthy health, lease conflicts,
+   and newer-run conflicts fail-closed.
+4. Wire boot and periodic self-registration through the extracted helper and
+   invoke the existing reconciler only after a real successful PUT. Do not add
+   another timer, queue, run identity, or operator control.
+5. Run focused red/green tests, the adjacent admission/instrumentation suites,
+   web typecheck, module-size/style/prose guards, preflight, exact-tree CI, and
+   protected GitHub checks. Publish one canonical release and deploy it through
+   the governed live path without creating another `SelfUpgradeRun`.
+6. On exact served-SHA/CAN-TEST, observe only the existing reconciler advancing
+   `SUR-6B312E24`; require stable event identity, one dispatch acknowledgement,
+   truthful terminal state, and no replacement row before unfreezing BI-F48.
+
+## Terminal old-target correction
+
+The accepted live fixture is terminal and bound to a superseded release. Add a
+first-failing admission test proving reconciliation does not mutate or dispatch
+that row. Use the existing authenticated operator action as the sole bootstrap
+contract: it accepts only a terminal superseded run plus a verified signed tagged
+release target, creates a new
+admission through the existing transaction, and persists a unique typed
+`recoveryOfRunId` self-relation to the prior run. Reject active/ambiguous or
+non-latest prior rows, an existing successor, same/untagged/Git targets, forged
+or expired bindings, and target drift. This narrowly supersedes the old
+"no replacement run" step: the terminal predecessor remains immutable, while
+one separately fingerprinted successor becomes the only lawful bootstrap
+identity. It is not a browser retry or rebind; protected CI and the existing
+quiescence/worker-CAS gates remain mandatory.
+
+Publish the protected repair without deploying the superseded c137 release.
+Before the one physical action, capture a fresh server-signed binding for the
+repair tag/SHA and prove the latest row is still the unchanged terminal
+`SUR-6B312E24`. The old runtime admits one new manual run through its existing
+authenticated path. During new-container startup, the additive migration may
+link that one in-flight run to the exact predecessor only when the singleton,
+ordering, terminal, pre-dispatch, tagged-target, and distinct-target predicates
+all hold. Verify the typed link plus served SHA/CAN-TEST and restart coherence;
+otherwise stop without a second action.
+
+Treat the typed link as audit metadata only. The successor's signed target
+verification and recomputed admission fingerprint remain the sole dispatch
+authority. Record that the SQL migration checks structural predecessor evidence
+without cryptographically recomputing the historical fingerprint, and that its
+tests are static SQL contract assertions rather than an executed migration
+fixture. In live acceptance, read back both immutable rows and the link, then
+verify the successor's independent admission and dispatch evidence.

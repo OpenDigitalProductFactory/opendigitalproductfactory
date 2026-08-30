@@ -163,7 +163,7 @@ const definitions: ToolDefinition[] = [
       "Request admission to a governed shared nonproduction environment for preview, UX verification, or local integration. " +
       "Reusing claimKey returns the same durable queue entry (idempotent wait). " +
       "Do not claim in a tight loop without a stable claimKey. " +
-      "When queued, wait and renew with the returned leaseId — do not open a second claim for the same session purpose.",
+      "When queued, terminate the polling runner and resume from the returned TaskRun — do not renew or open a second claim.",
     inputSchema: {
       type: "object",
       properties: {
@@ -196,6 +196,10 @@ const definitions: ToolDefinition[] = [
         url: { type: "string" },
         ports: { type: "array", items: { type: "number" } },
         expiresAt: { type: "string", description: "ISO timestamp when the lease expires" },
+        waitDeadlineAt: {
+          type: "string",
+          description: "Optional ISO deadline for a server-owned durable wait. Defaults to expiresAt. Queued clients should stop polling and resume from the returned TaskRun.",
+        },
         worktreePath: { type: "string" },
         branchName: { type: "string" },
         buildId: { type: "string" },
@@ -346,7 +350,10 @@ async function lookupChangeOriginHandler(params: Record<string, unknown>): Promi
   return { success: true, message, data: result };
 }
 
-async function claimNonprodEnvironmentLeaseHandler(params: Record<string, unknown>): Promise<ToolResult> {
+async function claimNonprodEnvironmentLeaseHandler(
+  params: Record<string, unknown>,
+  userId: string,
+): Promise<ToolResult> {
   const { claimNonprodEnvironmentLease } = await import("@/lib/nonprod/environment-lease");
   const stringValue = stringValueFor(params);
   const environmentKey = stringValue("environmentKey");
@@ -383,6 +390,15 @@ async function claimNonprodEnvironmentLeaseHandler(params: Record<string, unknow
   const expiresAt = new Date(expiresAtText);
   if (Number.isNaN(expiresAt.getTime())) {
     return { success: false, error: "invalid_expires_at", message: "expiresAt must be a valid ISO timestamp" };
+  }
+  const waitDeadlineText = stringValue("waitDeadlineAt") || expiresAtText;
+  const waitDeadlineAt = new Date(waitDeadlineText);
+  if (Number.isNaN(waitDeadlineAt.getTime())) {
+    return {
+      success: false,
+      error: "invalid_wait_deadline",
+      message: "waitDeadlineAt must be a future ISO timestamp when supplied",
+    };
   }
   const slotManifestVersion = params["slotManifestVersion"];
   if (
@@ -532,6 +548,15 @@ async function claimNonprodEnvironmentLeaseHandler(params: Record<string, unknow
     };
   }
   if (result.status === "terminal") {
+    if (result.lease.taskRunId) {
+      const { settleNonprodLeaseWait } = await import("@/lib/nonprod/durable-wait");
+      await settleNonprodLeaseWait({
+        db: (await import("@dpf/db")).prisma,
+        taskRunId: result.lease.taskRunId,
+        leaseId: result.lease.leaseId,
+        state: "terminal",
+      });
+    }
     return {
       success: false,
       entityId: result.lease.leaseId,
@@ -557,6 +582,14 @@ async function claimNonprodEnvironmentLeaseHandler(params: Record<string, unknow
     };
   }
   if (result.status === "queued") {
+    const { checkpointNonprodLeaseWait } = await import("@/lib/nonprod/durable-wait");
+    const durableWait = await checkpointNonprodLeaseWait({
+      db: (await import("@dpf/db")).prisma,
+      userId,
+      lease: result.lease,
+      queuePosition: result.queuePosition,
+      waitDeadlineAt,
+    });
     return {
       success: true,
       entityId: result.lease.leaseId,
@@ -567,11 +600,22 @@ async function claimNonprodEnvironmentLeaseHandler(params: Record<string, unknow
           status: "queued",
           queuePosition: result.queuePosition,
           waitAgeMs: result.waitAgeMs,
+          resumeMode: "durable-task",
+          taskRunId: durableWait.taskRunId,
         },
         poolPolicy: result.poolPolicy,
         gateKey,
       },
     };
+  }
+  if (result.lease.taskRunId) {
+    const { settleNonprodLeaseWait } = await import("@/lib/nonprod/durable-wait");
+    await settleNonprodLeaseWait({
+      db: (await import("@dpf/db")).prisma,
+      taskRunId: result.lease.taskRunId,
+      leaseId: result.lease.leaseId,
+      state: "admitted",
+    });
   }
   return {
     success: true,
@@ -701,7 +745,7 @@ async function renewNonprodEnvironmentLeaseHandler(params: Record<string, unknow
 const handlers: Record<string, ToolPackHandler> = {
   list_nonprod_environment_leases: () => listNonprodEnvironmentLeases(),
   lookup_change_origin: (params) => lookupChangeOriginHandler(params),
-  claim_nonprod_environment_lease: (params) => claimNonprodEnvironmentLeaseHandler(params),
+  claim_nonprod_environment_lease: (params, userId) => claimNonprodEnvironmentLeaseHandler(params, userId),
   release_nonprod_environment_lease: (params) => releaseNonprodEnvironmentLeaseHandler(params),
   renew_nonprod_environment_lease: (params) => renewNonprodEnvironmentLeaseHandler(params),
 };

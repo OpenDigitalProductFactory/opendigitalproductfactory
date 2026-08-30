@@ -53,6 +53,8 @@ failed before dispatch.
   unavailable while the request's disposition is unknown.
 - **OBJ-SUA-004:** Preserve quiescence, emergency-override, release binding, and
   newer-run checks as fail-closed authority boundaries.
+- **OBJ-SUA-005:** Keep one verified immutable release target available through
+  a bounded transient registry failure without weakening action-time authority.
 
 | Acceptance | Objectives | Statement | Design evidence |
 | --- | --- | --- | --- |
@@ -64,6 +66,7 @@ failed before dispatch.
 | AC-SUA-006 | OBJ-SUA-003 | The existing control shows durable pending, dispatching, queued, indeterminate, and dispatch-failed outcomes and never unlocks on a blind timer. | Operator projection |
 | AC-SUA-007 | OBJ-SUA-003 | A response interruption after admission still converges from server data; no local success state is treated as evidence. | Operator projection |
 | AC-SUA-008 | OBJ-SUA-004 | Emergency override remains explicit and immutable per admission; ordinary activity/quiescence preflight remains authoritative and cannot be bypassed by reconciliation. | Authority boundary |
+| AC-SUA-009 | OBJ-SUA-004, OBJ-SUA-005 | After live registry discovery agrees with a fresh successful publisher snapshot, a later transient registry failure may reuse only that exact bounded candidate; stale, conflicting, unverified, wrong-install, wrong-platform, malformed, or Git-source evidence remains unavailable. | Verified release-target fallback |
 
 ## Governed design-review recording contract
 
@@ -246,9 +249,155 @@ Tests must prove:
   has no timer-based re-enable;
 - ordinary queued/running/succeeded/failed/skipped history remains compatible;
 - startup and periodic recovery resend only eligible rows; and
-- the migration applies to a database containing historical self-upgrade rows.
+- the migration applies to a database containing historical self-upgrade rows;
+  and
+- a successful registry read followed by a transient failure retains the exact
+  fresh verified release target, while absent/stale/red/conflicting evidence
+  remains unavailable.
 
 Live acceptance requires one canonical release and one governed action whose
 UI returns a run id immediately, whose persisted dispatch transitions are
 observable, and whose physical upgrade completes at most once. Served SHA,
 health, preserved data, and CAN-TEST remain mandatory.
+
+## Bounded verified release-target fallback
+
+The live `f13fcf1c` pre-action fixture proved that release-artifact projection
+was volatile: one page read resolved the exact immutable release and issued a
+signed binding, while a later read in the same unchanged process returned
+`Target: unknown` after transient fetch degradation. The already-verified
+`release_health.latest` publisher state remained exact and healthy throughout.
+
+The repair extends that existing PlatformConfig row rather than creating a
+second target store. A successful live registry read may attach one
+`verifiedTarget` attestation only when the row's current publisher snapshot is
+`verified`, has a successful workflow conclusion, and exactly matches the
+candidate tag, source SHA, and publisher run id. The attestation binds the GHCR
+owner, channel tag, install mode, installed image tag, running config digest,
+Linux platform/architecture, and all three registry-verified image digests.
+The write uses a serializable transaction so a concurrent health poll cannot be
+overwritten by an older page observation.
+
+On a later registry failure, `resolveSelfUpgradeStatusTarget` may use that
+candidate only when both the publisher snapshot and attestation are no more
+than 30 minutes old and every bound install, platform, tag, SHA, publisher, and
+digest field still validates. The normal current-config comparison still
+decides whether the candidate is pending or already installed. Matching health
+polls preserve the attestation; a changed, red, in-progress, ambiguous, or
+unsuccessful publisher identity clears it. Missing evidence remains target
+unavailable.
+
+This fallback never applies to Git-source installs and never converts failed,
+stale, malformed, mismatched-owner/channel/architecture/digest, or unverified
+evidence into authority. It does not persist or reuse a client signature. The
+page still issues a fresh server-signed expiring release-artifact binding, and
+the action still performs its ordinary binding, target, predecessor,
+quiescence, and emergency-override checks at execution time. PR #4863 remains
+the single owner-state/UI projection contract; this extension changes no UI
+surface.
+
+## Source-free registration and persisted-target reconciliation extension
+
+Live acceptance of `SUR-6B312E24` exposed two coupled recovery defects after
+the original admission contract shipped:
+
+1. a consumer portal with `APP_URL` unset self-registers through
+   `http://localhost:3000/api/inngest`; inside the Linux container that name can
+   resolve to `::1` while the Next listener is reachable only on IPv4, so the
+   real registration PUT fails even though `127.0.0.1:3000` is healthy; and
+2. the dispatcher asks Git-backed target discovery to rediscover a release
+   target after admission. A source-free consumer has no usable
+   `/host-dpf` Git remote, so a null discovery result leaves the already
+   authenticated, exact-bound durable run permanently indeterminate.
+
+The repair keeps `SelfUpgradeRun` as the single authority. When no explicit
+`APP_URL` is configured, the portal uses its server-owned loopback listener at
+`127.0.0.1` and the effective `PORT`. An explicit configured URL remains
+authoritative. Registration health is persisted as successful only after the
+actual PUT returns an OK response. That transition immediately invokes the
+existing idempotent admission reconciler so an accepted run does not wait for
+the maintenance interval.
+
+For dispatch, a resolved current target must still match the stored target
+exactly. If release discovery is unavailable, the dispatcher may reconstruct
+only a `release-artifact` target from the stored SHA/tag and accept it only when
+recomputing the admission fingerprint from every persisted authority field
+matches exactly. A null resolver never authorizes a `git-source` admission,
+an untagged release, or a fingerprint mismatch. No client field is re-read and
+no new run is created. A later conflicting resolved target remains terminal
+drift.
+
+`SUR-6B312E24` is the immutable live fixture. It must remain the sole run while
+this source repair is developed and published. Once the repair is served, the
+normal reconciler may claim and dispatch that same run with stable event id
+`self-upgrade:SUR-6B312E24` exactly once under the existing lease and worker
+compare-and-swap contracts.
+
+### Extension acceptance
+
+- With `APP_URL` unset and `PORT=3000`, the self-registration endpoint is
+  `http://127.0.0.1:3000/api/inngest`; explicit `APP_URL` is normalized without
+  changing its host.
+- A failed or non-OK PUT persists failure and never triggers admission
+  reconciliation; a successful PUT persists success and triggers reconciliation.
+- A null target resolver can dispatch one exact fingerprint-valid tagged
+  release admission but leaves Git-source, untagged, or corrupt bindings
+  fail-closed and indeterminate/failed according to the existing state machine.
+- Resolver drift, unhealthy job-engine state, newer runs, active leases, and
+  duplicate worker delivery retain their current refusals.
+- Live proof uses no second click or replacement run: the already persisted
+  `SUR-6B312E24` must reach a truthful terminal dispatch/result through
+  reconciliation.
+
+### Terminal old-target and source-free bootstrap correction
+
+The live `SUR-6B312E24` fixture closed in `failed` with an immutable target from
+an older release. A terminal row is historical evidence, not a mutable retry
+slot: reconciliation must return a fail-closed terminal disposition without
+rewriting its target, status, fingerprint, or failure evidence. It must never
+dispatch that row toward a later release.
+
+When the current release target is available only through a server-owned,
+authenticated release binding, the existing operator action is the sole
+bootstrap boundary. There is no second bootstrap export or alternate admission
+path. The action verifies the signed, expiring release binding before it supplies
+`recoveryOfRunId` to the transaction; the ordinary request path cannot supply
+that field. This boundary proves that the superseded row is the exact latest terminal run,
+accepts only a distinct tagged `release-artifact` target from the authenticated
+server binding, and creates one separately fingerprinted admission through the
+same atomic transaction. `SelfUpgradeRun.recoveryOfRunId` is a unique typed
+self-relation, so a predecessor can have at most one successor and the
+predecessor's target, status, fingerprint, failure, and timestamps remain
+untouched. This supersedes the earlier "no replacement run" acceptance only for
+the proven terminal-old-target case; predecessor immutability remains normative.
+No client-provided SHA/tag, Git fallback, row reopening, downgrade, emergency
+override, or direct queue send is accepted. Active or ambiguous predecessors,
+newer runs, an existing successor, untagged/Git targets, target drift, and
+missing or expired authentication all remain fail closed. The normal
+worker/quiescence gates still decide whether the new admission can perform a
+physical upgrade.
+
+`recoveryOfRunId` is audit metadata, not dispatch authority. Dispatch authority
+comes only from the successor admission's independently verified signed target
+binding and its own recomputed admission fingerprint. The additive migration
+checks structural predecessor evidence but does not cryptographically recompute
+the historical predecessor fingerprint. Its trust premise is the integrity of
+server-created historical rows; the residual risk is a previously corrupted
+predecessor being linked for audit. That link cannot authorize, retarget, or
+dispatch either row. Migration tests statically assert the SQL contract; live
+acceptance must separately inspect the migrated rows and the independently
+authorized successor dispatch.
+
+### Bootstrap ordering
+
+The current source-free runtime predates `recoveryOfRunId`, so publication alone
+cannot prove this contract live. After the protected repair release is published,
+the existing operator page must render a fresh signed binding for that exact tag
+and SHA. One separately authorized click may then use the already-live durable
+admission path to create and dispatch a new, separately fingerprinted run; a
+plain retry without the signed binding is refused. When the new container starts,
+the additive migration links that singular in-flight manual release admission to
+the immediately preceding failed pre-dispatch run only when every CAS predicate
+holds. Any ambiguity leaves the relation null and fails live acceptance. Served
+SHA, CAN-TEST, the successor relation, the unchanged predecessor row, and ordinary
+restart coherence are all required before downstream recovery resumes.

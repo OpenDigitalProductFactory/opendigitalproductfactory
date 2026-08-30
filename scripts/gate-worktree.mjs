@@ -286,7 +286,15 @@ function parseArgs(argv) {
       case "--remote": options.remote = args.shift() ?? ""; break;
       case "--owner-provider": options.ownerProvider = args.shift() ?? ""; break;
       case "--owner-session-id": options.ownerSessionId = args.shift() ?? ""; break;
-      case "--mcp-url": options.mcpUrl = args.shift() ?? ""; break;
+      case "--mcp-url": {
+        options.mcpUrl = args.shift() ?? "";
+        // --mcp-url is the operator naming the endpoint, the same signal
+        // DPF_MCP_URL carries. Record it there too so mcpCall's loopback
+        // enforcement reads one source of operator intent instead of this
+        // file threading a flag through all nine of its call sites.
+        if (options.mcpUrl) process.env.DPF_MCP_URL = options.mcpUrl;
+        break;
+      }
       case "--lease-wait-seconds": options.leaseWaitSeconds = Number(args.shift()); break;
       case "--poll-seconds": options.pollSeconds = Number(args.shift()); break;
       case "--expires-minutes": options.expiresMinutes = Number(args.shift()); break;
@@ -1218,6 +1226,7 @@ async function main() {
         url,
         ports: [slotManifest.portal.port, slotManifest.postgres.hostPort],
         expiresAt,
+        waitDeadlineAt: new Date(deadline).toISOString(),
         worktreePath,
         branchName: branch,
         slotManifestVersion: slotManifest.schemaVersion,
@@ -1372,10 +1381,28 @@ async function main() {
         admission: {
           queuePosition: admission.queuePosition ?? null,
           waitAgeMs: admission.waitAgeMs ?? null,
+          resumeMode: admission.resumeMode ?? null,
+          taskRunId: admission.taskRunId ?? null,
           poolPolicy: claimResponse?.data?.poolPolicy ?? null,
           hostPressure,
         },
       });
+      if (admission.resumeMode === "durable-task" && admission.taskRunId) {
+        if (queueObserverPath) {
+          releaseLocalQueueObserver({ path: queueObserverPath, token: gateObserverIdentity.token });
+          queueObserverPath = "";
+        }
+        process.stderr.write(JSON.stringify({
+          status: "queued",
+          code: "local_ci_durable_wait",
+          leaseId,
+          taskRunId: admission.taskRunId,
+          claimKey,
+          queuePosition: admission.queuePosition ?? null,
+          resumeMode: "durable-task",
+        }) + "\n");
+        process.exit(75);
+      }
       if (Date.now() >= deadline) {
         await releaseLeaseOnce();
         die("local-CI admission queue wait timed out");

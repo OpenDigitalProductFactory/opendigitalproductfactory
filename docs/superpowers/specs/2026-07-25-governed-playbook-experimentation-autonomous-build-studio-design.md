@@ -1,6 +1,18 @@
+---
+status: active
+---
+
 # Governed Playbook Experimentation and Autonomous Build Studio
 
-- **Status:** proposed
+> **2026-08-30 assurance extension:** WikiSkill and Anthropic's automated-researcher results expose
+> evaluation-integrity and qualification-revalidation requirements beyond the shipped factorial
+> runtime. The canonical extension is the [PAAW competence-evolution Workroom
+> profile](2026-08-30-paaw-competence-evolution-workroom-design.md). This document remains the
+> experiment and activation authority; the extension makes the Workroom coordinator an outer-loop
+> Process Overseer, adds evaluator isolation, anti-gaming, target-profile transfer evidence, and a
+> TAK-JSI revalidation interlock without a second runtime or orchestrator type.
+
+- **Status:** active
 - **Date:** 2026-07-25
 - **Primary BIs:** `BI-0A636528`, `BI-356E69B1`, `BI-522E754E`
 - **Epic anchors:** `EP-COMPETENCE-FLYWHEEL`, `EP-BUILD-STUDIO`
@@ -68,6 +80,26 @@ The useful translation is:
 Ornith the model remains a participant in the model-evaluation lane. It is not a dependency for
 this architecture. Qwen, Ornith, frontier providers, or future models all enter the same experiment
 contract.
+
+### 2.1 Later research applied to the shipped loop
+
+[WikiSkill](https://arxiv.org/html/2608.27454) supports separating immutable execution evidence,
+curated knowledge, and executable methods. It also reports negative cross-model skill transfer, so
+DPF cannot treat a winning method as portable beyond its assessed operating profile.
+
+[Anthropic's automated alignment
+researchers](https://alignment.anthropic.com/2026/automated-alignment-researchers/) and [automated
+weak-to-strong researcher](https://alignment.anthropic.com/2026/automated-w2s-researcher/) support a
+flexible research loop inside hard external controls. Their reported evaluator gaming, seed
+selection, dataset shortcuts, and label leakage make evaluator isolation, precommitted decision
+rules, capability floors, and write-protected held-out material promotion requirements rather than
+optional research hygiene.
+
+The control boundary belongs to the Workroom's canonical coordinator/Process Overseer. It checks
+the declared shape, roster, stage, receipts, budgets, review point, and stop conditions before and
+after transitions, but it neither scripts every research step nor scores its own candidate. This
+preserves the studies' flexible inner loop while preventing the worker from weakening the outer
+accept/reject/rollback contract.
 
 ## 3. Verified current substrate
 
@@ -384,6 +416,13 @@ Promotion requires:
 - evidence freshness;
 - a rollback target;
 - claim scope no broader than evidence scope.
+- held-out fixtures, labels, expected results, and evaluator credentials outside the candidate's
+  writable environment;
+- precommitted endpoints, capability floors, seed/retry/submission budgets, and invalidation rules;
+- no evaluator leakage, unauthorized test inspection, or unaccounted seed/cohort selection;
+- direct target-profile evidence or a governed equivalence decision for cross-model/provider,
+  harness, tool, corpus, memory, job, or data/risk transfer; and
+- completed TAK-JSI material-change impact analysis before activation.
 
 Cost and speed can break a tie but cannot compensate for a security, correctness, migration, or
 customer-impact regression.
@@ -411,6 +450,13 @@ re-derives the maximum allowed scope, verifies referenced evidence, supersedes t
 binding, and activates exactly one binding. Concurrent retries converge by `bindingId`; a
 conflicting second active binding aborts. Build Studio dispatch reads only this binding. The
 Living Playbook read model projects it for humans but is not an authorization source.
+
+Activation must not leave an affected JSI qualification silently active. Before committing a new
+binding, the activation transaction (or one serialized prerequisite decision) resolves the changed
+operating-profile inputs against affected qualification records. Affected records move to
+`pending-revalidation`, `restricted`, or `suspended` before the changed method can execute beyond
+its safe continuity envelope. A restored WorkPattern version still requires freshness and profile
+compatibility checks; file rollback alone does not restore qualification.
 
 ## 9. Model x method experiment design
 
@@ -751,6 +797,25 @@ refactor allocation are planned independently when the evidence selects a concre
 Exit: one learning graduates from runtime method metadata into maintained code without bypassing
 the delivery pipeline.
 
+### Slice 5 - evaluation integrity and TAK-JSI revalidation
+
+Owned by umbrella `BI-41460872` and implemented as two independently shippable deliveries:
+evaluation integrity and transfer validity (`BI-1B7BB954`), then qualification revalidation and
+activation (`BI-6DB95601`).
+
+- Add a versioned evaluation-integrity policy covering held-out isolation, capability floors,
+  seed/retry/submission budgets, evaluator leakage, invalidation, and target-profile transfer.
+- Extend effective-ledger and promotion decisions with integrity evidence and hard invalidation
+  reasons.
+- Resolve affected qualification records from material operating-profile changes before activation.
+- Restrict or suspend affected profiles until the applicable JSI assessment clears.
+- Project integrity and qualification impact into the existing Needs and Playbooks surface.
+- Reserve 20 percent of each delivery for consolidating experiment invalidation, material-change,
+  and qualification/binding transition seams.
+
+Exit: a gamed or unsupported-transfer experiment cannot promote, and an affected active
+qualification cannot survive a material playbook change without an explicit impact decision.
+
 ## 15. Verification strategy
 
 ### Unit
@@ -767,6 +832,10 @@ the delivery pipeline.
 - recovery-budget transitions;
 - rollback target selection;
 - negative-knowledge dedupe.
+- evaluation-integrity policy parsing and versioning;
+- held-out leakage, submission-budget, seed-attribution, and capability-floor invalidation;
+- target-profile transfer refusal without direct or approved-equivalence evidence;
+- material-change impact resolution across active qualifications and bindings.
 
 ### Integration
 
@@ -782,6 +851,10 @@ the delivery pipeline.
 - interrupted runs resume without duplicate PR, queue, release, or ledger side effects;
 - human-closed PRs and unresolved review ambiguity escalate rather than self-authorize;
 - replay/shadow runs cannot mutate live customer state.
+- evaluator fixtures and expected results are absent from candidate-writable workspaces;
+- a forced evaluator-leak or cherry-picked-seed fixture invalidates the evidence;
+- a promoted skill change moves affected qualification state before a new binding becomes active;
+- rollback cannot reactivate stale qualification evidence.
 
 ### Runtime / UX
 
@@ -842,5 +915,8 @@ Implementation must update:
   behavior;
 - `docs/architecture/local-llm-build-engine.md` only when model x method routing becomes active;
 - the original governed adaptive playbooks design with status/pointers, not duplicated rules;
+- `docs/architecture/job-specific-intelligence.md` and
+  `docs/architecture/four-portfolio-archetype-ai-workforce-operating-standard.md` for the evaluation
+  integrity, transfer, Workroom trace, and revalidation contracts;
 - `docs/architecture/customer-zero-and-use-case-zero.md` when the JSI and playbook promotion paths
   mechanically enforce its evidence boundary.

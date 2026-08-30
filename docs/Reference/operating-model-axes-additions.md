@@ -5,14 +5,14 @@
 > `undetermined` source-use decision (`SUD-PORTFOLIO-WORKBOOK-V3-2026-08-01`) and MUST NOT
 > be used as new AI, mapping, conformance, or normative evidence until that decision is
 > resolved. Current code and live data establish observed platform state; the
-> [Four-Portfolio Archetype and AI Workforce Operating Standard](../architecture/four-portfolio-archetype-ai-workforce-operating-standard.md)
+> [Portfolio Aligned Agent and Workforce Operating Standard](../architecture/four-portfolio-archetype-ai-workforce-operating-standard.md)
 > governs target semantics.
 
 The historical taxonomy was maintained in
 `4_portfolio_Reworked_V3_Definitions_IT4IT.xlsx`; its *Products and Services Sold* sheet
 carried the then-current axis columns. This sidecar records additions accepted while that
 workbook-first process was in force. Preserve it as decision lineage, and promote or
-change current vocabulary only through the governed typed registries and the FPAW
+change current vocabulary only through the governed typed registries and the PAAW
 source-use contract.
 
 ## Accepted 2026-06-09 — civic & member-governed archetypes

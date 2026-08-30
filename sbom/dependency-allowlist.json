@@ -477,6 +477,16 @@
       ],
       "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
     },
+    "axe-core": {
+      "added": "2026-08-28",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "Direct declaration fixes the existing InstallationIdentityPanel axe-core import; 4.12.1 was already resolved transitively via @axe-core/playwright (zero new resolved components). MPL-2.0, npm integrity signature plus SLSA provenance attestation, DequeLabs upstream, 277,937,886 npm downloads in the last month, and pnpm scan:deps reports zero blocking vulnerabilities."
+    },
     "bcryptjs": {
       "added": "2026-06-21",
       "workspaces": [

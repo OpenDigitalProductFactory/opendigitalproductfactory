@@ -40,6 +40,7 @@ const ACTIVE_RUN_STATUSES = ["pending", "queued", "running"];
 
 function asAdmissionRecord(row: {
   runId: string;
+  recoveryOfRunId: string | null;
   status: string;
   trigger: string;
   targetSha: string | null;
@@ -82,9 +83,61 @@ export const selfUpgradeAdmissionRepository: SelfUpgradeAdmissionRepository = {
           run: asAdmissionRecord(active),
         };
       }
+      if (input.recoveryOfRunId) {
+        if (input.target.targetKind !== "release-artifact" || !input.target.targetTag) {
+          return { disposition: "recovery_refused" as const, reason: "recovery-target-invalid" as const, run: null };
+        }
+        const predecessor = await tx.selfUpgradeRun.findUnique({
+          where: { runId: input.recoveryOfRunId },
+        });
+        if (
+          !predecessor ||
+          predecessor.completedAt === null ||
+          predecessor.status !== "failed"
+        ) {
+          return {
+            disposition: "recovery_refused" as const,
+            reason: predecessor ? "recovery-predecessor-not-terminal" as const : "recovery-predecessor-missing" as const,
+            run: null,
+          };
+        }
+        if (
+          !predecessor.admissionFingerprint ||
+          !predecessor.dispatchStatus ||
+          !predecessor.targetSha ||
+          !predecessor.targetTag ||
+          predecessor.dispatchAttemptCount !== 0 ||
+          predecessor.dispatchAcknowledgedAt !== null ||
+          predecessor.dispatchEventIds.length !== 0
+        ) {
+          return { disposition: "recovery_refused" as const, reason: "recovery-predecessor-ambiguous" as const, run: null };
+        }
+        if (
+          predecessor.targetSha.toLowerCase() === input.target.targetSha.toLowerCase() ||
+          predecessor.targetTag === input.target.targetTag
+        ) {
+          return { disposition: "recovery_refused" as const, reason: "recovery-target-not-distinct" as const, run: null };
+        }
+        const latest = await tx.selfUpgradeRun.findFirst({
+          orderBy: { createdAt: "desc" },
+        });
+        if (latest?.runId !== predecessor.runId) {
+          return { disposition: "recovery_refused" as const, reason: "recovery-predecessor-not-latest" as const, run: null };
+        }
+        const existingSuccessor = await tx.selfUpgradeRun.findUnique({
+          where: { recoveryOfRunId: predecessor.runId },
+        });
+        if (existingSuccessor) {
+          return {
+            disposition: "recovery_conflict" as const,
+            run: asAdmissionRecord(existingSuccessor),
+          };
+        }
+      }
       const created = await tx.selfUpgradeRun.create({
         data: {
           runId: input.runId,
+          recoveryOfRunId: input.recoveryOfRunId ?? null,
           status: "pending",
           trigger: input.triggeredBy,
           targetSha: input.target.targetSha,
@@ -249,6 +302,34 @@ export async function claimAdmittedRunForWorker(
   notifyRunState(runId, "running");
   await safeSyncSelfUpgradeChangeRecord(runId);
   return "claimed";
+}
+
+/**
+ * A worker may yield an admitted run only before quiescence or any physical
+ * mutation begins. The admission reconciler can then dispatch the same run id
+ * again without creating a second upgrade identity.
+ */
+export async function deferAdmittedRunForRedispatch(runId: string, reason: string) {
+  const updated = await prisma.selfUpgradeRun.updateMany({
+    where: {
+      runId,
+      status: "running",
+      completedAt: null,
+      dispatchStatus: { in: ["dispatching", "dispatched"] },
+    },
+    data: {
+      status: "pending",
+      startedAt: null,
+      dispatchStatus: "indeterminate",
+      dispatchError: reason,
+      dispatchLeaseToken: null,
+      dispatchLeaseExpiresAt: null,
+    },
+  });
+  if (updated.count !== 1) return false;
+  notifyRunState(runId, "pending");
+  await safeSyncSelfUpgradeChangeRecord(runId);
+  return true;
 }
 
 export async function updateRunPlan(

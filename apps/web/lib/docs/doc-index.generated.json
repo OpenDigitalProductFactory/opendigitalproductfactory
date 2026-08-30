@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 693,
+  "pageCount": 695,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -1605,7 +1605,9 @@
       "publishedPublic": true,
       "publishedPortal": false,
       "anchors": [
-        "four-portfolio-archetype-and-ai-workforce-operating-standard",
+        "portfolio-aligned-agent-and-workforce-operating-standard",
+        "naming-and-harmonization-posture",
+        "revision-020-rename-and-governed-migration",
         "abstract",
         "1-status-scope-and-normative-language",
         "11-status",
@@ -1641,6 +1643,7 @@
         "93-physical-and-non-digital-work",
         "94-capacity",
         "95-dpf-workroom-definition-and-instance-projection",
+        "96-proposed-competence-evolution-workroom-application-profile",
         "10-performer-and-work-allocation-model",
         "101-performer-kinds",
         "102-allocation-is-a-governed-decision",
@@ -1840,6 +1843,7 @@
         "8-intelligence-profile-composition",
         "81-wsid-and-vector-decisioning",
         "82-learning-and-adaptation",
+        "83-workroom-process-overseer-qualification",
         "9-model-and-provider-suitability",
         "91-eligibility-before-ranking",
         "92-evidence-based-adequacy",
@@ -1856,6 +1860,7 @@
         "1142-evidence-source-rule",
         "1143-authorization-envelope-rule",
         "1144-inconclusive-results",
+        "115-evaluation-integrity-and-resistance-to-metric-gaming",
         "12-qualification-decision-and-record",
         "121-status",
         "13-material-change-and-revalidation",
@@ -2435,6 +2440,7 @@
         "work-shapes-and-the-decision-gate",
         "the-flow",
         "shape-is-four-orthogonal-choices-not-one-taxonomy",
+        "the-coordinator-is-the-workroom-process-overseer",
         "the-gate-which-scope-decides",
         "what-the-gate-does-to-the-turn",
         "what-is-actually-enforced-today",
@@ -5316,16 +5322,16 @@
         "evidence-weight-1-ceiling-2",
         "every-agent",
         "widest-gaps-detail",
-        "agt-100-policy-enforcement-agent-declared-only-12-attainable",
-        "agt-101-strategy-alignment-agent-declared-only-12-attainable",
-        "agt-102-portfolio-backlog-agent-declared-only-12-attainable",
-        "agt-110-portfolio-rationalization-agent-declared-only-12-attainable",
-        "agt-111-investment-analysis-agent-declared-only-12-attainable",
-        "agt-112-gap-analysis-agent-declared-only-12-attainable",
-        "agt-113-scope-agreement-agent-declared-only-12-attainable",
-        "agt-120-product-backlog-prioritization-agent-declared-only-12-attainable",
-        "agt-121-architecture-definition-agent-declared-only-12-attainable",
-        "agt-122-roadmap-assembly-agent-declared-only-12-attainable",
+        "data-architect-data-architect-roster-only-44-attainable",
+        "data-steward-data-steward-roster-only-44-attainable",
+        "dispatcher-dispatcher-roster-only-44-attainable",
+        "integration-engineer-mcp-integration-engineer-roster-only-44-attainable",
+        "legal-operations-counsel-legal-operations-counsel-roster-only-44-attainable",
+        "security-engineer-security-engineer-roster-only-44-attainable",
+        "storefront-advisor-storefront-operations-manager-roster-only-44-attainable",
+        "agt-100-policy-enforcement-agent-declared-only-48-attainable",
+        "agt-101-strategy-alignment-agent-declared-only-48-attainable",
+        "agt-102-portfolio-backlog-agent-declared-only-48-attainable",
         "assignto-health"
       ]
     },
@@ -8891,6 +8897,20 @@
         "pr-index"
       ]
     },
+    "docs/security/2026-08-30-security-authentication-stack-assessment.md": {
+      "publicHref": "/security/2026-08-30-security-authentication-stack-assessment/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "security-and-authentication-stack-assessment",
+        "outcome",
+        "implemented-stack-versus-design",
+        "backlog-and-plan-conformance-findings",
+        "priority-order",
+        "security-boundary-for-1password"
+      ]
+    },
     "docs/security/README.md": {
       "publicHref": "/security/README/",
       "portalHref": null,
@@ -8992,6 +9012,27 @@
         "execution-record-2026-08-28",
         "re-evaluation",
         "sources"
+      ]
+    },
+    "docs/security/tool-evaluations/2026-08-30-1password.md": {
+      "publicHref": "/security/tool-evaluations/2026-08-30-1password/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "1password-tool-evaluation",
+        "executive-decision",
+        "what-the-product-isand-is-not",
+        "security-and-architecture-evaluation",
+        "integration-choices",
+        "chosen-first-1password-connect-rest-api",
+        "supported-later-service-accounts",
+        "rejected-op-run-inside-the-portal-image",
+        "rejected-moving-connector-credentials-into-1password",
+        "benchmarking",
+        "standards",
+        "primary-vendor-sources",
+        "re-evaluation-triggers"
       ]
     },
     "docs/specs/device-identification-and-portfolio-placement-spec.md": {

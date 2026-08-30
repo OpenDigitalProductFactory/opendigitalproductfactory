@@ -30,7 +30,10 @@ describe("IntegrationReadinessPanel", () => {
     expect(screen.getByRole("heading", { name: "Import staging posture" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "Import review queue" })).toBeVisible();
     expect(screen.getByText("Non-editable")).toBeVisible();
-    expect(screen.getByText("BI-4025EF5F")).toBeVisible();
+    // Nothing is filed for the import-review queue, so the Backlog pill is not
+    // rendered at all rather than naming a dead item (BI-5BF97BAA).
+    expect(screen.queryByText("Backlog")).not.toBeInTheDocument();
+    expect(document.body.textContent ?? "").not.toMatch(/BI-[0-9A-F]{8}/);
     expect(screen.getByText("Ready for review")).toBeVisible();
     expect(screen.getByText(/Review queue records are DPF-held posture only/i)).toBeVisible();
     expect(screen.getAllByText("External-owned")).toHaveLength(9);

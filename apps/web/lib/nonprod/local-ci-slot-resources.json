@@ -14,8 +14,14 @@
     "maxParallelism": 4
   },
   "hostStagePolicy": {
-    "version": 1,
-    "memoryBytes": 8589934592
+    "version": 2,
+    "memoryBytes": 8589934592,
+    "admissionReserveBytes": 6442450944,
+    "admissionCalibration": {
+      "version": 1,
+      "observedHighWaterBytes": 2684354560,
+      "safetyMarginBytes": 3758096384
+    }
   },
   "slots": {
     "slot-0": {

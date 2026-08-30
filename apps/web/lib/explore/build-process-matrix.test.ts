@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   BUILD_PROCESS_TYPE_VALUES,
   BUILD_PROCESS_SIZES,
+  GATE_REQUIREMENTS,
+  checkRequirement,
   DELIVERABLE_SENSITIVITIES,
   deriveBuildProcessSize,
   deriveBuildProcessType,
@@ -15,6 +17,7 @@ import {
   type BuildProcessSize,
   type BuildProcessType,
 } from "./build-process-matrix";
+import { evaluateVerificationDepthShadow } from "./verification-depth-shadow";
 import { checkPhaseGate, normalizeHappyPathState, type FixContext } from "./feature-build-types";
 
 // The right-sizing matrix maps (type, size) -> a LifecyclePolicy. These tests
@@ -230,6 +233,130 @@ describe("checkPhaseGate via the matrix — back-compat invariant", () => {
 
   it("allows review->build backward transition (no gate)", () => {
     expect(checkPhaseGate("review", "build", {}).allowed).toBe(true);
+  });
+});
+
+describe("verification-depth-satisfied — shadow requirement", () => {
+  const greenVerification = {
+    testsPassed: 12,
+    testsFailed: 0,
+    typecheckPassed: true,
+    fullOutput: "green",
+    timestamp: "2026-08-29T00:00:00.000Z",
+  };
+
+  it("keeps absent and none byte-identical across absent, present, and failed evidence", () => {
+    const failedVerification = { ...greenVerification, testsFailed: 2, typecheckPassed: false };
+    for (const verificationDepth of [undefined, "none"] as const) {
+      expect(checkRequirement("verification-depth-satisfied", { verificationDepth })).toEqual({ allowed: true });
+      expect(checkRequirement("verification-depth-satisfied", {
+        verificationDepth,
+        verificationOut: greenVerification,
+      })).toEqual({ allowed: true });
+      expect(checkRequirement("verification-depth-satisfied", {
+        verificationDepth,
+        verificationOut: failedVerification,
+        uxVerificationStatus: "failed",
+      })).toEqual({ allowed: true });
+    }
+  });
+
+  it("requires a green typecheck and zero failed tests at shallow depth", () => {
+    expect(checkRequirement("verification-depth-satisfied", {
+      verificationDepth: "shallow",
+      verificationOut: greenVerification,
+    })).toEqual({ allowed: true });
+    expect(checkRequirement("verification-depth-satisfied", { verificationDepth: "shallow" })).toMatchObject({ allowed: false });
+    expect(checkRequirement("verification-depth-satisfied", {
+      verificationDepth: "shallow",
+      verificationOut: { typecheckPassed: true },
+    })).toMatchObject({ allowed: false });
+    expect(checkRequirement("verification-depth-satisfied", {
+      verificationDepth: "shallow",
+      verificationOut: { ...greenVerification, testsFailed: 1 },
+    })).toMatchObject({ allowed: false });
+    expect(checkRequirement("verification-depth-satisfied", {
+      verificationDepth: "shallow",
+      verificationOut: { ...greenVerification, typecheckPassed: false },
+    })).toMatchObject({ allowed: false });
+  });
+
+  it("requires shallow evidence plus a mechanical real-path verdict at deep depth", () => {
+    expect(checkRequirement("verification-depth-satisfied", {
+      verificationDepth: "deep",
+      verificationOut: greenVerification,
+      uxVerificationStatus: "complete",
+      uxTestResults: [{ step: "Open the affected route", passed: true }],
+    })).toEqual({ allowed: true });
+    expect(checkRequirement("verification-depth-satisfied", {
+      verificationDepth: "deep",
+      verificationOut: greenVerification,
+    })).toMatchObject({ allowed: false });
+    expect(checkRequirement("verification-depth-satisfied", {
+      verificationDepth: "deep",
+      verificationOut: greenVerification,
+      uxVerificationStatus: "failed",
+      uxTestResults: [{ step: "Open the affected route", passed: false }],
+    })).toMatchObject({ allowed: false });
+  });
+
+  it("accepts a passing golden-journey result as deep real-path evidence", () => {
+    expect(checkRequirement("verification-depth-satisfied", {
+      verificationDepth: "deep",
+      verificationOut: greenVerification,
+      goldenJourneyResult: { journeyId: "journey-1", passed: true },
+    })).toEqual({ allowed: true });
+  });
+
+  it("evaluates every transition in shadow without adding the requirement to a policy", () => {
+    for (const type of BUILD_PROCESS_TYPE_VALUES) {
+      for (const size of BUILD_PROCESS_SIZES) {
+        const policy = getProcessPolicy(type, size);
+        for (const requirements of Object.values(policy.gates)) {
+          expect(requirements).not.toContain("verification-depth-satisfied");
+        }
+      }
+    }
+    expect(GATE_REQUIREMENTS).toContain("verification-depth-satisfied");
+
+    const decision = evaluateVerificationDepthShadow("review", "ship", {
+      kind: "feature",
+      processSize: "medium",
+      verificationDepth: "shallow",
+      verificationOut: { ...greenVerification, testsFailed: 3 },
+    });
+    expect(decision).toMatchObject({
+      transition: "review->ship",
+      kind: "feature",
+      processSize: "medium",
+      declaredDepth: "shallow",
+      wouldBlock: true,
+    });
+  });
+
+  it("does not alter the default gate verdict for absent or none depth", () => {
+    const evidence = {
+      designDoc: { problemStatement: "x" },
+      buildPlan: { tasks: [] },
+      acceptanceMet: true,
+      verificationOut: { ...greenVerification, testsFailed: 4 },
+      uxVerificationStatus: "failed",
+    };
+    const today = checkPhaseGate("review", "ship", evidence);
+    for (const kind of [undefined, "feature"] as const) {
+      for (const processSize of [undefined, "medium"] as const) {
+        for (const verificationDepth of [undefined, "none"] as const) {
+          const result = checkPhaseGate("review", "ship", {
+            ...evidence,
+            kind,
+            processSize,
+            verificationDepth,
+          });
+          expect(JSON.stringify(result)).toBe(JSON.stringify(today));
+        }
+      }
+    }
+    expect(today).toEqual({ allowed: true });
   });
 });
 

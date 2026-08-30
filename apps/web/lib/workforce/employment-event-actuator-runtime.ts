@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import type { WorkerClassification } from "@dpf/db";
 import { isProfessionJurisdiction, type ProfessionJurisdiction } from "@dpf/db/wiki-taxonomy";
 
@@ -6,6 +8,10 @@ import {
   type ActuationOutcome,
   type EmploymentWorkroomKey,
 } from "./employment-event-actuator";
+import { createWorkCapsule } from "../work-capsules/work-capsule-store";
+import { recordWorkCapsuleActivity } from "../work-capsules/work-capsule-activity-store";
+import type { CapsuleDb, WorkCapsuleActor } from "../work-capsules/work-capsule-store-types";
+
 import { resolveEmploymentJurisdiction } from "./employment-jurisdiction";
 import { resolveClassification } from "./worker-classification";
 import type { EmploymentEventType } from "./workforce-types";
@@ -170,4 +176,187 @@ export async function actuateEmploymentEvent(args: {
 /** Narrowing helper for a stored slug, so a bad row cannot reach a policy lookup. */
 export function asProfessionJurisdiction(value: string | null): ProfessionJurisdiction | null {
   return value && isProfessionJurisdiction(value) ? value : null;
+}
+
+/**
+ * Bind the actuator to a live Prisma transaction.
+ *
+ * Passing the SAME `tx` the EmploymentEvent row is written in is the point: the
+ * event and the room it opens commit together or not at all. An event that
+ * commits without its room is precisely the silent failure-to-act this epic
+ * exists to remove — the organisation believes onboarding happened, and the
+ * missing half is found by the worker on their first day, or by an auditor.
+ *
+ * `createWorkCapsule` runs its own `inTransaction`, which is a no-op when handed
+ * a transaction client, so nesting is safe.
+ */
+export function prismaActuatorWriter(
+  tx: CapsuleDb,
+  actor: WorkCapsuleActor,
+): ActuatorCapsuleWriter {
+  return {
+    async createWorkCapsule(args) {
+      const created = await createWorkCapsule({
+        db: tx,
+        actor,
+        input: {
+          source: args.input.source as never,
+          title: args.input.title,
+          objective: args.input.objective,
+          idempotencyKey: args.input.idempotencyKey,
+          scope: args.input.scope,
+          workspaceState: args.input.workspaceState,
+        },
+      });
+      return { id: created.id, capsuleId: created.capsuleId };
+    },
+    async findByIdempotencyKey(key) {
+      const row = await tx.workroom.findUnique({ where: { idempotencyKey: key } });
+      return row ? { id: row.id, capsuleId: row.capsuleId } : null;
+    },
+    async recordUpdate({ capsuleId, eventType, reason }) {
+      const room = await tx.workroom.findFirst({ where: { capsuleId } });
+      if (!room) return;
+      await recordWorkCapsuleActivity(tx, {
+        workCapsuleId: room.id,
+        kind: "status-changed",
+        summary: `Employment event ${eventType}: ${reason}`,
+        actor,
+      });
+    },
+  };
+}
+
+/**
+ * One call for the lifecycle-event action: bind the writer to the live
+ * transaction and actuate.
+ *
+ * Exists so the action module states its intent in one line — the seam is easy
+ * to see and hard to drop — rather than assembling a writer inline.
+ */
+export async function actuateForLifecycleEvent(
+  tx: CapsuleDb,
+  args: {
+    employmentEventId: string;
+    eventType: EmploymentEventType;
+    worker: ActuatorWorkerRow;
+    employsIn: readonly string[];
+    userId: string;
+  },
+): Promise<ActuationResult> {
+  return actuateEmploymentEvent({
+    employmentEventId: args.employmentEventId,
+    eventType: args.eventType,
+    worker: args.worker,
+    employsIn: args.employsIn,
+    writer: prismaActuatorWriter(tx, {
+      userId: args.userId,
+      agentId: null,
+      principalId: null,
+    }),
+  });
+}
+
+/**
+ * What the event did, in words an operator can act on.
+ *
+ * An actuator that silently succeeds is only marginally better than the log it
+ * replaced: the operator still cannot tell whether anything opened. Operator
+ * work in particular must never be swallowed — an unresolved worker produces no
+ * room, and the person recording the event is the one who can fix it.
+ */
+export function describeActuation(
+  actuation: ActuationResult | null,
+  workerName: string,
+): string {
+  const recorded = `Lifecycle event recorded for ${workerName}.`;
+  if (!actuation) return recorded;
+
+  switch (actuation.kind) {
+    case "spawned":
+      return `${recorded} Opened ${actuation.capsuleId} to carry the work.`;
+    case "already-present":
+      return `${recorded} ${actuation.capsuleId} was already open for it.`;
+    case "updated":
+      return `${recorded} Updated the open room ${actuation.capsuleId}.`;
+    case "update-target-missing":
+      return `${recorded} No open ${actuation.definitionKey} room was found to update, so nothing was changed.`;
+    case "operator-work":
+      return `${recorded} No room was opened: ${actuation.message}`;
+    case "inert":
+      return recorded;
+  }
+}
+
+/**
+ * THE single writer of `EmploymentEvent` rows (BI-2624B7EA).
+ *
+ * The actuator first shipped inert, then shipped wired to one of the four places
+ * that write employment events — so hiring, org assignment and manager changes
+ * all still did nothing. Wiring call sites one at a time is what produced that,
+ * twice.
+ *
+ * This closes the class rather than the instances: writing the event and opening
+ * the room it prescribes are the SAME operation, so a future writer cannot record
+ * an event and silently fail to act on it. `check-employment-event-writers.mjs`
+ * enforces that no action module calls `employmentEvent.create` directly.
+ *
+ * Loads the worker's classification and jurisdiction itself, so a caller cannot
+ * omit them and get a permanent stream of operator work that looks like the
+ * classification gate working correctly.
+ */
+export async function recordAndActuateEmploymentEvent(
+  tx: CapsuleDb & {
+    employmentEvent: { create(args: unknown): Promise<{ eventId: string }> };
+    employeeProfile: { findUnique(args: unknown): Promise<ActuatorWorkerRow | null> };
+    businessContext: { findFirst(args: unknown): Promise<{ employsIn: string[] } | null> };
+  },
+  input: {
+    employeeProfileId: string;
+    eventType: EmploymentEventType;
+    effectiveAt: Date;
+    reason: string | null;
+    actorUserId: string;
+    metadata?: unknown;
+    /** Set when the caller already updated the row and knows the end state. */
+    terminationDate?: Date | null;
+  },
+): Promise<ActuationResult> {
+  const event = await tx.employmentEvent.create({
+    data: {
+      eventId: `EEVT-${randomUUID()}`,
+      employeeProfileId: input.employeeProfileId,
+      eventType: input.eventType,
+      effectiveAt: input.effectiveAt,
+      reason: input.reason,
+      actorUserId: input.actorUserId,
+      ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
+    },
+  });
+
+  const worker = await tx.employeeProfile.findUnique({
+    where: { id: input.employeeProfileId },
+    select: {
+      id: true,
+      displayName: true,
+      employmentType: { select: { classification: true } },
+      workLocation: { select: { id: true, jurisdictionSlug: true } },
+    },
+  });
+  if (!worker) {
+    return {
+      kind: "operator-work",
+      message: "The worker record could not be read back, so no room was opened.",
+    };
+  }
+
+  const employsIn = (await tx.businessContext.findFirst({ select: { employsIn: true } }))?.employsIn ?? [];
+
+  return actuateForLifecycleEvent(tx, {
+    employmentEventId: event.eventId,
+    eventType: input.eventType,
+    worker,
+    employsIn,
+    userId: input.actorUserId,
+  });
 }

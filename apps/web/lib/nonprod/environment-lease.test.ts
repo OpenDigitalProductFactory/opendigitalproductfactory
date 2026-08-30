@@ -584,7 +584,7 @@ describe("durable nonproduction admission", () => {
 
     const hostPressure = {
       observedAt: NOW.toISOString(),
-      availableMemoryBytes: 14 * gib,
+      availableMemoryBytes: 8 * gib + localCiSlotResources.hostStagePolicy.admissionReserveBytes - 1, // one byte short of a stage above the floor (BI-E58B57EC)
       sustainedCpuPercent: 20,
       diskFreeBytes: 500 * gib,
       dockerHealthy: true,
