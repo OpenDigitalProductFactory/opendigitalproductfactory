@@ -412,12 +412,16 @@ Live delivery coverage:
 | --- | --- | --- |
 | Umbrella assurance outcome | `BI-41460872` | Holds the cross-standard objective and decomposition. |
 | Standards and design publication | `BI-636638A6` | Publishes this profile and harmonizes PAAW, TAK-JSI, and playbook documentation. |
+| Workroom definition and roster foundations | `BI-EFFD97B4`, `BI-4CB2EF76` | Adds definition-level trigger/grant/measure declarations and a persisted typed roster while keeping presence derived. |
 | Evaluation integrity and transfer validity | `BI-1B7BB954` | Extends the shipped WorkPattern evaluator and promotion policy. |
 | Qualification revalidation interlock | `BI-6DB95601` | Connects material WorkPattern changes to the canonical JSI carrier and TAK activation. |
 | Workroom Process Overseer | `BI-3913EB49` | Makes the existing coordinator role enforce declared shape conformance across finite and standing rooms. |
 
-The bundle reuses rather than duplicates `BI-C6801B5A`, `BI-514826D3`, `BI-DE1333A1`,
-`BI-D4C110BC`, `BI-4CB2EF76`, `BI-EFFD97B4`, and `BI-3E99ACFA`.
+The foundation pair is one revertible delivery because the definition contract declares which roles
+and measures a room requires while the roster records who actually occupies those roles. It may
+ship before Process Overseer enforcement and must not silently activate that enforcement. The
+bundle otherwise reuses rather than duplicates `BI-C6801B5A`, `BI-514826D3`, `BI-DE1333A1`,
+`BI-D4C110BC`, and `BI-3E99ACFA`.
 
 ## 14. Acceptance criteria
 

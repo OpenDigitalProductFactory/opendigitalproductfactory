@@ -61,6 +61,8 @@ dependency gate rather than inventing the missing carrier in this plan.
 | --- | --- | --- |
 | `BI-41460872` | Umbrella competence-evolution assurance outcome | open / build / xlarge |
 | `BI-636638A6` | Standards and design publication | open / build / medium |
+| `BI-EFFD97B4` | Workroom definition trigger, grant, and measure contract | open / build / medium |
+| `BI-4CB2EF76` | Persisted typed Workroom roster | open / build / medium |
 | `BI-3913EB49` | Workroom Process Overseer and shape conformance | open / build / large |
 | `BI-1B7BB954` | Evaluation integrity and target-profile transfer | open / build / large |
 | `BI-6DB95601` | TAK-JSI revalidation and activation interlock | open / build / large |
@@ -87,8 +89,9 @@ definition contract into a second responsibility.
 ```text
 BI-636638A6  standards/design publication
        |
-       +----> BI-3913EB49  Process Overseer + shape conformance
-       |             +---- depends on BI-4CB2EF76 and BI-EFFD97B4
+       +----> BI-EFFD97B4 + BI-4CB2EF76  definition + roster foundation
+       |             |
+       |             +----> BI-3913EB49  Process Overseer + shape conformance
        |
        v
 BI-1B7BB954  evaluation integrity + target-profile transfer
@@ -111,6 +114,7 @@ not ready.
 | Delivery | Total units | Feature/doc units | Refactor units | Refactor share |
 | --- | ---: | ---: | ---: | ---: |
 | `BI-636638A6` — documentation | 5 | 4 | 1 | 20% |
+| `BI-EFFD97B4` + `BI-4CB2EF76` — Workroom foundations | 20 | 16 | 4 | 20% |
 | `BI-3913EB49` — Process Overseer | 20 | 16 | 4 | 20% |
 | `BI-1B7BB954` — evaluation integrity | 20 | 16 | 4 | 20% |
 | `BI-6DB95601` — revalidation interlock | 20 | 16 | 4 | 20% |
@@ -162,6 +166,53 @@ experiment/qualification product.
 
 Exit: the design and plan are indexed, linked, source-cited, live-BI covered, and make no false
 implementation claim.
+
+## 7. Delivery F — Workroom definition and roster foundations (`BI-EFFD97B4`, `BI-4CB2EF76`)
+
+These two BIs ship in one PR because the roster is the observed side of the definition contract.
+They remain separate backlog outcomes and commits so either result stays attributable. This delivery
+does not turn on Process Overseer enforcement; `BI-3913EB49` consumes the contracts afterwards.
+
+### Red tests first
+
+- A definition cannot omit a trigger without an explicit imperative-only justification.
+- Room grants can only intersect standing agent grants and can never confer a missing grant.
+- Standing `scheduled` and `bookkeeping-period` definitions preserve their current behavior.
+- A persisted roster survives the loss of every presence row and still reports its occupied roles.
+- Presence never creates membership or authority, and an absent required role remains queryable.
+- Multiple roles for one Principal remain one participant with normalized role assignments.
+- Existing rooms without persisted membership retain their current read/access projection through an
+  explicitly labelled legacy-derived compatibility path.
+
+### Implementation
+
+1. Reuse the existing definition registry and its version identity for trigger, tighten-only grant,
+   and measure declarations; do not introduce a scheduler or authority store.
+2. Add a normalized Workroom-to-Principal membership relation plus role assignments, keyed to the
+   canonical Principal rather than user/agent-specific foreign keys. Store work state, admission
+   reason, and admission time on membership; keep presence outside the roster.
+3. Add one pure roster projection that merges persisted membership metadata with live presence and
+   produces occupied-role and missing-role conformance without rendering a page.
+4. Make the workspace loader prefer the persisted roster, retain a labelled legacy-derived fallback
+   for existing rooms, and keep the existing access ladder unchanged.
+5. Extend the current Workroom participant surface so membership, active presence, work state, and
+   missing required roles are visually distinct using existing theme-aware report primitives.
+6. Spend the four refactor units consolidating assignment, conversation-lineage, coordinator, and
+   presence merging behind that one pure projection. Do not spend them on unrelated cleanup.
+
+### Verification
+
+- source-registry tighten-only and conformance tests;
+- Prisma migration apply from an existing populated state plus generated-client/schema checks;
+- participant projection, roster-store, shape-binding, workspace-loader, and access-regression tests;
+- participant component tests plus narrow/wide and light/dark Workroom inspection;
+- merged-code pregate and migration smoke in the shared local-CI environment.
+
+### Rollback
+
+Stop writing new roster rows and return the loader to the labelled legacy-derived projection. Keep
+the additive tables and definition fields readable until a forward migration removes their use;
+never reinterpret presence as membership during rollback.
 
 ## 7A. Delivery W — Workroom Process Overseer (`BI-3913EB49`)
 
