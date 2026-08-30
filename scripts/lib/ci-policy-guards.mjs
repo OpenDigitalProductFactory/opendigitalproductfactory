@@ -302,6 +302,12 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("module-size-guard", "Module Size Guard", [
       node("scripts/check-module-size.mjs"),
     ]),
+    // BI-2624B7EA: an EmploymentEvent written outside its canonical writer is a
+    // log entry, which is the exact state EP-862820FD exists to remove. The
+    // actuator shipped inert once and half-wired once; this closes the class.
+    guard("employment-event-writers", "Employment Event Writers", [
+      node("scripts/check-employment-event-writers.mjs"),
+    ]),
     // BI-640B011D: schema FK budgets (declared FKs without a leading index +
     // bare unbacked *Id columns) may only shrink against the owned baseline.
     guard("fk-index-coverage-guard", "FK Index Coverage Guard", [
