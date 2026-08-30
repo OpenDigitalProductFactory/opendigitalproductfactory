@@ -102,3 +102,10 @@ The expired BI-E35 review envelopes remain immutable evidence only. Neither a
 placeholder/`not-applicable` call nor a correct but unapproved call satisfies
 the baseline. The next independent review must bind to the materially revised
 design blob containing the writer contract above.
+
+The first review of that amended blob completed after six immutable reads but
+never invoked the terminal writer. Preserve that TaskRun as no-receipt evidence;
+do not replay it. The canonical design is therefore refactored without semantic
+loss into a bounded complete artifact that fits one reader result plus the
+reserved writer step. Any next review must bind to this new blob and remain the
+only identity for it.
