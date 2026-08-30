@@ -304,6 +304,34 @@ export async function claimAdmittedRunForWorker(
   return "claimed";
 }
 
+/**
+ * A worker may yield an admitted run only before quiescence or any physical
+ * mutation begins. The admission reconciler can then dispatch the same run id
+ * again without creating a second upgrade identity.
+ */
+export async function deferAdmittedRunForRedispatch(runId: string, reason: string) {
+  const updated = await prisma.selfUpgradeRun.updateMany({
+    where: {
+      runId,
+      status: "running",
+      completedAt: null,
+      dispatchStatus: { in: ["dispatching", "dispatched"] },
+    },
+    data: {
+      status: "pending",
+      startedAt: null,
+      dispatchStatus: "indeterminate",
+      dispatchError: reason,
+      dispatchLeaseToken: null,
+      dispatchLeaseExpiresAt: null,
+    },
+  });
+  if (updated.count !== 1) return false;
+  notifyRunState(runId, "pending");
+  await safeSyncSelfUpgradeChangeRecord(runId);
+  return true;
+}
+
 export async function updateRunPlan(
   runId: string,
   params: {

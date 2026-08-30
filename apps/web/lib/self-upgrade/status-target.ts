@@ -1,16 +1,12 @@
 import type { SelfUpgradeConfig } from "./config";
 import {
-  loadVerifiedReleaseTargetEvidence,
-  recordVerifiedReleaseTargetEvidence,
-} from "@/lib/release-health/state";
-import { getErrorMessage } from "@/lib/shared/get-error-message";
-import {
   loadReleaseInstallContext,
-  resolveReleaseTarget,
-  resolveReleaseUpgradeCandidate,
 } from "./release-target";
 import type { SelfUpgradeSupport } from "./support";
+import { resolveVerifiedReleaseUpgradeCandidate } from "./verified-release-target";
 import { resolveTargetSha } from "./version";
+
+export { resolveVerifiedReleaseUpgradeCandidate } from "./verified-release-target";
 
 export type SelfUpgradeStatusTarget = Readonly<{
   targetSha: string | null;
@@ -64,52 +60,13 @@ export async function resolveSelfUpgradeStatusTarget(input: {
     return UNAVAILABLE;
   }
 
-  // Registry discovery remains primary. A thrown fault is still reported even
-  // when the independently verified persisted candidate recovers the page, so
-  // intermittent process-level degradation remains observable.
-  const liveTarget = await resolveReleaseUpgradeCandidate({
+  const target = await resolveVerifiedReleaseUpgradeCandidate({
     context,
     currentConfigDigest: input.currentConfigDigest,
-  }).catch((error: unknown) => {
-    log(`release-target-resolution-threw: ${getErrorMessage(error)}`);
-    return null;
+    log,
   });
-  if (liveTarget && liveTarget.kind !== "no-published-target") {
-    const { kind: _kind, ...candidate } = liveTarget;
-    await recordVerifiedReleaseTargetEvidence({
-      candidate,
-      context,
-      currentConfigDigest: input.currentConfigDigest ?? "",
-    }).catch(() => false);
-    return {
-      targetSha: liveTarget.sourceSha,
-      targetTag: liveTarget.tag,
-      availability: "resolved",
-      unavailableReason: null,
-      releaseFreshness: liveTarget.kind === "up-to-date",
-    };
-  }
-
-  const persistedCandidate = input.currentConfigDigest
-    ? await loadVerifiedReleaseTargetEvidence({
-        context,
-        currentConfigDigest: input.currentConfigDigest,
-      }).catch(() => null)
-    : null;
-  const target = persistedCandidate
-    ? resolveReleaseTarget({
-        currentConfigDigest: input.currentConfigDigest,
-        candidate: persistedCandidate,
-      })
-    : null;
-  if (!target || target.kind === "no-published-target") {
-    const unavailableReason =
-      target?.reason ??
-      (liveTarget?.kind === "no-published-target"
-        ? liveTarget.reason
-        : "registry-unavailable");
-    log(`release-target-unavailable: ${unavailableReason}`);
-    return { ...UNAVAILABLE, unavailableReason };
+  if (target.kind === "no-published-target") {
+    return { ...UNAVAILABLE, unavailableReason: target.reason };
   }
   return {
     targetSha: target.sourceSha,

@@ -17,7 +17,10 @@ vi.mock("./release-target", () => releaseTarget);
 vi.mock("@/lib/release-health/state", () => releaseHealth);
 vi.mock("./version", () => version);
 
-import { resolveSelfUpgradeStatusTarget } from "./status-target";
+import {
+  resolveSelfUpgradeStatusTarget,
+  resolveVerifiedReleaseUpgradeCandidate,
+} from "./status-target";
 
 const config = {
   enabled: true,
@@ -75,6 +78,18 @@ describe("resolveSelfUpgradeStatusTarget", () => {
     releaseTarget.resolveReleaseTarget.mockReturnValue(target);
     releaseHealth.loadVerifiedReleaseTargetEvidence.mockResolvedValue(null);
     releaseHealth.recordVerifiedReleaseTargetEvidence.mockResolvedValue(true);
+  });
+
+  it("exposes the same verified fallback to non-presentation consumers", async () => {
+    releaseTarget.resolveReleaseUpgradeCandidate.mockResolvedValue({
+      kind: "no-published-target",
+      reason: "registry-unavailable",
+    });
+    releaseHealth.loadVerifiedReleaseTargetEvidence.mockResolvedValue(candidate);
+
+    await expect(
+      resolveVerifiedReleaseUpgradeCandidate({ context, currentConfigDigest }),
+    ).resolves.toEqual(target);
   });
 
   it("retains an exact verified release target when a later registry read fails transiently", async () => {
