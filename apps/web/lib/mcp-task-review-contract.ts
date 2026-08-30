@@ -104,16 +104,20 @@ export function narrowInitiativeReviewTools<T extends {
   const exactNames = new Set(requiredNames);
   const compactResearchReceipt = binding.gate === "research"
     && binding.writerToolName === "record_initiative_evidence";
-  const baseJudgmentNames = compactResearchReceipt
-    ? ["decision"]
-    : ["decision", "reason", "findings", "resolvedFindingRefs"];
-  const judgmentPropertyNames = [
-    ...baseJudgmentNames,
+  const objectiveMappingProposal = binding.gate === "objective-mapping"
+    && binding.writerToolName === "record_initiative_evidence";
+  const baseWriterNames = objectiveMappingProposal
+    ? ["operation", "baselineId", "objectiveMappings", "reason"]
+    : compactResearchReceipt
+      ? ["decision"]
+      : ["decision", "reason", "findings", "resolvedFindingRefs"];
+  const writerPropertyNames = [
+    ...baseWriterNames,
     ...(binding.gate === "spec-approval" ? ["profile", "artifactRole", "supersessionDispositions"] : []),
     ...(binding.gate === "classification" ? ["profile"] : []),
   ];
-  const requiredJudgmentNames = [
-    ...baseJudgmentNames,
+  const requiredWriterNames = [
+    ...baseWriterNames,
     ...(binding.gate === "spec-approval" ? ["profile", "artifactRole"] : []),
     ...(binding.gate === "classification" ? ["profile"] : []),
   ];
@@ -122,12 +126,17 @@ export function narrowInitiativeReviewTools<T extends {
       ? schema.properties as Record<string, unknown>
       : {};
     const narrowedProperties = Object.fromEntries(
-      judgmentPropertyNames.flatMap((name) => name in properties ? [[name, properties[name]]] : []),
+      writerPropertyNames.flatMap((name) => name in properties ? [[name, properties[name]]] : []),
     );
     return {
       type: "object",
-      properties: narrowedProperties,
-      required: requiredJudgmentNames,
+      properties: objectiveMappingProposal
+        ? {
+            ...narrowedProperties,
+            operation: { type: "string", enum: ["objective-mapping"] },
+          }
+        : narrowedProperties,
+      required: requiredWriterNames,
       additionalProperties: false,
     };
   };
