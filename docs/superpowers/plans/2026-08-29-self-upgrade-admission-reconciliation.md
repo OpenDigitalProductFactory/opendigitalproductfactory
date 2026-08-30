@@ -112,7 +112,42 @@ destruction.
 
 | Deliverable key | Backlog item | Independently shippable | Requirement refs | Contract refs | Flow refs | Verification refs |
 | --- | --- | --- | --- | --- | --- | --- |
-| `durable-self-upgrade-admission` | BI-3FD07259 | no | OBJ-SUA-001, OBJ-SUA-002, OBJ-SUA-003, OBJ-SUA-004 | admission-transaction, dispatch-state-machine, consumer-cas, operator-projection | admit-return, post-response-dispatch, boot-reconcile, worker-claim, live-upgrade | AC-SUA-001, AC-SUA-002, AC-SUA-003, AC-SUA-004, AC-SUA-005, AC-SUA-006, AC-SUA-007, AC-SUA-008 |
+| `durable-self-upgrade-admission` | BI-3FD07259 | no | OBJ-SUA-001, OBJ-SUA-002, OBJ-SUA-003, OBJ-SUA-004, OBJ-SUA-005 | admission-transaction, dispatch-state-machine, consumer-cas, operator-projection, verified-release-target-fallback | admit-return, post-response-dispatch, boot-reconcile, worker-claim, live-upgrade | AC-SUA-001, AC-SUA-002, AC-SUA-003, AC-SUA-004, AC-SUA-005, AC-SUA-006, AC-SUA-007, AC-SUA-008, AC-SUA-009 |
+
+## Volatile target-projection extension
+
+1. Add the exact oscillation RED fixture to `status-target.test.ts`: a live
+   registry success for the canonical release followed by a transient fetch
+   failure must retain the identical target, while no persisted proof remains
+   unavailable.
+2. Extend the existing `release_health.latest` JSON state with one optional
+   verified registry-target attestation. Do not add a model, migration, cache,
+   or alternate authority surface.
+3. Record the attestation only when a fresh successful publisher snapshot and
+   live registry candidate agree exactly. Bind publisher run, tag/SHA, GHCR
+   owner/channel, install identity, running config digest, platform, and all
+   verified image digests in a serializable transaction.
+4. On registry failure, accept the persisted candidate only while both evidence
+   timestamps are within 30 minutes and every binding still matches. Preserve
+   it across a matching health poll; clear it on changed/red/in-progress or
+   unsuccessful publisher identity. Keep Git-source and all malformed, stale,
+   ambiguous, or mismatched evidence fail closed.
+5. Preserve the existing server-signed expiring action binding and normal
+   action-time target/quiescence/override validation. Do not edit the #4863 UI
+   projection or add another operator control.
+6. Run the focused state/status/runner RED-GREEN suites, adjacent release-target
+   and self-upgrade action tests, web typecheck, prose/style/preflight guards,
+   exact-tree CI, protected PR/merge, and one canonical release. No live click
+   or BI-F48 replay is allowed before protected live proof.
+
+Additional source surface:
+
+- `apps/web/lib/self-upgrade/status-target.ts`
+- `apps/web/lib/self-upgrade/status-target.test.ts`
+- `apps/web/lib/release-health/state.ts`
+- `apps/web/lib/release-health/state.test.ts`
+- `apps/web/lib/release-health/runner.ts`
+- `apps/web/lib/release-health/runner.test.ts`
 
 ## Atomic recovery extension for SUR-6B312E24
 

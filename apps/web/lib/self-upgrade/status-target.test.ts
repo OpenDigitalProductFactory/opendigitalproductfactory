@@ -1,57 +1,136 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({
+const releaseTarget = vi.hoisted(() => ({
   loadReleaseInstallContext: vi.fn(),
+  resolveReleaseTarget: vi.fn(),
   resolveReleaseUpgradeCandidate: vi.fn(),
-  resolveTargetSha: vi.fn(),
 }));
 
-vi.mock("./release-target", () => ({
-  loadReleaseInstallContext: mocks.loadReleaseInstallContext,
-  resolveReleaseUpgradeCandidate: mocks.resolveReleaseUpgradeCandidate,
+const releaseHealth = vi.hoisted(() => ({
+  loadVerifiedReleaseTargetEvidence: vi.fn(),
+  recordVerifiedReleaseTargetEvidence: vi.fn(),
 }));
 
-vi.mock("./version", () => ({ resolveTargetSha: mocks.resolveTargetSha }));
+const version = vi.hoisted(() => ({ resolveTargetSha: vi.fn() }));
+
+vi.mock("./release-target", () => releaseTarget);
+vi.mock("@/lib/release-health/state", () => releaseHealth);
+vi.mock("./version", () => version);
 
 import { resolveSelfUpgradeStatusTarget } from "./status-target";
 
-const SUPPORT = {
-  configuredEnabled: true,
-  supported: true,
+const config = {
   enabled: true,
-  targetKind: "release-artifact",
-  reason: "enabled",
+  channel: "stable",
+  checkIntervalHours: 24,
+  cooldownMinutes: 60,
+  batchMinPendingPrs: 1,
+  batchMaxWaitHours: 24,
+  healthTarget: 100,
+  maintenanceWindows: [],
+  sourceMode: "upstream" as const,
+  installBranch: "dpf/install",
+  useIsolatedWorkspace: true,
+};
+
+const support = {
+  configuredEnabled: true,
+  supported: true as const,
+  enabled: true,
+  targetKind: "release-artifact" as const,
+  reason: "enabled" as const,
   message: null,
-} as const;
+};
 
-const CONFIG = { channel: "stable", hostSourceMountPath: "/host-dpf" } as never;
-
-const CONTEXT = {
-  installMode: "consumer",
-  imageTag: "v2026.08.29-x.1",
+const context = {
+  installMode: "consumer" as const,
+  imageTag: "v2026.08.29-rendered-target-admission.1",
   channelTag: "latest",
-  installPath: "D:\\DPF",
-  composeFiles: ["docker-compose.yml"],
+  installPath: "D:/DPF",
+  composeFiles: ["docker-compose.yml", "docker-compose.release.yml"],
   ghcrOwner: "opendigitalproductfactory",
 };
 
-function call(log: (m: string) => void) {
-  return resolveSelfUpgradeStatusTarget({
-    support: SUPPORT,
-    config: CONFIG,
-    currentConfigDigest: `sha256:${"a".repeat(64)}`,
-    log,
-  });
+const candidate = {
+  tag: "v2026.08.30-owner-release-projection.1",
+  sourceSha: "f13fcf1c568425d24e9b6dcbf44e65668a39b420",
+  channelDigest: `sha256:${"a".repeat(64)}`,
+  platformManifestDigest: `sha256:${"b".repeat(64)}`,
+  configDigest: `sha256:${"c".repeat(64)}`,
+  platformOs: "linux" as const,
+  platformArchitecture: "amd64",
+};
+
+const target = { kind: "target" as const, ...candidate };
+const currentConfigDigest = `sha256:${"d".repeat(64)}`;
+
+function call(log: (message: string) => void) {
+  return resolveSelfUpgradeStatusTarget({ support, config, currentConfigDigest, log });
 }
 
 describe("resolveSelfUpgradeStatusTarget", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.loadReleaseInstallContext.mockResolvedValue(CONTEXT);
+    releaseTarget.loadReleaseInstallContext.mockResolvedValue(context);
+    releaseTarget.resolveReleaseTarget.mockReturnValue(target);
+    releaseHealth.loadVerifiedReleaseTargetEvidence.mockResolvedValue(null);
+    releaseHealth.recordVerifiedReleaseTargetEvidence.mockResolvedValue(true);
+  });
+
+  it("retains an exact verified release target when a later registry read fails transiently", async () => {
+    releaseTarget.resolveReleaseUpgradeCandidate
+      .mockResolvedValueOnce(target)
+      .mockRejectedValueOnce(new Error("UND_ERR_CONNECT_TIMEOUT"));
+    releaseHealth.loadVerifiedReleaseTargetEvidence.mockResolvedValue(candidate);
+    const log = vi.fn();
+
+    const first = await call(log);
+    const second = await call(log);
+
+    expect(first).toEqual({
+      targetSha: candidate.sourceSha,
+      targetTag: candidate.tag,
+      availability: "resolved",
+      unavailableReason: null,
+      releaseFreshness: false,
+    });
+    expect(second).toEqual(first);
+    expect(log).toHaveBeenCalledWith(
+      "release-target-resolution-threw: UND_ERR_CONNECT_TIMEOUT",
+    );
+    expect(releaseHealth.recordVerifiedReleaseTargetEvidence).toHaveBeenCalledWith({
+      candidate,
+      context,
+      currentConfigDigest,
+    });
+    expect(releaseHealth.loadVerifiedReleaseTargetEvidence).toHaveBeenCalledWith({
+      context,
+      currentConfigDigest,
+    });
+  });
+
+  it("remains unavailable when registry discovery fails without persisted verified evidence", async () => {
+    releaseTarget.resolveReleaseUpgradeCandidate.mockRejectedValue(
+      new Error("UND_ERR_CONNECT_TIMEOUT"),
+    );
+    const log = vi.fn();
+
+    await expect(call(log)).resolves.toEqual({
+      targetSha: null,
+      targetTag: null,
+      availability: "unavailable",
+      unavailableReason: "registry-unavailable",
+      releaseFreshness: null,
+    });
+    expect(log).toHaveBeenCalledWith(
+      "release-target-resolution-threw: UND_ERR_CONNECT_TIMEOUT",
+    );
+    expect(log).toHaveBeenCalledWith("release-target-unavailable: registry-unavailable");
+    expect(releaseTarget.resolveReleaseTarget).not.toHaveBeenCalled();
   });
 
   it("reports the typed reason when the registry read fails", async () => {
-    mocks.resolveReleaseUpgradeCandidate.mockResolvedValue({
+    releaseTarget.resolveReleaseUpgradeCandidate.mockResolvedValue({
       kind: "no-published-target",
       reason: "registry-auth-invalid",
     });
@@ -65,10 +144,7 @@ describe("resolveSelfUpgradeStatusTarget", () => {
   });
 
   it("reports a thrown fault instead of silently collapsing it", async () => {
-    // The regression: a throw became a bare null, every distinct cause turned
-    // into "registry-unavailable", and nothing was logged — so a live
-    // intermittent failure was undiagnosable from outside the process.
-    mocks.resolveReleaseUpgradeCandidate.mockRejectedValue(new Error("socket hang up"));
+    releaseTarget.resolveReleaseUpgradeCandidate.mockRejectedValue(new Error("socket hang up"));
     const log = vi.fn();
 
     const result = await call(log);
@@ -80,7 +156,7 @@ describe("resolveSelfUpgradeStatusTarget", () => {
   });
 
   it("reports an unresolved install context rather than returning a bare unavailable", async () => {
-    mocks.loadReleaseInstallContext.mockResolvedValue(null);
+    releaseTarget.loadReleaseInstallContext.mockResolvedValue(null);
     const log = vi.fn();
 
     const result = await call(log);
@@ -89,20 +165,16 @@ describe("resolveSelfUpgradeStatusTarget", () => {
     expect(log).toHaveBeenCalledWith("release-install-context-unresolved");
   });
 
-  it("stays silent and resolves when a target is available", async () => {
-    mocks.resolveReleaseUpgradeCandidate.mockResolvedValue({
-      kind: "target",
-      tag: "v2026.08.30-owner-release-projection.1",
-      sourceSha: "f13fcf1c568425d24e9b6dcbf44e65668a39b420",
-    });
+  it("stays silent and resolves when a live target is available", async () => {
+    releaseTarget.resolveReleaseUpgradeCandidate.mockResolvedValue(target);
     const log = vi.fn();
 
     const result = await call(log);
 
     expect(result).toMatchObject({
       availability: "resolved",
-      targetSha: "f13fcf1c568425d24e9b6dcbf44e65668a39b420",
-      targetTag: "v2026.08.30-owner-release-projection.1",
+      targetSha: candidate.sourceSha,
+      targetTag: candidate.tag,
       unavailableReason: null,
       releaseFreshness: false,
     });
@@ -110,10 +182,10 @@ describe("resolveSelfUpgradeStatusTarget", () => {
   });
 
   it("marks an up-to-date install as fresh, still without logging", async () => {
-    mocks.resolveReleaseUpgradeCandidate.mockResolvedValue({
+    releaseTarget.resolveReleaseUpgradeCandidate.mockResolvedValue({
       kind: "up-to-date",
-      tag: "v2026.08.29-x.1",
-      sourceSha: "b".repeat(40),
+      ...candidate,
+      tag: context.imageTag,
     });
     const log = vi.fn();
 

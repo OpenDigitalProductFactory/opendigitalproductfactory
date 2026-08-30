@@ -53,6 +53,8 @@ failed before dispatch.
   unavailable while the request's disposition is unknown.
 - **OBJ-SUA-004:** Preserve quiescence, emergency-override, release binding, and
   newer-run checks as fail-closed authority boundaries.
+- **OBJ-SUA-005:** Keep one verified immutable release target available through
+  a bounded transient registry failure without weakening action-time authority.
 
 | Acceptance | Objectives | Statement | Design evidence |
 | --- | --- | --- | --- |
@@ -64,6 +66,7 @@ failed before dispatch.
 | AC-SUA-006 | OBJ-SUA-003 | The existing control shows durable pending, dispatching, queued, indeterminate, and dispatch-failed outcomes and never unlocks on a blind timer. | Operator projection |
 | AC-SUA-007 | OBJ-SUA-003 | A response interruption after admission still converges from server data; no local success state is treated as evidence. | Operator projection |
 | AC-SUA-008 | OBJ-SUA-004 | Emergency override remains explicit and immutable per admission; ordinary activity/quiescence preflight remains authoritative and cannot be bypassed by reconciliation. | Authority boundary |
+| AC-SUA-009 | OBJ-SUA-004, OBJ-SUA-005 | After live registry discovery agrees with a fresh successful publisher snapshot, a later transient registry failure may reuse only that exact bounded candidate; stale, conflicting, unverified, wrong-install, wrong-platform, malformed, or Git-source evidence remains unavailable. | Verified release-target fallback |
 
 ## Governed design-review recording contract
 
@@ -246,12 +249,52 @@ Tests must prove:
   has no timer-based re-enable;
 - ordinary queued/running/succeeded/failed/skipped history remains compatible;
 - startup and periodic recovery resend only eligible rows; and
-- the migration applies to a database containing historical self-upgrade rows.
+- the migration applies to a database containing historical self-upgrade rows;
+  and
+- a successful registry read followed by a transient failure retains the exact
+  fresh verified release target, while absent/stale/red/conflicting evidence
+  remains unavailable.
 
 Live acceptance requires one canonical release and one governed action whose
 UI returns a run id immediately, whose persisted dispatch transitions are
 observable, and whose physical upgrade completes at most once. Served SHA,
 health, preserved data, and CAN-TEST remain mandatory.
+
+## Bounded verified release-target fallback
+
+The live `f13fcf1c` pre-action fixture proved that release-artifact projection
+was volatile: one page read resolved the exact immutable release and issued a
+signed binding, while a later read in the same unchanged process returned
+`Target: unknown` after transient fetch degradation. The already-verified
+`release_health.latest` publisher state remained exact and healthy throughout.
+
+The repair extends that existing PlatformConfig row rather than creating a
+second target store. A successful live registry read may attach one
+`verifiedTarget` attestation only when the row's current publisher snapshot is
+`verified`, has a successful workflow conclusion, and exactly matches the
+candidate tag, source SHA, and publisher run id. The attestation binds the GHCR
+owner, channel tag, install mode, installed image tag, running config digest,
+Linux platform/architecture, and all three registry-verified image digests.
+The write uses a serializable transaction so a concurrent health poll cannot be
+overwritten by an older page observation.
+
+On a later registry failure, `resolveSelfUpgradeStatusTarget` may use that
+candidate only when both the publisher snapshot and attestation are no more
+than 30 minutes old and every bound install, platform, tag, SHA, publisher, and
+digest field still validates. The normal current-config comparison still
+decides whether the candidate is pending or already installed. Matching health
+polls preserve the attestation; a changed, red, in-progress, ambiguous, or
+unsuccessful publisher identity clears it. Missing evidence remains target
+unavailable.
+
+This fallback never applies to Git-source installs and never converts failed,
+stale, malformed, mismatched-owner/channel/architecture/digest, or unverified
+evidence into authority. It does not persist or reuse a client signature. The
+page still issues a fresh server-signed expiring release-artifact binding, and
+the action still performs its ordinary binding, target, predecessor,
+quiescence, and emergency-override checks at execution time. PR #4863 remains
+the single owner-state/UI projection contract; this extension changes no UI
+surface.
 
 ## Source-free registration and persisted-target reconciliation extension
 
