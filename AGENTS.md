@@ -28,6 +28,7 @@ Every rule here is a one-line statement; the kernel principle behind it carries 
 - **Live state over seed data.** Query the database for current epics, backlog, users, capabilities and status. → [kernel principle](docs/professions/data-architect/wiki/live-state-over-seed-data.md)
 - **Research and use standards.** Cite sources; recommend the standard unless there is a project-specific reason to deviate. → [kernel principle](docs/founder-kernel/wiki/principles/research-and-use-standards.md)
 - **Use paid AI capacity responsibly.** → [kernel principle](docs/founder-kernel/wiki/principles/responsible-capacity-utilization.md)
+- **An autonomous directive is bounded by descent, not effort.** Fix a blocker of the named objective; hand back at a blocker of *that* blocker, or on a second same-class failure. → [kernel principle](docs/founder-kernel/wiki/principles/autonomous-directives-are-blanket-approval.md)
 - **Self-provision before working.** A client missing its `dpf` MCP connector or `dpf-platform` skills converges before doing project work — run the bootstrap script from the repo root, then restart the client. Idempotent; covers all four CLI surfaces. → [Agent Toolchain Bootstrap](docs/superpowers/specs/2026-05-26-agent-toolchain-bootstrap-design.md)
 
 

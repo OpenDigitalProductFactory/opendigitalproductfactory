@@ -119,7 +119,7 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "adopt_worktree",
-    description: "Adopt an existing local branch/worktree pair into a Workroom without creating a new worktree. A branch has one durable workroom identity; an incompatible terminal or foreign binding returns branch_occupied instead of overwriting history.",
+    description: "Adopt an existing local branch/worktree pair into a Workroom without creating a new worktree. Pass backlogItemId to bind the work: the returned Workroom carries the binding or the call fails, never a partly-bound record. A branch has one durable workroom identity; a terminal Workroom with no backlog item is resumed and rebound rather than blocking the branch, while a foreign binding returns branch_occupied instead of overwriting history.",
     inputSchema: {
       type: "object",
       properties: {
@@ -128,10 +128,12 @@ const definitions: ToolDefinition[] = [
         repositoryFullName: { type: "string", description: "GitHub repository full name, for example OpenDigitalProductFactory/opendigitalproductfactory." },
         headBranch: { type: "string", description: "Existing branch to adopt." },
         worktreePath: { type: "string", description: "Local worktree path for the branch." },
+        backlogItemId: { type: "string", description: "BacklogItem this work delivers (BI-*). Bound onto the Workroom and read back; an unknown id is refused rather than dropped." },
         baseBranch: { type: "string", description: "Optional base branch (defaults to main)." },
         baseSha: { type: "string", description: "Optional current base SHA." },
         headSha: { type: "string", description: "Optional current head SHA." },
         executorKind: { type: "string", enum: ENUMS.executors, description: "Optional executor adopting the worktree." },
+        sessionRef: { type: "string", description: "Owner/session id, stored as the workroom executorRef. Without it a claim can be shown to exist but not shown to be yours." },
         ...scopeProperties,
       },
       required: ["title", "objective", "repositoryFullName", "headBranch", "worktreePath"],

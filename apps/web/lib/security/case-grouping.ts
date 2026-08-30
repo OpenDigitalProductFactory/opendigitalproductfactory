@@ -47,6 +47,10 @@ export interface DetectionForGrouping {
   groupingKey: string;
   /** Short title for the case (highest-severity detection's title wins). */
   title: string;
+  /** Rule name and the raw entity, kept separate from the composed title so a
+   *  persist step can resolve an actor entity to a name (BI-7D1EC4B9). */
+  ruleName: string;
+  entityKey: string;
   firstSeenAt: Date;
   lastSeenAt: Date;
 }
@@ -57,6 +61,11 @@ export interface CaseCandidate {
   customerAccountId: string | null;
   customerSiteId: string | null;
   title: string;
+  /** The winning detection's rule name and raw entity, so the persist step can
+   *  re-render the title with a resolved actor label (BI-7D1EC4B9). "unknown"
+   *  entityKey means the detection carried no asset/actor. */
+  ruleName: string;
+  entityKey: string;
   severity: string;
   detectionKeys: string[];
   firstSeenAt: Date;
@@ -87,6 +96,8 @@ export function groupDetectionsIntoCases(
         customerAccountId: d.customerAccountId,
         customerSiteId: d.customerSiteId,
         title: d.title,
+        ruleName: d.ruleName,
+        entityKey: d.entityKey,
         severity: d.severity,
         detectionKeys: [d.detectionKey],
         firstSeenAt: d.firstSeenAt,
@@ -103,6 +114,8 @@ export function groupDetectionsIntoCases(
     // ties keep the earlier title).
     if (rank > (titleRank.get(d.groupingKey) ?? 0)) {
       existing.title = d.title;
+      existing.ruleName = d.ruleName;
+      existing.entityKey = d.entityKey;
       titleRank.set(d.groupingKey, rank);
     }
   }
@@ -171,6 +184,8 @@ export function detectionRowToGroupingInput(
     severity: row.severity,
     groupingKey: deriveGroupingKey({ scopeKey: row.scopeKey, entityKey, family }),
     title,
+    ruleName,
+    entityKey,
     firstSeenAt: row.firstSeenAt,
     lastSeenAt: row.lastSeenAt,
   };

@@ -165,6 +165,60 @@ describe("nearby federation pairing actions", () => {
     expect(mocks.createPairing.mock.calls[0]?.[0].data).not.toHaveProperty("pairingSecret");
   });
 
+  it("reports the evidence verdict on a started pairing instead of leaving the operator to guess", async () => {
+    mocks.requestPairing.mockResolvedValue({
+      ok: true,
+      pairingId: "pair_123",
+      pairingSecret: `dpffpair_${"a".repeat(43)}`,
+      matchingCode: "123456",
+      peerDisplayName: "Windows development installation",
+      peerInstallationId: `inst_${"b".repeat(32)}`,
+      peerDeviceId: `did_${"b".repeat(64)}`,
+      peerSigningPublicKey: "receiver-public-key",
+      expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
+      projectionSummary: {
+        relationshipLabel: "Same organization",
+        retentionClass: "standard",
+        sharedSlices: ["demand"],
+        staysLocal: ["local backlog details"],
+      },
+    });
+
+    const result = await startNearbyPairingAction({
+      discoveryId: candidate.discoveryId,
+      endpoint: candidate.endpoint,
+    });
+
+    // No organization root is mounted and no join import exists here, so nothing
+    // about this peer can be PROVEN. The pairing still proceeds to the SAS
+    // exchange — that is the manual path, unchanged — but it now carries the
+    // reason a human is being asked, rather than asking silently.
+    expect(result).toMatchObject({
+      ok: true,
+      pairingMode: "operator-confirmation",
+    });
+    expect(result).toHaveProperty("pairingReason");
+    expect(typeof (result as { pairingExplanation?: string }).pairingExplanation).toBe("string");
+  });
+
+  it("refuses a plain-HTTP peer with the decision's own words, not a hardcoded sentence", async () => {
+    mocks.listCandidates.mockReturnValue([
+      { ...candidate, endpoint: "http://peer.local:3000", automaticPairing: "blocked-insecure-transport" as const },
+    ]);
+
+    const result = await startNearbyPairingAction({
+      discoveryId: candidate.discoveryId,
+      endpoint: "http://peer.local:3000",
+    });
+
+    expect(result).toMatchObject({ ok: false, error: "invalid_input" });
+    // The wording now comes from `decideAutomaticPairing`, which explains that an
+    // identity advertised over plain HTTP cannot be verified at all.
+    expect((result as { message: string }).message).toContain("plain HTTP");
+    expect((result as { message: string }).message).toContain("manual invitation");
+    expect(mocks.requestPairing).not.toHaveBeenCalled();
+  });
+
   it("redeems an approved peer invitation and clears the pairing credential", async () => {
     const expiresAt = new Date(Date.now() + 10 * 60_000);
     mocks.findPairingById.mockResolvedValue({

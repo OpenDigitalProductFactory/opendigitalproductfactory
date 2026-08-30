@@ -48,8 +48,16 @@ export default async function PerformancePage({
         <BusinessPerformanceDashboard performance={performance} watches={watches} />
       ) : (
         <EmptyState
-          title="Performance history is not ready yet"
-          description={`${performance.reason} We will not show made-up numbers.`}
+          title={
+            performance.applicable
+              ? "Performance history is not ready yet"
+              : "Performance isn't available for this business type"
+          }
+          description={
+            performance.applicable
+              ? `${performance.reason} We will not show made-up numbers.`
+              : performance.reason
+          }
           action={
             <Link
               href="/workspace"

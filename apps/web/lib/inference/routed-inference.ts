@@ -41,6 +41,7 @@ import {
 } from "@/lib/inference/route-contract-builder";
 import { logTokenUsage } from "@/lib/ai-inference";
 import type { RouteAndCallOptions } from "./routed-inference-options";
+import { applyCallerExecutionPlanOverrides } from "./routed-inference-plan-overrides";
 import {
   applyObservedRouterEvidence,
   attachProviderSuitabilityReceipt,
@@ -399,15 +400,12 @@ async function routeAndCallAttempt(
   // through callWithFallbackChain into every adapter in the fallback chain.
   // Caller-set effort wins; otherwise the resolved posture's effort applies
   // (EP-GOLDEN-TRIANGLE Slice 3). Balanced/no posture leaves effort untouched.
-  const effort = options?.effort ?? prepared.posture?.effort;
-  if (effort && decision.executionPlan) {
-    decision.executionPlan = {
-      ...decision.executionPlan,
-      providerSettings: {
-        ...decision.executionPlan.providerSettings,
-        effort,
-      },
-    };
+  if (decision.executionPlan) {
+    decision.executionPlan = applyCallerExecutionPlanOverrides(decision.executionPlan, {
+      effort: options?.effort ?? prepared.posture?.effort,
+      toolChoice: options?.toolChoice,
+      terminalWriterToolName: options?.terminalWriterToolName,
+    });
   }
 
   // BI-F4D3B9E9(c): persist the failed route decision BEFORE throwing so the

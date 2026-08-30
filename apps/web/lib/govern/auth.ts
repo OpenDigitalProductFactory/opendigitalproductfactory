@@ -5,6 +5,10 @@ import Google from "next-auth/providers/google";
 import Apple from "next-auth/providers/apple";
 import { prisma } from "@dpf/db";
 import { verifyPassword, hashPassword } from "./password";
+// BI-CEACBD0D: authentication now consults the Principal spine. Before this,
+// auth.ts never read Principal — identity was decided without the spine that
+// decides authority.
+import { authorizePrincipalForSession } from "@/lib/identity/authentication";
 import { determineSocialAuthFlow, createTempToken } from "./social-auth";
 import { normalizeAuthRedirect } from "./auth-redirect";
 import { resolveWorkforcePlatformRole } from "./auth-utils";
@@ -146,6 +150,15 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           if (needsRehash) {
             const newHash = await hashPassword(credentials.password as string);
             await prisma.user.update({ where: { id: user.id }, data: { passwordHash: newHash } });
+          }
+          // The credential is verified; now the SPINE decides whether this
+          // identity may act. An inactive Principal cannot log in even when the
+          // User row still says active — deactivation is an invariant here, not
+          // a sync that may not have run yet (BI-CEACBD0D).
+          const spine = await authorizePrincipalForSession(user.id);
+          if (!spine.authorized) {
+            console.warn(`[auth] workforce login refused by the principal spine: ${spine.reason}`);
+            return null;
           }
           return {
             id: user.id,

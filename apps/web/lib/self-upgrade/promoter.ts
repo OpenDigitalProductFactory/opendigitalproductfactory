@@ -100,8 +100,10 @@ export type VerifiedReleaseIdentity = {
 };
 
 export type PromoterParams = {
-  /** HOST path of the install tree; bind-mounted into the promoter. */
+  /** HOST path of the source/build carrier; bind-mounted into the promoter. */
   hostInstallPath: string;
+  /** HOST path of the canonical consumer install root that owns durable release identity. */
+  canonicalInstallPath?: string;
   /** Git SHA to promote to. */
   targetSha: string;
   /** In-container path the promoter writes its pre-swap backup to. */
@@ -214,6 +216,7 @@ function validateRuntimeTransitionCommandInputs(params: PromoterParams): void {
   }
   if (params.installStateMigrationEnvelope && !RUNTIME_TRANSITION_ENVELOPE.test(params.installStateMigrationEnvelope)) throw new Error("invalid_install_state_migration_envelope");
   if (params.installStateMigrationSignature && !RUNTIME_TRANSITION_TOKEN.test(params.installStateMigrationSignature)) throw new Error("invalid_install_state_migration_signature");
+  if (params.canonicalInstallPath && !isSafeRuntimeHostPath(params.canonicalInstallPath)) throw new Error("invalid_canonical_install_path");
   if (params.release && (
     !RELEASE_TAG.test(params.release.tag) ||
     !REGISTRY_OWNER.test(params.release.ghcrOwner) ||
@@ -232,23 +235,17 @@ function validateRuntimeTransitionCommandInputs(params: PromoterParams): void {
  * container. Separated from runPromoter so it can be unit-tested without
  * spawning a process. Returns the command and argv exactly as spawned.
  */
-export function buildPromoterCommand(
-  params: PromoterParams,
-): { command: string; args: string[] } {
+export function buildPromoterCommand(params: PromoterParams): { command: string; args: string[] } {
   validateRuntimeTransitionCommandInputs(params);
-  const image =
-    params.promoterImage && params.promoterImage.length > 0
-      ? params.promoterImage
-      : DEFAULT_PROMOTER_IMAGE;
+  const image = params.promoterImage && params.promoterImage.length > 0 ? params.promoterImage : DEFAULT_PROMOTER_IMAGE;
 
   // The promoter runs in its own container, so the portal's "localhost" health
   // URL is unreachable (that loopback is the promoter's own). Rewrite it to
   // host.docker.internal so curl hits the portal's published host port — the
   // new portal that the promoter just recreated.
-  const healthUrl = params.healthUrl.replace(
-    /\/\/(localhost|127\.0\.0\.1)(?=[:/]|$)/,
-    "//host.docker.internal",
-  );
+  const healthUrl = params.healthUrl.replace(/\/\/(localhost|127\.0\.0\.1)(?=[:/]|$)/, "//host.docker.internal");
+  const hasCanonicalInstall = params.release && params.canonicalInstallPath;
+  const distinctCanonicalInstall = hasCanonicalInstall && params.canonicalInstallPath !== params.hostInstallPath;
 
   const args = [
     "run",
@@ -272,8 +269,10 @@ export function buildPromoterCommand(
     "/var/run/docker.sock:/var/run/docker.sock",
     // Host source tree (read-only): build context + backup source.
     "-v",
-    `${params.hostInstallPath}:${PROMOTER_CONTAINER_SOURCE}${params.release ? "" : ":ro"}`,
+    `${params.hostInstallPath}:${PROMOTER_CONTAINER_SOURCE}${params.release && !distinctCanonicalInstall ? "" : ":ro"}`,
   );
+
+  if (distinctCanonicalInstall) args.push("-v", `${params.canonicalInstallPath}:/canonical-install`);
 
   if (params.backupHostPath && params.backupHostPath.length > 0) {
     args.push("-v", `${params.backupHostPath}:/backups`);
@@ -303,6 +302,7 @@ export function buildPromoterCommand(
   );
 
   if (params.release) {
+    if (hasCanonicalInstall) args.push("-e", `PROMOTE_INSTALL_ROOT=${distinctCanonicalInstall ? "/canonical-install" : PROMOTER_CONTAINER_SOURCE}`);
     args.push(
       "-e",
       "DPF_PROMOTION_MODE=release",

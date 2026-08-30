@@ -31,11 +31,11 @@ the platform is not".
 
 ## Inventory
 
-- Distinct agent identities measured: **83**
-  - canonical agent registry: 73 · workforce roster: 28 · profession roles: 95
+- Distinct agent identities measured: **86**
+  - canonical agent registry: 76 · workforce roster: 28 · profession roles: 98
   - Joined via COWORKER_SLUG_TO_CANONICAL_AGENT_ID; a handle-only join over-counts.
 - At 100% of attainable: **1**
-- Median attainable: **12%** · median absolute: **11%**
+- Median attainable: **48%** · median absolute: **44%**
 - Skills: **70** total, **0** stranded, **1** able to declare a cadence
 - Unresolved `assignTo` targets: `external-coding-agent`
 - Unbacked `backingSkillIds`: `build-sensitive-domain-requirements`, `customer-intake-triage`, `external-catalog-scout`, `marketing-collaboration-intake`, `prepare-counsel-packet`, `provider-cost-intake`
@@ -57,22 +57,22 @@ The gate is built, enforced, and its reach is derived from each tool's declared 
 | Class | Count | Median attainable | Meaning |
 |---|---|---|---|
 | `active-roster` | 13 | 76% | Active in the canonical registry and seeded onto the workforce roster. |
-| `active-registry-only` | 7 | 12% | Active in the canonical registry but absent from the workforce roster. |
+| `active-registry-only` | 10 | 48% | Active in the canonical registry but absent from the workforce roster. |
 | `roster-only` | 10 | 44% | On the workforce roster but absent from the canonical agent registry. |
 | `defined-roster` | 5 | 60% | Declared in the canonical registry (not active) and seeded onto the roster. |
-| `declared-only` | 48 | 12% | Declared in the canonical registry and never seeded anywhere. |
+| `declared-only` | 48 | 48% | Declared in the canonical registry and never seeded anywhere. |
 
 ## Plane levels across the inventory
 
 | Plane | Weight | Ceiling | L0 | L1 | L2 | L3 | At ceiling |
 |---|---|---|---|---|---|---|---|
-| Identity | 1 | 3 | 0 | 65 | 5 | 13 | 13/83 |
-| Corpus / WSID | 1 | 3 | 0 | 0 | 54 | 29 | 29/83 |
-| Governance / WWWD | 2 | 3 | 54 | 0 | 10 | 19 | 19/83 |
-| Shape | 1 | 2 | 82 | 0 | 1 | 0 | 1/83 |
-| Cadence | 1 | 3 | 77 | 0 | 5 | 1 | 1/83 |
-| Tools + Skills | 2 | 3 | 53 | 13 | 4 | 13 | 13/83 |
-| Evidence | 1 | 2 | 55 | 21 | 7 | 0 | 7/83 |
+| Identity | 1 | 3 | 0 | 68 | 5 | 13 | 13/86 |
+| Corpus / WSID | 1 | 3 | 0 | 0 | 0 | 86 | 86/86 |
+| Governance / WWWD | 2 | 3 | 0 | 0 | 10 | 76 | 76/86 |
+| Shape | 1 | 2 | 85 | 0 | 1 | 0 | 1/86 |
+| Cadence | 1 | 3 | 80 | 0 | 5 | 1 | 1/86 |
+| Tools + Skills | 2 | 3 | 0 | 69 | 4 | 13 | 13/86 |
+| Evidence | 1 | 2 | 58 | 21 | 7 | 0 | 7/86 |
 
 ### Planes the substrate currently caps
 
@@ -148,60 +148,6 @@ _Certification exercises a real domain act, not a generic probe._
 
 | Agent | Class | Attain | Abs | Id | Corp | Gov | Shp | Cad | T+S | Ev |
 |---|---|---|---|---|---|---|---|---|---|---|
-| `AGT-100` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `AGT-101` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `AGT-102` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `AGT-110` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `AGT-111` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `AGT-112` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `AGT-113` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `AGT-120` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `AGT-121` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `AGT-122` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `AGT-130` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `AGT-131` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `AGT-132` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `AGT-140` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `AGT-141` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `AGT-142` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `AGT-150` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `AGT-151` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `AGT-152` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `AGT-160` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `AGT-161` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `AGT-162` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `AGT-170` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `AGT-171` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `AGT-172` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `AGT-180` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `AGT-181` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `AGT-182` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `AGT-190` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `AGT-900` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `AGT-901` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `AGT-902` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `AGT-903` | active-registry-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `AGT-905` | active-registry-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `AGT-BUILD-DA` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `AGT-BUILD-FE` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `AGT-BUILD-QA` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `AGT-BUILD-SE` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `AGT-ORCH-100` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `AGT-ORCH-200` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `AGT-ORCH-300` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `AGT-ORCH-400` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `AGT-ORCH-500` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `AGT-ORCH-600` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `AGT-ORCH-700` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `AGT-ORCH-800` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `AGT-R2D-PB` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `AGT-S2P-PFB` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `AGT-S2P-POL` | declared-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `AGT-SOC-HUNTER` | active-registry-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `AGT-SOC-INVESTIGATOR` | active-registry-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `AGT-SOC-IR-LEAD` | active-registry-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `AGT-SOC-TRIAGE` | active-registry-only | 12% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `AGT-904` | declared-only | 36% | 33% | 1 | 2 | 0 | 0 | 0 | 3 | 0 |
 | `data-architect` | roster-only | 44% | 41% | 1 | 3 | 2 | 0 | 0 | 1 | 1 |
 | `data-steward` | roster-only | 44% | 41% | 1 | 3 | 2 | 0 | 0 | 1 | 1 |
 | `dispatcher` | roster-only | 44% | 41% | 1 | 3 | 2 | 0 | 0 | 1 | 1 |
@@ -209,12 +155,69 @@ _Certification exercises a real domain act, not a generic probe._
 | `legal-operations-counsel` | roster-only | 44% | 41% | 1 | 3 | 2 | 0 | 0 | 1 | 1 |
 | `security-engineer` | roster-only | 44% | 41% | 1 | 3 | 2 | 0 | 0 | 1 | 1 |
 | `storefront-advisor` | roster-only | 44% | 41% | 1 | 3 | 2 | 0 | 0 | 1 | 1 |
+| `AGT-100` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-101` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-102` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-110` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-111` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-112` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-113` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-120` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-121` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-122` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-130` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-131` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-132` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-140` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-141` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-142` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-150` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-151` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-152` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-160` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-161` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-162` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-170` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-171` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-172` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-180` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-181` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-182` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-190` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-900` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-901` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-902` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-903` | active-registry-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-905` | active-registry-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-BUILD-DA` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-BUILD-FE` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-BUILD-QA` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-BUILD-SE` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-EXT-CLAUDE` | active-registry-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-EXT-CODEX` | active-registry-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-EXT-GROK` | active-registry-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-ORCH-100` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-ORCH-200` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-ORCH-300` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-ORCH-400` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-ORCH-500` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-ORCH-600` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-ORCH-700` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-ORCH-800` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-R2D-PB` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-S2P-PFB` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-S2P-POL` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-SOC-HUNTER` | active-registry-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-SOC-INVESTIGATOR` | active-registry-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-SOC-IR-LEAD` | active-registry-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
+| `AGT-SOC-TRIAGE` | active-registry-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
 | `finance-controller` | roster-only | 52% | 48% | 1 | 3 | 2 | 0 | 2 | 1 | 1 |
 | `AGT-907` | defined-roster | 56% | 52% | 2 | 3 | 3 | 0 | 0 | 1 | 1 |
 | `AGT-WS-FARM-RANCH` | defined-roster | 56% | 52% | 2 | 3 | 3 | 0 | 0 | 1 | 1 |
 | `AGT-906` | defined-roster | 60% | 56% | 2 | 3 | 3 | 0 | 0 | 1 | 2 |
 | `AGT-WS-TIME-OFF` | defined-roster | 60% | 56% | 2 | 3 | 3 | 0 | 0 | 1 | 2 |
 | `market-research-analyst` | roster-only | 60% | 56% | 1 | 3 | 2 | 0 | 0 | 3 | 1 |
+| `AGT-904` | declared-only | 64% | 59% | 1 | 3 | 3 | 0 | 0 | 3 | 0 |
 | `AGT-WS-ONBOARD` | active-registry-only | 64% | 59% | 1 | 3 | 3 | 0 | 0 | 3 | 0 |
 | `AGT-WS-REVIEW` | active-roster | 64% | 59% | 3 | 3 | 3 | 0 | 0 | 1 | 2 |
 | `AGT-WS-BUILD` | active-roster | 68% | 63% | 3 | 3 | 3 | 0 | 0 | 2 | 1 |
@@ -234,104 +237,91 @@ _Certification exercises a real domain act, not a generic probe._
 
 ## Widest gaps — detail
 
-### `AGT-100` — policy-enforcement-agent · declared-only · 12% attainable
+### `data-architect` — Data Architect · roster-only · 44% attainable
 
-- **Identity** (level 1 of 3) — in the canonical registry only (status "defined"), never seeded onto the roster
-- **Corpus / WSID** (level 2 of 3) — corpus exists (16 pages) but evaluate_profession_decision is unreachable — missing: registry_read
-- **Governance / WWWD** (level 0 of 3) — holds no grants at all — no tool surface is authorised
+- **Identity** (level 1 of 3) — on the workforce roster but absent from the canonical agent registry
+- **Governance / WWWD** (level 2 of 3) — principle_decide reachable, but no escalation target is declared
 - **Shape** (level 0 of 2) — no declared work shape — nothing bounds what its standing work may do
 - **Cadence** (level 0 of 3) — no recurring trigger — any Proactivity setting is a silent no-op
-- **Tools + Skills** (level 0 of 3) — no grants and no skills — it cannot act
+- **Tools + Skills** (level 1 of 3) — no skill authored for it (5 wildcard only), 74 reachable tool(s)
+- **Evidence** (level 1 of 2) — derivedReadProbe only — passes certification with zero domain capability
+
+### `data-steward` — Data Steward · roster-only · 44% attainable
+
+- **Identity** (level 1 of 3) — on the workforce roster but absent from the canonical agent registry
+- **Governance / WWWD** (level 2 of 3) — principle_decide reachable, but no escalation target is declared
+- **Shape** (level 0 of 2) — no declared work shape — nothing bounds what its standing work may do
+- **Cadence** (level 0 of 3) — no recurring trigger — any Proactivity setting is a silent no-op
+- **Tools + Skills** (level 1 of 3) — no skill authored for it (5 wildcard only), 75 reachable tool(s)
+- **Evidence** (level 1 of 2) — derivedReadProbe only — passes certification with zero domain capability
+
+### `dispatcher` — Dispatcher · roster-only · 44% attainable
+
+- **Identity** (level 1 of 3) — on the workforce roster but absent from the canonical agent registry
+- **Governance / WWWD** (level 2 of 3) — principle_decide reachable, but no escalation target is declared
+- **Shape** (level 0 of 2) — no declared work shape — nothing bounds what its standing work may do
+- **Cadence** (level 0 of 3) — no recurring trigger — any Proactivity setting is a silent no-op
+- **Tools + Skills** (level 1 of 3) — no skill authored for it (5 wildcard only), 95 reachable tool(s)
+- **Evidence** (level 1 of 2) — derivedReadProbe only — passes certification with zero domain capability
+
+### `integration-engineer` — MCP & Integration Engineer · roster-only · 44% attainable
+
+- **Identity** (level 1 of 3) — on the workforce roster but absent from the canonical agent registry
+- **Governance / WWWD** (level 2 of 3) — principle_decide reachable, but no escalation target is declared
+- **Shape** (level 0 of 2) — no declared work shape — nothing bounds what its standing work may do
+- **Cadence** (level 0 of 3) — no recurring trigger — any Proactivity setting is a silent no-op
+- **Tools + Skills** (level 1 of 3) — no skill authored for it (5 wildcard only), 113 reachable tool(s)
+- **Evidence** (level 1 of 2) — derivedReadProbe only — passes certification with zero domain capability
+
+### `legal-operations-counsel` — Legal Operations Counsel · roster-only · 44% attainable
+
+- **Identity** (level 1 of 3) — on the workforce roster but absent from the canonical agent registry
+- **Governance / WWWD** (level 2 of 3) — principle_decide reachable, but no escalation target is declared
+- **Shape** (level 0 of 2) — no declared work shape — nothing bounds what its standing work may do
+- **Cadence** (level 0 of 3) — no recurring trigger — any Proactivity setting is a silent no-op
+- **Tools + Skills** (level 1 of 3) — no skill authored for it (5 wildcard only), 56 reachable tool(s)
+- **Evidence** (level 1 of 2) — derivedReadProbe only — passes certification with zero domain capability
+
+### `security-engineer` — Security Engineer · roster-only · 44% attainable
+
+- **Identity** (level 1 of 3) — on the workforce roster but absent from the canonical agent registry
+- **Governance / WWWD** (level 2 of 3) — principle_decide reachable, but no escalation target is declared
+- **Shape** (level 0 of 2) — no declared work shape — nothing bounds what its standing work may do
+- **Cadence** (level 0 of 3) — no recurring trigger — any Proactivity setting is a silent no-op
+- **Tools + Skills** (level 1 of 3) — no skill authored for it (5 wildcard only), 113 reachable tool(s)
+- **Evidence** (level 1 of 2) — derivedReadProbe only — passes certification with zero domain capability
+
+### `storefront-advisor` — Storefront Operations Manager · roster-only · 44% attainable
+
+- **Identity** (level 1 of 3) — on the workforce roster but absent from the canonical agent registry
+- **Governance / WWWD** (level 2 of 3) — principle_decide reachable, but no escalation target is declared
+- **Shape** (level 0 of 2) — no declared work shape — nothing bounds what its standing work may do
+- **Cadence** (level 0 of 3) — no recurring trigger — any Proactivity setting is a silent no-op
+- **Tools + Skills** (level 1 of 3) — no skill authored for it (5 wildcard only), 130 reachable tool(s)
+- **Evidence** (level 1 of 2) — derivedReadProbe only — passes certification with zero domain capability
+
+### `AGT-100` — policy-enforcement-agent · declared-only · 48% attainable
+
+- **Identity** (level 1 of 3) — in the canonical registry only (status "defined"), never seeded onto the roster
+- **Shape** (level 0 of 2) — no declared work shape — nothing bounds what its standing work may do
+- **Cadence** (level 0 of 3) — no recurring trigger — any Proactivity setting is a silent no-op
+- **Tools + Skills** (level 1 of 3) — no skill authored for it (5 wildcard only), 58 reachable tool(s)
 - **Evidence** (level 0 of 2) — not on the roster, so the certification sweep never exercises it
 
-### `AGT-101` — strategy-alignment-agent · declared-only · 12% attainable
+### `AGT-101` — strategy-alignment-agent · declared-only · 48% attainable
 
 - **Identity** (level 1 of 3) — in the canonical registry only (status "defined"), never seeded onto the roster
-- **Corpus / WSID** (level 2 of 3) — corpus exists (6 pages) but evaluate_profession_decision is unreachable — missing: registry_read
-- **Governance / WWWD** (level 0 of 3) — holds no grants at all — no tool surface is authorised
 - **Shape** (level 0 of 2) — no declared work shape — nothing bounds what its standing work may do
 - **Cadence** (level 0 of 3) — no recurring trigger — any Proactivity setting is a silent no-op
-- **Tools + Skills** (level 0 of 3) — no grants and no skills — it cannot act
+- **Tools + Skills** (level 1 of 3) — no skill authored for it (5 wildcard only), 52 reachable tool(s)
 - **Evidence** (level 0 of 2) — not on the roster, so the certification sweep never exercises it
 
-### `AGT-102` — portfolio-backlog-agent · declared-only · 12% attainable
+### `AGT-102` — portfolio-backlog-agent · declared-only · 48% attainable
 
 - **Identity** (level 1 of 3) — in the canonical registry only (status "defined"), never seeded onto the roster
-- **Corpus / WSID** (level 2 of 3) — corpus exists (7 pages) but evaluate_profession_decision is unreachable — missing: registry_read
-- **Governance / WWWD** (level 0 of 3) — holds no grants at all — no tool surface is authorised
 - **Shape** (level 0 of 2) — no declared work shape — nothing bounds what its standing work may do
 - **Cadence** (level 0 of 3) — no recurring trigger — any Proactivity setting is a silent no-op
-- **Tools + Skills** (level 0 of 3) — no grants and no skills — it cannot act
-- **Evidence** (level 0 of 2) — not on the roster, so the certification sweep never exercises it
-
-### `AGT-110` — portfolio-rationalization-agent · declared-only · 12% attainable
-
-- **Identity** (level 1 of 3) — in the canonical registry only (status "defined"), never seeded onto the roster
-- **Corpus / WSID** (level 2 of 3) — corpus exists (11 pages) but evaluate_profession_decision is unreachable — missing: registry_read
-- **Governance / WWWD** (level 0 of 3) — holds no grants at all — no tool surface is authorised
-- **Shape** (level 0 of 2) — no declared work shape — nothing bounds what its standing work may do
-- **Cadence** (level 0 of 3) — no recurring trigger — any Proactivity setting is a silent no-op
-- **Tools + Skills** (level 0 of 3) — no grants and no skills — it cannot act
-- **Evidence** (level 0 of 2) — not on the roster, so the certification sweep never exercises it
-
-### `AGT-111` — investment-analysis-agent · declared-only · 12% attainable
-
-- **Identity** (level 1 of 3) — in the canonical registry only (status "defined"), never seeded onto the roster
-- **Corpus / WSID** (level 2 of 3) — corpus exists (11 pages) but evaluate_profession_decision is unreachable — missing: registry_read
-- **Governance / WWWD** (level 0 of 3) — holds no grants at all — no tool surface is authorised
-- **Shape** (level 0 of 2) — no declared work shape — nothing bounds what its standing work may do
-- **Cadence** (level 0 of 3) — no recurring trigger — any Proactivity setting is a silent no-op
-- **Tools + Skills** (level 0 of 3) — no grants and no skills — it cannot act
-- **Evidence** (level 0 of 2) — not on the roster, so the certification sweep never exercises it
-
-### `AGT-112` — gap-analysis-agent · declared-only · 12% attainable
-
-- **Identity** (level 1 of 3) — in the canonical registry only (status "defined"), never seeded onto the roster
-- **Corpus / WSID** (level 2 of 3) — corpus exists (7 pages) but evaluate_profession_decision is unreachable — missing: registry_read
-- **Governance / WWWD** (level 0 of 3) — holds no grants at all — no tool surface is authorised
-- **Shape** (level 0 of 2) — no declared work shape — nothing bounds what its standing work may do
-- **Cadence** (level 0 of 3) — no recurring trigger — any Proactivity setting is a silent no-op
-- **Tools + Skills** (level 0 of 3) — no grants and no skills — it cannot act
-- **Evidence** (level 0 of 2) — not on the roster, so the certification sweep never exercises it
-
-### `AGT-113` — scope-agreement-agent · declared-only · 12% attainable
-
-- **Identity** (level 1 of 3) — in the canonical registry only (status "defined"), never seeded onto the roster
-- **Corpus / WSID** (level 2 of 3) — corpus exists (7 pages) but evaluate_profession_decision is unreachable — missing: registry_read
-- **Governance / WWWD** (level 0 of 3) — holds no grants at all — no tool surface is authorised
-- **Shape** (level 0 of 2) — no declared work shape — nothing bounds what its standing work may do
-- **Cadence** (level 0 of 3) — no recurring trigger — any Proactivity setting is a silent no-op
-- **Tools + Skills** (level 0 of 3) — no grants and no skills — it cannot act
-- **Evidence** (level 0 of 2) — not on the roster, so the certification sweep never exercises it
-
-### `AGT-120` — product-backlog-prioritization-agent · declared-only · 12% attainable
-
-- **Identity** (level 1 of 3) — in the canonical registry only (status "defined"), never seeded onto the roster
-- **Corpus / WSID** (level 2 of 3) — corpus exists (8 pages) but evaluate_profession_decision is unreachable — missing: registry_read
-- **Governance / WWWD** (level 0 of 3) — holds no grants at all — no tool surface is authorised
-- **Shape** (level 0 of 2) — no declared work shape — nothing bounds what its standing work may do
-- **Cadence** (level 0 of 3) — no recurring trigger — any Proactivity setting is a silent no-op
-- **Tools + Skills** (level 0 of 3) — no grants and no skills — it cannot act
-- **Evidence** (level 0 of 2) — not on the roster, so the certification sweep never exercises it
-
-### `AGT-121` — architecture-definition-agent · declared-only · 12% attainable
-
-- **Identity** (level 1 of 3) — in the canonical registry only (status "defined"), never seeded onto the roster
-- **Corpus / WSID** (level 2 of 3) — corpus exists (13 pages) but evaluate_profession_decision is unreachable — missing: registry_read
-- **Governance / WWWD** (level 0 of 3) — holds no grants at all — no tool surface is authorised
-- **Shape** (level 0 of 2) — no declared work shape — nothing bounds what its standing work may do
-- **Cadence** (level 0 of 3) — no recurring trigger — any Proactivity setting is a silent no-op
-- **Tools + Skills** (level 0 of 3) — no grants and no skills — it cannot act
-- **Evidence** (level 0 of 2) — not on the roster, so the certification sweep never exercises it
-
-### `AGT-122` — roadmap-assembly-agent · declared-only · 12% attainable
-
-- **Identity** (level 1 of 3) — in the canonical registry only (status "defined"), never seeded onto the roster
-- **Corpus / WSID** (level 2 of 3) — corpus exists (8 pages) but evaluate_profession_decision is unreachable — missing: registry_read
-- **Governance / WWWD** (level 0 of 3) — holds no grants at all — no tool surface is authorised
-- **Shape** (level 0 of 2) — no declared work shape — nothing bounds what its standing work may do
-- **Cadence** (level 0 of 3) — no recurring trigger — any Proactivity setting is a silent no-op
-- **Tools + Skills** (level 0 of 3) — no grants and no skills — it cannot act
+- **Tools + Skills** (level 1 of 3) — no skill authored for it (5 wildcard only), 91 reachable tool(s)
 - **Evidence** (level 0 of 2) — not on the roster, so the certification sweep never exercises it
 
 ## assignTo health

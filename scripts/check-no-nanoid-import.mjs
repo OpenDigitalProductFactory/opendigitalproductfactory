@@ -72,7 +72,19 @@ function* walk(dir) {
   }
   for (const entry of entries) {
     const full = join(dir, entry);
-    const s = statSync(full);
+    // An entry can vanish between readdirSync and statSync — a generator writing
+    // into a scan root (prisma generate under packages/db/generated) is enough.
+    // readdirSync and readFileSync in this file are already defensive; statSync
+    // was not, so a vanished entry threw and killed the guard. The guard loop
+    // then reported "found violations" with NO violation block printed, which is
+    // indistinguishable from a real violation — a crash must never be able to
+    // masquerade as a finding.
+    let s;
+    try {
+      s = statSync(full);
+    } catch {
+      continue;
+    }
     if (s.isDirectory()) {
       if (
         entry === "node_modules" ||

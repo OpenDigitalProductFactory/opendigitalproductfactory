@@ -1,6 +1,6 @@
 # DPF platform skill index
 
-The per-skill trigger / Surface-B `assignTo` / enforced-kernel-principle catalogue for the DPF platform skills, relocated out of the always-on `AGENTS.md` preamble (BI-0020D511 instruction-plane split, §4b). **The source of truth for each skill is its `packages/dpf-skill-pack/skills/<slug>/SKILL.md`**; this index is a convenience catalogue and is also surfaced by each client's own skill system. `AGENTS.md` §16 keeps the doctrine sub-rules (precedence, process-spine health, `composesFrom` disambiguation, WWMD/WWWD routing); this file carries only the lookup table.
+The per-skill trigger / Surface-B `assignTo` / enforced-kernel-principle catalogue for the DPF platform skills, relocated out of the always-on `AGENTS.md` preamble (BI-0020D511 instruction-plane split, §4b). **The source of truth for each skill is its `packages/dpf-skill-pack/skills/<slug>/SKILL.md`**; this index is a convenience catalogue and is also surfaced by each client's own skill system. `AGENTS.md` §11 keeps the doctrine sub-rules (precedence, process-spine health, `composesFrom` disambiguation, WWMD/WWWD routing); this file carries only the lookup table.
 
 Each entry: `name` — trigger regex; Surface-B `assignTo`; enforced kernel principles.
 

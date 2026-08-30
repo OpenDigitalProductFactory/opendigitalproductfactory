@@ -1,6 +1,6 @@
 ---
 name: dpf-sysml-architecture-substrate
-description: "Use when DPF platform work needs SysML v2 systems-architecture reasoning: internal EA substrate, requirements/constraints, interfaces/ports, allocations, verification cases, data architecture authority, AI agent/tool authority, Build Studio planning, current-state architecture catch-up, or external Codex/Claude/Grok planning handoff. Applies to architect-facing EA work, not normal end-user UX."
+description: "Use when DPF platform work needs SysML v2 systems-architecture reasoning — EA substrate, requirements, interfaces, allocations, verification cases, or architect-facing planning handoff."
 
 # Agent Skills standard fields (Surface A - Claude Code / Codex / Grok)
 disable-model-invocation: false

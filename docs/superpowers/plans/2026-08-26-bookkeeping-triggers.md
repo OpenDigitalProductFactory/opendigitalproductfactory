@@ -34,7 +34,11 @@ Wire the two triggers that make the Bookkeeping Work Room recurring rather than 
 - Unit tests: period-key determinism, the pure cycle-input builder (no-fabrication stop conditions present), the weekly + on-arrival paths against a mock cycle store (opens once, idempotent on re-fire, prior-active handled, non-bookkeeping inbound passes through). Full `apps/web` typecheck clean; local-CI pregate green.
 - **Owner-gated:** the live cadence and a live inbound address require the operator's setup and real statement export — no fictitious data on the live instance. The machinery is verified with fixtures; the reconciled period waits on the owner.
 
+## Initial use (seed) — follow-up
+
+A framework is inert until something runs on it. `packages/db/src/seed-bookkeeping-cycle.ts` (config in `bookkeeping-cycle-config.ts`) seeds the standing weekly `bookkeeping-cycle` scheduled task on every install — mirroring `seed-data-model-mirror.ts` — so the cadence actually fires and opens period cycles rather than the trigger merely being available. The deterministic handler (S-TRIG, `executeBookkeepingCycleTask`) runs it off the LLM path; the reconciled period stays owner-gated on the real statement export. Wired in `seed.ts` as the `bookkeepingCycleScheduledTask` step.
+
 ## Risks & rollback
 
 - A weekly tick that fires while a prior cycle is still open is handled (treated as already-active), not an error.
-- Rollback: remove the two trigger modules + the task kind + executor branch; pure additions, no migration.
+- Rollback: remove the two trigger modules + the task kind + executor branch; pure additions, no migration. The seed task is upsert-idempotent; removing the seed step and the row rolls it back.

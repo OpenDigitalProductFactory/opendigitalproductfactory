@@ -1,7 +1,7 @@
 ---
 # Single fields shared by both surfaces
 name: dpf-ux-fit-review
-description: "Use before code or PR handoff for UI-impacting DPF work. Triggers on UX/UI/design/feature fit, route/tab, first viewport, guided work, dashboard/cockpit, metric/KPI/status/card/button/link/disclosure, coworker launcher, empty state, navigation, portal UX, and customer/workspace/business/platform surfaces, including config/settings/admin screens, forms, or fields (setting, preference, toggle, wizard, credential picker, per-model option, numeric/text input). Config forms are UI surfaces."
+description: "Use before code or PR handoff for UI-impacting DPF work — any route, viewport, dashboard, metric, card, button, empty state, navigation, or admin/settings/config screen, form, or field. Config forms are UI surfaces."
 # Agent Skills standard fields (Surface A - Claude Code / Codex)
 disable-model-invocation: false
 user-invocable: true

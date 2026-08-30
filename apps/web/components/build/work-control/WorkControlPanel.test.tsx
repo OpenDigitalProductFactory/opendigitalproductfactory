@@ -33,7 +33,7 @@ describe("WorkControlPanel", () => {
           updatedAt: "2026-05-14T00:00:00.000Z",
         }]}
         adoptable={[]}
-        livenessSummary={{ scanned: 2, live: 1, history: 1, reapable: 1, byLiveness: { live: 1, "lease-expired": 1 } }}
+        livenessSummary={{ scanned: 2, live: 1, history: 1, reapable: 1, byLiveness: { live: 1, "lease-expired": 1 }, heavyLane: { executing: 0, nextReady: 0, dormant: 0 }, progressSlo: { oldestWaitMs: null, maxNoTransitionMs: null } }}
         createAction={vi.fn()}
       />,
     );

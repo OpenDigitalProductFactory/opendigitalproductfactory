@@ -183,3 +183,59 @@ describe("resolveUserAwareProactivityPlan", () => {
     expect(plan.evidenceRefs).toContainEqual({ kind: "user-fact", id: "cooldown-family" });
   });
 });
+
+describe("marketing-campaign proactivity (BI-C26FE785)", () => {
+  it("is a real family the resolver knows, not a declared-but-unwired enum entry", () => {
+    expect(PROACTIVITY_ACTIVITY_FAMILIES).toContain("marketing-campaign");
+
+    const plan = resolveProactivityPlan({ activityFamily: "marketing-campaign" });
+
+    expect(plan.policyId).toBe("proactivity:marketing-campaign:balanced");
+    expect(plan.evidenceRefs).toContainEqual({ kind: "activity-family", id: "marketing-campaign" });
+  });
+
+  it("produces campaign work on a steady cadence by default", () => {
+    const plan = resolveProactivityPlan({ activityFamily: "marketing-campaign" });
+
+    expect(plan.resolvedLevel).toBe("balanced");
+    expect(plan.explanation).toContain("steady cadence");
+  });
+
+  it("raises the work sooner only when a committed campaign date is within three days", () => {
+    const near = resolveProactivityPlan({ activityFamily: "marketing-campaign", deadlineWindowDays: 2 });
+    const far = resolveProactivityPlan({ activityFamily: "marketing-campaign", deadlineWindowDays: 10 });
+
+    expect(near.resolvedLevel).toBe("assertive");
+    expect(far.resolvedLevel).toBe("balanced");
+  });
+
+  it("never grants a preauthorized boundary at any level, so marketing cannot publish or spend on its own", () => {
+    for (const level of PROACTIVITY_LEVELS) {
+      const plan = resolveProactivityPlanForLevel({ activityFamily: "marketing-campaign" }, level);
+      expect(plan.actionBoundary).not.toBe("preauthorized");
+    }
+  });
+
+  it("keeps marketing off the urgent channel even when assertive", () => {
+    const plan = resolveProactivityPlanForLevel({ activityFamily: "marketing-campaign" }, "assertive");
+
+    // Contrast: security-incident is what the urgent channel exists for.
+    const incident = resolveProactivityPlanForLevel({ activityFamily: "security-incident" }, "assertive");
+
+    expect(plan.channelPolicy).toBe("preferred-channel");
+    expect(incident.channelPolicy).toBe("urgent-channel");
+  });
+
+  it("escalates an unanswered campaign nudge to the owner, not the attention surface", () => {
+    const plan = resolveProactivityPlan({ activityFamily: "marketing-campaign" });
+
+    expect(plan.escalationTarget).toBe("owner");
+  });
+
+  it("explains quiet as produce-only-when-asked so the owner can predict the behaviour", () => {
+    const plan = resolveProactivityPlanForLevel({ activityFamily: "marketing-campaign" }, "quiet");
+
+    expect(plan.explanation).toContain("only when asked");
+    expect(plan.actionBoundary).toBe("advise");
+  });
+});

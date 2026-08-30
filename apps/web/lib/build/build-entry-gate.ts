@@ -1,9 +1,11 @@
+import { describeReadinessRefusal } from "@/lib/build/readiness-refusal-message";
 import { randomUUID } from "node:crypto";
 
 import { prisma } from "@dpf/db";
 
 import {
   projectBacklogItemReadiness,
+  readinessRequirement,
   type InitiativeReadinessActivity,
   type InitiativeReadinessDecision,
   type ReadinessTarget,
@@ -51,7 +53,12 @@ function orphanDecision(args: {
     verdict: "denied",
     satisfied: [],
     unmet: [],
-    blockers: [{ code: "CLASSIFICATION_REQUIRED", state: "blocked", accountableRole: "product-owner", evidenceRefs: [] }],
+    blockers: [readinessRequirement({
+      code: "CLASSIFICATION_REQUIRED",
+      state: "blocked",
+      accountableRole: "product-owner",
+      profile: "feature",
+    })],
     evaluatedAt: args.evaluatedAt,
   };
 }
@@ -133,11 +140,44 @@ export async function enforceBuildInitiativeReadiness(args: {
   return {
     allowed: !blocked,
     ...(blocked ? { error: "initiative_not_ready" as const } : {}),
+    // BI-C5D978E9: the owner reads this. The raw enum list told a shelter
+    // director nothing — least of all that none of it was waiting on them.
     message: blocked
-      ? `Cannot enter ${args.targetPhase}: ${codes(decision).join(", ")}.`
+      ? describeReadinessRefusal(args.targetPhase, [...decision.blockers, ...decision.unmet])
       : `${args.target} readiness allowed.`,
     decision,
   };
+}
+
+/**
+ * BI-C5D978E9 — the readiness refusal an owner actually reads.
+ *
+ * Returns the refusal instead of throwing it. #4761 made the phase-gate
+ * refusals values for exactly this reason — a thrown Error is stripped to a
+ * production digest — but this call sits one line EARLIER in advanceBuildPhase
+ * and kept throwing, so the plain-language message built in #4788 never reached
+ * the screen. The owner saw "Minified React error #441" instead (live repro
+ * FB-EB292B9F).
+ *
+ * Returns null when the phase may advance.
+ *
+ * assertBuildPhaseInitiativeReadiness stays exported and unchanged: the
+ * completion path still relies on it throwing.
+ */
+export async function checkBuildPhaseInitiativeReadiness(
+  args: { buildId: string; currentPhase: string; targetPhase: string },
+  // Test seam — the assertion is the thing being converted, so it must be
+  // replaceable without standing up the whole readiness stack.
+  assertReadiness: (input: typeof args) => Promise<void> = assertBuildPhaseInitiativeReadiness,
+): Promise<string | null> {
+  try {
+    await assertReadiness(args);
+    return null;
+  } catch (error) {
+    return error instanceof Error && error.message
+      ? error.message
+      : "Initiative readiness refused this transition.";
+  }
 }
 
 export async function assertBuildPhaseInitiativeReadiness(args: {

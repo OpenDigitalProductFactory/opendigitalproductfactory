@@ -1,0 +1,103 @@
+{
+  "version": "1",
+  "accountableOwner": "developer-platform",
+  "affectedCopies": [],
+  "migration": {
+    "name": "20260829040000_self_upgrade_admission_reconciliation",
+    "backfill": "none - nullable dispatch metadata preserves historical SelfUpgradeRun rows; new admissions populate the contract"
+  },
+  "tests": [
+    "apps/web/lib/self-upgrade/admission.test.ts",
+    "apps/web/lib/self-upgrade/run-store.test.ts",
+    "apps/web/lib/queue/functions/self-upgrade.test.ts",
+    "apps/web/components/ops/SelfUpgradeTriggerControl.test.tsx"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "platform:self-upgrade-run",
+      "prismaModel": "SelfUpgradeRun",
+      "lifecycleDisposition": "operational admission and dispatch evidence retained with self-upgrade history",
+      "fields": [
+        {
+          "fieldId": "platform:self-upgrade-run#targetTag",
+          "resolution": "governed",
+          "reason": "binds a release-artifact admission to the exact immutable tag shown to the operator",
+          "provenance": "server-side self-upgrade target resolver"
+        },
+        {
+          "fieldId": "platform:self-upgrade-run#requestedForce",
+          "resolution": "governed",
+          "reason": "preserves the immutable emergency-override posture admitted by the operator",
+          "provenance": "authorized self-upgrade request"
+        },
+        {
+          "fieldId": "platform:self-upgrade-run#dryRun",
+          "resolution": "governed",
+          "reason": "preserves whether the admitted worker is forbidden from mutating the runtime",
+          "provenance": "authorized self-upgrade request"
+        },
+        {
+          "fieldId": "platform:self-upgrade-run#routine",
+          "resolution": "governed",
+          "reason": "preserves batching and routine-execution policy across delayed dispatch",
+          "provenance": "self-upgrade request actor classification"
+        },
+        {
+          "fieldId": "platform:self-upgrade-run#admissionFingerprint",
+          "resolution": "governed",
+          "reason": "idempotently binds target, force posture, actor, and reviewed impact to one admission",
+          "provenance": "self-upgrade admission transaction"
+        },
+        {
+          "fieldId": "platform:self-upgrade-run#dispatchStatus",
+          "resolution": "governed",
+          "reason": "projects durable admission, dispatch, ambiguity, acknowledgement, and failure state",
+          "provenance": "self-upgrade dispatcher and reconciler"
+        },
+        {
+          "fieldId": "platform:self-upgrade-run#dispatchAttemptCount",
+          "resolution": "governed",
+          "reason": "records every leased dispatch attempt for reconciliation audit",
+          "provenance": "transactional dispatch claim"
+        },
+        {
+          "fieldId": "platform:self-upgrade-run#dispatchLeaseToken",
+          "resolution": "governed",
+          "reason": "prevents concurrent reconcilers from dispatching the same admission",
+          "provenance": "transactional dispatch claim"
+        },
+        {
+          "fieldId": "platform:self-upgrade-run#dispatchLeaseExpiresAt",
+          "resolution": "governed",
+          "reason": "bounds exclusive dispatch ownership so a crashed dispatcher can be recovered",
+          "provenance": "transactional dispatch claim"
+        },
+        {
+          "fieldId": "platform:self-upgrade-run#dispatchEventIds",
+          "resolution": "governed",
+          "reason": "correlates the server admission with provider acknowledgement without becoming execution authority",
+          "provenance": "Inngest send acknowledgement"
+        },
+        {
+          "fieldId": "platform:self-upgrade-run#dispatchAttemptedAt",
+          "resolution": "governed",
+          "reason": "timestamps the latest dispatch attempt for operator and recovery evidence",
+          "provenance": "transactional dispatch claim"
+        },
+        {
+          "fieldId": "platform:self-upgrade-run#dispatchAcknowledgedAt",
+          "resolution": "governed",
+          "reason": "distinguishes provider acknowledgement from ambiguous transport completion",
+          "provenance": "Inngest send acknowledgement"
+        },
+        {
+          "fieldId": "platform:self-upgrade-run#dispatchError",
+          "resolution": "governed",
+          "reason": "projects the exact bounded dispatch or reconciliation failure without treating it as upgrade success",
+          "provenance": "self-upgrade dispatcher and reconciler"
+        }
+      ]
+    }
+  ]
+}

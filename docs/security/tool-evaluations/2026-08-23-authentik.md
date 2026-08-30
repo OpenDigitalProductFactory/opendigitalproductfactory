@@ -219,6 +219,35 @@ protocol maintenance tail, including its CVEs, with no upstream that will fix th
 8. This verdict covers absorption for the **LDAP** surface only. SAML, OIDC and
    SCIM are out of scope and each needs its own decision.
 
+## Execution record (2026-08-28)
+
+The absorb decision has been carried out. What it produced, and how the
+conditions above were met:
+
+- **Nothing was vendored.** The BER codec and LDAP message layer were written
+  against RFC 4511. No authentik source and no `ldapjs` source was copied, so
+  **condition 2 (carry the MIT notice) did not come into force** — there is
+  nothing derived to attribute. Condition 1 held throughout: nothing under
+  `authentik/enterprise/` was read.
+- **Condition 3** — absorption stayed at directory semantics. The object-class
+  shape and the read-only posture match what the evaluation observed in
+  authentik's provider; none of its flow-executor, proxy or SAML logic, where
+  all four recent bypass CVEs live, was touched.
+- **Condition 4** — the listener is read-only. Writes are refused with
+  `unwillingToPerform`, not left unimplemented.
+- **Condition 5** — there is no bind cache at all, so the negative lesson from
+  authentik's cached-bind mode ("revoking sessions does not remove them from the
+  outpost") cannot recur here.
+- **Condition 6** — search requires a successful bind and is bounded; anonymous
+  enumeration is refused, verified against a real `ldapsearch` client.
+- **Condition 7** — no new runtime dependency was introduced.
+
+The one prediction that proved wrong in DPF's favour: the evaluation warned that
+absorbing means owning a protocol maintenance tail with no upstream to fix its
+CVEs. That remains true, but the surface is smaller than expected, because
+implementing only bind and search against a read-only projection avoids most of
+what makes an LDAP server dangerous.
+
 ## Re-evaluation
 
 - **Schedule:** 2027-02-23.

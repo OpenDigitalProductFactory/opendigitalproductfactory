@@ -174,8 +174,9 @@ export async function listEpics(params: Record<string, unknown>): Promise<ToolRe
     },
   });
   const wantOpenItems = params["hasOpenItems"] === true;
-  const { buildSpecPlanReferenceIndex } = await import("@/lib/backlog/spec-plan-search");
+  const { buildSpecPlanReferenceIndex, specPlanCorpusCaveat } = await import("@/lib/backlog/spec-plan-search");
   const refIndex = await buildSpecPlanReferenceIndex();
+  const specPlanCaveat = specPlanCorpusCaveat(refIndex.corpus);
   const data = epics
     .map((e) => {
       const total = e.items.length;
@@ -206,8 +207,16 @@ export async function listEpics(params: Record<string, unknown>): Promise<ToolRe
     });
   return {
     success: true,
-    message: `Listed ${data.length} epic(s) (${epics.length} of ${epicTotal} fetched).`,
-    data: { epics: data, total: epicTotal, fetched: epics.length, truncated: epics.length < epicTotal },
+    message: specPlanCaveat
+      ? `Listed ${data.length} epic(s) (${epics.length} of ${epicTotal} fetched). ${specPlanCaveat}`
+      : `Listed ${data.length} epic(s) (${epics.length} of ${epicTotal} fetched).`,
+    data: {
+      epics: data,
+      total: epicTotal,
+      fetched: epics.length,
+      truncated: epics.length < epicTotal,
+      specPlanCorpus: refIndex.corpus,
+    },
   };
 }
 
@@ -232,6 +241,29 @@ export async function listBacklogItems(params: Record<string, unknown>): Promise
   }
   if (params["hasActiveBuild"] === true) where["activeBuildId"] = { not: null };
   else if (params["hasActiveBuild"] === false) where["activeBuildId"] = null;
+
+  // BI-28E8CB88 acceptance criterion 3: the items holding evidence the gates
+  // cannot read must be enumerable, so the backlog can be reconciled rather than
+  // silently stalled. When first measured on the live install, 38 items held
+  // `evidence` activities, 4 held `initiative_gate_receipt`, and the other 35
+  // had no way to be found.
+  if (params["evidenceNotCounted"] === true) {
+    const holdingEvidence = await prisma.backlogItemActivity.findMany({
+      where: { kind: "evidence" },
+      distinct: ["backlogItemId"],
+      select: { backlogItemId: true },
+    });
+    const holdingReceipts = await prisma.backlogItemActivity.findMany({
+      where: { kind: "initiative_gate_receipt" },
+      distinct: ["backlogItemId"],
+      select: { backlogItemId: true },
+    });
+    const withReceipts = new Set(holdingReceipts.map((row) => row.backlogItemId));
+    const stalled = holdingEvidence
+      .map((row) => row.backlogItemId)
+      .filter((id) => !withReceipts.has(id));
+    where["id"] = { in: stalled };
+  }
 
   const limit = resolveListLimit(params["limit"]);
   const matching = await prisma.backlogItem.count({ where });
@@ -268,9 +300,10 @@ export async function listBacklogItems(params: Record<string, unknown>): Promise
     },
   });
   const { deriveLifecycleLabel } = await import("@/lib/governed-backlog-workflow");
-  const { buildSpecPlanReferenceIndex } = await import("@/lib/backlog/spec-plan-search");
+  const { buildSpecPlanReferenceIndex, specPlanCorpusCaveat } = await import("@/lib/backlog/spec-plan-search");
   const { projectBacklogItemReadinessSummary } = await import("@/lib/backlog/initiative-readiness/entry-adapter");
   const refIndex = await buildSpecPlanReferenceIndex();
+  const specPlanCaveat = specPlanCorpusCaveat(refIndex.corpus);
   const evaluatedAt = new Date().toISOString();
   const data = items.map((i) => {
     const semanticEpic = i.epic?.epicId ?? null;
@@ -325,8 +358,15 @@ export async function listBacklogItems(params: Record<string, unknown>): Promise
   });
   return {
     success: true,
-    message: `Listed ${data.length} of ${matching} backlog item(s).`,
-    data: { items: data, total: matching, truncated: data.length < matching },
+    message: specPlanCaveat
+      ? `Listed ${data.length} of ${matching} backlog item(s). ${specPlanCaveat}`
+      : `Listed ${data.length} of ${matching} backlog item(s).`,
+    data: {
+      items: data,
+      total: matching,
+      truncated: data.length < matching,
+      specPlanCorpus: refIndex.corpus,
+    },
   };
 }
 
@@ -367,12 +407,13 @@ export async function getBacklogItem(params: Record<string, unknown>): Promise<T
   if (!item)
     return { success: false, error: "not_found", message: `Item ${itemIdRaw} not found` };
   const { deriveLifecycleLabel } = await import("@/lib/governed-backlog-workflow");
-  const { searchSpecsAndPlans } = await import("@/lib/backlog/spec-plan-search");
-  const specPlanRefs = await searchSpecsAndPlans({
+  const { searchSpecsAndPlans, specPlanCorpusCaveat } = await import("@/lib/backlog/spec-plan-search");
+  const { corpus: specPlanCorpus, results: specPlanRefs } = await searchSpecsAndPlans({
     query: itemIdRaw,
     itemId: itemIdRaw,
     matches: 10,
   });
+  const specPlanCaveat = specPlanCorpusCaveat(specPlanCorpus);
   const { mapDemandRows } = await import("@/lib/demand/demand-data");
   const demandView = mapDemandRows([item])[0]!;
   const { projectBacklogItemReadinessSummary } = await import("@/lib/backlog/initiative-readiness/entry-adapter");
@@ -399,7 +440,7 @@ export async function getBacklogItem(params: Record<string, unknown>): Promise<T
   });
   return {
     success: true,
-    message: `Loaded ${item.itemId}`,
+    message: specPlanCaveat ? `Loaded ${item.itemId}. ${specPlanCaveat}` : `Loaded ${item.itemId}`,
     data: {
       itemId: item.itemId,
       title: item.title,
@@ -452,6 +493,7 @@ export async function getBacklogItem(params: Record<string, unknown>): Promise<T
           }
         : null,
       readiness,
+      specPlanCorpus,
       specPlanFiles: specPlanRefs.map((r) => ({
         path: r.path,
         kind: r.kind,
@@ -466,5 +508,138 @@ export async function getBacklogItem(params: Record<string, unknown>): Promise<T
         payload: a.payload,
       })),
     },
+  };
+}
+
+export async function getNextRecommendedWork(params: Record<string, unknown>): Promise<ToolResult> {
+  const { prisma } = await import("@dpf/db");
+  const { rankCandidates } = await import("@/lib/backlog/recommend");
+  const { buildSpecPlanReferenceIndex, specPlanCorpusCaveat } = await import("@/lib/backlog/spec-plan-search");
+  const { projectBacklogItemReadinessSummary } = await import("@/lib/backlog/initiative-readiness/entry-adapter");
+
+  const count = typeof params["count"] === "number" ? params["count"] : undefined;
+  const epicIdRaw = typeof params["epicId"] === "string" ? params["epicId"].trim() : "";
+  const forAgentId = typeof params["forAgentId"] === "string" ? params["forAgentId"] : null;
+  const excludeItemIds = Array.isArray(params["excludeItemIds"])
+    ? (params["excludeItemIds"] as unknown[]).filter((x): x is string => typeof x === "string")
+    : [];
+  const mode = params["mode"] === "implementation-ready"
+    ? "implementation-ready"
+    : "design-candidate";
+
+  const where: Record<string, unknown> = {
+    status: { in: ["open", "triaging"] },
+  };
+  if (epicIdRaw) {
+    const epicRow = await prisma.epic.findFirst({
+      where: { OR: [{ epicId: epicIdRaw }, { id: epicIdRaw }] },
+      select: { id: true },
+    });
+    if (epicRow) where["epicId"] = epicRow.id;
+    else
+      return {
+        success: false,
+        error: "epic_not_found",
+        message: `No epic matched ${epicIdRaw}`,
+      };
+  }
+
+  const items = await prisma.backlogItem.findMany({
+    where,
+    take: 200,
+    orderBy: [{ priority: "asc" }, { updatedAt: "desc" }],
+    select: {
+      itemId: true,
+      title: true,
+      status: true,
+      priority: true,
+      demandScore: true,
+      effortSize: true,
+      triageOutcome: true,
+      type: true,
+      source: true,
+      workType: true,
+      scopeKind: true,
+      archetypeCategories: true,
+      archetypeIds: true,
+      activeBuildId: true,
+      claimedById: true,
+      claimedByAgentId: true,
+      updatedAt: true,
+      epic: { select: { epicId: true, status: true } },
+      activeBuild: { select: { kind: true } },
+      activities: {
+        where: { kind: { in: ["initiative_gate_receipt", "initiative_scope_baseline", "plan_backlog_coverage"] } },
+        orderBy: [{ recordedAt: "desc" }, { id: "desc" }],
+        take: 100,
+        select: { id: true, kind: true, gateKey: true, recordedAt: true, payload: true },
+      },
+    },
+  });
+
+  const refIndex = await buildSpecPlanReferenceIndex();
+  const candidates = items.map((i) => {
+    const semanticEpic = i.epic?.epicId ?? null;
+    const hasSpec =
+      refIndex.specs.has(i.itemId) || (semanticEpic ? refIndex.specs.has(semanticEpic) : false);
+    const hasPlan =
+      refIndex.plans.has(i.itemId) || (semanticEpic ? refIndex.plans.has(semanticEpic) : false);
+    const readiness = projectBacklogItemReadinessSummary({
+      item: {
+        id: i.itemId,
+        itemId: i.itemId,
+        type: i.type,
+        source: i.source,
+        workType: i.workType,
+        scopeKind: i.scopeKind,
+        archetypeCategories: i.archetypeCategories,
+        archetypeIds: i.archetypeIds,
+        activeBuildKind: i.activeBuild?.kind ?? null,
+      },
+      activities: (i.activities ?? []).map((activity) => ({ ...activity, gateKey: activity.gateKey ?? null })),
+      hasSpec,
+      hasPlan,
+      evaluatedAt: new Date().toISOString(),
+    });
+    return {
+      itemId: i.itemId,
+      title: i.title,
+      status: i.status,
+      priority: i.priority,
+      demandScore: i.demandScore,
+      effortSize: i.effortSize,
+      triageOutcome: i.triageOutcome,
+      hasActiveBuild: i.activeBuildId != null,
+      claimedById: i.claimedById,
+      claimedByAgentId: i.claimedByAgentId,
+      epicId: semanticEpic,
+      epicStatus: i.epic?.status ?? null,
+      hasSpec,
+      hasPlan,
+      implementationReadinessVerdict: readiness.decisions.implementation.verdict,
+      updatedAt: i.updatedAt,
+    };
+  });
+
+  const ranked = rankCandidates(candidates, {
+    excludeItemIds,
+    forAgentId,
+    count,
+    mode,
+  });
+
+  // BI-10C34BE1: design-candidate ranking rewards items with no spec. On an
+  // install with no docs/superpowers tree every item scores as undesigned, so
+  // the tool confidently recommends designing work that is already designed.
+  // The recommendations still stand as a priority ordering; what cannot be
+  // trusted is the "needs a design" part of the reason.
+  const specPlanCaveat = specPlanCorpusCaveat(refIndex.corpus);
+  const baseMessage = mode === "implementation-ready"
+    ? `Recommending ${ranked.length} implementation-ready item(s).`
+    : `Recommending ${ranked.length} design candidate(s).`;
+  return {
+    success: true,
+    message: specPlanCaveat ? `${baseMessage} ${specPlanCaveat}` : baseMessage,
+    data: { mode, recommendations: ranked, specPlanCorpus: refIndex.corpus },
   };
 }

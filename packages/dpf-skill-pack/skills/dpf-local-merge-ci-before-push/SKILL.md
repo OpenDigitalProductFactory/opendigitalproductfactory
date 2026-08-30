@@ -1,6 +1,6 @@
 ---
 name: dpf-local-merge-ci-before-push
-description: "Use in the DPF codebase before pushing or opening a PR when a branch needs local merged-code verification. Merges against current main in an isolated path, runs the required gates, records the result, and blocks red pushes."
+description: "Use before pushing or opening a DPF PR when a branch needs local merged-code verification."
 disable-model-invocation: false
 user-invocable: true
 allowed-tools: Bash(git *) Bash(pnpm *) Bash(node scripts/local-integration-ci.mjs *) mcp__dpf__record_local_integration_result

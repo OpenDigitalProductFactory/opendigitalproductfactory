@@ -13,6 +13,38 @@ export type SpecPlanResult = {
   referencedEpicIds: string[];
 };
 
+/**
+ * Whether this install actually carries a spec/plan corpus to search.
+ *
+ * BI-10C34BE1: the consumer image excludes `docs/superpowers/` on purpose
+ * (`.dockerignore`), so on a runtime-host install the directories simply are
+ * not there. The search returned `[]` for that state and `[]` for a genuine
+ * no-match, which are opposite facts: one means "nothing matched the corpus",
+ * the other means "no corpus was searched". An agent running the
+ * verify-substrate-before-proposing-new check reads the second as the first and
+ * concludes no prior design exists, which is how already-designed work gets
+ * re-proposed. Absence of a corpus is never evidence of absence of a spec.
+ */
+export type SpecPlanCorpusStatus = {
+  /** True only when every searched directory exists AND holds at least one markdown file. */
+  available: boolean;
+  /** Resolved repository root the directories were probed under. */
+  root: string;
+  /** Repo-relative directories this search covered. */
+  searchedPaths: string[];
+  /** Repo-relative directories that do not exist on this install. */
+  missingPaths: string[];
+  /** Total markdown files found across the searched directories. */
+  fileCount: number;
+  /** Human-readable statement of what was searched, and where specs live when they are not here. */
+  reason: string;
+};
+
+export type SpecPlanSearchOutcome = {
+  corpus: SpecPlanCorpusStatus;
+  results: SpecPlanResult[];
+};
+
 export type SpecPlanSearchOptions = {
   query: string;
   kind?: SpecPlanKind;
@@ -168,19 +200,52 @@ async function loadFile(filePath: string): Promise<CacheEntry | null> {
   }
 }
 
-async function listMarkdown(absDir: string): Promise<string[]> {
+/**
+ * List markdown under a directory, reporting whether the directory exists at
+ * all. The previous form collapsed ENOENT and "present but empty" into the same
+ * `[]`, which is the collapse BI-10C34BE1 is about — the caller could not tell
+ * a missing corpus from an empty one.
+ */
+async function listMarkdown(absDir: string): Promise<{ present: boolean; files: string[] }> {
   let entries: string[];
   try {
     entries = await fsp.readdir(absDir);
   } catch {
-    return [];
+    return { present: false, files: [] };
   }
-  return entries.filter((f) => f.endsWith(".md")).map((f) => path.join(absDir, f));
+  return {
+    present: true,
+    files: entries.filter((f) => f.endsWith(".md")).map((f) => path.join(absDir, f)),
+  };
+}
+
+const CORPUS_HOME =
+  "Design specs and implementation plans live in the platform source repository under " +
+  "docs/superpowers/specs and docs/superpowers/plans. Consumer and runtime-host images exclude " +
+  "that tree on purpose, so an install can carry no corpus at all. Search a source checkout " +
+  "directly, or point DPF_REPO_ROOT at one, before concluding no prior design exists.";
+
+function describeCorpus(
+  root: string,
+  probed: Array<{ rel: string; present: boolean; fileCount: number }>,
+): SpecPlanCorpusStatus {
+  const searchedPaths = probed.map((d) => d.rel);
+  const missingPaths = probed.filter((d) => !d.present).map((d) => d.rel);
+  const fileCount = probed.reduce((n, d) => n + d.fileCount, 0);
+  const available = missingPaths.length === 0 && fileCount > 0;
+  const reason = available
+    ? `Searched ${fileCount} markdown file(s) under ${searchedPaths.join(" and ")} in ${root}.`
+    : missingPaths.length > 0
+      ? `No spec/plan corpus on this install: ${missingPaths.join(" and ")} ` +
+        `do(es) not exist under ${root}. ${CORPUS_HOME}`
+      : `No spec/plan corpus on this install: ${searchedPaths.join(" and ")} exist under ${root} ` +
+        `but contain no markdown files. ${CORPUS_HOME}`;
+  return { available, root, searchedPaths, missingPaths, fileCount, reason };
 }
 
 export async function searchSpecsAndPlans(
   opts: SpecPlanSearchOptions,
-): Promise<SpecPlanResult[]> {
+): Promise<SpecPlanSearchOutcome> {
   const root = repoRoot();
   const matchesCap = Math.max(1, Math.min(opts.matches ?? DEFAULT_MATCHES, MAX_MATCHES));
   const queryLower = opts.query.toLowerCase();
@@ -200,9 +265,15 @@ export async function searchSpecsAndPlans(
   }
 
   const results: SpecPlanResult[] = [];
+  const probed: Array<{ rel: string; present: boolean; fileCount: number }> = [];
   for (const dir of dirs) {
-    const files = await listMarkdown(dir.path);
-    for (const file of files) {
+    const listing = await listMarkdown(dir.path);
+    probed.push({
+      rel: dir.kind === "spec" ? SPEC_DIR : PLAN_DIR,
+      present: listing.present,
+      fileCount: listing.files.length,
+    });
+    for (const file of listing.files) {
       const entry = await loadFile(file);
       if (!entry) continue;
 
@@ -240,7 +311,10 @@ export async function searchSpecsAndPlans(
     return a.path.localeCompare(b.path);
   });
 
-  return results.slice(0, matchesCap);
+  // The corpus status rides with the results rather than beside them, so a
+  // caller cannot read the array without the state that says whether an empty
+  // array means anything (BI-10C34BE1).
+  return { corpus: describeCorpus(root, probed), results: results.slice(0, matchesCap) };
 }
 
 // Reverse index: which IDs (BI-* and EP-*) are referenced anywhere under
@@ -249,27 +323,50 @@ export async function searchSpecsAndPlans(
 export async function buildSpecPlanReferenceIndex(): Promise<{
   specs: Set<string>;
   plans: Set<string>;
+  corpus: SpecPlanCorpusStatus;
 }> {
   const root = repoRoot();
   const specs = new Set<string>();
   const plans = new Set<string>();
   // turbopackIgnore: see note in searchSpecsAndPlans — these paths are runtime
   // filesystem reads of docs/, not bundled inputs.
-  const specFiles = await listMarkdown(path.join(/*turbopackIgnore: true*/ root, SPEC_DIR));
-  for (const file of specFiles) {
+  const specListing = await listMarkdown(path.join(/*turbopackIgnore: true*/ root, SPEC_DIR));
+  for (const file of specListing.files) {
     const entry = await loadFile(file);
     if (!entry) continue;
     for (const id of entry.refs.items) specs.add(id);
     for (const id of entry.refs.epics) specs.add(id);
   }
-  const planFiles = await listMarkdown(path.join(/*turbopackIgnore: true*/ root, PLAN_DIR));
-  for (const file of planFiles) {
+  const planListing = await listMarkdown(path.join(/*turbopackIgnore: true*/ root, PLAN_DIR));
+  for (const file of planListing.files) {
     const entry = await loadFile(file);
     if (!entry) continue;
     for (const id of entry.refs.items) plans.add(id);
     for (const id of entry.refs.epics) plans.add(id);
   }
-  return { specs, plans };
+  // An absent corpus makes every hasSpec/hasPlan derived from this index read
+  // false. That is the same false negative as an empty search result, so the
+  // index states its own coverage rather than letting callers assume it
+  // (BI-10C34BE1).
+  const corpus = describeCorpus(root, [
+    { rel: SPEC_DIR, present: specListing.present, fileCount: specListing.files.length },
+    { rel: PLAN_DIR, present: planListing.present, fileCount: planListing.files.length },
+  ]);
+  return { specs, plans, corpus };
+}
+
+/**
+ * One sentence to append to any tool message whose answer was derived from the
+ * spec/plan corpus, when that corpus is not there. Single-sourced so every
+ * surface states the same caveat rather than each inventing its own wording.
+ * Returns null when the corpus is present and the answer can be trusted.
+ */
+export function specPlanCorpusCaveat(corpus: SpecPlanCorpusStatus): string | null {
+  if (corpus.available) return null;
+  return (
+    "Spec/plan coverage was NOT measured: " +
+    `${corpus.reason} Treat every hasSpec/hasPlan below as unknown, not as false.`
+  );
 }
 
 // Test seam — clears in-memory caches between scenarios.

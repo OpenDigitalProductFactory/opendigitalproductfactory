@@ -1583,14 +1583,6 @@
     "longSentences": 0,
     "textMass": 8
   },
-  "apps/web/app/(shell)/ops/stack-currency/page.tsx": {
-    "vocabulary": 0,
-    "retiredVocabulary": 0,
-    "genericLabels": 0,
-    "readability": 0,
-    "longSentences": 0,
-    "textMass": 18
-  },
   "apps/web/app/(shell)/ops/teardown/page.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
@@ -2244,8 +2236,8 @@
     "retiredVocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
-    "longSentences": 1,
-    "textMass": 69
+    "longSentences": 0,
+    "textMass": 75
   },
   "apps/web/app/(shell)/portfolio/product/[id]/knowledge/page.tsx": {
     "vocabulary": 0,
@@ -2679,6 +2671,14 @@
     "longSentences": 0,
     "textMass": 11
   },
+  "apps/web/app/.well-known/dpf-federation.json/route.ts": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 7
+  },
   "apps/web/app/.well-known/dpf-instance.json/route.ts": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
@@ -2733,7 +2733,15 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 29
+    "textMass": 31
+  },
+  "apps/web/app/api/oauth/token/route.ts": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 19
   },
   "apps/web/app/api/onboarding/business-document/route.ts": {
     "vocabulary": 0,
@@ -8519,13 +8527,21 @@
     "longSentences": 0,
     "textMass": 15
   },
-  "apps/web/components/product/ProductSupplyChainPanel.tsx": {
+  "apps/web/components/product/ProductRelationshipsSection.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 49
+    "textMass": 29
+  },
+  "apps/web/components/product/ProductSoftwareCompositionPanel.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 37
   },
   "apps/web/components/product/ProductTabNav.tsx": {
     "vocabulary": 0,
@@ -9173,7 +9189,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 2
+    "textMass": 13
   },
   "apps/web/components/twin/WorkItem.tsx": {
     "vocabulary": 0,
@@ -9862,6 +9878,14 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 84
+  },
+  "apps/web/components/workspace/workroom/WorkroomPostureProvenance.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 16
   },
   "apps/web/components/workspace/workroom/WorkroomShape.tsx": {
     "vocabulary": 0,

@@ -73,11 +73,41 @@ export async function mcpCall(toolName, args, {
   mcpUrl,
   bearerToken,
   timeoutMs = 10_000,
+  allowNonLoopbackEndpoint = false,
 } = {}) {
   if (!mcpUrl) throw new Error("mcpCall: mcpUrl is required");
   if (!bearerToken) throw new Error("mcpCall: bearerToken is required");
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
     throw new Error("mcpCall: timeoutMs must be a positive number");
+  }
+  // Default-deny, checked HERE rather than left to each caller.
+  //
+  // isAllowedMcpEndpoint has existed for a while, but only one of the sixteen
+  // call sites ever ran it, so everywhere else the rule documented above it was
+  // a convention rather than an invariant: a caller resolving its endpoint from
+  // on-disk config would send a live `dpfmcp_...` credential to whatever host
+  // that file named (CWE-200, and what CodeQL's js/file-access-to-http reports
+  // on this module). Enforcing it here inverts the failure mode -- a caller that
+  // never thought about the endpoint now fails closed instead of leaking.
+  //
+  // The documented operator escape is preserved without touching any call site:
+  // an endpoint the operator set EXPLICITLY in the environment is intent, so it
+  // is honoured even off loopback. An endpoint that merely appeared in ambient
+  // state -- a copied-in, stale or tampered `.mcp.json` -- matches neither
+  // branch and is refused. Callers with their own operator signal (a --mcp-url
+  // flag) can still pass allowNonLoopbackEndpoint directly.
+  if (!allowNonLoopbackEndpoint && !isAllowedMcpEndpoint(mcpUrl)) {
+    const operatorSupplied = [process.env.DPF_MCP_URL, process.env.DPF_MCP_ENDPOINT]
+      .map((value) => (typeof value === "string" ? value.trim() : ""))
+      .filter((value) => value.length > 0);
+    if (!operatorSupplied.includes(mcpUrl.trim())) {
+      throw new Error(
+        `mcpCall: refusing to send a bearer token to ${mcpUrl}. Only loopback MCP `
+        + "endpoints are allowed unless the operator set this exact endpoint in "
+        + "DPF_MCP_URL or DPF_MCP_ENDPOINT. An endpoint read from on-disk config is "
+        + "ambient state, not operator intent, and a live credential is not sent to it.",
+      );
+    }
   }
 
   callId += 1;

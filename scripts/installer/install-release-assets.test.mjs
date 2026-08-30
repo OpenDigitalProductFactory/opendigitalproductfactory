@@ -64,6 +64,9 @@ test("verified release assets replace only managed files and converge durable id
   assert.match(env, /^DPF_IMAGE_TAG=v2\.0\.0$/m);
   assert.match(env, /^GHCR_OWNER=opendigitalproductfactory$/m);
   assert.equal(await readFile(join(f.install, ".verified-release-assets-version"), "utf8"), "v2.0.0");
+  await assert.rejects(readFile(join(f.source, ".env")), /ENOENT/);
+  await assert.rejects(readFile(join(f.source, ".verified-release-assets-version")), /ENOENT/);
+  assert.equal(await readFile(join(f.source, "docker-compose.yml"), "utf8"), "new-compose\n");
   const state = JSON.parse(await readFile(f.statePath, "utf8"));
   assert.equal(state.imageTag, "v2.0.0");
   assert.equal(state.installerVersion, "v2.0.0");
@@ -99,4 +102,10 @@ test("rejects tampering and rolls back files, env, markers, and state on injecte
   await assert.rejects(readFile(join(rollback.install, "scripts", "new.mjs")), /ENOENT/);
   assert.match(await readFile(join(rollback.install, ".env"), "utf8"), /^DPF_IMAGE_TAG=v1\.0\.0$/m);
   assert.equal(await readFile(rollback.statePath, "utf8"), priorState);
+});
+
+test("release promotion commits identity to the canonical install root, not the source carrier", async () => {
+  const source = await readFile(new URL("../promote.sh", import.meta.url), "utf8");
+  assert.match(source, /--install\s+"\$PROMOTE_INSTALL_ROOT"/);
+  assert.doesNotMatch(source, /--install\s+"\$PROMOTE_SOURCE"/);
 });

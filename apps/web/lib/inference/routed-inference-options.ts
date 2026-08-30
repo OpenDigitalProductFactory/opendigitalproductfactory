@@ -59,6 +59,14 @@ export interface RouteAndCallOptions {
   persistDecision?: boolean;
   /** Forbid capability degradation that strips required tools. */
   requireTools?: boolean;
+  /**
+   * Caller-owned function-call requirement. `required` is stronger than
+   * `requireTools`: the endpoint must not return a prose-only completion while
+   * a governed terminal action is pending.
+   */
+  toolChoice?: "auto" | "required" | "none";
+  /** Exact sole writer guarded by the caller's terminal-tool policy. */
+  terminalWriterToolName?: string;
   minimumCapabilities?: import("@/lib/routing/agent-capability-types").AgentMinimumCapabilities;
   agentMinimumContextTokens?: number;
   agentId?: string;

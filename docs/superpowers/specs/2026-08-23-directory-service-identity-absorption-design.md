@@ -285,6 +285,24 @@ Scope for this epic: **bind, search, group membership. Over TLS. Read-only.**
 
 **Acceptance is a real client.** `ldapsearch` binds over TLS and returns correct results for a human, an agent, and a service account, against the running app. Structural verification does not count here — this is a protocol, and only a real client proves conformance.
 
+### 9.1 Serving it — the difference between built and running
+
+`BI-A91004A7` found the gap this section now closes: Phase 3 delivered the protocol, and no install served it. `createLdapServer` was exported and never invoked outside tests. The epic's own verification did not catch it, because all 78 unit tests and all six real-`ldapsearch` runs **start the listener themselves** — a functional test that provisions its own runtime proves the code works, not that the product does.
+
+So the acceptance above is amended: a real client, against the **running install**, on a listener the test did not start.
+
+The serving contract:
+
+- **Off by default, on by explicit choice.** `DPF_LDAP_ENABLED` gates it. An install does not begin serving an identity protocol because it was upgraded.
+- **Three states, never silence.** The listener is `disabled`, `listening`, or `refused`, and the operator surface (`/platform/identity/directory`) renders all three. A directory that was turned on and failed must not read the same as one nobody asked for — that equivalence is exactly how a dark capability survives.
+- **Refusal never downgrades.** Absent org-PKI key, cert or CA, the listener refuses to start. There is no self-signed fallback, because a directory that quietly downgrades its transport is invisible to every client that trusts it.
+- **The tree is built before the port is bound.** If no `Organization` exists there is no base DN, and the listener refuses rather than binding a directory with nothing to publish — a startup misconfiguration must not become a per-client mystery.
+- **It reuses the portal's own issued identity.** The organization CA already issues `authority.crt` / `authority.key` / `root_ca.crt` into `DPF_PKI_DIR` (default `$HOME/.dpf/pki`), which sits inside `DPF_STATE_DIR` — already mounted read-only into the portal. No second certificate, no second mount, no second CA.
+- **Loopback by default.** The published port binds `127.0.0.1` unless `DPF_LDAP_BIND_ADDRESS` says otherwise, matching the `step-ca` overlay: a directory other hosts can bind to is a deliberate choice.
+- **A listener that cannot start does not take the portal with it.** It is reported, loudly, and every other surface keeps serving.
+
+Operator procedure: [serving the directory](../../install/serve-the-directory.md).
+
 ## 10. Authorization Stays Where It Is
 
 **The directory publishes identity. It does not publish authority.**
@@ -316,8 +334,9 @@ Each phase is a live backlog item. **No deliverable in this design exists only a
 | 3 | `BI-F7317D65` | LDAP listener: bind, search, groups, over org-PKI TLS | 2 |
 | 4 | `BI-CEACBD0D` | Principal becomes the authentication root; install as auth authority | 2 |
 | 5 | `BI-5167932D` | Audit 111 tasks, migrate live deliverables, mark 2026-04-22 superseded | 0 |
+| 6 | `BI-A91004A7` | Serve it: runtime entrypoint, config, operator surface, org-PKI wiring (§9.1) | 3 |
 
-Phases 1 and 4 are the ~80% convergence. Phase 3 is the ~20% new feature.
+Phases 1 and 4 are the ~80% convergence. Phase 3 is the ~20% new feature. Phase 6 was not in the original plan; it exists because Phase 3 shipped a listener nobody could reach, and "no deliverable exists only as a checkbox" has to mean running, not merged.
 
 ## 13. Design Decisions
 
@@ -331,6 +350,36 @@ Phases 1 and 4 are the ~80% convergence. Phase 3 is the ~20% new feature.
 | D6 | Groups are organizational, never an authorization API | Keeps capability filtering single-source per §6 |
 | D7 | Base DN derives from `Organization` | AGENTS.md §8 canonical identity model |
 | D8 | Read-only directory; no LDAP writes | Authority comes from being derived, not from being editable |
+
+## 14a. Open questions resolved by the Phase 2-4 build
+
+**Q1 — service-account bind credential: RESOLVED as mTLS only.** A client
+certificate whose subject CN names the same principal binds any class; a
+password binds humans only. Agents and service accounts deliberately have no
+password, because minting one would be a second credential store and would
+re-create the "authorized but never authenticated" gap the epic closes. The
+certificate comes from the org PKI already in place.
+
+**Q4 — absorbed protocol provenance: RESOLVED as reimplemented, not vendored.**
+The BER codec and LDAP message layer were written against RFC 4511. No authentik
+or `ldapjs` source was copied, so **no attribution obligation was incurred** —
+the evaluation's condition to carry an MIT notice does not apply because nothing
+was derived. The evaluation's other conditions still bind: nothing under
+`authentik/enterprise/` was read, the listener is read-only, bind caching cannot
+outlive revocation (there is no bind cache at all), and search requires
+authorization with bounded results.
+
+**Q2 — the fate of `User`: DEFERRED, and deliberately not forced.** `Principal`
+is now the authentication root in behaviour: `govern/auth.ts` consults the spine
+and an inactive principal cannot log in. `User` remains the credential holder.
+The schema change that would formally demote it to a side table was **not**
+needed to make the spine authoritative, and doing it in the same change as three
+new capabilities would have coupled the highest-blast-radius migration in the
+epic to everything else. It stays open.
+
+**Q3 — multi-organization installs: still deferred.** The base DN derives from
+the first `Organization`; a second one would need a decision this build did not
+need to make.
 
 ## 14. Open Questions
 

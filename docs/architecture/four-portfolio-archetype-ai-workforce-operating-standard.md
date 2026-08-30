@@ -1,17 +1,90 @@
-# Four-Portfolio Archetype and AI Workforce Operating Standard
+# Portfolio Aligned Agent and Workforce Operating Standard
 
-**Identifier:** `DPF-FPAW`
-**Version:** Candidate 0.1.0
+**Identifier:** `DPF-PAAW` (supersedes `DPF-FPAW`)
+**Version:** Candidate 0.2.0
 **Status:** DPF normative candidate; not an adopted Open Group, ISO, OMG, NIST, or ServiceNow standard
 **Normative owner:** DPF Standards Steward, a human role designated by the platform maintainer
 **Design sponsor and bounded direct-source contributor attestor:** Mark Bodman
 **Owned concerns:** enterprise value, portfolio placement, operating-flow, work-allocation, and
 cross-standard traceability semantics
 **Companion:** [Archetype Profile Catalog](four-portfolio-archetype-standard-profile-catalog.md)
+**Formerly:** *Four-Portfolio Archetype and AI Workforce Operating Standard* (`DPF-FPAW`). Renamed
+2026-08-29 to remove the portfolio cardinality from the standard's identity — the portfolio
+decomposition is core, the count is a parameter (three in the 2020 expression, four today). The
+`DPF-FPAW` identifier and the existing `FPAW-*` normative rule prefixes remain valid aliases until
+the governed rename migration (see *Revision 0.2.0*, below) retires them with a published crosswalk.
 
 IT4IT™ is a trademark of The Open Group. This document uses the mark only for accurate editorial
 reference to the IT4IT Reference Architecture; no affiliation, endorsement, certification, or
 trademark license is claimed.
+
+## Naming and harmonization posture
+
+**This is a harmonization standard, not a replacement.** A standard earns its validity and
+credibility by building on established doctrine and carrying it into a new context — not by
+discarding it. `DPF-PAAW` references and composes prior art rather than re-issuing it: The Open Group
+IT4IT™ 3.0.1, *The Shift to Digital Product* (`W205`) and Digital Product Portfolio Management
+(`G252`); TOGAF®/ArchiMate® enterprise structure; the ServiceNow Common Service Data Model (CSDM)
+data shape; Porter's separation of primary from support value-chain activities; and the SFIA / O*NET
+competence vocabularies — bound together through the DPF Trustworthy AI Agent Standards Family (TAK,
+GAID, and TAK-JSI). PAAW adds the missing business-operating context around these; it does not throw
+the baby out with the bathwater.
+
+**The name is portfolio-*aligned*, not portfolio-*counted*.** Portfolio decomposition is the
+load-bearing idea — every governed thing is placed in, and its workforce aligned to, a portfolio. The
+*number* of portfolios is a versioned parameter of the operator's operating model, not part of the
+standard's identity: the earlier published expression used three; the current expression uses four
+(`foundational`, `manufactureAndDeliver`, `forEmployees`, `productsAndServicesSold`). A later
+expression may use a different number without renaming the standard. This is why the identity is now
+**P**ortfolio **A**ligned **A**gent and **W**orkforce (PAAW), not "Four-Portfolio."
+
+**Two axes carry the model, and neither is the portfolio count.**
+
+- **Structure — vertical (who owns and coordinates).** Portfolio alignment is the coordination
+  hierarchy. This is Conway's law applied to a workforce of humans *and* agents: the coordination
+  structure the work is organized into becomes the structure of what is produced. Whatever the thing,
+  it is placed in a portfolio, specialized by **archetype**, and operated by an aligned
+  agent-and-workforce. The **archetype** is the specialization lens that makes a generic
+  portfolio-aligned structure concrete for a given business type — and, for a harmonization standard,
+  the adapter that maps an industry's own reference models onto the shared spine.
+- **Flow — horizontal (what produces value).** Value is produced along value streams — IT4IT for the
+  Digital Product delivery flow, and archetype-specific operational value streams for the business
+  flow — separated into **primary** and **support** activities after Porter. This is the shape of the
+  work, held distinct from who owns it.
+
+**Agent-and-Workforce parity is realized through TAK-JSI.** The workforce is humans and AI agents at
+parity. A human performer carries competence and credentials; an AI performer carries a **TAK-JSI**
+(Job-Specific Intelligence) qualification — `Defined → Assessed → Qualified` — that certifies fitness
+for a specific job *without* granting live permission (TAK computes the execution-time authority
+ceiling; GAID carries identity). JSI is the mechanism that lets both estates be assigned, qualified,
+and coordinated as one aligned workforce; the name deliberately says **Agent *and* Workforce** so
+both estates are named, not folded.
+
+**The unit of value is the BusinessProduct.** Earlier DPF framing centered the `DigitalProduct` as
+the single unit of organization for everything the platform tracks. `DPF-PAAW` harmonizes upward: the
+**BusinessProduct** — a good, service, experience, access product, or public service/benefit — is the
+unit, and `DigitalProduct` is the one identity within it whose offered outcome essentially depends on
+software. This keeps IT4IT's Digital Product lineage exact while removing the limitation that a
+business deals only in digital products.
+
+## Revision 0.2.0 — rename and governed migration
+
+This revision renames the standard and reframes its posture (above). To preserve traceability and
+avoid one large unreviewable change, the rename lands as governed slices — each an independently
+revertible pull request — and `DPF-FPAW` and the `FPAW-*` rule prefixes remain valid aliases until
+their slice completes:
+
+1. **Keystone (this change).** Standard identity, naming and harmonization posture, and the
+   BusinessProduct / archetype / TAK-JSI reframing.
+2. **Rule-prefix crosswalk.** Migrate the 206 `FPAW-*` normative rule identifiers to `PAAW-*` with a
+   published old→new crosswalk so no existing citation is orphaned.
+3. **Inbound references.** Update the specs, plans, and architecture documents that cite the standard
+   or its filename, and rename the file with redirects, so link integrity is preserved.
+4. **Kernel doctrine.** Reconcile the founder-kernel unit-of-value stance (`DigitalProduct` → the
+   `BusinessProduct` harmonization) as a deliberate, ratified doctrine change rather than a silent one.
+5. **Public-facing documentation.** Bring external-facing material up to the harmonized framing.
+
+Slices 2–5 are tracked in the backlog under the PAAW harmonization epic.
 
 ## Abstract
 
@@ -34,8 +107,8 @@ This standard defines an enterprise operating-model bridge between:
 
 The IT4IT Reference Architecture is intentionally centered on managing the business of IT and the
 lifecycle of Digital Products whose offered outcome essentially depends on software. Its source
-concept may describe a service, physical item, or digital item, so it is broader than FPAW's
-`DigitalProduct` software/capability identity and narrower than all FPAW BusinessProducts. This
+concept may describe a service, physical item, or digital item, so it is broader than PAAW's
+`DigitalProduct` software/capability identity and narrower than all PAAW BusinessProducts. This
 standard adds the missing business-operating context around it. A veterinary clinic, bank,
 municipality, warehouse, builder, restaurant, or salon does not sell only IT4IT-qualified Digital
 Products, even when its work is deeply digitally enabled. BusinessProducts and industry value streams
@@ -55,7 +128,7 @@ and the agent identity does not replace product lifecycle management.
 
 ### 1.1 Status
 
-`DPF-FPAW` is an independently expressed DPF candidate intended to become suitable contribution material for a
+`DPF-PAAW` is an independently expressed DPF candidate intended to become suitable contribution material for a
 profile or extension of the IT4IT Reference Architecture. It is not an assertion that The Open Group or any other cited body has
 reviewed, adopted, endorsed, or certified it.
 
@@ -851,6 +924,40 @@ and exceptions. The room references canonical Products, Performers, Resources, w
 does not own copies of them. Definition estimates, targets, and evidence policy remain distinguishable
 from instance actuals such as elapsed time, cost, capacity, token/tool use, exceptions, and accepted
 outcomes.
+
+### 9.6 Proposed competence-evolution Workroom application profile
+
+The [PAAW competence-evolution Workroom
+design](../superpowers/specs/2026-08-30-paaw-competence-evolution-workroom-design.md) defines a
+candidate application profile for turning operational experience into governed knowledge, evaluated
+WorkPatterns, and qualification-aware activation. It composes Section 9.5 Workrooms with scoped
+WWMD/WWWD/WSID commons, Governed Playbook Experimentation, TAK-JSI, GAID, and TAK.
+
+The profile is informative in Candidate 0.2.0. It does not add conformance requirements until the
+Standards Steward approves a minor-version proposal under Section 19. The proposed minor-version
+requirements would require:
+
+- exactly one explicit coordinator/Process Overseer for every executable Workroom, distinct from
+  the accountable outcome owner and, where independence is required, from executor,
+  evaluator/reviewer, and approver;
+- a deterministic before/after-transition conformance result over the exact room definition and
+  collaboration-shape versions, roster, prerequisites, authority, measures, budgets, review point,
+  stop conditions, observed deviations, disposition, and next permitted transition;
+- a trace from exact WorkOccurrence evidence through scoped knowledge, candidate method,
+  independent evaluation, qualification-impact decision, JSI status, active binding, deployed
+  profile, and later outcome;
+- evaluator and held-out material separation from the candidate's writable environment;
+- precommitted endpoints, capability floors, critical failures, seed/retry/submission budgets, and
+  invalidation rules;
+- direct target-profile or governed-equivalence evidence before a method transfers across a model,
+  provider, harness, corpus, tool surface, job version, or data/risk context; and
+- applicable JSI revalidation before a material promoted change can retain or widen an active
+  assignment or autonomy ceiling; and
+- a current process-oversight JSI qualification and intersecting TAK authority when an AI coworker
+  occupies the coordinator role.
+
+The profile creates no second room definition, evidence ledger, commons, playbook authority,
+qualification model, or action-permission engine.
 
 ## 10. Performer and work-allocation model
 
@@ -2476,6 +2583,9 @@ implementation work is deliberately identified rather than prematurely built:
 15. refactor the Work Case source registry and Workroom read model into the Section 9.5
     WorkUnitDefinition/WorkOccurrence bridge, preserving domain authorities and existing cycle,
     evidence, estimate, token/tool telemetry, backlog, worktree, PR, and receipt records
+16. evaluate and, if accepted by the Standards Steward, publish the Section 9.6 competence-evolution
+    application profile as a minor-version addition with conformance IDs, tests, and a compatibility
+    notice
 
 ### 18.4 Documentation convergence in this release
 

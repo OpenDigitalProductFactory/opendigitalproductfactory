@@ -1,10 +1,12 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 
 import { approveProposal, rejectProposal } from "@/lib/actions/proposals";
 
 export function CoworkerProposalActions({ proposalId }: { proposalId: string }) {
+  const router = useRouter();
   const [result, setResult] = useState<"approved" | "declined" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -26,6 +28,11 @@ export function CoworkerProposalActions({ proposalId }: { proposalId: string }) 
           : await rejectProposal(proposalId, "Owner declined this action");
       if (response.success) {
         setResult(decision === "approve" ? "approved" : "declined");
+        // The card acknowledged, but the header kept reading "40 things need you
+        // today" until a manual reload, so the rational next move was to press
+        // again (BI-79E207B9). Re-render the server tree so the count follows
+        // the decision.
+        router.refresh();
         return;
       }
       setError(response.error ?? "That decision could not be saved. Please try again.");

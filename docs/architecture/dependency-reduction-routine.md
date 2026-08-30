@@ -40,6 +40,14 @@ Generated outputs regenerate on every dependency change and are **not committed*
 `sbom/baseline.json` (drift) and `sbom/vuln-baseline.json` (accepted advisories)
 — are tracked.
 
+On install or reseed, the same generator is also the sole source for the
+Digital Product Factory Portal's current `BomDocument`. The seed derives a
+deterministic document identity from the normalized lockfile, replaces that
+document's occurrences transactionally, supersedes older platform documents,
+and links components through the shared `CatalogIdentity` key. Operators read
+that persisted graph at **Digital Product > Operate > Dependencies**; no
+route-local platform component list owns a competing currency record.
+
 ## Axis 1 — reduction / efficiency
 
 The analysis tiers duplicate package versions so signal separates from noise:

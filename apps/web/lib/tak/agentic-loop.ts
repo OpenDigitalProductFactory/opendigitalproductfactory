@@ -1,7 +1,7 @@
 // apps/web/lib/agentic-loop.ts
 // Agentic execution loop: LLM calls tools iteratively until it responds with text only.
 // This is the core behavioral difference between a chatbot and an agent.
-import { routeAndCall, type RoutedInferenceResult } from "@/lib/routed-inference";
+import { routeAndCall, type RouteAndCallOptions, type RoutedInferenceResult } from "@/lib/routed-inference";
 import {
   detectRepeatedToolCall,
   detectApproachingRepeatedToolCall,
@@ -56,6 +56,15 @@ import {
   appendToolRefusedRecoveryMessages,
   classifyToolRefusedIssue,
 } from "./tool-refused-recovery";
+import {
+  applyTerminalToolSurface,
+  buildTerminalToolReminder,
+  normalizeTerminalToolArguments,
+  resolveTerminalTextExit,
+  resolveTerminalToolCall,
+  selectTerminalToolSurface,
+  type TerminalToolPolicy,
+} from "./terminal-tool-policy";
 // Re-export for importers (certification-oracles, tests) that pull from agentic-loop.
 export { detectToolRefusedDespiteAvailability } from "./tool-refused-recovery";
 
@@ -99,6 +108,7 @@ export const HARD_COMPLETION_CLAIM_PATTERN =
 
 // The dead-end classifier and its copy live in ./inference-dead-ends (BI-A89E4827).
 import { describeToolRouteFailure, describeToolRouteFailureOutcome, type InferenceDeadEndOutcome } from "./inference-dead-ends";
+import { usesGovernedReviewTools } from "./governed-review-tools";
 export { describeToolRouteFailure };
 
 // Narration patterns: agent describes code or announces intent instead of calling tools.
@@ -1159,6 +1169,8 @@ export type RunAgenticLoopParams = {
    * caller is byte-for-byte unchanged until it opts in.
    */
   enableExecutionPlan?: boolean;
+  /** Bounded evidence-reader surface with a reserved governed writer step. */
+  terminalToolPolicy?: TerminalToolPolicy;
 
 };
 
@@ -1278,7 +1290,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
   }
 
   // Build routeAndCall options once (reused every iteration)
-  const routeOptions = {
+  const routeOptions: RouteAndCallOptions = {
     ...(toolsForProvider ? { tools: toolsForProvider } : {}),
     ...(systemPromptInstructionSpans?.length ? { systemPromptInstructionSpans } : {}),
     taskType: turnRoute.taskType,
@@ -1319,6 +1331,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       ...planProviderTools,
     ];
   }
+  const terminalProviderTools = [...((routeOptions.tools as Array<Record<string, unknown>> | undefined) ?? [])];
 
   // EP-COWORKER-INTERACTIVITY (BI-6A745E3C): on-demand tool attachment. The chat
   // coworker path right-sizes the attached tool set and hands the remaining
@@ -1371,6 +1384,24 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     message: latestUserText(messages),
   });
   let evidenceRecoveryNudges = 0;
+  let terminalToolNudges = 0;
+  let terminalToolSurfaceOverride: string[] | null = null;
+  const completeResult = (
+    content: string,
+    source: Pick<RoutedInferenceResult, "providerId" | "modelId" | "downgraded" | "downgradeMessage"> | null = lastResult,
+    extra: Partial<Pick<AgenticResult, "failure" | "executionPlan">> = {},
+  ): AgenticResult => ({
+    content,
+    providerId: source?.providerId ?? "",
+    modelId: source?.modelId ?? "",
+    downgraded: source?.downgraded ?? false,
+    downgradeMessage: source?.downgradeMessage ?? null,
+    totalInputTokens,
+    totalOutputTokens,
+    executedTools,
+    proposal: null,
+    ...extra,
+  });
   let bestPreNudgeContent = ""; // Preserve best text from before nudge
   const startTime = Date.now();
   let inferenceCallCount = 0;
@@ -1450,8 +1481,16 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         `toolBudgetTarget=${effortWarrant.toolBudgetTarget} signals=${effortWarrant.signals.join(",")}`,
     );
   }
-
   for (let iteration = 0; iteration < iterationCeiling; iteration++) {
+    if (params.terminalToolPolicy) {
+      routeOptions.tools = terminalToolSurfaceOverride
+        ? selectTerminalToolSurface(terminalProviderTools, terminalToolSurfaceOverride)
+        : applyTerminalToolSurface(params.terminalToolPolicy, executedTools, terminalProviderTools);
+      const writerOnlySurface = routeOptions.tools.length === 1
+        && selectTerminalToolSurface(routeOptions.tools, [params.terminalToolPolicy.writerToolName]).length === 1;
+      routeOptions.toolChoice = writerOnlySurface ? "required" : undefined;
+      routeOptions.terminalWriterToolName = writerOnlySurface ? params.terminalToolPolicy.writerToolName : undefined;
+    }
     // EP-ASYNC-COWORKER-001: Check cancellation flag at each iteration boundary
     if (agentEventBus.isCancelled(threadId)) {
       agentEventBus.clearCancel(threadId);
@@ -1482,17 +1521,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     // and surface the error so the user can start a sandbox rather than spinning expensively.
     if (sandboxUnavailableCount >= 2) {
       console.warn(`[agentic-loop] sandbox unavailable after ${sandboxUnavailableCount} attempts. Aborting loop.`);
-      return {
-        content: "The sandbox is not available — no slots are free. Please ensure the sandbox container is running (check Docker Desktop), then try again.",
-        providerId: lastResult?.providerId ?? "",
-        modelId: lastResult?.modelId ?? "",
-        downgraded: lastResult?.downgraded ?? false,
-        downgradeMessage: lastResult?.downgradeMessage ?? null,
-        totalInputTokens,
-        totalOutputTokens,
-        executedTools,
-        proposal: null,
-      };
+      return completeResult("The sandbox is not available — no slots are free. Please ensure the sandbox container is running (check Docker Desktop), then try again.");
     }
 
     // Grant-starvation circuit breaker — after 3 consecutive forbidden_grant
@@ -1508,20 +1537,11 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         `[agentic-loop] grant-starved: ${forbiddenGrantStreak} consecutive forbidden_grant rejections. ` +
         `agent=${JSON.stringify(agentId)} route=${JSON.stringify(routeContext)} tools=${JSON.stringify(blockedTools)}. Aborting loop.`,
       );
-      return {
-        content:
+      return completeResult(
           `Blocked — hard stop, not a retry situation. This agent's profile lacks the grant(s) required for ` +
           `the tools it needs: ${blockedTools.join(", ")}. Every attempt was rejected with \`forbidden_grant\`. ` +
           `A platform operator needs to grant \`${agentId}\` access to these tools (or hand the work to a peer that already holds them) before it can proceed.`,
-        providerId: lastResult?.providerId ?? "",
-        modelId: lastResult?.modelId ?? "",
-        downgraded: lastResult?.downgraded ?? false,
-        downgradeMessage: lastResult?.downgradeMessage ?? null,
-        totalInputTokens,
-        totalOutputTokens,
-        executedTools,
-        proposal: null,
-      };
+      );
     }
 
     // Time ceiling — phase-aware duration limits.
@@ -1542,10 +1562,14 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       t.name === "reviewBuildPlan" || (t.name === "saveBuildEvidence" &&
         (t.args as Record<string, unknown> | undefined)?.field === "buildPlan")
     );
+    // BI-3907AF35: a governed initiative review is review-phase work too. It
+    // reads an artifact at an immutable version and writes a structured
+    // receipt; on the 120s conversation baseline the reviewer ran out of budget
+    // after four reads and never reached its writer (FB-EB292B9F).
     const hasReviewTools = executedTools.some(t =>
       t.name === "run_ux_test" || t.name === "evaluate_page" ||
       t.name === "check_deployment_windows"
-    );
+    ) || usesGovernedReviewTools(executedTools);
     const hasShipTools = executedTools.some(t =>
       t.name === "deploy_feature" || t.name === "execute_promotion" ||
       t.name === "register_digital_product_from_build" || t.name === "schedule_promotion"
@@ -1583,17 +1607,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           : ` on a text answer. Exiting early with diagnostic.`) +
         ` agent=${JSON.stringify(agentId)} route=${JSON.stringify(routeContext)}`,
       );
-      return {
-        content: bestPreNudgeContent || buildLocalToolCallFailureMessage(lastResult),
-        providerId: lastResult.providerId,
-        modelId: lastResult.modelId,
-        downgraded: lastResult.downgraded,
-        downgradeMessage: lastResult.downgradeMessage,
-        totalInputTokens,
-        totalOutputTokens,
-        executedTools,
-        proposal: null,
-      };
+      return completeResult(bestPreNudgeContent || buildLocalToolCallFailureMessage(lastResult), lastResult);
     }
 
     // Repetition detector (runtime-issues). BI-PIR-2fc2106c: no-progress hard-stops
@@ -1608,10 +1622,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         repeated, routeContext: routeContext ?? null, userId,
         agentId: agentId ?? null, threadId: threadId ?? null, taskRunId: taskRunId ?? null,
       });
-      return {
-        content, providerId: "", modelId: "", downgraded: false, downgradeMessage: null,
-        totalInputTokens, totalOutputTokens, executedTools, proposal: null,
-      };
+      return completeResult(content, null);
     }
     const approaching = detectApproachingRepeatedToolCall({ executedTools });
     if (approaching && !noProgressNudgedSigs.has(approaching.signature)) {
@@ -1652,9 +1663,12 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     // tools→system prefix — instead of mutating tool descriptions, so the
     // Anthropic prompt-cache prefix stays byte-identical turn-over-turn even
     // after a tool fails or is review-vetoed. See buildToolSessionHintMessage.
-    const toolSessionHint = buildToolSessionHintMessage(executedTools);
-    const messagesForCall = toolSessionHint
-      ? [...assembledMessages, { role: "user" as const, content: toolSessionHint }]
+    const toolHints = [
+      buildToolSessionHintMessage(executedTools),
+      params.terminalToolPolicy ? buildTerminalToolReminder(params.terminalToolPolicy, executedTools) : null,
+    ].filter((hint): hint is string => Boolean(hint));
+    const messagesForCall = toolHints.length
+      ? [...assembledMessages, { role: "user" as const, content: toolHints.join("\n\n") }]
       : assembledMessages;
     let result: RoutedInferenceResult;
     try {
@@ -1687,6 +1701,14 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       const failure = describeToolRouteFailureOutcome(msg, routeOptions.tools?.length ?? 0, routeErr);
       console.warn(`[agentic-loop] routeAndCall threw: ${msg}`);
       logTurnSummary("unknown", "unknown");
+      if (params.terminalToolPolicy) {
+        const message = routeOptions.toolChoice === "required"
+          ? `The required governed writer ${params.terminalToolPolicy.writerToolName} could not be dispatched. The same TaskRun remains resumable. No receipt was created.`
+          : `The governed review route failed before ${params.terminalToolPolicy.writerToolName} could be recorded. The same TaskRun remains resumable. No receipt was created.`;
+        return completeResult(message, null, {
+          failure: { kind: "terminal-writer-missing", message },
+        });
+      }
       return {
         content: failure.message,
         providerId: "unknown",
@@ -1744,6 +1766,23 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         `toolCalls=0 contentLen=${trimmed.length} nudges=${continuationNudges} ` +
         `executedTools=${executedTools.length} content=${JSON.stringify(trimmed.slice(0, 200))}`,
       );
+
+      if (params.terminalToolPolicy) {
+        const exit = resolveTerminalTextExit(params.terminalToolPolicy, executedTools, terminalToolNudges);
+        if (exit.kind === "complete") {
+          logTurnSummary(result.providerId, result.modelId);
+          return completeResult(result.content, result);
+        }
+        if (exit.kind === "nudge") {
+          terminalToolNudges++;
+          terminalToolSurfaceOverride = exit.allowedToolNames;
+          messages = [...messages, { role: "assistant", content: result.content }, { role: "user", content: exit.message }];
+          continue;
+        }
+        if (exit.kind === "input-required") {
+          return completeResult(exit.message, result, { failure: { kind: "terminal-writer-missing", message: exit.message } });
+        }
+      }
 
       // BI-1D144CC1: truncation stop. The provider cut generation off at the
       // output-token ceiling (stop_reason=max_tokens / finish_reason=length /
@@ -1880,17 +1919,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       // Don't nudge — break immediately with a clear error.
       if (trimmed.length === 0 && executedTools.length === 0) {
         console.warn(`[agentic-loop] Empty response from ${result.providerId}/${result.modelId} on iteration ${iteration}. Model may not support tool use. Breaking.`);
-        return {
-          content: `The model (${result.modelId}) returned an empty response and did not use any tools. This typically means it does not support the tool format required for this task. Try a different model or provider.`,
-          providerId: result.providerId,
-          modelId: result.modelId,
-          downgraded: result.downgraded,
-          downgradeMessage: result.downgradeMessage,
-          totalInputTokens,
-          totalOutputTokens,
-          executedTools,
-          proposal: null,
-        };
+        return completeResult(`The model (${result.modelId}) returned an empty response and did not use any tools. This typically means it does not support the tool format required for this task. Try a different model or provider.`, result);
       }
 
       // Evidence-integrity gate (INV-1). When this turn's answer depends on live
@@ -1923,17 +1952,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           // quarantined is greppable, and so the extractor's zero can be
           // compared against what the model actually produced.
           console.warn(`[agentic-loop] evidence-required turn unverifiable; could-not-verify (INV-1/5). route=${JSON.stringify(routeContext)} withheldChars=${recovery.withheldContent.trim().length}`);
-          return {
-            content: recovery.message,
-            providerId: result.providerId,
-            modelId: result.modelId,
-            downgraded: result.downgraded,
-            downgradeMessage: result.downgradeMessage,
-            totalInputTokens,
-            totalOutputTokens,
-            executedTools,
-            proposal: null,
-          };
+          return completeResult(recovery.message, result);
         }
       }
 
@@ -2020,17 +2039,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           console.warn(
             "[agentic-loop] fabrication signal on a downgraded conversational turn — keeping the backup answer (infra failover, not fabrication).",
           );
-          return {
-            content: trimmed,
-            providerId: result.providerId,
-            modelId: result.modelId,
-            downgraded: result.downgraded,
-            downgradeMessage: result.downgradeMessage,
-            totalInputTokens,
-            totalOutputTokens,
-            executedTools,
-            proposal: null,
-          };
+          return completeResult(trimmed, result);
         }
 
         // Conversational coworker routes (e.g. the marketing strategist): the
@@ -2076,17 +2085,10 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           const base = makesHardCompletionClaim
             ? `${trimmed}\n\n${buildUnsavedAdviceNote(routeContext)}`
             : trimmed;
-          return {
-            content: applyEscalationLadderGuard(applyBacklogCreateClaimGuard(base, executedTools), executedTools),
-            providerId: result.providerId,
-            modelId: result.modelId,
-            downgraded: result.downgraded,
-            downgradeMessage: result.downgradeMessage,
-            totalInputTokens,
-            totalOutputTokens,
-            executedTools,
-            proposal: null,
-          };
+          return completeResult(
+            applyEscalationLadderGuard(applyBacklogCreateClaimGuard(base, executedTools), executedTools),
+            result,
+          );
         }
 
         // BI-PIR-cc091267 — a build-route fabrication signal (completion claim
@@ -2187,17 +2189,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           console.warn(
             `[agentic-loop] local model produced text-only response for tool-backed turn; returning diagnostic instead of issuing a second nudge. agent=${JSON.stringify(agentId)} route=${JSON.stringify(routeContext)}`,
           );
-          return {
-            content: buildLocalToolCallFailureMessage(result),
-            providerId: result.providerId,
-            modelId: result.modelId,
-            downgraded: result.downgraded,
-            downgradeMessage: result.downgradeMessage,
-            totalInputTokens,
-            totalOutputTokens,
-            executedTools,
-            proposal: null,
-          };
+          return completeResult(buildLocalToolCallFailureMessage(result), result);
         }
 
         if (shouldNudgeNow) {
@@ -2265,17 +2257,10 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         console.warn(`[agentic-loop] frustration detected (${frustrationCount}/3): ${trimmed.slice(0, 100)}`);
         if (frustrationCount >= 3) {
           // 3 strikes — break and be honest with the user
-          return {
-            content: trimmed + "\n\nI've been struggling with this. Let me be direct about what's not working so you can help me get unstuck.",
-            providerId: result.providerId,
-            modelId: result.modelId,
-            downgraded: result.downgraded,
-            downgradeMessage: result.downgradeMessage,
-            totalInputTokens,
-            totalOutputTokens,
-            executedTools,
-            proposal: null,
-          };
+          return completeResult(
+            trimmed + "\n\nI've been struggling with this. Let me be direct about what's not working so you can help me get unstuck.",
+            result,
+          );
         }
         // Phase-aware nudge: suggest tools specific to what the agent should be doing
         const phaseTools = getPhaseSpecificNudge(executedTools);
@@ -2320,18 +2305,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       // BI-41F15FD7 — observability only; content is returned unchanged.
       logGeneratedProse(finalContent, { threadId, modelId: result.modelId }, sanitizeForLog);
       logTurnSummary(result.providerId, result.modelId);
-      return {
-        content: finalContent,
-        providerId: result.providerId,
-        modelId: result.modelId,
-        downgraded: result.downgraded,
-        downgradeMessage: result.downgradeMessage,
-        totalInputTokens,
-        totalOutputTokens,
-        executedTools,
-        proposal: null,
-        executionPlan,
-      };
+      return completeResult(finalContent, result, { executionPlan });
     }
 
     // Collect all immediate tool results for this iteration
@@ -2340,7 +2314,22 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       toolResult: ToolResult;
     }> = [];
 
-    for (const tc of result.toolCalls) {
+    for (const providerToolCall of result.toolCalls) {
+      let tc = providerToolCall;
+      if (params.terminalToolPolicy) {
+        const normalized = normalizeTerminalToolArguments(
+          params.terminalToolPolicy,
+          tc.name,
+          tc.arguments,
+        );
+        if (normalized.kind === "refuse") {
+          executedTools.push({ name: tc.name, args: tc.arguments, result: normalized.result });
+          iterationResults.push({ tc, toolResult: normalized.result });
+          continue;
+        }
+        tc = { ...tc, arguments: normalized.arguments };
+      }
+
       // BI-2AC48661: plan tools are loop-intrinsic. Intercept them here — they
       // mutate loop state and return a synthetic result; they never reach
       // governedExecuteTool, take no capability grant, and write no audit row.
@@ -2407,6 +2396,14 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           },
         });
         continue;
+      }
+
+      if (params.terminalToolPolicy) {
+        const disposition = resolveTerminalToolCall(params.terminalToolPolicy, executedTools, tc.name);
+        if (disposition.kind === "refuse") {
+          iterationResults.push({ tc, toolResult: disposition.result });
+          continue;
+        }
       }
 
       let toolDef =
@@ -2604,6 +2601,9 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       }
 
       executedTools.push({ name: tc.name, args: tc.arguments, result: toolResult });
+      if (toolResult.success && params.terminalToolPolicy?.readerToolNames.includes(tc.name)) {
+        terminalToolSurfaceOverride = null;
+      }
       iterationResults.push({ tc, toolResult });
       onProgress?.({ type: "tool:complete", tool: tc.name, success: toolResult.success });
 
@@ -2618,7 +2618,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       {
         role: "assistant" as const,
         content: result.content,
-        toolCalls: result.toolCalls,
+        toolCalls: iterationResults.map(({ tc }) => tc),
       },
       ...iterationResults.map(({ tc, toolResult }) => ({
         role: "tool" as const,

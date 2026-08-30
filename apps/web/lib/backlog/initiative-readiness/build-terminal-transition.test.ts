@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { InitiativeReadinessDecision } from "./types";
 import { completeFeatureBuildTransition } from "./build-terminal-transition";
+import { readinessRequirement } from "@/lib/backlog/initiative-readiness/readiness-guidance";
 
 function projection(verdict: "allowed" | "input-required") {
   const decision: InitiativeReadinessDecision = {
@@ -13,7 +14,7 @@ function projection(verdict: "allowed" | "input-required") {
     target: "completion",
     verdict,
     satisfied: [],
-    unmet: verdict === "allowed" ? [] : [{ code: "OBJECTIVE_RECONCILIATION_REQUIRED", state: "missing", accountableRole: "acceptance-reviewer", evidenceRefs: [] }],
+    unmet: verdict === "allowed" ? [] : [readinessRequirement({ code: "OBJECTIVE_RECONCILIATION_REQUIRED", state: "missing", accountableRole: "acceptance-reviewer" })],
     blockers: [],
     evaluatedAt: "2026-08-22T08:00:00.000Z",
   };

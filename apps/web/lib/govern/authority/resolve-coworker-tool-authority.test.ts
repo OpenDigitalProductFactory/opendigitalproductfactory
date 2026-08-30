@@ -4,6 +4,7 @@ import {
   deriveAllowedRouteContexts,
   deriveCoworkerApprovalPolicy,
   deriveCoworkerAuthoritySubject,
+  resolveBoundInitiativeReviewItem,
   resolveInitiativeAuthorityContext,
 } from "./resolve-coworker-tool-authority";
 
@@ -48,6 +49,23 @@ describe("deriveCoworkerAuthoritySubject", () => {
 });
 
 describe("resolveInitiativeAuthorityContext", () => {
+  it("derives an organization-owned initiative from a validated server-bound review", async () => {
+    const db = {
+      backlogItem: {
+        findUnique: async () => ({ itemId: "BI-F0715C9C", organizationId: "org-canonical" }),
+      },
+    };
+    await expect(resolveInitiativeAuthorityContext({
+      params: { decision: "pass", organizationId: "caller-org" },
+      trustedBoundItemId: "BI-F0715C9C",
+      authenticatedOrganizationId: null,
+      db,
+    })).resolves.toEqual({
+      subject: { kind: "backlog-item", id: "BI-F0715C9C" },
+      organizationId: "org-canonical",
+    });
+  });
+
   it("derives organization authority server-side from the governed item", async () => {
     const db = {
       backlogItem: {
@@ -104,6 +122,64 @@ describe("resolveInitiativeAuthorityContext", () => {
       authenticatedOrganizationId: null,
       db,
     })).rejects.toThrow("requires an authenticated organization context");
+  });
+});
+
+describe("resolveBoundInitiativeReviewItem", () => {
+  const artifactRef = {
+    kind: "repo-blob-at-commit",
+    repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+    commitSha: "2e9f97d2d5ccb5f97b60e0991c34820a83cc1ec0",
+    path: "docs/superpowers/specs/design.md",
+    providerBlobId: "5ac674c03be1b21a335ea5b8607125f830e673a5",
+  };
+  const task = {
+    taskRunId: "TR-MCP-BI47",
+    parentTaskRunId: null,
+    authorityScope: [
+      "backlog-item:BI-47ACE2C7",
+      "tool:read_source_at_version",
+      "tool:record_initiative_evidence",
+    ],
+    a2aMetadata: {
+      trigger: "external-mcp",
+      sourceRef: { kind: "mcp-token", id: "PAT-BI47" },
+      initiativeReviewBinding: {
+        writerToolName: "record_initiative_evidence",
+        itemId: "BI-47ACE2C7",
+        gate: "research",
+        artifactRef,
+      },
+    },
+  };
+
+  it("accepts only the exact writer and exact persisted item/tool scope", () => {
+    expect(resolveBoundInitiativeReviewItem(task, "record_initiative_evidence"))
+      .toBe("BI-47ACE2C7");
+  });
+
+  it("fails closed when the executing writer differs from the immutable binding", () => {
+    expect(() => resolveBoundInitiativeReviewItem(task, "record_initiative_design_review"))
+      .toThrow("writer tool does not match");
+  });
+
+  it("leaves immutable reader authority unchanged on the same review TaskRun", () => {
+    expect(resolveBoundInitiativeReviewItem(task, "read_source_at_version"))
+      .toBeNull();
+  });
+
+  it("fails closed when exact backlog or writer scope is missing", () => {
+    expect(() => resolveBoundInitiativeReviewItem({
+      ...task,
+      authorityScope: ["tool:read_source_at_version", "tool:record_initiative_evidence"],
+    }, "record_initiative_evidence")).toThrow("backlog-item:BI-47ACE2C7");
+  });
+
+  it("does not trust initiative binding metadata on a non-external TaskRun", () => {
+    expect(() => resolveBoundInitiativeReviewItem({
+      ...task,
+      a2aMetadata: { ...task.a2aMetadata, trigger: "interactive" },
+    }, "record_initiative_evidence")).toThrow("external MCP TaskRun");
   });
 });
 

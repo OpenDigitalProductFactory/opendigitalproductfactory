@@ -8,19 +8,11 @@ import { getActiveSelfUpgradeBlackout } from "@/lib/self-upgrade/blackout";
 import { resolveOperatingScheduleForSystem } from "@/lib/operating-hours-read";
 import { getLastCheckedAt, recordCheckedAt, isCheckIntervalElapsed } from "@/lib/self-upgrade/last-check";
 import { buildFetchCommand, buildRemoteHeadCommand } from "@/lib/self-upgrade/version";
-import {
-  loadReleaseInstallContext,
-  resolveReleaseUpgradeCandidate,
-  resolveUpgradeStrategy,
-  type ReleaseTargetResult,
-} from "@/lib/self-upgrade/release-target";
-import {
-  countPendingUpstreamCommits,
-  evaluateReleaseBatch,
-} from "@/lib/self-upgrade/release-batch";
+import { loadReleaseInstallContext, resolveUpgradeStrategy, type ReleaseTargetResult } from "@/lib/self-upgrade/release-target";
+import { resolveWorkerReleaseTarget } from "@/lib/self-upgrade/worker-release-target";
+import { countPendingUpstreamCommits, evaluateReleaseBatch } from "@/lib/self-upgrade/release-batch";
 import { prepareUpgradeSource, defaultGitRunner } from "@/lib/self-upgrade/prepare-source";
-// Pure constant from a spawn-free module — the host-only ./promoter runtime must
-// NOT be statically imported into this server bundle entrypoint (BI-98AF1066);
+// Pure constant only: never statically import the spawn-heavy promoter runtime
 // that is what the dynamic loadPromoterRuntime() below is for.
 import { PROMOTER_ALREADY_RUNNING_EXIT_CODE } from "@/lib/self-upgrade/promoter-exit-codes";
 import {
@@ -32,10 +24,7 @@ import {
 import { evaluateHostMemoryGuard } from "@/lib/self-upgrade/host-memory-preflight";
 import { getDeployedSha, isFeatureBuildDeployed } from "@/lib/self-upgrade/completion";
 import { readCurrentContainerConfigDigest } from "@/lib/self-upgrade/runtime-image-identity";
-import {
-  classifyBuildFailure,
-  formatClassifiedExcerpt,
-} from "@/lib/self-upgrade/build-failure-classifier";
+import { classifyBuildFailure, formatClassifiedExcerpt } from "@/lib/self-upgrade/build-failure-classifier";
 import {
   createRun,
   startRun,
@@ -67,6 +56,7 @@ import {
   signalSwapComplete,
   failQuiescenceSwap,
 } from "@/lib/self-upgrade/quiescence";
+import { rejectDuplicateSelfUpgradeDelivery } from "@/lib/self-upgrade/delivery-admission";
 import {
   SELF_UPGRADE_CRON,
   SELF_UPGRADE_EVENT,
@@ -95,6 +85,8 @@ async function loadPromoterRuntime(): Promise<PromoterRuntime> {
 export async function runSelfUpgrade(
   params: SelfUpgradeRunEventData,
 ): Promise<Record<string, unknown>> {
+  const duplicate = await rejectDuplicateSelfUpgradeDelivery(params.runId);
+  if (duplicate) return duplicate;
   const config = await getSelfUpgradeConfig();
   const now = new Date();
   const cooldownMinutes = config.cooldownMinutes ?? DEFAULT_COOLDOWN_MINUTES;
@@ -330,13 +322,20 @@ export async function runSelfUpgrade(
   const deployedSha = await getDeployedSha();
   if (upgradeStrategy === "release" && releaseInstall) {
     const currentConfigDigest = await readCurrentContainerConfigDigest();
-    const target = await resolveReleaseUpgradeCandidate({
+    const resolution = await resolveWorkerReleaseTarget({
+      runId: params.runId,
       context: releaseInstall,
       currentConfigDigest,
     });
-    if (target.kind === "no-published-target") {
-      return await skipAttempt("no-published-target", `no-published-target: ${target.reason}`, { releaseStatus: target.reason });
+    if (resolution.kind === "handled") return resolution.response;
+    if (resolution.kind === "unavailable") {
+      return await skipAttempt(
+        "no-published-target",
+        `no-published-target: ${resolution.target.reason}`,
+        { releaseStatus: resolution.target.reason },
+      );
     }
+    const target = resolution.target;
     if (target.kind === "up-to-date" && !params.force && !params.dryRun) {
       return await skipAttempt("up-to-date", `up-to-date: ${target.tag}`, {
         releaseTag: target.tag,
@@ -635,10 +634,10 @@ export async function runSelfUpgrade(
       // Daemon-resolved host path, not an in-portal path; hostSourceMountPath
       // is no longer passed — runPromoter mounts to a fixed /host-source.
       // BI-A8A7CCFD — when isolated workspace is on, the promoter builds from
-      // the workspace HOST path (which holds the merged tree), not the
-      // operator's install clone. The promoter mounts whatever we hand it
+      // the workspace HOST path, not the operator install. It mounts whatever we hand it
       // here at `/host-source:ro` — same contract, just a different host dir.
       hostInstallPath: upgradeWorkspaceHostPath ?? hostInstallPathResolved,
+      canonicalInstallPath: hostInstallPathResolved,
       // The honest built identity from source prep (merge-commit SHA in upstream
       // mode, HEAD/-dirty in local mode). promote.sh re-derives this from the
       // tree's HEAD and cross-checks against it.

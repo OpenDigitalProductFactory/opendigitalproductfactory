@@ -1,6 +1,6 @@
 ---
 name: dpf-finishing-a-development-branch
-description: "Use when a unit of work is functionally complete and needs to leave the working tree. Decide the integration shape first, confirm the branch is green, obtain independent semantic review of the stable committed tree before pregate or publication, sweep for loose/overlapping work, then hand off to dpf-pr-with-dco."
+description: "Use when a unit of DPF work is functionally complete and needs to leave the working tree."
 
 # Agent Skills standard fields (Surface A — Claude Code)
 disable-model-invocation: false

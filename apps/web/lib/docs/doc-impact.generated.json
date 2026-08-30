@@ -1256,6 +1256,9 @@
     "docs/testing/ci-observation-baseline.json": [
       "docs/testing/ci-evidence.md"
     ],
+    "dpf-start.ps1": [
+      "docs/runbooks/bet5-windows-self-upgrade.md"
+    ],
     "e2e/fixtures/evidence.ts": [
       "docs/architecture/agent-client-capability-parity.md"
     ],
@@ -1447,6 +1450,9 @@
     "packages/dpf-skill-pack/hooks/tool-economy-precheck.mjs": [
       "docs/architecture/context-engineering-standards.md"
     ],
+    "packages/dpf-skill-pack/hooks/workroom-claim-guard.mjs": [
+      "docs/architecture/delivery-surfaces-runbook.md"
+    ],
     "packages/dpf-skill-pack/hooks/worktree-create.mjs": [
       "docs/architecture/delivery-surfaces-runbook.md"
     ],
@@ -1532,6 +1538,9 @@
     "scripts/check-agent-capability-integrity.mjs": [
       "docs/architecture/2026-08-20-governed-autonomy-architecture.md"
     ],
+    "scripts/check-agent-principal-convergence-wired.mjs": [
+      "docs/testing/pre-pr-gate.md"
+    ],
     "scripts/check-application-boundaries.mjs": [
       "docs/architecture/2026-08-16-simplify-and-strengthen-architecture-pass.md",
       "docs/architecture/application-boundaries.md"
@@ -1563,6 +1572,9 @@
     ],
     "scripts/check-docs-impact.mjs": [
       "docs/architecture/enforced-ci-gates.md"
+    ],
+    "scripts/check-guard-conformance-marks.mjs": [
+      "docs/testing/pre-pr-gate.md"
     ],
     "scripts/check-guards.mjs": [
       "docs/architecture/theme-aware-styling-runbook.md",
@@ -1702,6 +1714,9 @@
       "docs/testing/archetype-exercise-harness.md",
       "docs/testing/archetype-exercise-playbook.md"
     ],
+    "scripts/hooks/converge-git-hooks.mjs": [
+      "docs/testing/pre-pr-gate.md"
+    ],
     "scripts/hooks/run-hook.mjs": [
       "docs/install/platform-support-watchlist.md",
       "docs/operations/session-transcript-recovery.md"
@@ -1737,20 +1752,23 @@
     "scripts/lib/compose-safety.mjs": [
       "docs/architecture/delivery-surfaces-runbook.md"
     ],
+    "scripts/lib/converge-hooks-dir.mjs": [
+      "docs/testing/pre-pr-gate.md"
+    ],
     "scripts/lib/dco-signoff.mjs": [
       "docs/architecture/build-gate-runbook.md"
     ],
     "scripts/lib/dockerfile-portal-build.test.mjs": [
       "docs/install/platform-support-watchlist.md"
     ],
-    "scripts/lib/ensure-pre-push-hook.mjs": [
-      "docs/testing/pre-pr-gate.md"
-    ],
     "scripts/lib/entry-module.mjs": [
       "docs/install/platform-support-watchlist.md"
     ],
     "scripts/lib/gate-context.mjs": [
       "docs/testing/pr-health.md"
+    ],
+    "scripts/lib/hooks-dir.mjs": [
+      "docs/testing/pre-pr-gate.md"
     ],
     "scripts/lib/junction-safe-worktree-remove.mjs": [
       "docs/architecture/delivery-surfaces-runbook.md"
@@ -1760,6 +1778,9 @@
       "docs/operations/runtime-glossary.md"
     ],
     "scripts/lib/local-integration-ci.mjs": [
+      "docs/testing/pre-pr-gate.md"
+    ],
+    "scripts/lib/local-integration-status.mjs": [
       "docs/testing/pre-pr-gate.md"
     ],
     "scripts/lib/mcp-client.mjs": [
@@ -2388,6 +2409,7 @@
       "apps/web/lib/build/unified-wip.ts",
       "apps/web/lib/build/wip-cap.ts",
       "apps/web/lib/operate/db-continuity.ts",
+      "packages/dpf-skill-pack/hooks/workroom-claim-guard.mjs",
       "packages/dpf-skill-pack/hooks/worktree-create.mjs",
       "scripts/lib/compose-safety.mjs",
       "scripts/lib/junction-safe-worktree-remove.mjs",
@@ -2834,6 +2856,7 @@
     ],
     "docs/runbooks/bet5-windows-self-upgrade.md": [
       "apps/web/lib/self-upgrade/host-memory-preflight.ts",
+      "dpf-start.ps1",
       "scripts/promote.sh"
     ],
     "docs/security/2026-05-24-shift-left-rollout.md": [
@@ -2963,6 +2986,8 @@
       "apps/web/lib/testing/degenerate-env/probe-conformance.test.ts",
       "docker-compose.local-ci.yml",
       "packages/dpf-skill-pack/hooks/pregate-evidence-guard.mjs",
+      "scripts/check-agent-principal-convergence-wired.mjs",
+      "scripts/check-guard-conformance-marks.mjs",
       "scripts/check-guards.mjs",
       "scripts/check-label-association.mjs",
       "scripts/check-live-blocker-references.mjs",
@@ -2970,9 +2995,12 @@
       "scripts/ci-policy-guards.test.mjs",
       "scripts/gate-worktree.mjs",
       "scripts/gate-worktree.sh",
+      "scripts/hooks/converge-git-hooks.mjs",
       "scripts/lib/ci-policy-guards.mjs",
-      "scripts/lib/ensure-pre-push-hook.mjs",
+      "scripts/lib/converge-hooks-dir.mjs",
+      "scripts/lib/hooks-dir.mjs",
       "scripts/lib/local-integration-ci.mjs",
+      "scripts/lib/local-integration-status.mjs",
       "scripts/local-ci-runner.mjs",
       "scripts/pr-health.mjs",
       "scripts/set-hooks-path.mjs",

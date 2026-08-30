@@ -75,6 +75,24 @@ function deliveryState(result: ResolveCompletionEvidenceResult) {
     : "missing" as const;
 }
 
+/**
+ * The completion-evidence policy computes precise blockers — "missing
+ * production-build", "the manifest does not match this item's work type" — and
+ * `deliveryState()` flattens all of them into one word.
+ *
+ * BI-28E8CB88 (recurrence 2026-08-27): on BI-3727106F, `update_backlog_item_status`
+ * answered `DELIVERY_EVIDENCE_REQUIRED  state: missing  evidenceRefs:
+ * ["cmtb1e3it09mb01o0k78v8o7k"]` — it listed the evidence ref and still reported
+ * `missing`, on a fix that was merged, green and independently verified. Carry
+ * the reasons through so the caller is told which dimension is actually unmet.
+ */
+function deliveryReasons(result: ResolveCompletionEvidenceResult): string[] {
+  if (result.kind !== "evaluated" || result.verdict.allowed) return [];
+  const reasons = result.verdict.blockers.map((entry) => entry.message);
+  if (result.verdict.nextAction) reasons.push(result.verdict.nextAction);
+  return reasons;
+}
+
 export async function completeBacklogItemTransition(args: {
   db?: BacklogTerminalDb;
   itemId: string;
@@ -160,6 +178,7 @@ export async function completeBacklogItemTransition(args: {
             ACCEPTANCE_EVIDENCE_REQUIRED: reconciliation.evidenceRefs,
             OBJECTIVE_RECONCILIATION_REQUIRED: reconciliation.evidenceRefs,
           },
+          requirementReasons: { DELIVERY_EVIDENCE_REQUIRED: deliveryReasons(completion) },
         },
         evaluatedAt,
       });

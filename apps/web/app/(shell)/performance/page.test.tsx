@@ -26,6 +26,7 @@ describe("PerformancePage", () => {
       asOf: null,
       metricValues: [],
       source: "business-performance-read-model",
+      applicable: true,
     });
   });
 
@@ -43,6 +44,26 @@ describe("PerformancePage", () => {
     expect(html).toContain("data-dpf-primary-action");
     expect(html).not.toContain(">0<");
     expect(loadBusinessPerformance).toHaveBeenCalledWith({ userId: "user-owner" });
+  });
+
+  it("says the surface is unavailable (not pending) when the archetype has no metrics engine", async () => {
+    // BI-F359E1E9: the not-applicable state must not imply a snapshot is coming.
+    vi.mocked(loadBusinessPerformance).mockResolvedValue({
+      status: "not-configured",
+      reason:
+        "Performance snapshots are not available for this business type yet — the metrics engine currently covers hospitality operations.",
+      asOf: null,
+      metricValues: [],
+      source: "business-performance-read-model",
+      applicable: false,
+    });
+
+    const html = renderToStaticMarkup(await PerformancePage());
+
+    expect(html).toContain("Performance isn&#x27;t available for this business type");
+    expect(html).toContain("not available for this business type yet");
+    expect(html).not.toContain("Performance history is not ready yet");
+    expect(html).not.toContain("We will not show made-up numbers.");
   });
 
   it("does not add a second primary or local navigation component", async () => {

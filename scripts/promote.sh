@@ -276,6 +276,7 @@ _release_mode=0
 _release_identity_mode="legacy-no-config"
 if [[ "${DPF_PROMOTION_MODE:-source}" == "release" ]]; then
   _release_mode=1
+  [[ -n "${PROMOTE_INSTALL_ROOT:-}" ]] || _missing+=(PROMOTE_INSTALL_ROOT)
   [[ "${DPF_RELEASE_TAG:-}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-+][A-Za-z0-9.-]+)?$ ]] || _missing+=(DPF_RELEASE_TAG)
   # Portals released before the registry-authoritative upgrade contract do not
   # send a config digest. Keep that one-hop bootstrap path working; repaired
@@ -897,9 +898,13 @@ fi
 # compose is rerun against the restored old tag to put the portal back too.
 emit_step release-identity-commit
 if [[ $_release_mode -eq 1 && $_dry_run -eq 0 ]]; then
+  [[ -d "$PROMOTE_INSTALL_ROOT" && -w "$PROMOTE_INSTALL_ROOT" ]] || {
+    printf 'error: canonical install root %s is not a writable directory\n' "${PROMOTE_INSTALL_ROOT:-<unset>}" >&2
+    exit 1
+  }
   if ! node "$_promoter_dir/installer/install-release-assets.mjs" \
     --source "$_release_assets" \
-    --install "$PROMOTE_SOURCE" \
+    --install "$PROMOTE_INSTALL_ROOT" \
     --state "$_install_state" \
     --tag "$DPF_RELEASE_TAG" \
     --owner "$GHCR_OWNER" \

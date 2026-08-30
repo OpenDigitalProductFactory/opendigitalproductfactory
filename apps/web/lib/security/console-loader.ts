@@ -28,7 +28,10 @@ export async function loadSocConsole(opts?: { lookbackMinutes?: number }): Promi
 
   const [detections, cases, activeSources, allSources, recent] = await Promise.all([
     prisma.detection.findMany({
-      where: { lastSeenAt: { gte: since } },
+      // BI-7D1EC4B9: no time window. "Open detections" is a status count and must be
+      // consistent with the all-time "Open cases" shown beside it — windowing detections
+      // to 24h hid every open detection older than a day (43 of them, next to 12 open
+      // cases). `activeSources` below keeps its 24h window; "active" IS a recency concept.
       select: { severity: true, status: true },
       take: 5000,
     }),

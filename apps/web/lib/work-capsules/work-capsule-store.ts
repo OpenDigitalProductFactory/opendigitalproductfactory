@@ -8,6 +8,7 @@ import {
   isWorkCapsuleEvidenceKind,
   isAgentActivityKind,
   type AgentActivityKind,
+  capsuleRepositoryFullName,
   isWorkCapsuleExecutorKind,
   isWorkCapsuleSource,
   isWorkCapsuleStatus,
@@ -31,7 +32,7 @@ import {
   isReusableLiveCapsule,
   isTerminalCapsuleStatus,
   leaseUntil,
-  planAbandonedCapsuleResume,
+  planTerminalCapsuleResume,
   readBranchIdentityCapsule,
   TERMINAL_CAPSULE_STATUSES,
   defaultPlatformRepositoryFullName,
@@ -54,7 +55,7 @@ type CapsuleCreateInput = {
   executorKind?: WorkCapsuleExecutorKind | null;
   executorRef?: string | null;
   status?: WorkCapsuleStatus;
-  /** Keyed branch identity is (repositoryFullName, headBranch) — never null (BI-F83CF689). */
+  /** Branch identity is (repositoryFullName, headBranch); null for a business capsule. */
   repositoryFullName?: string | null;
   backlogItemId?: string | null;
   epicId?: string | null;
@@ -143,7 +144,7 @@ export async function createWorkCapsule(args: {
           source: args.input.source,
           executorKind: args.input.executorKind ?? null,
           executorRef: args.input.executorRef ?? null,
-          repositoryFullName: args.input.repositoryFullName?.trim() || defaultPlatformRepositoryFullName(),
+          repositoryFullName: capsuleRepositoryFullName(args.input.source, args.input.repositoryFullName, defaultPlatformRepositoryFullName),
           backlogItemId: args.input.backlogItemId ?? null,
           epicId: args.input.epicId ?? null,
           featureBuildId: args.input.featureBuildId ?? null,
@@ -202,7 +203,7 @@ export async function adoptWorktreeCapsule(args: {
   const { existing, repositoryUnbound } = await readBranchIdentityCapsule(args.db, args.input);
 
   const now = new Date();
-  const resumePlan = planAbandonedCapsuleResume({ existing, input: args.input, actor: args.actor, now });
+  const resumePlan = planTerminalCapsuleResume({ existing, input: args.input, actor: args.actor, now });
   if (resumePlan) {
     return inTransaction(args.db, async (tx) => {
       await admitCapsuleWork(tx, "work-capsule:external-adoption");

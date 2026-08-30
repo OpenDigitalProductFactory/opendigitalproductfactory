@@ -220,7 +220,21 @@ guards host-natively — the same check commands CI's Policy Guards jobs run
 (module size, style drift, derived-artifact staleness, doc links, SBOM, plus
 the workspace-dependent prose ratchet, and the commit-range-driven UX-Fit and
 Design Grounding trailer gates), with guard self-tests stripped and
-PR-body-dependent gates (Seed-Fit, Decision Baseline) left to CI. A violation
+PR-body-dependent gates (Seed-Fit, Decision Baseline) left to CI.
+
+**Not every `node --test` is a self-test (BI-7B249AFE).** Some files in the
+guard profiles assert **live repository state** rather than guard logic, so
+stripping one removes the only check on the tree being pushed and the preflight
+reports clean where CI fails deterministically — measured on #4737, where the
+preflight said "52 guards clean" and CI then failed on
+`check-instruction-plane-rule-coverage.test.mjs`. Those commands are marked
+`conformanceTest(...)` in `scripts/lib/ci-policy-guards.mjs` and run host-side.
+The mark is not discretionary: `scripts/check-guard-conformance-marks.mjs`
+detects the shape (a repo root bound from `import.meta.url`, read through) and
+fails when a detected file is unmarked, so a new repository-reading self-test
+cannot quietly rejoin the stripped set. 15 files carry the mark today, costing
+about 11s. Genuine guard unit tests stay stripped — over-marking would turn the
+preflight into the full CI suite. A violation
 aborts in well under a minute **before any lease is claimed**, so a doomed run
 never occupies the contended sandbox slot. A guard this host cannot execute
 (missing isolated or workspace runtime) is reported as
@@ -240,7 +254,7 @@ Run it standalone with `pnpm run pregate:preflight`
 still enforces every guard. Routing probes (`--dry-run`) and evidence replays
 (`--finalize-evidence`) skip the preflight automatically.
 
-**Documentation evidence lane (BI-B2E9FC9D).** After preflight and before any
+**Documentation evidence lane.** After preflight and before any
 `local-integration-ci` lease claim, the Node gate checks whether the committed
 candidate is an exact documentation-only tree. This lane is deliberately
 fail-closed: `HEAD` must equal the requested SHA, the worktree must be clean,
@@ -308,7 +322,22 @@ admitted lease. A later equivalent caller receives `subscribed` and observes
 the canonical execution without renewing, releasing, recording evidence, or
 starting the command. Once the owner links a fresh terminal pass or fail
 receipt, later callers receive `reused` and stop without recomputation.
-Missing, mismatched, inconclusive, or expired evidence remains fail-closed.
+Mismatched, inconclusive, or expired evidence remains fail-closed: evidence
+exists and does not fit, which is a real conclusion.
+
+**A run that DIED is not a verdict.** A terminal lease carrying no
+evidence record describes an execution that never reported — the executor was
+killed, or the portal rejected its status write. Since the immutable key hashes
+the integration *tree* rather than the commit, refusing such a claim used to
+brick that tree permanently: a fresh commit of identical content reproduces the
+key and the refusal, and `claimKey` is unique, so the dead row is the tree's only
+route back to the gate. The claim now revives that row and runs again. Nothing is
+reused, so nothing is weakened. Two rules keep it honest: the gate records
+*something* even when the portal rejects its status — an unknown status is
+recorded as `failed` with the real class in the summary — and a parity test
+asserts every status `classifyGateOutcome` can emit is one
+`record_local_integration_result` accepts, from the single closed set in
+`scripts/lib/local-integration-status.mjs`.
 
 The same identity rule coordinates assembled semantic review through the
 existing `TaskRun` carrier: one caller dispatches, concurrent callers subscribe,
@@ -625,10 +654,15 @@ and summary remain the default diagnostic surface.
 gitignored (git-lfs generates it), so the enforced logic ships as the tracked
 [`.githooks/lib/pre-push-chained.sh`](../../.githooks/lib/pre-push-chained.sh)
 — Git LFS first, then [`.githooks/pre-push-gate`](../../.githooks/pre-push-gate)
-— and `postinstall` (`scripts/set-hooks-path.mjs` →
-`scripts/lib/ensure-pre-push-hook.mjs`) converges the local shim to delegate to
-it (a hand-rolled custom hook is never clobbered; the install prints a warning
-instead). The gate refuses a push when the latest local-CI gate record is
+— and convergence rewrites the local shim to delegate to it. Convergence runs
+in two places, both through the same sequencer
+([`scripts/lib/converge-hooks-dir.mjs`](../../scripts/lib/converge-hooks-dir.mjs)):
+`postinstall` (`scripts/set-hooks-path.mjs`) and **every session start**
+([`scripts/hooks/converge-git-hooks.mjs`](../../scripts/hooks/converge-git-hooks.mjs)),
+which also sweeps sibling worktrees. A hand-rolled custom hook is never
+clobbered — convergence reports it and leaves it alone — and a tree missing
+`.githooks/lib/pre-push-chained.sh` is skipped rather than given a shim that
+would exec a missing script and fail every push. The gate refuses a push when the latest local-CI gate record is
 missing, belongs to a different branch/SHA, has `gatePassed=false`, has no
 `expiresAt`, or is past `expiresAt`. Not everything needs a record: docs-only
 diffs vs the configured comparison base, delete/tag-only pushes, detached HEAD,
@@ -637,6 +671,40 @@ installs, `DPF_PREPUSH_BASE_REF=<ref>`
 changes the docs-only comparison base to a local accepted-base ref (default:
 `origin/main`); if that configured ref is missing, the hook requires the normal
 SHA-bound gate record instead of silently falling back.
+
+**Convergence failures are reported, not swallowed.** Until
+2026-08-27 this chain was never active on Windows. `set-hooks-path.mjs`
+resolved its hooks directory with `new URL('../.githooks/', import.meta.url)
+.pathname`, which returns `/D:/repo/.githooks/` on Windows; `path.join` turned
+that into an unopenable `\D:\repo\.githooks\`, every `fs` call threw `ENOENT`,
+and a bare `catch {}` discarded it. `postinstall` exited 0, `.githooks/pre-push`
+stayed the stock git-lfs shim, and **a clean `git push` on Windows meant the
+gate never ran — not that it passed.** The post-checkout uncommitted-work guard
+was dead by the same path. Resolution now goes through `fileURLToPath`
+([`scripts/lib/hooks-dir.mjs`](../../scripts/lib/hooks-dir.mjs)), and a
+convergence that cannot complete prints a warning naming the consequence rather
+than failing silently. If `postinstall` reports `could not converge
+.githooks/pre-push`, the gate is not protecting your pushes — repair it before
+relying on a green push.
+
+**Verify by sweeping, never by spot-checking.** `head -4
+.githooks/pre-push` answers for one tree, and one tree is not the estate: when
+this was measured on 2026-08-26, **68 of 85 worktrees** on a single install
+carried the stock shim and pushed with no gate. Two things made that possible.
+Convergence ran only at `pnpm install`, so any tree not reinstalled since a fix
+kept the dead shim; and it ran the tree's *own* copy of the converger, so a tree
+sitting on a base that predated the fix could never repair itself — the fix
+reached only trees that already had it. Session-start convergence closes both:
+the session that just started is by construction running current code, and it
+repairs its siblings. To check the whole estate at once:
+
+```bash
+for wt in $(git worktree list --porcelain | awk '/^worktree /{print substr($0,10)}'); do grep -q pre-push-chained.sh "$wt/.githooks/pre-push" 2>/dev/null || echo "UNGATED $wt"; done
+```
+
+Treat an ungated tree as a gate that has not run, not as a gate that passed: a
+clean push from an ungated tree is byte-identical to a clean push from a gated
+one, which is why the outage stayed invisible for a week.
 
 The bypass is **recorded, never silent** — the reason is persisted into the
 gate state file and surfaced by `pnpm pr:health` at PR time:
@@ -873,6 +941,41 @@ node scripts/check-live-blocker-references.mjs --update   # regenerate the grand
 Prefer naming the **condition** the reader is hitting over any id: a condition
 does not go stale when the work behind it ships. If an id genuinely belongs in
 the text, repoint it at the live item.
+
+### Agent Principal Convergence Guard
+
+`scripts/check-agent-principal-convergence-wired.mjs` fails a PR that stops the
+seed converging a `Principal` for every agent, or that hoists the convergence
+above an agent seeder.
+
+Every agent needs a Principal, because governed receipts are attributed to one
+and the independence rules are expressed entirely in terms of principals.
+Convergence was applied to `User` rows and not to `Agent` rows, so on a seeded
+install 71 of 76 `AGT-*` agents had no identity — `AGT-WS-REVIEW`, the
+designated independent Change Reviewer, among them.
+
+`resolveReviewerIdentity` falls back to the authenticated human when an agent
+alias misses, which is right on its own terms: an external CLI session label
+carries an agent id and is genuinely a human acting. With no alias it always
+missed, so a coworker that was summoned and did call the writer had its receipt
+attributed to the delegating human — the artifact's author, the one identity
+independence forbids. Every `independent: true` lane was unsatisfiable and the
+refusal advised summoning a coworker, which is what the operator had just done.
+
+No source check can prove the DATA converged; that is the seed's job at run
+time. This guard proves the seed still runs the convergence, still runs it after
+**both** agent seeders — either can introduce an agent with no identity — and
+that the convergence module still writes the `aliasType: "agent"` alias the
+reviewer lookup reads.
+
+```bash
+node scripts/check-agent-principal-convergence-wired.mjs
+node --test scripts/check-agent-principal-convergence-wired.test.mjs
+```
+
+If a summoned reviewer's receipt is refused as non-independent, check whether
+its agent id has a Principal before re-summoning: summoning again cannot fix a
+coworker that has no identity to be attributed to.
 
 ### Label Association Guard (ratchet)
 

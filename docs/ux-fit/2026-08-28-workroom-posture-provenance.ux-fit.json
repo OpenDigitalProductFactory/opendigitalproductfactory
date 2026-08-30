@@ -1,0 +1,19 @@
+{
+  "version": "1",
+  "decidedOption": "nested-collapsed-disclosure",
+  "decisionInteractionId": "DI-EC67B219E83A",
+  "scope": {
+    "files": [
+      "apps/web/components/workspace/workroom/WorkroomPostureProvenance.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "nested-collapsed-disclosure",
+      "new-visible-section",
+      "assignments-route"
+    ],
+    "notes": "BI-4EB2F1D0 (EP-WORK-POSTURE slice H) renders the posture provenance chain. Scored via principle_decide (DI-EC67B219E83A, profile mark-dpf-platform, 41 principles applied, structured coverage strong): nested-collapsed-disclosure composite 10.99, new-visible-section 6.11, assignments-route 2.78 — margin 4.88, confidence high, autonomy eligible with no blockers. The decisive axis is human_cognitive_load, which is a COST axis: the two rejected options raise it (0.85 and 0.95) because they put a six-layer decision chain on an arrival view. The chain is nested inside the room surface's existing 'Pace and priority' disclosure, which is already collapsed, so defaultVisibleWords for the arrival view is unchanged — the UX budget measure excises collapsed content (apps/web/lib/ux-budget/evaluate.ts:98). It also replaces the flat 'Why' list the section rendered before, so the same clamp reasons appear once rather than twice. The assignments-route option was rejected on measured grounds as well as scored ones: /platform/ai/assignments is recorded in the committed baseline at 1193 visible words against a 450 budget and 37 visible fields against a budget of 8 (BI-6786CE44), so it is the wrong place to add anything visible."
+  }
+}

@@ -14,7 +14,11 @@ export default async function ItemInquirePage({
   ]);
   if (!storefront || !item) notFound();
 
-  const formSchema = await resolveInquiryFormSchema(storefront.archetypeId);
+  // A donation appeal may legitimately ask for an amount; nothing else may
+  // (BI-7F851119) — an adoption enquiry is not a donation.
+  const formSchema = await resolveInquiryFormSchema(storefront.archetypeId, {
+    itemCtaType: item.ctaType,
+  });
 
   const CTA_HEADINGS: Record<string, string> = {
     rental: "Reserve",

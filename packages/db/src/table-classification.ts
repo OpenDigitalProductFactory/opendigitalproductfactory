@@ -206,6 +206,12 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   EmployeeAddress: "confidential",
   EmploymentEvent: "confidential",
   TerminationRecord: "confidential",
+  // Employment-law judgements about a named worker (BI-C61CEEA9). A
+  // classification decides whether the organisation may direct them and
+  // whether they accrue entitlements; the evidence and rationale behind it
+  // are free-shaped and can hold personal data.
+  WorkerClassificationDetermination: "confidential",
+  WorkerEngagementTerm: "confidential",
   Team: "confidential",
   TeamMembership: "confidential",
   Agent: "confidential",
@@ -287,6 +293,14 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   // credential/contract records. Copying it without those parents creates an
   // invalid preview and exposes organization-specific provider governance.
   AiProviderConnection: "restricted",
+  // MCP OAuth authorization server (BI-E4DFDCB0). All three hold or gate
+  // credentials: OAuthClient carries a hashed AND an encrypted client secret,
+  // and the code/refresh tables hold hashes that are directly exchangeable for
+  // an access token. "restricted" means never copied to a dev environment,
+  // which is the only correct answer for an auth-token table.
+  OAuthClient: "restricted",
+  OAuthAuthorizationCode: "restricted",
+  OAuthRefreshToken: "restricted",
   // Embeddings are derived from source content and may retain semantic detail
   // even when the source text is otherwise obfuscated.
   VectorEmbedding: "restricted",

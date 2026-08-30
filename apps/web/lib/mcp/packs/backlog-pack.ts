@@ -20,7 +20,13 @@ import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { handleUpdateBacklogItem } from "./backlog-update-item-handler";
 import { updateBuildHappyPathState } from "@/lib/mcp/build-tool-helpers";
 import { optionalStringParam, stringArrayParam, validScopeKind } from "./backlog-scope-metadata";
-import { getBacklogItem, listBacklogItems, listEpics, queryBacklog } from "./backlog-pack-read-tools";
+import {
+  getBacklogItem,
+  getNextRecommendedWork,
+  listBacklogItems,
+  listEpics,
+  queryBacklog,
+} from "./backlog-pack-read-tools";
 import type { BacklogIngestInput } from "@/lib/operate/backlog-ingest";
 import type { ToolResult } from "@/lib/mcp-tools";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
@@ -626,132 +632,6 @@ async function linkBacklogItemToEpic(
       epicId: targetEpicSemantic,
       ...(epicLinkAdvisory ? { advisory: epicLinkAdvisory } : {}),
     },
-  };
-}
-
-async function getNextRecommendedWork(params: Record<string, unknown>): Promise<ToolResult> {
-  const { prisma } = await import("@dpf/db");
-  const { rankCandidates } = await import("@/lib/backlog/recommend");
-  const { buildSpecPlanReferenceIndex } = await import("@/lib/backlog/spec-plan-search");
-  const { projectBacklogItemReadinessSummary } = await import("@/lib/backlog/initiative-readiness/entry-adapter");
-
-  const count = typeof params["count"] === "number" ? params["count"] : undefined;
-  const epicIdRaw = typeof params["epicId"] === "string" ? params["epicId"].trim() : "";
-  const forAgentId = typeof params["forAgentId"] === "string" ? params["forAgentId"] : null;
-  const excludeItemIds = Array.isArray(params["excludeItemIds"])
-    ? (params["excludeItemIds"] as unknown[]).filter((x): x is string => typeof x === "string")
-    : [];
-  const mode = params["mode"] === "implementation-ready"
-    ? "implementation-ready"
-    : "design-candidate";
-
-  const where: Record<string, unknown> = {
-    status: { in: ["open", "triaging"] },
-  };
-  if (epicIdRaw) {
-    const epicRow = await prisma.epic.findFirst({
-      where: { OR: [{ epicId: epicIdRaw }, { id: epicIdRaw }] },
-      select: { id: true },
-    });
-    if (epicRow) where["epicId"] = epicRow.id;
-    else
-      return {
-        success: false,
-        error: "epic_not_found",
-        message: `No epic matched ${epicIdRaw}`,
-      };
-  }
-
-  const items = await prisma.backlogItem.findMany({
-    where,
-    take: 200,
-    orderBy: [{ priority: "asc" }, { updatedAt: "desc" }],
-    select: {
-      itemId: true,
-      title: true,
-      status: true,
-      priority: true,
-      demandScore: true,
-      effortSize: true,
-      triageOutcome: true,
-      type: true,
-      source: true,
-      workType: true,
-      scopeKind: true,
-      archetypeCategories: true,
-      archetypeIds: true,
-      activeBuildId: true,
-      claimedById: true,
-      claimedByAgentId: true,
-      updatedAt: true,
-      epic: { select: { epicId: true, status: true } },
-      activeBuild: { select: { kind: true } },
-      activities: {
-        where: { kind: { in: ["initiative_gate_receipt", "initiative_scope_baseline", "plan_backlog_coverage"] } },
-        orderBy: [{ recordedAt: "desc" }, { id: "desc" }],
-        take: 100,
-        select: { id: true, kind: true, gateKey: true, recordedAt: true, payload: true },
-      },
-    },
-  });
-
-  const refIndex = await buildSpecPlanReferenceIndex();
-  const candidates = items.map((i) => {
-    const semanticEpic = i.epic?.epicId ?? null;
-    const hasSpec =
-      refIndex.specs.has(i.itemId) || (semanticEpic ? refIndex.specs.has(semanticEpic) : false);
-    const hasPlan =
-      refIndex.plans.has(i.itemId) || (semanticEpic ? refIndex.plans.has(semanticEpic) : false);
-    const readiness = projectBacklogItemReadinessSummary({
-      item: {
-        id: i.itemId,
-        itemId: i.itemId,
-        type: i.type,
-        source: i.source,
-        workType: i.workType,
-        scopeKind: i.scopeKind,
-        archetypeCategories: i.archetypeCategories,
-        archetypeIds: i.archetypeIds,
-        activeBuildKind: i.activeBuild?.kind ?? null,
-      },
-      activities: (i.activities ?? []).map((activity) => ({ ...activity, gateKey: activity.gateKey ?? null })),
-      hasSpec,
-      hasPlan,
-      evaluatedAt: new Date().toISOString(),
-    });
-    return {
-      itemId: i.itemId,
-      title: i.title,
-      status: i.status,
-      priority: i.priority,
-      demandScore: i.demandScore,
-      effortSize: i.effortSize,
-      triageOutcome: i.triageOutcome,
-      hasActiveBuild: i.activeBuildId != null,
-      claimedById: i.claimedById,
-      claimedByAgentId: i.claimedByAgentId,
-      epicId: semanticEpic,
-      epicStatus: i.epic?.status ?? null,
-      hasSpec,
-      hasPlan,
-      implementationReadinessVerdict: readiness.decisions.implementation.verdict,
-      updatedAt: i.updatedAt,
-    };
-  });
-
-  const ranked = rankCandidates(candidates, {
-    excludeItemIds,
-    forAgentId,
-    count,
-    mode,
-  });
-
-  return {
-    success: true,
-    message: mode === "implementation-ready"
-      ? `Recommending ${ranked.length} implementation-ready item(s).`
-      : `Recommending ${ranked.length} design candidate(s).`,
-    data: { mode, recommendations: ranked },
   };
 }
 

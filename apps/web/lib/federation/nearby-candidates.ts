@@ -1,4 +1,6 @@
-import { isIP } from "node:net";
+import { isFederationScopedEndpoint } from "@dpf/validators";
+
+import { normalizeOrganizationRef } from "@/lib/install/estate-identity-contract";
 
 const CANDIDATE_TTL_MS = 2 * 60_000;
 
@@ -12,6 +14,17 @@ export interface NearbyFederationCandidateInput {
   protocol: "1";
   capabilityDigest: string;
   pairPath: "/connect/pair";
+  /**
+   * The estate the peer advertises, when its discovery record carried one.
+   *
+   * Optional on purpose. An Edge Node that predates this field, or a peer that
+   * has never been named, simply advertises nothing — and an absent ref makes
+   * `evaluateOrganizationEnrollment` answer `manual-approval`, which is the
+   * correct outcome rather than a regression. A self-asserted name grants no
+   * trust by itself: the same decision independently requires the peer's
+   * certificate chain to validate against the pinned organization root.
+   */
+  organizationRef?: string;
 }
 
 export interface NearbyFederationCandidate extends NearbyFederationCandidateInput {
@@ -35,43 +48,16 @@ const candidates =
   globalCandidateCache.__dpfNearbyFederationCandidates ??
   (globalCandidateCache.__dpfNearbyFederationCandidates = new Map());
 
-export function isLinkLocalFederationEndpoint(value: string): boolean {
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    return false;
-  }
-  if (
-    (url.protocol !== "http:" && url.protocol !== "https:") ||
-    url.username !== "" ||
-    url.password !== "" ||
-    (url.pathname !== "" && url.pathname !== "/") ||
-    url.search !== "" ||
-    url.hash !== ""
-  ) {
-    return false;
-  }
-  const host = url.hostname
-    .toLowerCase()
-    .replace(/^\[|\]$/g, "")
-    .replace(/\.$/, "");
-  if (host.endsWith(".local")) return true;
-  const ipVersion = isIP(host);
-  if (ipVersion === 4) {
-    if (/^10\./.test(host) || /^192\.168\./.test(host)) return true;
-    const match172 = /^172\.(\d{1,3})\./.exec(host);
-    if (match172 && Number(match172[1]) >= 16 && Number(match172[1]) <= 31) return true;
-    return /^169\.254\./.test(host);
-  }
-  if (ipVersion !== 6) return false;
-  const firstHextet = Number.parseInt(host.split(":", 1)[0] ?? "", 16);
-  return (
-    host === "::1" ||
-    (firstHextet >= 0xfe80 && firstHextet <= 0xfebf) ||
-    (firstHextet >= 0xfc00 && firstHextet <= 0xfdff)
-  );
-}
+/**
+ * Whether an endpoint is inside the scope discovery may report.
+ *
+ * The rule itself lives in `@dpf/validators` because the Edge Node that PRODUCES
+ * candidates has to apply the same one the Authority accepts by — a scanner and
+ * an acceptor that disagreed about scope would either drop good peers or submit
+ * batches the route refuses. Re-exported under the name this module has always
+ * used so its callers are unaffected.
+ */
+export const isLinkLocalFederationEndpoint = isFederationScopedEndpoint;
 
 function normalizedAuthorityUrl(value: string): string {
   const url = new URL(value);
@@ -105,10 +91,14 @@ export function recordNearbyFederationCandidates(input: {
     if (endpoint === local) continue;
     const protocol = new URL(endpoint).protocol;
     const key = `${candidate.discoveryId}\u0000${endpoint}`;
+    const organizationRef = normalizeOrganizationRef(candidate.organizationRef);
     candidates.set(key, {
       ...candidate,
       source: "lan",
       endpoint,
+      // Normalised on the way IN, with the same function the local ref uses, so
+      // the two are already comparable by the time a decision reads them.
+      ...(organizationRef ? { organizationRef } : { organizationRef: undefined }),
       edgeNodeId: input.edgeNodeId,
       observedAt: input.observedAt.toISOString(),
       expiresAt: new Date(now.getTime() + CANDIDATE_TTL_MS).toISOString(),

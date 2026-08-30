@@ -1344,6 +1344,14 @@ model FeaturePack {
   updatedAt DateTime @updatedAt
 }
 
+enum SelfUpgradeDispatchStatus {
+  admission_pending
+  dispatching
+  dispatched
+  indeterminate
+  dispatch_failed
+}
+
 model SelfUpgradeRun {
   id                    String    @id @default(cuid())
   runId                 String    @unique
@@ -1361,6 +1369,28 @@ model SelfUpgradeRun {
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
+  // A recovery admission never rewrites its terminal predecessor. The unique
+  // self-relation makes the one permitted successor explicit and auditable.
+  recoveryOfRunId String?         @unique
+  recoveryOf      SelfUpgradeRun? @relation("SelfUpgradeRecovery", fields: [recoveryOfRunId], references: [runId], onDelete: Restrict, onUpdate: Cascade)
+  recoveredBy     SelfUpgradeRun? @relation("SelfUpgradeRecovery")
+
+  // BI-3FD07259 — durable admission precedes queue I/O. Nullable dispatch
+  // state preserves historical rows created before the admission contract.
+  targetTag              String?
+  requestedForce         Boolean                    @default(false)
+  dryRun                 Boolean                    @default(false)
+  routine                Boolean                    @default(false)
+  admissionFingerprint   String?
+  dispatchStatus         SelfUpgradeDispatchStatus?
+  dispatchAttemptCount   Int                        @default(0)
+  dispatchLeaseToken     String?
+  dispatchLeaseExpiresAt DateTime?
+  dispatchEventIds       String[]                   @default([])
+  dispatchAttemptedAt    DateTime?
+  dispatchAcknowledgedAt DateTime?
+  dispatchError          String?                    @db.Text
+
   // The "What's in this update?" summary the operator reviewed when launching
   // this upgrade — attached so the run records the changes it carried, and so
   // the summary survives the process restart the swap triggers.
@@ -1375,6 +1405,8 @@ model SelfUpgradeRun {
   changeRequest   ChangeRequest? @relation("SelfUpgradeChangeRecord", fields: [changeRequestId], references: [id])
 
   @@index([status, createdAt])
+  @@index([dispatchStatus, dispatchLeaseExpiresAt])
+  @@index([admissionFingerprint])
   @@index([targetSha])
   @@index([impactSummaryId])
 }

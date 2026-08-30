@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 634,
+  "routeCount": 642,
   "routes": [
     {
       "routePath": "/",
@@ -34,6 +34,16 @@
       "file": "apps/web/app/.well-known/agent-card/[agentId]/route.ts"
     },
     {
+      "routePath": "/.well-known/dpf-federation.json",
+      "kind": "route",
+      "segments": [
+        ".well-known",
+        "dpf-federation.json"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/.well-known/dpf-federation.json/route.ts"
+    },
+    {
       "routePath": "/.well-known/dpf-instance.json",
       "kind": "route",
       "segments": [
@@ -42,6 +52,42 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/.well-known/dpf-instance.json/route.ts"
+    },
+    {
+      "routePath": "/.well-known/oauth-authorization-server",
+      "kind": "route",
+      "segments": [
+        ".well-known",
+        "oauth-authorization-server"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/.well-known/oauth-authorization-server/route.ts",
+      "exposure": "public"
+    },
+    {
+      "routePath": "/.well-known/oauth-protected-resource",
+      "kind": "route",
+      "segments": [
+        ".well-known",
+        "oauth-protected-resource"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/.well-known/oauth-protected-resource/route.ts",
+      "exposure": "public"
+    },
+    {
+      "routePath": "/.well-known/oauth-protected-resource/api/mcp/v1",
+      "kind": "route",
+      "segments": [
+        ".well-known",
+        "oauth-protected-resource",
+        "api",
+        "mcp",
+        "v1"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/.well-known/oauth-protected-resource/api/mcp/v1/route.ts",
+      "exposure": "public"
     },
     {
       "routePath": "/admin",
@@ -1092,6 +1138,54 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/api/metrics/route.ts"
+    },
+    {
+      "routePath": "/api/oauth/authorize",
+      "kind": "route",
+      "segments": [
+        "api",
+        "oauth",
+        "authorize"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/oauth/authorize/route.ts",
+      "exposure": "public"
+    },
+    {
+      "routePath": "/api/oauth/register",
+      "kind": "route",
+      "segments": [
+        "api",
+        "oauth",
+        "register"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/oauth/register/route.ts",
+      "exposure": "public"
+    },
+    {
+      "routePath": "/api/oauth/revoke",
+      "kind": "route",
+      "segments": [
+        "api",
+        "oauth",
+        "revoke"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/oauth/revoke/route.ts",
+      "exposure": "public"
+    },
+    {
+      "routePath": "/api/oauth/token",
+      "kind": "route",
+      "segments": [
+        "api",
+        "oauth",
+        "token"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/oauth/token/route.ts",
+      "exposure": "public"
     },
     {
       "routePath": "/api/onboarding/business-document",
@@ -4399,7 +4493,8 @@
         "customer-login"
       ],
       "dynamicParams": [],
-      "file": "apps/web/app/(customer-auth)/customer-login/page.tsx"
+      "file": "apps/web/app/(customer-auth)/customer-login/page.tsx",
+      "redirectTo": "/s/[slug]/sign-in"
     },
     {
       "routePath": "/customer/[id]",
@@ -5419,7 +5514,8 @@
         "health"
       ],
       "dynamicParams": [],
-      "file": "apps/web/app/(shell)/ops/health/page.tsx"
+      "file": "apps/web/app/(shell)/ops/health/page.tsx",
+      "redirectTo": "/portfolio/product/[id]/health"
     },
     {
       "routePath": "/ops/improvements",
@@ -5500,7 +5596,8 @@
         "stack-currency"
       ],
       "dynamicParams": [],
-      "file": "apps/web/app/(shell)/ops/stack-currency/page.tsx"
+      "file": "apps/web/app/(shell)/ops/stack-currency/page.tsx",
+      "redirectTo": "/portfolio/product/[id]/inventory"
     },
     {
       "routePath": "/ops/teardown",
@@ -6185,7 +6282,8 @@
       "dynamicParams": [
         "serverId"
       ],
-      "file": "apps/web/app/(shell)/platform/services/[serverId]/page.tsx"
+      "file": "apps/web/app/(shell)/platform/services/[serverId]/page.tsx",
+      "redirectTo": "/platform/tools/services/[serverId]"
     },
     {
       "routePath": "/platform/services/activate",
@@ -6852,7 +6950,8 @@
       "dynamicParams": [
         "id"
       ],
-      "file": "apps/web/app/(shell)/portfolio/product/[id]/supply-chain/page.tsx"
+      "file": "apps/web/app/(shell)/portfolio/product/[id]/supply-chain/page.tsx",
+      "redirectTo": "/portfolio/product/[id]/inventory"
     },
     {
       "routePath": "/portfolio/product/[id]/team",

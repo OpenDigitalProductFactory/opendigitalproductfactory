@@ -373,15 +373,29 @@ export function formatReadinessBanner(readiness, worktreePath) {
  * Run a managed dependency bootstrap in `worktreePath` and return its readiness.
  * - Never mutates the root clone; never junctions; uses pnpm's shared content
  *   store with --prefer-offline so installs are fast and disk-light.
- * - Idempotent: if node_modules already resolves, skips the install.
+ * - Idempotent: skips the install when the worktree is ALREADY compile-ready.
+ *   NOT when node_modules merely exists (BI-705AE7E3) — see below.
  * - Fail-safe: any failure -> source-only; never throws.
  */
 export function bootstrapWorktreeDeps(worktreePath, opts = {}) {
   const pkgMgr = opts.packageManager ?? "pnpm";
-  const exists = opts.exists ?? existsSync;
   const execute = opts.execute ?? executeCommand;
   try {
-    if (!exists(`${worktreePath}/node_modules`)) {
+    // Gate the install on MEASURED READINESS, not on the bare existence of
+    // node_modules (BI-705AE7E3). This function's own header says presence is
+    // not enough — "a partial/stale install is not ready" — but the guard used
+    // to be `!exists(node_modules)`, so a worktree seeded with a partial tree
+    // skipped the install FOREVER. Re-running the documented remedy was a no-op
+    // and there was no way to force it.
+    //
+    // That is not a cosmetic bug: pregate refuses to claim a lease for a
+    // source-only worktree, so a tree stuck this way could never run the
+    // mandatory build gate at all, and every push from it needed a recorded
+    // override. Observed 2026-08-26 on a freshly created worktree: 71 entries
+    // under node_modules, no .pnpm, no .bin, permanently source-only, while a
+    // healthy sibling had 1133 entries and reported compile-ready.
+    const before = probeWorktreeReadiness(worktreePath, opts);
+    if (opts.force || before.status !== "compile-ready") {
       // Managed install via the shared store; --frozen-lockfile keeps it honest
       // to the worktree's lockfile (a worktree off main carries main's lockfile).
       //
@@ -413,7 +427,8 @@ export function bootstrapWorktreeDeps(worktreePath, opts = {}) {
 
 // CLI entry: `node scripts/lib/bootstrap-worktree-deps.mjs <worktreePath> [--classify-only]`.
 // Default mode is invoked by seed-worktree-mcp when DPF_WORKTREE_BOOTSTRAP=1
-// (opt-in; installs). --classify-only never installs — it is cheap enough that
+// (opt-in; installs). --force reinstalls even when already compile-ready.
+// --classify-only never installs — it is cheap enough that
 // seed/sync scripts run it unconditionally to replace their old structural-only
 // readiness guess with a real dependency-resolution + workspace-link probe.
 // Prints the readiness JSON and ALWAYS exits 0 — a bootstrap failure must never
@@ -442,7 +457,11 @@ if (isEntryModule(import.meta.url)) {
     process.exit(0);
   }
 
-  const result = classifyOnly ? probeWorktreeReadiness(target) : bootstrapWorktreeDeps(target);
+  // --force reinstalls even when the probe already says compile-ready
+  // (BI-705AE7E3): readiness is measured, but an operator may still want to
+  // rebuild a tree they suspect.
+  const force = args.includes("--force");
+  const result = classifyOnly ? probeWorktreeReadiness(target) : bootstrapWorktreeDeps(target, { force });
   process.stdout.write(JSON.stringify(result) + "\n");
   process.exit(0);
 }

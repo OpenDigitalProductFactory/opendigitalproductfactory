@@ -91,6 +91,10 @@ model EmployeeProfile {
   trips                        Trip[]                        @relation("TripDriver")
   tripClassificationRules      TripClassificationRule[]      @relation("TripRuleDriver")
   driverLocationConsents       DriverLocationConsent[]       @relation("DriverConsentDriver")
+  classificationDeterminations WorkerClassificationDetermination[]
+  engagementTerms              WorkerEngagementTerm[]
+
+  referredApplications         Application[]                 @relation("ApplicationReferrer")
 
   @@index([status])
   @@index([departmentId])
@@ -179,17 +183,135 @@ model OccupationProfile {
   @@index([isActive])
 }
 
+/// The legally-consequential axis of a worker's engagement (BI-C61CEEA9).
+///
+/// DISTINCT from `EmploymentType`, which is the organisation's own display
+/// label ("Full-time", "Casual", "Summer help"). A label carries no legal
+/// meaning; this does. Every downstream question that matters - may the org
+/// direct and schedule this person, does withholding apply, do they accrue
+/// leave, do they enter review cycles - reads this and never the label text.
+///
+/// Shape follows Workday, where `Worker` is the supertype and Contingent
+/// Worker a distinct type whose bundle of services is deliberately limited.
+/// See docs/superpowers/specs/2026-08-25-employment-lifecycle-actuator-design.md
+enum WorkerClassification {
+  /// Employed by this organisation. Withholding applies; fully directable.
+  employee
+  /// Independent contractor engaged directly. Directing them like an employee
+  /// is the behavioural-control factor behind misclassification findings.
+  contractor_direct
+  /// Contractor supplied through an agency. Co-employment exposure sits here.
+  contractor_agency
+  /// Temporary worker from a staffing agency; the agency is the employer.
+  temp_agency_worker
+  /// Employed by an employer-of-record on this organisation's behalf.
+  eor_employee
+  /// Unpaid volunteer. The majority classification for nonprofit and community
+  /// archetypes, and the sharpest constraint: an unpaid worker directed like an
+  /// employee is a wage claim.
+  volunteer
+  /// Intern. Whether the engagement may lawfully be unpaid is jurisdictional.
+  intern
+  /// Board or governance member. Not staff; not directable as staff.
+  board_member
+}
+
 model EmploymentType {
-  id               String            @id @default(cuid())
-  employmentTypeId String            @unique
+  id               String                @id @default(cuid())
+  employmentTypeId String                @unique
   name             String
-  status           String            @default("active")
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
+  status           String                @default("active")
+  /// The legal axis behind this organisation's label. NULLABLE on purpose: the
+  /// migration maps the labels it can read confidently and leaves the rest
+  /// unresolved rather than guessing, because a guess here writes a legal claim
+  /// into the database. An unresolved type is operator work, never a default.
+  classification   WorkerClassification?
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
   employees        EmployeeProfile[]
   requisitions     JobRequisition[] // BI-7ACC38CE
 
   @@index([status])
+  @@index([classification])
+}
+
+/// A recorded human determination of one worker's classification (BI-C61CEEA9).
+///
+/// The platform NEVER derives a classification. Misclassification liability sits
+/// with the employer, the tests are multi-factor and contested, and a confident
+/// automated answer would be wrong in the most damaging way available:
+/// documented, timestamped and apparently authoritative. This row exists to make
+/// the determination explicit, attributable and evidenced - `determinedByUserId`
+/// is REQUIRED, so a determination without a human author cannot be stored.
+///
+/// Superseded rather than updated: an engagement's facts drift (duration
+/// extended, direction increased, exclusivity emerged), and the history of what
+/// was determined when, on what evidence, is the audit trail.
+model WorkerClassificationDetermination {
+  id                 String               @id @default(cuid())
+  workerClassificationDeterminationId    String               @unique
+  employeeProfileId  String
+  classification     WorkerClassification
+  /// The human who made the call. Required - see the model note.
+  determinedByUserId String
+  /// Which employment jurisdiction the determination was made under, when known.
+  /// Resolved by BI-9252B9EA; null until that lands.
+  jurisdictionSlug   String?
+  /// What the determination rested on: engagement facts, contract references,
+  /// the factors weighed. Free-shaped because the tests differ by jurisdiction.
+  evidence           Json?
+  rationale          String?              @db.Text
+  determinedAt       DateTime             @default(now())
+  /// The one record-lifecycle convention (BI-C357FA5A). A determination is
+  /// `superseded` when a later one replaces it; the current determination for a
+  /// worker is the `active` row with the newest `determinedAt`. No self-link,
+  /// because the convention already answers "is this still the one".
+  lifecycle          RecordLifecycle      @default(active)
+  lifecycleAt        DateTime?
+  lifecycleReason    String?
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+
+  employeeProfile    EmployeeProfile      @relation(fields: [employeeProfileId], references: [id], onDelete: Cascade)
+  determinedBy       User                 @relation("ClassificationDeterminedBy", fields: [determinedByUserId], references: [id])
+
+  @@index([employeeProfileId, determinedAt(sort: Desc)])
+  @@index([classification])
+  @@index([lifecycle])
+  @@index([determinedByUserId])
+}
+
+/// The definite term of a contingent engagement (BI-C61CEEA9).
+///
+/// An employee's `endDate` records when employment ended. This records that an
+/// engagement was agreed to run to a date - a different fact, and one that
+/// matters legally, because duration is itself a factor that turns a contractor
+/// into an employee. An extension is a NEW row superseding the previous one, so
+/// the drift stays visible and reads as a re-determination trigger rather than a
+/// silent continuation.
+model WorkerEngagementTerm {
+  id                String    @id @default(cuid())
+  workerEngagementTermId            String    @unique
+  employeeProfileId String
+  startsOn          DateTime
+  /// The agreed end. Required - an engagement with no end date is not a term,
+  /// and recording one as though it were is how an indefinite engagement hides.
+  endsOn            DateTime
+  /// The one record-lifecycle convention (BI-C357FA5A). An extension marks the
+  /// prior term `superseded` and records a new `active` one, so the drift stays
+  /// visible. `lifecycleReason` carries why it changed, for the
+  /// re-determination trail.
+  lifecycle         RecordLifecycle @default(active)
+  lifecycleAt       DateTime?
+  lifecycleReason   String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  employeeProfile   EmployeeProfile @relation(fields: [employeeProfileId], references: [id], onDelete: Cascade)
+
+  @@index([employeeProfileId, startsOn(sort: Desc)])
+  @@index([endsOn])
+  @@index([lifecycle])
 }
 
 model WorkLocation {
@@ -198,6 +320,24 @@ model WorkLocation {
   name         String
   locationType String
   timezone     String?
+  /// Which employment jurisdiction governs work done at this location
+  /// (BI-9252B9EA). Holds a PROFESSION_JURISDICTIONS slug - the same closed
+  /// vocabulary BusinessContext.employsIn already carries - so the value is
+  /// accepted DIRECTLY as the RegulatoryAutonomyPolicy.jurisdiction key with no
+  /// translation layer between them.
+  ///
+  /// String rather than a Prisma enum, deliberately and against the usual
+  /// closed-set rule: the two existing homes of this same vocabulary
+  /// (BusinessContext.employsIn and RegulatoryAutonomyPolicy.jurisdiction) are both
+  /// String. An enum here would be a THIRD representation that has to be cast at
+  /// every policy lookup, which is the translation layer AC-ELA-004 forbids.
+  /// The closed set is enforced in TypeScript by isProfessionJurisdiction.
+  ///
+  /// Nullable, and the migration leaves every existing row NULL. A location is
+  /// never assigned a jurisdiction by inference from its address, its timezone or
+  /// the organisation's first employsIn entry - a guess here produces a
+  /// confidently wrong legal answer, which is worse than no answer.
+  jurisdictionSlug String?
   status       String            @default("active")
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
@@ -208,6 +348,7 @@ model WorkLocation {
 
   @@index([status])
   @@index([addressId])
+  @@index([jurisdictionSlug])
 }
 
 model EmployeeAddress {
@@ -1146,6 +1287,21 @@ model Application {
   status              String    @default("active") // active|rejected|hired|withdrawn|converted
   currentStageId      String?
   sourceId            String?
+  /// WHO referred this candidate (BI-D78DC392), distinct from sourceId, which
+  /// records the CATEGORY the application came through ("referral", "job board").
+  /// A category cannot be excluded from an approval chain; a person can.
+  ///
+  /// Three consequences hang off this column, each reusing an existing mechanism:
+  /// the referrer is skipped for their own referral in the approval-routing
+  /// chain walk; a referral-intake room holds a bonus to its vesting milestone
+  /// and then emits a pay component line; and adverse-impact monitoring reaches
+  /// ProtectedMonitoringObservation through its opaque evaluationRef.
+  ///
+  /// It deliberately carries NO relation to any scoring model. Referral
+  /// pipelines reproduce the existing shape of a workforce, which is precisely
+  /// the adverse impact that rail exists to measure - so the relationship must
+  /// never become a scoring input, and must not share a foreign key with one.
+  referredByEmployeeProfileId String?
   dispositionReasonId String?
   appliedAt           DateTime?
   rejectedAt          DateTime?
@@ -1156,6 +1312,7 @@ model Application {
   requisition          JobRequisition?       @relation(fields: [requisitionId], references: [id], onDelete: SetNull)
   currentStage         PipelineStage?        @relation("ApplicationCurrentStage", fields: [currentStageId], references: [id], onDelete: SetNull)
   source               RecruitingSource?     @relation(fields: [sourceId], references: [id])
+  referredBy           EmployeeProfile?      @relation("ApplicationReferrer", fields: [referredByEmployeeProfileId], references: [id], onDelete: SetNull)
   dispositionReason    DispositionReason?    @relation(fields: [dispositionReasonId], references: [id])
   interviews           ScheduledInterview[]
   scorecards           Scorecard[]
@@ -1165,6 +1322,7 @@ model Application {
   @@index([candidateId])
   @@index([requisitionId])
   @@index([status])
+  @@index([referredByEmployeeProfileId])
 }
 
 model ScheduledInterview {

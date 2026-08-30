@@ -18,7 +18,7 @@
 // existing read path (listTrackedFiles, readFile, the extractors) is reused
 // unchanged against that path. Kernel decision DI-B0BE15B52C46.
 
-import { lazyExec, lazyPath } from "@/lib/shared/lazy-node";
+import { lazyExec, lazyPath, lazyFsPromises, lazyOs } from "@/lib/shared/lazy-node";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 const exec = lazyExec();
@@ -26,8 +26,28 @@ const exec = lazyExec();
 /** Preference order for "the tree everyone merges into". */
 const DEFAULT_BRANCH_CANDIDATES = ["origin/main", "origin/master", "main", "master"] as const;
 
-/** Directory name of the indexer-owned worktree, kept beside the host checkout. */
-export const CODE_GRAPH_WORKTREE_DIRNAME = ".dpf-code-graph-default-branch";
+/** Directory name of the indexer-owned worktree. */
+export const CODE_GRAPH_WORKTREE_DIRNAME = "dpf-code-graph-default-branch";
+
+/**
+ * Where the indexer-owned worktree lives.
+ *
+ * NOT inside the host checkout. The first version put it at
+ * `<gitRoot>/.dpf-code-graph-default-branch`, which on the live install meant
+ * dropping a 101-entry root-owned checkout INSIDE /sandbox-workspace — the tree
+ * Build Studio actually builds in. A private scratch checkout has no business
+ * living in someone else's working tree.
+ *
+ * Outside the repo it is also out of reach of the repo-scanning tooling that
+ * prunes stale worktree registrations, which is what orphaned the first one.
+ * Override with DPF_CODE_GRAPH_WORKTREE_DIR when tmp is unsuitable.
+ */
+export function codeGraphWorktreePath(): string {
+  const { resolve } = lazyPath();
+  const override = process.env.DPF_CODE_GRAPH_WORKTREE_DIR;
+  if (override) return resolve(override);
+  return resolve(lazyOs().tmpdir(), CODE_GRAPH_WORKTREE_DIRNAME);
+}
 
 function gitIn(root: string, args: string): string {
   return `git -c safe.directory=${JSON.stringify(root)} ${args}`;
@@ -67,6 +87,23 @@ export async function resolveDefaultBranchRef(gitRoot: string): Promise<DefaultB
   return null;
 }
 
+/**
+ * Delete a leftover indexer worktree directory so `worktree add` can recreate
+ * it. Deliberately narrow: it refuses any path that is not our own
+ * deterministically named scratch directory, because this is the one operation
+ * here that destroys data and it must never be pointed at a real checkout.
+ */
+async function removeLeftoverWorktreeDir(path: string): Promise<void> {
+  const { basename } = lazyPath();
+  if (basename(path) !== CODE_GRAPH_WORKTREE_DIRNAME) return;
+  try {
+    await lazyFsPromises().rm(path, { recursive: true, force: true });
+  } catch {
+    // Leave it; `worktree add` will report the real reason and the caller
+    // degrades to the host tree with that reason logged.
+  }
+}
+
 export type DefaultBranchWorktree = {
   path: string;
   branch: string;
@@ -86,14 +123,20 @@ export async function ensureDefaultBranchWorktree(
   gitRoot: string,
   target: DefaultBranchRef,
 ): Promise<{ worktree: DefaultBranchWorktree | null; warning: string | null }> {
-  const { resolve } = lazyPath();
-  const path = resolve(gitRoot, CODE_GRAPH_WORKTREE_DIRNAME);
+  const path = codeGraphWorktreePath();
 
   const head = await tryGit(path, "rev-parse HEAD", 10_000);
   if (head === null) {
-    // No usable worktree yet. --force tolerates a stale registration left by a
-    // killed run; a detached checkout keeps it off the branch namespace so it
-    // can never be confused for someone's working branch.
+    // No USABLE worktree — but the directory may still be sitting there.
+    //
+    // Observed live: the first run checked out 101 entries successfully, then
+    // something ran `git worktree prune` and dropped the registration, leaving
+    // an orphaned directory. Every later run failed with
+    // "fatal: '<path>' already exists", because `--force` overrides a stale
+    // REGISTRATION, not a leftover DIRECTORY. Recover from both.
+    await tryGit(gitRoot, "worktree prune", 30_000);
+    await removeLeftoverWorktreeDir(path);
+
     const added = await tryGit(
       gitRoot,
       `worktree add --detach --force ${JSON.stringify(path)} ${target.sha}`,

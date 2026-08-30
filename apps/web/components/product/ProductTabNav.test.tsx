@@ -44,20 +44,13 @@ describe("ProductTabNav", () => {
     expect(html).not.toContain(">Offerings<");
   });
 
-  it("renames the inventory destination to dependencies and estate", () => {
+  it("consolidates product dependencies, estate, and composition into one destination", () => {
     pathname = "/portfolio/product/prod-1/inventory";
     const html = renderToStaticMarkup(<ProductTabNav productId="prod-1" />);
 
-    expect(html).toContain(">Dependencies &amp; Estate<");
+    expect(html).toContain(">Dependencies<");
     expect(html).not.toContain(">Inventory<");
-  });
-
-  it("includes supply chain under the operate family", () => {
-    pathname = "/portfolio/product/prod-1/supply-chain";
-    const html = renderToStaticMarkup(<ProductTabNav productId="prod-1" />);
-
-    expect(html).toContain('href="/portfolio/product/prod-1/supply-chain"');
-    expect(html).toContain(">Supply Chain<");
-    expect(html).toContain(">Dependencies &amp; Estate<");
+    expect(html).not.toContain(">Supply Chain<");
+    expect(html.match(/href="\/portfolio\/product\/prod-1\/inventory"/g)).toHaveLength(1);
   });
 });
