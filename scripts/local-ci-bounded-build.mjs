@@ -200,7 +200,26 @@ function ensureBoundedBuilder(builder, log = () => {}) {
   return observed.inspection;
 }
 
-async function timedProbe(run, timeoutMs = 3_000) {
+// BI-24D5D7C2 — how long a control-plane probe may take before the build is
+// abandoned. The MCP surface is a full tool dispatch (auth, tool registry, DB),
+// not a static health handler, and it slows down under exactly the load this
+// watchdog runs during: a Docker image build. At 2.5s a 13-minute build was
+// aborted while portal answered in 19ms and docker and postgres were healthy.
+const CONTROL_PLANE_PROBE_TIMEOUT_MS = (() => {
+  const raw = Number(process.env.DPF_GATE_CONTROL_PLANE_PROBE_TIMEOUT_MS);
+  return Number.isFinite(raw) && raw > 0 ? raw : 15_000;
+})();
+
+/** True when a rejection is a deadline, whoever phrased it. */
+export function isTimeoutRejection(error) {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  // mcpCall throws "mcpCall: <tool> timed out after <n>ms"; AbortSignal.timeout
+  // throws a TimeoutError; the local race throws the bare word.
+  return /timed out|timeout/i.test(message)
+    || (error instanceof Error && error.name === "TimeoutError");
+}
+
+async function timedProbe(run, timeoutMs = CONTROL_PLANE_PROBE_TIMEOUT_MS) {
   const started = Date.now();
   let timer;
   try {
@@ -219,7 +238,11 @@ async function timedProbe(run, timeoutMs = 3_000) {
     return {
       healthy: false,
       elapsedMs: Date.now() - started,
-      reason: error instanceof Error && error.message === "timeout" ? "timeout" : "request-failed",
+      // BI-24D5D7C2: only a rejection whose message is EXACTLY "timeout" counted,
+      // so an inner mcpCall deadline was reported as "request-failed" — the
+      // operator reads that as a broken endpoint and goes looking for a
+      // connection fault that never happened. A deadline is a deadline.
+      reason: isTimeoutRejection(error) ? "timeout" : "request-failed",
     };
   } finally {
     clearTimeout(timer);
@@ -285,7 +308,7 @@ async function probeControlPlane(postgresProbe) {
   const bearerToken = process.env.DPF_MCP_BEARER_TOKEN || "";
   const [portal, mcp, docker, postgres] = await Promise.all([
     timedProbe(async () => {
-      const response = await fetch(`${portalUrl}/api/health`, { signal: AbortSignal.timeout(2_500) });
+      const response = await fetch(`${portalUrl}/api/health`, { signal: AbortSignal.timeout(CONTROL_PLANE_PROBE_TIMEOUT_MS) });
       if (response.status !== 200) return false;
       const payload = await response.json();
       return ["ok", "healthy"].includes(String(payload?.status).toLowerCase());
@@ -295,7 +318,7 @@ async function probeControlPlane(postgresProbe) {
       const response = await mcpCall("get_quiescence_status", {}, {
         mcpUrl,
         bearerToken,
-        timeoutMs: 2_500,
+        timeoutMs: CONTROL_PLANE_PROBE_TIMEOUT_MS,
         // DPF_CONTROL_PLANE_PORTAL_URL is an operator-set control-plane address
         // and is routinely not loopback, so this endpoint carries intent the
         // way DPF_MCP_URL does. Declared here rather than widening the
@@ -304,7 +327,7 @@ async function probeControlPlane(postgresProbe) {
       });
       return response?.success === true;
     }),
-    timedProbe(() => commandHealthy("docker", ["info"], 2_500)),
+    timedProbe(() => commandHealthy("docker", ["info"], CONTROL_PLANE_PROBE_TIMEOUT_MS)),
     timedProbe(postgresProbe),
   ]);
   return { portal, mcp, docker, postgres };

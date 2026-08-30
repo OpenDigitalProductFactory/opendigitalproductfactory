@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 692,
+  "pageCount": 693,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -1605,7 +1605,9 @@
       "publishedPublic": true,
       "publishedPortal": false,
       "anchors": [
-        "four-portfolio-archetype-and-ai-workforce-operating-standard",
+        "portfolio-aligned-agent-and-workforce-operating-standard",
+        "naming-and-harmonization-posture",
+        "revision-020-rename-and-governed-migration",
         "abstract",
         "1-status-scope-and-normative-language",
         "11-status",
@@ -4410,6 +4412,19 @@
         "anti-patterns",
         "related-principles",
         "spec-references"
+      ]
+    },
+    "docs/founder-kernel/wiki/principles/report-only-the-verdict-you-reached.md": {
+      "publicHref": "/founder-kernel/wiki/principles/report-only-the-verdict-you-reached/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "report-only-the-verdict-you-reached",
+        "why-this-exists",
+        "what-to-do",
+        "the-consequence-clause",
+        "related"
       ]
     },
     "docs/founder-kernel/wiki/principles/reporting-read-model-boundaries.md": {
@@ -8795,6 +8810,7 @@
         "what-bet-5-does",
         "why-this-box-needs-a-one-time-bootstrap",
         "consumer-release-installs-artifact-native-upgrades",
+        "ordinary-restart-after-a-consumer-upgrade",
         "preconditions-capture-current-state-first",
         "step-1-bootstrap-the-promoter-from-current-main",
         "step-2-trigger-the-upgrade",
@@ -10611,6 +10627,7 @@
         "degenerate-environment-fixtures",
         "common-drift-and-how-to-stay-on-script",
         "live-blocker-references-guard",
+        "agent-principal-convergence-guard",
         "label-association-guard-ratchet",
         "what-this-gate-is-not"
       ]

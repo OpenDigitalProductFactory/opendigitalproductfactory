@@ -3,7 +3,7 @@
 **Backlog item:** `BI-C2C16582`
 **Epic:** `EP-WORK-CONVERGENCE`
 **Status:** Current
-**Definition/instance realization:** `BI-D4C110BC` under `EP-1FABA22D`
+**Definition/instance realization:** shipped in PR #4648 under `EP-WORK-CONVERGENCE`; design and plan in [the workroom definition projection spec](../superpowers/specs/2026-08-24-workroom-definition-projection.md)
 
 Founder-directed 2026-08-15: **Workroom** is the canonical name for what we claim
 and how we work. This page is the single place that says what the word means at

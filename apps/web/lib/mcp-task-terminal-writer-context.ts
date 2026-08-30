@@ -205,13 +205,12 @@ function validateReaderExecutions(
   let priorCreatedAt = Number.NEGATIVE_INFINITY;
   for (const execution of executions) {
     if (
-      !execution.success
-      || execution.toolName !== "read_source_at_version"
+      execution.toolName !== "read_source_at_version"
       || !policy.readerToolNames.includes(execution.toolName)
     ) {
       return hydrationFailure(
         "terminal_writer_context_reader_failed",
-        "Persisted immutable reader evidence includes a failed or unauthorized reader execution.",
+        "Persisted immutable reader evidence includes an unauthorized reader execution.",
       );
     }
     const parameters = record(execution.parameters);
@@ -234,6 +233,7 @@ function validateReaderExecutions(
     }
     const persistedResult = record(execution.result);
     const persistedPage = record(persistedResult?.["data"]);
+    let successfulPage: HydrationPage | null = null;
     if (persistedPage) {
       const resultBinding = [
         ["repositoryFullName", policy.immutableReaderArguments.repositoryFullName],
@@ -261,25 +261,35 @@ function validateReaderExecutions(
             "Persisted immutable source content is not valid exact-bound page evidence.",
           );
         }
-        const startsNewAttempt = normalized.arguments["cursor"] === undefined
-          && (normalized.arguments["startLine"] === undefined || normalized.arguments["startLine"] === 1);
-        let attempt = contentfulAttempts.at(-1);
-        if (!attempt || (startsNewAttempt && attempt.length > 0)) {
-          attempt = [];
-          contentfulAttempts.push(attempt);
-        }
-        attempt.push({ page, requestArguments: normalized.arguments });
-        if (attempt.length > policy.maximumReaderCalls) {
-          return hydrationFailure(
-            "terminal_writer_context_reader_count_invalid",
-            "One persisted immutable reader attempt exceeds the bounded reader budget.",
-          );
-        }
+        successfulPage = execution.success ? page : null;
       }
     }
     seenIds.add(execution.id);
     priorCreatedAt = createdAt;
+    if (!execution.success) continue;
     ids.push(execution.id);
+    if (!successfulPage) continue;
+
+    const startsNewAttempt = normalized.arguments["cursor"] === undefined
+      && (normalized.arguments["startLine"] === undefined || normalized.arguments["startLine"] === 1);
+    let attempt = contentfulAttempts.at(-1);
+    if (!attempt || (startsNewAttempt && attempt.length > 0)) {
+      attempt = [];
+      contentfulAttempts.push(attempt);
+    }
+    attempt.push({ page: successfulPage, requestArguments: normalized.arguments });
+    if (attempt.length > policy.maximumReaderCalls) {
+      return hydrationFailure(
+        "terminal_writer_context_reader_count_invalid",
+        "One persisted immutable reader attempt exceeds the bounded reader budget.",
+      );
+    }
+  }
+  if (ids.length === 0) {
+    return hydrationFailure(
+      "terminal_writer_context_reader_count_invalid",
+      "No successful exact-bound immutable reader execution is available for terminal-writer hydration.",
+    );
   }
   return ok({ ids, contentfulAttempts });
 }

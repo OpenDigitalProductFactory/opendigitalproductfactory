@@ -4,6 +4,12 @@
 import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
+
+import { resolveActuationInputs } from "@/lib/workforce/employment-event-actuator-runtime";
+import {
+  checkWorkerAction,
+  describeWorkerActionRefusal,
+} from "@/lib/workforce/worker-action-control";
 import * as crypto from "crypto";
 
 // ─── Review Cycle Management ─────────────────────────────────────────────────
@@ -33,9 +39,18 @@ export async function createReviewCycle(input: {
   return { success: true, cycleId };
 }
 
-export async function activateReviewCycle(
-  cycleId: string,
-): Promise<{ success: boolean; instancesCreated?: number; error?: string }> {
+export async function activateReviewCycle(cycleId: string): Promise<{
+  success: boolean;
+  instancesCreated?: number;
+  error?: string;
+  /**
+   * Workers the co-employment control refused to enrol, each with the sentence
+   * an operator can act on. Never silently dropped: an unexplained absence from
+   * a review cycle reads as a bug, and an operator who cannot see why will go
+   * around the control.
+   */
+  excludedFromReview?: Array<{ displayName: string; explanation: string }>;
+}> {
   const session = await auth();
   if (!session?.user?.id) return { success: false, error: "Unauthorized" };
 
@@ -46,11 +61,52 @@ export async function activateReviewCycle(
   // Find all active employees with managers
   const employees = await prisma.employeeProfile.findMany({
     where: { status: "active", managerEmployeeId: { not: null } },
-    select: { id: true, managerEmployeeId: true },
+    select: {
+      id: true,
+      displayName: true,
+      managerEmployeeId: true,
+      // BI-B506AD2E: the two facts the co-employment control refuses to guess.
+      employmentType: { select: { classification: true } },
+      workLocation: { select: { id: true, jurisdictionSlug: true } },
+    },
   });
 
-  // Create review instances for each employee
-  const instances = employees.map((e) => ({
+  // BI-B506AD2E — the co-employment control, at the point of action.
+  //
+  // This used to enrol EVERY active employee with a manager. Performance review
+  // is an employment process: enrolling a contractor or a volunteer in one is
+  // behavioural-control evidence, created automatically, at scale, with a
+  // timestamp. The check runs here in the action rather than in the UI, because
+  // hiding a button leaves the action reachable by any API caller.
+  const businessContext = await prisma.businessContext.findFirst({
+    select: { employsIn: true },
+  });
+  const employsIn = businessContext?.employsIn ?? [];
+
+  const eligible: typeof employees = [];
+  const refused: Array<{ displayName: string; explanation: string }> = [];
+
+  for (const employee of employees) {
+    const { classification, jurisdiction } = resolveActuationInputs(employee, employsIn);
+    const decision = checkWorkerAction({
+      action: "enrol-in-review-cycle",
+      classification,
+      jurisdiction,
+    });
+
+    if (decision.permitted) {
+      eligible.push(employee);
+      continue;
+    }
+
+    refused.push({
+      displayName: employee.displayName,
+      explanation: describeWorkerActionRefusal(decision, employee.displayName),
+    });
+  }
+
+  // Create review instances for each ELIGIBLE employee
+  const instances = eligible.map((e) => ({
     reviewId: `RV-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
     cycleId: cycle.id,
     employeeProfileId: e.id,
@@ -67,7 +123,11 @@ export async function activateReviewCycle(
   ]);
 
   revalidatePath("/employee");
-  return { success: true, instancesCreated: instances.length };
+  return {
+    success: true,
+    instancesCreated: instances.length,
+    excludedFromReview: refused,
+  };
 }
 
 export async function completeReviewCycle(

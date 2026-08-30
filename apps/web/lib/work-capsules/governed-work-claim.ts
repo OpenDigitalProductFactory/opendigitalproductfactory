@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import {
   INITIATIVE_READINESS_POLICY_VERSION,
   projectBacklogItemReadiness,
+  readinessRequirement,
   type InitiativeReadinessDecision,
   type InitiativeReadinessActivity,
 } from "@/lib/backlog/initiative-readiness";
@@ -422,7 +423,12 @@ export async function claimGovernedBacklogWorkspace(args: {
     const denied: InitiativeReadinessDecision = {
       ...priorDecision,
       verdict: "denied",
-      blockers: [{ code: "CAPSULE_IDENTITY_MISMATCH", state: "fail", accountableRole: "delivery-coordinator", evidenceRefs: [] }],
+      blockers: [readinessRequirement({
+        code: "CAPSULE_IDENTITY_MISMATCH",
+        state: "fail",
+        accountableRole: "delivery-coordinator",
+        profile: priorDecision.profile,
+      })],
     };
     await recordDecision({ db: args.db, backlogItemRowId, decision: denied, workIntent, actor: args.actor });
     return {

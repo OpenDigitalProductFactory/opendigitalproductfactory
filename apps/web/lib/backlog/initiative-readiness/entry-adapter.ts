@@ -1,9 +1,13 @@
+import { evidenceKindMetadata, isExecutionEvidenceKind } from "../execution-evidence";
+
 import { evaluateInitiativeReadiness } from "./evaluate";
 import { deriveAuthoritativeReadinessProfile } from "./profiles";
+import { readinessCodesForEvidenceDimension } from "./readiness-guidance";
 import type {
   InitiativeReadinessDecision,
   InitiativeReadinessFacts,
   InitiativeTransitionObject,
+  ReadinessCode,
   ReadinessEvidenceState,
   ReadinessTarget,
 } from "./types";
@@ -186,6 +190,40 @@ function state(states: ReadonlyMap<string, ReadinessEvidenceState>, gate: string
   return states.get(gate) ?? "missing";
 }
 
+/**
+ * Timeline `evidence` activities grouped by the requirement they could be an
+ * attempt at.
+ *
+ * BI-28E8CB88: `record_execution_evidence` writes a `BacklogItemActivity` of
+ * kind `evidence`; readiness reads `initiative_gate_receipt` only. The writer
+ * works — it just writes somewhere the reader never looks, and neither side said
+ * so. Measured on the live install: 38 items held evidence, 4 held receipts.
+ *
+ * This does NOT make evidence satisfy a gate. It records that the evidence is
+ * there so the decision can say "recorded in a form this gate does not read"
+ * instead of "missing", which is the one output guaranteed to read as "you
+ * supplied nothing" to someone who supplied what was asked for.
+ */
+function unreadEvidenceByCode(
+  activities: readonly InitiativeReadinessActivity[],
+): Partial<Record<ReadinessCode, string[]>> {
+  const byCode: Partial<Record<ReadinessCode, string[]>> = {};
+  for (const activity of activities) {
+    if (activity.kind !== "evidence") continue;
+    const payload = object(activity.payload);
+    const evidenceKind = payload?.evidenceKind;
+    if (!isExecutionEvidenceKind(evidenceKind)) continue;
+    const metadata = evidenceKindMetadata(evidenceKind);
+    // A failing or non-gate-eligible record is not an attempt at satisfying a
+    // requirement, so reporting it as one would mislead in the other direction.
+    if (!metadata.gateEligible || metadata.polarity !== "pass") continue;
+    for (const code of readinessCodesForEvidenceDimension(metadata.dimension)) {
+      (byCode[code] ??= []).push(activity.id);
+    }
+  }
+  return byCode;
+}
+
 function projectPlanCoverage(
   activities: readonly InitiativeReadinessActivity[],
   baseline: Baseline | null,
@@ -226,6 +264,8 @@ export function projectBacklogItemReadiness(args: {
     acceptanceEvidence: ReadinessEvidenceState;
     objectiveReconciliation: ReadinessEvidenceState;
     evidenceRefs?: InitiativeReadinessFacts["evidenceRefs"];
+    /** Sub-policy reasons a single evidence state collapses (BI-28E8CB88). */
+    requirementReasons?: InitiativeReadinessFacts["requirementReasons"];
     objectiveBaselineConflict?: boolean;
     projectionError?: boolean;
   };
@@ -288,6 +328,8 @@ export function projectBacklogItemReadiness(args: {
     archetypeCompleteness: state(evidence, "archetype-completeness"),
     projectionError: baseline.malformed || receipts.malformed || args.completion?.projectionError,
     evidenceRefs: args.completion?.evidenceRefs,
+    unreadEvidenceRefs: unreadEvidenceByCode(args.activities),
+    requirementReasons: args.completion?.requirementReasons,
   };
   return {
     governed,

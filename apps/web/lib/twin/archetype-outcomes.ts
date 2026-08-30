@@ -1,14 +1,23 @@
 import type { TwinOutcome } from "@/components/twin";
 import { formatMoney } from "@/lib/org-locale/org-locale";
 
+/** Gifts recorded in one currency. Several of these means the org genuinely
+ *  holds more than one, and each is shown rather than none. */
+export interface DonationTotal {
+  currency: string;
+  amount: number;
+  count: number;
+}
+
 export interface ArchetypeOutcomeInput {
   archetypeId: string;
   currency: string;
   locale: string;
   paidRevenue: number;
   deliveredJobs: number;
-  donations?: { amount: number; count: number } | null;
-  donationsUnavailableHint?: string;
+  /** One entry per currency the gifts were recorded in. `null` means the
+   *  donation source could not be read at all; `[]` means no gifts yet. */
+  donationTotals?: DonationTotal[] | null;
   animalsPlaced?: number | null;
   fostersActive?: number | null;
 }
@@ -23,6 +32,53 @@ function countValue(count: number | null | undefined, noun: string): string {
   return `${count} ${noun}${count === 1 ? "" : "s"}`;
 }
 
+function giftCount(count: number): string {
+  return `${count} gift${count === 1 ? "" : "s"} · 90 days`;
+}
+
+/**
+ * The tile withheld a total it already held: two gifts in one currency read
+ * "Unavailable · Multiple donation currencies are not combined" (BI-685ADDCD).
+ * One currency totals, whichever currency it is. Several are shown side by
+ * side rather than replaced by nothing — an operator who really does hold two
+ * currencies still gets both numbers, just never added together.
+ */
+function donationsOutcome(input: ArchetypeOutcomeInput): TwinOutcome {
+  const totals = input.donationTotals;
+  const money = (total: DonationTotal) =>
+    formatMoney(total.amount, total.currency, input.locale);
+
+  if (totals == null) {
+    return {
+      key: "donations-received",
+      label: "Donations received",
+      value: "Unavailable",
+      intent: "success",
+      hint: "Donation source unavailable",
+    };
+  }
+
+  if (totals.length > 1) {
+    return {
+      key: "donations-received",
+      label: "Donations received",
+      value: totals.map(money).join(" · "),
+      intent: "success",
+      hint: `${giftCount(totals.reduce((sum, total) => sum + total.count, 0))} · kept apart by currency`,
+    };
+  }
+
+  // No gifts yet reads as the workspace's own zero, the way it always has.
+  const only = totals[0];
+  return {
+    key: "donations-received",
+    label: "Donations received",
+    value: only ? money(only) : formatMoney(0, input.currency, input.locale),
+    intent: "success",
+    hint: giftCount(only?.count ?? 0),
+  };
+}
+
 /**
  * Project canonical aggregates into the archetype's outcome language. This is
  * intentionally a small presentation boundary, not a general metric framework:
@@ -35,19 +91,7 @@ export function buildArchetypeOutcomes(
     return {
       heading: "Mission impact",
       outcomes: [
-        {
-          key: "donations-received",
-          label: "Donations received",
-          value:
-            input.donations == null
-              ? "Unavailable"
-              : formatMoney(input.donations.amount, input.currency, input.locale),
-          intent: "success",
-          hint:
-            input.donations == null
-              ? input.donationsUnavailableHint ?? "Donation source unavailable"
-              : `${input.donations.count} gift${input.donations.count === 1 ? "" : "s"} · 90 days`,
-        },
+        donationsOutcome(input),
         {
           key: "animals-placed",
           label: "Animals placed",

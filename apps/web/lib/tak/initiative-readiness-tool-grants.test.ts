@@ -5,6 +5,7 @@ import type { InitiativeReadinessDecision } from "@/lib/backlog/initiative-readi
 import { parseInitiativeReviewBinding } from "@/lib/mcp-task-submit";
 
 import { resolveInitiativeReviewerRecovery } from "./initiative-readiness-tool-grants";
+import { readinessRequirement } from "@/lib/backlog/initiative-readiness/readiness-guidance";
 
 const decision: InitiativeReadinessDecision = {
   decisionId: "IRD-RECOVERY",
@@ -21,8 +22,8 @@ const decision: InitiativeReadinessDecision = {
   verdict: "input-required",
   satisfied: [],
   unmet: [
-    { code: "RESEARCH_REQUIRED", state: "missing", accountableRole: "design-author", evidenceRefs: [] },
-    { code: "PLAN_REQUIRED", state: "missing", accountableRole: "implementation-planner", evidenceRefs: [] },
+    readinessRequirement({ code: "RESEARCH_REQUIRED", state: "missing", accountableRole: "design-author" }),
+    readinessRequirement({ code: "PLAN_REQUIRED", state: "missing", accountableRole: "implementation-planner" }),
   ],
   blockers: [],
   evaluatedAt: "2026-08-24T17:00:00.000Z",
@@ -187,7 +188,7 @@ describe("initiative readiness recovery routing", () => {
       decision: {
         ...decision,
         unmet: [
-          { code: "ARTIFACT_AUTHOR_REQUIRED", state: "missing", accountableRole: "artifact-resolver", evidenceRefs: [] },
+          readinessRequirement({ code: "ARTIFACT_AUTHOR_REQUIRED", state: "missing", accountableRole: "artifact-resolver" }),
         ],
       },
       currentAgentId: "AGT-AUTHOR",
@@ -248,7 +249,7 @@ describe("initiative readiness recovery routing", () => {
       decision: {
         ...decision,
         unmet: [
-          { code: "PLAN_REQUIRED", state: "missing", accountableRole: "implementation-planner", evidenceRefs: [] },
+          readinessRequirement({ code: "PLAN_REQUIRED", state: "missing", accountableRole: "implementation-planner" }),
         ],
       },
       currentAgentId: "AGT-AUTHOR",
@@ -279,7 +280,7 @@ describe("initiative readiness recovery routing", () => {
       decision: {
         ...decision,
         unmet: [
-          { code: "PLAN_REQUIRED", state: "missing", accountableRole: "implementation-planner", evidenceRefs: [] },
+          readinessRequirement({ code: "PLAN_REQUIRED", state: "missing", accountableRole: "implementation-planner" }),
         ],
       },
       currentAgentId: "AGT-AUTHOR",
