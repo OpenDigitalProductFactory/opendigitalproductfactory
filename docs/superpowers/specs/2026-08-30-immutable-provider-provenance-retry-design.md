@@ -116,6 +116,25 @@ single writer invocation remains the audit unit.
 - Provider response bodies and credential material are never logged or returned.
 - No approval, authority, receipt, or plan-coverage requirement is skipped.
 
+## Independent spec-approval writer contract
+
+The independent reviewer must read the complete immutable design artifact before
+calling `record_initiative_design_review`. For this bounded remediation the
+writer call must use `profile="fix"`, `artifactRole="design-spec"`, and exactly
+one substantive terminal decision:
+
+- `decision="pass"` with an evidence-based reason and no findings when the
+  design satisfies the review criteria; or
+- `decision="fail"` with concrete findings when it does not.
+
+`decision="not-applicable"`, a non-`fix` profile, placeholder or prospective
+reasoning, and claims based on unread or truncated source are invalid for this
+spec-approval gate. Such a call is non-approvable, cannot establish a baseline,
+and must remain preserved as terminal audit evidence. It is never corrected by
+approving or replaying the invalid envelope. Any subsequent review must bind to
+a materially revised immutable design artifact and a fresh deterministic
+request identity.
+
 ## Rejected alternatives
 
 - **Replay the consumed reviewer TaskRun or mint another envelope.** The exact
@@ -143,6 +162,9 @@ Tests must prove transient transport and retryable-status recovery for both
 commit and blob reads, one-attempt refusal for permanent statuses and malformed
 payloads, sanitized terminal diagnostics, unchanged DCO and Workroom refusal,
 unchanged blob mismatch and size refusal, and a hard maximum of two attempts.
+The governed review trace must additionally show a complete immutable-source
+read and a writer call conforming to the independent spec-approval contract;
+reviewer prose or an unapproved envelope is not a receipt or baseline.
 
 The implementation plan is
 `docs/superpowers/plans/2026-08-30-immutable-provider-provenance-retry.md`.

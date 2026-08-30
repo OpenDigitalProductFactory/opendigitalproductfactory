@@ -46,9 +46,15 @@ not be replayed.
    tree verification. If a shared gate is demonstrably unavailable, preserve
    that evidence and rely on protected CI rather than altering or weakening the
    gate.
-7. Publish normally, open a protected PR, inspect review findings and all checks,
+7. For canonical spec approval, require the independent reviewer to read the
+   complete immutable design and call the writer once with `profile="fix"`,
+   `artifactRole="design-spec"`, and a substantive `pass` or `fail`. Preserve
+   placeholder, `not-applicable`, non-fix, truncated-read, or unapproved calls as
+   non-baseline audit evidence; never approve or replay them. A fresh review is
+   allowed only after a materially revised immutable design artifact.
+8. Publish normally, open a protected PR, inspect review findings and all checks,
    merge, ship an immutable release, and verify the live provider path.
-8. Create exactly one fresh BI-F48 reviewer identity after deployment. Require a
+9. Create exactly one fresh BI-F48 reviewer identity after deployment. Require a
    real receipt/baseline, then resume plan coverage and the downstream WordPress
    readiness recovery without fabricating or proxying evidence.
 
@@ -91,3 +97,8 @@ The coverage receipt cannot exist before a canonical spec-approval baseline and
 a provider-readable immutable plan blob. This plan records the complete atomic
 mapping now; after the design/plan commit is published and reviewed, the
 canonical writer must replace `pending` with its real receipt and bindings.
+
+The expired BI-E35 review envelopes remain immutable evidence only. Neither a
+placeholder/`not-applicable` call nor a correct but unapproved call satisfies
+the baseline. The next independent review must bind to the materially revised
+design blob containing the writer contract above.
