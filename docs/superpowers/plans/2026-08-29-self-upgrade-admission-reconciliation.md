@@ -207,3 +207,25 @@ without cryptographically recomputing the historical fingerprint, and that its
 tests are static SQL contract assertions rather than an executed migration
 fixture. In live acceptance, read back both immutable rows and the link, then
 verify the successor's independent admission and dispatch evidence.
+
+## 2026-08-30 exact-target recurrence closure
+
+The ordered repair and UX-fit decision are normative in
+`docs/superpowers/specs/2026-08-29-self-upgrade-admission-reconciliation-design.md`
+under “2026-08-30 recurrence closure.” Execute that sequence atomically:
+
+1. turn the existing exact-SHA-and-tag refusal into a first-failing
+   zero-dispatch successor test;
+2. classify target relationships as exact, distinct, or conflicting, permitting
+   exact and distinct only behind the existing terminal, zero-dispatch, latest,
+   and unique-successor guards;
+3. keep partial SHA/tag overlap and every attempted, acknowledged, or event-bound
+   predecessor fail closed, and prove repeat recovery returns the same successor;
+4. re-run the current live-observation and IPv4 self-registration suites rather
+   than adding duplicate UI or startup mechanisms; and
+5. pass typecheck, preflight, semantic review, exact-tree CI, protected merge,
+   canonical release, and governed live served-SHA/CAN-TEST verification.
+
+This remains the single atomic BI-3FD07259 deliverable. The comparison repair,
+typed successor, worker CAS, and truthful terminal projection share one clean
+revert boundary and are not independently safe to ship.
