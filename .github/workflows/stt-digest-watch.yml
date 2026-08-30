@@ -62,7 +62,21 @@ jobs:
       - name: Apply re-pin and open PR
         if: steps.check.outputs.drift == 'true' && steps.existing.outputs.pr == ''
         run: |
+          # --apply exits 3 to mean "a change was made" — a SUCCESS signal, the
+          # same convention --check uses above. Calling it bare under `bash -e`
+          # made that success kill the step before `gh pr create` ran, so the
+          # watch detected the drift, rewrote both files, and then died without
+          # opening the PR. Two runs on 2026-08-27 failed exactly here while
+          # :latest stayed frozen and installs reported "up to date" (BI-E6EF0B2C).
+          # Anything other than 0 or 3 is a real failure and must still stop.
+          set +e
           node scripts/release/re-resolve-stt-digest.mjs --apply
+          apply_code=$?
+          set -e
+          if [ "$apply_code" != "0" ] && [ "$apply_code" != "3" ]; then
+            echo "re-pin failed with exit $apply_code" >&2
+            exit "$apply_code"
+          fi
           node --test scripts/release/re-resolve-stt-digest.test.mjs tests/release/installer-release-contract.test.mjs
           node scripts/release/verify-compose-image-manifests.mjs --mode release --platform linux --only digest-pinned
 

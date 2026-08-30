@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { InitiativeReadinessDecision } from "./types";
 import { executeGovernedTerminalTransition } from "./terminal-transition-repository";
+import { readinessRequirement } from "@/lib/backlog/initiative-readiness/readiness-guidance";
 
 function decision(verdict: "allowed" | "input-required" | "denied"): InitiativeReadinessDecision {
   return {
@@ -14,10 +15,10 @@ function decision(verdict: "allowed" | "input-required" | "denied"): InitiativeR
     verdict,
     satisfied: [],
     unmet: verdict === "input-required"
-      ? [{ code: "OBJECTIVE_RECONCILIATION_REQUIRED", state: "missing", accountableRole: "acceptance-reviewer", evidenceRefs: [] }]
+      ? [readinessRequirement({ code: "OBJECTIVE_RECONCILIATION_REQUIRED", state: "missing", accountableRole: "acceptance-reviewer" })]
       : [],
     blockers: verdict === "denied"
-      ? [{ code: "REVIEW_FAILED", state: "fail", accountableRole: "review-owner", evidenceRefs: [] }]
+      ? [readinessRequirement({ code: "REVIEW_FAILED", state: "fail", accountableRole: "review-owner" })]
       : [],
     evaluatedAt: "2026-08-22T08:00:00.000Z",
   };

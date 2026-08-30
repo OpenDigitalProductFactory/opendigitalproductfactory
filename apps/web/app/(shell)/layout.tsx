@@ -18,7 +18,7 @@ import { SystemEventProvider } from "@/components/platform/SystemEventProvider";
 import { ShellBannerOverlay } from "@/components/shell/ShellBannerOverlay";
 import { ModelWarmup } from "@/components/shell/ModelWarmup";
 import { SetupOverlay } from "@/components/setup/SetupOverlay";
-import { getShellNavSections } from "@/lib/permissions";
+import { getGrantedCapabilities, getShellNavSections } from "@/lib/permissions";
 import { cookies } from "next/headers";
 import { getActiveOrgCapabilities } from "@/lib/storefront/org-capabilities.server";
 import { AppRail } from "@/components/shell/AppRail";
@@ -160,16 +160,17 @@ export default async function ShellLayout({ children }: { children: React.ReactN
   // "operator" = the full rail; "Simple" writes worker via the rail toggle.
   // Operator is always one toggle away, so worker mode never strands a user.
   const navMode = resolveNavModeFromCookie((await cookies()).get(NAV_MODE_COOKIE)?.value);
+  const userContext = {
+    userId: user.id,
+    platformRole: user.platformRole,
+    isSuperuser: user.isSuperuser,
+  };
   const shellNavSections = activeSetup
     ? []
-    : getShellNavSections(
-        {
-          userId: user.id,
-          platformRole: user.platformRole,
-          isSuperuser: user.isSuperuser,
-        },
-        { activeOrgCapabilities, mode: navMode },
-      );
+    : getShellNavSections(userContext, { activeOrgCapabilities, mode: navMode });
+  // The breadcrumb offers only what this principal can open. Same registry the
+  // rail filters on and the destination route enforces (BI-2777B86B).
+  const grantedCapabilities = getGrantedCapabilities(userContext);
 
   return (
     <PhoneCountryProvider country={phoneCountry}>
@@ -271,7 +272,9 @@ export default async function ShellLayout({ children }: { children: React.ReactN
                   className="mx-auto w-full"
                   style={{ maxWidth: "var(--shell-page-content-max-width, none)" }}
                 >
-                  {shellNavSections.length > 0 && <ShellBreadcrumb />}
+                  {shellNavSections.length > 0 && (
+                    <ShellBreadcrumb capabilities={grantedCapabilities} />
+                  )}
                   <UxInitialLoadBoundary>{children}</UxInitialLoadBoundary>
                 </div>
               </div>

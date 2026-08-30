@@ -122,3 +122,41 @@ This phase was added after the repaired live reader completed five exact immutab
 4. Permit one identical request replay to reserve the exact waiting TaskRun through `status + updatedAt` compare-and-set and rerun with the same thread, token authority, request digest, tool grants, and immutable artifact binding.
 5. If that bounded continuation also omits the writer, retain `input-required` and refuse a third execution attempt. A real writer proposal still follows the existing separately approved envelope path.
 6. Prove the focused policy/loop/submission tests, impacted loop tests, typecheck, size/source guards, exact-tree CI, protected PR, canonical release, and live same-TaskRun behavior before issuing a fresh BI-42 review identity.
+
+## Phase 9 — Make writer-only dispatch a hard provider contract
+
+This phase is the BI-DE58CFE8 successor owned by WC-14EA9122 after live attempt five hydrated the exact BI-F48 artifact but returned prose with zero writer executions.
+
+1. Preserve TaskRun `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-95A624D36842` and its unchanged request key as the red fixture; do not replay it before deployment.
+2. Add a caller-owned required tool-choice option to routed inference and apply it after recipe/harness plan resolution.
+3. Set the option only when the initiative-review surface contains exactly its governed writer, including the post-evidence nudge and same-TaskRun writer resume.
+4. Compile required choice for OpenAI-compatible/Qwen, Gemini, Anthropic, ChatGPT, and Responses requests; fail closed before dispatch for adapters that cannot honor it.
+5. Preserve the required policy unchanged across fallback plans. Keep `requireTools`, exact grants, immutable binding, model-selected writer arguments, and separate approval unchanged.
+6. If a provider violates the hard contract, persist explicit required-call noncompliance on the same resumable TaskRun. Never synthesize a decision, envelope, execution, or receipt.
+7. Prove focused red/green tests, ordinary-turn non-regression, typecheck, size/source guards, exact-tree CI, protected PR, canonical release, and exact live CAN-TEST.
+8. Only after that live proof, replay the preserved BI-F48 key once and accept only a genuine grounded writer proposal or the explicit fail-closed noncompliance projection.
+
+## Phase 10 — Keep cross-attempt reader history recoverable
+
+This phase is the BI-DE58CFE8 successor on Workroom `WC-14EA9122`, branch `fix/terminal-writer-reader-history-budget`. It follows the single post-`3370a769` replay that remained on the same BI-F48 TaskRun but failed `terminal_writer_context_reader_count_invalid` with seven successful exact-bound reader rows and no writer, envelope, or receipt.
+
+1. Preserve the seven live reader execution ids as the RED fixture and do not replay the TaskRun again before a material deployment.
+2. Separate TaskRun-lifetime authority history from the existing per-attempt reader ceiling. Validate every historical row for exact tool/binding, unique id, durable order, and persisted result identity before classifying success as evidence.
+3. Treat content-free results only as authority proof. Partition contentful results at exact line-one request boundaries and enforce the reader-call, page, character, cursor, line-contiguity, and stable-total limits independently on each attempt.
+4. Reuse the latest complete coherent successful attempt only when all complete successful attempts agree on source content. Failed rows contribute no content or authority, while unauthorized, stale, conflicting, malformed, duplicated, out-of-order, gapped, overlapping, cursor-repeating, or per-attempt-over-budget evidence still fails closed.
+5. If no complete contentful attempt exists, deterministically reread only the server-bound artifact from line one under the existing bounded budget. Never mix partial persisted content with reread content.
+6. Prove the exact seven-row fixture RED then GREEN, longer coherent-history reuse, conflicting-attempt refusal, per-attempt ceiling, existing negative fixtures, adjacent submission/resume tests, typecheck, source guards, preflight, exact-tree CI, protected PR, canonical single-flight release, governed upgrade, and exact live CAN-TEST.
+7. Only after live proof, obtain a new narrow authority for one identical-key replay of the preserved BI-F48 TaskRun. Accept only a genuine grounded writer proposal/envelope and separately approved writer receipt.
+
+## Phase 11 — Isolate failed reader attempts from complete successful evidence
+
+This phase extends BI-DE58CFE8 on Workroom `WC-14EA9122` after preserved BI-F48 TaskRun `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-0B380E66396F` failed `terminal_writer_context_reader_failed`. Its exact live history contains five successful exact-bound content pages at start lines 1, 58, 97, 148, and 165 plus one intervening failed exact-bound subset request at start line 28. The complete successful sequence must remain usable without treating the failed row as evidence.
+
+1. Preserve the six execution rows, request digest, immutable binding, Workroom identity, and zero-writer/zero-receipt state as the RED fixture. Do not replay the live TaskRun before a protected deployment.
+2. Add the exact chronological fixture first and prove that the current validator rejects it. Add negative fixtures for failed-only history, failed rows with conflicting binding, unauthorized failed tools, invalid non-empty persisted results, duplicate ids, and reversed durable order.
+3. Validate tool authority, execution identity/order, immutable parameters, and any persisted result identity for every row before evidence selection. Retain every failed row as audit history, but exclude it from successful reader ids, content coverage, attempt boundaries, and reader-call budgets.
+4. Build attempts only from successful exact-bound rows. Reuse one complete internally coherent attempt; never splice pages across attempts. Preserve disagreement, pagination, content, truncation, call-count, and size checks unchanged.
+5. If successful persisted rows do not independently form a complete attempt, use only the existing bounded deterministic server reread of the exact bound artifact. Require at least one successful exact-bound historical read before hydration authority exists; failed-only evidence remains fail closed.
+6. Refactor the validator under green so authority validation and successful-evidence selection are explicit without adding a parallel recovery model. Keep TaskRun/digest/grants/provider floors/writer idempotency and approval behavior unchanged.
+7. Run the focused terminal-writer-context suite, adjacent submission/approval-recovery/agent-loop suites, web typecheck, source and generated-artifact guards, pregate preflight, governed exact-tree CI, and independent semantic review. Preserve any infrastructure-inconclusive gate as such.
+8. Deliver one DCO-signed protected PR, one canonical release, and one governed live upgrade. Require exact served SHA and CAN-TEST before obtaining fresh authority for one same-identity replay of TaskRun `...0B380E66396F`; accept only a genuine writer/baseline or an exact fail-closed refusal.

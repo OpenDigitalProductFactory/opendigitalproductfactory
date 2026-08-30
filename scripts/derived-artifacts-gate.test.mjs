@@ -130,6 +130,29 @@ test("evaluatePushExemption: a non-docs file change still gates even if a doc ar
   assert.equal(result.reason, "non-docs runtime changes present");
 });
 
+// BI-AC48D79F: pre-commit auto-stages registered artifact JSON next to the
+// docs source. Those outputs used to trip "non-docs runtime changes present"
+// and made the freshness branch unreachable.
+test("evaluatePushExemption: a docs diff plus its fresh registered artifact is exempt (BI-AC48D79F)", () => {
+  const result = evaluatePushExemption(
+    ["docs/foo.md", "apps/web/lib/docs/doc-index.generated.json"],
+    [DOC_INDEX],
+    () => true,
+  );
+  assert.equal(result.exempt, true);
+  assert.match(result.reason, /fresh|docs diff/i);
+});
+
+test("evaluatePushExemption: a docs diff plus a STALE registered artifact is not exempt (BI-AC48D79F)", () => {
+  const result = evaluatePushExemption(
+    ["docs/foo.md", "apps/web/lib/docs/doc-index.generated.json"],
+    [DOC_INDEX],
+    () => false,
+  );
+  assert.equal(result.exempt, false);
+  assert.deepEqual(result.staleArtifacts, ["doc-index"]);
+});
+
 // ── evaluateCheckAll ─────────────────────────────────────────────────────────
 
 test("evaluateCheckAll reports every entry's check result", () => {

@@ -329,6 +329,113 @@ export const WORK_CASE_SOURCE_REGISTRY = [
     receiptPolicy: OBSERVED_RECEIPT_POLICY,
     roomProjection: FINITE_ROOM_PROJECTION,
   },
+  // ─── Employment lifecycle (EP-862820FD, BI-28EFA338) ────────────────────────
+  //
+  // The employment lifecycle is registry entries, not a workflow engine.
+  // `docs/architecture/workroom-vocabulary-boundary.md` states that a Workroom
+  // definition already declares outcome, trigger classes, authority, review,
+  // escalation, completion rules and event-triggered spawn rules, and that later
+  // work must deepen THIS registry rather than create a parallel template
+  // subsystem. Building an engine beside it would be exactly the parallel-surface
+  // defect that document exists to prevent.
+  //
+  // All five are `wwwd`: they coordinate a customer's decisions about their own
+  // workforce, not platform-development decisions. AGENTS.md §11 forbids settling
+  // those through `principle_decide`.
+  //
+  // Authority resolves through `apps/web/lib/workforce/approval-routing.ts` — the
+  // existing accountable-approver chain walk, with its fail-loud unresolved
+  // posture and transient on-leave `onBehalfOf` handling carried over unchanged.
+  // No second approver model.
+  {
+    sourceKey: "worker-onboarding",
+    definitionVersion: 1,
+    displayLabel: "Worker onboarding",
+    owningArea: "workforce",
+    domainCategory: "employment-lifecycle",
+    defaultDecisionScope: "wwwd",
+    accountResolverKey: null,
+    titleProjection: "Use the worker display name and the position being started.",
+    summaryProjection:
+      "Use the onboarding curriculum for the occupation, the accountable manager, and the provisioning steps still outstanding.",
+    supportedTransitions: STANDARD_TRANSITIONS,
+    receiptPolicy: GOVERNED_RECEIPT_POLICY,
+    roomProjection: FINITE_ROOM_PROJECTION,
+  },
+  {
+    sourceKey: "worker-change",
+    definitionVersion: 1,
+    displayLabel: "Worker change",
+    owningArea: "workforce",
+    domainCategory: "employment-lifecycle",
+    defaultDecisionScope: "wwwd",
+    accountResolverKey: null,
+    titleProjection: "Use the worker display name and what changed.",
+    summaryProjection:
+      "Use the prior and new manager, department or position, the effective date, and the access changes that follow from it.",
+    supportedTransitions: STANDARD_TRANSITIONS,
+    receiptPolicy: GOVERNED_RECEIPT_POLICY,
+    roomProjection: FINITE_ROOM_PROJECTION,
+  },
+  {
+    sourceKey: "worker-offboarding",
+    definitionVersion: 1,
+    displayLabel: "Worker offboarding",
+    owningArea: "workforce",
+    domainCategory: "employment-lifecycle",
+    defaultDecisionScope: "wwwd",
+    accountResolverKey: null,
+    // Governed receipts, not observed events: a revocation that did not happen
+    // must be visible as an outstanding obligation rather than an absent log line.
+    // An offboarding room that closes while access remains live is the failure
+    // mode this definition most needs to prevent.
+    titleProjection: "Use the worker display name and the last working day.",
+    summaryProjection:
+      "Use the termination record, the dated revocations still outstanding, and the accountable manager.",
+    supportedTransitions: STANDARD_TRANSITIONS,
+    receiptPolicy: GOVERNED_RECEIPT_POLICY,
+    roomProjection: FINITE_ROOM_PROJECTION,
+  },
+  {
+    sourceKey: "worker-classification-review",
+    definitionVersion: 1,
+    displayLabel: "Worker classification review",
+    owningArea: "workforce",
+    domainCategory: "employment-lifecycle",
+    defaultDecisionScope: "wwwd",
+    accountResolverKey: null,
+    // STANDING, unlike the other four. Classification is not a fact recorded once
+    // at hire: engagements drift, and duration, increased direction and emerging
+    // exclusivity are exactly the factors that change the answer. This room exists
+    // to surface a determination for re-confirmation when those signals appear.
+    // The platform never decides the classification — it makes the human's
+    // recorded determination explicit, evidenced and consequential.
+    titleProjection: "Use the worker display name and the classification under review.",
+    summaryProjection:
+      "Use the current determination, its author and evidence, the engagement-term drift that triggered the review, and the governing jurisdiction.",
+    supportedTransitions: STANDARD_TRANSITIONS,
+    receiptPolicy: GOVERNED_RECEIPT_POLICY,
+    roomProjection: STANDING_ROOM_PROJECTION,
+  },
+  {
+    sourceKey: "referral-intake",
+    definitionVersion: 1,
+    displayLabel: "Referral intake",
+    owningArea: "workforce",
+    domainCategory: "employment-lifecycle",
+    defaultDecisionScope: "wwwd",
+    accountResolverKey: null,
+    // Stays open to its vesting milestone: a referral bonus is a tenure-gated
+    // payroll consequence, not an ad-hoc payment, and the room is what holds that
+    // obligation until it matures. It emits a pay component line and never moves
+    // money — the standing payroll boundary is unchanged.
+    titleProjection: "Use the referred candidate and the referring worker.",
+    summaryProjection:
+      "Use the referrer, the application stage, the vesting milestone, and whether the referrer is excluded from the approval chain.",
+    supportedTransitions: STANDARD_TRANSITIONS,
+    receiptPolicy: GOVERNED_RECEIPT_POLICY,
+    roomProjection: FINITE_ROOM_PROJECTION,
+  },
   {
     // A field-service job dispatched to a provider from a confirmed booking.
     // Account resolution flows through the originating booking, so this source

@@ -14,7 +14,8 @@ import localCiSlotResources from "./local-ci-slot-resources.json";
 import { recordQueueTransition } from "@/lib/queue/queue-telemetry";
 import { gateRunDispositionsTotal } from "@/lib/operate/metrics";
 import type { NonprodOwnerProvider } from "./nonprod-owner-provider";
-import { isImmutableGateClaimKey, resolveLocalCiTerminalEvidence } from "@/lib/gates/gate-run-identity";
+import { isImmutableGateClaimKey } from "@/lib/gates/gate-run-identity";
+import { settleTerminalGateLease } from "./environment-lease-terminal-evidence";
 import { admittedLeaseTtlMs, DEFAULT_LEASE_TTL_MS, requestedTtlMs } from "./environment-lease-timing";
 export { NONPROD_OWNER_PROVIDERS, type NonprodOwnerProvider } from "./nonprod-owner-provider";
 export {
@@ -328,21 +329,17 @@ export async function claimNonprodEnvironmentLease(input: {
       && isTerminalLeaseStatus(lease.status)
       && isImmutableGateClaimKey(input.claimKey)
     ) {
-      return {
-        ...await resolveLocalCiTerminalEvidence({
-          claimKey: input.claimKey!,
-          evidenceRecordId: lease.evidenceRecordId,
-          now,
-          loadEvidence: async (id) => tx.externalEvidenceRecord
-            ? tx.externalEvidenceRecord.findUnique({
-              where: { id },
-              select: { id: true, operationType: true, details: true },
-            })
-            : null,
-        }),
+      const settlement = await settleTerminalGateLease({
+        tx,
         lease,
-        poolPolicy,
-      };
+        claimKey: input.claimKey!,
+        now,
+        ttlMs,
+      });
+      if (settlement.kind === "settled") {
+        return { ...settlement.projection, lease, poolPolicy };
+      }
+      lease = settlement.lease;
     }
 
     if (lease && isTerminalLeaseStatus(lease.status)) {

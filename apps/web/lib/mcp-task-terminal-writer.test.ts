@@ -427,11 +427,11 @@ describe("terminal writer resumption", () => {
       };
     });
     autonomous.execute.mockResolvedValue({
-      content: "The independent review stopped without recording a governed assessment. No receipt was created.",
+      content: "The provider did not honor the required writer tool-call contract. No receipt was created.",
       executedTools: [],
       failure: {
         kind: "terminal-writer-missing",
-        message: "The independent review stopped without recording a governed assessment. No receipt was created.",
+        message: "The provider did not honor the required writer tool-call contract. No receipt was created.",
       },
     });
 
@@ -477,7 +477,11 @@ describe("terminal writer resumption", () => {
       data: expect.objectContaining({
         status: "input-required",
         progressPayload: expect.objectContaining({
-          terminalWriterWait: expect.objectContaining({ attempt: 3 }),
+          terminalWriterWait: expect.objectContaining({
+            attempt: 3,
+            dispatchContract: "required-tool-call",
+            noncompliance: "prose-without-required-writer",
+          }),
         }),
       }),
     });

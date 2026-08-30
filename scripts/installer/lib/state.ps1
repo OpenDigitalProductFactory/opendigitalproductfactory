@@ -235,6 +235,39 @@ function Get-DpfStateValue {
     return $state.$Key
 }
 
+# Resolve the immutable image tag that a known consumer install must use for
+# ordinary lifecycle commands. The persisted install-state is the transaction
+# record written by the installer/promoter; process environment precedence then
+# prevents a stale root .env (especially DPF_IMAGE_TAG=latest) from selecting
+# different bytes during Compose interpolation. Contributor and legacy states
+# remain unchanged because they do not declare a consumer install mode.
+function Resolve-DpfConsumerReleaseImageTag {
+    param([string]$InstallDir = (Get-Location).Path)
+
+    $state = Read-DpfState
+    if ($null -eq $state) { return $null }
+    $mode = if ($state.PSObject.Properties.Name -contains 'installMode') { [string]$state.installMode } else { '' }
+    if ($mode -notin @('consumer', 'customer')) { return $null }
+
+    if ($state.PSObject.Properties.Name -contains 'installPath' -and $state.installPath) {
+        $recorded = [IO.Path]::GetFullPath([string]$state.installPath).TrimEnd('\', '/')
+        $requested = [IO.Path]::GetFullPath($InstallDir).TrimEnd('\', '/')
+        if (-not $recorded.Equals($requested, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "consumer_release_install_path_mismatch"
+        }
+    }
+
+    $tag = if ($state.PSObject.Properties.Name -contains 'imageTag') { [string]$state.imageTag } else { '' }
+    if ([string]::IsNullOrWhiteSpace($tag)) { throw "consumer_release_identity_missing" }
+    if ($tag -notmatch '^v\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?$') { throw "consumer_release_identity_invalid" }
+
+    if ($env:DPF_IMAGE_TAG -and $env:DPF_IMAGE_TAG -ne $tag) {
+        Write-Warning "Recorded consumer release tag '$tag' overrides environment tag '$env:DPF_IMAGE_TAG'."
+    }
+    $env:DPF_IMAGE_TAG = $tag
+    return $tag
+}
+
 # Atomically converge a related set of top-level identity values in one lock,
 # CAS, schema validation, and replace. This avoids exposing half-updated release
 # identity (for example imageTag=new while composeFiles still describe old).

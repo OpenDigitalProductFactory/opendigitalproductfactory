@@ -138,6 +138,30 @@ export function buildPortfolioTree(
   }
   for (const root of roots) sumSubtree(root);
 
+  // BI-A5576D1A: products with a null taxonomyNodeId are real portfolio products that
+  // simply have not been placed in the taxonomy yet. The counts above skip them (the
+  // `if (c.taxonomyNodeId)` guards), so the tree total silently undercounted the estate
+  // (225 of 375). Surface them under a synthetic "Uncategorized" root so they are both
+  // counted and visible, instead of vanishing.
+  const uncategorizedTotal = totalCounts.find((c) => c.taxonomyNodeId === null)?._count.id ?? 0;
+  const uncategorizedActive = activeCounts.find((c) => c.taxonomyNodeId === null)?._count.id ?? 0;
+  if (uncategorizedTotal > 0) {
+    roots.push({
+      id: "__uncategorized__",
+      nodeId: "__uncategorized__",
+      name: "Uncategorized",
+      parentId: null,
+      portfolioId: null,
+      directCount: uncategorizedTotal,
+      totalCount: uncategorizedTotal,
+      activeCount: uncategorizedActive,
+      description: "Products not yet placed in the taxonomy.",
+      governance: null,
+      enrichment: null,
+      children: [],
+    });
+  }
+
   const { pruneEmpty = false, flattenThreshold = 20 } = options;
 
   // Prune empty branches: remove children (recursively) that have totalCount === 0.

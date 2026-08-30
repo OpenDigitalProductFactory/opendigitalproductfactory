@@ -5,6 +5,7 @@ import { prisma } from "@dpf/db";
 
 import {
   projectBacklogItemReadiness,
+  readinessRequirement,
   type InitiativeReadinessActivity,
   type InitiativeReadinessDecision,
   type ReadinessTarget,
@@ -52,7 +53,12 @@ function orphanDecision(args: {
     verdict: "denied",
     satisfied: [],
     unmet: [],
-    blockers: [{ code: "CLASSIFICATION_REQUIRED", state: "blocked", accountableRole: "product-owner", evidenceRefs: [] }],
+    blockers: [readinessRequirement({
+      code: "CLASSIFICATION_REQUIRED",
+      state: "blocked",
+      accountableRole: "product-owner",
+      profile: "feature",
+    })],
     evaluatedAt: args.evaluatedAt,
   };
 }

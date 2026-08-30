@@ -11,6 +11,8 @@ const mocks = vi.hoisted(() => ({
   failRun: vi.fn(),
   resolveReleaseBatchStatus: vi.fn(),
   readSelfUpgradeSupport: vi.fn(),
+  resolveCurrentSelfUpgradeTarget: vi.fn(),
+  admitSelfUpgrade: vi.fn(),
 }));
 
 vi.mock("@/lib/queue/inngest-client", () => ({
@@ -51,6 +53,10 @@ vi.mock("@/lib/self-upgrade/run-store", () => ({
   getLatestRun: mocks.getLatestRun,
   createRun: mocks.createRun,
   failRun: mocks.failRun,
+}));
+vi.mock("@/lib/self-upgrade/admission", () => ({
+  resolveCurrentSelfUpgradeTarget: mocks.resolveCurrentSelfUpgradeTarget,
+  admitSelfUpgrade: mocks.admitSelfUpgrade,
 }));
 
 import { requestSelfUpgrade } from "./request";
@@ -117,6 +123,17 @@ describe("requestSelfUpgrade", () => {
       reason: "enabled",
       message: null,
     });
+    mocks.resolveCurrentSelfUpgradeTarget.mockResolvedValue({
+      targetKind: "git-source",
+      targetSha: "b".repeat(40),
+      targetTag: null,
+    });
+    mocks.admitSelfUpgrade.mockResolvedValue({
+      admitted: true,
+      disposition: "created",
+      runId: "SUR-QUEUED1",
+      dispatchStatus: "admission_pending",
+    });
   });
 
   it("queues the same event as the human action in manual mode", async () => {
@@ -130,16 +147,14 @@ describe("requestSelfUpgrade", () => {
       status: "queued",
       runId: "SUR-QUEUED1",
       triggeredBy: "manual:user-ops-1",
-      eventIds: ["evt-1"],
+      eventIds: [],
+      dispatchStatus: "admission_pending",
     });
-    expect(mocks.createRun).toHaveBeenCalledWith({ triggeredBy: "manual:user-ops-1" });
-    expect(mocks.inngestSend).toHaveBeenCalledWith({
-      name: "ops/self-upgrade.run",
-      data: {
-        runId: "SUR-QUEUED1",
-        triggeredBy: "manual:user-ops-1",
-      },
-    });
+    expect(mocks.admitSelfUpgrade).toHaveBeenCalledWith(expect.objectContaining({
+      triggeredBy: "manual:user-ops-1",
+      routine: false,
+    }));
+    expect(mocks.inngestSend).not.toHaveBeenCalled();
     expect(mocks.isUpgradeWindowOpen).not.toHaveBeenCalled();
   });
 
@@ -163,8 +178,30 @@ describe("requestSelfUpgrade", () => {
       status: "queued",
       runId: "SUR-QUEUED1",
     });
-    expect(mocks.createRun).toHaveBeenCalled();
-    expect(mocks.inngestSend).toHaveBeenCalled();
+    expect(mocks.admitSelfUpgrade).toHaveBeenCalled();
+    expect(mocks.inngestSend).not.toHaveBeenCalled();
+  });
+
+  it("does not grant recovery authority to a plain request after a terminal failure", async () => {
+    mocks.getLatestRun.mockResolvedValue({
+      runId: "SUR-6B312E24",
+      status: "failed",
+      targetSha: "04b0b9d84251c2a91ae519bf79eedd86b662f604",
+      targetTag: "v2026.08.29-terminal-writer-failed-reader-history.1",
+      deployedSha: null,
+      completedAt: new Date("2026-08-29T14:45:34.380Z"),
+    });
+    const result = await requestSelfUpgrade({
+      requestedBy: "manual:user-ops-1",
+      actorKind: "human",
+    });
+
+    expect(result).toMatchObject({
+      success: true,
+      status: "human_override_required",
+      reason: "terminal-recovery-needs-operator-binding",
+    });
+    expect(mocks.admitSelfUpgrade).not.toHaveBeenCalled();
   });
 
   it.each(["running", "queued", "pending"])(
@@ -187,7 +224,7 @@ describe("requestSelfUpgrade", () => {
     },
   );
 
-  it("marks the queued run failed when event dispatch fails", async () => {
+  it("returns the durable admission without waiting for event dispatch", async () => {
     mocks.inngestSend.mockRejectedValueOnce(new Error("inngest offline"));
 
     const result = await requestSelfUpgrade({
@@ -195,16 +232,9 @@ describe("requestSelfUpgrade", () => {
       actorKind: "human",
     });
 
-    expect(result).toMatchObject({
-      success: false,
-      status: "dispatch_failed",
-      runId: "SUR-QUEUED1",
-      message: "queue-dispatch-failed: inngest offline",
-    });
-    expect(mocks.failRun).toHaveBeenCalledWith(
-      "SUR-QUEUED1",
-      "queue-dispatch-failed: inngest offline",
-    );
+    expect(result).toMatchObject({ success: true, status: "queued", runId: "SUR-QUEUED1" });
+    expect(mocks.inngestSend).not.toHaveBeenCalled();
+    expect(mocks.failRun).not.toHaveBeenCalled();
   });
 
   it("requires human override when an agent requests outside the effective window", async () => {
@@ -236,15 +266,11 @@ describe("requestSelfUpgrade", () => {
       runId: "SUR-QUEUED1",
       triggeredBy: "mcp:codex",
     });
-    expect(mocks.inngestSend).toHaveBeenCalledWith({
-      name: "ops/self-upgrade.run",
-      data: {
-        runId: "SUR-QUEUED1",
-        triggeredBy: "mcp:codex",
-        routine: true,
-      },
-    });
-    expect(mocks.inngestSend.mock.calls[0]?.[0].data.force).toBeUndefined();
+    expect(mocks.admitSelfUpgrade).toHaveBeenCalledWith(expect.objectContaining({
+      triggeredBy: "mcp:codex",
+      routine: true,
+      requestedForce: false,
+    }));
   });
 
   it("returns batch_below_threshold with the tally when an agent request is under the batch size", async () => {
@@ -297,7 +323,7 @@ describe("requestSelfUpgrade", () => {
 
     expect(result).toMatchObject({ success: true, status: "queued" });
     expect(mocks.resolveReleaseBatchStatus).not.toHaveBeenCalled();
-    expect(mocks.inngestSend).toHaveBeenCalled();
+    expect(mocks.admitSelfUpgrade).toHaveBeenCalled();
   });
 
   it("requires human override when a 24/7 install has no known timezone", async () => {

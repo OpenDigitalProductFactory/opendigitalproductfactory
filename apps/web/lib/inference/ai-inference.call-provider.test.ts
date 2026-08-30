@@ -164,4 +164,34 @@ describe("callProvider", () => {
       }),
     );
   });
+
+  it("fails closed when a CLI adapter cannot enforce required tool choice", async () => {
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({
+      providerId: "anthropic-sub",
+      authMethod: "oauth2_authorization_code",
+      authHeader: "Authorization",
+      baseUrl: null,
+      endpoint: null,
+    });
+
+    await expect(callProvider(
+      "anthropic-sub",
+      "claude-sonnet-4-6",
+      [{ role: "user", content: "Record it." }],
+      "Use the writer.",
+      [{ type: "function", function: { name: "record_review", parameters: {} } }],
+      {
+        providerId: "anthropic-sub",
+        modelId: "claude-sonnet-4-6",
+        recipeId: null,
+        contractFamily: "sync.review",
+        executionAdapter: "claude-cli",
+        maxTokens: 1024,
+        providerSettings: {},
+        toolPolicy: { toolChoice: "required" },
+        responsePolicy: {},
+      },
+    )).rejects.toThrow(/cannot enforce required tool choice/i);
+    expect(mockAdapterExecute).not.toHaveBeenCalled();
+  });
 });

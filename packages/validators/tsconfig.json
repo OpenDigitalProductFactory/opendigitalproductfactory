@@ -2,7 +2,14 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "rootDir": "src",
-    "outDir": "dist"
+    "outDir": "dist",
+    // The federation-discovery endpoint rule parses with WHATWG `URL`, which is
+    // a Web platform global rather than an ES2022 one. Declared here the same
+    // way @dpf/api-client declares the platform types it uses, instead of
+    // leaning on a transitive @types/node leak — this package is consumed by the
+    // portal, the Edge Node, and at least one client component, so it must not
+    // assume a Node runtime.
+    "lib": ["ES2022", "DOM"]
   },
   "include": ["src"],
   "exclude": ["src/**/*.test.ts"]

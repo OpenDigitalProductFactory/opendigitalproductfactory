@@ -8,7 +8,7 @@ import {
 } from "@/lib/govern/authority/coworker-authority-decision";
 import { markTaskRunWorking } from "@/lib/observability/heartbeat";
 
-const APPROVAL_TTL_MS = 15 * 60 * 1000;
+export const AUTHORITY_APPROVAL_TTL_MS = 15 * 60 * 1000;
 
 type EnvelopeSummary = {
   id: string;
@@ -100,7 +100,7 @@ export async function ensureAuthorityApprovalEnvelope(
     return existing;
   }
 
-  const expiresAt = new Date(now.getTime() + APPROVAL_TTL_MS);
+  const expiresAt = new Date(now.getTime() + AUTHORITY_APPROVAL_TTL_MS);
   let created: EnvelopeSummary;
   try {
     created = await db.coworkerActionEnvelope.create({

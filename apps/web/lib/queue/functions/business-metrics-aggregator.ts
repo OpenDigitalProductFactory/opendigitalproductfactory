@@ -29,8 +29,13 @@ export const businessMetricsAggregator = inngest.createFunction(
       const result = await aggregateBusinessMetrics(
         defaultBusinessMetricRollupDeps(),
       );
+      // Distinguish "did nothing because no install matched the engine" from a
+      // real refresh, so an operator auditing scheduled jobs is not misled by a
+      // green run that produced zero rollups. BI-F359E1E9.
       console.log(
-        `[business-metrics] refreshed ${result.upserted} rollups across ${result.organizations} organization(s)`,
+        result.organizations === 0
+          ? "[business-metrics] no storefronts matched the metrics engine (covers hospitality); nothing to refresh"
+          : `[business-metrics] refreshed ${result.upserted} rollups across ${result.organizations} organization(s)`,
       );
       return result;
     });
