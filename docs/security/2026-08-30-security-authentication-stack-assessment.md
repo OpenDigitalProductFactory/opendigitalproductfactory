@@ -47,11 +47,11 @@ The largest remaining security risks are at the edges of that architecture:
 ## Priority order
 
 1. **Now—BI-E7553A1C:** externalize startup root-secret custody behind a provider-neutral, fail-closed boundary; keep environment as default and 1Password optional.
-2. **Next—key lifecycle:** version the encrypted credential envelope, support read-old/write-new, controlled re-encryption, recovery, and compromise rotation before encouraging routine key rotation.
-3. **Next—production credential enforcement:** enforce `operator-only` at grants, host/runtime actions, diagnostics, and container-exec exposure boundaries; external vault use is defense in depth, not the enforcement mechanism.
-4. **Next—authentication assurance:** choose and implement workforce passkeys/MFA plus session/reauthentication tiers against NIST SP 800-63B-4.
-5. **Next—identity-path symmetry:** make customer/social sign-in consult the Principal spine before session issuance and migrate social-provider secrets into the canonical credential store.
-6. **Hygiene:** reconcile merged PR evidence to live BI states and replace stale spec/backlog identifiers with live pointers.
+2. **Next—BI-32935E47:** version the encrypted credential envelope, support read-old/write-new, controlled re-encryption, recovery, and compromise rotation before encouraging routine key rotation.
+3. **Next—BI-80E4A139:** enforce `operator-only` at grants, host/runtime actions, diagnostics, and container-exec exposure boundaries; external vault use is defense in depth, not the enforcement mechanism.
+4. **Next—BI-C9656270:** choose and implement workforce passkeys/MFA plus session/reauthentication tiers against NIST SP 800-63B-4.
+5. **Next—BI-E22C3D75 and BI-DD3BBD02:** make customer/social sign-in consult the Principal spine before session issuance and migrate social-provider secrets into the canonical credential store.
+6. **Hygiene—BI-FE678DA3:** reconcile merged PR evidence to live BI states and replace stale spec/backlog identifiers with live pointers.
 
 ## Security boundary for 1Password
 
