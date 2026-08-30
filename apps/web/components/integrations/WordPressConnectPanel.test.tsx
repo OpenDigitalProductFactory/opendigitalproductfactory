@@ -60,16 +60,17 @@ const connected: WordPressConnectionViewState = {
 };
 
 describe("WordPressConnectPanel", () => {
-  it("uses the shared three-field setup contract with one primary next action", () => {
+  it("labels the initial consequential action Connect WordPress", () => {
     render(<WordPressConnectPanel initialState={disconnected} />);
 
     expect(screen.getByLabelText(/WordPress site URL/i)).toBeTruthy();
     expect(screen.getByLabelText(/WordPress username/i)).toBeTruthy();
     expect(screen.getByLabelText(/Application Password/i)).toHaveAttribute("type", "password");
-    expect(screen.getByRole("button", { name: /check connection/i })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: /^connect wordpress$/i })).toHaveAttribute(
       "data-dpf-primary-action",
       "true",
     );
+    expect(screen.queryByRole("button", { name: /^check connection$/i })).toBeNull();
   });
 
   it("puts identity, health, capabilities, authority, and one next action in the connected view", () => {
@@ -83,7 +84,20 @@ describe("WordPressConnectPanel", () => {
       "data-dpf-primary-action",
       "true",
     );
+    expect(screen.getByRole("button", { name: /replace connection/i })).toBeTruthy();
     expect(screen.queryByDisplayValue(/application password/i)).toBeNull();
+  });
+
+  it("keeps a usable failed connection visible as degraded with a recovery action", () => {
+    render(<WordPressConnectPanel initialState={{
+      ...connected,
+      status: "degraded",
+      lastErrorMsg: "WordPress could not be reached safely.",
+    }} />);
+
+    expect(screen.getByText("Needs attention")).toBeTruthy();
+    expect(screen.getByText("WordPress could not be reached safely.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^check connection$/i })).toBeTruthy();
   });
 
   it("checks a connected site and reports a safe recovery error", async () => {
