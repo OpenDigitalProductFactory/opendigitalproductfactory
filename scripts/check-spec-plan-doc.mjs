@@ -36,6 +36,7 @@
 // interactive nudge is scripts/hooks/spec-plan-doc-precheck.mjs.
 
 import { execFileSync } from "node:child_process";
+import { listChangedFiles } from "./check-doc-anchor-existence.mjs";
 import { fetchOriginMainSharedSafe } from "./lib/git-fetch-shared-safe.mjs";
 // Canonical sensitivity constants (single source, shared with the gate-context
 // pack; the dpf-skill-pack precheck hook keeps a drift-guard-pinned copy).
@@ -89,11 +90,15 @@ const base = assertSafeRef(process.env.BASE_SHA || "origin/main", "BASE_SHA");
 // BI-1ADD56FC: never write .git/shallow into a full shared clone (breaks worktrees).
 fetchOriginMainSharedSafe((args) => git(...args));
 
-const changed = git("diff", "--name-only", `${base}...HEAD`)
-  .split("\n")
-  .map((s) => s.trim())
-  .filter(Boolean)
-  .filter((f) => !EXCLUDE_RE.test(f));
+// BI-1DF0BF51: a failed three-dot diff is not "no tracked source changes".
+const listed = listChangedFiles(base);
+if (listed.status === "unresolvable") {
+  console.error(`[spec-plan-doc-gate] cannot resolve ${base} — the guard did not run. This is not a pass.`);
+  console.error("[spec-plan-doc-gate] Remedy: git fetch --deepen 50 origin  (or git fetch origin main) and re-run.");
+  if (listed.detail) console.error(`[spec-plan-doc-gate] git: ${listed.detail}`);
+  process.exit(1);
+}
+const changed = listed.files.filter((f) => !EXCLUDE_RE.test(f));
 
 if (changed.length === 0) {
   console.log("[spec-plan-doc-gate] No tracked source changes — nothing to gate.");

@@ -1,6 +1,14 @@
 import type { SelfUpgradeConfig } from "./config";
+import {
+  loadVerifiedReleaseTargetEvidence,
+  recordVerifiedReleaseTargetEvidence,
+} from "@/lib/release-health/state";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
-import { loadReleaseInstallContext, resolveReleaseUpgradeCandidate } from "./release-target";
+import {
+  loadReleaseInstallContext,
+  resolveReleaseTarget,
+  resolveReleaseUpgradeCandidate,
+} from "./release-target";
 import type { SelfUpgradeSupport } from "./support";
 import { resolveTargetSha } from "./version";
 
@@ -31,8 +39,8 @@ export async function resolveSelfUpgradeStatusTarget(input: {
    */
   log?: (message: string) => void;
 }): Promise<SelfUpgradeStatusTarget> {
-  // Defaulted here, not at the call sites: the point is that every caller emits
-  // the reason without having to remember to ask for it.
+  // Defaulted here, not at the call sites: every caller reports a resolution
+  // failure without having to remember to opt in.
   const log = input.log ?? ((message: string) => console.warn(`[self-upgrade] ${message}`));
   if (!input.support.supported) return UNAVAILABLE;
   if (input.support.targetKind === "git-source") {
@@ -55,25 +63,51 @@ export async function resolveSelfUpgradeStatusTarget(input: {
     log("release-install-context-unresolved");
     return UNAVAILABLE;
   }
-  // A resolution failure has to leave a trace. `readRegistryReleaseCandidate`
-  // returns a typed {ok:false, reason}, but anything that THREW became a bare
-  // null here and every distinct cause collapsed into "registry-unavailable"
-  // with nothing logged anywhere. An install then reports "no target" while a
-  // newer release is published, and the reason is unrecoverable from outside
-  // the process — a live intermittent fault (SUR-6B312E24) could not be
-  // diagnosed at all, and the absence of any signal led to a confidently wrong
-  // root cause being recorded against working code. BI-52C6FE5A.
-  const target = await resolveReleaseUpgradeCandidate({
+
+  // Registry discovery remains primary. A thrown fault is still reported even
+  // when the independently verified persisted candidate recovers the page, so
+  // intermittent process-level degradation remains observable.
+  const liveTarget = await resolveReleaseUpgradeCandidate({
     context,
     currentConfigDigest: input.currentConfigDigest,
   }).catch((error: unknown) => {
-    log(
-      `release-target-resolution-threw: ${getErrorMessage(error)}`,
-    );
+    log(`release-target-resolution-threw: ${getErrorMessage(error)}`);
     return null;
   });
+  if (liveTarget && liveTarget.kind !== "no-published-target") {
+    const { kind: _kind, ...candidate } = liveTarget;
+    await recordVerifiedReleaseTargetEvidence({
+      candidate,
+      context,
+      currentConfigDigest: input.currentConfigDigest ?? "",
+    }).catch(() => false);
+    return {
+      targetSha: liveTarget.sourceSha,
+      targetTag: liveTarget.tag,
+      availability: "resolved",
+      unavailableReason: null,
+      releaseFreshness: liveTarget.kind === "up-to-date",
+    };
+  }
+
+  const persistedCandidate = input.currentConfigDigest
+    ? await loadVerifiedReleaseTargetEvidence({
+        context,
+        currentConfigDigest: input.currentConfigDigest,
+      }).catch(() => null)
+    : null;
+  const target = persistedCandidate
+    ? resolveReleaseTarget({
+        currentConfigDigest: input.currentConfigDigest,
+        candidate: persistedCandidate,
+      })
+    : null;
   if (!target || target.kind === "no-published-target") {
-    const unavailableReason = target?.reason ?? "registry-unavailable";
+    const unavailableReason =
+      target?.reason ??
+      (liveTarget?.kind === "no-published-target"
+        ? liveTarget.reason
+        : "registry-unavailable");
     log(`release-target-unavailable: ${unavailableReason}`);
     return { ...UNAVAILABLE, unavailableReason };
   }

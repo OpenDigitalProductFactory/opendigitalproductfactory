@@ -44,12 +44,14 @@ import type {
 import {
   activityKindBiasFor,
   deriveLowTrafficBias,
+  deriveStakesBias,
   deriveStreamBiases,
   deriveTemporalBias,
   modeBiasFor,
   shapeBiasFor,
   type ArchetypeStreamInput,
   type PostureBias,
+  type WorkStakesInput,
 } from "./derive";
 import {
   dampProactivityLevel,
@@ -129,6 +131,8 @@ export interface WorkPostureInput {
    */
   workroomDefault?: RoomPostureDeclaration | null;
   shape?: RoomShapeInput | null;
+  /** Existing Build Studio rightsizing facts, when this room fronts a build. */
+  stakes?: WorkStakesInput | null;
   stream?: ArchetypeStreamInput | null;
   /** Everything the clock needs. Passed in — the resolver reads no ambient time. */
   temporal?: TemporalBandInput | null;
@@ -178,6 +182,9 @@ function collectBiases(
 
   const kindBias = activityKindBiasFor(input.shape?.activityKind);
   if (kindBias) biases.push(kindBias);
+
+  const stakesBias = deriveStakesBias(input.stakes);
+  if (stakesBias) biases.push(stakesBias);
 
   biases.push(...deriveStreamBiases(input.stream));
 

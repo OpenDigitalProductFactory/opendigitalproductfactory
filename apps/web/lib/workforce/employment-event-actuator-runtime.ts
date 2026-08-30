@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import type { WorkerClassification } from "@dpf/db";
 import { isProfessionJurisdiction, type ProfessionJurisdiction } from "@dpf/db/wiki-taxonomy";
 
@@ -284,4 +286,77 @@ export function describeActuation(
     case "inert":
       return recorded;
   }
+}
+
+/**
+ * THE single writer of `EmploymentEvent` rows (BI-2624B7EA).
+ *
+ * The actuator first shipped inert, then shipped wired to one of the four places
+ * that write employment events — so hiring, org assignment and manager changes
+ * all still did nothing. Wiring call sites one at a time is what produced that,
+ * twice.
+ *
+ * This closes the class rather than the instances: writing the event and opening
+ * the room it prescribes are the SAME operation, so a future writer cannot record
+ * an event and silently fail to act on it. `check-employment-event-writers.mjs`
+ * enforces that no action module calls `employmentEvent.create` directly.
+ *
+ * Loads the worker's classification and jurisdiction itself, so a caller cannot
+ * omit them and get a permanent stream of operator work that looks like the
+ * classification gate working correctly.
+ */
+export async function recordAndActuateEmploymentEvent(
+  tx: CapsuleDb & {
+    employmentEvent: { create(args: unknown): Promise<{ eventId: string }> };
+    employeeProfile: { findUnique(args: unknown): Promise<ActuatorWorkerRow | null> };
+    businessContext: { findFirst(args: unknown): Promise<{ employsIn: string[] } | null> };
+  },
+  input: {
+    employeeProfileId: string;
+    eventType: EmploymentEventType;
+    effectiveAt: Date;
+    reason: string | null;
+    actorUserId: string;
+    metadata?: unknown;
+    /** Set when the caller already updated the row and knows the end state. */
+    terminationDate?: Date | null;
+  },
+): Promise<ActuationResult> {
+  const event = await tx.employmentEvent.create({
+    data: {
+      eventId: `EEVT-${randomUUID()}`,
+      employeeProfileId: input.employeeProfileId,
+      eventType: input.eventType,
+      effectiveAt: input.effectiveAt,
+      reason: input.reason,
+      actorUserId: input.actorUserId,
+      ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
+    },
+  });
+
+  const worker = await tx.employeeProfile.findUnique({
+    where: { id: input.employeeProfileId },
+    select: {
+      id: true,
+      displayName: true,
+      employmentType: { select: { classification: true } },
+      workLocation: { select: { id: true, jurisdictionSlug: true } },
+    },
+  });
+  if (!worker) {
+    return {
+      kind: "operator-work",
+      message: "The worker record could not be read back, so no room was opened.",
+    };
+  }
+
+  const employsIn = (await tx.businessContext.findFirst({ select: { employsIn: true } }))?.employsIn ?? [];
+
+  return actuateForLifecycleEvent(tx, {
+    employmentEventId: event.eventId,
+    eventType: input.eventType,
+    worker,
+    employsIn,
+    userId: input.actorUserId,
+  });
 }

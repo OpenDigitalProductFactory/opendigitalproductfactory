@@ -176,6 +176,8 @@ export async function advanceReviewedBuildToShip(
       planReview: true,
       verificationOut: true,
       acceptanceMet: true,
+      uxTestResults: true,
+      uxVerificationStatus: true,
       threadId: true,
       diffPatch: true,
       createdById: true,
@@ -281,9 +283,10 @@ export async function advanceReviewedBuildToShip(
     /* never blocks the manual/off path */
   }
 
-  const { checkPhaseGate, canTransitionPhase, normalizeHappyPathState } = await import(
+  const { canTransitionPhase, normalizeHappyPathState } = await import(
     "@/lib/feature-build-types"
   );
+  const { checkBuildPhaseGate } = await import("@/lib/work-posture/verification-depth-gate");
   if (!canTransitionPhase("review", "ship")) {
     return { kind: "skipped", reason: "transition not allowed" };
   }
@@ -296,18 +299,26 @@ export async function advanceReviewedBuildToShip(
   }
 
   const brief = build.brief as { fixContext?: unknown } | null;
-  const gate = checkPhaseGate("review", "ship", {
-    kind: build.kind,
-    fixContext: brief?.fixContext,
-    designDoc: build.designDoc,
-    designReview: build.designReview,
-    happyPathState: normalizeHappyPathState(
-      (build.plan as Record<string, unknown> | null)?.happyPathState ?? null,
-    ),
-    buildPlan: build.buildPlan,
-    planReview: build.planReview,
-    verificationOut: build.verificationOut,
-    acceptanceMet: build.acceptanceMet,
+  const gate = await checkBuildPhaseGate({
+    buildId,
+    from: "review",
+    to: "ship",
+    evidence: {
+      kind: build.kind,
+      processSize: ((build.plan as Record<string, unknown> | null)?.processSize as string | undefined) ?? "medium",
+      fixContext: brief?.fixContext,
+      designDoc: build.designDoc,
+      designReview: build.designReview,
+      happyPathState: normalizeHappyPathState(
+        (build.plan as Record<string, unknown> | null)?.happyPathState ?? null,
+      ),
+      buildPlan: build.buildPlan,
+      planReview: build.planReview,
+      verificationOut: build.verificationOut,
+      acceptanceMet: build.acceptanceMet,
+      uxTestResults: build.uxTestResults,
+      uxVerificationStatus: build.uxVerificationStatus,
+    },
   });
   if (!gate.allowed) {
     await log(`Not advanced — review→ship gate: ${gate.reason ?? "blocked"}`);

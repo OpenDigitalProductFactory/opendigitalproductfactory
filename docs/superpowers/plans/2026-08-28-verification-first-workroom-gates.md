@@ -68,6 +68,35 @@ flowchart TD
 
 **Gate:** unit tests + `pnpm --filter web build`. No runtime behaviour changes in this phase, which is the point.
 
+### Phase 2 execution record — 2026-08-29
+
+The first replay was empty because build-linked rooms carried no declared or
+derivable shape. Live evidence showed that the newer build plans already carry
+the missing stakes signal through the existing rightsizing fields, so the
+upstream dependency was repaired in `work-posture/derive.ts`: absent/low stays
+inert, quality-first or elevated resolves `shallow`, and high sensitivity
+resolves `deep`. The gate remains shadow-only and no lifecycle policy lists the
+requirement.
+
+Replaying the 25 recorded successful `phase:advance` transitions produced this
+report (a recorded advance is the authoritative evidence that the transition
+was allowed at the time):
+
+| Kind | Size | Declared depth | Transitions | Would newly block |
+| --- | --- | --- | ---: | ---: |
+| feature | small | none | 8 | 0 |
+| feature | medium | none | 7 | 0 |
+| doc | large | none | 4 | 0 |
+| fix | small | none | 4 | 0 |
+| feature | medium | deep | 2 | 2 |
+
+The affected transitions were `FB-259E67BD` (`ideate -> plan`) and
+`FB-2D3B7516` (`build -> review`), both for missing typecheck evidence. The
+former is not a valid future binding point because implementation has not yet
+happened; the latter is the intended shape of a future depth-bound refusal.
+Two of 25 (`8%`) is neither empty nor enormous, so Phase 2 is calibrated enough
+to deliver while Phases 3–6 remain separate backlog work.
+
 ## 4. Phase 3 — Tests block at `shallow`
 
 **Goal:** close finding 1 — failing tests stop advancing work.
