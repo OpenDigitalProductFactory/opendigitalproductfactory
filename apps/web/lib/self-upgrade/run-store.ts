@@ -38,6 +38,19 @@ export async function createRun(params: {
 
 const ACTIVE_RUN_STATUSES = ["pending", "queued", "running"];
 
+type RecoveryTargetRelationship = "exact" | "distinct" | "conflicting";
+
+function classifyRecoveryTargetRelationship(
+  predecessor: { targetSha: string; targetTag: string },
+  target: { targetSha: string; targetTag: string },
+): RecoveryTargetRelationship {
+  const sameSha = predecessor.targetSha.toLowerCase() === target.targetSha.toLowerCase();
+  const sameTag = predecessor.targetTag === target.targetTag;
+  if (sameSha && sameTag) return "exact";
+  if (!sameSha && !sameTag) return "distinct";
+  return "conflicting";
+}
+
 function asAdmissionRecord(row: {
   runId: string;
   recoveryOfRunId: string | null;
@@ -112,10 +125,11 @@ export const selfUpgradeAdmissionRepository: SelfUpgradeAdmissionRepository = {
         ) {
           return { disposition: "recovery_refused" as const, reason: "recovery-predecessor-ambiguous" as const, run: null };
         }
-        if (
-          predecessor.targetSha.toLowerCase() === input.target.targetSha.toLowerCase() ||
-          predecessor.targetTag === input.target.targetTag
-        ) {
+        const targetRelationship = classifyRecoveryTargetRelationship(
+          { targetSha: predecessor.targetSha, targetTag: predecessor.targetTag },
+          { targetSha: input.target.targetSha, targetTag: input.target.targetTag },
+        );
+        if (targetRelationship === "conflicting") {
           return { disposition: "recovery_refused" as const, reason: "recovery-target-not-distinct" as const, run: null };
         }
         const latest = await tx.selfUpgradeRun.findFirst({
