@@ -160,3 +160,16 @@ This phase extends BI-DE58CFE8 on Workroom `WC-14EA9122` after preserved BI-F48 
 6. Refactor the validator under green so authority validation and successful-evidence selection are explicit without adding a parallel recovery model. Keep TaskRun/digest/grants/provider floors/writer idempotency and approval behavior unchanged.
 7. Run the focused terminal-writer-context suite, adjacent submission/approval-recovery/agent-loop suites, web typecheck, source and generated-artifact guards, pregate preflight, governed exact-tree CI, and independent semantic review. Preserve any infrastructure-inconclusive gate as such.
 8. Deliver one DCO-signed protected PR, one canonical release, and one governed live upgrade. Require exact served SHA and CAN-TEST before obtaining fresh authority for one same-identity replay of TaskRun `...0B380E66396F`; accept only a genuine writer/baseline or an exact fail-closed refusal.
+
+## Phase 12 — Preserve a guarded CLI route for a sole terminal writer
+
+This phase extends BI-DE58CFE8 on Workroom `WC-14EA9122` after WordPress completion TaskRun `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-8139EEF334F5` reached attempt five with zero executions. Codex CLI was rejected before inference because it lacks provider-native required-tool choice; Gemini and local were simultaneously unavailable. No objective mapping or completion receipt exists.
+
+1. Preserve the TaskRun, key, digest, immutable WordPress artifact binding, and zero-writer state as the live RED identity. Do not create a sibling reviewer or synthesize objective mappings.
+2. Add RED tests proving a resumed writer-only turn carries both `toolChoice: required` and the exact bound terminal writer name into route resolution.
+3. Bind that name into the resolved plan after recipe/harness selection and preserve it across existing fallback plan construction.
+4. At the adapter boundary, permit a CLI attempt only for a governed MCP session with exactly one attached function whose name exactly matches the bound terminal writer. Keep ordinary required-tool CLI requests, missing sessions, mismatches, and multi-tool surfaces fail closed.
+5. Preserve the outer terminal policy as the sole completion boundary: prose or an absent writer remains `input-required/missing-terminal-writer`; only an actual governed writer execution may advance to approval or receipt.
+6. Run focused terminal-policy, plan-override, and provider-dispatch tests; the linked inference/agent-loop blast radius; web typecheck; source/module/docs guards; pregate preflight; exact-tree CI; and semantic review. Record infrastructure failures as non-PASS and keep protected CI mandatory.
+7. Deliver one DCO-signed protected PR, one canonical release, and one governed live upgrade. Require exact served SHA and CAN-TEST.
+8. Resume only the preserved WordPress TaskRun on a server-authorized identical-key path. Accept only genuine immutable reads plus governed `record_initiative_evidence` execution and objective-mapping receipt, then close BI-A45D744A and WC-04941646 through their normal server gates.

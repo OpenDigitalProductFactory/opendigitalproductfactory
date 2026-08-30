@@ -551,11 +551,25 @@ export async function callProvider(
   const isCliAdapter =
     selector !== null &&
     (selector.kind === "claude-code-cli" || selector.kind === "codex-cli");
-  if (effectivePlan.toolPolicy.toolChoice === "required" && isCliAdapter) {
+  const soleToolFunction = tools?.length === 1 ? tools[0]?.["function"] : undefined;
+  const soleToolName = soleToolFunction && typeof soleToolFunction === "object" && !Array.isArray(soleToolFunction)
+    ? (soleToolFunction as Record<string, unknown>)["name"]
+    : undefined;
+  const callerGuardsSoleTerminalWriter = Boolean(
+    mcpSession
+    && typeof soleToolName === "string"
+    && effectivePlan.responsePolicy.terminalWriterToolName === soleToolName,
+  );
+  if (effectivePlan.toolPolicy.toolChoice === "required" && isCliAdapter && !callerGuardsSoleTerminalWriter) {
     throw new InferenceError(
       `Execution adapter ${selector?.kind ?? String(executionAdapterRaw)} cannot enforce required tool choice.`,
       "provider_error",
       providerId,
+    );
+  }
+  if (effectivePlan.toolPolicy.toolChoice === "required" && isCliAdapter) {
+    console.info(
+      `[ai-inference] Delegating exact terminal-writer completion enforcement to the caller policy for ${String(soleToolName)}.`,
     );
   }
 
