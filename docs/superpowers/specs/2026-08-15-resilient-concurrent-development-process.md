@@ -57,6 +57,13 @@ The result is a queue of active Node processes, tool traffic, memory pressure, a
 | AC-FLOW-005 | OBJ-FLOW-005 | Workroom and queue projections show heavy-lane state and progress SLO breaches, including backlog with zero completions and p95 wait beyond one hour. |
 | AC-FLOW-006 | OBJ-FLOW-001, OBJ-FLOW-002, OBJ-FLOW-003 | A woken client must re-read the TaskRun and make one fresh host-pressure-aware claim; neither TaskRun nor event admits capacity. |
 
+## Design grounding
+
+- **Existing specs/plans reviewed:** this resilient-development specification and `docs/superpowers/plans/2026-08-24-resilient-gate-flow-control.md`.
+- **Current code substrate reviewed:** `NonProductionEnvironmentLease`, `TaskRun`, Workroom liveness, queue telemetry, MCP lease handlers, and the two canonical host runners.
+- **Source of truth:** the lease remains FIFO admission authority; TaskRun is the durable wait projection; queue and Workroom read models remain operational projections.
+- **Decision:** extend the existing lease and TaskRun substrate with one bounded, idempotent server-owned wait. No client event, notification, or UI state grants capacity.
+
 ## 3. Canonical identities and state
 
 No parallel queue or evidence table is introduced. Existing `Workroom`, `NonProductionEnvironmentLease`, `QueueTelemetryEvent`, task lifecycle, and local-CI evidence records remain authoritative.

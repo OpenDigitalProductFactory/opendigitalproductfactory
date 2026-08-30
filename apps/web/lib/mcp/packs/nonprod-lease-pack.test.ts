@@ -163,7 +163,7 @@ describe("nonprod-lease pack — handler behavior (delegation preserved)", () =>
     const res = await nonprodLeasePack.handlers.claim_nonprod_environment_lease({
       environmentKey: "local-integration-ci", ownerProvider: "codex", ownerSessionId: "s1",
       claimKey: "local-ci:s1:abc", purpose: "test", url: "http://localhost:3010", ports: [3010],
-      expiresAt: "2026-07-28T22:00:00Z",
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
     }, "u1");
 
     expect(res.success).toBe(true);
