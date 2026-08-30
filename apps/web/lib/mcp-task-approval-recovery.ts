@@ -11,6 +11,7 @@ import {
   type RecoverableProposal,
   type RecoverableTaskRun,
   failedReviewWorkroomTarget,
+  isRecoverableProviderFailure,
   isStaleApprovalRecoveryRun,
   objectRecord,
   reboundProposalResult,
@@ -65,24 +66,27 @@ export async function recoverStaleApprovedRemoteTask(
         || (!isStaleApprovalRecoveryRun(run, now) && run.status !== "failed")
       ) return null;
 
+      const providerFailure = isRecoverableProviderFailure(run);
       if (run.status === "failed") {
         const target = failedReviewWorkroomTarget(run);
-        if (!target) return null;
-        const candidates = await tx.workroom.findMany({
-          where: {
-            backlogItemId: target.itemId,
-            repositoryFullName: target.repositoryFullName,
-            archivedAt: null,
-            status: { notIn: ["abandoned", "cancelled"] },
-          },
-          take: 2,
-          orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
-          select: { capsuleId: true, headSha: true },
-        });
-        const matching = candidates.filter(
-          (candidate) => candidate.headSha?.toLocaleLowerCase("en-US") === target.commitSha,
-        );
-        if (matching.length !== 1) return null;
+        if (!target && !providerFailure) return null;
+        if (target) {
+          const candidates = await tx.workroom.findMany({
+            where: {
+              backlogItemId: target.itemId,
+              repositoryFullName: target.repositoryFullName,
+              archivedAt: null,
+              status: { notIn: ["abandoned", "cancelled"] },
+            },
+            take: 2,
+            orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
+            select: { capsuleId: true, headSha: true },
+          });
+          const matching = candidates.filter(
+            (candidate) => candidate.headSha?.toLocaleLowerCase("en-US") === target.commitSha,
+          );
+          if (matching.length !== 1) return null;
+        }
       }
 
       const envelope = await tx.coworkerActionEnvelope.findFirst({
@@ -91,7 +95,7 @@ export async function recoverStaleApprovedRemoteTask(
           delegatingUserId: input.userId,
           coworkerAgentId: input.agentId,
           manifestActionId: input.writerToolName,
-          status: "approved",
+          status: { in: ["approved", "failed"] },
         },
         orderBy: { createdAt: "desc" },
         select: {
@@ -113,6 +117,10 @@ export async function recoverStaleApprovedRemoteTask(
         },
       });
       if (!envelope?.expiresAt || envelope.taskRunId !== input.taskRunId) return null;
+      if (
+        envelope.status === "failed"
+        && !providerFailure
+      ) return null;
 
       const binding = storedBinding(envelope);
       if (
@@ -183,6 +191,7 @@ export async function recoverStaleApprovedRemoteTask(
 
       const observedAt = now.toISOString();
       if (envelope.expiresAt.getTime() > now.getTime()) {
+        if (envelope.status !== "approved") return null;
         // A normal input-required replay already owns the unexpired approval
         // path. Recovery may only replace an expired approval in this state.
         if (run.status === "input-required") return null;
@@ -213,7 +222,7 @@ export async function recoverStaleApprovedRemoteTask(
       const cancelled = await tx.coworkerActionEnvelope.updateMany({
         where: {
           id: envelope.id,
-          status: "approved",
+          status: envelope.status,
           expiresAt: { lte: now },
         },
         data: { status: "cancelled", resolvedAt: now },
@@ -282,6 +291,7 @@ export async function recoverStaleApprovedRemoteTask(
             approvalBindingFingerprint,
             observedAt,
             freshApprovalRequired: true,
+            sourceEnvelopeStatus: envelope.status,
           }),
         },
       });
