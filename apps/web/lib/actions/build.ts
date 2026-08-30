@@ -5,7 +5,6 @@ import { prisma, type Prisma } from "@dpf/db";
 import { revalidatePath } from "next/cache";
 import {
   canTransitionPhase,
-  checkPhaseGate,
   generateBuildId,
   bumpVersion,
   normalizeHappyPathState,
@@ -17,6 +16,7 @@ import {
   type ReviewResult,
   type BuildDeliberationSummary,
 } from "@/lib/feature-build-types";
+import { checkBuildPhaseGate } from "@/lib/work-posture/verification-depth-gate";
 import { buildDesignReviewPrompt, buildPlanReviewPrompt, parseReviewResponse } from "@/lib/build-reviewers";
 import { queueBuildReviewVerification } from "@/lib/build-review-verification-trigger";
 import { saveBuildArtifactRevision, type BuildArtifactField } from "@/lib/build/build-artifact-provenance";
@@ -416,21 +416,26 @@ export async function advanceBuildPhase(
   // docs/superpowers/specs/2026-05-30-build-studio-right-sizing-design.md.
   const buildPlanState = (build.plan as Record<string, unknown> | null) ?? null;
   const processSize = (buildPlanState?.["processSize"] as string | undefined) ?? "medium";
-  const gate = checkPhaseGate(currentPhase, targetPhase, {
-    kind: build.kind,
-    processSize,
-    fixContext: brief?.fixContext,
-    designDoc: build.designDoc,
-    designReview: build.designReview,
-    happyPathState: normalizeHappyPathState(buildPlanState?.happyPathState ?? null),
-    buildPlan: build.buildPlan,
-    planReview: build.planReview,
-    taskResults: build.taskResults,
-    verificationOut: build.verificationOut,
-    acceptanceMet: build.acceptanceMet,
-    uxTestResults: build.uxTestResults,
-    uxVerificationStatus: build.uxVerificationStatus,
-    acceptanceCriteria: brief?.acceptanceCriteria ?? [],
+  const gate = await checkBuildPhaseGate({
+    buildId,
+    from: currentPhase,
+    to: targetPhase,
+    evidence: {
+      kind: build.kind,
+      processSize,
+      fixContext: brief?.fixContext,
+      designDoc: build.designDoc,
+      designReview: build.designReview,
+      happyPathState: normalizeHappyPathState(buildPlanState?.happyPathState ?? null),
+      buildPlan: build.buildPlan,
+      planReview: build.planReview,
+      taskResults: build.taskResults,
+      verificationOut: build.verificationOut,
+      acceptanceMet: build.acceptanceMet,
+      uxTestResults: build.uxTestResults,
+      uxVerificationStatus: build.uxVerificationStatus,
+      acceptanceCriteria: brief?.acceptanceCriteria ?? [],
+    },
   });
 
   if (!gate.allowed) {

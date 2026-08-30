@@ -150,6 +150,54 @@ export interface ArchetypeStreamInput {
   stageKey?: string | null;
 }
 
+/**
+ * Existing Build Studio rightsizing facts that describe the stakes of the
+ * deliverable. These are already persisted on the build plan and already ride
+ * on phase-gate evidence; the posture layer consumes them rather than creating
+ * a second risk taxonomy.
+ */
+export interface WorkStakesInput {
+  qualityFirst?: boolean | null;
+  deliverableSensitivity?: string | null;
+}
+
+/**
+ * Convert the existing rightsizing ladder into a verification floor.
+ *
+ * The mapping is deliberately tighten-only and tier-preserving:
+ *   inert/low -> no bias (today exactly)
+ *   quality-first/elevated -> shallow
+ *   high -> deep
+ *
+ * Phase 2 observes this declaration in shadow mode; it does not make the gate
+ * verdict blocking. The resulting ledger is what calibrates the declaration
+ * before any policy cell adopts the requirement.
+ */
+export function deriveStakesBias(
+  stakes: WorkStakesInput | null | undefined,
+): PostureBias | null {
+  if (!stakes) return null;
+  if (stakes.deliverableSensitivity === "high") {
+    return {
+      verificationDepth: "deep",
+      reasonCode: "stakes_high_sensitivity",
+      reason: "High-sensitivity work receives the deepest existing verification floor.",
+    };
+  }
+  if (stakes.qualityFirst === true || stakes.deliverableSensitivity === "elevated") {
+    return {
+      verificationDepth: "shallow",
+      reasonCode: stakes.deliverableSensitivity === "elevated"
+        ? "stakes_elevated_sensitivity"
+        : "stakes_quality_first",
+      reason: stakes.deliverableSensitivity === "elevated"
+        ? "Elevated-sensitivity work receives a shallow verification floor."
+        : "Quality-first work receives a shallow verification floor.",
+    };
+  }
+  return null;
+}
+
 export function deriveStreamBiases(stream: ArchetypeStreamInput | null | undefined): PostureBias[] {
   if (!stream) return [];
   const biases: PostureBias[] = [];

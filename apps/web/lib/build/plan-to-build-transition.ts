@@ -29,9 +29,9 @@
 import { prisma, type Prisma } from "@dpf/db";
 import {
   canTransitionPhase,
-  checkPhaseGate,
   normalizeHappyPathState,
 } from "@/lib/feature-build-types";
+import { checkBuildPhaseGate } from "@/lib/work-posture/verification-depth-gate";
 import {
   deriveFeatureBuildDependencyGate,
   type FeatureBuildDependencyGateResult,
@@ -295,14 +295,19 @@ export async function performPlanToBuildTransition(params: {
 
   // Structural phase gate.
   const planRec = (build.plan as Record<string, unknown> | null) ?? {};
-  const gate = checkPhaseGate("plan", "build", {
-    kind: build.kind,
-    processSize: (planRec.processSize as string | undefined) ?? "medium",
-    deliverableSensitivity: planRec.deliverableSensitivity,
-    qualityFirst: planRec.qualityFirst === true,
-    buildPlan: build.buildPlan,
-    planReview: build.planReview,
-    happyPathState: normalizeHappyPathState(planRec.happyPathState),
+  const gate = await checkBuildPhaseGate({
+    buildId,
+    from: "plan",
+    to: "build",
+    evidence: {
+      kind: build.kind,
+      processSize: (planRec.processSize as string | undefined) ?? "medium",
+      deliverableSensitivity: planRec.deliverableSensitivity,
+      qualityFirst: planRec.qualityFirst === true,
+      buildPlan: build.buildPlan,
+      planReview: build.planReview,
+      happyPathState: normalizeHappyPathState(planRec.happyPathState),
+    },
   });
   if (!gate.allowed) {
     logBuildActivity(buildId, "phase:gate-blocked", gate.reason ?? "plan→build gate not satisfied");
