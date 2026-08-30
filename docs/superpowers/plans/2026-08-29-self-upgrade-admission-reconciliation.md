@@ -211,8 +211,8 @@ verify the successor's independent admission and dispatch evidence.
 ## 2026-08-30 exact-target recurrence closure
 
 The ordered repair and UX-fit decision are normative in
-`docs/superpowers/specs/2026-08-29-self-upgrade-admission-reconciliation-design.md`
-under “2026-08-30 recurrence closure.” Execute that sequence atomically:
+`docs/superpowers/specs/2026-08-30-self-upgrade-exact-target-recovery-design.md`.
+Execute that sequence atomically:
 
 1. turn the existing exact-SHA-and-tag refusal into a first-failing
    zero-dispatch successor test;
