@@ -11,12 +11,35 @@ const SERVED = "b".repeat(40);
 function deps(over: Partial<ReadinessDeps>): ReadinessDeps {
   return {
     readImage: async (): Promise<ImageVersion | null> => ({ raw: SERVED, source: "git-sha" }),
+    readInstallHostProfile: async () => ({
+      kind: "unknown",
+      installMode: null,
+      sourceCapable: false,
+      releaseImage: false,
+      reason: "insufficient-install-evidence",
+    }),
     isAncestor: async () => null,
     ...over,
   };
 }
 
 describe("resolveLiveInstallReadiness", () => {
+  it("CAN-TESTs exact identity without consulting Git ancestry", async () => {
+    let ancestryCalled = false;
+    const r = await resolveLiveInstallReadiness(
+      { featureSha: FEATURE },
+      deps({
+        readImage: async () => ({ raw: FEATURE, source: "git-sha" }),
+        isAncestor: async () => {
+          ancestryCalled = true;
+          return null;
+        },
+      }),
+    );
+    expect(r.verdict).toBe("CAN-TEST");
+    expect(ancestryCalled).toBe(false);
+  });
+
   it("CAN-TEST when the served git-sha image contains the feature commit", async () => {
     const r = await resolveLiveInstallReadiness(
       { featureSha: FEATURE },
@@ -41,6 +64,48 @@ describe("resolveLiveInstallReadiness", () => {
     );
     expect(r.verdict).toBe("BLOCKED");
   });
+
+  it("MUST-ADVANCEs uncomputable ancestry only for a server-derived consumer host", async () => {
+    const r = await resolveLiveInstallReadiness(
+      { featureSha: FEATURE },
+      deps({
+        isAncestor: async () => null,
+        readInstallHostProfile: async () => ({
+          kind: "consumer",
+          installMode: "consumer",
+          sourceCapable: false,
+          releaseImage: true,
+          reason: "consumer-release-install",
+        }),
+      }),
+    );
+    expect(r.verdict).toBe("MUST-ADVANCE");
+    expect(r.nextAction.kind).toBe("trigger-self-upgrade");
+    expect(`${r.reason} ${r.nextAction.detail}`).not.toMatch(/DPF_REPO_ROOT|git fetch/i);
+  });
+
+  it.each(["source", "unknown"] as const)(
+    "keeps uncomputable ancestry BLOCKED for a server-derived %s host",
+    async (kind) => {
+      const r = await resolveLiveInstallReadiness(
+        { featureSha: FEATURE },
+        deps({
+          isAncestor: async () => null,
+          readInstallHostProfile: async () => ({
+            kind,
+            installMode: kind === "source" ? "contributor" : null,
+            sourceCapable: kind === "source",
+            releaseImage: false,
+            reason:
+              kind === "source"
+                ? "git-source-present"
+                : "insufficient-install-evidence",
+          }),
+        }),
+      );
+      expect(r.verdict).toBe("BLOCKED");
+    },
+  );
 
   it("surfaces actionable nextAction detail when ancestry fails with a classified kind (BI-08BE758C)", async () => {
     const r = await resolveLiveInstallReadiness(

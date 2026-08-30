@@ -7,7 +7,12 @@
 
 import { readImageVersion, type ImageVersion } from "@/lib/platform/image-version";
 import {
+  readInstallHostProfile,
+  type InstallHostProfile,
+} from "@/lib/install/host-profile";
+import {
   computePreflightVerdict,
+  gitIdentitiesMatch,
   type PreflightResult,
 } from "@/lib/verify/preflight";
 import {
@@ -19,6 +24,8 @@ import {
 export type ReadinessDeps = {
   /** The live install's served identity (the portal's own image marker). */
   readImage: () => Promise<ImageVersion | null>;
+  /** Server-owned, closed install provenance; callers cannot supply this. */
+  readInstallHostProfile: () => Promise<InstallHostProfile>;
   /**
    * Whether `feature` is contained in (ancestor-or-equal of) `served`. Returns
    * null when it cannot be computed (git unavailable, commit not present).
@@ -40,6 +47,7 @@ export async function gitAncestry(
 
 export const defaultReadinessDeps: ReadinessDeps = {
   readImage: () => readImageVersion(),
+  readInstallHostProfile: () => readInstallHostProfile(),
   isAncestor: gitAncestry,
 };
 
@@ -52,13 +60,20 @@ export async function resolveLiveInstallReadiness(
   params: { featureSha: string },
   deps: ReadinessDeps = defaultReadinessDeps,
 ): Promise<PreflightResult> {
-  const servedImage = await deps.readImage();
+  const [servedImage, installHostProfile] = await Promise.all([
+    deps.readImage(),
+    deps.readInstallHostProfile(),
+  ]);
   // This code runs inside the portal, so the install is reachable by definition;
   // a null image means "not a built image" (dev/test), which the core maps to
   // BLOCKED.
   let featureContainedInServed: boolean | null = null;
   let ancestryUncomputableDetail: string | undefined;
-  if (servedImage && servedImage.source === "git-sha") {
+  if (
+    servedImage &&
+    servedImage.source === "git-sha" &&
+    !gitIdentitiesMatch(servedImage.raw, params.featureSha)
+  ) {
     const raw = await deps.isAncestor(params.featureSha, servedImage.raw);
     if (typeof raw === "boolean" || raw === null) {
       featureContainedInServed = raw;
@@ -78,6 +93,7 @@ export async function resolveLiveInstallReadiness(
     servedImage,
     featureSha: params.featureSha,
     featureContainedInServed,
+    installHostKind: installHostProfile.kind,
     ancestryUncomputableDetail,
   });
 }

@@ -121,6 +121,9 @@ async function main(): Promise<void> {
     servedImage: image,
     featureSha,
     featureContainedInServed,
+    // This CLI ships with and executes from the source checkout. The server
+    // adapter is the only surface allowed to derive a consumer host profile.
+    installHostKind: "source",
   };
   const result = computePreflightVerdict(input);
 
