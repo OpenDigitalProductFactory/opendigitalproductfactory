@@ -1,5 +1,13 @@
 import type { SelfUpgradeConfig } from "./config";
-import { loadReleaseInstallContext, resolveReleaseUpgradeCandidate } from "./release-target";
+import {
+  loadVerifiedReleaseTargetEvidence,
+  recordVerifiedReleaseTargetEvidence,
+} from "@/lib/release-health/state";
+import {
+  loadReleaseInstallContext,
+  resolveReleaseTarget,
+  resolveReleaseUpgradeCandidate,
+} from "./release-target";
 import type { SelfUpgradeSupport } from "./support";
 import { resolveTargetSha } from "./version";
 
@@ -42,14 +50,46 @@ export async function resolveSelfUpgradeStatusTarget(input: {
       "/host-dpf",
   });
   if (!context) return UNAVAILABLE;
-  const target = await resolveReleaseUpgradeCandidate({
+  const liveTarget = await resolveReleaseUpgradeCandidate({
     context,
     currentConfigDigest: input.currentConfigDigest,
   }).catch(() => null);
+  if (liveTarget && liveTarget.kind !== "no-published-target") {
+    const { kind: _kind, ...candidate } = liveTarget;
+    await recordVerifiedReleaseTargetEvidence({
+      candidate,
+      context,
+      currentConfigDigest: input.currentConfigDigest ?? "",
+    }).catch(() => false);
+    return {
+      targetSha: liveTarget.sourceSha,
+      targetTag: liveTarget.tag,
+      availability: "resolved",
+      unavailableReason: null,
+      releaseFreshness: liveTarget.kind === "up-to-date",
+    };
+  }
+
+  const persistedCandidate = input.currentConfigDigest
+    ? await loadVerifiedReleaseTargetEvidence({
+        context,
+        currentConfigDigest: input.currentConfigDigest,
+      }).catch(() => null)
+    : null;
+  const target = persistedCandidate
+    ? resolveReleaseTarget({
+        currentConfigDigest: input.currentConfigDigest,
+        candidate: persistedCandidate,
+      })
+    : null;
   if (!target || target.kind === "no-published-target") {
     return {
       ...UNAVAILABLE,
-      unavailableReason: target?.reason ?? "registry-unavailable",
+      unavailableReason:
+        target?.reason ??
+        (liveTarget?.kind === "no-published-target"
+          ? liveTarget.reason
+          : "registry-unavailable"),
     };
   }
   return {
