@@ -13,12 +13,14 @@ describe("WorkroomInventory", () => {
       ]}
     />);
 
-    expect(html).toContain("Live now");
-    expect(html).toContain("History and cleanup");
-    expect(html).toContain("1 live");
+    expect(html).toContain("Live Workrooms");
+    expect(html).toContain("Currently live across the platform.");
+    expect(html).toContain("History");
+    expect(html).toContain("Inactive records retained for audit.");
+    expect(html).toContain(">1</");
     expect(html).toContain("2 inactive");
-    expect(html).toContain("Next ready");
-    expect(html).toContain("Oldest wait");
+    expect(html).toContain("Ready");
+    expect(html).toContain("Wait");
     expect(html).toContain("2h");
     expect(html).toContain('href="/workspace/cases/WC-LIVE"');
     expect(html).toContain("Manufacture &amp; Deliver");
