@@ -163,7 +163,7 @@ const definitions: ToolDefinition[] = [
       "Request admission to a governed shared nonproduction environment for preview, UX verification, or local integration. " +
       "Reusing claimKey returns the same durable queue entry (idempotent wait). " +
       "Do not claim in a tight loop without a stable claimKey. " +
-      "When queued, wait and renew with the returned leaseId — do not open a second claim for the same session purpose.",
+      "When queued, terminate the polling runner and resume from the returned TaskRun — do not renew or open a second claim.",
     inputSchema: {
       type: "object",
       properties: {

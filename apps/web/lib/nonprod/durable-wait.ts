@@ -181,7 +181,7 @@ export async function checkpointNonprodLeaseWait(input: {
   });
   await input.db.nonProductionEnvironmentLease.updateMany({
     where: { id: input.lease.id, status: "queued" },
-    data: { taskRunId },
+    data: { taskRunId, expiresAt: input.waitDeadlineAt },
   });
   return { taskRunId, wait };
 }
@@ -302,4 +302,27 @@ export async function settleNonprodLeaseWait(input: {
     },
   });
   return { settled: true };
+}
+
+export async function afterNonprodLeaseRelease(input: {
+  db: DurableWaitDb;
+  lease: WaitLease & { status: string };
+  priorStatus: string;
+  now: Date;
+}) {
+  if (input.lease.taskRunId && input.db.taskRun) {
+    await settleNonprodLeaseWait({
+      db: input.db as DurableWaitDb & { taskRun: NonNullable<DurableWaitDb["taskRun"]> },
+      taskRunId: input.lease.taskRunId,
+      leaseId: input.lease.leaseId,
+      state: input.priorStatus === "queued" ? "terminal" : "admitted",
+      now: input.now,
+    });
+  }
+  return publishNonprodCapacityForHead({
+    db: input.db,
+    environmentKey: input.lease.environmentKey,
+    causeLeaseId: input.lease.leaseId,
+    now: input.now,
+  });
 }

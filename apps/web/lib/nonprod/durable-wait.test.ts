@@ -73,7 +73,7 @@ describe("durable nonproduction lease wait", () => {
     expect(mock.taskRun.upsert).toHaveBeenCalledTimes(2);
     expect(mock.nonProductionEnvironmentLease.updateMany).toHaveBeenLastCalledWith({
       where: { id: "lease-row-1", status: "queued" },
-      data: { taskRunId: first.taskRunId },
+      data: { taskRunId: first.taskRunId, expiresAt: new Date("2026-08-30T20:00:00.000Z") },
     });
     expect(parseNonprodLeaseWait(mock.task()?.progressPayload)).toMatchObject({
       state: "waiting",

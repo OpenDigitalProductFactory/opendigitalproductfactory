@@ -17,7 +17,7 @@ import type { NonprodOwnerProvider } from "./nonprod-owner-provider";
 import { isImmutableGateClaimKey } from "@/lib/gates/gate-run-identity";
 import { settleTerminalGateLease } from "./environment-lease-terminal-evidence";
 import { admittedLeaseTtlMs, DEFAULT_LEASE_TTL_MS, requestedTtlMs } from "./environment-lease-timing";
-import { publishNonprodCapacityForHead, settleNonprodLeaseWait } from "./durable-wait";
+import { afterNonprodLeaseRelease, publishNonprodCapacityForHead } from "./durable-wait";
 export { NONPROD_OWNER_PROVIDERS, type NonprodOwnerProvider } from "./nonprod-owner-provider";
 export {
   admittedLeaseTtlMs,
@@ -564,8 +564,8 @@ export async function releaseNonprodEnvironmentLease(input: {
       environmentKey: current.environmentKey,
       now,
       // A local-CI waiter carries the fresh client-side host observation needed
-      // to prove capacity. Preserve FIFO here and let its next claim poll admit
-      // it; a release must not promote from server-only or stale pressure.
+      // to prove capacity. Preserve FIFO here and wake the durable queue head;
+      // its one fresh claim can admit with current pressure evidence.
       slotKeys: current.environmentKey === "local-integration-ci"
         || current.environmentKey === "host-heavy-resource"
         ? []
@@ -617,21 +617,7 @@ export async function releaseNonprodEnvironmentLease(input: {
     }
   }
   void emitLeaseTransitions(transitions);
-  if (result.lease.taskRunId) {
-    await settleNonprodLeaseWait({
-      db: db as never,
-      taskRunId: result.lease.taskRunId,
-      leaseId: result.lease.leaseId,
-      state: priorStatus === "queued" ? "terminal" : "admitted",
-      now,
-    });
-  }
-  await publishNonprodCapacityForHead({
-    db: db as never,
-    environmentKey: result.lease.environmentKey,
-    causeLeaseId: result.lease.leaseId,
-    now,
-  });
+  await afterNonprodLeaseRelease({ db: db as never, lease: result.lease, priorStatus, now });
   return result.lease;
 }
 
@@ -771,12 +757,7 @@ export async function reapExpiredNonprodEnvironmentLeases(input: {
       });
       promotedLeaseIds.push(...result.admittedLeaseIds);
     });
-    await publishNonprodCapacityForHead({
-      db: db as never,
-      environmentKey,
-      causeLeaseId: `expired-${Math.floor(now.getTime() / 300_000)}`,
-      now,
-    });
+    await publishNonprodCapacityForHead({ db: db as never, environmentKey, causeLeaseId: `expired-${Math.floor(now.getTime() / 300_000)}`, now });
   }
   const changedIds = [...new Set([
     ...lapsed.map((row) => row.id),

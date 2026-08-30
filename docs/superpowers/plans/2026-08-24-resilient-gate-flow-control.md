@@ -14,6 +14,16 @@ status: active
 
 Increase delivery throughput without reducing evidence quality by moving wait state into the platform, selecting verification work before heavyweight admission, and coalescing equivalent immutable work. The measured starting point is four pull requests in seven hours and 1,222 estimated waiting calls among 1,297 nonproduction lease calls.
 
+## Consolidated delivery status — 2026-08-30
+
+This PR completes the server-owned slices that remained open:
+
+- `BI-MCP-EFF-0285909C`: deterministic TaskRun checkpoint, bounded queued lease lifetime, exact FIFO capacity event, duplicate suppression, five-minute reconciliation, and one-fresh-claim settlement are implemented. Canonical local-CI and host-resource runners now exit on the typed durable wait without releasing or polling.
+- `BI-114C1F40`: durable wait participates in true Workroom liveness, queued work is separated into executing/next-ready/dormant lanes, and canonical inventory/queue health exposes oldest wait, maximum no-transition age, zero-throughput backlog, p95 wait, and existing abandonment metrics.
+- `BI-47ACE2C7`: the prompt-only semantic-review route repair is carried in the same delivery candidate and derives its context requirement from the request actually sent.
+
+The event remains advisory: exact lease state is authority, and a resumed client must make one fresh claim. The five-minute reconciler is the correctness backstop when event delivery is unavailable.
+
 ## Invariants
 
 - A pass is valid only for its exact integration tree, evidence-plan digest, toolchain fingerprint, and gate kind.
@@ -79,12 +89,12 @@ Increase delivery throughput without reducing evidence quality by moving wait st
 
 ### Implementation
 
-1. Add `nonprod/durable-wait.ts` as the single projection service. Derive a deterministic task identity per lease/subscriber, persist `nonprod-lease-wait.v1` in `TaskRun.progressPayload`, bind the lease to its owner task, and make capacity-event updates idempotent. No Prisma migration.
-2. Extend `claim_nonprod_environment_lease` with a bounded `waitDeadlineAt`. When a claim is queued or subscribed, return the MCP task and checkpoint the wait; when its fresh claim admits, reuses evidence, or becomes terminal, settle that task. Accept a refreshed PID/process identity for a same-owner queued host-resource claim because its original runner is intentionally gone.
-3. After release/expiry, select only the FIFO head of each capacity lane and emit a typed event carrying task, lease, claim, owner session, immutable candidate, and event identity. Add a five-minute scheduled reconciliation that repairs a lost wake and owns queued liveness until the task deadline.
-4. Add an Inngest durable-wait function: wait for the exact capacity event with `step.waitForEvent()`, then apply the idempotent task transition. Keep direct durable transition/replay as the recovery path when Inngest or advisory delivery is unavailable.
+1. **Delivered.** Add `nonprod/durable-wait.ts` as the single projection service. Derive a deterministic task identity per lease/subscriber, persist `nonprod-lease-wait.v1` in `TaskRun.progressPayload`, bind the lease to its owner task, and make capacity-event updates idempotent. No Prisma migration.
+2. **Delivered for queued/admitted/terminal transitions.** Extend `claim_nonprod_environment_lease` with a bounded `waitDeadlineAt`. When a claim is queued, return the MCP task and checkpoint the wait; when its fresh claim admits or becomes terminal, settle that task.
+3. **Delivered.** After release/expiry, select only the FIFO head of each capacity lane and emit a typed event carrying task, lease, claim, owner session, immutable candidate, and event identity. A five-minute scheduled reconciliation repairs a lost wake; the checkpointed wait deadline owns queued liveness.
+4. **Delivered using persist-before-publish.** The exact TaskRun transition is persisted before advisory Inngest delivery; the registered function idempotently consumes the same event, while reconciliation remains the recovery path.
 5. Extend the MCP task projection with wait metadata and add authenticated Streamable HTTP GET/SSE. One connection replays all durable `capacity-available` tasks for the token's user, then publishes `notifications/tasks/status`; it does not create one connection per waiter.
-6. Change `gate-worktree.mjs` and `host-resource-runner.mjs` to write atomic wake descriptors and terminate on `queued`/`subscribed`, without release or renewal. On a wake they re-read the task and make one fresh claim; the existing active-lease supervisor remains unchanged after admission.
+6. **Delivered for canonical runners.** `gate-worktree.mjs` records the lease/TaskRun/claim wake identity and terminates on the server-owned queued result without release or renewal. `host-resource-runner.mjs` does the same. Active-lease supervision remains unchanged after admission.
 7. Add one host adapter process for the contributor toolchain. It consumes the SSE stream, deduplicates event ids in a bounded local ledger, and invokes the provider's supported session-resume command. Codex is the first executable adapter; unsupported providers surface the durable task and recovery command instead of polling.
 8. Update contributor bootstrap and operations documentation so the adapter is installed, health-checked, and visible. Record queue/task/event ids in gate evidence for later throughput attribution.
 

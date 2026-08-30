@@ -36,6 +36,27 @@ The result is a queue of active Node processes, tool traffic, memory pressure, a
 - **C6 — Local memory is a governed resource.** All heavyweight host processes use resource lanes; process naming or client provenance cannot bypass admission.
 - **C7 — Fail closed with a reason.** Stale projections, identity conflicts, and missing evidence block the affected transition and produce one actionable escalation.
 
+## 2.1 Objectives and acceptance contract
+
+**OBJ-FLOW-001:** Replace rapid nonproduction admission polling with a server-owned durable wait that preserves FIFO identity while the client process is absent.
+
+**OBJ-FLOW-002:** Wake only the exact FIFO head after capacity changes, without allowing an event or client-supplied field to grant admission.
+
+**OBJ-FLOW-003:** Make missed notifications recoverable through bounded reconciliation and idempotent event identity.
+
+**OBJ-FLOW-004:** Treat a durable capacity wait as live Workroom progress without counting it as executing work.
+
+**OBJ-FLOW-005:** Surface executing, next-ready, dormant, oldest-wait, no-transition, throughput, p95 wait, and abandonment signals through canonical operational read models.
+
+| Acceptance criterion | Objective links | Observable result |
+| --- | --- | --- |
+| AC-FLOW-001 | OBJ-FLOW-001 | A queued claim returns one deterministic TaskRun, extends only the queued lease to the bounded wait deadline, and the canonical runners exit without renew/list/claim polling or releasing queue position. |
+| AC-FLOW-002 | OBJ-FLOW-002 | Release or expiry selects only the FIFO head and persists an exact lease/claim/session/candidate-bound capacity event before advisory delivery. |
+| AC-FLOW-003 | OBJ-FLOW-003 | Duplicate events are suppressed, and a five-minute reconciler repairs missed delivery without creating a second wait identity. |
+| AC-FLOW-004 | OBJ-FLOW-004 | An exact worktree/branch durable lease prevents Workroom reaping even when its authoring lease expired; queued work remains outside the executing count. |
+| AC-FLOW-005 | OBJ-FLOW-005 | Workroom and queue projections show heavy-lane state and progress SLO breaches, including backlog with zero completions and p95 wait beyond one hour. |
+| AC-FLOW-006 | OBJ-FLOW-001, OBJ-FLOW-002, OBJ-FLOW-003 | A woken client must re-read the TaskRun and make one fresh host-pressure-aware claim; neither TaskRun nor event admits capacity. |
+
 ## 3. Canonical identities and state
 
 No parallel queue or evidence table is introduced. Existing `Workroom`, `NonProductionEnvironmentLease`, `QueueTelemetryEvent`, task lifecycle, and local-CI evidence records remain authoritative.
@@ -110,7 +131,7 @@ durable client-facing checkpoint. Its `progressPayload` carries a versioned
 - wait deadline, current wait state, queue position, and last transition time;
 - the last capacity-event identity and whether a fresh claim consumed it.
 
-The MCP task remains `working` while its wait state is `waiting`. A capacity
+The MCP task remains `submitted` while its wait state is `waiting`. A capacity
 event updates the same task to `capacity-available`; admission, terminal
 evidence reuse, cancellation, or deadline expiry completes or cancels it. The
 MCP projection includes the wait envelope in task metadata, so `tasks/get` is
