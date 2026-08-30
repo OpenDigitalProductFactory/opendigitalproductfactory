@@ -105,3 +105,31 @@ test("the runner stage ships git-lfs for the git-source upgrade shape", () => {
     "the runner stage must install git-lfs or self-upgrade cannot materialize the LFS-tracked assets it then asserts",
   );
 });
+
+test("the image carries the BIAN landscape the banking seed reads", () => {
+  const dockerfile = readFileSync("Dockerfile", "utf8");
+  const dockerignore = readFileSync(".dockerignore", "utf8");
+
+  // .dockerignore excludes docs/Reference/ wholesale. The BIAN JSON was never
+  // re-admitted, so seedBianReferenceModel's readFileSync threw on every
+  // install, its own catch swallowed the error, and the model imported zero
+  // Service Domains — including on the banking installs it exists for. The
+  // negation and the COPY have to move together or the build context loses it.
+  assert.match(
+    dockerignore,
+    /^!docs\/Reference\/bian\//m,
+    "the BIAN landscape must be re-admitted to the build context",
+  );
+
+  const copyIndex = dockerfile.indexOf(
+    "COPY docs/Reference/bian/bian-v14-service-landscape.json",
+  );
+  assert.notEqual(copyIndex, -1, "the BIAN landscape COPY must exist");
+
+  // Assert the bytes where they enter the artifact, same rule as the workbook.
+  assert.match(
+    dockerfile.slice(copyIndex),
+    /head -c 1 docs\/Reference\/bian\/bian-v14-service-landscape\.json \| grep -q '\{'/,
+    "the COPY must be followed by a JSON-shape assertion so a missing or truncated file fails the build",
+  );
+});
