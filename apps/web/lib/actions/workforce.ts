@@ -3,6 +3,12 @@
 import crypto from "node:crypto";
 import { prisma, type Prisma } from "@dpf/db";
 import { revalidatePath } from "next/cache";
+
+import {
+  actuateForLifecycleEvent,
+  describeActuation,
+  type ActuationResult,
+} from "@/lib/workforce/employment-event-actuator-runtime";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { getUserTeamIds, createAuthorizationDecisionLog } from "@/lib/governance-data";
@@ -578,9 +584,20 @@ export async function recordEmploymentLifecycleEvent(
     run: async (actor) => {
       const employee = await prisma.employeeProfile.findUnique({
         where: { id: input.employeeProfileId },
-        select: { id: true, displayName: true, status: true },
+        select: {
+          id: true,
+          displayName: true,
+          status: true,
+          // BI-2624B7EA: the two facts the actuator refuses to guess.
+          employmentType: { select: { classification: true } },
+          workLocation: { select: { id: true, jurisdictionSlug: true } },
+        },
       });
       if (!employee) return workforceDenied("Employee profile not found.");
+
+      const employsIn =
+        (await prisma.businessContext.findFirst({ select: { employsIn: true } }))?.employsIn ?? [];
+      let actuation: ActuationResult | null = null;
 
       await prisma.$transaction(async (tx) => {
         await tx.employeeProfile.update({
@@ -591,7 +608,7 @@ export async function recordEmploymentLifecycleEvent(
           },
         });
 
-        await tx.employmentEvent.create({
+        const employmentEvent = await tx.employmentEvent.create({
           data: {
             eventId: `EEVT-${crypto.randomUUID()}`,
             employeeProfileId: employee.id,
@@ -601,6 +618,18 @@ export async function recordEmploymentLifecycleEvent(
             actorUserId: actor.id,
             ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
           },
+        });
+
+        // BI-2624B7EA — THE SUBSCRIBER. Until this call existed, EmploymentEvent
+        // was a log: a row was appended and nothing happened. It runs in the SAME
+        // transaction as the event write, so an event never commits without the
+        // room it prescribes.
+        actuation = await actuateForLifecycleEvent(tx as never, {
+          employmentEventId: employmentEvent.eventId,
+          eventType: input.eventType,
+          worker: employee,
+          employsIn,
+          userId: actor.id,
         });
 
         if (input.eventType === "terminated" && input.terminationDate) {
@@ -626,7 +655,10 @@ export async function recordEmploymentLifecycleEvent(
 
       revalidatePath("/employee");
       revalidatePath("/admin");
-      return { ok: true, message: `Lifecycle event recorded for ${employee.displayName}.` };
+      return {
+        ok: true,
+        message: `${describeActuation(actuation, employee.displayName)}`,
+      };
     },
   });
 }

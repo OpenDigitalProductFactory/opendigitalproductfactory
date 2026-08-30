@@ -3,6 +3,7 @@ import {
   loadVerifiedReleaseTargetEvidence,
   recordVerifiedReleaseTargetEvidence,
 } from "@/lib/release-health/state";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 import {
   loadReleaseInstallContext,
   resolveReleaseTarget,
@@ -31,7 +32,16 @@ export async function resolveSelfUpgradeStatusTarget(input: {
   support: SelfUpgradeSupport;
   config: SelfUpgradeConfig;
   currentConfigDigest: string | null;
+  /**
+   * Sink for the reason a target could not be resolved. Injected rather than
+   * calling `console` directly so a test can assert the reason is reported at
+   * all — the defect being fixed is silence, so silence has to be testable.
+   */
+  log?: (message: string) => void;
 }): Promise<SelfUpgradeStatusTarget> {
+  // Defaulted here, not at the call sites: every caller reports a resolution
+  // failure without having to remember to opt in.
+  const log = input.log ?? ((message: string) => console.warn(`[self-upgrade] ${message}`));
   if (!input.support.supported) return UNAVAILABLE;
   if (input.support.targetKind === "git-source") {
     const targetSha = await resolveTargetSha(input.config.channel, input.config);
@@ -49,11 +59,21 @@ export async function resolveSelfUpgradeStatusTarget(input: {
       process.env.DPF_SELF_UPGRADE_HOST_SOURCE_MOUNT ??
       "/host-dpf",
   });
-  if (!context) return UNAVAILABLE;
+  if (!context) {
+    log("release-install-context-unresolved");
+    return UNAVAILABLE;
+  }
+
+  // Registry discovery remains primary. A thrown fault is still reported even
+  // when the independently verified persisted candidate recovers the page, so
+  // intermittent process-level degradation remains observable.
   const liveTarget = await resolveReleaseUpgradeCandidate({
     context,
     currentConfigDigest: input.currentConfigDigest,
-  }).catch(() => null);
+  }).catch((error: unknown) => {
+    log(`release-target-resolution-threw: ${getErrorMessage(error)}`);
+    return null;
+  });
   if (liveTarget && liveTarget.kind !== "no-published-target") {
     const { kind: _kind, ...candidate } = liveTarget;
     await recordVerifiedReleaseTargetEvidence({
@@ -83,14 +103,13 @@ export async function resolveSelfUpgradeStatusTarget(input: {
       })
     : null;
   if (!target || target.kind === "no-published-target") {
-    return {
-      ...UNAVAILABLE,
-      unavailableReason:
-        target?.reason ??
-        (liveTarget?.kind === "no-published-target"
-          ? liveTarget.reason
-          : "registry-unavailable"),
-    };
+    const unavailableReason =
+      target?.reason ??
+      (liveTarget?.kind === "no-published-target"
+        ? liveTarget.reason
+        : "registry-unavailable");
+    log(`release-target-unavailable: ${unavailableReason}`);
+    return { ...UNAVAILABLE, unavailableReason };
   }
   return {
     targetSha: target.sourceSha,
