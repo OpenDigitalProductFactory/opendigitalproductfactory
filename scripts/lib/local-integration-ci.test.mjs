@@ -97,7 +97,7 @@ describe("createLocalIntegrationPlan", () => {
       "node scripts/check-doc-links.mjs",
       "node scripts/check-guards.mjs",
       "env NODE_OPTIONS=--max-old-space-size=16384 node scripts/local-ci-typecheck-runner.mjs",
-      "env NODE_OPTIONS=--no-experimental-webstorage node scripts/local-ci-vitest-runner.mjs --initial-workers 4 --retry-workers 2",
+      "env NODE_OPTIONS=--no-experimental-webstorage node scripts/local-ci-vitest-runner.mjs --initial-workers 4 --retry-workers 2 --base origin/main",
       "env NODE_ENV=production NODE_OPTIONS=--max-old-space-size=16384 pnpm --filter web exec next build",
     ]);
   });
@@ -141,7 +141,7 @@ describe("createLocalIntegrationPlan", () => {
     });
 
     assert.ok(plan.commands.map((command) => command.join(" ")).includes(
-      "env NODE_OPTIONS=--no-experimental-webstorage node scripts/local-ci-vitest-runner.mjs --initial-workers 4 --retry-workers 2",
+      "env NODE_OPTIONS=--no-experimental-webstorage node scripts/local-ci-vitest-runner.mjs --initial-workers 4 --retry-workers 2 --base origin/main",
     ));
   });
 
@@ -158,7 +158,7 @@ describe("createLocalIntegrationPlan", () => {
     ));
     assert.equal(
       vitestCommand,
-      "env NODE_OPTIONS=--no-experimental-webstorage node scripts/local-ci-vitest-runner.mjs --initial-workers 4 --retry-workers 2",
+      "env NODE_OPTIONS=--no-experimental-webstorage node scripts/local-ci-vitest-runner.mjs --initial-workers 4 --retry-workers 2 --base origin/main",
     );
   });
 

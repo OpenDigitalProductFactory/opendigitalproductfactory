@@ -160,6 +160,71 @@ against the 1053s p90 recorded here, from the same
 `NonProductionEnvironmentLease` query. Record the observed service-time
 inflation at two slots against the modelled +25 to 33%.
 
+## Phase 0b — gate on the tests the diff can reach
+
+Umbrella: BI-2227C37C. Independently shippable. No dependencies. **Do this
+before Phase 0** — it cuts service time, which shrinks the queue, shrinks what a
+retry costs, and reduces the CPU contention a second slot introduces.
+
+### What actually changed, five weeks ago
+
+The single slot is not a regression. Before the two-slot pilot (`35cddc6be5`,
+2026-07-30), `environment-lease.ts` hard-coded
+`NONPROD_SLOT_KEYS = ["slot-0"]` with the comment "Phase 1 deliberately retains
+singleton capacity." Capacity has been 1 throughout.
+
+What grew is the work inside the slot:
+
+| date | `*.test.ts(x)` files |
+| --- | --- |
+| 2026-07-24 | 2462 |
+| 2026-08-09 | 3000 |
+| 2026-08-28 | **3414** |
+
+**+39% in five weeks.** The stage was exhaustive, so suite growth converted
+one-for-one into gate time and, at fixed capacity 1, into queue wait — which is
+non-linear in utilisation. Merges to `main` fell from 391/week (week 28) to
+166/week (week 34).
+
+Workrooms are not implicated: no Workroom path claims a `local-integration-ci`
+lease. Guards are not implicated: 17.9s of a 76.3s total.
+
+### Measured, on this host at maxWorkers=4
+
+| coverage | test files | tests | wall clock |
+| --- | ---: | ---: | ---: |
+| exhaustive | 3046 | 26,437 | **319s** |
+| affected (this branch's 10-file diff) | 430 | 4,273 | **97s** |
+
+319s is **41%** of the 776s median slot hold. Selection cuts it 70%.
+
+### Steps
+
+1. `scripts/lib/local-ci-vitest-selection.mjs` decides coverage from the diff,
+   using vitest's own `--changed` so a changed library still pulls in its
+   dependents' tests rather than trusting a hand-maintained path map.
+2. The gate passes `--base <baseRef>` to the stage.
+3. The stage receipt carries the coverage mode in its stage name and `--changed`
+   in its identity, so a narrower prior run cannot satisfy a wider one on reuse
+   or recovery.
+
+Implemented on this branch, with 11 selection tests.
+
+**Fail-safe conditions — all fall back to exhaustive:** no base ref, an
+unreadable diff, an empty diff, or a changed file whose blast radius the module
+graph cannot see (vitest/tsconfig/package.json/lockfile/next.config/prisma
+schema/migrations/test setup/env). `changedFilesAgainst` returns null rather
+than `[]` on a failed git call, so "git broke" can never be read as "nothing
+changed" and run zero tests. `DPF_LOCAL_CI_VITEST_EXHAUSTIVE="<why>"` forces the
+full run and records the reason.
+
+The cloud tier stays exhaustive and sharded. That is what makes local selection
+safe rather than a gamble.
+
+**Not done:** raising `--maxWorkers` from 4 on a 12-CPU VM. Likely worth it, but
+the memory and throughput trade against two admitted slots is unmeasured, and an
+unmeasured change here is what produced the problem being fixed.
+
 ## Phase 1 — an honest verdict
 
 Umbrella: BI-D088D06D. Independently shippable. No dependencies. Ships together
