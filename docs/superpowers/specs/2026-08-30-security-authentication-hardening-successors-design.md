@@ -1,3 +1,7 @@
+---
+status: draft
+---
+
 # Security and authentication hardening successor design
 
 **Status:** proposed for independent review  

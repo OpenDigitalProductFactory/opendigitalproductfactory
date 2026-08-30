@@ -1,3 +1,7 @@
+---
+status: draft
+---
+
 # Optional runtime-secret provider design
 
 **Status:** proposed for independent review  

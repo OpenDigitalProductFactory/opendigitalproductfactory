@@ -40,8 +40,8 @@ The largest remaining security risks are at the edges of that architecture:
 
 - EP-24741BBF is the correct live directory/identity program. Its core implementation has advanced farther than several child statuses imply.
 - BI-A91004A7 is a concrete status-drift example: the live item says `triaging`, while PR #4825 with the same title is merged and the runtime entrypoint is present on `origin/main`.
-- The 2026-08-26 MCP self-authentication spec names BI-1819D34F, BI-C7151B1B, BI-E4DFDCB0, BI-ED1BBC9E, and BI-MCP-7E53D1; none resolve in the current live backlog.
-- Older documents reference epics such as EP-1FABA22D, EP-COMPANY-IAM-FOUNDATION, EP-IAM-ADMIN-PORTAL-AUDIT, EP-TAK-3F9A21, and EP-AGENT-AUTH-VAULT; none resolve live. They must be treated as historical/superseded identifiers, not current delivery coverage.
+- The 2026-08-26 MCP self-authentication spec names five BI references that no longer resolve in the current live backlog. The reconciliation item must preserve the original text as historical evidence while replacing its current delivery pointers with live items.
+- Older documents also name several epic references that no longer resolve live. They must be treated as historical/superseded identifiers, not current delivery coverage, and replaced by live pointers where the work remains active.
 - The recovery bundle contains a detailed production credential-enforcement item, but the corresponding live item is absent. Recovery JSON is not live backlog and cannot satisfy the gap.
 
 ## Priority order

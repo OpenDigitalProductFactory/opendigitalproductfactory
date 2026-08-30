@@ -1,3 +1,7 @@
+---
+status: draft
+---
+
 # Optional runtime-secret provider implementation plan
 
 **Backlog:** BI-E7553A1C  
