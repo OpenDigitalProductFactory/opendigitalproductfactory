@@ -35,6 +35,8 @@ const TERMINAL_BUILD_PHASES = new Set(["complete", "failed", "abandoned"]);
 export type WorkCapsuleLiveness =
   /** Demonstrably live: valid lease, open PR, or recent real activity. */
   | "live"
+  /** Server-owned nonproduction capacity wait; the executor is suspended, not dead. */
+  | "durable-wait"
   /** Lease-backed executor whose lease has elapsed — the session died. */
   | "lease-expired"
   /** Linked Build Studio build is complete/failed/abandoned — nothing to do. */
@@ -69,6 +71,7 @@ export type CapsuleLivenessInput = {
    * null-lease capsule has. Absent/null for non-BS capsules or when not loaded.
    */
   featureBuild?: { phase: string | null; lastActivityAt: Date | null } | null;
+  durableWait?: { state: "queued" | "active"; signaledAt: Date | null } | null;
 };
 
 export type CapsuleLivenessVerdict = {
@@ -120,7 +123,7 @@ export function classifyWorkCapsuleLiveness(
     trueLivenessAt: Date | null,
   ): CapsuleLivenessVerdict => ({
     liveness,
-    isLive: liveness === "live" || liveness === "no-signal",
+    isLive: liveness === "live" || liveness === "durable-wait" || liveness === "no-signal",
     isReapable: REAPABLE_LIVENESS.has(liveness),
     reason,
     trueLivenessAt,
@@ -135,6 +138,15 @@ export function classifyWorkCapsuleLiveness(
   if (hasOpenPr(input)) {
     const label = input.pullRequestNumber ? `PR #${input.pullRequestNumber}` : "an open PR";
     return verdict("live", `Parked in review as ${label}.`, input.lastSyncedAt ?? null);
+  }
+
+  if (input.durableWait) {
+    const action = input.durableWait.state === "active" ? "executing" : "waiting for capacity";
+    return verdict(
+      "durable-wait",
+      `Durable nonproduction lease is ${action}; the Workroom must not be reaped.`,
+      input.durableWait.signaledAt,
+    );
   }
 
   const build = input.featureBuild ?? null;

@@ -47,6 +47,12 @@ function WorkroomRows({ rows, label }: { rows: WorkroomInventoryRow[]; label: st
   return <DataTable ariaLabel={label} className="overflow-x-auto rounded-xl border border-[var(--dpf-border)]" columns={columns} rows={rows} getRowKey={(room) => room.capsuleId} pageSize={20} empty="No Workrooms in this group. New activity appears here when work is claimed or started." />;
 }
 
+function duration(ms: number | null): string {
+  if (ms == null) return "—";
+  if (ms < 60 * 60 * 1000) return `${Math.round(ms / 60_000)}m`;
+  return `${Math.round(ms / 3_600_000)}h`;
+}
+
 export function WorkroomInventory({
   workrooms,
   summary,
@@ -58,10 +64,13 @@ export function WorkroomInventory({
   const history = workrooms.filter((room) => !room.isLive);
   return (
     <div className="space-y-8">
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
         <StatCard label="Live now" value={`${summary.live} live`} intent="success" hint="Backed by a lease, open PR, or recent activity" />
         <StatCard label="History" value={`${summary.history} inactive`} hint="Terminal, expired, stalled, or awaiting cleanup" />
         <StatCard label="Cleanup candidates" value={summary.reapable} intent={summary.reapable > 0 ? "warning" : "neutral"} hint="Eligible for governed reaping" />
+        <StatCard label="Executing" value={summary.heavyLane.executing} hint="Holding an admitted heavy lane" />
+        <StatCard label="Next ready" value={summary.heavyLane.nextReady} intent={summary.heavyLane.nextReady > 0 ? "info" : "neutral"} hint="FIFO heads awaiting capacity" />
+        <StatCard label="Oldest wait" value={duration(summary.progressSlo.oldestWaitMs)} intent={(summary.progressSlo.oldestWaitMs ?? 0) > 3_600_000 ? "warning" : "neutral"} hint={`${summary.heavyLane.dormant} queued behind a head`} />
       </div>
       <section className="space-y-3" aria-labelledby="live-workrooms-heading">
         <div>
