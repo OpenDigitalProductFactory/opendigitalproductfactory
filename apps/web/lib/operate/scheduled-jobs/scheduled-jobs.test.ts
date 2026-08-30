@@ -29,6 +29,15 @@ describe("scheduled-job catalog", () => {
     expect(isCatalogJobLocked("code-graph-reconcile")).toBe(true);
   });
 
+  it("schedules the regulatory monitor rescan as an editable run-now job (BI-DA37A602)", () => {
+    const entry = getCatalogEntry("regulatory-monitor-scan");
+    expect(entry).toBeDefined();
+    expect(entry?.category).toBe("editable");
+    expect(entry?.cron).toBe("0 6 * * 1");
+    expect(entry?.runNowEvent).toBe("govern/regulatory-monitor-scan.requested");
+    expect(isCatalogJobLocked("regulatory-monitor-scan")).toBe(false);
+  });
+
   it("marks every core job as locked and every editable job as unlocked", () => {
     for (const entry of SCHEDULED_JOB_CATALOG) {
       expect(isCatalogJobLocked(entry.jobId)).toBe(entry.category === "core");

@@ -237,12 +237,69 @@ test("generated Windows start script executes the canonical adapter before Compo
     const generation = spawnSync("pwsh", ["-NoProfile", "-Command", `. '${join(root, "install-dpf.ps1")}' -LibraryOnly; [IO.File]::WriteAllText('${generated}', (Get-DPFStartScriptContent), [Text.Encoding]::ASCII)`], { encoding: "utf8" });
     assert.equal(generation.status, 0, generation.stderr);
     const source = await readFile(generated, "ascii");
+    assert.match(source, /Resolve-DpfConsumerReleaseImageTag -InstallDir \$DPF_DIR/);
+    assert.ok(source.indexOf("Resolve-DpfConsumerReleaseImageTag") < source.indexOf("docker compose"));
     assert.match(source, /Resolve-DpfCapabilityComposeProfiles/);
     assert.match(source, /COMPOSE_PROFILES/);
     assert.doesNotMatch(source, /Join-Path \$HOME "\.dpf\\install-state\.json"/);
     const installer = await readFile(join(root, "install-dpf.ps1"), "ascii");
     assert.match(installer, /Resolve-DpfCapabilityComposeProfiles -InstallDir \$DPF_DIR/);
     assert.match(installer, /dpf-start\.ps1" -Encoding ASCII/);
+    for (const checkedIn of ["dpf-start.ps1", "scripts/dpf-start.ps1"]) {
+      const checkedInSource = await readFile(join(root, checkedIn), "utf8");
+      assert.match(checkedInSource, /Resolve-DpfConsumerReleaseImageTag -InstallDir \$DPF_DIR/);
+      assert.ok(checkedInSource.indexOf("Resolve-DpfConsumerReleaseImageTag") < checkedInSource.indexOf("docker compose"));
+    }
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("Windows consumer start projects the recorded immutable release tag and fails closed without it", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "dpf-win-consumer-tag-"));
+  try {
+    const stateDir = join(dir, "state");
+    await mkdir(stateDir, { recursive: true });
+    const statePath = join(stateDir, "install-state.json");
+    const base = {
+      schemaVersion: 2,
+      installerVersion: "v2026.08.29",
+      platform: "win32",
+      arch: "amd64",
+      enabledRuntimeCapabilities: [],
+      capabilityCatalogHash: null,
+      capabilityStateVersion: null,
+      installPath: dir,
+      installMode: "consumer",
+    };
+    await writeFile(statePath, `${JSON.stringify({ ...base, imageTag: "v2026.08.29-release.1" })}\n`);
+    const helper = join(root, "scripts", "installer", "lib", "state.ps1");
+    const resolve = [
+      `$env:DPF_STATE_DIR='${stateDir}'`,
+      `$env:DPF_IMAGE_TAG='latest'`,
+      `. '${helper}'`,
+      `$tag=Resolve-DpfConsumerReleaseImageTag -InstallDir '${dir}'`,
+      `Write-Output "$tag|$env:DPF_IMAGE_TAG"`,
+    ].join("; ");
+    const resolved = spawnSync("pwsh", ["-NoProfile", "-Command", resolve], { encoding: "utf8" });
+    assert.equal(resolved.status, 0, resolved.stderr);
+    assert.match(resolved.stdout, /overrides environment tag 'latest'/);
+    assert.match(resolved.stdout, /v2026\.08\.29-release\.1\|v2026\.08\.29-release\.1\s*$/);
+
+    await writeFile(statePath, `${JSON.stringify({ ...base, imageTag: null })}\n`);
+    const missing = spawnSync("pwsh", ["-NoProfile", "-Command", resolve], { encoding: "utf8" });
+    assert.notEqual(missing.status, 0);
+    assert.match(`${missing.stdout}\n${missing.stderr}`, /consumer_release_identity_missing/);
+
+    await writeFile(statePath, `${JSON.stringify({ ...base, imageTag: "latest" })}\n`);
+    const mutable = spawnSync("pwsh", ["-NoProfile", "-Command", resolve], { encoding: "utf8" });
+    assert.notEqual(mutable.status, 0);
+    assert.match(`${mutable.stdout}\n${mutable.stderr}`, /consumer_release_identity_invalid/);
+
+    await writeFile(statePath, `${JSON.stringify({ ...base, installMode: "contributor", imageTag: null })}\n`);
+    const contributor = spawnSync("pwsh", ["-NoProfile", "-Command", resolve], { encoding: "utf8" });
+    assert.equal(contributor.status, 0, contributor.stderr);
+    assert.equal(contributor.stdout.trim(), "|latest");
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

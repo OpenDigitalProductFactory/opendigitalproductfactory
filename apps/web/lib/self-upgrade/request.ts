@@ -1,5 +1,3 @@
-import { inngest } from "@/lib/queue/inngest-client";
-import { SELF_UPGRADE_EVENT } from "@/lib/queue/functions/self-upgrade";
 import { resolveOperatingScheduleForSystem } from "@/lib/operating-hours-read";
 import { resolveAutoUpgradeWindow } from "@/lib/self-upgrade/auto-window";
 import {
@@ -8,8 +6,11 @@ import {
 } from "@/lib/self-upgrade/config";
 import { isUpgradeWindowOpen } from "@/lib/self-upgrade/window";
 import { resolveReleaseBatchStatus } from "@/lib/self-upgrade/release-batch-status";
-import { createRun, failRun, getLatestRun } from "@/lib/self-upgrade/run-store";
-import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { getLatestRun } from "@/lib/self-upgrade/run-store";
+import {
+  admitSelfUpgrade,
+  resolveCurrentSelfUpgradeTarget,
+} from "@/lib/self-upgrade/admission";
 import { readSelfUpgradeSupport } from "@/lib/self-upgrade/support";
 
 type RequestActorKind = "human" | "agent";
@@ -27,6 +28,12 @@ export type RequestSelfUpgradeResult =
       runId: string;
       triggeredBy: string;
       eventIds: string[];
+      dispatchStatus:
+        | "admission_pending"
+        | "dispatching"
+        | "dispatched"
+        | "indeterminate"
+        | "dispatch_failed";
     }
   | {
       success: true;
@@ -36,7 +43,7 @@ export type RequestSelfUpgradeResult =
   | {
       success: true;
       status: "human_override_required";
-      reason: "outside-window" | "no-window-needs-timezone";
+      reason: "outside-window" | "no-window-needs-timezone" | "terminal-recovery-needs-operator-binding";
       message: string;
     }
   | {
@@ -126,6 +133,14 @@ export async function requestSelfUpgrade(
       runId: latestRun.runId,
     };
   }
+  if (latestRun?.status === "failed") {
+    return {
+      success: true,
+      status: "human_override_required",
+      reason: "terminal-recovery-needs-operator-binding",
+      message: "A terminal upgrade can only be recovered from the operator page with the current authenticated release binding.",
+    };
+  }
 
   const config = await getSelfUpgradeConfig();
   const support = await readSelfUpgradeSupport(config.enabled);
@@ -174,34 +189,33 @@ export async function requestSelfUpgrade(
     }
   }
 
-  const run = await createRun({ triggeredBy });
-  try {
-    const result = await inngest.send({
-      name: SELF_UPGRADE_EVENT,
-      data: {
-        runId: run.runId,
-        triggeredBy,
-        // Agent-requested runs stay batch-gated in the runner too (authoritative
-        // re-check); operator/manual dispatch elsewhere leaves this unset.
-        ...(input.actorKind === "agent" ? { routine: true } : {}),
-      },
-    });
+  const target = await resolveCurrentSelfUpgradeTarget();
+  if (!target) {
     return {
       success: true,
-      status: "queued",
-      runId: run.runId,
-      triggeredBy,
-      eventIds: result.ids,
-    };
-  } catch (err) {
-    const message = getErrorMessage(err);
-    const failure = `queue-dispatch-failed: ${message}`;
-    await failRun(run.runId, failure);
-    return {
-      success: false,
-      status: "dispatch_failed",
-      runId: run.runId,
-      message: failure,
+      status: "unsupported_install_mode",
+      reason: "install-identity-unverified",
+      targetKind: "unknown",
+      message: "Self-upgrade could not resolve an immutable target.",
     };
   }
+  const admission = await admitSelfUpgrade({
+    triggeredBy,
+    target,
+    requestedForce: false,
+    dryRun: false,
+    routine: input.actorKind === "agent",
+    impactSummaryId: null,
+  });
+  if (!admission.admitted) {
+    return { success: true, status: "already_active", runId: admission.runId };
+  }
+  return {
+    success: true,
+    status: "queued",
+    runId: admission.runId,
+    triggeredBy,
+    eventIds: [],
+    dispatchStatus: admission.dispatchStatus,
+  };
 }

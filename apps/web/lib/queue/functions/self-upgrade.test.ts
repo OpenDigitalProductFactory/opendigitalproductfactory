@@ -132,7 +132,7 @@ vi.mock("@/lib/self-upgrade/run-store", () => ({
   getLatestRun: mocks.getLatestRun,
   getLatestSucceededRun: mocks.getLatestSucceededRun,
 }));
-
+vi.mock("@/lib/self-upgrade/delivery-admission", () => ({ rejectDuplicateSelfUpgradeDelivery: vi.fn().mockResolvedValue(null) }));
 vi.mock("@/lib/self-upgrade/promoter", async (importOriginal) => ({
   // Keep the real pure exports (constants like PROMOTER_ALREADY_RUNNING_EXIT_CODE
   // that the orchestrator imports statically) and mock only the spawn-heavy fns.
@@ -506,8 +506,8 @@ describe("success path", () => {
     await runSelfUpgrade({ triggeredBy: "ops" });
     expect(mocks.runPromoter).toHaveBeenCalledWith(
       expect.objectContaining({
-        // Promoter mounts daemon-resolved host paths, never portal paths.
         hostInstallPath: "/Users/me/dpf",
+        canonicalInstallPath: "/Users/me/dpf",
         targetSha: "abc1234deadbeef",
         backupPath: "/backups/self-upgrade/SUR-AAAABBBB",
         healthUrl: "http://localhost:3000/api/health",

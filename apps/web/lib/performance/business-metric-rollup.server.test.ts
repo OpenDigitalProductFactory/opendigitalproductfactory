@@ -53,7 +53,7 @@ describe("defaultBusinessMetricRollupDeps", () => {
     await deps.loadRestaurantSource(context!, window, window.end);
 
     expect(mocks.storefrontFindMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { archetype: { archetypeId: "restaurant" } },
+      where: { archetype: { archetypeId: { in: ["restaurant"] } } },
     }));
     for (const sourceMock of [
       mocks.resourceFindMany,

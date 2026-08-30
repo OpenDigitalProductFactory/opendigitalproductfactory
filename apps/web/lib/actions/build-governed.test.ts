@@ -184,7 +184,7 @@ vi.mock("@/lib/self-upgrade/quiescence", () => ({
 }));
 
 import { revalidatePath } from "next/cache";
-import { approveBuildStart, advanceBuildPhase, completeBuild, createFeatureBuild, recordBuildAcceptance, resumeBuildImplementation, runBuildReviewVerification, updateBusinessBuildBrief, updateFeatureBrief } from "./build";
+import { approveBuildStart, advanceBuildPhase, completeBuild, createFeatureBuild, recordBuildAcceptance, resumeBuildImplementation, runBuildReviewVerification, updateBusinessBuildBrief } from "./build";
 
 describe("governed build start approvals", () => {
   beforeEach(() => {
@@ -348,55 +348,6 @@ describe("governed build start approvals", () => {
     // Rejected before any DB write — no build row, no work capsule.
     expect(mockPrisma.featureBuild.create).not.toHaveBeenCalled();
     expect(mockPrisma.workroom.create).not.toHaveBeenCalled();
-  });
-
-  it("updateFeatureBrief writes the legacy brief and backfills the BusinessBuildBrief contract", async () => {
-    mockPrisma.featureBuild.findUnique.mockResolvedValue({
-      id: "feature-build-row-1",
-      buildId: "FB-123",
-      title: "Improve Build Studio intake",
-      createdById: "user-1",
-      phase: "ideate",
-    });
-    mockPrisma.featureBuild.update.mockResolvedValue({});
-
-    const brief = {
-      title: "Improve Build Studio intake",
-      description: "Build Studio should turn business-language requests into a brief.",
-      portfolioContext: "Build Studio",
-      targetRoles: ["Operations lead"],
-      inputs: ["Reviewed plan"],
-      dataNeeds: "Business outcome, evidence, success signals",
-      acceptanceCriteria: ["A non-developer can review the generated brief."],
-    };
-
-    await updateFeatureBrief("FB-123", brief);
-
-    expect(mockPrisma.$transaction).toHaveBeenCalledWith(expect.any(Function));
-    expect(mockPrisma.featureBuild.update).toHaveBeenCalledWith({
-      where: { buildId: "FB-123" },
-      data: { brief },
-    });
-    expect(mockPrisma.businessBuildBrief.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { featureBuildId: "feature-build-row-1" },
-        create: expect.objectContaining({
-          briefId: "BBB-FB-123",
-          orgId: "org-1",
-          featureBuildId: "feature-build-row-1",
-          capabilityPackId: "build_studio_self_development",
-          status: "accepted",
-          acceptedByUserId: "user-1",
-          acceptedAt: expect.any(Date),
-        }),
-        update: expect.objectContaining({
-          businessOutcome: brief.description,
-          confidence: "high",
-          acceptedByUserId: "user-1",
-          acceptedAt: expect.any(Date),
-        }),
-      }),
-    );
   });
 
   it("updateBusinessBuildBrief persists business edits and accepts a complete brief", async () => {

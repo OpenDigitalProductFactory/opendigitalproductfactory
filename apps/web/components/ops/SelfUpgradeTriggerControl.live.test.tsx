@@ -57,12 +57,19 @@ describe("SelfUpgradeTriggerControl live observation", () => {
 
   it("rehydrates the targeted status after enqueue without refreshing the route", async () => {
     render(
-      <SelfUpgradeTriggerControl enabled actionState="update-available" channel="stable" latestRun={null} />,
+      <SelfUpgradeTriggerControl
+        enabled
+        actionState="update-available"
+        channel="stable"
+        latestRun={null}
+        targetBinding="server-signed-target"
+      />,
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Upgrade now" }));
 
     await waitFor(() => expect(mocks.trigger).toHaveBeenCalledOnce());
+    expect(mocks.trigger).toHaveBeenCalledWith({ targetBinding: "server-signed-target" });
     await waitFor(() => expect(mocks.refreshStatus).toHaveBeenCalledOnce());
     expect(mocks.refreshRoute).not.toHaveBeenCalled();
   });
