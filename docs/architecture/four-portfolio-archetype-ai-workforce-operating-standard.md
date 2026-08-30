@@ -925,6 +925,32 @@ does not own copies of them. Definition estimates, targets, and evidence policy 
 from instance actuals such as elapsed time, cost, capacity, token/tool use, exceptions, and accepted
 outcomes.
 
+### 9.6 Proposed competence-evolution Workroom application profile
+
+The [PAAW competence-evolution Workroom
+design](../superpowers/specs/2026-08-30-paaw-competence-evolution-workroom-design.md) defines a
+candidate application profile for turning operational experience into governed knowledge, evaluated
+WorkPatterns, and qualification-aware activation. It composes Section 9.5 Workrooms with scoped
+WWMD/WWWD/WSID commons, Governed Playbook Experimentation, TAK-JSI, GAID, and TAK.
+
+The profile is informative in Candidate 0.2.0. It does not add conformance requirements until the
+Standards Steward approves a minor-version proposal under Section 19. The proposed minor-version
+requirements would require:
+
+- a trace from exact WorkOccurrence evidence through scoped knowledge, candidate method,
+  independent evaluation, qualification-impact decision, JSI status, active binding, deployed
+  profile, and later outcome;
+- evaluator and held-out material separation from the candidate's writable environment;
+- precommitted endpoints, capability floors, critical failures, seed/retry/submission budgets, and
+  invalidation rules;
+- direct target-profile or governed-equivalence evidence before a method transfers across a model,
+  provider, harness, corpus, tool surface, job version, or data/risk context; and
+- applicable JSI revalidation before a material promoted change can retain or widen an active
+  assignment or autonomy ceiling.
+
+The profile creates no second room definition, evidence ledger, commons, playbook authority,
+qualification model, or action-permission engine.
+
 ## 10. Performer and work-allocation model
 
 ### 10.1 Performer kinds
@@ -2549,6 +2575,9 @@ implementation work is deliberately identified rather than prematurely built:
 15. refactor the Work Case source registry and Workroom read model into the Section 9.5
     WorkUnitDefinition/WorkOccurrence bridge, preserving domain authorities and existing cycle,
     evidence, estimate, token/tool telemetry, backlog, worktree, PR, and receipt records
+16. evaluate and, if accepted by the Standards Steward, publish the Section 9.6 competence-evolution
+    application profile as a minor-version addition with conformance IDs, tests, and a compatibility
+    notice
 
 ### 18.4 Documentation convergence in this release
 

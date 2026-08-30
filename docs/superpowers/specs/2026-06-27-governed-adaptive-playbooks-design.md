@@ -10,6 +10,13 @@
 > versioned bounded recovery, exact-head PR/merge-queue custody, governed-release/deployed-SHA
 > closure, execution-profile attribution, and the operator custody band. Rollout remains
 > default-off and proceeds through shadow and a contained `dpf_dogfood` canary.
+>
+> **2026-08-30 competence-assurance continuation:** WikiSkill and Anthropic's automated-researcher
+> results do not change the Living Playbook ownership model. They add requirements at its evaluation
+> and qualification seams: evidence/knowledge/method separation, held-out evaluator isolation,
+> capability floors, anti-gaming controls, target-profile transfer evidence, and TAK-JSI
+> revalidation before activation. The canonical extension is
+> [`2026-08-30-paaw-competence-evolution-workroom-design.md`](2026-08-30-paaw-competence-evolution-workroom-design.md).
 
 - **Status:** Design analysis
 - **Date:** 2026-06-27
