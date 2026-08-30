@@ -229,3 +229,12 @@ Execute that sequence atomically:
 This remains the single atomic BI-3FD07259 deliverable. The comparison repair,
 typed successor, worker CAS, and truthful terminal projection share one clean
 revert boundary and are not independently safe to ship.
+
+Traceability for `exact-target-never-dispatched-recovery`:
+
+- requirements: OBJ-SUA-002, OBJ-SUA-003, OBJ-SUA-004, OBJ-SUA-006;
+- contracts: terminal-predecessor-evidence, release-target-relationship,
+  typed-unique-recovery-successor, worker-claim-cas, operator-projection;
+- flows: watchdog-terminal-observation, authenticated-recovery-admission,
+  successor-dispatch, worker-claim, live-status-observation; and
+- verification: AC-SUA-010, AC-SUA-011, AC-SUA-012, AC-SUA-013, AC-SUA-014.
