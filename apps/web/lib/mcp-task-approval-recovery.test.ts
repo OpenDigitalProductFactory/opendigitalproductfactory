@@ -367,6 +367,88 @@ describe("same-TaskRun approval recovery", () => {
     }));
   });
 
+  it("supersedes a failed provider-provenance envelope on the same TaskRun", async () => {
+    const { db, tx, run, envelope, failedBinding } = failedReviewFixture();
+    const providerRun = {
+      ...run,
+      progressPayload: {
+        summary: "Repository provider could not resolve immutable commit provenance.",
+      },
+    };
+    const failedEnvelope = {
+      ...envelope,
+      status: "failed",
+      expiresAt: new Date("2026-08-28T13:40:00.000Z"),
+    };
+    tx.taskRun.findUnique.mockResolvedValue(providerRun);
+    tx.coworkerActionEnvelope.findFirst.mockResolvedValue(failedEnvelope);
+    tx.coworkerActionEnvelope.updateMany.mockResolvedValue({ count: 1 });
+
+    const result = await recoverStaleApprovedRemoteTask({
+      taskRunId: run.taskRunId,
+      requestDigest: REQUEST_DIGEST,
+      expectedUpdatedAt: run.updatedAt,
+      userId: "user-1",
+      agentId: failedBinding.actingAgentId,
+      writerToolName: failedBinding.toolName,
+      now: NOW,
+    }, db as NonNullable<Parameters<typeof recoverStaleApprovedRemoteTask>[1]>);
+
+    expect(result).toEqual({
+      kind: "fresh-approval-required",
+      sourceEnvelopeId: failedEnvelope.id,
+      replacementEnvelopeId: "ENV-REPLACEMENT",
+      replacementProposalExecutionId: "tool-proposal-new",
+    });
+    expect(tx.workroom.findMany).not.toHaveBeenCalled();
+    expect(tx.coworkerActionEnvelope.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: failedEnvelope.id,
+        status: "failed",
+        expiresAt: { lte: NOW },
+      },
+      data: { status: "cancelled", resolvedAt: NOW },
+    });
+    expect(tx.taskRun.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        progressPayload: expect.objectContaining({
+          approvalRecovery: expect.objectContaining({
+            kind: "failed-provider-envelope",
+            sourceEnvelopeId: failedEnvelope.id,
+            freshApprovalRequired: true,
+            inferenceRerun: false,
+          }),
+        }),
+      }),
+    }));
+  });
+
+  it("refuses a failed envelope when the failure is not immutable provider provenance", async () => {
+    const { db, tx, run, envelope, failedBinding } = failedReviewFixture();
+    tx.taskRun.findUnique.mockResolvedValue({
+      ...run,
+      progressPayload: { summary: "CANONICAL_DESIGN_REQUIRED: findings present." },
+    });
+    tx.coworkerActionEnvelope.findFirst.mockResolvedValue({
+      ...envelope,
+      status: "failed",
+      expiresAt: new Date("2026-08-28T13:40:00.000Z"),
+    });
+
+    await expect(recoverStaleApprovedRemoteTask({
+      taskRunId: run.taskRunId,
+      requestDigest: REQUEST_DIGEST,
+      expectedUpdatedAt: run.updatedAt,
+      userId: "user-1",
+      agentId: failedBinding.actingAgentId,
+      writerToolName: failedBinding.toolName,
+      now: NOW,
+    }, db as NonNullable<Parameters<typeof recoverStaleApprovedRemoteTask>[1]>)).resolves.toBeNull();
+
+    expect(tx.coworkerActionEnvelope.updateMany).not.toHaveBeenCalled();
+    expect(tx.coworkerActionEnvelope.create).not.toHaveBeenCalled();
+  });
+
   it("refuses failed replay recovery while the Workroom still records a stale head", async () => {
     const { db, tx, run, failedBinding } = failedReviewFixture("9c761214a76a6f0f13e24cbb7f13e1283430181b");
 
