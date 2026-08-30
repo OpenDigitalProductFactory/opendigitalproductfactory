@@ -1,3 +1,7 @@
+---
+status: draft
+---
+
 # Bounded Delivery Control Plane
 
 Status: draft for architecture review  

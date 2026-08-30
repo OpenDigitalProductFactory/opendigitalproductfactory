@@ -1,3 +1,7 @@
+---
+status: draft
+---
+
 # Implementation Plan: Bounded Delivery Control Plane
 
 > You are an excellent senior software engineer who specializes in analyzing existing codebases and implementing robust, well-tested solutions.
