@@ -286,7 +286,15 @@ function parseArgs(argv) {
       case "--remote": options.remote = args.shift() ?? ""; break;
       case "--owner-provider": options.ownerProvider = args.shift() ?? ""; break;
       case "--owner-session-id": options.ownerSessionId = args.shift() ?? ""; break;
-      case "--mcp-url": options.mcpUrl = args.shift() ?? ""; break;
+      case "--mcp-url": {
+        options.mcpUrl = args.shift() ?? "";
+        // --mcp-url is the operator naming the endpoint, the same signal
+        // DPF_MCP_URL carries. Record it there too so mcpCall's loopback
+        // enforcement reads one source of operator intent instead of this
+        // file threading a flag through all nine of its call sites.
+        if (options.mcpUrl) process.env.DPF_MCP_URL = options.mcpUrl;
+        break;
+      }
       case "--lease-wait-seconds": options.leaseWaitSeconds = Number(args.shift()); break;
       case "--poll-seconds": options.pollSeconds = Number(args.shift()); break;
       case "--expires-minutes": options.expiresMinutes = Number(args.shift()); break;
