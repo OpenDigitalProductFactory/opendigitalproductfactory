@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 693,
+  "pageCount": 695,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -8893,6 +8893,20 @@
         "pr-index"
       ]
     },
+    "docs/security/2026-08-30-security-authentication-stack-assessment.md": {
+      "publicHref": "/security/2026-08-30-security-authentication-stack-assessment/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "security-and-authentication-stack-assessment",
+        "outcome",
+        "implemented-stack-versus-design",
+        "backlog-and-plan-conformance-findings",
+        "priority-order",
+        "security-boundary-for-1password"
+      ]
+    },
     "docs/security/README.md": {
       "publicHref": "/security/README/",
       "portalHref": null,
@@ -8994,6 +9008,27 @@
         "execution-record-2026-08-28",
         "re-evaluation",
         "sources"
+      ]
+    },
+    "docs/security/tool-evaluations/2026-08-30-1password.md": {
+      "publicHref": "/security/tool-evaluations/2026-08-30-1password/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "1password-tool-evaluation",
+        "executive-decision",
+        "what-the-product-isand-is-not",
+        "security-and-architecture-evaluation",
+        "integration-choices",
+        "chosen-first-1password-connect-rest-api",
+        "supported-later-service-accounts",
+        "rejected-op-run-inside-the-portal-image",
+        "rejected-moving-connector-credentials-into-1password",
+        "benchmarking",
+        "standards",
+        "primary-vendor-sources",
+        "re-evaluation-triggers"
       ]
     },
     "docs/specs/device-identification-and-portfolio-placement-spec.md": {
