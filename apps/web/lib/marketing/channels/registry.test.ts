@@ -46,4 +46,9 @@ describe("channel adapter registry", () => {
     expect(adapter?.capabilities).toEqual(expect.arrayContaining(["publish-post", "publish-page", "upload-media", "upsert-content"]));
     expect(adapter?.projectionIntent).toBeTypeOf("function");
   });
+
+  it("routes the legacy wordpress id through the canonical self-hosted adapter", () => {
+    expect(getAdapter("wordpress")).toBe(getAdapter("wordpress-self-hosted"));
+    expect(getAdapter("wordpress")?.channelId).toBe("wordpress-self-hosted");
+  });
 });
