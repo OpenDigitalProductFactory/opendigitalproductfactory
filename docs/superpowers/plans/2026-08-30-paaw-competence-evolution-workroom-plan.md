@@ -295,7 +295,12 @@ The umbrella is ready for acceptance only when:
 - Decision: `decomposed`
 - Umbrella: `BI-41460872`
 - Plan path: `docs/superpowers/plans/2026-08-30-paaw-competence-evolution-workroom-plan.md`
-- Coverage receipt: pending the first signed and pushed plan commit
+- First immutable publication: commit `8dfe79a674e43d8aa575178f3b89a117dbd20d7f`, plan blob
+  `35a62ea2875dc289e1abdff3a31dd3fffd6918b2`
+- Coverage receipt: not yet recordable because no initiative scope baseline exists for
+  `BI-41460872`. An independent in-platform reviewer must pass the umbrella's spec-approval gate;
+  the resulting objective and acceptance IDs are the traceability vocabulary accepted by
+  `record_plan_backlog_coverage`.
 
 | Deliverable key | BI | Independently shippable | Depends on |
 | --- | --- | --- | --- |
@@ -303,5 +308,6 @@ The umbrella is ready for acceptance only when:
 | `evaluation-integrity-transfer` | `BI-1B7BB954` | yes | `standards-design-publication`, `BI-C6801B5A` for qualification-grade criteria |
 | `qualification-revalidation-interlock` | `BI-6DB95601` | yes | `evaluation-integrity-transfer`, `BI-514826D3`, `BI-C6801B5A`, `BI-3E99ACFA` |
 
-This section must be updated with the immutable coverage receipt returned by
-`record_plan_backlog_coverage`; Markdown mappings alone are not completion evidence.
+After spec approval, adopt an umbrella-bound governed Workroom at the immutable plan head, record
+the mappings above with `record_plan_backlog_coverage`, and replace this condition with the returned
+receipt. Markdown mappings alone are not completion evidence.
