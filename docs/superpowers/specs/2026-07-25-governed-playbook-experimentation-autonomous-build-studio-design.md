@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Governed Playbook Experimentation and Autonomous Build Studio
 
 > **2026-08-30 assurance extension:** WikiSkill and Anthropic's automated-researcher results expose
@@ -7,7 +11,7 @@
 > experiment and activation authority; the extension adds evaluator isolation, anti-gaming,
 > target-profile transfer evidence, and a TAK-JSI revalidation interlock without a second runtime.
 
-- **Status:** proposed
+- **Status:** active
 - **Date:** 2026-07-25
 - **Primary BIs:** `BI-0A636528`, `BI-356E69B1`, `BI-522E754E`
 - **Epic anchors:** `EP-COMPETENCE-FLYWHEEL`, `EP-BUILD-STUDIO`

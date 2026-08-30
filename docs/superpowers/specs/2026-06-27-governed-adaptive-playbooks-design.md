@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Governed Adaptive Playbooks - Translating Ornith-Style Self-Improving Work into DPF
 
 > **2026-07-25 continuation:** The proposal, review, Work Case staging, receipt, and resolution
@@ -18,7 +22,7 @@
 > revalidation before activation. The canonical extension is
 > [`2026-08-30-paaw-competence-evolution-workroom-design.md`](2026-08-30-paaw-competence-evolution-workroom-design.md).
 
-- **Status:** Design analysis
+- **Status:** active
 - **Date:** 2026-06-27
 - **Author:** Codex, operator-directed
 - **Primary audience:** DPF platform architecture, AI workforce, TAK runtime, Build Studio
