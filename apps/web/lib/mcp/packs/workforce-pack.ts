@@ -397,22 +397,27 @@ async function transitionEmployeeStatus(params: Record<string, unknown>, userId:
     inactive: employee.status === "offboarding" ? "offboarding_completed" : "terminated",
   };
 
-  await prisma.$transaction([
-    prisma.employeeProfile.update({
+  // BI-2624B7EA: the MCP surface writes employment events too, so it actuates
+  // through the same canonical writer. An event recorded by an agent must open
+  // the same Workroom an event recorded through the portal does — governance
+  // approves evidence, not provenance.
+  const { recordAndActuateEmploymentEvent } = await import(
+    "@/lib/workforce/employment-event-actuator-runtime"
+  );
+  await prisma.$transaction(async (tx) => {
+    await tx.employeeProfile.update({
       where: { employeeId: String(params["employeeId"]) },
       data: { status: newStatus },
-    }),
-    prisma.employmentEvent.create({
-      data: {
-        eventId: `EVT-${randomUUID().slice(0, 8).toUpperCase()}`,
-        employeeProfileId: employee.id,
-        eventType: eventMap[newStatus] ?? "activated",
-        effectiveAt: new Date(),
-        reason: typeof params["reason"] === "string" ? params["reason"] : null,
-        actorUserId: userId,
-      },
-    }),
-  ]);
+    });
+    await recordAndActuateEmploymentEvent(tx as never, {
+      employeeProfileId: employee.id,
+      eventType: (eventMap[newStatus] ??
+        "activated") as import("@/lib/workforce-types").EmploymentEventType,
+      effectiveAt: new Date(),
+      reason: typeof params["reason"] === "string" ? params["reason"] : null,
+      actorUserId: userId,
+    });
+  });
 
   return {
     success: true,
