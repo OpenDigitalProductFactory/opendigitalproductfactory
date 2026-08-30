@@ -179,6 +179,8 @@ The canonical design authority for this delivery is
 ### Red tests first
 
 - A definition cannot omit a trigger without an explicit imperative-only justification.
+- Registry validation requires exactly one of a declared trigger or a non-empty
+  imperative-only justification.
 - Room grants can only intersect standing agent grants and can never confer a missing grant.
 - Standing `scheduled` and `bookkeeping-period` definitions preserve their current behavior.
 - A persisted roster survives the loss of every presence row and still reports its occupied roles.
@@ -186,18 +188,23 @@ The canonical design authority for this delivery is
 - Multiple roles for one Principal remain one participant with normalized role assignments.
 - Existing rooms without persisted membership retain their current read/access projection through an
   explicitly labelled legacy-derived compatibility path.
+- Partially migrated rooms retain legacy-only Principals in a labelled hybrid projection and cannot
+  cut over to persisted-authoritative mode until a completeness check passes.
 
 ### Implementation
 
-1. Reuse the existing definition registry and its version identity for trigger, tighten-only grant,
-   and measure declarations; do not introduce a scheduler or authority store.
+1. Reuse the existing definition registry and its version identity for trigger, imperative-only
+   justification, tighten-only grant, and measure declarations; enforce the trigger/justification
+   exclusive-or at the registry boundary and do not introduce a scheduler or authority store.
 2. Add a normalized Workroom-to-Principal membership relation plus role assignments, keyed to the
    canonical Principal rather than user/agent-specific foreign keys. Store work state, admission
    reason, and admission time on membership; keep presence outside the roster.
 3. Add one pure roster projection that merges persisted membership metadata with live presence and
    produces occupied-role and missing-role conformance without rendering a page.
-4. Make the workspace loader prefer the persisted roster, retain a labelled legacy-derived fallback
-   for existing rooms, and keep the existing access ladder unchanged.
+4. Give each Workroom an explicit roster-authority state. In legacy-compatible mode, merge persisted
+   members with legacy-only Principals by canonical identity and label the result hybrid; permit
+   persisted-authoritative cutover only after the completeness check passes. Keep the existing access
+   ladder unchanged.
 5. Extend the current Workroom participant surface so membership, active presence, work state, and
    missing required roles are visually distinct using existing theme-aware report primitives.
 6. Spend the four refactor units consolidating assignment, conversation-lineage, coordinator, and

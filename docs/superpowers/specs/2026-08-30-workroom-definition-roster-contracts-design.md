@@ -81,6 +81,10 @@ a room, but none is the durable membership fact.
 
 - `trigger`: `event`, `cadence`, `threshold`, or `null` for genuinely imperative
   rooms. Cadence carries an RFC 5545 rule; threshold names one declared measure.
+- `imperativeOnlyJustification`: a non-empty operator-readable explanation when
+  `trigger` is `null`, and `null` when a trigger is declared. Registry validation
+  enforces that exactly one of `trigger` and this justification is present, so an
+  imperative room is deliberate and auditable rather than an omitted field.
 - `toolGrant.grantKeys`: a room ceiling. Effective keys are the intersection
   with the participant's standing grants. Missing standing grants are refused,
   never conferred.
@@ -93,7 +97,8 @@ definitions without changing their execution behavior.
 
 ## 5. Persisted roster (`BI-4CB2EF76`)
 
-Add normalized membership and role relations:
+Add normalized membership and role relations plus an explicit per-room roster
+authority state:
 
 - one membership per `(workroom, principal)`;
 - zero or more typed role assignments using the existing
@@ -102,6 +107,8 @@ Add normalized membership and role relations:
   current-work summary;
 - foreign keys to `Workroom` and canonical `Principal`, with indexed room and
   principal lookup paths.
+- `Workroom.rosterAuthority`: `legacy-compatible` by default or
+  `persisted-authoritative` after an explicit cutover verifies completeness.
 
 Presence is not stored on membership. Authority is not stored on membership.
 Sponsor and authority summaries remain derived from canonical identity and
@@ -109,11 +116,16 @@ authority sources. Membership deletion cascades its role assignments; deleting
 a Principal or Workroom follows existing stewardship policy rather than
 silently reassigning identity.
 
-Existing rooms are not bulk-inferred during migration. The loader prefers
-persisted membership when present and otherwise exposes a labelled
-`legacy-derived` projection from existing policy, assignment, conversation, and
-coordinator sources. Presence can decorate either projection but cannot create
-membership, a role, or access.
+Existing rooms are not bulk-inferred during migration. While roster authority is
+`legacy-compatible`, the loader forms a union keyed by Principal: a persisted
+membership is authoritative for that Principal's roles and metadata, and
+legacy-only Principals remain visible and admitted as labelled `legacy-derived`
+participants. The room reports `legacy-derived` with no persisted rows and
+`hybrid` with both sources. Only an explicit, audited transition to
+`persisted-authoritative` stops consulting legacy admission sources; that
+transition is refused unless the completeness check reports no legacy-only
+Principals. Presence can decorate either source but cannot create membership, a
+role, or access.
 
 ## 6. Read model and UI
 
@@ -125,6 +137,8 @@ identity, role, lineage, and presence facts. It returns:
 - presence as a separate, time-bounded value;
 - occupied required roles and missing required roles;
 - source references sufficient to explain each result.
+- room-level roster authority and projection mode (`legacy-derived`, `hybrid`,
+  or `persisted-authoritative`).
 
 The existing Workroom participant surface uses existing theme-aware report
 primitives. It labels membership separately from presence, never renders
@@ -177,10 +191,10 @@ Verification is test-first:
 
 | Acceptance | Objective | Statement |
 | --- | --- | --- |
-| AC-WR-001 | OBJ-WR-001 | Every registered room definition declares a versioned trigger or explicit imperative `null`, a tighten-only grant ceiling, and at least one resolvable measure binding. |
+| AC-WR-001 | OBJ-WR-001 | Every registered room definition declares a versioned trigger or an imperative `null` paired with a non-empty justification, a tighten-only grant ceiling, and at least one resolvable measure binding. |
 | AC-WR-002 | OBJ-WR-001 | Scheduled and bookkeeping-period rooms retain their existing behavior while using the canonical recurrence grammar. |
 | AC-WR-003 | OBJ-WR-002 | Persisted membership survives loss of all presence rows and preserves every occupied typed role. |
 | AC-WR-004 | OBJ-WR-002 | One Principal with multiple roles is stored once with normalized role assignments; presence and room grants confer neither membership nor standing authority. |
-| AC-WR-005 | OBJ-WR-003 | Existing rooms without roster rows retain access and participant visibility through an explicitly labelled legacy-derived path. |
+| AC-WR-005 | OBJ-WR-003 | Legacy-compatible rooms retain every legacy-only participant during partial migration, label hybrid results, and refuse persisted-authoritative cutover while completeness gaps remain. |
 | AC-WR-006 | OBJ-WR-003 | The Workroom surface visibly distinguishes membership, presence, work state, and missing required roles across supported viewport and theme variants. |
 | AC-WR-007 | OBJ-WR-003 | Process Overseer enforcement remains inactive until `BI-3913EB49`; this delivery supplies contracts only. |
