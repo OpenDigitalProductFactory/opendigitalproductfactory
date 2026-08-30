@@ -85,17 +85,15 @@ describe("capability completeness (derived artifact accessor)", () => {
     expect(a.planes.corpus.level).toBe(3);
   });
 
-  it("names the missing grant when a plane fails on reachability", () => {
-    // The mechanism itself still matters: an agent whose corpus exists but whose
-    // retrieval tool is unreachable must say WHICH grant is missing, or the gap
-    // is undiagnosable from the report alone.
+  it("keeps every measured identity able to reach its profession corpus", () => {
+    // The corpus grant class is closed and the integrity ratchet holds it at
+    // zero. Missing-grant diagnostics remain unit-tested at the scanner level;
+    // this accessor test now guards the resolved state instead of requiring a
+    // defect to remain present forever.
     const gapped = capabilityCompletenessReport().agents.filter(
-      (a) => a.planes.corpus.level === 2,
+      (a) => a.planes.corpus.level < a.planes.corpus.ceiling,
     );
-    expect(gapped.length).toBeGreaterThan(0);
-    for (const a of gapped) {
-      expect(a.planes.corpus.missingGrants?.length ?? 0).toBeGreaterThan(0);
-    }
+    expect(gapped.map((a) => a.key)).toEqual([]);
   });
 
   it("no roster-present coworker is locked out of the kernel", () => {

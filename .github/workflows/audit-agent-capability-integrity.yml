@@ -71,6 +71,9 @@ jobs:
       - name: Fail if the committed artifact was stale
         run: node scripts/measure-capability-completeness.mjs --check
 
+      - name: Test the measure and completeness ratchet
+        run: node --test scripts/measure-capability-completeness.test.mjs scripts/check-agent-capability-integrity.test.mjs
+
       - name: Check agent capability integrity
         run: node scripts/check-agent-capability-integrity.mjs
 
