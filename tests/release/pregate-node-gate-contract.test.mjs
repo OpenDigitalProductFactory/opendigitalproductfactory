@@ -249,6 +249,7 @@ test("gate-worktree.mjs refuses to run when neither an explicit command, the stu
   cpSync(join(repoRoot, "scripts", "lib", "local-ci-base-freshness.mjs"), join(temp, "scripts", "lib", "local-ci-base-freshness.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "git-fetch-shared-safe.mjs"), join(temp, "scripts", "lib", "git-fetch-shared-safe.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "entry-module.mjs"), join(temp, "scripts", "lib", "entry-module.mjs"));
+  cpSync(join(repoRoot, "scripts", "lib", "local-integration-status.mjs"), join(temp, "scripts", "lib", "local-integration-status.mjs"));
   cpSync(
     join(repoRoot, "apps", "web", "lib", "nonprod", "local-ci-slot-resources.json"),
     join(temp, "apps", "web", "lib", "nonprod", "local-ci-slot-resources.json"),

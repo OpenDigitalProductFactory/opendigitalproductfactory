@@ -5,6 +5,7 @@ import { pathToFileURL } from "node:url";
 
 import { runVitestWithRecovery } from "./lib/local-ci-vitest-supervisor.mjs";
 import { createObservedProcessRunner } from "./lib/local-ci-process-observer.mjs";
+import { resolveVitestSelection } from "./lib/local-ci-vitest-selection.mjs";
 import {
   classifyPriorStage,
   createStageReceiptWriter,
@@ -40,6 +41,24 @@ function resolveGit(ref) {
     windowsHide: true,
   });
   return result.status === 0 ? result.stdout.trim() : null;
+}
+
+/**
+ * Files this candidate changes relative to the integration base.
+ *
+ * Returns null — never an empty list — when the diff cannot be computed, so
+ * selection falls back to the exhaustive run rather than reading "no changes"
+ * out of a failed git call (BI-2227C37C).
+ */
+export function changedFilesAgainst(baseRef, { spawn = spawnSync } = {}) {
+  if (!baseRef) return null;
+  const result = spawn(
+    "git",
+    ["diff", "--name-only", `${baseRef}...HEAD`],
+    { encoding: "utf8", shell: false, windowsHide: true },
+  );
+  if (result.status !== 0 || typeof result.stdout !== "string") return null;
+  return result.stdout.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
 }
 
 function processAlive(pid) {
@@ -98,8 +117,15 @@ function latestExecutionProfile(receipt) {
   return receipt?.executionProfile ?? null;
 }
 
-export function recoveryReceiptForIdentity({ receipt, identity }) {
-  return receipt?.stage === "exhaustive-vitest"
+export function recoveryReceiptForIdentity({
+  receipt,
+  identity,
+  stage = "exhaustive-vitest",
+}) {
+  // The stage name carries the coverage mode, and the identity carries the
+  // command (which includes --changed). A narrower prior run must never satisfy
+  // a wider one, so both have to match.
+  return receipt?.stage === stage
     && stageIdentityMatches(receipt.identity, identity)
     ? receipt
     : null;
@@ -138,11 +164,12 @@ export function createAttemptRunner({
       lastCompletedTest: lastCompletedTestLine(progress.outputTail ?? ""),
     }),
   });
-  return function runAttempt({ workers, attempt }) {
+  return function runAttempt({ workers, attempt, extraArgs = [] }) {
     const args = [
         "--filter", "web", "exec", "vitest", "run",
         `--maxWorkers=${workers}`,
         "--reporter=verbose",
+        ...extraArgs,
       ];
     return runObservedProcess({
       command: "pnpm",
@@ -166,15 +193,32 @@ async function main() {
   );
   const startedAt = new Date().toISOString();
   let latestAttempts = [];
+
+  // BI-2227C37C: narrow the LOCAL tier to the tests the diff can reach. The
+  // cloud still runs everything, sharded, so a miss here is caught before merge
+  // rather than after. Selection fails safe to the exhaustive run — see
+  // lib/local-ci-vitest-selection.mjs for the conditions.
+  const baseRef = valueAfter("--base", "");
+  const selection = resolveVitestSelection({
+    baseRef,
+    changedFiles: changedFilesAgainst(baseRef),
+  });
+  process.stdout.write(
+    `[local-ci-vitest] coverage=${selection.mode} (${selection.reason})\n`,
+  );
+
   const identity = {
     integrationTreeSha: resolveGit("HEAD^{tree}"),
-    command: `pnpm --filter web exec vitest run --maxWorkers=${initialWorkers} --reporter=verbose`,
+    command: [
+      `pnpm --filter web exec vitest run --maxWorkers=${initialWorkers} --reporter=verbose`,
+      ...selection.extraArgs,
+    ].join(" "),
     maxDurationMs,
   };
   const priorReceipt = readStageReceipt(diagnosticsPath);
   if (reusablePassedStage({
     receipt: priorReceipt,
-    stage: "exhaustive-vitest",
+    stage: selection.stage,
     identity,
   })) {
     markStageReceiptReused({ path: diagnosticsPath, receipt: priorReceipt });
@@ -186,6 +230,7 @@ async function main() {
   const matchingPriorReceipt = recoveryReceiptForIdentity({
     receipt: priorReceipt,
     identity,
+    stage: selection.stage,
   });
   const priorDisposition = matchingPriorReceipt?.retryExhausted === true
     ? "retry-exhausted"
@@ -201,7 +246,7 @@ async function main() {
   });
   const receipt = createStageReceiptWriter({
     path: diagnosticsPath,
-    stage: "exhaustive-vitest",
+    stage: selection.stage,
     identity,
   });
   receipt.start({
@@ -253,7 +298,7 @@ async function main() {
           workers,
         },
       });
-      return observedAttempt({ workers, attempt });
+      return observedAttempt({ workers, attempt, extraArgs: selection.extraArgs });
     },
     onAttempt: async (attempt) => {
       latestAttempts = [...latestAttempts, attempt];

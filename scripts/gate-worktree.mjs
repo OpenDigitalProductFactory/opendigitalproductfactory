@@ -14,8 +14,53 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileS
 import { dirname, resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
 import { mcpCall } from "./lib/mcp-client.mjs";
+
+// BI-46B03CAE — the lease-queue MCP calls cost more than mcpCall's 10s default.
+//
+// Their latency tracks the number of waiters, not the size of the response: with
+// four branches queued on this box, `list_nonprod_environment_leases` measured
+// 10166ms and SUCCEEDED — 166ms past the client's deadline. The portal was
+// healthy throughout (/api/health ~85ms, 4.5% CPU), so nothing was broken; the
+// gate simply stopped listening to an answer that was on its way.
+//
+// The cost of abandoning it is not one retry. A claim that times out client-side
+// after the server created the queued row leaves a gate that does not own the
+// lease it just made, so its own cleanup refuses with `nonprod_lease_not_owner`
+// (explicitly non-retryable) and the row stays queued. Each failure adds a
+// waiter to a single-slot pool, which makes the next listing slower, which
+// strands the next row. Left alone it converges on a box where no gate can ever
+// claim and every contributor is told the portal timed out.
+//
+// So these calls get real headroom, tunable without patching source. The global
+// default stays at 10s: a health probe should still fail fast.
+const LEASE_QUEUE_TIMEOUT_MS = (() => {
+  const raw = Number(process.env.DPF_GATE_MCP_TIMEOUT_MS);
+  return Number.isFinite(raw) && raw > 0 ? raw : 60_000;
+})();
+
+/** Transport options for a queue call whose latency grows with the queue. */
+export function leaseQueueCallOptions(mcpUrl, bearerToken) {
+  return { mcpUrl, bearerToken, timeoutMs: LEASE_QUEUE_TIMEOUT_MS };
+}
+
+/**
+ * Describe a failed lease-queue call in the terms the operator has to act on.
+ *
+ * "timed out after 60000ms" reads as an unreachable portal and sends people to
+ * check whether the install is up. When a queue call is what timed out, the
+ * portal is usually fine and the queue is merely deep — a different problem
+ * with a different response, so say which one it is (BI-46B03CAE).
+ */
+export function describeLeaseCallFailure(error) {
+  const message = error?.message ?? String(error);
+  if (!/timed out after/.test(message)) return message;
+  return `${message} — the portal may be reachable and merely contended; `
+    + "lease-queue calls slow down as waiters accumulate. Raise DPF_GATE_MCP_TIMEOUT_MS "
+    + "if this box regularly runs several gates at once";
+}
 import { summarizeLocalCiOutput } from "./lib/local-ci-failure-summary.mjs";
 import { classifyGateOutcome } from "./lib/sandbox-freshness.mjs";
+import { fallbackStatusForUnknown } from "./lib/local-integration-status.mjs";
 import {
   authoritySafetyMarginMs,
   superviseLeaseRun,
@@ -241,7 +286,15 @@ function parseArgs(argv) {
       case "--remote": options.remote = args.shift() ?? ""; break;
       case "--owner-provider": options.ownerProvider = args.shift() ?? ""; break;
       case "--owner-session-id": options.ownerSessionId = args.shift() ?? ""; break;
-      case "--mcp-url": options.mcpUrl = args.shift() ?? ""; break;
+      case "--mcp-url": {
+        options.mcpUrl = args.shift() ?? "";
+        // --mcp-url is the operator naming the endpoint, the same signal
+        // DPF_MCP_URL carries. Record it there too so mcpCall's loopback
+        // enforcement reads one source of operator intent instead of this
+        // file threading a flag through all nine of its call sites.
+        if (options.mcpUrl) process.env.DPF_MCP_URL = options.mcpUrl;
+        break;
+      }
       case "--lease-wait-seconds": options.leaseWaitSeconds = Number(args.shift()); break;
       case "--poll-seconds": options.pollSeconds = Number(args.shift()); break;
       case "--expires-minutes": options.expiresMinutes = Number(args.shift()); break;
@@ -670,11 +723,11 @@ async function cancelDeadLocalQueueObservers({
     response = await mcpCall(
       "list_nonprod_environment_leases",
       {},
-      { mcpUrl, bearerToken },
+      leaseQueueCallOptions(mcpUrl, bearerToken),
     );
   } catch (error) {
     process.stderr.write(
-      `gate-worktree: dead-waiter reconciliation unavailable (${error.message}); queue remains fail-closed\n`,
+      `gate-worktree: dead-waiter reconciliation unavailable (${describeLeaseCallFailure(error)}); queue remains fail-closed\n`,
     );
     return;
   }
@@ -1116,7 +1169,7 @@ async function main() {
     const response = await mcpCall("release_nonprod_environment_lease", {
       leaseId,
       ownerSessionId,
-    }, { mcpUrl: options.mcpUrl, bearerToken });
+    }, leaseQueueCallOptions(options.mcpUrl, bearerToken));
     if (response?.success !== true) {
       throw new Error(`failed to release local-CI lease: ${JSON.stringify(response)}`);
     }
@@ -1177,7 +1230,7 @@ async function main() {
         branchName: branch,
         slotManifestVersion: slotManifest.schemaVersion,
         hostPressure,
-      }, { mcpUrl: options.mcpUrl, bearerToken });
+      }, leaseQueueCallOptions(options.mcpUrl, bearerToken));
     } catch (error) {
       if (!isTransientMcpError(error) || Date.now() >= deadline) throw error;
       const delayMs = retryDelayMs({ attempt: claimAttempt, pollSeconds: options.pollSeconds });
@@ -1485,7 +1538,7 @@ async function main() {
           },
         }
         : {}),
-    }, { mcpUrl: options.mcpUrl, bearerToken });
+    }, leaseQueueCallOptions(options.mcpUrl, bearerToken));
     const renewedExpiresAt = response?.data?.lease?.expiresAt;
     if (
       response?.success === true
@@ -1848,9 +1901,22 @@ async function main() {
       message: error instanceof Error ? error.message : String(error),
     };
   }
-  if (evidenceResponse?.success !== true && outcome.status === "blocked_sandbox_drift" && evidenceResponse?.error === "invalid_status") {
-    process.stdout.write("gate-worktree: portal does not know blocked_sandbox_drift yet; recording as failed with sandbox-drift evidence\n");
-    evidenceArgs = { ...evidenceArgs, status: "failed", summary: `[SANDBOX_DRIFT — not product evidence] ${evidenceArgs.summary}` };
+  // BI-C59AC8AF: generalized from the blocked_sandbox_drift-only version. An
+  // installed portal cannot know a status a newer gate emits, and dropping the
+  // write is the worst available outcome: the lease releases terminal with no
+  // evidence, and because the gate key hashes the integration tree, that tree is
+  // then permanently unable to be gated. Record SOMETHING, always — `failed` is
+  // the honest floor and the prefix keeps the real class readable.
+  if (evidenceResponse?.error === "invalid_status" && evidenceResponse?.success !== true) {
+    const fallback = fallbackStatusForUnknown(outcome.status);
+    process.stdout.write(
+      `gate-worktree: portal does not know ${outcome.status} yet; recording as ${fallback.status} with the original class in the summary\n`,
+    );
+    evidenceArgs = {
+      ...evidenceArgs,
+      status: fallback.status,
+      summary: `${fallback.summaryPrefix} ${evidenceArgs.summary}`,
+    };
     evidenceResponse = await mcpCall("record_local_integration_result", evidenceArgs, { mcpUrl: options.mcpUrl, bearerToken });
   }
 

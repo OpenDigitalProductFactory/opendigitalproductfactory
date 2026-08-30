@@ -19,6 +19,7 @@ export type GateRunIdentity = GateRunIdentityInput & {
 
 export type LocalCiTerminalEvidenceProjection =
   | { status: "reused"; evidenceRecordId: string; resultClass: "pass" | "fail" }
+  | { status: "rerunnable" }
   | {
     status: "blocked";
     reason: "missing-evidence" | "mismatched-evidence" | "expired-evidence";
@@ -103,7 +104,9 @@ export function projectLocalCiTerminalEvidence(input: {
   } | null;
   now: Date;
 }): LocalCiTerminalEvidenceProjection {
-  if (!input.evidence) return { status: "blocked", reason: "missing-evidence" };
+  // The record id was set but the row is gone (retention, or a failed write that
+  // still stamped the lease). Same reasoning as the null-id case above.
+  if (!input.evidence) return { status: "rerunnable" };
   const details = input.evidence.details && typeof input.evidence.details === "object"
     && !Array.isArray(input.evidence.details)
     ? input.evidence.details as Record<string, unknown>
@@ -113,17 +116,40 @@ export function projectLocalCiTerminalEvidence(input: {
     && !Array.isArray(details.evidenceValidity)
     ? details.evidenceValidity as Record<string, unknown>
     : null;
+  // Truly mismatched: this record does not describe this gate at all. That IS a
+  // real conclusion about the claim and still settles it.
   if (
     input.evidence.operationType !== "local_integration_ci"
     || details?.gateKey !== input.claimKey.slice("gate:".length)
-    || (details.status !== "passed" && details.status !== "failed")
   ) {
     return { status: "blocked", reason: "mismatched-evidence" };
   }
+  // BI-0F2E42D5: the right record for the right gate, carrying a status that is
+  // not a product verdict — `blocked_control_plane_starvation` and its kin. The
+  // gate writes those to say, in its own words, "this is infrastructure
+  // evidence, NOT a product build failure", and then records them; reading one
+  // back as `mismatched-evidence` bricked the tree it interrupted, because the
+  // claim key hashes the tree.
+  //
+  // That made an HONEST record strictly worse than none: a run killed before it
+  // wrote anything is rerunnable (BI-C59AC8AF), while one that recorded why it
+  // could not finish was punished for saying so. It is the same reasoning the
+  // validity check below already applies one branch down — a run that reached no
+  // verdict has no verdict to protect, so re-running it lets nobody escape one.
+  if (details.status !== "passed" && details.status !== "failed") {
+    return { status: "rerunnable" };
+  }
+  // An expiry that was never STAMPED is not an expiry that lapsed. The gate
+  // stamps validity only for a run that reached a product verdict, so evidence
+  // without one is infrastructure evidence — a killed child, a starved control
+  // plane, recorded for observability and never a verdict to reuse. Reading it
+  // as "expired" bricked the tree the same way a dropped write did, just under a
+  // different reason (BI-C59AC8AF). Only a real timestamp in the past expires.
   const expiresAt = typeof validity?.expiresAt === "string"
     ? Date.parse(validity.expiresAt)
     : Number.NaN;
-  if (!Number.isFinite(expiresAt) || expiresAt <= input.now.getTime()) {
+  if (!Number.isFinite(expiresAt)) return { status: "rerunnable" };
+  if (expiresAt <= input.now.getTime()) {
     return { status: "blocked", reason: "expired-evidence" };
   }
   return {
@@ -143,7 +169,15 @@ export async function resolveLocalCiTerminalEvidence(input: {
     details: unknown;
   } | null>;
 }): Promise<LocalCiTerminalEvidenceProjection> {
-  if (!input.evidenceRecordId) return { status: "blocked", reason: "missing-evidence" };
+  // A terminal lease that never recorded evidence describes a run that DIED,
+  // not a verdict — the executor was killed, or the portal rejected its status
+  // write. Blocking on it made that tree permanently ungateable, because the
+  // gate key hashes the integration tree: a fresh commit of the same content
+  // lands on the same key and the same refusal (BI-C59AC8AF). Nothing is being
+  // reused here, so there is nothing to protect — the honest answer is to let
+  // the gate run again. `mismatched-evidence` and `expired-evidence` stay
+  // blocking: there, evidence EXISTS and does not fit, which is a real verdict.
+  if (!input.evidenceRecordId) return { status: "rerunnable" };
   return projectLocalCiTerminalEvidence({
     claimKey: input.claimKey,
     evidence: await input.loadEvidence(input.evidenceRecordId),

@@ -235,15 +235,17 @@ const savePhaseHandoff: ToolPackHandler = async (params, userId, context) => {
   // passes happyPathState (intake anchors) so the gate's intake check
   // evaluates against the real build state rather than default-null.
   try {
-    const { checkPhaseGate, canTransitionPhase, normalizeHappyPathState } = await import("@/lib/feature-build-types");
+    const { canTransitionPhase, normalizeHappyPathState } = await import("@/lib/feature-build-types");
+    const { checkBuildPhaseGate } = await import("@/lib/work-posture/verification-depth-gate");
     if (canTransitionPhase(latestBuild.phase as import("@/lib/feature-build-types").BuildPhase, toPhase as import("@/lib/feature-build-types").BuildPhase)) {
       const plan = (latestBuild.plan as Record<string, unknown> | null) ?? {};
       const happyPathState = normalizeHappyPathState(plan.happyPathState);
       const handoffBrief = latestBuild.brief as { acceptanceCriteria?: string[]; fixContext?: import("@/lib/feature-build-types").FixContext } | null;
-      const gate = checkPhaseGate(
-        latestBuild.phase as import("@/lib/feature-build-types").BuildPhase,
-        toPhase as import("@/lib/feature-build-types").BuildPhase,
-        {
+      const gate = await checkBuildPhaseGate({
+        buildId,
+        from: latestBuild.phase as import("@/lib/feature-build-types").BuildPhase,
+        to: toPhase as import("@/lib/feature-build-types").BuildPhase,
+        evidence: {
           kind: latestBuild.kind,
           // Right-sizing matrix: persisted on plan.processSize at promote time.
           processSize: (plan.processSize as string | undefined) ?? "medium",
@@ -256,7 +258,7 @@ const savePhaseHandoff: ToolPackHandler = async (params, userId, context) => {
           acceptanceCriteria: handoffBrief?.acceptanceCriteria ?? [],
           happyPathState,
         },
-      );
+      });
       // Record the gate outcome on the handoff (the gate that allowed —
       // or blocked — advancement). Best-effort; never fail the handoff.
       await prisma.phaseHandoff

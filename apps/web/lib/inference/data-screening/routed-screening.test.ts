@@ -226,3 +226,61 @@ describe("prompt provenance decides whether a turn may leave the box", () => {
     expect(screen.receipt.routeEffect).toBe("local-only");
   });
 });
+
+// BI-DECCF716. The provenance split above covers the coworker's job description.
+// This is the panel shape it does not cover: message content and prior tool calls
+// are data by construction, so one ambiguous word there used to load the
+// employee-records pack, whose `restricted` binding sensitivity overrode the
+// corroboration-gated verdict and denied export outright.
+describe("an uncorroborated ambiguous word does not deny export", () => {
+  const persona =
+    "You are the COO. You coordinate operations: payroll runs, invoice approvals, " +
+    "salary review cycles, and team performance.";
+
+  const inboxTurn = () =>
+    createRoutedInferenceScreen({
+      messages: [
+        {
+          role: "user",
+          content: "How many distinct decisions are in my inbox today? Note from pat@example.com.",
+        },
+        {
+          role: "assistant",
+          content: "",
+          toolCalls: [{
+            id: "c1",
+            name: "get_capability_completeness",
+            arguments: { discipline: "platform-engineering" },
+          }],
+        },
+      ],
+      systemPrompt: persona,
+      systemPromptInstructionSpans: [persona],
+      taskType: "conversation",
+      routeContext: { sensitivity: "confidential", residencyPolicy: "any_enabled" },
+    }).screen;
+
+  it("no longer reaches the restricted export denial", () => {
+    const screen = inboxTurn();
+
+    expect(screen.receipt.policyEffect).not.toBe("deny");
+    expect(screen.receipt.explanationCodes).not.toContain("restricted-cannot-leave-boundary");
+  });
+
+  it("does not load the pack for the uncorroborated class", () => {
+    const screen = inboxTurn();
+
+    expect(screen.receipt.policyPackVersions).toEqual(["vertical-customer-records@1.0.0"]);
+    expect(screen.receipt.classifiedDataClasses).toContain("employee-records");
+  });
+
+  it("still holds the turn local for the contact detail it really carries", () => {
+    // Not a regression: the mask obligation from a real contact detail is the
+    // second, separate clamp (BI-0064680C). Asserted so a later change to that
+    // path shows up here rather than silently widening this one.
+    const screen = inboxTurn();
+
+    expect(screen.receipt.obligationKinds).toContain("mask");
+    expect(screen.routeContext.residencyPolicy).toBe("local_only");
+  });
+});

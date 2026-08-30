@@ -187,6 +187,7 @@ function runCandidate(fixture: Fixture, options: {
     "unset DPF_STATE_DIR DPF_PROMOTION_MODE DPF_RELEASE_TAG DPF_RELEASE_CONFIG_DIGEST GHCR_OWNER",
     `export PATH=${quote(bashPath(fixture.fakeBin))}:"$PATH"`,
     `export PROMOTE_SOURCE=${quote(bashPath(fixture.source))}`,
+    `export PROMOTE_INSTALL_ROOT=${quote(bashPath(fixture.source))}`,
     `export PROMOTE_TARGET_SHA=${TARGET_SHA}`,
     `export PROMOTE_BACKUP_PATH=${quote(bashPath(fixture.backup))}`,
     `export DPF_PROMOTER_STATE_DIR=${quote(bashPath(stateDir))}`,

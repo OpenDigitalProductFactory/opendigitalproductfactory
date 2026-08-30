@@ -6,6 +6,7 @@ const db = vi.hoisted(() => ({
   findModelConfig: vi.fn(),
   findEnvelope: vi.fn(),
   findToolExecution: vi.fn(),
+  findToolExecutions: vi.fn(),
   update: vi.fn(),
   updateMany: vi.fn(),
   upsertThread: vi.fn(),
@@ -27,7 +28,10 @@ vi.mock("@dpf/db", () => ({
       updateMany: (...args: unknown[]) => db.updateMany(...args),
     },
     coworkerActionEnvelope: { findFirst: (...args: unknown[]) => db.findEnvelope(...args) },
-    toolExecution: { findFirst: (...args: unknown[]) => db.findToolExecution(...args) },
+    toolExecution: {
+      findFirst: (...args: unknown[]) => db.findToolExecution(...args),
+      findMany: (...args: unknown[]) => db.findToolExecutions(...args),
+    },
     agentThread: { upsert: (...args: unknown[]) => db.upsertThread(...args) },
     agentModelConfig: { findUnique: (...args: unknown[]) => db.findModelConfig(...args) },
   },
@@ -72,6 +76,22 @@ const params = {
   },
 };
 
+const persistedReaderExecution = {
+  id: "reader-1",
+  toolName: "read_source_at_version",
+  parameters: {
+    repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+    path: "docs/superpowers/specs/design.md",
+    version: "d47536a552c7d588b2f963e478ae99369f720783",
+    expectedBlobId: "fb57e087c19ce0a3c78b4d591bb5da63027c2b3b",
+    startLine: 1,
+    maxChars: 3_200,
+  },
+  result: {},
+  success: true,
+  createdAt: new Date("2026-08-28T15:30:31.190Z"),
+};
+
 function submit(tokenId: string, request = params) {
   return submitRemoteCoworkerTask({
     token: { tokenId, userId: "user-1", capability: "write", source: "pat" },
@@ -86,6 +106,7 @@ beforeEach(() => {
   db.findUnique.mockResolvedValue({ status: "working" });
   db.findEnvelope.mockResolvedValue(null);
   db.findToolExecution.mockResolvedValue(null);
+  db.findToolExecutions.mockResolvedValue([persistedReaderExecution]);
   db.findModelConfig.mockResolvedValue({
     minimumTier: "strong",
     budgetClass: "quality_first",
@@ -108,6 +129,22 @@ beforeEach(() => {
   });
   autonomous.resolveTools.mockResolvedValue({ tools: [], toolsForProvider: [], deferredTools: [] });
   autonomous.execute.mockResolvedValue({ content: "Done.", executedTools: [] });
+  autonomous.executeTool.mockResolvedValue({
+    success: true,
+    message: "Read design.md lines 1-3 of 3.",
+    data: {
+      repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+      path: "docs/superpowers/specs/design.md",
+      version: "d47536a552c7d588b2f963e478ae99369f720783",
+      blobId: "fb57e087c19ce0a3c78b4d591bb5da63027c2b3b",
+      content: "# Recovery design\n\nThe same TaskRun preserves its immutable authority binding.",
+      startLine: 1,
+      endLine: 3,
+      totalLines: 3,
+      hasMore: false,
+      nextCursor: null,
+    },
+  });
 });
 
 async function persistedMetadata(tokenId: string, request = params) {
@@ -134,6 +171,7 @@ describe("terminal writer resumption", () => {
       a2aMetadata: metadata,
     });
     db.findEnvelope.mockResolvedValue(null);
+    db.findToolExecutions.mockResolvedValue([persistedReaderExecution]);
     db.findToolExecution.mockImplementation(async (query: { where?: { toolName?: unknown } }) => {
       const toolName = query.where?.toolName;
       if (toolName === "record_initiative_evidence") return null;
@@ -163,7 +201,8 @@ describe("terminal writer resumption", () => {
     expect(db.updateMany).toHaveBeenCalledWith({
       where: { taskRunId: "TR-MCP-ROUTE-EXIT", status: "completed", updatedAt },
       data: {
-        status: "input-required",
+        status: "working",
+        lastHeartbeatAt: expect.any(Date),
         completedAt: null,
         progressPayload: expect.objectContaining({
           terminalWriterWait: expect.objectContaining({ attempt: 2 }),
@@ -202,6 +241,7 @@ describe("terminal writer resumption", () => {
       a2aMetadata: metadata,
     });
     db.findToolExecution.mockResolvedValue(null);
+    db.findToolExecutions.mockResolvedValue([]);
 
     const outcome = await submit("PAT-WRITER-NO-EVIDENCE");
 
@@ -242,6 +282,7 @@ describe("terminal writer resumption", () => {
       a2aMetadata: metadata,
     });
     db.findEnvelope.mockResolvedValue(null);
+    db.findToolExecutions.mockResolvedValue([persistedReaderExecution]);
     db.findToolExecution.mockImplementation(async (query: { where?: { toolName?: unknown } }) => {
       const toolName = query.where?.toolName;
       if (toolName === "record_initiative_evidence") return null;
@@ -271,6 +312,8 @@ describe("terminal writer resumption", () => {
     expect(db.updateMany).toHaveBeenCalledWith({
       where: { taskRunId: "TR-MCP-SAME-WRITER-RUN", status: "input-required", updatedAt },
       data: {
+        status: "working",
+        lastHeartbeatAt: expect.any(Date),
         completedAt: null,
         progressPayload: expect.objectContaining({
           terminalWriterWait: expect.objectContaining({ attempt: 2 }),
@@ -322,10 +365,61 @@ describe("terminal writer resumption", () => {
       },
       a2aMetadata: metadata,
     });
-    db.findEnvelope.mockResolvedValue(null);
-    db.findToolExecution.mockImplementation(async (query: { where?: { toolName?: unknown } }) => {
+    db.findEnvelope.mockImplementation(async (query: { where?: { status?: unknown } }) => {
+      if (query.where?.status === "approved") return null;
+      return {
+        id: "cmtd7ltl200ac01qgk4ryw20x",
+        manifestActionId: "record_initiative_evidence",
+        status: "declined",
+      };
+    });
+    db.findToolExecutions.mockResolvedValue([
+      {
+        id: "cmtd3z0ye00gz01rtjr503slt",
+        toolName: "read_source_at_version",
+        parameters: {
+          repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+          path: "docs/superpowers/specs/design.md",
+          version: "d47536a552c7d588b2f963e478ae99369f720783",
+          expectedBlobId: "fb57e087c19ce0a3c78b4d591bb5da63027c2b3b",
+          startLine: 1,
+          maxChars: 3_200,
+        },
+        result: {},
+        success: true,
+        createdAt: new Date("2026-08-28T15:30:31.190Z"),
+      },
+      {
+        id: "cmtd3zymp00hh01rtpf9ukk8z",
+        toolName: "read_source_at_version",
+        parameters: {
+          repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+          path: "docs/superpowers/specs/design.md",
+          version: "d47536a552c7d588b2f963e478ae99369f720783",
+          expectedBlobId: "fb57e087c19ce0a3c78b4d591bb5da63027c2b3b",
+          startLine: 1,
+          maxLines: 200,
+        },
+        result: {},
+        success: true,
+        createdAt: new Date("2026-08-28T15:31:14.833Z"),
+      },
+    ]);
+    db.findToolExecution.mockImplementation(async (query: { where?: { toolName?: unknown; success?: unknown } }) => {
       const toolName = query.where?.toolName;
-      if (toolName === "record_initiative_evidence") return null;
+      if (toolName === "record_initiative_evidence") {
+        if (query.where?.success === true) return null;
+        return {
+          id: "cmtd7ltll00ad01qghtnykmo4",
+          toolName: "record_initiative_evidence",
+          success: false,
+          result: {
+            success: false,
+            error: "approval_required",
+            data: { envelopeId: "cmtd7ltl200ac01qgk4ryw20x" },
+          },
+        };
+      }
       return {
         id: "cmtd3zymp00hh01rtpf9ukk8z",
         toolName: "read_source_at_version",
@@ -333,11 +427,11 @@ describe("terminal writer resumption", () => {
       };
     });
     autonomous.execute.mockResolvedValue({
-      content: "The independent review stopped without recording a governed assessment. No receipt was created.",
+      content: "The provider did not honor the required writer tool-call contract. No receipt was created.",
       executedTools: [],
       failure: {
         kind: "terminal-writer-missing",
-        message: "The independent review stopped without recording a governed assessment. No receipt was created.",
+        message: "The provider did not honor the required writer tool-call contract. No receipt was created.",
       },
     });
 
@@ -345,9 +439,25 @@ describe("terminal writer resumption", () => {
 
     expect(autonomous.execute).toHaveBeenCalledWith(expect.objectContaining({
       taskRunId: "TR-MCP-WRITER-EXHAUSTED",
+      chatHistory: [
+        { role: "user", content: exhaustedParams.prompt },
+        expect.objectContaining({
+          role: "system",
+          content: expect.stringContaining("The same TaskRun preserves its immutable authority binding."),
+        }),
+      ],
       terminalToolPolicy: expect.objectContaining({
         terminalPhase: "writer-only",
         persistedEvidenceAvailable: true,
+      }),
+    }));
+    expect(autonomous.executeTool).toHaveBeenCalledWith(expect.objectContaining({
+      toolName: "read_source_at_version",
+      taskRunId: "TR-MCP-WRITER-EXHAUSTED",
+      args: expect.objectContaining({
+        path: "docs/superpowers/specs/design.md",
+        version: "d47536a552c7d588b2f963e478ae99369f720783",
+        expectedBlobId: "fb57e087c19ce0a3c78b4d591bb5da63027c2b3b",
       }),
     }));
     expect(autonomous.create).not.toHaveBeenCalled();
@@ -367,9 +477,73 @@ describe("terminal writer resumption", () => {
       data: expect.objectContaining({
         status: "input-required",
         progressPayload: expect.objectContaining({
-          terminalWriterWait: expect.objectContaining({ attempt: 3 }),
+          terminalWriterWait: expect.objectContaining({
+            attempt: 3,
+            dispatchContract: "required-tool-call",
+            noncompliance: "prose-without-required-writer",
+          }),
         }),
       }),
+    });
+  });
+
+  it("does not hydrate after an unrelated declined writer envelope", async () => {
+    const exhaustedParams = { ...params, idempotencyKey: "unrelated-decline" };
+    const metadata = await persistedMetadata("PAT-WRITER-UNRELATED-DECLINE", exhaustedParams);
+    vi.clearAllMocks();
+    db.findFirst.mockResolvedValue({
+      id: "task-internal",
+      taskRunId: "TR-MCP-WRITER-UNRELATED-DECLINE",
+      threadId: "thread-external",
+      contextId: "thread-external",
+      status: "input-required",
+      updatedAt: new Date("2026-08-28T07:25:00.000Z"),
+      progressPayload: {
+        terminalWriterWait: {
+          schemaVersion: 1,
+          kind: "missing-terminal-writer",
+          writerToolName: "record_initiative_evidence",
+          resumeMode: "same-taskrun",
+          attempt: 2,
+          observedAt: "2026-08-28T07:24:00.000Z",
+        },
+      },
+      a2aMetadata: metadata,
+    });
+    db.findToolExecutions.mockResolvedValue([persistedReaderExecution]);
+    db.findToolExecution.mockImplementation(async (query: { where?: { toolName?: unknown; success?: unknown } }) => {
+      if (query.where?.toolName !== "record_initiative_evidence" || query.where?.success === true) return null;
+      return {
+        id: "writer-proposal",
+        toolName: "record_initiative_evidence",
+        success: false,
+        result: {
+          success: false,
+          error: "approval_required",
+          data: { envelopeId: "exact-envelope" },
+        },
+      };
+    });
+    db.findEnvelope.mockImplementation(async (query: { where?: { id?: unknown; status?: unknown } }) => {
+      if (query.where?.status === "approved") return null;
+      return {
+        id: "unrelated-envelope",
+        manifestActionId: "record_initiative_evidence",
+        status: "declined",
+      };
+    });
+
+    const outcome = await submit("PAT-WRITER-UNRELATED-DECLINE", exhaustedParams);
+
+    expect(autonomous.executeTool).not.toHaveBeenCalled();
+    expect(autonomous.execute).not.toHaveBeenCalled();
+    expect(outcome).toMatchObject({
+      kind: "result",
+      result: {
+        taskRunId: "TR-MCP-WRITER-UNRELATED-DECLINE",
+        status: "input-required",
+        idempotentReplay: true,
+      },
     });
   });
 });

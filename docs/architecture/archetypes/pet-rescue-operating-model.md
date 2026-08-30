@@ -324,6 +324,22 @@ free-text event rather than an appointment against the animal. *A step recorded 
 because a control could not be found is a discoverability finding, not a capability one — check
 which before designing the fix.*
 
+**A second row needs correcting, in the other direction.** The 16:00 step recorded the outcomes as
+correct. They were correct while empty. Two gifts taken through `/s/rescue/donate` — $50 and $25,
+one currency, on a workspace that has never held a second — turned **Donations received** into
+`Unavailable · Multiple donation currencies are not combined`. Two defects met there. First,
+`submitDonation` stamped a hardcoded `GBP` on every gift while the donate page rendered the
+workspace's own symbol, so a USD install showed the donor `$50` and wrote GBP to its books; every
+gift on every non-GBP install was affected, not only this archetype. Second, `summarizeDonations`
+counted rows rather than currencies — `matching.length !== rows.length` is true whenever the gifts
+are in *any* single currency other than the workspace's — so one currency reported as several and
+the tile withheld a total it already held. Both fixed (`BI-685ADDCD`): the stored code now comes
+from `OrgSettings.baseCurrency`, the same source the symbol comes from, and gifts sharing one
+currency total wherever that currency came from. A genuine mix shows each currency side by side
+rather than nothing. **The two recorded gifts still carry `GBP`** — the platform does not silently
+rewrite the currency of an amount someone gave, so correcting them is the operator's call.
+*A metric that was honest while empty has not been measured. Populate it before scoring it.*
+
 ### What the run found that §6 could not
 
 Three findings sit outside the thirty entities entirely, and each alone prevents the business
@@ -333,6 +349,13 @@ running as more than one person with a clipboard:
    Manager` are both refused the only animal surface; only the superuser reaches it. Recruiting
    has no create control, the organization has zero departments and zero positions, and employment
    type has no volunteer. See §5b for what the day actually requires. *(BI-2777B86B, BI-A30152B6)*
+   **The navigation half was fixed 2026-08-29**: the shell breadcrumb offered both roles a *Portal*
+   crumb to `/storefront` — the one page whose layout refuses them — because the rail filtered on
+   `view_storefront` and the trail filtered on nothing. Both now read the same granted set, so the
+   product no longer advertises a door these roles cannot open. **The refusal itself stands.**
+   Granting storefront-manage to an operational role would make the 404 go away and cement animals
+   living under storefront and marketing administration, which is the actual defect
+   (`BI-4F8A484C`).
 2. **Every public inbound channel requires a donation.** Both the adoption enquiry and the
    site-wide contact form reject a submission without a donation amount, so the found-pet caller,
    the surrendering owner and the would-be volunteer are all turned away at the door. This stands
@@ -356,6 +379,9 @@ running as more than one person with a clipboard:
 - Consumer vocabulary is right — Donate, Adopt, Enquire; no price on an animal.
 - The cockpit puts storefront enquiries above the platform attention list.
 - `/performance` refuses to show numbers it has not computed.
+- The sixteen value-stream stages carry no chevron and nothing that reads as clickable, and the
+  fifteen with no queue bound to them show a dash rather than a zero no query could have produced
+  (`BI-AF50DBD5`; re-verified 2026-08-29 at 1440 and at 768x1024).
 - No horizontal overflow at 768×1024 on any surface tried.
 
 ### Two archetype-specific traps for the next run
@@ -367,9 +393,19 @@ screen. This is the concrete case for element 10 of the canonical minimal substr
 
 **Destructive controls are undersized for the tablet the work is done on.** At 768×1024 the
 per-animal Delete measured 59×28 px and the photo remove control 24×24, both unconfirmed, on the
-device a kennel technician holds one-handed. The per-animal Delete was fixed on 2026-08-27 — it
-asks first, and both it and its confirmation carry a 44 px target. **The photo remove control is
-unchanged**: still 24×24 and still unconfirmed.
+device a kennel technician holds one-handed. **Both fixed** — the per-animal Delete on 2026-08-27,
+the photo remove on 2026-08-28. Each asks first, and every one of the four controls carries a 44 px
+target.
+
+**The tablet worker could not reach Simple mode — the one thing §7 credits with solving the density
+problem for them.** The Simple/Full toggle and its mode explanation lived inside
+`#primary-navigation-menu`, which is `hidden` below `lg`, so at 768px the buttons measured 0×0 with
+a null `offsetParent` and the explanation vanished. The kennel technician doing rounds was locked
+in Full mode, looking at Build Studio, Backlog, Architecture, Delivery, Platform Hub and Admin
+while recording that a dog had been fed. Fixed 2026-08-28 (`BI-6395DA89`): the mode control sits
+outside the collapsible menu and is reachable at every width; the destinations themselves still
+collapse. *A control inside a responsive disclosure is not reachable — measure the control at the
+width the work is done at, not only at desktop.*
 
 ## 7. UX requirements
 

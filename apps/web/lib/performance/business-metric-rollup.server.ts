@@ -4,6 +4,7 @@ import type {
   BusinessMetricRollupDeps,
   RestaurantMetricContext,
 } from "./business-metric-rollup";
+import { PERFORMANCE_METRIC_ARCHETYPES } from "./performance-metric-support";
 
 /** Prisma adapter kept separate from the deterministic projection math. */
 export function defaultBusinessMetricRollupDeps(): BusinessMetricRollupDeps {
@@ -11,7 +12,12 @@ export function defaultBusinessMetricRollupDeps(): BusinessMetricRollupDeps {
     async listRestaurantContexts() {
       const [storefronts, profile] = await Promise.all([
         prisma.storefrontConfig.findMany({
-          where: { archetype: { archetypeId: "restaurant" } },
+          // Only archetypes the engine has a source loader for — kept in one
+          // place so the surface's "not available for this business type" copy
+          // and this scan can never disagree. BI-F359E1E9.
+          where: {
+            archetype: { archetypeId: { in: [...PERFORMANCE_METRIC_ARCHETYPES] } },
+          },
           select: { id: true, organizationId: true, timezone: true },
         }),
         prisma.businessProfile.findFirst({

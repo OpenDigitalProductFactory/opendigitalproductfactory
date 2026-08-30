@@ -43,6 +43,7 @@ export async function executeRemoteTaskAttempt(input: {
   parsed: RemoteTaskSubmitParams;
   idempotentReplay: boolean;
   resumeKind?: "capacity" | "terminal-writer";
+  terminalWriterContext?: string;
   capacityAttempt: number;
   terminalWriterAttempt?: number;
 }): Promise<RemoteTaskSubmitOutcome> {
@@ -124,7 +125,12 @@ export async function executeRemoteTaskAttempt(input: {
     const result = await executeAutonomousAgenticLoop({
       systemPrompt: agent.systemPrompt,
       systemPromptInstructionSpans: coworkerBriefSpans(agent.systemPrompt),
-      chatHistory: [{ role: "user", content: parsed.prompt }],
+      chatHistory: [
+        { role: "user", content: parsed.prompt },
+        ...(input.resumeKind === "terminal-writer" && input.terminalWriterContext
+          ? [{ role: "system" as const, content: input.terminalWriterContext }]
+          : []),
+      ],
       sensitivity: agent.sensitivity ?? "internal",
       tools: tools.tools,
       toolsForProvider: tools.toolsForProvider,
@@ -179,6 +185,10 @@ export async function executeRemoteTaskAttempt(input: {
               resumeMode: "same-taskrun",
               attempt: terminalWriterAttempt,
               observedAt: new Date().toISOString(),
+              dispatchContract: "required-tool-call",
+              ...(result.failure.message.includes("did not honor the required writer tool-call contract")
+                ? { noncompliance: "prose-without-required-writer" }
+                : {}),
             },
           },
         },

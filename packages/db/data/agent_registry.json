@@ -2471,6 +2471,7 @@
           "per_task_limit": 50000
         },
         "tool_grants": [
+          "registry_read",
           "sandbox_execute",
           "work_capsule_read",
           "work_capsule_write",
@@ -2510,6 +2511,7 @@
           "per_task_limit": 50000
         },
         "tool_grants": [
+          "registry_read",
           "sandbox_execute",
           "work_capsule_read",
           "work_capsule_write",
@@ -2549,6 +2551,7 @@
           "per_task_limit": 50000
         },
         "tool_grants": [
+          "registry_read",
           "sandbox_execute",
           "work_capsule_read",
           "work_capsule_write",
@@ -2588,6 +2591,7 @@
           "per_task_limit": 25000
         },
         "tool_grants": [
+          "registry_read",
           "sandbox_execute",
           "work_capsule_read",
           "work_capsule_write",

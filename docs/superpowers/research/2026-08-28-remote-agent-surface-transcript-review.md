@@ -2,13 +2,13 @@
 status: active
 ---
 
-# Transcript Review — remote agent surfaces, cross-model orchestration, skill economy
+# Transcript Review — remote agent surfaces, verification, and the trust curve
 
 - **Date:** 2026-08-28
-- **Scope:** platform — delivery surfaces, coworker routing, skill catalogue, capacity telemetry
-- **Type:** external-input review. Not a spec. Produces candidate backlog items and one explicit rejection list.
+- **Scope:** platform — delivery surfaces, coworker routing, skill catalogue, capacity telemetry, workroom gates
+- **Type:** external-input review of **two** sources. Not a spec. Produces candidate backlog items, one explicit rejection list, and one design (§8).
 
-## 1. Source and provenance
+## 1. Source A — provenance
 
 | Field | Value |
 | --- | --- |
@@ -269,12 +269,24 @@ single shared container, bind-mounted to one worktree at a time, **writing to th
 and it is lease-gated for exactly that reason. Publishing it to the internet would expose an
 unauthenticated write path to production data. Reject unconditionally.
 
-If the doctrine does not already say so explicitly, the lease rule should be extended to state that
-a lease-gated shared runtime is never exposed beyond the host, by any mechanism, including an
-agent-provisioned tunnel. An agent reading only the current rule could conclude that holding the
-lease makes the tunnel acceptable. It does not.
+**Verified and closed, 2026-08-28.** The doctrine did not say so. `runtime-gates-via-shared-lease`
+governed *which thread may bind* the shared runtime and forbade silent re-bind, but its threat model
+was thread-vs-thread contention and live-DB mutation — not reachability. A search across every kernel
+principle, `docs/architecture/*.md` and `AGENTS.md` for tunnel, ngrok, port exposure or public
+reachability returned nothing. So an agent legitimately holding the lease could satisfy every written
+rule and still publish an unauthenticated write path to the live database.
 
-## 7. Suggested next steps
+The kernel principle and the delivery-surfaces runbook now carry the clause: a lease-gated runtime is
+never reachable from outside the host, by any mechanism, and **holding the lease permits use, never
+exposure.**
+
+It is deliberately *not* in `AGENTS.md`. That file is a ratchet that may only shrink (BI-0020D511,
+the instruction-plane split), and the guard refused the 92-byte addition. Re-baselining past it was
+available and declined: the split exists so rules live in the principle rather than the always-on
+preamble, and `AGENTS.md` §12 already links the principle and delegates its detail to the runbook.
+Both are files in the repo, so an offline agent still reaches the rule.
+
+## 7. Suggested next steps (Source A)
 
 In priority order. None of these are done by this document.
 
@@ -285,9 +297,88 @@ In priority order. None of these are done by this document.
 5. **F11** — confirm whether the lease doctrine already forbids external exposure; if not, extend it.
 6. **F5**, **F8** — small extensions, batch with adjacent work rather than filing separately.
 
+**Priority note added after Source B (§8).** The order above is Source A's. Read against Source B,
+**F12 (§8.4) precedes all of them** — it is the constraint the others are downstream of, and F1 in
+particular should not start before it. F3 is no longer a proposal awaiting evidence; the evidence
+arrived with Source B.
+
 **Backlog items are not filed.** The DPF MCP server was unreachable for this session
 (`DPF_MCP_BEARER_TOKEN` unset; connection refused), so live backlog state could not be queried and
 nothing could be written to it. Per
 [`live-state-over-seed-data`](../../professions/data-architect/wiki/live-state-over-seed-data.md),
 the epic-overlap check in step 4 must run against the live database before any of these become
 items — this document must not be treated as having done it.
+
+## 8. Source B — the trust curve and verification
+
+Added 2026-08-28, after the first review was written. The two sources are directly connected:
+Source A is practitioners spending an hour installing this speaker's skill pack; Source B is the
+author explaining the reasoning behind it. Source B is the more rigorous of the two and carries
+first-party authority, so it is reviewed at greater depth.
+
+### 8.1 Provenance
+
+| Field | Value |
+| --- | --- |
+| Speaker | Lauren Tan — Cursor (~5 months at time of recording); previously React compiler team at Meta, tech lead then engineering manager at Netflix |
+| Format | ~60m recorded talk plus live Q&A, one interviewer |
+| URL | `https://www.tiktok.com/@sarutalksai/video/7678050436489743638` |
+| Transcript | **None published** — the platform reports `captionInfos: []`. Transcribed locally from the video's audio with Whisper (`base.en`) on 2026-08-28 |
+
+**Reliability caveat.** A local speech-to-text pass on a screen-shared talk mangles proper nouns
+worse than platform captions do: "PStack" appears as "P stack"/"piece that"/"PSAC", "Grokbot" as
+"Grockbot"/"graph bot"/"Crockbot", "evals" consistently as "emails", "Dune" as "doing"/"dune".
+Quotations below are lightly repaired for these known substitutions and for disfluency; the
+argument is unaltered. Anything load-bearing was read in context rather than from a keyword match.
+As with Source A, the speaker's productivity figures (~1000 PRs landed in a month; ~800 by the 12th
+of the next; ~600 PRs to refactor one application) are self-reported and uncontrolled, and she
+volunteers the relevant confound — she works at an AI lab with effectively unmetered tokens.
+
+### 8.2 The argument
+
+1. **Parallelism is gated by trust, and trust is not willed into existence.** *"You can't go to 100 agents, spawn 100 agents, when you don't even trust the output of one agent."* She plots her own year as a curve and is explicit that there is no shortcut along it.
+2. **Verification is the load-bearing skill.** Verification means the agent actually runs the thing — traces, heap snapshots, a simulator, the real UI — not that it reasons about whether it works. *"If you don't have a verification skill, you are the verifier. You're the bottleneck... so there's really no way to parallelize."* It does not make an agent write *good* code; it makes it write *correct* code, which is the precondition for trusting it at all.
+3. **Enforcement has ranked layers.** Architecture and conventions are strongest (agents copy surrounding patterns); then CI hard failures; then static analysis; then rules, skills and review bots. Her warning about stopping at the last tier: *"if you only have rules and bugbot and skills and a style guide for your code, it's only a matter of time before your codebase looks like complete trash."*
+4. **A rule a human enforces by reading is an anti-pattern.** *"If you are stuck in code review land where you enforce all of the invariants by literally the human person reading the code — every time you have to do that, you should consider that an anti-pattern. Instead of me commenting on the PR, how do I turn this into a hard rule? A lint rule? A CI failure? Or how do I categorically eliminate this problem entirely?"*
+5. **The feature map.** A verification skill is useless if the agent cannot navigate. Her fix is an artifact mapping each user-visible feature to how a user reaches it — routes, keyboard shortcuts, DOM selectors — which turns a screenshot-plus-"???" bug report into a reproducible one.
+6. **Evals are unit tests for skills.** Sub-agents run in deliberately neutrally-named directories, *"to not let the sub agent know that it's being evaluated, because agents can actually tell — and when they do, they change their behavior."* A judge agent **of a different model** cross-references so the first model's bias does not go unchecked. Scores are hill-climbed.
+7. **The economics.** Constraints cost tokens up front and pay back by letting non-experts contribute safely: *"designers and PMs are just able to ship features directly."*
+
+### 8.3 What this changes about the first review
+
+- **F3 (judge–implementer independence) is corroborated, not merely proposed.** §4.3 argued it from DPF's own DAME objectives. Source B is someone running it in production for exactly the stated reason — the judging model's bias. F3 moves from "worth deciding" to "the evidence is in; decide it."
+- **F4 (capacity telemetry) gains its business case.** Her ROI argument — spend tokens on constraints, recover them in unsupervised throughput — is unarguable either way at DPF today, because `responsible-capacity-utilization` has no measurement behind it.
+- **F1 (away-from-desk surface) drops in relative priority.** Source A treats the phone as the unlock. Source B implies the phone is worthless until verification is trustworthy, because an operator on a beach approving unverified work is strictly worse than the same operator at a desk. Mobility is a *consequence* of trust, not a route to it.
+- **A new finding, F12, outranks all of them.** Below.
+
+### 8.4 F12 — the workroom gate does not prove the thing ran
+
+Checking Source B's thesis against DPF's own gate produced the sharpest finding in either review.
+
+DPF runs **93 non-test guard scripts** under `scripts/check-*`. Every one protects the repository
+that builds the factory. At the workroom runtime tier, the build lifecycle gate has exactly one
+hard check — the code compiles. Tests are informational, UX verification is advisory by an
+operator decision, acceptance is self-reported, and `verificationDepth` is derived, tightened and
+rendered as a chip that no gate reads.
+
+**DPF has hard gates on the code that builds the factory and soft gates on the work the factory
+does.** By Source B's argument, that is precisely what caps how many coworkers can safely run at
+once — the human remains the verifier.
+
+This is now a design in its own right, with the findings code-verified against the gate
+implementation:
+
+- Design: [`2026-08-28-verification-first-workroom-gates-design.md`](../specs/2026-08-28-verification-first-workroom-gates-design.md)
+- Plan: [`2026-08-28-verification-first-workroom-gates.md`](../plans/2026-08-28-verification-first-workroom-gates.md)
+
+### 8.5 Rejected from Source B
+
+- **Auto-merge on agent verdict.** Her endpoint is agents merging unattended, reviewed later on `main`. DPF forbids an agent approving or merging anything. The upstream practice transfers; the merge decision does not — DPF's endpoint is higher concurrency *under* gates.
+- **Banning code comments in CI.** Her reason is sound (agents narrate irrelevant history) but DPF handles it at the right layer with `dpf-unslop`, and DPF's doctrine deliberately encodes contingency markers in prose. A ban would delete a governance mechanism to fix a style problem.
+- **Rewriting for architectural strictness.** She argues greenfield vibe-coded apps are the biggest risk and may deserve a rewrite. By her own analysis DPF is in the good position already — brownfield with guardrails.
+
+### 8.6 Corroborated, no action
+
+Her skill-maintenance practice — evals as unit tests, cross-model judging, hill-climbing a rubric —
+is the same shape as DPF's certification sweep with its five mechanical oracles, arrived at
+independently. It corroborates the existing substrate rather than suggesting a change to it.

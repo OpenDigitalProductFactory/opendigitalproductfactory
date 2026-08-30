@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { InitiativeReadinessDecision } from "./types";
 import { completeWorkCapsuleTransition } from "./work-capsule-terminal-transition";
+import { readinessRequirement } from "@/lib/backlog/initiative-readiness/readiness-guidance";
 
 function projected(verdict: "allowed" | "input-required") {
   const decision: InitiativeReadinessDecision = {
@@ -9,7 +10,7 @@ function projected(verdict: "allowed" | "input-required") {
     subject: { kind: "backlog-item", id: "BI-1" },
     transitionObject: { kind: "work-capsule", id: "capsule-row-1", expectedVersion: "working", targetState: "complete" },
     profile: "feature", target: "completion", verdict, satisfied: [], blockers: [],
-    unmet: verdict === "allowed" ? [] : [{ code: "OBJECTIVE_RECONCILIATION_REQUIRED", state: "missing", accountableRole: "acceptance-reviewer", evidenceRefs: [] }],
+    unmet: verdict === "allowed" ? [] : [readinessRequirement({ code: "OBJECTIVE_RECONCILIATION_REQUIRED", state: "missing", accountableRole: "acceptance-reviewer" })],
     evaluatedAt: "2026-08-22T08:00:00.000Z",
   };
   return { governed: true, baselineId: "BASE-1", artifactHints: { hasSpec: true, hasPlan: true }, decision };

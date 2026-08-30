@@ -14,14 +14,14 @@
   "dependencies": {
     "@dpf/integration-shared": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.0.4",
-    "pg": "^8.22.0",
+    "pg": "^8.23.0",
     "prom-client": "^15.1.3",
     "undici": "^8.10.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",
-    "@types/pg": "^8.21.0",
+    "@types/pg": "^8.23.1",
     "tsx": "^4.23.12",
     "typescript": "^6.0.3",
     "vitest": "^4.1.10"

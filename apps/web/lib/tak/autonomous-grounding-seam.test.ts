@@ -31,6 +31,7 @@ vi.mock("@/lib/coworker/authorized-surface-prompt-grounding", () => ({
   groundPromptWithAuthorizedSurface: vi.fn(async ({ systemPrompt }: { systemPrompt: string }) => ({
     systemPrompt: `${systemPrompt}\n\nSURFACE GROUNDED`,
     grounded: true,
+    instructionBlock: "SURFACE GROUNDED",
     sessionId: "surface-session-1",
     guidanceHighlights: [
       "For SNMP choose SNMP (Generic), enter Target IP or Hostname and the write-only Community String, then use Save & Test.",
@@ -138,5 +139,72 @@ describe("executeAutonomousAgenticLoop — profession-corpus grounding gate", ()
     expect(agentic.runAgenticLoop).toHaveBeenCalledWith(
       expect.objectContaining({ systemPrompt: expect.stringContaining("BASE") }),
     );
+  });
+});
+
+
+describe("grounded prompt blocks are declared as INSTRUCTION, not payload (BI-D9D661ED)", () => {
+  beforeEach(async () => {
+    const agentic = await import("@/lib/tak/agentic-loop");
+    vi.mocked(agentic.runAgenticLoop).mockReset();
+    vi.mocked(agentic.runAgenticLoop).mockResolvedValue({ content: "ok", executedTools: [] } as never);
+  });
+
+  it("declares the authorized-surface block as an instruction span", async () => {
+    // The provenance design lists AUTHORIZED_SURFACE_PROMPT as instruction, but
+    // it is appended HERE — after the caller computed its spans from the
+    // persona — so it landed in the data remainder and was screened as payload.
+    await callLoop("autonomous");
+
+    const agentic = await import("@/lib/tak/agentic-loop");
+    const spans = vi.mocked(agentic.runAgenticLoop).mock.calls[0]![0]!
+      .systemPromptInstructionSpans;
+    expect(spans).toContain("SURFACE GROUNDED");
+  });
+
+  it("does NOT declare the profession corpus as instruction", async () => {
+    // The corpus is retrieved content that can carry real values, so the
+    // ratified design classifies it as DATA. Labelling it would open an egress
+    // path for anything the corpus happens to contain.
+    await callLoop("autonomous");
+
+    const agentic = await import("@/lib/tak/agentic-loop");
+    const spans = vi.mocked(agentic.runAgenticLoop).mock.calls[0]![0]!
+      .systemPromptInstructionSpans;
+    expect(spans).not.toContain("GROUNDED");
+    expect(spans).toEqual(["SURFACE GROUNDED"]);
+  });
+
+  it("keeps the caller's own persona spans alongside the grounded ones", async () => {
+    const { executeAutonomousAgenticLoop } = await import("./autonomous-work-run");
+    await executeAutonomousAgenticLoop({
+      systemPrompt: "PERSONA",
+      systemPromptInstructionSpans: ["PERSONA"],
+      chatHistory: [{ role: "user", content: "Do the build task." }],
+      sensitivity: "internal",
+      tools: [],
+      toolsForProvider: [],
+      userId: "user-1",
+      routeContext: "build",
+      agentId: "build-qa-engineer",
+      threadId: "thread-1",
+      interactionMode: "autonomous",
+    });
+
+    const agentic = await import("@/lib/tak/agentic-loop");
+    const spans = vi.mocked(agentic.runAgenticLoop).mock.calls.at(-1)![0]!
+      .systemPromptInstructionSpans;
+    expect(spans).toContain("PERSONA");
+    expect(spans!.length).toBeGreaterThan(1);
+  });
+
+  it("adds no spans on the chat path, which grounds its corpus upstream", async () => {
+    await callLoop("chat");
+
+    const agentic = await import("@/lib/tak/agentic-loop");
+    const spans = vi.mocked(agentic.runAgenticLoop).mock.calls.at(-1)![0]!
+      .systemPromptInstructionSpans;
+    // Chat skips profession grounding, so only the surface block is appended.
+    expect(spans).toEqual(["SURFACE GROUNDED"]);
   });
 });

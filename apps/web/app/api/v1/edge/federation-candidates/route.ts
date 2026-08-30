@@ -1,54 +1,22 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { z } from "zod";
+import { federationCandidateSnapshotSchema } from "@dpf/validators";
 
 import { resolveAppBaseUrl } from "@/lib/app-url";
 import { resolveEdgeNodeAuth } from "@/lib/auth/edge-node-token";
 import { writeEdgeNodeAudit } from "@/lib/edge-node/audit";
 import { checkEdgeRateLimit } from "@/lib/edge-node/rate-limit";
-import {
-  isLinkLocalFederationEndpoint,
-  recordNearbyFederationCandidates,
-} from "@/lib/federation/nearby-candidates";
+import { recordNearbyFederationCandidates } from "@/lib/federation/nearby-candidates";
 
 const ROUTE_CONTEXT = "/api/v1/edge/federation-candidates";
 const MAX_BODY_BYTES = 64 * 1024;
 const MAX_CLOCK_SKEW_MS = 5 * 60_000;
 
-const Candidate = z
-  .object({
-    discoveryId: z.string().regex(/^[A-Za-z0-9_-]{16,64}$/),
-    endpoint: z
-      .string()
-      .url()
-      .max(512)
-      .refine((value) => {
-        const protocol = new URL(value).protocol;
-        return protocol === "http:" || protocol === "https:";
-      }, "endpoint must use HTTP or HTTPS"),
-    protocol: z.literal("1"),
-    capabilityDigest: z.string().regex(/^[a-f0-9]{8,64}$/),
-    pairPath: z.literal("/connect/pair"),
-    // The estate the peer advertises in its discovery record. Optional so an
-    // Edge Node that predates the field keeps submitting successfully; the
-    // decision layer treats an absent ref as "cannot prove same organization"
-    // and routes that pairing to a human. Bounded here and normalised in
-    // `recordNearbyFederationCandidates`; never trusted on its own, because the
-    // same decision also requires a certificate chain validating against the
-    // pinned organization root.
-    organizationRef: z.string().min(1).max(48).optional(),
-  })
-  .strict()
-  .refine((value) => isLinkLocalFederationEndpoint(value.endpoint), {
-    message: "endpoint must be link-local or private-network scoped",
-    path: ["endpoint"],
-  });
-
-const Body = z
-  .object({
-    observedAt: z.string().datetime(),
-    candidates: z.array(Candidate).max(50),
-  })
-  .strict();
+// The submission contract is `@dpf/validators`'s, not this route's: the Edge
+// Node scanner that produces these snapshots validates against the SAME schema
+// before it sends, so a candidate the scanner accepted is one this route accepts.
+// Keeping two copies is how a producer starts posting batches the acceptor
+// rejects wholesale.
+const Body = federationCandidateSnapshotSchema;
 
 function authStatus(error: string): number {
   return error === "scope_disallowed" ? 403 : 401;

@@ -272,6 +272,7 @@ export const responsesAdapter: ExecutionAdapterHandler = {
     const responseTools = toResponsesTools(tools);
     if (responseTools) {
       body.tools = responseTools;
+      if (plan.toolPolicy.toolChoice) body.tool_choice = plan.toolPolicy.toolChoice;
     }
 
     // Log all Responses API requests to help diagnose tool call issues

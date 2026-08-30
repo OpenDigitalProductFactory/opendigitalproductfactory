@@ -2,6 +2,7 @@ import { prisma } from "@dpf/db";
 
 import { DirectoryAuthoritiesPanel } from "@/components/platform/identity/DirectoryAuthoritiesPanel";
 import { branchDn } from "@/lib/directory/dn";
+import { getLdapListenerStatus } from "@/lib/directory/ldap/runtime";
 import { buildDirectoryProjection } from "@/lib/directory/projection";
 
 // EP-24741BBF · BI-DCE49BA9 — this page renders the SHARED projection; it does
@@ -69,6 +70,7 @@ export default async function PlatformIdentityDirectoryPage() {
           description: "Role and team groups. Organizational structure, not authorization.",
         },
       ]}
+      listener={getLdapListenerStatus()}
       publicationStatus={{
         authorityCount,
         aliasCount,

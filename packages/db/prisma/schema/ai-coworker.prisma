@@ -277,6 +277,11 @@ model Agent {
   authorityBindings    AuthorityBinding[]
 
   @@index([portfolioId]) // FK-leading (spine): active-agents-per-portfolio groupBy, apps/web/lib/evaluate/portfolio-data.ts:72
+
+  // MCP OAuth authorization server (BI-E4DFDCB0): a client_credentials client
+  // or a refresh token may act AS this coworker identity.
+  oauthClients      OAuthClient[]
+  oauthRefreshTokens OAuthRefreshToken[]
 }
 
 model AgentOwnership {

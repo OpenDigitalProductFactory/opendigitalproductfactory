@@ -2671,6 +2671,14 @@
     "longSentences": 0,
     "textMass": 11
   },
+  "apps/web/app/.well-known/dpf-federation.json/route.ts": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 7
+  },
   "apps/web/app/.well-known/dpf-instance.json/route.ts": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
@@ -2725,7 +2733,15 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 29
+    "textMass": 31
+  },
+  "apps/web/app/api/oauth/token/route.ts": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 19
   },
   "apps/web/app/api/onboarding/business-document/route.ts": {
     "vocabulary": 0,
@@ -9862,6 +9878,14 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 84
+  },
+  "apps/web/components/workspace/workroom/WorkroomPostureProvenance.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 16
   },
   "apps/web/components/workspace/workroom/WorkroomShape.tsx": {
     "vocabulary": 0,

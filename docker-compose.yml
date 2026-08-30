@@ -129,6 +129,11 @@ services:
     ports:
       - "3000:3000"
       - "1455:3000"  # OpenAI Codex OAuth callback (shared client requires this port)
+      # The directory listener (EP-24741BBF · BI-A91004A7). Loopback by default,
+      # matching the step-ca overlay: an organization directory that other hosts
+      # bind to is a deliberate choice, not a default. Nothing listens inside the
+      # container until DPF_LDAP_ENABLED=1, so this mapping is inert until then.
+      - "${DPF_LDAP_BIND_ADDRESS:-127.0.0.1}:${DPF_LDAP_PORT:-636}:${DPF_LDAP_PORT:-636}"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - dpf-source-code:/workspace
@@ -219,6 +224,23 @@ services:
       DPF_EDGE_ENABLED: ${DPF_INCLUDE_EDGE:-0}
       DPF_STATE_DIR_HOST: ${DPF_STATE_DIR:-${HOME}/.dpf}
       DPF_RUNTIME_TRANSITION_SECRET_FILE_HOST: ${DPF_STATE_DIR:-${HOME}/.dpf}/runtime-transition.secret
+      # The directory listener (EP-24741BBF · BI-A91004A7). Off unless the
+      # operator sets DPF_LDAP_ENABLED=1 — an install does not start serving
+      # an identity protocol because it was upgraded.
+      DPF_LDAP_ENABLED: ${DPF_LDAP_ENABLED:-0}
+      DPF_LDAP_PORT: ${DPF_LDAP_PORT:-636}
+      DPF_LDAP_REQUIRE_CLIENT_CERTIFICATE: ${DPF_LDAP_REQUIRE_CLIENT_CERTIFICATE:-0}
+      # LDAPS material comes from the organization CA that
+      # scripts/bootstrap-organization-pki.sh already issues. Its default output
+      # directory ($HOME/.dpf/pki) sits inside DPF_STATE_DIR, which is already
+      # mounted read-only at /dpf-state — so the listener reuses the portal's
+      # own issued identity rather than needing a second mount or a second cert.
+      # An operator who moved DPF_PKI_DIR outside DPF_STATE_DIR must set these
+      # three paths explicitly; the listener refuses to start rather than
+      # falling back to a self-signed certificate.
+      DPF_LDAP_TLS_CERT_PATH: ${DPF_LDAP_TLS_CERT_PATH:-/dpf-state/pki/authority.crt}
+      DPF_LDAP_TLS_KEY_PATH: ${DPF_LDAP_TLS_KEY_PATH:-/dpf-state/pki/authority.key}
+      DPF_LDAP_TLS_CA_PATH: ${DPF_LDAP_TLS_CA_PATH:-/dpf-state/pki/root_ca.crt}
       # Portal-side live-readiness checks run inside the container, where
       # process.cwd() is /app and not the host Git clone. Point git ancestry
       # helpers at the mounted host source so verify_live_install_readiness can

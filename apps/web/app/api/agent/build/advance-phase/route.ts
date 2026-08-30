@@ -8,12 +8,12 @@ import { can } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
 import {
   canTransitionPhase,
-  checkPhaseGate,
   normalizeHappyPathState,
   type BuildDeliberationSummary,
   type BuildPhase,
   type ReviewResult,
 } from "@/lib/feature-build-types";
+import { checkBuildPhaseGate } from "@/lib/work-posture/verification-depth-gate";
 import { evaluateBuildStudioPlanAdvancementGate } from "@/lib/decision-perspective/build-studio-gate";
 import { resolvePlannedFilePaths } from "@/lib/decision-perspective/planned-file-paths";
 
@@ -61,6 +61,8 @@ export async function POST(request: NextRequest): Promise<Response> {
       planReview: true,
       verificationOut: true,
       acceptanceMet: true,
+      uxTestResults: true,
+      uxVerificationStatus: true,
       deliberationSummary: true,
       threadId: true,
     },
@@ -104,16 +106,25 @@ export async function POST(request: NextRequest): Promise<Response> {
   }
 
   const advanceBrief = build.brief as { fixContext?: import("@/lib/feature-build-types").FixContext } | null;
-  const gate = checkPhaseGate(currentPhase, targetPhase, {
-    kind: build.kind,
-    fixContext: advanceBrief?.fixContext,
-    designDoc: build.designDoc,
-    designReview: build.designReview,
-    happyPathState: normalizeHappyPathState((build.plan as Record<string, unknown> | null)?.happyPathState ?? null),
-    buildPlan: build.buildPlan,
-    planReview: build.planReview,
-    verificationOut: build.verificationOut,
-    acceptanceMet: build.acceptanceMet,
+  const advancePlan = (build.plan as Record<string, unknown> | null) ?? {};
+  const gate = await checkBuildPhaseGate({
+    buildId,
+    from: currentPhase,
+    to: targetPhase,
+    evidence: {
+      kind: build.kind,
+      processSize: (advancePlan.processSize as string | undefined) ?? "medium",
+      fixContext: advanceBrief?.fixContext,
+      designDoc: build.designDoc,
+      designReview: build.designReview,
+      happyPathState: normalizeHappyPathState(advancePlan.happyPathState ?? null),
+      buildPlan: build.buildPlan,
+      planReview: build.planReview,
+      verificationOut: build.verificationOut,
+      acceptanceMet: build.acceptanceMet,
+      uxTestResults: build.uxTestResults,
+      uxVerificationStatus: build.uxVerificationStatus,
+    },
   });
 
   if (!gate.allowed) {

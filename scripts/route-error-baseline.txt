@@ -15,7 +15,7 @@ apps/web/app/api/calendar/events/route.ts	3
 apps/web/app/api/diagnostics/preflight/route.ts	2
 apps/web/app/api/diagnostics/probe/route.ts	3
 apps/web/app/api/integrations/adp/connect/route.ts	4
-apps/web/app/api/integrations/email-postmark/inbound/route.ts	6
+apps/web/app/api/integrations/email-postmark/inbound/route.ts	1
 apps/web/app/api/integrations/facebook-lead-ads/connect/route.ts	4
 apps/web/app/api/integrations/facebook-pages/connect/route.ts	4
 apps/web/app/api/integrations/google-business-profile/connect/route.ts	4
@@ -29,6 +29,10 @@ apps/web/app/api/integrations/stripe/connect/route.ts	3
 apps/web/app/api/integrations/whatsapp-business/connect/route.ts	4
 apps/web/app/api/internal/quiescence-state/route.ts	1
 apps/web/app/api/media/route.ts	8
+apps/web/app/api/oauth/authorize/route.ts	1
+apps/web/app/api/oauth/register/route.ts	4
+apps/web/app/api/oauth/revoke/route.ts	3
+apps/web/app/api/oauth/token/route.ts	1
 apps/web/app/api/onboarding/business-document/route.ts	4
 apps/web/app/api/onboarding/market-context/route.ts	2
 apps/web/app/api/onboarding/roster/import/route.ts	2
@@ -45,7 +49,6 @@ apps/web/app/api/platform/security/overview/route.ts	2
 apps/web/app/api/portfolio/product/[id]/supply-chain/bom/route.ts	2
 apps/web/app/api/sandbox/preview/route.ts	5
 apps/web/app/api/storefront/[slug]/dates/route.ts	3
-apps/web/app/api/storefront/[slug]/hold/route.ts	5
 apps/web/app/api/storefront/[slug]/slots/route.ts	3
 apps/web/app/api/storefront/admin/animals/[id]/route.ts	4
 apps/web/app/api/storefront/admin/animals/route.ts	5
@@ -63,9 +66,6 @@ apps/web/app/api/storefront/admin/providers/route.ts	3
 apps/web/app/api/storefront/admin/publish/route.ts	1
 apps/web/app/api/storefront/admin/sections/[id]/route.ts	1
 apps/web/app/api/storefront/admin/sections/reorder/route.ts	1
-apps/web/app/api/storefront/admin/setup/route.ts	5
-apps/web/app/api/storefront/admin/units/[id]/route.ts	5
-apps/web/app/api/storefront/admin/units/route.ts	6
 apps/web/app/api/storefront/bookings/[id]/cancel/route.ts	2
 apps/web/app/api/storefront/bookings/[id]/confirm/route.ts	2
 apps/web/app/api/storefront/sign-up/route.ts	2

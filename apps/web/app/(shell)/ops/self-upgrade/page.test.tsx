@@ -26,6 +26,10 @@ vi.mock("@/lib/self-upgrade/config", () => ({
   getSelfUpgradeConfig: vi.fn().mockResolvedValue({ hostSourceMountPath: "/host/dpf" }),
 }));
 
+vi.mock("@/lib/self-upgrade/target-binding", () => ({
+  createSelfUpgradeTargetBinding: vi.fn().mockReturnValue("server-signed-target"),
+}));
+
 vi.mock("@/lib/self-upgrade/merge-point", () => ({
   resolveUpgradeMergePoints: vi.fn().mockResolvedValue({
     running: {
@@ -118,12 +122,13 @@ vi.mock("@/components/ops/OwnerReleaseCard", () => ({
 // co-located with the release card), not the trigger's own behavior (covered
 // in SelfUpgradeTriggerControl.test.tsx).
 vi.mock("@/components/ops/SelfUpgradeTriggerControl", () => ({
-  default: (props: { enabled: boolean; channel: string; actionState: string }) => (
+  default: (props: { enabled: boolean; channel: string; actionState: string; targetBinding?: string | null }) => (
     <div
       data-testid="self-upgrade-trigger-control"
       data-enabled={String(props.enabled)}
       data-channel={props.channel}
       data-action-state={props.actionState}
+      data-target-binding={props.targetBinding ?? ""}
     />
   ),
 }));
@@ -274,6 +279,7 @@ describe("SelfUpgradePage", () => {
   it("passes history runs and cursor to SelfUpgradeClient", async () => {
     const run: SelfUpgradeRunDto = {
       runId: "run-1",
+      recoveryOfRunId: null,
       status: "succeeded",
       trigger: null,
       currentSha: "abc123",
@@ -401,6 +407,7 @@ describe("SelfUpgradePage", () => {
 
     expect(resolveUpgradeMergePoints).not.toHaveBeenCalled();
     expect(html).toContain('data-available-version="v2026.08.24"');
+    expect(html).toContain('data-target-binding="server-signed-target"');
   });
 
   it("loads only the persisted impact summary during render when an update is available", async () => {
