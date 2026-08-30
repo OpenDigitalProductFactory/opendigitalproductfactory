@@ -708,9 +708,8 @@ export function checkRequirement(req: GateRequirement, evidence: GateEvidence): 
       if (!verification.typecheckPassed) return { allowed: false, reason: "Typecheck must pass before review." };
       return { allowed: true };
     }
-    case "verification-depth-satisfied": {
+    case "verification-depth-satisfied":
       return checkVerificationDepthSatisfied(evidence);
-    }
     case "acceptance-evaluated": {
       if (!evidence.acceptanceMet) return { allowed: false, reason: "Acceptance criteria not evaluated." };
       return { allowed: true };

@@ -21,13 +21,17 @@ export type VerificationDepthShadowRecord = VerificationDepthShadowDecision & {
 };
 
 type GateDeps = {
-  resolveDepth: (buildId: string) => Promise<VerificationDepth | undefined>;
+  resolveDepth: (
+    buildId: string,
+    evidence: Record<string, unknown>,
+  ) => Promise<VerificationDepth | undefined>;
   record: (decision: VerificationDepthShadowRecord) => Promise<void>;
 };
 
 /** Resolve the already-existing work-posture depth for the room linked to a build. */
 export async function resolveBuildVerificationDepth(
   buildId: string,
+  evidence: Record<string, unknown> = {},
 ): Promise<VerificationDepth | undefined> {
   const room = await prisma.workroom.findFirst({
     where: { featureBuild: { buildId }, archivedAt: null },
@@ -61,6 +65,12 @@ export async function resolveBuildVerificationDepth(
     mode: "finite",
     cycleActive: true,
     dueAt: room.workItem?.dueAt?.toISOString() ?? null,
+    stakes: {
+      qualityFirst: evidence.qualityFirst === true,
+      deliverableSensitivity: typeof evidence.deliverableSensitivity === "string"
+        ? evidence.deliverableSensitivity
+        : null,
+    },
     declaration: readWorkroomPostureClaim(room.scopeClaims),
   }, context, now)?.verificationDepth;
 }
@@ -97,7 +107,7 @@ export async function checkBuildPhaseGate(
 ): Promise<PhaseGateResult> {
   let depth: VerificationDepth | undefined;
   try {
-    depth = await deps.resolveDepth(input.buildId);
+    depth = await deps.resolveDepth(input.buildId, input.evidence);
   } catch (error) {
     console.warn("[verification-depth-shadow] posture resolution failed:", (error as Error).message);
   }

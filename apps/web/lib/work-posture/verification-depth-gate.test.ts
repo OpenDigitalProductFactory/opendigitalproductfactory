@@ -51,6 +51,31 @@ describe("checkBuildPhaseGate", () => {
     }));
   });
 
+  it("passes the existing rightsizing evidence into posture depth resolution", async () => {
+    const resolveDepth = vi.fn(async (
+      _buildId: string,
+      gateEvidence: Record<string, unknown>,
+    ) => gateEvidence.qualityFirst === true && gateEvidence.deliverableSensitivity === "high"
+      ? "deep" as const
+      : undefined);
+    const record = vi.fn(async (_decision: VerificationDepthShadowRecord) => undefined);
+
+    await checkBuildPhaseGate({
+      buildId: "FB-RIGHTSIZED",
+      from: "review",
+      to: "ship",
+      evidence: { ...evidence, qualityFirst: true, deliverableSensitivity: "high" },
+    }, { resolveDepth, record });
+
+    expect(resolveDepth).toHaveBeenCalledWith("FB-RIGHTSIZED", expect.objectContaining({
+      qualityFirst: true,
+      deliverableSensitivity: "high",
+    }));
+    expect(record).toHaveBeenCalledWith(expect.objectContaining({
+      declaredDepth: "deep",
+    }));
+  });
+
   it("fails open when posture resolution or shadow recording is unavailable", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const result = await checkBuildPhaseGate({
