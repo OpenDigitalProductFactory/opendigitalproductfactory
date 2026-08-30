@@ -72,11 +72,19 @@ A `WorkShapeDefinition` already answers all four. Binding it to a room is the wh
 | Which advances need a human? | `advance.kind: "governed-decision"` — a sealed decision, not a status write | declared, never read |
 | What stops it? | `stopConditions` (success / failure / **budget**) and `reviewPoint` | declared, never read |
 
-### 3.2 The binding
+### 3.2 The binding and Process Overseer
 
 One field, no new table: a standing room declares `workShapeKey@version` on `Workroom.scopeClaims` —
 the same migration-free mechanism the collaboration-shape claim and the posture claim already use
-(`workroom-shape-claim.ts`). A drive runner then:
+(`workroom-shape-claim.ts`). A drive runner operates under the room's canonical `coordinator`,
+presented to people as the **Process Overseer**. The coordinator owns execution-shape conformance;
+the accountable principal still owns the business outcome. This reuses the existing participant
+role rather than introducing a generic manager agent.
+
+Before any dispatch, the runner consumes a deterministic conformance projection over the exact
+shape/version, explicit persisted coordinator and roster, current stage, prerequisite receipts,
+posture and authority, measures, budgets, review point, and stop conditions. A legacy-derived
+coordinator may explain an old room but does not qualify it for autonomous execution. The runner:
 
 1. reads the shape from the registry;
 2. resolves the posture through the existing §3.1 ladder (`work-posture` slices A–G), which supplies
@@ -84,12 +92,20 @@ the same migration-free mechanism the collaboration-shape claim and the posture 
 3. runs the stage whose accountable principal is an `agent:` reference, in **act** mode, through the
    existing `ScheduledAgentTask` dispatcher with that coworker's granted tools;
 4. records a room cycle via `projectWorkShapeCycleBoundary` and room activity via the existing
-   ledger; and
-5. stops on any declared stop condition, escalating rather than continuing.
+   ledger;
+5. rechecks conformance after the stage, records the observed transition and next permitted stage;
+   and
+6. stops on any declared stop condition, escalating rather than continuing.
 
 A stage whose accountable principal is a `role:` or `person:` reference is **never** run by the
 runner. It becomes an attention item for that principal. This is finding 2's lesson made structural:
 the sweep is the agent's, the response is the owner's.
+
+Shape drift is also an attention item, never an invitation to self-repair by widening authority or
+inventing a participant. Finite rooms reconcile on transitions; standing rooms also receive a
+bounded, idempotent delta sweep. The Process Overseer may be human or AI. An AI overseer needs a
+current JSI qualification for process coordination and applicable TAK authority, and it may not
+also be the independent evaluator or approver when the shape requires those roles.
 
 ### 3.3 Nesting is a relation, not a column
 
@@ -115,7 +131,7 @@ into every install.
 
 | Layer | Owns | Home | Ships to |
 | --- | --- | --- | --- |
-| **L1 — Platform substrate** | The shape→room binding, the drive runner, the relation model, posture resolution, evidence, stop-condition enforcement, portfolio placement | `apps/web/lib/work-management/`, `apps/web/lib/queue/functions/` | every install, every archetype |
+| **L1 — Platform substrate** | The shape→room binding, coordinator/Process Overseer conformance projection, drive runner, relation model, posture resolution, evidence, stop-condition enforcement, portfolio placement | `apps/web/lib/work-management/`, `apps/web/lib/queue/functions/` | every install, every archetype |
 | **L2 — Archetype profile** | The *set* of standing room definitions a business of this kind needs, derived from its OVSM — not authored per install | `packages/storefront-templates/src/` (derived, like `operational-value-stream.ts`) | every install of that archetype |
 | **L3 — Instance overlay** | Which repo, which forge account, which coworker holds which stage, which thresholds, which suppliers | `Organization` config + `scopeClaims` + connector credentials — **DB rows, never code** | this operator install only |
 
@@ -248,12 +264,12 @@ so the generic layers are proven before customer 0's own business rides on them.
 | Slice | Layer | Content | Inert until |
 | --- | --- | --- | --- |
 | **A** | L1 | Shape→room binding: the `scopeClaims` claim reader/writer, and `projectWorkShapeCycleBoundary` wired into the room-cycle adapter. No runner. | B |
-| **B** | L1 | The drive runner: resolve shape → resolve posture → dispatch the `agent:` stage through `ScheduledAgentTask` → record cycle and activity → honour stop conditions. Refuses non-`agent:` stages. | E |
+| **B** | L1 | The drive runner: require one explicit coordinator → resolve shape and conformance → resolve posture → dispatch the `agent:` stage through `ScheduledAgentTask` → record cycle and activity → recheck conformance → honour stop conditions. Refuses non-`agent:` stages. | E |
 | **C** | L1 | `WorkroomRelation` — the five relations, with the migration. Closes finding 8. | — |
 | **D** | L1 | Proactivity families for standing operations, so a posture can govern this work at all (finding 4). | B |
 | **E** | L2 | The `software-platform` standing-room profile, derived from OVSM, with the three conformance tests of §4. | F |
 | **F** | L3 | the operator install's bindings: repo, forge account, coworker-to-stage assignment, thresholds. Configuration rows and one seed. | — |
-| **G** | L1 | Room surface: the drive, its next wake, its last cycle, and why it is behaving as it is. | B |
+| **G** | L1 | Room surface: Process Overseer identity/source, shape-conformance state, current and expected next stage, deviations, last check, drive, next wake, last cycle, and intervention reason. | B |
 | **H** | L1 | Retire the agent-keyed self-task registry onto shapes, once E and F prove the path. Not before. | E, F |
 
 ## 9. Non-goals
