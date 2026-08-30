@@ -44,6 +44,17 @@ type HydratedTerminalWriterContext = {
 
 type TerminalWriterContextFailure = ActionFailure & { code: string };
 
+type HydrationPageEvidence = {
+  page: HydrationPage;
+  requestArguments: Record<string, unknown>;
+};
+
+type CompleteHydrationAttempt = {
+  pages: HydrationPageEvidence[];
+  totalChars: number;
+  content: string;
+};
+
 export type TerminalWriterContextHydration =
   | ActionSuccess<HydratedTerminalWriterContext>
   | TerminalWriterContextFailure;
@@ -95,35 +106,111 @@ function parseHydrationPage(
   return page as HydrationPage;
 }
 
+function pageEndLine(page: HydrationPage): number {
+  const newlineCount = page.content.split("\n").length - 1;
+  return page.startLine + newlineCount - (page.content.endsWith("\n") ? 1 : 0);
+}
+
+function assessPageSet(
+  evidence: readonly HydrationPageEvidence[],
+): ActionSuccess<{ complete: boolean; totalChars: number }> | TerminalWriterContextFailure {
+  if (evidence.length === 0) return ok({ complete: false, totalChars: 0 });
+
+  const seenCursors = new Set<string>();
+  let totalChars = 0;
+  let startsAtArtifactBeginning = true;
+  for (let index = 0; index < evidence.length; index += 1) {
+    const { page, requestArguments } = evidence[index]!;
+    const prior = evidence[index - 1]?.page;
+
+    totalChars += page.content.length;
+    if (totalChars > MAX_HYDRATED_CHARS) {
+      return hydrationFailure(
+        "terminal_writer_context_oversize",
+        "The immutable source exceeds the bounded terminal-writer context budget.",
+      );
+    }
+    if (pageEndLine(page) !== page.endLine) {
+      return hydrationFailure(
+        "terminal_writer_context_page_sequence_invalid",
+        "Immutable source pages are not a contiguous, non-overlapping sequence with stable line bounds.",
+      );
+    }
+
+    if (!prior) {
+      startsAtArtifactBeginning = page.startLine === 1
+        && requestArguments["cursor"] === undefined
+        && (requestArguments["startLine"] === undefined || requestArguments["startLine"] === 1);
+    } else {
+      const expectedStartLine = prior.content.endsWith("\n")
+        ? prior.endLine + 1
+        : prior.endLine;
+      if (
+        !prior.hasMore
+        || page.startLine !== expectedStartLine
+        || page.totalLines !== prior.totalLines
+        || requestArguments["cursor"] !== prior.nextCursor
+      ) {
+        return hydrationFailure(
+          "terminal_writer_context_page_sequence_invalid",
+          "Immutable source pages are not a contiguous, non-overlapping sequence with stable line bounds.",
+        );
+      }
+    }
+
+    if (page.hasMore) {
+      const cursor = page.nextCursor!;
+      if (seenCursors.has(cursor)) {
+        return hydrationFailure(
+          "terminal_writer_context_cursor_repeated",
+          "The immutable source pagination cursor did not make progress.",
+        );
+      }
+      seenCursors.add(cursor);
+    } else if (page.endLine !== page.totalLines || index !== evidence.length - 1) {
+      return hydrationFailure(
+        "terminal_writer_context_page_sequence_invalid",
+        "Immutable source pages are not a contiguous, non-overlapping sequence with stable line bounds.",
+      );
+    }
+  }
+
+  const lastPage = evidence.at(-1)!.page;
+  return ok({
+    complete: startsAtArtifactBeginning && !lastPage.hasMore && lastPage.endLine === lastPage.totalLines,
+    totalChars,
+  });
+}
+
 function validateReaderExecutions(
   policy: TerminalToolPolicy,
   executions: readonly PersistedTerminalReaderExecution[],
-): ActionSuccess<{ ids: string[] }> | TerminalWriterContextFailure {
+): ActionSuccess<{ ids: string[]; contentfulAttempts: HydrationPageEvidence[][] }> | TerminalWriterContextFailure {
   if (!policy.immutableReaderArguments) {
     return hydrationFailure(
       "terminal_writer_context_binding_missing",
       "The terminal writer cannot resume without an immutable artifact binding.",
     );
   }
-  if (executions.length === 0 || executions.length > policy.maximumReaderCalls) {
+  if (executions.length === 0) {
     return hydrationFailure(
       "terminal_writer_context_reader_count_invalid",
-      "Persisted immutable reader evidence is missing or exceeds the bounded reader budget.",
+      "Persisted immutable reader evidence is missing.",
     );
   }
 
   const ids: string[] = [];
+  const contentfulAttempts: HydrationPageEvidence[][] = [];
   const seenIds = new Set<string>();
   let priorCreatedAt = Number.NEGATIVE_INFINITY;
   for (const execution of executions) {
     if (
-      !execution.success
-      || execution.toolName !== "read_source_at_version"
+      execution.toolName !== "read_source_at_version"
       || !policy.readerToolNames.includes(execution.toolName)
     ) {
       return hydrationFailure(
         "terminal_writer_context_reader_failed",
-        "Persisted immutable reader evidence includes a failed or unauthorized reader execution.",
+        "Persisted immutable reader evidence includes an unauthorized reader execution.",
       );
     }
     const parameters = record(execution.parameters);
@@ -146,6 +233,7 @@ function validateReaderExecutions(
     }
     const persistedResult = record(execution.result);
     const persistedPage = record(persistedResult?.["data"]);
+    let successfulPage: HydrationPage | null = null;
     if (persistedPage) {
       const resultBinding = [
         ["repositoryFullName", policy.immutableReaderArguments.repositoryFullName],
@@ -159,12 +247,76 @@ function validateReaderExecutions(
           "Persisted immutable reader output conflicts with the current artifact binding.",
         );
       }
+      if (typeof persistedPage["content"] === "string") {
+        if (persistedPage["content"].length > MAX_PAGE_CHARS) {
+          return hydrationFailure(
+            "terminal_writer_context_oversize",
+            "An immutable source page exceeds the bounded terminal-writer context budget.",
+          );
+        }
+        const page = parseHydrationPage(persistedPage, policy.immutableReaderArguments);
+        if (!page) {
+          return hydrationFailure(
+            "terminal_writer_context_page_invalid",
+            "Persisted immutable source content is not valid exact-bound page evidence.",
+          );
+        }
+        successfulPage = execution.success ? page : null;
+      }
     }
     seenIds.add(execution.id);
     priorCreatedAt = createdAt;
+    if (!execution.success) continue;
     ids.push(execution.id);
+    if (!successfulPage) continue;
+
+    const startsNewAttempt = normalized.arguments["cursor"] === undefined
+      && (normalized.arguments["startLine"] === undefined || normalized.arguments["startLine"] === 1);
+    let attempt = contentfulAttempts.at(-1);
+    if (!attempt || (startsNewAttempt && attempt.length > 0)) {
+      attempt = [];
+      contentfulAttempts.push(attempt);
+    }
+    attempt.push({ page: successfulPage, requestArguments: normalized.arguments });
+    if (attempt.length > policy.maximumReaderCalls) {
+      return hydrationFailure(
+        "terminal_writer_context_reader_count_invalid",
+        "One persisted immutable reader attempt exceeds the bounded reader budget.",
+      );
+    }
   }
-  return ok({ ids });
+  if (ids.length === 0) {
+    return hydrationFailure(
+      "terminal_writer_context_reader_count_invalid",
+      "No successful exact-bound immutable reader execution is available for terminal-writer hydration.",
+    );
+  }
+  return ok({ ids, contentfulAttempts });
+}
+
+function selectCompletePersistedAttempt(
+  attempts: readonly HydrationPageEvidence[][],
+): ActionSuccess<CompleteHydrationAttempt | null> | TerminalWriterContextFailure {
+  let selected: CompleteHydrationAttempt | null = null;
+  for (const pages of attempts) {
+    const assessment = assessPageSet(pages);
+    if (!assessment.ok) return assessment;
+    if (!assessment.data.complete) continue;
+
+    const candidate: CompleteHydrationAttempt = {
+      pages,
+      totalChars: assessment.data.totalChars,
+      content: pages.map((evidence) => evidence.page.content).join(""),
+    };
+    if (selected && candidate.content !== selected.content) {
+      return hydrationFailure(
+        "terminal_writer_context_attempts_conflict",
+        "Persisted immutable reader attempts disagree about the bound source content.",
+      );
+    }
+    selected = candidate;
+  }
+  return ok(selected);
 }
 
 function renderContext(input: {
@@ -204,10 +356,29 @@ export async function hydrateTerminalWriterContext(input: {
   if (!validated.ok) return validated;
   const binding = input.policy.immutableReaderArguments!;
 
-  const pages: HydrationPage[] = [];
-  const seenCursors = new Set<string>();
+  const persistedSelection = selectCompletePersistedAttempt(validated.data.contentfulAttempts);
+  if (!persistedSelection.ok) return persistedSelection;
+  if (persistedSelection.data) {
+    const persistedAttempt = persistedSelection.data;
+    const persistedPages = persistedAttempt.pages.map((evidence) => evidence.page);
+    return ok({
+      context: renderContext({
+        binding,
+        content: persistedAttempt.content,
+        readerExecutionIds: validated.data.ids,
+        writerToolName: input.policy.writerToolName,
+      }),
+      readerExecutionIds: validated.data.ids,
+      hydratedPageCount: persistedPages.length,
+      hydratedCharCount: persistedAttempt.totalChars,
+    });
+  }
+
+  // A partial persisted result is authority evidence, not a hydration prefix.
+  // Re-read the one bound artifact from line one so persisted and fresh content
+  // can never be spliced into a synthetic source stream.
+  const pages: HydrationPageEvidence[] = [];
   let cursor: string | undefined;
-  let totalChars = 0;
   for (let index = 0; index < MAX_HYDRATION_PAGES; index += 1) {
     const args: Record<string, unknown> = {
       ...binding,
@@ -233,29 +404,11 @@ export async function hydrateTerminalWriterContext(input: {
         "The deterministic immutable source read returned missing or conflicting page evidence.",
       );
     }
-    const priorPage = pages.at(-1);
-    if (
-      (priorPage && (
-        page.startLine !== priorPage.endLine + 1
-        || page.totalLines !== priorPage.totalLines
-      ))
-      || (!page.hasMore && page.endLine !== page.totalLines)
-    ) {
-      return hydrationFailure(
-        "terminal_writer_context_page_sequence_invalid",
-        "Immutable source pages are not a contiguous, non-overlapping sequence with stable line bounds.",
-      );
-    }
-    totalChars += page.content.length;
-    if (totalChars > MAX_HYDRATED_CHARS) {
-      return hydrationFailure(
-        "terminal_writer_context_oversize",
-        "The immutable source exceeds the bounded terminal-writer context budget.",
-      );
-    }
-    pages.push(page);
-    if (!page.hasMore) {
-      const content = pages.map((candidate) => candidate.content).join("");
+    pages.push({ page, requestArguments: args });
+    const assessment = assessPageSet(pages);
+    if (!assessment.ok) return assessment;
+    if (assessment.data.complete) {
+      const content = pages.map((candidate) => candidate.page.content).join("");
       return ok({
         context: renderContext({
           binding,
@@ -265,18 +418,10 @@ export async function hydrateTerminalWriterContext(input: {
         }),
         readerExecutionIds: validated.data.ids,
         hydratedPageCount: pages.length,
-        hydratedCharCount: totalChars,
+        hydratedCharCount: assessment.data.totalChars,
       });
     }
-    const nextCursor = page.nextCursor!;
-    if (seenCursors.has(nextCursor)) {
-      return hydrationFailure(
-        "terminal_writer_context_cursor_repeated",
-        "The immutable source pagination cursor did not make progress.",
-      );
-    }
-    seenCursors.add(nextCursor);
-    cursor = nextCursor;
+    cursor = page.nextCursor!;
   }
 
   return hydrationFailure(

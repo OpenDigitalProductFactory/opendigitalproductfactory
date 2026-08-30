@@ -9,9 +9,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { execMock } = vi.hoisted(() => ({ execMock: vi.fn() }));
 
+const { rmMock } = vi.hoisted(() => ({ rmMock: vi.fn(async () => undefined) }));
+
 vi.mock("@/lib/shared/lazy-node", () => ({
   lazyExec: () => execMock,
-  lazyPath: () => ({ resolve: (...p: string[]) => p.join("/") }),
+  lazyPath: () => ({
+    resolve: (...p: string[]) => p.join("/"),
+    basename: (p: string) => p.split("/").filter(Boolean).pop() ?? "",
+  }),
+  lazyFsPromises: () => ({ rm: rmMock }),
+  lazyOs: () => ({ tmpdir: () => "/tmp" }),
   getCwd: () => "/cwd",
 }));
 
@@ -24,7 +31,11 @@ import {
 const ok = (stdout: string) => ({ stdout, stderr: "" });
 const SHA = "0ad91e688c2f5f3a4512d11ce0a845c4aa63d9ca";
 
-beforeEach(() => execMock.mockReset());
+beforeEach(() => {
+  execMock.mockReset();
+  rmMock.mockClear();
+  delete process.env.DPF_CODE_GRAPH_WORKTREE_DIR;
+});
 
 describe("resolveDefaultBranchRef", () => {
   it("prefers origin/main and reports the branch label without the remote", async () => {
@@ -69,7 +80,9 @@ describe("resolveIndexSource", () => {
     const src = await resolveIndexSource("/sandbox-workspace");
 
     expect(src.usedDefaultBranch).toBe(true);
-    expect(src.root).toBe(`/sandbox-workspace/${CODE_GRAPH_WORKTREE_DIRNAME}`);
+    expect(src.root).toBe(`/tmp/${CODE_GRAPH_WORKTREE_DIRNAME}`);
+    // Never inside the host checkout — /sandbox-workspace is a Build Studio tree.
+    expect(src.root.startsWith("/sandbox-workspace")).toBe(false);
     expect(src.branch).toBe("main");
     expect(src.sha).toBe(SHA);
     expect(src.warning).toBeNull();
@@ -78,13 +91,16 @@ describe("resolveIndexSource", () => {
   it("creates the worktree when none exists yet", async () => {
     execMock
       .mockResolvedValueOnce(ok(`${SHA}\n`))                        // rev-parse origin/main
-      .mockRejectedValueOnce(new Error("not a git repository"))     // no worktree yet
+      .mockRejectedValueOnce(new Error("not a git repository"))     // no usable worktree
+      .mockResolvedValueOnce(ok("\n"))                              // worktree prune
       .mockResolvedValueOnce(ok("Preparing worktree\n"));           // worktree add
 
     const src = await resolveIndexSource("/sandbox-workspace");
 
     expect(src.usedDefaultBranch).toBe(true);
-    expect(String(execMock.mock.calls[2]?.[0])).toContain("worktree add --detach --force");
+    const cmds = execMock.mock.calls.map((c) => String(c[0]));
+    expect(cmds.some((c) => c.includes("worktree prune"))).toBe(true);
+    expect(cmds.some((c) => c.includes("worktree add --detach --force"))).toBe(true);
   });
 
   it("fast-forwards a worktree parked on an older sha", async () => {
@@ -104,6 +120,7 @@ describe("resolveIndexSource", () => {
     execMock
       .mockResolvedValueOnce(ok(`${SHA}\n`))                    // origin/main
       .mockRejectedValueOnce(new Error("not a git repository")) // no worktree
+      .mockResolvedValueOnce(ok("\n"))                          // worktree prune
       .mockRejectedValueOnce(new Error("fatal: cannot add"))    // add fails
       .mockRejectedValueOnce(new Error("nope"));                // worktree list
 
@@ -119,5 +136,34 @@ describe("resolveIndexSource", () => {
     const src = await resolveIndexSource("/repo");
     expect(src.usedDefaultBranch).toBe(false);
     expect(src.warning).toContain("No default branch");
+  });
+});
+
+// Live failure this fix exists for: the first run checked out 101 entries, a
+// later `git worktree prune` dropped the registration, and every subsequent run
+// died on "fatal: '<path>' already exists" — because --force overrides a stale
+// REGISTRATION, not a leftover DIRECTORY.
+describe("orphaned worktree recovery", () => {
+  it("prunes and removes a leftover directory before recreating", async () => {
+    execMock
+      .mockResolvedValueOnce(ok(`${SHA}\n`))                     // origin/main
+      .mockRejectedValueOnce(new Error("not a git repository"))  // dir exists but unusable
+      .mockResolvedValueOnce(ok("\n"))                           // worktree prune
+      .mockResolvedValueOnce(ok("Preparing worktree\n"));        // worktree add succeeds
+
+    const src = await resolveIndexSource("/sandbox-workspace");
+
+    expect(rmMock).toHaveBeenCalledWith(`/tmp/${CODE_GRAPH_WORKTREE_DIRNAME}`, {
+      recursive: true,
+      force: true,
+    });
+    expect(src.usedDefaultBranch).toBe(true);
+  });
+
+  it("honours DPF_CODE_GRAPH_WORKTREE_DIR", async () => {
+    process.env.DPF_CODE_GRAPH_WORKTREE_DIR = "/dpf-state/graph-wt";
+    execMock.mockResolvedValueOnce(ok(`${SHA}\n`)).mockResolvedValueOnce(ok(`${SHA}\n`));
+    const src = await resolveIndexSource("/sandbox-workspace");
+    expect(src.root).toBe("/dpf-state/graph-wt");
   });
 });

@@ -11,6 +11,8 @@ const {
   mockSecurityCaseFindUnique,
   mockSecurityCaseCreate,
   mockSecurityCaseUpdate,
+  mockAgentFindFirst,
+  mockUserFindUnique,
 } = vi.hoisted(() => ({
   mockDetectionRuleFindMany: vi.fn(),
   mockThreatIndicatorFindMany: vi.fn(),
@@ -21,6 +23,8 @@ const {
   mockSecurityCaseFindUnique: vi.fn(),
   mockSecurityCaseCreate: vi.fn(),
   mockSecurityCaseUpdate: vi.fn(),
+  mockAgentFindFirst: vi.fn(),
+  mockUserFindUnique: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({
@@ -38,6 +42,8 @@ vi.mock("@dpf/db", () => ({
       create: mockSecurityCaseCreate,
       update: mockSecurityCaseUpdate,
     },
+    agent: { findFirst: mockAgentFindFirst },
+    user: { findUnique: mockUserFindUnique },
   },
 }));
 
@@ -54,6 +60,9 @@ beforeEach(() => {
   mockDetectionUpdateMany.mockResolvedValue({ count: 0 });
   mockSecurityCaseFindUnique.mockResolvedValue(null);
   mockSecurityCaseCreate.mockResolvedValue({ id: "case_1" });
+  // Default: entity resolves to neither an agent nor a user (hostname/asset).
+  mockAgentFindFirst.mockResolvedValue(null);
+  mockUserFindUnique.mockResolvedValue(null);
 });
 
 describe("runCorrelationSweep", () => {
@@ -182,11 +191,77 @@ describe("runCorrelationSweep", () => {
     });
     expect(created.caseKey).toContain("attack:T1070.001");
     expect(created.title).toContain("HOST-1");
+    // BI-7D1EC4B9: the case carries the detections it was opened from, not {}.
+    expect(created.evidence).toMatchObject({
+      openedBy: "correlation-sweep",
+      detectionCount: 2,
+    });
+    expect(created.evidence.detectionKeys).toHaveLength(2);
     // Both detections linked to the new case, exactly once.
     expect(mockDetectionUpdateMany).toHaveBeenCalledTimes(1);
     const link = mockDetectionUpdateMany.mock.calls[0]![0];
     expect(link.data).toEqual({ securityCaseId: "case_1" });
     expect(link.where.detectionKey.in).toHaveLength(2);
+  });
+
+  it("resolves a User-id actor entity to a name in the case title (BI-7D1EC4B9)", async () => {
+    mockDetectionRuleFindMany.mockResolvedValue([]);
+    mockSecurityEventFindMany.mockResolvedValue([]);
+    // An internal authorization-denied detection whose entity is a bare User cuid.
+    mockDetectionFindMany.mockResolvedValue([
+      {
+        detectionKey: "dpf-kernel:internal-authz-denied:e1",
+        scopeKey: "organization:internal",
+        customerAccountId: null,
+        customerSiteId: null,
+        severity: "medium",
+        firstSeenAt: NOW,
+        lastSeenAt: NOW,
+        enrichment: {
+          ruleKey: "dpf-kernel:internal-authz-denied",
+          ruleName: "Internal authorization denied",
+          entityKey: "user-cuid-placeholder",
+        },
+      },
+    ]);
+    // No agent by that id; a user resolves.
+    mockAgentFindFirst.mockResolvedValue(null);
+    mockUserFindUnique.mockResolvedValue({ email: "admin@dpf.local" });
+
+    const result = await runCorrelationSweep({ seedPack: false });
+
+    expect(result.casesOpened).toBe(1);
+    const created = mockSecurityCaseCreate.mock.calls[0]![0].data;
+    expect(created.title).toBe("Internal authorization denied — admin@dpf.local");
+    expect(created.title).not.toContain("user-cuid-placeholder");
+  });
+
+  it("prefers an agent display name when the entity is an agent principal (BI-7D1EC4B9)", async () => {
+    mockDetectionRuleFindMany.mockResolvedValue([]);
+    mockSecurityEventFindMany.mockResolvedValue([]);
+    mockDetectionFindMany.mockResolvedValue([
+      {
+        detectionKey: "dpf-kernel:internal-authz-denied:e2",
+        scopeKey: "organization:internal",
+        customerAccountId: null,
+        customerSiteId: null,
+        severity: "medium",
+        firstSeenAt: NOW,
+        lastSeenAt: NOW,
+        enrichment: {
+          ruleKey: "dpf-kernel:internal-authz-denied",
+          ruleName: "Internal authorization denied",
+          entityKey: "data-architect",
+        },
+      },
+    ]);
+    mockAgentFindFirst.mockResolvedValue({ displayName: "Dana (Data Architect)", name: "data-architect", agentId: "data-architect" });
+
+    const result = await runCorrelationSweep({ seedPack: false });
+
+    expect(result.casesOpened).toBe(1);
+    const created = mockSecurityCaseCreate.mock.calls[0]![0].data;
+    expect(created.title).toBe("Internal authorization denied — Dana (Data Architect)");
   });
 
   it("merges into an existing case and ratchets severity, no duplicate", async () => {

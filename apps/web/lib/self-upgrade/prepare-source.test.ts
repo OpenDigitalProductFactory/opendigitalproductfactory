@@ -106,6 +106,67 @@ describe("prepareUpgradeSource — upstream mode (isolated workspace, BI-4043A64
     ).toBe(true);
   });
 
+  // ── Git LFS materialization (BI-FEE26C36 follow-on) ──────────────────────
+  // The workspace is the promoter's Docker build context and Dockerfile asserts
+  // real bytes for the LFS-tracked IT4IT workbook (#4843). A pointer stub here
+  // fails the image build two minutes in, so prep must catch it and say why.
+  const cleanMergeRoutes: Array<[string, GitResult]> = [
+    ["rev-parse --git-dir", ok()],
+    ["config --get remote.origin.url", ok("https://github.com/x/y.git\n")],
+    ["config --get remote.upgrade-upstream.url", ok("")],
+    ["rev-parse upgrade-upstream/main", ok(`${UPSTREAM}\n`)],
+    ["diff --quiet", fail("local content delta", 1)],
+    ["rev-parse HEAD", ok(`${MERGE}\n`)],
+    ["status --porcelain", ok("")],
+  ];
+
+  it("materializes LFS objects in the workspace before stamping", async () => {
+    const git = fakeGit(cleanMergeRoutes);
+    await prepareUpgradeSource(baseWorkspace, git);
+    expect(
+      git.calls.some((c) => c.join(" ") === "-C /host-dpf/.upgrade-workspace lfs pull"),
+    ).toBe(true);
+  });
+
+  it("fails with a named reason when an LFS-tracked path is still a pointer stub", async () => {
+    const git = fakeGit([
+      ...cleanMergeRoutes,
+      [
+        "lfs ls-files",
+        ok("be8951db1c - docs/Reference/IT4IT_Functional_Criteria_Taxonomy.xlsx\n"),
+      ],
+    ]);
+    const r = await prepareUpgradeSource(baseWorkspace, git);
+    expect(r).toMatchObject({ ok: false, reason: "lfs-unmaterialized" });
+    if (r.ok) return;
+    expect(r.message).toContain("IT4IT_Functional_Criteria_Taxonomy.xlsx");
+    // Never push a tree the promoter cannot build.
+    expect(git.calls.some((c) => c.includes("push"))).toBe(false);
+  });
+
+  it("stops when materialization cannot be verified at all (no git-lfs binary)", async () => {
+    const git = fakeGit([
+      ...cleanMergeRoutes,
+      ["lfs ls-files", fail("git: 'lfs' is not a git command", 1)],
+    ]);
+    const r = await prepareUpgradeSource(baseWorkspace, git);
+    expect(r).toMatchObject({ ok: false, reason: "lfs-unmaterialized" });
+    if (r.ok) return;
+    expect(r.message).toMatch(/git-lfs/);
+  });
+
+  it("proceeds when every tracked object is materialized", async () => {
+    const git = fakeGit([
+      ...cleanMergeRoutes,
+      [
+        "lfs ls-files",
+        ok("be8951db1c * docs/Reference/IT4IT_Functional_Criteria_Taxonomy.xlsx\n"),
+      ],
+    ]);
+    const r = await prepareUpgradeSource(baseWorkspace, git);
+    expect(r).toEqual({ ok: true, mode: "upstream", stamp: MERGE, upstreamSha: UPSTREAM });
+  });
+
   it("advances an upstream-only install to the exact canonical upstream commit", async () => {
     const git = fakeGit([
       ["rev-parse --git-dir", ok()],

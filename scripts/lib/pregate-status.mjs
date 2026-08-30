@@ -30,15 +30,23 @@
 //
 // Pure aside from injected readers, so the verdict logic unit-tests without a
 // gate run or a filesystem.
+//
+// BI-51353470: a record whose status is queued/cancelled never ran — that is
+// INCONCLUSIVE, not FAIL. A metadata candidateSha that is not HEAD is STALE
+// in the headline, not FAIL with a buried metadata line.
 
 /** Terminal verdicts, ordered worst-to-best for slot reconciliation. */
 export const PREGATE_VERDICTS = Object.freeze([
   "NO-RECORD",
+  "INCONCLUSIVE",
   "FAIL",
   "STALE",
   "PENDING",
   "PASS",
 ]);
+
+/** Statuses that mean the gate was never admitted / never finished. Not FAIL. */
+const UNFINISHED_GATE_STATUSES = new Set(["queued", "cancelled"]);
 
 function rank(verdict) {
   const index = PREGATE_VERDICTS.indexOf(verdict);
@@ -187,6 +195,25 @@ export function classifySlotRecord({ state, metadata, headSha, headBranch = "", 
   }
 
   if (state.gatePassed !== true) {
+    // BI-51353470: a metadata candidateSha that is not HEAD is STALE in the
+    // headline, not FAIL with a buried metadata line. Observed: FAIL quoting
+    // a previous run's vitest command while gated claimed the current HEAD.
+    if (candidateSha && headSha && candidateSha !== headSha) {
+      return {
+        ...base,
+        verdict: "STALE",
+        reason: `metadata record gated ${candidateSha.slice(0, 12)}, not HEAD ${headSha.slice(0, 12)} — re-run pregate`,
+        staleness: "metadata-mismatch",
+      };
+    }
+    const status = String(state.status || "");
+    if (UNFINISHED_GATE_STATUSES.has(status)) {
+      return {
+        ...base,
+        verdict: "INCONCLUSIVE",
+        reason: `gate record status ${status} — the gate did not run. This is not a failure of the diff. Re-run pregate.`,
+      };
+    }
     return {
       ...base,
       verdict: "FAIL",

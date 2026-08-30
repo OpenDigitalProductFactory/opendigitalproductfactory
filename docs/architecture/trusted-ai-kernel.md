@@ -51,10 +51,10 @@ The following implementation-neutral view places the TAK runtime boundary inside
 AI-coworker operating system. It is independently derived from DPF's TAK, GAID, TAK-JSI,
 DigitalProduct, and work-allocation semantics in response to the bounded operator direction recorded
 as `OP-CSDM-02` in the
-[FPAW source register](four-portfolio-archetype-ai-workforce-operating-standard.md#20-research-and-source-register).
+[PAAW source register](four-portfolio-archetype-ai-workforce-operating-standard.md#20-research-and-source-register).
 ServiceNow's current [Common Service Data Model (CSDM) shapes](https://www.servicenow.com/docs/r/application-portfolio-management/eaw-modeling-csdm-shapes.html)
 page, identified by `SCIT-SNOW-AICT-GUIDANCE`, is a `reference-only` implementation target for the
-source-validated [FPAW Section 13.4 bridge](four-portfolio-archetype-ai-workforce-operating-standard.md#134-source-validated-csdm-5-and-aict-bridge);
+source-validated [PAAW Section 13.4 bridge](four-portfolio-archetype-ai-workforce-operating-standard.md#134-source-validated-csdm-5-and-aict-bridge);
 its figure, terminology, and vendor data model were not copied into this view. A concrete ServiceNow
 adapter still requires release/plugin/dictionary and relationship fingerprints.
 
@@ -113,7 +113,7 @@ flowchart TB
         DEP["Deployment"]
         INS["DigitalProductInstance"]
         SVI["ServiceInstance"]
-        BND["FPAW AIProductOperatingBinding"]
+        BND["PAAW AIProductOperatingBinding"]
         EVD["Controls, provenance, observations, and evidence"]
         DP --> DES --> REL --> AST --> PKG --> DIN --> DEP --> INS --> SVI
         REL -. "referenced by" .-> OPF
@@ -140,7 +140,7 @@ services, gateways, models, directives, data, and runtime state are independent 
 `AUTH`, not a linear transformation chain. The consequential-action path crosses `AUTH` and produces attributable evidence. TAK owns the
 authority decision, runtime gate, delegation, and execution-receipt semantics. GAID owns the
 AgentSubject and operating-profile identity; TAK-JSI owns job/activity qualification; the
-[Four-Portfolio Archetype and AI Workforce Operating
+[Portfolio Aligned Agent and Workforce Operating
 Standard](four-portfolio-archetype-ai-workforce-operating-standard.md) owns the Product, service,
 work, and lifecycle bridge. Offering, accepted agreement, entitlement, usage, asset, package,
 deployment, product instance, and service instance remain separate identities. Context nodes in this
@@ -149,7 +149,7 @@ view do not transfer that ownership to TAK.
 ### 1.2 AI-coworker lifecycle and architecture view
 
 The operator direction in `OP-CSDM-02` also calls for an implementation-neutral lifecycle picture.
-The view below is DPF's own expression. It separates the FPAW DigitalProduct lifecycle-state axis from
+The view below is DPF's own expression. It separates the PAAW DigitalProduct lifecycle-state axis from
 the IT4IT 3.0.1 seven-stream value network, architecture scope, and governed-entity maturity. The five
 product states are not aliases for IT4IT streams, and the seven streams are not a mandatory sequence.
 This is the lifecycle companion to the runtime stack above, not a vendor data model or a claim that
@@ -157,7 +157,7 @@ every state or stream is executed by TAK.
 
 ```mermaid
 flowchart LR
-    subgraph LIFE["FPAW DigitalProduct lifecycle-state axis"]
+    subgraph LIFE["PAAW DigitalProduct lifecycle-state axis"]
         IDEA["Idea<br/>Value hypothesis and candidate Product"]
         EVAL["Evaluate<br/>Outcomes, portfolio decision, feasibility and architecture"]
         BUILD["Build<br/>Design, acquire, compose, test, release and deploy"]
@@ -223,7 +223,7 @@ The solid five-state path governs Product lifecycle. The hub-and-spoke network p
 IT4IT streams without inventing a process order; dotted state-to-stream edges identify common
 touchpoints, not exclusive ownership or mandatory sequencing. Architecture bands overlap both axes:
 
-| Architecture band | FPAW product-lifecycle coverage | Typical IT4IT network touchpoints |
+| Architecture band | PAAW product-lifecycle coverage | Typical IT4IT network touchpoints |
 |---|---|---|
 | strategy and business model | Idea through Retire; stakeholder value, Outcomes, and four-portfolio decisions | Evaluate, Explore, plus Consume/Operate feedback |
 | business operational architecture | Evaluate through Operate, with retirement impact analysis | Explore, Consume, Operate |
@@ -239,7 +239,7 @@ Product state. A discovered
 operational record creates provisional typed projections and Gaps only; discovery **MUST NOT**
 synthesize a Product definition, release, or GAID subject identity.
 
-FPAW owns the Product, portfolio, work, service, and
+PAAW owns the Product, portfolio, work, service, and
 AIProductOperatingBinding semantics; GAID owns the enduring subject; TAK-JSI owns qualification; TAK
 owns the action-time authority, delegation, execution, and receipt boundary in Consume/Operate. An AI
 Agent record, design, release, asset, package, deployment, product instance, service instance,

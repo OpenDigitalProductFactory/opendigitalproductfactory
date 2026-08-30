@@ -14,9 +14,11 @@
 //   node scripts/render-doc-diagrams.mjs           # render/refresh SVGs
 //   node scripts/render-doc-diagrams.mjs --check    # fail if any SVG is stale/missing/orphaned
 //
-// Requires mmdc (@mermaid-js/mermaid-cli) — runs in the convergence sandbox or a
-// compile-ready environment, NOT a source-only worktree. Override the binary
-// with MMDC=/path/to/mmdc.
+// Requires @mermaid-js/mermaid-cli AND its puppeteer browser — runs in the
+// convergence sandbox or a compile-ready environment, NOT a source-only
+// worktree. The mermaid-cli JS entry is resolved and run through the current
+// Node, which is portable across platforms; override with
+// MMDC=/path/to/mermaid-cli/src/cli.js.
 
 import fs from "node:fs";
 import os from "node:os";
@@ -41,7 +43,58 @@ const SOURCE_DIRS = [
 const DIAGRAMS_ABS = path.join(REPO_ROOT, DIAGRAMS_DIR);
 const MANIFEST = path.join(DIAGRAMS_ABS, "manifest.json");
 const PORTAL_VERSIONS = path.join(REPO_ROOT, "apps", "web", "lib", "docs", "diagram-versions.generated.mjs");
-const MMDC = process.env.MMDC || path.join(REPO_ROOT, "node_modules", ".bin", "mmdc");
+// Resolve mermaid-cli's JS ENTRY by default, not the `.bin` shim.
+//
+// `node_modules/.bin/mmdc` is a POSIX `sh` script; on Windows the runnable
+// sibling is `mmdc.CMD`, and Node's execFileSync refuses to spawn either
+// without a shell. The failure surfaces as an execFileSync object dump with
+// `pid: 0` and no stderr, which reads as an unexplained crash rather than
+// "wrong file for this platform" (BI-334CB7DE).
+//
+// Running the JS entry through the CURRENT Node interpreter is portable on
+// every platform and needs no shell, so it is the default. The `.bin` shim
+// stays as the fallback for a layout where the entry is missing, and MMDC
+// still overrides both.
+function resolveMmdc() {
+  if (process.env.MMDC) return process.env.MMDC;
+  const jsEntry = path.join(REPO_ROOT, "node_modules", "@mermaid-js", "mermaid-cli", "src", "cli.js");
+  if (fs.existsSync(jsEntry)) return jsEntry;
+  return path.join(REPO_ROOT, "node_modules", ".bin", "mmdc");
+}
+const MMDC = resolveMmdc();
+
+/**
+ * Extract every ```mermaid fence body from one markdown document, in order.
+ *
+ * Exported and pure so the line-ending invariant is directly testable: fence
+ * content is hashed to decide whether a committed SVG is stale, so CR must not
+ * survive into that hash (BI-334CB7DE).
+ */
+export function extractFenceBodies(text) {
+  // Strip CR before splitting. A file rewritten with CRLF endings would
+  // otherwise re-hash EVERY fence in it and demand a re-render even though no
+  // diagram changed - and git normalises on commit, so `git diff` shows nothing
+  // to explain it. Line endings are not part of a diagram's identity.
+  const lines = String(text).replace(/\r\n?/g, "\n").split("\n");
+  const bodies = [];
+  let fence = null;
+  let buf = [];
+  for (const line of lines) {
+    const m = line.match(/^\s*(```+|~~~+)\s*mermaid\s*$/i);
+    if (!fence && m) {
+      fence = m[1].slice(0, 3);
+      buf = [];
+      continue;
+    }
+    if (fence && line.trimStart().startsWith(fence)) {
+      bodies.push(buf.join("\n").trim());
+      fence = null;
+      continue;
+    }
+    if (fence) buf.push(line);
+  }
+  return bodies;
+}
 
 /** Collect every ```mermaid fence: { slug, index, content }. */
 function collectFences() {
@@ -53,20 +106,8 @@ function collectFences() {
       if (!e.name.endsWith(".md")) continue;
       const rel = path.relative(REPO_ROOT, full).split(path.sep).join("/");
       const slug = diagramSlug(rel);
-      const lines = fs.readFileSync(full, "utf-8").split("\n");
-      let fence = null;
-      let buf = [];
-      let index = 0;
-      for (const line of lines) {
-        const m = line.match(/^\s*(```+|~~~+)\s*mermaid\s*$/i);
-        if (!fence && m) { fence = m[1].slice(0, 3); buf = []; continue; }
-        if (fence && line.trimStart().startsWith(fence)) {
-          fences.push({ slug, index: index++, content: buf.join("\n").trim() });
-          fence = null;
-          continue;
-        }
-        if (fence) buf.push(line);
-      }
+      const bodies = extractFenceBodies(fs.readFileSync(full, "utf-8"));
+      bodies.forEach((content, index) => fences.push({ slug, index, content }));
     }
   };
   for (const dir of SOURCE_DIRS) walk(dir);
@@ -94,9 +135,25 @@ function renderOne(content, outAbs, tmpDir, puppeteerCfg) {
   const [cmd, args] = /\.[cm]?js$/i.test(MMDC)
     ? [process.execPath, [MMDC, ...mmdcArgs]]
     : [MMDC, mmdcArgs];
-  execFileSync(cmd, args, {
-    stdio: ["ignore", "ignore", "inherit"],
-  });
+  try {
+    execFileSync(cmd, args, {
+      stdio: ["ignore", "ignore", "inherit"],
+    });
+  } catch (err) {
+    // mermaid-cli drives headless Chrome through puppeteer. A worktree that
+    // installed dependencies without the browser download fails here, and the
+    // raw execFileSync error is an object dump that names neither cause nor
+    // remedy. Say both (BI-334CB7DE).
+    const hint =
+      "\n  Rendering a Mermaid fence needs mermaid-cli AND its puppeteer browser." +
+      "\n  If the error above mentions chrome-headless-shell or a browser download," +
+      "\n  install it once:  npx puppeteer browsers install chrome-headless-shell" +
+      `\n  Binary in use: ${MMDC}` +
+      "\n  Override with MMDC=/path/to/mermaid-cli/src/cli.js if it lives elsewhere.";
+    throw new Error(`render-doc-diagrams: failed to render ${path.relative(REPO_ROOT, outAbs)}${hint}`, {
+      cause: err,
+    });
+  }
   fs.writeFileSync(outAbs, normalizeDocDiagramSvg(fs.readFileSync(outAbs, "utf-8")));
   fs.rmSync(tmp, { force: true });
 }

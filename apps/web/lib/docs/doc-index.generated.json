@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 691,
+  "pageCount": 693,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -1605,7 +1605,9 @@
       "publishedPublic": true,
       "publishedPortal": false,
       "anchors": [
-        "four-portfolio-archetype-and-ai-workforce-operating-standard",
+        "portfolio-aligned-agent-and-workforce-operating-standard",
+        "naming-and-harmonization-posture",
+        "revision-020-rename-and-governed-migration",
         "abstract",
         "1-status-scope-and-normative-language",
         "11-status",
@@ -2729,6 +2731,7 @@
         "dpf-edge-node-deployment-topology",
         "the-one-sentence-model",
         "what-an-edge-node-is-not",
+        "edge-nodes-also-find-your-other-dpf-installs",
         "edge-nodes-are-opt-in",
         "pick-your-situation",
         "a-map-the-network-from-the-machine-that-runs-dpf-co-located",
@@ -4411,6 +4414,19 @@
         "spec-references"
       ]
     },
+    "docs/founder-kernel/wiki/principles/report-only-the-verdict-you-reached.md": {
+      "publicHref": "/founder-kernel/wiki/principles/report-only-the-verdict-you-reached/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "report-only-the-verdict-you-reached",
+        "why-this-exists",
+        "what-to-do",
+        "the-consequence-clause",
+        "related"
+      ]
+    },
     "docs/founder-kernel/wiki/principles/reporting-read-model-boundaries.md": {
       "publicHref": "/founder-kernel/wiki/principles/reporting-read-model-boundaries/",
       "portalHref": null,
@@ -5065,6 +5081,7 @@
         "e-verify-tls-is-in-the-path",
         "cert-lifecycle",
         "discovery-scope-what-gets-scanned-and-how-to-control-it",
+        "finding-nearby-dpf-installs-federation-candidates",
         "snmp-polling-c3-discovering-switches-routers-aps",
         "quick-setup",
         "config-file-format",
@@ -5172,6 +5189,24 @@
         "run-the-rehearsal",
         "evidence-files",
         "backlog-and-provider-state"
+      ]
+    },
+    "docs/install/serve-the-directory.md": {
+      "publicHref": "/install/serve-the-directory/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "serving-the-directory-ldap",
+        "what-you-get",
+        "prerequisites",
+        "turning-it-on",
+        "checking-it-with-a-real-client",
+        "settings",
+        "letting-other-hosts-bind",
+        "if-you-moved-the-pki-directory",
+        "when-it-will-not-start",
+        "what-this-does-not-do"
       ]
     },
     "docs/install/verification-runbook.md": {
@@ -8775,6 +8810,7 @@
         "what-bet-5-does",
         "why-this-box-needs-a-one-time-bootstrap",
         "consumer-release-installs-artifact-native-upgrades",
+        "ordinary-restart-after-a-consumer-upgrade",
         "preconditions-capture-current-state-first",
         "step-1-bootstrap-the-promoter-from-current-main",
         "step-2-trigger-the-upgrade",
@@ -10591,6 +10627,7 @@
         "degenerate-environment-fixtures",
         "common-drift-and-how-to-stay-on-script",
         "live-blocker-references-guard",
+        "agent-principal-convergence-guard",
         "label-association-guard-ratchet",
         "what-this-gate-is-not"
       ]

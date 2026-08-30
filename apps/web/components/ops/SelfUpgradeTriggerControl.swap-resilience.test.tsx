@@ -124,7 +124,7 @@ describe("isExpectedDuringSwap", () => {
 // ─── Forced trigger severed by the swap ────────────────────────────────────
 
 describe("SelfUpgradeTriggerControl – forced upgrade swap resilience", () => {
-  it("shows a reconnecting state (not the crash boundary) when the forced upgrade swaps the portal mid-request", async () => {
+  it("keeps an interrupted trigger admission latched until durable server state changes", async () => {
     triggerMock.mockRejectedValue(makeE394());
 
     render(<SelfUpgradeTriggerControl {...baseProps} />);
@@ -133,17 +133,15 @@ describe("SelfUpgradeTriggerControl – forced upgrade swap resilience", () => {
     fireEvent.click(screen.getByRole("button", { name: /upgrade now/i }));
 
     await waitFor(() => {
-      expect(screen.getByText(/Applying the upgrade/i)).toBeInTheDocument();
+      expect(screen.getByText(/Admission response interrupted:/i)).toBeInTheDocument();
     });
 
-    // The raw Next transport message must never reach the operator as an error.
-    expect(
-      screen.queryByText(/An unexpected response was received from the server/i),
-    ).not.toBeInTheDocument();
-    expect(screen.queryByText(/Not queued/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /upgrade now/i })).toBeDisabled();
+    expect(screen.getByText(/do not click again/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Not admitted:/i)).not.toBeInTheDocument();
   });
 
-  it("surfaces a genuine (non-swap) trigger failure inline instead of reconnecting", async () => {
+  it("treats every thrown trigger response as indeterminate because admission may already be durable", async () => {
     triggerMock.mockRejectedValue(new Error("Unauthorized"));
 
     render(<SelfUpgradeTriggerControl {...baseProps} />);
@@ -151,10 +149,11 @@ describe("SelfUpgradeTriggerControl – forced upgrade swap resilience", () => {
     fireEvent.click(screen.getByRole("button", { name: /upgrade now/i }));
 
     await waitFor(() => {
-      expect(screen.getByText(/Not queued:/i)).toBeInTheDocument();
+      expect(screen.getByText(/Admission response interrupted:/i)).toBeInTheDocument();
     });
     expect(screen.getByText(/Unauthorized/i)).toBeInTheDocument();
     expect(screen.queryByText(/Applying the upgrade/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /upgrade now/i })).toBeDisabled();
   });
 
   it("treats a severed Force-now request during a drain as applying, not a crash", async () => {
@@ -178,7 +177,7 @@ describe("SelfUpgradeTriggerControl – forced upgrade swap resilience", () => {
     });
   });
 
-  it("clears the reconnecting banner once the swapped-in portal returns fresh data", async () => {
+  it("clears the indeterminate admission latch once a durable run appears", async () => {
     triggerMock.mockRejectedValue(makeE394());
 
     const { rerender } = render(<SelfUpgradeTriggerControl {...baseProps} />);
@@ -187,7 +186,7 @@ describe("SelfUpgradeTriggerControl – forced upgrade swap resilience", () => {
     fireEvent.click(screen.getByRole("button", { name: /upgrade now/i }));
 
     await waitFor(() => {
-      expect(screen.getByText(/Applying the upgrade/i)).toBeInTheDocument();
+      expect(screen.getByText(/Admission response interrupted:/i)).toBeInTheDocument();
     });
 
     // The poll reaches the new container: a fresh run is now visible.
@@ -201,7 +200,7 @@ describe("SelfUpgradeTriggerControl – forced upgrade swap resilience", () => {
     );
 
     await waitFor(() => {
-      expect(screen.queryByText(/Applying the upgrade/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Admission response interrupted:/i)).not.toBeInTheDocument();
     });
   });
 

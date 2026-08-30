@@ -19,6 +19,10 @@ import {
 } from "./mcp-task-capacity-contract";
 import { executeRemoteTaskAttempt } from "./mcp-task-execution";
 import {
+  recoverStaleApprovalOnReplay,
+  resumeApprovedRemoteTask,
+} from "./mcp-task-submit-approval-recovery";
+import {
   parseInitiativeReviewBinding,
   requiredToolNames,
   validateInitiativeReviewAuthorityScope,
@@ -130,6 +134,8 @@ export type ExistingRemoteTask = {
   status: string;
   progressPayload: unknown;
   a2aMetadata: unknown;
+  lastHeartbeatAt: Date | null;
+  completedAt: Date | null;
   updatedAt: Date;
 };
 
@@ -140,27 +146,9 @@ type TerminalWriterWait = {
   resumeMode: "same-taskrun";
   attempt: number;
   observedAt: string;
+  dispatchContract?: "required-tool-call";
+  noncompliance?: "prose-without-required-writer";
 };
-
-type ApprovedRemoteTaskEnvelope = {
-  id: string;
-  threadId: string;
-  manifestActionId: string;
-};
-
-const GOVERNED_AUDIT_PARAMETER_KEYS = new Set([
-  "_surface",
-  "_takAlignment",
-  "_takPrecondition",
-]);
-
-function originalToolParameters(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  return Object.fromEntries(
-    Object.entries(value as Record<string, unknown>)
-      .filter(([key]) => !GOVERNED_AUDIT_PARAMETER_KEYS.has(key)),
-  );
-}
 
 function storedRequestDigest(existing: ExistingRemoteTask): string | null {
   const metadata = existing.a2aMetadata && typeof existing.a2aMetadata === "object"
@@ -191,6 +179,8 @@ function parseTerminalWriterWait(value: unknown): TerminalWriterWait | null {
     || !Number.isInteger(wait["attempt"])
     || Number(wait["attempt"]) < 1
     || !optionalString(wait["observedAt"])
+    || (wait["dispatchContract"] !== undefined && wait["dispatchContract"] !== "required-tool-call")
+    || (wait["noncompliance"] !== undefined && wait["noncompliance"] !== "prose-without-required-writer")
   ) return null;
   return wait as TerminalWriterWait;
 }
@@ -314,6 +304,7 @@ async function reserveTerminalWriterReplay(input: {
     resumeMode: "same-taskrun",
     attempt: existingWait ? existingWait.attempt + 1 : 2,
     observedAt: now,
+    dispatchContract: "required-tool-call",
   };
   const reserved = await reserveTaskRunGenerationWorking({
     taskRunId: input.existing.taskRunId,
@@ -329,108 +320,6 @@ async function reserveTerminalWriterReplay(input: {
   return reserved
     ? { wait, readerExecutions: readerExecutions as PersistedTerminalReaderExecution[] }
     : null;
-}
-
-async function resumeApprovedRemoteTask(input: {
-  existing: ExistingRemoteTask;
-  token: RemoteTaskSubmitAuth;
-  userContext: UserContext;
-  parsed: RemoteTaskSubmitParams;
-}): Promise<RemoteTaskSubmitOutcome | null> {
-  if (input.existing.status !== "input-required") return null;
-
-  const envelope = await prisma.coworkerActionEnvelope.findFirst({
-    where: {
-      taskRunId: input.existing.taskRunId,
-      delegatingUserId: input.token.userId,
-      status: "approved",
-      expiresAt: { gt: new Date() },
-    },
-    orderBy: { createdAt: "desc" },
-    select: { id: true, threadId: true, manifestActionId: true },
-  }) as ApprovedRemoteTaskEnvelope | null;
-  if (!envelope) return null;
-
-  const proposedExecution = await prisma.toolExecution.findFirst({
-    where: {
-      taskRunId: input.existing.taskRunId,
-      toolName: envelope.manifestActionId,
-      success: false,
-      result: { path: ["data", "envelopeId"], equals: envelope.id },
-    },
-    orderBy: { createdAt: "desc" },
-    select: { parameters: true },
-  });
-  const args = originalToolParameters(proposedExecution?.parameters);
-  if (!args) return null;
-
-  const reservation = await prisma.taskRun.updateMany({
-    where: {
-      taskRunId: input.existing.taskRunId,
-      status: "input-required",
-      updatedAt: input.existing.updatedAt,
-    },
-    data: {
-      progressPayload: {
-        ...(input.existing.progressPayload && typeof input.existing.progressPayload === "object"
-          && !Array.isArray(input.existing.progressPayload)
-          ? input.existing.progressPayload as Record<string, unknown>
-          : {}),
-        approvalResumeReserved: true,
-      },
-    },
-  });
-  if (reservation.count !== 1) return null;
-  await markTaskRunWorking(input.existing.taskRunId);
-
-  const result = await executeAutonomousWorkTool({
-    toolName: envelope.manifestActionId,
-    args,
-    userId: input.token.userId,
-    userContext: input.userContext,
-    routeContext: input.parsed.routeContext,
-    agentId: resolveCanonicalAgentId(input.parsed.agentId),
-    threadId: envelope.threadId,
-    taskRunId: input.existing.taskRunId,
-    apiTokenId: input.token.tokenId,
-    tokenScope: input.token.capability,
-    externalAccessEnabled: true,
-  });
-  const currentRun = await prisma.taskRun.findUnique({
-    where: { taskRunId: input.existing.taskRunId },
-    select: { status: true },
-  });
-  const status = currentRun?.status === "input-required"
-    ? "input-required"
-    : result.success ? "completed" : "failed";
-  await prisma.taskRun.update({
-    where: { taskRunId: input.existing.taskRunId },
-    data: {
-      status,
-      ...(status === "input-required" ? {} : { completedAt: new Date() }),
-      progressPayload: {
-        summary: result.message,
-        riskClass: input.parsed.riskClass,
-        executedToolCount: 1,
-        resumedFromApproval: true,
-      },
-    },
-  });
-
-  return {
-    kind: "result",
-    result: {
-      taskRunId: input.existing.taskRunId,
-      status,
-      idempotentReplay: true,
-      resumedFromApproval: true,
-      requiresApproval: status === "input-required",
-      executedToolCount: 1,
-      content: remoteTaskContent(result.message),
-      isError: status === "failed",
-      ...(result.entityId ? { entityId: result.entityId } : {}),
-    },
-  };
 }
 
 export async function resumeWaitingRemoteTask(input: {
@@ -482,6 +371,8 @@ export async function resumeWaitingRemoteTask(input: {
         status: true,
         progressPayload: true,
         a2aMetadata: true,
+        lastHeartbeatAt: true,
+        completedAt: true,
         updatedAt: true,
       },
     }) as ExistingRemoteTask | null;
@@ -562,6 +453,8 @@ export async function submitRemoteCoworkerTask(input: {
       status: true,
       progressPayload: true,
       a2aMetadata: true,
+      lastHeartbeatAt: true,
+      completedAt: true,
       updatedAt: true,
     },
   };
@@ -593,6 +486,17 @@ export async function submitRemoteCoworkerTask(input: {
         parsed,
       });
       if (resumed) return resumed;
+    }
+    if (storedRequestDigest(existing) === requestDigest && terminalToolPolicy) {
+      const recovered = await recoverStaleApprovalOnReplay({
+        existing,
+        requestDigest,
+        writerToolName: terminalToolPolicy.writerToolName,
+        token,
+        userContext,
+        parsed,
+      });
+      if (recovered) return recovered;
     }
     const terminalWriterReservation = terminalToolPolicy
       ? await reserveTerminalWriterReplay({

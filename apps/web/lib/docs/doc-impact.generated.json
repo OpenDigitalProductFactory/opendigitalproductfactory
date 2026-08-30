@@ -1256,6 +1256,9 @@
     "docs/testing/ci-observation-baseline.json": [
       "docs/testing/ci-evidence.md"
     ],
+    "dpf-start.ps1": [
+      "docs/runbooks/bet5-windows-self-upgrade.md"
+    ],
     "e2e/fixtures/evidence.ts": [
       "docs/architecture/agent-client-capability-parity.md"
     ],
@@ -1535,6 +1538,9 @@
     "scripts/check-agent-capability-integrity.mjs": [
       "docs/architecture/2026-08-20-governed-autonomy-architecture.md"
     ],
+    "scripts/check-agent-principal-convergence-wired.mjs": [
+      "docs/testing/pre-pr-gate.md"
+    ],
     "scripts/check-application-boundaries.mjs": [
       "docs/architecture/2026-08-16-simplify-and-strengthen-architecture-pass.md",
       "docs/architecture/application-boundaries.md"
@@ -1566,6 +1572,9 @@
     ],
     "scripts/check-docs-impact.mjs": [
       "docs/architecture/enforced-ci-gates.md"
+    ],
+    "scripts/check-guard-conformance-marks.mjs": [
+      "docs/testing/pre-pr-gate.md"
     ],
     "scripts/check-guards.mjs": [
       "docs/architecture/theme-aware-styling-runbook.md",
@@ -1769,6 +1778,9 @@
       "docs/operations/runtime-glossary.md"
     ],
     "scripts/lib/local-integration-ci.mjs": [
+      "docs/testing/pre-pr-gate.md"
+    ],
+    "scripts/lib/local-integration-status.mjs": [
       "docs/testing/pre-pr-gate.md"
     ],
     "scripts/lib/mcp-client.mjs": [
@@ -2844,6 +2856,7 @@
     ],
     "docs/runbooks/bet5-windows-self-upgrade.md": [
       "apps/web/lib/self-upgrade/host-memory-preflight.ts",
+      "dpf-start.ps1",
       "scripts/promote.sh"
     ],
     "docs/security/2026-05-24-shift-left-rollout.md": [
@@ -2973,6 +2986,8 @@
       "apps/web/lib/testing/degenerate-env/probe-conformance.test.ts",
       "docker-compose.local-ci.yml",
       "packages/dpf-skill-pack/hooks/pregate-evidence-guard.mjs",
+      "scripts/check-agent-principal-convergence-wired.mjs",
+      "scripts/check-guard-conformance-marks.mjs",
       "scripts/check-guards.mjs",
       "scripts/check-label-association.mjs",
       "scripts/check-live-blocker-references.mjs",
@@ -2985,6 +3000,7 @@
       "scripts/lib/converge-hooks-dir.mjs",
       "scripts/lib/hooks-dir.mjs",
       "scripts/lib/local-integration-ci.mjs",
+      "scripts/lib/local-integration-status.mjs",
       "scripts/local-ci-runner.mjs",
       "scripts/pr-health.mjs",
       "scripts/set-hooks-path.mjs",

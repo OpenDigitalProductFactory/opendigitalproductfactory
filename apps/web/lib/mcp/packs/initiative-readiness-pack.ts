@@ -1,6 +1,8 @@
 import type { InitiativeArtifactRef, InitiativeGateKey } from "@/lib/backlog/initiative-readiness";
 import { prisma } from "@dpf/db";
 import {
+  RESEARCH_DEFINITIONS,
+  READINESS_PROFILES,
   recordInitiativeGateReceipt,
   recordInitiativeObjectiveMappingProposal,
   recordInitiativeSpecApproval,
@@ -83,9 +85,26 @@ function inputSchemaFor(name: string, lane: Lane): ToolDefinition["inputSchema"]
   };
 }
 
+/**
+ * BI-3AE38A1F: the `research` lane existed and nothing said what satisfies it.
+ * An author who had genuinely verified a defect — confirmed it on a named ref,
+ * proved it with a failing-then-passing test, ruled out candidate causes by
+ * running them — had no way to know that record was what the gate wanted, and
+ * discovered the bar only by being refused. State it on the tool that records
+ * it, per profile, so the requirement is legible before the work starts.
+ */
+function gateGuidance(lane: Lane): string {
+  if (!lane.gates.includes("research")) return "";
+  const shapes = READINESS_PROFILES
+    .map((profile) => [profile, RESEARCH_DEFINITIONS[profile]] as const)
+    .filter((entry): entry is [typeof entry[0], NonNullable<typeof entry[1]>] => entry[1] !== null)
+    .map(([profile, definition]) => `${profile}: ${definition.summary} (${definition.satisfiedBy.join("; ")})`);
+  return ` What satisfies the research gate depends on the item's profile — ${shapes.join(" | ")}.`;
+}
+
 function definitionBase(lane: Lane): Omit<ToolDefinition, "name" | "inputSchema"> {
   return {
-    description: `Record authenticated initiative evidence for only these gate lanes: ${lane.gates.join(", ")}. Artifact identity, digest, subject, author, reviewer, and authority are server resolved.`,
+    description: `Record authenticated initiative evidence for only these gate lanes: ${lane.gates.join(", ")}. Artifact identity, digest, subject, author, reviewer, and authority are server resolved.${gateGuidance(lane)}`,
     requiredCapability: lane.capability,
     executionMode: "immediate",
     sideEffect: true,

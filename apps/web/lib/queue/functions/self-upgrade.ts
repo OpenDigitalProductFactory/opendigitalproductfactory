@@ -19,8 +19,7 @@ import {
   evaluateReleaseBatch,
 } from "@/lib/self-upgrade/release-batch";
 import { prepareUpgradeSource, defaultGitRunner } from "@/lib/self-upgrade/prepare-source";
-// Pure constant from a spawn-free module — the host-only ./promoter runtime must
-// NOT be statically imported into this server bundle entrypoint (BI-98AF1066);
+// Pure constant only: never statically import the spawn-heavy promoter runtime
 // that is what the dynamic loadPromoterRuntime() below is for.
 import { PROMOTER_ALREADY_RUNNING_EXIT_CODE } from "@/lib/self-upgrade/promoter-exit-codes";
 import {
@@ -67,6 +66,7 @@ import {
   signalSwapComplete,
   failQuiescenceSwap,
 } from "@/lib/self-upgrade/quiescence";
+import { rejectDuplicateSelfUpgradeDelivery } from "@/lib/self-upgrade/delivery-admission";
 import {
   SELF_UPGRADE_CRON,
   SELF_UPGRADE_EVENT,
@@ -95,6 +95,8 @@ async function loadPromoterRuntime(): Promise<PromoterRuntime> {
 export async function runSelfUpgrade(
   params: SelfUpgradeRunEventData,
 ): Promise<Record<string, unknown>> {
+  const duplicate = await rejectDuplicateSelfUpgradeDelivery(params.runId);
+  if (duplicate) return duplicate;
   const config = await getSelfUpgradeConfig();
   const now = new Date();
   const cooldownMinutes = config.cooldownMinutes ?? DEFAULT_COOLDOWN_MINUTES;
@@ -635,10 +637,10 @@ export async function runSelfUpgrade(
       // Daemon-resolved host path, not an in-portal path; hostSourceMountPath
       // is no longer passed — runPromoter mounts to a fixed /host-source.
       // BI-A8A7CCFD — when isolated workspace is on, the promoter builds from
-      // the workspace HOST path (which holds the merged tree), not the
-      // operator's install clone. The promoter mounts whatever we hand it
+      // the workspace HOST path, not the operator install. It mounts whatever we hand it
       // here at `/host-source:ro` — same contract, just a different host dir.
       hostInstallPath: upgradeWorkspaceHostPath ?? hostInstallPathResolved,
+      canonicalInstallPath: hostInstallPathResolved,
       // The honest built identity from source prep (merge-commit SHA in upstream
       // mode, HEAD/-dirty in local mode). promote.sh re-derives this from the
       // tree's HEAD and cross-checks against it.

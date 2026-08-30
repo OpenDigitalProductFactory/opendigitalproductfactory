@@ -124,6 +124,7 @@ describe("loadBusinessPerformance", () => {
             asOf: null,
             metricValues: [],
             source: "business-performance-read-model",
+            applicable: true,
           };
         },
       }),
@@ -164,6 +165,59 @@ describe("loadBusinessPerformance", () => {
     expect(db.businessMetricRollup.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: { organizationId: "org-current" },
     }));
+  });
+
+  it("tells the truth (and reads no rollups) when the archetype has no metrics engine", async () => {
+    // BI-F359E1E9: a non-hospitality install would never produce a snapshot, so
+    // the surface must say "not available for this business type", not imply one
+    // is pending — and it must not run the rollup query at all.
+    const db = {
+      platformSetupProgress: {
+        findUnique: vi.fn(async () => ({ organizationId: "org-platform" })),
+      },
+      storefrontConfig: {
+        findUnique: vi.fn(async () => ({
+          organizationId: "org-platform",
+          archetype: { archetypeId: "software-platform" },
+        })),
+        findMany: vi.fn(),
+      },
+      businessMetricRollup: {
+        findMany: vi.fn(),
+      },
+    };
+
+    const result = await createBusinessPerformanceProvider(db as never).load({ userId: "user-owner" });
+
+    expect(result).toMatchObject({
+      status: "not-configured",
+      applicable: false,
+      reason: expect.stringContaining("not available for this business type"),
+    });
+    expect(db.businessMetricRollup.findMany).not.toHaveBeenCalled();
+  });
+
+  it("keeps the pending (applicable) state for a supported archetype with no snapshot yet", async () => {
+    const db = {
+      platformSetupProgress: {
+        findUnique: vi.fn(async () => ({ organizationId: "org-current" })),
+      },
+      storefrontConfig: {
+        findUnique: vi.fn(async () => ({
+          organizationId: "org-current",
+          archetype: { archetypeId: "restaurant" },
+        })),
+        findMany: vi.fn(),
+      },
+      businessMetricRollup: {
+        findMany: vi.fn(async () => []),
+      },
+    };
+
+    const result = await createBusinessPerformanceProvider(db as never).load({ userId: "user-owner" });
+
+    expect(result).toMatchObject({ status: "not-configured", applicable: true });
+    expect(db.businessMetricRollup.findMany).toHaveBeenCalled();
   });
 
   it("refuses an unmapped user in a multi-organization install without reading any rollups", async () => {

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { ok, type ActionResult } from "@/lib/shared/action-result";
 
+import { readinessRequirement } from "./readiness-guidance";
 import type { InitiativeReadinessDecision, ReadinessCode } from "./types";
 
 export type TerminalTransitionClient = {
@@ -96,12 +97,12 @@ function staleDecision(decision: InitiativeReadinessDecision): InitiativeReadine
     decisionId: nextDecisionId(),
     verdict: "denied",
     unmet: [],
-    blockers: [{
+    blockers: [readinessRequirement({
       code: "STALE_EVIDENCE",
       state: "blocked",
       accountableRole: "delivery-coordinator",
-      evidenceRefs: [],
-    }],
+      profile: decision.profile,
+    })],
   };
 }
 

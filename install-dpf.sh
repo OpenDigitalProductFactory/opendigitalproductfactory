@@ -712,8 +712,12 @@ if [ ! -f .env ]; then
     printf 'DPF_STATE_DIR=%s/.dpf\n' "$HOME" >> .env
   fi
   ok ".env created with generated secrets"
-  info "  Admin password: $ADMIN_PW_VAL"
-  info "  (Stored in .env; change before any non-local deployment)"
+  # Never print the generated password. The install log is the first thing an
+  # operator pastes into a public install-verification issue, and the issue
+  # template asks for exactly that paste -- so echoing the value here publishes
+  # it. Point at .env instead, matching the final summary below (#1767).
+  info "  Admin password: see ADMIN_PASSWORD in .env"
+  info "  (Change it before any non-local deployment)"
 else
   ok ".env already exists; preserving operator edits"
   # Even on an existing .env, ensure DPF_BACKUPS_HOST_PATH is set — operators

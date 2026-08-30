@@ -252,15 +252,16 @@ test("a started-then-released run with no failing command is a retry, not a verd
 });
 
 test("flags a metadata file that describes a different run", () => {
-  // The trap this closes: failing runs never rewrote the metadata, so it kept
-  // reporting the PREVIOUS run's success. Reading it after a failure yields a
-  // confident, wrong "it passed" — only the file mtime gave it away.
+  // Failing runs never rewrote the metadata, so it kept reporting the PREVIOUS
+  // run. BI-465B3D60 flagged that as buried staleness; BI-51353470 promotes it
+  // to STALE in the headline so the reader is not told the current HEAD failed.
   const out = classifySlotRecord({
     state: failingRecord(),
     metadata: { candidateSha: "oldersha", execution: { status: "passed", exitCode: 0 } },
     ...atHead,
   });
-  assert.equal(out.staleness, "metadata-describes-another-run");
+  assert.equal(out.verdict, "STALE");
+  assert.equal(out.staleness, "metadata-mismatch");
 });
 
 test("does not flag the metadata when it describes this run", () => {
@@ -360,4 +361,65 @@ test("the state's own failureReason outranks metadata either way", () => {
   });
 
   assert.match(out.reason, /typecheck failed/);
+});
+
+// BI-51353470: a record whose status is queued/cancelled never ran. FAIL is a
+// claim about the diff; INCONCLUSIVE is "this is not a verdict".
+test("a queued record that never ran is INCONCLUSIVE, not FAIL (BI-51353470)", () => {
+  const r = classifySlotRecord({
+    state: passingState({ gatePassed: false, status: "queued", evidenceRecordId: "" }),
+    metadata: { candidateSha: HEAD },
+    headSha: HEAD,
+    headBranch: "claude/topic",
+    now: NOW,
+  });
+  assert.equal(r.verdict, "INCONCLUSIVE");
+  assert.match(r.reason, /did not run|never ran|not a failure of the diff/i);
+  assert.doesNotMatch(r.reason, /local-ci-vitest-runner/);
+  assert.equal(exitCodeForVerdict(r.verdict), 1, "inconclusive is not a green light to push");
+});
+
+test("a cancelled record is INCONCLUSIVE, not FAIL (BI-51353470)", () => {
+  const r = classifySlotRecord({
+    state: passingState({ gatePassed: false, status: "cancelled", evidenceRecordId: "" }),
+    metadata: { candidateSha: HEAD },
+    headSha: HEAD,
+    now: NOW,
+  });
+  assert.equal(r.verdict, "INCONCLUSIVE");
+});
+
+test("a candidateSha/HEAD mismatch on an unfinished record is STALE in the headline (BI-51353470)", () => {
+  // Observed: FAIL with gated=HEAD @ 0m and metadata candidateSha of a previous
+  // commit, quoting that earlier run's vitest command as the reason.
+  const r = classifySlotRecord({
+    state: {
+      branch: "fix/build-studio-hide-the-guts",
+      sha: HEAD,
+      gatePassed: false,
+      status: "queued",
+      recordedAt: "2026-08-04T12:00:00.000Z",
+    },
+    metadata: {
+      candidateSha: OLD,
+      execution: { failedCommand: "node scripts/local-ci-vitest-runner.mjs" },
+    },
+    headSha: HEAD,
+    headBranch: "fix/build-studio-hide-the-guts",
+    now: NOW,
+  });
+  assert.equal(r.verdict, "STALE");
+  assert.equal(r.staleness, "metadata-mismatch");
+  assert.match(r.reason, /bbbbbbbbbbbb/);
+  assert.match(r.reason, /aaaaaaaaaaaa/);
+  assert.ok(
+    !r.reason.includes("local-ci-vitest-runner"),
+    `must not quote the previous run's command; got: ${r.reason}`,
+  );
+  const lines = formatStatusReport(r, {
+    headBranch: "fix/build-studio-hide-the-guts",
+    headSha: HEAD,
+    now: NOW,
+  });
+  assert.equal(lines[0], "local-CI gate: STALE");
 });
