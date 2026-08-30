@@ -9,7 +9,7 @@ import {
 import { inngest } from "../inngest-client";
 import { gateAtEntry } from "../quiescence-gates";
 
-const RECONCILE_CRON = "2,7,12,17,22,27,32,37,42,47,52,57 * * * *";
+const RECONCILE_CRON = "3,8,13,18,23,28,33,38,43,48,53,58 * * * *";
 
 export async function reconcileNonprodLeaseWaits(input: {
   now?: Date;
