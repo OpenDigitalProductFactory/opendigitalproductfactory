@@ -17,9 +17,11 @@ status: active
 >
 > **2026-08-30 competence-assurance continuation:** WikiSkill and Anthropic's automated-researcher
 > results do not change the Living Playbook ownership model. They add requirements at its evaluation
-> and qualification seams: evidence/knowledge/method separation, held-out evaluator isolation,
-> capability floors, anti-gaming controls, target-profile transfer evidence, and TAK-JSI
-> revalidation before activation. The canonical extension is
+> and qualification seams: evidence/knowledge/method separation, a Workroom coordinator acting as
+> the outer-loop Process Overseer, held-out evaluator isolation, capability floors, anti-gaming
+> controls, target-profile transfer evidence, and TAK-JSI revalidation before activation. The
+> overseer enforces the room contract and transition invariants while the inner learning method may
+> adapt; it is not the evaluator or activation authority. The canonical extension is
 > [`2026-08-30-paaw-competence-evolution-workroom-design.md`](2026-08-30-paaw-competence-evolution-workroom-design.md).
 
 - **Status:** active

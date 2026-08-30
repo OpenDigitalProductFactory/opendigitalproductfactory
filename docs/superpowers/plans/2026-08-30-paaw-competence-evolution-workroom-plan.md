@@ -61,6 +61,7 @@ dependency gate rather than inventing the missing carrier in this plan.
 | --- | --- | --- |
 | `BI-41460872` | Umbrella competence-evolution assurance outcome | open / build / xlarge |
 | `BI-636638A6` | Standards and design publication | open / build / medium |
+| `BI-3913EB49` | Workroom Process Overseer and shape conformance | open / build / large |
 | `BI-1B7BB954` | Evaluation integrity and target-profile transfer | open / build / large |
 | `BI-6DB95601` | TAK-JSI revalidation and activation interlock | open / build / large |
 
@@ -77,12 +78,17 @@ dependency gate rather than inventing the missing carrier in this plan.
 | `BI-3E99ACFA` | Owns A2A, GAID, TAK, and JSI readiness proof. | Delivery 2 activation and end-to-end canary |
 
 The Workroom dependencies do not block the bounded WorkPattern evaluator implementation. They block
-claiming the entire PAAW research-room profile as operationally conformant.
+claiming the entire PAAW research-room profile as operationally conformant. `BI-3913EB49` owns the
+controller that consumes those dependencies; it does not stretch participant persistence or the
+definition contract into a second responsibility.
 
 ## 5. Delivery graph
 
 ```text
 BI-636638A6  standards/design publication
+       |
+       +----> BI-3913EB49  Process Overseer + shape conformance
+       |             +---- depends on BI-4CB2EF76 and BI-EFFD97B4
        |
        v
 BI-1B7BB954  evaluation integrity + target-profile transfer
@@ -105,12 +111,15 @@ not ready.
 | Delivery | Total units | Feature/doc units | Refactor units | Refactor share |
 | --- | ---: | ---: | ---: | ---: |
 | `BI-636638A6` — documentation | 5 | 4 | 1 | 20% |
+| `BI-3913EB49` — Process Overseer | 20 | 16 | 4 | 20% |
 | `BI-1B7BB954` — evaluation integrity | 20 | 16 | 4 | 20% |
 | `BI-6DB95601` — revalidation interlock | 20 | 16 | 4 | 20% |
 
 Allowed refactoring:
 
 - one parser and vocabulary for experiment invalidation and integrity reasons;
+- one pure Workroom shape-conformance projection shared by finite transitions and standing-room
+  reconciliation;
 - one resource/seed/retry/submission budget projection;
 - one operating-profile material-change diff and affected-binding resolver;
 - one qualification/binding transition adapter after the canonical JSI carrier exists;
@@ -126,8 +135,11 @@ experiment/qualification product.
 - `docs/superpowers/specs/2026-08-30-paaw-competence-evolution-workroom-design.md`
 - `docs/architecture/four-portfolio-archetype-ai-workforce-operating-standard.md`
 - `docs/architecture/job-specific-intelligence.md`
+- `docs/architecture/work-shapes-and-the-decision-gate.md`
 - `docs/superpowers/specs/2026-06-27-governed-adaptive-playbooks-design.md`
 - `docs/superpowers/specs/2026-07-25-governed-playbook-experimentation-autonomous-build-studio-design.md`
+- `docs/superpowers/specs/2026-08-29-proactive-workrooms-design.md`
+- `docs/superpowers/plans/2026-08-29-proactive-workrooms.md`
 - this plan
 
 ### Steps
@@ -150,6 +162,61 @@ experiment/qualification product.
 
 Exit: the design and plan are indexed, linked, source-cited, live-BI covered, and make no false
 implementation claim.
+
+## 7A. Delivery W — Workroom Process Overseer (`BI-3913EB49`)
+
+### Dependency gate
+
+Verify `BI-4CB2EF76` supplies persisted participant/coordinator assignment and `BI-EFFD97B4`
+supplies the definition-level trigger, grant, and measure contract. If either carrier is not ready,
+implement only the pure declared-versus-observed conformance projection and keep dispatch
+enforcement default-off. Do not create a shadow roster or room-definition table.
+
+### Red tests first
+
+Add failing cases for:
+
+- zero, multiple, or only legacy-derived coordinators on an executable room;
+- a coordinator without applicable JSI or TAK authority;
+- missing required participant, out-of-order stage, absent prerequisite receipt, exhausted budget,
+  due review point, met stop condition, and attempted authority widening;
+- coordinator overlap with an independent evaluator or approver where the shape forbids it;
+- duplicate finite-room events and repeated standing-room reconciliation producing one disposition;
+- closure attempted with an unresolved deviation missing from the outcome packet.
+
+### Implementation
+
+1. Keep `coordinator` as the canonical role and distinguish explicit persisted assignment from
+   read-model derivation.
+2. Add one pure `WorkroomShapeConformance` result containing the exact collaboration-shape and
+   WorkShapeDefinition versions, observed state, typed deviations, disposition, and next permitted
+   transition.
+3. Consume it at convene, before and after stage dispatch, at review/close, and through a bounded
+   delta sweep for standing rooms. Append receipts and attention items on divergence; never invent
+   participants, skip gates, widen authority, or retry silently.
+4. Keep accountable owner, Process Overseer, executor, independent evaluator/reviewer, and approver
+   separate. Resolve AI-overseer eligibility through the canonical JSI/TAK paths.
+5. Extend the existing Workroom surface with coordinator identity/source, conformance state,
+   current and expected next stage, unresolved deviations, last check, and intervention reason.
+6. Spend the refactor allocation consolidating existing coordinator, shape-binding, stage, and
+   stop-condition checks behind the shared projection.
+
+### Verification
+
+- targeted coordinator, participation, shape, finite-transition, standing-drive, outcome-packet,
+  JSI, and TAK tests;
+- event replay and bounded-reconcile idempotency tests;
+- narrow/wide and light/dark UI inspection that distinguishes membership from presence and
+  explicit coordinator assignment from derivation;
+- contained nonproduction rooms demonstrating continue, pause, escalate, rollback, and close;
+- the canonical merged-code gate and live-install verification required by the implementation
+  Workroom.
+
+### Rollback
+
+Disable transition consumption of the new result and leave rooms paused where their explicit
+coordinator or contract cannot be proven. Preserve conformance receipts and deviations; do not
+reinterpret them as passes.
 
 ## 8. Delivery 1 — evaluation integrity and transfer validity (`BI-1B7BB954`)
 
@@ -280,7 +347,7 @@ manufacture a previous qualification from the method rollback.
 
 The umbrella is ready for acceptance only when:
 
-1. all three delivery BIs have their own signed PR and evidence;
+1. all four delivery BIs have their own signed PR and evidence;
 2. the dependency BIs required by each claim are complete or the corresponding profile claim remains
    explicitly unsupported;
 3. the held-out leak, seed gaming, capability-floor, negative-transfer, stale-qualification, and
@@ -305,6 +372,7 @@ The umbrella is ready for acceptance only when:
 | Deliverable key | BI | Independently shippable | Depends on |
 | --- | --- | --- | --- |
 | `standards-design-publication` | `BI-636638A6` | yes | none |
+| `workroom-process-overseer` | `BI-3913EB49` | yes | `standards-design-publication`, `BI-4CB2EF76`, `BI-EFFD97B4` |
 | `evaluation-integrity-transfer` | `BI-1B7BB954` | yes | `standards-design-publication`, `BI-C6801B5A` for qualification-grade criteria |
 | `qualification-revalidation-interlock` | `BI-6DB95601` | yes | `evaluation-integrity-transfer`, `BI-514826D3`, `BI-C6801B5A`, `BI-3E99ACFA` |
 

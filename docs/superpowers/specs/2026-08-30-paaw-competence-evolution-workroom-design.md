@@ -96,7 +96,7 @@ controls must remain fixed outside that loop.
 The Workroom definition projects the WorkUnitDefinition and convening policy. The Workroom instance
 references one root WorkOccurrence and the exact definition version. A research room may contain:
 
-- one coordinator assignment;
+- exactly one explicit coordinator assignment, presented as the Process Overseer;
 - two or more independent specialist assignments where parallel exploration is warranted;
 - a separate assessor assignment that does not share mutable candidate state;
 - a reviewer or scheme-authority assignment for consequential promotion;
@@ -105,6 +105,39 @@ references one root WorkOccurrence and the exact definition version. A research 
 Shared surveys, discussion, code, and candidate artifacts are governed Workroom artifacts. They do
 not become an informal side channel or a new source of truth. Independent arms use separate mutable
 workspaces. The evaluator and held-out material remain outside every candidate's writable surface.
+
+#### 4.2.1 Process Overseer contract
+
+The Process Overseer is the existing canonical `coordinator` role made executable, not a new agent
+kind. It owns whether the Workroom is following its declared shape; it does not own the business
+outcome or decide whether its own candidate passed.
+
+| Responsibility | Owner |
+| --- | --- |
+| Outcome and risk acceptance | accountable Principal |
+| Shape/version, stage order, roster, prerequisites, budgets, receipts, and stop-condition conformance | coordinator / Process Overseer |
+| Research or task execution | contributor or specialist |
+| Held-out scoring and assessment | evaluator or reviewer |
+| Consequential promotion | approver or scheme authority |
+
+Before candidate work starts, and before and after every stage transition, a deterministic
+conformance projection compares the declared definition with observed room state. Zero, multiple,
+or only legacy-derived coordinators; missing required participants; absent prerequisite receipts;
+out-of-order stages; exhausted retry/resource/submission budgets; due review points; and met stop
+conditions all pause or refuse execution. The result records the exact shape and definition
+versions, deviations, disposition, and next permitted transition.
+
+This outer loop owns application, validation routing, acceptance/rollback routing, audit logging,
+and escalation while leaving the inner research method flexible. It cannot expose held-out labels
+or evaluator credentials, select favorable seeds after seeing results, silently retry until a proxy
+passes, invent a participant, skip a gate, or widen authority. Finite rooms reconcile on events;
+standing rooms also receive a bounded idempotent delta sweep. Every mismatch becomes an
+attributable receipt and attention item for the Process Overseer and accountable Principal.
+
+The role may be filled by a person or AI coworker. An AI Process Overseer must hold a current JSI
+qualification for the applicable process-coordination activity and an intersecting TAK authority
+binding. Where the Workroom shape requires independent evaluation, review, or approval, the same
+subject cannot occupy both sides of that boundary.
 
 ### 4.3 PAAW trace
 
@@ -336,7 +369,9 @@ from many automated attempts; DPF must not cite it as proof that an automated re
 qualified human assessor.
 
 The study's monitor excluded 39 of 1,601 trajectories for evaluation gaming. That is evidence that
-monitoring and isolation are first-class controls, not evidence that cheating was negligible.
+monitoring and isolation are first-class controls, not evidence that cheating was negligible. DPF
+therefore gives the Process Overseer fixed attempt/budget accounting and audit duties, while keeping
+the evaluator and held-out material outside both the executor's and overseer's mutable surfaces.
 
 ### 12.3 Automated weak-to-strong researcher
 
@@ -345,7 +380,8 @@ Researcher](https://alignment.anthropic.com/2026/automated-w2s-researcher/) foun
 research loop effective, while agents also exploited dataset shortcuts, seed selection, evaluator
 feedback, and label leakage. DPF adopts flexible execution inside a precommitted WorkUnitDefinition
 envelope and rejects evaluator APIs that expose enough information to optimize the test rather than
-the intended outcome.
+the intended outcome. The design preserves that flexibility by making the Process Overseer enforce
+the outer contract and transition invariants, not a mandatory step-by-step research script.
 
 ### 12.4 Operator-provided transcript
 
@@ -363,6 +399,8 @@ of each delivery for refactoring. The allowed refactoring is narrow:
 - centralize operating-profile material-change impact resolution;
 - reuse one qualification/binding transition adapter;
 - remove duplicate evidence-scope or critical-failure interpretation;
+- consolidate existing coordinator, collaboration-shape, stage, and stop-condition checks into one
+  pure Workroom conformance projection;
 - keep UI projection separate from persistence and authority.
 
 Unrelated cleanup, a new experiment service, a new qualification table, or a new research dashboard
@@ -376,6 +414,7 @@ Live delivery coverage:
 | Standards and design publication | `BI-636638A6` | Publishes this profile and harmonizes PAAW, TAK-JSI, and playbook documentation. |
 | Evaluation integrity and transfer validity | `BI-1B7BB954` | Extends the shipped WorkPattern evaluator and promotion policy. |
 | Qualification revalidation interlock | `BI-6DB95601` | Connects material WorkPattern changes to the canonical JSI carrier and TAK activation. |
+| Workroom Process Overseer | `BI-3913EB49` | Makes the existing coordinator role enforce declared shape conformance across finite and standing rooms. |
 
 The bundle reuses rather than duplicates `BI-C6801B5A`, `BI-514826D3`, `BI-DE1333A1`,
 `BI-D4C110BC`, `BI-4CB2EF76`, `BI-EFFD97B4`, and `BI-3E99ACFA`.
@@ -393,6 +432,8 @@ The bundle reuses rather than duplicates `BI-C6801B5A`, `BI-514826D3`, `BI-DE133
 - Negative results and rejected hypotheses remain attributable without remaining active guidance.
 - Research Workrooms preserve participants, assignments, budgets, evaluator separation, failure
   ownership, and outcome evidence.
+- Every executable research Workroom has one explicit Process Overseer; drift pauses or refuses the
+  transition and remains visible through a typed conformance receipt and disposition.
 - The operator can see evidence integrity, transfer scope, qualification impact, and the next action
   without reading raw experiment metadata.
 

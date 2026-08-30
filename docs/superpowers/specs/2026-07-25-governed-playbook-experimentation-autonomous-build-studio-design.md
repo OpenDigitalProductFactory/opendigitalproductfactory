@@ -8,8 +8,9 @@ status: active
 > evaluation-integrity and qualification-revalidation requirements beyond the shipped factorial
 > runtime. The canonical extension is the [PAAW competence-evolution Workroom
 > profile](2026-08-30-paaw-competence-evolution-workroom-design.md). This document remains the
-> experiment and activation authority; the extension adds evaluator isolation, anti-gaming,
-> target-profile transfer evidence, and a TAK-JSI revalidation interlock without a second runtime.
+> experiment and activation authority; the extension makes the Workroom coordinator an outer-loop
+> Process Overseer, adds evaluator isolation, anti-gaming, target-profile transfer evidence, and a
+> TAK-JSI revalidation interlock without a second runtime or orchestrator type.
 
 - **Status:** active
 - **Date:** 2026-07-25
@@ -93,6 +94,12 @@ flexible research loop inside hard external controls. Their reported evaluator g
 selection, dataset shortcuts, and label leakage make evaluator isolation, precommitted decision
 rules, capability floors, and write-protected held-out material promotion requirements rather than
 optional research hygiene.
+
+The control boundary belongs to the Workroom's canonical coordinator/Process Overseer. It checks
+the declared shape, roster, stage, receipts, budgets, review point, and stop conditions before and
+after transitions, but it neither scripts every research step nor scores its own candidate. This
+preserves the studies' flexible inner loop while preventing the worker from weakening the outer
+accept/reject/rollback contract.
 
 ## 3. Verified current substrate
 

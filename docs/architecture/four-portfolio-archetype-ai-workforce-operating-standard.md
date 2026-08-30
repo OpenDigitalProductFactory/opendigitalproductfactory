@@ -937,6 +937,12 @@ The profile is informative in Candidate 0.2.0. It does not add conformance requi
 Standards Steward approves a minor-version proposal under Section 19. The proposed minor-version
 requirements would require:
 
+- exactly one explicit coordinator/Process Overseer for every executable Workroom, distinct from
+  the accountable outcome owner and, where independence is required, from executor,
+  evaluator/reviewer, and approver;
+- a deterministic before/after-transition conformance result over the exact room definition and
+  collaboration-shape versions, roster, prerequisites, authority, measures, budgets, review point,
+  stop conditions, observed deviations, disposition, and next permitted transition;
 - a trace from exact WorkOccurrence evidence through scoped knowledge, candidate method,
   independent evaluation, qualification-impact decision, JSI status, active binding, deployed
   profile, and later outcome;
@@ -946,7 +952,9 @@ requirements would require:
 - direct target-profile or governed-equivalence evidence before a method transfers across a model,
   provider, harness, corpus, tool surface, job version, or data/risk context; and
 - applicable JSI revalidation before a material promoted change can retain or widen an active
-  assignment or autonomy ceiling.
+  assignment or autonomy ceiling; and
+- a current process-oversight JSI qualification and intersecting TAK authority when an AI coworker
+  occupies the coordinator role.
 
 The profile creates no second room definition, evidence ledger, commons, playbook authority,
 qualification model, or action-permission engine.

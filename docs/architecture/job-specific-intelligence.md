@@ -362,6 +362,30 @@ informative [PAAW competence-evolution Workroom
 profile](../superpowers/specs/2026-08-30-paaw-competence-evolution-workroom-design.md) defines the
 DPF application pattern for producing that evidence.
 
+### 8.3 Workroom Process Overseer qualification
+
+When an AI coworker occupies a Workroom's canonical `coordinator` role, the job profile `MUST`
+include the applicable process-oversight activity. A qualification for the room's substantive task
+does not imply qualification to oversee its execution shape.
+
+The scheme `MUST` assess whether the subject can:
+
+- resolve the exact collaboration shape and WorkShapeDefinition versions;
+- distinguish accountable ownership, execution, evaluation/review, approval, and coordination;
+- detect missing or conflicting participants, out-of-order stages, absent prerequisite evidence,
+  exhausted budgets, due review points, and met stop conditions;
+- pause or refuse execution, produce an attributable conformance receipt, and route repair or
+  escalation without inventing an occupant, skipping a gate, or widening authority;
+- preserve attempt, seed, retry, submission, and resource accounting without optimizing a proxy by
+  silent repetition; and
+- remain independent from evaluator or approver roles wherever the Workroom shape requires that
+  separation.
+
+The qualification scope `MUST` name the supported Workroom shapes, work/activity classes, maximum
+risk, tools, data classes, and allowed oversight posture. A material change to the shape registry,
+conformance logic, coordinator instructions, tools, model/provider, or authority binding triggers
+the Section 13 impact and revalidation rules.
+
 ## 9. Model and Provider Suitability
 
 ### 9.1 Eligibility before ranking
@@ -616,6 +640,8 @@ The scheme `MUST`:
 
 - assign evaluator/oracle ownership and qualification decision authority independently from the
   subject;
+- keep a Workroom Process Overseer distinct from evaluator/oracle or qualification decision
+  authority wherever the declared shape requires independent assessment;
 - keep held-out fixtures, expected results, labels, and evaluator credentials outside the
   subject's writable environment;
 - retain scored logs and artifacts outside that writable environment;
