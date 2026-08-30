@@ -19,6 +19,7 @@
 import type { BacklogItemWithRelations } from "./backlog";
 import { BACKLOG_EFFORT_SIZES } from "./backlog";
 import type { BuildPhase, FeatureBuildKind } from "./feature-build-types";
+import { checkVerificationDepthSatisfied } from "./verification-depth-requirement";
 import {
   FEATURE_BUILD_KIND_VALUES,
 } from "./feature-build-types";
@@ -79,6 +80,7 @@ export const GATE_REQUIREMENTS = [
   "buildPlan-present",
   "planReview-passed",
   "verification-typecheck-passed",
+  "verification-depth-satisfied",
   "acceptance-evaluated",
   "acceptance-all-met-if-array",
   "uxVerification-not-blocking",
@@ -706,6 +708,9 @@ export function checkRequirement(req: GateRequirement, evidence: GateEvidence): 
       if (!verification.typecheckPassed) return { allowed: false, reason: "Typecheck must pass before review." };
       return { allowed: true };
     }
+    case "verification-depth-satisfied": {
+      return checkVerificationDepthSatisfied(evidence);
+    }
     case "acceptance-evaluated": {
       if (!evidence.acceptanceMet) return { allowed: false, reason: "Acceptance criteria not evaluated." };
       return { allowed: true };
@@ -790,9 +795,7 @@ import type { PhaseGateResult } from "./feature-build-types";
  *                          happyPathIntake-ready reason string only)
  *   (everything else)    — same as before
  */
-/** Read the additive rightsizing opts a caller threaded through the gate
- *  evidence. Returns undefined when neither field is present, so gates for
- *  callers that don't set them are byte-identical (EP-QUALITY-RIGHTSIZING). */
+/** Read additive rightsizing opts; absent fields preserve byte identity. */
 function rightsizingOptsFromEvidence(evidence: GateEvidence): RightsizingOpts | undefined {
   const qualityFirst = evidence.qualityFirst === true;
   const sensitivity = evidence.deliverableSensitivity as DeliverableSensitivity | undefined;
@@ -817,9 +820,7 @@ export function checkPhaseGate(
   const transition = `${from}->${to}` as BuildTransition;
   const required = policy.gates[transition] ?? [];
 
-  // The happyPathIntake-ready check has two callers (ideate->plan and
-  // plan->build) with different reason verbs. Surface the verb through
-  // evidence so the matrix's requirement enum stays compact.
+  // Surface the transition-specific intake verb without widening the enum.
   const verb = transition === "plan->build" ? "building" : "planning";
   const evidenceWithVerb = { ...evidence, intakeVerb: evidence.intakeVerb ?? verb };
 

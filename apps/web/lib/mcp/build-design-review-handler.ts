@@ -48,7 +48,8 @@ export async function reviewDesignDoc(params: Record<string, unknown>, userId: s
       // diagnosis (fixContext) on its brief. Review the diagnosis for completeness
       // and advance ideate → plan, instead of running the feature design reviewers.
       if (build?.kind === "fix") {
-        const { isFixContextComplete, checkPhaseGate } = await import("@/lib/feature-build-types");
+        const { isFixContextComplete } = await import("@/lib/feature-build-types");
+        const { checkBuildPhaseGate } = await import("@/lib/work-posture/verification-depth-gate");
         const fixBrief = (build.brief ?? null) as import("@/lib/feature-build-types").FeatureBrief | null;
         const fixProcessSize = ((build.plan as Record<string, unknown> | null)?.processSize as string | undefined) ?? "medium";
         const fc = fixBrief?.fixContext;
@@ -67,7 +68,12 @@ export async function reviewDesignDoc(params: Record<string, unknown>, userId: s
         let fixPhaseGateBlocker: string | null = null;
         try {
           const fixPlan = (build.plan as Record<string, unknown> | null);
-          const gate = checkPhaseGate("ideate", "plan", { kind: "fix", processSize: fixProcessSize, deliverableSensitivity: fixPlan?.deliverableSensitivity, qualityFirst: fixPlan?.qualityFirst === true, fixContext: fc, designReview: review });
+          const gate = await checkBuildPhaseGate({
+            buildId,
+            from: "ideate",
+            to: "plan",
+            evidence: { kind: "fix", processSize: fixProcessSize, deliverableSensitivity: fixPlan?.deliverableSensitivity, qualityFirst: fixPlan?.qualityFirst === true, fixContext: fc, designReview: review },
+          });
           const readiness = gate.allowed
             ? await enforceBuildInitiativeReadiness({ buildId, target: "plan", targetPhase: "plan", expectedPhase: "ideate" })
             : null;
@@ -326,7 +332,8 @@ export async function reviewDesignDoc(params: Record<string, unknown>, userId: s
       //   3. Pass happyPathState to checkPhaseGate so the full intake
       //      check actually runs.
       try {
-        const { checkPhaseGate, canTransitionPhase, normalizeHappyPathState, deriveIntakeTaxonomyAnchor } = await import("@/lib/feature-build-types");
+        const { canTransitionPhase, normalizeHappyPathState, deriveIntakeTaxonomyAnchor } = await import("@/lib/feature-build-types");
+        const { checkBuildPhaseGate } = await import("@/lib/work-posture/verification-depth-gate");
         const updatedBuild = await prisma.featureBuild.findUnique({
           where: { buildId },
           select: {
@@ -572,14 +579,18 @@ export async function reviewDesignDoc(params: Record<string, unknown>, userId: s
           }
 
           const idpPlan = (updatedBuild.plan as Record<string, unknown> | null);
-          const gate = checkPhaseGate("ideate", "plan", {
-            kind: updatedBuild.kind,
+          const gate = await checkBuildPhaseGate({
+            buildId,
+            from: "ideate",
+            to: "plan",
+            evidence: { kind: updatedBuild.kind,
             processSize: (idpPlan?.processSize as string | undefined) ?? "medium",
             deliverableSensitivity: idpPlan?.deliverableSensitivity,
             qualityFirst: idpPlan?.qualityFirst === true,
             designDoc: updatedBuild.designDoc,
             designReview: updatedBuild.designReview,
-            happyPathState,
+              happyPathState,
+            },
           });
           const readiness = gate.allowed
             ? await enforceBuildInitiativeReadiness({ buildId, target: "plan", targetPhase: "plan", expectedPhase: "ideate" })
