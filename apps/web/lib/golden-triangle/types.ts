@@ -90,6 +90,8 @@ export interface PolicyConstraints {
   sensitivity?: string;
   toolGrants?: string[];
   minimumTierFloor?: QualityTier;
+  /** Hard verification floor; posture and task class may deepen but never relax it. */
+  verificationDepthFloor?: VerificationDepth;
   maxLatencyCeilingMs?: number;
 }
 

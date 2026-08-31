@@ -129,6 +129,26 @@ export interface VerificationRequirement {
   reason: string;
 }
 
+export type VerificationEvidence = {
+  /** Work Case evidence shape. */
+  verifiedAt?: string | Date | null;
+  /** Canonical RuntimeVerification receipt shape. */
+  status?: string | null;
+  completedAt?: string | Date | null;
+};
+
+/**
+ * One predicate for both policy-envelope evidence and canonical room runtime
+ * receipts. A failed or merely-started receipt never satisfies the gate.
+ */
+export function hasPassingVerificationEvidence(
+  evidence?: readonly VerificationEvidence[] | null,
+): boolean {
+  return (evidence ?? []).some(
+    (entry) => Boolean(entry.verifiedAt) || (entry.status === "passed" && Boolean(entry.completedAt)),
+  );
+}
+
 const NOT_REQUIRED: VerificationRequirement = {
   required: false,
   reasonCode: "verification_not_required",
