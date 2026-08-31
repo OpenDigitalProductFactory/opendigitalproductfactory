@@ -44,6 +44,26 @@ export {
 } from "./mcp-task-review-contract";
 export type { InitiativeReviewBinding } from "./mcp-task-review-contract";
 
+async function persistedTerminalReaderExecutions(
+  taskRunId: string,
+): Promise<PersistedTerminalReaderExecution[]> {
+  return prisma.toolExecution.findMany({
+    where: {
+      taskRunId,
+      toolName: "read_source_at_version",
+    },
+    orderBy: { createdAt: "asc" },
+    select: {
+      id: true,
+      toolName: true,
+      parameters: true,
+      result: true,
+      success: true,
+      createdAt: true,
+    },
+  }) as Promise<PersistedTerminalReaderExecution[]>;
+}
+
 export const REMOTE_RISK_CLASSES = ["read", "bounded-write", "high-risk"] as const;
 export type RemoteRiskClass = (typeof REMOTE_RISK_CLASSES)[number];
 
@@ -236,6 +256,7 @@ async function reserveTerminalWriterReplay(input: {
 }): Promise<{
   wait: TerminalWriterWait;
   readerExecutions: PersistedTerminalReaderExecution[];
+  bootstrapReaderEvidence: boolean;
 } | null> {
   if (storedRequestDigest(input.existing) !== input.requestDigest) return null;
 
@@ -245,21 +266,7 @@ async function reserveTerminalWriterReplay(input: {
   if (!isProjectedWait && !isRecoverableCompletedExit) return null;
 
   const [readerExecutions, successfulWriter, writerAttempt] = await Promise.all([
-    prisma.toolExecution.findMany({
-      where: {
-        taskRunId: input.existing.taskRunId,
-        toolName: "read_source_at_version",
-      },
-      orderBy: { createdAt: "asc" },
-      select: {
-        id: true,
-        toolName: true,
-        parameters: true,
-        result: true,
-        success: true,
-        createdAt: true,
-      },
-    }),
+    persistedTerminalReaderExecutions(input.existing.taskRunId),
     prisma.toolExecution.findFirst({
       where: {
         taskRunId: input.existing.taskRunId,
@@ -277,7 +284,9 @@ async function reserveTerminalWriterReplay(input: {
       select: { id: true, success: true, result: true },
     }),
   ]);
-  if (readerExecutions.length === 0 || successfulWriter) return null;
+  if (successfulWriter) return null;
+  const bootstrapReaderEvidence = readerExecutions.length === 0;
+  if (bootstrapReaderEvidence && !isProjectedWait) return null;
 
   if (writerAttempt) {
     const proposalEnvelopeId = writerAttempt.success === false
@@ -322,7 +331,7 @@ async function reserveTerminalWriterReplay(input: {
     } as Prisma.InputJsonValue,
   });
   return reserved
-    ? { wait, readerExecutions: readerExecutions as PersistedTerminalReaderExecution[] }
+    ? { wait, readerExecutions, bootstrapReaderEvidence }
     : null;
 }
 
@@ -510,9 +519,49 @@ export async function submitRemoteCoworkerTask(input: {
         })
       : null;
     if (terminalWriterReservation && terminalToolPolicy && existing.id && existing.threadId) {
-      const hydration = await hydrateTerminalWriterContext({
+      let readerExecutions = terminalWriterReservation.readerExecutions;
+      let bootstrapFailure: { ok: false; code: string; error: string } | null = null;
+      if (terminalWriterReservation.bootstrapReaderEvidence) {
+        const immutableReaderArguments = terminalToolPolicy.immutableReaderArguments;
+        if (!immutableReaderArguments) {
+          bootstrapFailure = {
+            ok: false,
+            code: "terminal_writer_context_reader_failed",
+            error: "The terminal writer policy does not contain an immutable reader binding.",
+          };
+        } else {
+          const bootstrapRead = await executeAutonomousWorkTool({
+            toolName: "read_source_at_version",
+            args: {
+              ...immutableReaderArguments,
+              startLine: 1,
+              maxLines: 200,
+              maxChars: 3_200,
+            },
+            userId: token.userId,
+            userContext,
+            routeContext: parsed.routeContext,
+            agentId: resolveCanonicalAgentId(parsed.agentId),
+            threadId: existing.threadId,
+            taskRunId: existing.taskRunId,
+            apiTokenId: token.tokenId,
+            tokenScope: token.capability,
+            externalAccessEnabled: true,
+          });
+          if (!bootstrapRead.success) {
+            bootstrapFailure = {
+              ok: false,
+              code: "terminal_writer_context_reader_failed",
+              error: bootstrapRead.message || "The governed immutable bootstrap read failed.",
+            };
+          } else {
+            readerExecutions = await persistedTerminalReaderExecutions(existing.taskRunId);
+          }
+        }
+      }
+      const hydration = bootstrapFailure ?? await hydrateTerminalWriterContext({
         policy: terminalToolPolicy,
-        executions: terminalWriterReservation.readerExecutions,
+        executions: readerExecutions,
         readPage: async (args) => executeAutonomousWorkTool({
           toolName: "read_source_at_version",
           args,

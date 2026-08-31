@@ -5,13 +5,13 @@ status: draft
 # Security and authentication hardening successor design
 
 **Status:** proposed for independent review  
-**Backlog:** BI-32935E47, BI-80E4A139, BI-C9656270, BI-E22C3D75, BI-DD3BBD02, BI-FE678DA3  
+**Backlog:** BI-32935E47, BI-80E4A139, BI-C9656270, BI-E22C3D75, BI-DD3BBD02, BI-FE678DA3, BI-8B7B2FE9
 **Epic:** EP-413F2602  
 **Source assessment:** `docs/security/2026-08-30-security-authentication-stack-assessment.md`
 
 ## 1. Purpose
 
-The security/authentication assessment found six independently shippable gaps around an architecture that is otherwise converging correctly. This document is their shared canonical design baseline. It keeps the gaps coordinated without turning them into one unsafe implementation batch.
+The security/authentication assessment and authority follow-up found seven independently shippable gaps around an architecture that is otherwise converging correctly. This document is their shared canonical design baseline. It keeps the gaps coordinated without turning them into one unsafe implementation batch.
 
 The governing boundary is unchanged: DPF owns Principal identity, authentication policy, authorization, LDAP, PKI, credential lifecycle, and audit. External identity providers and secret managers may supply assertions or custody, but they do not become DPF's authorization system, directory authority, certificate authority, or canonical credential store.
 
@@ -27,6 +27,7 @@ Each backlog item below has its own objectives, acceptance contract, migration a
 6. **Assurance is session state.** Authentication methods, freshness, and assurance travel in the effective authentication context and are checked for consequential actions.
 7. **Forward-only migration.** Existing installs retain access through inline backfills, compatibility reads, verification, and explicit retirement gates. No clean-schema-only migration is acceptable.
 8. **Value-free evidence.** Logs, diagnostics, tests, and receipts may identify secret classes and failure categories but never secret values, bearer material, private keys, or recoverable ciphertext/plaintext pairs.
+9. **Unknown tools have no authority.** Dynamic discovery may inventory a tool, but only a DPF-owned policy may authorize it. Missing, stale, or incomplete policy is a deny state, never compatibility permission.
 
 ## 3. Research and benchmarking
 
@@ -36,6 +37,8 @@ The design adopts established patterns without importing a replacement identity 
 - [W3C Web Authentication Level 3](https://www.w3.org/TR/webauthn-3/) defines scoped public-key credentials and lifecycle operations. DPF adopts the browser/RP ceremony and authenticator model rather than designing a proprietary factor protocol.
 - [Keycloak's administration model](https://www.keycloak.org/docs/latest/server_admin/) demonstrates passkeys, configurable authentication flows, identity brokering, and LDAP federation. DPF adopts the separable flow and lifecycle concepts but rejects replacing its Principal, authorization, LDAP, and customer/workforce domain model with a second identity server.
 - [HashiCorp Vault Transit](https://developer.hashicorp.com/vault/docs/secrets/transit) demonstrates versioned ciphertext, read-old/write-new keyrings, minimum decrypt versions, and rewrap. DPF adopts those lifecycle invariants in its provider-neutral envelope; it does not require Vault or move application authorization into a vault.
+- The [MCP tools specification](https://modelcontextprotocol.io/specification/2025-06-18/server/tools) requires clients to treat tool annotations as untrusted unless the server is trusted. DPF adopts annotations as discovery hints only; grant, side-effect, and execution policy remain deterministic DPF-owned controls.
+- The [MCP authorization specification](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization) separates transport authorization from application policy. DPF preserves that split: a valid server token establishes connectivity, not permission for a coworker to see or invoke every tool the server advertises.
 
 The design also carries forward the 1Password/OpenBao/Infisical comparison and NIST SP 800-57/OWASP controls recorded in `docs/security/tool-evaluations/2026-08-30-1password.md`.
 
@@ -62,7 +65,7 @@ authentication sources                    secret custody sources
  role + capability + grant + room/channel policy
 ```
 
-The six slices strengthen this architecture at distinct seams. None introduces a second identity store, authorization cache, certificate authority, or vendor-owned source of truth.
+The seven slices strengthen this architecture at distinct seams. None introduces a second identity store, authorization cache, certificate authority, or vendor-owned source of truth.
 
 ## 5. BI-32935E47 — versioned credential-encryption key lifecycle
 
@@ -85,13 +88,13 @@ The six slices strengthen this architecture at distinct seams. None introduces a
 
 ### Acceptance contract
 
-| Acceptance | Statement |
-|---|---|
-| AC-KEY-001 | Legacy ciphertext remains readable while all new writes use the active versioned envelope. |
-| AC-KEY-002 | The inventory covers `IntegrationCredential`, `CredentialEntry`, MCP encrypted token copies, and every registered encrypted field family. |
-| AC-KEY-003 | Rotation can pause, resume, verify, and roll back without losing readable credentials. |
-| AC-KEY-004 | Unknown format, algorithm, or key id fails closed with value-free diagnostics. |
-| AC-KEY-005 | Key retirement is mechanically refused until coverage, recovery, and destruction prerequisites pass. |
+| Acceptance | Objective | Statement |
+|---|---|---|
+| AC-KEY-001 | OBJ-KEY-001 | Legacy ciphertext remains readable while all new writes use the active versioned envelope. |
+| AC-KEY-002 | OBJ-KEY-003 | The inventory covers `IntegrationCredential`, `CredentialEntry`, MCP encrypted token copies, and every registered encrypted field family. |
+| AC-KEY-003 | OBJ-KEY-003 | Rotation can pause, resume, verify, and roll back without losing readable credentials. |
+| AC-KEY-004 | OBJ-KEY-001 | Unknown format, algorithm, or key id fails closed with value-free diagnostics. |
+| AC-KEY-005 | OBJ-KEY-003 | Key retirement is mechanically refused until coverage, recovery, and destruction prerequisites pass. |
 
 ## 6. BI-80E4A139 — production operator-only credential enforcement
 
@@ -114,13 +117,13 @@ The six slices strengthen this architecture at distinct seams. None introduces a
 
 ### Acceptance contract
 
-| Acceptance | Statement |
-|---|---|
-| AC-OPS-001 | Every inventoried production credential action is denied to an unapproved agent at the earliest enforceable boundary. |
-| AC-OPS-002 | Credential-capable tools are absent or refused under intersected grants; a prompt instruction alone cannot authorize them. |
-| AC-OPS-003 | Development/test local-permitted behavior remains explicit and covered by tests. |
-| AC-OPS-004 | Diagnostics, logs, support artifacts, and receipts remain value-redacted. |
-| AC-OPS-005 | Deployment documentation states residual host-administrator and compromised-process risk accurately. |
+| Acceptance | Objective | Statement |
+|---|---|---|
+| AC-OPS-001 | OBJ-OPS-001 | Every inventoried production credential action is denied to an unapproved agent at the earliest enforceable boundary. |
+| AC-OPS-002 | OBJ-OPS-001 | Credential-capable tools are absent or refused under intersected grants; a prompt instruction alone cannot authorize them. |
+| AC-OPS-003 | OBJ-OPS-002 | Development/test local-permitted behavior remains explicit and covered by tests. |
+| AC-OPS-004 | OBJ-OPS-003 | Diagnostics, logs, support artifacts, and receipts remain value-redacted. |
+| AC-OPS-005 | OBJ-OPS-003 | Deployment documentation states residual host-administrator and compromised-process risk accurately. |
 
 ## 7. BI-C9656270 — workforce passkeys and assurance-aware reauthentication
 
@@ -143,13 +146,13 @@ The six slices strengthen this architecture at distinct seams. None introduces a
 
 ### Acceptance contract
 
-| Acceptance | Statement |
-|---|---|
-| AC-MFA-001 | A workforce Principal can enroll, name, use, and revoke more than one WebAuthn authenticator. |
-| AC-MFA-002 | Challenges are scoped, expiring, single-use, origin/RP validated, and replay-resistant. |
-| AC-MFA-003 | Consequential actions check current assurance and freshness server-side. |
-| AC-MFA-004 | Recovery and break-glass are independently auditable and cannot produce an unmarked high-assurance session. |
-| AC-MFA-005 | LDAP, PKI, Principal, role, capability, and optional upstream federation ownership remains unchanged. |
+| Acceptance | Objective | Statement |
+|---|---|---|
+| AC-MFA-001 | OBJ-MFA-001 | A workforce Principal can enroll, name, use, and revoke more than one WebAuthn authenticator. |
+| AC-MFA-002 | OBJ-MFA-001 | Challenges are scoped, expiring, single-use, origin/RP validated, and replay-resistant. |
+| AC-MFA-003 | OBJ-MFA-002 | Consequential actions check current assurance and freshness server-side. |
+| AC-MFA-004 | OBJ-MFA-003 | Recovery and break-glass are independently auditable and cannot produce an unmarked high-assurance session. |
+| AC-MFA-005 | OBJ-MFA-002 | LDAP, PKI, Principal, role, capability, and optional upstream federation ownership remains unchanged. |
 
 ## 8. BI-E22C3D75 — Principal-gated customer and social sign-in
 
@@ -172,12 +175,12 @@ The six slices strengthen this architecture at distinct seams. None introduces a
 
 ### Acceptance contract
 
-| Acceptance | Statement |
-|---|---|
-| AC-PRI-001 | No customer password or social session is issued before an active canonical Principal authorizes it. |
-| AC-PRI-002 | Inactive, unresolved, and conflicted principals fail consistently across all sign-in/link paths. |
-| AC-PRI-003 | Onboarding and deactivation cannot leave a session-capable split state. |
-| AC-PRI-004 | Existing customer account/contact scoping is preserved and derived from the Principal-rooted context. |
+| Acceptance | Objective | Statement |
+|---|---|---|
+| AC-PRI-001 | OBJ-PRI-001 | No customer password or social session is issued before an active canonical Principal authorizes it. |
+| AC-PRI-002 | OBJ-PRI-002 | Inactive, unresolved, and conflicted principals fail consistently across all sign-in/link paths. |
+| AC-PRI-003 | OBJ-PRI-002 | Onboarding and deactivation cannot leave a session-capable split state. |
+| AC-PRI-004 | OBJ-PRI-003 | Existing customer account/contact scoping is preserved and derived from the Principal-rooted context. |
 
 ## 9. BI-DD3BBD02 — social-provider secrets in the credential kernel
 
@@ -199,12 +202,12 @@ The six slices strengthen this architecture at distinct seams. None introduces a
 
 ### Acceptance contract
 
-| Acceptance | Statement |
-|---|---|
-| AC-SOC-001 | No Google or Apple client secret remains readable from `PlatformConfig` after migration. |
-| AC-SOC-002 | Existing configured installations retain sign-in capability through a clean forward migration and rollback plan. |
-| AC-SOC-003 | Safe projections, logs, diagnostics, errors, and audit receipts never expose the client secret. |
-| AC-SOC-004 | The credential kernel is the single writer/reader and Auth.js uses one supported adapter seam. |
+| Acceptance | Objective | Statement |
+|---|---|---|
+| AC-SOC-001 | OBJ-SOC-002 | No Google or Apple client secret remains readable from `PlatformConfig` after migration. |
+| AC-SOC-002 | OBJ-SOC-002 | Existing configured installations retain sign-in capability through a clean forward migration and rollback plan. |
+| AC-SOC-003 | OBJ-SOC-003 | Safe projections, logs, diagnostics, errors, and audit receipts never expose the client secret. |
+| AC-SOC-004 | OBJ-SOC-001 | The credential kernel is the single writer/reader and Auth.js uses one supported adapter seam. |
 
 ## 10. BI-FE678DA3 — security/identity backlog reconciliation
 
@@ -216,6 +219,8 @@ The six slices strengthen this architecture at distinct seams. None introduces a
 
 **OBJ-REC-003:** Add a repeatable drift detector or governed cadence so source, docs, and PostgreSQL do not silently diverge again.
 
+**OBJ-REC-004:** Close the capture-process defect that allowed build-bound BIs to be filed or triaged without proportional canonical design coverage.
+
 ### Design
 
 - Enumerate the active identity/security epics and children from live PostgreSQL, then map each to current specs, PRs, merged source, runtime verification, and unresolved acceptance.
@@ -223,17 +228,53 @@ The six slices strengthen this architecture at distinct seams. None introduces a
 - Preserve historical identifiers only when clearly labeled historical/superseded and linked to the live successor.
 - Add a deterministic check that extracts active BI/epic references from canonical specs and reports unresolved or mismatched live records. The check must tolerate intentionally historical references through an explicit annotation, not a broad ignore list.
 - Route every correction through MCP activity and PR evidence so both stores retain provenance.
+- Change the backlog-filing procedure so a build-bound BI and design are one capture outcome: reuse, extend, or create the design, then cross-link the generated BI id in the same branch/PR. A surface that cannot write source leaves the BI in triage with a visible design handoff rather than silently advancing designless work.
 
 ### Acceptance contract
 
-| Acceptance | Statement |
-|---|---|
-| AC-REC-001 | Every active identity/security deliverable resolves to one live BI and current epic. |
-| AC-REC-002 | Merged, runtime-verified, acceptance-verified, and done are distinguishable states. |
-| AC-REC-003 | Canonical specs do not present absent identifiers as current delivery coverage. |
-| AC-REC-004 | A repeatable check or governed cadence detects future spec/backlog reference drift. |
+| Acceptance | Objective | Statement |
+|---|---|---|
+| AC-REC-001 | OBJ-REC-001 | Every active identity/security deliverable resolves to one live BI and current epic. |
+| AC-REC-002 | OBJ-REC-001 | Merged, runtime-verified, acceptance-verified, and done are distinguishable states. |
+| AC-REC-003 | OBJ-REC-002 | Canonical specs do not present absent identifiers as current delivery coverage. |
+| AC-REC-004 | OBJ-REC-003 | A repeatable check or governed cadence detects future spec/backlog reference drift. |
+| AC-REC-005 | OBJ-REC-004 | The canonical backlog-filing skill refuses to report a build-bound BI as fully filed or build-ready without an exact design path/section, and defines the source-incapable handoff. |
 
-## 11. Delivery order and dependency rules
+## 11. BI-8B7B2FE9 — default-deny dynamically discovered external MCP tools
+
+### Objectives
+
+**OBJ-MCP-AUTH-001:** Make every dynamically discovered external MCP tool resolve to an explicit DPF-owned authorization policy before it can appear in an AI coworker's tool surface.
+
+**OBJ-MCP-AUTH-002:** Recheck the same human-capability, agent-grant, external-access, execution-mode, and side-effect policy at invocation so stale discovery cannot bypass listing-time authorization.
+
+**OBJ-MCP-AUTH-003:** Preserve operability for deliberately approved external tools through an auditable quarantine, classification, approval, rename, and revocation lifecycle.
+
+### Design
+
+- Keep `TOOL_TO_GRANTS` as the canonical bundled-tool mapping. Do not create a browser-specific or external-server-specific grant system.
+- Extend the existing `McpServerTool` record with typed closed policy status (`quarantined`, `approved`, `denied`), effect posture, and allowed execution modes, plus the approved grant key, policy version, `approvedByPrincipalId`, and approval timestamp. This is policy projection on the existing discovery record, not a new identity or permission table; approval provenance points to the canonical `Principal`, never a parallel user identity.
+- Discovery writes remote annotations into an explicitly untrusted evidence field, never into effective policy. Newly discovered and materially changed tools enter `quarantined` unless a versioned bundled policy deterministically covers the namespaced tool.
+- A shared resolver combines bundled mappings and approved persisted policy into the existing `isToolAllowedByGrants` path. Unknown status, unknown grant key, incomplete effect metadata, stale policy version, or server/tool identity mismatch denies.
+- `getAvailableTools` uses the resolver for listing. `executeMcpServerTool` re-resolves immediately before the remote call and records allow/deny in `AuthorizationDecisionLog`; a stale model-visible tool list cannot authorize execution.
+- The migration classifies currently mapped bundled tools from their canonical map and quarantines every other discovered tool. It never infers approval from `isEnabled`, server health, descriptions, or remote annotations.
+- Inventory and operator diagnostics report mapped, denied, and quarantined tools without exposing raw credentials or suggesting that connectivity equals authority.
+- Server/tool renames follow the existing tool-name compatibility principle: an alias is callable only when it carries equivalent explicit policy during its bounded compatibility window.
+
+The chosen hybrid approach was kernel-ratified in `DI-F6D4C0132024`. It beat static-map-only and persisted-policy-only alternatives with high confidence because it extends the existing registry and evaluator while keeping dynamic integrations operable.
+
+### Acceptance contract
+
+| Acceptance | Objective | Statement |
+|---|---|---|
+| AC-MCP-AUTH-001 | OBJ-MCP-AUTH-001 | An unmapped, quarantined, stale, or incomplete dynamically discovered tool is absent from every coworker tool surface, including with External Access enabled. |
+| AC-MCP-AUTH-002 | OBJ-MCP-AUTH-001 | A mapped tool is visible only when the acting human capability, agent grant, execution mode, and external-access requirements all pass. |
+| AC-MCP-AUTH-003 | OBJ-MCP-AUTH-002 | Invocation rechecks the current policy and refuses stale-list, revoked, renamed-without-policy, and now-quarantined tools before any remote call. |
+| AC-MCP-AUTH-004 | OBJ-MCP-AUTH-003 | Inventory classifies every active discovered tool as bundled-approved, explicitly approved, denied, or quarantined; no active tool is authorized by omission. |
+| AC-MCP-AUTH-005 | OBJ-MCP-AUTH-003 | Remote annotations remain untrusted evidence and cannot widen grants, lower side-effect posture, or authorize an execution mode. |
+| AC-MCP-AUTH-006 | OBJ-MCP-AUTH-002 | Canonical-runtime evidence proves an unknown tool is refused and an explicitly mapped tool succeeds with an authorization decision record. |
+
+## 12. Delivery order and dependency rules
 
 1. **BI-FE678DA3 first or in parallel with design work:** restore roadmap truth before completion claims.
 2. **BI-32935E47 before routine root-key rotation:** the optional 1Password adapter may land first, but operators must keep the same key value until versioned rotation is delivered.
@@ -241,10 +282,11 @@ The six slices strengthen this architecture at distinct seams. None introduces a
 4. **BI-E22C3D75 before assurance-dependent customer actions:** canonical session identity precedes new customer assurance policy.
 5. **BI-DD3BBD02 independently migratable:** coordinate with credential-envelope work so it does not create a second crypto format.
 6. **BI-C9656270 after an implementation plan defines rollout/recovery:** passkey enrollment and recovery require explicit UX and operational verification.
+7. **BI-8B7B2FE9 before enabling more dynamic MCP servers for coworkers:** connectivity and discovery may continue, but unknown tools remain quarantined until this boundary is implemented.
 
 No slice waits for all others unless its implementation plan names a concrete dependency. This design coordinates invariants; it is not authorization for a six-item batch.
 
-## 12. Cross-cutting verification
+## 13. Cross-cutting verification
 
 Every implementation plan must classify and exercise:
 
@@ -256,12 +298,13 @@ Every implementation plan must classify and exercise:
 - session invalidation and reauthentication effects;
 - documentation impact for operators, users, coworkers, architecture, and external agents;
 - focused tests, production build, semantic review, exact-tree gate, and canonical-runtime UX/operational verification where applicable.
+- dynamic-tool policy inventory and a negative invocation proving an unclassified external tool cannot reach its server.
 
-## 13. Non-goals
+## 14. Non-goals
 
 - replacing DPF LDAP with Microsoft Entra ID, Active Directory, Keycloak, or 1Password;
 - replacing Step CA or DPF organization PKI;
 - delegating DPF authorization, roles, capabilities, TAK grants, or workroom policy to an IdP or vault;
 - storing all connector credentials directly in 1Password;
 - treating vendor compliance certifications as DPF compliance;
-- merging the six backlog items into one implementation PR.
+- merging the seven backlog items into one implementation PR.
