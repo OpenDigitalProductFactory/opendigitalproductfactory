@@ -143,6 +143,62 @@ describe("terminal writer context hydration", () => {
     expect(readPage).toHaveBeenNthCalledWith(2, expect.objectContaining({ cursor: "cursor-2" }));
   });
 
+  it("rehydrates the preserved 24,493-character artifact across eight exact-bound pages", async () => {
+    const lines = [
+      "x".repeat(139),
+      ...Array.from({ length: 450 }, () => "x".repeat(53)),
+      `tail:${"z".repeat(48)}`,
+    ];
+    const pageLineCounts = [50, 58, 58, 58, 58, 58, 58, 54];
+    const pages = [];
+    let lineOffset = 0;
+    for (const [index, lineCount] of pageLineCounts.entries()) {
+      const startLine = lineOffset + 1;
+      const endLine = lineOffset + lineCount;
+      const isLast = index === pageLineCounts.length - 1;
+      pages.push(page({
+        content: `${lines.slice(lineOffset, endLine).join("\n")}${isLast ? "" : "\n"}`,
+        startLine,
+        endLine,
+        totalLines: lines.length,
+        hasMore: !isLast,
+        cursor: isLast ? null : `large-cursor-${index + 1}`,
+      }));
+      lineOffset = endLine;
+    }
+    const artifact = pages.map((candidate) => candidate.content).join("");
+    expect(artifact).toHaveLength(24_493);
+    expect(lines).toHaveLength(452);
+    expect(pages.every((candidate) => candidate.content.length <= 3_200)).toBe(true);
+
+    const readPage = vi.fn();
+    for (const candidate of pages) {
+      readPage.mockResolvedValueOnce({
+        success: true,
+        message: `page ${candidate.startLine}-${candidate.endLine}`,
+        data: candidate,
+      });
+    }
+
+    const result = await hydrateTerminalWriterContext({
+      policy,
+      executions: [reader("large-artifact-reader", { startLine: 1 })],
+      readPage,
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        hydratedPageCount: 8,
+        hydratedCharCount: 24_493,
+        context: expect.stringContaining(`tail:${"z".repeat(48)}`),
+      },
+    });
+    expect(readPage).toHaveBeenCalledTimes(8);
+    expect(readPage).toHaveBeenNthCalledWith(1, expect.objectContaining({ startLine: 1 }));
+    expect(readPage).toHaveBeenNthCalledWith(8, expect.objectContaining({ cursor: "large-cursor-7" }));
+  });
+
   it("accepts character-bounded reread pages that continue on the same source line", async () => {
     const readPage = vi.fn()
       .mockResolvedValueOnce({
@@ -532,7 +588,7 @@ describe("terminal writer context hydration", () => {
 
   it("fails closed when deterministic pagination remains truncated at the bound", async () => {
     const readPage = vi.fn();
-    for (let index = 0; index < 6; index += 1) {
+    for (let index = 0; index < 20; index += 1) {
       readPage.mockResolvedValueOnce({
         success: true,
         message: `page ${index + 1}`,
@@ -540,7 +596,7 @@ describe("terminal writer context hydration", () => {
           content: "x\n",
           startLine: index + 1,
           endLine: index + 1,
-          totalLines: 7,
+          totalLines: 21,
           hasMore: true,
           cursor: `cursor-${index + 1}`,
         }),
@@ -554,7 +610,7 @@ describe("terminal writer context hydration", () => {
     });
 
     expect(result).toMatchObject({ ok: false, code: "terminal_writer_context_truncated" });
-    expect(readPage).toHaveBeenCalledTimes(6);
+    expect(readPage).toHaveBeenCalledTimes(20);
   });
 
   it("fails closed when deterministic rereading fails", async () => {
