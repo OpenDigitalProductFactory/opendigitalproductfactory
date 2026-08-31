@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { readRegistryReleaseCandidate } from "./registry-release";
 
 const OWNER = "opendigitalproductfactory";
@@ -142,6 +142,98 @@ function fixtureFetch(options: {
 }
 
 describe("readRegistryReleaseCandidate", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("replaces a failed process-lifetime transport and retries the complete registry read once", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => {
+      throw new Error("poisoned process-lifetime fetch pool");
+    }));
+    const closeFailed = vi.fn(async () => undefined);
+    const closeHealthy = vi.fn(async () => undefined);
+    const transportFactory = vi.fn()
+      .mockReturnValueOnce({
+        fetch: vi.fn(async () => {
+          throw new TypeError("fetch failed", {
+            cause: new Error("Connect Timeout Error"),
+          });
+        }) as typeof fetch,
+        close: closeFailed,
+      })
+      .mockReturnValueOnce({
+        fetch: fixtureFetch(),
+        close: closeHealthy,
+      });
+
+    const result = await readRegistryReleaseCandidate({
+      owner: OWNER,
+      channelTag: "latest",
+      architecture: "amd64",
+      transportFactory,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(transportFactory).toHaveBeenCalledTimes(2);
+    expect(closeFailed).toHaveBeenCalledOnce();
+    expect(closeHealthy).toHaveBeenCalledOnce();
+  });
+
+  it("keeps a byte-verified candidate when transport cleanup reports an error", async () => {
+    const close = vi.fn(async () => {
+      throw new Error("dispatcher already closed");
+    });
+
+    const result = await readRegistryReleaseCandidate({
+      owner: OWNER,
+      channelTag: "latest",
+      architecture: "amd64",
+      transportFactory: () => ({ fetch: fixtureFetch(), close }),
+    });
+
+    expect(result.ok).toBe(true);
+    expect(close).toHaveBeenCalledOnce();
+  });
+
+  it("recovers when constructing the first isolated transport fails", async () => {
+    const close = vi.fn(async () => undefined);
+    const transportFactory = vi.fn()
+      .mockImplementationOnce(() => {
+        throw new TypeError("dispatcher construction failed");
+      })
+      .mockReturnValueOnce({ fetch: fixtureFetch(), close });
+
+    const result = await readRegistryReleaseCandidate({
+      owner: OWNER,
+      channelTag: "latest",
+      architecture: "amd64",
+      transportFactory,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(transportFactory).toHaveBeenCalledTimes(2);
+    expect(close).toHaveBeenCalledOnce();
+  });
+
+  it("does not retry an integrity failure on a new transport", async () => {
+    const close = vi.fn(async () => undefined);
+    const transportFactory = vi.fn(() => ({
+      fetch: fixtureFetch({ tamperChannelDigest: true }),
+      close,
+    }));
+
+    const result = await readRegistryReleaseCandidate({
+      owner: OWNER,
+      channelTag: "latest",
+      architecture: "amd64",
+      transportFactory,
+    });
+
+    expect(result).toEqual({ ok: false, reason: "channel-digest-mismatch" });
+    expect(transportFactory).toHaveBeenCalledOnce();
+    expect(close).toHaveBeenCalledOnce();
+  });
+
   it("resolves a verified channel to the immutable tag and byte identities", async () => {
     const result = await readRegistryReleaseCandidate({
       owner: OWNER,
