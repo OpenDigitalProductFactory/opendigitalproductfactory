@@ -35,6 +35,19 @@ function remoteTaskContent(text: string) {
   return [{ type: "text", text }];
 }
 
+export function remoteTaskChatHistory(input: {
+  prompt: string;
+  resumeKind?: "capacity" | "terminal-writer";
+  terminalWriterContext?: string;
+}): Array<{ role: "system" | "user"; content: string }> {
+  return [
+    ...(input.resumeKind === "terminal-writer" && input.terminalWriterContext
+      ? [{ role: "system" as const, content: input.terminalWriterContext }]
+      : []),
+    { role: "user" as const, content: input.prompt },
+  ];
+}
+
 export async function executeRemoteTaskAttempt(input: {
   run: { id: string; taskRunId: string; contextId: string | null };
   threadId: string;
@@ -126,12 +139,11 @@ export async function executeRemoteTaskAttempt(input: {
     const result = await executeAutonomousAgenticLoop({
       systemPrompt: agent.systemPrompt,
       systemPromptInstructionSpans: coworkerBriefSpans(agent.systemPrompt),
-      chatHistory: [
-        { role: "user", content: parsed.prompt },
-        ...(input.resumeKind === "terminal-writer" && input.terminalWriterContext
-          ? [{ role: "system" as const, content: input.terminalWriterContext }]
-          : []),
-      ],
+      chatHistory: remoteTaskChatHistory({
+        prompt: parsed.prompt,
+        resumeKind: input.resumeKind,
+        terminalWriterContext: input.terminalWriterContext,
+      }),
       sensitivity: agent.sensitivity ?? "internal",
       tools: tools.tools,
       toolsForProvider: tools.toolsForProvider,

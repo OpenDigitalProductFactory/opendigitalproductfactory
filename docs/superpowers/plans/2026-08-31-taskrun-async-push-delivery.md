@@ -59,6 +59,9 @@ cross-page notification experience after its durable-operation dependency.
    cancelling it and cloning its exact stored binding and proposal onto the
    same TaskRun. Require fresh human approval; never rerun inference or mint a
    sibling TaskRun.
+7. Keep hydrated immutable evidence as the first chat-history system message
+   on terminal-writer replay, followed by the original user prompt. Prove the
+   provider-neutral ordering with a focused regression and the live DMR route.
 
 ## Task 4: push and reconciliation
 
@@ -116,6 +119,9 @@ cross-page notification experience after its durable-operation dependency.
 5. On live, submit a bounded read-only coworker task and prove: immediate task
    handle, one background execution, push transition, disconnect/reconcile,
    and exact final result on the same TaskRun.
+6. Resume one persisted terminal-writer wait and prove the provider accepts the
+   system-first hydrated context, reuses the immutable reader evidence, and
+   records the writer result on the same TaskRun without a sibling identity.
 
 ## Backlog coverage
 
@@ -123,6 +129,11 @@ cross-page notification experience after its durable-operation dependency.
 - Parent: `BI-2014236E`
 - Receipt: pending governed writer execution against the final immutable plan
 - Dependencies: none
+- Rationale: the queue, push subscription, polling reconciliation, same-TaskRun
+  approval recovery, terminal-writer recovery, and WWMD authority projection
+  form one end-to-end execution contract. Shipping any phase independently
+  would expose a durable TaskRun state that another required phase cannot
+  deliver, recover, or authorize, so the phases are not independently useful.
 
 Related but independently shippable work is not a dependency of this atomic
 delivery: BI-8B8731EE is adjacent, BI-801313EB owns provider-level durable
