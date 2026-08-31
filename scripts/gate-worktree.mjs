@@ -59,7 +59,7 @@ export function describeLeaseCallFailure(error) {
     + "if this box regularly runs several gates at once";
 }
 import { summarizeLocalCiOutput } from "./lib/local-ci-failure-summary.mjs";
-import { classifyGateOutcome } from "./lib/sandbox-freshness.mjs";
+import { classifyGateOutcome, EXIT_CHILD_SIGNAL_DEATH } from "./lib/sandbox-freshness.mjs";
 import { fallbackStatusForUnknown } from "./lib/local-integration-status.mjs";
 import {
   authoritySafetyMarginMs,
@@ -88,6 +88,7 @@ import { classifyBaseResilience } from "./lib/local-ci-base-freshness.mjs";
 import { runPreAdmissionDocumentationLane } from "./lib/documentation-evidence-lane.mjs";
 import {
   createLocalCiPassEvidenceValidity,
+  projectReusedPassMetadata,
   readLocalCiGateState,
   writeLocalCiGateState,
 } from "./lib/local-ci-gate-state.mjs";
@@ -1270,6 +1271,25 @@ async function main() {
         ],
         evidencePending: false,
       });
+      // BI-C6B2D404: project current HEAD onto the metadata record so
+      // pregate:status does not report STALE against the prior candidateSha.
+      if (passed && metadataFile) {
+        let prior = null;
+        try {
+          prior = JSON.parse(readFileSync(metadataFile, "utf8"));
+        } catch {
+          prior = null;
+        }
+        writeFileSync(
+          metadataFile,
+          `${JSON.stringify(projectReusedPassMetadata(prior, {
+            sha,
+            branch,
+            evidenceId,
+            leaseId: canonicalLeaseId,
+          }), null, 2)}\n`,
+        );
+      }
       process.stdout.write(`reused canonical local-CI ${admission.resultClass} evidence: ${evidenceId}\n`);
       process.exit(passed ? 0 : 1);
     }
@@ -1787,7 +1807,7 @@ async function main() {
     process.stderr.write(`gate-worktree: lease fenced (${supervised.reason}); child process tree terminated\n`);
   }
   if (receivedSignal) {
-    runResult.status = 130;
+    runResult.status = EXIT_CHILD_SIGNAL_DEATH;
     runResult.output = `${runResult.output}\ngate-worktree: received ${receivedSignal}; child process tree terminated\n`;
     process.stderr.write(`gate-worktree: received ${receivedSignal}; child process tree terminated\n`);
   }
@@ -2015,6 +2035,12 @@ async function main() {
     die(`failed to record local integration evidence: ${JSON.stringify(evidenceResponse)}`);
   }
 
+  const capturedFailureCount = (failureSummary?.failedTests?.length || 0)
+    + (failureSummary?.failedChecks?.length || 0);
+  const persistedReason = outcome.summary
+    || (capturedFailureCount === 0 && runResult.status
+      ? `no stage failed; child exited ${runResult.status} after the last completed stage`
+      : "");
   writeState(stateFile, {
     branch,
     sha,
@@ -2028,6 +2054,9 @@ async function main() {
     resilience,
     leaseEvents,
     evidencePending: false,
+    failureReason: persistedReason,
+    failureSummary,
+    childExitCode: runResult.status,
   });
 
   // BI-B1065D41 Phase 1: one bounded, stable block closes every run. On a pass
@@ -2063,6 +2092,11 @@ async function main() {
     process.stderr.write(`gate-worktree: BLOCKED (control-plane starvation): ${outcome.summary}\n`);
     process.exit(5);
   }
+  if (outcome.status === "blocked_child_signal_death") {
+    process.stderr.write(`gate-worktree: BLOCKED (child signal death): ${outcome.summary}\n`);
+    process.stderr.write("gate-worktree: this is infrastructure evidence, not a product failure; retry on a quieter host\n");
+    process.exit(EXIT_CHILD_SIGNAL_DEATH);
+  }
   die("gate failed");
 }
 
@@ -2084,6 +2118,9 @@ function writeState(stateFile, {
   recovery = null,
   queueObserver = null,
   admission = null,
+  failureReason = "",
+  failureSummary = null,
+  childExitCode = null,
 }) {
   writeLocalCiGateState(stateFile, {
     branch,
@@ -2103,6 +2140,9 @@ function writeState(stateFile, {
     recovery,
     queueObserver,
     admission,
+    failureReason,
+    failureSummary,
+    childExitCode,
   });
 }
 

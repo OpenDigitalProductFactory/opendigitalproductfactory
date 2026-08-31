@@ -1,4 +1,10 @@
+---
+status: draft
+---
+
 # Implementation Plan — Browser-Driving Capability Substrate
+
+> **Current delivery note (2026-08-30):** this plan preserves the historical browser-specific design and identifiers. `EP-BROWSER-DRIVE` and its listed BIs no longer resolve in the live backlog. The mapped browser-tool work has landed; the remaining permissive behavior for unmapped discovered tools is superseded by live BI `BI-8B7B2FE9` and `2026-08-30-external-mcp-tool-default-deny.md`. Do not implement the fallback described below.
 
 | Field | Value |
 |-------|-------|
@@ -36,7 +42,7 @@
 - Unit: `mcp-tools.test.ts` — `getAvailableTools({externalAccessEnabled:true, agentId})` for an agent **without** browser grants returns **no** `mcp-browser-use__*`; with `browser_read` returns only the read tools; with `browser_drive` returns read + act.
 - Runtime: at `/platform/ai/authority`, the namespaced browser tools appear under their grants for a granted coworker and are absent for an ungranted one.
 
-**Risk / rollback:** filtering discovered tools could hide MCP tools other coworkers already rely on via External Access. Mitigate: only tools **present in `TOOL_TO_GRANTS`** are gated; unmapped discovered tools keep current behavior (or are deliberately denied — decide and test explicitly). Rollback = revert the `mcp-tools.ts` filter; grants become inert. Blast radius: the coworker tool-availability path — covered by the existing `mcp-tools.test.ts` suite.
+**Historical risk / supersession:** filtering discovered tools could hide MCP tools other coworkers already rely on via External Access. The former compatibility choice kept unmapped tools available. That choice is now superseded: BI-8B7B2FE9 requires all unmapped tools to quarantine/default-deny and rechecks policy at invocation. Never roll back to ambient availability; disable external execution while policy is repaired. Blast radius remains the coworker tool-availability and execution paths.
 
 ---
 
