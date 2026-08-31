@@ -297,11 +297,12 @@ test("clearStaleStageReceipts removes every per-stage receipt", () => {
   const cleared = clearStaleStageReceipts("/tmp/meta.json", { rm: (p) => removed.push(p) });
 
   assert.deepEqual(removed, [
+    "/tmp/meta.json",
     "/tmp/meta.json.vitest.json",
     "/tmp/meta.json.typecheck.json",
     "/tmp/meta.json.build.json",
   ]);
-  assert.equal(cleared.length, 3);
+  assert.equal(cleared.length, 4);
 });
 
 test("clearStaleStageReceipts is best-effort and never throws", () => {
@@ -318,12 +319,14 @@ test("clearStaleStageReceipts is best-effort and never throws", () => {
 test("clearStaleStageReceipts actually deletes on disk", () => {
   const dir = mkdtempSync(join(tmpdir(), "dpf-stage-receipts-"));
   const meta = join(dir, "dpf-local-ci-metadata.json");
+  writeFileSync(meta, JSON.stringify({ candidateSha: "old", execution: { status: "passed" } }));
   for (const suffix of [".vitest.json", ".typecheck.json", ".build.json"]) {
     writeFileSync(`${meta}${suffix}`, JSON.stringify({ status: "passed" }));
   }
 
   clearStaleStageReceipts(meta);
 
+  assert.equal(existsSync(meta), false, "metadata record must not survive into the next run (BI-F22B4EEE)");
   for (const suffix of [".vitest.json", ".typecheck.json", ".build.json"]) {
     assert.equal(existsSync(`${meta}${suffix}`), false, `${suffix} must not survive into the next run`);
   }

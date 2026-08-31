@@ -145,17 +145,19 @@ test("FAIL when the record exists for this SHA but did not pass", () => {
   assert.equal(exitCodeForVerdict(r.verdict), 1);
 });
 
-test("a run that gave up while queued reads FAIL, not PASS", () => {
-  // BI-2C7F51BA Defect 3: that path exits 0 having gated nothing. The record is
-  // what makes the silent exit-0 detectable.
+test("a run that gave up while queued reads INCONCLUSIVE, not PASS (BI-8392DA16)", () => {
+  // BI-2C7F51BA Defect 3: that path used to exit 0 having gated nothing. The
+  // record is what makes the silent exit-0 detectable. A `blocked_*` status
+  // is infrastructure, not a product FAIL — same class as SIGTERM.
   const r = classifySlotRecord({
     state: passingState({ gatePassed: false, status: "blocked_quiescence", evidenceRecordId: "" }),
     metadata: null,
     headSha: HEAD,
     now: NOW,
   });
-  assert.equal(r.verdict, "FAIL");
+  assert.equal(r.verdict, "INCONCLUSIVE");
   assert.match(r.reason, /blocked_quiescence/);
+  assert.match(r.reason, /infrastructure, not a product verdict/i);
 });
 
 test("PENDING when the gate passed but evidence publication is unfinished", () => {
@@ -377,6 +379,36 @@ test("a queued record that never ran is INCONCLUSIVE, not FAIL (BI-51353470)", (
   assert.match(r.reason, /did not run|never ran|not a failure of the diff/i);
   assert.doesNotMatch(r.reason, /local-ci-vitest-runner/);
   assert.equal(exitCodeForVerdict(r.verdict), 1, "inconclusive is not a green light to push");
+});
+
+test("a SIGTERM-killed / blocked_child_signal_death record is INCONCLUSIVE, not FAIL (BI-8392DA16, BI-2AB94B5A)", () => {
+  const r = classifySlotRecord({
+    state: passingState({
+      gatePassed: false,
+      status: "blocked_child_signal_death",
+      evidenceRecordId: "",
+      failureReason: "the build child was killed by SIGTERM",
+    }),
+    metadata: { candidateSha: HEAD },
+    headSha: HEAD,
+    headBranch: "claude/topic",
+    now: NOW,
+  });
+  assert.equal(r.verdict, "INCONCLUSIVE");
+  assert.match(r.reason, /infrastructure, not a product verdict/i);
+  assert.match(r.reason, /SIGTERM/);
+  assert.doesNotMatch(r.reason, /this SHA has not passed/);
+});
+
+test("blocked_sandbox_drift is INCONCLUSIVE, not FAIL (BI-2AB94B5A)", () => {
+  const r = classifySlotRecord({
+    state: passingState({ gatePassed: false, status: "blocked_sandbox_drift", evidenceRecordId: "" }),
+    metadata: { candidateSha: HEAD },
+    headSha: HEAD,
+    now: NOW,
+  });
+  assert.equal(r.verdict, "INCONCLUSIVE");
+  assert.match(r.reason, /infrastructure, not a product verdict/i);
 });
 
 test("a cancelled record is INCONCLUSIVE, not FAIL (BI-51353470)", () => {

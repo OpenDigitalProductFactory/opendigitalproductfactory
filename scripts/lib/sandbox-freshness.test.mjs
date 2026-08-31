@@ -386,6 +386,19 @@ test("a signal-killed child is blocked, not failed", () => {
   assert.match(outcome.summary, /NOT a product build failure/);
 });
 
+test("a parent SIGTERM (exit 130) is blocked, not a product FAIL (BI-8392DA16)", () => {
+  const outcome = classifyGateOutcome({ freshnessVerdict: "green", gateExitCode: 130 });
+  assert.equal(outcome.status, "blocked_child_signal_death");
+  assert.equal(outcome.productEvidence, false);
+});
+
+test("a fenced lease (exit 75) is blocked, not a product FAIL (BI-465B3D60)", () => {
+  const outcome = classifyGateOutcome({ freshnessVerdict: "green", gateExitCode: 75 });
+  assert.equal(outcome.status, "blocked_control_plane_starvation");
+  assert.equal(outcome.productEvidence, false);
+  assert.match(outcome.summary, /fenced/i);
+});
+
 test("the signal-death code does not collide with the other blocked codes", () => {
   const codes = new Set([
     EXIT_GREEN,
@@ -419,6 +432,9 @@ test("every status classifyGateOutcome can emit is one the recorder accepts", ()
     EXIT_CONTROL_PLANE_STARVATION,
     EXIT_VITEST_RUNNER_TERMINATION,
     EXIT_CHILD_SIGNAL_DEATH,
+    75,
+    130,
+    143,
   ];
   const verdicts = [null, "green", "drifted", "sandbox_not_ready"];
 
