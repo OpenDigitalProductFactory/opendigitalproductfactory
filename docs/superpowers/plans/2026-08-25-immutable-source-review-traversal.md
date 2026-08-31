@@ -195,3 +195,24 @@ The governed coverage writer cannot issue a receipt while the condition `no init
 | Deliverable | Requirement refs | Flow refs | Contract refs | Verification refs | Atomicity |
 | --- | --- | --- | --- | --- | --- |
 | Zero-reader same-TaskRun terminal-writer recovery | Phase 13.1, 13.3, 13.6, 13.9 | Phase 13.4, 13.5 | Phase 13.3, 13.6, 13.9 | Phase 13.2, 13.7, 13.8 | Reservation, the governed bootstrap read, persisted-row requery, hydration validation, and typed resumable failure form one fail-closed unit. Shipping any subset would either leave the preserved TaskRun unrecoverable or weaken evidence authority. |
+
+## Phase 14 — Supersede an expired unapproved writer proposal
+
+This phase extends BI-DE58CFE8 on Workroom `WC-14EA9122` for the exact PR #4891 design-review TaskRun `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-57CC78DB3778`. Its proposal envelope expired in `proposed`, leaving the same immutable review unable to obtain fresh approval or a genuine baseline.
+
+1. Preserve the TaskRun, request digest, writer proposal ToolExecution `cmthhuxly00a501qmsogavxv5`, expired envelope `cmthhuxlm00a201qmftzezz1k`, exact approval binding, and zero-receipt state as the RED fixture. Never approve the expired envelope or mint a sibling review.
+2. Add the failing transaction test proving the recovery query cannot see an expired `proposed` envelope. Add the paired refusal for an unexpired proposal.
+3. Extend the existing approval-recovery transaction, not terminal inference, to accept `proposed` only after expiry and only when TaskRun/digest/user/agent/writer/binding/proposal all match exactly.
+4. Compare-and-set the source envelope to `cancelled`, copy the stored envelope binding and proposal arguments into exactly one fresh proposal/envelope pair, and park the same TaskRun `input-required`. Roll back on any race.
+5. Preserve inference, the independent decision, grants, approval separation, writer validation, receipt semantics, and all historical rows unchanged. Refuse completed writers/receipts, conflicting or ambiguous bindings/proposals, and unexpired envelopes.
+6. Prove the exact RED then GREEN, unexpired refusal, existing approved/failed recovery cases, adjacent submission/terminal-writer tests, web typecheck, source/docs/style/preflight guards, and protected GitHub checks. Record any local or semantic infrastructure failure as non-PASS.
+7. Deliver one DCO-signed protected PR, one canonical release, and one governed live upgrade. Require exact served SHA and CAN-TEST before replaying `...57CC78DB3778` once.
+8. Accept only the fresh exact envelope, separately approved same-TaskRun writer execution, and genuine baseline. Then record atomic coverage and finish PR #4891 through its normal protected queue.
+
+### Phase 14 atomic coverage
+
+The existing BI-DE bootstrap has no initiative scope baseline, so this table remains traceability evidence rather than a fabricated coverage receipt.
+
+| Deliverable | Requirement refs | Flow refs | Contract refs | Verification refs | Atomicity |
+| --- | --- | --- | --- | --- | --- |
+| Expired proposed-envelope same-TaskRun recovery | Phase 14.1, 14.3, 14.5, 14.8 | Phase 14.3, 14.4 | Phase 14.3, 14.4, 14.5 | Phase 14.2, 14.6, 14.7 | Source-envelope cancellation, exact proposal rebinding, TaskRun parking, fresh approval, and writer receipt form one audit chain. Partial delivery would either reuse expired authority or rerun the independent review. |
