@@ -335,6 +335,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     // live install is reachable). Closes the unbacked-doc-anchor pattern (P3).
     guard("doc-anchor-existence", "Doc Anchor Existence", [
       node("--test", "scripts/check-doc-anchor-existence.test.mjs"),
+      // Spawns each remaining CLI against a missing BASE_SHA on the live tree,
+      // so the host-side preflight must not strip it (BI-20599979).
+      conformanceTest("scripts/lib/git-changed-files.test.mjs"),
       node("scripts/check-doc-anchor-existence.mjs"),
     ]),
     // BI-38A353B2: doc-anchor-existence proves a cited id EXISTS; nothing

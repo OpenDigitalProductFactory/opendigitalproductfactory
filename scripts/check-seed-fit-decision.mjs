@@ -7,6 +7,7 @@ import {
   normalizeGithubLabels,
   SEED_FIT_DECISIONS,
 } from "./lib/seed-fit-gate.mjs";
+import { requireChangedFiles } from "./lib/git-changed-files.mjs";
 
 const REF_RE = /^[A-Za-z0-9._\-/]{1,200}$/;
 
@@ -32,10 +33,7 @@ if (process.env.GITHUB_EVENT_NAME && process.env.GITHUB_EVENT_NAME !== "pull_req
 
 const base = safeRef(process.env.BASE_SHA || "origin/main", "BASE_SHA");
 git("fetch", "--no-tags", "origin", "main");
-const changedFiles = git("diff", "--name-only", `${base}...HEAD`)
-  .split("\n")
-  .map((line) => line.trim())
-  .filter(Boolean);
+const changedFiles = requireChangedFiles(base, "seed-fit-gate");
 
 let labels = [];
 try {
