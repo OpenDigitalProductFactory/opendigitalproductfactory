@@ -82,6 +82,17 @@ commit-to-subscribe race without making the in-memory notification bus a source
 of truth. Multiple streams for one auth context receive one logical live frame,
 not a duplicate broadcast.
 
+The first delivery slice has an explicit scale ceiling: live event fan-out is
+process-local and therefore assumes one active portal replica for immediate
+push. This does not create a correctness dependency on that process. A client
+connected to another replica, or reconnecting after a replica replacement,
+first receives durable TaskRun snapshots and then recovers with auth-bound
+`tasks/get` / `tasks/list`; scheduled reconciliation recovers missed queue
+delivery. BI-05D7A0DC owns the registered-host and cross-process notification
+transport needed before DPF promises immediate fan-out across multiple portal
+replicas. That follow-up must reuse TaskRun as the ledger rather than add a
+second task state store.
+
 An outbound webhook is useful only for a separately operated host that cannot
 maintain the MCP stream. It must be a registered integration endpoint with an
 encrypted signing secret, fixed allowlisted origin, delivery identity, replay
@@ -156,6 +167,7 @@ credentials, user-supplied callback URLs, or writer arguments.
 | AC-ONE-EXECUTION | Duplicate submit, duplicate queue event, and reconciliation race execute at most one claimed attempt for one request digest. |
 | AC-SERVER-REHYDRATION | The worker reconstructs the exact auth-bound packet from persisted server state; no prompt, credential, callback, or writer argument is trusted from the event. |
 | AC-PUSH-FIRST | A committed working/input-required/terminal transition reaches the authenticated MCP Streamable HTTP subscription as `notifications/tasks/status`; consumers re-read before acting. |
+| AC-SCALE-CEILING | Single-replica push is immediate; a replica miss or replacement remains lossless through durable replay/list/get, and multi-replica immediate fan-out is explicitly deferred to BI-05D7A0DC. |
 | AC-RECONCILE | A missed enqueue or disconnected notification is recovered by deterministic re-enqueue and auth-bound list/get without a sibling TaskRun. |
 | AC-FAIL-CLOSED | Missing/mismatched identity, revoked authority, cancellation, approval, and terminal-writer boundaries remain non-executable or input-required. |
 | AC-SYNC-REGRESSION | High-risk pre-execution approval and existing idempotent replay/resume behavior remain unchanged. |
@@ -168,6 +180,7 @@ credentials, user-supplied callback URLs, or writer arguments.
 | AC-ONE-EXECUTION | heartbeat-aware row-version CAS + deterministic Inngest event ID | duplicate-event and replay race tests |
 | AC-SERVER-REHYDRATION | TaskRun/TaskMessage/owner resolver | missing and mismatched persisted-field tests |
 | AC-PUSH-FIRST | post-commit TaskRun transition -> token-scoped MCP task event projection | GET auth, snapshot replay, live notification, and no-fanout tests |
+| AC-SCALE-CEILING | process-local live bus + durable snapshot/list/get recovery | reconnect snapshot test and documented BI-05D7A0DC dependency |
 | AC-RECONCILE | submitted dispatch-pending scan -> same event ID | enqueue-failure and scheduled-reconcile tests |
 | AC-FAIL-CLOSED | existing approval, terminal writer, token, cancellation checks | existing negative suites plus worker reconstruction matrix |
 | AC-SYNC-REGRESSION | unchanged high-risk and same-task replay paths | current `mcp-task-submit` regression suite |

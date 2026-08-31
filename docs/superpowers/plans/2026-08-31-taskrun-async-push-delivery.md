@@ -73,6 +73,10 @@ cross-page notification experience after its durable-operation dependency.
    catalog module past its size ratchet.
 6. Keep `tasks/list`, `tasks/get`, and `tasks/result` as the authoritative
    missed-delivery/read-after-wake path.
+7. Document and verify the first-slice scale ceiling: immediate push is scoped
+   to one active portal replica, while durable TaskRun replay/list/get remains
+   correct across reconnect or replacement. Keep multi-replica immediate
+   fan-out in the explicit BI-05D7A0DC dependency.
 
 ## Task 5: blast radius and delivery
 
