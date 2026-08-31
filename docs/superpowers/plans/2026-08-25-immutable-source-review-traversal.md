@@ -173,3 +173,17 @@ This phase extends BI-DE58CFE8 on Workroom `WC-14EA9122` after WordPress complet
 6. Run focused terminal-policy, plan-override, and provider-dispatch tests; the linked inference/agent-loop blast radius; web typecheck; source/module/docs guards; pregate preflight; exact-tree CI; and semantic review. Record infrastructure failures as non-PASS and keep protected CI mandatory.
 7. Deliver one DCO-signed protected PR, one canonical release, and one governed live upgrade. Require exact served SHA and CAN-TEST.
 8. Resume only the preserved WordPress TaskRun on a server-authorized identical-key path. Accept only genuine immutable reads plus governed `record_initiative_evidence` execution and objective-mapping receipt, then close BI-A45D744A and WC-04941646 through their normal server gates.
+
+## Phase 13 — Bootstrap a resumable TaskRun that has no reader rows
+
+This phase extends BI-DE58CFE8 on Workroom `WC-14EA9122` after Portfolio Advisor TaskRun `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-634F7FF63BF8` persisted an explicit missing-terminal-writer wait before any reader or writer tool execution. WWMD decision `DI-6A51BE456F49` keeps the exact TaskRun and request digest authoritative.
+
+1. Preserve the exact zero-reader TaskRun, request key, digest, immutable artifact binding, and zero-writer/zero-envelope/zero-receipt state as the RED fixture. Do not mint a sibling identity.
+2. Add RED submission tests proving an identical replay currently cannot reserve an explicit wait with zero readers, while a completed route exit with no persisted evidence remains closed.
+3. Permit zero-reader reservation only for an explicit `input-required` terminal-writer wait. Retain the existing digest, writer-success, proposal-envelope, and compare-and-set protections.
+4. After reservation, execute exactly one bounded line-one `read_source_at_version` call using only the server-bound repository/path/commit/blob identity. Do not synthesize or directly trust its returned content.
+5. Re-query persisted reader ToolExecutions for the same TaskRun and pass only those durable rows into the existing hydration validator. Refactor the shared reader query so reservation and post-bootstrap hydration cannot drift.
+6. On failed tool execution, missing persistence, invalid binding, malformed result, or incomplete hydration, restore the same TaskRun to a typed resumable context failure and do not invoke writer-only inference.
+7. Prove the exact zero-row RED then GREEN, bootstrap failure, completed-no-evidence non-regression, existing persisted-reader recovery, adjacent submission/approval/capacity/tool-grant suites, web typecheck, style/docs/source guards, preflight, exact-tree CI, and semantic review. Record infrastructure-inconclusive gates as non-PASS.
+8. Deliver one DCO-signed protected PR, one canonical release, and one governed live upgrade. Require exact served SHA and CAN-TEST before one identical-key replay of `...634F7FF63BF8`.
+9. Accept only a genuine persisted immutable reader, governed writer execution, exact current approval envelope, receipt, and server baseline/mapping. Apply WWMD approval decision `DI-85F8C9528BE4` only when the envelope is exact, current, and immutable; otherwise fail closed.
