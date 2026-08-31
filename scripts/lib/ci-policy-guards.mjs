@@ -227,6 +227,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/dev-preview-migrate-converge.test.mjs",
         "scripts/pregate-exit-honesty.test.mjs",
         "scripts/lib/gate-context-runtime-contract.test.mjs",
+        "packages/dpf-skill-pack/hooks/code-intelligence-guidance.test.mjs",
       ),
       node("scripts/check-ci-policy-test-inventory.mjs"),
     ]),
