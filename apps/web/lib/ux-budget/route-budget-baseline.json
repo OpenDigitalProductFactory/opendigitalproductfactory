@@ -1719,7 +1719,7 @@
       "ariaSnapshot": "- link\n- banner\n  - link\n    - text\n    - paragraph\n      - text\n  - link\n  - button\n  - text\n  - button\n- complementary\n  - navigation\n    - group\n      - button\n      - button [pressed]\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n- main\n  - navigation\n    - link\n    - text\n  - link\n  - paragraph\n    - text\n  - link\n  - heading [level=1]\n  - paragraph\n    - text\n  - heading [level=2]\n  - paragraph\n    - text\n  - text\n  - paragraph\n    - text\n  - text\n  - paragraph\n    - text\n  - text\n  - paragraph\n    - text\n  - text\n  - heading [level=2]\n  - paragraph\n    - text\n  - heading [level=2]\n  - text"
     },
     "/platform/identity/authorization": {
-      "defaultVisibleWords": 2602,
+      "defaultVisibleWords": 2609,
       "leadBandWords": 0,
       "primaryActions": 2,
       "visibleFields": 4,
