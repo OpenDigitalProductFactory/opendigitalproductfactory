@@ -159,6 +159,10 @@ credentials, user-supplied callback URLs, or writer arguments.
   preserves the provider-neutral system-first conversation contract while the
   separate coworker system prompt remains authoritative. Providers that reject
   misplaced system messages must receive the same canonical ordering.
+- Duration and iteration exhaustion remain terminal-policy exits. If the bound
+  writer has not been attempted, exhaustion records `terminal-writer-missing`
+  and leaves the same TaskRun `input-required`; generic completion copy may not
+  bypass the writer contract or imply that a receipt exists.
 - If a proposed human-approval envelope expires before the operator acts, an
   exact replay supersedes it on the same TaskRun with the same stored writer
   arguments, approval binding, request digest, and artifact identity. It never
@@ -221,7 +225,7 @@ action-bound WWMD projection with high confidence and
 | AC-FAIL-CLOSED | Missing/mismatched identity, revoked authority, cancellation, approval, and terminal-writer boundaries remain non-executable or input-required. |
 | AC-SYNC-REGRESSION | High-risk pre-execution approval and existing idempotent replay/resume behavior remain unchanged. |
 | AC-APPROVAL-EXPIRY | An expired proposed writer envelope is replaced on the same TaskRun with identical persisted arguments and binding, without inference rerun or sibling identity. |
-| AC-RESUME-MESSAGE-ORDER | A terminal-writer replay places hydrated immutable evidence before the user prompt so every supported provider receives a valid system-first conversation without changing the stored prompt or artifact binding. |
+| AC-RESUME-MESSAGE-ORDER | A terminal-writer replay places hydrated immutable evidence before the user prompt so every supported provider receives a valid system-first conversation without changing the stored prompt or artifact binding; duration or iteration exhaustion without the writer remains same-TaskRun input-required. |
 | AC-WWMD-AUTHORITY | A bounded initiative-readiness action with no fresh exact judgment invokes WWMD once and proceeds without a per-action human click only on explicit, autonomy-eligible `proceed`; every no/uncertain/conflict/stale/mismatched result fails closed. |
 
 ## Traceability and verification
@@ -237,7 +241,7 @@ action-bound WWMD projection with high confidence and
 | AC-FAIL-CLOSED | existing approval, terminal writer, token, cancellation checks | existing negative suites plus worker reconstruction matrix |
 | AC-SYNC-REGRESSION | unchanged high-risk and same-task replay paths | current `mcp-task-submit` regression suite |
 | AC-APPROVAL-EXPIRY | stale proposed envelope -> cancel old -> clone exact proposal -> fresh approval | approval-recovery transaction and replay tests |
-| AC-RESUME-MESSAGE-ORDER | hydrated immutable evidence -> system-first chat history -> original user prompt -> writer-only replay | pure ordering regression plus live same-TaskRun DMR replay |
+| AC-RESUME-MESSAGE-ORDER | hydrated immutable evidence -> system-first chat history -> original user prompt -> writer-only replay; exhausted writer-less review -> input-required | pure ordering regression, deterministic duration-exhaustion regression, plus live same-TaskRun DMR replay |
 | AC-WWMD-AUTHORITY | server-derived action question -> sealed exact DecisionInteraction -> existing projector -> expiring single-use authorization | producer, ledger-binding, projector, denial, mismatch, duplicate-consult, and gate integration tests |
 
 ## Rollout and rollback

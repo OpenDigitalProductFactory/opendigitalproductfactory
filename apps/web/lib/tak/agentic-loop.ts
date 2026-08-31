@@ -2642,6 +2642,18 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     `executedTools=${executedTools.length}. ` +
     `This may indicate the model needs more room or is stuck in a loop.`,
   );
+  if (params.terminalToolPolicy) {
+    const terminalExit = resolveTerminalTextExit(
+      params.terminalToolPolicy,
+      executedTools,
+      Math.max(1, terminalToolNudges),
+    );
+    if (terminalExit.kind === "input-required") {
+      return completeResult(terminalExit.message, lastResult, {
+        failure: { kind: "terminal-writer-missing", message: terminalExit.message },
+      });
+    }
+  }
   const fallbackContent = lastResult?.content?.trim() ?? "";
   const fallbackIsRawToolUse = fallbackContent.length > 0 && extractToolCalls(fallbackContent).length > 0;
   const fallbackIsFabricated = detectFabrication(

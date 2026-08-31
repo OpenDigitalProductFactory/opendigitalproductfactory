@@ -62,6 +62,9 @@ cross-page notification experience after its durable-operation dependency.
 7. Keep hydrated immutable evidence as the first chat-history system message
    on terminal-writer replay, followed by the original user prompt. Prove the
    provider-neutral ordering with a focused regression and the live DMR route.
+8. Route duration and iteration exhaustion through the terminal-writer policy.
+   When the writer has not run, preserve the same TaskRun as `input-required`
+   with `terminal-writer-missing`; never fall through to generic completion.
 
 ## Task 4: push and reconciliation
 
