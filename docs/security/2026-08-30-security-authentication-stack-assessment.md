@@ -1,6 +1,6 @@
 # Security and authentication stack assessment
 
-**As assessed:** 2026-08-30 against `origin/main` at `005d10dab` and the live PostgreSQL backlog  
+**As assessed:** 2026-08-30 against `origin/main` at `9b31fa091` and the live PostgreSQL backlog
 **Backlog:** BI-E7553A1C  
 **Scope:** identity, authentication, sessions, authorization, LDAP, PKI/mTLS, machine tokens, connector credentials, and runtime root-secret custody
 
@@ -14,7 +14,8 @@ The largest remaining security risks are at the edges of that architecture:
 2. production's `operator-only` credential stance is advisory at several host/container access boundaries rather than universally enforced;
 3. local workforce login has no native MFA/passkey assurance tier even though policy surfaces refer to step-up;
 4. customer/social authentication does not consult the Principal spine at the same sign-in boundary used by workforce credentials;
-5. some live backlog statuses and older spec references are stale relative to merged code, weakening roadmap truth.
+5. dynamically discovered external MCP tools without a canonical grant mapping are admitted by compatibility behavior, so discovery/connectivity can become ambient coworker authority;
+6. some live backlog statuses and older spec references are stale relative to merged code, weakening roadmap truth.
 
 ## Implemented stack versus design
 
@@ -27,6 +28,7 @@ The largest remaining security risks are at the edges of that architecture:
 | Session security | HttpOnly, SameSite=Lax, HTTPS-aware Secure flag, JWT strategy, bounded redirect normalization. | `govern/auth.ts`. | Sound self-hosted baseline. | Explicit session lifetime/reauthentication assurance policy and root-secret versioned rotation are not complete. |
 | OAuth / MCP clients | OAuth 2.1 authorization-server metadata, scoped access, refresh rotation/revocation, step-up scope challenges. | `lib/auth/oauth-*`, `/api/mcp/v1`, MCP self-authentication design. | Substantial implementation. | Several BI ids named in the 2026-08-26 spec no longer resolve in live backlog; reconcile plan identity/status before calling it complete. |
 | Authorization | Effective authority is an intersection of Principal, role/capability, grant, sensitivity, room/case, and channel policy. | TAK grants, effective auth context, governed execute, workroom policy. | Strong and intentionally DPF-owned. | Finish the open Coworker Authority Model epic and enforce installation stance at the actual capability boundary. |
+| Dynamic external tools | Discovery inventories capabilities; DPF policy must separately authorize their visibility and execution. | `getAvailableTools` filters mapped namespaced tools, but preserves permissive compatibility for tools missing from `TOOL_TO_GRANTS`; invocation does not re-evaluate a persisted DPF tool policy. | Authority gap: an unmapped discovered tool can be admitted by omission. | BI-8B7B2FE9 adds explicit quarantine/approval policy on `McpServerTool`, one shared evaluator, and execution-time recheck. |
 | Directory | DPF publishes its own identity projection and remains complete without an external IdP. | Directory absorption design; projection and Principal-rooted auth merged in PR #4780. | Implemented core. | Maintain protocol and operator evidence; do not add authentik or make federation mandatory. |
 | LDAP | Bind/search/group membership over TLS from DPF's directory. | `lib/directory/ldap/*`; `instrumentation.ts`; compose port/config; PR #4825. | Implemented and runtime-wired, off by default. | Live BI-A91004A7 still reads `triaging` although its titled fix merged as PR #4825—status reconciliation required. |
 | PKI / mTLS | One organization CA issues portal/edge/directory material; no self-signed downgrade. | pinned Step CA image, bootstrap scripts, TLS overlays, PKI contract tests, LDAP TLS loader. | Implemented foundation. | Continue certificate-expiry, renewal, revocation, recovery, and canonical-runtime evidence; 1Password may hold keys but never becomes issuer/trust authority. |
@@ -42,6 +44,7 @@ The largest remaining security risks are at the edges of that architecture:
 - BI-A91004A7 is a concrete status-drift example: the live item says `triaging`, while PR #4825 with the same title is merged and the runtime entrypoint is present on `origin/main`.
 - The 2026-08-26 MCP self-authentication spec names five BI references that no longer resolve in the current live backlog. The reconciliation item must preserve the original text as historical evidence while replacing its current delivery pointers with live items.
 - Older documents also name several epic references that no longer resolve live. They must be treated as historical/superseded identifiers, not current delivery coverage, and replaced by live pointers where the work remains active.
+- The browser-driving design's historical `EP-BROWSER-DRIVE` roster no longer resolves live. Its browser mappings remain useful implementation evidence, but the platform-wide unmapped-tool authority gap now has one live home: BI-8B7B2FE9 under EP-413F2602.
 - The recovery bundle contains a detailed production credential-enforcement item, but the corresponding live item is absent. Recovery JSON is not live backlog and cannot satisfy the gap.
 
 ## Priority order
@@ -51,7 +54,8 @@ The largest remaining security risks are at the edges of that architecture:
 3. **Next—BI-80E4A139:** enforce `operator-only` at grants, host/runtime actions, diagnostics, and container-exec exposure boundaries; external vault use is defense in depth, not the enforcement mechanism.
 4. **Next—BI-C9656270:** choose and implement workforce passkeys/MFA plus session/reauthentication tiers against NIST SP 800-63B-4.
 5. **Next—BI-E22C3D75 and BI-DD3BBD02:** make customer/social sign-in consult the Principal spine before session issuance and migrate social-provider secrets into the canonical credential store.
-6. **Hygiene—BI-FE678DA3:** reconcile merged PR evidence to live BI states and replace stale spec/backlog identifiers with live pointers.
+6. **Next—BI-8B7B2FE9:** default-deny dynamically discovered external MCP tools until a DPF-owned policy explicitly authorizes listing and invocation.
+7. **Hygiene—BI-FE678DA3:** reconcile merged PR evidence to live BI states and replace stale spec/backlog identifiers with live pointers.
 
 ## Security boundary for 1Password
 
