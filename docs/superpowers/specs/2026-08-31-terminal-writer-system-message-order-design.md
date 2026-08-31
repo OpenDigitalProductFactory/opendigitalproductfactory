@@ -3,7 +3,6 @@ status: active
 ---
 
 # Terminal-writer system-message order — fix design
-
 Backlog item: BI-EDC0DAF2  
 Workroom: WC-A291253B  
 Named baseline: `origin/main` at `be4c6bfcb4fd62f497167fa55c747105512a0ecd`
@@ -28,7 +27,6 @@ reproduced it after reading the immutable BI-B223F45E design at commit
 executions. Logs distinguish the ordering error from hosted capacity failures.
 
 ## Contract
-
 - Hydrated terminal-writer context is system authority and must appear before
   user content in provider-facing message history.
 - Ordinary external TaskRuns keep their existing message order.
