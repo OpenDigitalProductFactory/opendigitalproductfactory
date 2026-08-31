@@ -27,13 +27,9 @@ route.
 
 ## Observed defect and research evidence
 
-On the named base above, a conversation containing this ordinary code body:
-
-```ts
-export function workroomDrive() { return "ready"; }
-```
-
-classifies as `source-code`, receives only a generic `mask` obligation, and
+On the named base above, a conversation containing a small TypeScript function
+whose body returns the string “ready” classifies as `source-code`, receives only
+a generic `mask` obligation, and
 becomes `local-only`. This happens before provider suitability is evaluated.
 `createRoutedInferenceScreen` then attempts masking; `maskForContext` cannot
 cover a whole-body code match without destroying the code and throws
