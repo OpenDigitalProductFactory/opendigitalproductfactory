@@ -36,7 +36,7 @@ the platform is not".
   - Joined via COWORKER_SLUG_TO_CANONICAL_AGENT_ID; a handle-only join over-counts.
 - At 100% of attainable: **1**
 - Median attainable: **48%** · median absolute: **44%**
-- Skills: **70** total, **0** stranded, **1** able to declare a cadence
+- Skills: **71** total, **0** stranded, **1** able to declare a cadence
 - Unresolved `assignTo` targets: `external-coding-agent`
 - Unbacked `backingSkillIds`: `build-sensitive-domain-requirements`, `customer-intake-triage`, `external-catalog-scout`, `marketing-collaboration-intake`, `prepare-counsel-packet`, `provider-cost-intake`
 
