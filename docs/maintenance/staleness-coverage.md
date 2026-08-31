@@ -19,30 +19,30 @@ page it has no edge to, at any precision.
 
 ## The finding
 
-**180 of 612 published doc pages (29.4%) carry a doc-impact edge.**
-The other **432** (70.6%) carry none, and are invisible to
+**197 of 682 published doc pages (28.9%) carry a doc-impact edge.**
+The other **485** (71.1%) carry none, and are invisible to
 the doc-impact gate by construction — not because the gate is imprecise, but
 because there is no edge along which it could ever be told to look.
 
 | Signal | Pages |
 | ------ | ----- |
-| Code edges only | 133 |
+| Code edges only | 150 |
 | Route edges only | 43 |
 | Both | 4 |
-| **No edge at all** | **432** |
+| **No edge at all** | **485** |
 
 ### The uncovered remainder is not all a gap
 
-Of those 432, **416 reference no repo file anywhere in their text** — no link, no
+Of those 485, **468 reference no repo file anywhere in their text** — no link, no
 backticked path. They are WSID profession doctrine and founder-kernel principle
 pages: they describe how to decide, not what the code does. **No code-edge
 derivation will ever reach them**, and counting them as a shortfall argues
 forever for widening that has already run out.
 
-The genuinely recoverable set is **16** page(s) — those that cite a repo file but
+The genuinely recoverable set is **17** page(s) — those that cite a repo file but
 whose citation the current derivations do not turn into an edge.
 
-The timestamp detector (`build-docs-staleness.mjs`, BI-AA5DFEA2) currently reports **3** stale
+The timestamp detector (`build-docs-staleness.mjs`, BI-AA5DFEA2) currently reports **166** stale
 candidate(s). That number is small because its reach is small, not because the
 corpus is fresh — it can only ever flag a page that links a repo file.
 
@@ -53,31 +53,32 @@ Darkest first. These are the areas where a semantic gate would be blind today.
 | Area | Pages | Covered | Coverage |
 | ---- | ----- | ------- | -------- |
 | `marketing` | 4 | 0 | 0% |
-| `professions` | 204 | 5 | 2.5% |
-| `founder-kernel` | 125 | 5 | 4% |
+| `ux-fit` | 2 | 0 | 0% |
+| `professions` | 226 | 5 | 2.2% |
+| `founder-kernel` | 137 | 7 | 5.1% |
 | `triage` | 7 | 1 | 14.3% |
+| `maintenance` | 4 | 1 | 25% |
 | `(root)` | 3 | 1 | 33.3% |
-| `testing` | 40 | 14 | 35% |
+| `dogfood` | 3 | 1 | 33.3% |
+| `testing` | 41 | 14 | 34.1% |
+| `runbooks` | 6 | 3 | 50% |
 | `design` | 4 | 2 | 50% |
-| `dogfood` | 2 | 1 | 50% |
-| `operations` | 20 | 11 | 55% |
-| `architecture` | 83 | 48 | 57.8% |
-| `runbooks` | 5 | 3 | 60% |
+| `operations` | 21 | 12 | 57.1% |
+| `architecture` | 101 | 60 | 59.4% |
+| `security` | 9 | 6 | 66.7% |
+| `user-guide` | 83 | 59 | 71.1% |
 | `edge-node` | 7 | 5 | 71.4% |
-| `user-guide` | 80 | 58 | 72.5% |
 | `personas` | 4 | 3 | 75% |
-| `install` | 10 | 9 | 90% |
-| `security` | 6 | 6 | 100% |
+| `install` | 13 | 10 | 76.9% |
 | `specs` | 3 | 3 | 100% |
 | `strategy` | 2 | 2 | 100% |
 | `dev` | 1 | 1 | 100% |
-| `maintenance` | 1 | 1 | 100% |
 | `prompts` | 1 | 1 | 100% |
 
 ## What this implies for BI-3E5969DF
 
 1. **Widening is close to exhausted.** Of the pages any code-edge derivation could
-   reach, 180 of 196 (91.8%) now carry an edge. The headline 29.4% understates
+   reach, 197 of 214 (92.1%) now carry an edge. The headline 28.9% understates
    the gate because most of what it excludes is doctrine, not undocumented code.
    Further widening buys single-digit page counts; the cheap direction is spent.
 2. **Reach is no longer the binding constraint — precision is.** That inverts
