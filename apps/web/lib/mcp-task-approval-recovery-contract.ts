@@ -179,6 +179,8 @@ export function recoveryProgress(
         ? input.sourceEnvelopeStatus === "failed"
           ? "failed-provider-envelope"
           : "failed-prerequisite-approved-envelope"
+        : input.sourceEnvelopeStatus === "proposed"
+          ? "expired-proposed-envelope"
         : input.freshApprovalRequired
           ? "expired-approved-envelope"
           : "stale-approved-envelope",

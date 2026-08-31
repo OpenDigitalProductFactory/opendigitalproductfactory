@@ -95,7 +95,7 @@ export async function recoverStaleApprovedRemoteTask(
           delegatingUserId: input.userId,
           coworkerAgentId: input.agentId,
           manifestActionId: input.writerToolName,
-          status: { in: ["approved", "failed"] },
+          status: { in: ["approved", "failed", "proposed"] },
         },
         orderBy: { createdAt: "desc" },
         select: {

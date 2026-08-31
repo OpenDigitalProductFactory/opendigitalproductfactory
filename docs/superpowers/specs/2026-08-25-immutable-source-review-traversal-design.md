@@ -200,3 +200,18 @@ This is orchestration recovery, not an alternate evidence model. It changes no r
 - Live reproduction: TaskRun `...634F7FF63BF8` remained identical-key and resumable with zero ToolExecutions; no approval envelope existed to recover.
 - Code cause: `reserveTerminalWriterReplay` returned `null` solely when the persisted reader list was empty, so context hydration and its deterministic exact-bound reread were never reached.
 - Ruled out: a replacement key would split the audit identity; approval recovery was impossible without an envelope; reader validation was not the failing layer because it never ran; cached replay did not reach provider capacity or inference.
+
+## Expired proposal same-TaskRun recovery extension (2026-08-31)
+
+Live design-review TaskRun `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-57CC78DB3778` reached its independently selected terminal writer and created proposal ToolExecution `cmthhuxly00a501qmsogavxv5` plus approval envelope `cmthhuxlm00a201qmftzezz1k`. The envelope expired while still `proposed`. An identical request replay preserved the TaskRun and digest but could neither execute the writer nor create a fresh envelope: approval recovery searched only `approved` and `failed` envelopes, while terminal-writer reservation accepted a prior proposal only after it was explicitly declined. The run remained `input-required/missing-terminal-writer` with no receipt or baseline.
+
+An expired `proposed` envelope is now a recovery source under the same transaction as expired approved/failed recovery. Recovery requires the exact TaskRun, request digest, delegating user, acting agent, writer tool, stored approval-binding fingerprint, and original proposal parameters. It refuses an unexpired proposal, a conflicting binding, an absent or ambiguous proposal, or any completed writer/receipt. The transaction compare-and-sets the source envelope from `proposed` to `cancelled`, creates exactly one replacement `proposed` envelope and rebound proposal ToolExecution with the identical stored arguments, and parks the same TaskRun for fresh exact approval. A race rolls back the transaction.
+
+This recovery does not rerun inference, change the independent disposition, synthesize approval, or alter receipt validation. The expired envelope and original proposal remain immutable audit history. The replacement has a fresh bounded expiry and still requires the human approval boundary before the writer can execute.
+
+### Named-reference research
+
+- Source reference: `origin/main` at `7961b6846da00450a4ac61b93e0636677ef66292`, `recoverStaleApprovedRemoteTask` and `reserveTerminalWriterReplay`.
+- Live reproduction: TaskRun `...57CC78DB3778`, expired proposed envelope `cmthhuxlm00a201qmftzezz1k`, proposal execution `cmthhuxly00a501qmsogavxv5`, zero writer receipt/baseline.
+- Code cause: the recovery query excluded `proposed`, and reservation required the prior proposal envelope to be `declined`.
+- Ruled out: stale approval would violate expiry; a new review identity would rerun inference and split the audit chain; bypassing the receipt would fabricate governance evidence.
