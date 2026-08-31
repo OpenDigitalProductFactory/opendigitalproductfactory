@@ -269,15 +269,17 @@ async function main() {
     throw new Error(`host resource admission failed: ${claim?.error ?? "unknown"}`);
   }
   if (claim?.data?.admission?.status === "queued") {
-    // Bounded wait: no Node process remains resident behind a scarce gate. The
-    // durable-wait slice will turn this typed retry into an event-driven wake.
-    await mcpCall("release_nonprod_environment_lease", { leaseId }, connection);
+    // The server-owned TaskRun now preserves queue position and owns liveness.
+    // Exit without releasing: the event/reconciler wakes this exact claimant,
+    // which then makes one fresh pressure-aware claim under the same identity.
     process.stderr.write(JSON.stringify({
       status: "queued",
-      code: "host_resource_queued",
+      code: "host_resource_durable_wait",
+      leaseId,
+      taskRunId: claim?.data?.admission?.taskRunId ?? null,
+      resumeMode: claim?.data?.admission?.resumeMode ?? "durable-task",
       resourceClass: parsed.resourceClass,
       reason: claim?.data?.poolPolicy?.rollbackReason ?? "capacity-full",
-      retryAfterSeconds: 30,
       ungovernedProcesses: findings,
     }) + "\n");
     process.exitCode = 75;

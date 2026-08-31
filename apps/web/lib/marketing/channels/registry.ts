@@ -37,6 +37,9 @@ export function getAdapter(channelId: string): OutboundChannelAdapter | null {
   if (channelId === "email") {
     return getAdapters().find((a) => a.channelId === "email-postmark") ?? null;
   }
+  if (channelId === "wordpress") {
+    return getAdapters().find((a) => a.channelId === "wordpress-self-hosted") ?? null;
+  }
   return null;
 }
 

@@ -151,6 +151,7 @@ export function WordPressConnectPanel({ initialState }: { initialState: WordPres
           onSubmit={submitConnection}
           pending={pending}
           primary
+          submitLabel="Connect WordPress"
         />
         <FormStatus error={settled.error} success={settled.success} className="mt-dpf-sm" />
       </section>
@@ -282,7 +283,7 @@ export function WordPressConnectPanel({ initialState }: { initialState: WordPres
 function ConnectionForm({
   siteUrl, username, applicationPassword, onSiteUrlChange, onUsernameChange,
   onApplicationPasswordChange, onSubmit, pending, primary = false,
-  submitLabel = "Check connection",
+  submitLabel = "Connect WordPress",
 }: {
   siteUrl: string;
   username: string;

@@ -45,6 +45,7 @@ const DEEP_BACKLOG_DEPTH = 10; // items waiting
 const LOW_FIRST_PASS_YIELD = 0.7; // 70% — below this, rework is eating capacity
 const LOW_SLA_ATTAINMENT = 0.8; // 80% on-time
 const HIGH_ABANDONMENT = 0.2; // 20% balk/renege
+const WAIT_P95_SLO_MS = 60 * 60 * 1000;
 
 /** Assess a snapshot's health. Pure — no I/O. */
 export function assessQueueHealth(s: QueueSnapshotView): QueueHealthAssessment {
@@ -59,6 +60,11 @@ export function assessQueueHealth(s: QueueSnapshotView): QueueHealthAssessment {
   if (s.abandonmentRate != null && s.abandonmentRate > HIGH_ABANDONMENT) {
     reasons.push(`abandonment ${Math.round(s.abandonmentRate * 100)}%`);
   }
+  if (s.waitP95Ms != null && s.waitP95Ms > WAIT_P95_SLO_MS) {
+    reasons.push(`p95 wait ${Math.round(s.waitP95Ms / 60_000)}m exceeds 60m progress SLO`);
+  }
+  const noCompletionsWithBacklog = s.depth > 0 && s.throughput === 0;
+  if (noCompletionsWithBacklog) reasons.push("no completions with backlog");
 
   // Idle: nothing waiting and nothing flowing — not a problem, just quiet.
   if (reasons.length === 0 && s.depth === 0 && s.throughput === 0 && s.arrivals === 0) {
@@ -67,7 +73,7 @@ export function assessQueueHealth(s: QueueSnapshotView): QueueHealthAssessment {
   if (reasons.length === 0) return { health: "healthy", reasons };
   // A deep backlog OR two-plus concurrent problems ⇒ at-risk; a single softer
   // signal ⇒ watch.
-  const atRisk = s.depth >= DEEP_BACKLOG_DEPTH || reasons.length >= 2;
+  const atRisk = s.depth >= DEEP_BACKLOG_DEPTH || noCompletionsWithBacklog || reasons.length >= 2;
   return { health: atRisk ? "at-risk" : "watch", reasons };
 }
 

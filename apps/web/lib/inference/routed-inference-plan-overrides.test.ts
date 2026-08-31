@@ -29,4 +29,14 @@ describe("applyCallerExecutionPlanOverrides", () => {
       toolPolicy: { toolChoice: "auto", allowParallelToolCalls: false },
     });
   });
+
+  it("binds an explicitly delegated terminal writer without weakening tool choice", () => {
+    expect(applyCallerExecutionPlanOverrides(plan(), {
+      toolChoice: "required",
+      terminalWriterToolName: "record_initiative_evidence",
+    })).toMatchObject({
+      toolPolicy: { toolChoice: "required", allowParallelToolCalls: false },
+      responsePolicy: { terminalWriterToolName: "record_initiative_evidence" },
+    });
+  });
 });

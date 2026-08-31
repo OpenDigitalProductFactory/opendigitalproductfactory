@@ -194,4 +194,183 @@ describe("callProvider", () => {
     )).rejects.toThrow(/cannot enforce required tool choice/i);
     expect(mockAdapterExecute).not.toHaveBeenCalled();
   });
+
+  it("permits one explicitly bound terminal writer through a CLI adapter", async () => {
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({
+      providerId: "anthropic-sub",
+      authMethod: "oauth2_authorization_code",
+      authHeader: "Authorization",
+      baseUrl: null,
+      endpoint: null,
+    });
+
+    await callProvider(
+      "anthropic-sub",
+      "claude-sonnet-4-6",
+      [{ role: "user", content: "Record it." }],
+      "Use the writer.",
+      [{ type: "function", function: { name: "record_initiative_evidence", parameters: {} } }],
+      {
+        providerId: "anthropic-sub",
+        modelId: "claude-sonnet-4-6",
+        recipeId: null,
+        contractFamily: "sync.review",
+        executionAdapter: "claude-cli",
+        maxTokens: 1024,
+        providerSettings: {},
+        toolPolicy: { toolChoice: "required" },
+        responsePolicy: { terminalWriterToolName: "record_initiative_evidence" },
+      },
+      undefined,
+      { userId: "user-1", agentId: "reviewer-1", threadId: "thread-1", routeContext: "external-mcp" },
+    );
+
+    expect(mockAdapterExecute).toHaveBeenCalledWith(expect.objectContaining({
+      tools: [expect.objectContaining({
+        function: expect.objectContaining({ name: "record_initiative_evidence" }),
+      })],
+      plan: expect.objectContaining({
+        toolPolicy: expect.objectContaining({ toolChoice: "required" }),
+        responsePolicy: expect.objectContaining({ terminalWriterToolName: "record_initiative_evidence" }),
+      }),
+    }));
+  });
+
+  it("permits the live Codex CLI route for one governed bound terminal writer", async () => {
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({
+      providerId: "codex",
+      authMethod: "oauth2_authorization_code",
+      authHeader: "Authorization",
+      baseUrl: "https://api.openai.com/v1",
+      endpoint: null,
+    });
+
+    await callProvider(
+      "codex",
+      "gpt-5.4",
+      [{ role: "user", content: "Record the objective mapping." }],
+      "Use the sole governed writer.",
+      [{ type: "function", function: { name: "record_initiative_evidence", parameters: {} } }],
+      {
+        providerId: "codex",
+        modelId: "gpt-5.4",
+        recipeId: null,
+        contractFamily: "sync.review",
+        executionAdapter: "codex-cli",
+        maxTokens: 1024,
+        providerSettings: {},
+        toolPolicy: { toolChoice: "required" },
+        responsePolicy: { terminalWriterToolName: "record_initiative_evidence" },
+      },
+      undefined,
+      { userId: "user-1", agentId: "reviewer-1", threadId: "thread-1", routeContext: "external-mcp" },
+    );
+
+    expect(mockAdapterExecute).toHaveBeenCalledWith(expect.objectContaining({
+      providerId: "codex",
+      tools: [expect.objectContaining({
+        function: expect.objectContaining({ name: "record_initiative_evidence" }),
+      })],
+      plan: expect.objectContaining({
+        executionAdapter: "codex-cli",
+        toolPolicy: expect.objectContaining({ toolChoice: "required" }),
+        responsePolicy: expect.objectContaining({ terminalWriterToolName: "record_initiative_evidence" }),
+      }),
+    }));
+  });
+
+  it("rejects a terminal-writer marker when more than one tool is attached", async () => {
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({
+      providerId: "codex",
+      authMethod: "oauth2_authorization_code",
+      authHeader: "Authorization",
+      baseUrl: "https://api.openai.com/v1",
+      endpoint: null,
+    });
+
+    await expect(callProvider(
+      "codex",
+      "gpt-5.4",
+      [{ role: "user", content: "Record it." }],
+      "Use the writer.",
+      [
+        { type: "function", function: { name: "read_source_at_version", parameters: {} } },
+        { type: "function", function: { name: "record_initiative_evidence", parameters: {} } },
+      ],
+      {
+        providerId: "codex",
+        modelId: "gpt-5.4",
+        recipeId: null,
+        contractFamily: "sync.review",
+        executionAdapter: "codex-cli",
+        maxTokens: 1024,
+        providerSettings: {},
+        toolPolicy: { toolChoice: "required" },
+        responsePolicy: { terminalWriterToolName: "record_initiative_evidence" },
+      },
+      undefined,
+      { userId: "user-1", agentId: "reviewer-1", threadId: "thread-1", routeContext: "external-mcp" },
+    )).rejects.toThrow(/cannot enforce required tool choice/i);
+    expect(mockAdapterExecute).not.toHaveBeenCalled();
+  });
+
+  it("rejects a terminal-writer marker that does not exactly match the sole tool", async () => {
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({
+      providerId: "anthropic-sub",
+      authMethod: "oauth2_authorization_code",
+      authHeader: "Authorization",
+      baseUrl: null,
+      endpoint: null,
+    });
+
+    await expect(callProvider(
+      "anthropic-sub",
+      "claude-sonnet-4-6",
+      [{ role: "user", content: "Record it." }],
+      "Use the writer.",
+      [{ type: "function", function: { name: "record_initiative_evidence", parameters: {} } }],
+      {
+        providerId: "anthropic-sub",
+        modelId: "claude-sonnet-4-6",
+        recipeId: null,
+        contractFamily: "sync.review",
+        executionAdapter: "claude-cli",
+        maxTokens: 1024,
+        providerSettings: {},
+        toolPolicy: { toolChoice: "required" },
+        responsePolicy: { terminalWriterToolName: "different_writer" },
+      },
+    )).rejects.toThrow(/cannot enforce required tool choice/i);
+    expect(mockAdapterExecute).not.toHaveBeenCalled();
+  });
+
+  it("rejects a matching terminal-writer marker without a governed MCP session", async () => {
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({
+      providerId: "anthropic-sub",
+      authMethod: "oauth2_authorization_code",
+      authHeader: "Authorization",
+      baseUrl: null,
+      endpoint: null,
+    });
+
+    await expect(callProvider(
+      "anthropic-sub",
+      "claude-sonnet-4-6",
+      [{ role: "user", content: "Record it." }],
+      "Use the writer.",
+      [{ type: "function", function: { name: "record_initiative_evidence", parameters: {} } }],
+      {
+        providerId: "anthropic-sub",
+        modelId: "claude-sonnet-4-6",
+        recipeId: null,
+        contractFamily: "sync.review",
+        executionAdapter: "claude-cli",
+        maxTokens: 1024,
+        providerSettings: {},
+        toolPolicy: { toolChoice: "required" },
+        responsePolicy: { terminalWriterToolName: "record_initiative_evidence" },
+      },
+    )).rejects.toThrow(/cannot enforce required tool choice/i);
+    expect(mockAdapterExecute).not.toHaveBeenCalled();
+  });
 });

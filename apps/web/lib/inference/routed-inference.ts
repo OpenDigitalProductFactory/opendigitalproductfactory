@@ -404,6 +404,7 @@ async function routeAndCallAttempt(
     decision.executionPlan = applyCallerExecutionPlanOverrides(decision.executionPlan, {
       effort: options?.effort ?? prepared.posture?.effort,
       toolChoice: options?.toolChoice,
+      terminalWriterToolName: options?.terminalWriterToolName,
     });
   }
 
