@@ -8,7 +8,6 @@ Workroom: WC-A291253B
 Named baseline: `origin/main` at `be4c6bfcb4fd62f497167fa55c747105512a0ecd`
 
 ## Problem and live evidence
-
 An initiative-review TaskRun can complete its immutable reads and resume in the
 writer-only phase. That path hydrates source bytes into a system message, but
 `mcp-task-execution.ts` constructs `chatHistory` as user request then system
@@ -36,7 +35,6 @@ executions. Logs distinguish the ordering error from hosted capacity failures.
   prose, and the same TaskRun remains resumable.
 
 ## Ordered fix sequence
-
 1. Add a failing unit test that captures `executeAutonomousAgenticLoop` input
    for terminal-writer replay and asserts `system` precedes `user`.
 2. Reorder only the terminal-writer hydrated history in
