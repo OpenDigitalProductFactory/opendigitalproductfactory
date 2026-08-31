@@ -9,9 +9,9 @@ import {
   type ActionSuccess,
 } from "./shared/action-result";
 
-const MAX_HYDRATION_PAGES = 6;
 const MAX_PAGE_CHARS = 3_200;
-const MAX_HYDRATED_CHARS = MAX_HYDRATION_PAGES * MAX_PAGE_CHARS;
+const MAX_HYDRATED_CHARS = 64_000;
+const MAX_HYDRATION_PAGES = Math.ceil(MAX_HYDRATED_CHARS / MAX_PAGE_CHARS);
 
 export type PersistedTerminalReaderExecution = {
   id: string;
