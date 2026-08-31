@@ -7,6 +7,7 @@ status: active
 **Backlog item:** BI-8B8731EE  
 **Workroom:** WC-D8BEE5C9  
 **Kernel decision:** DI-2C90F0EF92B2  
+**Async delivery child:** BI-2014236E
 **Status:** Design and ordered fix plan
 
 ## Problem
@@ -52,6 +53,28 @@ This is a process-substrate defect. It does not authorize a proxy receipt, a new
 
 The repair changes only the bounded deterministic hydration policy and its tests. It introduces no parallel source of truth.
 
+## Async return and wake-up decision
+
+The same live evidence also exposed a distinct return-path defect: a governed reviewer can continue for roughly seventeen minutes after the initiating MCP request reaches its five-minute deadline. The TaskRun remains durable, but the synchronous `tasks/submit` response makes valid work appear lost and encourages repeated status calls.
+
+This design adopts the notification-plus-reconciliation architecture already specified by `2026-08-06-mcp-standard-tasks-lifecycle-convergence-design.md` and `2026-08-15-resilient-concurrent-development-process.md`. It does not add a second task or queue:
+
+1. `TaskRun` remains the durable execution and audit source of truth.
+2. The initiating call returns the persisted TaskRun identity before autonomous inference begins.
+3. The existing background queue executes the exact auth-bound request once under a deterministic dispatch identity.
+4. After a TaskRun transition commits, the existing task event/SSE substrate publishes the complete task state. Connected MCP hosts consume the native task notification/subscription and wake the owning agent only for `input_required` or terminal transitions.
+5. A disconnected or restarted host reconciles through auth-bound `tasks/list`/`tasks/get` with adaptive backoff. Polling is recovery, never the normal wait loop.
+6. A signed webhook is an optional delivery adapter for a separately registered external host. Arbitrary caller-supplied callback URLs are prohibited. Webhook delivery is at-least-once, idempotent by task event identity, retried with bounded backoff, and never execution authority.
+
+The current MCP core Tasks contract permits optional `notifications/tasks/status`; the newer Tasks extension draft adds subscriptions carrying the complete task state and result. DPF therefore keeps a thin protocol adapter: native notification spelling can evolve without changing `TaskRun`, queue, authorization, or reconciliation semantics.
+
+Standards adopted:
+
+- [MCP 2025-11-25 Tasks](https://modelcontextprotocol.io/specification/2025-11-25/basic/utilities/tasks): durable task identity, auth-bound retrieval, optional status notification, and server-advertised polling interval.
+- [MCP Tasks extension draft](https://tasks.extensions.modelcontextprotocol.io/specification/draft/tasks): immediate task result, subscription-based complete task notifications, task updates for required input, and durable recovery after reconnect.
+
+This async execution change is independently shippable from the hydration ceiling repair, so it is governed by child `BI-2014236E` rather than being hidden inside this BI's atomic implementation. This branch records the dependency and proceeds only with the bounded hydration repair; the child extends the canonical MCP Tasks convergence design and ships as its own clean revert.
+
 ## Decision
 
 Implement the `bounded-ceiling-lift` selected by DI-2C90F0EF92B2.
@@ -79,6 +102,7 @@ Every existing invariant remains mandatory:
 5. Obtain independent semantic review and exact-tree local CI for the immutable DCO candidate, then publish through a protected PR.
 6. Release and upgrade the canonical development install through the normal governed path.
 7. Resume the preserved TaskRun once with its original request identity. Verify additional exact-bound reader `ToolExecution` rows, one real `record_initiative_evidence` execution, and the resulting canonical receipt. If the source or route no longer matches, stop without creating a new reviewer identity.
+8. Deliver child `BI-2014236E` separately: return durable task identity immediately, execute through the existing queue, publish native task notifications, and retain adaptive polling as missed-delivery recovery. A generic signed-webhook adapter remains conditional on a governed registered-host substrate and must never accept an arbitrary per-request URL.
 
 ## Traceability
 
@@ -91,6 +115,8 @@ Every existing invariant remains mandatory:
 | AC-SEPARATION | Reviewer supplies writer disposition; server does not synthesize a receipt | Existing terminal-writer policy and live writer-result verification |
 
 **Coverage decision:** atomic. The constant change and its paired regression are one independently meaningful repair; neither is shippable alone. There are no implementation dependencies beyond the current mainline substrate.
+
+The asynchronous return path is intentionally excluded from this atomic decision and mapped to `BI-2014236E`, because it is independently reviewable, deployable, and revertible.
 
 ## Architecture and blast radius review
 
