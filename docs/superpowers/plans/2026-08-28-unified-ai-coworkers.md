@@ -18,6 +18,10 @@ Deliver one revertible PR that makes `/workforce` the canonical AI Coworkers exp
 - Deliverable 2 → `BI-7BEDF08A`: retained, named self-upgrade blocker evidence and exact deep link.
 - Dependency disposition: the two deliverables are independently testable but intentionally ship in one operator-journey PR at the operator's explicit direction. Deliverable 2 consumes the canonical activity destination created by deliverable 1; neither introduces a parallel route or ledger.
 
+## Review execution evidence
+
+- 2026-08-31: upgraded-runtime research review `TR-MCP-Y21xamsxOWhsMDAwMDdwcnZzZm4ybTAzOQ-B892BB47FD0C` read the immutable design artifact successfully but did not reach `record_initiative_evidence`. The pinned Anthropic provider was rate-limited and the governed local fallback hit its 120-second inference-admission timeout. No receipt was claimed; one fresh-packet retry remains within the bounded delivery directive.
+
 ## Existing substrate
 
 - Navigation: `apps/web/lib/navigation/portal-navigation-model.ts` is the single route/rail registry.
