@@ -25,6 +25,12 @@ Consequences (evidenced in the source analysis):
 
 **Goal:** make the primary navigation legible against the four-portfolio spine the platform already models, without regressing the coherence guarantees already shipped.
 
+**OBJ-WORKFORCE-001:** Give operators one canonical AI Coworkers journey that connects governed identities with current and retained recent work from roster, external-agent, specialist, Build Studio, and native-runtime executors without relabeling execution envelopes as coworker identities.
+
+**OBJ-WORKFORCE-002:** Preserve and expose the exact operational context needed to explain AI load and blocked work after live activity ends, including TaskRun, Workroom, actor, provider/model usage, self-upgrade blocker, evidence, and status identities.
+
+**OBJ-WORKFORCE-003:** Make historical AI operations investigation explicit and reproducible through resolvable Workroom details and URL-addressable Operations Map time windows with named presets and bounded navigation.
+
 **Non-goals:**
 - Not a rewrite of the nav model. `portal-navigation-model.ts` stays the single source; this changes the *section taxonomy* it maps into (`shellNav.sectionKey`), not the per-route records.
 - Not a change to the FPAW standard or `PortfolioDecomposition`.
@@ -156,6 +162,15 @@ An AI coworker *has* an agent identity; they are two objects, not two names for 
 The companion spec's lexicon rule has been corrected accordingly (*Interaction Shape Graph* §3.4): standard-bearing vocabulary is **taught, not hidden**, and the check derives that list from the normative corpus so ease-of-use work cannot soften it away.
 
 ## 8. Acceptance
+
+| Acceptance ID | Objective IDs | Statement |
+|---|---|---|
+| AC-WORKFORCE-001 | OBJ-WORKFORCE-001 | The primary navigation presents one AI-coworker destination whose canonical Workforce home combines coworker identity, ordinary controls, current activity, and retained recent activity while advanced fleet plumbing remains nested. |
+| AC-WORKFORCE-002 | OBJ-WORKFORCE-001, OBJ-WORKFORCE-002 | Current and retained activity includes every governed TaskRun actor that can block self-upgrade, visibly separates external and platform executors from roster coworkers, and reconciles TokenUsage into roster, external or specialist, and unattributed buckets without inference. |
+| AC-WORKFORCE-003 | OBJ-WORKFORCE-002 | An activity-in-flight self-upgrade skip persists and renders the exact actor and TaskRun identity, and its link lands on matching retained activity after the live window closes. |
+| AC-WORKFORCE-004 | OBJ-WORKFORCE-002, OBJ-WORKFORCE-003 | Every semantic WC identifier in inventory or activity resolves to the matching Workroom detail with objective, executor, branch or build context, activity, evidence, and status while legacy case keys continue to resolve. |
+| AC-WORKFORCE-005 | OBJ-WORKFORCE-003 | Operations Map exposes named time presets, exact start and end timestamps, one-window backward and forward movement, reset-to-live, and refresh-stable URL state. |
+| AC-WORKFORCE-006 | OBJ-WORKFORCE-001, OBJ-WORKFORCE-002, OBJ-WORKFORCE-003 | The reconciled experience is previewable on a live install without regressing section-scoped navigation, breadcrumb, single-renderer, or canonical-ledger guarantees. |
 
 - Every `shellNav` entry resolves — via a checked-in test — to exactly one FPAW portfolio key or an explicitly declared cross-cut; none is silently unclassified.
 - People, AI Workforce, and Coworker Decisions are reachable under one Workforce section without violating section-scoped nav or the breadcrumb guarantee.
