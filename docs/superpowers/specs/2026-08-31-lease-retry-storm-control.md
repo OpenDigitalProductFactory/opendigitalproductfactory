@@ -4,8 +4,8 @@ status: draft
 
 # Bounded nonproduction lease retry contract
 
-**Backlog:** BI-MCP-EFF-CD5F744B  
-**Epic:** EP-56AE0F69  
+**Backlog:** BI-MCP-EFF-CD5F744B
+**Epic:** EP-56AE0F69
 **Scope:** platform operations guidance and the existing nonproduction lease MCP contract
 
 ## Problem
@@ -46,4 +46,3 @@ The design follows the MCP transport guidance to respect server-provided retry s
 ## Rollback
 
 The response metadata and skill wording are backward-compatible. If the new response contract causes a client regression, revert the message/skill change while preserving the existing database lease and admission code. No data migration is required.
-

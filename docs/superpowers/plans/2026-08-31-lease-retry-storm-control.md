@@ -4,7 +4,7 @@ status: draft
 
 # Plan: bounded nonproduction lease retries
 
-**Backlog:** BI-MCP-EFF-CD5F744B  
+**Backlog:** BI-MCP-EFF-CD5F744B
 **Spec:** `docs/superpowers/specs/2026-08-31-lease-retry-storm-control.md`
 
 > **For agentic workers:** execute this plan one independently reviewable backlog item at a time — one BI, one branch, one PR. Use `dpf-tdd` for red-green implementation, `dpf-local-merge-ci-before-push` plus the plan's completion gate before any success claim, and `dpf-pr-with-dco` for handoff.
@@ -33,4 +33,3 @@ status: draft
 ## Backlog coverage
 
 This plan has three deliverables. Deliverables 1 and 2 are independently shippable but both belong to BI-MCP-EFF-CD5F744B because they are one contract correction with no safe standalone user value. Deliverable 3 is internal sequencing. A live `record_plan_backlog_coverage` receipt must be copied here before implementation completion.
-
