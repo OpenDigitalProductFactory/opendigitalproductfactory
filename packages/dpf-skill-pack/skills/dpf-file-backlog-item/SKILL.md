@@ -5,7 +5,7 @@ description: "Use when new DPF work needs to enter the backlog — a feature gap
 # Agent Skills standard fields (Surface A — Claude Code)
 disable-model-invocation: false
 user-invocable: true
-allowed-tools: mcp__dpf__create_backlog_item mcp__dpf__list_epics mcp__dpf__link_backlog_item_to_epic mcp__dpf__triage_backlog_item mcp__dpf__size_backlog_item mcp__dpf__list_backlog_items mcp__dpf__query_backlog
+allowed-tools: mcp__dpf__create_backlog_item mcp__dpf__list_epics mcp__dpf__link_backlog_item_to_epic mcp__dpf__triage_backlog_item mcp__dpf__size_backlog_item mcp__dpf__list_backlog_items mcp__dpf__query_backlog mcp__dpf__search_specs_and_plans
 
 # DPF coworker fields (Surface B — in-portal seed loader)
 category: ops
@@ -15,7 +15,7 @@ taskType: workflow
 triggerPattern: "file (a |new )?(backlog item|BI|bug|gap|ticket)|add to backlog|track this|new work item"
 userInvocable: true
 agentInvocable: true
-allowedTools: ["mcp__dpf__create_backlog_item", "mcp__dpf__list_epics", "mcp__dpf__link_backlog_item_to_epic", "mcp__dpf__triage_backlog_item", "mcp__dpf__size_backlog_item", "mcp__dpf__list_backlog_items", "mcp__dpf__query_backlog"]
+allowedTools: ["mcp__dpf__create_backlog_item", "mcp__dpf__list_epics", "mcp__dpf__link_backlog_item_to_epic", "mcp__dpf__triage_backlog_item", "mcp__dpf__size_backlog_item", "mcp__dpf__list_backlog_items", "mcp__dpf__query_backlog", "mcp__dpf__search_specs_and_plans"]
 composesFrom: ["dpf-verify-substrate-first"]
 contextRequirements: ["dpf MCP server reachable"]
 riskBand: medium
@@ -29,7 +29,7 @@ enforces:
 
 # DPF File a Backlog Item
 
-When a piece of work needs to enter the DPF queue — feature gap, bug, tool gap, skill gap, doc gap — **it goes through `mcp__dpf__create_backlog_item`**, not into a floating spec or a TODO comment. The DPF BI lifecycle gate sits in front of the planning step ([`dpf-writing-plans`](../dpf-writing-plans/SKILL.md)): a plan is for a BI, not for floating intent. This skill walks the verify → file → size → triage → link-epic flow with the live MCP tools so the BI lands with the right shape and the right epic on the first try.
+When a piece of work needs to enter the DPF queue — feature gap, bug, tool gap, skill gap, doc gap — **it goes through `mcp__dpf__create_backlog_item`**, not into a floating spec or a TODO comment. The DPF BI lifecycle gate sits in front of the planning step ([`dpf-writing-plans`](../dpf-writing-plans/SKILL.md)): a plan is for a BI, not for floating intent. A build-bound BI and its design are one capture outcome: reuse an adequate canonical design, extend one, or create the proportional design in `docs/superpowers/specs/` before reporting the BI as fully filed. This skill walks the verify → design → file → size → triage → link-epic flow so the BI lands with the right shape, design, and epic on the first try.
 
 ## When to use
 
@@ -53,6 +53,7 @@ When a piece of work needs to enter the DPF queue — feature gap, bug, tool gap
 | Strongly-typed enums | [AGENTS.md §3](../../../../AGENTS.md) | `Epic.status` and `BacklogItem.status` valid values |
 | Open epics | `mcp__dpf__list_epics({ status: "open" })` | Where to link this BI — extending an existing epic beats creating a new one |
 | Substrate verification | preceding [`dpf-verify-substrate-first`](../dpf-verify-substrate-first/SKILL.md) output | The verification ledger that justifies new work |
+| Canonical designs | `docs/superpowers/specs/` plus `search_specs_and_plans` | The existing design to reuse/extend, or evidence that a proportional new design is required |
 
 ## Enforces
 
@@ -76,20 +77,26 @@ When a piece of work needs to enter the DPF queue — feature gap, bug, tool gap
 
 6. **Set `effortSize` when proposedOutcome=build.** Enum: `small | medium | large | xlarge`. Required for `triageOutcome=build`. Rough mapping: small = under a day, medium = 1-3 days, large = 1-2 weeks, xlarge = larger. `xlarge` requires an explicit decomposition decision before implementation: independently shippable children become live BIs (or map to existing BIs); retaining one BI requires the governed atomic rationale and receipt from `dpf-writing-plans`.
 
-7. **Write the body.** Markdown. Include:
+7. **Establish design coverage for every build-bound BI.** Search `docs/superpowers/specs/` and `search_specs_and_plans` by the problem, substrate, epic, and proposed BI title.
+   - Reuse an existing design only when its objectives and acceptance contract actually cover this deliverable; link the BI to the exact section.
+   - Extend the canonical shared design when the new BI is an independently shippable successor under the same architecture.
+   - Otherwise create a proportional canonical design before claiming capture is complete. Even a small defect may use a short design, but it must name the authority/data/runtime boundary, objectives, acceptance criteria, non-goals, migration/compatibility posture, and research where AGENTS.md requires it.
+   - If the current surface cannot write source, leave the BI `triaging`, record the missing design as the explicit next handoff, and report **partially captured — design pending**. Never advance it to `build` or present it as ready.
+
+8. **Write the body.** Markdown. Include:
    - Problem statement (1-2 sentences naming the gap).
    - Scope (what's in, what's out).
    - Acceptance criteria (bullet list of observable outcomes).
    - Dependencies (`Blocks:` / `Blocked by:` references to other BI ids if applicable).
    - Link to full context (memo, spec, audit, or PR if available).
 
-8. **Call `mcp__dpf__create_backlog_item`** with the assembled fields. Capture the returned `entityId` (e.g. `BI-AD86EE4E`) for reference in subsequent BIs or in the operator response.
+9. **Call `mcp__dpf__create_backlog_item`** with the assembled fields. Capture the returned `entityId` (e.g. `BI-AD86EE4E`) for reference in subsequent BIs or in the operator response. Immediately add the generated BI id to the canonical design and keep both changes in the same delivery branch/PR.
 
    When a spec or plan produced several independent deliverables, repeat the overlap query and filing step for each uncovered deliverable, then pass all new and existing IDs plus dependencies to `record_plan_backlog_coverage`. Do not leave successors as unchecked Markdown.
 
-9. **Optionally call `mcp__dpf__triage_backlog_item`** in the same flow if you're skipping the default `triaging` status — supply `outcome` + `rationale` (+ `effortSize` if outcome=build).
+10. **Optionally call `mcp__dpf__triage_backlog_item`** in the same flow if you're skipping the default `triaging` status — supply `outcome` + `rationale` (+ `effortSize` if outcome=build). `outcome=build` is allowed only after Step 7 established canonical design coverage.
 
-10. **Report back.** Include: BI id, parent epic, body excerpt, what's blocked-by or blocking, link to MCP audit row.
+11. **Report back.** Include: BI id, parent epic, canonical design path/section and status, body excerpt, what's blocked-by or blocking, link to MCP audit row. “Filed” without design status is an incomplete receipt.
 
 ## Output template
 
@@ -98,6 +105,7 @@ When a piece of work needs to enter the DPF queue — feature gap, bug, tool gap
 
 - Id: `<BI-XXXXXXXX>`
 - Epic: `<EP-XXX>` (<epic title>)
+- Design: `<docs/superpowers/specs/...md §N>` (<reused|extended|created|pending>)
 - Type / workType / source: <portfolio|product> / <work-type-enum> / <user-request|automated-detection>
 - ProposedOutcome / size: <outcome> / <size>
 - Body summary: <one sentence>
@@ -122,6 +130,7 @@ If the substrate-verification step in §1 surfaced overlap, do NOT file — inst
 - **Never set `status` outside `triaging`** without a paired `triageOutcome` — the MCP tool will reject. Use `triage_backlog_item` for the transition instead.
 - **Never edit `packages/db/src/seed.ts` to add a BI.** Seeds are bootstrap; the backlog lives in Postgres (`kernel/principles/live-state-over-seed-data`).
 - **Never paraphrase the body** if the BI is part of a tracked bundle — use the verbatim body from the source memo so audit trails align.
+- **Never leave a build-bound BI designless.** A generated BI id without canonical design coverage remains triage intake, not build-ready work. The design and BI cross-link in the same branch/PR; the later plan receives independent approval and coverage receipts through `dpf-writing-plans`.
 
 ## Worked example (2026-05-24)
 
