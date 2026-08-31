@@ -15,6 +15,7 @@
 // from @/lib/platform/image-version — the canonical home for image identity.
 
 import type { ImageVersion, ImageVersionSource } from "@/lib/platform/image-version";
+import type { InstallHostKind } from "@/lib/install/host-profile";
 
 export type PreflightVerdict = "CAN-TEST" | "MUST-ADVANCE" | "BLOCKED";
 
@@ -57,6 +58,11 @@ export type PreflightInput = {
    * was unavailable locally.
    */
   featureContainedInServed: boolean | null;
+  /**
+   * Closed server-derived install provenance. Only a validated consumer may
+   * convert unavailable ancestry into the governed advance path.
+   */
+  installHostKind: InstallHostKind;
   /**
    * Optional operator-facing detail when featureContainedInServed is null
    * (BI-08BE758C) — e.g. missing DPF_REPO_ROOT, missing objects, no git.
@@ -120,6 +126,19 @@ export function computePreflightVerdict(input: PreflightInput): PreflightResult 
   }
 
   // 3. Served identity is a git SHA — decide on containment.
+  if (gitIdentitiesMatch(servedImage.raw, featureSha)) {
+    return {
+      verdict: "CAN-TEST",
+      reason: `Served bytes (${shortSha(servedImage.raw)}) exactly match feature commit ${shortSha(featureSha)}; the live install is testable.`,
+      served: { sha: servedImage.raw, source: "git-sha" },
+      feature: { sha: featureSha },
+      nextAction: {
+        kind: "drive-happy-path",
+        detail:
+          "Drive the feature's happy path on the live install and record runtime verification evidence.",
+      },
+    };
+  }
   if (featureContainedInServed === true) {
     return {
       verdict: "CAN-TEST",
@@ -147,9 +166,23 @@ export function computePreflightVerdict(input: PreflightInput): PreflightResult 
   }
 
   // featureContainedInServed === null: served is a git SHA but ancestry could
-  // not be computed (commit not fetched locally, or git unavailable). Don't
-  // guess — BLOCKED with a concrete unblock (detail may name DPF_REPO_ROOT /
-  // missing objects per BI-08BE758C).
+  // not be computed (commit not fetched locally, or git unavailable). A
+  // validated source-free consumer cannot repair that by mounting Git, so send
+  // it through the existing governed advance path. Source-backed,
+  // contradictory, and unknown hosts remain fail-closed.
+  if (input.installHostKind === "consumer") {
+    return {
+      verdict: "MUST-ADVANCE",
+      reason: `Served bytes (${shortSha(servedImage.raw)}) do not exactly match feature commit ${shortSha(featureSha)}, and this validated consumer install cannot compute Git ancestry. Advance only through the governed self-upgrade path.`,
+      served: { sha: servedImage.raw, source: "git-sha" },
+      feature: { sha: featureSha },
+      nextAction: {
+        kind: "trigger-self-upgrade",
+        detail: `Advance the live install via ${SELF_UPGRADE_PATH} (the ONLY sanctioned advance — AGENTS.md §5), then re-run the preflight.`,
+      },
+    };
+  }
+
   const detail =
     (input.ancestryUncomputableDetail && input.ancestryUncomputableDetail.trim()) ||
     "Fetch the served and feature commits locally (git fetch; set DPF_REPO_ROOT to the clone when the portal process has no .git) and re-run the preflight. If still uncomputable, file a blocker BI and stop.";
@@ -163,6 +196,22 @@ export function computePreflightVerdict(input: PreflightInput): PreflightResult 
       detail,
     },
   };
+}
+
+/**
+ * Compare identities without consulting a repository. The image marker is a
+ * full Git SHA in production; a caller may supply a conventional abbreviated
+ * feature SHA. Twelve hex characters is the minimum accepted abbreviation so
+ * arbitrary short prefixes cannot be treated as immutable identity.
+ */
+export function gitIdentitiesMatch(left: string, right: string): boolean {
+  const a = left.trim().toLowerCase();
+  const b = right.trim().toLowerCase();
+  if (!/^[0-9a-f]{12,40}$/.test(a) || !/^[0-9a-f]{12,40}$/.test(b)) {
+    return false;
+  }
+  if (a.length !== 40 && b.length !== 40) return false;
+  return a === b || a.startsWith(b) || b.startsWith(a);
 }
 
 function shortSha(sha: string): string {
