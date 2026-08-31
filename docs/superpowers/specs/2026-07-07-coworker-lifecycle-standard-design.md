@@ -70,14 +70,6 @@ Slice 1 also fixes drift the gate exposed:
   legal-operations-counsel) — route placement is a UX decision handled in the epic, not silently
   invented by the gate.
 
-As-built refinement (EP-32B0E693, 2026-08-30): the existing canonical coworker record route
-(`/platform/ai/agent/[agentId]`) is an invocation route for registry-backed `in_process`
-coworkers. Its server resolver loads the selected coworker's prompt and skills and applies the
-lifecycle gate, so LIFE-003 now recognizes that route without inventing an owner-page placement.
-An `external_cli` participant is intentionally exempt from in-portal route and model-floor
-requirements because its declared runtime is outside the portal. This refinement clears the old
-LIFE-003 baseline while leaving future owner-page placement as an explicit UX decision.
-
 ### Phase 2 — Behavioral certification harness (BI-DE9CC88B) — slice 1 shipped 2026-07-08
 
 Per-coworker certification runs hosted on the **existing** `AssuranceRun`/`AssuranceFinding`
