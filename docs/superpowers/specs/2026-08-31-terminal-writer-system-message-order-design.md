@@ -42,9 +42,11 @@ reproduced this after reading BI-B223F45E commit
 - WC-22868A77 reconciled; other local inference continued; no matching PR exists.
 
 ## Verification mapping
-- **AC-TWSO-001** → OBJ-TWSO-001: focused test proves `system` then `user`.
-- **AC-TWSO-002** → OBJ-TWSO-002: ordinary path and fail-closed suites stay green.
-- **AC-TWSO-003** → OBJ-TWSO-001: customer-zero bound receipt succeeds live.
+| ID | Objectives | Acceptance criterion |
+| --- | --- | --- |
+| AC-TWSO-001 | OBJ-TWSO-001 | Focused test proves `system` then `user`. |
+| AC-TWSO-002 | OBJ-TWSO-002 | Ordinary path and fail-closed suites stay green. |
+| AC-TWSO-003 | OBJ-TWSO-001 | Customer-zero bound receipt succeeds live. |
 
 Documentation impact: this design is the durable internal contract. The change
 does not alter owner-facing behavior or public product documentation.
