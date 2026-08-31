@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Terminal-writer large-artifact rehydration
 
 **Backlog item:** `BI-8B8731EE`  
