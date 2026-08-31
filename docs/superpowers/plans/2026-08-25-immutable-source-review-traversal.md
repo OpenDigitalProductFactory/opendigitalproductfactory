@@ -187,3 +187,11 @@ This phase extends BI-DE58CFE8 on Workroom `WC-14EA9122` after Portfolio Advisor
 7. Prove the exact zero-row RED then GREEN, bootstrap failure, completed-no-evidence non-regression, existing persisted-reader recovery, adjacent submission/approval/capacity/tool-grant suites, web typecheck, style/docs/source guards, preflight, exact-tree CI, and semantic review. Record infrastructure-inconclusive gates as non-PASS.
 8. Deliver one DCO-signed protected PR, one canonical release, and one governed live upgrade. Require exact served SHA and CAN-TEST before one identical-key replay of `...634F7FF63BF8`.
 9. Accept only a genuine persisted immutable reader, governed writer execution, exact current approval envelope, receipt, and server baseline/mapping. Apply WWMD approval decision `DI-85F8C9528BE4` only when the envelope is exact, current, and immutable; otherwise fail closed.
+
+### Phase 13 atomic coverage
+
+The governed coverage writer cannot issue a receipt while the condition `no initiative scope baseline exists for BI-DE58CFE8` remains true. Until that prerequisite is repaired independently, this table is the canonical in-plan traceability record; it does not infer a baseline or receipt.
+
+| Deliverable | Requirement refs | Flow refs | Contract refs | Verification refs | Atomicity |
+| --- | --- | --- | --- | --- | --- |
+| Zero-reader same-TaskRun terminal-writer recovery | Phase 13.1, 13.3, 13.6, 13.9 | Phase 13.4, 13.5 | Phase 13.3, 13.6, 13.9 | Phase 13.2, 13.7, 13.8 | Reservation, the governed bootstrap read, persisted-row requery, hydration validation, and typed resumable failure form one fail-closed unit. Shipping any subset would either leave the preserved TaskRun unrecoverable or weaken evidence authority. |
