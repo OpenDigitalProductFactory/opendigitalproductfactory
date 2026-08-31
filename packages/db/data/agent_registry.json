@@ -4092,8 +4092,6 @@
           "tool_grants": [
             "web_search",
             "crm_read",
-            "document_write",
-            "registry_write",
             "registry_read"
           ]
         }

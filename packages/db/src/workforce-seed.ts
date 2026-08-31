@@ -491,9 +491,12 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
   // BI-6D10EB1F: web_search gates the public-web research doors
   // (search_public_web, fetch_public_website, analyze_public_website_branding);
   // crm_read lets it target and cite an opportunity/account WITHOUT mutating the
-  // pipeline (no crm_write); document_write + registry_write reach doc_save/
-  // doc_link so it can author and attach a cited brief. registry_read/
-  // document_read/code_graph_read arrive via COWORKER_READ_BASELINE_GRANTS. No
+  // pipeline (no crm_write). The role is read-and-propose: it returns the cited
+  // brief in conversation and may file a governed CRM enrichment proposal, but
+  // holds neither document_write nor registry_write. Those broad grants would
+  // also unlock unrelated knowledge, wiki, discovery, and document mutations.
+  // registry_read/document_read/code_graph_read arrive via the explicit grant
+  // below and COWORKER_READ_BASELINE_GRANTS. No
   // sandbox_execute: the Build-Studio scout/ideate research launchers are
   // feature-scoped, not owner-facing market research.
   // registry_read is explicit rather than implied by registry_write: the
@@ -501,7 +504,7 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
   // wiki-overlay-pack.test.ts pins registry_write as NOT conferring read on the
   // overlay list tool. Fix the coworker, not the semantics (BI-728FD7F2); the
   // implication question is filed separately.
-  "market-research-analyst": ["web_search", "crm_read", "document_write", "registry_write", "registry_read"],
+  "market-research-analyst": ["web_search", "crm_read", "registry_read"],
   // The Customer Success Manager operates the CRM (accounts, pipeline, quotes),
   // so it needs crm_read/crm_write — NOT backlog_write (which let it retire live
   // backlog items while flailing) or marketing_read (wrong domain). Its runtime
