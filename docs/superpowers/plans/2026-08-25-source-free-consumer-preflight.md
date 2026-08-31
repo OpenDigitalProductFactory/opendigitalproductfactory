@@ -155,6 +155,7 @@ truthful consumer fallback when the provider is unavailable.
 
 ## Backlog coverage
 
+- Receipt: `cmthmt707007x01nxnwo1sri2`
 - Decision: atomic
 - Parent: `BI-FFBDDD96`
 - Satisfied overlapping occurrence: `BI-6AE39A07`
