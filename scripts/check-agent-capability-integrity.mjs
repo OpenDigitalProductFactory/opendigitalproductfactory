@@ -90,7 +90,10 @@ export function findCompletenessRatchetFailures(report, baseline) {
   const failures = [];
 
   for (const agent of report.agents ?? []) {
-    if (grandfathered.has(agent.key)) continue;
+    // Canonical identity reconciliation changes the inventory key from a slug
+    // to AGT-* without creating a new actor. Preserve the existing actor's
+    // grandfather status through any handle carried on the joined identity.
+    if (grandfathered.has(agent.key) || (agent.handles ?? []).some((handle) => grandfathered.has(handle))) continue;
     for (const plane of CAPABILITY_PLANES) {
       const floor = Number(floors[plane]);
       const level = Number(agent.planes?.[plane]?.level ?? 0);
@@ -139,7 +142,10 @@ function nextCompletenessRatchet(report, baseline) {
     ? new Set(prior.grandfatheredAgentIds ?? [])
     : new Set((report.agents ?? []).map((agent) => agent.key));
   const grandfatheredAgentIds = (report.agents ?? [])
-    .filter((agent) => priorGrandfathered.has(agent.key))
+    .filter((agent) =>
+      priorGrandfathered.has(agent.key)
+      || (agent.handles ?? []).some((handle) => priorGrandfathered.has(handle)),
+    )
     .filter((agent) => CAPABILITY_PLANES.some(
       (plane) => Number(agent.planes?.[plane]?.level ?? 0) < planeFloors[plane],
     ))
