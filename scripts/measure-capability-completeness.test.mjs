@@ -38,6 +38,10 @@ test("canonical registry tool grants participate in capability reachability", ()
   );
 });
 
+test("the alternate onboarding seed participates in the workforce roster", () => {
+  assert.ok(loadSubstrate().roster.includes("onboarding-coo"));
+});
+
 test("generated capability paths use repository-stable separators", () => {
   assert.equal(
     normalizeGeneratedPath("skills\\platform\\ingest-article.skill.md"),

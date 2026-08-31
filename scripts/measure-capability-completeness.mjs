@@ -362,7 +362,14 @@ export function loadSubstrate() {
   const onboardingGrants = parseStringArrayMap(
     objectLiteralBody(workforce.slice(workforce.indexOf("ONBOARDING_AGENT_GRANTS")), "ONBOARDING_AGENT_GRANTS"),
   );
-  for (const [k, v] of onboardingGrants) if (!heldGrants.has(k)) heldGrants.set(k, v);
+  for (const [k, v] of onboardingGrants) {
+    if (!heldGrants.has(k)) heldGrants.set(k, v);
+    // onboarding-coo is seeded by bootstrap-first-run rather than the bulk
+    // COWORKER_AGENT_SEEDS loop. It is still a real workforce identity and must
+    // not be misreported as active-registry-only merely because its seed door
+    // is separate.
+    if (!roster.includes(k)) roster.push(k);
+  }
   // Registry-only agents are seeded from config_profile.tool_grants, not from
   // HARDCODED_COWORKER_GRANTS. Omitting this source made 53 agents look locked
   // out of WSID even though both the canonical registry and live
