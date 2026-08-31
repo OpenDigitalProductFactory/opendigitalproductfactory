@@ -57,7 +57,7 @@ describe("external TaskRun durable dispatch", () => {
   });
 
   it("re-emits a stale submitted task with a new bounded attempt identity", async () => {
-    db.findMany.mockResolvedValue([{ 
+    db.findMany.mockResolvedValue([{
       taskRunId: "TR-1",
       updatedAt: new Date("2026-08-31T03:58:00.000Z"),
       progressPayload: {
