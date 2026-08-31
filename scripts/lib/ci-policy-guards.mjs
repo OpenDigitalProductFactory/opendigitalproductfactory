@@ -211,6 +211,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/ci-policy-guards.test.mjs",
         "scripts/lib/host-command-invocation.test.mjs",
         "packages/dpf-skill-pack/hooks/claim-work-guidance.test.mjs",
+        "packages/dpf-skill-pack/hooks/plan-coverage-guidance.test.mjs",
         // BI-812C676D: every covered-root *.test.mjs must appear here or on the
         // deliberate allowlist — otherwise CI stays green while the test never runs.
         "scripts/lib/ci-policy-test-inventory.test.mjs",
