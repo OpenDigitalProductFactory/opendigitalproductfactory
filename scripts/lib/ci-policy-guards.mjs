@@ -210,6 +210,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/documentation-evidence-lane.test.mjs",
         "scripts/ci-policy-guards.test.mjs",
         "scripts/lib/host-command-invocation.test.mjs",
+        "packages/dpf-skill-pack/hooks/claim-work-guidance.test.mjs",
+        "packages/dpf-skill-pack/hooks/plan-coverage-guidance.test.mjs",
         // BI-812C676D: every covered-root *.test.mjs must appear here or on the
         // deliberate allowlist — otherwise CI stays green while the test never runs.
         "scripts/lib/ci-policy-test-inventory.test.mjs",
@@ -227,6 +229,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/dev-preview-migrate-converge.test.mjs",
         "scripts/pregate-exit-honesty.test.mjs",
         "scripts/lib/gate-context-runtime-contract.test.mjs",
+        "packages/dpf-skill-pack/hooks/code-intelligence-guidance.test.mjs",
       ),
       node("scripts/check-ci-policy-test-inventory.mjs"),
     ]),
@@ -335,6 +338,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     // live install is reachable). Closes the unbacked-doc-anchor pattern (P3).
     guard("doc-anchor-existence", "Doc Anchor Existence", [
       node("--test", "scripts/check-doc-anchor-existence.test.mjs"),
+      // Spawns each remaining CLI against a missing BASE_SHA on the live tree,
+      // so the host-side preflight must not strip it (BI-20599979).
+      conformanceTest("scripts/lib/git-changed-files.test.mjs"),
       node("scripts/check-doc-anchor-existence.mjs"),
     ]),
     // BI-38A353B2: doc-anchor-existence proves a cited id EXISTS; nothing

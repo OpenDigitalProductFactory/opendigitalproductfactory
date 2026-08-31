@@ -26,6 +26,7 @@ Every row is code-verified against `main` at `49bbbb2e8`, or live-queried from t
 | 2 | **Only one shape is declared, and its runner never touches a Workroom.** `obligation-assurance-watch` runs a sweep and writes findings. It never calls `projectWorkShapeCycleBoundary`, never opens a room, never records room activity. The declared shape and the running job are unjoined. | `apps/web/lib/queue/functions/obligation-assurance-watch.ts` (78 lines, no room reference) |
 | 3 | **Proactive drive is keyed to the coworker, not the work.** `COWORKER_SELF_TASKS` is a hand-curated registry of four agent-keyed entries whose only dial is cron cadence (`balanced` = weekly, `assertive` = daily). Nothing binds an entry to a room, a portfolio, an obligation, or a stop condition. | `apps/web/lib/operate/scheduled-jobs/coworker-self-tasks.ts` |
 | 4 | **The proactivity resolver has no room in its ladder and no activity family for source operations.** Scopes are `agent:` → `route-context:` → `activity-family:`. The 15 families cover marketing, finance close, tax, field dispatch, security *incidents* — none covers contribution intake, code review, advisory triage, or payables. | `proactivity-resolver.server.ts` `scopeKeysForInput`; `proactivity-types.ts` `PROACTIVITY_ACTIVITY_FAMILIES` |
+| 4a | **The product still presents proactivity as a property of a specific AI Coworker.** The chat dock, coworker record and consolidated coworker roster all load and save agent-scoped preferences. That conflicts with the room carrying drive: changing the participant can change the work's persistence even though the outcome did not change. | `CoworkerPriorityDock.tsx`; `CoworkerProactivitySetting.tsx`; `coworker-decisions/proactivity/page.tsx` |
 | 5 | **The live room population is development sessions, not business operations.** Of 60 rooms scanned, 2 are live and 58 are history; 42 are reapable. 37 died by lease expiry. Most titles are `Work on BI-…`. | `list_workrooms` (2026-08-29): `{"scanned":60,"live":2,"history":58,"reapable":42}` |
 | 6 | **The one business-operations room that was tried died of exactly this gap.** `WC-42C558DD` "Security findings watch — Dependabot, code scanning, OSV" was created manually, portfolio `foundational`, serving three portfolios, anchored to the GitHub Security tab — and expired seven days later with no executor and no drive. It is the design's own motivating defect, already on the install. | `list_workrooms`, `WC-42C558DD`, `liveness: lease-expired` |
 | 7 | **The PAAW axes are specified but not populated.** 73% of rooms carry no `portfolioRole`, 67% no `activityKind`, **zero** carry `productsAndServicesSold`, and 0 of 330 declare a collaboration shape. | `EP-WORKFORCE-TRANSITION` triage items (live backlog) |
@@ -270,12 +271,14 @@ so the generic layers are proven before customer 0's own business rides on them.
 | **E** | L2 | The `software-platform` standing-room profile, derived from OVSM, with the three conformance tests of §4. | F |
 | **F** | L3 | the operator install's bindings: repo, forge account, coworker-to-stage assignment, thresholds. Configuration rows and one seed. | — |
 | **G** | L1 | Room surface: Process Overseer identity/source, shape-conformance state, current and expected next stage, deviations, last check, drive, next wake, last cycle, and intervention reason. | B |
-| **H** | L1 | Retire the agent-keyed self-task registry onto shapes, once E and F prove the path. Not before. | E, F |
+| **H** | L1 | Retire agent-owned proactivity onto outcome-specific Workrooms: migrate the self-task registry to shapes; remove the `agent:` preference scope and per-coworker controls; ignore legacy agent facts rather than fabricating room choices. Once E and F prove the path, not before. | E, F |
 
 ## 9. Non-goals
 
 - Not replacing the proactivity resolver, the Golden Triangle compiler, or the work-posture layer —
   this composes them.
+- Not retaining AI-coworker identity as a proactivity fallback. The engine remains; ownership moves
+  to the outcome-specific Workroom. Participant identity retains safety ceilings only.
 - Not a new decision engine; `principle_decide` remains the PDP.
 - Not per-install room authoring (§4 rule 2) and not a second work ledger (`PAAW-WORK-030`).
 - Not autonomy for outbound sends, money movement, or credential rotation — ever.

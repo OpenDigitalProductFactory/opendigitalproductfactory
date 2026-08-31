@@ -13,9 +13,10 @@ const floors = {
   evidence: 2,
 };
 
-function agent(key, levels) {
+function agent(key, levels, handles = [key]) {
   return {
     key,
+    handles,
     planes: Object.fromEntries(
       Object.entries(floors).map(([plane, ceiling]) => [
         plane,
@@ -54,6 +55,16 @@ test("accepts a new agent that meets every plane floor", () => {
     agents: [
       agent("legacy-agent", { identity: 2 }),
       agent("complete-new-agent", {}),
+    ],
+  };
+
+  assert.deepEqual(findCompletenessRatchetFailures(report, baseline), []);
+});
+
+test("preserves grandfathering when an existing slug is canonically re-keyed", () => {
+  const report = {
+    agents: [
+      agent("AGT-WS-LEGACY", { identity: 2 }, ["legacy-agent"]),
     ],
   };
 

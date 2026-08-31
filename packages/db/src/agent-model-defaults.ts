@@ -66,6 +66,14 @@ export const AGENT_MODEL_CONFIG_DEFAULTS: AgentModelConfigDefault[] = [
   { agentId: "legal-operations-counsel", minimumTier: "strong", budgetClass: "balanced", minimumCapabilities: { toolUse: true }, minimumContextTokens: 16000 },
   { agentId: "finance-agent", minimumTier: "strong", budgetClass: "balanced", minimumCapabilities: { toolUse: true }, minimumContextTokens: 16000 },
   { agentId: "licensing-specialist", minimumTier: "strong", budgetClass: "balanced", minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
+  // EP-32B0E693: active in-process SOC and accessibility coworkers need an
+  // explicit floor. These values follow the risk and input shape of the work;
+  // they do not alter staffing, authority, or execution cadence.
+  { agentId: "ux-accessibility-agent", minimumTier: "strong", budgetClass: "balanced", minimumCapabilities: { toolUse: true, imageInput: true }, minimumContextTokens: 32000 },
+  { agentId: "soc-triage-analyst", minimumTier: "adequate", budgetClass: "balanced", minimumCapabilities: { toolUse: true }, minimumContextTokens: 16000 },
+  { agentId: "soc-investigator", minimumTier: "strong", budgetClass: "balanced", minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
+  { agentId: "soc-threat-hunter", minimumTier: "strong", budgetClass: "balanced", minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
+  { agentId: "soc-incident-commander", minimumTier: "strong", budgetClass: "quality_first", minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
   // UX Design Critic (AGT-906). imageInput is load-bearing, not optional: this
   // coworker reasons over rendered screenshots, and a text-only model served
   // here would answer confidently about a screen it never saw — the exact

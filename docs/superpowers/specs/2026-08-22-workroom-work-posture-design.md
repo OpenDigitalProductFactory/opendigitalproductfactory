@@ -84,13 +84,24 @@ Both postures resolve through one precedence order:
 1. Hard policy          residency · sensitivity ceiling · regulated ceiling   (never relaxed)
 2. Room declaration     an explicit choice made when the room was convened
 3. Derived              work shape × archetype stream × temporal band × stakes
-4. Agent                the coworker's own saved posture
+4. Agent                Golden Triangle priority only — never proactivity
 5. Org / activity-family
 6. Platform default     Balanced / balanced — byte-identical to today
 ```
 
 Layer 3 is the new one. Layers 1, 4, 5 and 6 already exist and keep their current
 meaning; layer 2 is new but is a straight reuse of the shape-claim mechanism.
+
+**Operator correction — proactivity is not identity state (2026-08-30).** The earlier
+ladder incorrectly retained the coworker's saved proactivity as an inheritance layer.
+For proactivity, the outcome-specific Workroom is authoritative: every participant
+shares its level, cadence, channel and action boundary. Participant-specific trust,
+qualifications, grants and autonomy envelopes remain safety ceilings and may only narrow
+the room; they never supply or override its proactivity. Per-coworker proactivity controls
+and the `agent:<agentId>` preference scope are therefore legacy surfaces to retire under
+`BI-87C9C91C`. Unroomed activity uses the activity-family/platform default; proactive work
+without an outcome-specific Workroom is a modelling gap, not permission to fall back to
+identity. This correction does not change the separate Golden Triangle priority control.
 
 ### 3.2 The safety invariant
 

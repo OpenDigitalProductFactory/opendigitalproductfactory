@@ -58,19 +58,11 @@ export const TOOL_REACHABILITY_EXEMPTIONS: Readonly<Record<string, string>> = {
   workbook_update_cells:
     "SEALED: requires workbook_write, held by no registry agent — write authority deferred with the workbook persona.",
 
-  // ── Storefront / inventory reads ─────────────────────────────────────────
-  list_storefront_activity:
-    "SEALED: requires storefront_read, held by no registry agent — storefront vertical shipped tools before a granted owning coworker.",
-  list_stock_coverage:
-    "SEALED: requires stock_read, held by no registry agent — same storefront-vertical grant gap.",
-
   // ── Screen driving ───────────────────────────────────────────────────────
   screen_set_input:
     "SEALED: requires coworker_screen_fill, held by no registry agent — screen-fill is deliberately ungranted until the screen-drive trust tier assigns it (the read/drive grants are similarly scoped).",
 
   // ── Internal / runtime-invoked ───────────────────────────────────────────
-  run_tool_script:
-    "SEALED: requires tool_script_exec, held by no registry agent — script execution is a high-blast-radius authority; granting it is a deliberate act for the build-engine epic.",
   get_fleet_readiness:
     "NO ENTRY: absent from TOOL_TO_GRANTS entirely (deny-by-default) — fleet-readiness is read by platform surfaces, not coworkers; needs an owning-epic decision on whether to expose it.",
   record_surface_readiness:
