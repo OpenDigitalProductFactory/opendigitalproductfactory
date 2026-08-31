@@ -37,6 +37,11 @@ export function requiresInitiativeReviewEffort(toolNames: readonly string[]): bo
   return researchWriterRequired || independentReviewWriterRequired;
 }
 
+function explicitlyRequestsObjectiveMapping(prompt: string | undefined): boolean {
+  return typeof prompt === "string"
+    && /\boperation\s*(?:=|:)\s*['"]objective-mapping['"]/i.test(prompt);
+}
+
 export function parseInitiativeReviewBinding(value: unknown): InitiativeReviewBinding | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const binding = value as Record<string, unknown>;
@@ -99,13 +104,25 @@ export function narrowInitiativeReviewTools<T extends {
   tools: ToolDefinition[];
   toolsForProvider: Array<Record<string, unknown>>;
   deferredTools: ToolDefinition[];
-}>(input: T, requiredNames: readonly string[], binding: InitiativeReviewBinding | undefined): T {
+}>(
+  input: T,
+  requiredNames: readonly string[],
+  binding: InitiativeReviewBinding | undefined,
+  prompt?: string,
+): T {
   if (!binding) return input;
   const exactNames = new Set(requiredNames);
   const compactResearchReceipt = binding.gate === "research"
     && binding.writerToolName === "record_initiative_evidence";
-  const objectiveMappingProposal = binding.gate === "objective-mapping"
-    && binding.writerToolName === "record_initiative_evidence";
+  const objectiveMappingProposal = binding.writerToolName === "record_initiative_evidence"
+    && (
+      binding.gate === "objective-mapping"
+      || (
+        binding.gate === "dependency-disposition"
+        && !!optionalString(binding.expectedCurrentBaselineId)
+        && explicitlyRequestsObjectiveMapping(prompt)
+      )
+    );
   const baseWriterNames = objectiveMappingProposal
     ? ["operation", "baselineId", "objectiveMappings", "reason"]
     : compactResearchReceipt
