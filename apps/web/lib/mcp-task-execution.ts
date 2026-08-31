@@ -35,17 +35,21 @@ function remoteTaskContent(text: string) {
   return [{ type: "text", text }];
 }
 
-export function remoteTaskChatHistory(input: {
+export function remoteTaskConversation(input: {
+  systemPrompt: string;
   prompt: string;
   resumeKind?: "capacity" | "terminal-writer";
   terminalWriterContext?: string;
-}): Array<{ role: "system" | "user"; content: string }> {
-  return [
-    ...(input.resumeKind === "terminal-writer" && input.terminalWriterContext
-      ? [{ role: "system" as const, content: input.terminalWriterContext }]
-      : []),
-    { role: "user" as const, content: input.prompt },
-  ];
+}): {
+  systemPrompt: string;
+  chatHistory: Array<{ role: "user"; content: string }>;
+} {
+  return {
+    systemPrompt: input.resumeKind === "terminal-writer" && input.terminalWriterContext
+      ? `${input.systemPrompt}\n\n${input.terminalWriterContext}`
+      : input.systemPrompt,
+    chatHistory: [{ role: "user", content: input.prompt }],
+  };
 }
 
 export async function executeRemoteTaskAttempt(input: {
@@ -134,16 +138,18 @@ export async function executeRemoteTaskAttempt(input: {
     : input.resumeKind === "terminal-writer"
       ? { resumedFromTerminalWriterWait: true }
       : { resumedFromCapacity: true };
+  const conversation = remoteTaskConversation({
+    systemPrompt: agent.systemPrompt,
+    prompt: parsed.prompt,
+    resumeKind: input.resumeKind,
+    terminalWriterContext: input.terminalWriterContext,
+  });
 
   try {
     const result = await executeAutonomousAgenticLoop({
-      systemPrompt: agent.systemPrompt,
+      systemPrompt: conversation.systemPrompt,
       systemPromptInstructionSpans: coworkerBriefSpans(agent.systemPrompt),
-      chatHistory: remoteTaskChatHistory({
-        prompt: parsed.prompt,
-        resumeKind: input.resumeKind,
-        terminalWriterContext: input.terminalWriterContext,
-      }),
+      chatHistory: conversation.chatHistory,
       sensitivity: agent.sensitivity ?? "internal",
       tools: tools.tools,
       toolsForProvider: tools.toolsForProvider,

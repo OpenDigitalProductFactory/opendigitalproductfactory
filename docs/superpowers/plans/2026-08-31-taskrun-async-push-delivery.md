@@ -59,9 +59,10 @@ cross-page notification experience after its durable-operation dependency.
    cancelling it and cloning its exact stored binding and proposal onto the
    same TaskRun. Require fresh human approval; never rerun inference or mint a
    sibling TaskRun.
-7. Keep hydrated immutable evidence as the first chat-history system message
-   on terminal-writer replay, followed by the original user prompt. Prove the
-   provider-neutral ordering with a focused regression and the live DMR route.
+7. Merge hydrated immutable evidence into the single authoritative coworker
+   system prompt on terminal-writer replay, followed by the original user
+   history. Never emit a second system-role message. Prove the provider-neutral
+   composition with a focused regression and the live DMR route.
 8. Route duration and iteration exhaustion through the terminal-writer policy.
    When the writer has not run, preserve the same TaskRun as `input-required`
    with `terminal-writer-missing`; never fall through to generic completion.
