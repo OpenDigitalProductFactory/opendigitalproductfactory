@@ -84,6 +84,27 @@ export type KernelConsultLedgerOutcome = {
 };
 
 /**
+ * Internal-only linkage consumed by the policy-authority projector. It is not
+ * part of the public principle_decide schema; only a server-owned action gate
+ * may attach it to a kernel consult.
+ */
+export type KernelConsultPolicyProjection = {
+  policyAffirmativeOptionId: string;
+  dualControlRequired: boolean;
+  policyActionBinding: {
+    actionKey: string;
+    subject: {
+      kind: "employee" | "account" | "contact" | "partner-account" | "principal" | "team" | "backlog-item" | "platform";
+      id: string;
+    };
+    organizationId: string | null;
+    professionId: string | null;
+    routeContext: string | null;
+    artifactFingerprint: string;
+  };
+};
+
+/**
  * Map the pure decide() result onto the ledger's unresolved/resolved
  * semantics: a confident, conflict-free recommendation is `recommend`; a
  * commandment conflict or low-margin call is `escalate` (needs human review —
@@ -214,6 +235,8 @@ export async function recordKernelConsultInteraction(input: {
    * the caller ran one. Absent means the decision was reached first-pass.
    */
   retryAttempts?: RetryAttemptRecord[] | null;
+  /** Exact action linkage supplied only by the server-owned authority path. */
+  policyProjection?: KernelConsultPolicyProjection | null;
   now?: Date;
 }): Promise<KernelConsultLedgerOutcome> {
   try {
@@ -376,6 +399,9 @@ export async function recordKernelConsultInteraction(input: {
         autonomyBlockers: input.result.flags.autonomyBlockers ?? null,
         optionDescriptions: input.optionDescriptions,
         topContributors,
+        policyAffirmativeOptionId: input.policyProjection?.policyAffirmativeOptionId ?? null,
+        dualControlRequired: input.policyProjection?.dualControlRequired ?? null,
+        policyActionBinding: input.policyProjection?.policyActionBinding ?? null,
       },
     });
 

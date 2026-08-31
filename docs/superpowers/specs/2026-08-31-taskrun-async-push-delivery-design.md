@@ -164,6 +164,45 @@ credentials, user-supplied callback URLs, or writer arguments.
 - Quiescence and runtime admission remain enforced by the existing queue and
   agent loop.
 
+## WWMD action authority
+
+An approval wait is not the normal authority model for a bounded platform
+action that Mark's standing policy has already delegated. WWMD is the
+human-rooted governance process authority: it applies the current promoted
+platform-principle version to the exact action and records the result as a
+sealed `DecisionInteraction`. The action gate may project that judgment into a
+short-lived, single-use authorization only when all of the following are true:
+
+- the result is an explicit `proceed`, has usable evidence, is high confidence,
+  is autonomy eligible, and has no commandment conflict;
+- the judgment is fresh and binds the exact action, backlog-item subject,
+  organization scope, route, immutable input/artifact fingerprint, policy
+  version, acting human root, acting agent, and delegation evidence;
+- the action is one of the bounded initiative-readiness writers already
+  admitted by the canonical lane registry and is no higher than medium risk;
+- independent reviewer and author separation required by the lane remains
+  satisfied by the tool grant and reviewer identity. WWMD authorizes execution;
+  it does not manufacture or predetermine the reviewer's finding.
+
+The authority adapter first looks for a fresh exact judgment. If none exists,
+it performs one server-owned WWMD consult with server-derived options and
+binding, persists the sealed interaction, and re-evaluates it through the
+existing policy-authority projector. Callers cannot supply a DecisionInteraction
+id, binding, policy version, scoring vector, or affirmative option. A decline is
+an authoritative denial. Uncertain, defer, escalate, tie, stale, missing,
+unsealed, mismatched, or dual-control-required results remain input-required or
+denied. There is no blanket root instruction, direct DecisionInteraction-as-RBAC
+shortcut, reusable bypass, or automatic retry loop.
+
+This reconnects existing substrate rather than adding a parallel authority
+system: `DecisionInteraction` remains judgment SSOT;
+`AuthorizationDecisionLog` records the projected authorization;
+`CoworkerActionEnvelope` supplies exact binding, expiry, and single-use
+reservation; `DelegationGrant` proves the agent's human-rooted scope. The
+governing architecture decision is `DI-A16B2E483B28`, which selected exact
+action-bound WWMD projection with high confidence and
+`autonomyEligible=true`.
+
 ## Acceptance criteria
 
 | ID | Criterion |
@@ -177,6 +216,7 @@ credentials, user-supplied callback URLs, or writer arguments.
 | AC-FAIL-CLOSED | Missing/mismatched identity, revoked authority, cancellation, approval, and terminal-writer boundaries remain non-executable or input-required. |
 | AC-SYNC-REGRESSION | High-risk pre-execution approval and existing idempotent replay/resume behavior remain unchanged. |
 | AC-APPROVAL-EXPIRY | An expired proposed writer envelope is replaced on the same TaskRun with identical persisted arguments and binding, without inference rerun or sibling identity. |
+| AC-WWMD-AUTHORITY | A bounded initiative-readiness action with no fresh exact judgment invokes WWMD once and proceeds without a per-action human click only on explicit, autonomy-eligible `proceed`; every no/uncertain/conflict/stale/mismatched result fails closed. |
 
 ## Traceability and verification
 
@@ -191,6 +231,7 @@ credentials, user-supplied callback URLs, or writer arguments.
 | AC-FAIL-CLOSED | existing approval, terminal writer, token, cancellation checks | existing negative suites plus worker reconstruction matrix |
 | AC-SYNC-REGRESSION | unchanged high-risk and same-task replay paths | current `mcp-task-submit` regression suite |
 | AC-APPROVAL-EXPIRY | stale proposed envelope -> cancel old -> clone exact proposal -> fresh approval | approval-recovery transaction and replay tests |
+| AC-WWMD-AUTHORITY | server-derived action question -> sealed exact DecisionInteraction -> existing projector -> expiring single-use authorization | producer, ledger-binding, projector, denial, mismatch, duplicate-consult, and gate integration tests |
 
 ## Rollout and rollback
 

@@ -82,7 +82,27 @@ cross-page notification experience after its durable-operation dependency.
    correct across reconnect or replacement. Keep multi-replica immediate
    fan-out in the explicit BI-05D7A0DC dependency.
 
-## Task 5: blast radius and delivery
+## Task 5: reconnect WWMD action authority
+
+1. Add a server-only action-judgment builder for the bounded tools in the
+   initiative-readiness lane registry. Derive its exact subject, organization,
+   route, artifact fingerprint, actor, and option vectors from verified server
+   context; expose none of these as caller authority input.
+2. Extend the existing kernel-consult ledger adapter to persist the exact
+   `policyActionBinding`, affirmative option id, and dual-control requirement
+   supplied by that server-owned path. Preserve the ordinary advisory
+   `principle_decide` schema unchanged.
+3. When the existing policy projector finds no fresh exact judgment, invoke one
+   WWMD consult, reload the sealed record, and project only through the current
+   fail-closed projector. Never loop or interpret the tool's prose as authority.
+4. Test explicit proceed, decline, uncertain/defer/conflict, stale/mismatched
+   binding, already-existing judgment, single invocation, independent lane
+   separation, and the absence of caller-controlled policy binding.
+5. Record `DI-A16B2E483B28` and the promoted policy version in immutable audit
+   evidence. A human click remains reserved for genuine escalation or required
+   dual control, not routine action-by-action permission.
+
+## Task 6: blast radius and delivery
 
 1. Run affected submit, execution, Task lifecycle, task-stream, queue, approval,
    terminal-writer, and cancellation suites.
@@ -99,10 +119,15 @@ cross-page notification experience after its durable-operation dependency.
 
 ## Backlog coverage
 
-**Decision:** atomic.  
-**Dependencies:** BI-8B8731EE is related but independently shippable;
-BI-801313EB owns provider-level durable operation resume; BI-05D7A0DC consumes
-this task-event contract for cross-page operator UX.
+- Decision: atomic
+- Parent: `BI-2014236E`
+- Receipt: pending governed writer execution against the final immutable plan
+- Dependencies: none
+
+Related but independently shippable work is not a dependency of this atomic
+delivery: BI-8B8731EE is adjacent, BI-801313EB owns provider-level durable
+operation resume, and BI-05D7A0DC consumes this task-event contract for
+cross-page operator UX.
 
 | Requirement | Contract | Flow | Verification |
 | --- | --- | --- | --- |
@@ -112,6 +137,7 @@ this task-event contract for cross-page operator UX.
 | AC-PUSH-FIRST | token-scoped MCP task event projection | commit -> GET SSE notify -> reread | GET auth + snapshot/live/no-fanout tests |
 | AC-RECONCILE | deterministic rescan | missed send -> same event | reconciliation tests |
 | AC-FAIL-CLOSED | existing authority/approval/writer contracts | invalid/revoked/cancelled -> stop | negative regression matrix |
+| AC-WWMD-AUTHORITY | sealed DecisionInteraction + exact policy projector | no exact judgment -> one WWMD consult -> project or stop | producer/ledger/projector/gate matrix |
 
 The governed `record_plan_backlog_coverage` receipt and exact mappings replace
 this provisional section before final PR readiness.
