@@ -7,23 +7,19 @@ Backlog item: BI-EDC0DAF2
 Workroom: WC-A291253B  
 Named baseline: `origin/main` at `be4c6bfcb4fd62f497167fa55c747105512a0ecd`
 
+## Objectives
+**OBJ-TWSO-001:** Put hydrated terminal-writer system authority before user content.
+**OBJ-TWSO-002:** Preserve ordinary history and every existing fail-closed control.
+
 ## Problem and live evidence
-An initiative-review TaskRun can complete its immutable reads and resume in the
-writer-only phase. That path hydrates source bytes into a system message, but
-`mcp-task-execution.ts` constructs `chatHistory` as user request then system
-context.
-
-That order is accepted by some hosted adapters but is invalid for the bundled
-local Qwen chat template, which requires system content to precede user
-content. When hosted providers are unavailable, local fallback returns HTTP
-400 with `System message must be at the beginning`. The governed writer is
-never called and the same TaskRun remains `input-required`.
-
+An initiative-review TaskRun can complete immutable reads and resume writer-only,
+but `mcp-task-execution.ts` builds history as user then hydrated system context.
+Bundled local Qwen refuses that order with HTTP 400, `System message must be at
+the beginning`; the writer is not called and the same run remains resumable.
 Customer-zero TaskRun `TR-MCP-Y21xamsxOWhsMDAwMDdwcnZzZm4ybTAzOQ-557F042B9990`
-reproduced it after reading the immutable BI-B223F45E design at commit
+reproduced this after reading BI-B223F45E commit
 `035a6335bd0e609bafbe96777ef6c5e0ea26bac0`, blob
-`b9fe8f0707291805fbc468aef62b401e0ee210a5`. Two replays produced zero writer
-executions. Logs distinguish the ordering error from hosted capacity failures.
+`b9fe8f0707291805fbc468aef62b401e0ee210a5`; two replays wrote no receipt.
 
 ## Contract
 - Hydrated terminal-writer context is system authority and must appear before
@@ -35,32 +31,20 @@ executions. Logs distinguish the ordering error from hosted capacity failures.
   prose, and the same TaskRun remains resumable.
 
 ## Ordered fix sequence
-1. Add a failing unit test that captures `executeAutonomousAgenticLoop` input
-   for terminal-writer replay and asserts `system` precedes `user`.
-2. Reorder only the terminal-writer hydrated history in
-   `mcp-task-execution.ts`.
-3. Run the focused MCP task execution and terminal-writer suites, then the
-   affected web tests and production build.
+1. Add a failing test that asserts terminal-writer `system` precedes `user`.
+2. Reorder only terminal-writer hydrated history in `mcp-task-execution.ts`.
+3. Run focused MCP suites, affected web tests, and the production build.
 4. Advance the canonical runtime through `/ops/self-upgrade`.
-5. Replay the existing customer-zero TaskRun and verify that its bound
-   `record_initiative_evidence` writer executes and BI-B223F45E research
-   readiness becomes satisfied.
+5. Replay the customer-zero run; verify its bound writer and BI-B223F45E readiness.
 
 ## Candidate causes ruled out
-- Missing source: four `read_source_at_version` calls read the bound blob.
-- Missing grant: the server issued the exact packet and narrowed to its writer.
-- Wrong Workroom: base/head reconciliation passed for WC-22868A77.
-- Local outage: HTTP 400 named message order while other inference continued.
-- In-flight repair: no matching PR exists; `origin/main` retains the defect.
+- Source and grant exist: four exact reads passed and the packet narrowed to its writer.
+- WC-22868A77 reconciled; other local inference continued; no matching PR exists.
 
 ## Verification mapping
-- Role ordering and ordinary-path preservation → focused
-  `mcp-task-execution` test.
-- Terminal writer remains exact and fail-closed → existing
-  `mcp-task-terminal-writer` and terminal-tool-policy suites.
-- Type and integration safety → affected web test gate and production build.
-- Functional acceptance → the same customer-zero TaskRun records its bound
-  research receipt after canonical deployment.
+- **AC-TWSO-001** → OBJ-TWSO-001: focused test proves `system` then `user`.
+- **AC-TWSO-002** → OBJ-TWSO-002: ordinary path and fail-closed suites stay green.
+- **AC-TWSO-003** → OBJ-TWSO-001: customer-zero bound receipt succeeds live.
 
 Documentation impact: this design is the durable internal contract. The change
 does not alter owner-facing behavior or public product documentation.
