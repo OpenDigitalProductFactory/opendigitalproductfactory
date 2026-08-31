@@ -502,14 +502,15 @@ jobs:
       # restore-keys can hydrate stale multi-GB Turbopack caches on PRs, making
       # the production build slower than a clean compile and vulnerable to
       # hosted-runner cancellation before TypeScript completes. Exact-key hits
-      # still accelerate reruns of the same commit. NOTE: hashFiles does NOT
-      # support brace globs ({ts,tsx}), so each extension is a separate arg.
+      # still accelerate reruns of the same commit. The commit SHA is the
+      # source discriminator: GitHub evaluates hashFiles while rendering the
+      # workflow, and broad web-source globs can exceed the 120-second limit.
       - name: Cache Turbopack build cache
         if: needs.changes.outputs.heavy == 'true'
         uses: actions/cache@v6
         with:
           path: ${{ github.workspace }}/apps/web/.next/cache
-          key: nextjs-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ hashFiles('apps/web/**/*.ts', 'apps/web/**/*.tsx', 'apps/web/**/*.js', 'apps/web/**/*.jsx') }}
+          key: nextjs-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
 
       - name: Build web (Next.js production)
         if: needs.changes.outputs.heavy == 'true'
