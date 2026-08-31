@@ -5,6 +5,7 @@
 **Workroom:** `WC-D8BEE5C9`  
 **Design:** `docs/superpowers/specs/2026-08-30-terminal-writer-large-artifact-rehydration-design.md`  
 **Decision:** `DI-2C90F0EF92B2`
+**Related async delivery:** `BI-2014236E`
 
 ## Outcome
 
@@ -18,6 +19,11 @@ The same governed initiative-review TaskRun can rehydrate a complete immutable a
 - Dependencies: none
 - Receipt: pending governed `record_plan_backlog_coverage`
 - Rationale: the bounded policy change and its positive and negative proofs are one independently meaningful repair; neither is safe or useful to ship alone.
+- Independently shippable async TaskRun return/push/reconciliation work is mapped to `BI-2014236E` and is not part of this atomic receipt.
+
+## Related asynchronous delivery
+
+The preserved reviewer also proved that inline `tasks/submit` can outlive the initiating HTTP deadline while its TaskRun continues correctly. Child `BI-2014236E` owns the separate clean revert that will return the durable TaskRun immediately, execute through the existing queue, publish native MCP task notifications/subscriptions after committed transitions, and retain adaptive `tasks/list`/`tasks/get` reconciliation for offline or restarted hosts. Optional signed webhooks are delivery projections for separately registered external hosts; they never replace TaskRun state or accept arbitrary per-request callback URLs.
 
 ## Ordered implementation
 
