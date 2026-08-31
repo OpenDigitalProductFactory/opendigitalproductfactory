@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { Agent, fetch as undiciFetch } from "undici";
 import { ok, type ActionSuccess } from "@/lib/shared/action-result";
 
 const DEFAULT_REGISTRY_ORIGIN = "https://ghcr.io";
@@ -80,10 +81,30 @@ type RegistryConfig = {
   config?: { Labels?: Record<string, unknown> };
 };
 
+type RegistryTransport = Readonly<{
+  fetch: typeof fetch;
+  close(): Promise<void>;
+}>;
+
+type RegistryTransportFactory = () => RegistryTransport;
+
 class RegistryReadError extends Error {
   constructor(readonly reason: RegistryReleaseFailureReason) {
     super(reason);
   }
+}
+
+function createRegistryTransport(): RegistryTransport {
+  const dispatcher = new Agent();
+  const isolatedFetch = ((input: Parameters<typeof fetch>[0], init?: RequestInit) =>
+    undiciFetch(
+      input as Parameters<typeof undiciFetch>[0],
+      { ...init, dispatcher } as Parameters<typeof undiciFetch>[1],
+    ) as unknown as Promise<Response>) as typeof fetch;
+  return {
+    fetch: isolatedFetch,
+    close: () => dispatcher.close(),
+  };
 }
 
 function sha256(body: Uint8Array): string {
@@ -185,6 +206,7 @@ export async function readRegistryReleaseCandidate(input: {
   repository?: string;
   registryOrigin?: string;
   fetchImpl?: typeof fetch;
+  transportFactory?: RegistryTransportFactory;
 }): Promise<RegistryReleaseReadResult> {
   const repository = input.repository ?? DEFAULT_REPOSITORY;
   const origin = input.registryOrigin ?? DEFAULT_REGISTRY_ORIGIN;
@@ -192,10 +214,9 @@ export async function readRegistryReleaseCandidate(input: {
     return { ok: false, reason: "registry-identity-invalid" };
   }
 
-  try {
+  async function readCandidate(fetchImpl: typeof fetch): Promise<RegistryReleaseReadResult> {
     const originUrl = new URL(origin);
     if (originUrl.protocol !== "https:") throw new RegistryReadError("registry-identity-invalid");
-    const fetchImpl = input.fetchImpl ?? fetch;
     const imageName = `${input.owner.toLowerCase()}/${repository}`;
     let bearer: string | null = null;
 
@@ -394,10 +415,43 @@ export async function readRegistryReleaseCandidate(input: {
         platformArchitecture: architecture,
       }),
     };
-  } catch (error) {
-    return {
-      ok: false,
-      reason: error instanceof RegistryReadError ? error.reason : "registry-unavailable",
-    };
   }
+
+  // Next patches the process-global fetch used by server components. A failed
+  // connection during container startup can leave that long-lived transport
+  // returning timeouts even after Docker egress is healthy. Use an isolated,
+  // explicitly closed Undici dispatcher for each complete registry read, and
+  // replace it once after a transport exception. Injected fetchImpl callers
+  // keep their single-attempt deterministic contract.
+  const transportFactory = input.transportFactory
+    ?? (input.fetchImpl
+      ? () => ({ fetch: input.fetchImpl as typeof fetch, close: async () => undefined })
+      : createRegistryTransport);
+  const maxAttempts = input.fetchImpl && !input.transportFactory ? 1 : 2;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    let transport: RegistryTransport | null = null;
+    try {
+      transport = transportFactory();
+      return await readCandidate(transport.fetch);
+    } catch (error) {
+      if (error instanceof RegistryReadError || attempt === maxAttempts) {
+        return {
+          ok: false,
+          reason: error instanceof RegistryReadError ? error.reason : "registry-unavailable",
+        };
+      }
+    } finally {
+      if (transport) {
+        try {
+          await transport.close();
+        } catch {
+          // The dispatcher is never reused. Cleanup cannot invalidate registry
+          // bytes whose digest and immutable identity were already verified.
+        }
+      }
+    }
+  }
+
+  return { ok: false, reason: "registry-unavailable" };
 }

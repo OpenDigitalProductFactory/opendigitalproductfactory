@@ -414,12 +414,26 @@ export function classifyGateOutcome({ freshnessVerdict, gateExitCode }) {
       summary: "local-CI gate blocked: the shared portal/MCP/Docker/PostgreSQL control-plane degraded during the build. This is infrastructure evidence, NOT a product build failure.",
     };
   }
-  if (gateExitCode === EXIT_CHILD_SIGNAL_DEATH) {
+  if (gateExitCode === EXIT_CHILD_SIGNAL_DEATH || gateExitCode === 130 || gateExitCode === 143) {
+    // 130/143 are the conventional 128+SIGINT/SIGTERM codes the wrapper used
+    // to stamp when the PARENT received the signal (BI-8392DA16). Those are
+    // the same infrastructure death as EXIT_CHILD_SIGNAL_DEATH — not a
+    // product failure.
     return {
       status: "blocked_child_signal_death",
       gatePassed: false,
       productEvidence: false,
       summary: "local-CI gate could not produce a verdict: the build child was killed by a signal rather than exiting. This is infrastructure evidence, NOT a product build failure — most often the host running out of memory under concurrent gate load. Re-run when the box is quieter; check the recorded signal and host pressure before treating any of it as a code defect.",
+    };
+  }
+  if (gateExitCode === 75) {
+    // BI-465B3D60: lease fencing (expiry / quiescence) used to fall through
+    // to product `failed` with no reason.
+    return {
+      status: "blocked_control_plane_starvation",
+      gatePassed: false,
+      productEvidence: false,
+      summary: "local-CI gate blocked: the lease was fenced (expired or quiesced) before the run finished. This is infrastructure evidence, NOT a product build failure. Re-run when the slot is free.",
     };
   }
   if (gateExitCode === EXIT_VITEST_RUNNER_TERMINATION) {
