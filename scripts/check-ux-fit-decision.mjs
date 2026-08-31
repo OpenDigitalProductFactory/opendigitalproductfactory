@@ -37,6 +37,7 @@
 import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { fetchOriginMainSharedSafe } from "./lib/git-fetch-shared-safe.mjs";
+import { listChangedFiles, exitUnresolvable } from "./lib/git-changed-files.mjs";
 // Canonical sensitivity constants (single source, shared with the gate-context pack;
 // the dpf-skill-pack precheck hook keeps a drift-guard-pinned copy) — BI-2677A465.
 // `UX_FIT_ATTESTATION_RE` is deliberately NOT imported: this gate no longer reads any
@@ -471,7 +472,10 @@ function main() {
   // BI-1ADD56FC: never write .git/shallow into a full shared clone (breaks worktrees).
   fetchOriginMainSharedSafe((args) => git(...args));
 
-  const changed = lines(git("diff", "--name-only", `${base}...HEAD`, "--", "apps/web/**/*.tsx"))
+  const listed = listChangedFiles(base);
+  if (listed.status === "unresolvable") exitUnresolvable("ux-fit-gate", base, listed.detail);
+  const changed = listed.files
+    .filter((f) => f.startsWith("apps/web/") && f.endsWith(".tsx"))
     .filter((f) => !EXCLUDE_RE.test(f));
 
   const addedFiles = new Set(

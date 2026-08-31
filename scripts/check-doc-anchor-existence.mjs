@@ -38,10 +38,13 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
+
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { formatTxtBudgetHeader, parseTxtBudgetHeader } from "./lib/baseline-budget.mjs";
+import { listChangedFiles, runGit } from "./lib/git-changed-files.mjs";
+
+export { listChangedFiles, runGit };
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const BASELINE_PATH = path.join(REPO_ROOT, "scripts", "doc-anchor-baseline.txt");
@@ -177,54 +180,6 @@ export async function verifyAnchors(pairs, lookup) {
 }
 
 const REF_RE = /^[A-Za-z0-9._\-/]{1,200}$/;
-
-/**
- * Run git in the repo. Distinguishes success from failure — never collapse a
- * failed invocation into an empty string (BI-B6433DC6).
- */
-export function runGit(args, { exec = execFileSync } = {}) {
-  try {
-    const stdout = exec("git", args, {
-      cwd: REPO_ROOT,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    return { ok: true, stdout: String(stdout ?? ""), stderr: "" };
-  } catch (e) {
-    return {
-      ok: false,
-      stdout: (e.stdout && e.stdout.toString()) || "",
-      stderr: (e.stderr && e.stderr.toString()) || e.message || "",
-      status: e.status ?? 1,
-    };
-  }
-}
-
-/**
- * Files changed vs `base`. An unresolvable ref or a failed three-dot diff is
- * `unresolvable`, never an empty list — a shallow clone can name origin/main
- * and still fail the merge-base (BI-B6433DC6).
- */
-export function listChangedFiles(base, { git = runGit } = {}) {
-  const parsed = git(["rev-parse", "--verify", `${base}^{commit}`]);
-  if (!parsed.ok) {
-    return {
-      status: "unresolvable",
-      files: [],
-      detail: (parsed.stderr || parsed.stdout || "").trim(),
-    };
-  }
-  const diff = git(["diff", "--name-only", `${base}...HEAD`]);
-  if (!diff.ok) {
-    return {
-      status: "unresolvable",
-      files: [],
-      detail: (diff.stderr || diff.stdout || "").trim(),
-    };
-  }
-  const files = diff.stdout.split("\n").map((s) => s.trim()).filter(Boolean);
-  return { status: "ok", files, detail: "" };
-}
 
 function scanAllDocs() {
   const pairs = [];

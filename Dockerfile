@@ -158,6 +158,10 @@ COPY scripts/lib/module-size-scope.mjs ./scripts/lib/
 COPY scripts/lib/ci-policy-guards.mjs ./scripts/lib/
 COPY scripts/lib/host-command-invocation.mjs ./scripts/lib/
 COPY scripts/lib/git-fetch-shared-safe.mjs ./scripts/lib/
+# check-design-grounding-decision and check-data-impact import the shared
+# unresolvable-diff helper; without this COPY the init image dies at
+# ERR_MODULE_NOT_FOUND (BI-20599979).
+COPY scripts/lib/git-changed-files.mjs ./scripts/lib/
 COPY scripts/lib/entry-module.mjs ./scripts/lib/
 COPY scripts/lib/local-integration-status.mjs ./scripts/lib/
 COPY scripts/module-size-baseline.txt ./scripts/

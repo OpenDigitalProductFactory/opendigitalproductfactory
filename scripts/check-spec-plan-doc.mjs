@@ -36,7 +36,7 @@
 // interactive nudge is scripts/hooks/spec-plan-doc-precheck.mjs.
 
 import { execFileSync } from "node:child_process";
-import { listChangedFiles } from "./check-doc-anchor-existence.mjs";
+import { listChangedFiles, runGit, exitUnresolvable } from "./lib/git-changed-files.mjs";
 import { fetchOriginMainSharedSafe } from "./lib/git-fetch-shared-safe.mjs";
 // Canonical sensitivity constants (single source, shared with the gate-context
 // pack; the dpf-skill-pack precheck hook keeps a drift-guard-pinned copy).
@@ -105,11 +105,10 @@ if (changed.length === 0) {
   process.exit(0);
 }
 
+const addedDiff = runGit(["diff", "--name-only", "--diff-filter=A", `${base}...HEAD`]);
+if (!addedDiff.ok) exitUnresolvable("spec-plan-doc-gate", base, (addedDiff.stderr || addedDiff.stdout).trim());
 const addedFiles = new Set(
-  git("diff", "--name-only", "--diff-filter=A", `${base}...HEAD`)
-    .split("\n")
-    .map((s) => s.trim())
-    .filter(Boolean),
+  addedDiff.stdout.split("\n").map((s) => s.trim()).filter(Boolean),
 );
 
 // 1) Does the PR touch a durable-knowledge artifact? That satisfies the gate.
