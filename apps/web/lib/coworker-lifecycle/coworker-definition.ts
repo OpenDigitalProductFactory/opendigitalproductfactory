@@ -50,6 +50,7 @@ export type ModelFloorEntry = {
 export type RegistryMirrorEntry = {
   agentId: string;
   agentName: string;
+  executionRuntimeType?: string;
 };
 
 export type SelfTaskEntry = {
@@ -107,9 +108,17 @@ export function assembleCoworkerDefinitions(
   const selfTaskAgents = new Set(sources.selfTasks.map((t) => t.agentId));
 
   return sources.roster.map((seed) => {
+    const registryMirror = mirrorByName.get(seed.agentId) ?? null;
     const boundRoutes = sources.routePersonas
       .filter((p) => p.agentId === seed.agentId)
       .map((p) => p.routePrefix);
+    // Every registry-backed in-process coworker is also reachable through its
+    // canonical record route. agent-routing-server resolves that route by id,
+    // loads the coworker's prompt and skills, and enforces its lifecycle gate.
+    // External CLI participants deliberately have no in-portal invocation path.
+    if (registryMirror?.executionRuntimeType === "in_process") {
+      boundRoutes.push(`/platform/ai/agent/${encodeURIComponent(seed.agentId)}`);
+    }
     return {
       agentId: seed.agentId,
       displayName: seed.name,
@@ -118,7 +127,7 @@ export function assembleCoworkerDefinitions(
       boundRoutes,
       modelFloor: sources.modelFloors.find((m) => m.agentId === seed.agentId) ?? null,
       inSkillWildcard: sources.skillWildcardAgentIds.includes(seed.agentId),
-      registryMirror: mirrorByName.get(seed.agentId) ?? null,
+      registryMirror,
       hasSelfTask: selfTaskAgents.has(seed.agentId),
     };
   });
@@ -132,7 +141,8 @@ export function assembleCoworkerDefinitions(
  * - LIFE-002 grant-honored    — every granted key is honored by ≥1 tool
  *                               (dead grants authorize nothing; the coworker
  *                               refuses "available" tools at call time).
- * - LIFE-003 route-persona    — roster coworker is reachable via ≥1 route.
+ * - LIFE-003 invocation-route — in-process roster coworker is reachable via a
+ *                               static persona or canonical coworker record.
  * - LIFE-004 persona-real     — every route persona points at a real agent
  *                               (roster, bootstrap, or registry) so a route
  *                               never binds to a ghost.
@@ -163,6 +173,8 @@ export function checkDefinitionConformance(
   const knownGrants = new Set(sources.knownGrantKeys);
 
   for (const def of definitions) {
+    const isExternalCli =
+      def.registryMirror?.executionRuntimeType === "external_cli";
     if (def.grants.length === 0) {
       findings.push({
         checkId: "LIFE-001",
@@ -179,14 +191,14 @@ export function checkDefinitionConformance(
         });
       }
     }
-    if (def.boundRoutes.length === 0) {
+    if (!isExternalCli && def.boundRoutes.length === 0) {
       findings.push({
         checkId: "LIFE-003",
         subject: def.agentId,
-        message: `${def.agentId} is not bound to any route in ROUTE_AGENT_MAP — users can never reach it in a workspace`,
+        message: `${def.agentId} has no static persona or canonical in-process coworker route — users can never reach it in a workspace`,
       });
     }
-    if (!def.modelFloor) {
+    if (!isExternalCli && !def.modelFloor) {
       findings.push({
         checkId: "LIFE-005",
         subject: def.agentId,

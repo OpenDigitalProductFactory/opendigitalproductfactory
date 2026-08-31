@@ -41,16 +41,28 @@ import {
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(HERE, "..", "..", "..", "..");
 
-type RegistryAgent = { agent_id: string; agent_name: string };
+type RegistryAgent = {
+  agent_id: string;
+  agent_name: string;
+  config_profile?: { execution_runtime?: { type?: string } };
+};
 
-function loadRegistryMirrors(): { agentId: string; agentName: string }[] {
+function loadRegistryMirrors(): {
+  agentId: string;
+  agentName: string;
+  executionRuntimeType?: string;
+}[] {
   const raw = readFileSync(
     join(REPO_ROOT, "packages", "db", "data", "agent_registry.json"),
     "utf8",
   );
   const parsed = JSON.parse(raw) as { agents?: RegistryAgent[] } | RegistryAgent[];
   const agents = Array.isArray(parsed) ? parsed : (parsed.agents ?? []);
-  return agents.map((a) => ({ agentId: a.agent_id, agentName: a.agent_name }));
+  return agents.map((a) => ({
+    agentId: a.agent_id,
+    agentName: a.agent_name,
+    executionRuntimeType: a.config_profile?.execution_runtime?.type,
+  }));
 }
 
 function realSources(): CoworkerDefinitionSources {
@@ -142,6 +154,34 @@ describe("coworker definition conformance gate (EP-COWORKER-LIFECYCLE)", () => {
     expect(marketing?.boundRoutes.length).toBeGreaterThan(0);
     expect(marketing?.modelFloor?.minimumTier).toBeTruthy();
     expect(marketing?.hasSelfTask).toBe(true);
+  });
+
+  it("uses the canonical coworker record route for registry-backed in-process coworkers", () => {
+    const defs = assembleCoworkerDefinitions(realSources());
+    const accessibility = defs.find(
+      (d) => d.agentId === "ux-accessibility-agent",
+    );
+
+    expect(accessibility?.boundRoutes).toContain(
+      "/platform/ai/agent/ux-accessibility-agent",
+    );
+  });
+
+  it("does not require in-portal routes or model floors for external CLI runtimes", () => {
+    const findings = checkDefinitionConformance(realSources());
+    for (const agentId of [
+      "external-claude-code",
+      "external-codex",
+      "external-grok",
+    ]) {
+      expect(
+        findings.filter(
+          (finding) =>
+            finding.subject === agentId &&
+            (finding.checkId === "LIFE-003" || finding.checkId === "LIFE-005"),
+        ),
+      ).toEqual([]);
+    }
   });
 
   it("defines the Change Reviewer as an independent read-only coworker", () => {
