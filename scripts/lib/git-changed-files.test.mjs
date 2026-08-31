@@ -42,7 +42,10 @@ function spawnGuard(rel) {
   return spawnSync(process.execPath, [path.join(ROOT, rel)], {
     encoding: "utf8",
     cwd: ROOT,
-    env: { ...process.env, BASE_SHA: MISSING },
+    // Run the diff-scoped guard in its applicable PR mode.  CI's merge_group
+    // event otherwise makes seed-fit legitimately exit 0 before it resolves
+    // BASE_SHA, masking the unresolvable-base contract this fixture checks.
+    env: { ...process.env, BASE_SHA: MISSING, GITHUB_EVENT_NAME: "pull_request" },
   });
 }
 
