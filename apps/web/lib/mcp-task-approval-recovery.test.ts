@@ -211,6 +211,11 @@ describe("same-TaskRun approval recovery", () => {
       replacementEnvelopeId: "ENV-REPLACEMENT",
       replacementProposalExecutionId: "tool-proposal-new",
     });
+    expect(tx.coworkerActionEnvelope.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        status: { in: ["proposed", "approved", "failed"] },
+      }),
+    }));
     expect(tx.coworkerActionEnvelope.updateMany).toHaveBeenCalledWith({
       where: {
         id: "cmtcyo4h900m001pa2ma0itjn",
@@ -291,6 +296,40 @@ describe("same-TaskRun approval recovery", () => {
         progressPayload: expect.objectContaining({
           approvalRecovery: expect.objectContaining({
             sourceStatus: "input-required",
+            inferenceRerun: false,
+            freshApprovalRequired: true,
+          }),
+        }),
+      }),
+    }));
+  });
+
+  it("supersedes an expired proposal on the same stale input-required TaskRun", async () => {
+    const envelope = { ...expiredEnvelope(), status: "proposed" };
+    const { db, tx } = fakeDb(staleRun("input-required"), envelope);
+
+    const result = await recover(db);
+
+    expect(result).toEqual({
+      kind: "fresh-approval-required",
+      sourceEnvelopeId: "cmtcyo4h900m001pa2ma0itjn",
+      replacementEnvelopeId: "ENV-REPLACEMENT",
+      replacementProposalExecutionId: "tool-proposal-new",
+    });
+    expect(tx.coworkerActionEnvelope.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: envelope.id,
+        status: "proposed",
+        expiresAt: { lte: NOW },
+      },
+      data: { status: "cancelled", resolvedAt: NOW },
+    });
+    expect(tx.taskRun.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        progressPayload: expect.objectContaining({
+          approvalRecovery: expect.objectContaining({
+            kind: "expired-proposed-envelope",
+            sourceEnvelopeId: envelope.id,
             inferenceRerun: false,
             freshApprovalRequired: true,
           }),

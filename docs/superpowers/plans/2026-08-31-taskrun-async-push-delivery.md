@@ -55,6 +55,10 @@ cross-page notification experience after its durable-operation dependency.
    approval/terminal-writer/capacity replay paths.
 5. Add duplicate submit, duplicate event, cancellation-before-claim, and queue
    retry tests.
+6. Recover an expired proposed terminal-writer envelope by atomically
+   cancelling it and cloning its exact stored binding and proposal onto the
+   same TaskRun. Require fresh human approval; never rerun inference or mint a
+   sibling TaskRun.
 
 ## Task 4: push and reconciliation
 

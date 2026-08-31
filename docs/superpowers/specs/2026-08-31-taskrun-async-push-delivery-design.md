@@ -154,6 +154,11 @@ credentials, user-supplied callback URLs, or writer arguments.
 - Approval and terminal-writer resumes keep their existing same-TaskRun paths.
   This slice changes the initial submission only; it does not auto-resume human
   approval or fabricate a terminal disposition.
+- If a proposed human-approval envelope expires before the operator acts, an
+  exact replay supersedes it on the same TaskRun with the same stored writer
+  arguments, approval binding, request digest, and artifact identity. It never
+  reruns inference or mints a sibling TaskRun; the replacement still requires
+  fresh human approval.
 - Cancellation that wins before claim prevents execution. Cancellation after
   claim continues to use the existing cooperative cancellation semantics.
 - Quiescence and runtime admission remain enforced by the existing queue and
@@ -171,6 +176,7 @@ credentials, user-supplied callback URLs, or writer arguments.
 | AC-RECONCILE | A missed enqueue or disconnected notification is recovered by deterministic re-enqueue and auth-bound list/get without a sibling TaskRun. |
 | AC-FAIL-CLOSED | Missing/mismatched identity, revoked authority, cancellation, approval, and terminal-writer boundaries remain non-executable or input-required. |
 | AC-SYNC-REGRESSION | High-risk pre-execution approval and existing idempotent replay/resume behavior remain unchanged. |
+| AC-APPROVAL-EXPIRY | An expired proposed writer envelope is replaced on the same TaskRun with identical persisted arguments and binding, without inference rerun or sibling identity. |
 
 ## Traceability and verification
 
@@ -184,6 +190,7 @@ credentials, user-supplied callback URLs, or writer arguments.
 | AC-RECONCILE | submitted dispatch-pending scan -> same event ID | enqueue-failure and scheduled-reconcile tests |
 | AC-FAIL-CLOSED | existing approval, terminal writer, token, cancellation checks | existing negative suites plus worker reconstruction matrix |
 | AC-SYNC-REGRESSION | unchanged high-risk and same-task replay paths | current `mcp-task-submit` regression suite |
+| AC-APPROVAL-EXPIRY | stale proposed envelope -> cancel old -> clone exact proposal -> fresh approval | approval-recovery transaction and replay tests |
 
 ## Rollout and rollback
 
