@@ -95,11 +95,8 @@ case "$*" in
   "create "*) printf "candidate-container" ;;
   "cp candidate-container:/dpf-release-assets/. "*)
     for destination in "$@"; do :; done
-    # Model Docker's directory-copy semantics consistently on GNU/Linux and
-    # Windows: copy the release directory contents into the already-created
-    # destination, including the manifest consumed by sha256sum -c.
-    mkdir -p "$destination"
-    cp -R "$DPF_TEST_RELEASE_ASSETS"/. "$destination/"
+    # Match Docker's directory-copy semantics on both platforms.
+    mkdir -p "$destination"; cp -R "$DPF_TEST_RELEASE_ASSETS"/. "$destination/"
     ;;
   *"recover-human-principal-backfill-migration.mjs --verify-rolled-back"*)
     [ "\${DPF_TEST_PRINCIPAL_VERIFY_FAIL:-no}" = "yes" ] && exit 1
