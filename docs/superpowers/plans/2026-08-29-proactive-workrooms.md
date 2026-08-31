@@ -192,9 +192,14 @@ Files: `apps/web/components/workspace/workroom/` (compose existing primitives; n
 Verification: component tests; theme-aware token check; UX-fit manifest; browser exercise on the
 shared nonproduction environment at desktop and narrow viewports.
 
-## Phase H — retire the agent-keyed registry
+## Phase H — retire agent-owned proactivity
 
-Deliverable: `COWORKER_SELF_TASKS`'s four entries become declared shapes; one drive mechanism remains.
+Deliverable: `COWORKER_SELF_TASKS`'s four entries become declared shapes, the `agent:` preference
+scope and per-coworker proactivity controls are removed, and one Workroom-owned drive/posture
+mechanism remains. Legacy agent-scoped facts are ignored rather than copied into rooms because an
+identity preference cannot be inferred as an outcome preference. Unroomed activity uses the
+activity-family/platform default. Participant trust, grants, qualifications and autonomy remain
+tighten-only safety ceilings, not proactivity settings. Acceptance is owned by `BI-87C9C91C`.
 
 **Explicitly gated on E and F succeeding on the live install.** Retiring the working mechanism before
 its replacement is proven is how a proactivity outage happens silently.
