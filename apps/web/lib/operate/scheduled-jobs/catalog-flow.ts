@@ -6,6 +6,18 @@ import type { ScheduledJobCatalogEntry } from "./catalog-types";
 
 export const FLOW_JOB_CATALOG_ENTRIES: readonly ScheduledJobCatalogEntry[] = [
   {
+    jobId: "mcp-task-run-dispatch-reconciliation",
+    inngestId: "mcp/task-run-dispatch-reconciliation",
+    name: "External MCP task dispatch reconciliation",
+    purpose:
+      "Re-enqueues persisted external MCP TaskRuns whose deterministic background handoff was lost or never claimed.",
+    cron: "*/2 * * * *",
+    cadence: "Every 2 minutes",
+    category: "core",
+    tracksRunData: false,
+    runNowEvent: null,
+  },
+  {
     jobId: "nonprod-lease-wait-reconciliation",
     inngestId: "nonprod/lease-wait-reconciliation",
     name: "Nonproduction lease wait reconciliation",

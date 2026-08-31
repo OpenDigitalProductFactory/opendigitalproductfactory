@@ -33,6 +33,10 @@ import {
   hydrateTerminalWriterContext,
   type PersistedTerminalReaderExecution,
 } from "./mcp-task-terminal-writer-context";
+import {
+  enqueuePersistedRemoteTask,
+  externalMcpTaskAsyncEnabled,
+} from "./mcp-task-background-dispatch";
 
 export {
   parseInitiativeReviewBinding,
@@ -680,6 +684,32 @@ export async function submitRemoteCoworkerTask(input: {
         idempotentReplay: false,
         requiresApproval: true,
         content: remoteTaskContent("Remote task submitted and paused for employee approval."),
+        isError: false,
+      },
+    };
+  }
+
+  if (externalMcpTaskAsyncEnabled()) {
+    const dispatch = await enqueuePersistedRemoteTask({ taskRunId: run.taskRunId });
+    return {
+      kind: "result",
+      result: {
+        taskRunId: run.taskRunId,
+        status: "submitted",
+        idempotentReplay: false,
+        requiresApproval: false,
+        asynchronous: true,
+        dispatchEventId: dispatch.eventId,
+        dispatchQueued: dispatch.queued,
+        pollInterval: 2_000,
+        content: remoteTaskContent(
+          dispatch.queued
+            ? "Remote task accepted for background execution. Subscribe for task updates or reconcile with tasks/get."
+            : "Remote task persisted; background dispatch is pending reconciliation.",
+        ),
+        ...(dispatch.error
+          ? { structuredContent: { dispatchState: "pending-reconciliation", error: dispatch.error } }
+          : {}),
         isError: false,
       },
     };

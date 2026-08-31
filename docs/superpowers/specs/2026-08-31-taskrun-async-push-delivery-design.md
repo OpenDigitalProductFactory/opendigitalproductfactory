@@ -74,7 +74,13 @@ Adopt push-first delivery with reconciliation fallback:
 For a connected MCP client, the standard task notification/subscription is the
 preferred webhook-equivalent: it is immediate, auth-bound, carries complete task
 state, and does not require an Internet-reachable callback. DPF supports this
-through the existing authenticated stream and a thin MCP protocol adapter.
+through authenticated Streamable HTTP GET on the canonical `/api/mcp/v1`
+endpoint. The stream emits MCP 2025-11-25
+`notifications/tasks/status` frames. It replays durable token-owned TaskRuns
+before subscribing to live post-commit transitions, closing the
+commit-to-subscribe race without making the in-memory notification bus a source
+of truth. Multiple streams for one auth context receive one logical live frame,
+not a duplicate broadcast.
 
 An outbound webhook is useful only for a separately operated host that cannot
 maintain the MCP stream. It must be a registered integration endpoint with an
@@ -111,10 +117,10 @@ authority source:
 ```text
 schemaVersion: 1
 kind: external-mcp-task
-state: pending | claimed | dispatched | failed
+state: pending | enqueued | claimed | failed
 eventId: deterministic from taskRunId and logical attempt
 attempt: positive integer
-requestedAt / claimedAt / settledAt
+requestedAt / enqueuedAt / claimedAt / failedAt
 lastError: bounded diagnostic, when applicable
 ```
 
@@ -124,8 +130,10 @@ credentials, user-supplied callback URLs, or writer arguments.
 
 ## Concurrency and failure semantics
 
-- The worker claims with compare-and-set from `submitted` plus matching
-  dispatch event identity to `working`. One winner executes; duplicates return
+- The worker claims with the canonical heartbeat-aware compare-and-set from
+  `submitted` plus the row version it reconstructed to `working`. The event
+  carries only `taskRunId`; the persisted dispatch event ID remains the audit
+  and retry identity. One row-version winner executes and duplicates return
   the current durable state.
 - Queue-send failure does not roll back or delete the TaskRun. Reconciliation
   retries the deterministic event and records the failure.
@@ -147,7 +155,7 @@ credentials, user-supplied callback URLs, or writer arguments.
 | AC-ASYNC-RETURN | A new ordinary submission returns the durable TaskRun handle without awaiting `executeRemoteTaskAttempt`. |
 | AC-ONE-EXECUTION | Duplicate submit, duplicate queue event, and reconciliation race execute at most one claimed attempt for one request digest. |
 | AC-SERVER-REHYDRATION | The worker reconstructs the exact auth-bound packet from persisted server state; no prompt, credential, callback, or writer argument is trusted from the event. |
-| AC-PUSH-FIRST | A committed working/input-required/terminal transition reaches the authenticated task subscription; consumers re-read before acting. |
+| AC-PUSH-FIRST | A committed working/input-required/terminal transition reaches the authenticated MCP Streamable HTTP subscription as `notifications/tasks/status`; consumers re-read before acting. |
 | AC-RECONCILE | A missed enqueue or disconnected notification is recovered by deterministic re-enqueue and auth-bound list/get without a sibling TaskRun. |
 | AC-FAIL-CLOSED | Missing/mismatched identity, revoked authority, cancellation, approval, and terminal-writer boundaries remain non-executable or input-required. |
 | AC-SYNC-REGRESSION | High-risk pre-execution approval and existing idempotent replay/resume behavior remain unchanged. |
@@ -157,19 +165,19 @@ credentials, user-supplied callback URLs, or writer arguments.
 | Requirement | Contract/flow | Verification |
 | --- | --- | --- |
 | AC-ASYNC-RETURN | persisted TaskRun -> deterministic enqueue -> immediate task response | submission unit test with an unresolved execution promise |
-| AC-ONE-EXECUTION | CAS dispatch claim + deterministic Inngest event ID | duplicate-event and replay race tests |
+| AC-ONE-EXECUTION | heartbeat-aware row-version CAS + deterministic Inngest event ID | duplicate-event and replay race tests |
 | AC-SERVER-REHYDRATION | TaskRun/TaskMessage/owner resolver | missing and mismatched persisted-field tests |
-| AC-PUSH-FIRST | post-commit TaskRun transition -> task event projection | stream replay/live projection tests |
+| AC-PUSH-FIRST | post-commit TaskRun transition -> token-scoped MCP task event projection | GET auth, snapshot replay, live notification, and no-fanout tests |
 | AC-RECONCILE | submitted dispatch-pending scan -> same event ID | enqueue-failure and scheduled-reconcile tests |
 | AC-FAIL-CLOSED | existing approval, terminal writer, token, cancellation checks | existing negative suites plus worker reconstruction matrix |
 | AC-SYNC-REGRESSION | unchanged high-risk and same-task replay paths | current `mcp-task-submit` regression suite |
 
 ## Rollout and rollback
 
-Ship behind one server flag defaulting off. Nonproduction proves immediate return,
-single execution, event wake, disconnect/reconcile, approval, cancellation, and
-terminal-writer wait. Enable on the development install, then make the flag the
-default after protected evidence. Rollback disables new async enqueue; already
-persisted tasks remain retrievable and reconcilable, and no audit rows are
-deleted.
-
+Ship enabled by default with the server-owned
+`DPF_EXTERNAL_MCP_TASK_ASYNC=off` kill switch. Nonproduction proves immediate
+return, single execution, event wake, disconnect/reconcile, approval,
+cancellation, and terminal-writer wait. Rollback disables new async enqueue;
+already persisted tasks remain retrievable and reconcilable, and no audit rows
+are deleted. Disabling push never disables `tasks/get`, `tasks/list`, or durable
+TaskRun audit.

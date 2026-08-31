@@ -44,6 +44,9 @@ cross-page notification experience after its durable-operation dependency.
 ## Task 3: deterministic background dispatch
 
 1. Add the `mcp/task-run.execute` Inngest event and consumer.
+   Keep the direct queue-client dependency inside the canonical queue adapter;
+   submission and reconciliation call that adapter rather than growing a new
+   queue substrate.
 2. Add a compare-and-set claim so one submitted event wins and duplicates read
    current state without executing.
 3. Change ordinary `tasks/submit` to persist the dispatch projection, enqueue,
@@ -56,13 +59,19 @@ cross-page notification experience after its durable-operation dependency.
 ## Task 4: push and reconciliation
 
 1. Emit/project task status only after the database transition commits.
-2. Verify the authenticated task subscription replays the persisted state and
-   receives live working/input-required/terminal state.
+2. Add authenticated Streamable HTTP GET on canonical `/api/mcp/v1`. Replay
+   token-owned persisted TaskRuns, then emit MCP 2025-11-25
+   `notifications/tasks/status` for live working/input-required/terminal state.
+   Several streams for one token must not duplicate a logical live frame.
 3. Add a bounded scheduled reconciliation scan for submitted external tasks
    whose deterministic dispatch is pending or stale.
 4. Re-enqueue the same event identity with bounded attempts/backoff; never mint
    a sibling TaskRun.
-5. Keep `tasks/list`, `tasks/get`, and `tasks/result` as the authoritative
+5. Register the reconciliation cron in the canonical Scheduled Jobs catalog so
+   its cadence and purpose remain visible to operators. Classify it with the
+   existing durable flow-control catalog entries rather than growing the main
+   catalog module past its size ratchet.
+6. Keep `tasks/list`, `tasks/get`, and `tasks/result` as the authoritative
    missed-delivery/read-after-wake path.
 
 ## Task 5: blast radius and delivery
@@ -92,7 +101,7 @@ this task-event contract for cross-page operator UX.
 | AC-ASYNC-RETURN | submit/enqueue boundary | persist -> enqueue -> respond | unresolved-execution RED/GREEN test |
 | AC-ONE-EXECUTION | dispatch CAS | duplicate events -> one winner | concurrency test |
 | AC-SERVER-REHYDRATION | persisted request resolver | event id -> DB packet | invalid-state matrix |
-| AC-PUSH-FIRST | task event projection | commit -> notify -> reread | SSE replay/live tests |
+| AC-PUSH-FIRST | token-scoped MCP task event projection | commit -> GET SSE notify -> reread | GET auth + snapshot/live/no-fanout tests |
 | AC-RECONCILE | deterministic rescan | missed send -> same event | reconciliation tests |
 | AC-FAIL-CLOSED | existing authority/approval/writer contracts | invalid/revoked/cancelled -> stop | negative regression matrix |
 
