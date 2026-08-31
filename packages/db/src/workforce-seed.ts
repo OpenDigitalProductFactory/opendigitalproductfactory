@@ -2,7 +2,7 @@ export {
   getDefaultEmploymentTypes,
   getDefaultWorkLocations,
   seedWorkforceReferenceData,
-} from "./workforce-reference-seed.js";
+} from "./workforce-reference-seed";
 
 export type CoworkerAgentSeed = {
   agentId: string;
