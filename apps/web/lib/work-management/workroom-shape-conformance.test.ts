@@ -171,6 +171,92 @@ describe("evaluateWorkroomShapeConformance (BI-3913EB49)", () => {
     expect(result.disposition).toBe("pause");
   });
 
+  it("refuses a backward stage transition even when receipts exist", () => {
+    const result = evaluateWorkroomShapeConformance({
+      definition,
+      collaborationShape: null,
+      participants: executableRoster,
+      currentStageKey: "review",
+      proposedStageKey: "scan",
+      receipts: [
+        { stageKey: "scan", kind: "findings" },
+        { stageKey: "review", kind: "decision" },
+      ],
+      budgetUsage: [],
+      stopConditionHits: [],
+      reviewDue: false,
+      coordinatorHasProcessCoordinationAuthority: true,
+    });
+    expect(result.deviations.map((row) => row.code)).toContain("out_of_order_stage");
+    expect(result.disposition).toBe("pause");
+  });
+
+  it("refuses a transition from an unknown non-null current stage", () => {
+    const result = evaluateWorkroomShapeConformance({
+      definition,
+      collaborationShape: null,
+      participants: executableRoster,
+      currentStageKey: "unknown-stage",
+      proposedStageKey: "scan",
+      receipts: [],
+      budgetUsage: [],
+      stopConditionHits: [],
+      reviewDue: false,
+      coordinatorHasProcessCoordinationAuthority: true,
+    });
+    expect(result.deviations.map((row) => row.code)).toContain("out_of_order_stage");
+    expect(result.disposition).toBe("pause");
+  });
+
+  it("allows an initial transition only to the first declared stage", () => {
+    const result = evaluateWorkroomShapeConformance({
+      definition,
+      collaborationShape: null,
+      participants: executableRoster,
+      currentStageKey: null,
+      proposedStageKey: "review",
+      receipts: [{ stageKey: "scan", kind: "findings" }],
+      budgetUsage: [],
+      stopConditionHits: [],
+      reviewDue: false,
+      coordinatorHasProcessCoordinationAuthority: true,
+    });
+    expect(result.deviations.map((row) => row.code)).toContain("out_of_order_stage");
+    expect(result.disposition).toBe("pause");
+  });
+
+  it("allows same-stage replay only until that stage records a receipt", () => {
+    const replay = evaluateWorkroomShapeConformance({
+      definition,
+      collaborationShape: null,
+      participants: executableRoster,
+      currentStageKey: "scan",
+      proposedStageKey: "scan",
+      receipts: [],
+      budgetUsage: [],
+      stopConditionHits: [],
+      reviewDue: false,
+      coordinatorHasProcessCoordinationAuthority: true,
+    });
+    expect(replay.deviations).toEqual([]);
+    expect(replay.disposition).toBe("continue");
+
+    const completed = evaluateWorkroomShapeConformance({
+      definition,
+      collaborationShape: null,
+      participants: executableRoster,
+      currentStageKey: "scan",
+      proposedStageKey: "scan",
+      receipts: [{ stageKey: "scan", kind: "findings" }],
+      budgetUsage: [],
+      stopConditionHits: [],
+      reviewDue: false,
+      coordinatorHasProcessCoordinationAuthority: true,
+    });
+    expect(completed.deviations.map((row) => row.code)).toContain("out_of_order_stage");
+    expect(completed.disposition).toBe("pause");
+  });
+
   it("stops on exhausted budget or a hit stop condition", () => {
     const budget = evaluateWorkroomShapeConformance({
       definition,
