@@ -6,6 +6,7 @@ status: active
 
 **Epics:** `EP-WORKFORCE-TRANSITION` (live coverage) · `EP-WORK-CONVERGENCE` (room substrate) · `EP-PAAW-HARMONIZATION` (standard)
 **Phase C backlog item:** `BI-662254C6` — canonical Workroom relations
+**Phase D backlog item:** `BI-7056681C` — closed proactivity families for standing operations
 **Kernel consult:** `DI-6B057EE5AE32` — `wire-work-shapes-to-rooms`, composite 10.594, margin 7.655, **high** confidence, no commandment conflict, autonomy-eligible
 **Standard:** `DPF-PAAW` §9.5 (Workroom definition/instance), `PAAW-WORK-030`…`034`
 **Instance under design:** customer 0 — DPF's own customer-zero install, archetype `software-platform`
