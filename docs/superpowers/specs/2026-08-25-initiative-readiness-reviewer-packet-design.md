@@ -232,3 +232,90 @@ forwards them. This change is the producer half that half was waiting on, and it
 is what makes that item's acceptance criterion 1 — "a readiness recovery packet
 passed through threadless request/summon carries an immutable
 `initiativeReviewBinding` and exact required tool names" — reachable end to end.
+
+## 14. Terminal-transition recovery extension (`BI-199F71B6`)
+
+The original producer path is incomplete at one lifecycle boundary. It issues
+packets only while a Workroom claim is being evaluated for design, plan, or
+implementation. A BacklogItem or Workroom completion refusal returns the same
+typed readiness decision but does not pass it through
+`resolveInitiativeReviewerRecovery`. Consequently,
+`ACCEPTANCE_EVIDENCE_REQUIRED` and `OBJECTIVE_RECONCILIATION_REQUIRED` name an
+`acceptance-reviewer` that has no executable route, even though the existing
+`record_initiative_evidence` writer already accepts an `objective-mapping`
+proposal under an exact immutable binding.
+
+### 14.1 Objectives
+
+- **OBJ-PACKET-TERMINAL:** Every governed terminal refusal projects recovery
+  from the same readiness decision and server-owned Workroom identity that
+  produced the refusal.
+- **OBJ-PACKET-MAPPING:** Missing acceptance/objective reconciliation yields an
+  executable `record_initiative_evidence` packet whose binding gate is
+  `objective-mapping` and whose expected baseline is the current baseline.
+- **OBJ-PACKET-UNCHANGED:** Recovery remains additive response data. It changes
+  no readiness verdict, terminal mutation, evidence interpretation, reviewer
+  grant, or approval rule.
+
+### 14.2 Contract
+
+Add one shared terminal-recovery adapter beside the initiative-readiness
+repository. Given a terminal readiness decision, current caller agent, subject
+BI, and optional exact Workroom, it:
+
+1. resolves exactly one live Workroom for the BI, or uses the exact Workroom
+   whose completion was refused;
+2. reads that room's repository, branch, immutable base/head, and the current
+   objective-baseline chain head;
+3. discovers the provider-verified canonical design blob through the existing
+   compare-based discovery helper; and
+4. calls the existing `resolveInitiativeReviewerRecovery` registry.
+
+The evidence-writer lane owns `acceptance-reviewer` recovery only for
+`ACCEPTANCE_EVIDENCE_REQUIRED` and `OBJECTIVE_RECONCILIATION_REQUIRED`. Those
+codes map to recovery gate `objective-mapping`; they do not become receipt gate
+keys and cannot write a pass/fail receipt. The packet tells the reviewer to map
+every current `OBJ-*` and `AC-*` statement to existing post-baseline evidence
+and call `record_initiative_evidence(operation='objective-mapping')`. The
+terminal repository remains the only component that evaluates that proposal
+and decides completion.
+
+BacklogItem and Workroom MCP adapters attach the resulting `recovery` object to
+their existing refusal data. If no unique live Workroom, immutable base/head,
+current baseline, canonical artifact, or eligible writer exists, the same
+resolver emits its typed escalation; it never fabricates a packet.
+
+### 14.3 Architecture and scale
+
+No table, migration, tool, reviewer role, grant, receipt type, or second
+recovery engine is added. One shared adapter composes the canonical Workroom
+liveness projection, baseline-chain validator, provider artifact discovery, and
+reviewer registry. The terminal refusal path performs a bounded Workroom read,
+a bounded baseline-ledger read, one provider compare request, and the existing
+bounded grant query. Success paths and non-terminal reads perform none of this
+work.
+
+### 14.4 Acceptance
+
+- **AC-PACKET-TERMINAL-001** (`OBJ-PACKET-TERMINAL`): both BacklogItem and
+  Workroom completion refusals return the same executable recovery contract.
+- **AC-PACKET-TERMINAL-002** (`OBJ-PACKET-MAPPING`): the returned packet binds
+  `record_initiative_evidence`, `objective-mapping`, the current baseline,
+  repository/branch/head, canonical design path, and provider blob id.
+- **AC-PACKET-TERMINAL-003** (`OBJ-PACKET-UNCHANGED`): allowed terminal
+  transitions and all readiness verdicts remain unchanged.
+- **AC-PACKET-TERMINAL-004** (`OBJ-PACKET-TERMINAL`,
+  `OBJ-PACKET-UNCHANGED`): missing or ambiguous Workroom/artifact/baseline state
+  returns an actionable typed escalation and no route.
+- **AC-PACKET-TERMINAL-005** (`OBJ-PACKET-MAPPING`): dispatching the packet can
+  record the existing objective-mapping proposal without caller-constructed
+  authority metadata, and the existing terminal repository alone evaluates it.
+
+### 14.5 Verification and compatibility
+
+TDD covers acceptance-reviewer routing, packet narrowing, current-baseline
+selection, unique/missing Workroom identity, provider-artifact failure, and
+both MCP refusal projections. Affected Vitest suites and the production web
+build are mandatory. This is an MCP response-contract change with no UI and no
+migration; existing clients ignoring the additive `recovery` field are fully
+compatible.
