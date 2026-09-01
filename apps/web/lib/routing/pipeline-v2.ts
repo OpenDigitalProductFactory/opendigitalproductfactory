@@ -549,10 +549,19 @@ export async function routeEndpointV2(
       `excluded=${allCandidates.length}`,
     );
     for (const line of allExcludedReasons) console.warn(`[routing]   ✗ ${line}`);
+    // When an active, capable provider was dropped PURELY on sensitivity clearance
+    // (gate 7 in getExclusionReasonV2 returns its reason only after status,
+    // capability and quality gates have passed), the empty set is a data-governance
+    // block, not an outage. Surface that so the coworker-facing copy names the real
+    // lever (clear a business account / provision a local model) instead of sending
+    // the operator to re-check already-connected providers. (BI-431524DF)
+    const clearanceBlocked = allExcludedReasons.some((r) =>
+      /Sensitivity clearance missing/i.test(r),
+    );
     return {
       selectedEndpoint: null,
       selectedModelId: null,
-      reason: `No eligible endpoints for task type '${contract.taskType}' with sensitivity '${sensitivity}'. ${allCandidates.length} endpoint(s) excluded.`,
+      reason: `No eligible endpoints for task type '${contract.taskType}' with sensitivity '${sensitivity}'. ${allCandidates.length} endpoint(s) excluded.${clearanceBlocked ? ` No connected provider is cleared for '${sensitivity}' data.` : ""}`,
       fitnessScore: 0,
       fallbackChain: [],
       candidates: allCandidates,
