@@ -82,6 +82,7 @@ import {
 } from "./route-decision-attribution";
 import { MODEL_ROUTING_ENDPOINT_TYPES } from "./provider-eligibility";
 import { serializeActivityHarnessAudit } from "./activity-harness-audit";
+import { codexSubscriptionModelExclusionReason } from "./codex-subscription-model-eligibility";
 
 /**
  * EP-MODEL-CAP-001-B: Source-priority tool use resolution.
@@ -209,6 +210,12 @@ function profileToManifest(
   mp: ProfileWithProvider,
   statusOverride?: EndpointManifest["status"],
 ): EndpointManifest {
+  const eligibilityExclusionReason = codexSubscriptionModelExclusionReason({
+    providerId: mp.providerId,
+    authMethod: mp.provider.authMethod,
+    modelId: mp.modelId,
+  });
+
   return {
     id: mp.id,
     providerId: mp.providerId,
@@ -231,6 +238,7 @@ function profileToManifest(
     maxContextTokens: mp.maxContextTokens ?? mp.provider.maxContextTokens,
     maxOutputTokens: mp.maxOutputTokens ?? mp.provider.maxOutputTokens,
     modelRestrictions: mp.provider.modelRestrictions,
+    ...(eligibilityExclusionReason ? { eligibilityExclusionReason } : {}),
     reasoning: mp.reasoning,
     codegen: mp.codegen,
     toolFidelity: mp.toolFidelity,
