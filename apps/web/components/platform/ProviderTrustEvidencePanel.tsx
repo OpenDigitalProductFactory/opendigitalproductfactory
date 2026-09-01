@@ -35,16 +35,40 @@ function dateLabel(value: string): string {
   return new Intl.DateTimeFormat("en", { dateStyle: "medium", timeZone: "UTC" }).format(new Date(value));
 }
 
+const ACCOUNT_DECLARATION_CLAIMS = new Set<ProviderTrustClaimKey>([
+  "no-training",
+  "zero-retention",
+  "regional-processing",
+  "enabled-regions",
+  "approved-underlying-providers",
+]);
+
+function nextActionLabel(claim: ResolvedProviderTrustClaim): string {
+  if (claim.claimKey === "enabled-regions") {
+    return "Save the enabled regions in Connected account and data terms above. Leaving the field empty keeps region-restricted work blocked.";
+  }
+  if (claim.claimKey === "dpa-on-file") {
+    return "No DPA evidence workflow is available on this page. Restricted work stays blocked until platform governance links a reviewed supplier contract or current DPA evidence.";
+  }
+  if (ACCOUNT_DECLARATION_CLAIMS.has(claim.claimKey)) {
+    return `Update the matching declaration in Connected account and data terms above. ${claim.nextAction}`;
+  }
+  return `This page cannot change this evidence. Platform governance must resolve it. ${claim.nextAction}`;
+}
+
 export function ProviderTrustEvidencePanel({
+  accountDeclarationSaved,
   evidenceStatus,
   lastReviewedAt,
   claims,
 }: {
+  accountDeclarationSaved: boolean;
   evidenceStatus: ProviderConnectionPosture["evidenceStatus"];
   lastReviewedAt: string | null;
   claims: ResolvedProviderTrustClaim[];
 }) {
-  const actionNeeded = claims.length === 0 || claims.some((claim) => claim.status !== "valid");
+  const restrictedClaimCount = claims.filter((claim) => claim.status !== "valid").length;
+  const restrictedWorkLimited = claims.length === 0 || restrictedClaimCount > 0;
 
   return (
     <section
@@ -62,11 +86,24 @@ export function ProviderTrustEvidencePanel({
         </div>
         <span
           role="status"
-          className={`rounded-full px-2 py-1 text-xs font-semibold ${actionNeeded ? "bg-[var(--dpf-warning-soft)] text-[var(--dpf-warning)]" : "bg-[var(--dpf-success-soft)] text-[var(--dpf-success)]"}`}
+          className={`rounded-full px-2 py-1 text-xs font-semibold ${restrictedWorkLimited ? "bg-[var(--dpf-warning-soft)] text-[var(--dpf-warning)]" : "bg-[var(--dpf-success-soft)] text-[var(--dpf-success)]"}`}
         >
-          {actionNeeded ? "Action needed" : "Current"}
+          {claims.length === 0
+            ? "Restricted work not reviewed"
+            : restrictedClaimCount > 0
+              ? `${restrictedClaimCount} ${restrictedClaimCount === 1 ? "restriction" : "restrictions"} for restricted work`
+              : "Current for restricted work"}
         </span>
       </div>
+
+      <p className="mb-0 mt-3 text-xs font-medium text-[var(--dpf-text)]">
+        {accountDeclarationSaved && lastReviewedAt
+          ? `Account declaration saved · reviewed ${dateLabel(lastReviewedAt)}.`
+          : "Account declaration not yet saved."}
+        {restrictedWorkLimited
+          ? " General work is governed separately; sensitive or restricted work remains blocked until the evidence below is current."
+          : " The current evidence supports restricted-work evaluation; routing still applies each workload's policy."}
+      </p>
 
       {claims.length === 0 ? (
         <div className="mt-3 rounded border border-dashed border-[var(--dpf-border)] p-3 text-xs text-[var(--dpf-muted)]">
@@ -85,7 +122,7 @@ export function ProviderTrustEvidencePanel({
                 {claim.expiresAt ? ` · valid until ${dateLabel(claim.expiresAt)}` : ""}
               </p>
               {claim.status !== "valid" && (
-                <p className="mb-0 mt-1 text-xs font-medium text-[var(--dpf-text)]">Next: {claim.nextAction}</p>
+                <p className="mb-0 mt-1 text-xs font-medium text-[var(--dpf-text)]">Next: {nextActionLabel(claim)}</p>
               )}
             </li>
           ))}
