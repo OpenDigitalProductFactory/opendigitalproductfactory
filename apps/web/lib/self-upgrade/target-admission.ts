@@ -1,5 +1,8 @@
 import type { SelfUpgradeTargetBinding } from "./admission";
-import { verifySelfUpgradeTargetBinding } from "./target-binding";
+import {
+  matchesSignedSelfUpgradeTargetBinding,
+  verifySelfUpgradeTargetBinding,
+} from "./target-binding";
 import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 
 type SelectionInput = Readonly<{
@@ -16,7 +19,28 @@ export function selectSelfUpgradeAdmissionTarget(
   // itself runs (CodeQL: user-controlled bypass of security check).
   const bindingToken = input.targetBinding ?? "";
   const verified = verifySelfUpgradeTargetBinding(bindingToken);
-  if (bindingToken && !verified.ok) return err("target-binding-invalid");
+  if (bindingToken && !verified.ok) {
+    // A long-open authenticated page may retain an expired binding after the
+    // operator has reviewed the target. Expiry never supplies authority: only
+    // current server discovery may do that. Permit the action to continue when
+    // the expired token is still cryptographically valid and matches the exact
+    // independently resolved release; forged/malformed/unresolved/drifted
+    // targets remain fail-closed.
+    if (
+      verified.error === "expired" &&
+      input.resolvedTarget?.targetKind === "release-artifact" &&
+      input.resolvedTarget.targetTag
+    ) {
+      return matchesSignedSelfUpgradeTargetBinding(bindingToken, {
+        targetKind: "release-artifact",
+        targetSha: input.resolvedTarget.targetSha,
+        targetTag: input.resolvedTarget.targetTag,
+      })
+        ? ok(input.resolvedTarget)
+        : err("target-changed");
+    }
+    return err("target-binding-invalid");
+  }
 
   const boundTarget = verified.ok ? verified.data : null;
   if (

@@ -17,6 +17,7 @@ type BindingPayload = SelfUpgradeBoundTarget & {
 };
 
 type Verification = ActionResult<SelfUpgradeBoundTarget>;
+type PayloadVerification = ActionResult<BindingPayload>;
 
 export const SELF_UPGRADE_TARGET_BINDING_TTL_MS = 15 * 60 * 1_000;
 
@@ -101,10 +102,10 @@ export function createSelfUpgradeTargetBinding(
   return `${encoded}.${sign(encoded, options.secret ?? signingSecret())}`;
 }
 
-export function verifySelfUpgradeTargetBinding(
+function verifySignedPayload(
   token: string,
-  options: { now?: Date; secret?: string } = {},
-): Verification {
+  options: { secret?: string } = {},
+): PayloadVerification {
   if (typeof token !== "string" || token.length === 0) return err("malformed");
   const separator = token.lastIndexOf(".");
   if (separator <= 0 || separator === token.length - 1) return err("malformed");
@@ -129,13 +130,39 @@ export function verifySelfUpgradeTargetBinding(
   } catch {
     return err("malformed");
   }
-  if (!validPayload(payload)) return err("malformed");
-  if (payload.expiresAt <= (options.now ?? new Date()).getTime()) {
+  return validPayload(payload) ? ok(payload) : err("malformed");
+}
+
+/**
+ * Compare a cryptographically valid rendered binding with an independently
+ * resolved, current server target. Freshness is intentionally not authority
+ * here: callers may use this only after current discovery has already supplied
+ * the candidate. The function exposes no stale target for admission.
+ */
+export function matchesSignedSelfUpgradeTargetBinding(
+  token: string,
+  currentTarget: SelfUpgradeBoundTarget,
+  options: { secret?: string } = {},
+): boolean {
+  const signed = verifySignedPayload(token, options);
+  return signed.ok &&
+    signed.data.targetKind === currentTarget.targetKind &&
+    signed.data.targetSha.toLowerCase() === currentTarget.targetSha.toLowerCase() &&
+    signed.data.targetTag === currentTarget.targetTag;
+}
+
+export function verifySelfUpgradeTargetBinding(
+  token: string,
+  options: { now?: Date; secret?: string } = {},
+): Verification {
+  const signed = verifySignedPayload(token, options);
+  if (!signed.ok) return signed;
+  if (signed.data.expiresAt <= (options.now ?? new Date()).getTime()) {
     return err("expired");
   }
   return ok({
-      targetKind: payload.targetKind,
-      targetSha: payload.targetSha,
-      targetTag: payload.targetTag,
+    targetKind: signed.data.targetKind,
+    targetSha: signed.data.targetSha,
+    targetTag: signed.data.targetTag,
   });
 }

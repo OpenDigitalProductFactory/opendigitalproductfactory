@@ -128,10 +128,10 @@ export async function executeRemoteTaskAttempt(input: {
       systemPrompt: agent.systemPrompt,
       systemPromptInstructionSpans: coworkerBriefSpans(agent.systemPrompt),
       chatHistory: [
-        { role: "user", content: parsed.prompt },
         ...(input.resumeKind === "terminal-writer" && input.terminalWriterContext
           ? [{ role: "system" as const, content: input.terminalWriterContext }]
           : []),
+        { role: "user", content: parsed.prompt },
       ],
       sensitivity: agent.sensitivity ?? "internal",
       tools: tools.tools,
