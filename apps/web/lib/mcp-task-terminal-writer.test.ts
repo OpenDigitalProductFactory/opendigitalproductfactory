@@ -577,11 +577,11 @@ describe("terminal writer resumption", () => {
     expect(autonomous.execute).toHaveBeenCalledWith(expect.objectContaining({
       taskRunId: "TR-MCP-WRITER-EXHAUSTED",
       chatHistory: [
-        { role: "user", content: exhaustedParams.prompt },
         expect.objectContaining({
           role: "system",
           content: expect.stringContaining("The same TaskRun preserves its immutable authority binding."),
         }),
+        { role: "user", content: exhaustedParams.prompt },
       ],
       terminalToolPolicy: expect.objectContaining({
         terminalPhase: "writer-only",
