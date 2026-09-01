@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Provider trust status honesty
 
 **Backlog:** BI-231CA01C  

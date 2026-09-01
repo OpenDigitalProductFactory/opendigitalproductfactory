@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Provider trust status honesty implementation plan
 
 **Backlog:** BI-231CA01C  
@@ -10,6 +14,13 @@
 5. Run focused tests, typecheck/build gates, UX-fit review, exact-tree evidence, PR/merge queue, canonical self-upgrade, and live provider-page verification.
 
 No migration is required. Documentation impact is user-facing and is handled in the same change.
+
+## Design grounding
+
+- Existing specs/plans reviewed: `docs/superpowers/specs/2026-07-19-ai-provider-suitability-routing-design.md`, `docs/superpowers/plans/2026-07-19-ai-provider-suitability-routing.md`, and the provider-trust operations/user documentation.
+- Current code substrate reviewed: `apps/web/components/platform/ProviderTrustEvidencePanel.tsx`, `apps/web/components/platform/ProviderAccountPostureForm.tsx`, `apps/web/lib/routing/provider-suitability/evidence.ts`, and `apps/web/app/(shell)/platform/ai/providers/[providerId]/page.tsx`.
+- Source of truth: `AiProviderConnection`, `SupplierContract`, `ComplianceEvidence`, and `resolveProviderTrustEvidence`; the page remains a projection only.
+- Decision: keep the canonical routing/evidence contract unchanged and correct only the existing provider-detail projection and guidance.
 
 ## UX fit review
 
