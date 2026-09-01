@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   BacklogItemAlreadyClaimedError,
   assertBacklogWorkroomClaimAvailable,
+  activeWorkroomsByBacklogItem,
   loadBacklogWorkroomOwnership,
   lockBacklogItemForClaim,
 } from "./backlog-workroom-ownership";
@@ -33,7 +34,8 @@ function room(overrides: Record<string, unknown> = {}) {
 }
 
 const liveSummary = {
-  capsuleId: "WC-LIVE", repositoryFullName: "org/repo", headBranch: "fix/one",
+  capsuleId: "WC-LIVE", title: "Live work", status: "working", backlogItemId: "BI-ONE",
+  repositoryFullName: "org/repo", headBranch: "fix/one",
   worktreePath: "/worktrees/one", executorKind: "codex-desktop", executorRef: "session-one",
   leaseHolderPrincipalId: "PRN-ONE", leaseExpiresAt: "2026-08-31T19:00:00.000Z",
   liveness: "live", isLive: true, livenessReason: "Lease valid.", trueLivenessAt: now.toISOString(),
@@ -57,7 +59,29 @@ describe("backlog Workroom ownership", () => {
     }));
     expect(ownership.workrooms).toHaveLength(2);
     expect(ownership.liveWorkrooms.map((entry) => entry.capsuleId)).toEqual(["WC-LIVE"]);
+    expect(ownership.liveWorkrooms[0]).toMatchObject({
+      title: "Live work",
+      status: "working",
+      backlogItemId: "BI-ONE",
+    });
     expect(ownership.workrooms[1]).toMatchObject({ capsuleId: "WC-DEAD", isLive: false, liveness: "lease-expired" });
+  });
+
+  it("groups active ownership by both semantic and row BacklogItem identity", () => {
+    const byItem = activeWorkroomsByBacklogItem(
+      [
+        { id: "row-one", itemId: "BI-ONE" },
+        { id: "row-two", itemId: "BI-TWO" },
+      ],
+      [
+        liveSummary,
+        { ...liveSummary, capsuleId: "WC-ROW", backlogItemId: "row-two", headBranch: "fix/two" },
+        { ...liveSummary, capsuleId: "WC-DEAD", backlogItemId: "BI-ONE", isLive: false },
+      ],
+    );
+
+    expect(byItem.get("BI-ONE")?.map((room) => room.capsuleId)).toEqual(["WC-LIVE"]);
+    expect(byItem.get("BI-TWO")?.map((room) => room.capsuleId)).toEqual(["WC-ROW"]);
   });
 
   it("refuses a different live Workroom before adoption", () => {
