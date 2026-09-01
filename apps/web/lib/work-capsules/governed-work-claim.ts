@@ -34,6 +34,8 @@ type ClaimInput = {
   executorRef?: string | null;
   title?: string;
   objective?: string;
+  force?: boolean;
+  overrideReason?: string | null;
 };
 
 type ClaimResult = Awaited<ReturnType<typeof claimBacklogItemWorkspace>>;
