@@ -154,7 +154,21 @@ An item is governed by this policy when at least one authoritative signal applie
 
 If a surface cannot determine whether an implementation claim is governed, it returns `classification-required`; it does not infer the lighter profile. Capture/design work remains allowed while classification is resolved.
 
-Profile selection is monotonic and uses the strongest current or unresolved historical structural signal: `archetype > cross-domain > feature > fix > doc-only`. Canonical work types map `bug → fix` and `doc → doc-only`. Contradictory structured signals return `classification-required`. Once a governed profile has been recorded or a FeatureBuild/archetype/cross-domain fact exists, changing editable backlog fields cannot silently downgrade it. A downgrade requires a separate authorized classification-disposition receipt, current artifact digest, concrete reason, and proof that no contradictory structural fact remains.
+Profile selection is monotonic and uses the strongest current or unresolved historical structural signal: `archetype > cross-domain > feature > fix > doc-only`. Every member of the closed `BacklogItem.workType` enum maps explicitly:
+
+| Work type | Readiness profile | Reason |
+|---|---|---|
+| `bug` | `fix` | Repairs observed behavior. |
+| `chore` | `fix` | Maintains the existing system without adding a user-facing capability. |
+| `refactor` | `fix` | Changes implementation structure while preserving behavior. |
+| `feature` | `feature` | Adds or materially changes capability. |
+| `tool` | `feature` | Adds or changes an executable platform capability, even when its consumer is another agent or operator. |
+| `skill` | `feature` | Adds or changes an executable coworker capability, not documentation alone. |
+| `doc` | `doc-only` | Changes documentation without executable behavior. |
+
+This table is the authoritative work-type mapping and is exhaustive by construction against `BACKLOG_WORK_TYPE_VALUES`. Unknown, malformed, or newly added-but-unmapped values return `classification-required`; they never inherit the weakest profile. The mapping was selected by `DI-CD15302DA59B` over uniformly classifying all non-documentation work as `feature` or all four omitted values as `fix`.
+
+Contradictory structured signals return `classification-required`. Once a governed profile has been recorded or a FeatureBuild/archetype/cross-domain fact exists, changing editable backlog fields cannot silently downgrade it. A downgrade requires a separate authorized classification-disposition receipt, current artifact digest, concrete reason, and proof that no contradictory structural fact remains.
 
 ### 5.2 Profiles
 
