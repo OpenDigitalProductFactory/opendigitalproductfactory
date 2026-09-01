@@ -11,7 +11,8 @@ import {
 import { isRedundantReaskQuestion } from "@/lib/tak/conversation-intent";
 import { PLATFORM_TOOLS, toolsToOpenAIFormat, type ToolDefinition, type ToolResult } from "@/lib/mcp-tools";
 import { createAuthorizedSurfaceTurnGovernance } from "@/lib/coworker/authorized-surface-execution-context";
-import { LOAD_TOOLS_TOOL_NAME, selectLoadableTools } from "@/lib/tak/tool-intent";
+import { LOAD_TOOLS_TOOL_NAME } from "@/lib/tak/tool-intent";
+import { DynamicToolSurface } from "@/lib/tak/dynamic-tool-surface";
 import {
   classifyEvidenceRequirement,
   resolveEvidenceRecovery,
@@ -1338,8 +1339,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
   // authorized tools here as a deferred pool; the model pulls them back via the
   // load_tools meta-tool (intercepted below, like the plan tools). Empty for
   // autonomous/build callers, so their behavior is byte-for-byte unchanged.
-  const deferredPool: ToolDefinition[] = [...(params.deferredTools ?? [])];
-  const loadedToolDefs: ToolDefinition[] = [];
+  const dynamicToolSurface = new DynamicToolSurface({ active: tools, deferred: params.deferredTools });
 
   // Append the current plan as an ephemeral reminder to the messages handed to
   // the model. NOT stored in `messages`, so it is regenerated from live plan
@@ -2366,32 +2366,22 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       // governedExecuteTool (EP-COWORKER-INTERACTIVITY, BI-6A745E3C).
       if (tc.name === LOAD_TOOLS_TOOL_NAME) {
         const req = (tc.arguments ?? {}) as { names?: string[]; query?: string };
-        const toLoad = selectLoadableTools(deferredPool, req);
-        for (const t of toLoad) {
-          const idx = deferredPool.findIndex((d) => d.name === t.name);
-          if (idx >= 0) deferredPool.splice(idx, 1);
-          loadedToolDefs.push(t);
-        }
-        if (toLoad.length > 0) {
-          // Reassign provider tools so the NEXT iteration advertises the newly
-          // loaded schemas (mirrors the plan-tool append above).
-          routeOptions.tools = [
-            ...((routeOptions.tools as Array<Record<string, unknown>> | undefined) ?? []),
-            ...toolsToOpenAIFormat(toLoad),
-          ];
-        }
-        const loadedNames = toLoad.map((t) => t.name);
+        const change = dynamicToolSurface.load(req);
+        routeOptions.tools = toolsToOpenAIFormat(change.active);
+        const loadedNames = change.loaded.map((t) => t.name);
         console.log(
-          `[agentic-tool] LOAD_TOOLS iter=${iteration} loaded=${loadedNames.length} ` +
-          `remaining=${deferredPool.length} names=${JSON.stringify(loadedNames)}`,
+          `[agentic-tool] LOAD_TOOLS iter=${iteration} initial=${dynamicToolSurface.initialCount} ` +
+          `loaded=${JSON.stringify(loadedNames)} displaced=${JSON.stringify(change.displaced.map((t) => t.name))} ` +
+          `unattached=${JSON.stringify(change.unattached.map((t) => t.name))} reason=${change.unattached.length ? "ceiling" : "none"} ` +
+          `final=${change.active.length} ceiling=${dynamicToolSurface.ceiling} remaining=${dynamicToolSurface.deferredCount}`,
         );
         iterationResults.push({
           tc,
           toolResult: {
             success: true,
             message:
-              toLoad.length > 0
-                ? `Loaded ${toLoad.length} tool(s): ${loadedNames.join(", ")}. Call them on your next step.`
+              loadedNames.length > 0
+                ? `Loaded ${loadedNames.length} tool(s): ${loadedNames.join(", ")}. Call them on your next step.`
                 : "No deferred tools matched. Use search_tool_marketplace to discover tools, or proceed with your current set.",
           },
         });
@@ -2406,23 +2396,17 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         }
       }
 
-      let toolDef =
-        tools.find((t) => t.name === tc.name) ?? loadedToolDefs.find((t) => t.name === tc.name);
+      let toolDef = dynamicToolSurface.definition(tc.name);
 
       // Authority-preserving on-demand attach: if the model calls an authorized
       // tool that was deferred (not in this turn's attached set), promote it from
       // the deferred pool and execute it now. Deferral caps per-turn COST without
       // ever removing CAPABILITY — whether or not the model first called load_tools.
-      if (!toolDef) {
-        const idx = deferredPool.findIndex((d) => d.name === tc.name);
-        if (idx >= 0) {
-          const [promoted] = deferredPool.splice(idx, 1);
-          loadedToolDefs.push(promoted);
-          routeOptions.tools = [
-            ...((routeOptions.tools as Array<Record<string, unknown>> | undefined) ?? []),
-            ...toolsToOpenAIFormat([promoted]),
-          ];
-          toolDef = promoted;
+      if (dynamicToolSurface.isDeferred(tc.name)) {
+        const change = dynamicToolSurface.promote(tc.name);
+        if (change.loaded.length > 0) {
+          routeOptions.tools = toolsToOpenAIFormat(change.active);
+          toolDef = change.loaded[0];
           console.log(`[agentic-tool] AUTO_LOAD iter=${iteration} tool=${tc.name} (deferred → attached on direct call)`);
         }
       }

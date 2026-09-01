@@ -20,7 +20,7 @@ import { computeNextCronRun, isOneShotCron } from "@/lib/operate/cron-next-run";
 import { extractScheduledTaskSummary } from "./agent-task-scheduler-summary";
 import {
   createTaskRunForScheduledTask,
-  detectScheduledRunInferenceFailure,
+  detectScheduledRunFailure,
   type ScheduledTaskRunRef,
 } from "@/lib/tak/scheduled-task-runs";
 import { createTaskMessage } from "@/lib/tak/task-records";
@@ -614,15 +614,10 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
     // TR-SCHED-B7151A4C). That run did no work — throw so the catch below
     // records status=failed and the BI-754C9E82 retry cadence takes over,
     // instead of completing quietly with a healthy lastStatus.
-    const inferenceFailure = detectScheduledRunInferenceFailure({
-      executedToolCount: executedTools.length,
-      content: result.content,
+    const runFailure = detectScheduledRunFailure({
+      prompt: task.prompt, authorizedTools: [...tools, ...deferredTools], executedTools, content: result.content,
     });
-    if (inferenceFailure) {
-      throw new Error(
-        `Scheduled run produced no work — AI endpoints failed (${inferenceFailure}). ${result.content ?? ""}`.trim(),
-      );
-    }
+    if (runFailure) throw new Error(`Scheduled run produced no governed work (${runFailure}). ${result.content ?? ""}`.trim());
 
     const scheduledSummary = extractScheduledTaskSummary(executedTools);
     const taskMessageContent = scheduledSummary?.compactStatus ?? result.content ?? "(No response)";
