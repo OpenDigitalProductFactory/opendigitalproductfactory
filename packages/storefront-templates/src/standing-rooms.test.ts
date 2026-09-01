@@ -34,20 +34,50 @@ function sourceFiles(dir: string): string[] {
 describe("the archetype layer never names one business", () => {
   // Demarcation test 1. An instance fact that reaches this package would ship
   // one operator's business to every install of the archetype.
+  // Forge hostnames are matched as plain substrings, not as a regular
+  // expression. This scan asks "does this file mention a forge anywhere", which
+  // is the opposite of validating that a URL points at an allowed host — an
+  // unanchored host regex here would read as a bypassable authorization check
+  // (CodeQL js/regex/missing-regexp-anchor) when it is nothing of the kind.
+  const FORGE_HOSTS = ["github.com", "gitlab.com", "bitbucket.org", "bitbucket.com"];
+
+  const FORBIDDEN: { label: string; pattern: RegExp }[] = [
+    { label: "owner/repo coordinate", pattern: /\b[\w.-]+\/[\w.-]+\.git\b/ },
+    { label: "bearer/API token", pattern: /\b(ghp_|github_pat_|dpfmcp_|sk-[A-Za-z0-9]{16,})/ },
+    { label: "private key block", pattern: /BEGIN [A-Z ]*PRIVATE KEY/ },
+  ];
+
+  /** Instance facts found in one file's text. Empty means clean. */
+  function instanceFactsIn(body: string): string[] {
+    const found: string[] = [];
+    const haystack = body.toLowerCase();
+    for (const host of FORGE_HOSTS) {
+      if (haystack.includes(host)) found.push(`forge hostname ${host}`);
+    }
+    for (const { label, pattern } of FORBIDDEN) {
+      if (pattern.test(body)) found.push(label);
+    }
+    return found;
+  }
+
+  it("actually detects an instance fact — the guard is not vacuous", () => {
+    // A gate that cannot fail is not a gate. If the detector is ever weakened,
+    // this fails before the sweep below starts quietly passing on everything.
+    expect(instanceFactsIn("const repo = 'https://github.com/acme/widgets';"))
+      .toContain("forge hostname github.com");
+    expect(instanceFactsIn("clone git@host:acme/widgets.git")).toContain(
+      "owner/repo coordinate",
+    );
+    expect(instanceFactsIn("token = 'ghp_exampleexample'")).toContain("bearer/API token");
+    expect(instanceFactsIn("const rooms = deriveStandingRooms(archetype);")).toEqual([]);
+  });
+
   it("contains no forge coordinates, hostnames, or credential-shaped strings", () => {
-    const forbidden: { label: string; pattern: RegExp }[] = [
-      { label: "forge repository URL", pattern: /https?:\/\/(www\.)?(github|gitlab|bitbucket)\.com\//i },
-      { label: "owner/repo coordinate", pattern: /\b[\w.-]+\/[\w.-]+\.git\b/ },
-      { label: "bearer/API token", pattern: /\b(ghp_|github_pat_|dpfmcp_|sk-[A-Za-z0-9]{16,})/ },
-      { label: "private key block", pattern: /BEGIN [A-Z ]*PRIVATE KEY/ },
-    ];
     const offenders: string[] = [];
     for (const file of sourceFiles(PACKAGE_SRC)) {
-      const body = readFileSync(file, "utf8");
-      for (const { label, pattern } of forbidden) {
-        if (pattern.test(body)) {
-          offenders.push(`${path.relative(PACKAGE_SRC, file)}: ${label}`);
-        }
+      const found = instanceFactsIn(readFileSync(file, "utf8"));
+      for (const label of found) {
+        offenders.push(`${path.relative(PACKAGE_SRC, file)}: ${label}`);
       }
     }
     expect(offenders).toEqual([]);
