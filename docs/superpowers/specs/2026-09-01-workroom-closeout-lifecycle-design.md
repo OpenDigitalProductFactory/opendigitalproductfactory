@@ -1,6 +1,10 @@
+---
+status: active
+---
+
 # Workroom Closeout Lifecycle — Delivered vs. Abandoned, with a Resume Grace
 
-**Status:** design · **Date:** 2026-09-01 · **Epic:** EP-WORKROOM-CLOSEOUT
+**Date:** 2026-09-01 · **Epic:** EP-WORKROOM-CLOSEOUT
 **Backlog:** BI-9FF39058, BI-33E1E5D7, BI-154689E7, BI-75565393, BI-946E5359
 
 ## Problem
