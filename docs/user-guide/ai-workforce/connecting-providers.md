@@ -121,6 +121,8 @@ On each provider detail page, record:
 
 This is recorded as an operator attestation, not contract proof. A DPA, BAA, supplier contract, special retention option, or regional entitlement still needs its own evidence. Provider-published privacy pages describe an offering; they do not prove what your account purchased or enabled.
 
+After you save the declaration, the provider page acknowledges it separately from restricted-work evidence. A limitation count means only that sensitive or restricted work remains blocked by the listed claims; it is not a generic connection failure. Each claim says whether you can update it in **Connected account and data terms** or whether the page has no evidence workflow. In particular, DPA evidence cannot be added on this page and must be linked through platform governance. An empty processing-region field reads **No regions saved**; examples appear as help text, never as if they were saved values.
+
 For EEA, UK, public-sector, healthcare, education, financial-services, or other regulated use, ask the COO to consult the Data Governance Agent. The answer should cite applicable regulator guidance and provider terms, identify unknowns, and recommend qualified review when it cannot substantiate a claim.
 
 DPF checks those references before returning the specialist's answer. A material citation must match a current governed source claim and apply to the company location, workload, and named provider context. If the account class, service, jurisdiction, or evidence cannot be matched, the COO gives a conservative **cannot confirm** answer, preserves the current provider restrictions, and links the authoritative source that was actually accepted. It does not fill evidence gaps from model memory.

@@ -223,6 +223,13 @@ export default async function ProviderDetailPage({ params }: Props) {
           />
           {trustEvidenceResolution && (
             <ProviderTrustEvidencePanel
+              accountDeclarationSaved={Boolean(
+                providerConnection?.lastReviewedAt
+                && providerConnection.entitlements
+                && typeof providerConnection.entitlements === "object"
+                && !Array.isArray(providerConnection.entitlements)
+                && ("noTraining" in providerConnection.entitlements || "enabledRegions" in providerConnection.entitlements)
+              )}
               evidenceStatus={trustEvidenceResolution.posture.evidenceStatus}
               lastReviewedAt={trustEvidenceResolution.posture.lastReviewedAt}
               claims={trustEvidenceResolution.claims}
