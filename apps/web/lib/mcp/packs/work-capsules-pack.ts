@@ -144,7 +144,7 @@ const definitions: ToolDefinition[] = [
   {
     name: "claim_backlog_item_for_work",
     description:
-      "Claim a BacklogItem for work by binding it to the worktree + branch + session you are starting in. Governed work must declare design, review, plan, or implementation intent; legacy omission is evaluated as implementation and fails closed unless canonical readiness is allowed. Claim, intent event, readiness decision, and exact identity readback share one transaction. A branch bound to a different BI returns branch_occupied and preserves its history. The BI claim remains a soft coordination signal, not a lock.",
+      "Claim a BacklogItem by binding its worktree, branch, and session. Governed intent, readiness, claim, and readback share one transaction. Another live Workroom refuses the claim; deliberate co-delivery requires force plus an audited reason.",
     inputSchema: {
       type: "object",
       properties: {
@@ -156,6 +156,8 @@ const definitions: ToolDefinition[] = [
         provider: { type: "string", description: "Provider string (claude, codex, grok) — mapped to the closest executor kind." },
         sessionRef: { type: "string", description: "Owner/session id, stored as the workroom executorRef." },
         workIntent: { type: "string", enum: ["design", "review", "plan", "implementation"], description: "Lifecycle intent. Required for governed callers; omission is the legacy implementation-safe default." },
+        force: { type: "boolean", description: "Deliberately co-claim despite another live Workroom." },
+        overrideReason: { type: "string", description: "Required audit reason when force overrides live ownership." },
       },
       required: ["itemId", "worktreePath", "branchName", "provider", "sessionRef"],
     },
