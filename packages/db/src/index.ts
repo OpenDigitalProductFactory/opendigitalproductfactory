@@ -38,6 +38,7 @@ export {
 export {
   WorkroomParticipantRole,
   WorkroomParticipantAssignmentSource,
+  WorkroomRelationKind,
 } from "../generated/client/client";
 export {
   PRINCIPAL_SENSITIVITIES,
