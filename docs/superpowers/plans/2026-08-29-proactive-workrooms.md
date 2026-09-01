@@ -6,6 +6,7 @@ status: active
 
 **Design:** [2026-08-29-proactive-workrooms-design.md](../specs/2026-08-29-proactive-workrooms-design.md)
 **Epics:** `EP-WORKFORCE-TRANSITION` · `EP-WORK-CONVERGENCE` · `EP-PAAW-HARMONIZATION`
+**Phase C backlog item:** `BI-662254C6` — canonical Workroom relations
 **Kernel:** `DI-6B057EE5AE32` (`wire-work-shapes-to-rooms`, high confidence)
 **Branch:** `doc/workroom-proactive-operations` (this design/plan) — implementation branches per slice
 
@@ -102,7 +103,8 @@ nonproduction environment under a claimed lease — never by rebuilding the live
 
 ## Phase C — workroom relations
 
-Deliverable: the five work-coordination relations are modelled, closing design finding 8.
+Deliverable (`BI-662254C6`): the five work-coordination relations are modelled, closing design
+finding 8.
 
 Files:
 - `packages/db/prisma/schema/work-coordination.prisma` (new `WorkroomRelation` model)
@@ -113,9 +115,12 @@ Steps:
 1. Failing tests: each of `contains` / `spawned-from` / `depends-on` / `blocks` / `contributes-to`
    round-trips; a cycle in `contains` is rejected; portfolio dependencies are **not** silently
    converted into work-coordination relations (the vocabulary boundary's explicit warning).
-2. Add the model and migration. It must apply cleanly against the existing 330-row population, not
-   just a clean schema.
-3. Read model for the room view.
+2. Add the closed relation enum, the normalized join model, named endpoint relations, triple
+   uniqueness, and endpoint-leading indexes. Add the forward-only migration. It must apply cleanly
+   against the existing 330-row population, not just a clean schema; there is no backfill because no
+   existing field can distinguish or safely infer any of the five relations.
+3. Add the one-room adjacency read model. Keep descendant traversal explicitly depth- or
+   cursor-bounded; never load the full room inventory and silently truncate it.
 
 Verification: `pnpm --filter web exec vitest run`; migration applied against a copy of live-shaped
 data; `pnpm --filter web build`.
@@ -224,6 +229,10 @@ its replacement is proven is how a proactivity outage happens silently.
   E and F are data/profile changes revertible without migration.
 
 ## Backlog coverage
+
+Phase C is covered by `BI-662254C6`: one independently shippable relation-model slice for the five
+closed work-coordination relations, its forward-only migration, cycle rejection, and read model.
+This mapping does not convert portfolio dependencies into Workroom relations.
 
 The executable Process Overseer is filed as `BI-3913EB49` under live epic `EP-1FABA22D`. It reuses
 `BI-4CB2EF76` for persisted participant/coordinator assignment and `BI-EFFD97B4` for definition-level

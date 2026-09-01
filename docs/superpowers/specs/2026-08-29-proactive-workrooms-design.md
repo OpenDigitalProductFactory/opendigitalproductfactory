@@ -5,6 +5,7 @@ status: active
 # Proactive Workrooms — the room carries the drive, not the coworker
 
 **Epics:** `EP-WORKFORCE-TRANSITION` (live coverage) · `EP-WORK-CONVERGENCE` (room substrate) · `EP-PAAW-HARMONIZATION` (standard)
+**Phase C backlog item:** `BI-662254C6` — canonical Workroom relations
 **Kernel consult:** `DI-6B057EE5AE32` — `wire-work-shapes-to-rooms`, composite 10.594, margin 7.655, **high** confidence, no commandment conflict, autonomy-eligible
 **Standard:** `DPF-PAAW` §9.5 (Workroom definition/instance), `PAAW-WORK-030`…`034`
 **Instance under design:** customer 0 — DPF's own customer-zero install, archetype `software-platform`
@@ -116,6 +117,19 @@ parent/child. The realization is therefore a `WorkroomRelation` join (`fromWorkr
 `toWorkroomId`, `relation`, `createdAt`), not a `parentWorkroomId` column — because `contains`,
 `spawned-from`, `depends-on`, `blocks` and `contributes-to` are five different facts and a single
 nullable parent can only express one of them, badly.
+
+The closed relation vocabulary is a Prisma enum whose stored values preserve those five canonical
+hyphenated names. The join has named incoming and outgoing `Workroom` relations, cascading foreign
+keys, a unique constraint on `(fromWorkroomId, toWorkroomId, relation)`, and indexes beginning with
+each endpoint plus `relation`. `contains` is a directed acyclic relation: writes reject self-links
+and any edge that would make the target reach the source. The other four relation kinds remain
+directional but are not silently subjected to containment semantics.
+
+The operational read model loads one room's incoming and outgoing adjacency only. It does not walk
+the full Workroom inventory or return an implicitly truncated graph. Callers that need descendants
+must traverse with an explicit depth or page bound. `EP-WORKFORCE-TRANSITION` owns that scale
+contract; a future whole-estate graph view must add its own cursor and ceiling rather than widening
+this slice's read path.
 
 ## 4. The demarcation — three layers, one rule
 
