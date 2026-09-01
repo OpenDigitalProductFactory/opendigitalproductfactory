@@ -52,6 +52,27 @@ export function looksLikeCliAuthFailure(text: string): boolean {
   return CLI_AUTH_FAILURE_PATTERNS.some((p) => p.test(text));
 }
 
+/**
+ * Genuine Codex CLI capacity-exhaustion signatures.
+ *
+ * Do not use broad fragments such as `text.includes("rate")`: ordinary error
+ * prose can contain words like "degrade performance", which previously turned
+ * an unsupported-model HTTP 400 into a false rate-limit and poisoned the whole
+ * CLI pool. These signatures are intentionally tied to explicit HTTP throttle,
+ * quota, or usage-limit language.
+ */
+const CLI_RATE_LIMIT_PATTERNS: RegExp[] = [
+  /\b429\b/,
+  /too many requests/i,
+  /rate[_ -]?limit(?:ed| exceeded| reached)?/i,
+  /(?:weekly|usage|quota) limit (?:has been )?(?:reached|exceeded)/i,
+  /you(?:'|’)ve hit your (?:weekly|usage|quota) limit/i,
+];
+
+export function looksLikeCliRateLimit(text: string): boolean {
+  return CLI_RATE_LIMIT_PATTERNS.some((pattern) => pattern.test(text));
+}
+
 // ─── Container file writer ─────────────────────────────────────────────────
 
 /**
@@ -352,7 +373,7 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
                 "auth",
                 providerId,
               ));
-            } else if (stderr.includes("rate") || stderr.includes("429")) {
+            } else if (looksLikeCliRateLimit(stderr)) {
               // EP-COST Phase 4: record pool exhaustion so orchestrator can back off
               void recordCliRateLimit("codex-cli", providerId, stderr);
               reject(new InferenceError(

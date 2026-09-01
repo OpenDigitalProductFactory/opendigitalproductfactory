@@ -38,6 +38,14 @@ audited exception.
    tree gate rather than asserting a local build that cannot execute here.
 6. Commit with DCO, push, open a ready PR with Design grounding, verify PR
    health, and attach the results to BI-BFBF1BBB / WC-923105A2.
+7. Complete the recorded owner-visibility acceptance on the existing `/ops`
+   backlog row: batch-project active Workroom ownership from the same liveness
+   read model, then show a compact linked strip with the Workroom status,
+   executor, branch, and true-liveness label. Keep session refs, worktree paths,
+   and lease internals out of the default human view.
+8. Measure the changed `/ops` route against its UX-fit budget, verify the
+   duplicate-claim refusal on the canonical install after the merged SHA is
+   served, and reconcile the objective before closing the BI and Workroom.
 
 ## Verification mapping
 
@@ -50,3 +58,26 @@ audited exception.
   and writes an activity containing the displaced Workrooms.
 - Read model: `get_backlog_item` returns bound Workrooms with `isLive`, liveness
   reason, branch, worktree, executor, and lease evidence.
+- Owner UI: a backlog item with live work names and links its Workroom and
+  exposes status, executor, branch, and liveness without internal session or
+  filesystem noise; an unowned item adds no empty ownership chrome.
+- Live acceptance: a second branch/session claim against BI-BFBF1BBB is
+  refused before Workroom mutation, and the original three-item read path
+  returns non-vacuous ownership rather than an empty projection.
+
+## UX-fit decision
+
+- **Owning area / route:** Operations, on the existing canonical `/ops`
+  backlog list. No route or navigation layer is added.
+- **Persona:** a platform operator deciding whether a backlog item is already
+  being worked. The first answer is the linked Workroom; infrastructure detail
+  stays backstage.
+- **Component convergence:** reuse `StatusBadge`, the existing backlog row,
+  and the canonical Workroom detail route at `/workspace/cases/[caseKey]`.
+- **Source of truth:** `loadBacklogWorkroomOwnership`, which already reuses the
+  shared true-liveness inventory used by claim admission and MCP reads.
+- **Empty/failure state:** no strip when no live Workroom exists; loader
+  failures remain page-read failures rather than inventing an unowned state.
+- **Verification:** focused rendering and projection tests, `/ops` desktop and
+  narrow browser inspection, measured UX-fit manifest, affected Vitest, and
+  the web production build.

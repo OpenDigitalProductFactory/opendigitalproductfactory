@@ -80,6 +80,12 @@ export interface EndpointManifest {
   maxContextTokens: number | null;
   maxOutputTokens: number | null;
   modelRestrictions: string[];
+  /**
+   * Account/transport-specific hard exclusion computed by the manifest loader.
+   * The endpoint remains in the candidate trace so runtime health can explain
+   * why it was skipped and show the supported fallback that won.
+   */
+  eligibilityExclusionReason?: string;
 
   // Capability profile (0-100)
   reasoning: number;
