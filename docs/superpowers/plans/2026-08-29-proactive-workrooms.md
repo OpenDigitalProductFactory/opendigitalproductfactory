@@ -166,6 +166,34 @@ Steps:
 Verification: conformance suite; `pnpm --filter storefront-templates exec vitest run`;
 `pnpm --filter web build`. Docs: the archetype profile catalogue gains the room set.
 
+### Shipped ⟦runtime: 2026-09-01, `BI-7E7B93DF`⟧
+
+Twelve standing shapes are declared and the registry went from one shape to
+thirteen. Five top rooms and twelve sub-rooms derive for every leaf archetype,
+all four portfolios covered — including `productsAndServicesSold`, which had
+zero live rooms before. All three demarcation tests are in place.
+
+**One design claim did not survive contact and was corrected rather than
+papered over.** §5 proposed gating the source-operations rooms on the
+archetype's IT4IT `requirement-to-deploy` binding, "a derived property, not a
+category name". That predicate is wrong: `trades-maintenance`,
+`security-services`, `real-estate-construction`, `media-production` and
+`professional-services` already declare `requirement-to-deploy` to mean *we
+design and build a deliverable for a customer*. Gating on it would have handed a
+plumbing business a pull-request-flow room.
+
+No existing operating-model property distinguishes "builds software" from
+"builds things", so the gate keys on the archetype **category** — a kind of
+business, inside the archetype layer's remit, and not an instance fact. The
+reasoning is recorded at the gate in `standing-rooms.ts`. Adding the missing
+operating-model axis so this can derive honestly is follow-on work; faking the
+derivation would have been the worse trade.
+
+A first attempt gave `software-platform` an `activationProfile` to make the
+original predicate true. It failed an existing activation-profile regression
+test (a partial profile does not normalize) and was reverted — the archetype's
+capability activation is not this change's concern.
+
 ## Phase F — Customer-0 bindings (L3)
 
 Deliverable: DPF's own rooms exist, bound to DPF's repository, coworkers and thresholds.
