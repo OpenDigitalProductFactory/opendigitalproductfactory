@@ -37,6 +37,7 @@ import { WORKER_CLASSIFICATION_ASSETS } from "./worker-classification-assets";
 import { DECISION_TRUST_ENVELOPE_ASSETS } from "./decision-trust-envelope-assets";
 import { MCP_OAUTH_ASSETS } from "./mcp-oauth-assets";
 import { MCP_ASSETS } from "./mcp-assets";
+import { WORKROOM_PARTICIPANT_ASSETS } from "./workroom-participant-assets";
 import { INITIATIVE_GOVERNANCE_ASSETS } from "./initiative-governance-assets";
 import { FEDERATION_INTRODUCTION_ASSETS } from "./federation-introduction-assets";
 import { BUSINESS_PERFORMANCE_ASSETS } from "./business-performance-assets";
@@ -736,6 +737,7 @@ const SEED_ASSETS: readonly DataAssetDefinition[] = [
   ...DECISION_TRUST_ENVELOPE_ASSETS,
   ...MCP_OAUTH_ASSETS,
   ...MCP_ASSETS,
+  ...WORKROOM_PARTICIPANT_ASSETS,
   ...INITIATIVE_GOVERNANCE_ASSETS,
   ...FEDERATION_INTRODUCTION_ASSETS,
   ...EXTERNAL_CHANNEL_ASSETS,
