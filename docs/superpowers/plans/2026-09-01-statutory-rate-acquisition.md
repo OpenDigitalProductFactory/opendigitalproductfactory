@@ -38,6 +38,14 @@ Nothing in this plan invents a figure. `PayrollTaxRule` ships empty. A statutory
 
 ## Backlog coverage
 
+**Blocking condition:** no initiative scope baseline exists for BI-8E1FD1BD, so a
+live MCP coverage receipt cannot yet be bound to a governed scope. A baseline is
+minted only by a passing `spec-approval` gate recorded by a reviewer independent
+of the author. The canonical design is
+[2026-09-01-statutory-rate-acquisition-design.md](../specs/2026-09-01-statutory-rate-acquisition-design.md).
+
+Decision: **atomic**. Dependencies: **none**. Parent: **BI-8E1FD1BD**.
+
 Atomic. Every piece here is one indivisible capability — the table, the safety checks, the readiness assessment and the two tools are useless apart, since a proposal with nowhere to land, a gate with nothing to gate, or a tool with no table each deliver nothing on their own. Tracked under BI-8E1FD1BD with BI-4EB27955 item 3 as its schema dependency.
 
 ## Known gaps this does NOT close
