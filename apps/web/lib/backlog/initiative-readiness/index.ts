@@ -4,6 +4,7 @@ export * from "./baseline-repository";
 export * from "./objective-mapping-repository";
 export * from "./objective-reconciliation";
 export * from "./terminal-transition-repository";
+export * from "./terminal-recovery";
 export * from "./backlog-terminal-transition";
 export * from "./build-terminal-transition";
 export * from "./work-capsule-terminal-transition";

@@ -15,9 +15,12 @@ export type InitiativeReadinessLane = {
   independent: boolean;
 };
 
+/** Recovery may propose objective mapping; it is not an approval receipt gate. */
+export type InitiativeRecoveryGate = InitiativeGateKey | "objective-mapping";
+
 /** One registry drives disclosure, receipt validation, and recovery routing. */
 export const INITIATIVE_READINESS_LANES: Record<string, InitiativeReadinessLane> = {
-  record_initiative_evidence: { capability: "manage_backlog", grant: "initiative_evidence_write", gates: ["classification", "research", "dependency-disposition"], accountableRoles: ["design-author", "portfolio-management"], independent: false },
+  record_initiative_evidence: { capability: "manage_backlog", grant: "initiative_evidence_write", gates: ["classification", "research", "dependency-disposition"], accountableRoles: ["design-author", "portfolio-management", "acceptance-reviewer"], independent: false },
   record_plan_backlog_coverage: { capability: "manage_backlog", grant: "backlog_write", gates: ["dependency-disposition"], accountableRoles: ["implementation-planner"], independent: false },
   record_initiative_design_review: { capability: "manage_backlog", grant: "initiative_design_review", gates: ["design-spec", "spec-approval", "plan-review"], accountableRoles: ["design-checklist-reviewer", "plan-reviewer"], independent: true },
   record_initiative_architecture_review: { capability: "manage_ea_model", grant: "initiative_architecture_review", gates: ["architecture-review"], accountableRoles: ["architecture-reviewer"], independent: true },
@@ -58,7 +61,7 @@ export function readinessLaneForRole(role: string): { toolName: string; lane: In
 export type InitiativeReviewBindingPacket = {
   writerToolName: string;
   itemId: string;
-  gate: InitiativeGateKey;
+  gate: InitiativeRecoveryGate;
   expectedCurrentBaselineId: string | null;
   artifactRef: {
     kind: "repo-blob-at-commit";
@@ -74,7 +77,7 @@ export type InitiativeReviewerRecovery = {
     accountableRole: string;
     toolName: string;
     grant: string;
-    gate: InitiativeGateKey;
+    gate: InitiativeRecoveryGate;
     targetAgentId: string;
     targetDisplayName: string;
     independent: boolean;
@@ -181,7 +184,7 @@ export async function resolveInitiativeReviewerRecovery(input: {
     entry: ReadinessRequirementResult;
     role: string;
     route: NonNullable<ReturnType<typeof readinessLaneForRole>>;
-    gate: InitiativeGateKey;
+    gate: InitiativeRecoveryGate;
   }> = [];
   const unroutable: InitiativeReviewerRecovery["unroutable"] = [];
   for (const entry of requirements) {
@@ -309,7 +312,7 @@ type RequestedRecoveryLane = {
   entry: ReadinessRequirementResult;
   role: string;
   route: NonNullable<ReturnType<typeof readinessLaneForRole>>;
-  gate: InitiativeGateKey;
+  gate: InitiativeRecoveryGate;
 };
 
 /**
@@ -374,7 +377,7 @@ const UNROUTABLE_REMEDIES: Partial<Record<ReadinessCode, string>> = {
   STALE_EVIDENCE: "Recorded evidence is bound to a superseded artifact. Re-record it against the current immutable head.",
 };
 
-const REQUIREMENT_GATES: Partial<Record<ReadinessCode, InitiativeGateKey>> = {
+const REQUIREMENT_GATES: Partial<Record<ReadinessCode, InitiativeRecoveryGate>> = {
   CANONICAL_DESIGN_REQUIRED: "design-spec",
   RESEARCH_REQUIRED: "research",
   SPEC_APPROVAL_REQUIRED: "spec-approval",
@@ -385,11 +388,14 @@ const REQUIREMENT_GATES: Partial<Record<ReadinessCode, InitiativeGateKey>> = {
   DEPENDENCY_UNRESOLVED: "dependency-disposition",
   ARCHETYPE_PROVISIONING_INCOMPLETE: "archetype-provisioning",
   ARCHETYPE_COMPLETENESS_FAILED: "archetype-completeness",
+  ACCEPTANCE_EVIDENCE_REQUIRED: "objective-mapping",
+  OBJECTIVE_RECONCILIATION_REQUIRED: "objective-mapping",
 };
 
-function recoveryGate(entry: ReadinessRequirementResult, lane: InitiativeReadinessLane): InitiativeGateKey | null {
+function recoveryGate(entry: ReadinessRequirementResult, lane: InitiativeReadinessLane): InitiativeRecoveryGate | null {
   const exact = REQUIREMENT_GATES[entry.code];
-  if (exact && lane.gates.includes(exact)) return exact;
+  if (exact === "objective-mapping" && lane.accountableRoles.includes("acceptance-reviewer")) return exact;
+  if (exact && exact !== "objective-mapping" && lane.gates.includes(exact)) return exact;
   if (["REVIEW_REQUIRED", "REVIEW_FAILED", "BLOCKING_FINDINGS_OPEN"].includes(entry.code)
     && lane.gates.length === 1) return lane.gates[0] ?? null;
   return lane.gates.length === 1 ? lane.gates[0] ?? null : null;
@@ -405,7 +411,7 @@ const IMMUTABLE_READER_TOOL = "read_source_at_version";
 
 function requestCoworkerPacket(args: {
   decision: InitiativeReadinessDecision;
-  gate: InitiativeGateKey;
+  gate: InitiativeRecoveryGate;
   toolName: string;
   targetAgentId: string;
   dispatch: InitiativeRecoveryDispatchContext;
@@ -415,13 +421,16 @@ function requestCoworkerPacket(args: {
   expectedCurrentBaselineId: string | null;
 }) {
   const reviewConstraint = args.independent ? "independently " : "";
+  const mappingInstruction = args.gate === "objective-mapping"
+    ? " Map every current OBJ-* and AC-* statement to post-baseline evidence and submit the proposal with record_initiative_evidence(operation='objective-mapping')."
+    : "";
   const base = {
     targetAgent: args.targetAgentId,
     objective: `For ${args.decision.subject.id} in ${args.dispatch.workroomId} on ${args.dispatch.repositoryFullName}#${args.dispatch.branchName} at ${args.dispatch.headSha}, ${reviewConstraint}address ${args.gate} using ${args.toolName}.${
       args.artifact
         ? ` Read ${args.artifact.path} at that commit with ${IMMUTABLE_READER_TOOL},`
         : ""
-    } record a governed receipt only when the gate passes.`,
+    } record a governed receipt only when the gate passes.${mappingInstruction}`,
     questionPacketSummary: `${args.gate} for ${args.decision.subject.id} at ${args.dispatch.headSha.slice(0, 12)}`,
     requestKey: `initiative-readiness:${args.decision.subject.id}:${args.gate}:${args.dispatch.headSha}`,
     tier: 2 as const,
