@@ -37,6 +37,17 @@ exclusion-bucket contracts. It adds no schema, seed mutation, credential access,
 auth weakening, second router, or new UI. Selection and classification are
 atomic because either repair alone leaves the live incident reproducible.
 
+## Objective manifest
+
+**OBJ-CODEX-ELIGIBILITY:** Prevent unsupported ChatGPT-account/model pairs from dispatch while preserving supported Codex routes and classifying only genuine capacity failures as rate limits.
+
+| Acceptance ID | Objective IDs | Statement |
+|---|---|---|
+| AC-CODEX-ELIGIBILITY-1 | OBJ-CODEX-ELIGIBILITY | ChatGPT OAuth routing excludes `gpt-5.3-codex` before scoring and selects supported `gpt-5.4` without a local detour. |
+| AC-CODEX-ELIGIBILITY-2 | OBJ-CODEX-ELIGIBILITY | The exact unsupported-model HTTP 400 never mutates rate-limit pool state, while a genuine 429 still records capacity exhaustion. |
+| AC-CODEX-ELIGIBILITY-3 | OBJ-CODEX-ELIGIBILITY | Runtime Health names the rejected provider, authentication mode, model, and corrective action. |
+| AC-CODEX-ELIGIBILITY-4 | OBJ-CODEX-ELIGIBILITY | Focused and graph-expanded tests, exact-tree CI, canonical deployment, and live route verification pass. |
+
 ## Alternatives, risk, rollback, and acceptance
 
 Deleting the model globally would break valid API-key use. Silently dropping it
