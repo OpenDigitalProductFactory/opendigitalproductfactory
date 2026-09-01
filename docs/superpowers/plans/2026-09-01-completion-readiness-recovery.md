@@ -25,6 +25,11 @@ before any success claim, and `dpf-pr-with-dco` for handoff.
 - Architecture: extend `resolveInitiativeReviewerRecovery`, canonical artifact
   discovery, Workroom liveness, and baseline-chain validation. Add no storage,
   writer, receipt, or review engine.
+- Canonical replay after PR `#4932`: packet issuance is reachable, but the
+  bound writer exposed `baselineId` as an unconstrained string. The reviewer
+  supplied the BI id and the repository correctly rejected it as a non-current
+  baseline. The follow-up binds that property to the packet's immutable
+  `expectedCurrentBaselineId`; no new authority or evidence path is added.
 
 ## Atomic deliverable
 
@@ -137,5 +142,15 @@ applicable because it changes no schema.
   recovery shape on refusal and bypass recovery on success.
 - Verification: 41 affected readiness tests pass, including registry, shared
   resolver, terminal repositories, Workroom liveness, and both MCP projections;
-  style guard, web typecheck, and production build also pass. Exact-tree pregate,
-  PR health, and canonical replay remain pending.
+  style guard, web typecheck, and production build also pass. Exact-tree pregate
+  passed at `149a24b30c3a`; PR `#4932` merged and canonical self-upgrade
+  `SUR-AC432D44` deployed `b1fd6a2d3a7abedea3b45f0e502ec97ba75b3044`.
+- Canonical replay reached the exact `objective-mapping` writer and mapped all
+  four objectives plus five acceptance statements. Its live audit exposed one
+  remaining binding defect: `baselineId` was not enum-bound to the server-known
+  current baseline. A focused RED reproduced the unconstrained schema; the
+  follow-up is GREEN with 34 tests across the binding, task submit, readiness
+  registry, and terminal recovery suites.
+- Remaining: build and pregate the follow-up, merge and self-upgrade it, replay
+  the original completion with fresh delivery evidence, then close both BIs and
+  Workrooms.

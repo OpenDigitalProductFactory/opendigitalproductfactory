@@ -112,9 +112,11 @@ export function narrowInitiativeReviewTools<T extends {
 ): T {
   if (!binding) return input;
   const exactNames = new Set(requiredNames);
+  const currentBaselineId = optionalString(binding.expectedCurrentBaselineId);
   const compactResearchReceipt = binding.gate === "research"
     && binding.writerToolName === "record_initiative_evidence";
   const objectiveMappingProposal = binding.writerToolName === "record_initiative_evidence"
+    && !!currentBaselineId
     && (
       binding.gate === "objective-mapping"
       || (
@@ -151,6 +153,7 @@ export function narrowInitiativeReviewTools<T extends {
         ? {
             ...narrowedProperties,
             operation: { type: "string", enum: ["objective-mapping"] },
+            baselineId: { type: "string", enum: [currentBaselineId] },
           }
         : narrowedProperties,
       required: requiredWriterNames,

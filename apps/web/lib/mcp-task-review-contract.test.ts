@@ -71,7 +71,10 @@ describe("narrowInitiativeReviewTools", () => {
       type: "object",
       properties: {
         operation: { type: "string", enum: ["objective-mapping"] },
-        baselineId: evidenceWriterSchema.properties.baselineId,
+        baselineId: {
+          type: "string",
+          enum: [binding.expectedCurrentBaselineId],
+        },
         objectiveMappings: evidenceWriterSchema.properties.objectiveMappings,
         reason: evidenceWriterSchema.properties.reason,
       },
@@ -117,7 +120,10 @@ describe("narrowInitiativeReviewTools", () => {
       type: "object",
       properties: {
         operation: { type: "string", enum: ["objective-mapping"] },
-        baselineId: evidenceWriterSchema.properties.baselineId,
+        baselineId: {
+          type: "string",
+          enum: [binding.expectedCurrentBaselineId],
+        },
         objectiveMappings: evidenceWriterSchema.properties.objectiveMappings,
         reason: evidenceWriterSchema.properties.reason,
       },
