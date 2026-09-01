@@ -28,6 +28,9 @@ import {
   OFF_DEFAULT_BRANCH_FRESHNESS_CAP,
   isOffDefaultBranch,
 } from "@/lib/trust-vector/default-branch";
+// One definition of "which ref is the default branch", shared with the code
+// graph indexer rather than restated here (BI-6CFC5429).
+import { resolveDefaultBranchRef } from "@/lib/build/code-graph/default-branch-source";
 
 /** Directory holding the split Prisma schema (there is no monolithic schema.prisma). */
 export const SCHEMA_DIR_RELATIVE = "packages/db/prisma/schema";
@@ -223,7 +226,49 @@ export type LoadCommittedSchemaDeps = {
   readGit?: GitReader;
   /** Injected in tests; defaults to reading `.git/HEAD` off disk. */
   readBranchFallback?: (root: string) => Promise<string | null>;
+  /** Test hook: skip the default-branch read and exercise the working-tree path. */
+  skipDefaultBranch?: boolean;
 };
+
+/**
+ * Read the schema files straight out of a git ref, without checking anything out.
+ *
+ * BI-6CFC5429. The reader answered from whatever PROJECT_ROOT's working tree was
+ * parked on. On the live install that is /sandbox-workspace, a Build Studio
+ * sandbox whose branch MOVES — observed on client/5727856b-… one day and
+ * pr-4917-head the next. The same question got different answers on different
+ * days, and a model absent from today's sandbox branch read as absent from the
+ * platform: the exact false absence this reader exists to prevent. It answered
+ * correctly for MileageRate only because that PR branch happened to contain it.
+ *
+ * Only ~26 files are needed, so `git show <ref>:<path>` per file is cheap and
+ * needs no worktree — unlike the code graph's 14k-file case, which earns one.
+ */
+async function readSchemaAtRef(
+  root: string,
+  ref: string,
+  readGit: GitReader,
+): Promise<{ count: number; parts: string[] } | null> {
+  const listing = await readGit(root, `ls-tree --name-only ${ref} ${SCHEMA_DIR_RELATIVE}/`);
+  if (!listing) return null;
+
+  const paths = listing
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.endsWith(".prisma"))
+    .sort();
+  if (paths.length === 0) return null;
+
+  const parts: string[] = [];
+  for (const path of paths) {
+    const content = await readGit(root, `show ${ref}:${path}`);
+    // A ref we cannot fully read is not a partial schema, it is no schema.
+    // Returning some of it would silently under-report models.
+    if (content === null) return null;
+    parts.push(content);
+  }
+  return { count: paths.length, parts };
+}
 
 export async function loadCommittedSchema(
   deps: LoadCommittedSchemaDeps = {},
@@ -235,6 +280,31 @@ export async function loadCommittedSchema(
   const root = resolveSourceRoot();
   const schemaDir = resolve(root, SCHEMA_DIR_RELATIVE);
 
+  // Prefer the DEFAULT BRANCH over the working tree. Which tree this process
+  // happens to sit in is a deployment detail; the merge target is what a caller
+  // asking "does this model exist" actually means.
+  const defaultRef = deps.skipDefaultBranch ? null : await resolveDefaultBranchRef(root);
+  if (defaultRef) {
+    const atRef = await readSchemaAtRef(root, defaultRef.ref, readGit);
+    if (atRef) {
+      const refProvenance: CommittedSchemaProvenance = {
+        root,
+        branch: defaultRef.branch,
+        headSha: defaultRef.sha,
+        schemaFileCount: atRef.count,
+        tree: "committed",
+        identified: true,
+      };
+      return {
+        schema: atRef.parts.join("\n"),
+        provenance: refProvenance,
+        trust: buildTrust(refProvenance, asOfDate.toISOString()),
+      };
+    }
+  }
+
+  // Fall back to the working tree, and let the existing scoring say so — an
+  // off-default or unidentifiable tree is capped and named, never authoritative.
   let names: string[];
   try {
     names = (await readdir(schemaDir)).filter((n) => n.endsWith(".prisma")).sort();
