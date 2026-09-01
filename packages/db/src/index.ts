@@ -36,6 +36,10 @@ export {
   DecisionProposalStatus,
 } from "../generated/client/client";
 export {
+  WorkroomParticipantRole,
+  WorkroomParticipantAssignmentSource,
+} from "../generated/client/client";
+export {
   PRINCIPAL_SENSITIVITIES,
   isPrincipalSensitivity,
   normalizePrincipalSensitivities,

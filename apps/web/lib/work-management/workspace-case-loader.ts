@@ -178,6 +178,7 @@ export type WorkspaceRoomParticipantLoader = (input: {
   status: string;
   now: Date;
   policyParticipants: readonly WorkspaceRoomPolicyParticipant[];
+  workroomIds: readonly string[];
 }) => Promise<WorkroomParticipantView[]>;
 
 export type WorkspaceWorkCaseListItem = {
@@ -571,22 +572,12 @@ export async function loadWorkspaceWorkCaseDetail({
   if (access.level !== "content" && access.level !== "action") return null;
   const roomPolicy = readWorkspaceRoomPolicy(item.evidence);
 
-  const [messages, participants, capsules] = await Promise.all([
+  const [messages, capsules] = await Promise.all([
     prismaClient.workItemMessage.findMany({
       where: { workItemId: { in: [item.id, ...(item.childItems ?? []).map((child) => child.id)] } },
       orderBy: [{ createdAt: "asc" }],
       take: 20,
     }),
-    participantLoader?.({
-      workItemId: item.id,
-      assignedToUserId: item.assignedToUserId,
-      assignedToAgentId: item.assignedToAgentId ?? null,
-      assignedThreadId: item.assignedThreadId ?? null,
-      title: item.title,
-      status: item.status,
-      now,
-      policyParticipants: roomPolicy.participants ?? [],
-    }) ?? Promise.resolve([]),
     // EP-WORK-CONVERGENCE (BI-650994D7): join the capsule(s) anchored to this WorkItem
     // so a coding carrier surfaces in its case instead of as a disjoint row.
     prismaClient.workroom.findMany({
@@ -610,6 +601,17 @@ export async function loadWorkspaceWorkCaseDetail({
       orderBy: [{ updatedAt: "desc" }],
     }),
   ]);
+  const participants = await (participantLoader?.({
+    workItemId: item.id,
+    assignedToUserId: item.assignedToUserId,
+    assignedToAgentId: item.assignedToAgentId ?? null,
+    assignedThreadId: item.assignedThreadId ?? null,
+    title: item.title,
+    status: item.status,
+    now,
+    policyParticipants: roomPolicy.participants ?? [],
+    workroomIds: capsules.map((capsule) => capsule.id).filter((id): id is string => Boolean(id)),
+  }) ?? Promise.resolve([]));
   // BI-1CF7B600: the capsule's own execution journal (WorkroomActivity rows) so a
   // capsule-sourced room shows its activity instead of "No activity yet". Keyed on the
   // capsule row ids just fetched — one bounded query, newest first.
