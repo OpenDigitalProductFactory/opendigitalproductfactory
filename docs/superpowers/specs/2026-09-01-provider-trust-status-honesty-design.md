@@ -23,6 +23,17 @@ Keep routing and evidence semantics unchanged. Change only the provider-page pro
 
 The existing `AiProviderConnection`, `SupplierContract`, `ComplianceEvidence`, and `resolveProviderTrustEvidence` paths remain the source of truth. No routing policy, evidence classification, schema, or authorization changes.
 
+## Objective manifest
+
+**OBJ-PROVIDER-TRUST-TRUTH:** Present provider trust evidence as scoped routing restrictions with honest consequences and available next actions, without contradicting a saved account declaration or weakening fail-closed policy.
+
+| Acceptance ID | Objective IDs | Statement |
+|---|---|---|
+| AC-PROVIDER-TRUST-1 | OBJ-PROVIDER-TRUST-TRUTH | A saved account declaration is acknowledged independently from restricted-work evidence status. |
+| AC-PROVIDER-TRUST-2 | OBJ-PROVIDER-TRUST-TRUTH | Missing DPA and region evidence states that restricted work remains blocked and names whether resolution is available on this page. |
+| AC-PROVIDER-TRUST-3 | OBJ-PROVIDER-TRUST-TRUTH | An empty processing-region value cannot be mistaken for saved example regions. |
+| AC-PROVIDER-TRUST-4 | OBJ-PROVIDER-TRUST-TRUTH | Claim-state tests, production verification, documentation, and live desktop and narrow-page checks pass. |
+
 ## Research & benchmarking
 
 This follows established assurance-UX patterns used by current cloud security and identity consoles. Microsoft Entra distinguishes policy outcomes such as success, failure, user action required, and not applied instead of collapsing them into one account-health alarm ([Microsoft Learn](https://learn.microsoft.com/en-us/azure/active-directory/conditional-access/concept-conditional-access-report-only)). AWS Security Hub separately derives control status from scoped findings and links failed findings to remediation guidance ([status model](https://docs.aws.amazon.com/securityhub/latest/userguide/controls-overall-status.html), [control details](https://docs.aws.amazon.com/securityhub/latest/userguide/securityhub-standards-control-details.html)). DPF adopts that separation, scoped consequence, and explicit next action. It rejects a single red/amber provider-health badge because evidence can be sufficient for public work while still insufficient for restricted work, and rejects controls that imply an unsupported upload workflow.
