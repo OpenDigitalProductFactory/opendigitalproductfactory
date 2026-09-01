@@ -27,6 +27,8 @@ export type DecisionInteractionRow = {
   /** Governance gate that produced the row — 'profession' rows are advisory. */
   gateKey: string | null;
   createdAt: Date;
+  /** Open drafted resolutions for this decision (at most one is live). */
+  resolutionProposals?: { summary: string }[];
 };
 
 /**
@@ -67,26 +69,40 @@ function residueFor(row: DecisionInteractionRow): ResidueReason {
 }
 
 /** Pure projection of one unresolved decision into an attention item. */
-export function aiDecisionToAttentionItem(row: DecisionInteractionRow): AttentionItem {
+export function aiDecisionToAttentionItem(
+  row: DecisionInteractionRow,
+  /**
+   * The drafted resolution waiting on this decision, when a panel produced one
+   * (BI-C62127B9). Its presence changes what the owner is being asked for: not
+   * "go work this out" but "rule on what your coworkers drafted".
+   */
+  proposal?: { summary: string } | null,
+): AttentionItem {
   const blast = row.buildId ? `build ${row.buildId}` : row.taskRunId ? "a coworker task" : undefined;
   const decisionHref = `/platform/ai/decisions/${encodeURIComponent(row.interactionId)}`;
   return {
     id: `ai-decision:${row.interactionId}`,
     source: "ai-decision",
     title: clip(row.question),
-    context: row.rationale ?? "The governed scopes could not resolve this decision.",
+    context: proposal?.summary ?? row.rationale ?? "The governed scopes could not resolve this decision.",
     decisionClass: { scorability: "unscorable" },
     riskClass: riskFromTier(row.riskTier),
     triage: {
       timeToAct: "none",
       residueReason: residueFor(row),
       blastRadius: blast,
-      decideEffort: "judgment",
+      // A drafted resolution turns judgment into a review: the work of
+      // deciding has been done, and what is left is whether the owner agrees.
+      decideEffort: proposal ? "review" : "judgment",
       irreversible: false,
     },
     createdAtIso: row.createdAt.toISOString(),
     actions: [
-      { kind: "open-in-context", label: "Review evidence", href: decisionHref },
+      {
+        kind: "open-in-context",
+        label: proposal ? "Review the suggestion" : "Review evidence",
+        href: decisionHref,
+      },
     ],
     deepLink: decisionHref,
     audience: { operator: true },
@@ -112,9 +128,19 @@ export async function loadAiDecisionItems(db: Db): Promise<AttentionItem[]> {
       domainClass: true,
       gateKey: true,
       createdAt: true,
+      // The open drafted resolution, when one exists (BI-C62127B9). Read here
+      // rather than in a second pass so the inbox cannot show "needs your
+      // judgment" for a decision that already has an answer waiting.
+      resolutionProposals: {
+        where: { status: "proposed", lifecycle: "active" },
+        select: { summary: true },
+        take: 1,
+      },
     },
   });
   // Keep only rows a human should actually decide; drop agent-internal consults
   // and fail-open advisories (BI-6EC1EE25).
-  return rows.filter((row) => isFounderActionable(row)).map(aiDecisionToAttentionItem);
+  return rows
+    .filter((row) => isFounderActionable(row))
+    .map((row) => aiDecisionToAttentionItem(row, row.resolutionProposals?.[0] ?? null));
 }

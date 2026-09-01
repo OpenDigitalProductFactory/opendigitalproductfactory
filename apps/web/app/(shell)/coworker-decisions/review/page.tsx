@@ -29,6 +29,7 @@ import { listOpenWeightAdjustmentProposals } from "@/lib/decision-perspective/we
 import { listHeldProfessionMaterial } from "@/lib/decision-perspective/held-material-store";
 import { HeldMaterialList } from "./held-material-list";
 import { clusterDecisionReviewRowsSemantic } from "@/lib/decision/review-clustering";
+import { NOT_OWNER_ACTIONABLE, UNRESOLVED_OUTCOMES } from "@/lib/decision/open-decisions";
 import {
   presentProposalQueue,
   PROPOSAL_LABELS,
@@ -41,17 +42,16 @@ export const metadata = {
   title: "Decision review",
 };
 
-const UNRESOLVED = ["defer", "escalate"];
+// One definition of "still waiting on a human", shared with the concierge
+// sweep and the attention inbox (BI-C62127B9). Three copies of this predicate
+// drifted once already; if they can disagree, they will.
+const UNRESOLVED = [...UNRESOLVED_OUTCOMES];
 
 const OPERATOR_ACTIONABLE_WHERE: Prisma.DecisionInteractionWhereInput = {
   question: { not: "" },
   // DB pushdown keeps `take` meaningful. `buildConflictFindings` still applies
   // isFounderActionable as the authoritative defense-in-depth predicate.
-  NOT: [
-    { gateKey: "profession" },
-    { buildId: null, taskRunId: null, routeContext: { startsWith: "mcp:principle_decide" } },
-    { buildId: null, taskRunId: null, domainClass: "kernel-consult" },
-  ],
+  NOT: NOT_OWNER_ACTIONABLE,
 };
 
 const CLASS_LABEL: Record<ReviewFinding["findingClass"], string> = {

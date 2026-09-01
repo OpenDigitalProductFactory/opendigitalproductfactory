@@ -34,6 +34,9 @@ const DENIED_POLICY = {
   ok: false,
   reason: "unsupported_transition",
   message: "Source does not support this action.",
+  // A transition the source does not have never yields to a retry (BI-81780B4A).
+  disposition: "hard-no",
+  shapeHint: null,
 } as const satisfies WorkCasePolicyDecision;
 
 const GOVERNED_RECEIPT = fromToolExecutionReceipt({

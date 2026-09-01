@@ -57,7 +57,14 @@ Do not work the log line by line. Review & adjust groups the waiting rows into t
 
 ## Suggestions Your Coworkers Drafted
 
+Every few hours your coworkers look at the decisions waiting on you, take the most consequential ones first, and draft what they think you should do. You do not have to go looking: a decision with a suggestion waiting shows up in your inbox saying what they suggest, rather than asking you to go work it out.
+
+They are deliberately bounded — a pass only takes on a few decisions, and it says how many it left for next time rather than quietly stopping. When they cannot ground a recommendation, they draft nothing and say so.
+
+
 When your coworkers have worked out what you should do about a decision, the record carries their suggestion: what they recommend, what accepting it would change, and whether any of them disagreed. You can accept it as written, edit the wording and accept your version, or reject it with a reason so it does not come back.
+
+When a suggestion came from a panel of your coworkers, the card names which specialists weighed in — and says plainly when none applied, so a recommendation weighed on general judgement never looks like one your finance or legal coworker signed off.
 
 Nothing is applied behind you. Accepting a business answer still saves it as draft doctrine for you to review, exactly as answering a gap does, and a suggestion whose decision gets settled somewhere else quietly expires instead of waiting to be accepted later. Suggestions still waiting on you are listed at the top of Review & adjust.
 
