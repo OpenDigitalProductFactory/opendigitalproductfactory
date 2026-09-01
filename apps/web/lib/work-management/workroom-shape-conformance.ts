@@ -174,6 +174,36 @@ export function evaluateWorkroomShapeConformance(
       code: "out_of_order_stage",
       summary: `Proposed stage ${input.proposedStageKey} is not on the declared shape.`,
     });
+  } else if (input.currentStageKey && currentIndex < 0) {
+    deviations.push({
+      code: "out_of_order_stage",
+      summary: `Current stage ${input.currentStageKey} is not on the declared shape.`,
+    });
+  } else if (input.proposedStageKey && !input.currentStageKey && proposedIndex !== 0) {
+    deviations.push({
+      code: "out_of_order_stage",
+      summary:
+        `An unstarted room can begin only at ${input.definition.stages[0]?.key ?? "the first declared stage"}.`,
+    });
+  } else if (
+    input.proposedStageKey &&
+    input.currentStageKey &&
+    proposedIndex < currentIndex
+  ) {
+    deviations.push({
+      code: "out_of_order_stage",
+      summary: `Stage ${input.proposedStageKey} is behind ${input.currentStageKey}.`,
+    });
+  } else if (
+    input.proposedStageKey &&
+    input.currentStageKey &&
+    proposedIndex === currentIndex &&
+    input.receipts.some((receipt) => receipt.stageKey === input.currentStageKey)
+  ) {
+    deviations.push({
+      code: "out_of_order_stage",
+      summary: `Stage ${input.currentStageKey} already has a receipt and cannot be replayed.`,
+    });
   } else if (
     input.proposedStageKey &&
     input.currentStageKey &&
