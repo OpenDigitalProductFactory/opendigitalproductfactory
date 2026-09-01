@@ -216,3 +216,38 @@ The existing BI-DE bootstrap has no initiative scope baseline, so this table rem
 | Deliverable | Requirement refs | Flow refs | Contract refs | Verification refs | Atomicity |
 | --- | --- | --- | --- | --- | --- |
 | Expired proposed-envelope same-TaskRun recovery | Phase 14.1, 14.3, 14.5, 14.8 | Phase 14.3, 14.4 | Phase 14.3, 14.4, 14.5 | Phase 14.2, 14.6, 14.7 | Source-envelope cancellation, exact proposal rebinding, TaskRun parking, fresh approval, and writer receipt form one audit chain. Partial delivery would either reuse expired authority or rerun the independent review. |
+
+# Oversized accumulated-artifact recovery (BI-B3584737, 2026-09-01)
+
+This extension implements the design's oversized diff-context section without
+widening the 64,000-character full-artifact envelope.
+
+- [x] Reproduce the live failure and measure the bound artifact: TaskRun
+  `TR-MCP-Y21xamsxOWhsMDAwMDdwcnZzZm4ybTAzOQ-9E2A25A327F7`, 79,212 characters,
+  852 lines, `terminal_writer_context_truncated`.
+- [x] Confirm live overlap and substrate. BI-EDC0DAF2 owns bounded missing-writer
+  retries; `review_semantic_change` and canonical artifact discovery already
+  own committed-diff and repository compare identities.
+- [x] Record WWMD decision `DI-B62B98BFCB67`: keep the full-artifact cap and
+  reuse exact immutable diff context.
+- [x] File BI-B3584737 under EP-413F2602 and claim WC-4249AC07.
+- [ ] Red: prove provider patch completeness from addition/deletion totals,
+  reject identity mismatch and an oversized diff, and preserve the ordinary
+  artifact projection.
+- [ ] Green: extend canonical artifact discovery to return an optional validated
+  exact file-diff identity and add a focused terminal-writer diff-context
+  resolver for unique subject Workroom base/head recovery.
+- [ ] Integration: after the active peer claims release, route only
+  `terminal_writer_context_truncated` through the resolver in
+  `mcp-task-submit.ts`; persist hydration mode and diff digest while preserving
+  the same TaskRun and writer authority.
+- [ ] Verification: focused Vitest, adjacent terminal-writer/recovery suites,
+  `pnpm --filter web build`, pregate preflight, exact-tree pregate, independent
+  semantic review, PR health, DCO, protected merge, and canonical self-upgrade.
+- [ ] Functional acceptance: replay the preserved TaskRun, observe its exact
+  bound research writer execute or enter the existing approval envelope, and
+  verify the resulting receipt unblocks BI-1B5B4CEC without a replacement
+  TaskRun or fabricated evidence.
+
+No other phase of the immutable-source traversal plan is reopened by this
+extension.

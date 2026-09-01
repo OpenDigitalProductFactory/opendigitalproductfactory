@@ -184,6 +184,67 @@ The caller now binds the exact terminal writer name into the resolved execution 
 
 This is delegation of completion enforcement, not a relaxation of it. The CLI still receives only the writer schema and the explicit writer-only reminder. Its response returns to the existing terminal policy, which accepts completion only after the governed writer execution is recorded; prose remains `missing-terminal-writer`, resumable, and receipt-free. The writer continues to validate identity, arguments, approval, and persistence. No judgment, mapping, envelope, or receipt is synthesized by routing.
 
+## Oversized accumulated-artifact diff-context extension (2026-09-01)
+
+Live TaskRun `TR-MCP-Y21xamsxOWhsMDAwMDdwcnZzZm4ybTAzOQ-9E2A25A327F7`
+bound a valid 79,212-character, 852-line accumulated design at commit
+`a438119e8c147cb12650fd9047237ed9d86104d7`. The existing 64,000-character,
+20-page terminal-writer envelope correctly returned
+`terminal_writer_context_truncated`; exact replay could never reach the required
+research writer. Raising that envelope would turn one accumulated document into
+the context policy for every reviewer. Requiring authors to split documents
+would make repository layout, rather than evidence identity, decide whether a
+governed review is reachable.
+
+WWMD decision `DI-B62B98BFCB67` selected `immutable-diff-context` with high
+confidence and autonomy eligibility. The full-artifact envelope remains
+unchanged. When and only when full-artifact hydration reaches its bounded
+truncation result, the server may recover a compact review context from the
+already-recorded Workroom base/head identity and the canonical repository
+provider comparison.
+
+The recovery reuses `discoverCanonicalDesignArtifact` and the committed-change
+identity used by `review_semantic_change`; it does not add a second review
+engine. The provider comparison must resolve exactly one non-removed canonical
+design and return the same path and head blob already bound by the initiative
+packet. The selected file must carry a textual patch whose parsed added and
+deleted line counts equal the provider's file totals. Missing patch text,
+binary content, a truncated patch, an identity mismatch, an ambiguous Workroom,
+or a patch that still exceeds the 64,000-character aggregate envelope fails
+closed with a structured action. The server hashes the validated patch and
+renders repository, base commit, head commit, path, head blob, diff digest, and
+patch bytes as system-authority context before the writer-only turn.
+
+Preserved TaskRuns do not need a new request digest or replacement identity.
+Their existing initiative binding supplies item, repository, head commit, path,
+and head blob; the server resolves the unique active subject Workroom whose
+recorded head matches that binding and obtains its base commit. The TaskRun,
+idempotency key, token intersection, independent reviewer identity, writer
+schema, approval envelope, receipt artifact digest, and head-artifact authority
+remain unchanged. Diff context informs the independent decision; it never
+supplies or synthesizes that decision.
+
+Short and medium artifacts continue through the current complete full-artifact
+path byte-for-byte, and the diff resolver is not called. The fallback is only a
+bounded recovery from `terminal_writer_context_truncated`; no other binding,
+reader, ordering, provider, or malformed-page failure may downgrade into diff
+context.
+
+### Oversized-context acceptance
+
+- The preserved 79,212-character fixture reaches writer-only inference from an
+  exact validated diff without increasing either hydration ceiling.
+- The context records base SHA, head SHA, path, head blob, diff digest, and the
+  validated patch; its aggregate size remains at or below 64,000 characters.
+- Provider addition/deletion totals must match parsed patch totals, proving an
+  omitted or truncated provider patch cannot be treated as complete.
+- Workroom ambiguity, base/head/path/blob mismatch, missing/binary patch, and an
+  oversized exact diff remain receipt-free, fail-closed, and actionable.
+- A complete full-artifact hydration does not query Workroom or diff substrate
+  and produces exactly the pre-extension context.
+- No table, migration, receipt type, reviewer role, writer, or review engine is
+  added.
+
 ## Zero-reader same-TaskRun recovery extension (2026-08-31)
 
 Live Portfolio Advisor TaskRun `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-634F7FF63BF8` exposed a bootstrap gap in the same-TaskRun recovery contract. The initial governed request became `input-required/missing-terminal-writer` before any tool dispatch and persisted zero reader executions, zero writer executions, zero envelopes, and zero receipts. An identical replay retained the exact request digest and immutable artifact binding but returned the cached resumable projection because `reserveTerminalWriterReplay` rejected `readerExecutions.length === 0` before reserving the run. The advertised recovery was therefore unreachable precisely when dispatch failed before the first read.
