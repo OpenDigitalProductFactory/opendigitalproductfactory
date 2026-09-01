@@ -554,6 +554,9 @@
       "docs/architecture/contributor-procedure-runbook.md",
       "docs/professions/data-architect/wiki/strongly-typed-string-enums.md"
     ],
+    "apps/web/lib/backlog/deferral-contract.ts": [
+      "docs/architecture/backlog-and-planning-runbook.md"
+    ],
     "apps/web/lib/build-pipeline.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
     ],
@@ -1634,6 +1637,9 @@
     "scripts/check-no-provider-local-connector-lifecycle.mjs": [
       "docs/architecture/unified-connector-kernel.md"
     ],
+    "scripts/check-no-unattributable-deferral.mjs": [
+      "docs/architecture/backlog-and-planning-runbook.md"
+    ],
     "scripts/check-override-comments.mjs": [
       "docs/architecture/contributor-procedure-runbook.md"
     ],
@@ -2308,8 +2314,10 @@
       "apps/web/lib/tak/agent-event-bus.ts"
     ],
     "docs/architecture/backlog-and-planning-runbook.md": [
+      "apps/web/lib/backlog/deferral-contract.ts",
       "apps/web/lib/govern/data/field-classification.ts",
-      "packages/db/src/table-classification.ts"
+      "packages/db/src/table-classification.ts",
+      "scripts/check-no-unattributable-deferral.mjs"
     ],
     "docs/architecture/backlog-archetype-scope.md": [
       "apps/web/app/api/v1/ops/backlog/route.ts",

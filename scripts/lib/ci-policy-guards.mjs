@@ -471,6 +471,15 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/check-rendered-backlog-pointers.test.mjs"),
       node("scripts/check-rendered-backlog-pointers.mjs"),
     ]),
+    // An item written to "deferred" with no reason, trigger, review date or owner
+    // is not parked, it is gone: nothing fires, nothing comes due, nobody owns
+    // it. Seven items sat in exactly that state — including BI-F0715C9C — and a
+    // full cleanup was undone within two days, because the rows were the symptom
+    // and the write path was the cause (BI-9DA5F179).
+    guard("unattributable-deferral", "Unattributable Deferral", [
+      node("--test", "scripts/check-no-unattributable-deferral.test.mjs"),
+      node("scripts/check-no-unattributable-deferral.mjs"),
+    ]),
     guard("janitor-tests", "Janitor Tests", [
       node(
         "--test",

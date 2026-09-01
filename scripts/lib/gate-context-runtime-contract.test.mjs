@@ -18,7 +18,12 @@ function localImportClosure(entry) {
     }
   };
   visit(resolve(repoRoot, entry));
-  return [...discovered].map((path) => relative(repoRoot, path)).sort();
+  // POSIX separators: these paths are matched against Dockerfile COPY lines,
+  // which are always forward-slashed. On Windows `relative` returns
+  // `scripts\gate-context.mjs`, so every assertion here failed on a Windows
+  // checkout — the guard loop reported the image as missing files it packages
+  // perfectly well.
+  return [...discovered].map((path) => relative(repoRoot, path).replaceAll("\\", "/")).sort();
 }
 
 const runtimeSources = [
