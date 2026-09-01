@@ -129,17 +129,15 @@ export async function executeRemoteTaskAttempt(input: {
     : input.resumeKind === "terminal-writer"
       ? { resumedFromTerminalWriterWait: true }
       : { resumedFromCapacity: true };
+  const effectiveSystemPrompt = input.resumeKind === "terminal-writer" && input.terminalWriterContext
+    ? `${agent.systemPrompt}\n\n${input.terminalWriterContext}`
+    : agent.systemPrompt;
 
   try {
     const result = await executeAutonomousAgenticLoop({
-      systemPrompt: agent.systemPrompt,
+      systemPrompt: effectiveSystemPrompt,
       systemPromptInstructionSpans: coworkerBriefSpans(agent.systemPrompt),
-      chatHistory: [
-        ...(input.resumeKind === "terminal-writer" && input.terminalWriterContext
-          ? [{ role: "system" as const, content: input.terminalWriterContext }]
-          : []),
-        { role: "user", content: parsed.prompt },
-      ],
+      chatHistory: [{ role: "user", content: parsed.prompt }],
       sensitivity: agent.sensitivity ?? "internal",
       tools: tools.tools,
       toolsForProvider: tools.toolsForProvider,
