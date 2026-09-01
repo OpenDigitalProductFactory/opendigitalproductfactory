@@ -12,6 +12,9 @@ type LockDb = {
 
 export type BacklogWorkroomSummary = {
   capsuleId: string;
+  title: string;
+  status: string;
+  backlogItemId: string | null;
   repositoryFullName: string | null;
   headBranch: string | null;
   worktreePath: string | null;
@@ -45,6 +48,9 @@ export async function loadBacklogWorkroomOwnership(
   }
   const workrooms = inventory.capsulesAll.map((row): BacklogWorkroomSummary => ({
     capsuleId: String(row.capsuleId),
+    title: String(row.title),
+    status: String(row.status),
+    backlogItemId: nullableString(row.backlogItemId),
     repositoryFullName: nullableString(row.repositoryFullName),
     headBranch: nullableString(row.headBranch),
     worktreePath: nullableString(row.worktreePath),
@@ -58,6 +64,28 @@ export async function loadBacklogWorkroomOwnership(
     trueLivenessAt: nullableString(row.trueLivenessAt),
   }));
   return { workrooms, liveWorkrooms: workrooms.filter((room) => room.isLive) };
+}
+
+export function activeWorkroomsByBacklogItem(
+  items: Array<{ id: string; itemId: string }>,
+  workrooms: BacklogWorkroomSummary[],
+): Map<string, BacklogWorkroomSummary[]> {
+  const canonicalItemId = new Map<string, string>();
+  for (const item of items) {
+    canonicalItemId.set(item.id, item.itemId);
+    canonicalItemId.set(item.itemId, item.itemId);
+  }
+
+  const grouped = new Map<string, BacklogWorkroomSummary[]>();
+  for (const room of workrooms) {
+    if (!room.isLive || !room.backlogItemId) continue;
+    const itemId = canonicalItemId.get(room.backlogItemId);
+    if (!itemId) continue;
+    const owners = grouped.get(itemId) ?? [];
+    if (!owners.some((owner) => owner.capsuleId === room.capsuleId)) owners.push(room);
+    grouped.set(itemId, owners);
+  }
+  return grouped;
 }
 
 export class BacklogItemAlreadyClaimedError extends Error {

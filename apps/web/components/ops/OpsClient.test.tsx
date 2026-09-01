@@ -176,6 +176,53 @@ describe("OpsClient", () => {
     expect(html).not.toContain("done 5/25/2026");
   });
 
+  it("shows the active Workroom owner without exposing coordination internals", () => {
+    const html = renderToStaticMarkup(
+      <BacklogItemRow
+        item={item({
+          status: "in-progress",
+          activeWorkrooms: [{
+            capsuleId: "WC-923105A2",
+            title: "Workroom ownership safety",
+            status: "working",
+            backlogItemId: "BI-TEST",
+            repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+            headBranch: "fix/bi-workroom-single-owner",
+            worktreePath: "/private/internal/worktree",
+            executorKind: "codex-desktop",
+            executorRef: "private-session-ref",
+            leaseHolderPrincipalId: "private-principal",
+            leaseExpiresAt: "2026-09-01T06:00:00.000Z",
+            liveness: "lease-live",
+            isLive: true,
+            livenessReason: "The Workroom lease is active.",
+            trueLivenessAt: "2026-09-01T05:00:00.000Z",
+          }],
+        })}
+        onEdit={vi.fn()}
+      />,
+    );
+
+    expect(html).toContain("Workroom active");
+    expect(html).toContain("Workroom ownership safety");
+    expect(html).toContain('href="/workspace/cases/WC-923105A2"');
+    expect(html).toContain("working");
+    expect(html).toContain("Codex Desktop");
+    expect(html).toContain("fix/bi-workroom-single-owner");
+    expect(html).toContain("lease live");
+    expect(html).not.toContain("/private/internal/worktree");
+    expect(html).not.toContain("private-session-ref");
+    expect(html).not.toContain("private-principal");
+  });
+
+  it("adds no ownership chrome when no Workroom is active", () => {
+    const html = renderToStaticMarkup(
+      <BacklogItemRow item={item({ activeWorkrooms: [] })} onEdit={vi.fn()} />,
+    );
+
+    expect(html).not.toContain("Workroom active");
+  });
+
   it("keeps a zero-item epic explicit", () => {
     const html = renderToStaticMarkup(
       <OpsClient

@@ -190,6 +190,8 @@ function BacklogItemRowImpl({ item, onEdit, focused = false }: Props) {
         </div>
       ) : null}
 
+      <ActiveWorkroomOwnership workrooms={item.activeWorkrooms ?? []} />
+
       {/* Actions */}
       <div className="shrink-0 flex items-center gap-1">
         {confirmDelete ? (
@@ -249,6 +251,48 @@ function BacklogItemRowImpl({ item, onEdit, focused = false }: Props) {
       {buildMessage && (
         <p className="w-full text-[10px] text-[var(--dpf-muted)] mt-1">{buildMessage}</p>
       )}
+    </div>
+  );
+}
+
+function executorLabel(value: string | null): string {
+  if (!value) return "Unassigned";
+  return value
+    .split("-")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function ActiveWorkroomOwnership({
+  workrooms,
+}: {
+  workrooms: NonNullable<BacklogItemWithRelations["activeWorkrooms"]>;
+}) {
+  if (workrooms.length === 0) return null;
+  return (
+    <div
+      className="w-full rounded-md border border-[var(--dpf-accent)] bg-[var(--dpf-accent-soft)] p-2"
+      aria-label="Active Workroom ownership"
+    >
+      <p className="text-dpf-caption font-dpf-semibold text-[var(--dpf-text)]">
+        {workrooms.length === 1 ? "Workroom active" : `${workrooms.length} Workrooms active`}
+      </p>
+      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-dpf-caption text-[var(--dpf-muted)]">
+        {workrooms.map((room) => (
+          <div key={room.capsuleId} className="flex min-w-0 flex-wrap items-center gap-2">
+            <Link
+              href={`/workspace/cases/${room.capsuleId}`}
+              className="font-dpf-medium text-[var(--dpf-accent)] hover:underline"
+            >
+              {room.title}
+            </Link>
+            <StatusBadge domain="workroom" status={room.status} label={room.status.replaceAll("-", " ")} uppercase={false} />
+            <span>{executorLabel(room.executorKind)}</span>
+            {room.headBranch ? <span className="font-mono">{room.headBranch}</span> : null}
+            <span>{room.liveness.replaceAll("-", " ")}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
