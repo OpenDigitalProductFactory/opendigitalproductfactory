@@ -34,7 +34,7 @@ import { resolveRouteContext } from "@/lib/route-context-map";
 import { assembleSystemPromptWithProvenance } from "@/lib/prompt-assembler";
 import { composeCoworkerDomainContext } from "@/lib/tak/coworker-prompt-provenance";
 import { buildInitiativeBlock } from "@/lib/tak/initiative-block";
-import { getCoworkerProactivityPreference } from "@/lib/actions/proactivity";
+import type { ProactivityLevel } from "@/lib/proactivity/proactivity-types";
 import { resolveReadingLevelForRoute } from "@/lib/readability/policy";
 import type { QuestionPacket } from "@/lib/tak/question-packet";
 import { resolvePortalContextEnvelope } from "@/lib/portal-context";
@@ -693,13 +693,13 @@ export async function sendMessage(input: {
   // attributes each tool call to the active skill.
   let activeSkillId: string | null = null;
 
-  // BI-E35A8AA4: the employee's Proactivity choice for this coworker drives an
-  // Initiative block that scales in-task effort. Resolved once and injected into
-  // BOTH prompt paths so behavior is surface-uniform. Fail-open to null
-  // (→ balanced) so a preference-lookup hiccup never breaks the response.
-  const proactivityLevel = await getCoworkerProactivityPreference(agent.agentId).catch(
-    () => null,
-  );
+  // BI-E35A8AA4 drove the Initiative block from this coworker's saved Proactivity
+  // choice. BI-87C9C91C removed that identity ownership: this is the interactive
+  // turn path with no Workroom in scope, so it takes the platform default and who
+  // is staffed to the conversation cannot change its initiative. `null` IS that
+  // default (buildInitiativeBlock maps it to balanced) — byte-identical to an
+  // agent with no saved preference. Spec §3.1.
+  const proactivityLevel: ProactivityLevel | null = null;
 
   // Resolve the LOCAL model's served context ONCE up front — it sizes BOTH the
   // per-turn tool-attachment cap (below) and the skills-catalog cap (in each
