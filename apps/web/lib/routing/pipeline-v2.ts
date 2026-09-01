@@ -108,6 +108,11 @@ export function getExclusionReasonV2(
   const providerConstraintReason = getProviderConstraintExclusionReason(ep, contract);
   if (providerConstraintReason) return providerConstraintReason;
 
+  // Account/transport compatibility is a hard platform fact, not a score.
+  // Preserve the endpoint in the excluded trace so runtime-health previews
+  // explain the incompatibility while a supported sibling model can win.
+  if (ep.eligibilityExclusionReason) return ep.eligibilityExclusionReason;
+
   // EP-AGENT-CAP-002: Agent capability floor — hard filter, non-negotiable.
   // Must run BEFORE status/graceful-degradation checks so a tool-incapable
   // endpoint is never selected even in degraded mode.
