@@ -74,11 +74,55 @@ function causePhrase(cause: DowngradeCause): string {
   }
 }
 
+/**
+ * Did the sensitivity that forced this turn local come only from EARLIER
+ * messages, rather than from what the owner just asked (BI-706530B2)?
+ *
+ * Sensitivity is recomputed over the whole payload every turn, and history is
+ * resent every turn, so one triggering message restricts every later turn in
+ * that thread for as long as the thread lives. Observed live: a user typed
+ * "accounting, payroll, CRM, backup" while asking about SaaS spend, and the
+ * thread routed local-only from then on. Nothing said why, and nothing said a
+ * new thread would clear it — the only visible symptom was a coworker that had
+ * quietly become slower and less capable.
+ *
+ * This does not change what leaves the box. It reads the receipt the screener
+ * already produced and answers one question: is the owner being held back by
+ * something they said several turns ago? When yes, the banner can say so and
+ * point at the one action that works.
+ *
+ * Deliberately conservative: it returns false unless there is at least one
+ * match from an earlier message AND none from the latest one. A turn whose own
+ * content is sensitive is not "history", and saying otherwise would invite the
+ * owner to start a new thread that behaves identically.
+ */
+export function escalationCameOnlyFromHistory(
+  matchProvenance: ReadonlyArray<{ path: string }> | undefined,
+  messageCount: number,
+): boolean {
+  if (!matchProvenance?.length || messageCount < 2) return false;
+  const latestIndex = messageCount - 1;
+
+  let sawEarlier = false;
+  for (const match of matchProvenance) {
+    const index = Number(/^messages\[(\d+)\]/.exec(match.path)?.[1]);
+    if (!Number.isInteger(index)) continue; // prompt or tool-declaration evidence
+    if (index >= latestIndex) return false;
+    sawEarlier = true;
+  }
+  return sawEarlier;
+}
+
 export type LocalFallbackBannerInput = {
   /** Excluded user-configured candidates, in routing's own ranking order. */
   excludedReasons: string[];
   /** Names of user-configured providers currently in a non-routable status. */
   offProviderNames: string[];
+  /**
+   * The sensitivity came only from earlier messages in this thread, not from
+   * what the owner just asked (BI-706530B2). Drives the one action that works.
+   */
+  historicalOnly?: boolean;
 };
 
 /** The manifest and candidate fields this module reads — nothing else. */
@@ -176,6 +220,17 @@ export function buildLocalFallbackBanner(input: LocalFallbackBannerInput): strin
       phrases.length > 0
         ? `Your configured providers stayed available, but ${joinNames(phrases)}.`
         : "Your configured providers stayed available but none was eligible for this request.",
+    );
+  }
+
+  // BI-706530B2: when the only sensitive evidence is several turns back, the
+  // owner is being held by something they said earlier and has no way to know
+  // it. Naming the one action that works is the difference between a thread
+  // that has quietly degraded and a thread they can do something about.
+  if (input.historicalOnly) {
+    parts.push(
+      "That came from earlier in this conversation rather than from what you just asked, "
+      + "so it will keep applying here. Starting a new conversation clears it.",
     );
   }
 
