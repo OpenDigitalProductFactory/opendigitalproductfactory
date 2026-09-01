@@ -69,6 +69,21 @@ describe("Workspace Work Room access", () => {
     }).level).toBe("none");
   });
 
+  it("parses specialist and approver roles on the policy roster", () => {
+    expect(readWorkspaceRoomPolicy([{ workroomPolicy: {
+      participants: [{
+        principalRef: "PRN-SPEC",
+        roles: ["specialist", "approver"],
+        enteredReason: "Named specialist-approver",
+      }],
+    } }]).participants).toEqual([{
+      principalRef: "PRN-SPEC",
+      roles: ["specialist", "approver"],
+      enteredReason: "Named specialist-approver",
+      currentWorkSummary: null,
+    }]);
+  });
+
   it("parses explicitly named participants separately from access admission", () => {
     expect(readWorkspaceRoomPolicy([{ workroomPolicy: {
       admittedPrincipalRefs: ["PRN-REVIEWER"],

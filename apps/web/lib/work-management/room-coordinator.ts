@@ -49,6 +49,17 @@ export function selectRoomCoordinator(
 }
 
 /**
+ * Coordinator that was persisted as an assignment. A derived coordinator may
+ * explain an old room but does not qualify it for autonomous execution.
+ */
+export function selectExplicitRoomCoordinator(
+  participants: readonly WorkroomParticipantView[],
+): WorkroomParticipantView | null {
+  const coordinator = selectRoomCoordinator(participants);
+  return coordinator?.coordinatorSource === "explicit" ? coordinator : null;
+}
+
+/**
  * Ensure the room has a Coordinator. If one is already named (by policy or
  * lineage) it is kept; otherwise the accountable principal coordinates by
  * default — the Coordinator role is added to the (single) accountable
@@ -60,22 +71,33 @@ export function selectRoomCoordinator(
 export function deriveRoomCoordinator(
   participants: readonly WorkroomParticipantView[],
 ): WorkroomParticipantView[] {
-  // Validates single-coordinator and short-circuits when one is already named.
-  if (selectRoomCoordinator(participants)) {
-    return [...participants];
+  const named = selectRoomCoordinator(participants);
+  if (named) {
+    return participants.map((participant) =>
+      isCoordinator(participant)
+        ? {
+            ...participant,
+            coordinatorSource: participant.coordinatorSource === "derived" ? "derived" : "explicit",
+          }
+        : { ...participant, coordinatorSource: "none" },
+    );
   }
 
   const accountable = participants.filter(isAccountable);
   // Only default when there is exactly one accountable to promote; ambiguous or
   // absent accountability leaves the room without a derived coordinator.
   if (accountable.length !== 1) {
-    return [...participants];
+    return participants.map((participant) => ({ ...participant, coordinatorSource: "none" }));
   }
 
   const target = accountable[0];
   return participants.map((participant) =>
     participant.principalRef === target.principalRef
-      ? { ...participant, roles: [...new Set([...participant.roles, "coordinator" as const])] }
-      : participant,
+      ? {
+          ...participant,
+          roles: [...new Set([...participant.roles, "coordinator" as const])],
+          coordinatorSource: "derived",
+        }
+      : { ...participant, coordinatorSource: "none" },
   );
 }

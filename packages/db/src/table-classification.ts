@@ -76,6 +76,9 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   CodebaseManifest: "internal",
   ServiceOffering: "internal",
   BacklogItem: "internal",
+  // BI-4CB2EF76: room roster is operational membership (principal FK + roles).
+  // Display names stay on Principal; this table is not a second identity store.
+  WorkroomParticipant: "internal",
   InitiativeArtifactRetentionPin: "confidential",
   Epic: "internal",
   EpicPortfolio: "internal",
