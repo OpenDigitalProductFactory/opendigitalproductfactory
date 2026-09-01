@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
   createSelfUpgradeTargetBinding,
+  matchesSignedSelfUpgradeTargetBinding,
   verifySelfUpgradeTargetBinding,
 } from "./target-binding";
 
@@ -56,6 +57,15 @@ describe("self-upgrade target binding", () => {
     expect(
       verifySelfUpgradeTargetBinding(token, { now: new Date(NOW.getTime() + 1_001) }),
     ).toEqual({ ok: false, error: "expired" });
+    expect(
+      matchesSignedSelfUpgradeTargetBinding(token, TARGET),
+    ).toBe(true);
+    expect(
+      matchesSignedSelfUpgradeTargetBinding(
+        token,
+        { ...TARGET, targetSha: "b".repeat(40) },
+      ),
+    ).toBe(false);
     expect(
       verifySelfUpgradeTargetBinding(token, { now: NOW, secret: "different-secret" }),
     ).toEqual({ ok: false, error: "signature-mismatch" });

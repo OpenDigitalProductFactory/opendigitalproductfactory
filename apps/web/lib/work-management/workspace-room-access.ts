@@ -1,4 +1,5 @@
 import { authorizeWorkroomAccess, type WorkroomAccessDecision } from "./room-participation";
+import { WORKROOM_PARTICIPANT_ROLES, type WorkroomParticipantRole } from "./room-types";
 
 export type WorkspaceRoomPolicyMetadata = {
   admittedPrincipalRefs: string[];
@@ -10,7 +11,7 @@ export type WorkspaceRoomPolicyMetadata = {
 
 export type WorkspaceRoomPolicyParticipant = {
   principalRef: string;
-  roles: Array<"accountable" | "coordinator" | "contributor" | "reviewer" | "observer">;
+  roles: WorkroomParticipantRole[];
   enteredReason: string | null;
   currentWorkSummary: string | null;
 };
@@ -35,11 +36,10 @@ export function readWorkspaceRoomPolicy(evidence: unknown): Partial<WorkspaceRoo
             ? participant.principalRef.trim()
             : "";
           if (!principalRef) return [];
-          const validRoles = ["accountable", "coordinator", "contributor", "reviewer", "observer"];
           const roles = Array.isArray(participant.roles)
             ? participant.roles.filter(
-                (role): role is WorkspaceRoomPolicyParticipant["roles"][number] =>
-                  typeof role === "string" && validRoles.includes(role),
+                (role): role is WorkroomParticipantRole =>
+                  typeof role === "string" && (WORKROOM_PARTICIPANT_ROLES as readonly string[]).includes(role),
               )
             : [];
           return [{

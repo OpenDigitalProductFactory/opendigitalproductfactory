@@ -230,6 +230,31 @@ This remains the single atomic BI-3FD07259 deliverable. The comparison repair,
 typed successor, worker CAS, and truthful terminal projection share one clean
 revert boundary and are not independently safe to ship.
 
+## 2026-08-31 long-open binding recurrence
+
+The exact governed action for
+`v2026.08.31-source-free-verification-preflight.1` / `787700918778f5db56ca6c9c2701baa176650949`
+failed before persistence as `target-binding-invalid`. Read-only inspection
+proved the rendered HMAC payload was structurally valid and exact, but had been
+issued more than five hours earlier with the normal fifteen-minute expiry. The
+page still presented that old action binding after the operator returned to the
+long-open tab. No `SelfUpgradeRun` or live mutation occurred.
+
+Treat expiry as loss of fallback authority, not as evidence that a freshly
+resolved exact server target is unsafe. Refactor binding verification into one
+cryptographic payload check plus the existing strict freshness check. Add a
+comparison-only helper that never exposes an expired target for admission. The
+action may select only the independently resolved current release, and only
+when the expired signed payload matches its kind, SHA, and tag exactly. Forged,
+malformed, unresolved, Git-source, or drifted cases remain fail-closed.
+
+Verification is atomic: preserve the strict expiry unit assertion, add exact
+and mismatch comparison assertions, reproduce the long-open page in the action
+suite, run adjacent self-upgrade tests/typecheck/guards, then protected merge,
+one canonical release, one separately authorized governed action, exact served
+SHA/CAN-TEST, and the source-free verification preflight. Do not retry the
+failed action on the unchanged runtime.
+
 Traceability for `exact-target-never-dispatched-recovery`:
 
 - requirements: OBJ-SUA-002, OBJ-SUA-003, OBJ-SUA-004, OBJ-SUA-006;

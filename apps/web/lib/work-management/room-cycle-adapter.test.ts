@@ -7,6 +7,7 @@ import {
   WORKROOM_CYCLE_EVIDENCE_KIND,
   WORKROOM_OUTCOME_MESSAGE_TYPE,
 } from "./room-cycle-adapter";
+import { OBLIGATION_ASSURANCE_WATCH_SHAPE_KEY } from "./work-shapes";
 
 const packet = buildWorkroomOutcomePacket({
   sourceKey: "scheduled",
@@ -104,5 +105,55 @@ describe("Work Room cycle source adapter", () => {
     }));
 
     expect(projectStoredWorkroomOutcomePackets(messages)).toEqual([packet, earlier]);
+  });
+});
+
+describe("declared work-shape claim projects a cycle", () => {
+  const openedAt = "2026-08-21T00:00:00.000Z";
+  const validClaim = [{ workShape: `${OBLIGATION_ASSURANCE_WATCH_SHAPE_KEY}@1.0.0` }];
+
+  it("projects trigger, stopConditions, and expectedReviewAt from the declared shape", () => {
+    const candidates = projectWorkItemCycleCarriers({
+      items: [],
+      messages: [],
+      scopeClaims: validClaim,
+      capsuleId: "WC-SHAPE-1",
+      openedAt,
+    });
+
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0]?.carrierKind).toBe("work-capsule");
+    expect(candidates[0]?.trigger).toBe(`cadence:${OBLIGATION_ASSURANCE_WATCH_SHAPE_KEY}@1.0.0`);
+    expect(candidates[0]?.expectedReviewAt).toBe("2026-09-20T00:00:00.000Z");
+    expect(candidates[0]?.stopConditions.some((stop) => stop.startsWith("failure:"))).toBe(true);
+    expect(candidates[0]?.stopConditions.some((stop) => stop.startsWith("budget:"))).toBe(true);
+  });
+
+  it("leaves a room with no claim byte-identical to current behavior", () => {
+    const without = projectWorkItemCycleCarriers({ items: [item()], messages: [] });
+    const withUndefined = projectWorkItemCycleCarriers({
+      items: [item()],
+      messages: [],
+      scopeClaims: undefined,
+    });
+    expect(withUndefined).toEqual(without);
+    expect(projectWorkItemCycleCarriers({ items: [item()], messages: [], scopeClaims: [] })).toEqual(without);
+  });
+
+  it("resolves unknown or unparseable claims as no cycle and never throws", () => {
+    expect(projectWorkItemCycleCarriers({
+      items: [],
+      messages: [],
+      scopeClaims: [{ workShape: "not-a-shape@1.0.0" }],
+      capsuleId: "WC-UNKNOWN",
+      openedAt,
+    })).toEqual([]);
+    expect(projectWorkItemCycleCarriers({
+      items: [],
+      messages: [],
+      scopeClaims: [{ workShape: "garbage" }],
+      capsuleId: "WC-BAD",
+      openedAt,
+    })).toEqual([]);
   });
 });

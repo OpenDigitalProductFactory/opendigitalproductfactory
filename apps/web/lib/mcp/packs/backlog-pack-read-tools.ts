@@ -406,6 +406,8 @@ export async function getBacklogItem(params: Record<string, unknown>): Promise<T
   });
   if (!item)
     return { success: false, error: "not_found", message: `Item ${itemIdRaw} not found` };
+  const { loadBacklogWorkroomOwnership } = await import("@/lib/work-capsules/backlog-workroom-ownership");
+  const workroomOwnership = await loadBacklogWorkroomOwnership(prisma, [item.itemId, item.id]);
   const { deriveLifecycleLabel } = await import("@/lib/governed-backlog-workflow");
   const { searchSpecsAndPlans, specPlanCorpusCaveat } = await import("@/lib/backlog/spec-plan-search");
   const { corpus: specPlanCorpus, results: specPlanRefs } = await searchSpecsAndPlans({
@@ -492,6 +494,8 @@ export async function getBacklogItem(params: Record<string, unknown>): Promise<T
             sandboxId: item.activeBuild.sandboxId,
           }
         : null,
+      workrooms: workroomOwnership.workrooms,
+      activeWorkrooms: workroomOwnership.liveWorkrooms,
       readiness,
       specPlanCorpus,
       specPlanFiles: specPlanRefs.map((r) => ({

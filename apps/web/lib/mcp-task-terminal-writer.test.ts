@@ -479,7 +479,7 @@ describe("terminal writer resumption", () => {
     });
   });
 
-  it("keeps the same TaskRun resumable in a writer-only phase after attempt two", async () => {
+  it("stops replaying and returns a governed escalation after the third missing-writer attempt", async () => {
     const exhaustedParams = { ...params, idempotencyKey: "missing-writer-resume-exhausted" };
     const metadata = await persistedMetadata("PAT-WRITER-EXHAUSTED", exhaustedParams);
     vi.clearAllMocks();
@@ -577,11 +577,11 @@ describe("terminal writer resumption", () => {
     expect(autonomous.execute).toHaveBeenCalledWith(expect.objectContaining({
       taskRunId: "TR-MCP-WRITER-EXHAUSTED",
       chatHistory: [
-        { role: "user", content: exhaustedParams.prompt },
         expect.objectContaining({
           role: "system",
           content: expect.stringContaining("The same TaskRun preserves its immutable authority binding."),
         }),
+        { role: "user", content: exhaustedParams.prompt },
       ],
       terminalToolPolicy: expect.objectContaining({
         terminalPhase: "writer-only",
@@ -605,8 +605,14 @@ describe("terminal writer resumption", () => {
         status: "input-required",
         idempotentReplay: true,
         requiresApproval: false,
-        resumable: true,
-        waitReason: "missing-terminal-writer",
+        resumable: false,
+        waitReason: "terminal-writer-retry-exhausted",
+        structuredContent: {
+          error: "terminal_writer_retry_exhausted",
+          attempt: 3,
+          writerToolName: "record_initiative_evidence",
+          action: "select-different-reviewer-provider",
+        },
       },
     });
     expect(db.update).toHaveBeenCalledWith({
@@ -619,8 +625,110 @@ describe("terminal writer resumption", () => {
             dispatchContract: "required-tool-call",
             noncompliance: "prose-without-required-writer",
           }),
+          terminalWriterEscalation: expect.objectContaining({
+            schemaVersion: 1,
+            code: "terminal_writer_retry_exhausted",
+            attempt: 3,
+            writerToolName: "record_initiative_evidence",
+            action: "select-different-reviewer-provider",
+          }),
         }),
       }),
+    });
+  });
+
+  it("replays an exhausted terminal-writer escalation without starting another attempt", async () => {
+    const exhaustedParams = { ...params, idempotencyKey: "missing-writer-already-escalated" };
+    const metadata = await persistedMetadata("PAT-WRITER-ALREADY-ESCALATED", exhaustedParams);
+    vi.clearAllMocks();
+    db.findFirst.mockResolvedValue({
+      id: "task-internal", taskRunId: "TR-MCP-WRITER-ALREADY-ESCALATED",
+      threadId: "thread-external", contextId: "thread-external", status: "input-required",
+      updatedAt: new Date("2026-09-01T02:22:19.238Z"),
+      progressPayload: {
+        terminalWriterWait: {
+          schemaVersion: 1, kind: "missing-terminal-writer",
+          writerToolName: "record_initiative_evidence", resumeMode: "same-taskrun", attempt: 3,
+          observedAt: "2026-09-01T02:22:19.237Z",
+        },
+        terminalWriterEscalation: {
+          schemaVersion: 1, code: "terminal_writer_retry_exhausted",
+          writerToolName: "record_initiative_evidence", attempt: 3,
+          action: "select-different-reviewer-provider",
+          observedAt: "2026-09-01T02:22:19.237Z",
+        },
+      },
+      a2aMetadata: metadata,
+    });
+
+    const outcome = await submit("PAT-WRITER-ALREADY-ESCALATED", exhaustedParams);
+
+    expect(db.updateMany).not.toHaveBeenCalled();
+    expect(autonomous.executeTool).not.toHaveBeenCalled();
+    expect(autonomous.execute).not.toHaveBeenCalled();
+    expect(outcome).toMatchObject({
+      kind: "result",
+      result: {
+        taskRunId: "TR-MCP-WRITER-ALREADY-ESCALATED",
+        status: "input-required",
+        idempotentReplay: true,
+        requiresApproval: false,
+        resumable: false,
+        waitReason: "terminal-writer-retry-exhausted",
+        structuredContent: {
+          error: "terminal_writer_retry_exhausted",
+          attempt: 3,
+          writerToolName: "record_initiative_evidence",
+          action: "select-different-reviewer-provider",
+        },
+      },
+    });
+  });
+
+  it("turns a preserved bounded-hydration truncation into a concrete non-resumable escalation", async () => {
+    const truncatedParams = { ...params, idempotencyKey: "terminal-writer-context-truncated" };
+    const metadata = await persistedMetadata("PAT-WRITER-CONTEXT-TRUNCATED", truncatedParams);
+    vi.clearAllMocks();
+    db.findFirst.mockResolvedValue({
+      id: "task-internal", taskRunId: "TR-MCP-WRITER-CONTEXT-TRUNCATED",
+      threadId: "thread-external", contextId: "thread-external", status: "input-required",
+      updatedAt: new Date("2026-09-01T01:18:36.677Z"),
+      progressPayload: {
+        terminalWriterWait: {
+          schemaVersion: 1, kind: "missing-terminal-writer",
+          writerToolName: "record_initiative_evidence", resumeMode: "same-taskrun", attempt: 2,
+          observedAt: "2026-09-01T01:18:33.353Z",
+        },
+        terminalWriterContextFailure: {
+          code: "terminal_writer_context_truncated",
+          message: "The immutable source remained truncated after the bounded hydration budget.",
+          observedAt: "2026-09-01T01:18:36.676Z",
+        },
+      },
+      a2aMetadata: metadata,
+    });
+
+    const outcome = await submit("PAT-WRITER-CONTEXT-TRUNCATED", truncatedParams);
+
+    expect(db.updateMany).not.toHaveBeenCalled();
+    expect(autonomous.executeTool).not.toHaveBeenCalled();
+    expect(autonomous.execute).not.toHaveBeenCalled();
+    expect(outcome).toMatchObject({
+      kind: "result",
+      result: {
+        taskRunId: "TR-MCP-WRITER-CONTEXT-TRUNCATED",
+        status: "input-required",
+        idempotentReplay: true,
+        requiresApproval: false,
+        resumable: false,
+        waitReason: "terminal-writer-context-exhausted",
+        structuredContent: {
+          error: "terminal_writer_context_truncated",
+          attempt: 2,
+          writerToolName: "record_initiative_evidence",
+          action: "select-different-reviewer-provider",
+        },
+      },
     });
   });
 

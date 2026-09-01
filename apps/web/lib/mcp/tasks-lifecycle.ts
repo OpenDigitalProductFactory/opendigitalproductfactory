@@ -17,6 +17,7 @@
 
 import { prisma } from "@dpf/db";
 import { MCP_ROUTE_TOOL_RESULT_CHAR_CAP } from "@/lib/tak/tool-result-budget";
+import { withTaskRunApprovalLocation } from "./external-approval-location-lookup";
 
 /** Phase-0 surface is on by default (read-only + auth-bound); MCP_TASKS_LIFECYCLE=off disables it. */
 export function tasksLifecycleEnabled(): boolean {
@@ -133,7 +134,17 @@ export async function handleTasksGet(
   const row = await prisma.taskRun.findUnique({ where: { taskRunId: taskId }, select: TASK_SELECT });
   if (!row) return { kind: "notfound", message: `task not found: ${taskId}` };
   if (row.userId !== userId) return { kind: "forbidden", message: "task belongs to a different auth context" };
-  return { kind: "ok", value: toTaskObject(row) };
+  const task = toTaskObject(row);
+  if (row.status !== "input-required" && row.status !== "auth-required") {
+    return { kind: "ok", value: task };
+  }
+  return {
+    kind: "ok",
+    value: await withTaskRunApprovalLocation(
+      { ...task, requiresApproval: true },
+      { taskRunId: row.taskRunId, callerUserId: userId },
+    ),
+  };
 }
 
 /** tasks/result — for terminal tasks return a CallToolResult-shaped payload; for
@@ -151,6 +162,17 @@ export async function handleTasksResult(
 
   const meta = { "io.modelcontextprotocol/related-task": { taskId } };
   if (!isTerminalTaskStatus(row.status)) {
+    const structuredContent: Record<string, unknown> = {
+      taskId,
+      status: mcpTaskStateForWire(row.status),
+      terminal: false,
+    };
+    const located = row.status === "input-required" || row.status === "auth-required"
+      ? await withTaskRunApprovalLocation(
+          { ...structuredContent, requiresApproval: true },
+          { taskRunId: row.taskRunId, callerUserId: userId },
+        )
+      : structuredContent;
     return {
       kind: "ok",
       value: {
@@ -160,7 +182,7 @@ export async function handleTasksResult(
             text: `Task ${taskId} is not yet terminal (status: ${mcpTaskStateForWire(row.status)}). Poll tasks/get until it completes.`,
           },
         ],
-        structuredContent: { taskId, status: mcpTaskStateForWire(row.status), terminal: false },
+        structuredContent: located,
         isError: false,
         _meta: meta,
       },

@@ -1,10 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("./target-binding", () => ({
+  matchesSignedSelfUpgradeTargetBinding: vi.fn(),
   verifySelfUpgradeTargetBinding: vi.fn(),
 }));
 
-import { verifySelfUpgradeTargetBinding } from "./target-binding";
+import {
+  matchesSignedSelfUpgradeTargetBinding,
+  verifySelfUpgradeTargetBinding,
+} from "./target-binding";
 import { selectSelfUpgradeAdmissionTarget } from "./target-admission";
 
 const RELEASE_TARGET = {
@@ -29,7 +33,7 @@ describe("self-upgrade admission target selection", () => {
     })).toEqual({ ok: true, data: RELEASE_TARGET });
   });
 
-  it("refuses a forged or expired target binding", () => {
+  it("refuses a forged target binding", () => {
     vi.mocked(verifySelfUpgradeTargetBinding).mockReturnValue({
       ok: false,
       error: "signature-mismatch",
@@ -40,6 +44,52 @@ describe("self-upgrade admission target selection", () => {
       supportTargetKind: "release-artifact",
       resolvedTarget: null,
     })).toEqual({ ok: false, error: "target-binding-invalid" });
+  });
+
+  it("refuses an expired target binding when current server discovery is unavailable", () => {
+    vi.mocked(verifySelfUpgradeTargetBinding).mockReturnValue({
+      ok: false,
+      error: "expired",
+    });
+
+    expect(selectSelfUpgradeAdmissionTarget({
+      targetBinding: "expired-server-signed-target",
+      supportTargetKind: "release-artifact",
+      resolvedTarget: null,
+    })).toEqual({ ok: false, error: "target-binding-invalid" });
+    expect(matchesSignedSelfUpgradeTargetBinding).not.toHaveBeenCalled();
+  });
+
+  it("accepts an expired signed binding only when current server discovery independently resolves the exact same release", () => {
+    vi.mocked(verifySelfUpgradeTargetBinding).mockReturnValue({
+      ok: false,
+      error: "expired",
+    });
+    vi.mocked(matchesSignedSelfUpgradeTargetBinding).mockReturnValue(true);
+
+    expect(selectSelfUpgradeAdmissionTarget({
+      targetBinding: "expired-server-signed-target",
+      supportTargetKind: "release-artifact",
+      resolvedTarget: RELEASE_TARGET,
+    })).toEqual({ ok: true, data: RELEASE_TARGET });
+    expect(matchesSignedSelfUpgradeTargetBinding).toHaveBeenCalledWith(
+      "expired-server-signed-target",
+      RELEASE_TARGET,
+    );
+  });
+
+  it("refuses an expired binding when the signed target does not match current server discovery", () => {
+    vi.mocked(verifySelfUpgradeTargetBinding).mockReturnValue({
+      ok: false,
+      error: "expired",
+    });
+    vi.mocked(matchesSignedSelfUpgradeTargetBinding).mockReturnValue(false);
+
+    expect(selectSelfUpgradeAdmissionTarget({
+      targetBinding: "expired-server-signed-target",
+      supportTargetKind: "release-artifact",
+      resolvedTarget: RELEASE_TARGET,
+    })).toEqual({ ok: false, error: "target-changed" });
   });
 
   it("refuses a rendered target when fresh discovery resolves differently", () => {

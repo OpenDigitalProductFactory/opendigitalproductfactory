@@ -3,19 +3,23 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   count: vi.fn(),
   findMany: vi.fn(),
+  findUnique: vi.fn(),
   findEpic: vi.fn(),
   countEpics: vi.fn(),
   findEpics: vi.fn(),
   buildReferenceIndex: vi.fn(),
   searchSpecsAndPlans: vi.fn(),
   specPlanCorpusCaveat: vi.fn(),
+  loadBacklogWorkroomOwnership: vi.fn(),
+  mapDemandRows: vi.fn(),
+  projectReadiness: vi.fn(),
 }));
 
 const CORPUS_AVAILABLE = { available: true, root: "/repo", searchedPaths: ["docs/superpowers/specs", "docs/superpowers/plans"], missingPaths: [], fileCount: 2, reason: "Searched 2 markdown file(s)." };
 
 vi.mock("@dpf/db", () => ({
   prisma: {
-    backlogItem: { count: mocks.count, findMany: mocks.findMany },
+    backlogItem: { count: mocks.count, findMany: mocks.findMany, findUnique: mocks.findUnique },
     epic: { findFirst: mocks.findEpic, count: mocks.countEpics, findMany: mocks.findEpics },
   },
 }));
@@ -26,7 +30,16 @@ vi.mock("@/lib/backlog/spec-plan-search", () => ({
   specPlanCorpusCaveat: mocks.specPlanCorpusCaveat,
 }));
 
-import { listBacklogItems } from "./backlog-pack-read-tools";
+vi.mock("@/lib/work-capsules/backlog-workroom-ownership", () => ({
+  loadBacklogWorkroomOwnership: mocks.loadBacklogWorkroomOwnership,
+}));
+
+vi.mock("@/lib/demand/demand-data", () => ({ mapDemandRows: mocks.mapDemandRows }));
+vi.mock("@/lib/backlog/initiative-readiness/entry-adapter", () => ({
+  projectBacklogItemReadinessSummary: mocks.projectReadiness,
+}));
+
+import { getBacklogItem, listBacklogItems } from "./backlog-pack-read-tools";
 
 const baseItem = {
   itemId: "BI-DEFERRAL",
@@ -57,11 +70,15 @@ describe("backlog deferral read projection", () => {
     vi.clearAllMocks();
     mocks.count.mockResolvedValue(1);
     mocks.findMany.mockResolvedValue([]);
+    mocks.findUnique.mockResolvedValue(null);
     mocks.buildReferenceIndex.mockResolvedValue({ specs: new Set(), plans: new Set(), corpus: CORPUS_AVAILABLE });
     mocks.searchSpecsAndPlans.mockResolvedValue({ corpus: CORPUS_AVAILABLE, results: [] });
     mocks.specPlanCorpusCaveat.mockReturnValue(null);
     mocks.countEpics.mockResolvedValue(0);
     mocks.findEpics.mockResolvedValue([]);
+    mocks.loadBacklogWorkroomOwnership.mockResolvedValue({ workrooms: [], liveWorkrooms: [] });
+    mocks.mapDemandRows.mockReturnValue([{ activation: null, evidenceLinks: [] }]);
+    mocks.projectReadiness.mockReturnValue({ verdict: "allowed" });
   });
 
   it("does not report a plan-only epic as having a spec", async () => {
@@ -93,6 +110,21 @@ describe("backlog deferral read projection", () => {
       hasSpec: false,
       hasPlan: true,
     });
+  });
+
+  it("shows bound and active Workrooms on the canonical item read", async () => {
+    const active = { capsuleId: "WC-LIVE", headBranch: "fix/live", isLive: true };
+    mocks.findUnique.mockResolvedValue({
+      ...baseItem, id: "row-bi", itemId: "BI-WORKROOM", title: "Owned work", status: "open",
+      body: null, createdAt: new Date("2026-08-31T00:00:00Z"), completedAt: null,
+      deferOwnerPrincipal: null, epic: null, digitalProduct: null, organization: null,
+      productLine: null, businessProduct: null, demandEvidenceLinks: [], activities: [],
+    });
+    mocks.loadBacklogWorkroomOwnership.mockResolvedValue({ workrooms: [active], liveWorkrooms: [active] });
+
+    const result = await getBacklogItem({ itemId: "BI-WORKROOM" });
+
+    expect(result).toMatchObject({ success: true, data: { workrooms: [active], activeWorkrooms: [active] } });
   });
 
   it("builds the nonconformant filter from the canonical projection fields", async () => {

@@ -1,4 +1,5 @@
 import { prisma } from "@dpf/db";
+import { withTaskRunApprovalLocation } from "./mcp/external-approval-location-lookup";
 import type { Prisma } from "@dpf/db";
 import { resolveCanonicalAgentId } from "@dpf/db/agent-identity";
 import type { UserContext } from "@/lib/permissions";
@@ -33,6 +34,13 @@ import {
   hydrateTerminalWriterContext,
   type PersistedTerminalReaderExecution,
 } from "./mcp-task-terminal-writer-context";
+import {
+  createTerminalWriterEscalation,
+  recoverTerminalWriterEscalation,
+  terminalWriterEscalationMessage,
+  terminalWriterEscalationStructuredContent,
+  terminalWriterEscalationWaitReason,
+} from "./mcp-task-terminal-writer-escalation";
 
 export {
   parseInitiativeReviewBinding,
@@ -223,6 +231,7 @@ function replayOrConflict(existing: ExistingRemoteTask, requestDigest: string): 
       },
     };
   }
+  const terminalWriterEscalation = recoverTerminalWriterEscalation(existing.progressPayload);
   const terminalWriterWait = parseTerminalWriterWait(existing.progressPayload);
   const resourceWait = parseResourceWaitProjection(existing.progressPayload);
   return {
@@ -231,8 +240,14 @@ function replayOrConflict(existing: ExistingRemoteTask, requestDigest: string): 
       taskRunId: existing.taskRunId,
       status: existing.status,
       idempotentReplay: true,
-      requiresApproval: existing.status === "input-required" && !terminalWriterWait,
-      ...(terminalWriterWait ? {
+      requiresApproval: existing.status === "input-required" && !terminalWriterWait && !terminalWriterEscalation,
+      ...(terminalWriterEscalation ? {
+        resumable: false,
+        waitReason: terminalWriterEscalationWaitReason(terminalWriterEscalation),
+        content: remoteTaskContent(terminalWriterEscalationMessage(terminalWriterEscalation)),
+        structuredContent: terminalWriterEscalationStructuredContent(terminalWriterEscalation),
+        isError: false,
+      } : terminalWriterWait ? {
         resumable: true,
         waitReason: terminalWriterWait.kind,
       } : resourceWait ? {
@@ -255,6 +270,7 @@ async function reserveTerminalWriterReplay(input: {
   bootstrapReaderEvidence: boolean;
 } | null> {
   if (storedRequestDigest(input.existing) !== input.requestDigest) return null;
+  if (recoverTerminalWriterEscalation(input.existing.progressPayload)) return null;
 
   const existingWait = parseTerminalWriterWait(input.existing.progressPayload);
   const isProjectedWait = input.existing.status === "input-required" && existingWait !== null;
@@ -473,6 +489,10 @@ export async function submitRemoteCoworkerTask(input: {
     const replay = replayOrConflict(existing, requestDigest);
     if (
       storedRequestDigest(existing) === requestDigest
+      && recoverTerminalWriterEscalation(existing.progressPayload)
+    ) return replay;
+    if (
+      storedRequestDigest(existing) === requestDigest
       && existing.status === "input-required"
     ) {
       const resumed = await resumeApprovedRemoteTask({
@@ -577,6 +597,13 @@ export async function submitRemoteCoworkerTask(input: {
         ? existing.progressPayload as Record<string, unknown>
         : {};
       if (!hydration.ok) {
+        const escalation = hydration.code === "terminal_writer_context_truncated"
+          ? createTerminalWriterEscalation({
+              code: "terminal_writer_context_truncated",
+              writerToolName: terminalToolPolicy.writerToolName,
+              attempt: terminalWriterReservation.wait.attempt,
+            })
+          : null;
         await prisma.taskRun.update({
           where: { taskRunId: existing.taskRunId },
           data: {
@@ -592,6 +619,7 @@ export async function submitRemoteCoworkerTask(input: {
                 message: hydration.error,
                 observedAt: new Date().toISOString(),
               },
+              ...(escalation ? { terminalWriterEscalation: escalation } : {}),
             },
           },
         });
@@ -603,11 +631,17 @@ export async function submitRemoteCoworkerTask(input: {
             idempotentReplay: true,
             resumedFromTerminalWriterWait: false,
             requiresApproval: false,
-            resumable: true,
-            waitReason: "terminal-writer-context-unavailable",
-            content: remoteTaskContent(hydration.error),
-            structuredContent: { error: hydration.code },
-            isError: true,
+            resumable: escalation ? false : true,
+            waitReason: escalation
+              ? terminalWriterEscalationWaitReason(escalation)
+              : "terminal-writer-context-unavailable",
+            content: remoteTaskContent(
+              escalation ? terminalWriterEscalationMessage(escalation) : hydration.error,
+            ),
+            structuredContent: escalation
+              ? terminalWriterEscalationStructuredContent(escalation)
+              : { error: hydration.code },
+            isError: escalation ? false : true,
           },
         };
       }
@@ -723,14 +757,14 @@ export async function submitRemoteCoworkerTask(input: {
 
     return {
       kind: "result",
-      result: {
+      result: await withTaskRunApprovalLocation({
         taskRunId: run.taskRunId,
         status: "input-required",
         idempotentReplay: false,
         requiresApproval: true,
         content: remoteTaskContent("Remote task submitted and paused for employee approval."),
         isError: false,
-      },
+      }, { taskRunId: run.taskRunId, callerUserId: token.userId }),
     };
   }
 

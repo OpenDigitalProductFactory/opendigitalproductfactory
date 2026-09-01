@@ -248,6 +248,7 @@ model Principal {
   leaseHeldWorkrooms                  Workroom[]                          @relation("WorkroomLeaseHolder")
   createdWorkrooms                    Workroom[]                          @relation("WorkroomCreator")
   requestedWorkrooms                  Workroom[]                          @relation("WorkroomRequester")
+  workroomParticipations              WorkroomParticipant[]               @relation("WorkroomParticipantPrincipal")
 
   @@index([sponsorPrincipalId])
   @@index([kind, authorityMode])

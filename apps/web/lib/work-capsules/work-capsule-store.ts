@@ -41,6 +41,11 @@ import {
 import type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
 import { recordWorkCapsuleActivity as recordActivity } from "./work-capsule-activity-store";
 import { intentsConflict, scopeValuesOverlap } from "./work-capsule-scope-overlap";
+import {
+  assertBacklogWorkroomClaimAvailable,
+  loadBacklogWorkroomOwnership,
+  lockBacklogItemForClaim,
+} from "./backlog-workroom-ownership";
 
 export type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
 export { CapsuleBranchOccupiedError } from "./work-capsule-branch-identity";
@@ -334,25 +339,8 @@ export async function adoptWorktreeCapsule(args: {
   }
 }
 
-// A claim older than this is treated as abandoned (a dead session) and is
-// reclaimable — mirrors STALE_BACKLOG_CLAIM_MS in the direct-build claim gate
-// (mcp-tools.ts triage_backlog_item / status→in-progress). REUSE, do not diverge.
-const STALE_BACKLOG_CLAIM_MS = 12 * 60 * 60 * 1000;
-
-/**
- * A NON-blocking conflict surfaced by claimBacklogItemWorkspace. The soft
- * claim-at-start binds the capsule regardless; this metadata advises the caller
- * that other active work already exists so it can coordinate (it is NOT a lock).
- */
 export type BacklogWorkspaceConflict = {
-  /** The BacklogItem already carries a fresh active claim held by another session. */
-  backlogClaim: {
-    claimedById: string | null;
-    claimedByAgentId: string | null;
-    claimedAt: Date | null;
-    claimAgeMinutes: number | null;
-  } | null;
-  /** Other non-archived capsules on the same BI, on a DIFFERENT branch/session. */
+  backlogClaim: null;
   otherLocations: Array<{
     capsuleId: string;
     headBranch: string | null;
@@ -387,6 +375,8 @@ export async function claimBacklogItemWorkspace(args: {
     executorRef?: string | null;
     title?: string;
     objective?: string;
+    force?: boolean;
+    overrideReason?: string | null;
   };
   actor: WorkCapsuleActor;
   now?: Date;
@@ -420,6 +410,28 @@ export async function claimBacklogItemWorkspace(args: {
     throw new Error(`BacklogItem ${args.input.backlogItemId} not found`);
   }
 
+  await lockBacklogItemForClaim(args.db, item.id);
+  const ownershipDb = {
+    workroom: args.db.workroom,
+    featureBuild: args.db.featureBuild ?? { findMany: async () => [] },
+    ...(args.db.nonProductionEnvironmentLease
+      ? { nonProductionEnvironmentLease: args.db.nonProductionEnvironmentLease }
+      : {}),
+  };
+  const ownership = await loadBacklogWorkroomOwnership(
+    ownershipDb,
+    [item.itemId, item.id],
+    now,
+  );
+  const admission = assertBacklogWorkroomClaimAvailable({
+    backlogItemId: item.itemId,
+    liveWorkrooms: ownership.liveWorkrooms,
+    repositoryFullName: args.input.repositoryFullName,
+    headBranch: args.input.headBranch,
+    force: args.input.force === true,
+    overrideReason: args.input.overrideReason ?? null,
+  });
+
   // Create or reuse+late-bind the capsule bound to BI + location + session.
   const capsule = await adoptWorktreeCapsule({
     db: args.db,
@@ -438,40 +450,8 @@ export async function claimBacklogItemWorkspace(args: {
     actor: args.actor,
   });
 
-  // Conflict 1: the BI already carries a FRESH active claim held by a different
-  // session. Do NOT overwrite it (soft claim) — surface it as advisory.
-  const claimAgeMs = item.claimedAt ? now.getTime() - new Date(item.claimedAt).getTime() : Infinity;
-  const claimIsFresh = claimAgeMs < STALE_BACKLOG_CLAIM_MS;
-  const ownedByCaller =
-    (item.claimedById != null && item.claimedById === args.actor.userId) ||
-    (item.claimedByAgentId != null && item.claimedByAgentId === args.actor.agentId);
-  const activelyClaimedByOther =
-    item.claimStatus === "active" &&
-    claimIsFresh &&
-    !ownedByCaller &&
-    (item.claimedById != null || item.claimedByAgentId != null);
-
-  // Conflict 2: another non-archived capsule on the SAME BI, on a different branch
-  // or session. Multiple branches per BI are fine, but we still list them so the
-  // caller can see the parallel work.
-  const otherCapsules = await args.db.workroom.findMany({
-    where: {
-      backlogItemId: item.itemId,
-      archivedAt: null,
-      capsuleId: { not: capsule.capsuleId },
-    },
-    select: {
-      capsuleId: true,
-      headBranch: true,
-      worktreePath: true,
-      executorRef: true,
-      leaseHolderPrincipalId: true,
-    },
-  });
-
-  let claimed = false;
-  if (!activelyClaimedByOther) {
-    // Acquire (or refresh) the BI claim for this session — the stale/self case.
+  const claimed = admission.overrideConflicts.length === 0;
+  if (claimed) {
     await args.db.backlogItem.update({
       where: { id: item.id },
       data: {
@@ -481,29 +461,26 @@ export async function claimBacklogItemWorkspace(args: {
         claimedAt: now,
       },
     });
-    claimed = true;
   }
-
-  const hasConflict = activelyClaimedByOther || (otherCapsules?.length ?? 0) > 0;
-  const conflict: BacklogWorkspaceConflict | null = hasConflict
-    ? {
-        backlogClaim: activelyClaimedByOther
-          ? {
-              claimedById: item.claimedById,
-              claimedByAgentId: item.claimedByAgentId,
-              claimedAt: item.claimedAt ?? null,
-              claimAgeMinutes: Number.isFinite(claimAgeMs) ? Math.round(claimAgeMs / 60000) : null,
-            }
-          : null,
-        otherLocations: (otherCapsules ?? []).map((c) => ({
-          capsuleId: c.capsuleId,
-          headBranch: c.headBranch ?? null,
-          worktreePath: c.worktreePath ?? null,
-          executorRef: c.executorRef ?? null,
-          leaseHolderPrincipalId: c.leaseHolderPrincipalId ?? null,
-        })),
-      }
-    : null;
+  if (admission.overrideConflicts.length > 0) {
+    await args.db.workroomActivity.create({
+      data: {
+        workCapsuleId: capsule.id,
+        kind: "backlog-claim-override",
+        summary: `Deliberately co-claimed ${item.itemId}: ${args.input.overrideReason!.trim()}`,
+        payload: { reason: args.input.overrideReason!.trim(), liveWorkrooms: admission.overrideConflicts },
+        recordedById: args.actor.userId,
+        recordedByAgentId: args.actor.agentId,
+      },
+    });
+  }
+  const conflict: BacklogWorkspaceConflict | null = admission.overrideConflicts.length > 0 ? {
+    backlogClaim: null,
+    otherLocations: admission.overrideConflicts.map((room) => ({
+      capsuleId: room.capsuleId, headBranch: room.headBranch, worktreePath: room.worktreePath,
+      executorRef: room.executorRef, leaseHolderPrincipalId: room.leaseHolderPrincipalId,
+    })),
+  } : null;
 
   return {
     capsuleId: capsule.capsuleId,

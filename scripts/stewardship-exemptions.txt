@@ -112,6 +112,7 @@ StockItem  domain-lifecycle-managed  # Operator-maintained supply master: retire
 StorefrontItemComponent  domain-lifecycle-managed  # Recipe lines follow their sellable item and stock item via cascade; an age sweep would silently delete a live product's composition.
 IncumbentCoverageAssessment  domain-lifecycle-managed  # Per-customer coverage verdicts (BI-548060D5); re-assessment supersedes the prior row, never time-aged.
 JobRequisition  domain-lifecycle-managed  # Requisitions close/fill through their own status lifecycle (open→closed/filled), not a time-based sweep (BI-F3AEBF68).
+WorkroomParticipant  domain-lifecycle-managed  # Roster rows cascade with their Workroom and are archived by membership lifecycle; a time sweep would drop a live room's Process Overseer.
 RequisitionOpening  domain-lifecycle-managed  # Headcount slots follow their parent requisition via cascade; never independently aged.
 JobPosting  domain-lifecycle-managed  # Postings are unpublished/closed by requisition lifecycle and cascade; not age-swept.
 PipelineStage  domain-lifecycle-managed  # Stage definitions follow their requisition via cascade; not independently aged.

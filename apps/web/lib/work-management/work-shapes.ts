@@ -61,6 +61,20 @@ export type WorkShapeStopCondition = {
   condition: string;
 };
 
+/** Allowed tools/capabilities this activity may consume. Empty is a declaration. */
+export type WorkShapeGrant = string;
+
+export type WorkShapeMeasure = {
+  key: string;
+  description: string;
+};
+
+export type WorkShapeBudget = {
+  kind: "findings-per-run" | "cycles-per-window" | "spend";
+  limit: number;
+  unit: string;
+};
+
 export type WorkShapeDefinition = {
   key: string;
   /** Versioned: changing stages or gates is a new version, not an edit in place. */
@@ -70,11 +84,47 @@ export type WorkShapeDefinition = {
   triggers: readonly WorkShapeTriggerClass[];
   stages: readonly WorkShapeStage[];
   stopConditions: readonly WorkShapeStopCondition[];
+  /** Tools/capabilities the activity is allowed to use. Not a dispatcher. */
+  grants: readonly WorkShapeGrant[];
+  /** Named measures the activity is expected to leave on the ledger. */
+  measures: readonly WorkShapeMeasure[];
+  /** Numeric ceilings the runner must honour; pairs with the budget stop. */
+  budgets: readonly WorkShapeBudget[];
   /** The activity is examined here whether or not it progressed. */
   reviewPoint: { everyDays: number; description: string };
   /** The room shape a consequential act inside this activity binds to. */
   collaborationShape: WorkroomShapeKey | null;
 };
+
+/** The definition contract runtime consumers read. No dispatch, schedule, or roster. */
+export type WorkShapeDefinitionContract = Pick<
+  WorkShapeDefinition,
+  | "key"
+  | "version"
+  | "triggers"
+  | "stages"
+  | "stopConditions"
+  | "grants"
+  | "measures"
+  | "budgets"
+  | "reviewPoint"
+>;
+
+export function readWorkShapeDefinitionContract(
+  shape: WorkShapeDefinition,
+): WorkShapeDefinitionContract {
+  return {
+    key: shape.key,
+    version: shape.version,
+    triggers: shape.triggers,
+    stages: shape.stages,
+    stopConditions: shape.stopConditions,
+    grants: shape.grants,
+    measures: shape.measures,
+    budgets: shape.budgets,
+    reviewPoint: shape.reviewPoint,
+  };
+}
 
 // ── the registry ─────────────────────────────────────────────────────────────
 
@@ -137,6 +187,13 @@ const SHAPES: Record<string, WorkShapeDefinition> = {
       { kind: "failure", condition: "The sweep cannot read the compliance substrate (no profile, no obligations, or a query error) — it stops and reports, and does NOT raise findings from an empty read." },
       { kind: "budget", condition: "More than 200 findings would be raised in one run — the run stops and escalates, rather than burying the ledger." },
     ],
+    grants: ["tool:read"],
+    measures: [
+      { key: "findings-raised", description: "Findings opened onto the assurance ledger in one run." },
+    ],
+    budgets: [
+      { kind: "findings-per-run", limit: 200, unit: "findings" },
+    ],
     reviewPoint: {
       everyDays: 30,
       description:
@@ -194,6 +251,9 @@ export function validateWorkShape(shape: WorkShapeDefinition): string[] {
   }
   if (!shape.stopConditions.some((stop) => stop.kind === "failure")) {
     issues.push(`${shape.key}: no failure exit — only a successful one`);
+  }
+  if (!shape.stopConditions.some((stop) => stop.kind === "budget")) {
+    issues.push(`${shape.key}: no budget stop — a self-starting shape without a spend ceiling is unbounded`);
   }
   if (!(shape.reviewPoint.everyDays > 0)) issues.push(`${shape.key}: no review point`);
   return issues;

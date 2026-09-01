@@ -169,6 +169,8 @@ function toParticipantViews(
     sponsorPrincipalRef: null,
     authoritySummary: "Participates within assigned room authority",
     sourceRefs: [],
+    assignmentSource: "explicit",
+    coordinatorSource: participant.roles.includes("coordinator") ? "explicit" : "none",
   }));
 }
 

@@ -72,6 +72,8 @@ const room: WorkroomView = {
       sponsorPrincipalRef: null,
       authoritySummary: "May confirm an available service window",
       sourceRefs: [],
+      assignmentSource: "explicit",
+      coordinatorSource: "none",
     },
     {
       principalRef: "agent:scheduling-1",
@@ -86,6 +88,8 @@ const room: WorkroomView = {
       sponsorDisplayName: "Jamie Rivera",
       authoritySummary: "May prepare options; may not confirm externally",
       sourceRefs: [],
+      assignmentSource: "explicit",
+      coordinatorSource: "none",
     },
   ],
   activity: [

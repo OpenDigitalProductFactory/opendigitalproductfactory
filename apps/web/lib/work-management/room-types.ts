@@ -54,14 +54,21 @@ export type WorkroomActivityKind =
   | "cycle-closed"
   | "cycle-carried-over";
 
-export type WorkroomParticipantRole =
-  | "accountable"
-  | "coordinator"
-  | "contributor"
-  | "specialist"
-  | "approver"
-  | "reviewer"
-  | "observer";
+export const WORKROOM_PARTICIPANT_ROLES = [
+  "accountable",
+  "coordinator",
+  "contributor",
+  "specialist",
+  "approver",
+  "reviewer",
+  "observer",
+] as const;
+
+export type WorkroomParticipantRole = (typeof WORKROOM_PARTICIPANT_ROLES)[number];
+
+export type WorkroomParticipantAssignmentSource = "explicit" | "legacy" | "conversation";
+
+export type WorkroomCoordinatorSource = "explicit" | "derived" | "none";
 
 export type WorkroomParticipantWorkState =
   | "working"
@@ -162,6 +169,14 @@ export interface WorkroomParticipantView {
   sponsorDisplayName?: string | null;
   authoritySummary: string;
   sourceRefs: WorkCaseSourceRef[];
+  /** How this principal entered the roster. Conversation overlay is never persisted. */
+  assignmentSource: WorkroomParticipantAssignmentSource;
+  /**
+   * Explicit = coordinator role was persisted. Derived = read-model default from
+   * the sole accountable. None = not coordinating. Only explicit qualifies a
+   * standing room for autonomous drive (BI-3913EB49).
+   */
+  coordinatorSource: WorkroomCoordinatorSource;
 }
 
 export interface WorkroomActivityView {

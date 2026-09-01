@@ -79,6 +79,8 @@ describe("Work Room read model", () => {
           sponsorPrincipalRef: null,
           authoritySummary: "Can act within the approved booking scope",
           sourceRefs: [sourceRef],
+          assignmentSource: "explicit",
+          coordinatorSource: "none",
         },
       ],
       context: {
@@ -269,6 +271,8 @@ describe("Work Room read model", () => {
           sponsorPrincipalRef: null,
           authoritySummary: "Can approve and complete",
           sourceRefs: [sourceRef],
+          assignmentSource: "explicit",
+          coordinatorSource: "none",
         },
       ],
     });
