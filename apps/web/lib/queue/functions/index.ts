@@ -127,6 +127,10 @@ import {
 import { indexIntegritySweep } from "./index-integrity-sweep";
 import { localModelInstall } from "./local-model-install";
 import { nonprodCapacityAvailable, nonprodLeaseWaitReconciliation } from "./nonprod-lease-wait";
+import {
+  mcpTaskRunDispatchReconciliation,
+  mcpTaskRunExecute,
+} from "./mcp-task-run-execute";
 
 export const scheduledFunctions = [
   prometheusPoll,
@@ -196,6 +200,7 @@ export const scheduledFunctions = [
   indexIntegritySweep, // BI-D9C20A97: daily live-database btree/collation integrity sweep
   postmarkCallbackDispatchSweep,
   nonprodLeaseWaitReconciliation,
+  mcpTaskRunDispatchReconciliation,
 ];
 
 export const eventFunctions = [
@@ -240,6 +245,7 @@ export const eventFunctions = [
   workPatternExperimentRun,
   dataControlOperationRecoveryRequested,
   nonprodCapacityAvailable,
+  mcpTaskRunExecute,
 ];
 
 export const allFunctions = [...scheduledFunctions, ...eventFunctions];

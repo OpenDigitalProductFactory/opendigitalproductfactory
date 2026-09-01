@@ -3,8 +3,8 @@ status: active
 ---
 
 # Terminal-writer system-message order — fix design
-Backlog item: BI-EDC0DAF2  
-Workroom: WC-A291253B  
+Backlog item: BI-EDC0DAF2
+Workroom: WC-A291253B
 Named baseline: `origin/main` at `be4c6bfcb4fd62f497167fa55c747105512a0ecd`
 
 ## Objectives

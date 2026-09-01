@@ -1402,21 +1402,16 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     proposal: null,
     ...extra,
   });
+  const terminalFailure = (message: string, source = lastResult): AgenticResult =>
+    completeResult(message, source, { failure: { kind: "terminal-writer-missing", message } });
   let bestPreNudgeContent = ""; // Preserve best text from before nudge
   const startTime = Date.now();
   let inferenceCallCount = 0;
   let ctxPeakTokens = 0; // Peak assembled context (est. tokens) this turn — dumb-zone gauge.
   let resolvedMaxContextTokens: number | null = null; // BI-9679EB1A: learned from the first dispatch; sizes compaction + the gauge to the real window.
   let sandboxUnavailableCount = 0; // Circuit breaker: stop trying sandbox tools if unavailable
-  // Grant-starvation circuit breaker: an agent whose profile lacks the grants
-  // for the tools it was handed keeps emitting tool calls that all return
-  // `forbidden_grant`. Without this, the loop burns the full MAX_ITERATIONS /
-  // MAX_DURATION with executedTools=0 (observed 2026-07-06: build-architect on
-  // a build-pipeline thread spun ~500s, iter=200, zero tools executed). The
-  // repetition detector doesn't fire because the model keeps trying DIFFERENT
-  // forbidden tools; the nudge cap (1) is spent after the first iteration. We
-  // count consecutive forbidden_grant rejections and reset on ANY tool success,
-  // so a legitimately mixed grant surface (some tools allowed) never trips it.
+  // Stop grant-starved agents before they burn the full turn trying different
+  // forbidden tools. Reset on any success so mixed grant surfaces remain valid.
   let forbiddenGrantStreak = 0;
   const forbiddenGrantTools = new Set<string>(); // names seen rejected, for the blocked message
   let previousResponseId: string | undefined; // Responses API conversation chaining
@@ -1727,9 +1722,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         const message = routeOptions.toolChoice === "required"
           ? `The required governed writer ${params.terminalToolPolicy.writerToolName} could not be dispatched. The same TaskRun remains resumable. No receipt was created.`
           : `The governed review route failed before ${params.terminalToolPolicy.writerToolName} could be recorded. The same TaskRun remains resumable. No receipt was created.`;
-        return completeResult(message, null, {
-          failure: { kind: "terminal-writer-missing", message },
-        });
+        return terminalFailure(message, null);
       }
       return {
         content: failure.message,
@@ -1802,7 +1795,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           continue;
         }
         if (exit.kind === "input-required") {
-          return completeResult(exit.message, result, { failure: { kind: "terminal-writer-missing", message: exit.message } });
+          return terminalFailure(exit.message, result);
         }
       }
 
@@ -2648,6 +2641,12 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     `executedTools=${executedTools.length}. ` +
     `This may indicate the model needs more room or is stuck in a loop.`,
   );
+  if (params.terminalToolPolicy) {
+    const terminalExit = resolveTerminalTextExit(params.terminalToolPolicy, executedTools, Math.max(1, terminalToolNudges));
+    if (terminalExit.kind === "input-required") {
+      return terminalFailure(terminalExit.message);
+    }
+  }
   const fallbackContent = lastResult?.content?.trim() ?? "";
   const fallbackIsRawToolUse = fallbackContent.length > 0 && extractToolCalls(fallbackContent).length > 0;
   const fallbackIsFabricated = detectFabrication(

@@ -153,6 +153,18 @@ describe("recordKernelConsultInteraction", () => {
       optionDescriptions: { "option-a": "Reuse table", "option-b": "New table" },
       appliedPrincipleCount: 21,
       callingSurface: "claude-code",
+      policyProjection: {
+        policyAffirmativeOptionId: "proceed",
+        dualControlRequired: false,
+        policyActionBinding: {
+          actionKey: "record_initiative_evidence",
+          subject: { kind: "backlog-item", id: "BI-2014236E" },
+          organizationId: "platform",
+          professionId: null,
+          routeContext: "/build/work/WC-48A3D214",
+          artifactFingerprint: "sha256:exact",
+        },
+      },
     });
 
     expect(outcome.recorded).toBe(true);
@@ -174,6 +186,16 @@ describe("recordKernelConsultInteraction", () => {
     expect(payload.recommendedOptionId).toBe("option-a");
     expect(payload.callingPopulation).toBe("external_coding_agent");
     expect(payload.callingSurface).toBe("claude-code");
+    expect(payload.policyAffirmativeOptionId).toBe("proceed");
+    expect(payload.dualControlRequired).toBe(false);
+    expect(payload.policyActionBinding).toEqual({
+      actionKey: "record_initiative_evidence",
+      subject: { kind: "backlog-item", id: "BI-2014236E" },
+      organizationId: "platform",
+      professionId: null,
+      routeContext: "/build/work/WC-48A3D214",
+      artifactFingerprint: "sha256:exact",
+    });
     expect(Array.isArray(payload.topContributors)).toBe(true);
   });
 

@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
 vi.mock("@/lib/auth/mcp-api-token", () => ({
   resolveMcpApiToken: vi.fn(),
 }));
@@ -30,12 +29,15 @@ vi.mock("@/lib/tak/autonomous-work-run", () => ({
 vi.mock("@/lib/tak/task-records", () => ({
   createTaskMessage: vi.fn(),
 }));
+vi.mock("@/lib/queue/inngest-client", () => ({
+  inngest: { send: vi.fn().mockResolvedValue({ ids: ["event-1"] }) },
+}));
 
 vi.mock("@dpf/db", () => ({
   prisma: {
     user: { findUnique: vi.fn() },
     agent: { findFirst: vi.fn() },
-    taskRun: { findFirst: vi.fn(), update: vi.fn() },
+    taskRun: { findFirst: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     agentThread: { upsert: vi.fn() },
     taskMessage: { create: vi.fn() },
     mcpToolSession: { findUnique: vi.fn(), deleteMany: vi.fn(), upsert: vi.fn() },
@@ -161,11 +163,12 @@ afterEach(() => {
 });
 
 describe("GET", () => {
-  it("returns 405 with Allow header", () => {
-    const res = GET();
-    expect(res.status).toBe(405);
-    expect(res.headers.get("Allow")).toBe("POST");
+  it("requires the same authenticated transport as POST", async () => {
+    const res = await GET(makeRequest({ method: "GET", bearer: null }));
+    expect(res.status).toBe(401);
+    expect(res.headers.get("WWW-Authenticate")).toContain("resource_metadata");
   });
+
 });
 
 describe("POST — transport guards", () => {
@@ -1411,7 +1414,7 @@ describe("POST — tasks/submit", () => {
     expect(executeLoopMock).not.toHaveBeenCalled();
   });
 
-  it("creates an external-mcp TaskRun and executes read tasks with token attribution", async () => {
+  it("creates an external-mcp TaskRun and returns its durable handle", async () => {
     resolveMock.mockResolvedValue({
       tokenId: "tok_read",
       userId: "u1",
@@ -1453,23 +1456,13 @@ describe("POST — tasks/submit", () => {
         apiTokenId: "tok_read",
       }),
     }));
-    expect(resolveToolsMock).toHaveBeenCalledWith(expect.objectContaining({
-      mode: "advise",
-      externalAccessEnabled: true,
-    }));
-    expect(executeLoopMock).toHaveBeenCalledWith(expect.objectContaining({
-      taskRunId: "TR-MCP-12345678",
-      apiTokenId: "tok_read",
-      chatHistory: [{ role: "user", content: "Summarize discovery backlog and cite what you used." }],
-    }));
-    expect(taskRunUpdateMock).toHaveBeenCalledWith(expect.objectContaining({
-      where: { taskRunId: "TR-MCP-12345678" },
-      data: expect.objectContaining({ status: "completed" }),
-    }));
+    expect(resolveToolsMock).not.toHaveBeenCalled();
+    expect(executeLoopMock).not.toHaveBeenCalled();
     const body = await res.json();
     expect(body.result.taskRunId).toBe("TR-MCP-12345678");
     expect(body.result.idempotentReplay).toBe(false);
     expect(body.result.requiresApproval).toBe(false);
+    expect(body.result.status).toBe("submitted");
   });
 
   it("pauses high-risk submissions before executing tools", async () => {

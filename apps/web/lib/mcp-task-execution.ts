@@ -43,6 +43,23 @@ function remoteTaskContent(text: string) {
   return [{ type: "text", text }];
 }
 
+export function remoteTaskConversation(input: {
+  systemPrompt: string;
+  prompt: string;
+  resumeKind?: "capacity" | "terminal-writer";
+  terminalWriterContext?: string;
+}): {
+  systemPrompt: string;
+  chatHistory: Array<{ role: "user"; content: string }>;
+} {
+  return {
+    systemPrompt: input.resumeKind === "terminal-writer" && input.terminalWriterContext
+      ? `${input.systemPrompt}\n\n${input.terminalWriterContext}`
+      : input.systemPrompt,
+    chatHistory: [{ role: "user", content: input.prompt }],
+  };
+}
+
 export async function executeRemoteTaskAttempt(input: {
   run: { id: string; taskRunId: string; contextId: string | null };
   threadId: string;
@@ -129,15 +146,18 @@ export async function executeRemoteTaskAttempt(input: {
     : input.resumeKind === "terminal-writer"
       ? { resumedFromTerminalWriterWait: true }
       : { resumedFromCapacity: true };
-  const effectiveSystemPrompt = input.resumeKind === "terminal-writer" && input.terminalWriterContext
-    ? `${agent.systemPrompt}\n\n${input.terminalWriterContext}`
-    : agent.systemPrompt;
+  const conversation = remoteTaskConversation({
+    systemPrompt: agent.systemPrompt,
+    prompt: parsed.prompt,
+    resumeKind: input.resumeKind,
+    terminalWriterContext: input.terminalWriterContext,
+  });
 
   try {
     const result = await executeAutonomousAgenticLoop({
-      systemPrompt: effectiveSystemPrompt,
+      systemPrompt: conversation.systemPrompt,
       systemPromptInstructionSpans: coworkerBriefSpans(agent.systemPrompt),
-      chatHistory: [{ role: "user", content: parsed.prompt }],
+      chatHistory: conversation.chatHistory,
       sensitivity: agent.sensitivity ?? "internal",
       tools: tools.tools,
       toolsForProvider: tools.toolsForProvider,
@@ -174,27 +194,8 @@ export async function executeRemoteTaskAttempt(input: {
           where: { taskRunId: run.taskRunId },
           select: { status: true },
         });
-    const terminalWriterWasAttempted = terminalToolPolicy
-      ? (result.executedTools ?? []).some((tool) => tool.name === terminalToolPolicy.writerToolName)
-        || result.proposal?.name === terminalToolPolicy.writerToolName
-      : false;
-    const terminalWriterMissing = terminalToolPolicy !== null && !terminalWriterWasAttempted;
-    // BI-8B8731EE: a resource wait is NOT a writer-contract failure, and this
-    // branch would otherwise swallow it. `terminalWriterMissing` is true for any
-    // governed route that executed no tools, which is exactly what a capacity
-    // deferral looks like — so on a reviewer route the resource wait below was
-    // unreachable and every deferral was reported as a missing receipt writer.
-    // Let the resource wait win; it resumes on the same TaskRun either way.
-    const resourceWaitOwnsThisTurn = preInferenceResourceWait(result) !== null;
-    if (
-      !resourceWaitOwnsThisTurn
-      && (result.failure?.kind === "terminal-writer-missing" || terminalWriterMissing)
-      && terminalToolPolicy
-    ) {
+    if (result.failure?.kind === "terminal-writer-missing" && terminalToolPolicy) {
       const terminalWriterAttempt = input.terminalWriterAttempt ?? 1;
-      const terminalWriterFailureMessage = result.failure?.kind === "terminal-writer-missing"
-        ? result.failure.message
-        : `The required governed writer ${terminalToolPolicy.writerToolName} was not recorded before the review attempt ended. The same TaskRun remains resumable. No receipt was created.`;
       const escalation = terminalWriterRetryIsExhausted(terminalWriterAttempt)
         ? createTerminalWriterEscalation({
             writerToolName: terminalToolPolicy.writerToolName,
@@ -207,7 +208,7 @@ export async function executeRemoteTaskAttempt(input: {
           status: "input-required",
           completedAt: null,
           progressPayload: {
-            summary: terminalWriterFailureMessage,
+            summary: result.failure.message,
             riskClass: parsed.riskClass,
             executedToolCount: result.executedTools?.length ?? 0,
             terminalWriterWait: {
@@ -218,7 +219,7 @@ export async function executeRemoteTaskAttempt(input: {
               attempt: terminalWriterAttempt,
               observedAt: new Date().toISOString(),
               dispatchContract: "required-tool-call",
-              ...(terminalWriterFailureMessage.includes("did not honor the required writer tool-call contract")
+              ...(result.failure.message.includes("did not honor the required writer tool-call contract")
                 ? { noncompliance: "prose-without-required-writer" }
                 : {}),
             },

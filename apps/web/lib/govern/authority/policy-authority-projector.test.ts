@@ -283,4 +283,37 @@ describe("persistPolicyAuthorityProjection", () => {
       }),
     }));
   });
+
+  it("keeps the platform sentinel in the exact binding but never writes it as a tenant foreign key", async () => {
+    const platformInput = eligible();
+    platformInput.binding.organizationId = "platform";
+    platformInput.judgment.actionBinding = {
+      ...platformInput.judgment.actionBinding!,
+      organizationId: "platform",
+    };
+    const projection = projectPolicyAuthority(platformInput);
+    expect(projection).toMatchObject({ outcome: "allow", organizationId: "platform" });
+    const authorizationCreate = vi.fn().mockResolvedValue({ decisionId: "AUTH-PLATFORM" });
+    const db = {
+      $transaction: vi.fn(async (work: (tx: unknown) => Promise<unknown>) => work({
+        authorizationDecisionLog: { create: authorizationCreate },
+        coworkerActionEnvelope: {
+          findFirst: vi.fn().mockResolvedValue(null),
+          create: vi.fn().mockResolvedValue({ id: "ENV-PLATFORM" }),
+          updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+        },
+      })),
+    };
+
+    await persistPolicyAuthorityProjection({
+      db: db as never,
+      projection: projection as Extract<typeof projection, { outcome: "allow" }>,
+      approvalBinding: platformInput.approvalBinding,
+      threadId: "thread-platform",
+    });
+
+    expect(authorizationCreate).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ organizationId: null }),
+    }));
+  });
 });
