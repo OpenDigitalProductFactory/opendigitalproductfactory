@@ -114,6 +114,7 @@ export async function loadCapsuleLivenessInventory(
       liveness: verdict.liveness,
       isLive: verdict.isLive,
       isReapable: verdict.isReapable,
+      disposition: verdict.disposition,
       livenessReason: verdict.reason,
       trueLivenessAt: verdict.trueLivenessAt ? verdict.trueLivenessAt.toISOString() : null,
     };

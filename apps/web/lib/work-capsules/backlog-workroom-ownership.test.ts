@@ -46,7 +46,7 @@ describe("backlog Workroom ownership", () => {
     const db = {
       workroom: { findMany: vi.fn().mockResolvedValue([
         room(),
-        room({ capsuleId: "WC-DEAD", headBranch: "fix/dead", leaseExpiresAt: new Date("2026-08-31T17:00:00.000Z") }),
+        room({ capsuleId: "WC-DEAD", headBranch: "fix/dead", leaseExpiresAt: new Date("2026-08-30T00:00:00.000Z") }), // >24h before now — past the resume grace
       ]) },
       featureBuild: { findMany: vi.fn().mockResolvedValue([]) },
       nonProductionEnvironmentLease: { findMany: vi.fn().mockResolvedValue([]) },

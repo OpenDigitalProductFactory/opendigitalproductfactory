@@ -133,7 +133,9 @@ describe("getWorkControlData", () => {
 
   it("returns only truly live development workrooms and a truthful summary", async () => {
     const future = new Date(Date.now() + 60_000);
-    const past = new Date(Date.now() - 60_000);
+    // >24h ago — past the token-limited resume grace, so genuinely dead/reapable
+    // (a lease that lapsed minutes ago is now `paused`, still live, on purpose).
+    const past = new Date(Date.now() - 25 * 60 * 60 * 1000);
     mockPrisma.workroom.findMany.mockResolvedValue([
       {
         capsuleId: "WC-LIVE", title: "Live branch", status: "working", source: "external-adoption",
