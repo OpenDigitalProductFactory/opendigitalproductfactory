@@ -281,7 +281,7 @@ Scope for this epic: **bind, search, group membership. Over TLS. Read-only.**
 - **TLS from the existing org PKI (Step CA).** No second CA, no self-signed fallback — a test asserts the chain.
 - **Bind** for all three classes; a service account binds as a first-class peer of a human.
 - **Search authorization is mandatory.** What a bind identity may see is filtered by §8.4 and by the binding principal's own clearance. An anonymous or low-privilege bind must not enumerate the tree. A directory that answers every search identically is an information-disclosure surface.
-- **Explicitly out of scope:** SAML, OIDC, SCIM, and LDAP write operations. Each is its own surface and its own decision. Attempting all four at once is how the predecessor plan reached 111 tasks and shipped nothing.
+- **Explicitly out of scope:** SAML, OIDC, SCIM, and LDAP write operations. Each is its own surface and its own decision. Attempting all four at once is how the predecessor plan reached 111 tasks and shipped nothing. The exclusions are recorded rather than silent: SCIM as `BI-2C44C3EF`, OIDC as `BI-88363C2C`.
 
 **Acceptance is a real client.** `ldapsearch` binds over TLS and returns correct results for a human, an agent, and a service account, against the running app. Structural verification does not count here — this is a protocol, and only a real client proves conformance.
 
@@ -302,6 +302,24 @@ The serving contract:
 - **A listener that cannot start does not take the portal with it.** It is reported, loudly, and every other surface keeps serving.
 
 Operator procedure: [serving the directory](../../install/serve-the-directory.md).
+
+**Outcome, measured 2026-08-29 on the canonical runtime.** The amended acceptance
+above is met: the running install serves LDAPS on 636 from the organization CA.
+Portal log `[ldap] Serving the directory over LDAPS on port 636`; `:::636` bound
+in-container; TLS chain verified to the org root (`Verify return code: 0`, issuer
+`DPF Organization CA Intermediate CA`); and a real OpenLDAP client received the
+bind verifier's own diagnostic, confirming request decode, verifier dispatch,
+response encode and client parse end to end. Verified again after a subsequent
+self-upgrade, so the capability is carried by configuration rather than by a
+hand-held container.
+
+Two things this deliberately does **not** claim. A successful bind returning
+published entries was not demonstrated — that needs a credential for a production
+principal, and minting one (a client certificate whose CN is a real `principalId`
+would do it) manufactures an authentication credential for a real identity, which
+is not a verification step. And the disabled case was verified before enabling:
+with `DPF_LDAP_ENABLED=0` nothing was bound in-container and a real client could
+not connect, so the published port is inert until an operator turns it on.
 
 ## 10. Authorization Stays Where It Is
 
@@ -384,8 +402,8 @@ need to make.
 ## 14. Open Questions
 
 1. **Which credential scheme for service-account binds** — shared secret, or mTLS from the org PKI only? mTLS is stronger and reuses existing substrate, but not every client that needs to bind can present a client certificate. Resolve in `BI-F7317D65`.
-2. **Does `User` survive as a table, or fold into `Principal` with a credential side-table?** D2 says side-table; the migration shape needs its own review given `User` carries ~70 relations. This is the highest-risk mechanical change in the epic.
-3. **Multi-organization installs** — one tree per `Organization`, or one tree with organizational branches? Deferred until a live install needs it; noted so it is not silently assumed away.
+2. **Does `User` survive as a table, or fold into `Principal` with a credential side-table?** D2 says side-table; the migration shape needs its own review given `User` carries ~70 relations. This is the highest-risk mechanical change in the epic. Filed as `BI-D070FC77`, deliberately alone: a migration touching ~70 relations cannot be reverted as one clean concern if it rides along with anything else.
+3. **Multi-organization installs** — one tree per `Organization`, or one tree with organizational branches? Deferred until a live install needs it; noted so it is not silently assumed away. Filed as `BI-FAF6A01E`, which names the exact assumption site: `buildDirectoryProjection` takes the first `Organization` by `createdAt`.
 4. **Absorbed protocol code provenance** — vendored with notice, or reimplemented from the RFC with `ldapjs` as reference only? Legal answer is either; the maintenance answer differs. Resolve in `BI-27E462BA`.
 
 ## 15. Relationship to Existing Work
