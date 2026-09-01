@@ -57,7 +57,10 @@ export function ProviderAccountPostureForm({
           </select>
         </label>
         <label className="text-xs text-[var(--dpf-muted)]">Enabled processing regions
-          <input className="mt-1 w-full rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-2 text-[var(--dpf-text)]" value={regions} disabled={!canWrite || pending} placeholder="eu, uk" onChange={(event) => setRegions(event.target.value)} />
+          <input aria-describedby="enabled-regions-help" className="mt-1 w-full rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-2 text-[var(--dpf-text)]" value={regions} disabled={!canWrite || pending} onChange={(event) => setRegions(event.target.value)} />
+          <span id="enabled-regions-help" className="mt-1 block">
+            {regions.trim() ? "Saved regions are shown above." : "No regions saved. Region-restricted work remains blocked."} Example: eu, uk.
+          </span>
         </label>
       </div>
       {providerId === "openrouter" && (

@@ -36,5 +36,8 @@ describe("ProviderAccountPostureForm", () => {
       <ProviderAccountPostureForm providerId="anthropic" canWrite initial={null} />,
     );
     expect(html).not.toContain("Bound the router before company data is used");
+    expect(html).not.toContain('placeholder="eu, uk"');
+    expect(html).toContain("No regions saved");
+    expect(html).toContain("Example: eu, uk");
   });
 });
