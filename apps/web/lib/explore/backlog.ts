@@ -46,6 +46,7 @@ export type BacklogItemWithRelations = {
   scopeRationale?: string | null;
   lifecycleTags?: string[];
   activeBuild: { buildId: string; phase: string | null } | null;
+  activeWorkrooms?: import("@/lib/work-capsules/backlog-workroom-ownership").BacklogWorkroomSummary[];
   digitalProduct: { id: string; productId: string; name: string } | null;
   organizationId?: string | null;
   productLineId?: string | null;

@@ -1,0 +1,31 @@
+{
+  "version": "1",
+  "decidedOption": "show a compact linked active-Workroom strip inside the existing backlog row, with status, executor, branch, and liveness while keeping session, principal, lease, and filesystem detail backstage",
+  "scope": {
+    "files": [
+      "apps/web/components/ops/BacklogItemRow.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "sweep-measurement",
+    "baselineComparison": "pre-existing-route",
+    "measured": {
+      "/ops": {
+        "defaultVisibleWords": 187,
+        "leadBandWords": 0,
+        "primaryActions": 1,
+        "visibleFields": 2,
+        "maxChoicesPerControl": 5,
+        "subLegibleControls": 9,
+        "buriedPrimaryAction": 0,
+        "axeViolations": 2
+      }
+    }
+  },
+  "notes": {
+    "routeMeasurement": "The committed /ops sweep fixture has no active Workroom and remains byte-for-byte at its recorded route-budget baseline. The new strip returns null for that state, so every measured arrival axis remains unchanged rather than being estimated.",
+    "populatedState": "OpsClient.test.tsx renders a live owner and proves the Workroom link, status, executor, branch, and liveness are present while worktreePath, executorRef, and leaseHolderPrincipalId are absent. The strip uses the shared StatusBadge and token-backed styles.",
+    "previewLimitation": "A governed shared preview lease was admitted, but its database endpoint was unavailable and the route could not render. The lease was released immediately. Browser verification is therefore deferred to the canonical install after merge and is not claimed by this manifest.",
+    "fit": "The change adds one contextual link only when work is active, creates no route or navigation layer, adds no field or primary action, and answers the operator's ownership question at the backlog item where the claim decision starts."
+  }
+}
