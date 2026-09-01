@@ -3,6 +3,10 @@ import { prisma, Prisma } from "@dpf/db";
 import { safeSyncSelfUpgradeChangeRecord } from "@/lib/self-upgrade/change-record";
 import { agentEventBus } from "@/lib/agent-event-bus";
 import { recordCorrectiveRecoveryEvidence } from "@/lib/backlog/capture-corrective-bi";
+import {
+  deriveFailureReason,
+  FAILURE_REASON_MAX,
+} from "@/lib/self-upgrade/build-failure-classifier";
 import type { SelfUpgradeRunStatus } from "@/lib/self-upgrade/run-types";
 import type {
   SelfUpgradeAdmissionRecord,
@@ -398,10 +402,27 @@ export async function completeRun(runId: string) {
   return updated;
 }
 
-export async function failRun(runId: string, error: string) {
+export async function failRun(runId: string, error: string, reason?: string) {
+  // Record WHY, not just the log. `skipRun` has always written a structured
+  // `reason` that the Upgrade Center renders in plain language; `failRun` wrote
+  // only `failureLog`, so a failed run showed the operator nothing but raw
+  // Docker output behind a tooltip. Measured on this install: 55 of 55 failed
+  // runs carried no reason, and that hid two multi-day outages (four
+  // consecutive daily failures 2026-07-26..29, and the Git-LFS breakage of
+  // 2026-08-29 — four more days where the cause sat only in a build log).
+  //
+  // The derivation reuses the SAME classification this function already ran
+  // below to fingerprint the corrective BI and then threw away; callers that
+  // already know the cause (preflight, release-target) pass it explicitly.
+  const resolvedReason = (reason ?? deriveFailureReason(error)).slice(0, FAILURE_REASON_MAX);
   const updated = await prisma.selfUpgradeRun.update({
     where: { runId },
-    data: { status: "failed", completedAt: new Date(), failureLog: error },
+    data: {
+      status: "failed",
+      completedAt: new Date(),
+      failureLog: error,
+      reason: resolvedReason,
+    },
   });
   notifyRunState(updated.runId, "failed");
   await safeSyncSelfUpgradeChangeRecord(runId);

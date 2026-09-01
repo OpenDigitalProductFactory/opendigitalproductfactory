@@ -432,3 +432,67 @@ describe("buildOwnerReleaseSummary — pending update vs run state", () => {
     }
   });
 });
+
+// A failed run must say WHAT went wrong. "Check the details below" used to
+// point at a raw Docker log — the only place the cause existed, which is how
+// four consecutive daily failures (2026-07-26..29) and the Git-LFS breakage
+// (2026-08-29) stayed invisible to the operator.
+describe("buildOwnerReleaseSummary — a failure explains itself", () => {
+  const FAILED = {
+    isFresh: false,
+    targetSha: "f".repeat(40),
+    targetAvailability: "resolved" as const,
+  };
+
+  it("names the cause in the headline and the risk list", () => {
+    const s = buildOwnerReleaseSummary(
+      baseInput({
+        ...FAILED,
+        latestRun: { status: "failed", reason: "host-out-of-memory", targetSha: null },
+      }),
+      NO_LOCAL_CHANGES,
+    );
+    expect(s.state).toBe("failed");
+    expect(s.headline).toContain("ran out of memory");
+    expect(s.whatCouldGoWrong.join(" ")).toContain("ran out of memory");
+  });
+
+  it("tells the operator when a retry will not help", () => {
+    const s = buildOwnerReleaseSummary(
+      baseInput({
+        ...FAILED,
+        rollbackAvailable: false,
+        latestRun: { status: "failed", reason: "merge-conflict: 3 files", targetSha: null },
+      }),
+      NO_LOCAL_CHANGES,
+    );
+    expect(s.recommendedAction.label).toBe("Needs a decision");
+    expect(s.recommendedAction.detail).toContain("won't fix itself");
+  });
+
+  // Historical rows (and any future unclassified failure) have no reason. The
+  // card must degrade to the old copy rather than render an empty sentence.
+  it("falls back cleanly when no reason was recorded", () => {
+    const s = buildOwnerReleaseSummary(
+      baseInput({
+        ...FAILED,
+        latestRun: { status: "failed", reason: null, targetSha: null },
+      }),
+      NO_LOCAL_CHANGES,
+    );
+    expect(s.headline).toBe("The last update didn't finish");
+    expect(s.whatCouldGoWrong.join(" ")).toContain("didn't finish");
+  });
+
+  it("keeps the failure copy free of operator jargon", () => {
+    const s = buildOwnerReleaseSummary(
+      baseInput({
+        ...FAILED,
+        latestRun: { status: "failed", reason: "pnpm-install-failure", targetSha: null },
+      }),
+      NO_LOCAL_CHANGES,
+    );
+    const copy = [s.headline, s.recommendedAction.detail, ...s.whatCouldGoWrong].join(" ");
+    for (const term of JARGON) expect(copy).not.toContain(term);
+  });
+});
