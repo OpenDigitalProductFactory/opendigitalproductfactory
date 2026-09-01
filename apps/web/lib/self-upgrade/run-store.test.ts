@@ -46,6 +46,7 @@ import {
   claimAdmittedRunForWorker,
   deferAdmittedRunForRedispatch,
   selfUpgradeAdmissionRepository,
+  failRun,
 } from "./run-store";
 
 const report = {
@@ -547,5 +548,48 @@ describe("self-upgrade admission transaction", () => {
       dispatchStatus: "admission_pending",
     })).resolves.toMatchObject({ disposition: "recovery_conflict", run: successor });
     expect(mocks.create).not.toHaveBeenCalled();
+  });
+});
+
+// BI: a failed run must record WHY on the row, not only in failureLog.
+// `skipRun` always wrote a structured `reason`; `failRun` never did, so 55 of
+// 55 failed runs on the live install showed the operator nothing but a raw
+// Docker log behind a tooltip — hiding two multi-day outages.
+describe("failRun records an operator-readable reason", () => {
+  beforeEach(() => {
+    mocks.update.mockResolvedValue({ runId: "SUR-TEST", status: "failed" });
+  });
+
+  it("derives the reason from the failure log when the caller supplies none", async () => {
+    await failRun(
+      "SUR-TEST",
+      "#42 12.4 ERR_PNPM_OUTDATED_LOCKFILE  Cannot install with frozen-lockfile",
+    );
+    const data = mocks.update.mock.calls.at(-1)?.[0]?.data;
+    expect(data.status).toBe("failed");
+    expect(data.reason).toBe("pnpm-install-failure");
+    // The full log is still persisted — the reason summarises, never replaces.
+    expect(data.failureLog).toContain("ERR_PNPM_OUTDATED_LOCKFILE");
+  });
+
+  it("prefers a reason the caller already knows", async () => {
+    await failRun("SUR-TEST", "some long log", "promoter-readiness-failed: image missing");
+    expect(mocks.update.mock.calls.at(-1)?.[0]?.data.reason).toBe(
+      "promoter-readiness-failed: image missing",
+    );
+  });
+
+  it("never writes an empty reason, whatever the log looks like", async () => {
+    for (const log of ["", "   ", "totally unrecognised output"]) {
+      await failRun("SUR-TEST", log);
+      const reason = mocks.update.mock.calls.at(-1)?.[0]?.data.reason;
+      expect(typeof reason).toBe("string");
+      expect(reason.trim().length).toBeGreaterThan(0);
+    }
+  });
+
+  it("bounds the reason so the column never carries a whole build log", async () => {
+    await failRun("SUR-TEST", "y".repeat(10_000));
+    expect(mocks.update.mock.calls.at(-1)?.[0]?.data.reason.length).toBeLessThanOrEqual(200);
   });
 });

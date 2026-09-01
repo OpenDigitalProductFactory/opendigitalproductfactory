@@ -16,6 +16,7 @@
 
 import type { LocalChangesResult } from "@/lib/self-upgrade/local-changes-ledger";
 import { describeSkipReason } from "@/lib/self-upgrade/skip-reason";
+import { describeFailureReason } from "@/lib/self-upgrade/failure-reason";
 
 /** The release state an owner cares about — deliberately coarser than the run status machine. */
 export type OwnerReleaseState =
@@ -286,8 +287,14 @@ export function buildOwnerReleaseSummary(
     );
   }
   if (state !== "unavailable" && failed) {
+    // Say WHAT went wrong, not just that something did. "Check the details
+    // below" used to point at a raw build log — the only place the cause
+    // existed, which is how two multi-day outages stayed invisible.
+    const why = describeFailureReason(input.latestRun?.reason);
     whatCouldGoWrong.push(
-      "The previous attempt didn't finish — check the details below before you retry.",
+      why
+        ? `${why.title}. ${why.detail}`
+        : "The previous attempt didn't finish — check the details below before you retry.",
     );
   }
   // Always reassure with the safety net, last.
@@ -375,13 +382,18 @@ export function buildOwnerReleaseSummary(
       break;
     case "failed":
     default:
-      headline = "The last update didn't finish";
-      recommendedAction = {
-        label: "Review and recover",
-        detail: rollbackAvailable
-          ? "Restore the previous version below if the platform isn't behaving, then try the update again."
-          : "Check the details below, then try the update again.",
-      };
+      {
+        const why = describeFailureReason(input.latestRun?.reason);
+        headline = why ? `The last update didn't finish — ${why.title.toLowerCase()}` : "The last update didn't finish";
+        recommendedAction = {
+          label: why && !why.retryable ? "Needs a decision" : "Review and recover",
+          detail: rollbackAvailable
+            ? "Restore the previous version below if the platform isn't behaving, then try the update again."
+            : why && !why.retryable
+              ? "This one won't fix itself on a retry — someone needs to look at the details below."
+              : "Check the details below, then try the update again.",
+        };
+      }
       ifYouDoNothing =
         "The platform stays on the previous version. Nothing else changes until you retry.";
       break;
