@@ -43,9 +43,18 @@ type ClassRule = {
 // nothing else; the second is real HR vocabulary that is ALSO everyday English
 // on an AI-operations, capacity, or product surface, so it needs corroboration.
 const EMPLOYEE_RECORD_VALUE_PATTERN =
-  /\b(?:salary|performance review|disciplinary|manager-only|payroll)\b/i;
+  /\b(?:salary|performance review|disciplinary|manager-only|payroll record|employee record|personnel file)\b/i;
+// BARE `payroll` moved here from the precise set (BI-67CAF494). It names a
+// DOMAIN, not a record: "the payroll module", "design payroll tax acquisition",
+// "help me with payroll" are all requests ABOUT payroll containing no payroll
+// data. Escalating on it alone meant a coworker could not be asked for help with
+// payroll at all — the request was clamped to local-only before anyone read it.
+//
+// The record-SHAPED phrases stay precise and still escalate alone: "payroll
+// record", "employee record", "personnel file" name the thing itself, as do a
+// salary figure or an SSN. The line is domain versus record, not topic.
 const EMPLOYEE_RECORD_AMBIGUOUS_VALUE_PATTERN =
-  /\b(?:compensation|benefits?)\b/i;
+  /\b(?:compensation|benefits?|payroll)\b/i;
 
 const SOURCE_CODE_VALUE_PATTERN =
   /(?:\b(?:const|let|var)\s+[A-Za-z_$][\w$]*\s*(?:[:=;,])|\bfunction\s+[A-Za-z_$][\w$]*\s*\(|\bclass\s+[A-Za-z_$][\w$]*(?:\s+extends\s+[A-Za-z_$][\w$]*)?\s*\{|\bimport\s+[\w*{},\s]+\s+from\s+["']|\bexport\s+(?:default\s+)?(?:const|let|var|function|class)\b|=>|```(?:ts|tsx|js|jsx|py|sql|sh|ps1)\b)/;
@@ -116,8 +125,18 @@ const CLASS_RULES: readonly ClassRule[] = [
     dataClass: "payments-finance",
     reason: "payment-or-finance-text",
     confidence: "inferred",
+    // `payroll` is deliberately absent from this list. It is employment
+    // vocabulary and belongs to the employee-records rules; carrying it here too
+    // made ONE word produce two distinct restricted reasons, which is exactly the
+    // corroboration bar — so the guard corroborated itself (BI-67CAF494).
+    //
+    // `invoice` and `bank account` are left precise on purpose. They read as
+    // domain words too, but no evidence shows them causing a false clamp, and
+    // demoting them stops semantic memory producing a mask obligation for
+    // confidential content — which silently DROPS the memory rather than storing
+    // it masked. Not changed without evidence that it needs changing.
     textPattern:
-      /\b(?:routing number|account number|credit card|invoice|bank account|payroll|tax id|ein|ssn)\b/i,
+      /\b(?:routing number|account number|credit card|invoice|bank account|tax id|ein|ssn)\b/i,
   },
   {
     dataClass: "health-phi",

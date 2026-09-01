@@ -122,6 +122,43 @@ export function findCompletenessRatchetFailures(report, baseline) {
         + "complete the regressed/new identity rather than raising the baseline",
       );
     }
+    // Shrink-only was declared in the baseline note but never enforced: the
+    // check caught growth past the maximum and ignored slack beneath it. Slack
+    // is how a closed gap reopens silently — close 57 corpus gaps without
+    // re-running --update and the baseline still permits 57, so a later change
+    // may spend that headroom and this gate stays green. A ratchet that only
+    // resists growth is a limiter; refusing to leave the headroom unclaimed is
+    // what makes it a ratchet.
+    if (current < maximum) {
+      failures.push(
+        `${plane} open gaps fell to ${current} but the baseline still allows ${maximum}; `
+        + "run: node scripts/check-agent-capability-integrity.mjs --update  "
+        + "— unclaimed slack lets these gaps reopen without failing this gate",
+      );
+    }
+  }
+
+  // The same staleness at identity granularity. A grandfathered agent is
+  // skipped entirely by the floor loop above, so one that has since reached
+  // every floor keeps a permanent exemption and may regress unnoticed.
+  // --update already drops such an agent from the list; this makes forgetting
+  // to run it a failure rather than a silent loss of coverage.
+  for (const agent of report.agents ?? []) {
+    const listed = grandfathered.has(agent.key)
+      || (agent.handles ?? []).some((handle) => grandfathered.has(handle));
+    if (!listed) continue;
+    const meetsEveryFloor = CAPABILITY_PLANES.every((plane) => {
+      const floor = Number(floors[plane]);
+      if (!Number.isFinite(floor)) return true;
+      return Number(agent.planes?.[plane]?.level ?? 0) >= floor;
+    });
+    if (meetsEveryFloor) {
+      failures.push(
+        `${agent.key} now meets every plane floor but is still grandfathered; `
+        + "run: node scripts/check-agent-capability-integrity.mjs --update  "
+        + "— an earned exemption left in place is an agent that may quietly regress",
+      );
+    }
   }
 
   return failures;

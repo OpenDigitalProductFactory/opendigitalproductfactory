@@ -71,7 +71,12 @@ describe("screenInferencePayload", () => {
       schemaVersion: "inference-data-screen/v1",
       policyEffect: "deny",
       routeEffect: "local-only",
-      classifiedDataClasses: expect.arrayContaining(["employee-records", "payments-finance"]),
+      // "payments-finance" dropped 2026-09-01 (BI-67CAF494). This message names
+      // no payment identifier; the class appeared only because bare `payroll`
+      // sat in BOTH the employee-records and payments-finance text patterns, so
+      // one word produced two classes. The routing outcome below is unchanged —
+      // `disciplinary` is precise and still escalates on its own.
+      classifiedDataClasses: expect.arrayContaining(["employee-records"]),
       explanationCodes: expect.arrayContaining(["restricted-cannot-leave-boundary"]),
       rawPayloadStored: false,
     });
