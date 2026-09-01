@@ -297,19 +297,13 @@ work.
 
 ### 14.4 Acceptance
 
-- **AC-PACKET-TERMINAL-001** (`OBJ-PACKET-TERMINAL`): both BacklogItem and
-  Workroom completion refusals return the same executable recovery contract.
-- **AC-PACKET-TERMINAL-002** (`OBJ-PACKET-MAPPING`): the returned packet binds
-  `record_initiative_evidence`, `objective-mapping`, the current baseline,
-  repository/branch/head, canonical design path, and provider blob id.
-- **AC-PACKET-TERMINAL-003** (`OBJ-PACKET-UNCHANGED`): allowed terminal
-  transitions and all readiness verdicts remain unchanged.
-- **AC-PACKET-TERMINAL-004** (`OBJ-PACKET-TERMINAL`,
-  `OBJ-PACKET-UNCHANGED`): missing or ambiguous Workroom/artifact/baseline state
-  returns an actionable typed escalation and no route.
-- **AC-PACKET-TERMINAL-005** (`OBJ-PACKET-MAPPING`): dispatching the packet can
-  record the existing objective-mapping proposal without caller-constructed
-  authority metadata, and the existing terminal repository alone evaluates it.
+| Acceptance ID | Objective IDs | Required outcome |
+|---|---|---|
+| AC-PACKET-TERMINAL-001 | OBJ-PACKET-TERMINAL | Both BacklogItem and Workroom completion refusals return the same executable recovery contract. |
+| AC-PACKET-TERMINAL-002 | OBJ-PACKET-MAPPING | The returned packet binds `record_initiative_evidence`, `objective-mapping`, the current baseline, repository/branch/head, canonical design path, and provider blob id. |
+| AC-PACKET-TERMINAL-003 | OBJ-PACKET-UNCHANGED | Allowed terminal transitions and all readiness verdicts remain unchanged. |
+| AC-PACKET-TERMINAL-004 | OBJ-PACKET-TERMINAL, OBJ-PACKET-UNCHANGED | Missing or ambiguous Workroom/artifact/baseline state returns an actionable typed escalation and no route. |
+| AC-PACKET-TERMINAL-005 | OBJ-PACKET-MAPPING | Dispatching the packet can record the existing objective-mapping proposal without caller-constructed authority metadata, and the existing terminal repository alone evaluates it. |
 
 ### 14.5 Verification and compatibility
 
