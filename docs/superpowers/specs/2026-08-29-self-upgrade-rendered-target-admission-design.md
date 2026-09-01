@@ -68,7 +68,7 @@ second, inconsistent home for target authority.
 | Acceptance | Objectives | Statement | Verification |
 | --- | --- | --- | --- |
 | AC-RTA-001 | OBJ-RTA-001, OBJ-RTA-002 | A release-artifact page mints an opaque HMAC binding for kind, SHA, tag, issued time, expiry, and schema version using a server-only secret. | Binding unit tests |
-| AC-RTA-002 | OBJ-RTA-002 | Forged, malformed, expired, wrong-secret, wrong-kind, invalid-SHA, blank/oversized-tag, and unbound browser values cannot admit a run. | Binding and action tests |
+| AC-RTA-002 | OBJ-RTA-002 | Forged, malformed, wrong-secret, wrong-kind, invalid-SHA, blank/oversized-tag, and unbound browser values cannot admit a run. An expired binding cannot independently supply admission authority. | Binding and action tests |
 | AC-RTA-003 | OBJ-RTA-001, OBJ-RTA-003 | If action-time discovery is unavailable, a valid unexpired server binding on a release-artifact install creates exactly one durable admission with that exact target. | Source-free action fixture |
 | AC-RTA-004 | OBJ-RTA-004 | If action-time discovery resolves a different kind, SHA, or tag, admission is refused before persistence. | Drift fixture |
 | AC-RTA-005 | OBJ-RTA-004 | If dispatch-time discovery is unavailable, the same run becomes indeterminate/reconcilable and no worker event is sent. | Admission state-machine fixture |
@@ -80,6 +80,7 @@ second, inconsistent home for target authority.
 | AC-RTA-011 | OBJ-RTA-003 | If neither live nor bounded verified evidence is available, a claimed worker returns the same run to `pending`/`indeterminate` reconciliation before quiescence; it is not skipped and no second admission is created. | Worker and run-store fixtures |
 | AC-RTA-012 | OBJ-RTA-004 | A worker candidate whose SHA/tag differs from the durable admission, or whose registry proof reports an integrity failure, terminally fails with a distinct integrity outcome before quiescence. | Drift and digest fixtures |
 | AC-RTA-013 | OBJ-RTA-003 | Recovery is constant work per admitted run and uses the existing bounded reconciliation query; no fleet fan-out or unbounded collection is introduced. | Architecture review and existing reconciler bound |
+| AC-RTA-014 | OBJ-RTA-001, OBJ-RTA-002 | A long-open page whose signed binding expired may proceed only when fresh server discovery independently resolves the identical release kind, SHA, and tag. The signed expired payload is comparison evidence only; unresolved discovery, forgery, malformed input, or any drift remains fail-closed. | Exact long-open-page admission fixture |
 
 ## Chosen design
 
@@ -94,9 +95,12 @@ signature is trusted.
 
 The payload is a proof of what the server rendered, not an authorization. The
 server action still performs ordinary session/permission, support, quiescence,
-override, and newer-run checks. The binding expires after 15 minutes; an
-operator whose page is older must refresh rather than admit an identity the
-server can no longer confirm.
+override, and newer-run checks. The binding expires after 15 minutes and cannot
+supply fallback authority after that point. A long-open page may still complete
+the same authenticated action only when action-time server discovery
+independently confirms the exact signed kind, SHA, and tag. The expired payload
+is never returned as the selected target; it is used only for equality
+comparison with the current server target.
 
 The page mints a token only when its server-resolved target is a complete
 `release-artifact` binding. The client control carries only the opaque token.
@@ -168,6 +172,10 @@ worker delivery. EP-56AE0F69 owns further self-upgrade lifecycle evolution.
    verified-evidence resolution behind one helper, compare against the durable
    admission, and return transport-unavailable runs to reconciliation before
    mutation. Keep all typed integrity failures terminal.
+9. Add the exact long-open-page recurrence: an expired but authentic binding
+   plus an independently resolved identical release admits that current server
+   target; unresolved, forged, malformed, Git-source, or drifted cases remain
+   fail-closed.
 
 No step is independently shippable: signing without action integration is
 unused, action integration without dispatch reconciliation wedges admissions,
@@ -178,7 +186,7 @@ original authority defect.
 
 | Deliverable key | Backlog item | Independently shippable | Requirement refs | Contract refs | Flow refs | Verification refs |
 | --- | --- | --- | --- | --- | --- | --- |
-| `server-owned-rendered-target-admission` | BI-EE81F61B | no | OBJ-RTA-001, OBJ-RTA-002, OBJ-RTA-003, OBJ-RTA-004, OBJ-RTA-005 | opaque-target-binding, admission-transaction, dispatch-state-machine, install-support-boundary | render-sign, client-carry, action-verify, admit, reconcile, dispatch, worker-verify, worker-reconcile, live-upgrade | AC-RTA-001, AC-RTA-002, AC-RTA-003, AC-RTA-004, AC-RTA-005, AC-RTA-006, AC-RTA-007, AC-RTA-008, AC-RTA-009, AC-RTA-010, AC-RTA-011, AC-RTA-012, AC-RTA-013 |
+| `server-owned-rendered-target-admission` | BI-EE81F61B | no | OBJ-RTA-001, OBJ-RTA-002, OBJ-RTA-003, OBJ-RTA-004, OBJ-RTA-005 | opaque-target-binding, admission-transaction, dispatch-state-machine, install-support-boundary | render-sign, client-carry, action-verify, admit, reconcile, dispatch, worker-verify, worker-reconcile, live-upgrade | AC-RTA-001, AC-RTA-002, AC-RTA-003, AC-RTA-004, AC-RTA-005, AC-RTA-006, AC-RTA-007, AC-RTA-008, AC-RTA-009, AC-RTA-010, AC-RTA-011, AC-RTA-012, AC-RTA-013, AC-RTA-014 |
 
 ## Scope, rollback, and root-cause prevention
 
