@@ -15,6 +15,13 @@ status: active
 
 No migration is required. Documentation impact is user-facing and is handled in the same change.
 
+## Governed traceability
+
+- Requirement: `OBJ-PROVIDER-TRUST-TRUTH`
+- Verification: `AC-PROVIDER-TRUST-1`, `AC-PROVIDER-TRUST-2`, `AC-PROVIDER-TRUST-3`, `AC-PROVIDER-TRUST-4`
+- Contract: `provider trust evidence projection`
+- Flow: `provider trust settings page`
+
 ## Design grounding
 
 - Existing specs/plans reviewed: `docs/superpowers/specs/2026-07-19-ai-provider-suitability-routing-design.md`, `docs/superpowers/plans/2026-07-19-ai-provider-suitability-routing.md`, and the provider-trust operations/user documentation.
