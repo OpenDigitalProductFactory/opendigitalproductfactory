@@ -53,6 +53,8 @@ import { listLocalBranches } from "./git-scanner";
 import { ensureExternalSessionCapsule } from "./external-session-capture";
 import { branchOccupiedResult, invalidScopeResult } from "./mcp-result-errors";
 import { claimBacklogItemForWork } from "./claim-backlog-item-handler";
+import { createWorkroomBoundToBacklogItem } from "./create-workroom-binding";
+import { workCapsuleActor as actor } from "./handler-actor";
 type ToolContext = {
   routeContext?: string;
   agentId?: string;
@@ -75,26 +77,6 @@ export function workCapsuleToolEnums() {
     outcomeAnchorKinds: [...WORK_CAPSULE_OUTCOME_ANCHOR_KINDS],
     agentActivityKinds: [...AGENT_ACTIVITY_KINDS],
   };
-}
-
-async function actor(userId: string, context: ToolContext) {
-  const { ensureAgentPrincipalIdentity, syncUserPrincipal } = await import("@/lib/identity/principal-linking");
-  const agentId = context?.agentId ?? null;
-  let principalId: string | null = null;
-
-  try {
-    if (agentId) {
-      const synced = await ensureAgentPrincipalIdentity(agentId);
-      principalId = synced?.id ?? null;
-    } else {
-      const synced = await syncUserPrincipal(userId);
-      principalId = synced?.id ?? null;
-    }
-  } catch {
-    principalId = null;
-  }
-
-  return { userId, agentId, principalId };
 }
 
 function stringParam(params: Record<string, unknown>, key: string): string | null {
@@ -504,18 +486,23 @@ export async function createWorkCapsuleTool(
     return invalidScopeResult(error);
   }
 
-  const capsule = await createWorkCapsule({
-    db: workCapsuleDb(),
-    input: {
-      title,
-      objective,
-      source,
-      idempotencyKey,
-      executorKind: validatedExecutorKind, repositoryFullName: stringParam(params, "repositoryFullName"),
-      scope: parseScopeInput(params),
-    },
-    actor: await actor(userId, context),
+  // BI-CB3AEBBF: bind the named backlog item onto the column subject lookups
+  // read, not just onto outcomeAnchor. See create-workroom-binding.ts.
+  const resolvedActor = await actor(userId, context);
+  const bound = await createWorkroomBoundToBacklogItem({
+    db: workCapsuleDb() as unknown as BacklogBindingReader, params, title,
+    create: (backlogItemId) => createWorkCapsule({
+      db: workCapsuleDb(),
+      input: {
+        title, objective, source, idempotencyKey, backlogItemId,
+        executorKind: validatedExecutorKind, repositoryFullName: stringParam(params, "repositoryFullName"),
+        scope: parseScopeInput(params),
+      },
+      actor: resolvedActor,
+    }),
   });
+  if (!bound.created) return bound.refusal;
+  const capsule = bound.capsule;
   await ensureCapsuleWorkItemAnchorNonFatal(capsule, "created");
   return {
     success: true,
