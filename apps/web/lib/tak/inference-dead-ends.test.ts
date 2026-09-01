@@ -173,13 +173,23 @@ describe("the capacity reply names the window when it knows one", () => {
 
   it("puts the window in the step, not in a separate sentence to skim past", () => {
     const message = localCapacityHeldHandoff(false, new Date("2026-08-23T20:17:00.000Z"), now);
-    expect(message).toMatch(/^1\. Send the message again in about 3 minutes/m);
+    expect(message).toMatch(/^1\. Send the message again in about 3 minutes at the earliest/m);
     expect(message).toMatch(/Nothing is misconfigured/);
   });
 
-  it("falls back to the generic wait when no window is known", () => {
+  // BI-EBE25715: with no window we do not know how long the host stays
+  // reserved, and a queue behind the current claim can make it indefinite.
+  // Saying "a couple of minutes" was a promise the platform cannot keep.
+  it("admits it cannot tell how long when no window is known", () => {
     const message = localCapacityHeldHandoff(false, null, now);
-    expect(message).toMatch(/^1\. Give it a couple of minutes/m);
+    expect(message).toMatch(/I can't tell from here how long that will be/);
+    expect(message).not.toMatch(/couple of minutes/);
+  });
+
+  it("frames a known window as the EARLIEST it could free, not a promise", () => {
+    const message = localCapacityHeldHandoff(false, new Date("2026-08-23T20:17:00.000Z"), now);
+    expect(message).toMatch(/at the earliest/);
+    expect(message).toMatch(/nothing else is waiting for this machine/);
   });
 
   it("reads the window off the thrown error the routing layer produced", () => {

@@ -110,11 +110,18 @@ export function localCapacityHeldHandoff(
       ? "I couldn't confirm the local AI model was free to use, so I held off rather than risk disrupting something else running on this machine. Nothing is misconfigured."
       : "The only AI model allowed to handle this request is tied up with a background job on this machine, so I couldn't answer. Nothing is misconfigured.",
     steps: [
+      // BI-EBE25715: `expectedFreeAt` is ONE lease's expiry, not the time until
+      // the host is actually free. When other claims are waiting behind it the
+      // reservation is re-taken the moment it clears, so "send again in about
+      // two minutes" reads as a promise the platform cannot keep — observed on
+      // a host running 9-46 queued claims, where the same turn was refused for
+      // over an hour on that advice. Name the window as the earliest it COULD
+      // free, and say plainly that it depends on what else is queued.
       window
-        ? `Send the message again in ${window}, when that job is due to finish.`
-        : "Give it a couple of minutes, then send the message again.",
+        ? `Send the message again in ${window} at the earliest — sooner only if nothing else is waiting for this machine.`
+        : "It frees up when that job finishes. I can't tell from here how long that will be, so send the message again when you want me to retry.",
     ],
-    verify: "check the moment it frees up",
+    verify: "check whether it has freed up",
   });
 }
 
