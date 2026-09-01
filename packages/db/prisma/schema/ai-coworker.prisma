@@ -282,6 +282,7 @@ model Agent {
   // or a refresh token may act AS this coworker identity.
   oauthClients      OAuthClient[]
   oauthRefreshTokens OAuthRefreshToken[]
+  payrollTaxRulesProposed PayrollTaxRule[] @relation("PayrollTaxRuleProposedBy")
 }
 
 model AgentOwnership {

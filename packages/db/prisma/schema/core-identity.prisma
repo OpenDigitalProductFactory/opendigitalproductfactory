@@ -85,6 +85,7 @@ model User {
   workbookShares                 WorkbookShare[]               @relation("WorkbookShareUser")
   workbookRowsCreated            WorkbookRow[]                 @relation("WorkbookRowCreatedBy")
   workbookViewsCreated           WorkbookView[]                @relation("WorkbookViewCreatedBy")
+  payrollTaxRulesRatified        PayrollTaxRule[]              @relation("PayrollTaxRuleRatifiedBy")
 }
 
 model UserGroup {

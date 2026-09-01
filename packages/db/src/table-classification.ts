@@ -391,6 +391,10 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   MileageRatePlan: "internal",
   MileageRate: "internal",
 
+  // Published statutory figures with their citations — the authority's own
+  // public tables. Nothing here is customer or employee data; the only
+  // person-identifying field is the internal id of whoever ratified.
+  PayrollTaxRule: "internal",
   // Period component totals are aggregate business figures for one filing
   // period — no employee is identifiable from a withheld total, which is the
   // sum across the whole payroll. The per-person detail lives on Payslip.

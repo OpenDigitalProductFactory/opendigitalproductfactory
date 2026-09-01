@@ -103,9 +103,131 @@ model TaxJurisdictionReference {
 
   registrations TaxRegistration[]
   mileageRatePlans MileageRatePlan[] @relation("MileageRatePlanJurisdiction")
+  payrollTaxRules PayrollTaxRule[]
 
   @@index([countryCode, stateProvinceCode])
   @@index([authorityType])
+}
+
+/// Where a statutory figure is in its journey from "researched" to "usable".
+///
+/// A coworker can research and PROPOSE. Only a human can ratify. Nothing
+/// computes money before ratification, which is what makes it safe to let an
+/// agent go and read the authority's tables (BI-8E1FD1BD).
+enum StatutoryRuleStatus {
+  /// Researched and cited, awaiting a human. NEVER used to compute.
+  proposed
+  /// A human confirmed the figure against its cited source. Usable.
+  ratified
+  /// A human rejected it. Kept, so the same wrong figure is not re-proposed.
+  rejected
+  /// Was ratified, then superseded by a later effective-dated rule.
+  superseded
+}
+
+/// Which payroll tax a statutory figure belongs to.
+///
+/// Closed on purpose (AGENTS.md §8): these mirror the PayrollTaxType union the
+/// emitter already computes against, so the figure and the computation cannot
+/// drift apart on a typo. A new payroll tax is a migration, not a string
+/// literal. Deliberately narrower than the tax spine's free-form
+/// TaxRegistration.taxType, which must also carry sales families.
+enum PayrollTaxKind {
+  federal_withholding
+  social_security
+  medicare
+  additional_medicare
+  futa
+  state_withholding
+  suta
+  local_withholding
+}
+
+/// What kind of statutory figure a rule carries.
+enum StatutoryRuleKind {
+  /// A percentage applied to a wage base, e.g. Social Security employee share.
+  rate
+  /// A ceiling on the wages a rate applies to, e.g. the SS wage base.
+  wage_base
+  /// A floor above which a rule starts to apply, e.g. Additional Medicare.
+  threshold
+  /// A published amount, e.g. a standard deduction or a deposit threshold.
+  amount
+}
+
+/// One published statutory figure, effective-dated and cited.
+///
+/// This is the home BI-4EB27955 item 3 specified and that never existed, so a
+/// researched rate had nowhere to land: the tax spine could compute, but only
+/// against figures nobody could cite. Every row carries the authority's own URL
+/// and the date it was read, because a figure that cannot be cited must never
+/// drive a filing — the penalty for a wrong deposit is real money.
+///
+/// Effective-dated rather than mutable: a closed period must re-compute
+/// identically after a later tax year is loaded.
+model PayrollTaxRule {
+  id                 String              @id @default(cuid())
+  payrollTaxRuleId   String              @unique
+  jurisdictionRefId  String
+  /// Closed axis shared with the payroll emitter.
+  taxType            PayrollTaxKind
+  ruleKind           StatutoryRuleKind
+  /// Which side owes it — employee_withheld or employer_contribution. Null for
+  /// a figure that is not side-specific, such as a deposit threshold.
+  side               String?
+  /// Tax year the authority published this under. Distinct from effectiveFrom:
+  /// a mid-year correction shares the tax year but opens a new window.
+  taxYear            Int
+  /// The figure. A rate is stored as a decimal fraction (0.062), never a
+  /// percentage, so no caller has to guess which convention applies.
+  value              Decimal             @db.Decimal(18, 8)
+  currency           String?
+  /// Bracket bounds, filing status, and any other qualifiers the authority
+  /// publishes alongside the figure. Shapeless on purpose: the authorities do
+  /// not agree on a shape, and forcing one would lose detail.
+  qualifiers         Json                @default("{}")
+  effectiveFrom      DateTime
+  effectiveTo        DateTime?
+
+  status             StatutoryRuleStatus @default(proposed)
+  /// The authority's own publication. Required to ratify; without it the figure
+  /// is unciteable and must not be usable.
+  sourceUrl          String?
+  /// What the source actually said, quoted, so a ratifier can check the reading
+  /// without re-fetching a page that may have changed.
+  sourceExcerpt      String?
+  retrievedAt        DateTime?
+  /// Which coworker proposed it, or null when an operator entered it directly.
+  proposedByAgentId  String?
+  proposedAt         DateTime            @default(now())
+  /// The human who ratified. Never an agent — that is the whole point.
+  ratifiedByUserId   String?
+  ratifiedAt         DateTime?
+  rejectedReason     String?
+  notes              String?
+
+  lifecycle          RecordLifecycle     @default(active)
+  lifecycleAt        DateTime?
+  lifecycleReason    String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  jurisdictionReference TaxJurisdictionReference @relation(fields: [jurisdictionRefId], references: [id], onDelete: Restrict)
+  /// SetNull, not Restrict: a retired coworker or a departed employee must not
+  /// pin a statutory figure in place. The attribution is audit context, not
+  /// ownership — losing it is preferable to blocking the deletion of a person.
+  proposedByAgent       Agent?                   @relation("PayrollTaxRuleProposedBy", fields: [proposedByAgentId], references: [id], onDelete: SetNull)
+  ratifiedByUser        User?                    @relation("PayrollTaxRuleRatifiedBy", fields: [ratifiedByUserId], references: [id], onDelete: SetNull)
+
+  /// One rule per jurisdiction, tax type, kind, side and start date.
+  @@unique([jurisdictionRefId, taxType, ruleKind, side, effectiveFrom])
+  // FK-leading (jurisdictionRefId): resolve the figures in force on a pay date.
+  @@index([jurisdictionRefId, taxType, status, effectiveFrom, effectiveTo])
+  // Drives the review queue: what is waiting on a human, oldest first.
+  @@index([status, proposedAt])
+  // FK-leading: attribution lookups, and required by the FK-index ratchet.
+  @@index([proposedByAgentId])
+  @@index([ratifiedByUserId])
 }
 
 model TaxRegistration {

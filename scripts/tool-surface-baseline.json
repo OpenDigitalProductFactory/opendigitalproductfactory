@@ -8,9 +8,9 @@
       "recordedAt": "2026-08-23"
     },
     "registry.packFiles": {
-      "value": 98,
-      "reason": "New banking-pack.ts groups the S-FIN books-loop tools as thin adapters over the existing, tested banking actions — a distinct finance domain that does not belong in any current pack.",
-      "recordedAt": "2026-08-23"
+      "value": 99,
+      "reason": "New statutory-rate-pack.ts (BI-8E1FD1BD): the two tools a research coworker needs to deliver a cited statutory figure — list_statutory_rate_gaps and propose_statutory_rate. They belong in no existing pack, and the alternative was what already existed: coworkers holding web_search that could research a tax rate and had no way to record it, so the finding died in a backlog item. Deliberately no ratify tool — confirming a figure is a human action on the finance surface.",
+      "recordedAt": "2026-09-01"
     },
     "tier.coreToolNames": {
       "value": 30,
