@@ -30,13 +30,19 @@ export function detectScheduledRunInferenceFailure(input: {
 export function detectScheduledRequiredToolFailure(input: {
   prompt: string;
   authorizedTools: Array<{ name: string; sideEffect?: boolean }>;
-  executedTools: Array<{ name: string; result?: { success?: boolean } }>;
+  executedTools: Array<{
+    name: string;
+    result?: { success?: boolean; data?: { proposalId?: string; status?: string } };
+  }>;
 }): string | null {
   const prompt = input.prompt.toLowerCase();
   for (const tool of input.authorizedTools) {
     if (!tool.sideEffect || !prompt.includes(tool.name.toLowerCase())) continue;
     const succeeded = input.executedTools.some(
-      (execution) => execution.name === tool.name && execution.result?.success === true,
+      (execution) =>
+        execution.name === tool.name &&
+        execution.result?.success === true &&
+        execution.result.data?.status !== "proposed",
     );
     if (!succeeded) return `required governed tool ${tool.name} executed zero times`;
   }
@@ -46,7 +52,10 @@ export function detectScheduledRequiredToolFailure(input: {
 export function detectScheduledRunFailure(input: {
   prompt: string;
   authorizedTools: Array<{ name: string; sideEffect?: boolean }>;
-  executedTools: Array<{ name: string; result?: { success?: boolean } }>;
+  executedTools: Array<{
+    name: string;
+    result?: { success?: boolean; data?: { proposalId?: string; status?: string } };
+  }>;
   content: string | null | undefined;
 }): string | null {
   return detectScheduledRequiredToolFailure(input) ??
