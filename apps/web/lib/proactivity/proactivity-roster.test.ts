@@ -13,15 +13,11 @@ const agents = [
 ];
 
 describe("deriveProactivityRoster", () => {
-  it("uses the owner override level and marks the row as owner-set", () => {
-    const rows = deriveProactivityRoster(agents, { bookkeeper: "assertive" });
-    const book = rows.find((row) => row.agentId === "bookkeeper");
-    expect(book?.isOverride).toBe(true);
-    expect(book?.level).toBe("assertive");
-  });
-
-  it("falls back to a posture-derived default when there is no override", () => {
-    const rows = deriveProactivityRoster(agents, {});
+  // BI-87C9C91C — a saved per-coworker override no longer influences resolution
+  // anywhere, so the roster must not display one. Every row reports the derived
+  // default, and no row can claim to be owner-set.
+  it("reports the derived default and never marks a row owner-set", () => {
+    const rows = deriveProactivityRoster(agents);
     for (const row of rows) {
       expect(row.isOverride).toBe(false);
       expect(PROACTIVITY_LEVELS).toContain(row.level);
@@ -29,8 +25,14 @@ describe("deriveProactivityRoster", () => {
     }
   });
 
+  it("resolves the same level for every coworker, whoever they are", () => {
+    const rows = deriveProactivityRoster(agents);
+    const levels = new Set(rows.map((row) => row.level));
+    expect(levels.size).toBe(1);
+  });
+
   it("preserves each coworker's identity fields in order", () => {
-    const rows = deriveProactivityRoster(agents, {});
+    const rows = deriveProactivityRoster(agents);
     expect(rows.map((row) => row.displayName)).toEqual([
       "Chief Operating Officer",
       "Bookkeeper",
@@ -53,7 +55,6 @@ describe("deriveProactivityRoster", () => {
         { agentId: "sales", displayName: "Customer Advisor", role: "specialist", portfolioSlug: "products_and_services_sold" },
         { agentId: "hr", displayName: "HR", role: "specialist", portfolioSlug: "for_employees" },
       ],
-      {},
     );
     const groups = groupRosterByArea(rows);
     expect(groups.map((group) => group.area.label)).toEqual([

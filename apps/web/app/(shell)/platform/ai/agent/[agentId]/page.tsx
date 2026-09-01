@@ -15,7 +15,7 @@ import { AgentModelRoutingCard } from "@/components/platform/AgentModelRoutingCa
 import { CapabilitiesEditor } from "@/components/platform/coworker-record/CapabilitiesEditor";
 import { RecordActionsMenu } from "@/components/platform/coworker-record/RecordActionsMenu";
 import { CoworkerPriorityControl } from "@/components/golden-triangle/CoworkerPriorityControl";
-import { CoworkerProactivitySetting } from "@/components/platform/coworker-record/CoworkerProactivitySetting";
+import { CoworkerProactivityNote } from "@/components/platform/coworker-record/CoworkerProactivityNote";
 import { getCoworkerPostureInheritance } from "@/lib/actions/golden-triangle";
 import {
   loadCoworkerRecord,
@@ -650,7 +650,7 @@ export default async function AgentDetailPage({
           <PriorityPanel
             priorityControl={priorityControl}
             proactivitySection={
-              <CoworkerProactivitySetting agentId={agent.agentId} />
+              <CoworkerProactivityNote />
             }
           />
           <GovernancePanel record={record} />
