@@ -49,6 +49,10 @@ audited exception.
 
 ## Verification mapping
 
+The atomic deliverable maps objectives `OBJ-BIWO-001`, `OBJ-BIWO-002`,
+`OBJ-BIWO-003`, and `OBJ-BIWO-004` to acceptance statements `AC-BIWO-001`
+through `AC-BIWO-005` in the design.
+
 - Accidental duplicate: a live different Workroom returns
   `backlog_item_already_claimed` and no adoption occurs.
 - Concurrency: the BacklogItem row is locked before ownership is evaluated.

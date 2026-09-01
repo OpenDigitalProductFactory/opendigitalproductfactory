@@ -126,6 +126,25 @@ was rejected because deliberate recovery and scoped co-delivery remain valid;
 the old silent-success default was rejected because it makes duplicate effort
 the normal path.
 
+### Governed objectives
+
+**OBJ-BIWO-001:** A normal claim against a BacklogItem with a different live
+Workroom is refused before any second Workroom is created, bound, or used to
+replace the canonical BI claim.
+
+**OBJ-BIWO-002:** Claim admission remains race-safe and backward-compatible:
+concurrent first claims produce one winner, the same Workroom/session replay is
+idempotent, and terminal or genuinely dead Workrooms do not prevent reclaim.
+
+**OBJ-BIWO-003:** Deliberate parallel delivery is an explicit audited exception
+that requires both `force=true` and a non-empty reason identifying who
+overrode which live ownership and why.
+
+**OBJ-BIWO-004:** The canonical backlog-item read model and owner-facing backlog
+row expose the same active Workroom ownership facts used by claim admission,
+including Workroom link, status, executor, branch, and true liveness, without
+displaying filesystem, session, principal, or lease internals by default.
+
 The hardened contract is:
 
 1. Lock the canonical `BacklogItem` row inside the existing governed claim
@@ -145,3 +164,13 @@ The hardened contract is:
 No table, migration, new status vocabulary, or second liveness engine is added.
 The source of truth remains `Workroom.backlogItemId` plus
 `classifyWorkCapsuleLiveness`.
+
+### Hardening acceptance mapping
+
+| Acceptance ID | Objective IDs | Required evidence |
+| --- | --- | --- |
+| AC-BIWO-001 | OBJ-BIWO-001 | A different live Workroom returns `backlog_item_already_claimed`, and an immediate read proves no second Workroom or BI-claim mutation occurred. |
+| AC-BIWO-002 | OBJ-BIWO-002 | Tests prove serialized concurrent claims, same-room idempotency, and reclaim after terminal or dead ownership. |
+| AC-BIWO-003 | OBJ-BIWO-003 | Tests prove a missing override reason is refused and a reasoned override records actor, reason, and displaced Workroom summaries. |
+| AC-BIWO-004 | OBJ-BIWO-004 | `get_backlog_item` and `/ops` show the canonical owner facts; desktop and narrow verification show no empty chrome, leaked internals, or horizontal overflow. |
+| AC-BIWO-005 | OBJ-BIWO-001, OBJ-BIWO-002, OBJ-BIWO-003, OBJ-BIWO-004 | Focused tests, production build, PR/merge-group checks, exact-SHA live readiness, and canonical functional acceptance pass. |
