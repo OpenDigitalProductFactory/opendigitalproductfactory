@@ -769,7 +769,9 @@ describe("work capsule store", () => {
         id: "bi-row-1", itemId: "BI-7D20BFDF", epicId: null, claimStatus: "active",
         claimedById: "other-user", claimedByAgentId: "other-agent", claimedAt: now,
       });
-      db.workroom.findMany.mockResolvedValueOnce([ownershipRoom({ leaseExpiresAt: new Date("2026-08-31T17:00:00.000Z") })]);
+      // Lease dead ~1.75d before now — past the 24h resume grace, so genuinely dead
+      // (not a token-paused session that would be protected within the grace).
+      db.workroom.findMany.mockResolvedValueOnce([ownershipRoom({ leaseExpiresAt: new Date("2026-08-30T00:00:00.000Z") })]);
       db.workroom.findFirst.mockResolvedValueOnce(null);
       db.workroom.create.mockResolvedValueOnce({ id: "row-1", capsuleId: "WC-CLAIM03" });
       db.backlogItem.update.mockResolvedValueOnce({ id: "bi-row-1" });
@@ -779,6 +781,20 @@ describe("work capsule store", () => {
       expect(result.claimed).toBe(true);
       expect(result.conflict).toBeNull();
       expect(db.backlogItem.update).toHaveBeenCalledTimes(1);
+    });
+
+    it("PROTECTS a token-paused Workroom (lease expired within the resume grace) from being claim-stolen", async () => {
+      const now = new Date("2026-08-31T18:00:00.000Z");
+      db.backlogItem.findFirst.mockResolvedValueOnce({
+        id: "bi-row-1", itemId: "BI-7D20BFDF", epicId: null, claimStatus: "active",
+        claimedById: "other-user", claimedByAgentId: "other-agent", claimedAt: now,
+      });
+      // Lease expired 1h ago — inside the 24h grace ⇒ paused ⇒ isLive ⇒ still owned.
+      db.workroom.findMany.mockResolvedValueOnce([ownershipRoom({ leaseExpiresAt: new Date("2026-08-31T17:00:00.000Z") })]);
+
+      await expect(claimBacklogItemWorkspace({ db: capsuleDb(), input: baseInput, actor, now }))
+        .rejects.toMatchObject({ code: "backlog_item_already_claimed", backlogItemId: "BI-7D20BFDF" });
+      expect(db.workroom.create).not.toHaveBeenCalled();
     });
 
     it("allows and audits a reasoned force override", async () => {
