@@ -26,6 +26,15 @@ export function detectScheduledRunInferenceFailure(input: {
   return classifyInferenceFailure(input.content);
 }
 
+/** Baseline reproduction: explicit governed mutations are not yet terminal requirements. */
+export function detectScheduledRequiredToolFailure(_input: {
+  prompt: string;
+  authorizedTools: Array<{ name: string; sideEffect?: boolean }>;
+  executedTools: Array<{ name: string; result?: { success?: boolean } }>;
+}): string | null {
+  return null;
+}
+
 export async function createTaskRunForScheduledTask(input: {
   taskId: string;
   ownerUserId: string;
