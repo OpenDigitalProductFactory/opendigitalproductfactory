@@ -22,6 +22,14 @@ type ClassRule = {
   pathPattern?: RegExp;
   textPattern?: RegExp;
   /**
+   * Occurrences matching this are removed from the probe text BEFORE
+   * `textPattern` is evaluated, so the rule fires only on evidence that is NOT
+   * exempt. Strip-then-retest rather than skip-if-present on purpose: a payload
+   * carrying both a DCO trailer and a genuine customer address must still
+   * match on the genuine one (BI-EBE25715).
+   */
+  textExemptionPattern?: RegExp;
+  /**
    * BI-CD13D818 — this rule is built from vocabulary that is ALSO ordinary
    * English outside its protected domain ("performance", "benefits", "manager",
    * "incident"). On its own such a match may not escalate a turn to
@@ -42,6 +50,12 @@ type ClassRule = {
 // Split by precision (BI-CD13D818). The first set names employment data and
 // nothing else; the second is real HR vocabulary that is ALSO everyday English
 // on an AI-operations, capacity, or product surface, so it needs corroboration.
+// Addresses that identify a COMMIT AUTHOR or the acting account, not a customer.
+// Matched with the surrounding trailer/identifier so a bare address elsewhere in
+// the same payload is still classified normally (BI-EBE25715).
+const GIT_AUTHORSHIP_EMAIL_PATTERN =
+  /(?:signed-off-by|co-authored-by|author|committer|reported-by|reviewed-by|acked-by|createdby(?:id)?|actorid)\s*:?\s*[^\n<]*<?[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}>?|<(?:noreply|no-reply|do-not-reply)@[A-Z0-9.-]+\.[A-Z]{2,}>/i;
+
 const EMPLOYEE_RECORD_VALUE_PATTERN =
   /\b(?:salary|performance review|disciplinary|manager-only|payroll record|employee record|personnel file)\b/i;
 // BARE `payroll` moved here from the precise set (BI-67CAF494). It names a
@@ -79,6 +93,20 @@ const CLASS_RULES: readonly ClassRule[] = [
     confidence: "deterministic",
     textPattern:
       /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b|\b(?:\+?1[-.\s]?)?\(?[2-9]\d{2}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b/i,
+    // BI-EBE25715: an address carried as AUTHORSHIP METADATA is not a customer
+    // contact record. Build Studio payloads routinely embed commit history —
+    // `Signed-off-by:` (the DCO the repo requires on every commit),
+    // `Co-Authored-By:`, `Author:` — plus the operator's own account id. Those
+    // matched `contact-detail` deterministically, which is precise evidence, so
+    // it escalated the turn to `confidential` on its own and the vertical
+    // customer-records pack denied external routing. The observed effect was
+    // that ordinary source-code turns were pinned to `local_only` and then died
+    // whenever local-CI held the host reservation.
+    //
+    // Scope is deliberately narrow: the address must sit in a recognised
+    // trailer/identifier position. A bare address anywhere else still matches,
+    // so a real customer email pasted into a message is unaffected.
+    textExemptionPattern: GIT_AUTHORSHIP_EMAIL_PATTERN,
   },
   {
     dataClass: "customer-records",
@@ -253,6 +281,19 @@ const CONFIDENTIAL_CLASSES = new Set<InferenceDataClass>([
   "source-code",
 ]);
 
+/**
+ * Remove every occurrence of `exemption` from `text` so a rule's own pattern is
+ * evaluated against the remainder only. Returns the text unchanged when the
+ * exemption never matches, so the common path costs one failed regex test.
+ */
+function stripExemptSpans(text: string, exemption: RegExp): string {
+  const global = exemption.global
+    ? exemption
+    : new RegExp(exemption.source, `${exemption.flags}g`);
+  global.lastIndex = 0;
+  return text.replace(global, " ");
+}
+
 export function classifyInferencePayload(
   input: InferencePayloadClassificationInput,
 ): InferencePayloadClassification {
@@ -261,9 +302,12 @@ export function classifyInferencePayload(
 
   for (const probe of probes) {
     for (const rule of CLASS_RULES) {
+      const probeText = rule.textExemptionPattern
+        ? stripExemptSpans(probe.text, rule.textExemptionPattern)
+        : probe.text;
       if (
         rule.pathPattern?.test(normalizeProbePath(probe.path)) ||
-        rule.textPattern?.test(probe.text)
+        rule.textPattern?.test(probeText)
       ) {
         matches.push({
           dataClass: rule.dataClass,
