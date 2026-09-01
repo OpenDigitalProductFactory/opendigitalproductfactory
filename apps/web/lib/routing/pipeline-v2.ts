@@ -28,6 +28,10 @@ import { cliSaturationPercent } from "./cli-concurrency";
 import { usesCodexCli, usesCliAdapter } from "./provider-utils";
 import { isLocalProviderId } from "./provider-locality";
 import { satisfiesMinimumCapabilities } from "./agent-capability-types";
+import {
+  endpointClearsSensitivity,
+  endpointGenuinelyClearsSensitivity,
+} from "./sensitivity-clearance";
 import { QUALITY_TIERS, type QualityTier } from "./quality-tiers";
 import {
   estimateSuccessProbability,
@@ -88,16 +92,11 @@ function getProviderConstraintExclusionReason(
  * internal business data — run Build Studio code-gen. An endpoint with no
  * clearance at all is never eligible.
  */
-export function endpointClearsSensitivity(
-  ep: EndpointManifest,
-  sensitivity: RequestContract["sensitivity"],
-): boolean {
-  if (ep.sensitivityClearance.includes(sensitivity)) return true;
-  if (sensitivity === "development" && ep.sensitivityClearance.includes("public")) {
-    return true;
-  }
-  return false;
-}
+// The data-sensitivity fence predicates live in ./sensitivity-clearance (extracted
+// so the break-glass override's second path did not push this module over its size
+// ceiling; imported above for internal use). Re-exported so existing importers of
+// pipeline-v2 are unaffected. (BI-4512E7D2)
+export { endpointClearsSensitivity, endpointGenuinelyClearsSensitivity };
 
 export function getExclusionReasonV2(
   ep: EndpointManifest,
