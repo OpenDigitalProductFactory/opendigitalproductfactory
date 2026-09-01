@@ -269,8 +269,22 @@ describe("ambiguous-vocabulary corroboration (BI-CD13D818)", () => {
   });
 
   it("escalates when precise vocabulary accompanies an ambiguous term", () => {
-    expect(screen("Review the payroll run and the benefits elections.").overallSensitivity)
+    // Fixture changed 2026-09-01 (BI-67CAF494). This asserted the same rule with
+    // "payroll run" as its precise term; `payroll` has since moved to the
+    // ambiguous set, because it names a domain rather than a record. The rule
+    // under test is unchanged — `salary` is precise and still escalates beside an
+    // ambiguous term.
+    expect(screen("Review the salary bands and the benefits elections.").overallSensitivity)
       .toBe("restricted");
+  });
+
+  it("holds two ambiguous EMPLOYMENT words at confidential, not restricted", () => {
+    // The deliberate behaviour change, pinned so it cannot regress silently:
+    // naming two employment domains is a request ABOUT payroll, not payroll data.
+    // Confidential still summons the PDP and still keeps the turn off any
+    // endpoint lacking confidential clearance.
+    expect(screen("Review the payroll run and the benefits elections.").overallSensitivity)
+      .toBe("confidential");
   });
 
   it("does not let one ambiguous word repeated across probes fake corroboration", () => {
@@ -614,5 +628,62 @@ describe("a field named 'discipline' is not evidence of an HR record", () => {
 
     expect(result.overallSensitivity).toBe("restricted");
     expect(result.dataEvidencedClasses).toContain("employee-records");
+  });
+});
+
+describe("naming a domain is not evidence of a record in it (BI-67CAF494)", () => {
+  function ask(content: string) {
+    return classifyInferencePayload({
+      messages: [{ role: "user" as const, content }],
+      systemPrompt: "",
+      taskType: "conversation",
+    });
+  }
+
+  it("lets a coworker be ASKED for help with payroll", () => {
+    // The live failure: a design-review request that said "payroll" and "tax
+    // filing" classified restricted and clamped to local-only, so the reviewer
+    // could not be reached. RouteDecisionLog 2026-09-01T20:03:07Z, AGT-WS-REVIEW,
+    // classes ["employee-records","payments-finance"]. The message carried no
+    // employee record and no payment value — only the name of the domain.
+    const result = ask(
+      "Please review the payroll tax acquisition design and record spec-approval.",
+    );
+    expect(result.overallSensitivity).not.toBe("restricted");
+  });
+
+  it("still escalates alone on a real employment value", () => {
+    // Fails closed: the words that name the thing itself are unchanged.
+    expect(ask("Her salary is being reviewed.").overallSensitivity).toBe("restricted");
+    expect(ask("Attach the disciplinary letter.").overallSensitivity).toBe("restricted");
+  });
+
+  it("still escalates alone on a real payment identifier", () => {
+    expect(ask("The routing number is on file.").overallSensitivity).toBe("restricted");
+    expect(ask("His SSN is required for the filing.").overallSensitivity).toBe("restricted");
+  });
+
+  it("escalates when two DISTINCT domain words corroborate each other", () => {
+    // One domain word is a subject; two independent ones start to look like a
+    // payload. The corroboration bar is unchanged.
+    const result = ask("Reconcile the payroll against the invoice.");
+    expect(result.overallSensitivity).toBe("restricted");
+  });
+
+  it("does not let one word corroborate itself across two rules", () => {
+    // The defect this closes: `payroll` sat in BOTH the employee-records and
+    // payments-finance text patterns, so a single word produced two distinct
+    // restricted reasons — exactly the corroboration bar. The guard corroborated
+    // itself, and no amount of ambiguity marking would have helped.
+    const reasons = new Set(
+      ask("payroll").matches.filter((m) => m.dataClass !== "unknown-governed-data").map((m) => m.reason),
+    );
+    expect(reasons.size).toBeLessThan(2);
+  });
+
+  it("still reports every detected class on the receipt", () => {
+    // Suppressed for routing, never hidden from audit.
+    const result = ask("Please review the payroll tax acquisition design.");
+    expect(result.dataClasses).toContain("employee-records");
   });
 });
