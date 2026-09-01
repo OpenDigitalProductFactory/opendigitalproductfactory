@@ -6,7 +6,9 @@ status: active
 
 **Backlog item:** `BI-199F71B6`  
 **Workroom:** `WC-0C842917`  
-**Design:** `docs/superpowers/specs/2026-08-25-initiative-readiness-reviewer-packet-design.md` §14
+**Design:** `docs/superpowers/specs/2026-09-01-completion-readiness-recovery-design.md`
+(`2026-08-25-initiative-readiness-reviewer-packet-design.md` §14 is the parent
+packet contract.)
 
 **For agentic workers:** execute this plan one independently reviewable backlog
 item at a time — one BI, one branch, one PR. Use `dpf-tdd` for red-green
