@@ -2,6 +2,7 @@
 // Agentic execution loop: LLM calls tools iteratively until it responds with text only.
 // This is the core behavioral difference between a chatbot and an agent.
 import { routeAndCall, type RouteAndCallOptions, type RoutedInferenceResult } from "@/lib/routed-inference";
+import type { DowngradeCause } from "@/lib/inference/downgrade-explanation";
 import {
   detectRepeatedToolCall,
   detectApproachingRepeatedToolCall,
@@ -532,45 +533,8 @@ export function buildRuntimeLimitToolLoopMessage(executedTools: ExecutedTool[]):
   ].join(" ");
 }
 
-/**
- * Plain-English message for when the loop hits MAX_ITERATIONS without
- * producing a text-only response. Replaces the prior generic "I ran into
- * a limit while working on this. Try breaking your request into smaller
- * steps." which obscured the actual cause (usually: preferred provider
- * unavailable → fallback model overwhelmed by the tool surface). Respects
- * IDENTITY_BLOCK rule #5 — no provider/model/tool internals exposed.
- *
- * BI-F4D3B9E9(d): this branched on `downgraded`, which conflated "a dispatch
- * failed" with "nothing was eligible" — so it printed "My usual AI was
- * unavailable" directly beneath a banner that had just said "your configured
- * provider is active but wasn't eligible". One of the two was always wrong.
- * It now branches on the routed `downgradeReason` so both statements describe
- * the same cause, and it no longer tells an owner to connect a provider they
- * already have connected.
- */
-export function buildMaxIterationsExhaustedMessage(params: {
-  downgradeReason: "provider-unavailable" | "not-eligible" | null;
-  executedTools: ExecutedTool[];
-}): string {
-  const toolSummary = summarizeExecutedToolNames(params.executedTools);
-  const downgradeLead = params.downgradeReason === "provider-unavailable"
-    ? "My usual AI was unavailable, so I worked through a backup that wasn't able to keep up. "
-    : params.downgradeReason === "not-eligible"
-      ? "My usual AI wasn't a fit for this particular request, so I worked through a backup that wasn't able to keep up. "
-      : "";
-  const workNote = toolSummary
-    ? `I made several attempts (${toolSummary}) but couldn't complete a final answer before hitting my safety limit.`
-    : "I worked through several attempts but couldn't complete a final answer before hitting my safety limit.";
-  // Honest copy (G2, 2026-05-23): no false re-route promises. Point at the fix
-  // that matches the actual cause — an owner whose providers are all connected
-  // and merely ineligible must not be told to connect one (BI-F4D3B9E9(d)).
-  const suggestion = params.downgradeReason === "provider-unavailable"
-    ? "Reconnecting or restoring that provider at Platform > AI > Providers unlocks the work I'm built for. Otherwise, try a narrower question."
-    : params.downgradeReason === "not-eligible"
-      ? "A shorter request usually routes back to the stronger model. The note above says what ruled it out."
-      : "Try the same question again, or break it into a smaller piece.";
-  return `${downgradeLead}${workNote} ${suggestion}`;
-}
+import { buildMaxIterationsExhaustedMessage } from "./max-iterations-message";
+export { buildMaxIterationsExhaustedMessage };
 
 // Pattern: response is a short clarifying question asking for a required field.
 // System prompt rule 13 allows ONE round of "I need X and Y" before acting.
@@ -2665,6 +2629,9 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     // that predate the field fall back to the unavailable reading only when they
     // actually reported a downgrade.
     downgradeReason: lastResult?.downgradeReason ?? (downgraded ? "provider-unavailable" : null),
+    // The same binding cause the banner named, so the advice below it addresses
+    // the constraint the owner was actually told about (BI-FB184D69).
+    cause: lastResult?.downgradeCause ?? null,
     executedTools,
   });
   return {

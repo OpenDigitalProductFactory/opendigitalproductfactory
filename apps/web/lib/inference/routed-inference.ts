@@ -60,7 +60,7 @@ import { soleCapabilityFloorFailure } from "@/lib/inference/routing-exclusion-at
 import { createRoutingTraceId } from "@/lib/routing/routing-trace";
 import { AI_ROUTING_ARCHITECTURE_VERSION } from "@/lib/routing/routing-architecture-version";
 import type { EndpointPreferences } from "@/lib/routing/preference-finalization";
-import { describeLocalFallback } from "./downgrade-explanation";
+import { describeLocalFallback, type DowngradeCause } from "./downgrade-explanation";
 export type { RouteAndCallOptions } from "./routed-inference-options";
 // ─── Result type ────────────────────────────────────────────────────────────
 /** Unified inference result — flat token fields, V2 metadata included. */
@@ -81,6 +81,8 @@ export interface RoutedInferenceResult {
    * assert both at once. See ./downgrade-explanation.ts (BI-F4D3B9E9d).
    */
   downgradeReason: "provider-unavailable" | "not-eligible" | null;
+  /** The constraint the banner named, so copy below it cannot contradict it (BI-FB184D69). */
+  downgradeCause?: DowngradeCause | null;
   /** True when tools were stripped due to capability degradation (local model). */
   toolsStripped: boolean;
   /**
@@ -701,7 +703,7 @@ async function routeAndCallAttempt(
   // "is active" — wrong whenever a stronger provider is disabled and a weaker one
   // is not. Both facts are already in scope, so ./downgrade-explanation.ts reads
   // them instead of guessing.
-  const localFallbackBanner = fellToLocal
+  const localFallback = fellToLocal
     ? describeLocalFallback({
       manifests,
       candidates: decision.candidates,
@@ -710,6 +712,7 @@ async function routeAndCallAttempt(
       messageCount: messages.length,
     })
     : null;
+  const localFallbackBanner = localFallback?.banner ?? null;
 
   // 6. Persist TokenUsage row for the cost ledger (Phase J).
   // Fire-and-forget because metering must not block the response. A loud log
@@ -741,6 +744,7 @@ async function routeAndCallAttempt(
       : fellToLocal
         ? "not-eligible"
         : null,
+    downgradeCause: localFallback?.cause ?? null,
     toolsStripped,
     truncated: result.truncated ?? false,
     routeDecision: decision,

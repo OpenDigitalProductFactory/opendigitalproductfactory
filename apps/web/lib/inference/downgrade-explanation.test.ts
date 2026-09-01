@@ -193,7 +193,12 @@ describe("buildLocalFallbackBanner", () => {
     expect(banner).not.toContain("usually because");
   });
 
-  it("combines distinct causes without repeating one", () => {
+  // BI-FB184D69. This asserted the opposite — that both causes appear in the
+  // sentence. Co-billing them is what sent the reported owner after a capability
+  // that was never binding while residency held every route back. `excludedReasons`
+  // is in ranking order, so the first survivable cause owns the outcome; the rest
+  // are counted, not named.
+  it("names only the binding cause and counts the rest", () => {
     const banner = buildLocalFallbackBanner({
       excludedReasons: [
         "Context window too small: 24576 < 32000",
@@ -203,8 +208,23 @@ describe("buildLocalFallbackBanner", () => {
       offProviderNames: [],
     });
     expect(banner).toContain("longer than its context window");
-    expect(banner).toContain("needed a capability it doesn't offer");
+    expect(banner).not.toContain("needed a capability it doesn't offer");
+    expect(banner).toContain("One other provider was ruled out for a different reason.");
     expect(banner.match(/context window/g)).toHaveLength(1);
+  });
+
+  // The live shape from the report: eight residency exclusions, one capability.
+  it("names residency, not the single capability exclusion behind it", () => {
+    const banner = buildLocalFallbackBanner({
+      excludedReasons: [
+        ...Array.from({ length: 8 }, () =>
+          "Residency policy 'local_only' requires a local provider (Docker Model Runner or Ollama)"),
+        "Agent requires capability 'toolUse' (EP-AGENT-CAP-002)",
+      ],
+      offProviderNames: [],
+    });
+    expect(banner).toContain("data policy required this work to stay on this machine");
+    expect(banner).not.toContain("capability it doesn't offer");
   });
 
   it("drops the catch-all phrase once a specific cause is known", () => {
