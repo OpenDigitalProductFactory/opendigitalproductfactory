@@ -113,7 +113,23 @@ decision brief is
 [`docs/superpowers/specs/2026-08-16-mcp-version-window-contract-brief.md`](../superpowers/specs/2026-08-16-mcp-version-window-contract-brief.md).
 No revision has been retired under this section yet.
 
-## Acting-coworker binding — what lets a token join a Work Room (BI-B986A18B)
+## Terminal-readiness recovery packets
+
+An `initiative_not_ready` result from BacklogItem or Workroom completion may
+include `data.recovery`. The server issues every reviewer route from the exact
+live Workroom, current objective baseline, immutable branch head, canonical
+source path, provider blob, writer tool, and grant. Dispatch the returned
+`requestCoworker` packet unchanged; callers must not choose a different writer,
+reviewer, baseline, artifact, or gate.
+
+`objective-mapping` is an evidence proposal for terminal evaluation, not an
+initiative approval receipt. The acceptance reviewer records it through
+`record_initiative_evidence`, and the canonical terminal repository alone
+decides whether the evidence satisfies completion. Missing or ambiguous
+Workroom, baseline, source, or eligible writer returns a typed escalation and
+no reviewer route.
+
+## Acting-coworker binding — what lets a token join a Work Room
 
 A bearer token carries two separate things: **grants** (what tools it may call)
 and an **acting coworker** (who it is). Grants alone are not enough for a Work
@@ -143,7 +159,7 @@ room is not cleared for a finance room. This is the least-privilege half of the
 [multi-agent communication substrate design](../superpowers/specs/2026-08-12-work-room-multi-agent-communication-substrate-design.md) §1.
 
 **Rotation preserves the binding.** Rotating a token changes the secret, not the
-identity. Before BI-B986A18B, rotation hardcoded `agentId: null`, so a
+identity. Earlier rotation code hardcoded `agentId: null`, so a
 room-capable token silently became anonymous and its coworker dropped out of
 every room it had joined — with no error on any surface.
 

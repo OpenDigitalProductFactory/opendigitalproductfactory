@@ -3,6 +3,7 @@ import { ensureCapsuleWorkItemAnchorNonFatal } from "@/lib/work-capsules/capsule
 import { computeChangeImpactContract } from "@/lib/build/gate-context-bridge";
 import type { ToolResult } from "@/lib/mcp-tools";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { resolveTerminalInitiativeRecovery } from "@/lib/backlog/initiative-readiness/terminal-recovery";
 import {
   WORK_CAPSULE_ACTIVITY_KINDS,
   WORK_CAPSULE_BRANCH_TAXONOMIES,
@@ -375,11 +376,12 @@ export async function updateWorkCapsuleStatusTool(
     });
   } catch (error) {
     if (error instanceof WorkCapsuleCompletionDeniedError) {
+      const recovery = await resolveTerminalInitiativeRecovery({ decision: error.result.decision, currentAgentId: context?.agentId ?? null, refusedWorkroomId: capsuleId });
       return {
         success: false,
         error: "initiative_not_ready",
         message: `Work Capsule completion is blocked by ${error.result.code}.`,
-        data: { code: error.result.code, readiness: error.result.decision },
+        data: { code: error.result.code, readiness: error.result.decision, recovery },
       };
     }
     throw error;

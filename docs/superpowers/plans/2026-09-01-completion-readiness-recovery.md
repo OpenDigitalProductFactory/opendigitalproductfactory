@@ -7,8 +7,8 @@ status: active
 **Backlog item:** `BI-199F71B6`  
 **Workroom:** `WC-0C842917`  
 **Design:** `docs/superpowers/specs/2026-09-01-completion-readiness-recovery-design.md`
-(`2026-08-25-initiative-readiness-reviewer-packet-design.md` §14 is the parent
-packet contract.)
+(`2026-08-25-initiative-readiness-reviewer-packet-design.md` is the parent
+packet contract; the binding extension is specified by this plan's design.)
 
 **For agentic workers:** execute this plan one independently reviewable backlog
 item at a time — one BI, one branch, one PR. Use `dpf-tdd` for red-green
@@ -120,6 +120,22 @@ applicable because it changes no schema.
 
 ## Backlog coverage
 
-- Decision: `atomic`
-- Parent and only BI: `BI-199F71B6`
-- Receipt: pending immutable plan commit and governed coverage recording.
+- Decision: atomic
+- Parent: `BI-199F71B6`
+- Receipt: `cmtif5ip50c9k01mn8k70lx14`
+- Rationale: The registry route, shared resolver, both refusal projections, tests, and documentation form one response contract and none is independently useful.
+- Dependencies: `BI-EDC0DAF2` is merged and deployed; `BI-E2B632D2` remains separate replay hardening and does not block this source delivery.
+
+## Progress evidence
+
+- Phase 1 complete: focused RED proved the acceptance-reviewer requirement was
+  unroutable and the shared terminal adapter did not exist.
+- Phase 2 complete: the evidence-writer registry now emits an exact
+  `objective-mapping` packet, and the shared resolver fails closed on Workroom,
+  baseline, and artifact identity.
+- Phase 3 complete: both terminal MCP adapters attach the same server-issued
+  recovery shape on refusal and bypass recovery on success.
+- Verification: 41 affected readiness tests pass, including registry, shared
+  resolver, terminal repositories, Workroom liveness, and both MCP projections;
+  style guard, web typecheck, and production build also pass. Exact-tree pregate,
+  PR health, and canonical replay remain pending.

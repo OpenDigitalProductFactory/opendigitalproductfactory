@@ -1,7 +1,11 @@
+---
+status: active
+---
+
 # Completion-readiness recovery design
 
 **BI:** `BI-199F71B6`  
-**Parent:** `2026-08-25-initiative-readiness-reviewer-packet-design.md` §14
+**Parent contract:** `2026-08-25-initiative-readiness-reviewer-packet-design.md`
 
 ## Problem and scope
 
