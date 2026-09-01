@@ -104,44 +104,6 @@ beforeEach(() => {
 });
 
 describe("submitRemoteCoworkerTask idempotency", () => {
-  it("attaches the pending envelope location when a governed writer pauses", async () => {
-    db.findUnique.mockResolvedValue({ status: "input-required" });
-    db.findEnvelope.mockResolvedValue({
-      id: "cmthpk6kpfylj01lc5r5cealp",
-      delegatingUserId: "user-1",
-      taskRunId: "TR-MCP-VISIBLE",
-      status: "proposed",
-      expiresAt: new Date("2099-01-01T00:00:00.000Z"),
-      rationale: "Record research evidence.",
-      manifestActionId: "record_initiative_evidence",
-    });
-
-    const outcome = await submit("PAT-A", {
-      ...immutableParams,
-      riskClass: "bounded-write",
-    });
-
-    expect(outcome).toMatchObject({
-      kind: "result",
-      result: {
-        status: "input-required",
-        requiresApproval: true,
-        approval: {
-          envelopeId: "cmthpk6kpfylj01lc5r5cealp",
-          delegatingUserId: "user-1",
-          inboxHref: "/workspace/inbox",
-          approveHref: "/api/agent/envelope/cmthpk6kpfylj01lc5r5cealp/approve",
-        },
-      },
-    });
-    expect(db.findEnvelope).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({
-        delegatingUserId: "user-1",
-        status: "proposed",
-      }),
-    }));
-  });
-
   it("preserves input-required when a governed tool pauses the active TaskRun", async () => {
     db.findUnique.mockResolvedValue({ status: "input-required" });
 

@@ -28,7 +28,7 @@ describe("loadExternalApprovalLocationForTaskRun", () => {
       delegatingUserId: OWNER,
       taskRunId: TASK,
       status: "proposed",
-      expiresAt: new Date("2099-01-01T00:00:00.000Z"),
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
       rationale: "Record research evidence.",
       manifestActionId: "record_initiative_evidence",
     });

@@ -19,6 +19,7 @@ const proposed: PendingEnvelopeRow = {
   delegatingUserId: OWNER,
   status: "proposed",
   taskRunId: "TR-MCP-Y21xamsxOWhsMDAwMDdwcnZzZm4ybTAzOQ-0C8D679DE842",
+  // clock-bomb-guard: allow listPendingEnvelopesForCaller takes now explicitly and never reads the wall clock
   expiresAt: new Date("2026-08-31T21:49:22.000Z"),
   rationale: "Record research evidence.",
   manifestActionId: "record_initiative_evidence",
@@ -87,6 +88,7 @@ describe("listPendingEnvelopesForCaller", () => {
   it("excludes expired and non-proposed rows", () => {
     expect(listPendingEnvelopesForCaller([
       { ...proposed, status: "approved" },
+      // clock-bomb-guard: allow expiry comparison uses the injected NOW, not Date.now()
       { ...proposed, id: "expired", expiresAt: new Date("2026-08-31T19:00:00.000Z") },
     ], OWNER, NOW)).toEqual([]);
   });
