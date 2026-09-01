@@ -216,3 +216,22 @@ The existing BI-DE bootstrap has no initiative scope baseline, so this table rem
 | Deliverable | Requirement refs | Flow refs | Contract refs | Verification refs | Atomicity |
 | --- | --- | --- | --- | --- | --- |
 | Expired proposed-envelope same-TaskRun recovery | Phase 14.1, 14.3, 14.5, 14.8 | Phase 14.3, 14.4 | Phase 14.3, 14.4, 14.5 | Phase 14.2, 14.6, 14.7 | Source-envelope cancellation, exact proposal rebinding, TaskRun parking, fresh approval, and writer receipt form one audit chain. Partial delivery would either reuse expired authority or rerun the independent review. |
+
+## Phase 15 — Enforce the terminal writer at the remote-task completion boundary
+
+This phase extends BI-DE58CFE8 after BI-FFBDDD96 research TaskRun `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-7991D9CAE467` completed at the review duration ceiling with one malformed read attempt, one successful exact-bound read, and no required writer, envelope, or receipt.
+
+1. Preserve the TaskRun, request key/digest, exact artifact binding, successful reader execution `cmti6qhl303tm01o0upfpg15y`, zero-writer state, and incorrect completed projection as RED evidence. Do not replay or mint a sibling before deployment.
+2. Add a remote submission RED that returns a normal agent-loop result containing the failed-then-successful reader history but no writer failure marker. Prove current code persists `completed`.
+3. Make the remote-task executor independently require the exact bound writer in governed executions or the active bound proposal before allowing completion.
+4. Reuse the existing `terminalWriterWait` state, retry limit, escalation, request identity, and approval handling. Do not create a parallel recovery state or infer a writer failure from unrelated tasks.
+5. Fail closed as `input-required/missing-terminal-writer` for every incomplete agent-loop exit, including duration and iteration exhaustion, while preserving successful writer/proposal behavior and non-review completion.
+6. Prove the exact RED then GREEN, all MCP-task and terminal-policy suites, web typecheck, style/diff/preflight guards, DCO, and every protected PR/merge-group check. Record broken local infrastructure as explicit non-PASS only.
+7. Deliver one protected merge, one canonical release, and one governed live upgrade. Require exact served SHA and CAN-TEST before any same-TaskRun recovery.
+8. Recover BI-FFBDDD96 through genuine persisted research and objective-mapping writers only; then reconcile its already-protected delivery and live acceptance evidence without fabricating a baseline, receipt, or objective result.
+
+### Phase 15 atomic coverage
+
+| Deliverable | Requirement refs | Flow refs | Contract refs | Verification refs | Atomicity |
+| --- | --- | --- | --- | --- | --- |
+| Executor-owned terminal-writer completion invariant | Phase 15.1, 15.3, 15.4, 15.8 | Phase 15.3, 15.5 | Phase 15.3, 15.4, 15.5 | Phase 15.2, 15.6, 15.7 | Agent-loop policy and executor postcondition ship together so no loop exit can falsely complete a governed review while ordinary tasks and genuine writer proposals retain their existing semantics. |
