@@ -131,7 +131,9 @@ cross-page notification experience after its durable-operation dependency.
 
 - Decision: atomic
 - Parent: `BI-2014236E`
-- Receipt: pending governed writer execution against the final immutable plan
+- Receipt: blocked by the condition `no initiative scope baseline exists for
+  BI-2014236E`; the baseline writer is itself on the repaired TaskRun path, so
+  no receipt is inferred or proxied
 - Dependencies: none
 - Rationale: the queue, push subscription, polling reconciliation, same-TaskRun
   approval recovery, terminal-writer recovery, and WWMD authority projection
@@ -156,3 +158,16 @@ cross-page operator UX.
 
 The governed `record_plan_backlog_coverage` receipt and exact mappings replace
 this provisional section before final PR readiness.
+
+## Bootstrap verification
+
+Candidate preview `NPEL-1D12454DD3` proved that external submission returns a
+durable TaskRun immediately and truthfully projects a failed queue send as
+`pending-reconciliation`. With the documented synchronous rollback enabled,
+the same reviewer TaskRun `TR-MCP-…-EF5737F325F7` survived an initial provider
+timeout and, on one identical-key replay after a successful warm probe, reused
+the same identity and executed two immutable `read_source_at_version` calls.
+The local reviewer still exhausted its turn before dispatching the terminal
+writer, so no spec baseline or plan-coverage receipt was created. This is the
+self-hosting condition the candidate repairs; protected CI remains mandatory,
+and live baseline/coverage replay is required immediately after deployment.
