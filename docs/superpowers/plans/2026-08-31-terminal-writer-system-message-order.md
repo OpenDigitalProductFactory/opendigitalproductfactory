@@ -5,7 +5,7 @@ status: active
 # Terminal-writer system-message order — implementation plan
 
 Backlog item: `BI-EDC0DAF2`  
-Workroom: `WC-A291253B`  
+Workroom: `WC-EF32001A`
 Design: `docs/superpowers/specs/2026-08-31-terminal-writer-system-message-order-design.md`
 
 **For agentic workers:** execute this plan one independently reviewable backlog
@@ -98,3 +98,19 @@ rollback is involved.
 Documentation impact: the design and this plan are the durable contributor
 contract. The repair does not add owner-facing UX or change public product
 behavior.
+
+## Provider-neutral follow-up — 2026-09-01
+
+The original order-only PR merged, but live Codex replay proved its system-role
+history entry is intentionally discarded at the CLI adapter boundary. The
+remaining atomic correction is:
+
+1. RED: require hydrated immutable evidence in `systemPrompt` and user-only
+   `chatHistory` in `mcp-task-terminal-writer.test.ts`.
+2. GREEN: append the hydrated context to the coworker's system prompt only for
+   terminal-writer resume; preserve ordinary execution byte-for-byte.
+3. Run all related MCP TaskRun tests, style guard, web build, exact-tree pregate,
+   PR health, and canonical replay of the failed `BI-199F71B6` reviewer route.
+
+This follow-up satisfies `OBJ-TWSO-003` / `AC-TWSO-004`; no migration or UX
+change is involved.

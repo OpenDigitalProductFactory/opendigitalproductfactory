@@ -10,6 +10,8 @@ Named baseline: `origin/main` at `be4c6bfcb4fd62f497167fa55c747105512a0ecd`
 ## Objectives
 **OBJ-TWSO-001:** Put hydrated terminal-writer system authority before user content.
 **OBJ-TWSO-002:** Preserve ordinary history and every existing fail-closed control.
+**OBJ-TWSO-003:** Carry that authority on the provider-neutral system-prompt
+contract, including adapters that intentionally omit system-role history.
 
 ## Problem and live evidence
 An initiative-review TaskRun can complete immutable reads and resume writer-only,
@@ -21,9 +23,17 @@ reproduced this after reading BI-B223F45E commit
 `035a6335bd0e609bafbe96777ef6c5e0ea26bac0`, blob
 `b9fe8f0707291805fbc468aef62b401e0ee210a5`; two replays wrote no receipt.
 
+After the original order correction merged, Codex-only live replays for
+`BI-199F71B6` hydrated the complete immutable source but recorded three false
+spec-approval failures claiming that source was absent. The Codex CLI adapter
+correctly omits system-role history because it receives `systemPrompt`
+separately. Therefore ordering the history entry first was necessary for local
+providers but not provider-neutral; the authority must be appended to the
+actual system-prompt argument and omitted from history.
+
 ## Contract
-- Hydrated terminal-writer context is system authority and must appear before
-  user content in provider-facing message history.
+- Hydrated terminal-writer context is system authority and must be appended to
+  the provider-facing system prompt, before the separate user history.
 - Ordinary external TaskRuns keep their existing message order.
 - Writer-only narrowing, immutable artifact binding, server-bound arguments,
   PAT grant intersection, reviewer identity, and idempotency remain unchanged.
@@ -47,6 +57,7 @@ reproduced this after reading BI-B223F45E commit
 | AC-TWSO-001 | OBJ-TWSO-001 | Focused test proves `system` then `user`. |
 | AC-TWSO-002 | OBJ-TWSO-002 | Ordinary path and fail-closed suites stay green. |
 | AC-TWSO-003 | OBJ-TWSO-001 | Customer-zero bound receipt succeeds live. |
+| AC-TWSO-004 | OBJ-TWSO-003 | A Codex terminal-writer replay receives the hydrated source through `systemPrompt`, while `chatHistory` remains user-only. |
 
 Documentation impact: this design is the durable internal contract. The change
 does not alter owner-facing behavior or public product documentation.
