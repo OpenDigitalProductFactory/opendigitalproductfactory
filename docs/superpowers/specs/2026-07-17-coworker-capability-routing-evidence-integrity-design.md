@@ -1,6 +1,10 @@
+---
+status: active
+---
+
 # Coworker Capability Routing & Evidence Integrity — Design
 
-**Status:** Draft for architecture review
+**Status:** Active — architecture review folded; phased delivery in progress
 **Epic:** EP-E431FC8A
 **Lead BI (Phase 1):** BI-B5C358B1
 **Kernel decision:** `principle_decide` DI-2A6C75048353 → **D (hybrid-hierarchical)**, composite 10.59, margin 2.15, high confidence, no commandment conflict.
