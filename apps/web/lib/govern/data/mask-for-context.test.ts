@@ -261,3 +261,139 @@ describe("maskForContext", () => {
     });
   });
 });
+
+// BI-0064680C. The guard now measures what the transform DID, not what the
+// caller declared, so the tokenized projection the platform already built is
+// reachable without every caller first asserting materiality it cannot know.
+describe("materiality is decided by reversibility, not by declaration", () => {
+  const boundBinding = (pathPrefixes?: string[]): RehydrationAuthorizationBinding => ({
+    expectedActor: {
+      principalId: "PRN-1",
+      actingHumanUserId: "user-1",
+      actingAgentId: null,
+      delegationGrantId: null,
+    },
+    purpose: "customer-support",
+    surface: "private-customer",
+    subject: { kind: "account", id: "account-1" },
+    sensitivity: "confidential",
+    decisionVersions: [{
+      decisionId: "decision-mask-1",
+      assetVersion: "asset-v1",
+      classificationVersion: "classification-v1",
+      authorityVersion: "authority-v1",
+    }],
+    dataClasses: ["customer-records"],
+    ...(pathPrefixes ? { pathPrefixes } : {}),
+  });
+
+  const contactMatch = {
+    dataClass: "customer-records" as const,
+    path: "customer.email",
+    reason: "contact-detail",
+    confidence: "deterministic" as const,
+  };
+
+  it("allows an undeclared turn when every value is tokenized and bound", () => {
+    const result = maskForContext(
+      { customer: { email: "ada@example.com" } },
+      {
+        decision: maskingDecision(),
+        detailUse: "unknown",
+        rehydrationBindings: [boundBinding()],
+        matches: [contactMatch],
+      },
+    );
+
+    expect(result.transformation).toBe("tokenized");
+    expect(result.value.customer.email).toMatch(/^\[DPF_TOKEN_/);
+    expect(result.rehydrationHandle).toMatch(/^rehydration_/);
+  });
+
+  it("still refuses an undeclared turn when no binding can restore the value", () => {
+    expect(() =>
+      maskForContext(
+        { customer: { email: "ada@example.com" } },
+        {
+          decision: maskingDecision(),
+          detailUse: "unknown",
+          matches: [contactMatch],
+        },
+      )
+    ).toThrow(ContextMaskMaterialityError);
+  });
+
+  it("still refuses an undeclared turn when a binding does not cover the path", () => {
+    expect(() =>
+      maskForContext(
+        { customer: { email: "ada@example.com" } },
+        {
+          decision: maskingDecision(),
+          detailUse: "unknown",
+          rehydrationBindings: [boundBinding(["somewhere-else"])],
+          matches: [contactMatch],
+        },
+      )
+    ).toThrow(ContextMaskMaterialityError);
+  });
+
+  it("still refuses an undeclared turn for a one-way redaction", () => {
+    expect(() =>
+      maskForContext(
+        { note: "the key is sk-abcdefghijklmnop" },
+        {
+          decision: maskingDecision(),
+          detailUse: "unknown",
+          rehydrationBindings: [boundBinding()],
+          matches: [{
+            dataClass: "secrets-credentials",
+            path: "note",
+            reason: "secret-shaped-token",
+            confidence: "deterministic",
+          }],
+        },
+      )
+    ).toThrow(ContextMaskMaterialityError);
+  });
+
+  it("still refuses an undeclared turn for a lossy PDP profile", () => {
+    expect(() =>
+      maskForContext(
+        { customer: { accountNumber: "123456789" } },
+        {
+          decision: {
+            ...maskingDecision(),
+            obligations: [{ kind: "mask" as const, profileId: "context-partial" }],
+          },
+          detailUse: "unknown",
+          rehydrationBindings: [boundBinding()],
+          matches: [{
+            dataClass: "payments-finance",
+            path: "customer.accountNumber",
+            reason: "payment-or-finance-field",
+            confidence: "inferred",
+          }],
+        },
+      )
+    ).toThrow(ContextMaskMaterialityError);
+  });
+
+  it("leaves a declared-replaceable turn free to use a lossy transform", () => {
+    const result = maskForContext(
+      { note: "the key is sk-abcdefghijklmnop" },
+      {
+        decision: maskingDecision(),
+        detailUse: "replaceable",
+        matches: [{
+          dataClass: "secrets-credentials",
+          path: "note",
+          reason: "secret-shaped-token",
+          confidence: "deterministic",
+        }],
+      },
+    );
+
+    expect(result.value.note).toContain("[REDACTED]");
+    expect(result.value.note).not.toContain("sk-abcdefghijklmnop");
+  });
+});
