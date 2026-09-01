@@ -176,8 +176,16 @@ export async function executeRemoteTaskAttempt(input: {
           where: { taskRunId: run.taskRunId },
           select: { status: true },
         });
-    if (result.failure?.kind === "terminal-writer-missing" && terminalToolPolicy) {
+    const terminalWriterWasAttempted = terminalToolPolicy
+      ? (result.executedTools ?? []).some((tool) => tool.name === terminalToolPolicy.writerToolName)
+        || result.proposal?.name === terminalToolPolicy.writerToolName
+      : false;
+    const terminalWriterMissing = terminalToolPolicy !== null && !terminalWriterWasAttempted;
+    if ((result.failure?.kind === "terminal-writer-missing" || terminalWriterMissing) && terminalToolPolicy) {
       const terminalWriterAttempt = input.terminalWriterAttempt ?? 1;
+      const terminalWriterFailureMessage = result.failure?.kind === "terminal-writer-missing"
+        ? result.failure.message
+        : `The required governed writer ${terminalToolPolicy.writerToolName} was not recorded before the review attempt ended. The same TaskRun remains resumable. No receipt was created.`;
       const escalation = terminalWriterRetryIsExhausted(terminalWriterAttempt)
         ? createTerminalWriterEscalation({
             writerToolName: terminalToolPolicy.writerToolName,
@@ -190,7 +198,7 @@ export async function executeRemoteTaskAttempt(input: {
           status: "input-required",
           completedAt: null,
           progressPayload: {
-            summary: result.failure.message,
+            summary: terminalWriterFailureMessage,
             riskClass: parsed.riskClass,
             executedToolCount: result.executedTools?.length ?? 0,
             terminalWriterWait: {
@@ -201,7 +209,7 @@ export async function executeRemoteTaskAttempt(input: {
               attempt: terminalWriterAttempt,
               observedAt: new Date().toISOString(),
               dispatchContract: "required-tool-call",
-              ...(result.failure.message.includes("did not honor the required writer tool-call contract")
+              ...(terminalWriterFailureMessage.includes("did not honor the required writer tool-call contract")
                 ? { noncompliance: "prose-without-required-writer" }
                 : {}),
             },

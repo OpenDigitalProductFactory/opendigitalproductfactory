@@ -215,3 +215,11 @@ This recovery does not rerun inference, change the independent disposition, synt
 - Live reproduction: TaskRun `...57CC78DB3778`, expired proposed envelope `cmthhuxlm00a201qmftzezz1k`, proposal execution `cmthhuxly00a501qmsogavxv5`, zero writer receipt/baseline.
 - Code cause: the recovery query excluded `proposed`, and reservation required the prior proposal envelope to be `declined`.
 - Ruled out: stale approval would violate expiry; a new review identity would rerun inference and split the audit chain; bypassing the receipt would fabricate governance evidence.
+
+## Executor postcondition for every terminal-writer exit (2026-09-01)
+
+Live BI-FFBDDD96 research TaskRun `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-7991D9CAE467` persisted one successful exact-bound immutable read after an earlier malformed read attempt, then reached the agent-loop duration ceiling before invoking `record_initiative_evidence`. The loop returned its last prose as an ordinary result, so the remote-task executor persisted `completed` with `executedToolCount: 2`, zero writer executions, zero envelopes, and zero receipts. This bypassed the text-exit policy because duration and iteration exits occur outside that branch.
+
+The remote-task executor is the final completion boundary for initiative reviews. When an immutable review binding creates a terminal-writer policy, the executor may persist ordinary completion only after the bound writer appears in the governed execution history or as the active bound proposal. Any other loop result—including duration, iteration, cancellation, route, circuit-breaker, or prose exits—is converted to the existing `input-required/missing-terminal-writer` projection on the same TaskRun. The conversion clears `completedAt`, preserves the request digest and immutable binding, records the bounded attempt, and creates no envelope, decision, mapping, or receipt.
+
+This is a postcondition, not a second inference policy. The agent loop still controls reader/writer surfaces and required tool choice; the executor independently prevents an incomplete result from escaping as completed. A genuine writer attempt retains existing approval and receipt handling, and non-review tasks remain unchanged.
