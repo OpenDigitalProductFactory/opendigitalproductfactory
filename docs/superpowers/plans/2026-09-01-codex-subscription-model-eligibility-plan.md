@@ -16,6 +16,13 @@ this item. The coverage table below is therefore the durable mapping until an
 independent passing spec-approval receipt mints that baseline and allows the
 platform coverage recorder to bind it.
 
+## Governed traceability
+
+- Requirement: `OBJ-CODEX-ELIGIBILITY`
+- Verification: `AC-CODEX-ELIGIBILITY-1`, `AC-CODEX-ELIGIBILITY-2`, `AC-CODEX-ELIGIBILITY-3`, `AC-CODEX-ELIGIBILITY-4`
+- Contracts: `endpoint manifest eligibility`, `capacity error classifier`
+- Flows: `Codex OAuth routing`, `Runtime Health`
+
 ## Outcome
 
 A ChatGPT-authenticated Codex connection never dispatches a model the CLI has
