@@ -498,6 +498,12 @@ export async function reviveInterruptedQueuedGate({
   return { revived: false, reason: "no-queued-state" };
 }
 
+/**
+ * `gate-worktree.mjs` exits with this when the lease became a durable queue task.
+ * A queued run is not a failed run and must never be recovered as one.
+ */
+export const EXIT_DURABLE_QUEUE_WAIT = 75;
+
 export async function recoverInterruptedGate({
   args = [],
   result,
@@ -510,6 +516,24 @@ export async function recoverInterruptedGate({
   const status = result?.status ?? 1;
   if (status === 0 || args.includes("--dry-run") || args.includes("--finalize-evidence")) {
     return { recovered: false, reason: "not-a-recoverable-invocation" };
+  }
+  // BI-465B3D60. Exit 75 is the gate telling us it QUEUED, not that it broke:
+  // gate-worktree.mjs exits 75 after printing {status:"queued", code:
+  // "local_ci_durable_wait", resumeMode:"durable-task"} because the lease is a
+  // durable task that outlives this process and resumes on the next invocation.
+  //
+  // Recovery fired on any non-zero status, so it treated that as an interrupted
+  // run, tried to release a lease this process does not own
+  // (nonprod_lease_not_owner, retryable:false), and stamped the state `failed`.
+  // `pregate:status` then reported "status failed with NO recorded reason" for a
+  // lease that was queued, healthy and heartbeating — the exact category error
+  // this item was filed for ("losing a slot is not the same verdict as failing a
+  // gate"), reintroduced downstream of the classifier that already handles 75.
+  //
+  // Reproduced on a five-deep queue, unpiped and with no concurrent reader, on
+  // three consecutive invocations while the position advanced 3 -> 2.
+  if (status === EXIT_DURABLE_QUEUE_WAIT) {
+    return { recovered: false, reason: "queued-durable-task" };
   }
   let context;
   try {

@@ -3,11 +3,13 @@ import { join, resolve } from "node:path";
 import test from "node:test";
 
 import {
+  EXIT_DURABLE_QUEUE_WAIT,
   WINDOWS_WRAPPER_TERMINATED_STATUS,
   createQueuedGateRevivalWindow,
   gateArgsForQueuedRevivalWindow,
   runGateWithQueuedRevival,
   detectWorkingShell,
+  recoverInterruptedGate,
   recoverInterruptedGateState,
   resolvePregateGateContext,
   reviveInterruptedQueuedGateState,
@@ -392,4 +394,52 @@ test("pregate recovery ignores terminal gate states", async () => {
 
   assert.equal(recovered.recovered, false);
   assert.equal(releaseCalled, false);
+});
+
+// BI-465B3D60. gate-worktree.mjs exits 75 after printing
+// {status:"queued", code:"local_ci_durable_wait", resumeMode:"durable-task"} —
+// the lease is a durable task that outlives this process. Recovery fired on any
+// non-zero status, so it read that as an interrupted run, tried to release a
+// lease it does not own, and stamped the state `failed`. `pregate:status` then
+// reported "failed with NO recorded reason" for a queued, heartbeating lease.
+test("a queued durable-task gate is not recovered as an interrupted one", async () => {
+  let contextResolved = false;
+  const recovered = await recoverInterruptedGate({
+    args: [],
+    result: { status: EXIT_DURABLE_QUEUE_WAIT },
+    spawnSyncImpl: () => {
+      contextResolved = true;
+      return { status: 0, stdout: "", stderr: "" };
+    },
+    stderr: { write: () => {} },
+  });
+
+  assert.deepEqual(recovered, { recovered: false, reason: "queued-durable-task" });
+  // It must bail before touching git or the lease at all — releasing a lease this
+  // process does not own is what produced the misleading verdict.
+  assert.equal(contextResolved, false);
+});
+
+test("a genuinely non-zero, non-queue exit still reaches recovery", async () => {
+  // The guard must be exit-75-specific. Widening it would re-hide the real
+  // interruptions this recovery exists to clean up.
+  const recovered = await recoverInterruptedGate({
+    args: [],
+    result: { status: 1 },
+    cwd: resolve(".pregate-does-not-exist"),
+    spawnSyncImpl: () => ({ status: 1, stdout: "", stderr: "not a git worktree" }),
+    stderr: { write: () => {} },
+  });
+
+  assert.notEqual(recovered.reason, "queued-durable-task");
+});
+
+test("a clean exit is still not a recovery", async () => {
+  const recovered = await recoverInterruptedGate({
+    args: [],
+    result: { status: 0 },
+    stderr: { write: () => {} },
+  });
+
+  assert.equal(recovered.reason, "not-a-recoverable-invocation");
 });
