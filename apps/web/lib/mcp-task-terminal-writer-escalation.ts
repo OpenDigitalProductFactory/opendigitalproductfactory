@@ -61,25 +61,34 @@ export function recoverTerminalWriterEscalation(value: unknown): TerminalWriterE
   const progress = value as Record<string, unknown>;
   const failure = progress["terminalWriterContextFailure"];
   const wait = progress["terminalWriterWait"];
-  if (
-    !failure || typeof failure !== "object" || Array.isArray(failure)
-    || !wait || typeof wait !== "object" || Array.isArray(wait)
-  ) return null;
-  const failureRecord = failure as Record<string, unknown>;
+  if (!wait || typeof wait !== "object" || Array.isArray(wait)) return null;
   const waitRecord = wait as Record<string, unknown>;
   const writerToolName = nonEmptyString(waitRecord["writerToolName"]);
   const attempt = Number(waitRecord["attempt"]);
   if (
-    failureRecord["code"] !== "terminal_writer_context_truncated"
+    waitRecord["schemaVersion"] !== 1
+    || waitRecord["kind"] !== "missing-terminal-writer"
+    || waitRecord["resumeMode"] !== "same-taskrun"
     || !writerToolName
     || !Number.isInteger(attempt)
     || attempt < 1
   ) return null;
+  if (failure && typeof failure === "object" && !Array.isArray(failure)) {
+    const failureRecord = failure as Record<string, unknown>;
+    if (failureRecord["code"] === "terminal_writer_context_truncated") {
+      return createTerminalWriterEscalation({
+        code: "terminal_writer_context_truncated",
+        writerToolName,
+        attempt,
+        observedAt: nonEmptyString(failureRecord["observedAt"]) ?? new Date().toISOString(),
+      });
+    }
+  }
+  if (!terminalWriterRetryIsExhausted(attempt)) return null;
   return createTerminalWriterEscalation({
-    code: "terminal_writer_context_truncated",
     writerToolName,
     attempt,
-    observedAt: nonEmptyString(failureRecord["observedAt"]) ?? new Date().toISOString(),
+    observedAt: nonEmptyString(waitRecord["observedAt"]) ?? new Date().toISOString(),
   });
 }
 
