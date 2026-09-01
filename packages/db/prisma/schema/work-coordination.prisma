@@ -408,6 +408,8 @@ model Workroom {
   createdByPrincipal      Principal?               @relation("WorkroomCreator", fields: [createdByPrincipalId], references: [id], onDelete: SetNull)
   requestedByPrincipal    Principal?               @relation("WorkroomRequester", fields: [requestedByPrincipalId], references: [id], onDelete: SetNull)
   participants            WorkroomParticipant[]    @relation("WorkroomParticipants")
+  outgoingRelations       WorkroomRelation[]       @relation("WorkroomRelationFrom")
+  incomingRelations       WorkroomRelation[]       @relation("WorkroomRelationTo")
 
   @@index([status, updatedAt])
   @@index([backlogItemId])
@@ -472,6 +474,32 @@ model WorkroomParticipant {
   @@index([workroomId, lifecycle])
   @@index([assignmentSource])
   @@map("WorkCapsuleParticipant")
+}
+
+// BI-662254C6: five work-coordination relations. Not a parent column — contains,
+// spawned-from, depends-on, blocks, and contributes-to are different facts.
+// Portfolio dependencies stay on Workroom.dependsOnPortfolioRoles.
+enum WorkroomRelationKind {
+  contains
+  spawned_from    @map("spawned-from")
+  depends_on      @map("depends-on")
+  blocks
+  contributes_to  @map("contributes-to")
+}
+
+model WorkroomRelation {
+  id              String               @id @default(cuid())
+  fromWorkroomId  String
+  toWorkroomId    String
+  relation        WorkroomRelationKind
+  createdAt       DateTime             @default(now())
+  fromWorkroom    Workroom             @relation("WorkroomRelationFrom", fields: [fromWorkroomId], references: [id], onDelete: Cascade)
+  toWorkroom      Workroom             @relation("WorkroomRelationTo", fields: [toWorkroomId], references: [id], onDelete: Cascade)
+
+  @@unique([fromWorkroomId, toWorkroomId, relation])
+  @@index([toWorkroomId, relation])
+  @@index([relation])
+  @@map("WorkCapsuleRelation")
 }
 
 model Epic {
