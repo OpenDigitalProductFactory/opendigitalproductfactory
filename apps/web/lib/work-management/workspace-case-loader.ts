@@ -651,6 +651,9 @@ export async function loadWorkspaceWorkCaseDetail({
   const cycleCandidates = projectWorkItemCycleCarriers({
     items: item.childItems ?? [],
     messages,
+    scopeClaims: capsules[0]?.scopeClaims,
+    capsuleId: capsules[0]?.capsuleId,
+    openedAt: item.createdAt,
   });
   const sourceEntry = getWorkCaseSourceEntry(item.sourceType);
   const currentCycle = sourceEntry
