@@ -7,6 +7,7 @@ import test from "node:test";
 import {
   createLocalCiPassEvidenceValidity,
   isRecoverableInterruptedGateState,
+  projectReusedPassMetadata,
   readLocalCiGateState,
   writeLocalCiGateState,
 } from "./local-ci-gate-state.mjs";
@@ -52,6 +53,41 @@ test("local-CI gate state helper writes and reads the shared evidence shape", ()
   assert.equal(state.recovery.reason, "test");
   assert.equal(state.queueObserver.token, "observer-token");
   assert.equal(state.leaseExpiresAt, "2026-07-30T06:00:00.000Z");
+});
+
+test("a failed record persists the reason and structured summary (BI-DBED32FE, BI-465B3D60)", () => {
+  const stateFile = join(mkdtempSync(join(tmpdir(), "dpf-gate-reason-")), "gate.json");
+  writeLocalCiGateState(stateFile, {
+    branch: "fix/x",
+    sha: "a".repeat(40),
+    gatePassed: false,
+    leaseId: "NPEL-1",
+    evidenceId: "",
+    status: "failed",
+    expiresAt: "2026-08-30T06:00:00.000Z",
+    resilience: null,
+    leaseEvents: [],
+    failureReason: "no stage failed; child exited 1 after local-ci-vitest",
+    failureSummary: { schema: "dpf-local-ci-failure-summary/v1", failedTests: [], failedChecks: [] },
+    childExitCode: 1,
+  });
+  const state = readLocalCiGateState(stateFile);
+  assert.equal(state.failureReason, "no stage failed; child exited 1 after local-ci-vitest");
+  assert.equal(state.childExitCode, 1);
+  assert.equal(state.failureSummary.schema, "dpf-local-ci-failure-summary/v1");
+});
+
+test("canonical PASS reuse projects current HEAD onto metadata (BI-C6B2D404)", () => {
+  const projected = projectReusedPassMetadata(
+    { candidateSha: "oldsha", candidateRef: "feat/old", execution: { status: "passed", failedCommand: "stale" } },
+    { sha: "newsha", branch: "feat/new", evidenceId: "EXT-9", leaseId: "NPEL-9" },
+  );
+  assert.equal(projected.candidateSha, "newsha");
+  assert.equal(projected.candidateRef, "feat/new");
+  assert.equal(projected.reusedEvidenceId, "EXT-9");
+  assert.equal(projected.runLeaseId, "NPEL-9");
+  assert.equal(projected.execution.status, "passed");
+  assert.equal(projected.execution.failedCommand, null);
 });
 
 test("only matching queued/admitted/running gate states are recoverable", () => {

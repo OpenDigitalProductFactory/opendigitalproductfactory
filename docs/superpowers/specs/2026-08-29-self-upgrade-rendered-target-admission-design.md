@@ -41,6 +41,16 @@ five-file/129-test draft, but architecture review rejected that draft because
 it trusted ordinary client-provided target fields. That draft is research
 evidence only and must not be published.
 
+### 2026-08-30 worker-stage recurrence
+
+The protected render/action repair admitted and dispatched
+`SUR-5B6E1FE2` for `v2026.08.30` at
+`48a7492bdc6da61682f9956a9ca185ba4c12762d`. The worker then discarded that
+durable binding, repeated mutable GHCR discovery, and terminally skipped the
+run as `no-published-target: registry-unavailable`. A later run to the same
+target succeeded when the registry responded. The worker therefore remained a
+second, inconsistent home for target authority.
+
 ## Objectives
 
 - **OBJ-RTA-001:** Preserve the exact immutable release target resolved by the
@@ -49,8 +59,9 @@ evidence only and must not be published.
   mismatched, or unbound target data from creating a durable admission.
 - **OBJ-RTA-003:** Keep admission durable and idempotent while target
   re-resolution is temporarily unavailable.
-- **OBJ-RTA-004:** Require an independent exact resolver match before physical
-  dispatch, while preserving terminal fail-closed behavior for actual drift.
+- **OBJ-RTA-004:** Require independently verified immutable image evidence
+  before physical mutation, while preserving terminal fail-closed behavior for
+  actual drift at dispatch or worker start.
 - **OBJ-RTA-005:** Preserve source-install Git discovery and all existing auth,
   quiescence, override, newer-run, and release-support boundaries.
 
@@ -65,6 +76,10 @@ evidence only and must not be published.
 | AC-RTA-007 | OBJ-RTA-005 | Git-source installs cannot use a rendered release binding and retain ordinary Git target discovery. | Git-source denial fixture |
 | AC-RTA-008 | OBJ-RTA-005 | Existing auth, force, quiescence, newer-run, and live status behavior remains green; no new user-facing control is introduced. | Adjacent tests and UX verification |
 | AC-RTA-009 | OBJ-RTA-001, OBJ-RTA-003, OBJ-RTA-004 | One governed live upgrade reaches the canonical BI-EE release, exact served SHA, CAN-TEST, and restart identity convergence across install-state, `.env`, container image, and OCI revision. | Protected/live acceptance |
+| AC-RTA-010 | OBJ-RTA-003, OBJ-RTA-004 | A worker consumes the same bounded publisher-verified candidate used by status/admission when a second registry read is transiently unavailable. | Worker recovery fixture |
+| AC-RTA-011 | OBJ-RTA-003 | If neither live nor bounded verified evidence is available, a claimed worker returns the same run to `pending`/`indeterminate` reconciliation before quiescence; it is not skipped and no second admission is created. | Worker and run-store fixtures |
+| AC-RTA-012 | OBJ-RTA-004 | A worker candidate whose SHA/tag differs from the durable admission, or whose registry proof reports an integrity failure, terminally fails with a distinct integrity outcome before quiescence. | Drift and digest fixtures |
+| AC-RTA-013 | OBJ-RTA-003 | Recovery is constant work per admitted run and uses the existing bounded reconciliation query; no fleet fan-out or unbounded collection is introduced. | Architecture review and existing reconciler bound |
 
 ## Chosen design
 
@@ -106,6 +121,21 @@ absence records `admission-target-unavailable` as indeterminate and retains
 the row for reconciliation; an exact result dispatches once; an actual
 mismatch remains terminal drift.
 
+The worker uses that same verified resolver instead of owning a parallel
+registry-only path. Live discovery remains primary. Only
+`registry-unavailable` may fall back to recent publisher-verified evidence
+bound to the exact install context and current config digest; authentication,
+manifest, digest, tag, and source-revision failures remain authoritative. The
+worker compares the resulting SHA/tag with the durable admission before any
+quiescence. If transient evidence is absent, a compare-and-swap returns the
+claimed run to `pending`/`indeterminate`, where the existing bounded admission
+reconciler redispatches the same identity. This preserves one source of target
+truth and one physical-upgrade identity.
+
+The scale ceiling remains the admission reconciler's existing bounded batch of
+recoverable runs; this repair adds O(1) work and one bounded evidence lookup per
+worker delivery. EP-56AE0F69 owns further self-upgrade lifecycle evolution.
+
 ## Rejected options
 
 - **Ordinary client fields:** rejected because a forged or stale browser can
@@ -134,6 +164,10 @@ mismatch remains terminal drift.
    diff checks, exact-tree local CI, and independent semantic review.
 7. Deliver through DCO/protected merge, one canonical release, one governed
    live action, exact served-SHA/CAN-TEST, and restart identity convergence.
+8. Add the worker-stage recurrence fixtures, consolidate registry plus bounded
+   verified-evidence resolution behind one helper, compare against the durable
+   admission, and return transport-unavailable runs to reconciliation before
+   mutation. Keep all typed integrity failures terminal.
 
 No step is independently shippable: signing without action integration is
 unused, action integration without dispatch reconciliation wedges admissions,
@@ -144,7 +178,7 @@ original authority defect.
 
 | Deliverable key | Backlog item | Independently shippable | Requirement refs | Contract refs | Flow refs | Verification refs |
 | --- | --- | --- | --- | --- | --- | --- |
-| `server-owned-rendered-target-admission` | BI-EE81F61B | no | OBJ-RTA-001, OBJ-RTA-002, OBJ-RTA-003, OBJ-RTA-004, OBJ-RTA-005 | opaque-target-binding, admission-transaction, dispatch-state-machine, install-support-boundary | render-sign, client-carry, action-verify, admit, reconcile, dispatch, live-upgrade | AC-RTA-001, AC-RTA-002, AC-RTA-003, AC-RTA-004, AC-RTA-005, AC-RTA-006, AC-RTA-007, AC-RTA-008, AC-RTA-009 |
+| `server-owned-rendered-target-admission` | BI-EE81F61B | no | OBJ-RTA-001, OBJ-RTA-002, OBJ-RTA-003, OBJ-RTA-004, OBJ-RTA-005 | opaque-target-binding, admission-transaction, dispatch-state-machine, install-support-boundary | render-sign, client-carry, action-verify, admit, reconcile, dispatch, worker-verify, worker-reconcile, live-upgrade | AC-RTA-001, AC-RTA-002, AC-RTA-003, AC-RTA-004, AC-RTA-005, AC-RTA-006, AC-RTA-007, AC-RTA-008, AC-RTA-009, AC-RTA-010, AC-RTA-011, AC-RTA-012, AC-RTA-013 |
 
 ## Scope, rollback, and root-cause prevention
 

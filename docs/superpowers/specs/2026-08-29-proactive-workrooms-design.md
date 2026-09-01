@@ -26,6 +26,7 @@ Every row is code-verified against `main` at `49bbbb2e8`, or live-queried from t
 | 2 | **Only one shape is declared, and its runner never touches a Workroom.** `obligation-assurance-watch` runs a sweep and writes findings. It never calls `projectWorkShapeCycleBoundary`, never opens a room, never records room activity. The declared shape and the running job are unjoined. | `apps/web/lib/queue/functions/obligation-assurance-watch.ts` (78 lines, no room reference) |
 | 3 | **Proactive drive is keyed to the coworker, not the work.** `COWORKER_SELF_TASKS` is a hand-curated registry of four agent-keyed entries whose only dial is cron cadence (`balanced` = weekly, `assertive` = daily). Nothing binds an entry to a room, a portfolio, an obligation, or a stop condition. | `apps/web/lib/operate/scheduled-jobs/coworker-self-tasks.ts` |
 | 4 | **The proactivity resolver has no room in its ladder and no activity family for source operations.** Scopes are `agent:` → `route-context:` → `activity-family:`. The 15 families cover marketing, finance close, tax, field dispatch, security *incidents* — none covers contribution intake, code review, advisory triage, or payables. | `proactivity-resolver.server.ts` `scopeKeysForInput`; `proactivity-types.ts` `PROACTIVITY_ACTIVITY_FAMILIES` |
+| 4a | **The product still presents proactivity as a property of a specific AI Coworker.** The chat dock, coworker record and consolidated coworker roster all load and save agent-scoped preferences. That conflicts with the room carrying drive: changing the participant can change the work's persistence even though the outcome did not change. | `CoworkerPriorityDock.tsx`; `CoworkerProactivitySetting.tsx`; `coworker-decisions/proactivity/page.tsx` |
 | 5 | **The live room population is development sessions, not business operations.** Of 60 rooms scanned, 2 are live and 58 are history; 42 are reapable. 37 died by lease expiry. Most titles are `Work on BI-…`. | `list_workrooms` (2026-08-29): `{"scanned":60,"live":2,"history":58,"reapable":42}` |
 | 6 | **The one business-operations room that was tried died of exactly this gap.** `WC-42C558DD` "Security findings watch — Dependabot, code scanning, OSV" was created manually, portfolio `foundational`, serving three portfolios, anchored to the GitHub Security tab — and expired seven days later with no executor and no drive. It is the design's own motivating defect, already on the install. | `list_workrooms`, `WC-42C558DD`, `liveness: lease-expired` |
 | 7 | **The PAAW axes are specified but not populated.** 73% of rooms carry no `portfolioRole`, 67% no `activityKind`, **zero** carry `productsAndServicesSold`, and 0 of 330 declare a collaboration shape. | `EP-WORKFORCE-TRANSITION` triage items (live backlog) |
@@ -72,11 +73,19 @@ A `WorkShapeDefinition` already answers all four. Binding it to a room is the wh
 | Which advances need a human? | `advance.kind: "governed-decision"` — a sealed decision, not a status write | declared, never read |
 | What stops it? | `stopConditions` (success / failure / **budget**) and `reviewPoint` | declared, never read |
 
-### 3.2 The binding
+### 3.2 The binding and Process Overseer
 
 One field, no new table: a standing room declares `workShapeKey@version` on `Workroom.scopeClaims` —
 the same migration-free mechanism the collaboration-shape claim and the posture claim already use
-(`workroom-shape-claim.ts`). A drive runner then:
+(`workroom-shape-claim.ts`). A drive runner operates under the room's canonical `coordinator`,
+presented to people as the **Process Overseer**. The coordinator owns execution-shape conformance;
+the accountable principal still owns the business outcome. This reuses the existing participant
+role rather than introducing a generic manager agent.
+
+Before any dispatch, the runner consumes a deterministic conformance projection over the exact
+shape/version, explicit persisted coordinator and roster, current stage, prerequisite receipts,
+posture and authority, measures, budgets, review point, and stop conditions. A legacy-derived
+coordinator may explain an old room but does not qualify it for autonomous execution. The runner:
 
 1. reads the shape from the registry;
 2. resolves the posture through the existing §3.1 ladder (`work-posture` slices A–G), which supplies
@@ -84,12 +93,20 @@ the same migration-free mechanism the collaboration-shape claim and the posture 
 3. runs the stage whose accountable principal is an `agent:` reference, in **act** mode, through the
    existing `ScheduledAgentTask` dispatcher with that coworker's granted tools;
 4. records a room cycle via `projectWorkShapeCycleBoundary` and room activity via the existing
-   ledger; and
-5. stops on any declared stop condition, escalating rather than continuing.
+   ledger;
+5. rechecks conformance after the stage, records the observed transition and next permitted stage;
+   and
+6. stops on any declared stop condition, escalating rather than continuing.
 
 A stage whose accountable principal is a `role:` or `person:` reference is **never** run by the
 runner. It becomes an attention item for that principal. This is finding 2's lesson made structural:
 the sweep is the agent's, the response is the owner's.
+
+Shape drift is also an attention item, never an invitation to self-repair by widening authority or
+inventing a participant. Finite rooms reconcile on transitions; standing rooms also receive a
+bounded, idempotent delta sweep. The Process Overseer may be human or AI. An AI overseer needs a
+current JSI qualification for process coordination and applicable TAK authority, and it may not
+also be the independent evaluator or approver when the shape requires those roles.
 
 ### 3.3 Nesting is a relation, not a column
 
@@ -115,7 +132,7 @@ into every install.
 
 | Layer | Owns | Home | Ships to |
 | --- | --- | --- | --- |
-| **L1 — Platform substrate** | The shape→room binding, the drive runner, the relation model, posture resolution, evidence, stop-condition enforcement, portfolio placement | `apps/web/lib/work-management/`, `apps/web/lib/queue/functions/` | every install, every archetype |
+| **L1 — Platform substrate** | The shape→room binding, coordinator/Process Overseer conformance projection, drive runner, relation model, posture resolution, evidence, stop-condition enforcement, portfolio placement | `apps/web/lib/work-management/`, `apps/web/lib/queue/functions/` | every install, every archetype |
 | **L2 — Archetype profile** | The *set* of standing room definitions a business of this kind needs, derived from its OVSM — not authored per install | `packages/storefront-templates/src/` (derived, like `operational-value-stream.ts`) | every install of that archetype |
 | **L3 — Instance overlay** | Which repo, which forge account, which coworker holds which stage, which thresholds, which suppliers | `Organization` config + `scopeClaims` + connector credentials — **DB rows, never code** | this operator install only |
 
@@ -248,18 +265,20 @@ so the generic layers are proven before customer 0's own business rides on them.
 | Slice | Layer | Content | Inert until |
 | --- | --- | --- | --- |
 | **A** | L1 | Shape→room binding: the `scopeClaims` claim reader/writer, and `projectWorkShapeCycleBoundary` wired into the room-cycle adapter. No runner. | B |
-| **B** | L1 | The drive runner: resolve shape → resolve posture → dispatch the `agent:` stage through `ScheduledAgentTask` → record cycle and activity → honour stop conditions. Refuses non-`agent:` stages. | E |
+| **B** | L1 | The drive runner: require one explicit coordinator → resolve shape and conformance → resolve posture → dispatch the `agent:` stage through `ScheduledAgentTask` → record cycle and activity → recheck conformance → honour stop conditions. Refuses non-`agent:` stages. | E |
 | **C** | L1 | `WorkroomRelation` — the five relations, with the migration. Closes finding 8. | — |
 | **D** | L1 | Proactivity families for standing operations, so a posture can govern this work at all (finding 4). | B |
 | **E** | L2 | The `software-platform` standing-room profile, derived from OVSM, with the three conformance tests of §4. | F |
 | **F** | L3 | the operator install's bindings: repo, forge account, coworker-to-stage assignment, thresholds. Configuration rows and one seed. | — |
-| **G** | L1 | Room surface: the drive, its next wake, its last cycle, and why it is behaving as it is. | B |
-| **H** | L1 | Retire the agent-keyed self-task registry onto shapes, once E and F prove the path. Not before. | E, F |
+| **G** | L1 | Room surface: Process Overseer identity/source, shape-conformance state, current and expected next stage, deviations, last check, drive, next wake, last cycle, and intervention reason. | B |
+| **H** | L1 | Retire agent-owned proactivity onto outcome-specific Workrooms: migrate the self-task registry to shapes; remove the `agent:` preference scope and per-coworker controls; ignore legacy agent facts rather than fabricating room choices. Once E and F prove the path, not before. | E, F |
 
 ## 9. Non-goals
 
 - Not replacing the proactivity resolver, the Golden Triangle compiler, or the work-posture layer —
   this composes them.
+- Not retaining AI-coworker identity as a proactivity fallback. The engine remains; ownership moves
+  to the outcome-specific Workroom. Participant identity retains safety ceilings only.
 - Not a new decision engine; `principle_decide` remains the PDP.
 - Not per-install room authoring (§4 rule 2) and not a second work ledger (`PAAW-WORK-030`).
 - Not autonomy for outbound sends, money movement, or credential rotation — ever.

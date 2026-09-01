@@ -110,3 +110,41 @@ Use test-first changes at the owning boundaries:
 ## 10. Review boundary
 
 This repair does not reconcile historical initiative receipts from BI-8D98C5E6, replace the canonical WordPress design, or expand DPF into a WordPress-like public CMS. It repairs behavior already promised by the merged design and routes any broader product decision to a separate backlog item.
+
+## 11. Current-main implementation checkpoint (2026-08-28)
+
+The implementation branch was refreshed onto `fc5cedc6a571e78bd62a892d56c340a51b3fc2f0` before source work. Inspection of that exact base confirms that all four accepted regressions remain present and that the original architecture is still the correct repair boundary:
+
+- `WordPressConnectPanel` still defaults the empty-state credential submit control to `Check connection`; only this initial command changes to `Connect WordPress`. The already-connected probe and replacement controls remain `Check connection` and `Replace connection`.
+- `getAdapter` still normalizes the established `linkedin` and `email` aliases but not legacy `wordpress`, while the WordPress adapter still rejects every channel id except `wordpress-self-hosted`. Both ids will resolve to and validate against the one canonical adapter; no second adapter or connector identity is introduced.
+- `checkWordPressConnection` still records successful health before returning the newly probed site and capability fields. It will instead send the bounded, redacted discovery projection through the credential store's atomic health transition so the stored site identity and capabilities cannot lag the healthy status.
+- `readSetupState` still projects the persisted credential status directly unless a caller supplies fresher health. It will derive `degraded` when the most recent persisted probe failed after the most recent success, while preserving the usable encrypted credential and safe error message.
+
+### 11.1 Implementation seams and invariants
+
+The owning seams remain deliberately small:
+
+1. `apps/web/lib/integrations/kernel/credential-store.ts` owns persisted health derivation and the atomic healthy-state plus safe-projection update.
+2. `apps/web/lib/integrations/wordpress/connection-operations.ts` maps a successful WordPress probe into the bounded safe projection and never changes capabilities on failure.
+3. `apps/web/lib/marketing/channels/registry.ts` and `wordpress-self-hosted/adapter.ts` normalize the closed legacy alias set at the routing boundary while keeping `wordpress-self-hosted` as the canonical connector and publication intent.
+4. `apps/web/components/integrations/WordPressConnectPanel.tsx` owns the operator-facing command language and continues to derive status from the server projection.
+
+The successful probe update may change only existing non-secret discovery fields: site name and origin, authenticated user display name, supported resource kinds and taxonomies, unsupported resource types, and draft/live/media capability flags. It must preserve the existing public-publication policy and every reconnect or secret field. The store validates and encrypts the merged envelope before committing it with health timestamps; validation or persistence failure commits neither half. A failed probe records sanitized health failure only.
+
+### 11.2 Data, scale, and deployment boundary
+
+No table, migration, backfill, queue, capability enum, or new external service is required. `IntegrationCredential` and its encrypted envelope remain authoritative. The update reads and writes one connector credential, merges one schema-bounded projection, and performs no collection scan or unbounded provider request. Existing credential encryption, audit, and transaction behavior remain in force.
+
+The change adds no inbound network surface, DPF-hosted public URL, CMS, theme/plugin runtime, CDN, or Docker topology. WordPress remains customer-owned infrastructure reached by an operator-configured outbound HTTPS connection. Deployment therefore follows the ordinary web image path and needs no new environment variable, Compose service, secret, or runtime migration.
+
+### 11.3 Verification boundary
+
+Tests will first reproduce each current-main failure at its owning boundary, then prove the repair and its safety cases:
+
+- component coverage pins all three action labels and the degraded presentation across desktop, narrow, and mobile layouts;
+- registry and adapter coverage proves canonical and legacy routing share the same adapter and that unrelated ids remain rejected;
+- credential-store coverage proves persisted failure ordering, later recovery, atomic projection merge, policy preservation, and unsafe-patch refusal;
+- WordPress operation coverage proves successful refresh and failed-probe non-mutation;
+- authenticated operator and MCP journeys confirm the page and server projection report the same state without exposing secrets.
+
+Focused tests, impacted-package tests, typecheck, production build, UX fit review, semantic review, exact-tree integration CI, protected PR checks, the official Docker release, and one governed live upgrade remain required. A document or receipt alone is not delivery evidence.

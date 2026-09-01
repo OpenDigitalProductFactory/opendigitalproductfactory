@@ -94,6 +94,7 @@ export async function executeRemoteTaskAttempt(input: {
     resolvedTools,
     exactRequiredToolNames,
     parsed.initiativeReviewBinding,
+    parsed.prompt,
   );
   const effortWarrant = requiresInitiativeReviewEffort(exactRequiredToolNames)
     ? deriveEffortWarrant({

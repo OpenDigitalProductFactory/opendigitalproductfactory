@@ -48,6 +48,17 @@ export const PREGATE_VERDICTS = Object.freeze([
 /** Statuses that mean the gate was never admitted / never finished. Not FAIL. */
 const UNFINISHED_GATE_STATUSES = new Set(["queued", "cancelled"]);
 
+/**
+ * BI-8392DA16 / BI-2AB94B5A. A `blocked_*` status is infrastructure evidence —
+ * the child was killed, the sandbox drifted, or the control plane starved.
+ * FAIL is a claim about the diff. These must never share a headline.
+ */
+const BLOCKED_GATE_STATUSES = new Set([
+  "blocked_sandbox_drift",
+  "blocked_control_plane_starvation",
+  "blocked_child_signal_death",
+]);
+
 function rank(verdict) {
   const index = PREGATE_VERDICTS.indexOf(verdict);
   return index < 0 ? -1 : index;
@@ -212,6 +223,16 @@ export function classifySlotRecord({ state, metadata, headSha, headBranch = "", 
         ...base,
         verdict: "INCONCLUSIVE",
         reason: `gate record status ${status} — the gate did not run. This is not a failure of the diff. Re-run pregate.`,
+      };
+    }
+    if (BLOCKED_GATE_STATUSES.has(status) || status.startsWith("blocked_")) {
+      const stated = state?.failureReason || state?.error || "";
+      return {
+        ...base,
+        verdict: "INCONCLUSIVE",
+        reason: stated
+          ? `gate record status ${status} — infrastructure, not a product verdict. ${stated}`
+          : `gate record status ${status} — infrastructure, not a product verdict. The run was blocked before it could grade the diff. Re-run when the host is quieter; do not treat this as a failure of the code.`,
       };
     }
     return {

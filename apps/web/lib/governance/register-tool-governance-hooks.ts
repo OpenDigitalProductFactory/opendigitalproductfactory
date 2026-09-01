@@ -38,6 +38,10 @@ async function loadWorkroomForShapeGate(
       createdByPrincipalId: true,
       leaseHolderPrincipalId: true,
       requestedByPrincipalId: true,
+      runtimeVerifications: {
+        where: { status: "passed" },
+        select: { status: true, completedAt: true },
+      },
     },
   });
   if (!room) return null;
@@ -55,6 +59,7 @@ async function loadWorkroomForShapeGate(
     id: room.id,
     capsuleId: room.capsuleId,
     scopeClaims: room.scopeClaims,
+    verificationEvidence: room.runtimeVerifications,
     participants,
   };
 }

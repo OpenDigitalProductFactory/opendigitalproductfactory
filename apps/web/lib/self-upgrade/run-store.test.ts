@@ -44,6 +44,7 @@ import {
   recordRunRecoveryPoint,
   sanitizePromoterReadinessReport,
   claimAdmittedRunForWorker,
+  deferAdmittedRunForRedispatch,
   selfUpgradeAdmissionRepository,
 } from "./run-store";
 
@@ -162,6 +163,31 @@ describe("admitted worker ownership", () => {
     await expect(claimAdmittedRunForWorker("SUR-ONE")).resolves.toBe("duplicate");
   });
 
+  it("returns a claimed worker to durable reconciliation before mutation begins", async () => {
+    await expect(
+      deferAdmittedRunForRedispatch("SUR-ONE", "release-target-registry-unavailable"),
+    ).resolves.toBe(true);
+    expect(mocks.updateMany).toHaveBeenCalledWith({
+      where: {
+        runId: "SUR-ONE",
+        status: "running",
+        completedAt: null,
+        dispatchStatus: { in: ["dispatching", "dispatched"] },
+      },
+      data: {
+        status: "pending",
+        startedAt: null,
+        dispatchStatus: "indeterminate",
+        dispatchError: "release-target-registry-unavailable",
+        dispatchLeaseToken: null,
+        dispatchLeaseExpiresAt: null,
+      },
+    });
+    expect(mocks.broadcastSystem).toHaveBeenCalledWith(
+      expect.objectContaining({ runId: "SUR-ONE", status: "pending" }),
+    );
+  });
+
   it("preserves the legacy path for historical queued runs", async () => {
     mocks.findUnique.mockResolvedValue({ status: "queued", dispatchStatus: null });
     await expect(claimAdmittedRunForWorker("SUR-LEGACY")).resolves.toBe("legacy");
@@ -219,7 +245,7 @@ describe("self-upgrade admission transaction", () => {
   };
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     mocks.findFirst.mockResolvedValue(null);
     mocks.create.mockResolvedValue(admittedRow);
   });
@@ -358,11 +384,57 @@ describe("self-upgrade admission transaction", () => {
     expect(mocks.create).not.toHaveBeenCalled();
   });
 
+  it("creates one typed successor for an exact-target predecessor that never dispatched", async () => {
+    const predecessor = {
+      ...admittedRow,
+      runId: "SUR-6B312E24",
+      status: "failed",
+      targetSha: "0".repeat(40),
+      targetTag: "v-old",
+      completedAt: new Date(),
+    };
+    mocks.findFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(predecessor);
+    mocks.findUnique
+      .mockResolvedValueOnce(predecessor)
+      .mockResolvedValueOnce(null);
+    mocks.create.mockImplementationOnce(({ data }) => Promise.resolve({
+      ...admittedRow,
+      ...data,
+    }));
+
+    await expect(selfUpgradeAdmissionRepository.admit({
+      runId: "SUR-SAME",
+      triggeredBy: admittedRow.trigger,
+      target: {
+        targetKind: "release-artifact",
+        targetSha: predecessor.targetSha,
+        targetTag: predecessor.targetTag,
+      },
+      recoveryOfRunId: predecessor.runId,
+      requestedForce: false,
+      dryRun: false,
+      routine: false,
+      impactSummaryId: null,
+      admissionFingerprint: "same-target-fingerprint",
+      dispatchStatus: "admission_pending",
+    })).resolves.toMatchObject({
+      disposition: "created",
+      run: {
+        runId: "SUR-SAME",
+        recoveryOfRunId: predecessor.runId,
+        targetSha: predecessor.targetSha,
+        targetTag: predecessor.targetTag,
+      },
+    });
+    expect(mocks.create).toHaveBeenCalledOnce();
+  });
+
   it.each([
-    ["same SHA", "0".repeat(40), "v-new"],
-    ["same tag", "c".repeat(40), "v-old"],
-    ["same SHA and tag", "0".repeat(40), "v-old"],
-  ])("refuses a successor that reuses the predecessor's %s", async (_case, targetSha, targetTag) => {
+    ["same SHA only", "0".repeat(40), "v-new"],
+    ["same tag only", "c".repeat(40), "v-old"],
+  ])("refuses a successor with conflicting predecessor identity: %s", async (_case, targetSha, targetTag) => {
     const predecessor = {
       ...admittedRow,
       runId: "SUR-6B312E24",
@@ -448,6 +520,8 @@ describe("self-upgrade admission transaction", () => {
       ...admittedRow,
       runId: "SUR-EXISTING",
       recoveryOfRunId: predecessor.runId,
+      targetSha: predecessor.targetSha,
+      targetTag: predecessor.targetTag,
     };
     mocks.findFirst
       .mockResolvedValueOnce(null)
@@ -459,7 +533,11 @@ describe("self-upgrade admission transaction", () => {
     await expect(selfUpgradeAdmissionRepository.admit({
       runId: "SUR-SECOND",
       triggeredBy: admittedRow.trigger,
-      target: { targetKind: "release-artifact", targetSha: "c".repeat(40), targetTag: "v-new" },
+      target: {
+        targetKind: "release-artifact",
+        targetSha: predecessor.targetSha,
+        targetTag: predecessor.targetTag,
+      },
       recoveryOfRunId: predecessor.runId,
       requestedForce: false,
       dryRun: false,

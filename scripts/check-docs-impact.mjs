@@ -28,6 +28,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
+import { requireChangedFiles } from "./lib/git-changed-files.mjs";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const ROUTE_MAP_TS = path.join(REPO_ROOT, "apps", "web", "lib", "docs-route-map.ts");
@@ -150,8 +151,7 @@ export function computeImpact(changedFiles, entries, codeToDocs = {}) {
 
 function main() {
   const base = assertSafeRef(process.env.BASE_SHA || "origin/main", "BASE_SHA");
-  const changed = git("diff", "--name-only", `${base}...HEAD`)
-    .split("\n").map((s) => s.trim()).filter(Boolean);
+  const changed = requireChangedFiles(base, "docs-impact-gate");
   for (const f of changed) assertSafePath(f);
 
   // Dependency-manifest-only diffs (lockfile / package.json bumps, e.g. from

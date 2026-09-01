@@ -318,6 +318,57 @@ test("durable queue observation reuses claimKey and grants a fresh admitted TTL"
   }
 });
 
+test("a server-owned durable queue response checkpoints once and exits without polling or releasing", async () => {
+  const calls = [];
+  const server = createServer((request, response) => {
+    let body = "";
+    request.on("data", (chunk) => { body += chunk; });
+    request.on("end", () => {
+      const payload = JSON.parse(body);
+      calls.push(payload.params.name);
+      const result = payload.params.name === "claim_nonprod_environment_lease"
+        ? {
+          success: true,
+          entityId: "NPEL-DURABLE",
+          data: {
+            lease: { leaseId: "NPEL-DURABLE" },
+            admission: {
+              status: "queued", queuePosition: 3, waitAgeMs: 20,
+              resumeMode: "durable-task", taskRunId: "TR-NONPROD-DURABLE",
+            },
+          },
+        }
+        : { success: true, data: { leases: [], queued: [] } };
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify({
+        jsonrpc: "2.0", id: payload.id,
+        result: { content: [{ type: "text", text: JSON.stringify(result) }] },
+      }));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  const worktree = makeTempWorktree();
+  try {
+    const result = await run(process.execPath, [
+      "scripts/gate-worktree.mjs", "--branch", "fix/durable-wait", "--worktree", worktree,
+      "--lease-wait-seconds", "60", "--mcp-url", `http://127.0.0.1:${address.port}`, "--no-push",
+    ], { cwd: process.cwd(), env: {
+      ...process.env, DPF_MCP_BEARER_TOKEN: "test-token", DPF_ALLOW_LOCAL_CI_STUB: "1",
+      DPF_GATE_RETRY_JITTER: "0", DPF_LOCAL_SANDBOX_FENCE_PATH: isolatedFencePath(),
+    } });
+    assert.equal(result.code, 75, result.output);
+    assert.equal(calls.filter((tool) => tool === "claim_nonprod_environment_lease").length, 1);
+    assert.equal(calls.includes("renew_nonprod_environment_lease"), false);
+    assert.equal(calls.includes("release_nonprod_environment_lease"), false);
+    assert.match(result.output, /TR-NONPROD-DURABLE/);
+  } finally {
+    rmSync(worktree, { recursive: true, force: true });
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
 test("a subscriber observes the canonical run and reuses its terminal evidence without authority", async () => {
   const calls = [];
   let claims = 0;

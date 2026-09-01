@@ -175,3 +175,43 @@ Failed reader rows remain immutable audit history, but failure is not source evi
 Only successful exact-bound rows may form hydration attempts. Each candidate attempt must independently start at the artifact boundary, remain contiguous and cursor-progressing, respect the existing per-attempt call/page/character ceilings, preserve a stable total and blob identity, and terminate with complete coverage. Pages are never combined across attempt boundaries. When no complete successful persisted attempt exists, hydration may use only the existing bounded deterministic reread of the one server-bound artifact; failed-only history, a missing successful row, conflicting successful attempts, or an unavailable/incomplete reread remains a fail-closed resumable state.
 
 This extension changes no immutable request digest, TaskRun identity, model route or floor, grants, writer arguments, approval boundary, receipt semantics, or non-review behavior. It only separates audited failed attempts from successful immutable evidence after authority and binding validation.
+
+## CLI terminal-writer dispatch extension (2026-08-30)
+
+Live WordPress completion TaskRun `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-8139EEF334F5` exposed a final routing dead end. The same immutable request remained resumable through five attempts, but every writer-only turn ended with zero executions: the Codex CLI endpoint was rejected before inference because it cannot express provider-native `tool_choice: required`, while the Gemini and local endpoints were transiently unavailable. The terminal policy already owned the stronger invariant—only the one bound writer was exposed, prose could not complete the TaskRun, and no receipt could be inferred—but the adapter boundary did not distinguish that caller-enforced contract from an ordinary unguarded required-tool request.
+
+The caller now binds the exact terminal writer name into the resolved execution plan only while the provider surface contains exactly that writer. A CLI adapter may attempt this one call only when all of the following are true: the plan still requires tool choice, the attached surface has exactly one function, its name exactly matches the bound terminal writer, and a governed MCP session is present. Ordinary required-tool CLI requests, missing sessions, mismatched names, and multi-tool surfaces retain the existing pre-inference refusal. API adapters continue to compile native required tool choice unchanged.
+
+This is delegation of completion enforcement, not a relaxation of it. The CLI still receives only the writer schema and the explicit writer-only reminder. Its response returns to the existing terminal policy, which accepts completion only after the governed writer execution is recorded; prose remains `missing-terminal-writer`, resumable, and receipt-free. The writer continues to validate identity, arguments, approval, and persistence. No judgment, mapping, envelope, or receipt is synthesized by routing.
+
+## Zero-reader same-TaskRun recovery extension (2026-08-31)
+
+Live Portfolio Advisor TaskRun `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-634F7FF63BF8` exposed a bootstrap gap in the same-TaskRun recovery contract. The initial governed request became `input-required/missing-terminal-writer` before any tool dispatch and persisted zero reader executions, zero writer executions, zero envelopes, and zero receipts. An identical replay retained the exact request digest and immutable artifact binding but returned the cached resumable projection because `reserveTerminalWriterReplay` rejected `readerExecutions.length === 0` before reserving the run. The advertised recovery was therefore unreachable precisely when dispatch failed before the first read.
+
+The recovery reservation may bootstrap evidence only for an explicit `input-required` terminal-writer wait with an identical request digest, exact server-owned initiative-review binding, and no successful writer. A generic completed route exit with no evidence remains closed. The existing compare-and-set reservation happens before any bootstrap tool call, so concurrent replays cannot create duplicate reads.
+
+After reservation, the server invokes the already-governed `read_source_at_version` tool once at line one under the existing bounded page controls. The call uses only the immutable repository, path, commit, and blob identity from the terminal policy. Its returned content is never passed directly to the writer. The server re-queries durable ToolExecution rows for the same TaskRun, and the existing terminal-writer hydration validator must independently validate those persisted rows before evidence can enter the writer context. A failed bootstrap read, absent persisted row, binding mismatch, malformed result, or incomplete bounded hydration returns the same TaskRun to `input-required/terminal-writer-context-unavailable`; it creates no writer, envelope, baseline, mapping, or receipt.
+
+This is orchestration recovery, not an alternate evidence model. It changes no request identity, approval semantics, writer arguments, provider routing, tool grants, or receipt rules. WWMD decision `DI-6A51BE456F49` selected this repair over a replacement review identity because it preserves the immutable audit chain and makes the platform's existing resumability promise true.
+
+### Named-reference research
+
+- Source reference: `fix/initiative-review-terminal-writer-resume` at `c6c1380e828a65ca9552806d057c66833fb6c403`.
+- Live reproduction: TaskRun `...634F7FF63BF8` remained identical-key and resumable with zero ToolExecutions; no approval envelope existed to recover.
+- Code cause: `reserveTerminalWriterReplay` returned `null` solely when the persisted reader list was empty, so context hydration and its deterministic exact-bound reread were never reached.
+- Ruled out: a replacement key would split the audit identity; approval recovery was impossible without an envelope; reader validation was not the failing layer because it never ran; cached replay did not reach provider capacity or inference.
+
+## Expired proposal same-TaskRun recovery extension (2026-08-31)
+
+Live design-review TaskRun `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-57CC78DB3778` reached its independently selected terminal writer and created proposal ToolExecution `cmthhuxly00a501qmsogavxv5` plus approval envelope `cmthhuxlm00a201qmftzezz1k`. The envelope expired while still `proposed`. An identical request replay preserved the TaskRun and digest but could neither execute the writer nor create a fresh envelope: approval recovery searched only `approved` and `failed` envelopes, while terminal-writer reservation accepted a prior proposal only after it was explicitly declined. The run remained `input-required/missing-terminal-writer` with no receipt or baseline.
+
+An expired `proposed` envelope is now a recovery source under the same transaction as expired approved/failed recovery. Recovery requires the exact TaskRun, request digest, delegating user, acting agent, writer tool, stored approval-binding fingerprint, and original proposal parameters. It refuses an unexpired proposal, a conflicting binding, an absent or ambiguous proposal, or any completed writer/receipt. The transaction compare-and-sets the source envelope from `proposed` to `cancelled`, creates exactly one replacement `proposed` envelope and rebound proposal ToolExecution with the identical stored arguments, and parks the same TaskRun for fresh exact approval. A race rolls back the transaction.
+
+This recovery does not rerun inference, change the independent disposition, synthesize approval, or alter receipt validation. The expired envelope and original proposal remain immutable audit history. The replacement has a fresh bounded expiry and still requires the human approval boundary before the writer can execute.
+
+### Named-reference research
+
+- Source reference: `origin/main` at `7961b6846da00450a4ac61b93e0636677ef66292`, `recoverStaleApprovedRemoteTask` and `reserveTerminalWriterReplay`.
+- Live reproduction: TaskRun `...57CC78DB3778`, expired proposed envelope `cmthhuxlm00a201qmftzezz1k`, proposal execution `cmthhuxly00a501qmsogavxv5`, zero writer receipt/baseline.
+- Code cause: the recovery query excluded `proposed`, and reservation required the prior proposal envelope to be `declined`.
+- Ruled out: stale approval would violate expiry; a new review identity would rerun inference and split the audit chain; bypassing the receipt would fabricate governance evidence.

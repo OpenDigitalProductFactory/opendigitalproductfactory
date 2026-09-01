@@ -33,6 +33,17 @@ test("rejects obsolete polling wait flags because queued work resumes through du
   );
 });
 
+test("queued host work preserves its durable lease and exits without a release or retry timer", () => {
+  const source = readFileSync(new URL("./host-resource-runner.mjs", import.meta.url), "utf8");
+  const queuedBranch = source.slice(
+    source.indexOf('if (claim?.data?.admission?.status === "queued")'),
+    source.indexOf("const child = createOwnedChild"),
+  );
+  assert.match(queuedBranch, /host_resource_durable_wait/);
+  assert.doesNotMatch(queuedBranch, /release_nonprod_environment_lease/);
+  assert.doesNotMatch(queuedBranch, /setTimeout|retryAfterSeconds/);
+});
+
 test("rejects an undeclared command", () => {
   assert.throws(() => parseHostResourceArgs(["--", "pnpm", "test"]), /--class is required/);
 });

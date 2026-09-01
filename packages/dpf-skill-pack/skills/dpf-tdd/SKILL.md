@@ -51,7 +51,7 @@ This is [AGENTS.md §4 "Where each gate runs"](../../../../AGENTS.md) applied to
 
 ## The DPF-gated loop
 
-1. **Impact before Red.** Consume the `changeImpactContract` returned when the Workroom claimed its edit paths (or read `verificationState.changeImpactContract`). Resolve every `testImpact` entry with `find_related_tests` and pull every `guardObligation` into the loop now. `status: unresolved`, stale graph advice, or an unmapped source path **expands** verification — it never means "no tests."
+1. **Impact before Red.** Consume the `changeImpactContract` returned when the Workroom claimed its edit paths (or read `verificationState.changeImpactContract`). Resolve every `testImpact` entry with `find_related_tests` and pull every `guardObligation` into the loop now. If `find_related_tests` returns `Code graph unavailable`, an unavailable graph, or low-trust/qualify advice, **do not retry it blindly**: record the lookup as unavailable/unrun, then use a bounded `Grep`/`Glob` sweep plus colocated tests and the repository's explicit test commands. `status: unresolved`, stale graph advice, or an unmapped source path **expands** verification — it never means "no tests." The fallback is evidence of the search you performed, not a claim that the graph found nothing.
 
 2. **Red.** Watch it fail for the right reason. For a bug fix this is mandatory (`security-fix-needs-regression-test-first`, generalized beyond security).
 

@@ -158,6 +158,10 @@ COPY scripts/lib/module-size-scope.mjs ./scripts/lib/
 COPY scripts/lib/ci-policy-guards.mjs ./scripts/lib/
 COPY scripts/lib/host-command-invocation.mjs ./scripts/lib/
 COPY scripts/lib/git-fetch-shared-safe.mjs ./scripts/lib/
+# check-design-grounding-decision and check-data-impact import the shared
+# unresolvable-diff helper; without this COPY the init image dies at
+# ERR_MODULE_NOT_FOUND (BI-20599979).
+COPY scripts/lib/git-changed-files.mjs ./scripts/lib/
 COPY scripts/lib/entry-module.mjs ./scripts/lib/
 COPY scripts/lib/local-integration-status.mjs ./scripts/lib/
 COPY scripts/module-size-baseline.txt ./scripts/
@@ -197,6 +201,8 @@ COPY config/ ./config/
 # seed-ea-reference-models.ts. The rest of docs/Reference/ is large
 # binary content not needed in the image.
 COPY docs/Reference/IT4IT_Functional_Criteria_Taxonomy.xlsx ./docs/Reference/
+# The BIAN Service Landscape, read at seed time on a banking install.
+COPY docs/Reference/bian/bian-v14-service-landscape.json ./docs/Reference/bian/
 # The workbook is tracked in Git LFS, so a checkout without `lfs: true` copies a
 # ~130-byte pointer stub here instead of the real file. That shipped: every
 # consumer install's eaReferenceModels seed step failed with "invalid zip data"
@@ -214,6 +220,19 @@ RUN head -c 2 docs/Reference/IT4IT_Functional_Criteria_Taxonomy.xlsx | grep -q '
       echo "It is almost certainly an unmaterialized Git LFS pointer. Check out with lfs: true"; \
       echo "(or run 'git lfs pull') before building this image."; \
       head -c 64 docs/Reference/IT4IT_Functional_Criteria_Taxonomy.xlsx; \
+      exit 1; \
+    }
+# Same rule for the BIAN landscape: assert the bytes where they enter the
+# artifact. This one is plain JSON (not LFS), and it was simply absent from the
+# image for its whole life — seedBianReferenceModel caught the read error and
+# returned, so a banking install imported zero Service Domains and the seed's
+# own row-count guard fired into a non-fatal catch. A missing or truncated file
+# must fail the build, not the bank.
+RUN head -c 1 docs/Reference/bian/bian-v14-service-landscape.json | grep -q '{' || { \
+      echo "ERROR: docs/Reference/bian/bian-v14-service-landscape.json is not a JSON object."; \
+      echo "seed-ea-reference-models.ts reads this at seed time on a banking install;"; \
+      echo "a missing or truncated file imports zero BIAN Service Domains."; \
+      head -c 64 docs/Reference/bian/bian-v14-service-landscape.json; \
       exit 1; \
     }
 RUN pnpm install --frozen-lockfile

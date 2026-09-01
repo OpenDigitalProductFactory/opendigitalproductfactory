@@ -8,16 +8,9 @@ import { getActiveSelfUpgradeBlackout } from "@/lib/self-upgrade/blackout";
 import { resolveOperatingScheduleForSystem } from "@/lib/operating-hours-read";
 import { getLastCheckedAt, recordCheckedAt, isCheckIntervalElapsed } from "@/lib/self-upgrade/last-check";
 import { buildFetchCommand, buildRemoteHeadCommand } from "@/lib/self-upgrade/version";
-import {
-  loadReleaseInstallContext,
-  resolveReleaseUpgradeCandidate,
-  resolveUpgradeStrategy,
-  type ReleaseTargetResult,
-} from "@/lib/self-upgrade/release-target";
-import {
-  countPendingUpstreamCommits,
-  evaluateReleaseBatch,
-} from "@/lib/self-upgrade/release-batch";
+import { loadReleaseInstallContext, resolveUpgradeStrategy, type ReleaseTargetResult } from "@/lib/self-upgrade/release-target";
+import { resolveWorkerReleaseTarget } from "@/lib/self-upgrade/worker-release-target";
+import { countPendingUpstreamCommits, evaluateReleaseBatch } from "@/lib/self-upgrade/release-batch";
 import { prepareUpgradeSource, defaultGitRunner } from "@/lib/self-upgrade/prepare-source";
 // Pure constant only: never statically import the spawn-heavy promoter runtime
 // that is what the dynamic loadPromoterRuntime() below is for.
@@ -31,10 +24,7 @@ import {
 import { evaluateHostMemoryGuard } from "@/lib/self-upgrade/host-memory-preflight";
 import { getDeployedSha, isFeatureBuildDeployed } from "@/lib/self-upgrade/completion";
 import { readCurrentContainerConfigDigest } from "@/lib/self-upgrade/runtime-image-identity";
-import {
-  classifyBuildFailure,
-  formatClassifiedExcerpt,
-} from "@/lib/self-upgrade/build-failure-classifier";
+import { classifyBuildFailure, formatClassifiedExcerpt } from "@/lib/self-upgrade/build-failure-classifier";
 import {
   createRun,
   startRun,
@@ -332,13 +322,20 @@ export async function runSelfUpgrade(
   const deployedSha = await getDeployedSha();
   if (upgradeStrategy === "release" && releaseInstall) {
     const currentConfigDigest = await readCurrentContainerConfigDigest();
-    const target = await resolveReleaseUpgradeCandidate({
+    const resolution = await resolveWorkerReleaseTarget({
+      runId: params.runId,
       context: releaseInstall,
       currentConfigDigest,
     });
-    if (target.kind === "no-published-target") {
-      return await skipAttempt("no-published-target", `no-published-target: ${target.reason}`, { releaseStatus: target.reason });
+    if (resolution.kind === "handled") return resolution.response;
+    if (resolution.kind === "unavailable") {
+      return await skipAttempt(
+        "no-published-target",
+        `no-published-target: ${resolution.target.reason}`,
+        { releaseStatus: resolution.target.reason },
+      );
     }
+    const target = resolution.target;
     if (target.kind === "up-to-date" && !params.force && !params.dryRun) {
       return await skipAttempt("up-to-date", `up-to-date: ${target.tag}`, {
         releaseTag: target.tag,

@@ -34,6 +34,17 @@ test("Production Build Turbopack cache uses exact keys only", () => {
   assert.doesNotMatch(block, /\n\s+restore-keys:/);
 });
 
+test("Production Build cache key avoids unbounded source glob hashing", () => {
+  const block = stepBlock("Cache Turbopack build cache");
+
+  // GitHub evaluates hashFiles while rendering the workflow. Scanning every
+  // web source file can exceed the 120s template limit before the job starts.
+  // The immutable commit SHA already changes on every source commit, so it is a
+  // bounded and exact cache discriminator.
+  assert.match(block, /\$\{\{\s*github\.sha\s*\}\}/);
+  assert.doesNotMatch(block, /hashFiles\(['"]apps\/web\/\*\*/);
+});
+
 test("Production Build is bounded and identifies timed-out evidence", () => {
   const block = jobBlock("build", "ux-route-sweep-runtime");
   const buildStep = stepBlock("Build web (Next.js production)");

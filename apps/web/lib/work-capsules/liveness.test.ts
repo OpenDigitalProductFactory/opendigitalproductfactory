@@ -59,6 +59,20 @@ describe("classifyWorkCapsuleLiveness", () => {
     expect(v.isReapable).toBe(false);
   });
 
+  it("keeps an expired Workroom lease live while its exact worktree has a durable capacity wait", () => {
+    const v = classifyWorkCapsuleLiveness(
+      row({
+        executorKind: "codex-desktop",
+        leaseExpiresAt: new Date("2026-08-05T14:00:00.000Z"),
+        durableWait: { state: "queued", signaledAt: new Date("2026-08-05T14:55:00.000Z") },
+      }),
+      NOW,
+    );
+    expect(v.liveness).toBe("durable-wait");
+    expect(v.isLive).toBe(true);
+    expect(v.isReapable).toBe(false);
+  });
+
   it("treats an open PR as live even after the authoring lease lapsed", () => {
     const v = classifyWorkCapsuleLiveness(
       row({

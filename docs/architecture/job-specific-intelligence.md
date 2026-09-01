@@ -125,6 +125,9 @@ committee projects are identified as such and are not represented as completed s
 | [ISO/IEC 5259-5:2025](https://www.iso.org/standard/84150.html) | Data-quality governance and accountable stewardship |
 | [W3C Verifiable Credentials Data Model 2.0](https://www.w3.org/TR/vc-data-model/) | Issuer-holder-verifier claim model, schemas, evidence, validity, and status |
 | [1EdTech Open Badges 3.0](https://standards.1edtech.org/open-badges/specifications/standards/v3p0/cert) | Achievement claims with issuer, evidence, results, issue date, expiry, and portable verification |
+| [WikiSkill](https://arxiv.org/html/2608.27454) | Separation of immutable experience, curated knowledge, executable skills, validation/rollback, and evidence that skill transfer can regress on another model |
+| [Automated Researchers Can Reliably Mitigate Alignment Failures](https://alignment.anthropic.com/2026/automated-alignment-researchers/) | Parallel research, isolated held-out evaluation, capability preservation, and monitored evaluation-gaming evidence |
+| [Automated Weak-to-Strong Researcher](https://alignment.anthropic.com/2026/automated-w2s-researcher/) | Flexible research inside a fixed control envelope and concrete reward-hacking modes involving seeds, evaluator feedback, and label leakage |
 | [O*NET Content Model](https://www.onetcenter.org/content.html) | Tasks, knowledge, skills, abilities, work activities, and work context as job descriptors |
 | [ESCO](https://esco.ec.europa.eu/en/about-esco) | Versioned relationships among occupations, skills, competences, and qualifications |
 
@@ -351,6 +354,37 @@ An implementation `MAY` adapt:
 
 Adaptive changes `MUST` remain observable, attributable, bounded, and subject to the material-change
 rules in Section 13.
+
+An adaptive method proven for one operating profile `MUST NOT` be presumed transferable to another
+model, provider, harness, tool surface, corpus, memory policy, job version, or data/risk context.
+Transfer requires direct target-profile evidence or a scheme-defined equivalence decision. The
+informative [PAAW competence-evolution Workroom
+profile](../superpowers/specs/2026-08-30-paaw-competence-evolution-workroom-design.md) defines the
+DPF application pattern for producing that evidence.
+
+### 8.3 Workroom Process Overseer qualification
+
+When an AI coworker occupies a Workroom's canonical `coordinator` role, the job profile `MUST`
+include the applicable process-oversight activity. A qualification for the room's substantive task
+does not imply qualification to oversee its execution shape.
+
+The scheme `MUST` assess whether the subject can:
+
+- resolve the exact collaboration shape and WorkShapeDefinition versions;
+- distinguish accountable ownership, execution, evaluation/review, approval, and coordination;
+- detect missing or conflicting participants, out-of-order stages, absent prerequisite evidence,
+  exhausted budgets, due review points, and met stop conditions;
+- pause or refuse execution, produce an attributable conformance receipt, and route repair or
+  escalation without inventing an occupant, skipping a gate, or widening authority;
+- preserve attempt, seed, retry, submission, and resource accounting without optimizing a proxy by
+  silent repetition; and
+- remain independent from evaluator or approver roles wherever the Workroom shape requires that
+  separation.
+
+The qualification scope `MUST` name the supported Workroom shapes, work/activity classes, maximum
+risk, tools, data classes, and allowed oversight posture. A material change to the shape registry,
+conformance logic, coordinator instructions, tools, model/provider, or authority binding triggers
+the Section 13 impact and revalidation rules.
 
 ## 9. Model and Provider Suitability
 
@@ -597,6 +631,38 @@ Inconclusive results carry no qualification consequence and `SHOULD` be requeued
 infrastructure failure with demonstrated incapacity is the fastest way to make a qualification
 scheme untrusted by the operators who depend on it.
 
+### 11.5 Evaluation integrity and resistance to metric gaming
+
+An evaluation that can change qualification status or autonomy `MUST` protect the evaluation from
+the qualification subject as carefully as it protects the subject from an invalid harness.
+
+The scheme `MUST`:
+
+- assign evaluator/oracle ownership and qualification decision authority independently from the
+  subject;
+- keep a Workroom Process Overseer distinct from evaluator/oracle or qualification decision
+  authority wherever the declared shape requires independent assessment;
+- keep held-out fixtures, expected results, labels, and evaluator credentials outside the
+  subject's writable environment;
+- retain scored logs and artifacts outside that writable environment;
+- precommit primary endpoints, critical failures, capability floors, sample/cohort construction,
+  seed and retry policy, resource/submission budgets, invalidation conditions, and the decision
+  rule before candidate execution;
+- attribute who selected each seed, sample, cohort, retry, and evaluator submission;
+- invalidate evidence affected by evaluator leakage, label access, unauthorized test inspection,
+  or an exceeded submission budget;
+- distinguish a correct refusal, an incorrect refusal, a successful completion, and a mandatory
+  escalation rather than folding them into one aggregate score;
+- assess cross-model/provider transfer against the target operating profile rather than infer it
+  from source-profile success; and
+- base the qualification decision on governed actions, artifacts, receipts, and observed outcomes,
+  not on private chain-of-thought access.
+
+A capability floor `MUST` prevent a scheme from treating destruction of required job capability as
+a safety or alignment improvement. For high-consequence work, a scheme `SHOULD` also use an
+independent monitor, out-of-distribution cases, and repeated or long-horizon scenarios appropriate
+to the job.
+
 ## 12. Qualification Decision and Record
 
 A qualification decision `MUST` be made by the declared scheme authority, not by the subject agent.
@@ -773,6 +839,10 @@ Threats include:
 
 - capability inflation through vague badges
 - benchmark overfitting and evaluation leakage
+- cherry-picked seeds, cohorts, or retries that overstate performance
+- repeated evaluator probing that reconstructs held-out labels or acceptance boundaries
+- apparent safety gains caused by destroying required job capability
+- negative transfer when a method qualified on one operating profile is reused on another
 - swapping the assessed model, prompt, tools, or data after qualification
 - using a low-risk job qualification to justify high-risk work
 - routing sensitive work through an unassessed provider
@@ -787,6 +857,9 @@ Mitigations `SHOULD` include:
 - precise scope and exclusions
 - immutable profile fingerprints
 - protected evidence and transparent methodology
+- write-isolated held-out material and attributable evaluator submissions
+- precommitted endpoints, seed/retry policy, budgets, capability floors, and invalidation rules
+- direct target-profile assessment or governed equivalence before transfer
 - independent assessment where risk warrants it
 - critical-failure gates
 - change-triggered revalidation

@@ -138,6 +138,19 @@ export function failedReviewWorkroomTarget(run: RecoverableTaskRun): FailedRevie
   };
 }
 
+/**
+ * A provider outage can terminally fail the writer after the approval has
+ * already been consumed.  This marker is intentionally exact: only the
+ * canonical immutable-provenance refusal is eligible for same-TaskRun
+ * recovery.  Other failed writer outcomes (including design findings) remain
+ * terminal and cannot be converted into a fresh approval.
+ */
+export function isRecoverableProviderFailure(run: RecoverableTaskRun): boolean {
+  if (run.status !== "failed" || !run.completedAt) return false;
+  const progress = objectRecord(run.progressPayload);
+  return progress?.["summary"] === "Repository provider could not resolve immutable commit provenance.";
+}
+
 export function reboundProposalResult(value: unknown, envelopeId: string): Record<string, unknown> {
   const result = objectRecord(value) ?? {};
   const data = objectRecord(result["data"]) ?? {};
@@ -154,6 +167,7 @@ export function recoveryProgress(
     approvalBindingFingerprint: string;
     observedAt: string;
     freshApprovalRequired: boolean;
+    sourceEnvelopeStatus?: string;
   },
 ) {
   const progress = objectRecord(run.progressPayload) ?? {};
@@ -162,7 +176,11 @@ export function recoveryProgress(
     approvalRecovery: {
       schemaVersion: 1,
       kind: run.status === "failed"
-        ? "failed-prerequisite-approved-envelope"
+        ? input.sourceEnvelopeStatus === "failed"
+          ? "failed-provider-envelope"
+          : "failed-prerequisite-approved-envelope"
+        : input.sourceEnvelopeStatus === "proposed"
+          ? "expired-proposed-envelope"
         : input.freshApprovalRequired
           ? "expired-approved-envelope"
           : "stale-approved-envelope",

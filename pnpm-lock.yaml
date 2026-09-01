@@ -275,6 +275,9 @@ importers:
       '@xyflow/react':
         specifier: ^12.11.2
         version: 12.11.2(@types/react-dom@19.2.3(@types/react@19.2.18))(@types/react@19.2.18)(immer@11.1.18)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+      axe-core:
+        specifier: 4.12.1
+        version: 4.12.1
       bcryptjs:
         specifier: ^3.0.3
         version: 3.0.3

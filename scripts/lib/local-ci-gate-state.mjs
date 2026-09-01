@@ -57,6 +57,9 @@ export function writeLocalCiGateState(stateFile, {
   recovery = null,
   queueObserver = null,
   admission = null,
+  failureReason = "",
+  failureSummary = null,
+  childExitCode = null,
 }) {
   const previous = readLocalCiGateState(stateFile);
   const retainedAdmission = admission ?? (
@@ -85,7 +88,38 @@ export function writeLocalCiGateState(stateFile, {
   if (recovery) payload.recovery = recovery;
   if (queueObserver) payload.queueObserver = queueObserver;
   if (retainedAdmission) payload.admission = retainedAdmission;
+  // BI-DBED32FE / BI-465B3D60: a failed or blocked record that cannot name
+  // its cause teaches people to re-run (or skip) the gate. Persist the
+  // structured summary so `pregate:status` can quote THIS run.
+  if (failureReason) payload.failureReason = failureReason;
+  if (failureSummary) payload.failureSummary = failureSummary;
+  if (childExitCode !== null && childExitCode !== undefined) payload.childExitCode = childExitCode;
   writeGateStateAtomically(stateFile, `${JSON.stringify(payload, null, 2)}\n`);
+}
+
+/**
+ * BI-C6B2D404. Canonical PASS reuse must project the CURRENT candidate onto
+ * the metadata record. Updating only dpf-local-ci-gate.json leaves
+ * candidateSha pointing at the prior run, and pregate:status then reports
+ * STALE for an identical tested tree.
+ */
+export function projectReusedPassMetadata(prior, { sha, branch, evidenceId, leaseId }) {
+  const previous = prior && typeof prior === "object" ? prior : {};
+  const previousExecution = previous.execution && typeof previous.execution === "object"
+    ? previous.execution
+    : {};
+  return {
+    ...previous,
+    candidateRef: branch,
+    candidateSha: sha,
+    reusedEvidenceId: evidenceId,
+    runLeaseId: leaseId || previous.runLeaseId || null,
+    execution: {
+      ...previousExecution,
+      status: "passed",
+      failedCommand: null,
+    },
+  };
 }
 
 function writeGateStateAtomically(stateFile, contents) {

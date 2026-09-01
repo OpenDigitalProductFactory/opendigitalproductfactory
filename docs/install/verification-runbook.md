@@ -45,6 +45,7 @@
 | DPF Edge Node — multi-host LAN (T2) | none — code-complete via T2.1-T2.4 | Authority on Host A, Edge Node on Host B over a real LAN with a switch; non-loopback IP attribution; ARP / nmap / SNMP collector output reaching Postgres + Neo4j | 🙋 **reports wanted** |
 | Cloud — Single VM substrate (AWS / GCP / Azure) | runbook + verify-wrapper ready ([cloud-single-vm.md](cloud-single-vm.md)) | First real-cloud pilot report on each major cloud | 🙋 **reports wanted** |
 | Cloud — Managed Container service / Managed k8s | none — spec only | Substrate pilot per packaging target | 🧪 **design partner wanted** |
+| Cloud — Cloudflare-fronted managed isolated cells | architecture + live decomposed backlog; no runtime implementation | Two synthetic cells, edge/origin failure drills, restore/exit proof, and full deployment-contract evidence | 🔬 **research — not yet a pilot offer** |
 
 ## Fastest path: one command for the whole sweep
 

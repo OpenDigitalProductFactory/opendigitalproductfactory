@@ -21,9 +21,34 @@ status: active
 | G | `BI-BEDAFF57` | small | Archetype posture conformance test over the whole catalogue |
 | H | `BI-4EB2F1D0` | medium | Room surface renders the posture and its provenance |
 
-## Status ⟦runtime: 2026-08-28⟧
+## Status ⟦runtime: 2026-08-30⟧
 
-All eight slices have landed. Seven went across five PRs (#4488, #4492, #4569, and the
+### Slice E production-reach correction
+
+The 2026-08-30 live-substrate audit found that Slice E was overstated below. Its pure
+policy pieces landed: `joinAutonomy` is exhaustive, the verification requirement resolves
+from risk/depth, and `evaluateWorkCasePolicy` returns the named
+`missing_verification_evidence` denial. But `resolveWorkCaseAutonomyEnvelope` has no
+production caller and `createWorkCaseGovernanceHook` is not registered, so those pieces do
+not govern ordinary in-room tool calls. A unit-only policy is not load-bearing.
+
+The completion pass is bound to `BI-13ED1BE1` in Workroom `WC-3ECD32DA` and uses the
+already-registered Workroom governance hook as the production seam. The operator clarified
+that proactivity is one **Workroom setting shared by every participant**: each participant's
+own autonomy envelope may narrow the room boundary, but adding or changing a participant
+must never make the room more permissive. The same hook will consume canonical room
+verification receipts and the existing `resolveVerificationRequirement` policy, producing
+the existing named denial for consequential stake work. No participant-local proactivity
+setting and no second verification engine are introduced.
+
+Exit proof for this correction is production-seam coverage: two distinct participants are
+both capped by the same room action boundary; outward/floor actions without a verified
+receipt are denied by name in enforce mode; a verified receipt permits the action; and
+non-stake work is byte-for-byte unaffected at the decision boundary. The existing shadow
+mode remains audit-only.
+
+All eight slices have code on main, but the production-reach correction above remains the
+completion work for E. Seven went across five PRs (#4488, #4492, #4569, and the
 posture-governs branch); **H — the rich layer-by-layer provenance surface — landed on
 `feat/work-posture-provenance`.**
 
@@ -39,9 +64,12 @@ layer that produced them, and the arrival view gains no words.
 Two follow-on wiring gaps were found while verifying H and filed rather than built: a
 scheduled tick still does not resolve posture through the room ladder (`BI-27C8484F`), and
 a coworker's ordinary in-room proactivity still resolves from the old identity ladder
-(`BI-87C9C91C`). Both are the same "posture resolves but nothing consumes it" defect on
-different execution paths, and are worth sequencing together so the room dimension is added
-to `ProactivityResolverInput` once.
+(`BI-87C9C91C`). The operator clarified that the latter is not merely a missing room input:
+AI-coworker identity must cease to own proactivity. That slice removes the `agent:` preference
+scope and the coworker-record, chat-dock and roster controls; room participants share the
+outcome-specific Workroom posture, while participant trust and authority remain tighten-only
+safety ceilings. Unroomed activity uses the activity-family/platform default. The two wiring
+items should still share the room-resolution seam, but neither may preserve identity fallback.
 
 Two items outside the original eight were found and closed on the way: the workroom shape
 had no write path at all (`BI-8C54B216`), and the posture was display-only

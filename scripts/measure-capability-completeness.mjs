@@ -362,7 +362,25 @@ export function loadSubstrate() {
   const onboardingGrants = parseStringArrayMap(
     objectLiteralBody(workforce.slice(workforce.indexOf("ONBOARDING_AGENT_GRANTS")), "ONBOARDING_AGENT_GRANTS"),
   );
-  for (const [k, v] of onboardingGrants) if (!heldGrants.has(k)) heldGrants.set(k, v);
+  for (const [k, v] of onboardingGrants) {
+    if (!heldGrants.has(k)) heldGrants.set(k, v);
+    // onboarding-coo is seeded by bootstrap-first-run rather than the bulk
+    // COWORKER_AGENT_SEEDS loop. It is still a real workforce identity and must
+    // not be misreported as active-registry-only merely because its seed door
+    // is separate.
+    if (!roster.includes(k)) roster.push(k);
+  }
+  // Registry-only agents are seeded from config_profile.tool_grants, not from
+  // HARDCODED_COWORKER_GRANTS. Omitting this source made 53 agents look locked
+  // out of WSID even though both the canonical registry and live
+  // AgentToolGrant rows held registry_read. Roster coworkers remain governed
+  // by the workforce seed below; this adds the other authoritative namespace.
+  for (const agent of registry) {
+    const grants = agent.config_profile?.tool_grants;
+    if (Array.isArray(grants) && !heldGrants.has(agent.agent_name)) {
+      heldGrants.set(agent.agent_name, grants);
+    }
+  }
   // Bootstrap-created agents are real runtime identities even though they are
   // not in the workforce-seed roster; a skill assigned to one does reach it.
   const onboardingAgents = new Set(onboardingGrants.keys());
@@ -571,7 +589,16 @@ function firstHandle(ident, lookup) {
 }
 
 export function scoreIdentity(ident, s) {
-  const grantHit = firstHandle(ident, (h) => (s.heldGrants.has(h) ? s.heldGrants.get(h) : null));
+  // A bridged roster identity is reseeded from HARDCODED_COWORKER_GRANTS, which
+  // is authoritative for its live standing grants. Registry-only identities
+  // instead use agent_registry.json config_profile.tool_grants.
+  const grantHandles = ident.onRoster && ident.rosterSlug
+    ? [ident.rosterSlug]
+    : [...ident.handles];
+  const grantHit = firstHandle(
+    { handles: grantHandles },
+    (h) => (s.heldGrants.has(h) ? s.heldGrants.get(h) : null),
+  );
   const held = grantHit?.value ?? [];
   const expanded = expandGrants(held, s.grantImplications);
 

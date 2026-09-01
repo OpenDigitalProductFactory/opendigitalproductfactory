@@ -1481,7 +1481,6 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         `toolBudgetTarget=${effortWarrant.toolBudgetTarget} signals=${effortWarrant.signals.join(",")}`,
     );
   }
-
   for (let iteration = 0; iteration < iterationCeiling; iteration++) {
     if (params.terminalToolPolicy) {
       routeOptions.tools = terminalToolSurfaceOverride
@@ -1490,6 +1489,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       const writerOnlySurface = routeOptions.tools.length === 1
         && selectTerminalToolSurface(routeOptions.tools, [params.terminalToolPolicy.writerToolName]).length === 1;
       routeOptions.toolChoice = writerOnlySurface ? "required" : undefined;
+      routeOptions.terminalWriterToolName = writerOnlySurface ? params.terminalToolPolicy.writerToolName : undefined;
     }
     // EP-ASYNC-COWORKER-001: Check cancellation flag at each iteration boundary
     if (agentEventBus.isCancelled(threadId)) {

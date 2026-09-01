@@ -34,6 +34,7 @@ const INVENTORY_SELECT = {
 type InventoryDb = {
   workroom: { findMany(args: unknown): Promise<any[]> };
   featureBuild: { findMany(args: unknown): Promise<any[]> };
+  nonProductionEnvironmentLease?: { findMany(args: unknown): Promise<any[]> };
 };
 
 export type CapsuleLivenessSummary = {
@@ -42,6 +43,8 @@ export type CapsuleLivenessSummary = {
   history: number;
   reapable: number;
   byLiveness: Record<string, number>;
+  heavyLane: { executing: number; nextReady: number; dormant: number };
+  progressSlo: { oldestWaitMs: number | null; maxNoTransitionMs: number | null };
 };
 
 /**
@@ -73,9 +76,34 @@ export async function loadCapsuleLivenessInventory(
     }
   }
 
+  const leases = db.nonProductionEnvironmentLease
+    ? await db.nonProductionEnvironmentLease.findMany({
+      where: { status: { in: ["active", "queued"] }, expiresAt: { gt: now } },
+      orderBy: [{ environmentKey: "asc" }, { queuedAt: "asc" }, { id: "asc" }],
+      select: {
+        leaseId: true, environmentKey: true, status: true, worktreePath: true, branchName: true,
+        queuedAt: true, admittedAt: true, heartbeatAt: true, updatedAt: true,
+      },
+    })
+    : [];
+  const normalize = (value: unknown) => typeof value === "string"
+    ? value.replaceAll("\\", "/").replace(/\/$/, "").toLowerCase()
+    : "";
+  const leaseFor = (row: any) => leases.find((lease) =>
+    (normalize(row.worktreePath) && normalize(lease.worktreePath) === normalize(row.worktreePath))
+    || (normalize(row.headBranch) && normalize(lease.branchName) === normalize(row.headBranch)));
+
   const capsulesAll = rows.map((row) => {
     const featureBuild = row.featureBuildId ? buildsById.get(row.featureBuildId) ?? null : null;
-    const verdict = classifyWorkCapsuleLiveness({ ...row, featureBuild }, now);
+    const lease = leaseFor(row);
+    const verdict = classifyWorkCapsuleLiveness({
+      ...row,
+      featureBuild,
+      durableWait: lease ? {
+        state: lease.status,
+        signaledAt: lease.heartbeatAt ?? lease.admittedAt ?? lease.queuedAt ?? lease.updatedAt ?? null,
+      } : null,
+    }, now);
     const { featureBuildId: _omit, ...rest } = row;
     return {
       ...rest,
@@ -90,6 +118,20 @@ export async function loadCapsuleLivenessInventory(
   const byLiveness: Record<string, number> = {};
   for (const c of capsulesAll) byLiveness[c.liveness as string] = (byLiveness[c.liveness as string] ?? 0) + 1;
 
+  const active = leases.filter((lease) => lease.status === "active");
+  const queued = leases.filter((lease) => lease.status === "queued");
+  const headByEnvironment = new Set<string>();
+  for (const lease of queued) {
+    if (!headByEnvironment.has(lease.environmentKey)) headByEnvironment.add(lease.environmentKey);
+  }
+  const transitionAges = leases.map((lease) => {
+    const at = lease.heartbeatAt ?? lease.admittedAt ?? lease.queuedAt ?? lease.updatedAt;
+    return at instanceof Date ? Math.max(0, now.getTime() - at.getTime()) : null;
+  }).filter((age): age is number => age != null);
+  const waitAges = queued.map((lease) => lease.queuedAt instanceof Date
+    ? Math.max(0, now.getTime() - lease.queuedAt.getTime())
+    : null).filter((age): age is number => age != null);
+
   return {
     capsulesAll,
     livenessSummary: {
@@ -98,6 +140,15 @@ export async function loadCapsuleLivenessInventory(
       history: capsulesAll.filter((c) => !c.isLive).length,
       reapable: capsulesAll.filter((c) => c.isReapable).length,
       byLiveness,
+      heavyLane: {
+        executing: active.length,
+        nextReady: headByEnvironment.size,
+        dormant: Math.max(0, queued.length - headByEnvironment.size),
+      },
+      progressSlo: {
+        oldestWaitMs: waitAges.length ? Math.max(...waitAges) : null,
+        maxNoTransitionMs: transitionAges.length ? Math.max(...transitionAges) : null,
+      },
     },
   };
 }

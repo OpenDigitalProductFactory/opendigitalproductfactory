@@ -168,6 +168,71 @@ const BIAN_SD_TO_CAPABILITY_KEY: Readonly<Record<string, string>> = {
   "Fraud Resolution": "bian-fraud-resolution",
 };
 
+/**
+ * Which archetypes an industry-specific reference model serves.
+ *
+ * Entries may be archetype CATEGORY slugs (`banking-financial-services`) or
+ * specific archetype ids (`credit-union`), matching either — the same contract
+ * `RegulationApplicability.archetypes` already uses, so an operator reads one
+ * rule for "is this vertical content mine?", not two.
+ *
+ * An empty/absent list means universal: IT4IT describes IT management for any
+ * organisation that runs IT, which is every install.
+ */
+const REFERENCE_MODEL_ARCHETYPES: Readonly<Record<string, readonly string[]>> = {
+  bian_service_landscape_v14_0_0: ["banking-financial-services"],
+};
+
+/** The install's declared archetype, as category slug + specific archetype id. */
+interface InstallArchetype {
+  category: string | null;
+  archetypeId: string | null;
+}
+
+/**
+ * Read the install's setup-chosen archetype. `StorefrontConfig.archetypeId` is a
+ * cuid FK, not a slug, so the join to StorefrontArchetype is required to reach
+ * the category/id slugs the applicability lists are written in.
+ *
+ * Returns nulls when setup has not run yet. That is treated as "not applicable"
+ * below rather than "applicable": seeding a banking hierarchy onto an install
+ * that has not said it is a bank is the defect being fixed. The seed is
+ * idempotent and runs on every boot and upgrade, so an install that later
+ * declares banking imports the hierarchy on its next seed.
+ */
+async function resolveInstallArchetype(): Promise<InstallArchetype> {
+  const config = await prisma.storefrontConfig.findFirst({
+    select: { archetypeId: true },
+  });
+  if (!config) return { category: null, archetypeId: null };
+  const archetype = await prisma.storefrontArchetype.findUnique({
+    where: { id: config.archetypeId },
+    select: { archetypeId: true, category: true },
+  });
+  return {
+    category: archetype?.category ?? null,
+    archetypeId: archetype?.archetypeId ?? null,
+  };
+}
+
+/**
+ * Does this install need the element hierarchy for `modelSlug`?
+ *
+ * Universal models (no declared archetypes) always apply. An industry model
+ * applies only when the install's category or archetype id is in its list.
+ */
+export function referenceModelAppliesToInstall(
+  modelSlug: string,
+  install: InstallArchetype,
+  archetypesBySlug: Readonly<Record<string, readonly string[]>> = REFERENCE_MODEL_ARCHETYPES,
+): boolean {
+  const archetypes = archetypesBySlug[modelSlug];
+  if (!archetypes || archetypes.length === 0) return true;
+  return archetypes.some(
+    (a) => a === install.category || a === install.archetypeId,
+  );
+}
+
 async function seedBianReferenceModel(modelId: string): Promise<void> {
   const BIAN_JSON_PATH = join(REFERENCE_ROOT, "bian", "bian-v14-service-landscape.json");
 
@@ -466,26 +531,52 @@ export async function seedEaReferenceModels(): Promise<void> {
     },
   });
 
-  await seedBianReferenceModel(bianModel.id);
+  // The MODEL ROW above is catalogue and is always upserted — it carries
+  // primaryIndustry, so a non-banking install can still see that BIAN exists
+  // and what it is for. That mirrors seed-banking-compliance.ts, which seeds
+  // banking regulations everywhere and scopes them at consumption.
+  //
+  // The ELEMENT HIERARCHY is different: it is ~390 rows of banking-specific
+  // structure that a software-platform, dry-cleaning or field-service install
+  // has no use for, and — until now — a zero count for it FAILED the seed on
+  // every one of those installs. Import it only where it applies.
+  const install = await resolveInstallArchetype();
+  const bianApplies = referenceModelAppliesToInstall(bianSlug, install);
+  if (bianApplies) {
+    await seedBianReferenceModel(bianModel.id);
+  }
 
-  // BI-98D19DF2: a workbook read that silently yields zero rows (e.g. an
-  // LFS pointer stub masquerading as the real .xlsx, or a JSON schema
-  // change that empties every extracted row) must fail loudly here rather
-  // than let the seed report success while a fresh install imports
-  // nothing. Row-count assertion, not just absence of a thrown error.
-  const [it4itElementCount, bianElementCount] = await Promise.all([
-    prisma.eaReferenceModelElement.count({ where: { modelId: model.id } }),
-    prisma.eaReferenceModelElement.count({ where: { modelId: bianModel.id } }),
-  ]);
-
+  // BI-98D19DF2: a workbook/JSON read that silently yields zero rows (e.g. an
+  // LFS pointer stub masquerading as the real .xlsx, or a schema change that
+  // empties every extracted row) must fail loudly here rather than let the
+  // seed report success while a fresh install imports nothing. Row-count
+  // assertion, not just absence of a thrown error.
+  //
+  // BI-DDB48B04 follow-on: assert only over models this install actually
+  // needs. The original assertion demanded a non-zero BIAN count from every
+  // install, so on any non-banking install the eaReferenceModels step threw
+  // and — because seed steps are caught and logged, not fatal (seed.ts
+  // `step()`) — failed silently on every boot and every upgrade. That is the
+  // same "seed reports success while importing nothing" shape this assertion
+  // was written to prevent, inverted: an assertion asserting the wrong thing
+  // is as blind as no assertion at all.
+  const it4itElementCount = await prisma.eaReferenceModelElement.count({
+    where: { modelId: model.id },
+  });
   if (it4itElementCount === 0) {
     throw new Error(
       `IT4IT reference model imported zero elements from ${IT4IT_WORKBOOK_PATH} — the workbook read did not throw but produced no rows (check for an LFS pointer stub or an empty/relabelled sheet).`
     );
   }
-  if (bianElementCount === 0) {
-    throw new Error(
-      "BIAN Service Landscape reference model imported zero elements — the JSON read did not throw but produced no business areas/domains/service domains (check docs/Reference/bian/bian-v14-service-landscape.json)."
-    );
+
+  if (bianApplies) {
+    const bianElementCount = await prisma.eaReferenceModelElement.count({
+      where: { modelId: bianModel.id },
+    });
+    if (bianElementCount === 0) {
+      throw new Error(
+        "BIAN Service Landscape reference model imported zero elements — the JSON read did not throw but produced no business areas/domains/service domains (check docs/Reference/bian/bian-v14-service-landscape.json)."
+      );
+    }
   }
 }

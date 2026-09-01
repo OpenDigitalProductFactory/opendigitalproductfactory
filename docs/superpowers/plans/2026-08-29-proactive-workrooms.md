@@ -12,8 +12,9 @@ status: active
 ## Outcome
 
 A standing Workroom wakes on its own declared trigger, runs the stages its shape assigns to an AI
-coworker, hands every governed advance to the accountable human, records a cycle and its evidence,
-and stops on a declared condition. customer 0's source-code operations, adopter inquiries and
+coworker under one explicit coordinator/Process Overseer, hands every governed advance to the
+accountable human, records a cycle and its evidence, and stops on a declared condition. Customer
+0's source-code operations, adopter inquiries and
 payables run in such rooms, portfolio-aligned and nested — and the generic half ships to every
 install of the archetype while the DPF-specific half stays configuration.
 
@@ -58,19 +59,26 @@ Steps:
 
 Verification: targeted Vitest; `pnpm --filter web build`. Docs: none — no user-visible surface.
 
-## Phase B — the drive runner
+## Phase B — the overseen drive runner
 
-Deliverable: a declared standing room wakes on its trigger, runs its `agent:` stages, and stops.
+Deliverable: a declared standing room with one explicit coordinator passes shape conformance, wakes
+on its trigger, runs its `agent:` stages, rechecks conformance, and stops.
 
 Files:
 - `apps/web/lib/queue/functions/workroom-drive.ts` (new — mirrors
   `obligation-assurance-watch.ts`: pure exported job + thin Inngest cron/event wrappers behind
   `gateAtEntry`)
 - `apps/web/lib/work-management/drive-resolution.ts` (new — pure: shape + posture → dispatch plan)
+- `apps/web/lib/work-management/workroom-shape-conformance.ts` (new — pure declared-versus-observed
+  projection shared with finite-room transitions)
 - `apps/web/lib/operate/scheduled-jobs/agent-task-core.ts` (reuse `scheduleAgentTaskFor` unchanged)
 
 Steps:
 1. Failing tests first, and these are the load-bearing ones:
+   - zero, multiple, or only legacy-derived coordinators refuse dispatch; one explicit current
+     coordinator is required;
+   - missing required participants, out-of-order stage, absent prerequisite receipt, exhausted
+     budget, due review point, or met stop condition returns a typed deviation and next disposition;
    - a stage whose `accountablePrincipalRef` is `role:` or `person:` is **never** dispatched — it
      becomes an attention item (design §3.2, §6);
    - a `governed-decision` advance is never executed by the runner at any posture;
@@ -80,10 +88,14 @@ Steps:
    - an unreachable substrate reports and stops, and raises nothing from an empty read.
 2. Resolve the posture through the existing ladder — do not re-derive cadence. `damp` remains the
    only reducing lever; clamps only tighten.
-3. Dispatch through the existing `ScheduledAgentTask` engine with a deterministic task id derived
+3. Consume the same pure conformance result before and after dispatch. Append an attributable
+   receipt and attention item on drift; do not invent an occupant, skip a stage, widen authority,
+   or silently retry.
+4. Dispatch through the existing `ScheduledAgentTask` engine with a deterministic task id derived
    from `roomId + shapeKey`, so reconcile is idempotent and flipping a setting never piles up
    duplicate schedules (the lesson already encoded in `coworker-self-tasks.ts`).
-4. Record the cycle (Phase A) and room activity on the existing ledger.
+5. Record the cycle (Phase A), observed transition, conformance result, and room activity on the
+   existing ledger.
 
 Verification: targeted Vitest; `pnpm --filter web build`; a driven test room exercised on the shared
 nonproduction environment under a claimed lease — never by rebuilding the live portal.
@@ -171,17 +183,23 @@ the human. Recorded as canonical-runtime execution evidence via `record_executio
 
 ## Phase G — the room surface
 
-Deliverable: the drive is legible — what wakes this room, when next, what happened last, why it is
-behaving this way.
+Deliverable: the Process Overseer and drive are legible — who owns conformance, whether the
+assignment is explicit or derived, current and expected next stage, deviations, last check, what
+wakes the room, when next, what happened last, and why it is behaving this way.
 
 Files: `apps/web/components/workspace/workroom/` (compose existing primitives; no new route)
 
 Verification: component tests; theme-aware token check; UX-fit manifest; browser exercise on the
 shared nonproduction environment at desktop and narrow viewports.
 
-## Phase H — retire the agent-keyed registry
+## Phase H — retire agent-owned proactivity
 
-Deliverable: `COWORKER_SELF_TASKS`'s four entries become declared shapes; one drive mechanism remains.
+Deliverable: `COWORKER_SELF_TASKS`'s four entries become declared shapes, the `agent:` preference
+scope and per-coworker proactivity controls are removed, and one Workroom-owned drive/posture
+mechanism remains. Legacy agent-scoped facts are ignored rather than copied into rooms because an
+identity preference cannot be inferred as an outcome preference. Unroomed activity uses the
+activity-family/platform default. Participant trust, grants, qualifications and autonomy remain
+tighten-only safety ceilings, not proactivity settings. Acceptance is owned by `BI-87C9C91C`.
 
 **Explicitly gated on E and F succeeding on the live install.** Retiring the working mechanism before
 its replacement is proven is how a proactivity outage happens silently.
@@ -194,6 +212,10 @@ its replacement is proven is how a proactivity outage happens silently.
 - **Demarcation leak.** Mitigated by Phase E's three conformance tests running before the profile is
   written, and by Phase F being config-only — a code file in that diff is the tripwire.
 - **Duplicate schedules.** Deterministic task id from `roomId + shapeKey`; reconcile is idempotent.
+- **Coordinator self-certifies the work.** The Process Overseer owns sequence and conformance, not
+  the task result or consequential approval. Tests reject coordinator/evaluator or
+  coordinator/approver overlap when the shape requires independence; AI coordinators also require
+  current process-coordination JSI and TAK authority.
 - **Migration against live data.** Phase C's migration must apply against the existing 330-row
   population; forward-only, backfill inline.
 - **Spend.** Standing rooms consume inference on a cadence. `spendClass` already rides the posture;
@@ -203,6 +225,11 @@ its replacement is proven is how a proactivity outage happens silently.
 
 ## Backlog coverage
 
-Filed under `EP-WORKFORCE-TRANSITION`, cross-linked to `EP-WORK-CONVERGENCE`. Coverage recorded via
-`record_plan_backlog_coverage` once the plan commit is pushed and its provenance resolves. No receipt
-is claimed here.
+The executable Process Overseer is filed as `BI-3913EB49` under live epic `EP-1FABA22D`. It reuses
+`BI-4CB2EF76` for persisted participant/coordinator assignment and `BI-EFFD97B4` for definition-level
+trigger, grant, and measure contracts. The latter explicitly excludes the trigger runtime; this
+plan's Phase B and `BI-3913EB49` own transition conformance and drive enforcement rather than
+stretching either dependency.
+
+Coverage is recorded via `record_plan_backlog_coverage` only after an independently approved scope
+baseline and a pushed plan commit resolve. No receipt is claimed here.

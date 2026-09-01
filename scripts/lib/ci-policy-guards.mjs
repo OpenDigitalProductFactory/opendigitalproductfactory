@@ -210,6 +210,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/documentation-evidence-lane.test.mjs",
         "scripts/ci-policy-guards.test.mjs",
         "scripts/lib/host-command-invocation.test.mjs",
+        "packages/dpf-skill-pack/hooks/claim-work-guidance.test.mjs",
+        "packages/dpf-skill-pack/hooks/plan-coverage-guidance.test.mjs",
         // BI-812C676D: every covered-root *.test.mjs must appear here or on the
         // deliberate allowlist — otherwise CI stays green while the test never runs.
         "scripts/lib/ci-policy-test-inventory.test.mjs",
@@ -227,6 +229,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/dev-preview-migrate-converge.test.mjs",
         "scripts/pregate-exit-honesty.test.mjs",
         "scripts/lib/gate-context-runtime-contract.test.mjs",
+        "packages/dpf-skill-pack/hooks/code-intelligence-guidance.test.mjs",
       ),
       node("scripts/check-ci-policy-test-inventory.mjs"),
     ]),
@@ -302,6 +305,12 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("module-size-guard", "Module Size Guard", [
       node("scripts/check-module-size.mjs"),
     ]),
+    // BI-2624B7EA: an EmploymentEvent written outside its canonical writer is a
+    // log entry, which is the exact state EP-862820FD exists to remove. The
+    // actuator shipped inert once and half-wired once; this closes the class.
+    guard("employment-event-writers", "Employment Event Writers", [
+      node("scripts/check-employment-event-writers.mjs"),
+    ]),
     // BI-640B011D: schema FK budgets (declared FKs without a leading index +
     // bare unbacked *Id columns) may only shrink against the owned baseline.
     guard("fk-index-coverage-guard", "FK Index Coverage Guard", [
@@ -329,6 +338,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     // live install is reachable). Closes the unbacked-doc-anchor pattern (P3).
     guard("doc-anchor-existence", "Doc Anchor Existence", [
       node("--test", "scripts/check-doc-anchor-existence.test.mjs"),
+      // Spawns each remaining CLI against a missing BASE_SHA on the live tree,
+      // so the host-side preflight must not strip it (BI-20599979).
+      conformanceTest("scripts/lib/git-changed-files.test.mjs"),
       node("scripts/check-doc-anchor-existence.mjs"),
     ]),
     // BI-38A353B2: doc-anchor-existence proves a cited id EXISTS; nothing
@@ -450,6 +462,15 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/check-doc-reference-integrity.test.mjs"),
       node("scripts/check-doc-reference-integrity.mjs"),
     ]),
+    // BI-5BF97BAA: the integrations and finance surfaces rendered a "what
+    // happens next" backlog id that resolved to nothing — hardcoded strings that
+    // outlived the backlog reset. The backlog is resettable; source is not. The
+    // resolve check itself needs a database and so lives in a DB-gated test; this
+    // enforces the structural half, which is what CI can actually run.
+    guard("rendered-backlog-pointers", "Rendered Backlog Pointers", [
+      node("--test", "scripts/check-rendered-backlog-pointers.test.mjs"),
+      node("scripts/check-rendered-backlog-pointers.mjs"),
+    ]),
     guard("janitor-tests", "Janitor Tests", [
       node(
         "--test",
@@ -561,10 +582,11 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // detection is tested, because an over-reporting checklist claims work
         // is done when it is not.
         "scripts/measure-doc-cadence-coverage.test.mjs",
-        // Same rule for the capability measure: the report is advisory, but its
-        // parsing and scoring are tested here because a mis-parsed registry
-        // under-reports gaps, and an under-reported gap reads as an all-clear.
+        // Capability completeness is a blocking ratchet. Test both the scanner
+        // and the floor/gap-growth enforcement before running the guard so a
+        // broken gate cannot manufacture its own all-clear.
         "scripts/measure-capability-completeness.test.mjs",
+        "scripts/check-agent-capability-integrity.test.mjs",
         // Archetype obligation coverage: same rule again, plus a lockstep check
         // that this measure classifies a frequency exactly as the runtime sweep
         // does — a report that disagrees with the ledger it reports on is worse
@@ -645,6 +667,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "packages/dpf-skill-pack/hooks/mcp-catalog-profile.test.mjs",
         "packages/dpf-skill-pack/hooks/surface-manifest-paths.test.mjs",
       ),
+      node("--test", "scripts/check-spec-plan-doc.test.mjs"),
       node("scripts/check-spec-plan-doc.mjs"),
       node("scripts/check-plan-backlog-coverage.mjs"),
     ]),

@@ -41,6 +41,9 @@ function fullyStaffedRoom(scopeClaims: unknown = []): WorkroomShapeGateRoom {
     id: "room-row-1",
     capsuleId: "WC-TEST0001",
     scopeClaims,
+    verificationEvidence: [
+      { status: "passed", completedAt: "2026-08-30T12:00:00.000Z" },
+    ],
     participants: [
       { principalRef: "PRN-OWNER", roles: ["accountable"] },
       { principalRef: "PRN-SPEC", roles: ["specialist"] },
@@ -322,5 +325,97 @@ describe("posture governs the turn", () => {
     await hook.onPreToolUse!(event({ workroomId: "room-row-1" }));
     const verdict = (deps.recordShadow as ReturnType<typeof vi.fn>).mock.calls[0][0].verdict;
     expect(verdict.decisionMode).toBe("propose-for-approval");
+  });
+
+  it("applies one room boundary to every participant, while participant envelopes may narrow", async () => {
+    const room = fullyStaffedRoom(ADVISE_CLAIM);
+    const resolveAutonomyLevel = vi.fn((turn: ToolLifecycleEvent) =>
+      turn.context?.agentId === "agent-autopilot" ? "autopilot" : "shadow",
+    );
+    const { hook, deps } = makeHook({
+      mode: "shadow",
+      loadRoom: vi.fn().mockResolvedValue(room),
+      resolveAutonomyLevel,
+    });
+
+    await hook.onPreToolUse!(
+      event({ workroomId: "room-row-1", agentId: "agent-autopilot" }),
+    );
+    await hook.onPreToolUse!(
+      event({ workroomId: "room-row-1", agentId: "agent-shadow" }),
+    );
+
+    const verdicts = (deps.recordShadow as ReturnType<typeof vi.fn>).mock.calls.map(
+      ([record]) => record.verdict,
+    );
+    expect(verdicts.map((verdict) => verdict.postureActionBoundary)).toEqual([
+      "advise",
+      "advise",
+    ]);
+    expect(verdicts.map((verdict) => verdict.decisionMode)).toEqual([
+      "shadow-only",
+      "shadow-only",
+    ]);
+  });
+});
+
+describe("verification governs consequential stake work", () => {
+  it("denies by name in enforce mode when an outward action has no passing receipt", async () => {
+    const room = { ...fullyStaffedRoom(), verificationEvidence: [] };
+    const { hook, deps } = makeHook({
+      mode: "enforce",
+      loadRoom: vi.fn().mockResolvedValue(room),
+    });
+
+    const decision = await hook.onPreToolUse!(event({ workroomId: "room-row-1" }));
+
+    expect(decision).toMatchObject({ decision: "deny" });
+    expect(decision?.reason).toContain("missing_verification_evidence");
+    expect(deps.recordShadow).toHaveBeenCalledWith(
+      expect.objectContaining({
+        verdict: expect.objectContaining({
+          verificationRequired: true,
+          verificationSatisfied: false,
+          postureVerificationDepth: null,
+        }),
+      }),
+    );
+  });
+
+  it("allows the same outward action when the room has a passing receipt", async () => {
+    const { hook } = makeHook({ mode: "enforce" });
+    expect(await hook.onPreToolUse!(event({ workroomId: "room-row-1" }))).toEqual({
+      decision: "allow",
+    });
+  });
+
+  it("keeps shadow mode audit-only even when verification is missing", async () => {
+    const room = { ...fullyStaffedRoom(), verificationEvidence: [] };
+    const { hook } = makeHook({
+      mode: "shadow",
+      loadRoom: vi.fn().mockResolvedValue(room),
+    });
+    expect(await hook.onPreToolUse!(event({ workroomId: "room-row-1" }))).toMatchObject({
+      decision: "allow",
+    });
+  });
+
+  it("does not add a verification requirement to a legacy consequential tool with no stake consequence", async () => {
+    const room = { ...fullyStaffedRoom(), verificationEvidence: [] };
+    const { hook, deps } = makeHook({
+      mode: "enforce",
+      findTool: vi.fn().mockReturnValue({ sideEffect: true, consequence: undefined }),
+      loadRoom: vi.fn().mockResolvedValue(room),
+    });
+    expect(
+      await hook.onPreToolUse!(
+        event({ workroomId: "room-row-1", toolName: "transition_employee_status" }),
+      ),
+    ).toEqual({ decision: "allow" });
+    expect(deps.recordShadow).toHaveBeenCalledWith(
+      expect.objectContaining({
+        verdict: expect.objectContaining({ verificationRequired: false }),
+      }),
+    );
   });
 });
