@@ -26,6 +26,7 @@ import type {
   RemoteTaskSubmitOutcome,
   RemoteTaskSubmitParams,
 } from "./mcp-task-submit";
+import { withTaskRunApprovalLocation } from "./mcp/external-approval-location-lookup";
 
 function optionalString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
@@ -213,7 +214,7 @@ export async function executeRemoteTaskAttempt(input: {
     if (currentRun?.status === "input-required") {
       return {
         kind: "result",
-        result: {
+        result: await withTaskRunApprovalLocation({
           taskRunId: run.taskRunId,
           status: "input-required",
           idempotentReplay: input.idempotentReplay,
@@ -222,7 +223,7 @@ export async function executeRemoteTaskAttempt(input: {
           content: remoteTaskContent(result.content),
           executedToolCount: result.executedTools?.length ?? 0,
           isError: false,
-        },
+        }, { taskRunId: run.taskRunId, callerUserId: token.userId }),
       };
     }
 
