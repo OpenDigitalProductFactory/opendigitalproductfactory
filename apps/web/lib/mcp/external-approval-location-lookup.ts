@@ -12,8 +12,10 @@ export async function loadExternalApprovalLocationForTaskRun(input: {
   callerUserId: string;
 }): Promise<ExternalApprovalLocation | null> {
   if (!input.callerUserId) return null;
+  const findFirst = prisma.coworkerActionEnvelope?.findFirst;
+  if (typeof findFirst !== "function") return null;
   const now = new Date();
-  const row = await prisma.coworkerActionEnvelope.findFirst({
+  const row = await findFirst({
     where: {
       taskRunId: input.taskRunId,
       delegatingUserId: input.callerUserId,
