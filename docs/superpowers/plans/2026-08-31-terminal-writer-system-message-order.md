@@ -77,6 +77,8 @@ also requires the style-drift guard, `pnpm run pregate:preflight`, an exact-tree
 
 ## Traceability
 
+- Baseline objectives: `OBJ-TWSO-001`, `OBJ-TWSO-002`.
+- Baseline acceptance: `AC-TWSO-001`, `AC-TWSO-002`, `AC-TWSO-003`.
 - Requirement: `BI-EDC0DAF2#Acceptance`.
 - Contract: design `## Contract`.
 - Flow: design `## Ordered fix sequence` and this plan's atomic delivery
