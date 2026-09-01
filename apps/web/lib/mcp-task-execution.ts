@@ -27,6 +27,13 @@ import type {
   RemoteTaskSubmitParams,
 } from "./mcp-task-submit";
 import { withTaskRunApprovalLocation } from "./mcp/external-approval-location-lookup";
+import {
+  createTerminalWriterEscalation,
+  terminalWriterEscalationMessage,
+  terminalWriterEscalationStructuredContent,
+  terminalWriterEscalationWaitReason,
+  terminalWriterRetryIsExhausted,
+} from "./mcp-task-terminal-writer-escalation";
 
 function optionalString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
@@ -171,6 +178,12 @@ export async function executeRemoteTaskAttempt(input: {
         });
     if (result.failure?.kind === "terminal-writer-missing" && terminalToolPolicy) {
       const terminalWriterAttempt = input.terminalWriterAttempt ?? 1;
+      const escalation = terminalWriterRetryIsExhausted(terminalWriterAttempt)
+        ? createTerminalWriterEscalation({
+            writerToolName: terminalToolPolicy.writerToolName,
+            attempt: terminalWriterAttempt,
+          })
+        : null;
       await prisma.taskRun.update({
         where: { taskRunId: run.taskRunId },
         data: {
@@ -192,6 +205,7 @@ export async function executeRemoteTaskAttempt(input: {
                 ? { noncompliance: "prose-without-required-writer" }
                 : {}),
             },
+            ...(escalation ? { terminalWriterEscalation: escalation } : {}),
           },
         },
       });
@@ -203,9 +217,16 @@ export async function executeRemoteTaskAttempt(input: {
           idempotentReplay: input.idempotentReplay,
           ...resumedFlag,
           requiresApproval: false,
-          resumable: true,
-          waitReason: "missing-terminal-writer",
-          content: remoteTaskContent(result.content),
+          resumable: escalation ? false : true,
+          waitReason: escalation
+            ? terminalWriterEscalationWaitReason(escalation)
+            : "missing-terminal-writer",
+          content: remoteTaskContent(
+            escalation ? terminalWriterEscalationMessage(escalation) : result.content,
+          ),
+          ...(escalation
+            ? { structuredContent: terminalWriterEscalationStructuredContent(escalation) }
+            : {}),
           executedToolCount: result.executedTools?.length ?? 0,
           isError: false,
         },
