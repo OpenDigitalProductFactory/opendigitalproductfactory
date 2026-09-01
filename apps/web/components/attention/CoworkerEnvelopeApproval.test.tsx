@@ -14,13 +14,24 @@ vi.mock("@/lib/actions/proposals", () => ({ approveProposal, rejectProposal }));
 import { CoworkerEnvelopeApproval } from "./CoworkerEnvelopeApproval";
 import { OwnerDecisionCards } from "./OwnerDecisionCards";
 import { coworkerEnvelopeToAttentionItem } from "@/lib/attention/sources/coworker-envelope";
+import { summarizeCoworkerEnvelopeDecision } from "@/lib/attention/coworker-envelope-decision";
 import { buildOwnerAttentionProjection } from "@/lib/attention/owner-projection";
 import type { AttentionEnvelopeApproval } from "@/lib/attention/types";
 
 const NOW = Date.parse("2026-08-25T20:00:00.000Z");
 
 function approval(over: Partial<AttentionEnvelopeApproval> = {}): AttentionEnvelopeApproval {
-  return {
+  const reviewBinding = Object.prototype.hasOwnProperty.call(over, "reviewBinding")
+    ? over.reviewBinding
+    : {
+        gate: "research",
+        itemId: "BI-MCP-EFF-0285909C",
+        repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+        commitSha: "89e875eb49be0604ee8fa4156d0903b6a0932e62",
+        path: "docs/superpowers/specs/2026-08-15-resilient-concurrent-development-process.md",
+        providerBlobId: "bddca7c5a0b109f9460f84b2b0d886f5d794cbb6",
+      };
+  const base: AttentionEnvelopeApproval = {
     envelopeId: "cmt932fn301el01p7vfb2gas7",
     coworkerAgentId: "AGT-WS-PORTFOLIO",
     delegatingUserId: "cmt6ejt2109n56mnw5kt1f8y0",
@@ -32,16 +43,18 @@ function approval(over: Partial<AttentionEnvelopeApproval> = {}): AttentionEnvel
     actionable: true,
     approveHref: "/api/agent/envelope/cmt932fn301el01p7vfb2gas7/approve",
     declineHref: "/api/agent/envelope/cmt932fn301el01p7vfb2gas7/deny",
-    reviewBinding: {
-      gate: "research",
-      itemId: "BI-MCP-EFF-0285909C",
-      repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
-      commitSha: "89e875eb49be0604ee8fa4156d0903b6a0932e62",
-      path: "docs/superpowers/specs/2026-08-15-resilient-concurrent-development-process.md",
-      providerBlobId: "bddca7c5a0b109f9460f84b2b0d886f5d794cbb6",
-    },
-    ...over,
+    decision: summarizeCoworkerEnvelopeDecision({
+      toolName: "record_initiative_evidence",
+      proposedParameters: { decision: "pass" },
+      reviewBinding: reviewBinding
+        ? { gate: reviewBinding.gate, itemId: reviewBinding.itemId }
+        : undefined,
+      recommenderAgentId: "AGT-WS-PORTFOLIO",
+      authorizerUserId: "cmt6ejt2109n56mnw5kt1f8y0",
+    }),
+    ...(reviewBinding ? { reviewBinding } : {}),
   };
+  return { ...base, ...over, decision: over.decision ?? base.decision };
 }
 
 let fetchMock: ReturnType<typeof vi.fn>;
@@ -60,51 +73,68 @@ afterEach(() => {
 });
 
 describe("CoworkerEnvelopeApproval", () => {
-  it("shows the coworker, the requested action, and the reason it is waiting", () => {
+  it("states the AI recommendation versus human authorization, not identity plumbing", () => {
     render(<CoworkerEnvelopeApproval approval={approval()} />);
 
-    expect(screen.getByText("AGT-WS-PORTFOLIO")).toBeTruthy();
-    expect(screen.getByText("record_initiative_evidence")).toBeTruthy();
+    expect(screen.getByText("Human authorization needed")).toBeTruthy();
     expect(
-      screen.getByText("This action is authorized to proceed only after employee approval."),
+      screen.getByText("record that receipt so implementation planning may continue."),
     ).toBeTruthy();
-    expect(screen.getByText("proposed")).toBeTruthy();
-  });
-
-  it("shows the task, the expiry, and the whole immutable review binding", () => {
-    render(<CoworkerEnvelopeApproval approval={approval()} />);
-
-    expect(
-      screen.getByText("TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-7A98D78A3948"),
-    ).toBeTruthy();
-    expect(screen.getByText("2026-08-25T20:09:05.868Z")).toBeTruthy();
     expect(screen.getByText("BI-MCP-EFF-0285909C")).toBeTruthy();
     expect(screen.getByText("research")).toBeTruthy();
+    expect(screen.getByText("pass")).toBeTruthy();
+    expect(screen.getByText("None")).toBeTruthy();
+    expect(screen.getByText("Your coworker")).toBeTruthy();
+    expect(screen.getByText("You")).toBeTruthy();
+    expect(screen.queryByText("AGT-WS-PORTFOLIO")).toBeNull();
+    expect(screen.queryByText("record_initiative_evidence")).toBeNull();
+    expect(screen.queryByText("proposed")).toBeNull();
     expect(
-      screen.getByText("89e875eb49be0604ee8fa4156d0903b6a0932e62"),
-    ).toBeTruthy();
+      screen.queryByText("TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-7A98D78A3948"),
+    ).toBeNull();
     expect(
-      screen.getByText(
-        "docs/superpowers/specs/2026-08-15-resilient-concurrent-development-process.md",
-      ),
-    ).toBeTruthy();
-    expect(
-      screen.getByText("bddca7c5a0b109f9460f84b2b0d886f5d794cbb6"),
-    ).toBeTruthy();
+      screen.queryByText("89e875eb49be0604ee8fa4156d0903b6a0932e62"),
+    ).toBeNull();
+    expect(screen.queryByText("bddca7c5a0b109f9460f84b2b0d886f5d794cbb6")).toBeNull();
+    expect(screen.getByRole("button", { name: "Authorize" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Decline" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Approve action" })).toBeNull();
   });
 
-  it("omits the review binding block when the envelope carries none", () => {
+  it("lists findings on a fail without calling the stages approval", () => {
+    render(
+      <CoworkerEnvelopeApproval
+        approval={approval({
+          decision: summarizeCoworkerEnvelopeDecision({
+            toolName: "record_initiative_evidence",
+            proposedParameters: {
+              decision: "fail",
+              findings: [{ issue: "The defect was not reproduced.", severity: "critical" }],
+            },
+            reviewBinding: { gate: "research", itemId: "BI-MCP-EFF-0285909C" },
+            recommenderAgentId: "AGT-WS-PORTFOLIO",
+            authorizerUserId: "cmt6ejt2109n56mnw5kt1f8y0",
+          }),
+        })}
+      />,
+    );
+
+    expect(screen.getByText("The defect was not reproduced.")).toBeTruthy();
+    expect(screen.getByText("fail")).toBeTruthy();
+    expect(screen.queryByText(/approv/i)).toBeNull();
+  });
+
+  it("omits subject and gate when the envelope carries no bound record", () => {
     render(<CoworkerEnvelopeApproval approval={approval({ reviewBinding: undefined })} />);
 
     expect(screen.queryByText("BI-MCP-EFF-0285909C")).toBeNull();
-    expect(screen.queryByText("Reviewed record")).toBeNull();
-    expect(screen.getByText("record_initiative_evidence")).toBeTruthy();
+    expect(screen.getByText("Human authorization needed")).toBeTruthy();
   });
 
   it("approves through the envelope endpoint and never the proposal actions", async () => {
     render(<CoworkerEnvelopeApproval approval={approval()} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Approve action" }));
+    fireEvent.click(screen.getByRole("button", { name: "Authorize" }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     expect(fetchMock).toHaveBeenCalledWith(
@@ -131,7 +161,7 @@ describe("CoworkerEnvelopeApproval", () => {
 
   it("sends exactly one request when the button is pressed repeatedly", async () => {
     render(<CoworkerEnvelopeApproval approval={approval()} />);
-    const button = screen.getByRole("button", { name: "Approve action" });
+    const button = screen.getByRole("button", { name: "Authorize" });
 
     fireEvent.click(button);
     fireEvent.click(button);
@@ -152,7 +182,7 @@ describe("CoworkerEnvelopeApproval", () => {
     );
     render(<CoworkerEnvelopeApproval approval={approval()} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Approve action" }));
+    fireEvent.click(screen.getByRole("button", { name: "Authorize" }));
 
     await waitFor(() => expect(screen.getByRole("status")).toBeTruthy());
     expect(screen.queryByRole("alert")).toBeNull();
@@ -167,10 +197,10 @@ describe("CoworkerEnvelopeApproval", () => {
     );
     render(<CoworkerEnvelopeApproval approval={approval()} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Approve action" }));
+    fireEvent.click(screen.getByRole("button", { name: "Authorize" }));
 
     await waitFor(() => expect(screen.getByRole("alert")).toBeTruthy());
-    expect(screen.getByRole("button", { name: "Approve action" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Authorize" })).toBeTruthy();
   });
 
   it.each([
@@ -182,10 +212,10 @@ describe("CoworkerEnvelopeApproval", () => {
   ])("offers no decision control for a %s envelope", (_label, settled) => {
     render(<CoworkerEnvelopeApproval approval={settled} />);
 
-    expect(screen.queryByRole("button", { name: "Approve action" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Authorize" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Decline" })).toBeNull();
     // The record itself stays readable: hiding a control must not hide evidence.
-    expect(screen.getByText("record_initiative_evidence")).toBeTruthy();
+    expect(screen.getByText("Human authorization needed")).toBeTruthy();
   });
 });
 
@@ -203,7 +233,23 @@ describe("OwnerDecisionCards routing", () => {
         // clock-bomb-guard: allow projected against the pinned NOW constant, not the wall clock
         expiresAt: new Date("2026-08-25T20:09:05.868Z"),
         createdAt: new Date("2026-08-25T19:54:05.871Z"),
-        taskRun: null,
+        proposedParameters: { decision: "pass" },
+        taskRun: {
+          a2aMetadata: {
+            initiativeReviewBinding: {
+              gate: "research",
+              itemId: "BI-MCP-EFF-0285909C",
+              writerToolName: "record_initiative_evidence",
+              artifactRef: {
+                kind: "repo-blob-at-commit",
+                repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+                commitSha: "89e875eb49be0604ee8fa4156d0903b6a0932e62",
+                path: "docs/superpowers/specs/2026-08-15-resilient-concurrent-development-process.md",
+                providerBlobId: "bddca7c5a0b109f9460f84b2b0d886f5d794cbb6",
+              },
+            },
+          },
+        },
         ...over,
       },
       NOW,
@@ -214,8 +260,11 @@ describe("OwnerDecisionCards routing", () => {
   it("renders the envelope approval card, not the proposal controls", async () => {
     render(<OwnerDecisionCards entries={[entryFor()]} />);
 
-    expect(screen.getByText("record_initiative_evidence")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Approve action" }));
+    expect(screen.getByText("Authorize this research receipt?")).toBeTruthy();
+    expect(screen.getByText(/research passes with no findings/i)).toBeTruthy();
+    expect(screen.getByText("Human authorization needed")).toBeTruthy();
+    expect(screen.queryByText("record_initiative_evidence")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Authorize" }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     expect(fetchMock).toHaveBeenCalledWith(
@@ -225,5 +274,22 @@ describe("OwnerDecisionCards routing", () => {
     // The AgentActionProposal path must never be reachable from an envelope card.
     expect(approveProposal).not.toHaveBeenCalled();
     expect(rejectProposal).not.toHaveBeenCalled();
+  });
+
+  it("keeps identity plumbing under technical detail", () => {
+    render(<OwnerDecisionCards entries={[entryFor()]} />);
+
+    expect(screen.queryByText("record_initiative_evidence")).toBeNull();
+    expect(
+      screen.queryByText("89e875eb49be0604ee8fa4156d0903b6a0932e62"),
+    ).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /Technical detail/ }));
+
+    expect(screen.getByText("record_initiative_evidence")).toBeTruthy();
+    expect(
+      screen.getByText("89e875eb49be0604ee8fa4156d0903b6a0932e62"),
+    ).toBeTruthy();
+    expect(screen.getByText("bddca7c5a0b109f9460f84b2b0d886f5d794cbb6")).toBeTruthy();
   });
 });
