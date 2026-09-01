@@ -242,3 +242,14 @@ stretching either dependency.
 
 Coverage is recorded via `record_plan_backlog_coverage` only after an independently approved scope
 baseline and a pushed plan commit resolve. No receipt is claimed here.
+
+The remaining independently shippable slices are filed under `EP-WORKFORCE-TRANSITION`:
+
+- Phase A — `BI-FAFEB5C2`, bind a declared work shape to a standing Workroom.
+- Phase B — `BI-FCD639D9`, run the declared drive; `BI-3913EB49`, enforce Process Overseer
+  transition conformance.
+- Phase D — `BI-7056681C`, add the five standing-operations proactivity families.
+- Phase E — `BI-7E7B93DF`, derive the software-platform five-top/thirteen-subroom profile.
+- Phase F — `BI-A967717A`, bind this operator install's customer-zero rooms through configuration only.
+- Phase G — `BI-C16DC9E0`, make each room's trigger, next wake, last cycle and posture legible.
+- Phase H — `BI-41962384`, retire the agent-keyed self-task registry onto declared work shapes.
