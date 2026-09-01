@@ -61,6 +61,7 @@ model ModelProvider {
   financeProfile           AiProviderFinanceProfile?
   capacityStatus           ProviderCapacityStatus?
   connections              AiProviderConnection[]
+  clearanceOverrides       ProviderClearanceOverride[]
 }
 
 // A configured account/channel for a provider catalog entry. Contract and

@@ -24,6 +24,7 @@ import {
   type ResidencyClassKey,
   type SubjectLocator,
 } from "./taxonomy";
+import { AI_PROVIDER_GOVERNANCE_ASSETS } from "./ai-provider-governance-assets";
 import { PROCESSING_GOVERNANCE_ASSETS } from "./processing-governance-assets";
 import { BUSINESS_PRODUCT_PORTFOLIO_ASSETS } from "./business-product-portfolio-assets";
 import { HOSPITALITY_CAPACITY_ASSETS } from "./hospitality-capacity-assets";
@@ -651,25 +652,7 @@ const SEED_ASSETS: readonly DataAssetDefinition[] = [
     classification: { state: "confirmed", source: "manual", effectiveFrom: "2026-07-24" },
     fields: [],
   },
-  {
-    id: "data:ai-provider-connection",
-    physical: { prismaModel: "AiProviderConnection" },
-    domain: "ai-provider-governance",
-    ownerRole: "platform-owner",
-    stewardRole: "data-steward",
-    categories: ["configuration", "authorization", "security-audit"],
-    sensitivity: "confidential",
-    criticality: "mission-critical",
-    subjectLocators: [
-      { role: "organization", fieldPath: "organization" },
-    ],
-    lifecycleClass: "legal-evidence",
-    purposeCapabilities: ["platform-operations", "compliance-and-legal", "coworker-assistance"],
-    residencyClass: "local-only",
-    projectionClass: "metadata",
-    classification: { state: "confirmed", source: "manual", effectiveFrom: "2026-07-19" },
-    fields: [],
-  },
+  ...AI_PROVIDER_GOVERNANCE_ASSETS,
   {
     // Per-customer incumbent coverage verdict (BI-548060D5). Operational — the
     // instantiated verdict for a customer's incumbent app, defaulted from the
