@@ -138,14 +138,36 @@ function run(cmd, args, cwd, opts = {}) {
   return (opts.execute ?? executeCommand)(cmd, args, cwd, opts).ok;
 }
 
+// `pnpm ignored-builds` prints several sections. Only the "Automatically
+// ignored builds during installation:" section lists build scripts that are NOT
+// covered by pnpm config — the UNCLASSIFIED set this gate must flag for a
+// dependency-policy decision. Sibling sections ("Explicitly ignored package
+// builds (via pnpm.ignoredBuiltDependencies):", the onlyBuiltDependencies
+// counterpart) are already-classified and must NOT be flagged. Package entries
+// are indented under their header; a blank line or the next non-indented
+// "…:" header ends the section; "None", bullet markers, and pnpm's "hint:"
+// advisory lines are not packages. A naive "everything after the first header"
+// parser mis-read the section headers and hint lines as package names, so an
+// operator who correctly classified a build (moving it to the Explicitly
+// section) could never converge the gate.
 export function classifyIgnoredBuilds(stdout) {
-  const lines = String(stdout ?? "").split(/\r?\n/).map((line) => line.trim());
-  const header = lines.findIndex((line) => /ignored builds during installation/i.test(line));
-  if (header < 0) return { ok: true, packages: [] };
-  const packages = lines
-    .slice(header + 1)
-    .map((line) => line.replace(/^[-*•]\s*/, ""))
-    .filter((line) => line.length > 0 && !/^none\.?$/i.test(line));
+  const packages = [];
+  let inUnclassifiedSection = false;
+  for (const raw of String(stdout ?? "").split(/\r?\n/)) {
+    if (/^\s*$/.test(raw)) {
+      inUnclassifiedSection = false; // a blank line closes the current section
+      continue;
+    }
+    const isSectionHeader = /^\S/.test(raw) && /:\s*$/.test(raw);
+    if (isSectionHeader) {
+      inUnclassifiedSection = /ignored builds during installation/i.test(raw);
+      continue;
+    }
+    if (!inUnclassifiedSection) continue;
+    const entry = raw.trim().replace(/^[-*•]\s*/, "");
+    if (!entry || /^none\.?$/i.test(entry) || /^hint:/i.test(entry)) continue;
+    packages.push(entry);
+  }
   return { ok: packages.length === 0, packages };
 }
 

@@ -6,6 +6,7 @@ import {
   localCapacityHeldHandoff,
   noEligibleModelHandoff,
   providersBusyHandoff,
+  sensitivityClearanceHandoff,
   unexplainedDeadEndHandoff,
 } from "./inference-dead-ends";
 
@@ -17,6 +18,7 @@ describe("dead-end replies hand off instead of asking the user to poll", () => {
     ["no eligible model", noEligibleModelHandoff()],
     ["providers busy", providersBusyHandoff()],
     ["local capacity held", localCapacityHeldHandoff()],
+    ["sensitivity clearance", sensitivityClearanceHandoff("confidential")],
     ["unexplained dead end", unexplainedDeadEndHandoff()],
   ] as const;
 
@@ -121,6 +123,41 @@ describe("describeToolRouteFailure classifies the deferral that stranded the own
       .toBe(noEligibleModelHandoff());
     expect(describeToolRouteFailure("All endpoints failed for conversation", 0))
       .toBe(providersBusyHandoff());
+  });
+
+  // BI-431524DF. A confidential coworker's empty route is a data-governance block,
+  // not an outage — it must NOT tell the operator to re-check connected providers.
+  it("names the clearance lever when the block is sensitivity, not availability", () => {
+    const routerReason =
+      "No eligible endpoints for task type 'conversation' with sensitivity 'confidential'. " +
+      "3 endpoint(s) excluded. No connected provider is cleared for 'confidential' data.";
+    const message = describeToolRouteFailure(routerReason, 0);
+
+    expect(message).toBe(sensitivityClearanceHandoff("confidential"));
+    // The wrong advice the generic branch would give, explicitly absent.
+    expect(message).not.toMatch(/provider status/i);
+    // The real levers, present.
+    expect(message).toMatch(/no-training/i);
+    expect(message).toMatch(/local model/i);
+    // Never implies attesting a personal subscription.
+    expect(message).toMatch(/business or enterprise account/i);
+  });
+
+  it("classifies the sensitivity-clearance dead end as policy-or-capability", () => {
+    const outcome = describeToolRouteFailureOutcome(
+      "No eligible endpoints for task type 'conversation' with sensitivity 'restricted'. " +
+        "2 endpoint(s) excluded. No connected provider is cleared for 'restricted' data.",
+      0,
+    );
+    expect(outcome.kind).toBe("policy-or-capability");
+    expect(outcome.message).toBe(sensitivityClearanceHandoff("restricted"));
+  });
+
+  // Regression: an empty route with NO clearance clause stays the generic copy —
+  // the clearance branch must not swallow ordinary "no eligible endpoints" cases.
+  it("leaves a non-clearance empty route on the generic hand-off", () => {
+    expect(describeToolRouteFailure("No eligible endpoints for task type 'conversation'", 0))
+      .toBe(noEligibleModelHandoff());
   });
 
   it("falls through to the unexplained hand-off, not to a fabricated cause", () => {

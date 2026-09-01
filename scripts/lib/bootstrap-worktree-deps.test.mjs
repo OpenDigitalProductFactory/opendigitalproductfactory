@@ -57,6 +57,31 @@ test("ignored-build readiness fails closed when pnpm reports an unclassified scr
   });
 });
 
+test("ignored-build parser ignores the Explicitly-ignored section and hint lines (BI @scarf gate)", () => {
+  // The real multi-section `pnpm ignored-builds` output once a build is
+  // classified into pnpm.ignoredBuiltDependencies. Nothing is unclassified, so
+  // the gate must pass — the naive parser used to flag the section header and
+  // the package under it, jamming every push from the worktree.
+  const classified = [
+    "Automatically ignored builds during installation:",
+    "  None",
+    "",
+    "Explicitly ignored package builds (via pnpm.ignoredBuiltDependencies):",
+    "  @scarf/scarf",
+  ].join("\n");
+  assert.deepEqual(classifyIgnoredBuilds(classified), { ok: true, packages: [] });
+
+  // Before classification: the build sits under "Automatically ignored" and pnpm
+  // appends advisory "hint:" lines. Flag the package, never the hints.
+  const unclassified = [
+    "Automatically ignored builds during installation:",
+    "  @scarf/scarf",
+    "hint: To allow the execution of build scripts, add its name to \"pnpm.onlyBuiltDependencies\".",
+    "hint: If you don't want to build a package, add it to the \"pnpm.ignoredBuiltDependencies\" list.",
+  ].join("\n");
+  assert.deepEqual(classifyIgnoredBuilds(unclassified), { ok: false, packages: ["@scarf/scarf"] });
+});
+
 test("compile-ready ONLY when deps resolved AND the cheap gate passes", () => {
   assert.equal(classifyReadiness({ hasNodeModules: true, depProbeOk: true, gateOk: true }), "compile-ready");
   assert.equal(classifyReadiness({ hasNodeModules: true, depProbeOk: true, gateOk: false }), "source-only");
