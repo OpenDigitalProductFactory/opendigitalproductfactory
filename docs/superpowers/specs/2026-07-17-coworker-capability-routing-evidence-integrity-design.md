@@ -126,6 +126,20 @@ Four architecturally distinct options were scored by the kernel (`principle_deci
 
 **INV-7 (Scheduled terminal truth follows required governed work).** A scheduled prompt that explicitly names an authorized side-effecting tool establishes a terminal obligation for that run. `lastStatus="ok"` and `TaskRun.status="completed"` require at least one successful execution of every such explicitly required tool. A pending `AgentActionProposal` is not an execution even though its synthetic loop result is successful. Zero execution, a proposal without approval and execution, a failed execution, or an attachment refusal is `error`/`failed` with the missing tool named in internal evidence; prose claiming completion is not evidence. Advisory and read-only schedules remain eligible for truthful zero-tool completion. This closes live TaskRuns `TR-SCHED-7841123E` and `TR-SCHED-2C4E040A`, where the latter proposed `promote_to_build_studio` but incorrectly recorded `ok` without a `ToolExecution` row.
 
+### BI-4738F64B objective manifest
+
+**OBJ-TOOL-CEILING:** Preserve the resolved inference-tool ceiling after deferred-tool discovery by recompiling the active surface and displacing lower-ranked unpinned tools.
+
+**OBJ-SCHEDULED-TRUTH:** Report a scheduled explicit governed mutation as successful only when the mutation actually executes; a pending proposal or prose claim is not execution evidence.
+
+| Acceptance ID | Objective IDs | Statement |
+|---|---|---|
+| AC-TOOL-CEILING-1 | OBJ-TOOL-CEILING | Starting from 15 attached tools, deferred-tool loading leaves the next inference surface at or below 15 with the requested tool attached and displaced tools diagnosed. |
+| AC-TOOL-CEILING-2 | OBJ-TOOL-CEILING | Cloud-only and measured-fidelity ceilings, grants, provider suitability, and execution gates remain unchanged. |
+| AC-SCHEDULED-TRUTH-1 | OBJ-SCHEDULED-TRUTH | A required side-effect tool with zero executions cannot yield an ok scheduled-task status. |
+| AC-SCHEDULED-TRUTH-2 | OBJ-SCHEDULED-TRUTH | A synthetic successful result whose status is proposed cannot satisfy the actual-execution requirement. |
+| AC-BI473-LIVE | OBJ-TOOL-CEILING, OBJ-SCHEDULED-TRUTH | Focused regressions, exact-tree CI, merge-queue health, canonical deployment, and live scheduled-task acceptance pass. |
+
 **Failure-state ladder for an evidence-required turn returning zero authoritative tool calls:**
 1. **Retry with a reduced, task-compiled catalog** (top-K route/message-relevant tools only) and `tool_choice = "required"`. Bounded to 1 attempt.
 2. If still zero (or no eligible tool): **delegate** to a specialist whose stable surface covers the intent (Phase 4), if one exists and delegation is authorized.
