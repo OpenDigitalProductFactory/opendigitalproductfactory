@@ -5,6 +5,10 @@ import { markTaskRunWorking } from "@/lib/observability/heartbeat";
 import { executeAutonomousWorkTool } from "@/lib/tak/autonomous-work-run";
 
 import { recoverStaleApprovedRemoteTask } from "./mcp-task-approval-recovery";
+import {
+  describeExternalApprovalLocation,
+  withExternalApprovalLocation,
+} from "./mcp/external-approval-location";
 import { isStaleApprovalRecoveryRun } from "./mcp-task-approval-recovery-contract";
 import type {
   ExistingRemoteTask,
@@ -197,7 +201,7 @@ export async function recoverStaleApprovalOnReplay(input: {
   if (recovery?.kind === "fresh-approval-required") {
     return {
       kind: "result",
-      result: {
+      result: withExternalApprovalLocation({
         taskRunId: existing.taskRunId,
         status: "input-required",
         idempotentReplay: true,
@@ -216,7 +220,11 @@ export async function recoverStaleApprovalOnReplay(input: {
           inferenceRerun: false,
         },
         isError: false,
-      },
+      }, describeExternalApprovalLocation({
+        envelopeId: recovery.replacementEnvelopeId,
+        delegatingUserId: input.token.userId,
+        taskRunId: existing.taskRunId,
+      })),
     };
   }
 

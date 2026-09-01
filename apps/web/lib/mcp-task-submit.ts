@@ -1,4 +1,5 @@
 import { prisma } from "@dpf/db";
+import { withTaskRunApprovalLocation } from "./mcp/external-approval-location-lookup";
 import type { Prisma } from "@dpf/db";
 import { resolveCanonicalAgentId } from "@dpf/db/agent-identity";
 import type { UserContext } from "@/lib/permissions";
@@ -723,14 +724,14 @@ export async function submitRemoteCoworkerTask(input: {
 
     return {
       kind: "result",
-      result: {
+      result: await withTaskRunApprovalLocation({
         taskRunId: run.taskRunId,
         status: "input-required",
         idempotentReplay: false,
         requiresApproval: true,
         content: remoteTaskContent("Remote task submitted and paused for employee approval."),
         isError: false,
-      },
+      }, { taskRunId: run.taskRunId, callerUserId: token.userId }),
     };
   }
 
