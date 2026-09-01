@@ -237,3 +237,28 @@ export function buildLocalFallbackBanner(input: LocalFallbackBannerInput): strin
   parts.push(LOCAL_QUALITY_NOTE);
   return parts.join(" ");
 }
+
+/**
+ * One call for the whole local-fallback banner (BI-706530B2).
+ *
+ * routed-inference.ts previously assembled this inline — extract the facts,
+ * compute the history provenance, spread both into the builder. That is banner
+ * composition living in the routing module, and it pushed routed-inference over
+ * its 800-LOC ceiling. Composition belongs beside the thing being composed.
+ */
+export function describeLocalFallback(input: {
+  manifests: ReadonlyArray<ManifestFacts>;
+  candidates: ReadonlyArray<CandidateFacts>;
+  sensitivity: string;
+  matchProvenance: ReadonlyArray<{ path: string }> | undefined;
+  messageCount: number;
+}): string {
+  return buildLocalFallbackBanner({
+    ...extractLocalFallbackFacts({
+      manifests: input.manifests,
+      candidates: input.candidates,
+      sensitivity: input.sensitivity,
+    }),
+    historicalOnly: escalationCameOnlyFromHistory(input.matchProvenance, input.messageCount),
+  });
+}

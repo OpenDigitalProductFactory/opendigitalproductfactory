@@ -60,11 +60,7 @@ import { soleCapabilityFloorFailure } from "@/lib/inference/routing-exclusion-at
 import { createRoutingTraceId } from "@/lib/routing/routing-trace";
 import { AI_ROUTING_ARCHITECTURE_VERSION } from "@/lib/routing/routing-architecture-version";
 import type { EndpointPreferences } from "@/lib/routing/preference-finalization";
-import {
-  buildLocalFallbackBanner,
-  escalationCameOnlyFromHistory,
-  extractLocalFallbackFacts,
-} from "./downgrade-explanation";
+import { describeLocalFallback } from "./downgrade-explanation";
 export type { RouteAndCallOptions } from "./routed-inference-options";
 // ─── Result type ────────────────────────────────────────────────────────────
 /** Unified inference result — flat token fields, V2 metadata included. */
@@ -706,22 +702,13 @@ async function routeAndCallAttempt(
   // is not. Both facts are already in scope, so ./downgrade-explanation.ts reads
   // them instead of guessing.
   const localFallbackBanner = fellToLocal
-    ? buildLocalFallbackBanner(
-      {
-        ...extractLocalFallbackFacts({
-          manifests,
-          candidates: decision.candidates,
-          sensitivity: decision.sensitivity,
-        }),
-        // BI-706530B2: read the receipt the screener already produced, so the
-        // banner can tell an owner their thread is held by something said
-        // earlier — and that a new conversation clears it.
-        historicalOnly: escalationCameOnlyFromHistory(
-          decision.inferenceDataScreenReceipt?.matchProvenance,
-          messages.length,
-        ),
-      },
-    )
+    ? describeLocalFallback({
+      manifests,
+      candidates: decision.candidates,
+      sensitivity: decision.sensitivity,
+      matchProvenance: decision.inferenceDataScreenReceipt?.matchProvenance,
+      messageCount: messages.length,
+    })
     : null;
 
   // 6. Persist TokenUsage row for the cost ledger (Phase J).
