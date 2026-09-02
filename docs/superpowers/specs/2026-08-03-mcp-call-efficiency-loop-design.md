@@ -32,8 +32,15 @@ External MCP clients (Claude/Codex/Grok) and in-portal coworkers burn tokens via
 ### Dimensions
 - **Surface:** `executionMode` (+ `apiTokenId` present ⇒ external PAT)
 - **Identity:** `agentId`, `userId`, `threadId`, `taskRunId`, `skillId`
-- **Tool:** `toolName`, success, `durationMs`
+- **Tool:** `toolName`, success, governed-refusal flag, `durationMs`
 - **Window:** default 24h, max 7d
+
+### A governed refusal is not a tool failure
+`ToolExecution.success` is false for two different events: a tool that broke, and a gate that correctly said no. Counting them together makes a working gate read as a misbehaving tool. Measured on the live install over seven days (2026-09-02): of ~5,700 failed executions, ~4,900 were governed refusals — `gate_evidence_blocked` alone was 4,520 — against ~235 genuine caller defects (`missing_required`, `invalid_input`, `invalid_status`).
+
+`refusal-codes.ts` holds the closed list, read from the tool's own `result.error`. Refusals are excluded from `failCount` **and** from the `high_failure` denominator, so a tool is rated on the calls it was answerable for; they are reported separately as `refusalCount`. The list is deliberately conservative — an unrecognised code stays a failure, because a missed finding is re-detected on the next scan while a wrongly-excused fault is not.
+
+A `retry_storm` whose pairs are mostly refusals is still reported (retrying a non-retryable refusal is waste, and the loop cannot end by succeeding) but is worded to point at the caller's retry loop rather than at the tool or its instructions.
 
 ### Finding kinds
 1. `thrash` — same tool ≥ N times in one thread within window  
