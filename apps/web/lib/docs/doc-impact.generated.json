@@ -1854,7 +1854,13 @@
       "docs/architecture/build-gate-runbook.md",
       "docs/founder-kernel/wiki/principles/dco-sign-off-required.md"
     ],
+    "scripts/pre-push-gate-slot-contract.test.mjs": [
+      "docs/architecture/build-gate-runbook.md"
+    ],
     "scripts/pregate-preflight.mjs": [
+      "docs/architecture/build-gate-runbook.md"
+    ],
+    "scripts/pregate-status.mjs": [
       "docs/architecture/build-gate-runbook.md"
     ],
     "scripts/probes/marketing-media/local-render-receipt.json": [
@@ -2350,7 +2356,9 @@
       "scripts/lib/bootstrap-worktree-deps.mjs",
       "scripts/lib/dco-signoff.mjs",
       "scripts/pre-push-dco-check.mjs",
-      "scripts/pregate-preflight.mjs"
+      "scripts/pre-push-gate-slot-contract.test.mjs",
+      "scripts/pregate-preflight.mjs",
+      "scripts/pregate-status.mjs"
     ],
     "docs/architecture/build-studio-namespace.md": [
       "apps/web/lib/build/build-plan-paths.ts",

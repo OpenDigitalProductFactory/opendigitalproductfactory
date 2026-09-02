@@ -228,6 +228,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       conformanceTest(
         "scripts/lib/dev-preview-migrate-converge.test.mjs",
         "scripts/pregate-exit-honesty.test.mjs",
+        "scripts/pre-push-gate-slot-contract.test.mjs",
         "scripts/lib/gate-context-runtime-contract.test.mjs",
         "packages/dpf-skill-pack/hooks/code-intelligence-guidance.test.mjs",
       ),
