@@ -118,7 +118,10 @@
   },
   "pnpm": {
     "ignoredBuiltDependencies": [
-      "@scarf/scarf"
+      "@scarf/scarf",
+      "protobufjs",
+      "puppeteer",
+      "unrs-resolver"
     ]
   },
   "devDependencies": {
