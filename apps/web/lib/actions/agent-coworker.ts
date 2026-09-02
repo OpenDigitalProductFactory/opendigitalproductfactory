@@ -96,6 +96,7 @@ import {
 // ─── Auth helper ────────────────────────────────────────────────────────────
 
 import { filterToolsForCoworkerRuntime, buildAdvisePromptSuffix } from "./coworker-tool-filter";
+import { labelHistory, prependLabelled } from "@/lib/tak/message-origins";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { requireUser } from "./shared/guards";
 import {
@@ -588,6 +589,9 @@ export async function sendMessage(input: {
     chatHistory = await applyRollingCompaction(chatHistory);
   }
 
+  // Labels for what each message IS, moved with the messages (BI-40EF7C44).
+  let labelled = labelHistory(chatHistory);
+
   // BI-FDECBE0A (EP-8C706944 P1): prepend the thread's durable rolling checkpoint
   // — a persisted running summary of every turn older than the recency window —
   // so long threads keep continuity that does not depend on vector recall. Strict
@@ -596,7 +600,7 @@ export async function sendMessage(input: {
     const { loadThreadCheckpointMessage } = await import("@/lib/tak/thread-checkpoint-runner");
     const checkpointMessage = await loadThreadCheckpointMessage(input.threadId);
     if (checkpointMessage) {
-      chatHistory = [checkpointMessage, ...chatHistory];
+      labelled = prependLabelled(labelled, checkpointMessage, "thread-checkpoint");
     }
   } catch (err) {
     console.warn("[thread-checkpoint] inject failed:", getErrorMessage(err));
@@ -611,12 +615,13 @@ export async function sendMessage(input: {
       const { loadUserBriefingMessage } = await import("@/lib/tak/coworker-briefing-runner");
       const briefingMessage = await loadUserBriefingMessage(agent.agentId, user.id);
       if (briefingMessage) {
-        chatHistory = [briefingMessage, ...chatHistory];
+        labelled = prependLabelled(labelled, briefingMessage, "user-briefing");
       }
     } catch (err) {
       console.warn("[coworker-briefing] inject failed:", getErrorMessage(err));
     }
   }
+  chatHistory = labelled.messages;
   const recentContentForClassification = chatHistory
     .filter((m) => m.role === "user")
     .slice(-3)
@@ -1943,6 +1948,7 @@ export async function sendMessage(input: {
         chatHistory,
         systemPrompt: populatedPrompt,
         systemPromptInstructionSpans,
+        messageOrigins: labelled.origins,
         sensitivity: agent.sensitivity,
         tools: attachedTools,
         toolsForProvider,

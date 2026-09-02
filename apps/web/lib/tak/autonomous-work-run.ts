@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import { prisma } from "@dpf/db";
 import type { Prisma } from "@dpf/db";
+import type { MessageOrigin } from "@/lib/inference/data-screening/types";
 import type { ChatMessage } from "@/lib/ai-inference";
 import { resolveCoworkerReviewPattern } from "@/lib/golden-triangle/coworker-review";
 import { reviewCoworkerDraft } from "@/lib/tak/coworker-inline-review";
@@ -316,6 +317,8 @@ export async function executeAutonomousAgenticLoop(input: {
   systemPrompt: string;
   /** Instruction spans within `systemPrompt`, forwarded to routing (BI-463BE12A). */
   systemPromptInstructionSpans?: string[];
+  /** What each entry of `chatHistory` is — labels only (BI-40EF7C44). */
+  messageOrigins?: readonly MessageOrigin[];
   chatHistory: ChatMessage[];
   sensitivity: RouteSensitivity;
   tools: ToolDefinition[];
@@ -473,6 +476,7 @@ export async function executeAutonomousAgenticLoop(input: {
           ...groundedInstructionSpans,
         ],
         chatHistory: input.chatHistory,
+        messageOrigins: input.messageOrigins,
         sensitivity: input.sensitivity,
         tools: input.tools,
         toolsForProvider,
