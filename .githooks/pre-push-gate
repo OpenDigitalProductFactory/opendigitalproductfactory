@@ -227,6 +227,35 @@ if [ -f "scripts/semantic-review-gate.mjs" ]; then
   node scripts/semantic-review-gate.mjs validate || exit $?
 fi
 
+# BI-A167CF8A: ask the canonical, slot-aware reader for the verdict.
+#
+# `pregate` writes SLOT-SCOPED records (dpf-local-ci-gate-slot-N.json). The
+# unslotted "$state_file" this hook used to stat is written by exactly one path
+# — the override branch above, as {gatePassed:false, skipped:true} — so it can
+# never contain a pass. A genuine PASS was therefore invisible here, and the
+# only way past the gate was the override, which is how a mandatory gate decays
+# into a formality.
+#
+# pregate-status.mjs already enumerates slots and exits 0 only when the verdict
+# is PASS for the CURRENT HEAD, applying the same branch/sha, evidence-pending
+# and expiry checks the legacy block below duplicates. Defer to it rather than
+# keeping a second reader that can drift from the writer again.
+if [ -f "scripts/pregate-status.mjs" ]; then
+  if node scripts/pregate-status.mjs; then
+    echo "[pre-push-gate] local-CI gate passed for $branch@$sha"
+    completion_notice
+    exit 0
+  fi
+  echo "[pre-push-gate] Run the sandbox gate first:  pnpm run pregate" >&2
+  echo "[pre-push-gate] (claims the shared local-integration-ci lease, runs the checked-in" >&2
+  echo "[pre-push-gate]  CI-equivalent runner, records MCP evidence, writes the gate record)" >&2
+  echo "[pre-push-gate] Recorded override for a verified-clean push:" >&2
+  echo "[pre-push-gate]   DPF_SKIP_PREPUSH_GATE=1 DPF_SKIP_PREPUSH_GATE_REASON=\"<code>: why\" git push" >&2
+  exit 1
+fi
+
+# Legacy fallback: a checkout without pregate-status.mjs (older tree, consumer
+# bundle). Keeps the gate strict rather than passing when the reader is absent.
 if [ ! -f "$state_file" ]; then
   echo "[pre-push-gate] No local-CI gate record exists for this worktree." >&2
   echo "[pre-push-gate] Run the sandbox gate first:  pnpm run pregate" >&2
