@@ -144,16 +144,36 @@ sessions upgrades on its own.
 ### 5.6 Membership proof without TLS (second slice)
 
 A member holds `authority.crt` / `authority.key` issued by the organization's
-CA from its join package, and the organization root. Pairing therefore does
-not need the optional TLS overlay: a member signs an enrolment statement with
-its authority key and presents its chain; the receiver verifies the chain
-against its pinned root (`verifyPeerChainAgainstRoot`, already pure) and the
-signature, and the link is born trusted on both sides with
-`confirmationProvenance: "organization-trust"`. The join package gains an
-optional `authority_portal_url`; a member enrols with the authority
-installation named there at boot, and the authority introduces the other
-members over the trusted link (`FederationIntroductionCandidate`). No mDNS, no
-discovered candidate, no code comparison, no click.
+CA from its join package, and the organization root — all under
+`<state dir>/pki`, which the portal already reads at `/dpf-state/pki/`. Pairing
+therefore needs neither the optional TLS overlay nor an invitation token:
+
+- **Statement.** The member signs `dpf.membership-statement/1` — its
+  installation id, device id, normalised organization ref (estate name), its
+  reachable authority URL, the root fingerprint it chains to, the audience root
+  fingerprint, a callback token, a display name, a nonce and `issuedAt` — with
+  the key behind its certificate (`createSign("sha256")`; the certificate's
+  key type decides the algorithm).
+- **Verification, message layer.** The receiver verifies the presented chain
+  by *signature* leaf → root (`X509Certificate.checkIssued` + `verify`), every
+  validity window, that the terminal certificate is self-signed and equals the
+  pinned root's fingerprint, then the statement signature with the leaf key,
+  then freshness (±5 min), audience, root and organization ref. The
+  certificate carries only a hostname, so the installation facts ride in the
+  signed statement and the estate ref is what proves "same organization".
+- **Result.** The link is created **trusted** on both sides
+  (`approvedAtLocal = approvedAtPeer = now`, `approvedByPrincipalId` null,
+  `confirmationProvenance: "organization-trust"` with the chain evidence). The
+  response carries the receiver's own proof and the token the member must use
+  to call back, so trust is mutual in one round trip.
+- **Nothing is typed.** The authority installation's portal is derived from the
+  join package's `ca_url` host on the portal port; the member's own address is
+  the package's `intended_hostname`. A member with organization material and
+  no trusted link to that host enrols on every federation tick until it has
+  one. The authority introduces the other members over the trusted link.
+
+Route: `POST /api/v1/federation/enroll/organization` (private-mesh). Pure
+core: `lib/federation/membership-proof.ts`; runtime: `organization-membership.ts`.
 
 ### 5.7 One health line (third slice)
 

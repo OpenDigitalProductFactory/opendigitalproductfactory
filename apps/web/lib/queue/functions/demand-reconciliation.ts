@@ -32,6 +32,12 @@ export const demandReconciliationScheduled = inngest.createFunction(
       const { reconcileFederationLinks } = await import("@/lib/federation/boot-reconcile");
       return reconcileFederationLinks();
     });
-    return { demand, work, links };
+    // A member with organization material and no trusted link to its authority
+    // enrols now, on proof of membership (EP-ZERO-CONFIG-FEDERATION §5.6).
+    const membership = await step.run("enrol-organization-membership", async () => {
+      const { reconcileOrganizationMembership } = await import("@/lib/federation/organization-membership");
+      return reconcileOrganizationMembership();
+    });
+    return { demand, work, links, membership };
   },
 );

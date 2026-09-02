@@ -104,6 +104,19 @@ is already on production before the development box is torn down.
 Demand sharing (above) is separate: a copy of a backlog item is not "demand"
 to follow or adopt, and adopted demand is still owned by whoever adopted it.
 
+### Joining is the only step
+
+Once an installation has imported the organization's join file, it holds a
+certificate the organization's own authority issued it. From then on it proves
+membership to the organization's authority installation by itself — signing
+its request with that certificate and checking the authority's certificate in
+return — and the connection is created trusted on both sides with no
+invitation, no approval click and no code to compare. Nothing is typed: the
+authority's address comes from the join file, and so does this installation's
+own name. If the authority installation is still on a version that predates
+this, the connection is retried every few minutes and made the moment it
+upgrades.
+
 ## Customer and reseller operation
 
 Across company boundaries, the supported business route is **end company →
