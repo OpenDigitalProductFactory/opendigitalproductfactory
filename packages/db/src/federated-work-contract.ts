@@ -180,8 +180,11 @@ export function validateFederatedWorkItemV1(value: unknown, path = "item"): stri
   // Closed-vocabulary facets stay short. `proposedOutcome` and `resolution` are
   // prose an operator or coworker typed — the first live pull from production
   // was refused on an item whose proposedOutcome ran past an 80-character cap.
+  // Free-form at the wire: what a column can hold, the page can carry. Only
+  // shape and ids are enforced here; the receiver writes through Prisma, which
+  // owns the column types. (The first live pull was refused on a hand-typed cap.)
   for (const key of ["workType", "triageOutcome", "effortSize", "source", "scopeKind"] as const) {
-    if (!isNullableString(value[key], 200)) violations.push(`${path}.${key}:invalid`);
+    if (!isNullableString(value[key])) violations.push(`${path}.${key}:invalid`);
   }
   if (!isNullableString(value.proposedOutcome)) violations.push(`${path}.proposedOutcome:invalid`);
   if (!isNullableString(value.resolution)) violations.push(`${path}.resolution:invalid`);

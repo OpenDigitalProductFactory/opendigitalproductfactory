@@ -28,7 +28,13 @@ status: active
 
 Precondition on the live pair: a join file created on the authority and imported on the member (the act of membership). Neither install has done it yet.
 
-## Slice 3 — health line (§5.7) and schema-derived validator bounds
+## Slice 3 — health line (§5.7) and validator bounds
+
+1. `packages/db/src/federation-health.ts` (pure): `resolveFederationHealth` and `describePullFailure`.
+2. `work-sync.ts` records each pull's outcome per link in `PlatformConfig["federation.work-sync.health.v1"]`.
+3. `work-sync-read-model.ts` composes links, mirror activity and the recorded outcomes into per-link lines and the rollup; `WorkSyncPanel` shows the line and a state badge, nothing else.
+4. The stance resolver takes `workSyncHealthLine`; `loadInstanceStance` reads it, so the MCP briefing and the installation page state what is happening.
+5. `dpf.work-sync/1` validator keeps shape and ids only; column types are Prisma's.
 
 ## Governed traceability
 

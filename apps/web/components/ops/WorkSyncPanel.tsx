@@ -1,13 +1,20 @@
 import type { WorkSyncLinkView } from "@/lib/federation/work-sync-read-model";
-import { LocalTime } from "@/components/ui/LocalTime";
 import { Surface } from "@/components/ui/Surface";
 import { StatusBadge } from "@/components/ui/report-kit";
 
+const BADGE: Record<WorkSyncLinkView["healthState"], { intent: "success" | "warning" | "danger" | "info"; label: string }> = {
+  "in-step": { intent: "success", label: "In step" },
+  behind: { intent: "warning", label: "Behind" },
+  broken: { intent: "danger", label: "Broken" },
+  "no-peer": { intent: "info", label: "No peer" },
+};
+
 /**
- * BI-FF8A57EF / BI-C5456B79 — is the backlog in step with the other
- * installations in this organization? One row per trusted same-organization
- * connection; nothing rendered when there is no such connection, because the
- * question does not arise.
+ * BI-FF8A57EF / BI-C5456B79 / EP-ZERO-CONFIG-FEDERATION §5.7 — is the backlog
+ * in step with the other installations in this organization? One row per
+ * trusted same-organization connection, each carrying the same health sentence
+ * the cockpit and the MCP briefing show; nothing rendered when there is no
+ * such connection, because the question does not arise.
  */
 export function WorkSyncPanel({ links }: { links: WorkSyncLinkView[] }) {
   if (links.length === 0) return null;
@@ -22,28 +29,14 @@ export function WorkSyncPanel({ links }: { links: WorkSyncLinkView[] }) {
       </p>
       <ul className="mt-3 space-y-2">
         {links.map((link) => {
-          const stuck = link.conflicts > 0;
-          const waiting = link.lastSyncedAt === null;
+          const badge = BADGE[link.healthState];
           return (
             <Surface as="li" key={link.linkId} padding="sm" className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-[var(--dpf-text)]">{link.peerLabel}</p>
-                <p className="mt-1 text-xs text-[var(--dpf-muted)]">
-                  {waiting
-                    ? "Nothing has arrived yet. After ten minutes, that means the other installation needs the latest platform version."
-                    : <>{link.mirroredItems} items and {link.mirroredEpics} epics copied here · last copy <LocalTime value={link.lastSyncedAt!} mode="datetime" />{link.withdrawn > 0 ? ` · ${link.withdrawn} retired at the source` : ""}</>}
-                </p>
-                {stuck ? (
-                  <p className="mt-1 text-xs text-[var(--dpf-warning)]">
-                    {link.conflicts} item{link.conflicts === 1 ? "" : "s"} share an id with local work and were left alone.
-                  </p>
-                ) : null}
+                <p className="mt-1 text-xs text-[var(--dpf-muted)]">{link.healthLine}</p>
               </div>
-              <StatusBadge
-                intent={stuck ? "warning" : waiting ? "info" : "success"}
-                label={stuck ? "Needs attention" : waiting ? "Waiting for first copy" : "In step"}
-                variant="soft"
-              />
+              <StatusBadge intent={badge.intent} label={badge.label} variant="soft" />
             </Surface>
           );
         })}

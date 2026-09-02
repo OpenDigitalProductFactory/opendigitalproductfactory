@@ -83,6 +83,13 @@ export interface InstanceStanceHostFacts {
    * a declared name is intent and a link is evidence.
    */
   pairingIsEstablished?: boolean;
+  /**
+   * The one federation health sentence (EP-ZERO-CONFIG-FEDERATION §5.7):
+   * "In step …", "Behind by …" or "Broken because …". When present it IS the
+   * work-sync rationale, so the briefing states what is happening, not what
+   * is supposed to happen.
+   */
+  workSyncHealthLine?: string;
 }
 
 function resolveCredentials(
@@ -180,6 +187,7 @@ function resolvePeerWrite(
 function resolveWorkSync(
   pairedRef: string | undefined,
   pairingIsEstablished: boolean,
+  healthLine?: string,
 ): { stance: WorkSyncStance; rationale: string } {
   if (!pairedRef) {
     return {
@@ -199,8 +207,8 @@ function resolveWorkSync(
   }
   return {
     stance: "same-organization",
-    rationale:
-      `Mirror the backlog this installation owns to ${pairedRef} so the work survives a teardown; only this side may change those records.`,
+    rationale: healthLine
+      ?? `Mirror the backlog this installation owns to ${pairedRef} so the work survives a teardown; only this side may change those records.`,
   };
 }
 
@@ -228,6 +236,7 @@ export function resolveInstanceStance(
   const workSync = resolveWorkSync(
     snapshot.pairedProductionInstallationRef,
     host.pairingIsEstablished ?? false,
+    host.workSyncHealthLine,
   );
 
   return {
