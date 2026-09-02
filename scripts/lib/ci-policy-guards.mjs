@@ -495,6 +495,12 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/sandbox-freshness.test.mjs",
         "scripts/sandbox-freshness-preflight.test.mjs",
         "scripts/release/re-resolve-stt-digest.test.mjs",
+        // BI-BBD60CF8: the re-pin SCRIPT was always correct and always
+        // green; the workflow driving it aborted on the script's own
+        // drift exit code, so the watch failed on every drift day and
+        // never once completed a re-pin (#4823 fixed the wiring). This
+        // guards the wiring, which is the part nothing tested.
+        "scripts/stt-digest-watch-workflow.test.mjs",
         "scripts/lib/ensure-pre-push-hook.test.mjs",
         // BI-5CBDC146: hook directories must resolve through fileURLToPath.
         // URL.pathname yields "/D:/..." on Windows, so the shim never
