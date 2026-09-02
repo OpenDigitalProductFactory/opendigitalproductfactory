@@ -6,7 +6,7 @@ import { normalizeAuthorityUrl, planSupersession, supersedeStaleSameOrgLinks, ty
 
 function row(linkId: string, overrides: Partial<SupersessionLinkRow> = {}): SupersessionLinkRow {
   return {
-    linkId, role: "same-org-peer", peerAuthorityUrl: "http://192.168.0.200:3000", peerInstallationId: null,
+    linkId, role: "same-org-peer", linkState: "trusted", peerAuthorityUrl: "http://192.168.0.200:3000", peerInstallationId: null,
     enrolledAt: new Date("2026-08-28T00:00:00Z"), createdAt: new Date("2026-08-28T00:00:00Z"), ...overrides,
   };
 }
@@ -33,6 +33,30 @@ describe("planSupersession", () => {
     ]);
     expect(plan).toEqual([{ linkId: "a", supersededBy: "b" }]);
     expect(normalizeAuthorityUrl("https://peer.example/")).toBe("peer.example:443");
+  });
+
+  it("merges the id-keyed and address-keyed views of one peer, and trust outranks age", () => {
+    const inst = `inst_${"b".repeat(32)}`;
+    // Live: a trusted link that knows the peer's id; a pending duplicate at the
+    // same address that never learned it (the live pair on 2026-09-02).
+    const plan = planSupersession([
+      row("link_pending_old", { linkState: "pending", enrolledAt: new Date("2026-08-28T04:40:26Z") }),
+      row("link_trusted", { peerInstallationId: inst, enrolledAt: new Date("2026-08-28T19:16:38Z") }),
+    ]);
+    expect(plan).toEqual([{ linkId: "link_pending_old", supersededBy: "link_trusted" }]);
+
+    // A pending re-pairing NEWER than the trusted link is in flight: left alone,
+    // and it never supersedes the trusted link.
+    expect(planSupersession([
+      row("link_trusted", { peerInstallationId: inst, enrolledAt: new Date("2026-08-28T19:16:38Z") }),
+      row("link_pending_new", { linkState: "pending", enrolledAt: new Date("2026-09-02T10:00:00Z") }),
+    ])).toEqual([]);
+
+    // An OLDER trusted link loses to a newer trusted link, whatever its id knowledge.
+    expect(planSupersession([
+      row("link_trusted_old", { enrolledAt: new Date("2026-08-01T00:00:00Z") }),
+      row("link_trusted_new", { peerInstallationId: inst, enrolledAt: new Date("2026-08-28T19:16:38Z") }),
+    ])).toEqual([{ linkId: "link_trusted_old", supersededBy: "link_trusted_new" }]);
   });
 
   it("never touches cross-organization links and is stable on ties", () => {
