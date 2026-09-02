@@ -289,6 +289,59 @@ describe("work capsule store", () => {
     expect(db.workroom.create).not.toHaveBeenCalled();
   });
 
+  // BI-69BBC446: worktreePath moved only on lateBind, so re-adopting an
+  // ALREADY-bound room accepted the parameter, returned success, and silently
+  // kept the old path — while headSha beside it synced. A worktree is reaped and
+  // rebuilt under a new directory far more often than a room changes branches,
+  // and the stale path then fails the claim readback with an identity mismatch
+  // that names the wrong field. Observed on WC-0BE07607.
+  it("syncs a moved worktree path onto an already-bound capsule", async () => {
+    db.workroom.findFirst.mockResolvedValue({
+      id: "row-1",
+      capsuleId: "WC-MOVED1",
+      status: "ready",
+      // Already bound, so lateBind is false — the case that used to drop it.
+      backlogItemId: "BI-SYNC",
+      executorRef: "session-1",
+      headBranch: "feat/sync",
+      headSha: "same-head",
+      worktreePath: "/worktrees/old-location",
+    });
+    db.workroom.update.mockResolvedValue({
+      id: "row-1", capsuleId: "WC-MOVED1", worktreePath: "/worktrees/new-location",
+    });
+
+    const result = await adoptWorktreeCapsule({
+      db: capsuleDb(),
+      input: {
+        title: "Move worktree",
+        objective: "The old worktree was reaped; the branch now lives elsewhere.",
+        repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+        headBranch: "feat/sync",
+        worktreePath: "/worktrees/new-location",
+        backlogItemId: "BI-SYNC",
+        executorRef: "session-1",
+        headSha: "same-head",
+      },
+      actor: { userId: "user-1", agentId: "claude", principalId: "principal-1" },
+    });
+
+    expect(result.worktreePath).toBe("/worktrees/new-location");
+    expect(db.workroom.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { capsuleId: "WC-MOVED1" },
+      data: expect.objectContaining({ worktreePath: "/worktrees/new-location" }),
+    }));
+    // The move is auditable, not silent in either direction.
+    expect(db.workroomActivity.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        payload: expect.objectContaining({
+          worktreePath: "/worktrees/new-location",
+          previousWorktreePath: "/worktrees/old-location",
+        }),
+      }),
+    }));
+  });
+
   it("leaves an existing capsule untouched when the adopt call repeats the same head", async () => {
     db.workroom.findFirst.mockResolvedValue({
       id: "row-1",

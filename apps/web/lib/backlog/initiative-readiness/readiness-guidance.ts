@@ -169,7 +169,7 @@ const GENERIC_REMEDIES: Partial<Record<ReadinessCode, string>> = {
   ARTIFACT_AUTHOR_REQUIRED:
     "Sign the design commit off (git commit -s), push the rewritten sha, then re-sync the workroom head with adopt_worktree.",
   CAPSULE_IDENTITY_MISMATCH:
-    "The workroom's recorded branch and head no longer match the claim. Re-sync with adopt_worktree(headBranch, headSha).",
+    "The claim did not match the workroom's recorded identity. The reasons above name which fields differ: a stale branch or head re-syncs with adopt_worktree(headBranch, headSha), an expired lease renews with heartbeat_workroom, and a terminal or foreign-held room needs a new claim.",
   DELIVERY_EVIDENCE_REQUIRED:
     "Record delivery evidence with record_execution_evidence, then cite those activity IDs in completionEvidence.evidenceActivityIds.",
   ACCEPTANCE_EVIDENCE_REQUIRED:

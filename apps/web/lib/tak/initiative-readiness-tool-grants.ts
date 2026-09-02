@@ -368,7 +368,7 @@ const UNROUTABLE_REMEDIES: Partial<Record<ReadinessCode, string>> = {
   ARTIFACT_AUTHOR_REQUIRED: "Sign the design commit off (git commit -s), push the rewritten sha, then re-sync the workroom head with adopt_worktree.",
   CLASSIFICATION_REQUIRED: "Classify the demand before shaping it: set the investment bucket and score inputs on the backlog item.",
   AUTHORIZATION_DENIED: "The caller's authority does not cover this transition. Re-run from a principal holding the required capability.",
-  CAPSULE_IDENTITY_MISMATCH: "The workroom's recorded branch and head no longer match the claim. Re-sync with adopt_worktree(headBranch, headSha).",
+  CAPSULE_IDENTITY_MISMATCH: "The claim did not match the workroom's recorded identity. The reasons above name which fields differ: a stale branch or head re-syncs with adopt_worktree(headBranch, headSha), an expired lease renews with heartbeat_workroom, and a terminal or foreign-held room needs a new claim.",
   DELIVERY_EVIDENCE_REQUIRED: "Record delivery evidence for the merged change with record_execution_evidence.",
   ACCEPTANCE_EVIDENCE_REQUIRED: "Record acceptance evidence against the objective baseline before closing the item.",
   OBJECTIVE_RECONCILIATION_REQUIRED: "Reconcile delivered outcomes against the objective baseline with record_product_outcome_observation.",

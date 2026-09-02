@@ -3,8 +3,7 @@
 # Module-size ratchet baseline (BI-OPT-RATCHETS). Shrink-only: files leave by
 # being split/refactored under the ceiling, never by expanding the baseline.
 # Regenerate with: node scripts/check-module-size.mjs --update
-apps/web/app/api/mcp/v1/route.test.ts	1532
-apps/web/app/api/mcp/v1/route.ts	950
+apps/web/app/api/mcp/v1/route.test.ts	1525
 apps/web/app/api/v1/edge/discovery-runs/route.test.ts	982
 apps/web/components/admin/BusinessModelBuilder.tsx	821
 apps/web/components/admin/McpTokenManager.tsx	1384
@@ -58,11 +57,11 @@ apps/web/lib/skills/evidence-search.ts	803
 apps/web/lib/tak/agent-grants.test.ts	940
 apps/web/lib/tak/agent-grants.ts	995
 apps/web/lib/tak/agent-routing.ts	1191
-apps/web/lib/tak/agentic-loop.test.ts	2551
-apps/web/lib/tak/agentic-loop.ts	2715
+apps/web/lib/tak/agentic-loop.test.ts	2485
+apps/web/lib/tak/agentic-loop.ts	2681
 apps/web/lib/tak/route-context-map.ts	1440
-apps/web/lib/work-capsules/work-capsule-store.test.ts	1186
-apps/web/lib/work-capsules/work-capsule-store.ts	1028
+apps/web/lib/work-capsules/work-capsule-store.test.ts	1239
+apps/web/lib/work-capsules/work-capsule-store.ts	1037
 apps/web/lib/workbooks/platform-tables.ts	938
 apps/web/lib/workforce/calendar-data.ts	1134
 apps/web/lib/workspace-home/command-center.ts	1118
