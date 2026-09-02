@@ -3,9 +3,13 @@
  *
  * Pure: declared shape + posture + Process Overseer conformance → a dispatch
  * plan. The Inngest job executes the plan. Never invents occupants, skips
- * stages, widens grants, or runs `role:` / `person:` / governed-decision stages.
+ * stages, widens grants, or runs `role:` / `person:` stages. A governed-decision
+ * stage also routes to a human (attention) — EXCEPT (EP-4614F35E) when its
+ * accountable principal is an AGENT and the room is at full proactivity
+ * (`actionBoundary === "preauthorized"`): then the room DRIVES its own governed
+ * review, dispatching the non-author agent reviewer who records the receipt.
  */
-import type { ProactivityLevel } from "@/lib/proactivity/proactivity-types";
+import type { ProactivityActionBoundary, ProactivityLevel } from "@/lib/proactivity/proactivity-types";
 import type { WorkroomParticipantRole, WorkroomParticipantView } from "./room-types";
 import {
   projectWorkShapeCycleBoundary,
@@ -41,6 +45,11 @@ export type DriveResolutionInput = {
   budgetUsage: readonly { kind: string; used: number }[];
   stopConditionHits: readonly string[];
   reviewDue: boolean;
+  /** The room's resolved action boundary. `preauthorized` (full proactivity) is
+   *  what lets an AGENT-principal governed-decision review stage dispatch itself
+   *  instead of raising attention. Absent/null preserves the conservative
+   *  attention behavior (EP-4614F35E). */
+  actionBoundary?: ProactivityActionBoundary | null;
   substrateReachable: boolean;
   substrateEmpty: boolean;
   proposedGrants?: readonly string[];
@@ -244,7 +253,14 @@ export function resolveDrivePlan(input: DriveResolutionInput): DrivePlan {
   const parsed = parseAccountablePrincipalRef(stage.accountablePrincipalRef);
   const governed = stage.advance.kind === "governed-decision";
   const humanStage = parsed.kind === "role" || parsed.kind === "person";
-  if (governed || humanStage) {
+  // EP-4614F35E: a governed-decision stage normally raises attention (a human
+  // decides). The one exception — full proactivity — is when the accountable
+  // principal is an AGENT and the room is `preauthorized`: the room drives its
+  // own governed review, dispatching the non-author agent reviewer that records
+  // the governed receipt. A role/person governed stage still raises attention.
+  const agentDrivesGovernedReview =
+    governed && parsed.kind === "agent" && Boolean(parsed.value) && input.actionBoundary === "preauthorized";
+  if ((governed || humanStage) && !agentDrivesGovernedReview) {
     const reason = governed ? "governed_decision" : parsed.kind === "role" ? "role_stage" : "person_stage";
     return {
       action: "attention",
