@@ -97,7 +97,10 @@ async function convergeUxSweepWorkCase(db, now) {
         capsuleId: "WC-UX-SWEEP",
         title: "Route sweep fixture room",
         objective: "Give the sweep a room whose posture surface renders populated.",
-        source: "fixture",
+        // Closed set, enforced by WorkCapsule_source_closed_set. "fixture" is not
+        // a member and the constraint refused it — "manual" is the honest value
+        // for a room created directly rather than adopted or raised from backlog.
+        source: "manual",
         status: "working",
         activityKind: "delivery",
         workItemId: item.id,

@@ -233,6 +233,27 @@ test("gives the case a room carrying a declared shape and posture", async () => 
   assert.ok(claims.some((claim) => claim.workroomPosture));
 });
 
+// The DB refused "fixture": WorkCapsule.source is a closed set. Pin the values
+// this fixture writes against the constraint so a wrong one fails here, in
+// milliseconds, rather than after a nine-minute CI sweep.
+test("writes only closed-set values the WorkCapsule constraints accept", async () => {
+  const ALLOWED_SOURCE = [
+    "backlog", "build-studio", "external-adoption", "git-promotion", "manual",
+    "scheduled-steward", "worker-onboarding", "worker-change", "worker-offboarding",
+  ];
+  const ALLOWED_STATUS = [
+    "draft", "ready", "working", "blocked", "verifying", "ready-for-review",
+    "ready-for-promotion", "complete", "abandoned", "archived",
+  ];
+  const fixture = fixtureDb({ setupComplete: true });
+
+  await convergeUxSweepFixture(fixture.db, NOW, { dbNull: DB_NULL });
+
+  const room = fixture.calls.workroomCreate[0].data;
+  assert.ok(ALLOWED_SOURCE.includes(room.source), `source "${room.source}" is outside the closed set`);
+  assert.ok(ALLOWED_STATUS.includes(room.status), `status "${room.status}" is outside the closed set`);
+});
+
 test("reports why no case was minted rather than returning a broken key", async () => {
   const fixture = fixtureDb({ setupComplete: true, hasQueue: false });
 
