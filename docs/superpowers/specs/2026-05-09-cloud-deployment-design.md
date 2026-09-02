@@ -489,16 +489,36 @@ ingress wiring** each surface needs.
 
 ### MCP transport hardening (substrate-specific)
 
-The MCP route at `apps/web/app/api/mcp/v1/route.ts:120-142` reads
-three deployment-supplied envvars to validate transport:
+> **Shipped vs planned (corrected 2026-09-02).** An earlier revision of this
+> section said the MCP route "reads three deployment-supplied envvars" and cited
+> `route.ts:120-142`. Only one of the three is implemented, the line range is
+> stale, and a fourth real setting was missing. The support matrix in
+> `2026-05-09-deployment-contracts.md` has always marked this row **Planned**;
+> this table now says which half is which, so an operator does not set variables
+> that do nothing. Tracked by `BI-1AE9D368`.
+
+**Implemented today** — read by `isOriginAllowed` and `isTransportAllowed` in
+`apps/web/app/api/mcp/v1/route.ts`:
 
 | Envvar | Required when | Purpose |
 |---|---|---|
-| `MCP_PUBLIC_URL` | always | the canonical external URL of `/api/mcp/v1`; embedded in tool registry responses |
-| `MCP_ALLOWED_ORIGIN_HOSTS` | always when MCP transport is exposed publicly | comma-separated hostnames; `Origin` header validation |
-| `TRUST_PROXY_HEADERS` | when behind a proxy | gates whether `X-Forwarded-Proto` / `X-Forwarded-Host` are honored for HTTPS-detection |
+| `MCP_ALLOWED_ORIGIN_HOSTS` | when MCP transport is exposed publicly | comma-separated hostnames; `Origin` header validation, against DNS rebinding |
+| `MCP_INSECURE_INTERNAL_HOSTS` | when a container on the internal network must reach MCP over plain HTTP | comma-separated hostnames trusted to skip the TLS transport gate. Empty means localhost-only. Bearer auth, origin check and scope/grant checks still apply |
 
-Per substrate:
+**Planned, not implemented** — do not set these; nothing reads them:
+
+| Envvar | Intended purpose | State |
+|---|---|---|
+| `MCP_PUBLIC_URL` | canonical external URL of `/api/mcp/v1` | not in code. `PUBLIC_URL` already resolves the install's external base URL via `resolveAppBaseUrl()`; a second MCP-only setting may not be needed |
+| `TRUST_PROXY_HEADERS` | gate whether `X-Forwarded-Proto` / `X-Forwarded-Host` are honoured | not in code. `isTransportAllowed` currently honours `X-Forwarded-Proto` **unconditionally**, so there is no gate to turn on |
+
+The per-substrate guidance below is written against the planned state. Until
+`TRUST_PROXY_HEADERS` exists, a proxy that terminates TLS and sets
+`X-Forwarded-Proto: https` already satisfies the transport gate with no
+configuration — which is convenient and is also why the gate is weaker than this
+section implies.
+
+Per substrate (planned state):
 
 - **Single VM:** if Caddy / nginx terminates TLS in front of the
   Next.js portal, `TRUST_PROXY_HEADERS=true` and the proxy must
