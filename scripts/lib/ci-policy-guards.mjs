@@ -496,6 +496,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // Worktree lifecycle hygiene (plan 2026-08-11): the reaping classifier
         // (now with the liveness + abandoned-merge verdicts), the session
         // heartbeat liveness signal, and the root-clone fast-forward remedy.
+        // BI-0B2F0546: the platform's single answer to where its development
+        // surfaces work. A wrong base points the reaper at the wrong directory,
+        // so resolution order and provenance are pinned.
+        "scripts/lib/worktree-base.test.mjs",
         "scripts/lib/worktree-janitor-core.test.mjs",
         "scripts/worktree-janitor.test.mjs",
         "scripts/lib/worktree-session-heartbeat.test.mjs",
