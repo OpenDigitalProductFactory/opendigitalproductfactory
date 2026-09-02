@@ -56,7 +56,7 @@ The gate is built, enforced, and its reach is derived from each tool's declared 
 
 | Class | Count | Median attainable | Meaning |
 |---|---|---|---|
-| `active-roster` | 30 | 68% | Active in the canonical registry and seeded onto the workforce roster. |
+| `active-roster` | 30 | 72% | Active in the canonical registry and seeded onto the workforce roster. |
 | `active-registry-only` | 0 | — | Active in the canonical registry but absent from the workforce roster. |
 | `roster-only` | 0 | — | On the workforce roster but absent from the canonical agent registry. |
 | `defined-roster` | 8 | 60% | Declared in the canonical registry (not active) and seeded onto the roster. |
@@ -69,7 +69,7 @@ The gate is built, enforced, and its reach is derived from each tool's declared 
 | Identity | 1 | 3 | 0 | 48 | 8 | 30 | 30/86 |
 | Corpus / WSID | 1 | 3 | 0 | 0 | 0 | 86 | 86/86 |
 | Governance / WWWD | 2 | 3 | 0 | 0 | 0 | 86 | 86/86 |
-| Shape | 1 | 2 | 85 | 0 | 1 | 0 | 1/86 |
+| Shape | 1 | 2 | 78 | 0 | 8 | 0 | 8/86 |
 | Cadence | 1 | 3 | 80 | 0 | 5 | 1 | 1/86 |
 | Tools + Skills | 2 | 3 | 0 | 69 | 4 | 13 | 13/86 |
 | Evidence | 1 | 2 | 48 | 31 | 7 | 0 | 7/86 |
@@ -198,7 +198,6 @@ _Certification exercises a real domain act, not a generic probe._
 | `AGT-907` | defined-roster | 56% | 52% | 2 | 3 | 3 | 0 | 0 | 1 | 1 |
 | `AGT-WS-FARM-RANCH` | defined-roster | 56% | 52% | 2 | 3 | 3 | 0 | 0 | 1 | 1 |
 | `AGT-WS-INTEGRATION` | defined-roster | 56% | 52% | 2 | 3 | 3 | 0 | 0 | 1 | 1 |
-| `AGT-WS-SECURITY` | defined-roster | 56% | 52% | 2 | 3 | 3 | 0 | 0 | 1 | 1 |
 | `AGT-903` | active-roster | 60% | 56% | 3 | 3 | 3 | 0 | 0 | 1 | 1 |
 | `AGT-905` | active-roster | 60% | 56% | 3 | 3 | 3 | 0 | 0 | 1 | 1 |
 | `AGT-906` | defined-roster | 60% | 56% | 2 | 3 | 3 | 0 | 0 | 1 | 2 |
@@ -216,23 +215,24 @@ _Certification exercises a real domain act, not a generic probe._
 | `AGT-WS-STOREFRONT` | active-roster | 60% | 56% | 3 | 3 | 3 | 0 | 0 | 1 | 1 |
 | `AGT-WS-TIME-OFF` | defined-roster | 60% | 56% | 2 | 3 | 3 | 0 | 0 | 1 | 2 |
 | `AGT-904` | declared-only | 64% | 59% | 1 | 3 | 3 | 0 | 0 | 3 | 0 |
-| `AGT-WS-REVIEW` | active-roster | 64% | 59% | 3 | 3 | 3 | 0 | 0 | 1 | 2 |
-| `AGT-WS-BUILD` | active-roster | 68% | 63% | 3 | 3 | 3 | 0 | 0 | 2 | 1 |
-| `AGT-WS-CUSTOMER` | active-roster | 68% | 63% | 3 | 3 | 3 | 0 | 0 | 2 | 1 |
-| `AGT-WS-FINANCE` | active-roster | 68% | 63% | 3 | 3 | 3 | 0 | 2 | 1 | 1 |
+| `AGT-WS-SECURITY` | defined-roster | 64% | 59% | 2 | 3 | 3 | 2 | 0 | 1 | 1 |
 | `AGT-WS-SCOUT` | active-roster | 68% | 63% | 3 | 3 | 3 | 0 | 0 | 2 | 1 |
 | `AGT-ORCH-000` | defined-roster | 72% | 67% | 2 | 3 | 3 | 0 | 0 | 3 | 1 |
 | `AGT-WS-MARKET-RESEARCH` | defined-roster | 72% | 67% | 2 | 3 | 3 | 0 | 0 | 3 | 1 |
+| `AGT-WS-REVIEW` | active-roster | 72% | 67% | 3 | 3 | 3 | 2 | 0 | 1 | 2 |
 | `AGT-WS-ADMIN` | active-roster | 76% | 70% | 3 | 3 | 3 | 0 | 0 | 3 | 1 |
+| `AGT-WS-BUILD` | active-roster | 76% | 70% | 3 | 3 | 3 | 2 | 0 | 2 | 1 |
+| `AGT-WS-CUSTOMER` | active-roster | 76% | 70% | 3 | 3 | 3 | 2 | 0 | 2 | 1 |
 | `AGT-WS-EA` | active-roster | 76% | 70% | 3 | 3 | 3 | 0 | 0 | 3 | 1 |
+| `AGT-WS-FINANCE` | active-roster | 76% | 70% | 3 | 3 | 3 | 2 | 2 | 1 | 1 |
 | `AGT-WS-HR` | active-roster | 76% | 70% | 3 | 3 | 3 | 0 | 0 | 3 | 1 |
 | `AGT-WS-ONBOARD` | active-roster | 76% | 70% | 3 | 3 | 3 | 0 | 0 | 3 | 1 |
-| `AGT-WS-PORTFOLIO` | active-roster | 76% | 70% | 3 | 3 | 3 | 0 | 0 | 3 | 1 |
 | `AGT-WS-MARKETING` | active-roster | 80% | 74% | 3 | 3 | 3 | 0 | 2 | 2 | 2 |
 | `AGT-WS-OPS` | active-roster | 80% | 74% | 3 | 3 | 3 | 0 | 0 | 3 | 2 |
 | `AGT-WS-DOC` | active-roster | 84% | 78% | 3 | 3 | 3 | 0 | 2 | 3 | 1 |
-| `AGT-WS-PLATFORM` | active-roster | 84% | 78% | 3 | 3 | 3 | 0 | 2 | 3 | 1 |
+| `AGT-WS-PORTFOLIO` | active-roster | 84% | 78% | 3 | 3 | 3 | 2 | 0 | 3 | 1 |
 | `AGT-WS-INVENTORY` | active-roster | 88% | 81% | 3 | 3 | 3 | 0 | 2 | 3 | 2 |
+| `AGT-WS-PLATFORM` | active-roster | 92% | 85% | 3 | 3 | 3 | 2 | 2 | 3 | 1 |
 | `AGT-WS-COMPLIANCE` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
 
 ## Widest gaps — detail

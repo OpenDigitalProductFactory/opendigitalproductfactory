@@ -195,6 +195,19 @@ export const PLANE_CONTRACT = {
 
 export const PLANES = Object.keys(PLANE_CONTRACT);
 
+/**
+ * Files that declare work shapes. The runtime registry merges them into
+ * ALL_SHAPES; a static scanner cannot call listWorkShapes(), so the list is
+ * explicit and guarded — see measure-capability-completeness.test.mjs, which
+ * fails when a work-management file names an accountable agent and is absent
+ * here. Reading only the first of these under-reported seven agents as having
+ * no work shape at all.
+ */
+export const SHAPE_SOURCE_FILES = [
+  "apps/web/lib/work-management/work-shapes.ts",
+  "apps/web/lib/work-management/standing-operations-shapes.ts",
+];
+
 /** Identity classes. Expectations differ by class; none is excluded. */
 export const IDENTITY_CLASSES = {
   "active-roster": "Active in the canonical registry and seeded onto the workforce roster.",
@@ -429,7 +442,19 @@ export function loadSubstrate() {
   }
 
   // ── Shape sources: the declared work-shape registry (TAK §8.11).
-  const shapesSrc = stripLineComments(read("apps/web/lib/work-management/work-shapes.ts"));
+  //
+  // The registry is split across files and merged into ALL_SHAPES at runtime, so
+  // reading work-shapes.ts alone under-reports. Every shape in
+  // standing-operations-shapes.ts declares stages and a governed-decision gate,
+  // is imported into ALL_SHAPES, and was still measured as "no declared work
+  // shape" for the seven agents it makes accountable — a false gap that reads
+  // as an unbounded coworker.
+  //
+  // A static scanner cannot call listWorkShapes(), so the source list is
+  // explicit. SHAPE_SOURCE_FILES is exported and guarded by a test that fails
+  // when a work-management file declares an accountable agent and is not listed
+  // here, so a third shape file cannot go unread the way the second one did.
+  const shapesSrc = SHAPE_SOURCE_FILES.map((file) => stripLineComments(read(file))).join("\n");
   const shapeAgents = new Map();
   for (const m2 of shapesSrc.matchAll(/accountablePrincipalRef:\s*"agent:([a-z0-9-]+)"/g)) {
     const stagesDeclared = /stages:\s*\[/.test(shapesSrc);
