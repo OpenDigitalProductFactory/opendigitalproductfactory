@@ -362,4 +362,96 @@ describe("claimGovernedBacklogWorkspace", () => {
     expect(result).toMatchObject({ ok: false, data: { code: "capsule_identity_mismatch" } });
     expect(db.$transaction).toHaveBeenCalled();
   });
+
+  // BI-69BBC446. The observed failure: WC-0BE07607's branch and head matched the
+  // claim exactly and its lease had expired nine hours earlier, but the blocker
+  // said "the recorded branch and head no longer match. Re-sync with
+  // adopt_worktree(headBranch, headSha)". Re-syncing changed nothing, because
+  // nothing was wrong with the branch or the head, and the branch stayed
+  // unclaimable for two days. A remedy that names the wrong field is worse than
+  // one that names none — it is actionable, and it is wrong.
+  it("names the expired lease, and does not blame the branch or head, when only the lease is stale", async () => {
+    const db = database();
+    const claimWorkspace = vi.fn().mockResolvedValue({
+      capsuleId: "WC-ENTRY",
+      backlogItemId: "BI-ENTRY",
+      headBranch: input.headBranch,
+      worktreePath: input.worktreePath,
+      claimed: true,
+      conflict: null,
+    });
+    const declareIntent = vi.fn().mockResolvedValue({ id: "intent-row" });
+    (db.workroom.findUnique as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      capsuleId: "WC-ENTRY",
+      backlogItemId: "BI-ENTRY",
+      status: "ready",
+      archivedAt: null,
+      repositoryFullName: input.repositoryFullName,
+      // Branch, worktree and executor all match the claim exactly.
+      headBranch: input.headBranch,
+      worktreePath: input.worktreePath,
+      executorKind: input.executorKind,
+      executorRef: input.executorRef,
+      leaseHolderPrincipalId: actor.principalId,
+      // The one thing that differs.
+      leaseExpiresAt: new Date("2026-08-21T15:00:00.000Z"),
+    });
+
+    const result = await claimGovernedBacklogWorkspace({
+      db,
+      input,
+      actor,
+      workIntent: "design",
+      now: new Date("2026-08-22T00:00:00.000Z"),
+      dependencies: { claimWorkspace, declareIntent, discoverCanonicalArtifact },
+    });
+
+    expect(result.ok).toBe(false);
+    const message = result.ok ? "" : String(result.error);
+    expect(message).toContain("lease expired at 2026-08-21T15:00:00.000Z");
+    expect(message).toContain("heartbeat_workroom");
+    // The whole point: it must not send the caller re-syncing a correct branch.
+    expect(message).not.toContain("recorded branch");
+    expect(message).not.toContain("adopt_worktree");
+  });
+
+  it("names the differing field when the executor ref is foreign", async () => {
+    const db = database();
+    const claimWorkspace = vi.fn().mockResolvedValue({
+      capsuleId: "WC-ENTRY",
+      backlogItemId: "BI-ENTRY",
+      headBranch: input.headBranch,
+      worktreePath: input.worktreePath,
+      claimed: true,
+      conflict: null,
+    });
+    const declareIntent = vi.fn().mockResolvedValue({ id: "intent-row" });
+    (db.workroom.findUnique as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      capsuleId: "WC-ENTRY",
+      backlogItemId: "BI-ENTRY",
+      status: "ready",
+      archivedAt: null,
+      repositoryFullName: input.repositoryFullName,
+      headBranch: input.headBranch,
+      worktreePath: input.worktreePath,
+      executorKind: input.executorKind,
+      executorRef: "foreign-session",
+      leaseHolderPrincipalId: actor.principalId,
+      leaseExpiresAt: new Date("2099-01-01T00:00:00.000Z"),
+    });
+
+    const result = await claimGovernedBacklogWorkspace({
+      db,
+      input,
+      actor,
+      workIntent: "design",
+      now: new Date("2026-08-22T00:00:00.000Z"),
+      dependencies: { claimWorkspace, declareIntent, discoverCanonicalArtifact },
+    });
+
+    expect(result.ok).toBe(false);
+    const message = result.ok ? "" : String(result.error);
+    expect(message).toContain("executor ref");
+    expect(message).toContain("foreign-session");
+  });
 });
