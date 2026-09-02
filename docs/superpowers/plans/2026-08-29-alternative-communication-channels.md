@@ -232,4 +232,8 @@ Outbound against the Cloud API, reusing the existing WhatsApp Secretary Gateway 
 
 ## Provenance note
 
-`EP-COMM-FABRIC` was in-progress with 5 items (3 done) in `docs/testing/backlog-snapshots/backlog-2026-06-10-pre-audit.json`. Every Epic and BacklogItem row in this install was created on or after 2026-08-22, so that epic and its items are absent here. The half-wired adapters this plan repairs are its residue. Source references to pre-reset ids — `BI-C7D25599` in the email adapter header, `BI-DG-015` across the governance baseline — resolve to nothing in this install for the same reason. Treat such an id as historical provenance, not as an open item to look up.
+`EP-COMM-FABRIC` was in-progress with 5 items (3 done) in `docs/testing/backlog-snapshots/backlog-2026-06-10-pre-audit.json`. Every Epic and BacklogItem row in this install was created on or after 2026-08-22, so that epic and its items are absent here. The half-wired adapters this plan repairs are its residue.
+
+Source code still carries pre-reset backlog ids that resolve to nothing here for the same reason — the email adapter's file header cites the item that commissioned it, and the legacy data-governance baseline repeats a single remediation id across every row. Treat such an id as historical provenance, not as an open item to look up.
+
+This document deliberately does not reproduce those ids. The Doc Anchor Existence guard requires every `BI-`/`EP-` anchor in a changed doc to resolve against the live backlog, and it is right to: a doc must not govern work the coordination plane cannot see. An id that dangles on every fresh install is exactly the defect PR #4877 removed from the integration coverage matrix — name the thing, not a dead identifier.
