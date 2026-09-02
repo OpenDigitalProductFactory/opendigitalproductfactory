@@ -81,7 +81,17 @@ const GENERIC_MCP_SERVERS_TO_DISABLE = ["nanobanana-mcp", "youtube_transcript"] 
  * (S4.1 decision #1). Worktree sessions live under `D:/DPF-worktrees/<topic>`;
  * trusting the base avoids per-worktree trust friction in Codex.
  */
-const CANONICAL_WORKTREE_BASE = "D:\\DPF-worktrees";
+/**
+ * Fallback ONLY. The worktree base is platform-owned and is passed in by the
+ * caller, which resolves it through `scripts/lib/worktree-base.mjs`. This
+ * constant used to BE the definition — a client planner deciding where DPF
+ * does its work — which is why the platform could not see its own worktrees
+ * (BI-0B2F0546, BI-99395B29). It survives only so an older caller that passes
+ * nothing behaves exactly as it did before.
+ *
+ * Spec: docs/superpowers/specs/2026-09-02-platform-owned-client-configuration-design.md §1
+ */
+const LEGACY_WORKTREE_BASE_FALLBACK = "D:\\DPF-worktrees";
 
 /** Desired `[mcp_servers.dpf]` shape (secret-free -- references the env var). */
 function desiredMcpServerBlock(mcpEndpoint: string): Record<string, string> {
@@ -231,7 +241,17 @@ export function planCodexConfig(
   repoRoot: string,
   configPath: string,
   mcpEndpoint?: string,
+  /**
+   * The platform's canonical worktree base, resolved by the caller. Passed in
+   * rather than owned here: the platform declares where work happens and tells
+   * its clients, never the reverse.
+   */
+  worktreeBase?: string,
 ): CodexConfigPlan {
+  const canonicalWorktreeBase =
+    worktreeBase && worktreeBase.trim().length > 0
+      ? worktreeBase.trim()
+      : LEGACY_WORKTREE_BASE_FALLBACK;
   let normalizedTomlText = existingTomlText.replace(/^\uFEFF/, "");
   const repaired = collapseDuplicateTomlTable(normalizedTomlText, "mcp_servers.dpf");
   normalizedTomlText = repaired.text;
@@ -291,7 +311,7 @@ export function planCodexConfig(
 
   // Trust entries to add: the canonical worktree base and this worktree.
   const projects = (parsed["projects"] as Record<string, unknown> | undefined) ?? {};
-  const trustTargets = [CANONICAL_WORKTREE_BASE, repoRoot];
+  const trustTargets = [canonicalWorktreeBase, repoRoot];
   const trustToAdd = trustTargets.filter((p) => {
     const blk = projects[p] as { trust_level?: unknown } | undefined;
     return blk?.trust_level !== "trusted";
