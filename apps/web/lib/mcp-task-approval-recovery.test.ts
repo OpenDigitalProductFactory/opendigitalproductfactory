@@ -211,6 +211,11 @@ describe("same-TaskRun approval recovery", () => {
       replacementEnvelopeId: "ENV-REPLACEMENT",
       replacementProposalExecutionId: "tool-proposal-new",
     });
+    expect(tx.coworkerActionEnvelope.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        status: { in: ["proposed", "approved", "failed"] },
+      }),
+    }));
     expect(tx.coworkerActionEnvelope.updateMany).toHaveBeenCalledWith({
       where: {
         id: "cmtcyo4h900m001pa2ma0itjn",
@@ -314,7 +319,7 @@ describe("same-TaskRun approval recovery", () => {
     expect(tx.coworkerActionEnvelope.findFirst).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({
         taskRunId: TASK_RUN_ID,
-        status: { in: ["approved", "failed", "proposed"] },
+        status: { in: ["proposed", "approved", "failed"] },
       }),
     }));
     expect(tx.coworkerActionEnvelope.updateMany).toHaveBeenCalledWith({

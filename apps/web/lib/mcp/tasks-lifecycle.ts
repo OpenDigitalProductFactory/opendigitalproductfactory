@@ -83,7 +83,7 @@ export type TaskLifecycleResult =
   | { kind: "forbidden"; message: string }
   | { kind: "notfound"; message: string };
 
-type TaskRunRow = {
+export type McpTaskRunRow = {
   taskRunId: string;
   userId: string;
   title: string;
@@ -96,7 +96,7 @@ type TaskRunRow = {
 };
 
 /** The standard Task object projected from a TaskRun row. */
-function toTaskObject(row: TaskRunRow) {
+export function toMcpTaskObject(row: McpTaskRunRow) {
   return {
     taskId: row.taskRunId,
     status: mcpTaskStateForWire(row.status),
@@ -107,7 +107,7 @@ function toTaskObject(row: TaskRunRow) {
   };
 }
 
-const TASK_SELECT = {
+export const MCP_TASK_SELECT = {
   taskRunId: true,
   userId: true,
   title: true,
@@ -131,10 +131,10 @@ export async function handleTasksGet(
 ): Promise<TaskLifecycleResult> {
   const taskId = requireTaskId(params);
   if (!taskId) return { kind: "invalid", message: "tasks/get requires params.taskId (string)" };
-  const row = await prisma.taskRun.findUnique({ where: { taskRunId: taskId }, select: TASK_SELECT });
+  const row = await prisma.taskRun.findUnique({ where: { taskRunId: taskId }, select: MCP_TASK_SELECT });
   if (!row) return { kind: "notfound", message: `task not found: ${taskId}` };
   if (row.userId !== userId) return { kind: "forbidden", message: "task belongs to a different auth context" };
-  const task = toTaskObject(row);
+  const task = toMcpTaskObject(row);
   if (row.status !== "input-required" && row.status !== "auth-required") {
     return { kind: "ok", value: task };
   }
@@ -156,7 +156,7 @@ export async function handleTasksResult(
 ): Promise<TaskLifecycleResult> {
   const taskId = requireTaskId(params);
   if (!taskId) return { kind: "invalid", message: "tasks/result requires params.taskId (string)" };
-  const row = await prisma.taskRun.findUnique({ where: { taskRunId: taskId }, select: TASK_SELECT });
+  const row = await prisma.taskRun.findUnique({ where: { taskRunId: taskId }, select: MCP_TASK_SELECT });
   if (!row) return { kind: "notfound", message: `task not found: ${taskId}` };
   if (row.userId !== userId) return { kind: "forbidden", message: "task belongs to a different auth context" };
 
@@ -226,7 +226,7 @@ export async function handleTasksList(
   const cursor = typeof params?.["cursor"] === "string" ? (params["cursor"] as string) : undefined;
   const rows = await prisma.taskRun.findMany({
     where: { userId },
-    select: TASK_SELECT,
+    select: MCP_TASK_SELECT,
     orderBy: { createdAt: "desc" },
     take: MAX_LIST_PAGE + 1,
     ...(cursor ? { cursor: { taskRunId: cursor }, skip: 1 } : {}),
@@ -236,7 +236,7 @@ export async function handleTasksList(
   return {
     kind: "ok",
     value: {
-      tasks: page.map(toTaskObject),
+      tasks: page.map(toMcpTaskObject),
       ...(nextCursor ? { nextCursor } : {}),
     },
   };
@@ -250,17 +250,17 @@ export async function handleTasksCancel(
 ): Promise<TaskLifecycleResult> {
   const taskId = requireTaskId(params);
   if (!taskId) return { kind: "invalid", message: "tasks/cancel requires params.taskId (string)" };
-  const row = await prisma.taskRun.findUnique({ where: { taskRunId: taskId }, select: TASK_SELECT });
+  const row = await prisma.taskRun.findUnique({ where: { taskRunId: taskId }, select: MCP_TASK_SELECT });
   if (!row) return { kind: "notfound", message: `task not found: ${taskId}` };
   if (row.userId !== userId) return { kind: "forbidden", message: "task belongs to a different auth context" };
   if (isTerminalTaskStatus(row.status)) {
     // Idempotent: already terminal, report current state.
-    return { kind: "ok", value: toTaskObject(row) };
+    return { kind: "ok", value: toMcpTaskObject(row) };
   }
   const updated = await prisma.taskRun.update({
     where: { taskRunId: taskId },
     data: { status: "canceled", completedAt: new Date() },
-    select: TASK_SELECT,
+    select: MCP_TASK_SELECT,
   });
-  return { kind: "ok", value: toTaskObject(updated) };
+  return { kind: "ok", value: toMcpTaskObject(updated) };
 }

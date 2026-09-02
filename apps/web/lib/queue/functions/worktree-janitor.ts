@@ -35,6 +35,34 @@ export const WORKTREE_JANITOR_ENABLED_FLAG = "DPF_WORKTREE_JANITOR_ENABLED";
  */
 export const WORKTREE_JANITOR_AUTO_REAP_FLAG = "DPF_WORKTREE_JANITOR_AUTO_REAP";
 
+/**
+ * Upper bound on retained worktrees, above which Tier-A reaping runs WITHOUT a
+ * human decision. This is the operative half of
+ * `platform-function-never-depends-on-a-client`: a default that requires a
+ * technical action from a non-technical owner is not a safe default, it is a
+ * deferred outage.
+ *
+ * Bounded rather than absolute — the excess is reaped oldest-first, and only
+ * Tier A, which `classifyWorktree` already defines as merged, clean, unpinned,
+ * without an open PR and without a live session heartbeat. Tier B and anything
+ * unmerged or unpushed keep explicit-go; that constraint is load-bearing, since
+ * a sweep of the development install found ~137 branches with commits never
+ * pushed and one abandoned worktree holding a finished, signed, tested commit.
+ */
+export const WORKTREE_JANITOR_MAX_FLAG = "DPF_WORKTREE_JANITOR_MAX";
+
+/** Generous enough that ordinary concurrent work never trips it; far below the
+ *  193 observed when nothing reaped at all. */
+export const DEFAULT_MAX_WORKTREES = 40;
+
+export function resolveMaxWorktrees(env: Record<string, string | undefined>): number {
+  const raw = (env[WORKTREE_JANITOR_MAX_FLAG] ?? "").trim();
+  if (raw.length === 0) return DEFAULT_MAX_WORKTREES;
+  const parsed = Number.parseInt(raw, 10);
+  // A malformed bound must not silently disable the bound.
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_MAX_WORKTREES;
+}
+
 const JANITOR_SCRIPT = "worktree-janitor.mjs";
 const SCAN_TIMEOUT_MS = 300_000;
 const SCAN_MAX_BUFFER = 8 * 1024 * 1024;
@@ -69,6 +97,13 @@ export type ScanOutcome =
 
 export type RunResult =
   | { skipped: true; reason: string }
+  /**
+   * Enabled, scheduled, and unable to see what it is responsible for. This is
+   * NOT a skip: a backstop that cannot reach its subject must never report
+   * success. Returning `skipped` here is how 528 GB accumulated behind a job
+   * that ran on time and found nothing (BI-99395B29).
+   */
+  | { skipped: false; healthy: false; reason: string }
   | {
       skipped: false;
       mode: "dry-run" | "live";
@@ -165,30 +200,34 @@ async function defaultRunScan(mode: "dry-run" | "live"): Promise<ScanOutcome> {
   }
 }
 
-export async function runWorktreeJanitor(options: RunOptions = {}): Promise<RunResult> {
-  const env = options.env ?? process.env;
-
-  if (!envFlagEnabled(env, WORKTREE_JANITOR_ENABLED_FLAG)) {
-    return {
-      skipped: true,
-      reason: `disabled (${WORKTREE_JANITOR_ENABLED_FLAG} not set)`,
-    };
+/**
+ * Worktrees this install is holding on to. Counts every decision the scan
+ * returned rather than only the reapable ones: the bound is about how much is
+ * accumulating, not about how much happens to be safe to delete right now.
+ */
+export function countRetained(scan: WorktreeJanitorScan): number {
+  // An EMPTY decisions array is "not populated", not "zero worktrees" — a scan
+  // may report only a summary. Reading empty as zero would put the install
+  // permanently under any bound, which is the same silent-success failure this
+  // whole change exists to remove.
+  if (Array.isArray(scan.decisions) && scan.decisions.length > 0) {
+    return scan.decisions.length;
   }
+  const counts = scan.summary?.counts ?? {};
+  return Object.values(counts).reduce((sum, n) => sum + (typeof n === "number" ? n : 0), 0);
+}
 
-  const autoReap =
-    envFlagEnabled(env, WORKTREE_JANITOR_AUTO_REAP_FLAG) &&
-    envFlagEnabled(env, WORKTREE_JANITOR_ENABLED_FLAG);
-  const mode: "dry-run" | "live" = autoReap ? "live" : "dry-run";
+/** A backstop that cannot reach its subject reports UNHEALTHY, never success. */
+function unhealthy(reason: string): RunResult {
+  console.error(
+    `[worktree-janitor] UNHEALTHY — enabled but cannot see its worktree base: ${reason}. ` +
+      "Nothing was scanned, so nothing being found is not evidence that nothing is there.",
+  );
+  return { skipped: false, healthy: false, reason };
+}
 
-  const runScan = options.runScan ?? defaultRunScan;
-  const outcome = await runScan(mode);
-
-  if (!outcome.available) {
-    console.warn(`[worktree-janitor] scan unavailable: ${outcome.reason}`);
-    return { skipped: true, reason: outcome.reason };
-  }
-
-  const { scan } = outcome;
+/** Shared reporting for both the observation and the live run. */
+function summarize(scan: WorktreeJanitorScan, mode: "dry-run" | "live"): RunResult {
   if (mode === "dry-run" && scan.mode !== "dry-run") {
     console.error(
       `[worktree-janitor] REFUSING unexpected scan mode "${scan.mode}" for observe run`,
@@ -230,6 +269,54 @@ export async function runWorktreeJanitor(options: RunOptions = {}): Promise<RunR
 
   console.warn(`[worktree-janitor] summary: ${JSON.stringify(result)}`);
   return result;
+}
+
+export async function runWorktreeJanitor(options: RunOptions = {}): Promise<RunResult> {
+  const env = options.env ?? process.env;
+
+  if (!envFlagEnabled(env, WORKTREE_JANITOR_ENABLED_FLAG)) {
+    return {
+      skipped: true,
+      reason: `disabled (${WORKTREE_JANITOR_ENABLED_FLAG} not set)`,
+    };
+  }
+
+  const explicitAutoReap =
+    envFlagEnabled(env, WORKTREE_JANITOR_AUTO_REAP_FLAG) &&
+    envFlagEnabled(env, WORKTREE_JANITOR_ENABLED_FLAG);
+
+  const runScan = options.runScan ?? defaultRunScan;
+
+  // An explicit auto-reap request keeps its existing contract exactly: go
+  // straight to live, one scan, no bound evaluation.
+  if (explicitAutoReap) {
+    const live = await runScan("live");
+    if (!live.available) return unhealthy(live.reason);
+    return summarize(live.scan, "live");
+  }
+
+  // Otherwise observe first. The bound is a property of what is actually there,
+  // so it cannot be evaluated before looking — and looking is never destructive.
+  const observed = await runScan("dry-run");
+  if (!observed.available) return unhealthy(observed.reason);
+
+  const retained = countRetained(observed.scan);
+  const max = resolveMaxWorktrees(env);
+
+  if (retained <= max) {
+    return summarize(observed.scan, "dry-run");
+  }
+
+  console.warn(
+    `[worktree-janitor] over bound: ${retained} worktrees retained, bound ${max} ` +
+      `(${WORKTREE_JANITOR_MAX_FLAG}). Reaping Tier-A excess without waiting for a decision — ` +
+      "Tier B and anything unmerged or unpushed still require an explicit go.",
+  );
+
+  const live = await runScan("live");
+  if (!live.available) return unhealthy(live.reason);
+  return summarize(live.scan, "live");
+
 }
 
 export const worktreeJanitor = inngest.createFunction(

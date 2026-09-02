@@ -159,6 +159,16 @@ services:
       # directory at token generation time. Requires DPF_HOST_INSTALL_PATH
       # to be set in .env (done by the installer at setup time).
       - ${DPF_HOST_INSTALL_PATH:-.}:/host-dpf
+      # The platform's own worktree base, so the server-side worktree janitor can
+      # SEE what it is responsible for. Without this the job scans nothing, finds
+      # nothing, and reports success — which is how 528 GB accumulated behind a
+      # feature that was written, shipped and defaulted off (BI-99395B29).
+      #
+      # The base is a SIBLING of the install root, so /host-dpf does not contain
+      # it. Resolution is platform-owned (scripts/lib/worktree-base.mjs); the
+      # default here reproduces that module's derived default so an install that
+      # sets nothing behaves exactly as it does today.
+      - ${DPF_WORKTREE_BASE:-${DPF_HOST_INSTALL_PATH:-.}-worktrees}:/host-worktrees
       # Signed transition receipts are host-owned; portal verifies read-only.
       # DPF_STATE_DIR MUST be an absolute, Docker-Desktop-shared host path (the
       # installer writes ~/.dpf). The ${HOME} fallback is a dev-only last resort:

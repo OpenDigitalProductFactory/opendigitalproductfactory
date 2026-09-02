@@ -112,3 +112,17 @@ describe("committed schema — reads the default branch", () => {
     expect(result!.provenance.branch).toBe("client/5727856b");
   });
 });
+
+// The default git reader is the ONLY path production takes — every other test
+// here injects readGit, which is exactly why the missing safe.directory flag
+// shipped in #4951 and degraded every live call in silence.
+describe("default git reader", () => {
+  it("carries a scoped safe.directory so container ownership cannot block the read", async () => {
+    const { buildCommittedSchemaGitCommand } = await import("./committed-schema-source");
+    const cmd = buildCommittedSchemaGitCommand("/sandbox-workspace", "ls-tree --name-only origin/main");
+    expect(cmd).toContain('-c safe.directory="/sandbox-workspace"');
+    expect(cmd).toContain("ls-tree --name-only origin/main");
+    // The flag must precede the subcommand, or git rejects it.
+    expect(cmd.indexOf("safe.directory")).toBeLessThan(cmd.indexOf("ls-tree"));
+  });
+});

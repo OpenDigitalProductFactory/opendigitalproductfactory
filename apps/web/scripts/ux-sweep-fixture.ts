@@ -18,9 +18,13 @@
  *
  *   pnpm --filter web ux:sweep-fixture
  */
+import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+
 import { Prisma, prisma } from "@dpf/db";
 
 import { convergeUxSweepFixture } from "./ux-sweep-fixture-core.mjs";
+import { SWEEP_ROUTE_PARAMS_REL } from "@/lib/ux-budget/route-shells";
 
 void (async () => {
   try {
@@ -34,6 +38,21 @@ void (async () => {
     );
     console.error(
       `[ux-sweep-fixture] refreshed ${result.refreshedRuntimeTargets} running root-portal heartbeat(s)`,
+    );
+    // BI-DE67A3EC: publish the ids this fixture minted so the sweep can resolve a
+    // dynamic route's path. Written even when empty, so a stale file from an
+    // earlier run can never make an unminted route look resolvable.
+    const params: Record<string, string> = {};
+    if (result.workCase?.caseKey) {
+      params["/workspace/cases/[caseKey]"] = `/workspace/cases/${result.workCase.caseKey}`;
+    }
+    const paramsPath = join(process.cwd(), "..", "..", SWEEP_ROUTE_PARAMS_REL);
+    mkdirSync(dirname(paramsPath), { recursive: true });
+    writeFileSync(paramsPath, `${JSON.stringify({ routes: params }, null, 2)}\n`);
+    console.error(
+      result.workCase?.caseKey
+        ? `[ux-sweep-fixture] resolved ${Object.keys(params).length} dynamic route(s)`
+        : `[ux-sweep-fixture] no dynamic route resolved (${result.workCase?.reason ?? "unknown"})`,
     );
     console.error(
       "[ux-sweep-fixture] converged weekly-digest inputs " +

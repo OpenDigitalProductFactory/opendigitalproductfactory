@@ -27,7 +27,7 @@ vi.mock("@/lib/tak/autonomous-work-run", () => ({
 }));
 vi.mock("@/lib/tak/task-records", () => ({ createTaskMessage: vi.fn() }));
 
-import { executeRemoteTaskAttempt } from "./mcp-task-execution";
+import { executeRemoteTaskAttempt, remoteTaskConversation } from "./mcp-task-execution";
 
 const writerToolName = "record_initiative_evidence";
 const parsed = {
@@ -222,5 +222,33 @@ describe("a resource wait is not a missing terminal writer (BI-8B8731EE)", () =>
     const outcome = await attempt();
 
     expect(outcome).toMatchObject({ result: { waitReason: "missing-terminal-writer" } });
+  });
+});
+
+describe("remoteTaskConversation", () => {
+  it("merges hydrated terminal-writer context into the sole system prompt", () => {
+    expect(remoteTaskConversation({
+      systemPrompt: "Review independently.",
+      prompt: "Record the exact governed receipt.",
+      resumeKind: "terminal-writer",
+      terminalWriterContext: "Immutable artifact evidence",
+    })).toEqual({
+      systemPrompt: "Review independently.\n\nImmutable artifact evidence",
+      chatHistory: [
+        { role: "user", content: "Record the exact governed receipt." },
+      ],
+    });
+  });
+
+  it("keeps an ordinary task system prompt and user history unchanged", () => {
+    expect(remoteTaskConversation({
+      systemPrompt: "Review independently.",
+      prompt: "Inspect the artifact.",
+    })).toEqual({
+      systemPrompt: "Review independently.",
+      chatHistory: [
+        { role: "user", content: "Inspect the artifact." },
+      ],
+    });
   });
 });
