@@ -16,6 +16,7 @@ import {
   bootstrapWorktreeDeps,
   resolvePinnedPnpmInvocation,
   classifyIgnoredBuilds,
+  policyDeniedBuilds,
   dependencyPolicyReviewKey,
 } from "./bootstrap-worktree-deps.mjs";
 
@@ -80,6 +81,66 @@ test("ignored-build parser ignores the Explicitly-ignored section and hint lines
     "hint: If you don't want to build a package, add it to the \"pnpm.ignoredBuiltDependencies\" list.",
   ].join("\n");
   assert.deepEqual(classifyIgnoredBuilds(unclassified), { ok: false, packages: ["@scarf/scarf"] });
+});
+
+test("a build denied by allowBuilds policy is classified, not unclassified (BI-6945BEEF)", () => {
+  // pnpm reports an `allowBuilds: false` package under "Automatically ignored"
+  // — it is absent from the allowlist, which reads identically to a package
+  // nobody has decided about. That is the whole defect: puppeteer, protobufjs
+  // and unrs-resolver each carry a deliberate `false`, yet every worktree
+  // created off main was stuck SOURCE-ONLY and unpushable with no way to
+  // converge, because this parser could not see the decision.
+  const stdout = [
+    "Automatically ignored builds during installation:",
+    "  puppeteer",
+    "  unrs-resolver",
+    "  protobufjs",
+  ].join("\n");
+
+  assert.deepEqual(classifyIgnoredBuilds(stdout), {
+    ok: false,
+    packages: ["puppeteer", "unrs-resolver", "protobufjs"],
+  });
+
+  const denied = new Set(["puppeteer", "unrs-resolver", "protobufjs"]);
+  assert.deepEqual(classifyIgnoredBuilds(stdout, denied), { ok: true, packages: [] });
+
+  // A package with no recorded decision is still flagged even when siblings are
+  // decided — the gate must not go blanket-permissive.
+  assert.deepEqual(
+    classifyIgnoredBuilds(`${stdout}\n  brand-new-dep`, denied),
+    { ok: false, packages: ["brand-new-dep"] },
+  );
+});
+
+test("policyDeniedBuilds reads only explicit `false` entries, and fails safe", () => {
+  const workspace = [
+    "packages:",
+    '  - "apps/*"',
+    "allowBuilds:",
+    "  esbuild: true",
+    "  puppeteer: false",
+    "  '@scarf/scarf': false",
+    "packageExtensions:",
+  ].join("\n");
+
+  const denied = policyDeniedBuilds("/irrelevant", {
+    readFileSync: () => workspace,
+  });
+  assert.deepEqual([...denied].sort(), ["@scarf/scarf", "puppeteer"]);
+  assert.equal(denied.has("esbuild"), false, "an allowed build is not a denial");
+
+  // Unreadable or malformed workspace file → empty set, so the gate stays
+  // STRICT. Failing open here would let an undecided build through silently.
+  assert.equal(
+    policyDeniedBuilds("/irrelevant", {
+      readFileSync: () => {
+        throw new Error("ENOENT");
+      },
+    }).size,
+    0,
+  );
+  assert.equal(policyDeniedBuilds("/irrelevant", { readFileSync: () => "packages: []" }).size, 0);
 });
 
 test("compile-ready ONLY when deps resolved AND the cheap gate passes", () => {

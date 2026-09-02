@@ -18,7 +18,9 @@
 // so worktree creation stays fast and convergence is a deliberate step.
 
 import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs";
+import { join } from "node:path";
 import { execFileSync } from "node:child_process";
+import { parseAllowBuilds } from "../check-build-script-policy.mjs";
 import { resolveHostCommandInvocation } from "./host-command-invocation.mjs";
 import { isEntryModule } from "./entry-module.mjs";
 import { parseRepositoryPnpmVersion, resolvePinnedPnpmInvocation } from "./pinned-pnpm.mjs";
@@ -150,7 +152,19 @@ function run(cmd, args, cwd, opts = {}) {
 // parser mis-read the section headers and hint lines as package names, so an
 // operator who correctly classified a build (moving it to the Explicitly
 // section) could never converge the gate.
-export function classifyIgnoredBuilds(stdout) {
+//
+// BI-6945BEEF: reading only pnpm's own sections is still not enough. DPF records
+// build-script decisions in the top-level `allowBuilds:` block of
+// pnpm-workspace.yaml — the canonical policy home, where every entry must carry
+// an explicit boolean (enforced by scripts/check-build-script-policy.mjs). A
+// package denied there with `false` is simply absent from pnpm's allowlist, so
+// pnpm reports it under "Automatically ignored" — indistinguishable, to a
+// stdout-only parser, from a package nobody has decided about. That made
+// puppeteer, protobufjs and unrs-resolver read as unclassified even though all
+// three carry a deliberate `false`, and it left every worktree created off main
+// stuck at SOURCE-ONLY with no way to converge. Pass the policy-denied set in so
+// a recorded decision counts as classified wherever it was recorded.
+export function classifyIgnoredBuilds(stdout, policyDenied = new Set()) {
   const packages = [];
   let inUnclassifiedSection = false;
   for (const raw of String(stdout ?? "").split(/\r?\n/)) {
@@ -166,9 +180,31 @@ export function classifyIgnoredBuilds(stdout) {
     if (!inUnclassifiedSection) continue;
     const entry = raw.trim().replace(/^[-*•]\s*/, "");
     if (!entry || /^none\.?$/i.test(entry) || /^hint:/i.test(entry)) continue;
+    // pnpm prints bare names here; a policy decision is keyed by name too.
+    if (policyDenied.has(entry.replace(/@[^@]*$/, "")) || policyDenied.has(entry)) continue;
     packages.push(entry);
   }
   return { ok: packages.length === 0, packages };
+}
+
+/**
+ * Names carrying an explicit `allowBuilds: false` in a worktree's
+ * pnpm-workspace.yaml — decided, and therefore not "unclassified".
+ *
+ * Fail-safe by contract: an unreadable or malformed workspace file yields an
+ * empty set, so the gate stays strict rather than silently passing everything.
+ * check-build-script-policy.mjs is the guard that keeps the block well-formed.
+ */
+export function policyDeniedBuilds(worktreePath, deps = {}) {
+  const read = deps.readFileSync ?? readFileSync;
+  try {
+    const entries = (deps.parseAllowBuilds ?? parseAllowBuilds)(
+      read(join(worktreePath, "pnpm-workspace.yaml"), "utf8"),
+    );
+    return new Set(entries.filter((e) => e.value === "false").map((e) => e.name));
+  } catch {
+    return new Set();
+  }
 }
 
 export function dependencyPolicyReviewKey({ baseSha, packageName, version, errorCode }) {
@@ -279,7 +315,7 @@ export function probeWorktreeReadiness(worktreePath, opts = {}) {
   const depProbeOk = Boolean(runner?.ok && runner.run(["ls", "--depth", "-1"]).ok);
   const ignoredBuildResult = depProbeOk ? runner.run(["ignored-builds"]) : null;
   const ignoredBuilds = ignoredBuildResult?.ok
-    ? classifyIgnoredBuilds(ignoredBuildResult.stdout)
+    ? classifyIgnoredBuilds(ignoredBuildResult.stdout, policyDeniedBuilds(worktreePath, opts))
     : { ok: false, packages: [] };
   const gitResult = (opts.execute ?? executeCommand)("git", ["rev-parse", "HEAD"], worktreePath, opts);
   const baseSha = gitResult.ok ? String(gitResult.stdout ?? "").trim() : "unknown-base";
