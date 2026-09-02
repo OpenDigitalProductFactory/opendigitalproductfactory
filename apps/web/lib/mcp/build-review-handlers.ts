@@ -404,19 +404,26 @@ export async function reviewBuildPlan(params: Record<string, unknown>, userId: s
       // architecture reviewer is advisory only — it never enters mergeReviews,
       // it rides along on review.architectureAdvisory and the deliberation
       // `architect` branch so the coworker can fold concerns into the plan.
+      // BI-B3AB7FC9: carry the caller and build into every reviewer call so
+      // the spend meters under a coworker, not agentId "unknown".
+      const attribution = {
+        ...(context?.agentId ? { agentId: context.agentId } : {}),
+        ...(context?.threadId ? { threadId: context.threadId } : {}),
+        buildId,
+      };
       const [r1settled, r2settled, archSettled] = await Promise.allSettled([
-        routeAndCall(messages, "You are a plan reviewer.", "internal"),
+        routeAndCall(messages, "You are a plan reviewer.", "internal", attribution),
         routeAndCall(
           messages,
           "You are an independent plan reviewer. Focus especially on missing tasks, dependency ordering, absent test-first steps, and data seeding gaps.",
           "internal",
-          { budgetClass: "minimize_cost" },
+          { ...attribution, budgetClass: "minimize_cost" },
         ),
         routeAndCall(
           [{ role: "user" as const, content: archPrompt }],
           `You are the ${ENTERPRISE_ARCHITECT_DISPLAY_NAME} (DPF chief-architect lens) reviewing for architectural alignment. Advisory only — surface concerns and concrete plan edits, never block the gate.`,
           "internal",
-          { budgetClass: "minimize_cost" },
+          { ...attribution, budgetClass: "minimize_cost" },
         ),
       ]);
       const r1 = r1settled.status === "fulfilled" ? parseReviewResponse(r1settled.value.content) : null;
@@ -538,6 +545,7 @@ export async function reviewBuildPlan(params: Record<string, unknown>, userId: s
             phase: "plan",
             reviewerBranches,
             ...(context?.threadId ? { threadId: context.threadId } : {}),
+            ...(context?.agentId ? { agentId: context.agentId } : {}),
           });
         }
       } catch (err) {

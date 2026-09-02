@@ -36,7 +36,7 @@ apps/web/lib/actions/promotions.ts	982
 apps/web/lib/actions/tax-remittance.test.ts	1084
 apps/web/lib/actions/tax-remittance.ts	971
 apps/web/lib/ai-operations-map/load-map-data.test.ts	928
-apps/web/lib/deliberation/orchestrator.ts	808
+apps/web/lib/deliberation/orchestrator.ts	812
 apps/web/lib/explore/build-process-matrix.ts	832
 apps/web/lib/explore/feature-build-types.ts	1098
 apps/web/lib/finance/ai-provider-finance.ts	1309
