@@ -90,8 +90,14 @@ function numberParam(params: Record<string, unknown>, key: string): number | nul
 }
 
 function parseScopeInput(params: Record<string, unknown>): WorkCapsuleScopeInput {
+  // Every key the tool schema advertises under scopeProperties must appear here.
+  // This function picks fields explicitly, so a field added to the schema and to
+  // the normalizer but not to this list is accepted by the caller, dropped here,
+  // and answered `success: true` — the same defect `backlogItemId` had on
+  // adopt_worktree. scope-input-parity.test.ts is what keeps the two in step.
   return {
     workroomShape: params.workroomShape,
+    workShape: params.workShape,
     decisionScope: params.decisionScope,
     portfolioRole: params.portfolioRole,
     servedPersona: params.servedPersona,
@@ -783,3 +789,11 @@ export async function recordAgentActivityTool(
     data: { capsule: renewedCapsule },
   };
 }
+
+/**
+ * Test-only surface. `parseScopeInput` is internal, but the schema/handler
+ * parity guard has to call the real function — a test that re-implements the
+ * pick list is exactly the test that would have passed while workShape was
+ * being dropped.
+ */
+export const __testing__ = { parseScopeInput };
