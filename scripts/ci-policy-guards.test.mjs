@@ -10,6 +10,7 @@ import {
 } from "./lib/ci-policy-guards.mjs";
 
 const EXPECTED_LEGACY_JOBS = [
+  "actuator-inputs-writable",
   "application-boundary-guard",
   "archetype-completeness-guard",
   "build-studio-namespace-guard",

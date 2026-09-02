@@ -311,6 +311,11 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("employment-event-writers", "Employment Event Writers", [
       node("scripts/check-employment-event-writers.mjs"),
     ]),
+    // BI-9252B9EA / BI-C61CEEA9: a governed column the actuator refuses to
+    // default, that no operator can set, is a dead end dressed as a control.
+    guard("actuator-inputs-writable", "Actuator Inputs Writable", [
+      node("scripts/check-actuator-inputs-writable.mjs"),
+    ]),
     // BI-640B011D: schema FK budgets (declared FKs without a leading index +
     // bare unbacked *Id columns) may only shrink against the owned baseline.
     guard("fk-index-coverage-guard", "FK Index Coverage Guard", [
