@@ -104,10 +104,17 @@ export function resolveFederationHealth(input: { links: readonly FederationLinkH
   });
   const worst = (["broken", "behind", "in-step"] as const).find((s) => links.some((l) => l.state === s)) ?? "in-step";
   const first = links.find((l) => l.state === worst)!;
-  const line = links.length === 1
-    ? first.line
-    : worst === "in-step"
-      ? `In step with ${links.length} installations: ${plural(links.reduce((n, l) => n + input.links.find((i) => i.linkId === l.linkId)!.mirroredItems, 0), "item")} mirrored here.`
-      : `${first.line} (${links.filter((l) => l.state !== worst).length} other connection${links.length - 1 === 1 ? "" : "s"} ${links.every((l) => l.state === worst) ? "" : "in step"})`.replace(/ \(0 [^)]*\)$/, "");
+  const others = links.filter((l) => l.state !== worst).length;
+  const totalMirrored = input.links.reduce((n, l) => n + l.mirroredItems, 0);
+  let line: string;
+  if (links.length === 1) {
+    line = first.line;
+  } else if (worst === "in-step") {
+    line = `In step with ${links.length} installations: ${plural(totalMirrored, "item")} mirrored here.`;
+  } else if (others > 0) {
+    line = `${first.line} (${others} other connection${others === 1 ? "" : "s"} in step)`;
+  } else {
+    line = first.line;
+  }
   return { state: worst, line, links };
 }
