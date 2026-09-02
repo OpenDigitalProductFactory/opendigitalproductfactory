@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   loadArchetypeOutcomeFacts,
+  summarizeAnimalsInCare,
   summarizeDonations,
 } from "./archetype-outcome-facts";
 
@@ -24,7 +25,11 @@ describe("archetype outcome facts", () => {
       runtime: rt,
     });
 
-    expect(facts).toEqual({ donationRows: null, animalsPlaced: null });
+    expect(facts).toEqual({
+      donationRows: null,
+      animalStatusRows: null,
+      animalsPlaced: null,
+    });
     expect(rt.unavailable).not.toHaveBeenCalled();
   });
 
@@ -126,5 +131,45 @@ describe("archetype outcome facts", () => {
 
   it("stays unavailable when the donation source could not be read", () => {
     expect(summarizeDonations(null, "USD")).toEqual({ totals: null });
+  });
+});
+
+describe("summarizeAnimalsInCare", () => {
+  it("counts every animal that has not left, split by the status staff act on", () => {
+    expect(
+      summarizeAnimalsInCare([
+        { status: "hold", _count: { _all: 5 } },
+        { status: "available", _count: { _all: 1 } },
+      ]),
+    ).toEqual({ total: 6, onHold: 5, available: 1, pending: 0 });
+  });
+
+  it("excludes adopted animals — they are an outcome, not a population", () => {
+    expect(
+      summarizeAnimalsInCare([
+        { status: "available", _count: { _all: 2 } },
+        { status: "adopted", _count: { _all: 9 } },
+      ]),
+    ).toEqual({ total: 2, onHold: 0, available: 2, pending: 0 });
+  });
+
+  it("counts an unrecognised status into the total rather than losing the animal", () => {
+    const summary = summarizeAnimalsInCare([
+      { status: "available", _count: { _all: 1 } },
+      { status: "quarantine", _count: { _all: 3 } },
+    ]);
+
+    expect(summary?.total).toBe(4);
+    expect(summary?.available).toBe(1);
+  });
+
+  it("reads an empty shelter as zero and an unreadable source as null", () => {
+    expect(summarizeAnimalsInCare([])).toEqual({
+      total: 0,
+      onHold: 0,
+      available: 0,
+      pending: 0,
+    });
+    expect(summarizeAnimalsInCare(null)).toBeNull();
   });
 });
