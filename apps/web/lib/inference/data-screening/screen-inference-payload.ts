@@ -6,7 +6,7 @@ import type {
 import type { RequestContract } from "@/lib/routing/request-contract";
 import type { ActivityContract } from "@/lib/routing/activity-contract";
 import { isLocalProviderId } from "@/lib/routing/provider-locality";
-import { classifyInferencePayload } from "./classify-payload";
+import { classifyInferencePayload, isVocabularyOnlyEvidence } from "./classify-payload";
 import { evaluateInferenceDispatchPolicy } from "./evaluate-inference-policy";
 import type {
   GovernedPayloadHint,
@@ -124,9 +124,21 @@ export function screenInferencePayload(
       : classification.overallSensitivity;
   const sensitivity = strongestSensitivity(originalSensitivity, routedPayloadSensitivity);
   const maskRequired = policy.obligations.some((obligation) => obligation.kind === "mask");
+  // A mask obligation clamps the turn local so nothing leaves unredacted. That
+  // is right whenever there is something to redact — and a no-op when the only
+  // evidence is corroboration-gated vocabulary, because a domain was named and
+  // no value was found. Clamping then protects nothing and makes a coworker
+  // unreachable for its own subject: asking for help with payroll measured
+  // confidential, attached a mask with nothing to mask, and fenced the turn
+  // (BI-67CAF494, RouteDecisionLog screen_2781e0797c3307ed).
+  //
+  // Narrow by construction. One precise match, any declared governed hint, or a
+  // deny/review effect and the clamp stands.
+  const maskHasNothingToRedact =
+    maskRequired && isVocabularyOnlyEvidence(classification.matches, input.governedData);
   const routeEffect = policy.effect === "deny" ||
     policy.effect === "review" ||
-    (maskRequired && !prior)
+    (maskRequired && !prior && !maskHasNothingToRedact)
     ? "local-only"
     : "allow";
   const residencyPolicy = routeEffect === "local-only"
