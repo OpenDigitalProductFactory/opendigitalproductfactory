@@ -162,9 +162,18 @@ export async function createWorkCapsule(args: {
           dependsOnPortfolioRoles: scope.dependsOnPortfolioRoles,
           // BI-8C54B216: convened WITH a shape. Rides scopeClaims (the home
           // workroom-shape-claim.ts reads) — no migration, invisible to readers.
-          scopeClaims: scope.workroomShape
-            ? [{ workroomShape: scope.workroomShape, recordedAt: now.toISOString() }]
-            : [],
+          // BI-8C54B216 convened WITH a collaboration shape; BI-A967717A adds the
+          // standing ACTIVITY shape that drives the room. Both ride scopeClaims
+          // (the home workroom-shape-claim.ts reads) — no migration, invisible
+          // to existing readers, which strictly filter entries they do not know.
+          scopeClaims: [
+            ...(scope.workroomShape
+              ? [{ workroomShape: scope.workroomShape, recordedAt: now.toISOString() }]
+              : []),
+            ...(scope.workShape
+              ? [{ workShape: scope.workShape, recordedAt: now.toISOString() }]
+              : []),
+          ],
           workspaceState: args.input.workspaceState ?? {},
           idempotencyKey: args.input.idempotencyKey,
           leaseHolderPrincipalId: isExternalLeaseExecutor(args.input.executorKind)

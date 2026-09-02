@@ -66,6 +66,30 @@ The first three are live code. The fourth **is now a registry with a write path*
 shape by passing `workroomShape` to `create_workroom` or `adopt_worktree`. It persists as a
 `scopeClaims` entry — no migration — and is read back by `readWorkroomShapeClaim`.
 
+### The activity shape is a second, separate claim ⟦runtime: 2026-09-02, `BI-A967717A`⟧
+
+Do not confuse the two shapes a room can carry. **`workroomShape`** (above) says *who must be
+in the room* for one consequential act. **`workShape`** says *what makes the room act at all*:
+which triggers wake it, which stages it moves through, who answers for each, and what stops it.
+
+A standing room declares its activity shape by passing `workShape` to `create_workroom` as a
+`key@version` reference — for example `dependency-advisory-watch@1.0.0`, from the registry in
+`apps/web/lib/work-management/work-shapes.ts` and its standing set in
+`standing-operations-shapes.ts`. Like the collaboration shape, it persists as a `scopeClaims`
+entry with no migration, and is read back by `readWorkShapeClaim` / `resolveWorkShapeClaim`.
+
+**This claim is what makes a room wake.** The standing-Workroom drive
+(`apps/web/lib/queue/functions/workroom-drive.ts`, every 15 minutes) loads non-terminal rooms
+and drops every one whose `scopeClaims` carry no work-shape claim. A room without it is inert
+by construction, however assertive its posture. A malformed reference is refused at
+normalization rather than stored, because a claim that can never resolve would leave the room
+looking declared and behaving inert — the exact failure this contract exists to end.
+
+The drive never executes a stage whose accountable principal is a `role:` or `person:`
+reference, and never executes a `governed-decision` advance, at any posture. Those become
+attention for the named principal. Sending outward, moving money, rotating a credential,
+merging a change, and changing authority are declared that way in every standing shape.
+
 A room that never declared one gets a **derived** shape from what it already is
 (`derive-workroom-shape.ts`): a standing WSID room is craft stewardship by definition,
 `launch-readiness` is an approval sign-off, `governance` and `remediation` are consequential
