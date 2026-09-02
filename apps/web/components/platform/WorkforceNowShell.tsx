@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { Spinner } from "@/components/ui/Spinner";
+import { Surface } from "@/components/ui/Surface";
 import type {
   WorkforceActivity,
   WorkforceCoworker,
@@ -354,7 +355,7 @@ function CoworkerRow({
 function PlatformRunRow({ run }: { run: WorkforcePlatformRun }) {
   const target = run.buildId ? `/build?buildId=${encodeURIComponent(run.buildId)}` : null;
   return (
-    <li className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-2 text-dpf-body">
+    <Surface as="li" level={1} padding="none" rounded="lg" className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-dpf-body">
       <span className="h-1.5 w-1.5 rounded-full" style={{ background: "var(--dpf-warning)" }} />
       <span className="font-semibold text-[var(--dpf-text)]">{run.title}</span>
       <span className="rounded border border-[var(--dpf-border)] px-1.5 py-0.5 font-mono text-dpf-caption uppercase text-[var(--dpf-muted)]">
@@ -375,7 +376,7 @@ function PlatformRunRow({ run }: { run: WorkforcePlatformRun }) {
       <span className="ml-auto font-mono text-dpf-caption text-[var(--dpf-muted)]" title={`started ${run.startedAt}`}>
         running {runningFor(run.startedAt)}
       </span>
-    </li>
+    </Surface>
   );
 }
 

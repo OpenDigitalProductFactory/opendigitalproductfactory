@@ -83,12 +83,7 @@ export interface OrchestrateDeliberationInput {
   threadId?: string | null;
   buildId?: string | null;
   routeContext?: string | null;
-  /**
-   * Coworker on whose behalf this deliberation runs. Stamped as
-   * initiatingAgentId/currentAgentId on a bootstrapped TaskRun so the
-   * workforce view can place the run instead of showing "0 working" while
-   * the model runner is busy (BI-B3AB7FC9).
-   */
+  /** Coworker on whose behalf this runs — stamped on a bootstrapped TaskRun (BI-B3AB7FC9). */
   agentId?: string | null;
 
   patternSlug: string;

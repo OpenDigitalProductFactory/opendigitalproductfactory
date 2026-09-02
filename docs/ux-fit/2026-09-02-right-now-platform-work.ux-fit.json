@@ -1,0 +1,31 @@
+{
+  "version": "1",
+  "decidedOption": "name unowned live runs and unattributed spend on the existing Right Now board instead of an empty 'no coworkers working' state",
+  "scope": {
+    "files": [
+      "apps/web/components/platform/WorkforceNowShell.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "sweep-measurement",
+    "baselineComparison": "new-route",
+    "measured": {
+      "/platform/ai/right-now": {
+        "defaultVisibleWords": 168,
+        "leadBandWords": 0,
+        "primaryActions": 0,
+        "visibleFields": 0,
+        "maxChoicesPerControl": 0,
+        "subLegibleControls": 0,
+        "buriedPrimaryAction": 0,
+        "axeViolations": 0
+      }
+    }
+  },
+  "notes": {
+    "routeMeasurement": "/platform/ai/right-now has no row in route-budget-baseline.json, so the rendered sweep has never adjudicated it. Numbers come from apps/web/components/platform/WorkforceNowShell.uxbudget.test.tsx, which renders the shell in the heaviest state this change introduces (no coworker working, two platform runs in flight, unattributed spend flagged, three quiet coworkers) and measures it with lib/ux-budget's measureUxBudget plus axe-core. Reading grade measured 2.8.",
+    "fit": "One new list section ('Platform work in flight') appears only when a live run has no roster owner; each row is title, status chip, source, build link, running-for. The Tokens today card gains an 'N unattributed' sub-label and warning flag only when that number is non-zero. No new navigation, form, or primary action; the build link reuses the existing /build?buildId= pattern.",
+    "failureState": "The empty 'Working now' state now says the platform work below is what is running, so an operator watching a saturated model runner is not told nothing is happening.",
+    "theme": "All styles use existing dpf tokens (--dpf-warning for the run dot and flag, --dpf-surface-1, --dpf-border); no literal colors."
+  }
+}

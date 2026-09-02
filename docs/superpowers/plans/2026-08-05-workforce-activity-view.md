@@ -1,3 +1,6 @@
+---
+status: active
+---
 # Plan — AI workforce "Right Now" activity view
 
 - **Backlog item:** BI-1A68257F

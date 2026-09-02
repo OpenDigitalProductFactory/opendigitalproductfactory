@@ -3371,6 +3371,7 @@
           "defaultVisibleKeys": [
             "workforce-pulse",
             "working-now-list",
+            "platform-work-list",
             "quiet-list"
           ],
           "deferredRegions": [
