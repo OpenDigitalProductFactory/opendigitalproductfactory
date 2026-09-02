@@ -47,7 +47,6 @@ function request(type = "dpf.demand.proposed", data: unknown = envelope): NextRe
 
 beforeEach(() => {
   vi.resetAllMocks();
-  process.env.DPF_FEDERATION_EXCHANGE_ENABLED = "1";
   mockResolveIdentity.mockResolvedValue({ installationId: "inst_receiver", projectionSecret: "secret" });
   mockResolveAuth.mockResolvedValue({ ok: true, linkId: "link_1" });
   mockHandleIncomingDemand.mockResolvedValue({

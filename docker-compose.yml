@@ -176,6 +176,11 @@ services:
       # DPF_STATE_DIR would resolve to the unshareable /root/.dpf and fail the
       # migrate step with "mounts denied" (#3262). Guarded by check-compose-env-contract.
       - ${DPF_STATE_DIR:-${HOME}/.dpf}:/dpf-state:ro
+      # Portal-owned, teardown-surviving federation state (identity + peer
+      # ledger). The one read-write slice of the state directory, so a reinstall
+      # that keeps DPF_STATE_DIR keeps the identity its peers trust
+      # (EP-ZERO-CONFIG-FEDERATION §5.1-5.2).
+      - ${DPF_STATE_DIR:-${HOME}/.dpf}/federation:/dpf-federation
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://dpf:dpf_dev@postgres:5432/dpf}
       AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET must be set - run scripts/setup.ps1 or scripts/setup.sh first}
@@ -308,14 +313,10 @@ services:
       # jobs are registered only when this flag is on. Library defaults stay
       # off for tests and ad-hoc imports; compose is the deployment contract.
       DPF_SCHEDULED_INNGEST_FUNCTIONS_ENABLED: ${DPF_SCHEDULED_INNGEST_FUNCTIONS_ENABLED:-1}
-      # Federation dark-launch flags (default OFF; founder enables per the
-      # federated-demand plan's two-instance verification gate). These MUST be
-      # base-compose passthroughs so an operator opt-in lives in the install's
-      # .env and survives the BASE-ONLY portal recreate that promote.sh falls
-      # back to when install-state composeFiles is empty (which otherwise drops
-      # docker-compose.override.yml and silently disables the exchange surface
-      # on every self-upgrade). See BI-8C1F0A2E.
-      DPF_FEDERATION_EXCHANGE_ENABLED: ${DPF_FEDERATION_EXCHANGE_ENABLED:-0}
+      # RETIRED (EP-ZERO-CONFIG-FEDERATION §5.4): federation exchange is always
+      # on; a trusted link is the only switch. The passthrough stays one release
+      # so an existing .env that sets it still interpolates, then goes.
+      DPF_FEDERATION_EXCHANGE_ENABLED: ${DPF_FEDERATION_EXCHANGE_ENABLED:-1}
       DPF_EDGE_INCIDENT_CORRELATION_ENABLED: ${DPF_EDGE_INCIDENT_CORRELATION_ENABLED:-0}
       # Allow outbound federation enroll/exchange to http:// and private/LAN-IP
       # peers (default OFF = https-only + SSRF block). Same-organization installs

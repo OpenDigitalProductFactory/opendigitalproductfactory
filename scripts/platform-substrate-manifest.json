@@ -67,7 +67,8 @@
         "${DPF_BACKUPS_HOST_PATH:-${DPF_HOST_INSTALL_PATH:-.}/backups}:/backups",
         "${DPF_HOST_INSTALL_PATH:-.}:/host-dpf",
         "${DPF_WORKTREE_BASE:-${DPF_HOST_INSTALL_PATH:-.}-worktrees}:/host-worktrees",
-        "${DPF_STATE_DIR:-${HOME}/.dpf}:/dpf-state:ro"
+        "${DPF_STATE_DIR:-${HOME}/.dpf}:/dpf-state:ro",
+        "${DPF_STATE_DIR:-${HOME}/.dpf}/federation:/dpf-federation"
       ],
       "dependsOn": [
         "portal-init"

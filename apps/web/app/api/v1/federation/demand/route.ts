@@ -15,7 +15,6 @@ import {
   handleIncomingDemandResponse,
   type DemandResponseDb,
 } from "@/lib/federation/demand-response";
-import { envFlagEnabled } from "@/lib/runtime/env-flags";
 import { handleIncomingDemandDisposition } from "@/lib/federation/demand-disposition";
 
 const ERROR_STATUS: Record<string, number> = {
@@ -42,9 +41,6 @@ function isInboundActivity(value: unknown): value is InboundDemandActivity {
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
-  if (!envFlagEnabled(process.env, "DPF_FEDERATION_EXCHANGE_ENABLED")) {
-    return NextResponse.json({ ok: false, error: "federation_exchange_disabled" }, { status: 404 });
-  }
 
   const authz = await resolveFederationLinkAuth(request.headers.get("authorization"));
   if (!authz.ok) {

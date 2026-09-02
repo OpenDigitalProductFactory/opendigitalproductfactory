@@ -231,6 +231,7 @@
           "volumes": [
             "${DPF_BACKUPS_HOST_PATH:-${DPF_HOST_INSTALL_PATH:-.}/backups}:/backups",
             "${DPF_HOST_INSTALL_PATH:-.}:/host-dpf",
+            "${DPF_STATE_DIR:-${HOME}/.dpf}/federation:/dpf-federation",
             "${DPF_STATE_DIR:-${HOME}/.dpf}:/dpf-state:ro",
             "${DPF_WORKTREE_BASE:-${DPF_HOST_INSTALL_PATH:-.}-worktrees}:/host-worktrees",
             "/var/run/docker.sock:/var/run/docker.sock",
@@ -1167,7 +1168,7 @@
       ]
     }
   ],
-  "catalogHash": "6f6566aea2214f00403209bb8e895aa92198be96646cf653ebc464cf453b9253",
+  "catalogHash": "fb667ab5b744b7ce7c0c59ff674be592d1df36cb441faee4692b4689e0b83144",
   "catalogVersion": 1,
   "substrateManifestVersion": 2
 }

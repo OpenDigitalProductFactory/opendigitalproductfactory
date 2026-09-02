@@ -1014,7 +1014,7 @@ export async function register() {
       void resetStuckQuiescenceLevelOnBoot();
 
       void reconcileSelfUpgradeAdmissions().catch((error) => console.error("[self-upgrade] admission reconcile failed", error));
-      void reconcileSelfUpgradeRunsOnBoot();
+      void reconcileSelfUpgradeRunsOnBoot(); void import("@/lib/federation/boot-reconcile").then((m) => m.reconcileFederationDurableStateOnBoot()).catch((error) => console.error("[federation] durable-state reconcile failed", error));
 
       // Periodic safety net — cron-independent (the boot reconcile above and the
       // Inngest cron can BOTH miss this). If a swap's orchestrator dies while the
