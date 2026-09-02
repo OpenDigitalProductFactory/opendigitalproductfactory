@@ -203,9 +203,23 @@ export const PLANES = Object.keys(PLANE_CONTRACT);
  * here. Reading only the first of these under-reported seven agents as having
  * no work shape at all.
  */
+/**
+ * Files that declare coworker self-tasks, each as a named object literal. Split
+ * for the same reason the shapes were: coworker-self-tasks.ts sat 51 lines from
+ * the 800-line ceiling. The runtime spreads the second into the first; a static
+ * scanner has to union them itself, and a spread is invisible to
+ * parseTopLevelKeys — reading only the first file would report every coworker in
+ * the second as having no recurring trigger at all.
+ */
+export const SELF_TASK_SOURCES = [
+  { file: "apps/web/lib/operate/scheduled-jobs/coworker-self-tasks.ts", literal: "COWORKER_SELF_TASKS" },
+  { file: "apps/web/lib/operate/scheduled-jobs/coworker-standing-self-tasks.ts", literal: "COWORKER_STANDING_SELF_TASKS" },
+];
+
 export const SHAPE_SOURCE_FILES = [
   "apps/web/lib/work-management/work-shapes.ts",
   "apps/web/lib/work-management/standing-operations-shapes.ts",
+  "apps/web/lib/work-management/coworker-standing-shapes.ts",
 ];
 
 /** Identity classes. Expectations differ by class; none is excluded. */
@@ -438,6 +452,21 @@ export function loadSubstrate() {
       const fm = parseSkillFrontmatter(fs.readFileSync(skillMd, "utf8"));
       packSkillNames.add(fm?.name ?? entry.name);
       packSkillNames.add(entry.name);
+      // The pack namespace also has to enter `skills`, not only contribute a
+      // name. AGENTS.md §11 makes this format the REQUIRED home for a new DPF
+      // skill, so leaving it out of the array meant a correctly-authored skill
+      // was invisible to the cadence and tools+skills planes: assignTo,
+      // taskType and cadence were parsed here and then dropped. The comment
+      // above already claimed both namespaces; only the name half was true.
+      if (fm) {
+        skills.push({
+          file: normalizeGeneratedPath(path.relative(REPO_ROOT, skillMd)),
+          name: fm.name ?? entry.name,
+          assignTo: Array.isArray(fm.assignTo) ? fm.assignTo : [],
+          taskType: fm.taskType ?? null,
+          cadence: fm.cadence ?? null,
+        });
+      }
     }
   }
 
@@ -463,8 +492,11 @@ export function loadSubstrate() {
   }
 
   // ── Cadence sources.
-  const selfTasksSrc = stripLineComments(read("apps/web/lib/operate/scheduled-jobs/coworker-self-tasks.ts"));
-  const selfTaskAgents = new Set(parseTopLevelKeys(objectLiteralBody(selfTasksSrc, "COWORKER_SELF_TASKS")));
+  const selfTaskAgents = new Set(
+    SELF_TASK_SOURCES.flatMap(({ file, literal }) =>
+      parseTopLevelKeys(objectLiteralBody(stripLineComments(read(file)), literal)),
+    ),
+  );
   const jobCatalog = read("apps/web/lib/operate/scheduled-jobs/catalog.ts");
 
   // ── Evidence: curated golden journeys.

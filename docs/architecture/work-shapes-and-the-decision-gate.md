@@ -215,6 +215,29 @@ The trust level feeding this is already risk-capped before it arrives, and
 as named reasons from `policy-envelope.ts` — including `missing_decision_interaction`,
 `missing_coworker_envelope`, and `stop_condition_tripped` — not as a generic refusal.
 
+
+### Where the declared shapes live ⟦runtime: 2026-09-02⟧
+
+The shape registry spans three modules, merged into `ALL_SHAPES` at runtime:
+
+| module | holds |
+|---|---|
+| `work-shapes.ts` | the contract — types, validation, cycle projection — and the anchor compliance shape |
+| `standing-operations-shapes.ts` | the standing operations a BUSINESS runs |
+| `coworker-standing-shapes.ts` | the standing work the platform's own coworkers run |
+
+A static reader must consult all three. The capability measure read only the first
+for a period and reported seven fully-bounded agents as having no declared work
+shape at all — an unbounded coworker is what that reads as, so the under-report was
+the more dangerous direction. `SHAPE_SOURCE_FILES` in
+`scripts/measure-capability-completeness.mjs` is now the explicit list, guarded by a
+test that fails when a work-management file names an accountable agent and is not on
+it.
+
+Every shape in the coworker module ends in a `governed-decision` taken by a human
+`role:`, never by the coworker that prepared the work. A shape whose advances are
+all `status-change` declares an unbounded coworker in the shape of a bounded one.
+
 ## What is actually enforced today
 
 The seam is `apps/web/lib/tak/decision-routing-governance-hook.ts`. Read it before

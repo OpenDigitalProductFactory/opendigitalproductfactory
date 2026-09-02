@@ -1818,6 +1818,10 @@
     "scripts/mcp-tool-pack-baseline.json": [
       "docs/architecture/mcp-tool-packs.md"
     ],
+    "scripts/measure-capability-completeness.mjs": [
+      "docs/architecture/2026-08-20-recurring-obligation-work-shape-and-doc-robustness.md",
+      "docs/architecture/work-shapes-and-the-decision-gate.md"
+    ],
     "scripts/measure-doc-staleness-coverage.mjs": [
       "docs/maintenance/staleness-coverage.md"
     ],
@@ -2243,7 +2247,8 @@
       "docker-compose.pki.yml",
       "packages/db/src/regulation-applicability.ts",
       "packages/db/src/seed-software-horizontal-compliance.ts",
-      "scripts/check-doc-links.mjs"
+      "scripts/check-doc-links.mjs",
+      "scripts/measure-capability-completeness.mjs"
     ],
     "docs/architecture/agent-client-capability-parity.md": [
       "apps/web/lib/build/unified-wip-query.ts",
@@ -2595,7 +2600,8 @@
       "apps/web/lib/work-management/room-posture.ts",
       "apps/web/lib/work-management/room-shapes.ts",
       "apps/web/lib/work-management/room-types.ts",
-      "apps/web/lib/work-management/work-shapes.ts"
+      "apps/web/lib/work-management/work-shapes.ts",
+      "scripts/measure-capability-completeness.mjs"
     ],
     "docs/architecture/workroom-vocabulary-boundary.md": [
       "scripts/check-prose-lint.ts"
