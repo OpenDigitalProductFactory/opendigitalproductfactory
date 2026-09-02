@@ -1527,6 +1527,9 @@
     "scripts/backup-postgres.sh": [
       "docs/operations/disaster-recovery.md"
     ],
+    "scripts/bind-worktree-cli.mjs": [
+      "docs/architecture/delivery-surfaces-runbook.md"
+    ],
     "scripts/build-docs-staleness.mjs": [
       "docs/maintenance/README.md",
       "docs/maintenance/staleness-report.md"
@@ -2429,6 +2432,7 @@
       "apps/web/lib/operate/db-continuity.ts",
       "packages/dpf-skill-pack/hooks/workroom-claim-guard.mjs",
       "packages/dpf-skill-pack/hooks/worktree-create.mjs",
+      "scripts/bind-worktree-cli.mjs",
       "scripts/lib/compose-safety.mjs",
       "scripts/lib/junction-safe-worktree-remove.mjs",
       "scripts/new-dev-worktree.sh"
