@@ -161,9 +161,16 @@ discovered candidate, no code comparison, no click.
 
 ### 5.7 One health line (third slice)
 
-The federation stance in the cockpit and the MCP briefing carries one of:
-`In step`, `Behind by N`, or `Broken because <one sentence>`, where the sentence
-names something the platform fixes itself or the exact next step.
+`resolveFederationHealth` (pure, `@dpf/db/federation-health`) turns the facts
+about the same-organization connections — mirrored rows, newest successful
+pull, the last pull's recorded outcome and detail, id conflicts — into exactly
+one of `In step …`, `Behind by <duration> …`, or `Broken because <cause>; <what
+the platform does next>`. The runner records each pull's outcome per link in
+`PlatformConfig["federation.work-sync.health.v1"]` so the cause is known, not
+inferred. The same sentence is the work-sync rationale in the instance stance
+(so the MCP briefing states it), the per-connection line in Delivery Flow, and
+the installation page. No sentence tells a person to do something the
+platform does itself.
 
 ## 6. Slices
 

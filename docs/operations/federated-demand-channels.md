@@ -97,9 +97,10 @@ is already on production before the development box is torn down.
   mirrored, when the last copy landed, and whether any item shares an id with
   work created locally (those are left alone until the local one is renamed or
   retired).
-- If a connection shows "Waiting for first copy" for more than ten minutes, the
-  other installation is running a platform version that predates backlog sync.
-  Upgrade it from its own **Operate → Self-upgrade**.
+- Each connection carries one sentence — "In step …", "Behind by …" or
+  "Broken because …" — and the same sentence is what an AI coworker reads in
+  its briefing. A "Broken because" sentence names the cause and what the
+  platform does next; there is nothing for a person to type or click.
 
 Demand sharing (above) is separate: a copy of a backlog item is not "demand"
 to follow or adopt, and adopted demand is still owned by whoever adopted it.
