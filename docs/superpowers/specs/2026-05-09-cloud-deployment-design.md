@@ -1,3 +1,7 @@
+---
+status: draft
+---
+
 # Customer-Cloud Deployment Design (DRAFT / RESEARCH)
 
 > Status: **research stub** — not yet a finalized spec. Per AGENTS.md §10
