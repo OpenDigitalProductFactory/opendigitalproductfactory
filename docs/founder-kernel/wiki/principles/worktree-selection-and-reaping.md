@@ -29,6 +29,8 @@ Every worktree is **born governed**:
 
 Every worktree has a lifecycle — `active` (claimed workroom, live heartbeat), `idle` (no heartbeat past threshold), or `done` (branch merged/abandoned) — and the janitor reaps `idle`/`done` worktrees, their branches, their per-branch CI images, and any stray compose project. The target is a **bounded** worktree count, not the 119 observed on 2026-06-05.
 
+**Where the reaper runs is settled by [`platform-function-never-depends-on-a-client`](platform-function-never-depends-on-a-client.md) (commandment, 2026-09-02), and this page no longer decides it.** Reaping was implemented as a Claude Code `SessionEnd` hook with the portal sweeper default-off, so an install with no AI client reaped nothing. This page said "bounded" on 2026-06-05 at 119 worktrees; on 2026-09-02 the same install held 193, growing 17.6 per day. The lifecycle definition above still stands. The obligation to run it server-side, on every install, with no client present, comes from the commandment.
+
 ## Why
 
 On 2026-06-05 the live install carried 119 worktrees in two conflicting conventions (43 nested `.claude/worktrees/`, ~75 sibling `D:/DPF-<topic>`), none reaped — because the doctrine and the tools disagreed about placement *and* nothing governed lifecycle. The kernel decided the canonical location with the most decisive margin of the five delivery decisions (margin 3.12): a worktree is **source-control, not runtime** ([`worktree-is-source-control-not-runtime`](worktree-is-source-control-not-runtime.md)), and there must be a **single source of truth** ([`single-source-of-truth`](single-source-of-truth.md)) for where it lives. Nesting work inside the root clone confuses the source-control boundary; a dedicated sibling dir keeps it clean. The sprawl came from the registration-and-reaping gap, not the path difference — so both halves are binding: one canonical path, and every worktree governed and reaped.
@@ -56,6 +58,7 @@ On 2026-06-05 the live install carried 119 worktrees in two conflicting conventi
 - [`worktree-per-session`](worktree-per-session.md) — one thread, one branch, one worktree.
 - [`single-source-of-truth`](single-source-of-truth.md) — one canonical location, not two.
 - [`mcp-is-the-coordination-plane`](mcp-is-the-coordination-plane.md) — every worktree registers its claim.
+- [`platform-function-never-depends-on-a-client`](platform-function-never-depends-on-a-client.md) — the reaper is platform function, not client behaviour.
 - [AGENTS.md §17](../../../../AGENTS.md) — operational summary.
 - [Unified Delivery Surfaces spec §4.1, §7 Q1](../../../superpowers/specs/2026-06-05-unified-delivery-surfaces-execution-alignment-design.md) — design context and the canonical-location decision.
 
