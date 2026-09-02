@@ -453,8 +453,21 @@ async function hasRecentKnowledgeArticle(titlePrefix: string): Promise<boolean> 
  * zeros, never better than the truth.
  */
 export function coworkerSelfTaskRequiredTool(
-  agentId: string,
+  rawAgentId: string,
 ): CoworkerSelfTaskProceduralTool | null {
+  // The caller passes ScheduledAgentTask.agentId, which for a dual-seeded
+  // coworker is the CANONICAL id (AGT-WS-MARKETING) — the roster can only write
+  // that form. The branches below are keyed by registry SLUG, so without this
+  // resolution the lookup returns null and the required-tool guarantee never
+  // fires. That is the same alias gap BI-B05E5D30 closed in the sweep and in
+  // reconcileCoworkerSelfTask; this was the third lookup site and it was missed.
+  //
+  // Observed cost: the marketing self-task ran on 2026-08-31, made four READ
+  // calls, produced no artifact, ended with "I got stuck retrying the same step",
+  // and was still recorded lastStatus=ok. The fallback that exists precisely to
+  // catch that could not match the agent id it was handed.
+  const agentId = selfTaskRegistryKey(rawAgentId) ?? rawAgentId;
+
   if (agentId === "inventory-specialist") {
     return {
       name: "create_knowledge_article",

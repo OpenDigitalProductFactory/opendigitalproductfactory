@@ -167,6 +167,29 @@ describe("rollout registry (BI-E962B9CD)", () => {
 });
 
 describe("coworkerSelfTaskRequiredTool (anti-fabrication floor)", () => {
+
+  it("resolves the CANONICAL agent id the scheduler actually passes (BI-B05E5D30 third site)", async () => {
+    // ScheduledAgentTask.agentId holds AGT-WS-MARKETING, because the proactivity
+    // roster collapses the slug row and can only write the canonical form. Before
+    // this resolution the lookup returned null, the required-tool guarantee never
+    // fired, and a stuck run produced no artifact while reporting ok.
+    // Inventory IS dual-seeded and DOES have a guarantee: before this resolution
+    // the canonical form returned null and its fallback silently never fired.
+    expect(coworkerSelfTaskRequiredTool("AGT-WS-INVENTORY")?.name).toBe("create_knowledge_article");
+    // Marketing stays null in BOTH id forms — the placeholder brief was removed
+    // deliberately (an honest empty state beats a fabricated brief); resolving
+    // the alias must not resurrect it.
+    expect(coworkerSelfTaskRequiredTool("AGT-WS-MARKETING")).toBeNull();
+    expect(coworkerSelfTaskRequiredTool("marketing-specialist")).toBeNull();
+  });
+
+  it("still returns null for a coworker with no procedural guarantee", () => {
+    // The resolution must not invent a fallback for a coworker that has none.
+    expect(coworkerSelfTaskRequiredTool("coo")).toBeNull();
+    expect(coworkerSelfTaskRequiredTool("AGT-WS-EA")).toBeNull();
+  });
+
+
   it("forces a knowledge article for the Estate Specialist, recency-guarded on KnowledgeArticle", async () => {
     const { prisma } = await import("@dpf/db");
     const tool = coworkerSelfTaskRequiredTool(INV);
