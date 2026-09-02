@@ -131,9 +131,7 @@ cross-page notification experience after its durable-operation dependency.
 
 - Decision: atomic
 - Parent: `BI-2014236E`
-- Receipt: blocked by the condition `no initiative scope baseline exists for
-  BI-2014236E`; the baseline writer is itself on the repaired TaskRun path, so
-  no receipt is inferred or proxied
+- Receipt: blocked by the condition "no initiative scope baseline exists for BI-2014236E" — record_plan_backlog_coverage refuses with traceability-incomplete until an independent reviewer records spec-approval; no receipt is inferred or proxied
 - Dependencies: none
 - Rationale: the queue, push subscription, polling reconciliation, same-TaskRun
   approval recovery, terminal-writer recovery, and WWMD authority projection
