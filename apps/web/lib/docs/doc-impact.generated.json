@@ -930,6 +930,9 @@
     "apps/web/lib/queue/functions/wiki-lint.ts": [
       "docs/founder-kernel/SCHEMA.md"
     ],
+    "apps/web/lib/queue/functions/workroom-drive.ts": [
+      "docs/architecture/work-shapes-and-the-decision-gate.md"
+    ],
     "apps/web/lib/queue/inngest-client.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
     ],
@@ -1158,6 +1161,9 @@
       "docs/user-guide/ai-workforce/how-governed-work-runs.md"
     ],
     "apps/web/lib/work-management/room-types.ts": [
+      "docs/architecture/work-shapes-and-the-decision-gate.md"
+    ],
+    "apps/web/lib/work-management/work-shapes.ts": [
       "docs/architecture/work-shapes-and-the-decision-gate.md"
     ],
     "apps/web/lib/work-management/work-unit.ts": [
@@ -2582,12 +2588,14 @@
     ],
     "docs/architecture/work-shapes-and-the-decision-gate.md": [
       "apps/web/lib/mcp/packs/profession-decision-pack.ts",
+      "apps/web/lib/queue/functions/workroom-drive.ts",
       "apps/web/lib/tak/decision-routing-governance-hook.ts",
       "apps/web/lib/work-capsules.ts",
       "apps/web/lib/work-management/autonomy-envelope.ts",
       "apps/web/lib/work-management/room-posture.ts",
       "apps/web/lib/work-management/room-shapes.ts",
-      "apps/web/lib/work-management/room-types.ts"
+      "apps/web/lib/work-management/room-types.ts",
+      "apps/web/lib/work-management/work-shapes.ts"
     ],
     "docs/architecture/workroom-vocabulary-boundary.md": [
       "scripts/check-prose-lint.ts"

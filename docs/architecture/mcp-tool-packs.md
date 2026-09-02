@@ -86,9 +86,19 @@ a room the caller believes is shaped. Its enum is mirrored from `room-shapes.ts`
 layer must not import from `work-management`) and `shape-key-parity.test.ts` is what keeps
 the mirror honest.
 
-Not every field belongs in that shared block. `sessionRef` was added to `adopt_worktree` **alone** ⟦runtime: `BI-0B292D84`, 2026-08-28⟧ because it answers a question only the adopt path had left unanswered: *whose* claim this is. `claim_backlog_item_for_work` had required a `sessionRef` all along and stored it as `WorkCapsule.executorRef`; `adopt_worktree` omitted it, so every worktree adopted through it stored `executorRef: null` and a claim guard could prove a live claim **covered** a branch but not that it belonged to the session asking. It is optional rather than required, unlike its sibling: making it required would break existing callers and refuse claims outright, and an unattributed claim is better than none.
+`workShape` joined the same block ⟦runtime: 2026-09-02, `BI-A967717A`⟧ and is the second,
+separate shape a room can be convened with: `workroomShape` says who must be in the room for
+one consequential act, `workShape` says what wakes the room at all. It is a `key@version`
+reference into the declared work-shape registry rather than an enum, so the pack validates its
+*form* and leaves the registry lookup to the drive — the lower layer stays free of a runtime
+dependency on `work-management`, exactly as the mirrored enum above does. A malformed
+reference is **rejected** on the same reasoning: a claim the drive can never resolve leaves a
+room that looks declared and behaves inert, which is worse than an undeclared room, because
+nobody goes looking for it.
 
-`backlogItemId` was added to `adopt_worktree` alone for the same kind of reason ⟦runtime: `BI-D526F72C`, 2026-08-28⟧. The handler had always bound a backlog item — but only from `outcomeAnchor`, and the schema advertised no `backlogItemId`, so the name every caller reaches for (the one `claim_backlog_item_for_work` binds, and the one the returned Workroom reports) was accepted and dropped while the call answered `success: true`. The unbound Workroom then held the branch permanently: unclaimable, because it matched no subject, and unreleasable, because resuming a terminal Workroom needed a backlog item it did not have.
+Not every field belongs in that shared block. `sessionRef` was added to `adopt_worktree` **alone** ⟦runtime: PR #4789, 2026-08-28⟧ because it answers a question only the adopt path had left unanswered: *whose* claim this is. `claim_backlog_item_for_work` had required a `sessionRef` all along and stored it as `WorkCapsule.executorRef`; `adopt_worktree` omitted it, so every worktree adopted through it stored `executorRef: null` and a claim guard could prove a live claim **covered** a branch but not that it belonged to the session asking. It is optional rather than required, unlike its sibling: making it required would break existing callers and refuse claims outright, and an unattributed claim is better than none.
+
+`backlogItemId` was added to `adopt_worktree` alone for the same kind of reason ⟦runtime: PR #4837, 2026-08-28⟧. The handler had always bound a backlog item — but only from `outcomeAnchor`, and the schema advertised no `backlogItemId`, so the name every caller reaches for (the one `claim_backlog_item_for_work` binds, and the one the returned Workroom reports) was accepted and dropped while the call answered `success: true`. The unbound Workroom then held the branch permanently: unclaimable, because it matched no subject, and unreleasable, because resuming a terminal Workroom needed a backlog item it did not have.
 
 Three properties make the binding honest rather than merely present. The id is **resolved** against the live `BacklogItem`, so an unknown one returns `unknown_backlog_item` instead of adopting unbound. The binding is **read back from the stored record**, because reporting the request rather than the result is exactly what hid the original defect. And a terminal Workroom carrying **no** backlog item is resumed and rebound rather than refusing — one bound to a *different* item still refuses, so branch provenance cannot be overwritten by a re-adopt.
 

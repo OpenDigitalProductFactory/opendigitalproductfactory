@@ -450,6 +450,14 @@ export type WorkCapsuleScopeInput = {
   decisionScope?: unknown;
   /** EP-WORK-POSTURE (BI-8C54B216): the collaboration shape the room is convened WITH. */
   workroomShape?: unknown;
+  /**
+   * BI-A967717A: the standing ACTIVITY shape that drives the room, as
+   * `key@version`. Distinct from `workroomShape`, which says who must be in the
+   * room for one consequential act; this says what wakes the room, what stages
+   * it moves through, and what stops it. Without it a room is inert — the drive
+   * runner reads this claim and skips every room that has none.
+   */
+  workShape?: unknown;
   portfolioRole?: unknown;
   servedPersona?: unknown;
   activityKind?: unknown;
@@ -461,6 +469,7 @@ export type WorkCapsuleScopeInput = {
 export type NormalizedWorkCapsuleScope = {
   decisionScope: WorkCapsuleDecisionScope | null;
   workroomShape: WorkroomShapeKey | null;
+  workShape: string | null;
   portfolioRole: WorkCapsulePortfolioRole | null;
   servedPersona: string | null;
   activityKind: WorkCapsuleScopeActivityKind | null;
@@ -565,10 +574,51 @@ function normalizeWorkroomShape(value: unknown): WorkroomShapeKey | null {
   return value;
 }
 
+const WORK_SHAPE_REF_PATTERN = /^[^@\s]+@\d+\.\d+\.\d+$/;
+
+/**
+ * `key@version`, validated for shape only. The registry lookup happens where the
+ * drive resolves, so this module stays free of a runtime dependency on the shape
+ * registry — but a malformed ref is refused here rather than persisted as a
+ * claim that silently never matches a shape.
+ */
+function normalizeWorkShapeRef(value: unknown): string | null {
+  if (value === undefined || value === null || value === "") return null;
+  const trimmed = optionalString(value);
+  if (trimmed === null || !WORK_SHAPE_REF_PATTERN.test(trimmed)) {
+    throw new Error(
+      "workShape must be a declared shape reference of the form key@version, for example dependency-advisory-watch@1.0.0.",
+    );
+  }
+  return trimmed;
+}
+
+/**
+ * The `scopeClaims` entries a room is convened WITH. Both shapes ride this one
+ * JSON column rather than a column each — no migration, and existing readers
+ * strictly filter entries they do not recognize, so an unknown claim is inert
+ * rather than breaking them.
+ *
+ * `workroomShape` says who must be in the room for one consequential act;
+ * `workShape` says what wakes the room at all. Composed here, beside the
+ * normalizer that validates them, rather than inline at the write site.
+ */
+export function buildWorkCapsuleScopeClaims(
+  scope: Pick<NormalizedWorkCapsuleScope, "workroomShape" | "workShape">,
+  now: Date,
+): Array<Record<string, string>> {
+  const recordedAt = now.toISOString();
+  const claims: Array<Record<string, string>> = [];
+  if (scope.workroomShape) claims.push({ workroomShape: scope.workroomShape, recordedAt });
+  if (scope.workShape) claims.push({ workShape: scope.workShape, recordedAt });
+  return claims;
+}
+
 export function normalizeWorkCapsuleScopeInput(input?: WorkCapsuleScopeInput | null): NormalizedWorkCapsuleScope {
   return {
     decisionScope: normalizeDecisionScope(input?.decisionScope),
     workroomShape: normalizeWorkroomShape(input?.workroomShape),
+    workShape: normalizeWorkShapeRef(input?.workShape),
     portfolioRole: normalizePortfolioRole(input?.portfolioRole, "portfolioRole"),
     servedPersona: optionalString(input?.servedPersona),
     activityKind: normalizeScopeActivityKind(input?.activityKind),
