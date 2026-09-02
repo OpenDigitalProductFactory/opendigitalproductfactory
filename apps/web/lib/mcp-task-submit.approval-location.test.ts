@@ -60,6 +60,8 @@ const immutableParams = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.unstubAllEnvs();
+  vi.stubEnv("DPF_EXTERNAL_MCP_TASK_ASYNC", "0");
   db.findFirst.mockResolvedValue(null);
   db.findUnique.mockResolvedValue({ status: "working" });
   db.findEnvelope.mockResolvedValue(null);

@@ -328,6 +328,29 @@ describe("agent loop terminal writer integration", () => {
     expect(vi.mocked(routeAndCall)).toHaveBeenCalledTimes(3);
   });
 
+  it("returns a missing-writer failure when the review budget expires after a successful read", async () => {
+    const now = vi.spyOn(Date, "now")
+      .mockReturnValueOnce(0)
+      .mockReturnValueOnce(0)
+      .mockReturnValue(300_001);
+    vi.mocked(routeAndCall).mockResolvedValueOnce(
+      response("", [{ id: "read", name: "read_source_at_version", arguments: {} }]) as never,
+    );
+
+    try {
+      const result = await runAgenticLoop(params);
+
+      expect(result.executedTools).toHaveLength(1);
+      expect(result.failure).toEqual({
+        kind: "terminal-writer-missing",
+        message: expect.stringContaining("No receipt was created"),
+      });
+      expect(vi.mocked(routeAndCall)).toHaveBeenCalledTimes(1);
+    } finally {
+      now.mockRestore();
+    }
+  });
+
   it("returns a missing-writer wait when routing fails after a successful read", async () => {
     vi.mocked(routeAndCall)
       .mockResolvedValueOnce(response("", [{ id: "read", name: "read_source_at_version", arguments: {} }]) as never)

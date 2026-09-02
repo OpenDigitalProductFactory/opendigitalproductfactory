@@ -43,6 +43,23 @@ function remoteTaskContent(text: string) {
   return [{ type: "text", text }];
 }
 
+export function remoteTaskConversation(input: {
+  systemPrompt: string;
+  prompt: string;
+  resumeKind?: "capacity" | "terminal-writer";
+  terminalWriterContext?: string;
+}): {
+  systemPrompt: string;
+  chatHistory: Array<{ role: "user"; content: string }>;
+} {
+  return {
+    systemPrompt: input.resumeKind === "terminal-writer" && input.terminalWriterContext
+      ? `${input.systemPrompt}\n\n${input.terminalWriterContext}`
+      : input.systemPrompt,
+    chatHistory: [{ role: "user", content: input.prompt }],
+  };
+}
+
 export async function executeRemoteTaskAttempt(input: {
   run: { id: string; taskRunId: string; contextId: string | null };
   threadId: string;
@@ -129,15 +146,18 @@ export async function executeRemoteTaskAttempt(input: {
     : input.resumeKind === "terminal-writer"
       ? { resumedFromTerminalWriterWait: true }
       : { resumedFromCapacity: true };
-  const effectiveSystemPrompt = input.resumeKind === "terminal-writer" && input.terminalWriterContext
-    ? `${agent.systemPrompt}\n\n${input.terminalWriterContext}`
-    : agent.systemPrompt;
+  const conversation = remoteTaskConversation({
+    systemPrompt: agent.systemPrompt,
+    prompt: parsed.prompt,
+    resumeKind: input.resumeKind,
+    terminalWriterContext: input.terminalWriterContext,
+  });
 
   try {
     const result = await executeAutonomousAgenticLoop({
-      systemPrompt: effectiveSystemPrompt,
+      systemPrompt: conversation.systemPrompt,
       systemPromptInstructionSpans: coworkerBriefSpans(agent.systemPrompt),
-      chatHistory: [{ role: "user", content: parsed.prompt }],
+      chatHistory: conversation.chatHistory,
       sensitivity: agent.sensitivity ?? "internal",
       tools: tools.tools,
       toolsForProvider: tools.toolsForProvider,
@@ -174,6 +194,10 @@ export async function executeRemoteTaskAttempt(input: {
           where: { taskRunId: run.taskRunId },
           select: { status: true },
         });
+    // The loop is not trusted to self-report a missing writer: main enforces this
+    // at the completion boundary (#4925, #4930) so a review cannot pass without
+    // the governed writer having been attempted. Ported verbatim into the async
+    // flow, which previously relied on result.failure alone.
     const terminalWriterWasAttempted = terminalToolPolicy
       ? (result.executedTools ?? []).some((tool) => tool.name === terminalToolPolicy.writerToolName)
         || result.proposal?.name === terminalToolPolicy.writerToolName

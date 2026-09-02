@@ -35,6 +35,10 @@ import {
   type PersistedTerminalReaderExecution,
 } from "./mcp-task-terminal-writer-context";
 import {
+  enqueuePersistedRemoteTaskSubmission,
+  externalMcpTaskAsyncEnabled,
+} from "./mcp-task-background-dispatch";
+import {
   createTerminalWriterEscalation,
   recoverTerminalWriterEscalation,
   terminalWriterEscalationMessage,
@@ -766,6 +770,10 @@ export async function submitRemoteCoworkerTask(input: {
         isError: false,
       }, { taskRunId: run.taskRunId, callerUserId: token.userId }),
     };
+  }
+
+  if (externalMcpTaskAsyncEnabled()) {
+    return { kind: "result", result: await enqueuePersistedRemoteTaskSubmission(run.taskRunId) };
   }
 
   return executeRemoteTaskAttempt({
