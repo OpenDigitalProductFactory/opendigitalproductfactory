@@ -66,6 +66,31 @@ This design answers that open question: it proposes a **contract** that is
 vendor-neutral, and a **first provider** behind it, so that "documented recipe"
 becomes "shipped overlay" without the platform depending on one relay vendor.
 
+## Boundary with the managed-cell design
+
+`2026-08-29-cloudflare-fronted-managed-deployment-design.md` (`BI-D5228299`,
+`EP-MFG-DELIVER-INSTALL`) also puts Cloudflare in front of DPF. It is a different
+problem and the two are peers, not rivals:
+
+| | That design | This design |
+|---|---|---|
+| Who operates the install | DPF, as a managed service | the customer, on their own hardware |
+| Origin | cloud VM, managed container, or Kubernetes cell | a box on a residential connection, usually behind CGNAT |
+| What Cloudflare supplies | customer hostnames, DNS, TLS, WAF, Access, cell routing | one outbound-only path to a name the operator owns |
+| Provisioning | automated stamp per customer cell | an optional overlay the operator enables |
+
+Its §5 keeps "customer-owned cloud" as a continuing peer option, and its origins are
+all substrates that already have a routable address. Neither it nor the Single VM
+work addresses the self-hosted install that has no address to point DNS at — which
+is the only case this design is about.
+
+Where they must agree: the deployment contracts both extend
+(`2026-05-09-deployment-contracts.md`), and the principle that hostname metadata is
+routing input, not authorization evidence. That design states it as "the adapter
+strips untrusted forwarding headers"; this one states it as invariant 3. If a
+Cloudflare adapter is built for the managed case, this design's contract should
+consume it rather than grow a second one.
+
 ## Research and benchmarking
 
 ### The comparable product pattern
