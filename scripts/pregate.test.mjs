@@ -131,7 +131,7 @@ test("pregate shell route is explicit and still requires a working shell", () =>
   }), false);
 });
 
-test("pregate recovery releases an interrupted running gate and marks it failed", async () => {
+test("pregate recovery releases an interrupted running gate and marks it INFRASTRUCTURE, not failed (BI-D088D06D)", async () => {
   const calls = [];
   let written = null;
   const recovered = await recoverInterruptedGateState({
@@ -167,13 +167,18 @@ test("pregate recovery releases an interrupted running gate and marks it failed"
     tool: "release_nonprod_environment_lease",
     args: { leaseId: "NPEL-INTERRUPTED" },
   }]);
-  assert.equal(written.status, "failed");
+  // The wrapper dying before a terminal state never graded the diff, so it must
+  // not write a status that reads as a grade. `blocked_*` is the vocabulary
+  // pregate-status classifies as INCONCLUSIVE.
+  assert.equal(written.status, "blocked_wrapper_exited");
+  assert.match(written.status, /^blocked_/);
+  assert.notEqual(written.status, "failed");
   assert.equal(written.gatePassed, false);
   assert.equal(written.leaseEvents.at(-1).type, "pregate_interrupted_gate_recovery");
   assert.equal(written.recovery.reason, "gate-wrapper-exited-before-terminal-state");
 });
 
-test("pregate recovery releases an interrupted queued gate and marks it failed", async () => {
+test("pregate recovery releases an interrupted queued gate as INFRASTRUCTURE, not failed (BI-D088D06D)", async () => {
   const calls = [];
   let written = null;
   const recovered = await recoverInterruptedGateState({
@@ -228,7 +233,8 @@ test("pregate recovery releases an interrupted queued gate and marks it failed",
       },
     },
   ]);
-  assert.equal(written.status, "failed");
+  assert.equal(written.status, "blocked_wrapper_exited");
+  assert.notEqual(written.status, "failed");
   assert.equal(written.leaseEvents.at(-1).type, "pregate_interrupted_gate_recovery");
   assert.equal(written.recovery.childStatus, 4294967295);
   assert.equal(written.recovery.queueObserverReleaseStatus, "released");

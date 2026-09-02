@@ -114,6 +114,7 @@ scripts/lib/transition-signing.test.mjs
 scripts/lifecycle-surface-policy.test.mjs
 scripts/local-ci-bounded-build.test.mjs
 scripts/local-ci-capacity-broker.test.mjs
+scripts/local-ci-host-stage-calibration.test.mjs
 scripts/local-ci-pool-policy.test.mjs
 scripts/local-ci-runner.test.mjs
 scripts/local-ci-slot-cleanup.test.mjs
