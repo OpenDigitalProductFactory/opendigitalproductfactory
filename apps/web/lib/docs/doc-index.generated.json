@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 695,
+  "pageCount": 696,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -4282,6 +4282,21 @@
         "decision-dimensions",
         "examples",
         "sources"
+      ]
+    },
+    "docs/founder-kernel/wiki/principles/platform-function-never-depends-on-a-client.md": {
+      "publicHref": "/founder-kernel/wiki/principles/platform-function-never-depends-on-a-client/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "platform-function-never-depends-on-a-client",
+        "the-test",
+        "why",
+        "what-this-does-not-license",
+        "how-to-apply",
+        "decision-dimensions",
+        "related"
       ]
     },
     "docs/founder-kernel/wiki/principles/prefer-reversible-containment.md": {
