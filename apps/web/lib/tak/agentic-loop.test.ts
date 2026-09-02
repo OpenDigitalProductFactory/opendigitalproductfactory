@@ -637,6 +637,56 @@ describe("runAgenticLoop", () => {
     threadId: "thread-1",
   };
 
+  // BI-8B8731EE. On a governed reviewer route the loop used to rewrite EVERY
+  // routeAndCall throw as `terminal-writer-missing`, discarding the
+  // classification it had just computed. A local-CI capacity reservation —
+  // which clears itself in ~195s — was therefore reported as the writer failing
+  // its contract, and `preInferenceResourceWait` downstream could never see the
+  // `capacity` kind it keys on.
+  it.each([
+    ["Local provider dispatch deferred: local-ci-queued-capacity-reservation", "capacity"],
+    ["Provider is overloaded, status: 529", "busy"],
+  ])("keeps a resource deferral classified (%s) instead of blaming the writer", async (message, expectedKind) => {
+    const mockRoute = vi.mocked(routeAndCall);
+    const deferral = new Error(message);
+    deferral.name = expectedKind === "capacity" ? "LocalProviderCapacityDeferredError" : "Error";
+    mockRoute.mockRejectedValue(deferral);
+
+    const result = await runAgenticLoop({
+      ...baseParams,
+      terminalToolPolicy: {
+        writerToolName: "record_initiative_evidence",
+        readerToolNames: ["read_source_at_version"],
+        minimumSuccessfulReaderCalls: 1,
+        maximumReaderCalls: 3,
+      },
+    });
+
+    expect(result.failure?.kind).toBe(expectedKind);
+    expect(result.failure?.kind).not.toBe("terminal-writer-missing");
+    expect(result.content).not.toContain("could not be dispatched");
+  });
+
+  it("still blames the writer when the route fails for a reason it cannot classify", async () => {
+    // The unclassified path is unchanged: without a known cause there is nothing
+    // truer to say than that the receipt was not recorded.
+    const mockRoute = vi.mocked(routeAndCall);
+    mockRoute.mockRejectedValue(new Error("something entirely unexpected"));
+
+    const result = await runAgenticLoop({
+      ...baseParams,
+      terminalToolPolicy: {
+        writerToolName: "record_initiative_evidence",
+        readerToolNames: ["read_source_at_version"],
+        minimumSuccessfulReaderCalls: 1,
+        maximumReaderCalls: 3,
+      },
+    });
+
+    expect(result.failure?.kind).toBe("terminal-writer-missing");
+    expect(result.content).toContain("record_initiative_evidence");
+  });
+
   it("points to the real provider surface when no tool-capable endpoint is active", async () => {
     const mockRoute = vi.mocked(routeAndCall);
     mockRoute.mockRejectedValueOnce(new Error(

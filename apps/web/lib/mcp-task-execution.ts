@@ -179,7 +179,18 @@ export async function executeRemoteTaskAttempt(input: {
         || result.proposal?.name === terminalToolPolicy.writerToolName
       : false;
     const terminalWriterMissing = terminalToolPolicy !== null && !terminalWriterWasAttempted;
-    if ((result.failure?.kind === "terminal-writer-missing" || terminalWriterMissing) && terminalToolPolicy) {
+    // BI-8B8731EE: a resource wait is NOT a writer-contract failure, and this
+    // branch would otherwise swallow it. `terminalWriterMissing` is true for any
+    // governed route that executed no tools, which is exactly what a capacity
+    // deferral looks like — so on a reviewer route the resource wait below was
+    // unreachable and every deferral was reported as a missing receipt writer.
+    // Let the resource wait win; it resumes on the same TaskRun either way.
+    const resourceWaitOwnsThisTurn = preInferenceResourceWait(result) !== null;
+    if (
+      !resourceWaitOwnsThisTurn
+      && (result.failure?.kind === "terminal-writer-missing" || terminalWriterMissing)
+      && terminalToolPolicy
+    ) {
       const terminalWriterAttempt = input.terminalWriterAttempt ?? 1;
       const terminalWriterFailureMessage = result.failure?.kind === "terminal-writer-missing"
         ? result.failure.message
