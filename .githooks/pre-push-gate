@@ -69,6 +69,43 @@ branch="$(git rev-parse --abbrev-ref HEAD)"
 sha="$(git rev-parse HEAD)"
 state_file="$(git rev-parse --git-path dpf-local-ci-gate.json)"
 
+# BI-5529B5AC: gate state is written PER SLOT — slot-0 to dpf-local-ci-gate.json
+# and slot-1 to dpf-local-ci-gate-slot-1.json (scripts/lib/local-ci-slot-manifest.mjs).
+# `pregate:status` reconciles across slots; this hook used to read the slot-0
+# filename and nothing else, so a gate that ran and PASSED on slot-1 was
+# invisible here and the push was refused with gatePassed=false for a SHA that
+# had genuinely passed. Observed 2026-09-02 on this repository: slot-1 recorded
+# status=passed with an evidence id while a stale slot-0 record from an earlier
+# unadmitted attempt still said queued, and the push was refused.
+#
+# That defect activates exactly when the two-slot pool starts working, and it
+# presents as gate flakiness rather than as a slot bug, so it drives re-runs.
+# Prefer any slot record that passes for THIS branch and SHA; otherwise keep the
+# default file so every "no record" and "did not pass" message below is unchanged.
+if [ -f "scripts/lib/local-ci-gate-state.mjs" ] || [ -d "$(dirname "$state_file")" ]; then
+  passing_state_file="$(node -e '
+const fs = require("node:fs");
+const path = require("node:path");
+const [dir, branch, sha] = process.argv.slice(1);
+let entries = [];
+try { entries = fs.readdirSync(dir); } catch { process.exit(0); }
+for (const name of entries) {
+  if (!/^dpf-local-ci-gate.*\.json$/.test(name)) continue;
+  const file = path.join(dir, name);
+  let state;
+  try { state = JSON.parse(fs.readFileSync(file, "utf8")); } catch { continue; }
+  if (state.branch === branch && state.sha === sha && state.gatePassed === true) {
+    process.stdout.write(file);
+    break;
+  }
+}
+' "$(dirname "$state_file")" "$branch" "$sha" 2>/dev/null || true)"
+  if [ -n "$passing_state_file" ] && [ "$passing_state_file" != "$state_file" ]; then
+    echo "[pre-push-gate] using the passing slot record $(basename "$passing_state_file")"
+    state_file="$passing_state_file"
+  fi
+fi
+
 if [ "$branch" = "HEAD" ]; then
   echo "[pre-push-gate] detached HEAD — gate applies to branch pushes only; skipping."
   exit 0

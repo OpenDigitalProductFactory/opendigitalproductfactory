@@ -309,13 +309,27 @@ export async function recoverInterruptedGateState({
     ...(Array.isArray(state.leaseEvents) ? state.leaseEvents : []),
     recoveryEvent,
   ];
+  // BI-D088D06D: the wrapper exiting before a terminal state is infrastructure
+  // — a killed process, a host under pressure, a lost control plane. It is NOT
+  // a grade on the diff, and it never graded the diff: the run died before it
+  // could. Writing "failed" here made pregate:status report FAIL, which reads as
+  // "your code is bad", permanently consumed that SHA's verdict, and forced an
+  // amend to a fresh SHA. Measured 2026-09-02: 4 of 5 gated branches needed more
+  // than one lease attempt.
+  //
+  // The queued path already recovers (it rewrites status "queued" and preserves
+  // the lease). The running path cannot preserve the lease — the slot must be
+  // freed for the next claimant — but it must still tell the truth about cause.
+  // `blocked_*` is the vocabulary pregate-status already classifies as
+  // INCONCLUSIVE, so this needs no reader change and inherits the honest
+  // headline the blocked statuses already earn.
   writeStateImpl(stateFile, {
     branch,
     sha,
     gatePassed: false,
     leaseId: state.leaseId,
     evidenceId: "",
-    status: "failed",
+    status: "blocked_wrapper_exited",
     expiresAt: state.expiresAt || "",
     resilience: state.resilience ?? null,
     leaseEvents,
