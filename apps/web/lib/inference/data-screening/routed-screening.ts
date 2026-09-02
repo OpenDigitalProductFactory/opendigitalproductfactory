@@ -15,12 +15,15 @@ import {
   screenInferencePayload,
   type ScreenInferencePayloadInput,
 } from "./screen-inference-payload";
+import type { MessageOrigin } from "./types";
 
 type RoutedScreenInput = {
   messages: ChatMessage[];
   systemPrompt: string;
   /** Platform-authored instruction spans within `systemPrompt` (BI-463BE12A). */
   systemPromptInstructionSpans?: string[];
+  /** Positional labels for `messages` (BI-40EF7C44). Labels only, never content. */
+  messageOrigins?: readonly MessageOrigin[];
   tools?: Array<Record<string, unknown>>;
   taskType: string;
   routeContext: ScreenInferencePayloadInput["routeContext"];

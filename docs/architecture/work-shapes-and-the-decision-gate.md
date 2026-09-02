@@ -66,6 +66,30 @@ The first three are live code. The fourth **is now a registry with a write path*
 shape by passing `workroomShape` to `create_workroom` or `adopt_worktree`. It persists as a
 `scopeClaims` entry — no migration — and is read back by `readWorkroomShapeClaim`.
 
+### The activity shape is a second, separate claim ⟦runtime: 2026-09-02, `BI-A967717A`⟧
+
+Do not confuse the two shapes a room can carry. **`workroomShape`** (above) says *who must be
+in the room* for one consequential act. **`workShape`** says *what makes the room act at all*:
+which triggers wake it, which stages it moves through, who answers for each, and what stops it.
+
+A standing room declares its activity shape by passing `workShape` to `create_workroom` as a
+`key@version` reference — for example `dependency-advisory-watch@1.0.0`, from the registry in
+`apps/web/lib/work-management/work-shapes.ts` and its standing set in
+`standing-operations-shapes.ts`. Like the collaboration shape, it persists as a `scopeClaims`
+entry with no migration, and is read back by `readWorkShapeClaim` / `resolveWorkShapeClaim`.
+
+**This claim is what makes a room wake.** The standing-Workroom drive
+(`apps/web/lib/queue/functions/workroom-drive.ts`, every 15 minutes) loads non-terminal rooms
+and drops every one whose `scopeClaims` carry no work-shape claim. A room without it is inert
+by construction, however assertive its posture. A malformed reference is refused at
+normalization rather than stored, because a claim that can never resolve would leave the room
+looking declared and behaving inert — the exact failure this contract exists to end.
+
+The drive never executes a stage whose accountable principal is a `role:` or `person:`
+reference, and never executes a `governed-decision` advance, at any posture. Those become
+attention for the named principal. Sending outward, moving money, rotating a credential,
+merging a change, and changing authority are declared that way in every standing shape.
+
 A room that never declared one gets a **derived** shape from what it already is
 (`derive-workroom-shape.ts`): a standing WSID room is craft stewardship by definition,
 `launch-readiness` is an approval sign-off, `governance` and `remediation` are consequential
@@ -190,6 +214,29 @@ The trust level feeding this is already risk-capped before it arrives, and
 `when-supervised`, per the action descriptor in `action-registry.ts`. Denials come back
 as named reasons from `policy-envelope.ts` — including `missing_decision_interaction`,
 `missing_coworker_envelope`, and `stop_condition_tripped` — not as a generic refusal.
+
+
+### Where the declared shapes live ⟦runtime: 2026-09-02⟧
+
+The shape registry spans three modules, merged into `ALL_SHAPES` at runtime:
+
+| module | holds |
+|---|---|
+| `work-shapes.ts` | the contract — types, validation, cycle projection — and the anchor compliance shape |
+| `standing-operations-shapes.ts` | the standing operations a BUSINESS runs |
+| `coworker-standing-shapes.ts` | the standing work the platform's own coworkers run |
+
+A static reader must consult all three. The capability measure read only the first
+for a period and reported seven fully-bounded agents as having no declared work
+shape at all — an unbounded coworker is what that reads as, so the under-report was
+the more dangerous direction. `SHAPE_SOURCE_FILES` in
+`scripts/measure-capability-completeness.mjs` is now the explicit list, guarded by a
+test that fails when a work-management file names an accountable agent and is not on
+it.
+
+Every shape in the coworker module ends in a `governed-decision` taken by a human
+`role:`, never by the coworker that prepared the work. A shape whose advances are
+all `status-change` declares an unbounded coworker in the shape of a bounded one.
 
 ## What is actually enforced today
 

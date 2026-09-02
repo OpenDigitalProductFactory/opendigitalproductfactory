@@ -25,6 +25,11 @@ const scopeProperties = {
     description:
       "How a gate inside this room routes. Sets the room's action envelope and its posture: outward-review and approval-sign-off require verification before an action leaves, escalation raises urgency, craft-stewardship stays quiet. Omit when the room genuinely has no gate pattern — an unshaped room is reported as unshaped rather than guessed.",
   },
+  workShape: {
+    type: "string",
+    description:
+      "The standing ACTIVITY shape that drives this room, as key@version (for example dependency-advisory-watch@1.0.0). Distinct from workroomShape: that says who must be in the room for one consequential act, this says what wakes the room, which stages it moves through, who answers for each, and what stops it. A room without it never wakes on its own — the drive skips it. Use a key from the declared work-shape registry; a shape reference that is not key@version is refused rather than stored as a claim that can never match.",
+  },
   outcomeAnchor: {
     type: "object",
     additionalProperties: true,

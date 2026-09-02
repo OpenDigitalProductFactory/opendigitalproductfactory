@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import type { ContentBlock } from "@/lib/inference/ai-inference";
 import type {
   GovernedPayloadHint,
+  MessageOrigin,
   InferenceDataClass,
   InferencePayloadClassification,
   InferencePayloadClassificationInput,
@@ -13,6 +14,7 @@ import type {
 type TextProbe = {
   path: string;
   text: string;
+  origin?: MessageOrigin;
 };
 
 type ClassRule = {
@@ -314,6 +316,7 @@ export function classifyInferencePayload(
           path: probe.path,
           reason: rule.reason,
           confidence: rule.confidence,
+          ...(probe.origin ? { origin: probe.origin } : {}),
         });
       }
     }
@@ -393,15 +396,19 @@ function collectTextProbes(input: InferencePayloadClassificationInput): TextProb
   }
 
   input.messages.forEach((message, index) => {
-    probes.push({ path: `messages[${index}].role`, text: message.role });
-    collectMessageContent(message.content, `messages[${index}].content`, probes);
+    // Labels only, and only for message-derived probes: the prompt and tool
+    // declarations have their own provenance story (BI-40EF7C44).
+    const origin = input.messageOrigins?.[index] ?? "turn";
+    probes.push({ path: `messages[${index}].role`, text: message.role, origin });
+    collectMessageContent(message.content, `messages[${index}].content`, probes, origin);
     if (message.toolCallId) {
-      probes.push({ path: `messages[${index}].toolCallId`, text: message.toolCallId });
+      probes.push({ path: `messages[${index}].toolCallId`, text: message.toolCallId, origin });
     }
     message.toolCalls?.forEach((toolCall, toolIndex) => {
       probes.push({
         path: `messages[${index}].toolCalls[${toolIndex}].name`,
         text: toolCall.name,
+        origin,
       });
       collectUnknown(
         toolCall.arguments,
@@ -427,9 +434,10 @@ function collectMessageContent(
   content: string | ContentBlock[],
   path: string,
   probes: TextProbe[],
+  origin?: MessageOrigin,
 ): void {
   if (typeof content === "string") {
-    probes.push({ path, text: content });
+    probes.push({ path, text: content, origin });
     return;
   }
 

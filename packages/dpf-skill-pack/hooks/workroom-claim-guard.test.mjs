@@ -299,5 +299,27 @@ test("the refusal names the terminal-capsule dead end, so a leftover worktree is
   // send them into a refusal loop.
   const text = denyGuidance(classifyClaim({ branch: "fix/a", marker: null, nowMs: NOW }));
   assert.match(text, /branch_occupied/);
-  assert.match(text, /reap it or start a new branch/);
+  // Was /reap it or start a new branch/ until 2026-08-28. That wording assumed a
+  // terminal capsule meant the work was done; eleven branches proved otherwise.
+  // The guidance now routes to the check instead of to the destructive action.
+  assert.match(text, /rev-list --count/);
+});
+
+// ── the refusal must not assert more than the evidence carries ───────────────
+
+test("branch_occupied guidance never claims the work is finished", () => {
+  // The original wording said a terminal capsule meant "that branch's work is
+  // finished and this worktree is a leftover — reap it". Measured 2026-08-28:
+  // ELEVEN branches sat behind terminal capsules carrying unmerged commits, one
+  // with 13. The sentence stated as fact something the evidence did not
+  // establish, and pointed at the destructive reading of two possible ones.
+  const text = denyGuidance(classifyClaim({ branch: "fix/a", marker: null, nowMs: NOW }));
+  assert.doesNotMatch(text, /work is finished/, "a closed capsule does not prove the branch work is done");
+  assert.doesNotMatch(text, /reap it or start a new branch/, "must not steer to reaping before the branch is checked");
+});
+
+test("branch_occupied guidance tells the operator how to tell the two cases apart", () => {
+  const text = denyGuidance(classifyClaim({ branch: "fix/a", marker: null, nowMs: NOW }));
+  assert.match(text, /rev-list --count/, "must name the check that distinguishes leftover from unresolved");
+  assert.match(text, /unresolved, not finished/, "must name the case where the capsule closed over live work");
 });

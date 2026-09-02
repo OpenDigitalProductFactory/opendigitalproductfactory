@@ -75,7 +75,12 @@ const CAPABILITY_PLANES = [
  * complete identity needs no entry, so it remains protected if it later
  * regresses. Existing identities fall out of the list as they reach all floors.
  */
-export function findCompletenessRatchetFailures(report, baseline) {
+export function findCompletenessRatchetFailures(report, baseline, options = {}) {
+  // `forUpdate` omits the two improvement-class checks below. --update exists to
+  // claim slack and drop earned exemptions, so refusing to run it BECAUSE slack
+  // exists is a deadlock: the failure tells you to run --update and --update
+  // refuses, quoting the same failure. It must still refuse growth.
+  const forUpdate = options.forUpdate === true;
   const ratchet = baseline?.capabilityCompleteness;
   if (!ratchet) {
     return [
@@ -129,7 +134,7 @@ export function findCompletenessRatchetFailures(report, baseline) {
     // may spend that headroom and this gate stays green. A ratchet that only
     // resists growth is a limiter; refusing to leave the headroom unclaimed is
     // what makes it a ratchet.
-    if (current < maximum) {
+    if (current < maximum && !forUpdate) {
       failures.push(
         `${plane} open gaps fell to ${current} but the baseline still allows ${maximum}; `
         + "run: node scripts/check-agent-capability-integrity.mjs --update  "
@@ -152,7 +157,7 @@ export function findCompletenessRatchetFailures(report, baseline) {
       if (!Number.isFinite(floor)) return true;
       return Number(agent.planes?.[plane]?.level ?? 0) >= floor;
     });
-    if (meetsEveryFloor) {
+    if (meetsEveryFloor && !forUpdate) {
       failures.push(
         `${agent.key} now meets every plane floor but is still grandfathered; `
         + "run: node scripts/check-agent-capability-integrity.mjs --update  "
@@ -245,7 +250,7 @@ function main() {
       process.exit(1);
     }
     if (baseline?.capabilityCompleteness) {
-      const completenessFailures = findCompletenessRatchetFailures(report, baseline);
+      const completenessFailures = findCompletenessRatchetFailures(report, baseline, { forUpdate: true });
       if (completenessFailures.length > 0) {
         console.error("[agent-capability-integrity] refusing --update: capability debt may only SHRINK.");
         for (const failure of completenessFailures) console.error(`  ${failure}`);

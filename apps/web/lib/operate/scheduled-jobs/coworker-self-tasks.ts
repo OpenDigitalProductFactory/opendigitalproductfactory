@@ -26,6 +26,7 @@ import {
 import { SCHEDULING_MAP } from "@/lib/operate/scheduled-jobs/scheduling-map";
 import { occupiedTicks, deconflictCron } from "@/lib/operate/scheduled-jobs/scheduling-allocator";
 import { computeNextCronRun } from "@/lib/operate/cron-next-run";
+import { COWORKER_STANDING_SELF_TASKS } from "./coworker-standing-self-tasks";
 
 /**
  * A coworker self-task definition. `cadence` maps the two work-producing
@@ -70,6 +71,11 @@ export const AI_PLATFORM_POSTURE_ARTICLE_TITLE_PREFIX = "AI platform posture sum
  * Keyed by agentId (the interactive coworker slug, e.g. "marketing-specialist").
  */
 export const COWORKER_SELF_TASKS: Record<string, CoworkerSelfTask> = {
+  // Entries paired with a declared work shape live in a sibling module — this
+  // file was within 51 lines of the 800-line ceiling. See
+  // coworker-standing-self-tasks.ts; the measure reads both.
+  ...COWORKER_STANDING_SELF_TASKS,
+
   "marketing-specialist": {
     title: "Refresh the acquisition campaign brief",
     prompt: [

@@ -7,6 +7,13 @@ import {
   type CertificationDeps,
 } from "./certification-runner";
 import { deriveCertificationStates } from "./certification-status";
+import { journeysForCoworker } from "./golden-journeys";
+
+// The runner tests exercise finding reopen and audit scoping, not WHICH journey a
+// coworker has. Hardcoding one made them fail the moment that coworker gained a
+// curated journey — a curation change breaking a runner test is noise, so the id
+// is derived from the registry instead.
+const COO_JOURNEY_ID = journeysForCoworker("coo")[0].journeyId;
 
 type FindingRow = { findingKey: string; status: string };
 
@@ -207,7 +214,7 @@ describe("coworker certification runner (EP-COWORKER-LIFECYCLE Phase 2)", () => 
   });
 
   it("reopens a previously resolved finding instead of duplicating it", async () => {
-    const journeyId = "coo/derived-read-probe";
+    const journeyId = COO_JOURNEY_ID;
     const { deps, created, updates } = makeDeps({
       loopContent: "Done! Everything has been updated successfully.",
       executedTools: [],
@@ -281,7 +288,7 @@ describe("governed ToolExecution evidence union (BI-68BBF206, native-mcp dispatc
     expect(deps.fetchToolEvidence).toHaveBeenCalled();
     const call = (deps.fetchToolEvidence as ReturnType<typeof vi.fn>).mock.calls[0]![0];
     // Thread naming observed live: certification:<agentId>/<journeyId>.
-    expect(call.threadId).toBe("certification:coo/derived-read-probe");
+    expect(call.threadId).toBe(`certification:${COO_JOURNEY_ID}`);
     expect(call.agentId).toBe("coo");
     expect(call.since).toBeInstanceOf(Date);
     expect(call.until).toBeInstanceOf(Date);

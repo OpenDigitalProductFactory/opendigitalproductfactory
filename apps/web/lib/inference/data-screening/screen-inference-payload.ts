@@ -7,6 +7,7 @@ import type { RequestContract } from "@/lib/routing/request-contract";
 import type { ActivityContract } from "@/lib/routing/activity-contract";
 import { isLocalProviderId } from "@/lib/routing/provider-locality";
 import { classifyInferencePayload, isVocabularyOnlyEvidence } from "./classify-payload";
+import type { MessageOrigin } from "./types";
 import { evaluateInferenceDispatchPolicy } from "./evaluate-inference-policy";
 import type {
   GovernedPayloadHint,
@@ -28,7 +29,7 @@ function dedupeMatchProvenance(
 ): InferenceMatchProvenance[] {
   const seen = new Map<string, InferenceMatchProvenance>();
   for (const row of rows) {
-    const key = `${row.dataClass}|${row.path}|${row.reason}|${row.confidence}`;
+    const key = `${row.dataClass}|${row.path}|${row.reason}|${row.confidence}|${row.origin ?? ""}`;
     if (!seen.has(key)) seen.set(key, row);
   }
   return [...seen.values()].sort((a, b) =>
@@ -50,6 +51,8 @@ export type ScreenInferencePayloadInput = {
   systemPrompt: string;
   /** Platform-authored instruction spans within `systemPrompt` (BI-463BE12A). */
   systemPromptInstructionSpans?: string[];
+  /** Positional labels for `messages` — what each one IS, never its content. */
+  messageOrigins?: readonly MessageOrigin[];
   tools?: Array<Record<string, unknown>>;
   taskType?: string;
   routeContext?: ScreenRouteContextInput;
@@ -88,6 +91,7 @@ export function screenInferencePayload(
     messages: input.messages,
     systemPrompt: input.systemPrompt,
     systemPromptInstructionSpans: input.systemPromptInstructionSpans,
+    messageOrigins: input.messageOrigins,
     tools: input.tools,
     taskType: input.taskType,
     governedData,
@@ -202,6 +206,10 @@ export function screenInferencePayload(
           path: match.path,
           reason: match.reason,
           confidence: match.confidence,
+          // A label saying WHAT the message was, so `messages[0].content` stops
+          // being ambiguous between a real turn and a block the coworker path
+          // prepended. Still no values (BI-40EF7C44).
+          ...(match.origin ? { origin: match.origin } : {}),
         })),
       ),
       // The declared route label is a floor (strongestSensitivity above), so a
