@@ -100,6 +100,24 @@ findings ledger, and an auto-remediation tee-up. The gap is not conceptual
 capability — it is that this shape was built once, for one obligation family, and
 never generalized.
 
+
+### 2.1 Self-tasks now span two modules ⟦runtime: 2026-09-02⟧
+
+`COWORKER_SELF_TASKS` reached 749 lines against an 800-line ceiling, so entries
+that pair with a declared work shape live in
+`coworker-standing-self-tasks.ts` and are spread into the original registry.
+
+A static reader has to union both: a spread is invisible to the frontmatter-style
+parser the capability measure uses, so reading only the first module would report
+every coworker declared in the second as having no recurring trigger — which the
+measure states as "any Proactivity setting is a silent no-op". `SELF_TASK_SOURCES`
+in `scripts/measure-capability-completeness.mjs` names both, with the literal to
+read from each.
+
+Each standing self-task drives the FIRST stage of its coworker's shape and nothing
+past the shape's governed gate. A self-task starts standing work; it never carries
+it through the decision a human owns.
+
 ## 3. The generalization: obligations are a family, not a feature
 
 The operator's instinct is correct — the compliance page is one instance. The

@@ -176,3 +176,31 @@ test("a baseline exactly matching reality passes — the ratchet is silent when 
 
   assert.ok(!failures.some((failure) => failure.includes("still allows")));
 });
+
+test("--update is not deadlocked by the slack it exists to claim", () => {
+  // Regression: the slack rule fires, its message says run --update, and the
+  // --update path refused on any ratchet failure — quoting that same message
+  // back. Improvement-class findings must not block the command that records
+  // the improvement.
+  const report = { agents: [agent("legacy-agent", {})] };
+
+  assert.ok(
+    findCompletenessRatchetFailures(report, baseline).some((f) => f.includes("still allows")),
+    "precondition: this fixture must report slack",
+  );
+  assert.deepEqual(
+    findCompletenessRatchetFailures(report, baseline, { forUpdate: true }),
+    [],
+    "--update must not be blocked by slack or by an earned exemption",
+  );
+});
+
+test("--update still refuses growth", () => {
+  const report = { agents: [agent("legacy-agent", { identity: 2, corpus: 2 })] };
+
+  assert.ok(
+    findCompletenessRatchetFailures(report, baseline, { forUpdate: true })
+      .some((f) => f.includes("corpus") && f.includes("grew")),
+    "growth must block --update even when improvement-class checks are suppressed",
+  );
+});
