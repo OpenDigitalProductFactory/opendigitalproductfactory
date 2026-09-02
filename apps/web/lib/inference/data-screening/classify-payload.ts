@@ -618,6 +618,30 @@ function isInstructionProvenance(match: InferencePayloadMatch): boolean {
 }
 
 /**
+ * True when the DATA evidence is nothing but corroboration-gated vocabulary —
+ * a domain was named and no value was found.
+ *
+ * The distinction matters at the routing seam. A mask obligation exists to
+ * redact something before it leaves the boundary; when the only evidence is the
+ * word "payroll", there is no span to redact, so masking is a no-op and
+ * clamping the turn to local-only protects nothing while making the coworker
+ * unreachable for its own subject (BI-67CAF494).
+ *
+ * Deliberately strict: ONE precise match, or any declared governed hint, and
+ * this is false. It answers "is there anything here to mask?", not "is this
+ * probably fine?".
+ */
+export function isVocabularyOnlyEvidence(
+  matches: readonly InferencePayloadMatch[],
+  governedData?: readonly GovernedPayloadHint[],
+): boolean {
+  if (governedData && governedData.length > 0) return false;
+  const dataMatches = matches.filter((match) => !isInstructionProvenance(match));
+  if (dataMatches.length === 0) return false;
+  return dataMatches.every((match) => AMBIGUOUS_REASONS.has(match.reason));
+}
+
+/**
  * Split the prompt into instruction spans and the data remainder.
  *
  * Spans are matched literally and every occurrence is removed, so a block that
