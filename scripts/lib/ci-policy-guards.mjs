@@ -505,6 +505,11 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/root-clone-refresh.test.mjs",
         "scripts/lib/compose-safety.test.mjs",
         "scripts/lib/local-integration-ci.test.mjs",
+        // BI-ECAE03F7: the supervisor that fences a long gate run was
+        // allowlisted OUT of CI, so nothing enforced its behaviour while it
+        // destroyed run after run. The allowlist is shrink-only and its own
+        // header prefers inventory listing; this is that move.
+        "scripts/lib/lease-supervisor.test.mjs",
         "scripts/lib/local-convergence-lock.test.mjs",
         "scripts/lib/sandbox-freshness.test.mjs",
         "scripts/sandbox-freshness-preflight.test.mjs",
