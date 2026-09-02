@@ -62,6 +62,13 @@ describe("validateFederatedWorkPageV1", () => {
     expect(validateFederatedWorkPageV1(page())).toEqual([]);
   });
 
+  it("accepts prose-length proposedOutcome and resolution — real rows carry paragraphs, not tokens", () => {
+    // The first live pull from production was refused on items[125].proposedOutcome
+    // because the field was capped like a closed-vocabulary facet.
+    const item = { ...page().items[0]!, proposedOutcome: "x".repeat(2_000), resolution: "y".repeat(5_000) };
+    expect(validateFederatedWorkPageV1(page({ items: [item] }))).toEqual([]);
+  });
+
   it("refuses the sensitivity tiers that never leave an installation", () => {
     const item = { ...page().items[0]!, sensitivity: "confidential" };
     expect(validateFederatedWorkPageV1(page({ items: [item] }))).toContain("items[0].sensitivity:local-only");

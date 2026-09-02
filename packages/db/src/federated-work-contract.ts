@@ -157,7 +157,7 @@ export function validateFederatedWorkEpicV1(value: unknown, path = "epic"): stri
   if (!isRecord(value)) return [`${path}:not-an-object`];
   const violations: string[] = [];
   if (!isNonEmptyString(value.epicId, 160) || !SEMANTIC_ID.test(value.epicId as string)) violations.push(`${path}.epicId:invalid`);
-  if (!isNonEmptyString(value.title)) violations.push(`${path}.title:invalid`);
+  if (!isNonEmptyString(value.title, 20_000)) violations.push(`${path}.title:invalid`);
   if (!isNullableString(value.description)) violations.push(`${path}.description:invalid`);
   if (!isNonEmptyString(value.status, 40)) violations.push(`${path}.status:invalid`);
   if (!isNullableInt(value.priority)) violations.push(`${path}.priority:invalid`);
@@ -172,15 +172,19 @@ export function validateFederatedWorkItemV1(value: unknown, path = "item"): stri
   if (!isRecord(value)) return [`${path}:not-an-object`];
   const violations: string[] = [];
   if (!isNonEmptyString(value.itemId, 160) || !SEMANTIC_ID.test(value.itemId as string)) violations.push(`${path}.itemId:invalid`);
-  if (!isNonEmptyString(value.title)) violations.push(`${path}.title:invalid`);
+  if (!isNonEmptyString(value.title, 20_000)) violations.push(`${path}.title:invalid`);
   if (!isNonEmptyString(value.status, 40)) violations.push(`${path}.status:invalid`);
   if (!isNonEmptyString(value.type, 40)) violations.push(`${path}.type:invalid`);
   if (!isNullableString(value.body)) violations.push(`${path}.body:invalid`);
   if (!isNullableInt(value.priority)) violations.push(`${path}.priority:invalid`);
-  for (const key of ["workType", "triageOutcome", "effortSize", "proposedOutcome", "source", "scopeKind"] as const) {
-    if (!isNullableString(value[key], 80)) violations.push(`${path}.${key}:invalid`);
+  // Closed-vocabulary facets stay short. `proposedOutcome` and `resolution` are
+  // prose an operator or coworker typed — the first live pull from production
+  // was refused on an item whose proposedOutcome ran past an 80-character cap.
+  for (const key of ["workType", "triageOutcome", "effortSize", "source", "scopeKind"] as const) {
+    if (!isNullableString(value[key], 200)) violations.push(`${path}.${key}:invalid`);
   }
-  if (!isNullableString(value.resolution, 20_000)) violations.push(`${path}.resolution:invalid`);
+  if (!isNullableString(value.proposedOutcome)) violations.push(`${path}.proposedOutcome:invalid`);
+  if (!isNullableString(value.resolution)) violations.push(`${path}.resolution:invalid`);
   if (!isNonEmptyString(value.sensitivity, 40)) violations.push(`${path}.sensitivity:invalid`);
   else if ((FEDERATED_WORK_LOCAL_ONLY_SENSITIVITIES as readonly string[]).includes(value.sensitivity as string)) {
     violations.push(`${path}.sensitivity:local-only`);
