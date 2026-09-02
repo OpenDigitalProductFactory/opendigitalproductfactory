@@ -64,12 +64,30 @@ export interface ChainVerification {
     | null;
 }
 
-const PEM_BLOCK = /-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/g;
+const PEM_BEGIN = "-----BEGIN CERTIFICATE-----";
+const PEM_END = "-----END CERTIFICATE-----";
 
-/** Split a PEM bundle (or an array of PEMs) into individual certificate PEMs. */
+/** Split a PEM bundle (or an array of PEMs) into individual certificate PEMs.
+ *  A line scanner, not a regex: the input is peer-supplied, and a backtracking
+ *  pattern over it would be a denial-of-service lever (js/polynomial-redos). */
 export function splitPemChain(input: string | readonly string[]): string[] {
   const text = Array.isArray(input) ? input.join("\n") : String(input);
-  return text.match(PEM_BLOCK) ?? [];
+  const blocks: string[] = [];
+  let current: string[] | null = null;
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (line === PEM_BEGIN) {
+      current = [line];
+      continue;
+    }
+    if (current === null) continue;
+    current.push(line);
+    if (line === PEM_END) {
+      blocks.push(current.join("\n"));
+      current = null;
+    }
+  }
+  return blocks;
 }
 
 function parse(pem: string): X509Certificate | null {
