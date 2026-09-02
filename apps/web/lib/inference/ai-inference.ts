@@ -144,6 +144,17 @@ export class InferenceError extends Error {
     public readonly headers?: Record<string, string>,
     public readonly rawBody?: string,
     public readonly capacity?: ProviderCapacityClassification,
+    /**
+     * True when a LOCAL pool check refused the call before it left the process,
+     * because the pool is known-saturated until a known reset time.
+     *
+     * This is not an upstream 429. Nothing was asked of the provider, and
+     * waiting on this endpoint cannot make it answer sooner — the reset is
+     * wall-clock. The fallback chain uses this to skip its wait-and-retry and
+     * move to the next provider immediately, which is what the pool check was
+     * always trying to cause (BI-52C6FE5A).
+     */
+    public readonly localPoolExhausted?: boolean,
   ) {
     super(message);
     this.name = "InferenceError";
@@ -586,6 +597,11 @@ export async function callProvider(
         `${cliAdapterType} pool exhausted — resets in ~${waitSecs}s (EP-COST pool check)`,
         "rate_limit",
         providerId,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        true, // localPoolExhausted — fall through, do not wait on this endpoint
       );
     }
   }

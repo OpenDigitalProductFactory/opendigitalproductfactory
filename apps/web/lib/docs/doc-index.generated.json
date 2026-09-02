@@ -9108,6 +9108,7 @@
         "non-goals",
         "4-design",
         "41-runtime-circuit-breaker-and-retry-budget",
+        "41a-local-pool-refusal-is-not-an-upstream-rate-limit-implemented",
         "42-error-classification-and-remediation-propagation",
         "43-failure-observability",
         "44-tool-surface-scoping",
