@@ -101,6 +101,18 @@ Independent of the others. May land at any point; it is listed last only because
 
 **Rollback.** Delete the check; no runtime behaviour depends on it.
 
+### Implementation record (2026-08-29)
+
+Shipped as `apps/web/lib/communications/channel-parity.ts` + `channel-parity.test.ts`.
+
+Two deviations from the sketch above, both deliberate.
+
+**The invariant is enforced at compile time, not only by a test.** `CHANNEL_IMPLEMENTATION` is a `Record<CommunicationChannel, ChannelImplementation>`, so widening `COMMUNICATION_CHANNELS` fails `pnpm --filter web build` until the new channel is classified. That is stronger than the planned assertion and needs no startup throw, so the concern about blocking boot on an unconfigured install does not arise. The runtime test remains as a backstop against a type assertion widening the enum past the Record.
+
+**"Implemented" and "registered" are separate axes.** The plan spoke of "a registered adapter or an explicit not-yet-implemented marker", but those collapse two different questions. Whether an adapter exists is a property of the tree; whether it is active is a property of this install's configuration. `describeChannelAvailability(channel, registeredChannels)` returns `available` / `not-configured` / `not-implemented` so a surface can distinguish "email works once you add Postmark" from "Slack does not exist yet". The integrations page currently lists Slack beside working channels with nothing to separate them; this is the contract that lets it stop.
+
+`intent` on an unimplemented channel is prose, and a test asserts it never contains a `BI-`/`EP-` identifier. A hardcoded backlog id is install-local data that dangles on a fresh install and after every reset — the defect PR #4877 fixed in the integration coverage matrix. Naming the work instead is the same discipline applied here.
+
 ### BI-1DBE64A4 — register the email adapter
 
 **Deliverable.** `createEmailAdapter` is registered in `apps/web/lib/queue/notification-adapter.ts` when Postmark configuration is present.
