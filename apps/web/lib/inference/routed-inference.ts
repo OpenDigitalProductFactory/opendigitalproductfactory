@@ -81,7 +81,6 @@ export interface RoutedInferenceResult {
    * assert both at once. See ./downgrade-explanation.ts (BI-F4D3B9E9d).
    */
   downgradeReason: "provider-unavailable" | "not-eligible" | null;
-  /** The constraint the banner named, so copy below it cannot contradict it (BI-FB184D69). */
   downgradeCause?: DowngradeCause | null;
   /** True when tools were stripped due to capability degradation (local model). */
   toolsStripped: boolean;
@@ -202,6 +201,7 @@ async function prepareRoute(
     messages,
     systemPrompt,
     systemPromptInstructionSpans: options?.systemPromptInstructionSpans,
+    messageOrigins: options?.messageOrigins,
     tools: options?.tools,
     taskType,
     routeContext: initialRouteContext,

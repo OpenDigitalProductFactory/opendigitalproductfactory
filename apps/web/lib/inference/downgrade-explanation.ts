@@ -20,7 +20,13 @@
 // Reads only routing metadata (statuses, reason strings, endpoint names) — never
 // prompts, tool payloads, credentials, or detected values.
 
-/** Plain-language cause classes, derived from `getExclusionReasonV2` output. */
+/**
+ * Plain-language cause classes, derived from `getExclusionReasonV2` output.
+ *
+ * Carried on `RoutedInferenceResult.downgradeCause` so the copy printed BELOW a
+ * downgrade banner argues from the constraint the banner actually named, rather
+ * than re-deriving it and contradicting it (BI-FB184D69).
+ */
 export type DowngradeCause =
   | "context-window"
   | "capability"

@@ -3,6 +3,7 @@
 // This is the core behavioral difference between a chatbot and an agent.
 import { routeAndCall, type RouteAndCallOptions, type RoutedInferenceResult } from "@/lib/routed-inference";
 import type { DowngradeCause } from "@/lib/inference/downgrade-explanation";
+import type { MessageOrigin } from "@/lib/inference/data-screening/types";
 import {
   detectRepeatedToolCall,
   detectApproachingRepeatedToolCall,
@@ -1012,6 +1013,8 @@ export type RunAgenticLoopParams = {
   systemPrompt: string;
   /** Instruction spans in `systemPrompt`; see RouteAndCallOptions (BI-463BE12A). */
   systemPromptInstructionSpans?: string[];
+  /** What each `chatHistory` entry is — labels only (BI-40EF7C44). */
+  messageOrigins?: readonly MessageOrigin[];
   sensitivity: import("@/lib/agent-sensitivity").RouteSensitivity;
   tools: ToolDefinition[];
   toolsForProvider: Array<Record<string, unknown>> | undefined;
@@ -1167,6 +1170,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     chatHistory,
     systemPrompt,
     systemPromptInstructionSpans,
+    messageOrigins,
     sensitivity,
     tools,
     toolsForProvider,
@@ -1258,6 +1262,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
   const routeOptions: RouteAndCallOptions = {
     ...(toolsForProvider ? { tools: toolsForProvider } : {}),
     ...(systemPromptInstructionSpans?.length ? { systemPromptInstructionSpans } : {}),
+    ...(messageOrigins?.length ? { messageOrigins } : {}),
     taskType: turnRoute.taskType,
     ...effectiveConfig,
     ...(requireTools ? { requireTools: true } : {}),
