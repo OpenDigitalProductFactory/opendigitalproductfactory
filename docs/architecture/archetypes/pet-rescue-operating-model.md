@@ -340,6 +340,65 @@ rather than nothing. **The two recorded gifts still carry `GBP`** — the platfo
 rewrite the currency of an amount someone gave, so correcting them is the operator's call.
 *A metric that was honest while empty has not been measured. Populate it before scoring it.*
 
+## 6c. Re-run after the operating-day fixes — measured 2026-09-01
+
+§6b measured the day before any of it was fixed. This is the same ten steps, same install, run
+after the tranche-1 fixes shipped and were deployed. Install `v2026.09.01`, serving `52ab1d0db4`,
+founder account plus the public path signed out, at 768×1024.
+
+**Operability 0.40** — of ten steps, **0 completed, 8 partial, 2 impossible**. It was **0.30** on
+2026-08-26 (0 completed, 6 partial, 4 impossible). **Coverage is unchanged at 0.05.**
+
+| Step | 08-26 | 09-01 | What moved, or did not |
+|---|---|---|---|
+| 08:00 stray intake | partial | partial | Measured absent again: no microchip, finder, hold-clock or housing field. What changed is that what *was* typed is now correctable, and Delete asks first |
+| 09:00 owner surrender | partial | partial | Still one admission path; no pathway, ownership transfer or reason code |
+| 09:30 rounds | impossible | impossible | No round, care record or medication log |
+| 10:00 medical | impossible | **partial** | A `New event` control now exists, so a slot can be recorded. Still no vaccination record and no booster dates |
+| 11:00 walk-in adopter | partial | partial | A hold still shows without reason or date, and still blocks nothing |
+| 12:00 publish and share | partial | partial | **Zero per-animal URLs, zero listing filters.** The archetype's primary acquisition channel is still unreachable |
+| 13:00 found-pet call | impossible | **partial** | The caller gets through: the contact form takes name, email, **phone** and message with no donation. Searching intake records is still impossible |
+| 14:00 foster placement | impossible | impossible | No placement, supplies or return date |
+| 15:00 adoption | partial | partial | Outcome still untyped; no contract, fee or chip re-registration |
+| 16:00 numbers | partial | partial | Outcomes and donations now readable; kennels-free still unanswerable; intakes still not recorded as intakes |
+
+**The delta is +0.10, and it is honest about its size.** Two steps moved impossible → partial.
+Nothing reached *completed*, and nothing will until an animal can exist independently of a
+storefront listing (`BI-4F8A484C`). The tranche removed ways the product misled or obstructed the
+operator; it did not add the records the day is made of. That is precisely why coverage did not
+move, and why the two numbers are reported apart.
+
+**Confirmed fixed, each measured rather than asserted:**
+
+- The public contact form reads `Full name*, Email*, Phone, Message`. The required donation is
+  gone and the phone number a found-pet caller must leave is back.
+- The inbox reads **"6 things need you today"** with **zero** "Help your coworker continue?"
+  cards. It was 42 items, 34 of them identical platform runs.
+- Six **Details** disclosures on the animals page — breed, age, sex, size and description are
+  correctable after creation.
+- The value-stream strip renders **zero chevrons**; unobservable stages show a dash.
+- The Simple/Full toggle is **visible and clickable at 768px**, where it previously measured 0×0.
+- `DONATIONS RECEIVED` now reads **`£75 · $10 · 3 gifts · kept apart by currency`**. It read
+  `Unavailable` on 2026-08-27 because a hardcoded default recorded USD gifts as GBP; the writer
+  was corrected and the tile now totals each currency instead of refusing outright. Worth
+  recording: the refusal was always correct behaviour — the defect was upstream of it.
+
+**Still measured absent, and the reason:** no volunteer or foster-carer worker class on the People
+surface, no ward or foster-home work location, and no rescue role. The archetype declares all of
+them; the seeder that applies them read a cuid where a slug was required and therefore seeded
+nothing. That is the fix in this change.
+
+**The AI roster still has no animal-welfare specialist** (`BI-DC11C687`), and the attempt to add
+one is worth recording because it names the real cost. A coworker is not a registry row: the
+lifecycle conformance gate refused it for having no `AGENT_MODEL_CONFIG_DEFAULTS` floor — *"no
+minimum model tier, so a weak local model can serve it"* — and the capability measure refused it
+for sitting at corpus level 1, *bound to a family that has no corpus pages*. Reaching level 3 needs
+a `docs/professions/animal-welfare-operations/` craft corpus, the way `agricultural-operations`
+carries four pages for the farm-ranch steward. That corpus is the work, and it is its own piece.
+The eight roles therefore summon the general coworkers for now, and a test asserts they roster only
+coworkers that actually exist rather than a ghost. *The gate was right to refuse: a specialist with
+no craft corpus and no model floor is a name, not expertise.*
+
 ### What the run found that §6 could not
 
 Three findings sit outside the thirty entities entirely, and each alone prevents the business
