@@ -20,7 +20,13 @@ status: active
 
 ## Slice 2 — membership-proof pairing (§5.6)
 
-Signed enrolment statement with the member's authority certificate, chain verified against the pinned organization root at the message layer; link born trusted on both sides; `authority_portal_url` in the join package; boot-time enrolment with the authority; introductions over the trusted link.
+1. `membership-proof.ts` (pure): PEM chain split, signature-verified chain to the pinned root with validity windows, canonical statement signed and verified with the certificate's own keypair; freshness, audience and organization checks. Fixtures: a test organization CA, a member leaf, a foreign CA and a stranger leaf (`membership-fixtures.ts`, keys as PKCS8 DER, test-only).
+2. `enrollment.ts`: `createFederationLinkRow` factored out so the invitation path (born pending) and the membership path (born trusted) share one row shape.
+3. `organization-membership.ts` (runtime): read `/dpf-state/pki/{root_ca.crt,authority.crt,authority.key}`; build/sign our proof; verify a peer's; create the trusted link with `confirmationProvenance: "organization-trust"`; member-side `enrolWithOrganizationAuthority` with mutual proof; `reconcileOrganizationMembership` on the federation tick, deriving the authority host from the imported join package's `ca_url` and our own address from its `intended_hostname`.
+4. `POST /api/v1/federation/enroll/organization` (private-mesh), no bearer token — the proof is the credential.
+5. Tests for every branch; operations doc.
+
+Precondition on the live pair: a join file created on the authority and imported on the member (the act of membership). Neither install has done it yet.
 
 ## Slice 3 — health line (§5.7) and schema-derived validator bounds
 
