@@ -33,6 +33,7 @@ import {
 import { assertScheduledResearchCapability, resolveScheduledTurnExternalAccess } from "@/lib/tak/scheduled-external-access";
 import { resolveUserAwareProactivityPlan } from "@/lib/proactivity/proactivity-resolver.server";
 import { resolveDelegatedPosture } from "@/lib/proactivity/delegated-posture";
+import { resolveScheduledTickPlan } from "@/lib/scheduling/scheduled-work-posture.server";
 import { applyProviderRouteModelPreference } from "@/lib/ai-provider-route-context";
 import {
   isCoworkerSelfTaskId,
@@ -430,13 +431,15 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       },
     });
 
-    const proactivity = await resolveUserAwareProactivityPlan({
+    // BI-27C8484F: the identity ladder, then MOVED by the room's ladder when this
+    // job serves a Workroom — its declaration, the work's shape, and the
+    // obligation this tick races. A job serving no room resolves exactly as before.
+    const { plan: proactivity } = await resolveScheduledTickPlan({
       userId: task.ownerUserId,
-      input: {
-        activityFamily: "scheduled-task",
-        agentId: task.agentId,
-        routeContext: task.routeContext,
-      },
+      taskConfig: task.taskConfig,
+      agentId: task.agentId,
+      routeContext: task.routeContext,
+      now: new Date(),
     });
     resolvedPlan = proactivity;
 
