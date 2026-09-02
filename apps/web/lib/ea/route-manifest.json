@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 642,
+  "routeCount": 643,
   "routes": [
     {
       "routePath": "/",
@@ -2731,6 +2731,19 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/api/v1/federation/proposal/route.ts"
+    },
+    {
+      "routePath": "/api/v1/federation/work",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "federation",
+        "work"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/federation/work/route.ts",
+      "exposure": "private-mesh"
     },
     {
       "routePath": "/api/v1/finance/assets",

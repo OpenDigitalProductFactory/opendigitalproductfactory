@@ -7135,6 +7135,14 @@
     "longSentences": 1,
     "textMass": 78
   },
+  "apps/web/components/ops/WorkSyncPanel.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 30
+  },
   "apps/web/components/ops/backlog-form-assist.ts": {
     "vocabulary": 0,
     "retiredVocabulary": 0,

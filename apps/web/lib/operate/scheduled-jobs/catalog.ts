@@ -192,7 +192,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     inngestId: "federation/demand-reconciliation",
     name: "Federated demand reconciliation",
     purpose:
-      "Projects approved same-organization platform demand, retries durable peer delivery, and withdraws records that leave the approved scope.",
+      "Projects approved same-organization platform demand, retries durable peer delivery, withdraws records that leave the approved scope, and pulls every same-organization peer's backlog into local read-only mirrors (work sync).",
     cron: "1,6,11,16,21,26,31,36,41,46,51,56 * * * *",
     cadence: "Every 5 minutes, offset by 1 minute",
     category: "core",

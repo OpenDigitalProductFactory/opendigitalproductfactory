@@ -60,11 +60,35 @@ demand to the other. This is what lets a link reach `trusted` on **both** sides
 would leave the connecting side stuck at `pending`.
 
 This is not multi-master backlog replication. Each source backlog item remains
-single-writer authoritative. A peer receives a versioned mirror that it can
-follow, respond to, or adopt as separately owned local work. Status, priority,
-estimate, build state, private planning, discussion, attachments, and customer
-context are not remotely overwritten. Either installation can pause or revoke
-its link, and expanding the projection requires approval on both sides.
+single-writer authoritative. Either installation can pause or revoke its link,
+and expanding the projection requires approval on both sides.
+
+### Backlog sync between your own installations
+
+Approved `same-organization` connections also keep each other's **backlog** in
+step. Every five minutes each installation pulls the other's share-safe backlog
+items and epics and stores them as read-only rows in its own backlog, under the
+same `BI-*` / `EP-*` ids. So a development installation shows the production
+backlog it is meant to evolve, and the work a development installation files
+is already on production before the development box is torn down.
+
+- An item is changed only on the installation that created it; the copy follows
+  on the next cycle, and a local edit to a copy is overwritten.
+- Items marked `confidential` or `restricted` never leave their installation.
+- If the source retires or deletes an item, the copy is retired.
+- A copy carries a final body line `[origin:federatedWork:<installation>:<id>]`.
+  That line is what keeps the copy from being shared onward, re-copied, or
+  triaged here.
+- **Operate → Delivery Flow** shows, per connection, how many items are
+  mirrored, when the last copy landed, and whether any item shares an id with
+  work created locally (those are left alone until the local one is renamed or
+  retired).
+- If a connection shows "Waiting for first copy" for more than ten minutes, the
+  other installation is running a platform version that predates backlog sync.
+  Upgrade it from its own **Operate → Self-upgrade**.
+
+Demand sharing (above) is separate: a copy of a backlog item is not "demand"
+to follow or adopt, and adopted demand is still owned by whoever adopted it.
 
 ## Customer and reseller operation
 
