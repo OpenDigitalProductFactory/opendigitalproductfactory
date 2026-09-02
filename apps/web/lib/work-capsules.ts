@@ -593,6 +593,27 @@ function normalizeWorkShapeRef(value: unknown): string | null {
   return trimmed;
 }
 
+/**
+ * The `scopeClaims` entries a room is convened WITH. Both shapes ride this one
+ * JSON column rather than a column each — no migration, and existing readers
+ * strictly filter entries they do not recognize, so an unknown claim is inert
+ * rather than breaking them.
+ *
+ * `workroomShape` says who must be in the room for one consequential act;
+ * `workShape` says what wakes the room at all. Composed here, beside the
+ * normalizer that validates them, rather than inline at the write site.
+ */
+export function buildWorkCapsuleScopeClaims(
+  scope: Pick<NormalizedWorkCapsuleScope, "workroomShape" | "workShape">,
+  now: Date,
+): Array<Record<string, string>> {
+  const recordedAt = now.toISOString();
+  const claims: Array<Record<string, string>> = [];
+  if (scope.workroomShape) claims.push({ workroomShape: scope.workroomShape, recordedAt });
+  if (scope.workShape) claims.push({ workShape: scope.workShape, recordedAt });
+  return claims;
+}
+
 export function normalizeWorkCapsuleScopeInput(input?: WorkCapsuleScopeInput | null): NormalizedWorkCapsuleScope {
   return {
     decisionScope: normalizeDecisionScope(input?.decisionScope),

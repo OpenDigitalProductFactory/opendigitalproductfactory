@@ -8,7 +8,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { normalizeWorkCapsuleScopeInput } from "../work-capsules";
+import { buildWorkCapsuleScopeClaims, normalizeWorkCapsuleScopeInput } from "../work-capsules";
 import { DEPENDENCY_ADVISORY_WATCH_SHAPE_KEY } from "./standing-operations-shapes";
 import { getWorkShape } from "./work-shapes";
 import { readWorkShapeClaim, resolveWorkShapeClaim } from "./workroom-shape-claim";
@@ -50,14 +50,15 @@ describe("declaring a room's activity shape", () => {
 });
 
 describe("the claim the store writes is the claim the drive reads", () => {
-  /** The scopeClaims array exactly as createWorkCapsule composes it. */
+  /**
+   * The production composer, not a re-implementation of it. A test that rebuilds
+   * the claim array itself would keep passing after the real one broke.
+   */
   function scopeClaimsFor(input: { workroomShape?: string; workShape?: string }): unknown[] {
-    const scope = normalizeWorkCapsuleScopeInput(input);
-    const recordedAt = new Date("2026-09-02T00:00:00.000Z").toISOString();
-    return [
-      ...(scope.workroomShape ? [{ workroomShape: scope.workroomShape, recordedAt }] : []),
-      ...(scope.workShape ? [{ workShape: scope.workShape, recordedAt }] : []),
-    ];
+    return buildWorkCapsuleScopeClaims(
+      normalizeWorkCapsuleScopeInput(input),
+      new Date("2026-09-02T00:00:00.000Z"),
+    );
   }
 
   it("round-trips through the reader the drive uses", () => {
