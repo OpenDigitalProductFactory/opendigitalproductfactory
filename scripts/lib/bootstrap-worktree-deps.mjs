@@ -150,7 +150,15 @@ function run(cmd, args, cwd, opts = {}) {
 // parser mis-read the section headers and hint lines as package names, so an
 // operator who correctly classified a build (moving it to the Explicitly
 // section) could never converge the gate.
-export function classifyIgnoredBuilds(stdout) {
+//
+// Section membership is not the whole answer, though. pnpm only files a package
+// under "Explicitly ignored" when the decision was recorded as
+// pnpm.ignoredBuiltDependencies. This repo records its build decisions in
+// pnpm-workspace.yaml `allowBuilds:`, and pnpm still prints those under
+// "Automatically ignored" — so a worktree honouring `puppeteer: false` was read
+// as UNDECIDED and refused, blocking every code push from a fresh worktree
+// (BI-27DECD71). Pass the workspace's decisions in and they are excluded.
+export function classifyIgnoredBuilds(stdout, decidedPackages = new Set()) {
   const packages = [];
   let inUnclassifiedSection = false;
   for (const raw of String(stdout ?? "").split(/\r?\n/)) {
@@ -168,7 +176,48 @@ export function classifyIgnoredBuilds(stdout) {
     if (!entry || /^none\.?$/i.test(entry) || /^hint:/i.test(entry)) continue;
     packages.push(entry);
   }
-  return { ok: packages.length === 0, packages };
+  const undecided = packages.filter((entry) => !decidedPackages.has(packageNameOf(entry)));
+  return { ok: undecided.length === 0, packages: undecided };
+}
+
+/** Bare package name, without the version or pnpm's peer-resolution suffix. */
+function packageNameOf(entry) {
+  return splitPackageVersion(String(entry).replace(/\(.*\)$/, "")).packageName;
+}
+
+/**
+ * Packages this workspace has already decided about, from `pnpm-workspace.yaml`'s
+ * `allowBuilds:` block. Both values count as decided: `true` is built and never
+ * shows up as ignored, `false` is ignored deliberately.
+ *
+ * Fail-safe: an absent, malformed or unreadable block decides nothing, leaving
+ * the gate exactly as strict as it was before.
+ */
+export function readAllowBuildsDecisions(opts = {}) {
+  const decided = new Set();
+  let text;
+  try {
+    text =
+      typeof opts.readFile === "function"
+        ? opts.readFile()
+        : readFileSync(`${opts.worktreePath ?? "."}/pnpm-workspace.yaml`, "utf8");
+  } catch {
+    return decided;
+  }
+
+  let inBlock = false;
+  for (const raw of String(text ?? "").split(/\r?\n/)) {
+    if (/^\s*(#.*)?$/.test(raw)) continue; // blank and comment lines never close the block
+    if (/^\S/.test(raw)) {
+      inBlock = /^allowBuilds\s*:/.test(raw);
+      continue;
+    }
+    if (!inBlock) continue;
+    // `  '@scarf/scarf': false` or `  esbuild: true`
+    const match = /^\s+(['"]?)(.+?)\1\s*:\s*(true|false)\s*$/.exec(raw);
+    if (match) decided.add(match[2].trim());
+  }
+  return decided;
 }
 
 export function dependencyPolicyReviewKey({ baseSha, packageName, version, errorCode }) {
@@ -279,7 +328,10 @@ export function probeWorktreeReadiness(worktreePath, opts = {}) {
   const depProbeOk = Boolean(runner?.ok && runner.run(["ls", "--depth", "-1"]).ok);
   const ignoredBuildResult = depProbeOk ? runner.run(["ignored-builds"]) : null;
   const ignoredBuilds = ignoredBuildResult?.ok
-    ? classifyIgnoredBuilds(ignoredBuildResult.stdout)
+    ? classifyIgnoredBuilds(
+        ignoredBuildResult.stdout,
+        readAllowBuildsDecisions({ worktreePath }),
+      )
     : { ok: false, packages: [] };
   const gitResult = (opts.execute ?? executeCommand)("git", ["rev-parse", "HEAD"], worktreePath, opts);
   const baseSha = gitResult.ok ? String(gitResult.stdout ?? "").trim() : "unknown-base";

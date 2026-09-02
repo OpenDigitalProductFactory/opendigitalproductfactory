@@ -16,6 +16,7 @@ import {
   bootstrapWorktreeDeps,
   resolvePinnedPnpmInvocation,
   classifyIgnoredBuilds,
+  readAllowBuildsDecisions,
   dependencyPolicyReviewKey,
 } from "./bootstrap-worktree-deps.mjs";
 
@@ -340,4 +341,87 @@ test("the install decision is driven by measured readiness, not by existsSync", 
     .filter((line) => !line.trimStart().startsWith("//") && !line.trimStart().startsWith("*"))
     .filter((line) => /if\s*\(\s*!exists\s*\(/.test(line));
   assert.deepEqual(offending, [], "bootstrapWorktreeDeps must gate its install on probeWorktreeReadiness, not existsSync");
+});
+
+test("a build the workspace decided about is classified, wherever pnpm prints it", () => {
+  // pnpm only files a package under "Explicitly ignored" when the decision was
+  // recorded as pnpm.ignoredBuiltDependencies. This repo records its decisions
+  // in pnpm-workspace.yaml `allowBuilds:`, so pnpm still prints those under
+  // "Automatically ignored" — and the gate read that as undecided, refusing a
+  // worktree that was doing exactly what policy asked (BI-27DECD71).
+  const stdout = [
+    "Automatically ignored builds during installation:",
+    "  puppeteer@25.7.0(yauzl@2.10.0)",
+    "  unrs-resolver@1.2.3",
+    "hint: To allow the execution of build scripts for a package, add its name to \"pnpm.onlyBuiltDependencies\".",
+  ].join("\n");
+
+  const decided = new Set(["puppeteer", "unrs-resolver"]);
+  assert.deepEqual(classifyIgnoredBuilds(stdout, decided), { ok: true, packages: [] });
+});
+
+test("a build nobody decided about still fails closed, even alongside decided ones", () => {
+  const stdout = [
+    "Automatically ignored builds during installation:",
+    "  puppeteer@25.7.0(yauzl@2.10.0)",
+    "  some-new-dep@0.1.0",
+  ].join("\n");
+
+  assert.deepEqual(classifyIgnoredBuilds(stdout, new Set(["puppeteer"])), {
+    ok: false,
+    packages: ["some-new-dep@0.1.0"],
+  });
+});
+
+test("matching strips the version and peer suffix, and handles scoped names", () => {
+  const stdout = [
+    "Automatically ignored builds during installation:",
+    "  @scope/pkg@2.0.0(peer@1.0.0)",
+  ].join("\n");
+
+  assert.deepEqual(classifyIgnoredBuilds(stdout, new Set(["@scope/pkg"])), {
+    ok: true,
+    packages: [],
+  });
+});
+
+test("with no decisions supplied the parser behaves exactly as before", () => {
+  const stdout = ["Automatically ignored builds during installation:", "  sharp@1.2.3"].join("\n");
+  assert.deepEqual(classifyIgnoredBuilds(stdout), { ok: false, packages: ["sharp@1.2.3"] });
+});
+
+test("readAllowBuildsDecisions reads every package the workspace decided, true or false", () => {
+  const yaml = [
+    "minimumReleaseAge: 1440",
+    "allowBuilds:",
+    "  '@prisma/client': true",
+    "  '@scarf/scarf': false",
+    "  esbuild: true",
+    "  puppeteer: false",
+    "packageExtensions:",
+    "  '@testing-library/jest-dom':",
+    "    peerDependencies:",
+    "      vitest: '*'",
+  ].join("\n");
+
+  const decided = readAllowBuildsDecisions({ readFile: () => yaml });
+  assert.deepEqual(
+    [...decided].sort(),
+    ["@prisma/client", "@scarf/scarf", "esbuild", "puppeteer"].sort(),
+  );
+  // The block ends at the next top-level key — nothing from packageExtensions leaks in.
+  assert.equal(decided.has("@testing-library/jest-dom"), false);
+  assert.equal(decided.has("vitest"), false);
+});
+
+test("readAllowBuildsDecisions is fail-safe: an unreadable or absent block decides nothing", () => {
+  assert.equal(readAllowBuildsDecisions({ readFile: () => "minimumReleaseAge: 1440" }).size, 0);
+  assert.equal(
+    readAllowBuildsDecisions({
+      readFile: () => {
+        throw new Error("ENOENT");
+      },
+    }).size,
+    0,
+  );
 });
