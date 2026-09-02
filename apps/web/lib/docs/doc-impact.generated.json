@@ -1548,6 +1548,9 @@
     "scripts/check-build-namespace.mjs": [
       "docs/architecture/build-studio-namespace.md"
     ],
+    "scripts/check-build-script-policy.mjs": [
+      "docs/architecture/build-gate-runbook.md"
+    ],
     "scripts/check-build-studio-surface-budget.mjs": [
       "docs/architecture/build-studio-namespace.md"
     ],
@@ -2329,6 +2332,7 @@
       "apps/web/lib/build/coding-agent.ts",
       "apps/web/lib/queue/functions/build-review-verification.ts",
       "pnpm-lock.yaml",
+      "scripts/check-build-script-policy.mjs",
       "scripts/lib/bootstrap-worktree-deps.mjs",
       "scripts/lib/dco-signoff.mjs",
       "scripts/pre-push-dco-check.mjs",
