@@ -2213,6 +2213,17 @@
       "axeViolations": 2,
       "ariaSnapshot": "- link\n- banner\n  - link\n    - text\n    - paragraph\n      - text\n  - button\n  - text\n  - button\n- complementary\n  - navigation\n    - group\n      - button\n      - button [pressed]\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n- main\n  - heading [level=1]\n  - paragraph\n    - text\n  - region\n    - text\n    - searchbox\n    - text\n    - combobox\n      - option [selected]\n      - option\n    - group\n      - button\n        - text\n      - text\n      - combobox\n        - option [selected]\n        - option\n      - text\n      - combobox\n        - option [selected]\n        - option\n      - text\n      - combobox\n        - option [selected]\n        - option\n      - text\n      - combobox\n        - option [selected]\n        - option\n      - text\n      - combobox\n        - option [selected]\n        - option\n      - text\n      - combobox\n        - option [selected]\n        - option\n      - text\n      - combobox\n        - option [selected]\n        - option\n      - text\n      - combobox\n        - option [selected]\n        - option\n      - text\n      - combobox\n        - option [selected]\n        - option\n      - checkbox\n      - text\n      - checkbox\n      - text\n      - button\n    - paragraph\n      - text\n    - list\n      - listitem\n        - link\n          - text\n    - button"
     },
+    "/workspace/cases/[caseKey]": {
+      "defaultVisibleWords": 250,
+      "leadBandWords": 0,
+      "primaryActions": 1,
+      "visibleFields": 0,
+      "maxChoicesPerControl": 0,
+      "subLegibleControls": 0,
+      "buriedPrimaryAction": 0,
+      "axeViolations": 2,
+      "ariaSnapshot": "- link\n- banner\n  - link\n    - text\n    - paragraph\n      - text\n  - link\n  - button\n  - text\n  - button\n- complementary\n  - navigation\n    - group\n      - button\n      - button [pressed]\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n- main\n  - navigation\n    - link\n    - text\n  - link\n  - paragraph\n    - text\n  - text\n  - heading [level=1]\n  - paragraph\n    - text\n  - region\n    - heading [level=2]\n    - paragraph\n      - text\n  - region\n    - paragraph\n      - text\n  - note\n    - paragraph\n      - text\n    - list\n      - listitem\n  - paragraph\n    - text\n  - group\n    - button [pressed]\n    - button\n  - region\n    - heading [level=2]\n    - paragraph\n      - text\n    - list\n      - listitem\n        - heading [level=3]\n        - text\n        - list\n          - listitem\n            - text\n      - listitem\n        - heading [level=3]\n        - text\n        - paragraph\n          - text"
+    },
     "/workspace/documents": {
       "defaultVisibleWords": 111,
       "leadBandWords": 0,
