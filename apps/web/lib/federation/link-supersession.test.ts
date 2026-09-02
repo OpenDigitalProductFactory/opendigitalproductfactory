@@ -59,6 +59,20 @@ describe("planSupersession", () => {
     ])).toEqual([{ linkId: "link_trusted_old", supersededBy: "link_trusted_new" }]);
   });
 
+  it("among trusted links, the one that most recently exchanged anything wins over a newer silent one", () => {
+    // Production held three trusted links to one box from earlier install cycles;
+    // only "relinked" still carried a token the peer recognised (485 items synced).
+    const plan = planSupersession([
+      row("link_dev", { enrolledAt: new Date("2026-08-20T00:00:00Z"), lastActivityAt: null }),
+      row("link_relinked", { enrolledAt: new Date("2026-08-25T00:00:00Z"), lastActivityAt: new Date("2026-09-02T09:21:00Z") }),
+      row("link_dpf_dev", { enrolledAt: new Date("2026-08-30T00:00:00Z"), lastActivityAt: null }),
+    ]);
+    expect(plan).toEqual([
+      { linkId: "link_dpf_dev", supersededBy: "link_relinked" },
+      { linkId: "link_dev", supersededBy: "link_relinked" },
+    ]);
+  });
+
   it("never touches cross-organization links and is stable on ties", () => {
     expect(planSupersession([row("x", { role: "managed-by" }), row("y", { role: "managed-by" })])).toEqual([]);
     const tie = planSupersession([row("b"), row("a")]);
@@ -76,6 +90,9 @@ describe("supersedeStaleSameOrgLinks", () => {
           row("new", { enrolledAt: new Date("2026-08-28T00:00:00Z") }),
         ]),
         updateMany,
+      },
+      federatedRecordMirror: {
+        groupBy: vi.fn().mockResolvedValue([{ federationLinkId: "new", _max: { lastSyncedAt: new Date("2026-09-02T00:00:00Z") } }]),
       },
     };
     const now = new Date("2026-09-02T10:00:00Z");

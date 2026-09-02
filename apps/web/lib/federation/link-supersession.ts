@@ -18,12 +18,17 @@ export interface SupersessionLinkRow {
   peerInstallationId: string | null;
   enrolledAt: Date | null;
   createdAt: Date;
+  /** Most recent successful exchange over this link (mirror lastSyncedAt), if any. */
+  lastActivityAt?: Date | null;
 }
 
 export interface SupersessionDb {
   federationLink: {
     findMany(args: unknown): Promise<SupersessionLinkRow[]>;
     updateMany(args: unknown): Promise<{ count: number }>;
+  };
+  federatedRecordMirror?: {
+    groupBy(args: unknown): Promise<Array<{ federationLinkId: string; _max: { lastSyncedAt: Date | null } }>>;
   };
 }
 
@@ -45,6 +50,19 @@ function enrolledMs(link: SupersessionLinkRow): number {
   return (link.enrolledAt ?? link.createdAt).getTime();
 }
 
+function activityMs(link: SupersessionLinkRow): number {
+  return link.lastActivityAt ? link.lastActivityAt.getTime() : -1;
+}
+
+/** Trusted first; then the link that most recently exchanged anything (a link
+ *  the peer actually answers on); then the newest enrolment; then id. */
+function rank(a: SupersessionLinkRow, b: SupersessionLinkRow): number {
+  return Number(isTrusted(b)) - Number(isTrusted(a))
+    || activityMs(b) - activityMs(a)
+    || enrolledMs(b) - enrolledMs(a)
+    || a.linkId.localeCompare(b.linkId);
+}
+
 /**
  * Pure: decide which links a set of same-org links supersede.
  *
@@ -54,11 +72,13 @@ function enrolledMs(link: SupersessionLinkRow): number {
  * in the same group as the trusted link at the same address (a reinstalled
  * peer shows up as a new installation id at the old address).
  *
- * Trust outranks age: a trusted link is never superseded by a pending one. If
- * the group holds a trusted link, the newest trusted link wins and every other
- * link is superseded EXCEPT a pending link enrolled after the winner (a
- * re-pairing in flight; it supersedes the old one once it becomes trusted).
- * Without any trusted link, the newest wins.
+ * Trust outranks age, and liveness outranks age among trusted links: the link
+ * that most recently exchanged anything is the one the peer actually answers
+ * on (three "trusted" links to one box from earlier install cycles look alike
+ * by state; only one still carries a token the peer recognises). A trusted
+ * link is never superseded by a pending one. Every other link in the group is
+ * superseded EXCEPT a pending link enrolled after the winner (a re-pairing in
+ * flight; it supersedes the old one once it becomes trusted).
  */
 export function planSupersession(links: readonly SupersessionLinkRow[]): Array<{ linkId: string; supersededBy: string }> {
   const sameOrg = links.filter((link) => link.role === "same-org-peer");
@@ -93,10 +113,10 @@ export function planSupersession(links: readonly SupersessionLinkRow[]): Array<{
   const plan: Array<{ linkId: string; supersededBy: string }> = [];
   for (const group of groups.values()) {
     if (group.length < 2) continue;
-    const byNewest = [...group].sort((a, b) => enrolledMs(b) - enrolledMs(a) || a.linkId.localeCompare(b.linkId));
-    const trusted = byNewest.filter(isTrusted);
-    const winner = trusted[0] ?? byNewest[0]!;
-    for (const link of byNewest) {
+    const ranked = [...group].sort(rank);
+    const trusted = ranked.filter(isTrusted);
+    const winner = ranked[0]!;
+    for (const link of ranked) {
       if (link.linkId === winner.linkId) continue;
       // A pending re-pairing newer than the trusted winner is in flight; leave it.
       if (trusted.length > 0 && !isTrusted(link) && enrolledMs(link) > enrolledMs(winner)) continue;
@@ -114,7 +134,17 @@ export async function supersedeStaleSameOrgLinks(
     where: { role: "same-org-peer", revokedAt: null },
     select: { linkId: true, role: true, linkState: true, peerAuthorityUrl: true, peerInstallationId: true, enrolledAt: true, createdAt: true },
   });
-  const plan = planSupersession(links);
+  const activity = new Map<string, Date | null>();
+  if (db.federatedRecordMirror) {
+    for (const row of await db.federatedRecordMirror.groupBy({
+      by: ["federationLinkId"],
+      where: { federationLinkId: { in: links.map((link) => link.linkId) }, syncStatus: "synced" },
+      _max: { lastSyncedAt: true },
+    })) {
+      activity.set(row.federationLinkId, row._max.lastSyncedAt);
+    }
+  }
+  const plan = planSupersession(links.map((link) => ({ ...link, lastActivityAt: activity.get(link.linkId) ?? null })));
   for (const entry of plan) {
     await db.federationLink.updateMany({
       where: { linkId: entry.linkId, revokedAt: null },
