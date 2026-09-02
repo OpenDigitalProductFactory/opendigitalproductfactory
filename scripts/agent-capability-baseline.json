@@ -58,7 +58,6 @@
       "AGT-181",
       "AGT-182",
       "AGT-190",
-      "AGT-900",
       "AGT-901",
       "AGT-902",
       "AGT-904",
@@ -69,14 +68,6 @@
       "AGT-BUILD-QA",
       "AGT-BUILD-SE",
       "AGT-ORCH-000",
-      "AGT-ORCH-100",
-      "AGT-ORCH-200",
-      "AGT-ORCH-300",
-      "AGT-ORCH-400",
-      "AGT-ORCH-500",
-      "AGT-ORCH-600",
-      "AGT-ORCH-700",
-      "AGT-ORCH-800",
       "AGT-R2D-PB",
       "AGT-S2P-PFB",
       "AGT-S2P-POL",
@@ -98,13 +89,13 @@
       "AGT-WS-TIME-OFF"
     ],
     "maxOpenGapsByPlane": {
-      "identity": 56,
+      "identity": 47,
       "corpus": 0,
       "governance": 0,
-      "shape": 57,
-      "cadence": 64,
-      "toolsAndSkills": 59,
-      "evidence": 49
+      "shape": 48,
+      "cadence": 55,
+      "toolsAndSkills": 50,
+      "evidence": 40
     }
   }
 }

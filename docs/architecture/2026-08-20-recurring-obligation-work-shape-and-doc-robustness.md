@@ -101,6 +101,15 @@ capability — it is that this shape was built once, for one obligation family, 
 never generalized.
 
 
+### 2.2 The split-registry hazard is general ⟦runtime: 2026-09-02⟧
+
+Self-tasks were the second of four registries to move to a second module while a
+static reader kept reading the first; shapes, skills and the coworker grants map
+were the others. The rule that came out of it: a scanner that reads a registry
+must name its sources in an exported list with a guard test, never an inline
+path. See `SELF_TASK_SOURCES`, `SHAPE_SOURCE_FILES` and `GRANTS_SOURCE_FILES` in
+`scripts/measure-capability-completeness.mjs`.
+
 ### 2.1 Self-tasks now span two modules ⟦runtime: 2026-09-02⟧
 
 `COWORKER_SELF_TASKS` reached 749 lines against an 800-line ceiling, so entries

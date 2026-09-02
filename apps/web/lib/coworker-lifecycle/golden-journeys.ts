@@ -363,6 +363,78 @@ export const CURATED_JOURNEYS: Readonly<Record<string, readonly Omit<GoldenJourn
         "Certification probe (read-only). Retrieve one user-facing route on this install. Report one specific accessibility risk on it — a missing text alternative, a contrast concern, or a structural problem — and the fix. Treat a failure as blocking, not advisory. Do not create, modify, or delete anything. If every tool call fails, reply TOOL-FAILURE and name the tool you tried.",
     },
   ],
+  "evaluate-orchestrator": [
+    {
+      journeyId: "evaluate-orchestrator/evaluate-stream-survey",
+      mode: "act",
+      prompt:
+        "Certification probe (read-only). Retrieve the open work currently recorded in the evaluate value stream. Report how many items are routed to a named owner, how many are unowned, and one item whose ownership is ambiguous with the reason. Do not create, modify, or delete anything. If every tool call fails, reply TOOL-FAILURE and name the tool you tried.",
+    },
+  ],
+  "explore-orchestrator": [
+    {
+      journeyId: "explore-orchestrator/explore-stream-survey",
+      mode: "act",
+      prompt:
+        "Certification probe (read-only). Retrieve the open work currently recorded in the explore value stream. Report how many items are routed to a named owner, how many are unowned, and one item whose ownership is ambiguous with the reason. Do not create, modify, or delete anything. If every tool call fails, reply TOOL-FAILURE and name the tool you tried.",
+    },
+  ],
+  "integrate-orchestrator": [
+    {
+      journeyId: "integrate-orchestrator/integrate-stream-survey",
+      mode: "act",
+      prompt:
+        "Certification probe (read-only). Retrieve the open work currently recorded in the integrate value stream. Report how many items are routed to a named owner, how many are unowned, and one item whose ownership is ambiguous with the reason. Do not create, modify, or delete anything. If every tool call fails, reply TOOL-FAILURE and name the tool you tried.",
+    },
+  ],
+  "deploy-orchestrator": [
+    {
+      journeyId: "deploy-orchestrator/deploy-stream-survey",
+      mode: "act",
+      prompt:
+        "Certification probe (read-only). Retrieve the open work currently recorded in the deploy value stream. Report how many items are routed to a named owner, how many are unowned, and one item whose ownership is ambiguous with the reason. Do not create, modify, or delete anything. If every tool call fails, reply TOOL-FAILURE and name the tool you tried.",
+    },
+  ],
+  "release-orchestrator": [
+    {
+      journeyId: "release-orchestrator/release-stream-survey",
+      mode: "act",
+      prompt:
+        "Certification probe (read-only). Retrieve the open work currently recorded in the release value stream. Report how many items are routed to a named owner, how many are unowned, and one item whose ownership is ambiguous with the reason. Do not create, modify, or delete anything. If every tool call fails, reply TOOL-FAILURE and name the tool you tried.",
+    },
+  ],
+  "consume-orchestrator": [
+    {
+      journeyId: "consume-orchestrator/consume-stream-survey",
+      mode: "act",
+      prompt:
+        "Certification probe (read-only). Retrieve the open work currently recorded in the consume value stream. Report how many items are routed to a named owner, how many are unowned, and one item whose ownership is ambiguous with the reason. Do not create, modify, or delete anything. If every tool call fails, reply TOOL-FAILURE and name the tool you tried.",
+    },
+  ],
+  "operate-orchestrator": [
+    {
+      journeyId: "operate-orchestrator/operate-stream-survey",
+      mode: "act",
+      prompt:
+        "Certification probe (read-only). Retrieve the open work currently recorded in the operate value stream. Report how many items are routed to a named owner, how many are unowned, and one item whose ownership is ambiguous with the reason. Do not create, modify, or delete anything. If every tool call fails, reply TOOL-FAILURE and name the tool you tried.",
+    },
+  ],
+  "governance-orchestrator": [
+    {
+      journeyId: "governance-orchestrator/governance-stream-survey",
+      mode: "act",
+      prompt:
+        "Certification probe (read-only). Retrieve the open work currently recorded in the governance value stream. Report how many items are routed to a named owner, how many are unowned, and one item whose ownership is ambiguous with the reason. Do not create, modify, or delete anything. If every tool call fails, reply TOOL-FAILURE and name the tool you tried.",
+    },
+  ],
+  "finance-agent": [
+    {
+      journeyId: "finance-agent/recorded-money-position",
+      mode: "act",
+      prompt:
+        "Certification probe (read-only). Retrieve the recorded finance state on this install. Report one figure that IS measurable with the window it covers, and one that is not, naming exactly what would have to be recorded to make it known. Do not create, modify, or delete anything. If every tool call fails, reply TOOL-FAILURE and name the tool you tried.",
+    },
+  ],
 };
 
 export function journeysForCoworker(agentId: string): GoldenJourney[] {

@@ -216,10 +216,21 @@ export const SELF_TASK_SOURCES = [
   { file: "apps/web/lib/operate/scheduled-jobs/coworker-standing-self-tasks.ts", literal: "COWORKER_STANDING_SELF_TASKS" },
 ];
 
+/**
+ * Files that declare HARDCODED_COWORKER_GRANTS. workforce-seed.ts re-exports the
+ * map from coworker-grants.ts, and a re-export carries no entries, so reading
+ * the seed file alone reports every roster coworker as ungranted.
+ */
+export const GRANTS_SOURCE_FILES = [
+  "packages/db/src/coworker-grants.ts",
+  "packages/db/src/workforce-seed.ts",
+];
+
 export const SHAPE_SOURCE_FILES = [
   "apps/web/lib/work-management/work-shapes.ts",
   "apps/web/lib/work-management/standing-operations-shapes.ts",
   "apps/web/lib/work-management/coworker-standing-shapes.ts",
+  "apps/web/lib/work-management/orchestration-shapes.ts",
 ];
 
 /** Identity classes. Expectations differ by class; none is excluded. */
@@ -381,10 +392,17 @@ export function loadSubstrate() {
   );
 
   // ── Grants. Keyed by slug for roster coworkers, by agent_name for registry agents.
-  const grantsRegion = workforce.slice(
-    workforce.indexOf("HARDCODED_COWORKER_GRANTS"),
-    workforce.indexOf("ONBOARDING_AGENT_GRANTS"),
-  );
+  //
+  // The map lives in coworker-grants.ts; workforce-seed.ts re-exports it. Slicing
+  // the seed file alone would parse the re-export line and find nothing, which
+  // reads as "holds no grants at all — no tool surface is authorised" for EVERY
+  // roster coworker. GRANTS_SOURCE_FILES is the explicit list, guarded by a test,
+  // for the same reason the shape and self-task sources are: this scanner has
+  // been broken four times by a registry moving to a second file.
+  const heldGrantsSrc = GRANTS_SOURCE_FILES.map((f) => stripLineComments(read(f))).join("\n");
+  const grantsStart = heldGrantsSrc.indexOf("HARDCODED_COWORKER_GRANTS");
+  const grantsEnd = heldGrantsSrc.indexOf("ONBOARDING_AGENT_GRANTS");
+  const grantsRegion = heldGrantsSrc.slice(grantsStart, grantsEnd > grantsStart ? grantsEnd : undefined);
   const heldGrants = parseStringArrayMap(objectLiteralBody(grantsRegion, "HARDCODED_COWORKER_GRANTS"));
   const onboardingGrants = parseStringArrayMap(
     objectLiteralBody(workforce.slice(workforce.indexOf("ONBOARDING_AGENT_GRANTS")), "ONBOARDING_AGENT_GRANTS"),

@@ -85,7 +85,7 @@
         "5.1 Evaluate Value Stream",
         "5.1.1-5.1.6"
       ],
-      "status": "defined",
+      "status": "active",
       "config_profile": {
         "model_binding": {
           "model_id": "claude-opus-4-6",
@@ -140,7 +140,7 @@
         "5.2 Explore Value Stream",
         "5.2.1-5.2.5"
       ],
-      "status": "defined",
+      "status": "active",
       "config_profile": {
         "model_binding": {
           "model_id": "claude-opus-4-6",
@@ -207,7 +207,7 @@
         "MUST-0033",
         "MUST-0034"
       ],
-      "status": "defined",
+      "status": "active",
       "config_profile": {
         "model_binding": {
           "model_id": "claude-opus-4-6",
@@ -270,7 +270,7 @@
         "MUST-0037",
         "MUST-0038"
       ],
-      "status": "defined",
+      "status": "active",
       "config_profile": {
         "model_binding": {
           "model_id": "claude-opus-4-6",
@@ -328,7 +328,7 @@
         "MUST-0016",
         "MUST-0039"
       ],
-      "status": "defined",
+      "status": "active",
       "config_profile": {
         "model_binding": {
           "model_id": "claude-opus-4-6",
@@ -385,7 +385,7 @@
         "5.6.1-5.6.5",
         "MUST-0040"
       ],
-      "status": "defined",
+      "status": "active",
       "config_profile": {
         "model_binding": {
           "model_id": "claude-opus-4-6",
@@ -441,7 +441,7 @@
         "5.7 Operate Value Stream",
         "5.7.1-5.7.5"
       ],
-      "status": "defined",
+      "status": "active",
       "config_profile": {
         "model_binding": {
           "model_id": "claude-opus-4-6",
@@ -498,7 +498,7 @@
         "6.1.3 Enterprise Architecture FC",
         "MUST-0047-0053"
       ],
-      "status": "defined",
+      "status": "active",
       "config_profile": {
         "model_binding": {
           "model_id": "claude-opus-4-6",
@@ -2004,7 +2004,7 @@
         "ITFM",
         "SHOULD-0005"
       ],
-      "status": "defined",
+      "status": "active",
       "config_profile": {
         "model_binding": {
           "model_id": "claude-haiku-4-5-20251001",

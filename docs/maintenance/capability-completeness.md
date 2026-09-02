@@ -32,11 +32,11 @@ the platform is not".
 ## Inventory
 
 - Distinct agent identities measured: **86**
-  - canonical agent registry: 86 · workforce roster: 38 · profession roles: 98
+  - canonical agent registry: 86 · workforce roster: 47 · profession roles: 98
   - Joined via COWORKER_SLUG_TO_CANONICAL_AGENT_ID; a handle-only join over-counts.
-- At 100% of attainable: **19**
-- Median attainable: **48%** · median absolute: **44%**
-- Skills: **129** total, **0** stranded, **22** able to declare a cadence
+- At 100% of attainable: **28**
+- Median attainable: **68%** · median absolute: **63%**
+- Skills: **138** total, **0** stranded, **31** able to declare a cadence
 - Unresolved `assignTo` targets: `external-coding-agent`, `software-engineer`
 - Unbacked `backingSkillIds`: `build-sensitive-domain-requirements`, `customer-intake-triage`, `external-catalog-scout`, `marketing-collaboration-intake`, `prepare-counsel-packet`, `provider-cost-intake`
 
@@ -56,23 +56,23 @@ The gate is built, enforced, and its reach is derived from each tool's declared 
 
 | Class | Count | Median attainable | Meaning |
 |---|---|---|---|
-| `active-roster` | 30 | 100% | Active in the canonical registry and seeded onto the workforce roster. |
+| `active-roster` | 39 | 100% | Active in the canonical registry and seeded onto the workforce roster. |
 | `active-registry-only` | 0 | — | Active in the canonical registry but absent from the workforce roster. |
 | `roster-only` | 0 | — | On the workforce roster but absent from the canonical agent registry. |
 | `defined-roster` | 8 | 68% | Declared in the canonical registry (not active) and seeded onto the roster. |
-| `declared-only` | 48 | 48% | Declared in the canonical registry and never seeded anywhere. |
+| `declared-only` | 39 | 48% | Declared in the canonical registry and never seeded anywhere. |
 
 ## Plane levels across the inventory
 
 | Plane | Weight | Ceiling | L0 | L1 | L2 | L3 | At ceiling |
 |---|---|---|---|---|---|---|---|
-| Identity | 1 | 3 | 0 | 48 | 8 | 30 | 30/86 |
+| Identity | 1 | 3 | 0 | 39 | 8 | 39 | 39/86 |
 | Corpus / WSID | 1 | 3 | 0 | 0 | 0 | 86 | 86/86 |
 | Governance / WWWD | 2 | 3 | 0 | 0 | 0 | 86 | 86/86 |
-| Shape | 1 | 2 | 57 | 0 | 29 | 0 | 29/86 |
-| Cadence | 1 | 3 | 61 | 0 | 3 | 22 | 22/86 |
-| Tools + Skills | 2 | 3 | 0 | 54 | 5 | 27 | 27/86 |
-| Evidence | 1 | 2 | 48 | 1 | 37 | 0 | 37/86 |
+| Shape | 1 | 2 | 48 | 0 | 38 | 0 | 38/86 |
+| Cadence | 1 | 3 | 52 | 0 | 3 | 31 | 31/86 |
+| Tools + Skills | 2 | 3 | 0 | 45 | 5 | 36 | 36/86 |
+| Evidence | 1 | 2 | 39 | 1 | 46 | 0 | 46/86 |
 
 ### Planes the substrate currently caps
 
@@ -177,21 +177,12 @@ _Certification exercises a real domain act, not a generic probe._
 | `AGT-181` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
 | `AGT-182` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
 | `AGT-190` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
-| `AGT-900` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
 | `AGT-901` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
 | `AGT-902` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
 | `AGT-BUILD-DA` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
 | `AGT-BUILD-FE` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
 | `AGT-BUILD-QA` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
 | `AGT-BUILD-SE` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
-| `AGT-ORCH-100` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
-| `AGT-ORCH-200` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
-| `AGT-ORCH-300` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
-| `AGT-ORCH-400` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
-| `AGT-ORCH-500` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
-| `AGT-ORCH-600` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
-| `AGT-ORCH-700` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
-| `AGT-ORCH-800` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
 | `AGT-R2D-PB` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
 | `AGT-S2P-PFB` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
 | `AGT-S2P-POL` | declared-only | 48% | 44% | 1 | 3 | 3 | 0 | 0 | 1 | 0 |
@@ -215,11 +206,20 @@ _Certification exercises a real domain act, not a generic probe._
 | `AGT-WS-LEGAL` | active-roster | 92% | 85% | 3 | 3 | 3 | 2 | 3 | 2 | 2 |
 | `AGT-WS-SCOUT` | active-roster | 92% | 85% | 3 | 3 | 3 | 2 | 3 | 2 | 2 |
 | `AGT-WS-PLATFORM` | active-roster | 96% | 89% | 3 | 3 | 3 | 2 | 2 | 3 | 2 |
+| `AGT-900` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
 | `AGT-903` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
 | `AGT-905` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
 | `AGT-EXT-CLAUDE` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
 | `AGT-EXT-CODEX` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
 | `AGT-EXT-GROK` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
+| `AGT-ORCH-100` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
+| `AGT-ORCH-200` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
+| `AGT-ORCH-300` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
+| `AGT-ORCH-400` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
+| `AGT-ORCH-500` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
+| `AGT-ORCH-600` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
+| `AGT-ORCH-700` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
+| `AGT-ORCH-800` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
 | `AGT-SOC-HUNTER` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
 | `AGT-SOC-INVESTIGATOR` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
 | `AGT-SOC-TRIAGE` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
