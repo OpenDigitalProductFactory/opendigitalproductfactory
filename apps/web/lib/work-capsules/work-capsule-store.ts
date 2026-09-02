@@ -22,6 +22,7 @@ import {
   type WorkCapsuleScopeInput,
   type WorkCapsuleSource,
   type WorkCapsuleStatus,
+  buildWorkCapsuleScopeClaims,
 } from "@/lib/work-capsules";
 import { admitRuntimeGuardedWork } from "@/lib/platform-runtime/work-admission";
 import { planCapsuleChangeImpact, type CapsuleChangeImpactContract } from "./change-impact-contract";
@@ -162,9 +163,7 @@ export async function createWorkCapsule(args: {
           dependsOnPortfolioRoles: scope.dependsOnPortfolioRoles,
           // BI-8C54B216: convened WITH a shape. Rides scopeClaims (the home
           // workroom-shape-claim.ts reads) — no migration, invisible to readers.
-          scopeClaims: scope.workroomShape
-            ? [{ workroomShape: scope.workroomShape, recordedAt: now.toISOString() }]
-            : [],
+          scopeClaims: buildWorkCapsuleScopeClaims(scope, now),
           workspaceState: args.input.workspaceState ?? {},
           idempotencyKey: args.input.idempotencyKey,
           leaseHolderPrincipalId: isExternalLeaseExecutor(args.input.executorKind)

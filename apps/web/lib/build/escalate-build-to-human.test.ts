@@ -2,25 +2,43 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // Mock the DB + the canonical issue-report writer so we can assert orchestration
 // without a database. The handler's side effects are the contract here.
-vi.mock("@dpf/db", () => ({
-  prisma: {
+vi.mock("@dpf/db", () => {
+  // $transaction hands the callback the same mock, so assertions on
+  // prisma.backlogItem.update see the transactional write too.
+  const prisma: Record<string, unknown> = {
     featureBuild: { update: vi.fn().mockResolvedValue({}) },
-    backlogItem: { update: vi.fn().mockResolvedValue({}) },
+    backlogItem: {
+      update: vi.fn().mockResolvedValue({}),
+      findUnique: vi.fn().mockResolvedValue({ status: "in-progress" }),
+    },
+    backlogItemActivity: { create: vi.fn().mockResolvedValue({}) },
     buildActivity: { create: vi.fn().mockResolvedValue({}) },
-  },
-}));
+    principalAlias: { findFirst: vi.fn().mockResolvedValue({ principalId: "prn-owner-1" }) },
+  };
+  prisma.$transaction = vi.fn(async (cb: (tx: unknown) => unknown) => cb(prisma));
+  return { prisma };
+});
 vi.mock("@/lib/quality/platform-issue-reports", () => ({
   createPlatformIssueReport: vi.fn().mockResolvedValue({ reportId: "PIR-TEST1" }),
+}));
+vi.mock("@/lib/attention/notify-live", () => ({
+  resolveOperatorRecipient: vi.fn().mockResolvedValue("user-1"),
+  notifyAttentionLive: vi.fn().mockResolvedValue(undefined),
 }));
 
 import {
   buildEscalationDedupeKey,
+  buildEscalationDeferral,
+  ESCALATION_DEFERRAL_REVIEW_DAYS,
   formatEscalationReport,
   escalateBuildToHuman,
   SELF_FIX_CLASS,
 } from "./escalate-build-to-human";
 import { prisma } from "@dpf/db";
 import { createPlatformIssueReport } from "@/lib/quality/platform-issue-reports";
+import { notifyAttentionLive, resolveOperatorRecipient } from "@/lib/attention/notify-live";
+
+const mockFn = (f: unknown) => f as ReturnType<typeof vi.fn>;
 
 const NOW = new Date("2026-06-19T18:00:00.000Z");
 
@@ -113,6 +131,12 @@ describe("escalateBuildToHuman (orchestration)", () => {
     (prisma.featureBuild.update as ReturnType<typeof vi.fn>).mockResolvedValue({});
     (prisma.backlogItem.update as ReturnType<typeof vi.fn>).mockResolvedValue({});
     (prisma.buildActivity.create as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    mockFn(prisma.backlogItem.findUnique).mockResolvedValue({ status: "in-progress" });
+    mockFn(prisma.backlogItemActivity.create).mockResolvedValue({});
+    mockFn(prisma.principalAlias.findFirst).mockResolvedValue({ principalId: "prn-owner-1" });
+    mockFn(prisma.$transaction).mockImplementation(async (cb: (tx: unknown) => unknown) => cb(prisma));
+    mockFn(resolveOperatorRecipient).mockResolvedValue("user-1");
+    mockFn(notifyAttentionLive).mockResolvedValue(undefined);
   });
 
   it("captures a durable, build-linked, deduped escalation report", async () => {
@@ -165,5 +189,95 @@ describe("escalateBuildToHuman (orchestration)", () => {
     expect(res.reportId).toBeNull();
     expect(prisma.featureBuild.update).toHaveBeenCalledTimes(1); // WIP freed anyway
     expect(res.wipFreed).toBe(true);
+  });
+
+  // BI-9DA5F179 — the park must be attributable. Seven items, including
+  // BI-F0715C9C, were parked by this path with none of these fields and no
+  // activity row, so nothing could ever surface them again.
+  it("parks with a reason, trigger, future review date and accountable owner", async () => {
+    await escalateBuildToHuman(args());
+    const { data } = mockFn(prisma.backlogItem.update).mock.calls[0][0];
+    expect(data.deferReason).toContain("FB-ABC123");
+    expect(data.deferReason).toContain("PIR-TEST1");
+    expect(data.deferTrigger).toContain("PIR-TEST1");
+    expect(data.deferOwnerPrincipalId).toBe("prn-owner-1");
+    expect(data.deferredAt).toBe(NOW);
+    expect(data.deferReviewAt.getTime()).toBeGreaterThan(NOW.getTime());
+  });
+
+  it("records the status change on the ITEM, not only on the build being abandoned", async () => {
+    await escalateBuildToHuman(args());
+    const { data } = mockFn(prisma.backlogItemActivity.create).mock.calls[0][0];
+    expect(data.backlogItemId).toBe("bi-1");
+    expect(data.kind).toBe("status_change");
+    expect(data.summary).toBe("in-progress → deferred");
+    expect(data.payload.to).toBe("deferred");
+    expect(data.payload.escalatedBuildId).toBe("FB-ABC123");
+    expect(data.payload.deferral.ownerPrincipalId).toBe("prn-owner-1");
+  });
+
+  it("leaves the item VISIBLE rather than parking it unattributably when no owner resolves", async () => {
+    // An open item that re-stalls is noisy; a deferred item with no owner and no
+    // trigger is invisible. Noisy beats invisible.
+    mockFn(resolveOperatorRecipient).mockResolvedValue(null);
+    const res = await escalateBuildToHuman(args());
+    expect(prisma.backlogItem.update).not.toHaveBeenCalled();
+    expect(res.backlogItemDeferred).toBe(false);
+    expect(res.wipFreed).toBe(true); // the jam still clears
+  });
+
+  // BI-B6894001 — the build is abandoned microseconds later, so a link to it
+  // lands the operator on a corpse.
+  it("points the escalation notification at the durable report, not the abandoned build", async () => {
+    await escalateBuildToHuman(args());
+    const event = mockFn(notifyAttentionLive).mock.calls[0][0];
+    expect(event.deepLink).not.toContain("buildId");
+    expect(event.deepLink).toBe("/admin/issue-reports");
+    expect(event.itemKey).toBe("PIR-TEST1");
+  });
+});
+
+describe("buildEscalationDeferral (pure)", () => {
+  it("produces a conformant deferral with a future review date", () => {
+    const d = buildEscalationDeferral({
+      buildId: "FB-ABC123",
+      phase: "plan",
+      rounds: 2,
+      reportId: "PIR-TEST1",
+      ownerPrincipalId: "prn-owner-1",
+      now: NOW,
+    });
+    expect(d).not.toBeNull();
+    expect(d!.deferReason.length).toBeGreaterThan(0);
+    expect(d!.deferTrigger.length).toBeGreaterThan(0);
+    expect(d!.deferOwnerPrincipalId).toBe("prn-owner-1");
+    const expectedDays = (d!.deferReviewAt.getTime() - NOW.getTime()) / (24 * 60 * 60 * 1000);
+    expect(expectedDays).toBeCloseTo(ESCALATION_DEFERRAL_REVIEW_DAYS, 5);
+  });
+
+  it("refuses to build a deferral with no accountable owner", () => {
+    expect(
+      buildEscalationDeferral({
+        buildId: "FB-ABC123",
+        phase: "plan",
+        rounds: 2,
+        reportId: null,
+        ownerPrincipalId: null,
+        now: NOW,
+      }),
+    ).toBeNull();
+  });
+
+  it("still names the build and phase when no report was filed", () => {
+    const d = buildEscalationDeferral({
+      buildId: "FB-XYZ789",
+      phase: "ideate",
+      rounds: 1,
+      reportId: null,
+      ownerPrincipalId: "prn-owner-1",
+      now: NOW,
+    });
+    expect(d!.deferReason).toContain("FB-XYZ789");
+    expect(d!.deferReason).toContain("ideate");
   });
 });

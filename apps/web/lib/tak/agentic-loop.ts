@@ -1702,6 +1702,28 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       console.warn(`[agentic-loop] routeAndCall threw: ${msg}`);
       logTurnSummary("unknown", "unknown");
       if (params.terminalToolPolicy) {
+        // BI-8B8731EE. A THROW from routeAndCall means the model never ran, so
+        // this is not the reviewer declining its writer contract.
+        //
+        // `failure` above already classifies why. When that classification is a
+        // RESOURCE wait — the host is busy, or governed local CI holds the
+        // inference capacity — say so, because the platform already knows what
+        // to do with it: `preInferenceResourceWait` projects a `provider-capacity`
+        // wait that resumes on the same TaskRun. Rewriting it to
+        // `terminal-writer-missing` made that handling unreachable for every
+        // governed reviewer route and reported a reservation that clears itself
+        // in ~195s as a failure of the writer contract.
+        //
+        // Measured cost of the substitution: five dispatches spent auditing
+        // grants, autonomy tiers and tool surfaces that were correct throughout.
+        // Only PRE-INFERENCE, mirroring `preInferenceResourceWait`'s own
+        // contract. Once a reader has run, the turn is no longer "nothing
+        // happened yet": the resumable writer wait below is the better state,
+        // because the read work is banked and only the receipt is outstanding.
+        // Diverting that to a resource wait would fail the run instead.
+        if ((failure.kind === "capacity" || failure.kind === "busy") && executedTools.length === 0) {
+          return completeResult(failure.message, null, { failure });
+        }
         const message = routeOptions.toolChoice === "required"
           ? `The required governed writer ${params.terminalToolPolicy.writerToolName} could not be dispatched. The same TaskRun remains resumable. No receipt was created.`
           : `The governed review route failed before ${params.terminalToolPolicy.writerToolName} could be recorded. The same TaskRun remains resumable. No receipt was created.`;

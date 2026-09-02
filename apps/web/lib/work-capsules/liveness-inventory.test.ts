@@ -15,7 +15,7 @@ describe("loadCapsuleLivenessInventory", () => {
     const db = {
       workroom: { findMany: vi.fn().mockResolvedValue([
         { ...base, capsuleId: "WC-LIVE", status: "working", leaseExpiresAt: new Date("2026-08-24T19:00:00.000Z") },
-        { ...base, capsuleId: "WC-EXPIRED", status: "working", leaseExpiresAt: new Date("2026-08-24T17:00:00.000Z") },
+        { ...base, capsuleId: "WC-EXPIRED", status: "working", leaseExpiresAt: new Date("2026-08-22T17:00:00.000Z") }, // ~2 days ago — past the 24h resume grace
         { ...base, capsuleId: "WC-DONE", status: "complete", leaseExpiresAt: null },
       ]) },
       featureBuild: { findMany: vi.fn().mockResolvedValue([]) },

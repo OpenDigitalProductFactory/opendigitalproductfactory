@@ -3,12 +3,10 @@
 import { useEffect, useState } from "react";
 import type { AgentInfo, AgentSkill } from "@/lib/agent-coworker-types";
 import {
-  getCoworkerProactivityPreference,
   getCoworkerSelfTaskCadenceInfo,
-  saveCoworkerProactivityPreference,
 } from "@/lib/actions/proactivity";
-import { ProactivityLevelControl } from "@/components/proactivity/ProactivityLevelControl";
-import { resolveProactivityPlan, resolveProactivityPlanForLevel } from "@/lib/proactivity/proactivity-resolver";
+import { getProactivityLevelCopy } from "@/lib/proactivity/proactivity-copy";
+import { resolveProactivityPlan } from "@/lib/proactivity/proactivity-resolver";
 import {
   describeProactivityEffects,
   type CoworkerSelfTaskCadenceInfo,
@@ -73,7 +71,6 @@ const categoryLabels: Record<string, string> = {
 
 export function CoworkerProfilePanel({ agent, onClose }: Props) {
   const [expandedSkill, setExpandedSkill] = useState<string | null>(null);
-  const [savedProactivityLevel, setSavedProactivityLevel] = useState<ProactivityLevel | null>(null);
   // BI-AB7CD55B: whether this coworker actually self-drives (curated registry)
   // — the effects list must not promise scheduled work that doesn't exist.
   const [selfTaskInfo, setSelfTaskInfo] = useState<CoworkerSelfTaskCadenceInfo>({
@@ -85,18 +82,11 @@ export function CoworkerProfilePanel({ agent, onClose }: Props) {
     activityFamily: "scheduled-task",
     agentId: agent.agentId,
   } as const;
-  const proactivityPlan = savedProactivityLevel
-    ? resolveProactivityPlanForLevel(proactivityInput, savedProactivityLevel, "user-override")
-    : resolveProactivityPlan(proactivityInput);
+  const proactivityPlan = resolveProactivityPlan(proactivityInput);
   const proactivityEffects = describeProactivityEffects(proactivityPlan.resolvedLevel, selfTaskInfo);
 
   useEffect(() => {
     let alive = true;
-    getCoworkerProactivityPreference(agent.agentId)
-      .then((level) => {
-        if (alive) setSavedProactivityLevel(level);
-      })
-      .catch(() => {});
     getCoworkerSelfTaskCadenceInfo(agent.agentId)
       .then((info) => {
         if (alive) setSelfTaskInfo(info);
@@ -198,18 +188,14 @@ export function CoworkerProfilePanel({ agent, onClose }: Props) {
               background: "color-mix(in srgb, var(--dpf-surface-2) 70%, transparent)",
             }}
           >
-            {/* EP-26E528F5 P1: editable here with the SAME shared control the
-                composer dock uses — this panel used to show the level read-only
-                while the dock 20px below edited it. One behavior, one component. */}
+            {/* BI-87C9C91C: read-only. Proactivity is owned by the workroom
+                that owns the outcome, so this panel reports what is in force
+                rather than offering to change it on the coworker. */}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-              <ProactivityLevelControl
-                value={proactivityPlan.resolvedLevel}
-                onChange={(next) => {
-                  setSavedProactivityLevel(next);
-                  saveCoworkerProactivityPreference(agent.agentId, next).catch(() => {});
-                }}
-              />
-              <span style={{ ...tagStyle, fontSize: 10 }}>Effective now</span>
+              <span style={{ fontSize: 11, color: "var(--dpf-text)" }}>
+                {getProactivityLevelCopy(proactivityPlan.resolvedLevel).label}
+              </span>
+              <span style={{ ...tagStyle, fontSize: 10 }}>Set by the room</span>
             </div>
             <div style={{ fontSize: 10, color: "var(--dpf-muted)", marginTop: 6, lineHeight: 1.45 }}>
               {proactivityPlan.explanation}

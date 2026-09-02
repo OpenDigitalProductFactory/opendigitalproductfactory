@@ -216,12 +216,25 @@ export function requirementEvidenceLane(input: {
  * something already done is noise, and noise is what makes the real remedy easy
  * to miss.
  */
+/** Give a clause a full stop so joined reasons do not read as one sentence. */
+function endWithStop(reason: string): string {
+  const trimmed = reason.trim();
+  if (!trimmed) return trimmed;
+  return /[.!?:;]$/.test(trimmed) ? trimmed : `${trimmed}.`;
+}
+
 export function requirementNextAction(input: RequirementGuidanceInput): string | null {
   if (input.state === "pass" || input.state === "not-applicable") return null;
 
   const parts: string[] = [];
   if (input.reasons && input.reasons.length > 0) {
-    parts.push(input.reasons.join(" "));
+    // Terminate each reason before joining. A blocker message is a bare clause
+    // ("Completion evidence is missing source"), so a plain space ran them
+    // together into "...missing source Completion evidence is missing
+    // production-build" — one sentence naming a dimension called
+    // "source Completion". The reasons are the part a caller acts on, so they
+    // are the last place to make them re-read a line to find the boundary.
+    parts.push(input.reasons.map(endWithStop).join(" "));
   }
 
   const definition = requirementDefinition(input.code, input.profile);

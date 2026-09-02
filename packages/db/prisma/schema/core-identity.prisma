@@ -497,6 +497,7 @@ model Organization {
   founderDemandClusters             FounderDemandCluster[]
   dataProcessingActivities          DataProcessingActivity[]
   dataPolicyExceptions              DataPolicyException[]
+  providerClearanceOverrides        ProviderClearanceOverride[]
   dataControlOperations             DataControlOperation[]
   billableRates                     BillableRate[]
   outboundDrafts                    OutboundDraft[]

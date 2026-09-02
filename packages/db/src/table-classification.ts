@@ -326,6 +326,7 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   UserGroup: "restricted",
   CredentialEntry: "restricted",
   DataPolicyException: "restricted",
+  ProviderClearanceOverride: "restricted",
   OAuthPendingFlow: "restricted",
   ModelProvider: "restricted",
   DiscoveredModel: "restricted",

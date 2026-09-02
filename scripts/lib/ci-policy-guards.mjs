@@ -311,6 +311,11 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("employment-event-writers", "Employment Event Writers", [
       node("scripts/check-employment-event-writers.mjs"),
     ]),
+    // BI-9252B9EA / BI-C61CEEA9: a governed column the actuator refuses to
+    // default, that no operator can set, is a dead end dressed as a control.
+    guard("actuator-inputs-writable", "Actuator Inputs Writable", [
+      node("scripts/check-actuator-inputs-writable.mjs"),
+    ]),
     // BI-640B011D: schema FK budgets (declared FKs without a leading index +
     // bare unbacked *Id columns) may only shrink against the owned baseline.
     guard("fk-index-coverage-guard", "FK Index Coverage Guard", [
@@ -471,6 +476,15 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/check-rendered-backlog-pointers.test.mjs"),
       node("scripts/check-rendered-backlog-pointers.mjs"),
     ]),
+    // An item written to "deferred" with no reason, trigger, review date or owner
+    // is not parked, it is gone: nothing fires, nothing comes due, nobody owns
+    // it. Seven items sat in exactly that state — including BI-F0715C9C — and a
+    // full cleanup was undone within two days, because the rows were the symptom
+    // and the write path was the cause (BI-9DA5F179).
+    guard("unattributable-deferral", "Unattributable Deferral", [
+      node("--test", "scripts/check-no-unattributable-deferral.test.mjs"),
+      node("scripts/check-no-unattributable-deferral.mjs"),
+    ]),
     guard("janitor-tests", "Janitor Tests", [
       node(
         "--test",
@@ -495,6 +509,12 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/sandbox-freshness.test.mjs",
         "scripts/sandbox-freshness-preflight.test.mjs",
         "scripts/release/re-resolve-stt-digest.test.mjs",
+        // BI-BBD60CF8: the re-pin SCRIPT was always correct and always
+        // green; the workflow driving it aborted on the script's own
+        // drift exit code, so the watch failed on every drift day and
+        // never once completed a re-pin (#4823 fixed the wiring). This
+        // guards the wiring, which is the part nothing tested.
+        "scripts/stt-digest-watch-workflow.test.mjs",
         "scripts/lib/ensure-pre-push-hook.test.mjs",
         // BI-5CBDC146: hook directories must resolve through fileURLToPath.
         // URL.pathname yields "/D:/..." on Windows, so the shim never

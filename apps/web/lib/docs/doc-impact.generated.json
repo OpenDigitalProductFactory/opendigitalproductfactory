@@ -554,6 +554,9 @@
       "docs/architecture/contributor-procedure-runbook.md",
       "docs/professions/data-architect/wiki/strongly-typed-string-enums.md"
     ],
+    "apps/web/lib/backlog/deferral-contract.ts": [
+      "docs/architecture/backlog-and-planning-runbook.md"
+    ],
     "apps/web/lib/build-pipeline.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
     ],
@@ -927,6 +930,9 @@
     "apps/web/lib/queue/functions/wiki-lint.ts": [
       "docs/founder-kernel/SCHEMA.md"
     ],
+    "apps/web/lib/queue/functions/workroom-drive.ts": [
+      "docs/architecture/work-shapes-and-the-decision-gate.md"
+    ],
     "apps/web/lib/queue/inngest-client.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
     ],
@@ -1155,6 +1161,9 @@
       "docs/user-guide/ai-workforce/how-governed-work-runs.md"
     ],
     "apps/web/lib/work-management/room-types.ts": [
+      "docs/architecture/work-shapes-and-the-decision-gate.md"
+    ],
+    "apps/web/lib/work-management/work-shapes.ts": [
       "docs/architecture/work-shapes-and-the-decision-gate.md"
     ],
     "apps/web/lib/work-management/work-unit.ts": [
@@ -1548,6 +1557,9 @@
     "scripts/check-build-namespace.mjs": [
       "docs/architecture/build-studio-namespace.md"
     ],
+    "scripts/check-build-script-policy.mjs": [
+      "docs/architecture/build-gate-runbook.md"
+    ],
     "scripts/check-build-studio-surface-budget.mjs": [
       "docs/architecture/build-studio-namespace.md"
     ],
@@ -1633,6 +1645,9 @@
     ],
     "scripts/check-no-provider-local-connector-lifecycle.mjs": [
       "docs/architecture/unified-connector-kernel.md"
+    ],
+    "scripts/check-no-unattributable-deferral.mjs": [
+      "docs/architecture/backlog-and-planning-runbook.md"
     ],
     "scripts/check-override-comments.mjs": [
       "docs/architecture/contributor-procedure-runbook.md"
@@ -2308,8 +2323,10 @@
       "apps/web/lib/tak/agent-event-bus.ts"
     ],
     "docs/architecture/backlog-and-planning-runbook.md": [
+      "apps/web/lib/backlog/deferral-contract.ts",
       "apps/web/lib/govern/data/field-classification.ts",
-      "packages/db/src/table-classification.ts"
+      "packages/db/src/table-classification.ts",
+      "scripts/check-no-unattributable-deferral.mjs"
     ],
     "docs/architecture/backlog-archetype-scope.md": [
       "apps/web/app/api/v1/ops/backlog/route.ts",
@@ -2329,6 +2346,7 @@
       "apps/web/lib/build/coding-agent.ts",
       "apps/web/lib/queue/functions/build-review-verification.ts",
       "pnpm-lock.yaml",
+      "scripts/check-build-script-policy.mjs",
       "scripts/lib/bootstrap-worktree-deps.mjs",
       "scripts/lib/dco-signoff.mjs",
       "scripts/pre-push-dco-check.mjs",
@@ -2570,12 +2588,14 @@
     ],
     "docs/architecture/work-shapes-and-the-decision-gate.md": [
       "apps/web/lib/mcp/packs/profession-decision-pack.ts",
+      "apps/web/lib/queue/functions/workroom-drive.ts",
       "apps/web/lib/tak/decision-routing-governance-hook.ts",
       "apps/web/lib/work-capsules.ts",
       "apps/web/lib/work-management/autonomy-envelope.ts",
       "apps/web/lib/work-management/room-posture.ts",
       "apps/web/lib/work-management/room-shapes.ts",
-      "apps/web/lib/work-management/room-types.ts"
+      "apps/web/lib/work-management/room-types.ts",
+      "apps/web/lib/work-management/work-shapes.ts"
     ],
     "docs/architecture/workroom-vocabulary-boundary.md": [
       "scripts/check-prose-lint.ts"

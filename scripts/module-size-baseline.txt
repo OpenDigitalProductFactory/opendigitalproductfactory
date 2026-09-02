@@ -24,6 +24,7 @@ apps/web/lib/actions/agent-coworker-external.test.ts	889
 apps/web/lib/actions/agent-coworker.ts	2810
 apps/web/lib/actions/agent-task-scheduler.test.ts	1132
 apps/web/lib/actions/agent-task-scheduler.ts	811
+apps/web/lib/actions/agent-task-scheduler.ts	814
 apps/web/lib/actions/ai-providers.ts	914
 apps/web/lib/actions/build-governed.test.ts	1140
 apps/web/lib/actions/build.ts	1717
@@ -51,7 +52,7 @@ apps/web/lib/operate/coworker-regression-detector.ts	935
 apps/web/lib/queue/functions/self-upgrade.test.ts	1379
 apps/web/lib/routing/chat-adapter.test.ts	1073
 apps/web/lib/routing/eval-runner.ts	803
-apps/web/lib/routing/fallback.test.ts	1178
+apps/web/lib/routing/fallback.test.ts	1299
 apps/web/lib/self-upgrade/quiescence.test.ts	951
 apps/web/lib/self-upgrade/quiescence.ts	1621
 apps/web/lib/skills/evidence-search.ts	803
@@ -62,6 +63,10 @@ apps/web/lib/tak/agentic-loop.test.ts	2501
 apps/web/lib/tak/agentic-loop.ts	2688
 apps/web/lib/tak/route-context-map.ts	1440
 apps/web/lib/work-capsules/work-capsule-store.test.ts	1170
+apps/web/lib/tak/agentic-loop.test.ts	2551
+apps/web/lib/tak/agentic-loop.ts	2710
+apps/web/lib/tak/route-context-map.ts	1440
+apps/web/lib/work-capsules/work-capsule-store.test.ts	1186
 apps/web/lib/work-capsules/work-capsule-store.ts	1029
 apps/web/lib/workbooks/platform-tables.ts	938
 apps/web/lib/workforce/calendar-data.ts	1134

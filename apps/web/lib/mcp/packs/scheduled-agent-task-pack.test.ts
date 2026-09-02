@@ -85,7 +85,52 @@ describe("scheduled-agent-task pack — handler behavior (delegation preserved)"
       routeContext: "/platform",
       schedule: "0 9 * * *",
       timezone: undefined,
+      // BI-5087F34F: every job records WHY it exists. A caller that names no
+      // trigger still gets one — "time" is what a cron-created job IS.
+      taskConfig: { trigger: expect.objectContaining({ kind: "time" }) },
     });
+  });
+
+  // The record is unconditional precisely because it used to be optional: of 53
+  // live tasks only 13 carried a trigger, and none of the 12 ACTIVE ones did.
+  it("records a trigger even when the caller supplies none", async () => {
+    core.scheduleAgentTaskFor.mockResolvedValue({ success: true, taskId: "agent-task-1" });
+    await scheduledAgentTaskPack.handlers.create_scheduled_agent_task(
+      { agentId: "a", title: "t", prompt: "p", schedule: "0 9 * * *" },
+      "u1",
+    );
+    const trigger = core.scheduleAgentTaskFor.mock.calls[0][1].taskConfig.trigger;
+    expect(trigger.kind).toBe("time");
+    expect(typeof trigger.recordedAt).toBe("string");
+    // Absent facts stay absent — a default kind must not invent a room or a deadline.
+    expect(trigger.workroomId).toBeUndefined();
+    expect(trigger.obligation).toBeUndefined();
+  });
+
+  it("preserves a caller's own trigger, room and obligation", async () => {
+    const futureDueAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    core.scheduleAgentTaskFor.mockResolvedValue({ success: true, taskId: "agent-task-2" });
+    await scheduledAgentTaskPack.handlers.create_scheduled_agent_task(
+      {
+        agentId: "a",
+        title: "t",
+        prompt: "p",
+        schedule: "0 9 * * *",
+        trigger: {
+          kind: "detected-need",
+          workroomId: "WC-1",
+          // Relative, not absolute: this asserts PASS-THROUGH, so the instant is
+          // irrelevant — but a hardcoded future date silently becomes a past one
+          // and starts testing something else.
+          obligation: { dueAt: futureDueAt, label: "Q3 filing" },
+        },
+      },
+      "u1",
+    );
+    const trigger = core.scheduleAgentTaskFor.mock.calls[0][1].taskConfig.trigger;
+    expect(trigger.kind).toBe("detected-need");
+    expect(trigger.workroomId).toBe("WC-1");
+    expect(trigger.obligation.dueAt).toBe(futureDueAt);
   });
 
   it("create_scheduled_agent_task appends a de-confliction note and honors a supplied routeContext", async () => {
@@ -129,7 +174,12 @@ describe("scheduled-agent-task pack — handler behavior (delegation preserved)"
         organizationId: "org-1",
         businessProductId: "product-1",
         taskKind: "product-management-playbook",
-        taskConfig,
+        // The typed playbook config is preserved verbatim; the trigger is merged
+        // alongside it rather than replacing it.
+        taskConfig: expect.objectContaining({
+          ...taskConfig,
+          trigger: expect.objectContaining({ kind: "time" }),
+        }),
       }),
     );
   });

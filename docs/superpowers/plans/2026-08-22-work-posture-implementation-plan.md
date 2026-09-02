@@ -61,9 +61,36 @@ the room surface's existing collapsed "Pace and priority" disclosure and REPLACE
 "Why" list that section used to show, so the same reasons appear once, attributed to the
 layer that produced them, and the arrival view gains no words.
 
-Two follow-on wiring gaps were found while verifying H and filed rather than built: a
-scheduled tick still does not resolve posture through the room ladder (`BI-27C8484F`), and
-a coworker's ordinary in-room proactivity still resolves from the old identity ladder
+### Both follow-on wiring gaps are now built
+
+`BI-87C9C91C` landed as `fix/workroom-owned-proactivity` (PR #4949, squashed to main as
+`1317f126e`): the `agent:` preference scope is gone from `scopeKeysForInput`, the three
+per-coworker controls are removed, legacy `aiCoworkerProactivity:agent:*` facts are inert
+rather than migrated, and the interactive turn plus the opening briefing take the platform
+default. Its remaining scope is the interactive-turn room seam, deferred rather than
+guessed because a chat turn has no outcome-specific Workroom in scope.
+
+`BI-27C8484F` landed as `fix/scheduled-tick-room-posture`:
+`lib/scheduling/scheduled-work-posture.server.ts` reads the recorded trigger, resolves the
+room it names through `resolveWorkroomPosture`, and hands the result back to
+`executeScheduledAgentTask`. The scheduler's own resolved plan is passed in as the
+INHERITED baseline, so the room's layers move that plan rather than replacing it with a
+separately-derived one, and `temporalInputForTrigger` finally has a production caller — the
+obligation a tick is racing outranks the room's own due date. Tighten-only is re-asserted at
+the call site: a scheduled job can never acquire more authority by virtue of running in a
+room. A task naming no room keeps today's plan exactly; the room ladder never invents a room.
+
+**Reach, measured rather than claimed (live install, 2026-09-02).** 53 scheduled tasks, 12
+active. 13 carry a recorded trigger and 7 of those name a room — but **all 7 are inactive,
+and none of the 12 active tasks carries a trigger at all**. So the seam is correct and
+production-reachable and changes nothing on this install today. The inertness has moved
+from the code to the data: what is missing is now tasks created with a trigger, not wiring.
+That is a materially different problem from the one this item was filed for, and it is the
+same input-starvation shape as the room shape/posture claims.
+
+The two gaps as originally filed were: a
+scheduled tick did not resolve posture through the room ladder (`BI-27C8484F`), and
+a coworker's ordinary in-room proactivity resolved from the old identity ladder
 (`BI-87C9C91C`). The operator clarified that the latter is not merely a missing room input:
 AI-coworker identity must cease to own proactivity. That slice removes the `agent:` preference
 scope and the coworker-record, chat-dock and roster controls; room participants share the
