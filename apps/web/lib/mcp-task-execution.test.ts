@@ -119,3 +119,108 @@ describe("remote task terminal-writer postcondition", () => {
     });
   });
 });
+
+// BI-8B8731EE. A governed reviewer route that never reached a model is NOT a
+// writer-contract failure. The platform already knows how to report that —
+// `preInferenceResourceWait` projects a resumable `provider-capacity` wait — but
+// the terminal-writer branch ran first and `terminalWriterMissing` is true for
+// ANY governed route that executed no tools, which is exactly what a capacity
+// deferral looks like. So every deferral on a reviewer route was reported as a
+// missing receipt writer.
+//
+// Measured on the live install 2026-09-01: the terminal write landed on ~34% of
+// external-MCP reviewer dispatches (35 completed / 49 input-required / 18
+// failed). The portal log named the real cause on every stranded one:
+// "routeAndCall threw: Local provider dispatch deferred:
+// local-ci-queued-capacity-reservation" — governed local CI holding the host,
+// which clears on its own in about 195s.
+describe("a resource wait is not a missing terminal writer (BI-8B8731EE)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    db.findModelConfig.mockResolvedValue(null);
+    db.findTaskRun.mockResolvedValue({ status: "working" });
+    db.updateTaskRun.mockResolvedValue({});
+    autonomous.resolveAgent.mockResolvedValue({
+      agentId: "AGT-WS-PORTFOLIO",
+      displayName: "Portfolio Advisor",
+      systemPrompt: "Review independently.",
+      sensitivity: "internal",
+    });
+    autonomous.resolveTools.mockResolvedValue({ tools: [], toolsForProvider: [], deferredTools: [] });
+  });
+
+  const attempt = () => executeRemoteTaskAttempt({
+    run: { id: "run-internal", taskRunId: "TR-MCP-CAPACITY-DEFERRAL", contextId: "thread-1" },
+    threadId: "thread-1",
+    token: { tokenId: "PAT-WRITER-CAPACITY", userId: "user-1", capability: "write", source: "pat" },
+    userContext: { platformRole: "developer", isSuperuser: false },
+    parsed,
+    idempotentReplay: false,
+    capacityAttempt: 1,
+  });
+
+  it.each(["capacity", "busy"] as const)(
+    "reports a %s deferral as a resumable provider-capacity wait, not a missing writer",
+    async (failureKind) => {
+      autonomous.execute.mockResolvedValue({
+        content: "Local inference capacity is held by governed local CI.",
+        executedTools: [],
+        failure: { kind: failureKind, message: "Local inference capacity is held by governed local CI." },
+      });
+
+      const outcome = await attempt();
+
+      expect(outcome).toMatchObject({
+        kind: "result",
+        result: {
+          status: "submitted",
+          resumable: true,
+          waitReason: "provider-capacity",
+          executedToolCount: 0,
+        },
+      });
+      // The old behaviour: the caller was told the writer could not be
+      // dispatched, and went auditing grants and tool surfaces instead of
+      // waiting out a reservation.
+      expect(outcome).not.toMatchObject({ result: { waitReason: "missing-terminal-writer" } });
+
+      const payload = db.updateTaskRun.mock.calls.at(-1)?.[0]?.data?.progressPayload;
+      expect(payload).toEqual(expect.objectContaining({
+        resourceWait: expect.objectContaining({ kind: "provider-capacity", failureKind }),
+      }));
+      expect(payload).not.toHaveProperty("terminalWriterWait");
+    },
+  );
+
+  it("still parks a genuine writer no-show, where the model ran and did not write", async () => {
+    // The optimisation this fix must not undo: a reviewer that reached a model,
+    // read the artifact and then answered in prose is a real writer-contract
+    // failure and must stay `missing-terminal-writer`.
+    autonomous.execute.mockResolvedValue({
+      content: "In my assessment the design is sound.",
+      executedTools: [{ name: "read_source_at_version", result: { success: true } }],
+    });
+
+    const outcome = await attempt();
+
+    expect(outcome).toMatchObject({
+      kind: "result",
+      result: { status: "input-required", resumable: true, waitReason: "missing-terminal-writer" },
+    });
+  });
+
+  it("does not divert a capacity failure that arrived AFTER real tool work", async () => {
+    // preInferenceResourceWait is deliberately pre-inference: once the reviewer
+    // has executed tools, a late capacity error is not a clean "nothing
+    // happened yet" wait and must not masquerade as one.
+    autonomous.execute.mockResolvedValue({
+      content: "Capacity was lost partway through.",
+      executedTools: [{ name: "read_source_at_version", result: { success: true } }],
+      failure: { kind: "capacity", message: "Capacity was lost partway through." },
+    });
+
+    const outcome = await attempt();
+
+    expect(outcome).toMatchObject({ result: { waitReason: "missing-terminal-writer" } });
+  });
+});

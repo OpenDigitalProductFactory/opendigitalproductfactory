@@ -22,6 +22,30 @@ Native companion app for the Open Digital Product Factory platform.
 - Expo CLI: `npm install -g expo-cli`
 - EAS CLI: `npm install -g eas-cli`
 
+### Running it on the iOS simulator
+
+This is an Expo **managed** app: `ios/` and `android/` are generated, not committed.
+
+```bash
+pnpm --filter mobile exec expo prebuild --platform ios   # generates ios/
+cd apps/mobile/ios && LANG=en_US.UTF-8 pod install       # CocoaPods needs UTF-8
+cd .. && pnpm exec expo run:ios                          # build + launch
+```
+
+A **Debug** build needs Metro running or it shows the red "No script URL provided"
+screen. To run it standalone — which is what you want for a quick visual check —
+build Release, which embeds the JS bundle:
+
+```bash
+xcodebuild -workspace ios/DPFMobile.xcworkspace -scheme DPFMobile \
+  -configuration Release -sdk iphonesimulator \
+  -destination 'platform=iOS Simulator,name=iPhone 17' build
+```
+
+Do **not** pass `CODE_SIGNING_ALLOWED=NO`. An unsigned simulator build cannot use
+the keychain, and `expo-secure-store` then throws `KeyChainException: A required
+entitlement isn't present` — which looks exactly like an app bug and is not one.
+
 ### Setup
 
 ```bash

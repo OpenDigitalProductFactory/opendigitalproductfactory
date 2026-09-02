@@ -436,7 +436,23 @@ export async function callWithFallbackChain(
           // to an incompatible provider. Max 2 retries with backoff.
           const retryMs = extractRetryAfterMs(e.headers) ?? 30_000;
           const isSelectedEndpoint = i === 0;
-          if (isSelectedEndpoint && !rateLimitRetried) {
+          // A LOCAL pool check that refused before the call left the process is
+          // not an upstream 429: nothing was asked of the provider, and the
+          // reset is wall-clock, so waiting here cannot make it answer sooner.
+          // The pool check throws precisely to cause fallback, and honouring
+          // the wait defeated it — the review lane spent its whole 300s budget
+          // sleeping on a saturated codex pool while a healthy provider sat at
+          // index 1, and every governed review ended `missing-terminal-writer`
+          // with the model never bound (BI-52C6FE5A).
+          //
+          // Skipping the wait is only correct when somewhere else can serve the
+          // call. On a single-provider install the saturated pool IS the whole
+          // chain, and the wait is the only recovery there is — dropping it
+          // there would turn a 30s delay into an immediate hard failure. So the
+          // skip is conditional on an untried entry actually existing.
+          const hasUntriedAlternative = i < chain.length - 1;
+          const skipWaitForLocalPool = e.localPoolExhausted === true && hasUntriedAlternative;
+          if (isSelectedEndpoint && !rateLimitRetried && !skipWaitForLocalPool) {
             rateLimitRetried = true;
             const waitMs = Math.min(retryMs, 60_000);
             console.log(`[callWithFallbackChain] Rate limited on pinned provider ${entry.providerId}. Waiting ${waitMs / 1000}s before retry...`);

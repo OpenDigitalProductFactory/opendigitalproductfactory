@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 695,
+  "pageCount": 696,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -1022,6 +1022,7 @@
         "5b-the-operators",
         "6-what-exists-today-measured-2026-08-25",
         "6b-what-can-be-done-today-measured-by-running-the-day-2026-08-26",
+        "6c-re-run-after-the-operating-day-fixes-measured-2026-09-01",
         "what-the-run-found-that-6-could-not",
         "what-worked-and-is-now-a-regression-surface",
         "two-archetype-specific-traps-for-the-next-run",
@@ -4282,6 +4283,21 @@
         "decision-dimensions",
         "examples",
         "sources"
+      ]
+    },
+    "docs/founder-kernel/wiki/principles/platform-function-never-depends-on-a-client.md": {
+      "publicHref": "/founder-kernel/wiki/principles/platform-function-never-depends-on-a-client/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "platform-function-never-depends-on-a-client",
+        "the-test",
+        "why",
+        "what-this-does-not-license",
+        "how-to-apply",
+        "decision-dimensions",
+        "related"
       ]
     },
     "docs/founder-kernel/wiki/principles/prefer-reversible-containment.md": {
@@ -9108,6 +9124,7 @@
         "non-goals",
         "4-design",
         "41-runtime-circuit-breaker-and-retry-budget",
+        "41a-local-pool-refusal-is-not-an-upstream-rate-limit-implemented",
         "42-error-classification-and-remediation-propagation",
         "43-failure-observability",
         "44-tool-surface-scoping",
