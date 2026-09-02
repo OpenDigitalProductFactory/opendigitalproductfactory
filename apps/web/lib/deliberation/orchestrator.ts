@@ -83,6 +83,13 @@ export interface OrchestrateDeliberationInput {
   threadId?: string | null;
   buildId?: string | null;
   routeContext?: string | null;
+  /**
+   * Coworker on whose behalf this deliberation runs. Stamped as
+   * initiatingAgentId/currentAgentId on a bootstrapped TaskRun so the
+   * workforce view can place the run instead of showing "0 working" while
+   * the model runner is busy (BI-B3AB7FC9).
+   */
+  agentId?: string | null;
 
   patternSlug: string;
   artifactType: DeliberationArtifactType;
@@ -369,6 +376,8 @@ export async function orchestrateDeliberation(
         userId: input.userId,
         threadId: input.threadId ?? null,
         buildId: input.buildId ?? null,
+        initiatingAgentId: input.agentId ?? null,
+        currentAgentId: input.agentId ?? null,
         routeContext: input.routeContext ?? "deliberation",
         title: `Deliberation: ${input.patternSlug}`,
         objective: `Run ${pattern.name} over artifactType=${input.artifactType}`,

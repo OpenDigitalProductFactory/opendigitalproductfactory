@@ -203,4 +203,72 @@ describe("loadWorkforceActivity", () => {
     const wf = await loadWorkforceActivity({ prisma, now: () => NOW });
     expect(wf.working.map((c) => c.name)).toEqual(["A2", "A1"]);
   });
+
+  it("reports token spend the roster cannot claim as unattributed instead of dropping it (BI-B3AB7FC9)", async () => {
+    const prisma = fakePrisma({
+      agents: [agent({ agentId: "a1", displayName: "A1" })],
+      tokens: [
+        { agentId: "a1", _sum: { inputTokens: 100, outputTokens: 50, costUsd: 0.5 } },
+        // The reviewDesignDoc fan-out before the fix: routed calls with no caller.
+        { agentId: "unknown", _sum: { inputTokens: 700, outputTokens: 300, costUsd: 2 } },
+        // A retired or non-coworker agent id still counts toward the day.
+        { agentId: "AGT-RETIRED", _sum: { inputTokens: 10, outputTokens: 0, costUsd: 0 } },
+      ],
+    });
+    const wf = await loadWorkforceActivity({ prisma, now: () => NOW });
+    expect(wf.pulse.tokensToday).toBe(1160);
+    expect(wf.pulse.costToday).toBeCloseTo(2.5);
+    expect(wf.pulse.tokensUnattributed).toBe(1010);
+    expect(wf.pulse.costUnattributed).toBeCloseTo(2);
+    // The coworker's own line is unchanged.
+    expect(wf.quiet[0].tokensToday).toBe(150);
+  });
+
+  it("lists live runs no coworker owns as platform work rather than an empty 'working' board (BI-B3AB7FC9)", async () => {
+    const prisma = fakePrisma({
+      agents: [agent({ agentId: "a1", displayName: "A1" })],
+      liveRuns: [
+        {
+          taskRunId: "deliberation-1",
+          status: "working",
+          title: "Deliberation: review",
+          currentAgentId: null,
+          source: "proactive",
+          buildId: "FB-FCAC756D",
+          routeContext: "/build",
+          startedAt: new Date(NOW - 120_000),
+          lastHeartbeatAt: new Date(NOW - 60_000),
+        },
+        {
+          taskRunId: "owned-1",
+          status: "working",
+          title: "Coworker task",
+          currentAgentId: "a1",
+          startedAt: new Date(NOW),
+          lastHeartbeatAt: new Date(NOW),
+        },
+        {
+          taskRunId: "ghost-1",
+          status: "working",
+          title: "Run owned by an id not on the roster",
+          currentAgentId: "AGT-RETIRED",
+          startedAt: new Date(NOW),
+          lastHeartbeatAt: null,
+        },
+      ],
+    });
+    const wf = await loadWorkforceActivity({ prisma, now: () => NOW });
+    expect(wf.working.map((c) => c.agentId)).toEqual(["a1"]);
+    expect(wf.platformWork.map((r) => r.taskRunId)).toEqual(["deliberation-1", "ghost-1"]);
+    expect(wf.platformWork[0]).toMatchObject({
+      title: "Deliberation: review",
+      status: "working",
+      source: "proactive",
+      buildId: "FB-FCAC756D",
+      routeContext: "/build",
+      startedAt: new Date(NOW - 120_000).toISOString(),
+    });
+    expect(wf.pulse.platformWorkCount).toBe(2);
+    expect(wf.pulse.workingCount).toBe(1);
+  });
 });

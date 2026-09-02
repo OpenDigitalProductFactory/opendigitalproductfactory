@@ -647,7 +647,7 @@ async function routeAndCallAttempt(
       traceId,
       agentId: options?.agentId ?? "unknown",
       providerId: result.providerId,
-      contextKey: options?.threadId ?? options?.taskType ?? "routed-call",
+      contextKey: routedContextKey(options),
       inputTokens: result.tokenUsage?.inputTokens ?? 0,
       outputTokens: result.tokenUsage?.outputTokens ?? 0,
       inferenceMs: result.inferenceMs,
@@ -722,7 +722,7 @@ async function routeAndCallAttempt(
     traceId,
     agentId: options?.agentId ?? "unknown",
     providerId: result.providerId,
-    contextKey: options?.threadId ?? options?.taskType ?? "routed-call",
+    contextKey: routedContextKey(options),
     inputTokens: result.tokenUsage?.inputTokens ?? 0,
     outputTokens: result.tokenUsage?.outputTokens ?? 0,
     inferenceMs: result.inferenceMs,
@@ -769,6 +769,17 @@ async function routeAndCallAttempt(
 // it easy to satisfy by default.
 //
 // Errors are logged but never thrown — metering must never block the response.
+/**
+ * TokenUsage.contextKey for a routed call: the thread when there is one, else
+ * the build, else the task type. "routed-call" is the last resort and means
+ * the caller said nothing about itself (BI-B3AB7FC9).
+ */
+function routedContextKey(options: RouteAndCallOptions | undefined): string {
+  if (options?.threadId) return options.threadId;
+  if (options?.buildId) return `build:${options.buildId}`;
+  return options?.taskType ?? "routed-call";
+}
+
 async function persistRoutedTokenUsage(input: {
   traceId?: string | null;
   agentId: string;
