@@ -42,6 +42,7 @@ import {
 } from "../lib/ux-budget/ratchet";
 import type { UxShell } from "../lib/ux-budget/budgets";
 import type { RouteAudience } from "../lib/navigation/route-audience";
+import { loadRouteParams, resolveSweepPath } from "./ux-sweep-route-params";
 import type {
   ExemptCheck,
   RouteSweepExclusionReason,
@@ -65,6 +66,7 @@ function repoRoot(): string {
 
 const ROOT = repoRoot();
 const SHELLS_REL = "apps/web/lib/ux-budget/route-shells.generated.json";
+
 const BASELINE_REL = "apps/web/lib/ux-budget/route-budget-baseline.json";
 const REPORT_REL = "apps/web/lib/ux-budget/route-budget-report.json";
 const EXECUTION_REL =
@@ -396,13 +398,15 @@ async function measureRoute(
   page: Page,
   row: ShellRow,
   baseUrl: string,
+  routeParams: Readonly<Record<string, string>> = {},
 ): Promise<MeasuredRoute> {
+  const targetPath = resolveSweepPath(row.routePath, routeParams);
   const phases = {} as RoutePhaseTimings;
   let phaseStartedAt = performance.now();
 
   // NOT networkidle: this portal holds long-lived connections (activity streams,
   // polling), so networkidle never settles and every route would time out.
-  const response = await page.goto(`${baseUrl}${row.routePath}`, {
+  const response = await page.goto(`${baseUrl}${targetPath}`, {
     waitUntil: "domcontentloaded",
     timeout: 30_000,
   });
@@ -419,7 +423,7 @@ async function measureRoute(
     throw new Error(`http ${response.status()}`);
   }
   const landed = new URL(page.url()).pathname.replace(/\/$/, "") || "/";
-  const wanted = row.routePath.replace(/\/$/, "") || "/";
+  const wanted = targetPath.replace(/\/$/, "") || "/";
   if (landed !== wanted) {
     throw new Error(`redirected to ${landed}`);
   }
@@ -566,6 +570,7 @@ async function main(): Promise<void> {
     JSON.parse(readFileSync(join(ROOT, SHELLS_REL), "utf8")) as { routes: ShellRow[] }
   ).routes;
   const rows = selectSweepRows(inventory, routeSelector);
+  const routeParams = loadRouteParams(ROOT);
   const excluded = inventory
     .filter((row) => !row.sweepEligible)
     .map((row) => ({
@@ -602,7 +607,7 @@ async function main(): Promise<void> {
       async (row, workerIndex) =>
         withIsolatedSweepPage(contexts[workerIndex], async (page) => {
           try {
-            return await measureRoute(page, row, baseUrl);
+            return await measureRoute(page, row, baseUrl, routeParams);
           } catch (error) {
             await captureFailureScreenshot(page, row.routePath);
             throw error;
@@ -625,7 +630,7 @@ async function main(): Promise<void> {
             [...confirmRows],
             Math.min(workerCount, confirmRows.length),
             async (row, workerIndex) =>
-              withIsolatedSweepPage(contexts[workerIndex], async (page) => measureRoute(page, row, baseUrl)),
+              withIsolatedSweepPage(contexts[workerIndex], async (page) => measureRoute(page, row, baseUrl, routeParams)),
           );
           const measured = run.outcomes.flatMap((o) => (o.status === "measured" ? [o.value.measurement] : []));
           return {

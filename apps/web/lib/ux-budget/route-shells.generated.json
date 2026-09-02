@@ -3976,8 +3976,7 @@
         "next-action-marker",
         "lead-band"
       ],
-      "sweepEligible": false,
-      "sweepExclusionReason": "dynamic-fixture-required",
+      "sweepEligible": true,
       "confidence": "high"
     },
     {

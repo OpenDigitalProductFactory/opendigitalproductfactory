@@ -5658,8 +5658,7 @@
         "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
-        "sweepEligible": false,
-        "sweepExclusionReason": "dynamic-fixture-required"
+        "sweepEligible": true
       }
     },
     {
