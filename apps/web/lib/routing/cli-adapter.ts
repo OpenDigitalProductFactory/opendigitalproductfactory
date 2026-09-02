@@ -472,6 +472,9 @@ export const cliAdapter: ExecutionAdapterHandler = {
     const tokenFile = `/tmp/cli-token-${slug}.txt`;
     const mcpConfigFile = `/tmp/cli-mcp-${slug}.json`;
     const runnerScript = `/tmp/cli-run-${slug}.sh`;
+    // BI-35FAE2DB: empty, per-run cwd so the CLI discovers no project
+    // CLAUDE.md / settings / hooks above it.
+    const cliWorkingDir = `/tmp/cli-cwd-${slug}`;
     // Records the in-container claude PID so a timeout can reap the actual
     // process inside the sandbox (BI-F36E7510). proc.kill() below only reaches
     // the local `docker exec` client, not the containerized process.
@@ -562,9 +565,20 @@ export const cliAdapter: ExecutionAdapterHandler = {
       // replace the sh, leaving the cmdline as bare `claude -p ...` with no
       // unique handle and no way to signal it from the host. stdout/stderr are
       // inherited by the background child, so capture is unchanged.
+      // BI-35FAE2DB: headless inference runs from a NEUTRAL directory, never
+      // the project workspace. `claude` discovers CLAUDE.md (which imports the
+      // whole AGENTS.md rulebook), settings and hooks by walking UP from cwd,
+      // so `cd /workspace` turned every single-shot call into an agentic
+      // session that answered "respond with ONLY a JSON object" with session
+      // meta-commentary — unparseable, and the reason design review reported
+      // "Both review agents failed to respond" for 332 rounds. Nothing is lost
+      // by leaving: every native filesystem tool is already disallowed here
+      // (CLAUDE_CODE_NATIVE_TOOLS_FLAG_VALUE), so that context could never be
+      // acted on, only paid for. Measurements are in the BI and commit message.
       const script = [
         "#!/bin/sh",
-        "cd /workspace",
+        `mkdir -p ${cliWorkingDir}`,
+        `cd ${cliWorkingDir}`,
         authExportLine,
         `SYSPROMPT=$(cat ${systemFile})`,
         `claude ${bareFlag}-p - --dangerously-skip-permissions ${mcpFlags}--disallowedTools "${CLAUDE_CODE_NATIVE_TOOLS_FLAG_VALUE}" --output-format json --model ${cliModel} --system-prompt "$SYSPROMPT" < ${promptFile} &`,
@@ -773,7 +787,7 @@ export const cliAdapter: ExecutionAdapterHandler = {
       // so a leaked sandbox shell can't dump the bearer from disk after the
       // call returns.
       execAsync(
-        `docker exec ${SANDBOX_CONTAINER} sh -c "rm -f ${promptFile} ${systemFile} ${tokenFile} ${mcpConfigFile} ${runnerScript} ${pidFile}"`,
+        `docker exec ${SANDBOX_CONTAINER} sh -c "rm -f ${promptFile} ${systemFile} ${tokenFile} ${mcpConfigFile} ${runnerScript} ${pidFile}; rmdir ${cliWorkingDir} 2>/dev/null || true"`,
         { timeout: 5_000 },
       ).catch(() => {});
     }
