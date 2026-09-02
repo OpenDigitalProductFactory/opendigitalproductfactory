@@ -178,7 +178,11 @@ export const getDemandShareContext = cache(async (): Promise<DemandShareContext>
     prisma.backlogItem.findMany({
       where: {
         status: { in: ["open", "in-progress"] },
-        NOT: { body: { contains: "[origin:federatedDemand:" } },
+        NOT: [
+          { body: { contains: "[origin:federatedDemand:" } },
+          // A work-sync mirror is not local demand to share (BI-FF8A57EF).
+          { body: { contains: "[origin:federatedWork:" } },
+        ],
       },
       select: { itemId: true, title: true, status: true },
       orderBy: [{ priority: "desc" }, { updatedAt: "desc" }],

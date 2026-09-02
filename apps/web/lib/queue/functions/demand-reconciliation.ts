@@ -20,9 +20,17 @@ export const demandReconciliationScheduled = inngest.createFunction(
     const gate = await gateAtEntry(step);
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
-    return step.run("reconcile-federated-demand", async () => {
+    const demand = await step.run("reconcile-federated-demand", async () => {
       const { runDemandReconciliation } = await import("@/lib/federation/demand-reconciliation");
       return runDemandReconciliation();
     });
+    // Same cadence, separate step: pull every same-organization peer's backlog
+    // into local mirrors (BI-FF8A57EF). A demand failure never blocks work sync
+    // and vice versa.
+    const work = await step.run("sync-federated-work", async () => {
+      const { runWorkSync } = await import("@/lib/federation/work-sync");
+      return runWorkSync();
+    });
+    return { demand, work };
   },
 );

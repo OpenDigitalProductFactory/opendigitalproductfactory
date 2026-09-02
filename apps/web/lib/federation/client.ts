@@ -217,3 +217,55 @@ export async function sendDemandDigestToPeer(
     ...(target.fetchImpl ? { fetchImpl: target.fetchImpl } : {}),
   });
 }
+
+/** Authenticated GET against a peer's federation surface (same SSRF/LAN rules
+ *  as postToPeer). Work sync PULLS: the receiving side asks for the page it is
+ *  missing instead of waiting on the sender's outbox. */
+export async function getFromPeer(input: {
+  peerAuthorityUrl: string;
+  linkToken: string;
+  path: string;
+  fetchImpl?: typeof fetch;
+  sameOrgLan?: boolean;
+}): Promise<PeerPostResult> {
+  const f = input.fetchImpl ?? fetch;
+  let url: string;
+  try {
+    url = safePeerRequestUrl(input.peerAuthorityUrl, input.path, input.sameOrgLan ?? false);
+  } catch (err) {
+    return { ok: false, status: 0, error: err instanceof Error ? err.message : "unsafe peer url" };
+  }
+  try {
+    const res = await f(url, {
+      method: "GET",
+      headers: { accept: "application/json", authorization: `Bearer ${input.linkToken}` },
+    });
+    let body: unknown;
+    try {
+      body = await res.json();
+    } catch {
+      body = undefined;
+    }
+    return { ok: res.ok, status: res.status, body };
+  } catch (err) {
+    return { ok: false, status: 0, error: err instanceof Error ? err.message : "network error" };
+  }
+}
+
+/** Pull one page of a same-organization peer's share-safe backlog (BI-FF8A57EF). */
+export async function fetchWorkPageFromPeer(
+  target: PeerLinkTarget,
+  options: { cursor?: string | null; limit?: number } = {},
+): Promise<PeerPostResult> {
+  const params = new URLSearchParams();
+  if (options.cursor) params.set("cursor", options.cursor);
+  if (options.limit) params.set("limit", String(options.limit));
+  const query = params.toString();
+  return getFromPeer({
+    peerAuthorityUrl: target.peerAuthorityUrl,
+    linkToken: target.linkToken,
+    path: `/api/v1/federation/work${query ? `?${query}` : ""}`,
+    sameOrgLan: target.sameOrgLan ?? false,
+    ...(target.fetchImpl ? { fetchImpl: target.fetchImpl } : {}),
+  });
+}

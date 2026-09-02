@@ -387,6 +387,41 @@ Where the ARP cache cannot see the segment — Docker Desktop again —
 ceiling reports how many origins it left out, because a silent cap reads as
 covering everything.
 
+### 5.11 Work sync is a pull (amendment, 2026-09-02, BI-FF8A57EF)
+
+§5.2 declared `backlog-item` and `epic` as federated record types and left the
+transport to "the existing mirror". Nothing was ever built on that: no producer
+wrote those types, and `dispatchDueDemand` filtered to the three demand types.
+Meanwhile the demand lane carried the same items the other way — as *demand*
+a person must adopt one by one — and five days of measurement on a paired
+development/production pair showed 327 healthy outbound envelopes and **zero**
+inbound rows, a state the receiving side could not even see.
+
+The transport for work is therefore a **pull**, run by the receiving side on the
+five-minute federation cadence:
+
+- `GET /api/v1/federation/work` (private-mesh) serves the caller's trusted
+  same-organization link a paged, share-safe view of this installation's whole
+  backlog — every status, minus the `confidential` / `restricted` tiers and minus
+  rows that are themselves mirrors — plus its epics.
+- The puller materialises each page as real `BacklogItem` / `Epic` rows carrying
+  the origin's semantic ids (`BI-*`, `EP-*`) and a standalone
+  `[origin:federatedWork:<installationId>:<id>]` marker line, and records
+  provenance in `FederatedRecordMirror` (`recordType` `backlog-item` / `epic`,
+  `canonicalSide` `peer`).
+- Only the origin mutates (invariant 6): every cycle the origin's copy overwrites
+  the mirror, a record that disappears at the origin is retired locally, and a
+  locally owned row that shares an id is left alone and recorded as a conflict.
+- Mirrors never re-project — not as work, not as demand — and the triage drain
+  does not touch them, so nothing echoes and nothing forks.
+
+Why pull rather than the outbox: a development companion must converge on
+production's truth regardless of production's outbox, retry clock or re-heal cap,
+and the receiving side must be able to *say* it is behind. A pull reports its
+own failure ("peer does not serve work sync yet"); a push that never arrives
+reports nothing. The demand lane is unchanged and still carries deliberate,
+per-item sharing across organization boundaries.
+
 ## 6. Lifecycle at scale
 
 The unattended cycle this enables:
@@ -422,8 +457,9 @@ the identity design remains the backstop for an install with **no** peer.
    auto-enrol.
 2. Every other combination returns `manual-approval` with a closed reason.
 3. Unrecognised presets and roles refuse rather than defaulting open.
-4. `backlog-item` and `epic` are federated record types and reconcile through the
-   existing mirror.
+4. `backlog-item` and `epic` are federated record types; a trusted
+   same-organization peer's items and epics appear as read-only rows in this
+   installation's backlog within one cadence, and vice versa (§5.11).
 5. A development install paired with an organization peer resolves
    `workSync: same-organization` while `peerWrite` stays `read-only`.
 6. A plain-HTTP candidate is `blocked` regardless of organization trust; an

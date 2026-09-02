@@ -12,9 +12,20 @@
 // when no link exists yet to confirm it.
 
 import type { FederationRelationshipPreset } from "./federation-link-types";
+import type { TrustState } from "./trust-link-lifecycle";
 
-/** Link states that represent a peer this installation may actually work with. */
-const USABLE_LINK_STATES = new Set(["active", "approved"]);
+/**
+ * Link states that represent a peer this installation may actually work with.
+ *
+ * `trusted` is the only usable state by design: `pending` means the dual
+ * approval the handshake exists to obtain has not completed, and `quarantined` /
+ * `revoked` are explicit operator withdrawals. Typed as `Set<TrustState>` so a
+ * member outside the closed vocabulary is a compile error — the previous set
+ * held `active` / `approved`, which `resolveLinkTrust` never produces, so no
+ * link could ever count and work sync reported "nowhere to mirror" while
+ * mirroring succeeded (BI-D92A50F4).
+ */
+const USABLE_LINK_STATES: ReadonlySet<string> = new Set<TrustState>(["trusted"]);
 
 /** Where the resolved pairing came from. Never inferred beyond these. */
 export const PAIRING_SOURCES = ["federation-link", "declared-intent", "none"] as const;

@@ -37,7 +37,12 @@ export const backlogTriageDrain = inngest.createFunction(
     const items = await step.run("fetch-triaging-items", async () => {
       const { prisma } = await import("@dpf/db");
       return prisma.backlogItem.findMany({
-        where: { status: "triaging" },
+        where: {
+          status: "triaging",
+          // A work-sync mirror is triaged by the installation that owns it;
+          // triaging the copy here would fork the record (BI-FF8A57EF).
+          NOT: { body: { contains: "[origin:federatedWork:" } },
+        },
         orderBy: { createdAt: "asc" },
         take: MAX_PER_RUN,
         select: {
