@@ -79,8 +79,19 @@ A standing room declares its activity shape by passing `workShape` to `create_wo
 entry with no migration, and is read back by `readWorkShapeClaim` / `resolveWorkShapeClaim`.
 
 **This claim is what makes a room wake.** The standing-Workroom drive
-(`apps/web/lib/queue/functions/workroom-drive.ts`, every 15 minutes) loads non-terminal rooms
-and drops every one whose `scopeClaims` carry no work-shape claim. A room without it is inert
+(`apps/web/lib/queue/functions/workroom-drive.ts`, every 15 minutes) selects non-terminal,
+unarchived rooms **that carry a work-shape claim**, ordered, and bounded by
+`STANDING_ROOM_SCAN_LIMIT`.
+
+The filter is part of the query rather than a pass over the results, and the distinction is
+load-bearing ⟦runtime: corrected 2026-09-02, `BI-72B3FB40`⟧. The first implementation capped
+the row read at 200 and filtered for the claim afterwards in JavaScript, so the cap bounded
+*every* room instead of the candidates. On an install with 276 non-terminal rooms and one
+shaped room, the drive reported `scanned: 0` on every tick for seven hours: registered,
+connected, executing in 47ms, and reading the wrong set of rows. Nothing errored, which is
+why it took a direct row count to see. The ordering matters for the same reason — without it,
+which rooms fall inside the cap is whatever the query planner returned, so a room could be
+scanned on one tick and invisible on the next without changing at all. A room without it is inert
 by construction, however assertive its posture. A malformed reference is refused at
 normalization rather than stored, because a claim that can never resolve would leave the room
 looking declared and behaving inert — the exact failure this contract exists to end.

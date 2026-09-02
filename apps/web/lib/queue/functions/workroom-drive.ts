@@ -90,6 +90,9 @@ export type WorkroomDriveResult = {
 
 const TERMINAL = new Set(["abandoned", "archived", "complete"]);
 
+/** Max rooms one drive tick will consider. Bounds CANDIDATES, not all rooms. */
+export const STANDING_ROOM_SCAN_LIMIT = 200;
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -310,10 +313,46 @@ export async function runWorkroomDriveJob(
   };
 }
 
+/**
+ * Ids of the rooms the drive could possibly act on: non-terminal, not archived,
+ * and actually carrying a work-shape claim.
+ *
+ * The claim lives inside the `scopeClaims` JSON, which Prisma cannot filter on
+ * for an array of objects — so this is raw SQL rather than a `findMany` where
+ * clause. That matters more than it looks: the previous implementation capped
+ * `findMany` at 200 rows and only then filtered for the claim in JavaScript, so
+ * the cap applied to ALL rooms rather than to candidates. On the reference
+ * install that meant 276 non-terminal rooms, exactly one of them shaped, and a
+ * drive that reported `scanned: 0` forever because the one shaped room fell
+ * outside an unordered 200-row window. Filtering in SQL means the cap now
+ * bounds work the drive can actually do, and `ORDER BY` makes which rooms it
+ * takes deterministic instead of whatever the planner returned.
+ */
+export async function loadStandingRoomIds(db: {
+  $queryRaw: (q: TemplateStringsArray, ...v: unknown[]) => Promise<Array<{ id: string }>>;
+}): Promise<string[]> {
+  const rows = await db.$queryRaw`
+    SELECT "id"
+    FROM "WorkCapsule"
+    WHERE "archivedAt" IS NULL
+      AND "status" NOT IN ('abandoned', 'archived', 'complete')
+      AND EXISTS (
+        SELECT 1 FROM jsonb_array_elements("scopeClaims") AS claim
+        WHERE claim ? 'workShape'
+      )
+    ORDER BY "updatedAt" ASC, "id" ASC
+    LIMIT ${STANDING_ROOM_SCAN_LIMIT}
+  `;
+  return rows.map((row) => row.id);
+}
+
 async function loadStandingRooms(): Promise<WorkroomDriveRoom[]> {
   const { prisma } = await import("@dpf/db");
+  const ids = await loadStandingRoomIds(prisma as never);
+  if (ids.length === 0) return [];
   const rows = await prisma.workroom.findMany({
     where: {
+      id: { in: ids },
       archivedAt: null,
       status: { notIn: [...TERMINAL] },
     },
@@ -342,7 +381,6 @@ async function loadStandingRooms(): Promise<WorkroomDriveRoom[]> {
         },
       },
     },
-    take: 200,
   });
 
   return rows.flatMap((row) => {
