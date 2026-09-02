@@ -17,6 +17,7 @@ userInvocable: true
 agentInvocable: true
 allowedTools: ["Read", "Grep", "Glob"]
 composesFrom: []
+enforces: []
 contextRequirements: []
 riskBand: low
 ---
