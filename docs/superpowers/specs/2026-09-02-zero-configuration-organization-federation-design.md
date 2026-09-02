@@ -121,9 +121,13 @@ peer's token in clear, which is why it is in the ledger.
 
 ### 5.3 Supersession
 
-Among non-revoked `same-org-peer` links, group by `peerInstallationId` when
-known, else by normalised `peerAuthorityUrl`. The newest `enrolledAt` wins; the
-rest are revoked with reason `superseded-by:<linkId>`. Runs at boot, on every
+Among non-revoked `same-org-peer` links, group by `peerInstallationId` and by
+normalised `peerAuthorityUrl`, merged transitively (a pending link that never
+learned the peer's id joins the trusted link at the same address). Trust
+outranks age: a trusted link is never superseded by a pending one; among
+trusted links the newest `enrolledAt` wins; a pending link enrolled after the
+winner is a re-pairing in flight and is left alone until it becomes trusted.
+The rest are revoked with reason `superseded-by:<linkId>`. Runs at boot, on every
 federation tick, and after any enrolment. On production this retires the two
 links from earlier install cycles without a click.
 
