@@ -20,6 +20,11 @@ type VerifiedReleaseTargetInput = {
  * evidence bound to this exact install. Only transport unavailability may use
  * the bounded fallback; any registry integrity result remains authoritative.
  */
+/** `registry-unavailable` alone cannot say whether the registry rate-limited us, 5xx'd, or refused the token. */
+function describeUnavailable(target: { reason: string; detail?: string }): string {
+  return target.detail ? `${target.reason} (${target.detail})` : target.reason;
+}
+
 export async function resolveVerifiedReleaseUpgradeCandidate(
   input: VerifiedReleaseTargetInput,
 ): Promise<Awaited<ReturnType<typeof resolveReleaseUpgradeCandidate>>> {
@@ -41,7 +46,7 @@ export async function resolveVerifiedReleaseUpgradeCandidate(
     return liveTarget;
   }
   if (liveTarget?.kind === "no-published-target" && liveTarget.reason !== "registry-unavailable") {
-    log(`release-target-unavailable: ${liveTarget.reason}`);
+    log(`release-target-unavailable: ${describeUnavailable(liveTarget)}`);
     return liveTarget;
   }
   const persistedCandidate = input.currentConfigDigest
@@ -55,7 +60,7 @@ export async function resolveVerifiedReleaseUpgradeCandidate(
       kind: "no-published-target" as const,
       reason: "registry-unavailable" as const,
     };
-    log(`release-target-unavailable: ${unavailable.reason}`);
+    log(`release-target-unavailable: ${describeUnavailable(unavailable)}`);
     return unavailable;
   }
   const target = resolveReleaseTarget({
@@ -64,7 +69,7 @@ export async function resolveVerifiedReleaseUpgradeCandidate(
     unavailableReason: "registry-unavailable",
   });
   if (target.kind === "no-published-target") {
-    log(`release-target-unavailable: ${target.reason}`);
+    log(`release-target-unavailable: ${describeUnavailable(target)}`);
   }
   return target;
 }

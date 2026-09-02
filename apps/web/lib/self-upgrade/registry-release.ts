@@ -57,7 +57,7 @@ export type RegistryReleaseFailureReason =
 
 export type RegistryReleaseReadResult =
   | (ActionSuccess & { candidate: RegistryReleaseCandidate })
-  | { ok: false; reason: RegistryReleaseFailureReason };
+  | { ok: false; reason: RegistryReleaseFailureReason; detail?: string };
 
 type ManifestDescriptor = {
   mediaType?: unknown;
@@ -89,8 +89,15 @@ type RegistryTransport = Readonly<{
 type RegistryTransportFactory = () => RegistryTransport;
 
 class RegistryReadError extends Error {
-  constructor(readonly reason: RegistryReleaseFailureReason) {
-    super(reason);
+  // `registry-unavailable` is raised from three different non-OK responses and
+  // is also the bounded-fallback reason, so the bare reason cannot say whether
+  // the registry rate-limited us, 5xx'd, or refused the token. `detail` carries
+  // the HTTP status so a log line names the actual condition (BI-52C6FE5A).
+  constructor(
+    readonly reason: RegistryReleaseFailureReason,
+    readonly detail?: string,
+  ) {
+    super(detail ? `${reason} (${detail})` : reason);
   }
 }
 
@@ -276,7 +283,7 @@ export async function readRegistryReleaseCandidate(input: {
         `/v2/${imageName}/manifests/${encodeURIComponent(reference)}`,
         MANIFEST_ACCEPT,
       );
-      if (!response.ok) throw new RegistryReadError("registry-unavailable");
+      if (!response.ok) throw new RegistryReadError("registry-unavailable", `HTTP ${response.status}`);
       const body = await readBounded(response, MAX_MANIFEST_BYTES);
       const digest = verifiedDigest(
         response,
@@ -342,7 +349,7 @@ export async function readRegistryReleaseCandidate(input: {
     }
 
     const configResponse = await blob(configDigest);
-    if (!configResponse.ok) throw new RegistryReadError("registry-unavailable");
+    if (!configResponse.ok) throw new RegistryReadError("registry-unavailable", `HTTP ${configResponse.status}`);
     const configBody = await readBounded(configResponse, MAX_CONFIG_BYTES);
     verifiedDigest(
       configResponse,
@@ -379,7 +386,7 @@ export async function readRegistryReleaseCandidate(input: {
       if (immutableDigest !== channel.digest) throw new RegistryReadError("immutable-tag-mismatch");
     } else {
       const tagsResponse = await request(`/v2/${imageName}/tags/list?n=${MAX_LEGACY_TAGS}`);
-      if (!tagsResponse.ok) throw new RegistryReadError("registry-unavailable");
+      if (!tagsResponse.ok) throw new RegistryReadError("registry-unavailable", `HTTP ${tagsResponse.status}`);
       const tagsBody = parseJson(
         await readBounded(tagsResponse, MAX_TAG_LIST_BYTES),
         "channel-manifest-invalid",
@@ -439,6 +446,7 @@ export async function readRegistryReleaseCandidate(input: {
         return {
           ok: false,
           reason: error instanceof RegistryReadError ? error.reason : "registry-unavailable",
+          ...(error instanceof RegistryReadError && error.detail ? { detail: error.detail } : {}),
         };
       }
     } finally {
