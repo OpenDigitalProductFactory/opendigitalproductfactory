@@ -17,7 +17,6 @@ import {
   type ProposalExchangeDb,
 } from "@/lib/federation/exchange-handlers";
 import type { RemediationProposalDraft } from "@/lib/service-desk/remediation-authority";
-import { envFlagEnabled } from "@/lib/runtime/env-flags";
 
 const ERROR_STATUS: Record<string, number> = {
   missing_authorization: 401,
@@ -38,9 +37,6 @@ function isProposalDraft(v: unknown): v is RemediationProposalDraft {
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
-  if (!envFlagEnabled(process.env, "DPF_FEDERATION_EXCHANGE_ENABLED")) {
-    return NextResponse.json({ ok: false, error: "federation_exchange_disabled" }, { status: 404 });
-  }
   const authz = await resolveFederationLinkAuth(request.headers.get("authorization"));
   if (!authz.ok) {
     return NextResponse.json(

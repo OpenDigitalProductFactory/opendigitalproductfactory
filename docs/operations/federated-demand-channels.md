@@ -63,6 +63,20 @@ This is not multi-master backlog replication. Each source backlog item remains
 single-writer authoritative. Either installation can pause or revoke its link,
 and expanding the projection requires approval on both sides.
 
+### What survives a reinstall
+
+An installation's federation identity and its list of peers live in the
+`federation/` folder of the state directory (`~/.dpf` by default), beside the
+organization certificates. A reinstall that keeps that directory keeps the
+identity its peers trust and every connection it had; nothing needs to be
+re-connected or re-approved on either side. Exchange is always on: a trusted
+connection is the only switch, and there is no flag to set.
+
+If an installation is rebuilt without its state directory, its peers see the
+new identity arrive over the same address and retire the old connection on
+their own ("superseded by" the new one) once a new connection is made. The
+Connections page never carries two live rows for one installation.
+
 ### Backlog sync between your own installations
 
 Approved `same-organization` connections also keep each other's **backlog** in
