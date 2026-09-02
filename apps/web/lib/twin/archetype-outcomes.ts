@@ -9,6 +9,16 @@ export interface DonationTotal {
   count: number;
 }
 
+/** The population physically in the shelter right now, split by the status
+ *  staff act on. Adopted animals are an outcome, not a population, so they are
+ *  not counted here. */
+export interface AnimalsInCare {
+  total: number;
+  onHold: number;
+  available: number;
+  pending: number;
+}
+
 export interface ArchetypeOutcomeInput {
   archetypeId: string;
   currency: string;
@@ -18,6 +28,9 @@ export interface ArchetypeOutcomeInput {
   /** One entry per currency the gifts were recorded in. `null` means the
    *  donation source could not be read at all; `[]` means no gifts yet. */
   donationTotals?: DonationTotal[] | null;
+  /** `null` means the animal source could not be read; a zero total means an
+   *  empty shelter, which is a real and different answer. */
+  animalsInCare?: AnimalsInCare | null;
   animalsPlaced?: number | null;
   fostersActive?: number | null;
 }
@@ -80,6 +93,41 @@ function donationsOutcome(input: ArchetypeOutcomeInput): TwinOutcome {
 }
 
 /**
+ * The subject of the business leads. A rescue cockpit counted its workforce,
+ * its coworkers and its programs and never said how many animals were in the
+ * building (BI-E54F7F87) — so this is the first tile, before any money.
+ */
+function animalsInCareOutcome(inCare: AnimalsInCare | null | undefined): TwinOutcome {
+  if (inCare == null) {
+    return {
+      key: "animals-in-care",
+      label: "Animals in care",
+      value: "Unavailable",
+      intent: "info",
+      hint: "Animal source unavailable",
+    };
+  }
+
+  // Name only the statuses actually present: "5 on hold · 1 available" reads,
+  // and a row of zeroes does not.
+  const split = [
+    { count: inCare.onHold, label: "on hold" },
+    { count: inCare.available, label: "available" },
+    { count: inCare.pending, label: "pending" },
+  ]
+    .filter((part) => part.count > 0)
+    .map((part) => `${part.count} ${part.label}`);
+
+  return {
+    key: "animals-in-care",
+    label: "Animals in care",
+    value: `${inCare.total} animal${inCare.total === 1 ? "" : "s"}`,
+    intent: "info",
+    hint: split.length > 0 ? split.join(" · ") : "None in care",
+  };
+}
+
+/**
  * Project canonical aggregates into the archetype's outcome language. This is
  * intentionally a small presentation boundary, not a general metric framework:
  * each value must already have a real source, and missing sources stay visible.
@@ -91,6 +139,7 @@ export function buildArchetypeOutcomes(
     return {
       heading: "Mission impact",
       outcomes: [
+        animalsInCareOutcome(input.animalsInCare),
         donationsOutcome(input),
         {
           key: "animals-placed",

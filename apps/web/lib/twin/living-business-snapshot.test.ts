@@ -409,20 +409,30 @@ describe("loadLivingBusinessSnapshot — loader", () => {
           { amount: 75, currency: "USD" },
         ],
       },
-      adoptableAnimal: { count: async () => 2 },
+      adoptableAnimal: {
+        count: async () => 2,
+        groupBy: async () => [
+          { status: "hold", _count: { _all: 3 } },
+          { status: "available", _count: { _all: 1 } },
+          { status: "adopted", _count: { _all: 2 } },
+        ],
+      },
     } as unknown as LivingBusinessClient;
 
     const snapshot = await loadLivingBusinessSnapshot({ db, now: NOW });
 
     expect(snapshot?.outcomesHeading).toBe("Mission impact");
     expect(snapshot?.outcomes?.map((outcome) => outcome.label)).toEqual([
+      "Animals in care",
       "Donations received",
       "Animals placed",
       "Fosters active",
     ]);
-    expect(snapshot?.outcomes?.[0]?.value).toContain("$275");
-    expect(snapshot?.outcomes?.[1]?.value).toBe("2 animals");
-    expect(snapshot?.outcomes?.[2]).toMatchObject({
+    expect(snapshot?.outcomes?.[0]?.value).toBe("4 animals");
+    expect(snapshot?.outcomes?.[0]?.hint).toBe("3 on hold · 1 available");
+    expect(snapshot?.outcomes?.[1]?.value).toContain("$275");
+    expect(snapshot?.outcomes?.[2]?.value).toBe("2 animals");
+    expect(snapshot?.outcomes?.[3]).toMatchObject({
       value: "Unavailable",
       hint: "No foster record source yet",
     });
