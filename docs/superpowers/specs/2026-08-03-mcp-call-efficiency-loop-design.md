@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # MCP Call Efficiency Loop (BI-A08EBAEC) — Design
 
 ## Problem
