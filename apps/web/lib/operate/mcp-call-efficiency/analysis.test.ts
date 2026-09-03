@@ -112,6 +112,9 @@ describe("analyzeCallEfficiency (BI-A08EBAEC)", () => {
     expect(report.findings.some(
       (finding) => finding.kind === "high_volume" && finding.toolName === "edge.heartbeat",
     )).toBe(false);
+    expect(report.findings.some(
+      (finding) => finding.kind === "thrash" && finding.toolName === "edge.heartbeat",
+    )).toBe(false);
     expect(report.ledgerSufficiency.note).toContain("contractual machine cadence");
   });
 
@@ -186,6 +189,10 @@ describe("analyzeCallEfficiency (BI-A08EBAEC)", () => {
     const report = analyzeCallEfficiency(events, { highVolumeFloor: 25 });
     expect(report.findings.some(
       (finding) => finding.kind === "high_volume"
+        && finding.toolName === "renew_nonprod_environment_lease",
+    )).toBe(false);
+    expect(report.findings.some(
+      (finding) => finding.kind === "thrash"
         && finding.toolName === "renew_nonprod_environment_lease",
     )).toBe(false);
     expect(report.ledgerSufficiency.note).toContain("contractual machine cadence");
