@@ -501,7 +501,9 @@ describe("generated route-shell registry", () => {
     // be measurable: the sweep fixture now provisions one pet-rescue storefront with
     // listed animals, which is the honest fixture context the storefront-setup-required
     // exclusions were waiting for. Its siblings keep their exclusion until each gets its own.
-    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(207);
+    // 207 -> 206: /storefront/setup joins setup-phase-only in the same PR — once the
+    // fixture provisions a storefront the wizard navigates away and cannot be measured.
+    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(206);
     // 110 -> 113: the three exclusions above. Product Direction then adds seven
     // explicitly classified dynamic routes, bringing the combined total to 120.
     // 120 -> 121: /platform/ai/operations-map.
@@ -515,7 +517,7 @@ describe("generated route-shell registry", () => {
     // detection removed five compatibility shims from this count in BI-7D2C4F02.
     // 120 -> 119: the mirror of the eligibility gain above — /workspace/cases/[caseKey]
     // left the excluded set when the fixture began minting its id.
-    expect(registry.routes.filter((route) => !route.sweepEligible)).toHaveLength(119);
+    expect(registry.routes.filter((route) => !route.sweepEligible)).toHaveLength(120);
   });
 
   it("keeps contextual sweep exclusions explicit, valid, and non-stale", () => {

@@ -5441,7 +5441,8 @@
         "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
-        "sweepEligible": true
+        "sweepEligible": false,
+        "sweepExclusionReason": "setup-phase-only"
       }
     },
     {

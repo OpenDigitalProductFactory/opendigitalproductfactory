@@ -2169,17 +2169,6 @@
       "axeViolations": 2,
       "ariaSnapshot": "- link\n- banner\n  - link\n    - text\n    - paragraph\n      - text\n  - link\n  - button\n  - text\n  - button\n- complementary\n  - navigation\n    - group\n      - button\n      - button [pressed]\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n- main\n  - navigation\n    - link\n    - text\n  - heading [level=1]\n  - navigation\n    - link\n  - link\n  - heading [level=2]\n  - paragraph\n    - text\n  - text\n  - combobox\n  - paragraph\n    - text\n  - switch [checked]\n  - text\n  - textbox\n  - text\n  - textbox\n  - switch [checked]\n  - text\n  - textbox\n  - text\n  - textbox\n  - switch [checked]\n  - text\n  - textbox\n  - text\n  - textbox\n  - switch [checked]\n  - text\n  - textbox\n  - text\n  - textbox\n  - switch [checked]\n  - text\n  - textbox\n  - text\n  - textbox\n  - switch\n  - text\n  - switch\n  - text\n  - button"
     },
-    "/storefront/setup": {
-      "defaultVisibleWords": 479,
-      "leadBandWords": 0,
-      "primaryActions": 1,
-      "visibleFields": 1,
-      "maxChoicesPerControl": 0,
-      "subLegibleControls": 0,
-      "buriedPrimaryAction": 0,
-      "axeViolations": 2,
-      "ariaSnapshot": "- link\n- banner\n  - link\n    - text\n    - paragraph\n      - text\n  - link\n  - button\n  - text\n  - button\n- complementary\n  - navigation\n    - group\n      - button\n      - button [pressed]\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n- main\n  - navigation\n    - link\n    - text\n  - heading [level=1]\n  - navigation\n    - link\n  - heading [level=2]\n  - searchbox\n  - text\n  - button\n    - text\n  - text\n  - button\n    - text\n  - text\n  - button\n    - text\n  - text\n  - button\n    - text\n  - text\n  - button\n    - text\n  - text\n  - button\n    - text\n  - text\n  - button\n    - text\n  - text\n  - button\n    - text\n  - text\n  - button\n    - text\n  - text\n  - button\n    - text\n  - text\n  - button\n    - text\n  - text\n  - button\n    - text\n  - text\n  - button\n    - text\n  - text\n  - button\n    - text\n  - text\n  - button\n    - text\n  - text\n  - button\n    - text\n  - text\n  - button\n    - text\n  - text\n  - button\n    - text\n  - text\n  - button\n    - text\n  - text\n  - button\n    - text\n  - text\n  - button\n    - text\n  - text\n  - button\n    - text\n  - text\n  - button\n    - text\n  - text\n  - button\n    - text\n  - text\n  - button\n    - text"
-    },
     "/storefront/team": {
       "defaultVisibleWords": 86,
       "leadBandWords": 0,

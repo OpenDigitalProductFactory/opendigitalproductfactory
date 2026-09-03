@@ -3823,7 +3823,8 @@
         "next-action-marker",
         "lead-band"
       ],
-      "sweepEligible": true,
+      "sweepEligible": false,
+      "sweepExclusionReason": "setup-phase-only",
       "confidence": "high"
     },
     {
