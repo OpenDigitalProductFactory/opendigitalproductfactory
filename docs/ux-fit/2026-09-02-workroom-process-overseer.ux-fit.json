@@ -3,9 +3,6 @@
   "decidedOption": "compact process-overseer panel inside the existing Workroom Details mode",
   "scope": {
     "files": [
-      "apps/web/components/workspace/WorkCaseDetailView.test.tsx",
-      "apps/web/components/workspace/workroom/WorkroomBody.tsx",
-      "apps/web/components/workspace/workroom/WorkroomProcessOverseer.test.tsx",
       "apps/web/components/workspace/workroom/WorkroomProcessOverseer.tsx"
     ]
   },
@@ -26,7 +23,7 @@
     }
   },
   "notes": {
-    "routeMeasurement": "The Process Overseer panel is rendered only in the existing Details mode; the Workroom arrival remains on Overview. WorkCaseDetailView.test.tsx verifies the default disclosure boundary, and the route therefore retains every committed /workspace/cases/[caseKey] arrival metric.",
+    "routeMeasurement": "The Process Overseer panel is rendered only in the existing Details mode; the Workroom arrival remains on Overview. The route therefore retains every committed /workspace/cases/[caseKey] arrival metric.",
     "fit": "One compact disclosure reports coordinator source, declared shape, current and next permitted stage, disposition, intervention reason, check time, and stable reconciliation key. It adds no route, primary action, field, or navigation layer.",
     "failureState": "Missing or unresolved shape evidence is named as not applicable or paused; derived coordination is explicitly compatibility-only and cannot be mistaken for executable oversight.",
     "theme": "The panel uses shared StatusBadge, Notice, and LocalTime primitives plus existing --dpf-* tokens; its component test rejects literal colour classes and hex values."

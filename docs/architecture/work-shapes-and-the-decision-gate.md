@@ -125,10 +125,12 @@ standing rooms. The accountable participant owns the outcome; the coordinator ow
 the room's declared shape. Executors do the work, reviewers or evaluators assess it, and approvers
 authorize consequential transitions. Those responsibilities are not synonyms.
 
-The current runtime establishes the vocabulary but not the complete control loop.
-`room-coordinator.ts` selects or derives a coordinator for the read model, and
-`bindWorkroomShape` can report missing participant roles. A derived coordinator is useful for
-legacy visibility, but it is not enough to make a room execution-qualified. The target contract is:
+The runtime now carries this role as an executable conformance projection, not only as roster
+vocabulary. `room-coordinator.ts` selects or derives a coordinator for the read model;
+`workroom-shape-conformance.ts` compares declared shape, stage, evidence, role separation,
+budgets, stop conditions, and coordinator eligibility with observed state. A derived coordinator
+remains useful for legacy visibility, but it is marked compatibility-only and does not make a
+shaped room execution-qualified. The enforced contract is:
 
 1. **Convene:** require exactly one explicit current coordinator and validate the collaboration
    shape, WorkShapeDefinition/version, persisted roster, posture, authority, trigger, measures,
@@ -149,9 +151,17 @@ coordinator and accountable owner. The coordinator may be a person or an AI cowo
 coordinator requires job-specific qualification for process oversight plus explicit TAK authority;
 it cannot also serve as the independent evaluator or approver where the shape requires separation.
 
-The Workroom surface should make this control legible: coordinator identity, explicit versus
-derived assignment, conformance status, current and expected next stage, unresolved deviations,
-last check, and intervention reason. Presence remains separate from membership.
+The same projection guards cycle opening, cycle completion, and carry-over persistence before any
+mutation. Standing-room runs persist the full projection and its stable reconciliation key so the
+next drive and the operator read the same evidence. Missing or unresolvable evidence pauses a
+shaped room; the runtime does not infer conformance from the absence of an error. AI coordinators
+must have eligible JSI qualification and TAK authority inputs, and an unknown input fails closed.
+
+The Workroom surface makes this control legible in **Details → Process Overseer**: coordinator
+identity, explicit versus derived assignment, conformance status, current and expected next stage,
+unresolved deviations, last check, intervention reason, and reconciliation key. Presence remains
+separate from membership. Unshaped legacy rooms are reported as not applicable rather than being
+silently upgraded to executable oversight.
 
 Definition and occurrence identity are not a fifth shape axis. The Work Case source
 registry owns a stable, versioned room-definition projection. The Work Case owns the room
