@@ -5,7 +5,6 @@ status: binding
 # Workroom Process Overseer — Design
 
 **Backlog item:** `BI-3913EB49`  
-**Epic:** `EP-1FABA22D`  
 **Status:** implementation baseline  
 **Extends:** `2026-08-29-proactive-workrooms-design.md` §3.2 and `2026-08-30-paaw-competence-evolution-workroom-plan.md` §7A
 
