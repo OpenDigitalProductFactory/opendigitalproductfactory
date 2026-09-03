@@ -339,6 +339,9 @@
     "apps/web/app/(shell)/platform/ai/priority/outcomes/page.tsx": [
       "docs/user-guide/ai-workforce/priority-and-outcomes.md"
     ],
+    "apps/web/app/(shell)/platform/ai/providers/[providerId]/page.tsx": [
+      "docs/user-guide/ai-workforce/connecting-providers.md"
+    ],
     "apps/web/app/(shell)/platform/ai/providers/page.tsx": [
       "docs/user-guide/ai-workforce/connecting-providers.md"
     ],
@@ -3054,6 +3057,7 @@
       "apps/web/lib/build/sandbox/sandbox.ts"
     ],
     "docs/user-guide/ai-workforce/connecting-providers.md": [
+      "apps/web/app/(shell)/platform/ai/providers/[providerId]/page.tsx",
       "apps/web/app/(shell)/platform/ai/providers/page.tsx",
       "apps/web/components/platform/ProviderSuitabilityGuide.tsx",
       "apps/web/lib/ai-inference.ts"

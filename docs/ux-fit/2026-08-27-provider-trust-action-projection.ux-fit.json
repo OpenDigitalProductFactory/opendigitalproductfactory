@@ -4,9 +4,7 @@
   "decisionInteractionId": "DI-16D8DE623703",
   "scope": {
     "files": [
-      "apps/web/components/platform/ProviderAccountPostureForm.tsx",
-      "apps/web/components/platform/ProviderDetailForm.tsx",
-      "apps/web/components/platform/ProviderTrustEvidencePanel.tsx"
+      "apps/web/components/platform/ProviderAccountPostureForm.tsx"
     ]
   },
   "evidence": {
