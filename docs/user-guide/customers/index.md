@@ -19,6 +19,15 @@ The Customer area is the internal relationship and revenue workspace. The public
 Storefront receives interest; Customer turns that interest into owned follow-up
 and a traceable commercial lifecycle.
 
+For a **Pet Rescue** or **Animal Shelter**, the same records and permissions are
+presented around the relationships the organization actually manages. The
+section is titled **Adoption & community** and its primary views are **People &
+partners**, **Adoption enquiries**, and **Community outreach**. Commercial
+pipeline, quote, order, and sales-funnel tabs are hidden because they are not
+part of the rescue's normal operating model. **Add person or partner** still
+creates the canonical relationship record; it does not create a second kind of
+customer database.
+
 ## The Customer Lifecycle
 
 ```mermaid
@@ -71,6 +80,10 @@ The section navigation is permission-aware:
 
 If you do not have the required Customer or Marketing capability, DPF hides the
 route rather than exposing a read-only version.
+
+Pet Rescue and Animal Shelter organizations see the bounded relationship views
+described above. Other archetypes continue to see the full commercial
+navigation in this section.
 
 ## Start the Day With Attention, Not the Database
 
