@@ -225,15 +225,20 @@ export default async function FinancePage() {
   // collapsed advanced region. Supersedes the generic owner-first summary band
   // (BI-3BCAF95F) for food-hospitality, so it returns before that is built.
   if (financeSurface.mode === "owner-first") {
+    const metricCopy = financeSurface.metricCopy;
     const moneyJobMetrics: Partial<Record<FinanceMetricKey, MoneyJobMetric>> = {
       "outstanding-receivables": {
         value: `${sym}${formatMoney(owedAmount)}`,
-        hint: `${owedCount} invoice${owedCount !== 1 ? "s" : ""} outstanding`,
+        hint: `${owedCount} ${owedCount === 1
+          ? (metricCopy?.outstandingSingular ?? "invoice")
+          : (metricCopy?.outstandingPlural ?? "invoices")} outstanding`,
         intent: owedAmount > 0 ? "warning" : "neutral",
       },
       "money-in-month": {
         value: `${sym}${formatMoney(paidAmount)}`,
-        hint: `${paidCount} invoice${paidCount !== 1 ? "s" : ""} paid this month`,
+        hint: metricCopy
+          ? `${paidCount} ${paidCount === 1 ? metricCopy.receivedSingular : metricCopy.receivedPlural} received this month`
+          : `${paidCount} invoice${paidCount !== 1 ? "s" : ""} paid this month`,
         intent: paidAmount > 0 ? "success" : "neutral",
       },
       "overdue-count": {
@@ -243,7 +248,7 @@ export default async function FinancePage() {
             ? `oldest: ${oldestOverdue.account.name}`
             : hasAnyInvoices
               ? "all up to date"
-              : "no invoices recorded yet",
+              : (metricCopy?.emptyOverdue ?? "no invoices recorded yet"),
         intent: overdueCount > 0 ? "danger" : hasAnyInvoices ? "success" : "neutral",
       },
       "supplier-bills-due": {
@@ -283,7 +288,12 @@ export default async function FinancePage() {
               {financeSurface.recentRecordsEmpty}
             </p>
           ) : (
-            <RecentInvoicesTable rows={recentInvoiceRows} currencySymbol={sym} />
+            <RecentInvoicesTable
+              rows={recentInvoiceRows}
+              currencySymbol={sym}
+              accountHeader={metricCopy?.recentAccountHeader}
+              emptyLabel={metricCopy?.recentEmpty}
+            />
           )}
         </section>
       </div>
