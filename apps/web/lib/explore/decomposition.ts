@@ -12,7 +12,7 @@ export function validateDecompositionPlan(plan: DecompositionPlan): ValidationRe
 }
 
 export function createTechDebtItem(input: { title: string; description: string; severity: string }): {
-  itemId: string; title: string; type: string; status: string; body: string; priority: number;
+  itemId: string; title: string; type: string; status: "open"; body: string; priority: number;
 } {
   const priorityMap: Record<string, number> = { critical: 1, high: 2, medium: 3, low: 4 };
   return {

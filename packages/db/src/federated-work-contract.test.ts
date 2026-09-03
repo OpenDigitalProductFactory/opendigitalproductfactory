@@ -80,6 +80,16 @@ describe("validateFederatedWorkPageV1", () => {
     expect(validateFederatedWorkPageV1(page({ specVersion: "dpf.work-sync/0" as never }))).toContain("specVersion:unsupported");
   });
 
+  it("accepts an absent or null deferral and checks every field of a present one (BI-9DA5F179)", () => {
+    const base = page().items[0]!;
+    expect(validateFederatedWorkPageV1(page({ items: [{ ...base, deferral: null }] }))).toEqual([]);
+    const full = { reason: "Vendor v2", trigger: "v2 ships", reviewAt: "2026-10-01T00:00:00.000Z", deferredAt: null };
+    expect(validateFederatedWorkPageV1(page({ items: [{ ...base, status: "deferred", deferral: full }] }))).toEqual([]);
+    expect(validateFederatedWorkPageV1(page({ items: [{ ...base, deferral: { ...full, reason: "" } }] }))).toContain("items[0].deferral.reason:invalid");
+    expect(validateFederatedWorkPageV1(page({ items: [{ ...base, deferral: { ...full, reviewAt: "soon" } }] }))).toContain("items[0].deferral.reviewAt:invalid");
+    expect(validateFederatedWorkPageV1(page({ items: [{ ...base, deferral: "later" as never }] }))).toContain("items[0].deferral:not-an-object");
+  });
+
   it("never throws on garbage", () => {
     expect(validateFederatedWorkPageV1(null)).toEqual(["page:not-an-object"]);
     expect(validateFederatedWorkPageV1({ items: "x", epics: 1 })).toEqual(

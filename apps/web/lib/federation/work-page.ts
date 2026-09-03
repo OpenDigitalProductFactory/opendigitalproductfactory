@@ -12,6 +12,7 @@ import {
   FEDERATED_WORK_ORIGIN_MARKER_PREFIX,
   FEDERATED_WORK_SPEC_VERSION,
   hasFederatedWorkOriginMarker,
+  type FederatedWorkDeferralV1,
   type FederatedWorkEpicV1,
   type FederatedWorkItemV1,
   type FederatedWorkPageV1,
@@ -39,6 +40,10 @@ export interface WorkPageItemRow {
   createdAt: Date;
   updatedAt: Date;
   completedAt: Date | null;
+  deferReason: string | null;
+  deferTrigger: string | null;
+  deferReviewAt: Date | null;
+  deferredAt: Date | null;
   epic: { epicId: string } | null;
 }
 
@@ -83,6 +88,21 @@ function toItem(row: WorkPageItemRow): FederatedWorkItemV1 {
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     completedAt: row.completedAt?.toISOString() ?? null,
+    deferral: toDeferral(row),
+  };
+}
+
+/** Publish the deferral only when it is attributable (BI-9DA5F179). A parked
+ *  row missing any of reason / trigger / review date ships `null` so the peer
+ *  reports the gap instead of mirroring a bare `deferred`. */
+function toDeferral(row: WorkPageItemRow): FederatedWorkDeferralV1 | null {
+  if (row.status !== "deferred") return null;
+  if (!row.deferReason || !row.deferTrigger || !row.deferReviewAt) return null;
+  return {
+    reason: row.deferReason,
+    trigger: row.deferTrigger,
+    reviewAt: row.deferReviewAt.toISOString(),
+    deferredAt: row.deferredAt?.toISOString() ?? null,
   };
 }
 
@@ -133,6 +153,7 @@ export async function buildFederatedWorkPage(
       resolution: true, sensitivity: true, source: true, occurrenceCount: true,
       scopeKind: true, archetypeCategories: true, archetypeIds: true, lifecycleTags: true,
       createdAt: true, updatedAt: true, completedAt: true,
+      deferReason: true, deferTrigger: true, deferReviewAt: true, deferredAt: true,
       epic: { select: { epicId: true } },
     },
   });
