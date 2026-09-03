@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Provider trust action projection implementation plan
 
 **Backlog:** BI-9CFB483F  

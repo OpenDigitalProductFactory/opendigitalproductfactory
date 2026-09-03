@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Provider trust action projection design
 
 **Backlog:** BI-9CFB483F  
