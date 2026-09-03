@@ -4,9 +4,9 @@ status: active
 
 # Terminal-Writer Large-Artifact Rehydration Design
 
-**Backlog item:** BI-8B8731EE  
-**Workroom:** WC-D8BEE5C9  
-**Kernel decision:** DI-2C90F0EF92B2  
+**Backlog item:** BI-8B8731EE
+**Workroom:** WC-D8BEE5C9
+**Kernel decision:** DI-2C90F0EF92B2
 **Async delivery child:** BI-2014236E
 **Status:** Design and ordered fix plan
 

@@ -4,10 +4,10 @@ status: active
 
 # Terminal-writer large-artifact rehydration
 
-**Backlog item:** `BI-8B8731EE`  
-**Epic:** `EP-129D11FD`  
-**Workroom:** `WC-D8BEE5C9`  
-**Design:** `docs/superpowers/specs/2026-08-30-terminal-writer-large-artifact-rehydration-design.md`  
+**Backlog item:** `BI-8B8731EE`
+**Epic:** `EP-129D11FD`
+**Workroom:** `WC-D8BEE5C9`
+**Design:** `docs/superpowers/specs/2026-08-30-terminal-writer-large-artifact-rehydration-design.md`
 **Decision:** `DI-2C90F0EF92B2`
 **Related async delivery:** `BI-2014236E`
 
