@@ -218,6 +218,16 @@ export function classifySlotRecord({ state, metadata, headSha, headBranch = "", 
       };
     }
     const status = String(state.status || "");
+    // BI-5529B5AC: another slot PASSED this branch+SHA and the gate rewrote this
+    // losing record to say so. Bookkeeping, not a verdict on the diff.
+    if (status === "superseded" || state.supersededBy) {
+      const winner = state.supersededBy?.slotKey || "another slot";
+      return {
+        ...base,
+        verdict: "INCONCLUSIVE",
+        reason: `gate record superseded — ${winner} passed this SHA; this slot's ${state.supersededStatus || "prior"} record is not a verdict`,
+      };
+    }
     if (UNFINISHED_GATE_STATUSES.has(status)) {
       return {
         ...base,
