@@ -42,6 +42,17 @@ function render(path: string, capabilities: ReadonlySet<string> = ADMIN) {
 }
 
 describe("buildBreadcrumbTrail", () => {
+  it("applies an archetype-facing label to the shared customer root", () => {
+    expect(
+      buildBreadcrumbTrail("/customer/engagements", ADMIN, {
+        customer: "Adoption & community",
+      }),
+    ).toEqual([
+      { label: "Adoption & community", href: "/customer" },
+      { label: "Engagements", href: "/customer/engagements" },
+    ]);
+  });
+
   it("walks the canonical parentPath chain to the domain root", () => {
     expect(buildBreadcrumbTrail("/platform/ai/providers", ADMIN)).toEqual([
       { label: "Platform Hub", href: "/platform" },

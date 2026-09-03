@@ -2,6 +2,8 @@ export type CustomerSurfaceTab = { label: string; href: string };
 
 export type CustomerSurface = {
   title: string;
+  /** Label used by the shared shell rail and breadcrumbs. */
+  shellLabel: string;
   accountCountLabel: string;
   tabs: CustomerSurfaceTab[];
   newEntry: {
@@ -29,6 +31,7 @@ export function resolveCustomerSurface(
     ]);
     return {
       title: "Adoption & community",
+      shellLabel: "Adoption & community",
       accountCountLabel: "people & partners",
       tabs: availableTabs
         .filter((tab) => allowed.has(tab.href))
@@ -46,6 +49,7 @@ export function resolveCustomerSurface(
 
   return {
     title: "Customer",
+    shellLabel: "Customer",
     accountCountLabel: "accounts",
     tabs: availableTabs,
     newEntry: {

@@ -26,6 +26,7 @@ describe("resolveCustomerSurface", () => {
     );
     expect(surface.newEntry.buttonLabel).toBe("+ Add person or partner");
     expect(surface.detailSummary).toBe("Relationship records");
+    expect(surface.shellLabel).toBe("Adoption & community");
   });
 
   it("uses the same rescue contract for animal shelters", () => {
@@ -41,5 +42,6 @@ describe("resolveCustomerSurface", () => {
     expect(surface.tabs).toEqual(CRM_TABS);
     expect(surface.newEntry.buttonLabel).toBe("+ New Account");
     expect(surface.detailSummary).toBe("All CRM detail");
+    expect(surface.shellLabel).toBe("Customer");
   });
 });

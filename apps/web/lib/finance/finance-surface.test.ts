@@ -243,6 +243,15 @@ describe("pet-rescue finance surface", () => {
       spend: "Care spending",
       close: "Stewardship",
     });
+    expect(surface.metricCopy).toEqual({
+      outstandingSingular: "commitment",
+      outstandingPlural: "commitments",
+      receivedSingular: "contribution",
+      receivedPlural: "contributions",
+      emptyOverdue: "no commitments recorded yet",
+      recentAccountHeader: "Supporter or funder",
+      recentEmpty: "No contributions yet.",
+    });
   });
 
   it("does not make every nonprofit inherit pet-rescue claims", () => {
