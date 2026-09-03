@@ -2455,6 +2455,14 @@
     "longSentences": 0,
     "textMass": 6
   },
+  "apps/web/app/(shell)/workspace/ward/page.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 26
+  },
   "apps/web/app/(storefront)/error.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
@@ -7967,6 +7975,14 @@
     "longSentences": 0,
     "textMass": 7
   },
+  "apps/web/components/platform/coworker-record/CoworkerProactivityNote.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 32
+  },
   "apps/web/components/platform/coworker-record/CoworkerRecordTabs.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
@@ -8446,14 +8462,6 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 68
-  },
-  "apps/web/components/platform/coworker-record/CoworkerProactivityNote.tsx": {
-    "vocabulary": 0,
-    "retiredVocabulary": 0,
-    "genericLabels": 0,
-    "readability": 0,
-    "longSentences": 0,
-    "textMass": 32
   },
   "apps/web/components/proactivity/ProactivityLevelControl.tsx": {
     "vocabulary": 0,

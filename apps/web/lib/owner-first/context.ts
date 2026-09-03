@@ -20,10 +20,11 @@ export async function loadOwnerFirstContext(): Promise<OwnerFirstContext> {
     include: { archetype: { select: { category: true, archetypeId: true, name: true } } },
   });
   const category = config?.archetype?.category ?? null;
+  const archetypeId = config?.archetype?.archetypeId ?? null;
   return {
     archetypeCategory: category,
-    archetypeId: config?.archetype?.archetypeId ?? null,
+    archetypeId,
     archetypeName: config?.archetype?.name ?? null,
-    vocab: resolveOwnerVocabulary(category),
+    vocab: resolveOwnerVocabulary(category, archetypeId),
   };
 }

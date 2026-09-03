@@ -496,6 +496,10 @@ describe("generated route-shell registry", () => {
     // case and publishes its path, so a detail surface is measurable at last.
     // Eligibility for a dynamic route is earned by that minting, not asserted —
     // an eligible-but-unresolved route fails the run rather than measuring a 404.
+    // 206 -> 207: /workspace/ward (BI-F91D0685) — the ward board reads housing and
+    // occupancy from route-owned read models with no wall-clock or live-orchestration
+    // state, so its rendered output is stable and it carries a ratified page-purpose
+    // contract.
     // 206 -> 207: /storefront/animals/waiting (BI-899D7F00) — the adoption waiting
     // list, read-only over AdoptableAnimal.publishedAt. The first storefront route to
     // be measurable: the sweep fixture now provisions one pet-rescue storefront with
@@ -503,7 +507,8 @@ describe("generated route-shell registry", () => {
     // exclusions were waiting for. Its siblings keep their exclusion until each gets its own.
     // 207 -> 206: /storefront/setup joins setup-phase-only in the same PR — once the
     // fixture provisions a storefront the wizard navigates away and cannot be measured.
-    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(206);
+    // Net: 206 base + /workspace/ward + /storefront/animals/waiting - /storefront/setup = 207.
+    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(207);
     // 110 -> 113: the three exclusions above. Product Direction then adds seven
     // explicitly classified dynamic routes, bringing the combined total to 120.
     // 120 -> 121: /platform/ai/operations-map.

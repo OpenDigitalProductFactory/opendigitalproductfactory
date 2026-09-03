@@ -1,0 +1,19 @@
+{
+  "version": "1",
+  "decidedOption": "map-with-list-flip",
+  "decisionInteractionId": "DI-6E711DA68A9B",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/workspace/ward/page.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "map-with-list-flip",
+      "list-only",
+      "map-only"
+    ],
+    "note": "A measured operating day could not answer two questions at any point: where is this animal, and how many kennels are free (pet-rescue operating model 6b, steps 08:00 and 16:00). map-with-list-flip won at composite 9.673 with a 0.804 margin, high confidence, autonomy eligible, no commandment conflict. It draws units grouped by the shelter's own service areas so a free run is a gap you see rather than a number you compute, and keeps a list flip for what a map cannot hold. list-only scored 8.869: cheaper and easier to keep correct, but it turns a capacity conversation back into counting rows, and 'Do the work; don't task the operator' scores it NEGATIVE (-0.021) where the map scores +0.101 — the only axis where the two options invert. map-only scored 6.928 and is opposed by 'Every non-text element needs a text alternative' (0.242 against 0.415): a drawn board with no tabular alternative is the accessibility failure, which is why the list is a flip rather than a separate page. Cognitive load was scored as a COST axis per AGENTS.md 11: the map at 0.3 demands less attention than the list at 0.6 because occupancy is read spatially. The page states occupied-of-total and free before anything else, and says plainly when housing has never been recorded rather than rendering a confident zero — a shelter that has told the system about no kennels has not answered 'none free'. Where the board cannot place an animal it is in care with, it names those animals and says the free count is only true for the ones it can place."
+  }
+}

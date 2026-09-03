@@ -117,6 +117,7 @@ export type FinanceSurfaceModel = {
   navigationLabels: Record<"revenue" | "spend" | "close" | "configuration", string>;
   recentRecordsLabel: string;
   recentRecordsEmpty: string;
+  setupDescription?: string;
   /** Visible metric/table nouns when the persisted record type is an internal implementation detail. */
   metricCopy?: {
     outstandingSingular: string;
@@ -526,6 +527,7 @@ export function resolveFinanceSurface(
       },
       recentRecordsLabel: "Recent contributions",
       recentRecordsEmpty: "No contributions recorded yet. Record a donation, grant, or sponsorship to get started.",
+      setupDescription: "Set up donations, grants, care spending, and stewardship reporting for this rescue.",
       metricCopy: {
         outstandingSingular: "commitment",
         outstandingPlural: "commitments",
