@@ -32,6 +32,8 @@ import {
   workroomDriveTaskId,
   type DrivePlan,
 } from "@/lib/work-management/drive-resolution";
+import type { WorkroomCoordinatorEligibility } from "@/lib/work-management/workroom-shape-conformance";
+import { readStoredWorkroomDriveState } from "@/lib/work-management/workroom-drive-state";
 
 export type WorkroomDriveRoom = {
   id: string;
@@ -49,6 +51,8 @@ export type WorkroomDriveRoom = {
   reviewDue: boolean;
   substrateReachable: boolean;
   substrateEmpty: boolean;
+  /** Current verifier-readable JSI and TAK eligibility for an AI coordinator. */
+  coordinatorEligibility?: WorkroomCoordinatorEligibility | null;
 };
 
 export type WorkroomDriveEffects = {
@@ -99,38 +103,6 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
-function readStoredDrive(workspaceState: unknown): {
-  currentStageKey: string | null;
-  receipts: { stageKey: string; kind: string }[];
-  budgetUsage: { kind: string; used: number }[];
-  stopConditionHits: string[];
-  reviewDue: boolean;
-} {
-  const drive = asRecord(asRecord(workspaceState)?.workroomDrive);
-  const receipts = Array.isArray(drive?.receipts)
-    ? drive.receipts.filter((entry): entry is { stageKey: string; kind: string } => {
-      const row = asRecord(entry);
-      return Boolean(row && typeof row.stageKey === "string" && typeof row.kind === "string");
-    })
-    : [];
-  const budgetUsage = Array.isArray(drive?.budgetUsage)
-    ? drive.budgetUsage.filter((entry): entry is { kind: string; used: number } => {
-      const row = asRecord(entry);
-      return Boolean(row && typeof row.kind === "string" && typeof row.used === "number");
-    })
-    : [];
-  const stopConditionHits = Array.isArray(drive?.stopConditionHits)
-    ? drive.stopConditionHits.filter((entry): entry is string => typeof entry === "string")
-    : [];
-  return {
-    currentStageKey: typeof drive?.stageKey === "string" ? drive.stageKey : null,
-    receipts,
-    budgetUsage,
-    stopConditionHits,
-    reviewDue: drive?.reviewDue === true,
-  };
-}
-
 function postureLevelOf(scopeClaims: unknown): ProactivityLevel | null {
   const declared = readWorkroomPostureClaim(scopeClaims)?.proactivityLevel;
   if (declared === "quiet" || declared === "balanced" || declared === "assertive") return declared;
@@ -164,6 +136,7 @@ export async function applyDrivePlan(input: {
         reason: plan.reason,
       }
       : null,
+    conformance: plan.conformance,
     ledger: plan.ledger,
   };
 
@@ -270,7 +243,7 @@ export async function runWorkroomDriveJob(
 
   for (const room of rooms) {
     const shape = resolveWorkShapeClaim(room.scopeClaims);
-    const stored = readStoredDrive(room.workspaceState);
+    const stored = readStoredWorkroomDriveState(room.workspaceState);
     const plan = resolveDrivePlan({
       roomId: room.capsuleId,
       definition: shape ? readWorkShapeDefinitionContract(shape) : null,
@@ -287,6 +260,7 @@ export async function runWorkroomDriveJob(
       reviewDue: room.reviewDue || stored.reviewDue,
       substrateReachable: room.substrateReachable,
       substrateEmpty: room.substrateEmpty,
+      coordinatorEligibility: room.coordinatorEligibility,
       now,
     });
     plans.push({
@@ -415,7 +389,7 @@ async function loadStandingRooms(): Promise<WorkroomDriveRoom[]> {
           authoritySummary: "",
         };
       }),
-      ...readStoredDrive(row.workspaceState),
+      ...readStoredWorkroomDriveState(row.workspaceState),
       substrateReachable: true,
       substrateEmpty: false,
     }];

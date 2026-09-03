@@ -69,6 +69,18 @@ what they are working on, their authority summary, and an AI coworker's accounta
 sponsor. Coworkers created by the active thread's governed lineage appear automatically;
 the room does not provide an unrestricted coworker picker.
 
+Open **Details**, then **Process Overseer**, to see whether the room is following its declared
+activity shape. The panel names the coordinator, whether that assignment was explicit or derived,
+the current and next expected stage, the latest conformance result, any intervention reason, and a
+stable reconciliation reference. A derived coordinator is shown as compatibility-only: it helps
+older rooms remain understandable but is not treated as proof that active oversight is configured.
+
+For a shaped room, missing role, evidence, stage, budget, stop-condition, or authority information
+pauses the affected lifecycle transition before work is persisted. An AI coordinator must also have
+the required job-specific qualification and delegated authority. When either is unknown, the room
+asks for attention instead of assuming eligibility. Rooms without a declared activity shape keep
+their legacy behavior and the panel reports oversight as not applicable.
+
 ## Access and Other Channels
 
 Room access has separate discovery, content, and action boundaries. Assignment or an explicit room policy admits a principal; a presence heartbeat never does. Sensitivity clearance is checked on the server before messages, participants, or context load. A person without content access receives the same not-found experience as an unknown room.

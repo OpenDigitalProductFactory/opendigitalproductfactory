@@ -8,7 +8,7 @@ status: draft
 - **Backlog item:** BI-B5C8FEFC
 - **Profile:** cross-domain (policy spans backlog, Workroom, Build Studio, readiness)
 - **Authored:** 2026-09-02
-- **Status:** draft — founder ruling needed on §5 open decisions
+- **Status:** draft — 4 of 5 decisions ruled by the kernel (§5); founder input open on who may declare `break-fix`; execution readiness in §5.1
 - **Provenance:** BI-B3AB7FC9 (PR #4999) was a one-afternoon diagnosis-to-merge fix that could not be closed because the completion gate demanded a research receipt, a plan-coverage record, an independently approved spec baseline, acceptance evidence, and objective reconciliation. BI-28E8CB88, BI-F0715C9C and BI-3AE38A1F record the same wall from three other fixes.
 
 ## 1. Problem
@@ -81,7 +81,7 @@ Mapping to existing substrate: `small|medium|large|xlarge` **are** `BacklogEffor
 
 ### 3.2 Risk axis (unchanged, made universal)
 
-`DeliverableSensitivity = low | elevated | high` already exists in the matrix with a monotonic raise-only rule (`build-process-matrix.ts:369-479`). It becomes the single risk axis for readiness too. Raisers: sensitive data, auth/security, compliance evidence, migration, archetype scope, cross-domain contract. `high` sensitivity raises any shape's gate set to the next shape's set (a `small` security fix carries `medium` gates: regression test first, independent review). It never lowers.
+`DeliverableSensitivity = low | elevated | high` already exists in the matrix with a monotonic raise-only rule (`build-process-matrix.ts:369-479`). It becomes the single risk axis for readiness too. Raisers: sensitive data, auth/security, compliance evidence, migration, archetype scope, cross-domain contract. `high` sensitivity raises a `small` or `medium` shape to `large` gates (kernel ruling 4, 2026-09-03: a small security fix owes a spec, independent approval, and independent acceptance); `elevated` raises one step. It never lowers.
 
 The current readiness profiles collapse onto (shape, sensitivity):
 
@@ -126,10 +126,10 @@ Derived at triage from signals already on the item; overridable with a recorded 
 | Design artifact | none | none | item body is the design | canonical spec, independently approved (`SPEC_APPROVAL_REQUIRED`) | decomposition proposal, approved |
 | Objective baseline | none | acceptance criterion in the item body | acceptance criteria in the item body, minted as the baseline by triage (new: baseline from item, not from spec) | spec approval mints it (exists) | hypothesis is the baseline |
 | Plan | none | none | ordered steps in the item body | plan doc + coverage record (exists) | children with their own shapes |
-| Independent review | PR review + mandatory post-implementation review within 48h by someone other than the author | PR review (peer, in-platform) | PR review + architecture advisory (non-blocking) | PR review + architecture review (blocking) + specialist reviews as applicable | portfolio review of decomposition |
+| Independent review | PR review + mandatory post-implementation review within 48h by someone other than the author | PR review (peer, in-platform) | PR review + architecture advisory (non-blocking) + independent acceptance receipt (kernel ruling 3) | PR review + architecture review (blocking) + specialist reviews as applicable | portfolio review of decomposition |
 | Delivery evidence | merged SHA reachable from `main` | merged SHA reachable from `main` | same | same, plus deployed via `/ops/self-upgrade` | all children done |
 | Acceptance | post-implementation review confirms the symptom is gone on the live install | runtime check on the live install or the failing→passing test | acceptance criteria verified on the live install (UX verification where UI) | acceptance evidence against baseline (exists) | outcome reconciliation against the hypothesis (`OBJECTIVE_RECONCILIATION_REQUIRED`, moved here) |
-| Completion writer | author, with the PIR receipt | author | author, with acceptance receipt | acceptance reviewer | portfolio owner |
+| Completion writer | author, with the PIR receipt | author | eligible independent acceptance reviewer (a coworker qualifies) | acceptance reviewer | portfolio owner |
 | WIP limit | 1 per installation | none | Workroom cap (exists) | Workroom cap | epic cap |
 
 Principles encoded in the table:
@@ -140,13 +140,35 @@ Principles encoded in the table:
 - **Raising is monotonic; lowering is a recorded override.** Sensitivity raises. An operator may lower a shape only with a reason, and the override is visible on the item and in the gate decision.
 - **No artifact is produced solely to satisfy a gate.** If a shape's gate table asks for something the work did not naturally produce, the table is wrong, not the work. This is the direct answer to the after-the-fact plan pressure in BI-28E8CB88.
 
-## 5. Open decisions (founder)
+## 5. Decisions — kernel rulings (2026-09-03)
 
-1. **Is `break-fix` a shape or a lane flag on `small`?** Recommendation: a shape — a registry entry whose stages differ in kind (post-hoc review), with its own WIP budget and frequency measure. Operators will look for it by name.
-2. **Who may declare `break-fix`?** Recommendation: any human operator with `view_platform`, and the operations coworker when an incident record exists. Never an unattended build. The declaring principal is recorded and cannot be the PIR reviewer.
-3. **Does `medium` require an independent acceptance reviewer, or is author acceptance with live-install evidence enough?** Recommendation: author acceptance with recorded runtime evidence. Independent acceptance starts at `large`. On a single-human-principal install, mandatory independent acceptance for medium work is the CAB anti-pattern.
-4. **Does sensitivity `high` on a `small` shape raise to `medium` gates (recommendation) or all the way to `large`?**
-5. **Retroactive classification of the 33 `done` items with no baseline.** Recommendation: leave them; add the shape column with `null` meaning "pre-taxonomy" and report the count once, not as a permanent blocker.
+Per founder direction, the five open questions were put to the kernel (`principle_decide`, stakes `high`, 56 principles in scope, structured coverage strong) instead of to the founder. Four returned an autonomy-eligible verdict; one is uncertain and stays with the founder. Two rulings overrode the spec author's recommendation and the spec now follows the kernel.
+
+| # | Question | Ruling | Confidence / margin | Strongest contributors |
+|---|---|---|---|---|
+| 1 | Is `break-fix` a shape or a lane flag? | **A shape** (`delivery-break-fix@1.0.0`) | high · 4.33 | Research and Use Standards; Classify ambiguous requests before acting |
+| 2 | Who may declare `break-fix`? | **Uncertain** — human-only 7.61 vs human-or-ops-coworker 7.54; any-caller rejected at 2.07 | low · 0.07 | Destructive actions require explicit go; Human-in-the-Loop at Phase Boundaries |
+| 3 | Does `medium` need an independent acceptance reviewer? | **Yes — independent acceptance** (overrides the author's "author + live evidence") | high · 0.40 | Propose, Acknowledge, Reassign; Jurisdiction-layered analysis |
+| 4 | How far does high sensitivity raise a `small`? | **To `large` gates** (overrides the author's one-step) | high · 0.73 | Destructive actions require explicit go; Never wipe the DB to fix code |
+| 5 | The 33 pre-taxonomy `done` items? | **Leave them; null shape = pre-taxonomy** | high · 1.70 | Propose, Acknowledge, Reassign; Human-in-the-Loop at Phase Boundaries |
+
+Consequences folded into §4: the `medium` row's independent review is an eligible independent reviewer's acceptance receipt (a coworker qualifies; this is not a board), and the `small` + `high` sensitivity cell carries `large` gates. Decision 2 is the only founder input still required; the spec proceeds with the narrower option (human-only) as the default until ruled, since the kernel's tie broke that way and it is the safer floor.
+
+**Gap surfaced by the ratification itself (BI-218EC195):** every call returned `ledger.recorded: false, reason: profile-not-provisioned` for `dpf-organizational-principles`. The kernel can rule but cannot seal a decision record on this install, so its rulings are advisory until that is fixed. That is a precondition for "WWMD automates approvals", not a nice-to-have: an approval nothing can cite is advice.
+
+Related, adjacent items this spec now binds to: BI-C8C4031C (document the shape axes and where `principle_decide` interleaves as the gate — this spec's §3.0 is that page's delivery-shape half), BI-07891CAE (bind lifecycle transitions to `principle_decide` gates — the mechanism by which a `governed-decision` stage advance in a delivery shape gets its sealed verdict).
+
+## 5.1 Readiness to execute
+
+| Precondition | State | Evidence |
+|---|---|---|
+| Design ratified | 4 of 5 decisions ruled by the kernel; 1 founder input open (who declares break-fix) | table above; BI-B5C8FEFC activity cmtkut5xx09or01pgks0ni72l |
+| Substrate exists | `workShape` registry, scope-claim persistence, claim handler, Workroom header all present | §3.0; `apps/web/lib/work-management/work-shapes.ts`; `governed-work-claim.ts:249-360` |
+| Decision ledger seals verdicts | **No** — `profile-not-provisioned` on this install | BI-218EC195 |
+| Reviewer capacity for `large` gates | Fragile — reviewers exist (AGT-WS-PORTFOLIO, ea-architect) but bounded-budget reviewers have stopped before their terminal receipt write | BI-8B8731EE, BI-28E8CB88 activity cmtf85p3403dy01phlttlc1z6 |
+| Plan with backlog coverage | Not yet written | §6 is the outline; the plan is the next artifact |
+
+Verdict: **ready to plan, not yet ready to build.** The plan can be written now. Building should start with BI-218EC195 so the first delivery-shape claim can bind to a sealed kernel verdict rather than an advisory one.
 
 ## 6. Implementation outline (for the plan that follows this spec)
 

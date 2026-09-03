@@ -187,6 +187,18 @@ the PID so liveness cannot be fooled by OS PID reuse.
 | `BI-30EDD4B0` | `REQ-RES-1..3` | Resource lanes | Declare → admit → supervise → release | Slice 4 memory/fence tests | `BI-B2E9FC9D` |
 | `BI-114C1F40` | `REQ-WIP-1..4` | Workroom identity and liveness | Active ↔ waiting → promotion | Slice 5 identity/SLO tests | `BI-6A5AB570`, `BI-MCP-EFF-0285909C` |
 
+### Baseline objective and acceptance traceability
+
+The canonical design baseline names the outcome and acceptance identifiers that
+the implementation slices deliver. This plan keeps those identifiers verbatim
+so the governed coverage record can prove that every baseline statement has an
+owner, flow, contract, and verification path.
+
+| Deliverable | Baseline objectives | Contract | Flow | Baseline acceptance |
+| --- | --- | --- | --- | --- |
+| `BI-MCP-EFF-0285909C` | `OBJ-FLOW-001`, `OBJ-FLOW-002`, `OBJ-FLOW-003` | `CONTRACT-WAIT-001`: the lease and TaskRun remain authority; events are advisory and a resumed client makes one fresh claim | `FLOW-WAIT-001`: queue → durable checkpoint → exact FIFO wake → fresh claim → settle | `AC-FLOW-001`, `AC-FLOW-002`, `AC-FLOW-003`, `AC-FLOW-006` |
+| `BI-114C1F40` | `OBJ-FLOW-004`, `OBJ-FLOW-005` | `CONTRACT-WIP-001`: durable waiting is live Workroom progress but never executing WIP | `FLOW-WIP-001`: active ↔ waiting → ready-for-promotion or terminal, with SLO projection | `AC-FLOW-004`, `AC-FLOW-005` |
+
 ## Rollout and rollback
 
 1. Ship lane selection in observe mode for non-documentation branches while making documentation bypass authoritative.

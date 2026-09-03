@@ -145,6 +145,20 @@ describe("standing Work Room cycles", () => {
     expect(evaluateWorkroomCyclePolicy({ operation: "archive", cycle: null, policy: policy() })).toMatchObject({ ok: true });
   });
 
+  it("runs shaped lifecycle operations through the shared fail-closed conformance guard", () => {
+    const active = selectCurrentWorkroomCycle("scheduled", [candidate()]);
+    expect(evaluateWorkroomCyclePolicy({
+      operation: "split",
+      cycle: active,
+      policy: policy(),
+      shapeConformance: { hasDeclaredWorkShape: true, result: null },
+    })).toMatchObject({
+      ok: false,
+      reason: "shape_conformance_denied",
+      deviationCodes: ["missing_conformance_result"],
+    });
+  });
+
   it("plans carry-over attachment and new-case creation idempotently", () => {
     const packet = buildWorkroomOutcomePacket({
       sourceKey: "scheduled",

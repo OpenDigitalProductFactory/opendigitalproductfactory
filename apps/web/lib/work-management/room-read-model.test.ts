@@ -136,6 +136,60 @@ describe("Work Room read model", () => {
     });
     expect(room.roomKey).toBe("booking%3ABK-100");
     expect(room.work.sourceRefs).toEqual([sourceRef]);
+    expect(room.processOverseer).toMatchObject({
+      disposition: "not-applicable",
+      processOverseerSource: "derived",
+    });
+  });
+
+  it("projects a declared work shape and its explicit Process Overseer", () => {
+    const room = buildWorkroomView({
+      caseKey: "booking%3ABK-100",
+      detail: caseDetail(),
+      scopeClaims: [{ workShape: "obligation-assurance-watch@1.0.0" }],
+      now: new Date("2026-09-01T12:00:00.000Z"),
+      participants: [{
+        principalRef: "prn-user-1",
+        displayName: "Casey Morgan",
+        kind: "person",
+        roles: ["accountable", "coordinator"],
+        workState: "working",
+        presence: "active",
+        currentWorkSummary: "Keeping the room on shape.",
+        enteredReason: "Explicitly assigned coordinator.",
+        sponsorPrincipalRef: null,
+        authoritySummary: "Can coordinate this room",
+        sourceRefs: [sourceRef],
+        assignmentSource: "explicit",
+        coordinatorSource: "explicit",
+      }],
+    });
+
+    expect(room.processOverseer).toMatchObject({
+      shapeKey: "obligation-assurance-watch",
+      shapeVersion: "1.0.0",
+      processOverseerPrincipalRef: "prn-user-1",
+      processOverseerSource: "explicit",
+      disposition: "continue",
+      nextPermittedStageKey: "sweep",
+      checkedAt: "2026-09-01T12:00:00.000Z",
+    });
+  });
+
+  it("pauses an unresolved declared shape instead of treating it as unshaped", () => {
+    const room = buildWorkroomView({
+      caseKey: "booking%3ABK-100",
+      detail: caseDetail(),
+      scopeClaims: [{ workShape: "obligation-assurance-watch@9.9.9" }],
+      now: new Date("2026-09-01T12:00:00.000Z"),
+    });
+
+    expect(room.processOverseer).toMatchObject({
+      shapeKey: "obligation-assurance-watch",
+      shapeVersion: "9.9.9",
+      disposition: "pause",
+      deviations: [{ code: "work_shape_version_mismatch" }],
+    });
   });
 
   it("derives standing mode only from typed source policy", () => {
