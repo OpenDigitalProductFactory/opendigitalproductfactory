@@ -179,37 +179,177 @@ export async function getUpgradeVersionState(
   return compareUpgradeVersions(currentSha, targetSha);
 }
 
-// ─── Compatibility Exports ────────────────────────────────────────────────────
+// ─── Remote Target Resolution (BI-4746F2A9) ───────────────────────────────────
+// The status page and the impact summary used to read `rev-parse origin/main`,
+// a LOCAL remote-tracking ref that only moves when something fetches — the
+// upgrade run itself or the 24h-throttled scheduled poll. A source-mode install
+// therefore said "up to date" (and hid "Upgrade now") for a day after a fix was
+// published. "Up to date" must be a statement about upstream, so the target is
+// asked of the remote (`git ls-remote`), which touches no local ref and holds no
+// lock, bounded by a short cache. When the local ref is behind the remote, one
+// single-ref fetch freshens it so the change-set `git log` has the objects. If
+// the remote is unreachable the local ref is the honest fallback and the reason
+// is logged. The RUN path (queue/functions/self-upgrade.ts) already fetches
+// before it resolves and is unchanged.
 
-export async function resolveTargetSha(
-  channel: string,
-  config: TargetResolverConfig = {},
-  deps: Pick<VersionStateDeps, "execFile"> = DEFAULT_DEPS,
+/** `git -C <path> ls-remote --heads <remote> <branch>` — ask upstream, not the local ref. */
+export function buildRemoteLsCommand(input: {
+  hostSourcePath: string;
+  remote: string;
+  branch: string;
+}): string[] {
+  return ["git", "-C", input.hostSourcePath, "ls-remote", "--heads", input.remote, input.branch];
+}
+
+/** The SHA on the `refs/heads/<branch>` line of `ls-remote --heads` output, or null. */
+export function parseRemoteHeadSha(stdout: string, branch: string): string | null {
+  const wanted = `refs/heads/${branch}`;
+  for (const rawLine of stdout.split("\n")) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    const tab = line.indexOf("\t");
+    const sha = tab === -1 ? line : line.slice(0, tab);
+    const ref = tab === -1 ? "" : line.slice(tab + 1).trim();
+    if (ref === wanted && isGitSha(sha)) return sha.toLowerCase();
+  }
+  return null;
+}
+
+/** How long one remote answer stands in for every status render (~1 min). */
+export const TARGET_SHA_CACHE_TTL_MS = 60_000;
+
+export type TargetShaSource = "remote" | "local-ref";
+
+type TargetShaCacheEntry = {
+  sha: string | null;
+  source: TargetShaSource | null;
+  resolvedAt: number;
+};
+
+const targetShaCache = new Map<string, TargetShaCacheEntry>();
+const targetShaInFlight = new Map<string, Promise<TargetShaCacheEntry>>();
+
+/** Test seam: forget every cached remote answer. */
+export function resetTargetShaCacheForTests(): void {
+  targetShaCache.clear();
+  targetShaInFlight.clear();
+}
+
+async function readLocalRef(
+  at: { hostSourcePath: string; remote: string; branch: string },
+  execFile: VersionStateDeps["execFile"],
 ): Promise<string | null> {
-  const [, ...gitArgs] = buildRemoteHeadCommand({
-    hostSourcePath: config.hostSourceMountPath ?? process.env.HOST_SOURCE_PATH ?? "/workspace",
-    remote: config.repositoryRemote ?? process.env.REPO_REMOTE ?? "origin",
-    branch: config.repositoryBranch ?? process.env.REPO_BRANCH ?? "main",
-  });
+  const [, ...gitArgs] = buildRemoteHeadCommand(at);
+  const { stdout } = await execFile("git", gitArgs);
+  const sha = stdout.trim();
+  return isGitSha(sha) ? sha.toLowerCase() : null;
+}
 
+async function resolveTargetShaUncached(
+  channel: string,
+  at: { hostSourcePath: string; remote: string; branch: string },
+  execFile: VersionStateDeps["execFile"],
+): Promise<TargetShaCacheEntry> {
+  const resolvedAt = Date.now();
+  let remoteFailure: string | null = null;
   try {
-    const { stdout } = await deps.execFile("git", gitArgs);
-    const targetSha = stdout.trim();
-    if (isGitSha(targetSha)) return targetSha;
+    const [, ...lsArgs] = buildRemoteLsCommand(at);
+    const { stdout } = await execFile("git", lsArgs);
+    const remoteSha = parseRemoteHeadSha(stdout, at.branch);
+    if (remoteSha) {
+      // Freshen the local ref only when it is actually behind, so the impact
+      // summary's `git log <lineage>..<target>` can see the target's objects.
+      // Best effort: a failed fetch does not change the answer.
+      let localSha: string | null = null;
+      try {
+        localSha = await readLocalRef(at, execFile);
+      } catch {
+        localSha = null;
+      }
+      if (localSha !== remoteSha) {
+        try {
+          const [, ...fetchArgs] = buildFetchCommand(at);
+          await execFile("git", fetchArgs);
+        } catch (err) {
+          console.info("self-upgrade.target-fetch-skipped", {
+            channel,
+            message: getErrorMessage(err),
+          });
+        }
+      }
+      return { sha: remoteSha, source: "remote", resolvedAt };
+    }
+    remoteFailure = "remote-head-not-listed";
+  } catch (err) {
+    remoteFailure = getErrorMessage(err);
+  }
+
+  // The remote could not answer: the local ref is the honest fallback, and the
+  // reason it is being used is said, not swallowed.
+  try {
+    const localSha = await readLocalRef(at, execFile);
+    if (localSha) {
+      console.info("self-upgrade.target-from-local-ref", {
+        channel,
+        reason: "remote-unreachable",
+        message: remoteFailure,
+      });
+      return { sha: localSha, source: "local-ref", resolvedAt };
+    }
     console.info("self-upgrade.no-target", {
       channel,
       reason: "target-not-git-sha",
-      targetSha,
+      message: remoteFailure,
     });
-    return null;
+    return { sha: null, source: null, resolvedAt };
   } catch (err) {
     console.info("self-upgrade.no-target", {
       channel,
       reason: "target-resolution-failed",
-      message: getErrorMessage(err),
+      message: `${remoteFailure}; ${getErrorMessage(err)}`,
     });
-    return null;
+    return { sha: null, source: null, resolvedAt };
   }
+}
+
+/**
+ * Resolve the upgrade target for STATUS surfaces (the page, the impact
+ * summary): the remote branch head, cached for TARGET_SHA_CACHE_TTL_MS and
+ * shared by concurrent renders. Returns null when neither the remote nor the
+ * local ref yields a git SHA.
+ */
+export async function resolveTargetSha(
+  channel: string,
+  config: TargetResolverConfig = {},
+  deps: Pick<VersionStateDeps, "execFile"> = DEFAULT_DEPS,
+  options: { now?: () => number } = {},
+): Promise<string | null> {
+  const at = {
+    hostSourcePath: config.hostSourceMountPath ?? process.env.HOST_SOURCE_PATH ?? "/workspace",
+    remote: config.repositoryRemote ?? process.env.REPO_REMOTE ?? "origin",
+    branch: config.repositoryBranch ?? process.env.REPO_BRANCH ?? "main",
+  };
+  const key = `${at.hostSourcePath} ${at.remote} ${at.branch}`;
+  const now = options.now?.() ?? Date.now();
+  const cached = targetShaCache.get(key);
+  if (cached && cached.sha && now - cached.resolvedAt < TARGET_SHA_CACHE_TTL_MS) {
+    return cached.sha;
+  }
+  let pending = targetShaInFlight.get(key);
+  if (!pending) {
+    pending = resolveTargetShaUncached(channel, at, deps.execFile)
+      .then((entry) => {
+        // A miss is not cached: the next render asks again rather than hiding
+        // "Upgrade now" for a minute because one call happened to time out.
+        if (entry.sha) targetShaCache.set(key, { ...entry, resolvedAt: now });
+        return entry;
+      })
+      .finally(() => {
+        targetShaInFlight.delete(key);
+      });
+    targetShaInFlight.set(key, pending);
+  }
+  return (await pending).sha;
 }
 
 export function isShaFresh(deployedSha: string | null, targetSha: string): boolean {
