@@ -1683,6 +1683,9 @@
       "docs/architecture/theme-aware-styling-runbook.md",
       "docs/design/golden-triangle-design.md"
     ],
+    "scripts/ci-change-scope.mjs": [
+      "docs/testing/pre-pr-gate.md"
+    ],
     "scripts/ci-evidence-plan.mjs": [
       "docs/testing/ci-evidence.md"
     ],
@@ -3030,6 +3033,7 @@
       "scripts/check-label-association.mjs",
       "scripts/check-live-blocker-references.mjs",
       "scripts/check-mobile-jest-pin.mjs",
+      "scripts/ci-change-scope.mjs",
       "scripts/ci-policy-guards.test.mjs",
       "scripts/gate-worktree.mjs",
       "scripts/gate-worktree.sh",
