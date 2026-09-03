@@ -3,7 +3,11 @@ import { describe, expect, it } from "vitest";
 import { deriveRoomCoordinator } from "./room-coordinator";
 import type { WorkroomParticipantRole, WorkroomParticipantView } from "./room-types";
 import type { WorkShapeDefinitionContract } from "./work-shapes";
-import { evaluateWorkroomShapeConformance } from "./workroom-shape-conformance";
+import {
+  evaluateWorkroomLifecycleConformance,
+  evaluateWorkroomShapeConformance,
+  projectUnshapedWorkroomConformance,
+} from "./workroom-shape-conformance";
 
 function participant(
   principalRef: string,
@@ -48,7 +52,7 @@ const definition: WorkShapeDefinitionContract = {
 };
 
 const executableRoster = [
-  participant("PRN-COORD", ["coordinator"], { kind: "agent", coordinatorSource: "explicit" }),
+  participant("PRN-COORD", ["coordinator"], { kind: "person", coordinatorSource: "explicit" }),
   participant("PRN-OWNER", ["accountable"]),
   participant("PRN-REVIEWER", ["reviewer"]),
 ];
@@ -363,5 +367,127 @@ describe("evaluateWorkroomShapeConformance (BI-3913EB49)", () => {
       coordinatorHasProcessCoordinationAuthority: true,
     };
     expect(evaluateWorkroomShapeConformance(input)).toEqual(evaluateWorkroomShapeConformance(input));
+  });
+
+  it("returns stable reconciliation metadata without including the check instant", () => {
+    const common = {
+      roomKey: "scheduled:ROOM-1",
+      definition,
+      collaborationShape: "craft-stewardship" as const,
+      participants: executableRoster,
+      currentStageKey: "scan",
+      proposedStageKey: "review",
+      receipts: [{ stageKey: "scan", kind: "findings" }],
+      budgetUsage: [{ kind: "findings-per-run", used: 1 }],
+      stopConditionHits: [] as string[],
+      reviewDue: false,
+      coordinatorHasProcessCoordinationAuthority: true,
+    };
+    const first = evaluateWorkroomShapeConformance({
+      ...common,
+      checkedAt: "2026-09-01T12:00:00.000Z",
+    });
+    const second = evaluateWorkroomShapeConformance({
+      ...common,
+      checkedAt: "2026-09-01T12:05:00.000Z",
+    });
+
+    expect(first.checkedAt).toBe("2026-09-01T12:00:00.000Z");
+    expect(second.checkedAt).toBe("2026-09-01T12:05:00.000Z");
+    expect(second.reconciliationKey).toBe(first.reconciliationKey);
+    expect(first.interventionReason).toBeNull();
+    expect(first.observed).toMatchObject({ participantCount: 3, receiptKinds: ["findings"] });
+  });
+
+  it("fails closed when an AI coordinator lacks current JSI or TAK eligibility", () => {
+    const result = evaluateWorkroomShapeConformance({
+      roomKey: "scheduled:ROOM-2",
+      definition,
+      collaborationShape: "craft-stewardship",
+      participants: executableRoster.map((row) => row.principalRef === "PRN-COORD"
+        ? { ...row, kind: "agent" as const }
+        : row),
+      currentStageKey: "scan",
+      proposedStageKey: "review",
+      receipts: [{ stageKey: "scan", kind: "findings" }],
+      budgetUsage: [],
+      stopConditionHits: [],
+      reviewDue: false,
+      coordinatorHasProcessCoordinationAuthority: true,
+      coordinatorEligibility: {
+        jsi: "stale",
+        authorityBinding: "unknown",
+      },
+    });
+
+    expect(result.deviations.map((row) => row.code)).toEqual([
+      "coordinator_authority_binding_ineligible",
+      "coordinator_jsi_ineligible",
+    ]);
+    expect(result.disposition).toBe("escalate");
+    expect(result.interventionReason).toContain("authority binding");
+  });
+
+  it("completes only a conformant explicit close", () => {
+    const result = evaluateWorkroomShapeConformance({
+      roomKey: "scheduled:ROOM-3",
+      definition,
+      collaborationShape: "craft-stewardship",
+      participants: executableRoster.map((row) => row.principalRef === "PRN-COORD"
+        ? { ...row, kind: "person" as const }
+        : row),
+      currentStageKey: "review",
+      proposedStageKey: null,
+      receipts: [
+        { stageKey: "scan", kind: "findings" },
+        { stageKey: "review", kind: "decision" },
+      ],
+      budgetUsage: [],
+      stopConditionHits: [],
+      reviewDue: false,
+      coordinatorHasProcessCoordinationAuthority: true,
+      closing: true,
+      unresolvedDeviationCount: 0,
+    });
+
+    expect(result.disposition).toBe("complete");
+    expect(evaluateWorkroomLifecycleConformance({
+      operation: "complete-cycle",
+      hasDeclaredWorkShape: true,
+      conformance: result,
+    })).toMatchObject({ allowed: true, disposition: "complete" });
+  });
+});
+
+describe("Workroom lifecycle conformance guard", () => {
+  it("preserves unshaped legacy behavior and explains that conformance is not applicable", () => {
+    const conformance = projectUnshapedWorkroomConformance({
+      roomKey: "booking:BK-1",
+      collaborationShape: null,
+      participants: [],
+      checkedAt: "2026-09-01T12:00:00.000Z",
+    });
+    expect(conformance.disposition).toBe("not-applicable");
+    expect(evaluateWorkroomLifecycleConformance({
+      operation: "open-cycle",
+      hasDeclaredWorkShape: false,
+      conformance,
+    })).toMatchObject({ allowed: true, disposition: "not-applicable" });
+  });
+
+  it("refuses a shaped lifecycle operation when its projection is missing", () => {
+    expect(evaluateWorkroomLifecycleConformance({
+      operation: "open-cycle",
+      hasDeclaredWorkShape: true,
+      conformance: null,
+    })).toMatchObject({
+      allowed: false,
+      disposition: "pause",
+      deviationCodes: ["missing_conformance_result"],
+      receipt: {
+        kind: "work-room-conformance-receipt",
+        operation: "open-cycle",
+      },
+    });
   });
 });

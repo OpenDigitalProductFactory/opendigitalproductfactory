@@ -20,6 +20,7 @@ import {
 } from "./work-shapes";
 import {
   evaluateWorkroomShapeConformance,
+  type WorkroomCoordinatorEligibility,
   type WorkroomShapeConformance,
   type WorkroomShapeConformanceDeviation,
 } from "./workroom-shape-conformance";
@@ -57,6 +58,7 @@ export type DriveResolutionInput = {
   independentEvaluatorPrincipalRef?: string | null;
   independentApproverPrincipalRef?: string | null;
   requiredRoles?: readonly WorkroomParticipantRole[];
+  coordinatorEligibility?: WorkroomCoordinatorEligibility | null;
   now?: Date;
   trigger?: WorkShapeTriggerClass;
   /** Test/override only. Production callers omit this and the next permitted stage is derived. */
@@ -189,6 +191,7 @@ export function resolveDrivePlan(input: DriveResolutionInput): DrivePlan {
       input.receipts,
     );
   const conformance = evaluateWorkroomShapeConformance({
+    roomKey: input.roomId,
     definition: input.definition,
     collaborationShape: input.collaborationShape,
     participants: input.participants,
@@ -203,6 +206,8 @@ export function resolveDrivePlan(input: DriveResolutionInput): DrivePlan {
     independentEvaluatorPrincipalRef: input.independentEvaluatorPrincipalRef,
     independentApproverPrincipalRef: input.independentApproverPrincipalRef,
     requiredRoles: input.requiredRoles,
+    coordinatorEligibility: input.coordinatorEligibility,
+    checkedAt: input.now,
   });
 
   const trigger = input.trigger

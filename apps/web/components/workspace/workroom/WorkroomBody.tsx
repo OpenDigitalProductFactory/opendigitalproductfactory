@@ -26,6 +26,7 @@ import { WorkroomCycles } from "./WorkroomCycles";
 import { WorkroomShapeSection } from "./WorkroomShapeSection";
 import { WorkroomParticipants } from "./WorkroomParticipants";
 import { WorkroomPosture } from "./WorkroomPosture";
+import { WorkroomProcessOverseer } from "./WorkroomProcessOverseer";
 import {
   useWorkroomViewMode,
   type WorkroomViewMode,
@@ -102,6 +103,8 @@ function ContextPanels({ room }: { room: WorkroomView }) {
   return (
     <div className="space-y-3">
       <WorkroomParticipants room={room} />
+
+      <WorkroomProcessOverseer room={room} />
 
       <section aria-label="Work" className="rounded-xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
         <details>

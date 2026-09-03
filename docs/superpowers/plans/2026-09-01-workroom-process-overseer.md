@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Workroom Process Overseer — Implementation Plan
 
 **Backlog item:** `BI-3913EB49`  
@@ -76,9 +80,11 @@ Nonconformant rooms remain paused rather than being reclassified as conformant.
 
 ## Backlog coverage
 
-Decision: `atomic`. All four phases are one fail-closed Process Overseer contract mapped to
-`BI-3913EB49`; none is independently shippable without creating either unenforced or unexplained
-behavior. The immutable coverage receipt is recorded after this plan is committed and pushed.
+- Decision: atomic
+- Parent: `BI-3913EB49`
+- Receipt: `cmtkwzfde01rl01jxfvdw2r9s`
+- Dependencies: none
+- Rationale: All four phases are one fail-closed Process Overseer contract; none is independently shippable without creating either unenforced or unexplained behavior.
 
 ### Four-way traceability
 

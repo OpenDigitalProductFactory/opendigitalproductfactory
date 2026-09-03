@@ -1,3 +1,7 @@
+---
+status: binding
+---
+
 # Workroom Process Overseer — Design
 
 **Backlog item:** `BI-3913EB49`  
