@@ -98,6 +98,52 @@ export function writeLocalCiGateState(stateFile, {
 }
 
 /**
+ * BI-5529B5AC. Gate state is per slot. When one slot PASSES a branch+SHA, a
+ * sibling slot's non-passing record for the SAME branch+SHA is a loser — an
+ * earlier attempt that queued, was blocked, failed on a contended slot, or was
+ * overridden — and left alone it lingers as a live-looking claim that shadows
+ * the real PASS in every reader that opens one file. Rewrite it as
+ * `superseded`, naming the winner, so no reader can mistake it for a verdict.
+ *
+ * Only exact branch+SHA matches are touched. A real PASS, a PASS whose evidence
+ * is still pending, a record for another SHA or branch, and a missing file are
+ * all left as they are.
+ *
+ * @returns {{ superseded: string[], skipped: Array<{ file: string, reason: string }> }}
+ */
+export function supersedeLosingSlotRecords({
+  winnerStateFile,
+  winnerSlotKey,
+  siblingStateFiles,
+  branch,
+  sha,
+  now = () => new Date().toISOString(),
+}) {
+  const superseded = [];
+  const skipped = [];
+  for (const file of siblingStateFiles || []) {
+    if (!file || file === winnerStateFile) continue;
+    const state = readLocalCiGateState(file);
+    if (!state) { skipped.push({ file, reason: "no-record" }); continue; }
+    if (state.branch !== branch || state.sha !== sha) { skipped.push({ file, reason: "other-candidate" }); continue; }
+    if (state.gatePassed === true) { skipped.push({ file, reason: "is-a-pass" }); continue; }
+    if (state.evidencePending === true) { skipped.push({ file, reason: "evidence-pending" }); continue; }
+    if (state.status === "superseded") { skipped.push({ file, reason: "already-superseded" }); continue; }
+    const payload = {
+      ...state,
+      gatePassed: false,
+      status: "superseded",
+      supersededStatus: state.status ?? null,
+      supersededBy: { slotKey: winnerSlotKey, stateFile: winnerStateFile, at: now() },
+    };
+    writeGateStateAtomically(file, `${JSON.stringify(payload, null, 2)}
+`);
+    superseded.push(file);
+  }
+  return { superseded, skipped };
+}
+
+/**
  * BI-C6B2D404. Canonical PASS reuse must project the CURRENT candidate onto
  * the metadata record. Updating only dpf-local-ci-gate.json leaves
  * candidateSha pointing at the prior run, and pregate:status then reports
