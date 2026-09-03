@@ -30,17 +30,26 @@ envelope, reviewer, organization, artifact, or audit unit, and never mints new
 governance state. Diagnostics expose only class, attempt count, and HTTP status,
 never secrets or provider content. Provider I/O stays outside transactions.
 
+## Objectives
+
+**OBJ-PROV-001:** Recover a transient repository-provider failure with one
+bounded retry while preserving the original immutable artifact request.
+
+**OBJ-PROV-002:** Keep every identity, authority, DCO, Workroom, blob-integrity,
+size, approval, and coverage boundary fail closed.
+
+**OBJ-PROV-003:** Produce bounded, sanitized retry diagnostics without leaking
+credentials or repository content.
+
 ## Acceptance contract
 
-- **AC-PROV-001 / OBJ-PROV-001:** transport and retryable-status failures for
-  commit and blob reads may succeed on the second and final attempt.
-- **AC-PROV-002 / OBJ-PROV-002:** permanent status, unreadable JSON, DCO or
-  Workroom conflict, identity mismatch, blob mismatch, and oversize content
-  remain immediate refusals.
-- **AC-PROV-003 / OBJ-PROV-003:** terminal diagnostics are bounded and sanitized.
-- **AC-PROV-004:** both reads share the helper and one audit invocation.
-- **AC-PROV-005:** no immutable, authorization, approval, or coverage control is
-  weakened or skipped.
+| Acceptance criterion | Objective links | Required outcome |
+| --- | --- | --- |
+| AC-PROV-001 | OBJ-PROV-001 | Transport and retryable-status failures for commit and blob reads may succeed on the second and final attempt. |
+| AC-PROV-002 | OBJ-PROV-002 | Permanent status, unreadable JSON, DCO or Workroom conflict, identity mismatch, blob mismatch, and oversize content remain immediate refusals. |
+| AC-PROV-003 | OBJ-PROV-003 | Terminal diagnostics are bounded and sanitized. |
+| AC-PROV-004 | OBJ-PROV-001, OBJ-PROV-003 | Commit-provenance and exact-blob reads share the helper and one audit invocation. |
+| AC-PROV-005 | OBJ-PROV-002 | No immutable, authorization, approval, or coverage control is weakened or skipped. |
 
 ## Independent spec-approval writer contract
 
