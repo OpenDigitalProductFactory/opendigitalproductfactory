@@ -1,0 +1,26 @@
+{
+  "version": "1",
+  "decidedOption": "open-25-rest-in-one-disclosure",
+  "decisionInteractionId": "DI-72C9AC182848",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/storefront/animals/waiting/page.tsx",
+      "apps/web/components/storefront-admin/AnimalsManager.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "open-25-rest-in-one-disclosure",
+      "all-100-rows-open",
+      "paginate-25-per-page"
+    ]
+  },
+  "notes": {
+    "decision": "principle_decide DI-72C9AC182848 (routine stakes, ui context): open-25-rest-in-one-disclosure composite 8.46, margin 2.60 over paginate-25-per-page 5.86; all-100-rows-open 4.06. The owner's 'no pagination, whole list on one page' holds: one URL, no page two; rows past the twenty-five longest-waiting sit on the same page inside one closed disclosure, still in wait order, so the detail shell's default-visible budget (450 words, deferred detail above 300) holds at the 100-row cap.",
+    "measurement": "The route is sweep-eligible (its fixture context is added in this PR), so the CI route sweep measures it as a net-new route with blocking absolutes; the offline audit in page.test.tsx renders the served markup and passes every detail-shell absolute at 4 rows and at 103 rows. Numbers are not restated here because they were not taken from a served app carrying the route before this PR existed.",
+    "fit": "Read-only surface beside the existing Animals manager; one primary action (Open the list) in the lead band; no fields, no filters, no export. The one added control on the Animals page is a text link to this route.",
+    "failureState": "No storefront: the lead says so and links to setup. No listed animals: an empty state points at the Animals page. Missing or future listing dates are shown as such at the end of the list with no day count and a one-line pointer to fix the date; a negative number is never shown.",
+    "theme": "All styles use existing --dpf-* tokens; no literal colour or new primitive."
+  }
+}
