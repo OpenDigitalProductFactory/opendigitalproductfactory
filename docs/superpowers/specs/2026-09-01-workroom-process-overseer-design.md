@@ -128,12 +128,26 @@ paused; recorded failures are never reinterpreted as passes.
 
 ## 7. Acceptance
 
-- Every `WorkroomView` exposes a Process Overseer/conformance projection.
-- Executable shaped rooms require exactly one explicit coordinator.
-- Required roles, stage order, evidence, receipts, grants, budgets, review points, stop conditions,
-  role independence, and AI eligibility are deterministic deviations.
-- Lifecycle guards refuse nonconformant shaped rooms and preserve legacy unshaped compatibility.
-- Repeated checks yield one stable reconciliation key.
-- The Workroom surface distinguishes explicit from derived coordination and explains intervention.
-- Targeted pure, read-model, lifecycle, and component tests pass; typecheck, build, UX route sweep,
-  and merged-code CI pass before merge.
+**OBJ-WPO-001:** Every Workroom projects one explainable Process Overseer state from its declared
+collaboration and activity shapes plus observed participants, stages, evidence, authority, budgets,
+reviews, stop conditions, and coordinator eligibility.
+
+**OBJ-WPO-002:** Executable shaped Workrooms advance only through a shared fail-closed lifecycle
+guard, while unshaped legacy Workrooms retain compatible behavior and report that conformance is
+not applicable.
+
+**OBJ-WPO-003:** Every refusal or intervention is deterministic, attributable, and idempotently
+reconcilable without widening authority or allowing the coordinator to judge its own work.
+
+**OBJ-WPO-004:** The existing Workroom detail surface explains coordinator assignment, conformance,
+stage progress, deviations, and intervention in an accessible compact presentation.
+
+| Acceptance ID | Objective | Acceptance statement |
+|---|---|---|
+| AC-WPO-001 | OBJ-WPO-001, OBJ-WPO-004 | Every `WorkroomView` exposes a Process Overseer/conformance projection and the existing Workroom detail surface renders it. |
+| AC-WPO-002 | OBJ-WPO-001, OBJ-WPO-002 | An executable shaped Workroom requires exactly one explicitly persisted coordinator; absent, multiple, or legacy-derived assignment cannot autonomously advance. |
+| AC-WPO-003 | OBJ-WPO-001, OBJ-WPO-003 | Required roles, stage order, evidence, receipts, grants, budgets, review points, stop conditions, role independence, and AI JSI/TAK eligibility produce deterministic typed deviations. |
+| AC-WPO-004 | OBJ-WPO-002, OBJ-WPO-003 | The shared lifecycle guard refuses nonconformant shaped operations with the exact disposition and intervention data, while preserving unshaped legacy compatibility. |
+| AC-WPO-005 | OBJ-WPO-003 | Repeated checks produce one stable reconciliation key suitable for one attributable activity or attention receipt. |
+| AC-WPO-006 | OBJ-WPO-004 | The Workroom surface distinguishes explicit from compatibility-only derived coordination and explains current/next stage, last check, unresolved deviations, and intervention reason. |
+| AC-WPO-007 | OBJ-WPO-001, OBJ-WPO-002, OBJ-WPO-003, OBJ-WPO-004 | Focused pure, read-model, lifecycle, and component tests, typecheck, production build, UX route sweep, exact-tree CI, merge checks, and live-install verification pass before completion. |
