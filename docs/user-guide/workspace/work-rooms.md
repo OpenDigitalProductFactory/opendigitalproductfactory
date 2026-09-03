@@ -22,6 +22,8 @@ relatedCode:
 
 A Workroom is not an unbounded chat channel. It has a work boundary: purpose, outcome, scope, accountability, authority, sensitivity, measures, timing, and a closure rule. The platform keeps the underlying governed Work Case and its evidence; the room presents that structure in language suited to doing the work.
 
+From **Platform > Workrooms**, select a room ID to open this same canonical Workroom. Rooms tied to backlog work open that backlog case; rooms without a backlog item open their Work Capsule case, so the inventory never leads to a dead route.
+
 ## What You See First
 
 The top of a Workroom answers four questions:
