@@ -11,6 +11,11 @@ import {
 import { dedupeRoomSourceRefs, roomText } from "./room-projection-utils";
 import { getWorkCaseSourceEntry } from "./source-registry";
 import type { WorkroomCycleView, WorkroomOutcomePacket } from "./room-types";
+import {
+  evaluateWorkroomLifecycleConformance,
+  type WorkroomLifecycleConformanceDecision,
+  type WorkroomShapeConformance,
+} from "./workroom-shape-conformance";
 
 export interface WorkroomCycleCarrierCandidate {
   cycleKey: string;
@@ -161,12 +166,19 @@ export function selectCompletedWorkroomCycles(
 
 export type WorkroomCyclePolicyDecision =
   | WorkCasePolicyDecision
+  | Extract<WorkroomLifecycleConformanceDecision, { ok: false }>
   | { ok: false; reason: "unknown_lifecycle_operation" | "missing_current_cycle" | "closed_cycle_sealed"; message: string };
+
+export type WorkroomShapeConformanceContext = {
+  hasDeclaredWorkShape: boolean;
+  result: WorkroomShapeConformance | null;
+};
 
 export function evaluateWorkroomCyclePolicy(input: {
   operation: WorkroomLifecycleOperation | string;
   cycle: WorkroomCycleView | null;
   policy: Omit<WorkCasePolicyInput, "action">;
+  shapeConformance?: WorkroomShapeConformanceContext;
 }): WorkroomCyclePolicyDecision {
   const lifecycle = getWorkroomLifecycleAction(input.operation);
   if (!lifecycle) {
@@ -178,6 +190,14 @@ export function evaluateWorkroomCyclePolicy(input: {
   }
   if (input.cycle && ["closed", "carried-over"].includes(input.cycle.status) && !["renew", "archive"].includes(lifecycle.operation)) {
     return { ok: false, reason: "closed_cycle_sealed", message: `Cycle '${input.cycle.cycleKey}' is sealed.` };
+  }
+  if (input.shapeConformance) {
+    const conformance = evaluateWorkroomLifecycleConformance({
+      operation: lifecycle.operation,
+      hasDeclaredWorkShape: input.shapeConformance.hasDeclaredWorkShape,
+      conformance: input.shapeConformance.result,
+    });
+    if (!conformance.ok) return conformance;
   }
   return evaluateWorkCasePolicy({ ...input.policy, action: lifecycle.canonicalAction });
 }

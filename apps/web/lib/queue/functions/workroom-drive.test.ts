@@ -45,6 +45,7 @@ function room(over: Partial<WorkroomDriveRoom> = {}): WorkroomDriveRoom {
     reviewDue: false,
     substrateReachable: true,
     substrateEmpty: false,
+    coordinatorEligibility: { jsi: "eligible", authorityBinding: "eligible" },
     ...over,
   };
 }
@@ -90,6 +91,12 @@ describe("runWorkroomDriveJob (BI-FCD639D9)", () => {
       workroomDriveTaskId("WC-TEST", "obligation-assurance-watch"),
       workroomDriveTaskId("WC-TEST", "obligation-assurance-watch"),
     ]);
+    expect(fx.persist.mock.calls[0]?.[0]?.snapshot).toMatchObject({
+      conformance: {
+        disposition: "continue",
+        reconciliationKey: expect.stringMatching(/^work-room-conformance:/),
+      },
+    });
   });
 
   it("leaves the stage eligible when a live lease is still held", async () => {
