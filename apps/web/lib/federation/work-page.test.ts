@@ -17,7 +17,7 @@ function row(itemId: string, overrides: Partial<WorkPageItemRow> = {}): WorkPage
   };
 }
 
-function db(items: WorkPageItemRow[]): WorkPageDb & { backlogItem: { findMany: ReturnType<typeof vi.fn> } } {
+function db(items: WorkPageItemRow[]): WorkPageDb & { backlogItem: { findMany: ReturnType<typeof vi.fn> }; epic: { findMany: ReturnType<typeof vi.fn> } } {
   return {
     backlogItem: { findMany: vi.fn().mockResolvedValue(items) },
     epic: { findMany: vi.fn().mockResolvedValue([{
@@ -39,7 +39,10 @@ describe("buildFederatedWorkPage", () => {
     // Local-only sensitivities and mirrored rows are excluded at the SQL layer.
     const where = store.backlogItem.findMany.mock.calls[0]![0].where;
     expect(where.sensitivity.notIn).toEqual(["confidential", "restricted"]);
-    expect(where.NOT.body.contains).toBe("[origin:federatedWork:");
+    // A row with no prose is owned: NOT-contains alone is NULL for a NULL column.
+    expect(where.OR).toEqual([{ body: null }, { NOT: { body: { contains: "[origin:federatedWork:" } } }]);
+    const epicWhere = store.epic.findMany.mock.calls[0]![0].where;
+    expect(epicWhere.OR).toEqual([{ description: null }, { NOT: { description: { contains: "[origin:federatedWork:" } } }]);
   });
 
   it("never serves a mirror back, even when the SQL predicate let it through", async () => {
