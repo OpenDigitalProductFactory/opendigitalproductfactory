@@ -49,7 +49,23 @@ What DPF adopts: all seven. What DPF rejects: SAFe's four-level hierarchy (story
 
 ## 3. The taxonomy
 
-One axis of **shape** (size and lifecycle), one orthogonal axis of **risk** (sensitivity), and one binary **lane** (standard or expedite). Shape is derived, storable as an override, and inherited by every carrier of the same work: backlog item → Workroom → FeatureBuild → TaskRun.
+One axis of **delivery shape** (size and lifecycle), one orthogonal axis of **risk** (sensitivity), and one binary **lane** (standard or expedite). The delivery shape is selected when the Workroom is claimed, lives on the Workroom, and is inherited by every carrier of the same work: Workroom → FeatureBuild → TaskRun, with the backlog item's `effortSize` as the default signal.
+
+**Founder direction (2026-09-02):** the Workroom is the shape and the governance-gate carrier. If the shape is not clear at claim time, the claim asks the user to pick before any work starts.
+
+### 3.0 This is the fifth axis, not a new concept
+
+`docs/architecture/work-shapes-and-the-decision-gate.md` already defines a Workroom's shape as orthogonal axes: activity kind, mode, participant roles, collaboration shape (`workroomShape`), and the activity shape (`workShape`, a versioned registry entry with triggers, stages, evidence, stop conditions and budgets). Delivery shape is the missing axis: *how big is this and what does it owe before it is done*. It is expressed **as five `workShape` registry entries** (`apps/web/lib/work-management/work-shapes.ts`), so it rides the existing claim, readback, drive and UI paths with no migration:
+
+| Registry key | Trigger | Stages (each with evidence) | Stop conditions | Budget | Collaboration shape |
+|---|---|---|---|---|---|
+| `delivery-break-fix@1.0.0` | `claim` | reproduce → repair → merge → post-implementation review | success: PIR receipt within 48h; failure: PIR missed | WIP 1 per installation | `escalation` |
+| `delivery-small@1.0.0` | `claim` | reproduce (failing→passing) → repair → merge → runtime check | success: merged SHA on `main` + runtime check | none | null |
+| `delivery-medium@1.0.0` | `claim` | design note → implement → merge → acceptance on live install | success: acceptance criteria verified | Workroom cap | `outward-review` |
+| `delivery-large@1.0.0` | `claim` | spec (research & benchmarking) → spec approval → plan + coverage → implement → merge → deploy → acceptance | success: acceptance receipt from independent reviewer | Workroom cap | `change-consequential` |
+| `delivery-xlarge@1.0.0` | `claim` | hypothesis + appetite → decomposition → children → outcome reconciliation | success: all children done + reconciliation; failure: circuit breaker at appetite | epic cap | `approval-sign-off` |
+
+Every stage whose advance merges, deploys or changes authority is a `governed-decision` advance, exactly as the standing shapes already declare.
 
 ### 3.1 Shapes
 
@@ -77,7 +93,17 @@ The current readiness profiles collapse onto (shape, sensitivity):
 | `cross-domain` | `large` + `elevated` |
 | `archetype` | `large` + `high` with the archetype provisioning/completeness codes |
 
-### 3.3 Classification rules
+### 3.3 Selecting the shape at claim
+
+`claim_backlog_item_for_work` (and `adopt_worktree` for an existing branch) gains a `workShape` parameter restricted to the five delivery keys. Resolution order:
+
+1. **Caller supplied it** → recorded on the Workroom as the `workShape` scope claim with `source: declared`.
+2. **Not supplied, derivable with confidence** → derived from the item (`effortSize`, work type, substrate-addition detector, sensitivity) and recorded with `source: derived` plus the signals used. Derivation is confident only when every rule in §3.4 agrees; an `xlarge` derivation never proceeds to implementation.
+3. **Not supplied, not derivable** → the claim is refused with `error: "work_shape_required"` and a structured pick list: the five shapes, each with its one-line definition, appetite, and the gates it will owe. This follows the established DPF pattern (a closed-enum parameter plus a refusal that lists the valid values, as `triage_backlog_item` does for `effortSize`). The `dpf-worktree-per-session` skill and the `workroom-claim-guard` hook instruct the agent to put that pick list to the user and re-claim with the answer, never to guess. An unattended caller (Build Studio, a scheduled coworker) with no derivable shape stops and raises attention to the item's owner.
+
+The shape is visible in the Workroom header next to the status badge and on the backlog item, with `declared` or `derived` shown, so the operator can see whether a human chose it.
+
+### 3.4 Classification rules
 
 Derived at triage from signals already on the item; overridable with a recorded reason; audited.
 
@@ -116,7 +142,7 @@ Principles encoded in the table:
 
 ## 5. Open decisions (founder)
 
-1. **Is `break-fix` a shape or a lane flag on `small`?** Recommendation: a shape. Its gates differ in kind (post-hoc), it needs a WIP limit and a frequency signal, and operators will look for it by name. Cost: one more `BacklogEffortSize`-adjacent value, stored as `workShape`, not as an effort size.
+1. **Is `break-fix` a shape or a lane flag on `small`?** Recommendation: a shape — a registry entry whose stages differ in kind (post-hoc review), with its own WIP budget and frequency measure. Operators will look for it by name.
 2. **Who may declare `break-fix`?** Recommendation: any human operator with `view_platform`, and the operations coworker when an incident record exists. Never an unattended build. The declaring principal is recorded and cannot be the PIR reviewer.
 3. **Does `medium` require an independent acceptance reviewer, or is author acceptance with live-install evidence enough?** Recommendation: author acceptance with recorded runtime evidence. Independent acceptance starts at `large`. On a single-human-principal install, mandatory independent acceptance for medium work is the CAB anti-pattern.
 4. **Does sensitivity `high` on a `small` shape raise to `medium` gates (recommendation) or all the way to `large`?**
@@ -124,10 +150,10 @@ Principles encoded in the table:
 
 ## 6. Implementation outline (for the plan that follows this spec)
 
-1. **Schema:** `BacklogItem.workShape` (`break-fix|small|medium|large|xlarge`, closed-set CHECK like the other contract-pending columns), `workShapeSource` (`derived|override`), `workShapeReason`. Workroom, FeatureBuild and TaskRun read it through the item; no duplicate columns.
-2. **Classifier:** `deriveWorkShape(item)` next to `deriveAuthoritativeReadinessProfile` (`profiles.ts`), consuming the same signals plus the substrate-addition detector. Unclassified → `large` + `high`.
+1. **Registry:** five `delivery-*` entries in `apps/web/lib/work-management/work-shapes.ts` (table in §3.0). No schema change: the shape persists as the Workroom's existing `workShape` scope claim. The backlog item mirrors it read-only for list and triage surfaces.
+2. **Claim:** `workShape` parameter on `claim_backlog_item_for_work` and `adopt_worktree`; `deriveDeliveryShape(item)` beside `deriveAuthoritativeReadinessProfile`; `work_shape_required` refusal with the pick list; skill and hook text telling the agent to ask the user. `derive-workroom-shape.ts` keeps returning null for delivery activity kinds — the delivery shape is the answer to that gap, not a guess inside it.
 3. **Readiness policy v3:** requirements keyed by (shape, sensitivity, target). Completion requirements become shape-conditional. `OBJECTIVE_BASELINE_REQUIRED` is satisfiable by an item-body acceptance baseline for `small|medium`.
-4. **Delivery evidence:** merge-reachability resolver reads the linked PR when no Workroom is bound.
+4. **Delivery evidence:** merge-reachability resolver reads the Workroom's `headSha`, then the linked PR when the room never recorded one.
 5. **Build Studio matrix:** the `(type, size)` cell lookup becomes `(shape, sensitivity)`; the cell bodies stay. `break-fix` maps to the `FIX_SMALL` cell with `promptVariant = "hotfix"`.
 6. **Expedite lane:** `declare_break_fix` on the backlog pack (records declarer, incident ref, starts the 48h PIR clock); PIR receipt writer; WIP-1 check at claim; frequency signal on Right Now governance card.
 7. **Docs:** kernel principle `gates-proportional-to-shape` under `docs/founder-kernel/wiki/principles/`; AGENTS.md §5 one-liner pointing at it; `backlog-and-planning-runbook.md` shape table.
