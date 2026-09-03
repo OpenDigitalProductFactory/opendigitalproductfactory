@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 645,
+  "routeCount": 646,
   "routes": [
     {
       "routePath": "/",
@@ -7688,6 +7688,16 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/workspace/my-queue/page.tsx"
+    },
+    {
+      "routePath": "/workspace/ward",
+      "kind": "page",
+      "segments": [
+        "workspace",
+        "ward"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/workspace/ward/page.tsx"
     }
   ]
 }

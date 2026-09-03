@@ -1,11 +1,11 @@
 {
   "generator": "apps/web/scripts/build-route-shells.ts",
-  "pageRouteCount": 325,
+  "pageRouteCount": 326,
   "migratedCount": 1,
   "summary": {
     "cockpit": 17,
     "list": 6,
-    "detail": 252,
+    "detail": 253,
     "settings": 12,
     "form": 17,
     "public": 21,
@@ -4020,6 +4020,18 @@
       "routePath": "/workspace/my-queue",
       "shell": "detail",
       "audience": "worker",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "sweepEligible": true,
+      "confidence": "high"
+    },
+    {
+      "routePath": "/workspace/ward",
+      "shell": "detail",
+      "audience": "owner",
       "migrated": false,
       "exemptChecks": [
         "next-action-marker",

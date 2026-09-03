@@ -4,6 +4,8 @@ import {
   type AnimalsInCare,
   type DonationTotal,
 } from "./archetype-outcomes";
+import { summarizeKennelCapacity } from "@/lib/ward/ward-occupancy";
+import { loadWardBoard, type WardStoreClient } from "@/lib/ward/ward-store";
 
 type FindMany = (args: unknown) => Promise<unknown>;
 type Count = (args: unknown) => Promise<number>;
@@ -32,6 +34,8 @@ interface DonationRow {
 }
 
 export interface ArchetypeOutcomeFacts {
+  /** `null` when no housing is recorded — never rendered as "0 free". */
+  kennelCapacity: ReturnType<typeof summarizeKennelCapacity>;
   donationRows: DonationRow[] | null;
   animalStatusRows: AnimalStatusGroup[] | null;
   animalsPlaced: number | null;
@@ -45,12 +49,15 @@ function isRescue(archetypeId: string): boolean {
 export async function loadArchetypeOutcomeFacts(input: {
   archetypeId: string;
   storefrontId: string;
+  /** Absent on a caller that cannot resolve it; capacity then reads as
+   *  unrecorded rather than as a confident zero. */
+  organizationId?: string | null;
   since: Date;
   db: ArchetypeOutcomeFactsClient;
   runtime: OutcomeFactsRuntime;
 }): Promise<ArchetypeOutcomeFacts> {
   if (!isRescue(input.archetypeId)) {
-    return { donationRows: null, animalStatusRows: null, animalsPlaced: null };
+    return { kennelCapacity: null, donationRows: null, animalStatusRows: null, animalsPlaced: null };
   }
 
   const [donationRows, animalStatusRows, animalsPlaced] = await Promise.all([
@@ -93,7 +100,24 @@ export async function loadArchetypeOutcomeFacts(input: {
       : (input.runtime.unavailable("adoptions"), Promise.resolve(null)),
   ]);
 
-  return { donationRows, animalStatusRows, animalsPlaced };
+  // Housing is org-scoped, not storefront-scoped: a kennel is not a listing.
+  const board = input.organizationId
+    ? await input.runtime.read(
+        "kennels",
+        loadWardBoard({
+          organizationId: input.organizationId,
+          db: input.db as unknown as WardStoreClient,
+        }),
+        null,
+      )
+    : null;
+
+  return {
+    kennelCapacity: summarizeKennelCapacity(board),
+    donationRows,
+    animalStatusRows,
+    animalsPlaced,
+  };
 }
 
 /**
@@ -172,6 +196,7 @@ export function buildOutcomeProjectionFromFacts(input: {
     deliveredJobs: input.deliveredJobs,
     donationTotals: donations.totals,
     animalsInCare: summarizeAnimalsInCare(input.facts.animalStatusRows),
+    kennelCapacity: input.facts.kennelCapacity,
     animalsPlaced: input.facts.animalsPlaced,
     // There is no governed foster entity yet. Preserve that fact in the UI.
     fostersActive: null,

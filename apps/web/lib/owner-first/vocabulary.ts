@@ -25,6 +25,11 @@ export type OwnerDomainVocabulary = {
   guestFollowUpLabel: string;
   customerSummarySubhead: string;
   reservationsLabel: string;
+  /** The stream of people reaching in, as this business names it. A storefront
+   *  is what DPF calls the product; it is not what a rescue calls its front
+   *  door, so this is vocabulary rather than a branch on one archetype. */
+  inboundHeadline: string;
+  inboundSubhead: string;
   ordersLabel: string;
   inquiriesLabel: string;
   /** People-domain daily work. */
@@ -43,6 +48,8 @@ const RESTAURANT_VOCABULARY: OwnerDomainVocabulary = {
   guestsLabel: "guests",
   guestFollowUpLabel: "Guest follow-up",
   customerSummarySubhead: "Guests waiting on you — reservations, orders, and inquiries first.",
+  inboundHeadline: "From your guests",
+  inboundSubhead: "Reservations, orders, and inquiries waiting on you — before anything else.",
   reservationsLabel: "reservations",
   ordersLabel: "orders",
   inquiriesLabel: "inquiries",
@@ -60,6 +67,8 @@ const DEFAULT_VOCABULARY: OwnerDomainVocabulary = {
   guestsLabel: "customers",
   guestFollowUpLabel: "Customer follow-up",
   customerSummarySubhead: "Customers waiting on you first — the rest of your CRM is below.",
+  inboundHeadline: "From your customers",
+  inboundSubhead: "Bookings, orders, and inquiries waiting on you — before anything else.",
   reservationsLabel: "bookings",
   ordersLabel: "orders",
   inquiriesLabel: "inquiries",
@@ -77,6 +86,8 @@ const PET_RESCUE_VOCABULARY: OwnerDomainVocabulary = {
   guestsLabel: "people & partners",
   guestFollowUpLabel: "Adoption follow-up",
   customerSummarySubhead: "Adopters, foster families, volunteers, donors, and partners waiting on you first.",
+  inboundHeadline: "From your community",
+  inboundSubhead: "Adoption enquiries, visits, and supply requests waiting on you — before anything else.",
   reservationsLabel: "adoption visits",
   ordersLabel: "supply requests",
   inquiriesLabel: "adoption enquiries",
