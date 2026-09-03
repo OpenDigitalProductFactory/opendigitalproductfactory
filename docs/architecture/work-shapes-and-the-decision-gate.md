@@ -84,7 +84,7 @@ unarchived rooms **that carry a work-shape claim**, ordered, and bounded by
 `STANDING_ROOM_SCAN_LIMIT`.
 
 The filter is part of the query rather than a pass over the results, and the distinction is
-load-bearing ⟦runtime: corrected 2026-09-02, `BI-72B3FB40`⟧. The first implementation capped
+load-bearing ⟦runtime: corrected 2026-09-02⟧. The first implementation capped
 the row read at 200 and filtered for the claim afterwards in JavaScript, so the cap bounded
 *every* room instead of the candidates. On an install with 276 non-terminal rooms and one
 shaped room, the drive reported `scanned: 0` on every tick for seven hours: registered,
