@@ -1,7 +1,11 @@
+---
+status: active
+---
+
 # Terminal Readiness Read Projection Repair
 
 - **Backlog item:** BI-72CEB47A
-- **Epic:** EP-129D11FD
+- **Owning program:** Initiative Readiness and Governed Completion Enforcement
 - **Profile:** fix
 - **Canonical parent design:** `docs/superpowers/specs/2026-08-08-initiative-readiness-and-goal-completion-reconciliation-design.md`
 - **Live reproduction:** BI-A45D744A / WC-04941646 / IRD-BFB7EB781EEE
@@ -44,6 +48,8 @@ Nonterminal items continue to recompute current design, plan, implementation, an
 - The projection does not alter receipt creation, reviewer independence, terminal mutation, deletion, or authorization.
 - Governed deletion/revocation continues to operate on the existing activity classes. If no valid terminal decision remains, the projection falls back to current fail-closed evaluation.
 - The MCP response returns the same sanitized decision shape already exposed by initiative readiness; it does not disclose new restricted payloads.
+- Reads remain bounded to the latest 100 governance activities already selected by the backlog pack. A completed item that somehow accumulates more than 100 newer governance activities may fall back to the current fail-closed evaluator rather than silently inventing an allowed decision. The owning initiative-readiness program remains the place to lift that measured ceiling with cursor-backed reads.
+- Equal-time transition decisions follow the parent contract's deterministic `(recordedAt DESC, decisionId DESC)` ordering.
 
 ## Implementation sequence
 
@@ -68,4 +74,3 @@ This is one atomic fix: the parser and serializer change are not independently s
 ## Rollback
 
 Revert the parser and MCP activity-selection changes together. The immutable decisions and completed records remain untouched; rollback returns the previous contradictory read behavior but does not corrupt governance data.
-
