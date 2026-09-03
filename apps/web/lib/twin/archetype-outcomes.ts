@@ -31,6 +31,9 @@ export interface ArchetypeOutcomeInput {
   /** `null` means the animal source could not be read; a zero total means an
    *  empty shelter, which is a real and different answer. */
   animalsInCare?: AnimalsInCare | null;
+  /** Housing the shelter has recorded. `null` means none has been recorded at
+   *  all, which is a different answer from having none free. */
+  kennelCapacity?: { total: number; free: number; occupied: number; outOfService: number } | null;
   animalsPlaced?: number | null;
   fostersActive?: number | null;
 }
@@ -128,6 +131,36 @@ function animalsInCareOutcome(inCare: AnimalsInCare | null | undefined): TwinOut
 }
 
 /**
+ * The 16:00 question the operating day could not answer: how many kennels are
+ * free. A shelter that has recorded no housing has not answered "none free" —
+ * it has not been asked yet — so the two states never render the same.
+ */
+function kennelsOutcome(
+  capacity: ArchetypeOutcomeInput["kennelCapacity"],
+): TwinOutcome {
+  if (capacity == null) {
+    return {
+      key: "kennels-free",
+      label: "Kennels",
+      value: "Not recorded",
+      intent: "info",
+      hint: "No housing recorded yet",
+    };
+  }
+
+  const detail = [`${capacity.occupied} occupied`];
+  if (capacity.outOfService > 0) detail.push(`${capacity.outOfService} out of service`);
+
+  return {
+    key: "kennels-free",
+    label: "Kennels",
+    value: `${capacity.free} free`,
+    intent: capacity.free === 0 ? "warning" : "success",
+    hint: `${detail.join(" · ")} of ${capacity.total}`,
+  };
+}
+
+/**
  * Project canonical aggregates into the archetype's outcome language. This is
  * intentionally a small presentation boundary, not a general metric framework:
  * each value must already have a real source, and missing sources stay visible.
@@ -140,6 +173,7 @@ export function buildArchetypeOutcomes(
       heading: "Mission impact",
       outcomes: [
         animalsInCareOutcome(input.animalsInCare),
+        kennelsOutcome(input.kennelCapacity),
         donationsOutcome(input),
         {
           key: "animals-placed",

@@ -496,7 +496,11 @@ describe("generated route-shell registry", () => {
     // case and publishes its path, so a detail surface is measurable at last.
     // Eligibility for a dynamic route is earned by that minting, not asserted —
     // an eligible-but-unresolved route fails the run rather than measuring a 404.
-    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(206);
+    // 206 -> 207: /workspace/ward (BI-F91D0685) — the ward board reads housing and
+    // occupancy from route-owned read models with no wall-clock or live-orchestration
+    // state, so its rendered output is stable and it carries a ratified page-purpose
+    // contract.
+    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(207);
     // 110 -> 113: the three exclusions above. Product Direction then adds seven
     // explicitly classified dynamic routes, bringing the combined total to 120.
     // 120 -> 121: /platform/ai/operations-map.

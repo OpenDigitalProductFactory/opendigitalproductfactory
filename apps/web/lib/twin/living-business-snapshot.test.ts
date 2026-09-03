@@ -424,15 +424,17 @@ describe("loadLivingBusinessSnapshot — loader", () => {
     expect(snapshot?.outcomesHeading).toBe("Mission impact");
     expect(snapshot?.outcomes?.map((outcome) => outcome.label)).toEqual([
       "Animals in care",
+      "Kennels",
       "Donations received",
       "Animals placed",
       "Fosters active",
     ]);
     expect(snapshot?.outcomes?.[0]?.value).toBe("4 animals");
     expect(snapshot?.outcomes?.[0]?.hint).toBe("3 on hold · 1 available");
-    expect(snapshot?.outcomes?.[1]?.value).toContain("$275");
-    expect(snapshot?.outcomes?.[2]?.value).toBe("2 animals");
-    expect(snapshot?.outcomes?.[3]).toMatchObject({
+    expect(snapshot?.outcomes?.[1]?.value).toBe("Not recorded");
+    expect(snapshot?.outcomes?.[2]?.value).toContain("$275");
+    expect(snapshot?.outcomes?.[3]?.value).toBe("2 animals");
+    expect(snapshot?.outcomes?.[4]).toMatchObject({
       value: "Unavailable",
       hint: "No foster record source yet",
     });

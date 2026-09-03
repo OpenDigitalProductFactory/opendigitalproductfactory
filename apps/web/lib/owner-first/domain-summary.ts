@@ -242,7 +242,7 @@ export function buildFinanceOwnerSummary(
 
   return {
     domain: "finance",
-    headline: vocab.isRestaurant ? "Money today" : "Money today",
+    headline: "Money today",
     subhead: vocab.isRestaurant
       ? `What must be paid, collected, or approved — ${vocab.billsLabel}, ${vocab.depositsLabel}, and ${vocab.invoicesLabel}.`
       : "What must be paid, collected, or approved today.",
@@ -285,10 +285,8 @@ export function buildWorkspaceStorefrontSummary(
   return {
     ...summary,
     domain: "workspace",
-    headline: vocab.isRestaurant ? "From your guests" : "From your storefront",
-    subhead: vocab.isRestaurant
-      ? "Reservations, orders, and inquiries waiting on you — before anything else."
-      : "Storefront bookings and inquiries waiting on you — before anything else.",
+    headline: vocab.inboundHeadline,
+    subhead: vocab.inboundSubhead,
   };
 }
 

@@ -15,6 +15,7 @@ import { GOVERNED_TEARDOWN_PURPOSE_CONTRACTS } from "./governed-teardown";
 import { WORDPRESS_PURPOSE_CONTRACTS } from "./wordpress";
 import { WORKROOM_PURPOSE_CONTRACTS } from "./workrooms";
 import { INSTALLATION_IDENTITY_PURPOSE_CONTRACTS } from "./installation-identity";
+import { WARD_PURPOSE_CONTRACTS } from "./ward";
 
 const CONTRACT_MODULES: readonly PurposeContractModule[] = [
   ARCHETYPE_READINESS_PURPOSE_CONTRACTS,
@@ -27,6 +28,7 @@ const CONTRACT_MODULES: readonly PurposeContractModule[] = [
   WORDPRESS_PURPOSE_CONTRACTS,
   WORKROOM_PURPOSE_CONTRACTS,
   INSTALLATION_IDENTITY_PURPOSE_CONTRACTS,
+  WARD_PURPOSE_CONTRACTS,
 ];
 
 export function buildPurposeContractSourceIndex(

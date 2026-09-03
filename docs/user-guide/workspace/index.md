@@ -77,6 +77,30 @@ operational grammar, not live hotel data. Live assignment, housekeeping, and
 maintenance commands remain unavailable until the business's durable room
 provider is connected.
 
+## The ward, for a shelter
+
+An animal rescue opens **Operations > Ward** to answer the two questions a
+shelter asks all day: where an animal is, and how much room is left.
+
+- The board states **occupied of total** and **free** before anything else, then
+  draws the units grouped by your own ward names. A free run is an outline you
+  can see rather than a number you have to work out.
+- **List** shows the same units as a table when you want the area and state per
+  row. It carries every unit the map does.
+- A unit held out of service — a deep clean, a repair — shows its reason and is
+  **not** counted as free.
+- If the shelter is holding animals with no kennel recorded, the board names
+  them and says the free count covers only the animals it can place.
+
+Two states are deliberately different. A shelter that has recorded **no
+housing** sees "No housing recorded yet" and no free count at all, because
+having told the system about no kennels is not the same as having no room. A
+shelter whose units are all full sees a free count of zero.
+
+The same figures appear on the Operations home as **Animals in care** and
+**Kennels**, so the number you quote in a capacity conversation is the number
+the board is drawing.
+
 ## Confirming an operational suggestion
 
 An AI coworker can suggest an assignment, but the suggestion is not a completed
