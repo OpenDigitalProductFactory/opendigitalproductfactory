@@ -10,17 +10,19 @@ import { resolveOwnerVocabulary, type OwnerDomainVocabulary } from "./vocabulary
 
 export type OwnerFirstContext = {
   archetypeCategory: string | null;
+  archetypeId: string | null;
   archetypeName: string | null;
   vocab: OwnerDomainVocabulary;
 };
 
 export async function loadOwnerFirstContext(): Promise<OwnerFirstContext> {
   const config = await prisma.storefrontConfig.findFirst({
-    include: { archetype: { select: { category: true, name: true } } },
+    include: { archetype: { select: { category: true, archetypeId: true, name: true } } },
   });
   const category = config?.archetype?.category ?? null;
   return {
     archetypeCategory: category,
+    archetypeId: config?.archetype?.archetypeId ?? null,
     archetypeName: config?.archetype?.name ?? null,
     vocab: resolveOwnerVocabulary(category),
   };
