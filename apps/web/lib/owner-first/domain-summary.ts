@@ -132,9 +132,7 @@ export function buildCustomerOwnerSummary(
   return {
     domain: "customer",
     headline: vocab.guestFollowUpLabel,
-    subhead: vocab.isRestaurant
-      ? "Guests waiting on you — reservations, orders, and inquiries first."
-      : "Customers waiting on you first — the rest of your CRM is below.",
+    subhead: vocab.customerSummarySubhead,
     actions: orderActions(actions),
     clearMessage: `No ${vocab.guestsLabel} are waiting on a reply right now. New ${vocab.reservationsLabel} and ${vocab.inquiriesLabel} will appear here first.`,
   };

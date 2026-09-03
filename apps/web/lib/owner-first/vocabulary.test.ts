@@ -30,4 +30,12 @@ describe("resolveOwnerVocabulary", () => {
     expect(v.isRestaurant).toBe(false);
     expect(v.category).toBeNull();
   });
+
+  it("uses adoption and community vocabulary for pet rescue", () => {
+    const v = resolveOwnerVocabulary("nonprofit-community", "pet-rescue");
+    expect(v.guestFollowUpLabel).toBe("Adoption follow-up");
+    expect(v.guestsLabel).toBe("people & partners");
+    expect(v.inquiriesLabel).toBe("adoption enquiries");
+    expect(v.customerSummarySubhead).not.toMatch(/customer|crm/i);
+  });
 });
