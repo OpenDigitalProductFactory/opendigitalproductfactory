@@ -15,6 +15,7 @@
 
 import Link from "next/link";
 import { prisma } from "@dpf/db";
+import { WaitingListTable, type WaitingListTableRow } from "@/components/storefront-admin/WaitingListTable";
 import { buildWaitingList, type WaitingListRow } from "@/lib/storefront/adoption-waiting-list";
 
 export const dynamic = "force-dynamic";
@@ -24,51 +25,17 @@ const OPEN_ROWS = 25;
 
 const dateFormat = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 
-function speciesLabel(species: string | null): string {
-  if (!species) return "Not set";
-  return species.charAt(0).toUpperCase() + species.slice(1);
-}
-
-function listedOnCell(row: WaitingListRow): string {
-  if (row.dateState === "future") return "Date is in the future";
-  if (row.dateState === "missing") return "No date";
-  return dateFormat.format(row.listedOn!);
-}
-
-function daysCell(row: WaitingListRow): string {
-  return row.daysWaiting === null ? "—" : String(row.daysWaiting);
-}
-
-function Row({ row }: { row: WaitingListRow }) {
-  const flagged = row.dateState !== "known";
-  return (
-    <tr className="border-t border-[var(--dpf-border)]">
-      <td className="px-3 py-2 font-medium text-[var(--dpf-text)]">{row.name}</td>
-      <td className="px-3 py-2 text-[var(--dpf-text)]">{speciesLabel(row.species)}</td>
-      <td className="px-3 py-2 text-[var(--dpf-muted)]">{row.breed ?? "—"}</td>
-      <td className={`px-3 py-2 ${flagged ? "text-[var(--dpf-warning)]" : "text-[var(--dpf-text)]"}`}>{listedOnCell(row)}</td>
-      <td className="px-3 py-2 text-right tabular-nums text-[var(--dpf-text)]">{daysCell(row)}</td>
-    </tr>
-  );
-}
-
-function Table({ rows, label }: { rows: WaitingListRow[]; label: string }) {
-  return (
-    <table className="w-full text-sm" aria-label={label}>
-      <thead>
-        <tr className="text-left text-xs uppercase tracking-wide text-[var(--dpf-muted)]">
-          <th scope="col" className="px-3 py-2">Name</th>
-          <th scope="col" className="px-3 py-2">Species</th>
-          <th scope="col" className="px-3 py-2">Breed</th>
-          <th scope="col" className="px-3 py-2">Listed on</th>
-          <th scope="col" className="px-3 py-2 text-right">Days waiting</th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((row) => <Row key={row.id} row={row} />)}
-      </tbody>
-    </table>
-  );
+/** Serialise a row for the client table: dates become reader-facing text here,
+ *  on the server, so the table renders words and never a raw timestamp. */
+function toTableRow(row: WaitingListRow): WaitingListTableRow {
+  const listedOn =
+    row.dateState === "future" ? "Date is in the future"
+    : row.dateState === "missing" ? "No date"
+    : dateFormat.format(row.listedOn!);
+  return {
+    id: row.id, name: row.name, species: row.species, breed: row.breed,
+    listedOn, daysWaiting: row.daysWaiting, flagged: row.dateState !== "known",
+  };
 }
 
 export default async function AdoptionWaitingListPage() {
@@ -100,8 +67,8 @@ export default async function AdoptionWaitingListPage() {
     select: { id: true, name: true, species: true, breed: true, status: true, publishedAt: true },
   });
   const list = buildWaitingList(animals, new Date());
-  const open = list.rows.slice(0, OPEN_ROWS);
-  const rest = list.rows.slice(OPEN_ROWS);
+  const open = list.rows.slice(0, OPEN_ROWS).map(toTableRow);
+  const rest = list.rows.slice(OPEN_ROWS).map(toTableRow);
   const flagged = list.rows.filter((r) => r.dateState !== "known").length;
 
   return (
@@ -136,7 +103,7 @@ export default async function AdoptionWaitingListPage() {
               {list.rows.length} listed. Days count from the listing date.
             </p>
             <div className="overflow-x-auto rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface)]">
-              <Table rows={open} label="Animals waiting longest" />
+              <WaitingListTable rows={open} label="Animals waiting longest" />
             </div>
             {rest.length > 0 && (
               <details className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface)]">
@@ -144,7 +111,7 @@ export default async function AdoptionWaitingListPage() {
                   Show the other {rest.length} animals
                 </summary>
                 <div className="overflow-x-auto">
-                  <Table rows={rest} label="Rest of the waiting list" />
+                  <WaitingListTable rows={rest} label="Rest of the waiting list" />
                 </div>
               </details>
             )}

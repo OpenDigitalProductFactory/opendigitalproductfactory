@@ -1,3 +1,6 @@
+---
+status: active
+---
 # Adoption waiting list — implementation plan
 
 **Backlog:** BI-899D7F00 (retired duplicates: BI-5C3F3433, BI-336EEDF3, BI-C3B5FB75, BI-3A0F6E1F)
