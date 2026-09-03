@@ -10,6 +10,24 @@ The provider detail route turns a fixed list of evidence claims into an aggregat
 
 The page also accepts arbitrary comma-separated region codes. Organization location, organization data-residency policy, provider catalog capability, and the connected account's contractual entitlement are separate facts; one must never be used as proof of another.
 
+## Objective baseline
+
+**OBJ-TRUST-RELEVANCE:** Provider setup derives questions and attention from the canonical business and workload policy, so optional region or contract evidence does not look mandatory.
+
+**OBJ-ENTITLEMENT-INTEGRITY:** Organization locale and data-residency requirements remain distinct from a connected provider account's proven processing entitlement.
+
+**OBJ-READINESS-CLARITY:** The page distinguishes technical connectivity from workload-specific data-use eligibility and names the smallest correct next action.
+
+**OBJ-ROUTING-SAFETY:** Restricted, unknown-classification, and region-bound workloads remain denied when required evidence is absent or invalid.
+
+| Acceptance | Objective | Statement |
+| --- | --- | --- |
+| AC-TRUST-01 | OBJ-TRUST-RELEVANCE | With no explicit canonical residency requirement, the provider page neither asks for arbitrary region codes nor raises action for missing region or DPA evidence. |
+| AC-TRUST-02 | OBJ-ENTITLEMENT-INTEGRITY | When canonical policy requires regions, the page names them and records a connection-scoped guarantee without inferring entitlement from operating locale. |
+| AC-TRUST-03 | OBJ-READINESS-CLARITY | Technical readiness and data-use eligibility use distinct labels, scope statements, and actions. |
+| AC-TRUST-04 | OBJ-ROUTING-SAFETY | Existing deny-by-default compiler behavior remains covered for unknown classification, region-bound work, and restricted work. |
+| AC-TRUST-05 | OBJ-TRUST-RELEVANCE | Saving account terms while no region is required preserves existing region evidence; a required positive guarantee persists normalized regions. |
+
 ## Design grounding
 
 This change extends the existing provider-suitability design rather than creating a second policy engine.
