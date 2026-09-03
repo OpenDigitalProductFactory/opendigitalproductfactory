@@ -1,10 +1,10 @@
 {
   "_comment": "Plane-4 standing tool-surface baseline (scripts/check-tool-surface.mjs). Growth is ALLOWED but never silent: raise a value and record `reason` + `recordedAt` saying what capability it buys. Dispatch-time caps are governed elsewhere and are not the subject of this baseline.",
-  "selectionCliff": 15,
+  "selectionCliff": null,
   "entries": {
     "registry.toolDefinitions": {
-      "value": 406,
-      "reason": "issue_ux_verification_sign_in (BI-9369DEB5): a fully automated installation is verified by agents with no person present, and most pages are session-gated. No existing tool can put the platform's own browser behind a session; this one mints a one-time link for the seeded automation persona so an agent can judge layout, type, colour and overrun in a real browser without typing a password or asking the operator.",
+      "value": 407,
+      "reason": "appoint_room_coordinator (BI-F63200A8). Conformance refuses to execute a Workroom without exactly one explicit Process Overseer, and no tool could set that role: persistWorkroomParticipantAssignment had zero callers and invite_room_participant admits a participant without ever making them coordinator. A live room woke 100 times and refused every one for want of an owner. This earns a permanent place because ownership is a standing property of every room on every install, not a one-off repair \u2014 and because the tool is deliberately callable without an acting coworker, so a stalled room can be given an owner by whoever notices it.",
       "recordedAt": "2026-09-03"
     },
     "registry.packFiles": {

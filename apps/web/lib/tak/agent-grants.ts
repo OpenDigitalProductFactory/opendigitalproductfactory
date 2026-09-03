@@ -208,6 +208,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // EP-WORKROOM-COMMS: invite a participant on demand (write); 360 coworker
   // room-engagement (read). Room admission/coordinator right enforced separately.
   invite_room_participant: ["work_room_write"],
+  appoint_room_coordinator: ["work_room_write"],
   get_coworker_room_engagement: ["work_room_read"],
   create_workroom: ["work_capsule_write"],
   plan_workroom_worktree: ["work_capsule_write"],

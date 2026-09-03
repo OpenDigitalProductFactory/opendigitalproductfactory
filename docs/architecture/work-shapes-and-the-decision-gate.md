@@ -132,6 +132,34 @@ budgets, stop conditions, and coordinator eligibility with observed state. A der
 remains useful for legacy visibility, but it is marked compatibility-only and does not make a
 shaped room execution-qualified. The enforced contract is:
 
+#### Appointing one ⟦runtime: 2026-09-03, `BI-F63200A8`⟧
+
+Requiring an explicit coordinator is only half a contract; something has to be able to name one.
+Until this landed nothing could. `persistWorkroomParticipantAssignment` could always write the
+roster row and had **zero callers**; `invite_room_participant` admits a participant but never sets
+the `coordinator` role, and requires an acting coworker, so it could not have unstuck a room even
+from inside. The consequence was observable rather than theoretical: a standing room on the
+reference install woke every fifteen minutes and refused **100 consecutive times** with
+`missing_explicit_coordinator`, and nothing surfaced it.
+
+`appoint_room_coordinator` is that caller — `capsuleId` plus `principalRef`, deliberately callable
+**without** an acting coworker so a stalled room can be given an owner by whoever notices it. It
+carries `consequence: "authority"`, because who answers for a room is an authority fact.
+
+Its refusals carry the contract:
+
+- an unknown or inactive principal is refused, because persisting one leaves the room *looking*
+  owned while it still refuses to execute — indistinguishable from having no owner at all;
+- a second coordinator is refused unless a hand-over is explicit, because conformance treats
+  `multiple_coordinators` as blocking, so silently adding one leaves the room **more** stuck than
+  before the appointment;
+- re-appointing the current owner is idempotent, not a second coordinator.
+
+Appointment is layer 1 of the ownership ladder ratified in `DI-306B742EFD74`; deriving an owner
+from the work shape, the archetype's portfolio specialist, or the value-stream orchestrator is
+follow-on work, and an unresolvable room is reported unowned rather than assigned to a
+plausible-looking coworker.
+
 1. **Convene:** require exactly one explicit current coordinator and validate the collaboration
    shape, WorkShapeDefinition/version, persisted roster, posture, authority, trigger, measures,
    review point, budgets, and stop conditions.
