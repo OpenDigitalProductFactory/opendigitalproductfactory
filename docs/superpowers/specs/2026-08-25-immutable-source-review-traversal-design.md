@@ -7,7 +7,7 @@ status: active
 **Backlog item:** BI-SIG-463E478D  
 **Workroom:** WC-C4836AC0  
 **Kernel decision:** DI-5B59E245E250  
-**BI-DE58CFE8 review profile:** fix  
+**BI-DE58CFE8 review profile:** fix
 **Status:** Design checkpoint
 
 ## Problem
