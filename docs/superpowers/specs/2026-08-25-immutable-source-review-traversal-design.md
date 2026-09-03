@@ -7,6 +7,7 @@ status: active
 **Backlog item:** BI-SIG-463E478D  
 **Workroom:** WC-C4836AC0  
 **Kernel decision:** DI-5B59E245E250  
+**BI-DE58CFE8 review profile:** fix
 **Status:** Design checkpoint
 
 ## Problem
@@ -23,6 +24,40 @@ The observed failure is systemic. It blocks the readiness receipt needed by BI-F
 - Reserve a terminal governed-writer step instead of allowing reads to consume the whole local-model tool surface.
 - Fail closed when the reviewer does not read evidence or does not attempt the writer.
 - Reuse the existing MCP tool pack, task submission path, agent loop, `ToolExecution` audit rows, and initiative receipt validators.
+
+## BI-DE58CFE8 objective and acceptance contract
+
+BI-DE58CFE8 owns the terminal-writer resumability extensions in this design. The
+original BI-SIG delivery established immutable traversal; the BI-DE extensions
+make every incomplete review exit recoverable on the same governed identity
+without weakening the writer or approval boundary.
+
+- **OBJ-DE-001:** Preserve the exact TaskRun, request digest, immutable artifact
+  binding, reviewer identity, and grants across every missing-writer exit and
+  bounded recovery.
+- **OBJ-DE-002:** After immutable evidence is available, expose and require only
+  the bound governed writer; prose, duration, iteration, cancellation, routing,
+  or provider exits cannot complete the review without that writer.
+- **OBJ-DE-003:** Keep approval and persistence authoritative: the model selects
+  writer arguments independently, a current exact approval remains mandatory,
+  and no recovery path fabricates a proposal, envelope, receipt, or baseline.
+- **OBJ-DE-004:** Hydrate only complete, successful, exact-bound reader evidence
+  from one coherent attempt, with bounded deterministic reread as the sole
+  fallback; failed, conflicting, unauthorized, malformed, or over-budget
+  evidence remains fail closed.
+- **OBJ-DE-005:** Preserve ordinary non-review task behavior while shipping each
+  material repair through DCO, protected checks, canonical publication,
+  governed upgrade, exact served-SHA readiness, and live same-identity proof.
+
+| Acceptance ID | Objectives | Acceptance criterion |
+| --- | --- | --- |
+| AC-DE-001 | OBJ-DE-001, OBJ-DE-002 | The exact two-read, zero-writer, attempt-two fixture remains input-required and resumable on the same TaskRun instead of becoming irrecoverable or completed. |
+| AC-DE-002 | OBJ-DE-002 | A terminal initiative-review turn with satisfied immutable evidence receives a single-writer required-tool surface; prose or any non-writer exit remains `missing-terminal-writer`. |
+| AC-DE-003 | OBJ-DE-001, OBJ-DE-004 | Proof-only rows, multiple historical attempts, zero-reader bootstrap, and an exact-bound failed read can recover only through one coherent successful attempt or the bounded server reread, never by combining attempts. |
+| AC-DE-004 | OBJ-DE-003 | Writer execution uses independently selected arguments and a fresh exact approval; stale, expired, mismatched, ambiguous, or already-consumed authority cannot write a receipt. |
+| AC-DE-005 | OBJ-DE-001, OBJ-DE-003 | Expired proposal and repaired-prerequisite recovery retain one TaskRun and audit chain without rerunning inference or creating a sibling identity. |
+| AC-DE-006 | OBJ-DE-004 | Unauthorized tools, immutable path/version/blob conflicts, malformed non-empty content, invalid page order, conflicting complete attempts, or unavailable bounded hydration fail closed with no writer receipt. |
+| AC-DE-007 | OBJ-DE-005 | Non-review TaskRuns preserve their prior completion behavior, and protected CI plus live same-identity recovery prove the terminal-writer postcondition at the served runtime. |
 
 ## Non-goals
 
