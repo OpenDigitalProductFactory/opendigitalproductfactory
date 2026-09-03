@@ -501,6 +501,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // surfaces work. A wrong base points the reaper at the wrong directory,
         // so resolution order and provenance are pinned.
         "scripts/lib/worktree-base.test.mjs",
+        // BI-541156EE: one worktree base, or none. Seven were found on a single
+        // host, all from the same formula handed different roots.
+        "scripts/check-single-worktree-base.test.mjs",
         "scripts/lib/worktree-janitor-core.test.mjs",
         "scripts/worktree-janitor.test.mjs",
         "scripts/lib/worktree-session-heartbeat.test.mjs",
