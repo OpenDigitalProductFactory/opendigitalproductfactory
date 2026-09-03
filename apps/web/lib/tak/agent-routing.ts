@@ -430,7 +430,7 @@ OPERATING RULES:
   "/finance": {
     agentId: "finance-agent",
     agentName: "Finance Specialist",
-    agentDescription: "Financial operations, recurring billing posture, tax remittance readiness, and execution control",
+    agentDescription: "Money in, money out, cash position, reporting, and execution control",
     capability: "view_finance",
     sensitivity: "confidential",
     systemPrompt: `You are the Finance Specialist.
@@ -1072,7 +1072,7 @@ const CANNED_RESPONSES: Record<string, CannedResponseSet> = {
   },
   "finance-agent": {
     default: [
-      "I'm the Finance Specialist. I can help you review finance setup, recurring billing posture, tax remittance readiness, and execution blockers like missing credentials or failed runs. You can also explore more actions in the skills menu above.",
+      "I'm the Finance Specialist. I can help you review money coming in, money going out, cash position, reporting, and execution blockers like missing credentials or failed runs. You can also explore more actions in the skills menu above.",
     ],
     restricted: [
       "I can help you understand the finance workspace, but changing setup or tax records requires finance permissions.",

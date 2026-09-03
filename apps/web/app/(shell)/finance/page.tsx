@@ -268,7 +268,7 @@ export default async function FinancePage() {
 
     return (
       <div>
-        {!setupStatus.isConfigured && <SetupBanner />}
+        {!setupStatus.isConfigured && <SetupBanner description={financeSurface.setupDescription} />}
 
         <FinanceTabNav labels={financeSurface.navigationLabels} />
 
@@ -770,14 +770,14 @@ export default async function FinancePage() {
   );
 }
 
-function SetupBanner() {
+function SetupBanner({ description }: { description?: string }) {
   return (
     <div className="mb-6 rounded-lg border border-[color-mix(in_srgb,var(--dpf-warning)_35%,var(--dpf-border))] bg-[color-mix(in_srgb,var(--dpf-warning)_10%,transparent)] p-4">
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm font-medium text-[var(--dpf-warning)]">Complete your financial setup</p>
           <p className="text-xs text-[var(--dpf-muted)] mt-0.5">
-            Set up your finances based on your business type to get started with invoicing, expenses, and reporting.
+            {description ?? "Set up your finances based on your business type to get started with invoicing, expenses, and reporting."}
           </p>
         </div>
         <Link

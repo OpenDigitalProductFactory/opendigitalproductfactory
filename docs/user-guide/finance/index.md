@@ -17,6 +17,9 @@ permissions remain canonical; the archetype changes the operator vocabulary,
 not the accounting truth. Foreground totals therefore count **contributions**
 and **commitments**, and recent records identify the **supporter or funder**;
 the internal invoice record type remains available only as accounting detail.
+The setup prompt and Finance Specialist summary use the same funding,
+stewardship, cash-position, and reporting language instead of assuming a
+commercial invoicing or tax-remittance workflow.
 
 ```mermaid
 flowchart TB

@@ -252,6 +252,8 @@ describe("pet-rescue finance surface", () => {
       recentAccountHeader: "Supporter or funder",
       recentEmpty: "No contributions yet.",
     });
+    expect(surface.setupDescription).toMatch(/donations|grants/i);
+    expect(surface.setupDescription).not.toMatch(/invoicing/i);
   });
 
   it("does not make every nonprofit inherit pet-rescue claims", () => {

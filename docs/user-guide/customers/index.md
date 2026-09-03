@@ -28,7 +28,9 @@ part of the rescue's normal operating model. **Add person or partner** still
 creates the canonical relationship record; it does not create a second kind of
 customer database. The shared rail, breadcrumbs, and Relationship Manager use
 the same rescue-facing language, so opening the coworker panel does not bring
-the suppressed commercial concepts back into view.
+the suppressed commercial concepts back into view. The daily attention band is
+**Adoption follow-up** and describes people and community relationships rather
+than customers or a CRM.
 
 ## The Customer Lifecycle
 
