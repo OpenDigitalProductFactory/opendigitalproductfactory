@@ -30,7 +30,8 @@ The request says "dogs and cats"; `species` also allows rabbit and other. Filter
 3. A "Waiting list" link beside the Adoptable animals heading in `AnimalsManager`, the page's entry point.
 4. Page-purpose contract `apps/web/lib/ux-budget/purpose-contracts/adoption-waiting-list.ts`, registered in the index; route registries regenerated (`route:sync`, `build:page-purpose`).
 5. Sweep fixture context: `ux-sweep-fixture-core.mjs` provisions one pet-rescue storefront on the seeded platform organisation with the animals-available section and four listed animals (two dated, one future-dated, one undated). This is the honest fixture context that lets the route be measured by the served-app sweep; sibling storefront routes keep their `storefront-setup-required` exclusion until each gets its own.
-6. UX-Fit manifest `docs/ux-fit/2026-09-03-adoption-waiting-list.ux-fit.json` with `sweep-measurement` evidence taken from the CI route sweep run on this branch, not invented.
+6. UX-Fit manifest `docs/ux-fit/2026-09-03-adoption-waiting-list.ux-fit.json` carrying the recorded option pick DI-72C9AC182848 (`principle_decide`, three options scored on cognitive load) with the CI route sweep's measured numbers for the route in its notes; the route's row and the rows the fixture changed are frozen in `route-budget-baseline.json` from an update-baseline sweep of the merged tree, never typed by hand.
+7. `/storefront/setup` joins the `setup-phase-only` sweep exclusion: the wizard navigates away once a storefront exists.
 
 ## Verification
 
