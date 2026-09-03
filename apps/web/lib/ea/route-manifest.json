@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 644,
+  "routeCount": 645,
   "routes": [
     {
       "routePath": "/",
@@ -654,6 +654,18 @@
         "nextauth"
       ],
       "file": "apps/web/app/api/auth/[...nextauth]/route.ts"
+    },
+    {
+      "routePath": "/api/automation/sign-in",
+      "kind": "route",
+      "segments": [
+        "api",
+        "automation",
+        "sign-in"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/automation/sign-in/route.ts",
+      "exposure": "public"
     },
     {
       "routePath": "/api/brand/logo",
