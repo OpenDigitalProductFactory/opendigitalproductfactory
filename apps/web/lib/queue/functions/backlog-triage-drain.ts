@@ -40,8 +40,9 @@ export const backlogTriageDrain = inngest.createFunction(
         where: {
           status: "triaging",
           // A work-sync mirror is triaged by the installation that owns it;
-          // triaging the copy here would fork the record (BI-FF8A57EF).
-          NOT: { body: { contains: "[origin:federatedWork:" } },
+          // triaging the copy here would fork the record (BI-FF8A57EF). A row
+          // with no body is owned: NOT-contains alone is NULL for a NULL column.
+          OR: [{ body: null }, { NOT: { body: { contains: "[origin:federatedWork:" } } }],
         },
         orderBy: { createdAt: "asc" },
         take: MAX_PER_RUN,

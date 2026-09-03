@@ -100,10 +100,20 @@ function toEpic(row: WorkPageEpicRow): FederatedWorkEpicV1 {
   };
 }
 
-/** Where-clause shared by every reader that must skip mirrored rows. */
+/**
+ * Where-clause shared by every reader that must skip mirrored rows. The prose
+ * columns are nullable, and `NOT (col LIKE …)` is NULL — not true — for a NULL
+ * column, so a bare NOT-contains silently dropped every row that had no prose
+ * (29 production epics and 8 development epics never crossed). A row with no
+ * prose cannot carry a marker and is owned.
+ */
 export const OWNED_BACKLOG_WHERE = {
   sensitivity: { notIn: [...FEDERATED_WORK_LOCAL_ONLY_SENSITIVITIES] },
-  NOT: { body: { contains: FEDERATED_WORK_ORIGIN_MARKER_PREFIX } },
+  OR: [{ body: null }, { NOT: { body: { contains: FEDERATED_WORK_ORIGIN_MARKER_PREFIX } } }],
+} as const;
+
+export const OWNED_EPIC_WHERE = {
+  OR: [{ description: null }, { NOT: { description: { contains: FEDERATED_WORK_ORIGIN_MARKER_PREFIX } } }],
 } as const;
 
 export async function buildFederatedWorkPage(
@@ -139,7 +149,7 @@ export async function buildFederatedWorkPage(
   const epics = input.cursor
     ? []
     : (await db.epic.findMany({
-        where: { NOT: { description: { contains: FEDERATED_WORK_ORIGIN_MARKER_PREFIX } } },
+        where: OWNED_EPIC_WHERE,
         orderBy: { epicId: "asc" },
         select: {
           epicId: true, title: true, description: true, status: true, priority: true,
