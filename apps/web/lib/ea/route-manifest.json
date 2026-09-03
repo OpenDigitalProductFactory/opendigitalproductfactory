@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 646,
+  "routeCount": 647,
   "routes": [
     {
       "routePath": "/",
@@ -7366,6 +7366,17 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/storefront/animals/page.tsx"
+    },
+    {
+      "routePath": "/storefront/animals/waiting",
+      "kind": "page",
+      "segments": [
+        "storefront",
+        "animals",
+        "waiting"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/storefront/animals/waiting/page.tsx"
     },
     {
       "routePath": "/storefront/dispatch",

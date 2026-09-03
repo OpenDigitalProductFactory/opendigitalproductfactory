@@ -118,6 +118,10 @@ export const ROUTE_SWEEP_EXCLUSIONS = {
   "/storefront/units": "storefront-setup-required",
 
   "/setup": "setup-phase-only",
+  // The storefront setup wizard navigates away the moment a StorefrontConfig
+  // exists, and the sweep fixture now provisions one (BI-899D7F00), so the
+  // page cannot be measured in the owner-fixture context.
+  "/storefront/setup": "setup-phase-only",
   "/welcome": "setup-phase-only",
 
   // Wall-clock collections (BI-0C6C2153): these routes derive the SET of

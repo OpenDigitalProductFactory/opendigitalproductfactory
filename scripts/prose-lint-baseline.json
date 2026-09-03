@@ -10030,5 +10030,13 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 13
+  },
+  "apps/web/app/(shell)/storefront/animals/waiting/page.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 55
   }
 }
