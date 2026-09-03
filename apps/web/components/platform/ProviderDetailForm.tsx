@@ -200,7 +200,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
       <div style={{ maxWidth: 560 }}>
       <div style={{ marginBottom: 20 }}>
         <div style={{ color: "var(--dpf-muted)", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>
-          Provider readiness
+          Technical readiness
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           <span style={{
@@ -219,6 +219,9 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
           </span>
           <span style={{ color: "var(--dpf-muted)", fontSize: 12 }}>{readinessState.detail}</span>
         </div>
+        <p style={{ color: "var(--dpf-muted)", fontSize: 12, margin: "6px 0 0" }}>
+          Data-use eligibility is evaluated separately for each workload and connected account.
+        </p>
       </div>
 
       {/* Status + toggle */}
