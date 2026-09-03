@@ -90,6 +90,7 @@ import {
   createLocalCiPassEvidenceValidity,
   projectReusedPassMetadata,
   readLocalCiGateState,
+  supersedeLosingSlotRecords,
   writeLocalCiGateState,
 } from "./lib/local-ci-gate-state.mjs";
 import {
@@ -169,6 +170,21 @@ async function observeLocalCiHostPressure(input) {
       (manifest) => manifest.schemaVersion === 1,
     ),
   });
+}
+
+/**
+ * BI-5529B5AC: the other slots' state files for this worktree, so a PASS can
+ * retire any losing record they hold for the same branch+SHA.
+ */
+function siblingSlotStateFiles({ currentSlotKey, rootClone, gitCommonDir, candidateGitDir }) {
+  return LOCAL_CI_SLOT_KEYS
+    .filter((slotKey) => slotKey !== currentSlotKey)
+    .map((slotKey) => createLocalCiSlotManifest({
+      slotKey,
+      rootClone,
+      gitCommonDir,
+      candidateGitDir,
+    }).evidence.state);
 }
 
 function retryDelayMs({ attempt, pollSeconds, retryAfterSeconds = 0 }) {
@@ -935,13 +951,23 @@ async function main() {
   const rootClone = resolveLocalCiRootClone(gitCommonDir);
   const queueObserverDirectory = process.env.DPF_LOCAL_QUEUE_OBSERVER_DIR
     || resolvePath(gitCommonDir, "dpf-local-ci-queue-observers");
+  let currentSlotKey = process.env.DPF_LOCAL_CI_SLOT_KEY || "slot-0";
   let slotManifest = createLocalCiSlotManifest({
-    slotKey: process.env.DPF_LOCAL_CI_SLOT_KEY || "slot-0",
+    slotKey: currentSlotKey,
     rootClone,
     gitCommonDir,
     candidateGitDir,
   });
   let stateFile = slotManifest.evidence.state;
+  // A PASS for this branch+SHA retires any losing sibling-slot record for the
+  // same branch+SHA (BI-5529B5AC). Called only after a passed, non-pending write.
+  const retireLosingSiblings = () => supersedeLosingSlotRecords({
+    winnerStateFile: stateFile,
+    winnerSlotKey: currentSlotKey,
+    siblingStateFiles: siblingSlotStateFiles({ currentSlotKey, rootClone, gitCommonDir, candidateGitDir }),
+    branch,
+    sha,
+  });
   let metadataFile = slotManifest.evidence.metadata;
   let pendingEvidenceFile = slotManifest.evidence.pending;
   let fullLogFile;
@@ -1034,6 +1060,7 @@ async function main() {
         leaseEvents: state.leaseEvents ?? [],
         evidencePending: false,
       });
+      retireLosingSiblings();
       process.stdout.write(`finalized existing local-CI evidence: ${state.evidenceRecordId}\n`);
       process.exit(0); // exit-0: --finalize-evidence revalidated an already-recorded PASS for this sha
     }
@@ -1069,6 +1096,7 @@ async function main() {
       evidencePending: false,
     });
     rmSync(pendingEvidenceFile, { force: true });
+    retireLosingSiblings();
     process.stdout.write(`recorded pending local-CI evidence: ${evidenceId}\n`);
     process.exit(0); // exit-0: --finalize-evidence recorded the pending PASS evidence for this sha
   }
@@ -1270,6 +1298,7 @@ async function main() {
           { type: "reused", gateKey, evidenceId, at: new Date().toISOString() },
         ],
         evidencePending: false,
+        ...(passed ? { onPassWritten: retireLosingSiblings } : {}),
       });
       // BI-C6B2D404: project current HEAD onto the metadata record so
       // pregate:status does not report STALE against the prior candidateSha.
@@ -1334,6 +1363,7 @@ async function main() {
         expiresAt = admittedExpiresAt;
       }
       const admittedSlotKey = admission?.slotKey || "slot-0";
+      currentSlotKey = admittedSlotKey;
       slotManifest = createLocalCiSlotManifest({
         slotKey: admittedSlotKey,
         rootClone,
@@ -2057,6 +2087,7 @@ async function main() {
     failureReason: persistedReason,
     failureSummary,
     childExitCode: runResult.status,
+    ...(outcome.gatePassed ? { onPassWritten: retireLosingSiblings } : {}),
   });
 
   // BI-B1065D41 Phase 1: one bounded, stable block closes every run. On a pass
@@ -2121,6 +2152,7 @@ function writeState(stateFile, {
   failureReason = "",
   failureSummary = null,
   childExitCode = null,
+  onPassWritten = null,
 }) {
   writeLocalCiGateState(stateFile, {
     branch,
@@ -2144,6 +2176,15 @@ function writeState(stateFile, {
     failureSummary,
     childExitCode,
   });
+  // BI-5529B5AC: only a committed, non-pending PASS may retire sibling losers.
+  if (typeof onPassWritten === "function" && gatePassed === true && !evidencePending) {
+    try {
+      onPassWritten();
+    } catch (error) {
+      process.stderr.write(`gate-worktree: could not retire sibling slot records: ${error?.message || error}
+`);
+    }
+  }
 }
 
 // A gate that silently skips main() exits 0 — a false "pass" — so the entry

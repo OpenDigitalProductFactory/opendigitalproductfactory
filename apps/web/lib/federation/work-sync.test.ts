@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@dpf/db", () => ({ prisma: {} }));
 
-import { federatedWorkOriginMarker, type FederatedWorkPageV1 } from "@dpf/db/federated-work-contract";
+import { federatedWorkOriginMarker, type FederatedWorkItemV1, type FederatedWorkPageV1 } from "@dpf/db/federated-work-contract";
 
 import { runWorkSync, type WorkSyncDb, type WorkSyncMirrorRow } from "./work-sync";
 
@@ -16,7 +16,7 @@ function item(itemId: string, updatedAt = "2026-09-01T00:00:00.000Z", epicId: st
     workType: "bug", triageOutcome: "build", effortSize: null, proposedOutcome: null, resolution: null,
     sensitivity: "internal", epicId, source: "user-request", occurrenceCount: 1, scopeKind: null,
     archetypeCategories: [], archetypeIds: [], lifecycleTags: [], createdAt: "2026-08-30T00:00:00.000Z",
-    updatedAt, completedAt: null,
+    updatedAt, completedAt: null, deferral: null as FederatedWorkItemV1["deferral"],
   };
 }
 
@@ -46,6 +46,9 @@ function store(options: {
       findUnique: vi.fn(async (args: { where: { itemId: string } }) => existingItems[args.where.itemId] ?? null),
       upsert: vi.fn().mockResolvedValue({ id: "row" }),
       updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+    },
+    principal: {
+      findUnique: vi.fn().mockResolvedValue({ id: "peer-principal-row" }),
     },
     epic: {
       findUnique: vi.fn(async (args: { where: { epicId: string } }) => existingEpics[args.where.epicId] ?? null),
@@ -152,5 +155,75 @@ describe("runWorkSync", () => {
     const crossOrg = await runWorkSync(db, { fetchPage, decryptToken, now });
     expect(crossOrg.linksChecked).toBe(0);
     expect(fetchPage).not.toHaveBeenCalled();
+  });
+});
+
+describe("runWorkSync - mirrored deferrals (BI-9DA5F179)", () => {
+  const deferral = {
+    reason: "Waiting on the vendor v2 API", trigger: "Vendor ships v2", reviewAt: "2026-10-01T00:00:00.000Z",
+    deferredAt: "2026-09-01T12:00:00.000Z",
+  };
+
+  function upsertData(db: ReturnType<typeof store>) {
+    return db.backlogItem.upsert.mock.calls[0]![0].update as Record<string, unknown>;
+  }
+
+  it("carries the origin reason, trigger and review date, owned by the link federated-peer principal", async () => {
+    const db = store();
+    const fetchPage = vi.fn().mockResolvedValue({ ok: true, status: 200, body: page([{ ...item("BI-A"), status: "deferred", deferral }]) });
+
+    const result = await runWorkSync(db, { fetchPage, decryptToken, now });
+
+    expect(result.links[0]).toMatchObject({ itemsCreated: 1, itemsDeferredUnattributed: 0 });
+    expect(db.principal.findUnique).toHaveBeenCalledWith({ where: { principalId: "principal_link_1" }, select: { id: true } });
+    expect(upsertData(db)).toMatchObject({
+      status: "deferred", deferReason: deferral.reason, deferTrigger: deferral.trigger,
+      deferReviewAt: new Date(deferral.reviewAt), deferredAt: new Date(deferral.deferredAt), deferOwnerPrincipalId: "peer-principal-row",
+    });
+  });
+
+  it("never writes a bare deferred: an origin that shared nothing gets the gap as the reason, a review date, and a count", async () => {
+    const db = store();
+    // Exactly what the 2026-09-02 09:51 pull carried for 18 items: status only.
+    const fetchPage = vi.fn().mockResolvedValue({ ok: true, status: 200, body: page([{ ...item("BI-A"), status: "deferred" }]) });
+
+    const result = await runWorkSync(db, { fetchPage, decryptToken, now });
+
+    expect(result.links[0]).toMatchObject({ itemsCreated: 0, itemsDeferredUnattributed: 1 });
+    const data = upsertData(db);
+    expect(data.status).toBe("deferred");
+    expect(data.deferReason).toContain(`Parked at origin installation ${origin}`);
+    expect(data.deferTrigger).toMatch(/origin publishes an attributable deferral/);
+    expect(data.deferReviewAt).toEqual(new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000));
+    expect(data.deferredAt).toEqual(now);
+    expect(data.deferOwnerPrincipalId).toBe("peer-principal-row");
+  });
+
+  it("clears a stale park when the origin resumed the item", async () => {
+    const db = store({
+      existingItems: { "BI-A": { id: "row", body: `Body\n\n${federatedWorkOriginMarker(origin, "BI-A")}`, status: "deferred" } },
+    });
+    const fetchPage = vi.fn().mockResolvedValue({ ok: true, status: 200, body: page([item("BI-A", "2026-09-02T00:00:00.000Z")]) });
+
+    await runWorkSync(db, { fetchPage, decryptToken, now });
+
+    expect(upsertData(db)).toMatchObject({
+      status: "open", deferReason: null, deferTrigger: null, deferReviewAt: null, deferOwnerPrincipalId: null, deferredAt: null,
+    });
+  });
+
+  it("repairs a mirror already parked bare on disk even when the origin has not changed it", async () => {
+    const mirrors: WorkSyncMirrorRow[] = [{ mirrorId: "m", localRecordRef: "BI-A", version: 1756684800000n, syncStatus: "synced" }];
+    const db = store({
+      existingItems: { "BI-A": { id: "row", body: `Body\n\n${federatedWorkOriginMarker(origin, "BI-A")}`, status: "deferred" } },
+      mirrors,
+    });
+    // Same version as the mirror row: the pre-fix code returned "unchanged" and left the bare park in place.
+    const fetchPage = vi.fn().mockResolvedValue({ ok: true, status: 200, body: page([{ ...item("BI-A", "2026-09-01T00:00:00.000Z"), status: "deferred", deferral }]) });
+
+    const result = await runWorkSync(db, { fetchPage, decryptToken, now });
+
+    expect(result.links[0]).toMatchObject({ itemsUpdated: 1, itemsUnchanged: 0 });
+    expect(upsertData(db)).toMatchObject({ deferReason: deferral.reason });
   });
 });

@@ -249,7 +249,16 @@ to CI/the sandbox to enforce. The Repo Guard Loop runner
 guards and exits with a dedicated runner-failure code so a killed spawn never
 prints `N/24 guard(s) FAILED` naming an innocent guard that had, in fact, run.
 Run it standalone with `pnpm run pregate:preflight`
-(`--plan` prints the guard plan without running it). Emergency skip:
+(`--plan` prints the guard plan without running it, scoped to the diff;
+`--scope` prints the classified change scope and the guards it left out). **The preflight honours the change
+scope (BI-8CDA7F95).** It classifies the diff against `origin/main` with the
+same `scripts/ci-change-scope.mjs` classifier `ci.yml` branches on, and on a
+docs-only diff it leaves out only the guards that **declare** `inputs: ["code"]`
+in `scripts/lib/ci-policy-guards.mjs` — guards that read only source, schema,
+compose or package manifests and so cannot be violated by prose. A guard with
+no declaration always runs; an unknown scope (no merge base) runs everything; a
+static test fails any declared guard whose import closure reads docs. CI still
+runs every guard. Emergency skip:
 `DPF_SKIP_PREGATE_PREFLIGHT_REASON="<why>"` — printed on the gate run, and CI
 still enforces every guard. Routing probes (`--dry-run`) and evidence replays
 (`--finalize-evidence`) skip the preflight automatically.
@@ -299,7 +308,11 @@ bounds recovery when the supervisor disappears without shortening the maximum
 queue wait. The gate runs the command, releases the runtime slot, records a
 local-integration evidence record with the lease id and `gatePassed`, and
 writes the latest gate result to Git-local state
-(`.git/dpf-local-ci-gate.json`, with a slot suffix for non-default slots). It
+(`.git/dpf-local-ci-gate.json`, with a slot suffix for non-default slots). A
+pass on one slot retires any non-passing sibling-slot record for the same
+branch and SHA as `superseded`, and every reader of that state (`pregate:status`,
+the pre-push hook, `pr:health`, the PreToolUse publish guard) consults all
+slots, so an earlier attempt on another slot cannot shadow a real pass. It
 overwrites stale state with `admitted` and then `running` as soon as it owns the
 sandbox, before the expensive command mutates the runtime. If the child wrapper
 exits before a terminal record is written, `pregate` reads that running state,
