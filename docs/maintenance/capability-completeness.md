@@ -46,9 +46,9 @@ The rule autonomy depends on: a consequential tool cannot execute unless
 `principle_decide` was consulted first, so every key decision leaves a record.
 The mechanism is built, wired, and enforce-by-default.
 
-- Side-effecting tools: **178**
+- Side-effecting tools: **179**
 - Gate-classified: **56** (`abandon_stalled_build`, `activity_harness_confidence_override`, `add_provider`, `apply_platform_update`, `cancel_scheduled_agent_task`, `cancel_thread`, `claim_workroom_scope`, `configure_gateway_scan`, `contribute_to_hive`, `create_bank_account`, `create_employee`, `create_policy`, `create_portal_pr`, `create_scheduled_agent_task`, `deploy_feature`, `discovery_sweep`, `dismiss_entity`, `drive_browser_task`, `enrich_customer_account`, `enrich_digital_product`, `escalate_feedback_upstream`, `execute_promotion`, `extract_brand_design_system`, `grok_signin_start`, `import_bank_statement`, `invite_room_participant`, `manage_coworker_tool_grant`, `merge_backlog_items`, `merge_customer_accounts`, `merge_customer_contacts`, `place_linkedin_ad`, `publish_to_linkedin`, `reassign_workroom_executor`, `record_org_business_answer`, `recover_sandbox`, `release_nonprod_environment_lease`, `release_workroom_scope`, `repair_promoter_image`, `request_re_enrichment`, `request_self_upgrade`, `retire_backlog_item`, `run_capacity_drain`, `run_hive_scout_ingest`, `schedule_promotion`, `schedule_release_bundle`, `send_marketing_email`, `set_backlog_delivery_budget`, `set_demand_policy`, `set_marketing_autopilot_policy`, `setup_email`, `supersede_demand_evidence`, `tick_marketing_scheduler`, `transition_employee_status`, `triage_backlog_item`, `unmerge_customer_accounts`, `update_policy`)
-- **Ungated: 122** — 31% coverage
+- **Ungated: 123** — 31% coverage
 
 The gate is built, enforced, and its reach is derived from each tool's declared consequence. What remains ungated is every side-effecting tool that has declared NOTHING — deliberately still ordinary by default, because flipping that default moves the whole remainder behind the gate at once.
 

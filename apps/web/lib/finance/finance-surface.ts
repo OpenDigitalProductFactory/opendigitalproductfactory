@@ -117,6 +117,16 @@ export type FinanceSurfaceModel = {
   navigationLabels: Record<"revenue" | "spend" | "close" | "configuration", string>;
   recentRecordsLabel: string;
   recentRecordsEmpty: string;
+  /** Visible metric/table nouns when the persisted record type is an internal implementation detail. */
+  metricCopy?: {
+    outstandingSingular: string;
+    outstandingPlural: string;
+    receivedSingular: string;
+    receivedPlural: string;
+    emptyOverdue: string;
+    recentAccountHeader: string;
+    recentEmpty: string;
+  };
 };
 
 // Archetype categories that get the owner-first money-jobs surface. Keyed on
@@ -516,6 +526,15 @@ export function resolveFinanceSurface(
       },
       recentRecordsLabel: "Recent contributions",
       recentRecordsEmpty: "No contributions recorded yet. Record a donation, grant, or sponsorship to get started.",
+      metricCopy: {
+        outstandingSingular: "commitment",
+        outstandingPlural: "commitments",
+        receivedSingular: "contribution",
+        receivedPlural: "contributions",
+        emptyOverdue: "no commitments recorded yet",
+        recentAccountHeader: "Supporter or funder",
+        recentEmpty: "No contributions yet.",
+      },
     };
   }
 

@@ -5,9 +5,11 @@ import Link from "next/link";
 import { DataTable, StatCard, StatusBadge, type Column } from "@/components/ui/report-kit";
 import type { CapsuleLivenessSummary } from "@/lib/work-capsules/liveness-inventory";
 import { portfolioRoleLabel } from "@/lib/work-capsules/work-capsule-presenter";
+import { encodeWorkCaseKey } from "@/lib/work-management/case-key";
 
 export type WorkroomInventoryRow = {
   capsuleId: string;
+  backlogItemId: string | null;
   title: string;
   status: string;
   source: string;
@@ -27,7 +29,12 @@ const columns: Column<WorkroomInventoryRow>[] = [
   {
     key: "workroom",
     header: "Workroom",
-    cell: (room) => <div><Link className="font-medium text-[var(--dpf-accent)] hover:underline" href={`/workspace/cases/${room.capsuleId}`}>{room.title}</Link><p className="mt-1 font-mono text-dpf-caption text-[var(--dpf-muted)]">{room.capsuleId}</p></div>,
+    cell: (room) => {
+      const caseKey = encodeWorkCaseKey(room.backlogItemId
+        ? { sourceType: "backlog-item", sourceId: room.backlogItemId }
+        : { sourceType: "work-capsule", sourceId: room.capsuleId });
+      return <div><Link className="font-medium text-[var(--dpf-accent)] hover:underline" href={`/workspace/cases/${caseKey}`}>{room.title}</Link><p className="mt-1 font-mono text-dpf-caption text-[var(--dpf-muted)]">{room.capsuleId}</p></div>;
+    },
     sortAccessor: (room) => room.title,
     width: "28%",
   },

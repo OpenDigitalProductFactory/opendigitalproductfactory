@@ -26,7 +26,9 @@ partners**, **Adoption enquiries**, and **Community outreach**. Commercial
 pipeline, quote, order, and sales-funnel tabs are hidden because they are not
 part of the rescue's normal operating model. **Add person or partner** still
 creates the canonical relationship record; it does not create a second kind of
-customer database.
+customer database. The shared rail, breadcrumbs, and Relationship Manager use
+the same rescue-facing language, so opening the coworker panel does not bring
+the suppressed commercial concepts back into view.
 
 ## The Customer Lifecycle
 

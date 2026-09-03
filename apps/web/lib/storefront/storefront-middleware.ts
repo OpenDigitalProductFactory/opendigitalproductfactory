@@ -27,6 +27,8 @@ export function classifyRoute(pathname: string): RouteClass {
   if (pathname.startsWith("/portal")) return RouteClass.Portal;
   if (pathname.startsWith("/api/storefront/")) return RouteClass.PublicApi;
   if (pathname.startsWith("/api/auth/")) return RouteClass.PublicApi;
+  // BI-9369DEB5: the platform's own browser arrives with a one-time token, not a session.
+  if (pathname === "/api/automation/sign-in") return RouteClass.PublicApi;
   // OAuth 2.1 authorization server for the MCP resource (BI-E4DFDCB0). These
   // MUST be reachable before any DPF session exists — that is the whole point
   // of the flow: a client with no credential discovers the AS from a 401 and
