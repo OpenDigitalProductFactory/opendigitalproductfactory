@@ -265,7 +265,7 @@ export default async function FinancePage() {
       <div>
         {!setupStatus.isConfigured && <SetupBanner />}
 
-        <FinanceTabNav />
+        <FinanceTabNav labels={financeSurface.navigationLabels} />
 
         <OwnerFirstFinanceView
           surface={financeSurface}
@@ -276,11 +276,11 @@ export default async function FinancePage() {
         {/* Recent invoices — owner-relevant, kept below the money jobs */}
         <section>
           <h2 className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] mb-3">
-            Recent Invoices
+            {financeSurface.recentRecordsLabel}
           </h2>
           {recentInvoices.length === 0 ? (
             <p className="text-sm text-[var(--dpf-muted)]">
-              No invoices yet. Bill a booking, order, or catering job to get started.
+              {financeSurface.recentRecordsEmpty}
             </p>
           ) : (
             <RecentInvoicesTable rows={recentInvoiceRows} currencySymbol={sym} />

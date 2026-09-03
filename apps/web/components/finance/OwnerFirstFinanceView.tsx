@@ -54,7 +54,7 @@ export function OwnerFirstFinanceView({ surface, metrics, advancedChildren }: Pr
           href="/finance/invoices/new"
           className="shrink-0 rounded-md bg-[var(--dpf-accent)] px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90"
         >
-          New Invoice
+          {surface.primaryActionLabel}
         </Link>
       </div>
 
@@ -102,9 +102,9 @@ export function OwnerFirstFinanceView({ surface, metrics, advancedChildren }: Pr
 
       {/* Subtype invoice entry points */}
       {surface.invoiceEntryPoints.length > 0 && (
-        <section aria-label="Start a bill" className="mb-8">
+        <section aria-label={surface.entryPointSectionLabel} className="mb-8">
           <h2 className="mb-3 text-[10px] uppercase tracking-widest text-[var(--dpf-muted)]">
-            Start a bill
+            {surface.entryPointSectionLabel}
           </h2>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {surface.invoiceEntryPoints.map((entry) => (
@@ -123,16 +123,15 @@ export function OwnerFirstFinanceView({ surface, metrics, advancedChildren }: Pr
 
       {/* Deferred accounting internals — collapsed by default */}
       {surface.advancedSections.length > 0 && (
-        <section aria-label="Accounting and admin" className="mb-6">
+        <section aria-label={surface.advancedSectionLabel} className="mb-6">
           <details className="group rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4">
               <div>
                 <p className="text-sm font-semibold text-[var(--dpf-text)]">
-                  Accounting &amp; admin
+                  {surface.advancedSectionLabel}
                 </p>
                 <p className="mt-0.5 text-xs text-[var(--dpf-muted)]">
-                  VAT, dunning, payment runs, ledger reports, bank rules, and AI spend — the
-                  back-office detail, out of the way until you need it.
+                  {surface.advancedSectionDescription}
                 </p>
               </div>
               <span className="shrink-0 text-[11px] font-medium text-[var(--dpf-accent)]">
