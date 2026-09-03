@@ -989,7 +989,7 @@ services:
   dpf-stt:
     profiles: ["runtime-local-speech", "tts"]
     # Pinned to the multi-arch index digest for hwdsl2/whisper-server:latest
-    # resolved on 2026-08-27 (the prior 166a8c04… digest was deleted from the
+    # resolved on 2026-09-03 (the prior 8f76c4f9… digest was deleted from the
     # registry — Release Image Manifest Guard caught it again). The registry
     # owner re-pushes :latest periodically and prunes the previous index, so
     # this digest must be re-resolved every time the guard fails. Bump
@@ -999,7 +999,7 @@ services:
     # the sidecar won't start, set DPF_STT_IMAGE in .env to a reachable ref
     # (e.g. hwdsl2/whisper-server:latest) then `docker compose up -d dpf-stt`,
     # and open a PR re-resolving the digest here (this is that PR's pattern).
-    image: ${DPF_STT_IMAGE:-hwdsl2/whisper-server@sha256:8f76c4f99069b533b54866388f6a6cb1cb47cfde14762dc7af0b22dd58721df2}
+    image: ${DPF_STT_IMAGE:-hwdsl2/whisper-server@sha256:29d01f2e47e4f72b5475ce36fc987bb369f53fa5e5cf6b5a924ada69e1820b3f}
     restart: unless-stopped
     logging: *default-logging
     environment:
