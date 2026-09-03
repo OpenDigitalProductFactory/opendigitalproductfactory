@@ -235,3 +235,20 @@ This phase extends BI-DE58CFE8 after BI-FFBDDD96 research TaskRun `TR-MCP-Y210Nm
 | Deliverable | Requirement refs | Flow refs | Contract refs | Verification refs | Atomicity |
 | --- | --- | --- | --- | --- | --- |
 | Executor-owned terminal-writer completion invariant | Phase 15.1, 15.3, 15.4, 15.8 | Phase 15.3, 15.5 | Phase 15.3, 15.4, 15.5 | Phase 15.2, 15.6, 15.7 | Agent-loop policy and executor postcondition ship together so no loop exit can falsely complete a governed review while ordinary tasks and genuine writer proposals retain their existing semantics. |
+
+## BI-DE58CFE8 atomic program coverage
+
+- Decision: `atomic`
+- Parent and delivery item: `BI-DE58CFE8`
+- Design contract: `docs/superpowers/specs/2026-08-25-immutable-source-review-traversal-design.md#bi-de58cfe8-objective-and-acceptance-contract`
+- Rollback: revert this documentation-only closure as one unit; it changes no
+  runtime, schema, authority, or persisted evidence behavior.
+- Rationale: the terminal-writer policy, evidence hydration, required-tool
+  routing, approval recovery, executor postcondition, and same-identity live
+  proof are one fail-closed review-completion boundary. Reverting or shipping
+  only one slice could either strand a governed TaskRun or permit an incomplete
+  review to escape as completed.
+
+| Deliverable | Requirement refs | Flow refs | Contract refs | Verification refs |
+| --- | --- | --- | --- | --- |
+| Same-identity terminal-writer resumability | OBJ-DE-001, OBJ-DE-002, OBJ-DE-003, OBJ-DE-004, OBJ-DE-005 | Phases 8-15 | BI-DE58CFE8 objective and acceptance contract; initiative-review terminal tool policy; persisted reader-history extension; failed reader-attempt isolation extension; CLI terminal-writer dispatch extension; zero-reader same-TaskRun recovery extension; expired proposal same-TaskRun recovery extension; executor postcondition | AC-DE-001, AC-DE-002, AC-DE-003, AC-DE-004, AC-DE-005, AC-DE-006, AC-DE-007; phase RED/GREEN suites; protected PR and merge-group checks; canonical release; served-SHA CAN-TEST; genuine same-TaskRun research writer receipt |
