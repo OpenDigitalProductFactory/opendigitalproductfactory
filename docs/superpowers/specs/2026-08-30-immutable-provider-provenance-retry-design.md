@@ -32,6 +32,9 @@ never secrets or provider content. Provider I/O stays outside transactions.
 
 ## Objectives
 
+These standalone markers are the canonical scope baseline consumed by the
+initiative-readiness writer; acceptance rows below link back to them explicitly.
+
 **OBJ-PROV-001:** Recover a transient repository-provider failure with one
 bounded retry while preserving the original immutable artifact request.
 
