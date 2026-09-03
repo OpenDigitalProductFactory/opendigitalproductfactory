@@ -18,6 +18,7 @@ import { prisma } from "@dpf/db";
 import {
   FEDERATION_PEER_ALIAS_TYPE,
   FEDERATION_PEER_PRINCIPAL_KIND,
+  federationPeerPrincipalId,
   inverseRole,
   isFederationRole,
   linkStateFromRow,
@@ -212,7 +213,7 @@ interface FederationLinkTx {
 export async function createFederationLinkRow(tx: FederationLinkTx, input: FederationLinkRowInput): Promise<{ id: string }> {
   const principal = await tx.principal.create({
     data: {
-      principalId: `principal_${input.linkId}`,
+      principalId: federationPeerPrincipalId(input.linkId),
       kind: FEDERATION_PEER_PRINCIPAL_KIND,
       displayName: input.displayName,
     },

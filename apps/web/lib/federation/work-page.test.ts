@@ -13,7 +13,8 @@ function row(itemId: string, overrides: Partial<WorkPageItemRow> = {}): WorkPage
     workType: "bug", triageOutcome: null, effortSize: null, proposedOutcome: null, resolution: null,
     sensitivity: "internal", source: "user-request", occurrenceCount: 1, scopeKind: null,
     archetypeCategories: [], archetypeIds: [], lifecycleTags: [], createdAt: at, updatedAt: at,
-    completedAt: null, epic: { epicId: "EP-1" }, ...overrides,
+    completedAt: null, deferReason: null, deferTrigger: null, deferReviewAt: null, deferredAt: null,
+    epic: { epicId: "EP-1" }, ...overrides,
   };
 }
 
@@ -73,5 +74,24 @@ describe("buildFederatedWorkPage", () => {
     expect(second.complete).toBe(true);
     expect(second.epics).toEqual([]);
     expect(store.backlogItem.findMany.mock.calls[0]![0].take).toBe(3);
+  });
+});
+
+describe("buildFederatedWorkPage - deferral attribution (BI-9DA5F179)", () => {
+  const reviewAt = new Date("2026-10-01T00:00:00.000Z");
+
+  it("publishes an attributable deferral with the parked item", async () => {
+    const store = db([row("BI-A", { status: "deferred", deferReason: "Vendor v2", deferTrigger: "v2 ships", deferReviewAt: reviewAt, deferredAt: at })]);
+    const page = await buildFederatedWorkPage(store, { originInstallationId: origin, cursor: null, limit: 10 });
+    expect(page.items[0]!.deferral).toEqual({ reason: "Vendor v2", trigger: "v2 ships", reviewAt: reviewAt.toISOString(), deferredAt: at.toISOString() });
+  });
+
+  it("ships null, never a half deferral, when the origin park is unattributed, and null for any non-deferred item", async () => {
+    const store = db([
+      row("BI-A", { status: "deferred", deferReason: "Vendor v2", deferTrigger: null, deferReviewAt: reviewAt }),
+      row("BI-B", { status: "open", deferReason: "stale", deferTrigger: "stale", deferReviewAt: reviewAt }),
+    ]);
+    const page = await buildFederatedWorkPage(store, { originInstallationId: origin, cursor: null, limit: 10 });
+    expect(page.items.map((i) => i.deferral)).toEqual([null, null]);
   });
 });

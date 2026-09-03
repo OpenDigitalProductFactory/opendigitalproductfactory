@@ -83,3 +83,58 @@ test("reports the offending line number, not the line the write started on", () 
   const lines = HISTORICAL_DEFECT.split("\n");
   assert.match(lines[hits[0].line - 1], /status: "deferred"/);
 });
+
+/** The second class (2026-09-02): the work-sync mirror copied a peer's status
+ *  through, 19 lines above the upsert, with no literal "deferred" in the file. */
+const PASSTHROUGH_DEFECT = `
+  const data = {
+    title: item.title,
+    status: item.status,
+    type: item.type,
+    body: withFederatedWorkOriginMarker(item.body, origin, item.itemId),
+    priority: item.priority,
+    workType: item.workType,
+    triageOutcome: item.triageOutcome,
+    effortSize: item.effortSize,
+    proposedOutcome: item.proposedOutcome,
+    resolution: item.resolution,
+    sensitivity: item.sensitivity,
+    source: item.source,
+    occurrenceCount: item.occurrenceCount,
+    scopeKind: item.scopeKind,
+    archetypeCategories: item.archetypeCategories,
+    archetypeIds: item.archetypeIds,
+    lifecycleTags: item.lifecycleTags,
+    completedAt: item.completedAt ? new Date(item.completedAt) : null,
+    epicId: item.epicId ? (epicLocalIds.get(item.epicId) ?? null) : null,
+  };
+  await db.backlogItem.upsert({
+    where: { itemId: item.itemId },
+    create: { itemId: item.itemId, createdAt: new Date(item.createdAt), ...data },
+    update: data,
+    select: { id: true },
+  });
+`;
+
+test("catches a status copied through from another record into a BacklogItem write, even 19 lines from the call", () => {
+  const hits = findUnattributableDeferrals("apps/web/lib/federation/work-sync.ts", PASSTHROUGH_DEFECT);
+  assert.equal(hits.length, 1);
+  assert.equal(hits[0].kind, "passthrough");
+  assert.match(hits[0].text, /status: item\.status/);
+});
+
+test("passes a pass-through status that spreads a deferral projection beside it", () => {
+  const ok = PASSTHROUGH_DEFECT.replace("status: item.status,", "status: item.status,\n    ...deferral.projection,");
+  assert.deepEqual(findUnattributableDeferrals("a.ts", ok), []);
+});
+
+test("ignores a JSON snapshot column on a provenance row", () => {
+  const snapshot = `
+    await db.federatedRecordMirror.upsert({
+      where: mirrorWhere,
+      create: { payload: { title: item.title, status: item.status, updatedAt: item.updatedAt } },
+    });
+    await db.backlogItem.upsert({ where: { itemId: item.itemId }, update: data });
+  `;
+  assert.deepEqual(findUnattributableDeferrals("a.ts", snapshot), []);
+});
