@@ -4,6 +4,7 @@ import type {
   WorkCaseState,
   WorkCaseTimelineEvent,
 } from "./case-types";
+import { decodeWorkCaseKey, encodeWorkCaseKey } from "./case-key";
 import {
   buildWorkCaseDetail,
   buildWorkCaseSummary,
@@ -36,6 +37,8 @@ import {
   readWorkspaceRoomPolicy,
   type WorkspaceRoomPolicyParticipant,
 } from "./workspace-room-access";
+
+export { decodeWorkCaseKey, encodeWorkCaseKey } from "./case-key";
 
 const CLOSED_WORK_ITEM_STATUSES = ["completed", "cancelled"];
 
@@ -239,20 +242,6 @@ function sourceForItem(item: WorkspaceWorkItemRecord): { sourceType: string; sou
   return {
     sourceType: item.sourceType || "manual-task",
     sourceId: item.sourceId || item.itemId,
-  };
-}
-
-export function encodeWorkCaseKey(ref: { sourceType: string; sourceId: string }): string {
-  return encodeURIComponent(`${ref.sourceType}:${ref.sourceId}`);
-}
-
-export function decodeWorkCaseKey(caseKey: string): { sourceType: string; sourceId: string } | null {
-  const decoded = decodeURIComponent(caseKey);
-  const separator = decoded.indexOf(":");
-  if (separator <= 0 || separator === decoded.length - 1) return null;
-  return {
-    sourceType: decoded.slice(0, separator),
-    sourceId: decoded.slice(separator + 1),
   };
 }
 
