@@ -496,7 +496,12 @@ describe("generated route-shell registry", () => {
     // case and publishes its path, so a detail surface is measurable at last.
     // Eligibility for a dynamic route is earned by that minting, not asserted —
     // an eligible-but-unresolved route fails the run rather than measuring a 404.
-    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(206);
+    // 206 -> 207: /storefront/animals/waiting (BI-899D7F00) — the adoption waiting
+    // list, read-only over AdoptableAnimal.publishedAt. The first storefront route to
+    // be measurable: the sweep fixture now provisions one pet-rescue storefront with
+    // listed animals, which is the honest fixture context the storefront-setup-required
+    // exclusions were waiting for. Its siblings keep their exclusion until each gets its own.
+    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(207);
     // 110 -> 113: the three exclusions above. Product Direction then adds seven
     // explicitly classified dynamic routes, bringing the combined total to 120.
     // 120 -> 121: /platform/ai/operations-map.

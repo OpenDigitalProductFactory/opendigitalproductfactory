@@ -264,6 +264,12 @@ The entire animal surface in the shipped product is `/storefront/animals`:
 is a storefront surface — the public section, the storefront admin manager, the catalog API.
 There are no operational surfaces at all.
 
+One read-only staff surface has since been added on top of the same row: `/storefront/animals/waiting`,
+the **adoption waiting list** (BI-899D7F00) — every animal with status `available`, longest wait
+first, with whole days since `publishedAt`; future-dated listings sit last with no count, undated
+last of all, capped at the 100 longest-waiting and saying so. It is the newsletter-picking page
+the owner asked for five times; it adds no field and no model.
+
 Verified absent — searches over `packages/db/prisma/schema/*.prisma` returning zero:
 `StrayReport`/`FieldReport`/`IntakeRequest`, `Kennel`, `Euthan*`, `Vaccinat*`/`Immuniz*`,
 `Microchip`, `Foster`, `WalkIn`. Apparent hits for "tier" (`riskTier`, `hitlTier`) and

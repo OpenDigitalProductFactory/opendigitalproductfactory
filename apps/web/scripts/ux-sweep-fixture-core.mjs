@@ -129,6 +129,16 @@ export async function convergeUxSweepFixture(db, now = new Date(), { dbNull } = 
       select: { id: true },
     }));
 
+  // A storefront with listed animals (BI-899D7F00). Every /storefront/* route
+  // redirects to /storefront/setup without a StorefrontConfig, which is why the
+  // storefront admin family sat in ROUTE_SWEEP_EXCLUSIONS as
+  // "storefront-setup-required". A route becomes eligible in the PR that adds
+  // its honest fixture context; this is that context for the adoption waiting
+  // list: one pet-rescue storefront on the seeded platform organisation, the
+  // animals-available section, and four listed animals covering the ordering
+  // rules the owner decided — two dated, one future-dated, one undated.
+  const storefront = await convergeStorefrontFixture(db, now);
+
   const heartbeat = await db.runtimeTarget.updateMany({
     where: { targetId: "RT-ROOT-PORTAL", status: "running" },
     data: { lastHeartbeatAt: now },
@@ -171,10 +181,67 @@ export async function convergeUxSweepFixture(db, now = new Date(), { dbNull } = 
     setupChanged: existingSetup === null,
     setupProgressId: setupProgress.id,
     refreshedRuntimeTargets: heartbeat.count,
+    storefront,
     convergedWeeklyDigestInputs: {
       coworkerMemoryNotes: memoryNotes.count,
       researchProposals: researchProposals.count,
       unlinkedDeferredDecisions: deferredDecisions.count,
     },
   };
+}
+
+/**
+ * Idempotent: one storefront on the seeded platform organisation, one
+ * animals-available section, four listed animals with stable refs. Returns
+ * null (and provisions nothing) when the seed carries no pet-rescue archetype,
+ * so a sweep against an older seed still runs — the storefront routes then stay
+ * measured-as-redirect and the sweep reports them, rather than the fixture
+ * throwing.
+ */
+export async function convergeStorefrontFixture(db, now) {
+  const org = await db.organization.findFirst({ where: { slug: "platform" }, select: { id: true } });
+  const archetype = await db.storefrontArchetype.findFirst({
+    where: { archetypeId: "pet-rescue" },
+    select: { id: true },
+  });
+  if (!org || !archetype) return null;
+
+  const existing = await db.storefrontConfig.findFirst({
+    where: { organizationId: org.id },
+    select: { id: true },
+  });
+  const config =
+    existing ??
+    (await db.storefrontConfig.create({
+      data: { organizationId: org.id, archetypeId: archetype.id, isPublished: false },
+      select: { id: true },
+    }));
+
+  const section = await db.storefrontSection.findFirst({
+    where: { storefrontId: config.id, type: "animals-available" },
+    select: { id: true },
+  });
+  if (!section) {
+    await db.storefrontSection.create({
+      data: { storefrontId: config.id, type: "animals-available", title: "Animals available", content: {}, sortOrder: 0 },
+    });
+  }
+
+  const day = 24 * 60 * 60 * 1000;
+  const animals = [
+    { animalRef: "ux-sweep-animal-longest", name: "Ada", species: "dog", breed: "Collie mix", publishedAt: new Date(now.getTime() - 94 * day) },
+    { animalRef: "ux-sweep-animal-recent", name: "Biscuit", species: "cat", breed: null, publishedAt: new Date(now.getTime() - 14 * day) },
+    { animalRef: "ux-sweep-animal-future", name: "Coco", species: "rabbit", breed: null, publishedAt: new Date(now.getTime() + 7 * day) },
+    { animalRef: "ux-sweep-animal-undated", name: "Dusty", species: "dog", breed: null, publishedAt: null },
+  ];
+  let created = 0;
+  for (const animal of animals) {
+    const found = await db.adoptableAnimal.findUnique({ where: { animalRef: animal.animalRef }, select: { id: true } });
+    if (found) continue;
+    await db.adoptableAnimal.create({
+      data: { ...animal, storefrontId: config.id, organizationId: org.id, status: "available" },
+    });
+    created += 1;
+  }
+  return { storefrontId: config.id, storefrontCreated: existing === null, animalsCreated: created };
 }
