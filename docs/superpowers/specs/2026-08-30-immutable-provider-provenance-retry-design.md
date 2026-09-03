@@ -4,8 +4,8 @@ status: active
 
 # Immutable Provider Provenance Retry
 
-**Backlog item:** BI-E35E1183 | **Epic:** EP-56AE0F69 |
-**Workroom:** WC-6D36EB1A | **Profile:** fix
+**Backlog item:** BI-E35E1183 | **Workroom:** WC-6D36EB1A |
+**Profile:** fix
 
 ## Problem and decision
 
