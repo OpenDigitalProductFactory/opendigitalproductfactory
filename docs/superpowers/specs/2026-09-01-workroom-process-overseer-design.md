@@ -19,9 +19,29 @@ advances. The coordinator is an existing participant role, not a new agent type 
 ## 2. Research and design choices
 
 The research recorded in PR #4881 supports a flexible inner work loop inside a fixed outer control
-loop. DPF adopts bounded budgets, immutable evidence, held-out or independent evaluation, explicit
-role separation, and fail-closed escalation. It rejects coordinator self-certification, prompt-only
-oversight, hidden retries, silent authority widening, and candidate-selected evidence.
+loop. The relevant designs are complementary rather than interchangeable workflow engines:
+
+| Source design | Applicable mechanism | DPF decision |
+|---|---|---|
+| [WikiSkill](https://arxiv.org/html/2608.27454) | Immutable experience, curated knowledge, executable skills, and an external accept/reject/rollback loop; cross-model transfer can regress | Adopt immutable evidence, scoped knowledge, versioned methods, independent validation, negative-result retention, and profile-specific qualification. Reject direct corpus injection and coordinator self-certification. |
+| [Automated Researchers Can Reliably Mitigate Alignment Failures](https://alignment.anthropic.com/2026/automated-alignment-researchers/) | Parallel researchers with persistent artifacts, fresh sessions, isolated held-out evaluation, a capability floor, and explicit monitoring for evaluation gaming | Adopt flexible collaboration within fixed attempt/budget accounting, retained artifacts, evaluator separation, and capability preservation. Reject interpreting many automated attempts as evidence that one coworker replaces a qualified assessor. |
+| [Automated Weak-to-Strong Researcher](https://alignment.anthropic.com/2026/automated-w2s-researcher/) | A flexible inner research loop performed well, while seed selection, evaluator feedback, dataset shortcuts, and label leakage created reward-hacking paths | Adopt flexible stage execution inside a precommitted outer envelope. Keep seeds, labels, held-out answers, and evaluator authority outside both executor and coordinator control. |
+| DPF PAAW, JSI, TAK, WWMD, WWWD, and WSID | Existing authority, job qualification, organizational and platform judgment, profession craft, evidence, and promotion substrate | Extend these owners through one conformance projection. Do not create a competing agent manager, competence ledger, decision kernel, or workflow database. |
+
+DPF therefore adopts bounded budgets, immutable evidence, held-out or independent evaluation,
+explicit role separation, monitorable interventions, and fail-closed escalation. It rejects
+prompt-only oversight, hidden retries, silent authority widening, candidate-selected evidence, and
+any coordinator path that can inspect held-out answers or approve its own consequential output.
+
+The local `AGI by december.txt` transcript is a discovery and interpretation source, not a
+normative reference. Its WikiSkill and Goodhart observations are consistent with the primary
+sources above; its AGI-date, vendor-roadmap, and model-release claims are speculative and do not
+create DPF requirements.
+
+The detailed source findings and adoption/rejection rationale remain in
+`docs/superpowers/specs/2026-08-30-paaw-competence-evolution-workroom-design.md` sections 5, 6, and
+12, with the qualification mapping in `docs/architecture/job-specific-intelligence.md`. This
+design narrows those findings to Workroom process conformance.
 
 The design extends three canonical substrates already on `main`:
 
@@ -29,7 +49,7 @@ The design extends three canonical substrates already on `main`:
   and stop conditions (`BI-EFFD97B4`, PR #4909).
 - `WorkroomParticipant` owns persisted roster and explicit coordinator assignment
   (`BI-4CB2EF76`, PR #4913).
-- Workroom scope claims bind collaboration shape and `workShapeKey@version`; room cycles,
+- Workroom scope claims bind collaboration shape and `workShape` `key@version`; room cycles,
   activities, receipts, and outcome packets carry observed execution.
 
 No `ProcessOverseer`, `WorkroomConformance`, or shadow roster table is added. Conformance is a pure,
@@ -117,4 +137,3 @@ paused; recorded failures are never reinterpreted as passes.
 - The Workroom surface distinguishes explicit from derived coordination and explains intervention.
 - Targeted pure, read-model, lifecycle, and component tests pass; typecheck, build, UX route sweep,
   and merged-code CI pass before merge.
-
