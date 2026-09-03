@@ -9,7 +9,7 @@
 
 import {
   FEDERATED_WORK_LOCAL_ONLY_SENSITIVITIES,
-  FEDERATED_WORK_ORIGIN_MARKER_PREFIX,
+  FEDERATED_WORK_ORIGIN_MARKER_SQL_PREFIX,
   FEDERATED_WORK_SPEC_VERSION,
   hasFederatedWorkOriginMarker,
   type FederatedWorkEpicV1,
@@ -109,11 +109,11 @@ function toEpic(row: WorkPageEpicRow): FederatedWorkEpicV1 {
  */
 export const OWNED_BACKLOG_WHERE = {
   sensitivity: { notIn: [...FEDERATED_WORK_LOCAL_ONLY_SENSITIVITIES] },
-  OR: [{ body: null }, { NOT: { body: { contains: FEDERATED_WORK_ORIGIN_MARKER_PREFIX } } }],
+  OR: [{ body: null }, { NOT: { body: { contains: FEDERATED_WORK_ORIGIN_MARKER_SQL_PREFIX } } }],
 } as const;
 
 export const OWNED_EPIC_WHERE = {
-  OR: [{ description: null }, { NOT: { description: { contains: FEDERATED_WORK_ORIGIN_MARKER_PREFIX } } }],
+  OR: [{ description: null }, { NOT: { description: { contains: FEDERATED_WORK_ORIGIN_MARKER_SQL_PREFIX } } }],
 } as const;
 
 export async function buildFederatedWorkPage(

@@ -1,6 +1,7 @@
 import { cache } from "react";
 
 import { prisma } from "@dpf/db";
+import { FEDERATED_WORK_ORIGIN_MARKER_SQL_PREFIX } from "@dpf/db/federated-work-contract";
 
 import { decodeDemandMirrorPayload, type DemandDisposition } from "./demand-exchange";
 import { decodeDemandResponseMirrorPayload } from "./demand-response";
@@ -181,7 +182,7 @@ export const getDemandShareContext = cache(async (): Promise<DemandShareContext>
         NOT: [
           { body: { contains: "[origin:federatedDemand:" } },
           // A work-sync mirror is not local demand to share (BI-FF8A57EF).
-          { body: { contains: "[origin:federatedWork:" } },
+          { body: { contains: FEDERATED_WORK_ORIGIN_MARKER_SQL_PREFIX } },
         ],
       },
       select: { itemId: true, title: true, status: true },

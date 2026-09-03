@@ -88,8 +88,21 @@ export function federatedWorkOriginMarker(originInstallationId: string, recordId
   return `[origin:${ORIGIN_MARKER_KIND}:${originInstallationId}:${recordId}]`;
 }
 
-/** SQL-usable prefix for `NOT { body: { contains } }` exclusions. */
+/** The marker's opening text; used to parse a marker line, never as a SQL predicate. */
 export const FEDERATED_WORK_ORIGIN_MARKER_PREFIX = ORIGIN_MARKER_PREFIX;
+
+/**
+ * SQL prefilter for `NOT { body: { contains } }` exclusions (BI-C97CE534).
+ * A real marker always names an installation id, which the platform mints as
+ * `inst_<hex>`; prose that merely writes `[origin:federatedWork:<inst>:<id>]`
+ * to describe the mechanism does not match this longer prefix, so an owned
+ * row is not hidden from the wire for mentioning it. The predicate is only a
+ * prefilter: every reader re-checks with `hasFederatedWorkOriginMarker`, which
+ * is exact (the marker is a standalone line). A body that quotes a literal
+ * `inst_`-prefixed marker in prose is still excluded here; that is the price
+ * of a substring predicate and is documented, not hidden.
+ */
+export const FEDERATED_WORK_ORIGIN_MARKER_SQL_PREFIX = `${ORIGIN_MARKER_PREFIX}inst_`;
 
 export function hasFederatedWorkOriginMarker(text: string | null | undefined): boolean {
   return (text ?? "").split(/\r?\n/).some((line) => ORIGIN_MARKER_LINE.test(line.trim()));

@@ -8,6 +8,7 @@ import {
   type ChannelDemandPolicy,
 } from "@dpf/db/federated-channel";
 import { DEMAND_PROJECTION_TEMPLATES } from "@dpf/db/federated-demand-contract";
+import { hasFederatedWorkOriginMarker } from "@dpf/db/federated-work-contract";
 import {
   isFederationRole,
   type FederationRole,
@@ -264,7 +265,7 @@ export async function selectLocalDemandForLink(
   if ((item.body ?? "").includes("[origin:federatedDemand:")) {
     throw new Error("Adopted demand must use governed forwarding so original provenance is preserved.");
   }
-  if ((item.body ?? "").includes("[origin:federatedWork:")) {
+  if (hasFederatedWorkOriginMarker(item.body)) {
     throw new Error("This item is mirrored from another installation in your organization; share it from the installation that owns it.");
   }
   // Cross-org gate (BI-DC4E526E, kernel DI-3E77E48D5710) — CONTEXT-DERIVED, so no

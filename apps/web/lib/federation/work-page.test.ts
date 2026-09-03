@@ -40,9 +40,20 @@ describe("buildFederatedWorkPage", () => {
     const where = store.backlogItem.findMany.mock.calls[0]![0].where;
     expect(where.sensitivity.notIn).toEqual(["confidential", "restricted"]);
     // A row with no prose is owned: NOT-contains alone is NULL for a NULL column.
-    expect(where.OR).toEqual([{ body: null }, { NOT: { body: { contains: "[origin:federatedWork:" } } }]);
+    expect(where.OR).toEqual([{ body: null }, { NOT: { body: { contains: "[origin:federatedWork:inst_" } } }]);
     const epicWhere = store.epic.findMany.mock.calls[0]![0].where;
-    expect(epicWhere.OR).toEqual([{ description: null }, { NOT: { description: { contains: "[origin:federatedWork:" } } }]);
+    expect(epicWhere.OR).toEqual([{ description: null }, { NOT: { description: { contains: "[origin:federatedWork:inst_" } } }]);
+  });
+
+  it("serves an owned row whose prose merely mentions the marker (BI-C97CE534)", async () => {
+    // BI-FF8A57EF describes the mechanism as `[origin:federatedWork:<inst>:<id>]`;
+    // that text must not hide the item from the paired installation.
+    const prose = row("BI-FF8A57EF", { body: "Mirrors carry a `[origin:federatedWork:<inst>:<id>]` last line." });
+    const store = db([row("BI-A"), prose]);
+    const page = await buildFederatedWorkPage(store, { originInstallationId: origin, cursor: null, limit: 10, now: at });
+    expect(page.items.map((i) => i.itemId)).toEqual(["BI-A", "BI-FF8A57EF"]);
+    const prefix = store.backlogItem.findMany.mock.calls[0]![0].where.OR[1].NOT.body.contains;
+    expect("Mirrors carry a `[origin:federatedWork:<inst>:<id>]` last line.".includes(prefix)).toBe(false);
   });
 
   it("never serves a mirror back, even when the SQL predicate let it through", async () => {
