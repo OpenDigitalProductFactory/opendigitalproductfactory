@@ -80,3 +80,15 @@ Decision: `atomic`. All four phases are one fail-closed Process Overseer contrac
 `BI-3913EB49`; none is independently shippable without creating either unenforced or unexplained
 behavior. The immutable coverage receipt is recorded after this plan is committed and pushed.
 
+### Four-way traceability
+
+| Deliverable | Requirement refs | Contract refs | Flow refs | Verification refs |
+|---|---|---|---|---|
+| `workroom-process-overseer` | `OBJ-WPO-001`, `OBJ-WPO-002`, `OBJ-WPO-003`, `OBJ-WPO-004` | `contract:process-overseer-projection`, `contract:lifecycle-conformance-guard`, `contract:workroom-overseer-ux` | `flow:declared-observed-project-guard-receipt`, `flow:load-project-render` | `AC-WPO-001`, `AC-WPO-002`, `AC-WPO-003`, `AC-WPO-004`, `AC-WPO-005`, `AC-WPO-006`, `AC-WPO-007` |
+
+The pure projection implements `contract:process-overseer-projection`; every finite lifecycle and
+standing reconciliation call follows `flow:declared-observed-project-guard-receipt` through
+`contract:lifecycle-conformance-guard`. The existing Workroom detail path follows
+`flow:load-project-render` through `contract:workroom-overseer-ux`. Together they satisfy
+`OBJ-WPO-001`, `OBJ-WPO-002`, `OBJ-WPO-003`, and `OBJ-WPO-004`, verified by `AC-WPO-001`,
+`AC-WPO-002`, `AC-WPO-003`, `AC-WPO-004`, `AC-WPO-005`, `AC-WPO-006`, and `AC-WPO-007`.

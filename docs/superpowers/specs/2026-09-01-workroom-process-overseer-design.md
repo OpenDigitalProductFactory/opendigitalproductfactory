@@ -83,6 +83,78 @@ The pure projection is deterministic for the same declared/observed input. Devia
 and deduplicated; its reconciliation key is derived from room, shape version, stage, and deviation
 codes so repeated finite events or standing sweeps produce one logical disposition.
 
+### 3.1 Component boundaries
+
+The implementation has four components with one-way dependencies:
+
+1. **Observation adapter** converts already-loaded Workroom state into a bounded
+   `WorkroomShapeObservation`. It may resolve a declared `WorkShapeDefinition` and canonical
+   coordinator JSI/TAK eligibility, but it does not decide conformance.
+2. **Pure conformance projector** accepts only the declared collaboration/work shapes and the
+   observation. It returns `WorkroomShapeConformance`; it performs no I/O and mutates nothing.
+3. **Lifecycle guard** accepts the operation plus the projection and returns an allow/refuse
+   decision. It does not recompute a second rule set. Finite-cycle and standing-room callers use
+   this same contract.
+4. **Read-model/UI adapter** serializes the projection into `WorkroomView` and renders it. It has no
+   write path and cannot affect the guard decision.
+
+Dependencies point inward: store/runner and read-model adapters depend on the projector and guard;
+the projector never depends on Prisma, React, a runner, or a client. Existing
+`WorkShapeDefinition`, `WorkroomParticipant`, lifecycle receipt, and scope-claim owners remain
+authoritative.
+
+### 3.2 Input and output interfaces
+
+`WorkroomShapeObservation` is a value object containing the Workroom identifier, checked instant,
+persisted participants, current/proposed stage, observed receipt/evidence kinds, observed grants,
+budget use, review/stop observations, close intent, and optional coordinator eligibility. The
+eligibility value distinguishes a person (`not-applicable`) from an AI coworker whose canonical JSI
+and TAK authority binding is `eligible | absent | stale | narrowed | suspended | incompatible | unknown`.
+Unknown is not inferred as eligible.
+
+`WorkroomShapeConformance` returns the exact shape key/version, collaboration shape, overseer
+identity/source, current/next stage, normalized observation summary, sorted deviations,
+disposition, intervention reason, checked instant, and reconciliation key. The key excludes the
+wall-clock instant and includes only stable room/shape/stage/deviation/operation identity, so a
+retry of the same observed state has the same key.
+
+`WorkroomLifecycleGuardDecision` returns either `allowed: true` with the permitted operation or
+`allowed: false` with disposition, reason, deviation codes, reconciliation key, and a complete
+receipt payload. Callers persist that payload without reconstructing policy. A shaped operation
+with a missing projection returns a typed `missing_conformance_result` refusal; an unshaped room
+returns `not-applicable` and preserves legacy behavior.
+
+### 3.3 Reliability and consistency rules
+
+- The projector is total and side-effect free: malformed or missing shaped observations become
+  deviations rather than exceptions or optimistic defaults.
+- Declared shape identity is exact. An unresolved key or version mismatch refuses execution; the
+  projector never silently substitutes the latest shape.
+- Lifecycle callers pass the projection produced from the same transaction/read snapshot as the
+  proposed transition. Stores re-check the guard before write, preventing a stale UI projection
+  from authorizing execution.
+- Receipt persistence is append-only and idempotent on `(room, reconciliationKey, operation)`.
+  A duplicate retry reads the existing refusal/intervention receipt rather than emitting another.
+- A persistence failure means the transition remains refused. No lifecycle advance is committed
+  without its required receipt; no receipt claims a transition that rolled back.
+- Standing reconciliation is per-room and bounded. A failed room does not poison the sweep, and
+  the next sweep safely retries the same reconciliation key.
+- The UI treats the projection as explanatory state, not authority. Missing UI data cannot turn a
+  refusal into an allow.
+
+### 3.4 Recovery matrix
+
+| Failure | Required behavior | Recovery |
+|---|---|---|
+| Shape key cannot resolve or version differs | `pause`; no dispatch/open/complete | Restore the declared version or make an explicit reviewed shape migration, then reproject. |
+| No explicit coordinator, multiple coordinators, or derived-only coordinator | `escalate`; no autonomous advance | Persist exactly one qualified coordinator through the canonical roster path. |
+| AI coordinator eligibility is absent, stale, suspended, incompatible, or unknown | `escalate` or `stop` according to severity | Refresh JSI evidence/TAK binding or assign a qualified coordinator; never self-certify. |
+| Stage/evidence/grant/budget/review/stop deviation | Refuse with the typed deviation and append one receipt | Repair the observed fact or obtain the already-declared human authorization; reproject. |
+| Conformance projection unavailable for a shaped room | Fail closed with `missing_conformance_result` | Retry projection from canonical state; do not fall back to legacy execution. |
+| Receipt append fails | Roll back/withhold the lifecycle write | Retry the same operation and reconciliation key after storage recovers. |
+| Standing sweep crashes mid-run | Previously committed rooms remain committed; uncommitted room remains eligible | Resume per-room reconciliation; idempotency suppresses duplicates. |
+| UI cannot render the section | Enforcement remains active server-side | Surface the existing error boundary/notice and repair the read surface; never disable the guard. |
+
 ## 4. Enforcement
 
 The lifecycle guard consumes a conformance result before convene/open-cycle, stage dispatch,
