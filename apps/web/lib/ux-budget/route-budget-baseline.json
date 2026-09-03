@@ -498,7 +498,7 @@
       "ariaSnapshot": "- link\n- banner\n  - link\n    - text\n    - paragraph\n      - text\n  - link\n  - button\n  - text\n  - button\n- complementary\n  - navigation\n    - group\n      - button\n      - button [pressed]\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n- main\n  - navigation\n    - link\n    - text\n  - heading [level=1]\n  - paragraph\n    - text\n  - heading [level=2]\n  - paragraph\n    - text\n  - list\n    - listitem\n      - text\n      - button\n      - paragraph\n        - text\n  - button\n  - text\n  - heading [level=2]\n  - list\n    - listitem\n      - link\n      - text\n      - link\n      - paragraph\n        - text\n    - listitem\n      - link\n      - text\n      - paragraph\n        - text\n    - listitem\n      - link\n      - text\n      - link\n      - paragraph\n        - text\n    - listitem\n      - link\n      - text\n      - paragraph\n        - text\n    - listitem\n      - link\n      - text\n      - link\n      - paragraph\n        - text\n    - listitem\n      - link\n      - text\n      - paragraph\n        - text\n    - listitem\n      - link\n      - text\n      - link\n      - paragraph\n        - text\n    - listitem\n      - link\n      - text\n      - paragraph\n        - text\n    - listitem\n      - link\n      - text\n      - link\n      - paragraph\n        - text\n    - listitem\n      - link\n      - text\n      - paragraph\n        - text\n  - paragraph\n    - text\n  - text\n  - textbox\n  - text\n  - textbox\n  - text\n  - textbox\n  - text\n  - combobox\n    - option [selected]\n    - option\n  - button\n  - text\n  - paragraph\n    - text\n    - link\n    - text"
     },
     "/customer": {
-      "defaultVisibleWords": 131,
+      "defaultVisibleWords": 135,
       "leadBandWords": 0,
       "primaryActions": 1,
       "visibleFields": 0,
@@ -542,7 +542,7 @@
       "ariaSnapshot": "- link\n- banner\n  - link\n    - text\n    - paragraph\n      - text\n  - link\n  - button\n  - text\n  - button\n- complementary\n  - navigation\n    - group\n      - button\n      - button [pressed]\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n- main\n  - navigation\n    - link\n    - text\n  - link\n  - heading [level=1]\n  - button\n  - paragraph\n    - text\n  - heading [level=2]\n  - paragraph\n    - text\n  - text\n  - paragraph\n    - text\n  - link\n  - paragraph\n    - text"
     },
     "/customer/funnel": {
-      "defaultVisibleWords": 169,
+      "defaultVisibleWords": 173,
       "leadBandWords": 0,
       "primaryActions": 1,
       "visibleFields": 0,
@@ -729,7 +729,7 @@
       "ariaSnapshot": "- link\n- banner\n  - link\n    - text\n    - paragraph\n      - text\n  - link\n  - button\n  - text\n  - button\n- complementary\n  - navigation\n    - group\n      - button\n      - button [pressed]\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n- main\n  - navigation\n    - link\n    - text\n  - heading [level=1]\n  - paragraph\n    - text\n  - link\n  - paragraph\n    - text\n  - link\n  - paragraph\n    - text\n  - link\n    - paragraph\n      - text\n  - paragraph\n    - text\n  - region\n    - paragraph\n      - text\n    - heading [level=2]\n    - text"
     },
     "/employee": {
-      "defaultVisibleWords": 303,
+      "defaultVisibleWords": 306,
       "leadBandWords": 0,
       "primaryActions": 2,
       "visibleFields": 5,
@@ -1224,7 +1224,7 @@
       "ariaSnapshot": "- heading [level=1]\n- paragraph\n  - text\n- text\n- textbox\n- button\n- paragraph\n  - text"
     },
     "/inventory": {
-      "defaultVisibleWords": 941,
+      "defaultVisibleWords": 944,
       "leadBandWords": 0,
       "primaryActions": 1,
       "visibleFields": 2,
@@ -1829,7 +1829,7 @@
       "ariaSnapshot": "- link\n- banner\n  - link\n    - text\n    - paragraph\n      - text\n  - link\n  - button\n  - text\n  - button\n- complementary\n  - navigation\n    - group\n      - button\n      - button [pressed]\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n- main\n  - navigation\n    - link\n    - text\n  - link\n  - paragraph\n    - text\n  - link\n  - heading [level=1]\n  - paragraph\n    - text\n  - heading [level=2]\n  - paragraph\n    - text\n  - button\n  - heading [level=2]\n  - table\n    - rowgroup\n      - row\n        - columnheader\n    - rowgroup\n  - heading [level=2]\n  - paragraph\n    - text\n  - table\n    - rowgroup\n      - row\n        - columnheader\n    - rowgroup\n      - row\n        - cell\n          - text\n        - cell\n          - combobox\n            - option\n            - option [selected]\n            - option\n        - cell\n          - text\n        - cell\n          - button\n  - heading [level=2]\n  - table\n    - rowgroup\n      - row\n        - columnheader\n    - rowgroup"
     },
     "/platform/tools/discovery": {
-      "defaultVisibleWords": 963,
+      "defaultVisibleWords": 966,
       "leadBandWords": 0,
       "primaryActions": 1,
       "visibleFields": 2,
