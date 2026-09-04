@@ -4,7 +4,7 @@ status: draft
 
 # Implementation plan: durable asynchronous MCP operation resume
 
-**Backlog item:** BI-801313EB  
+**Backlog item:** BI-801313EB
 **Spec:** `docs/superpowers/specs/2026-08-30-async-operation-resume-contract.md`
 
 For agentic workers: execute this plan one independently reviewable backlog item at a time — one BI, one branch, one PR. Use `dpf-tdd` for red-green implementation, `dpf-local-merge-ci-before-push` plus the completion gate before any success claim, and `dpf-pr-with-dco` for handoff.

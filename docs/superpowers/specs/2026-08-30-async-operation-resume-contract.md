@@ -4,8 +4,8 @@ status: draft
 
 # Durable asynchronous MCP operation resume contract
 
-**Backlog item:** BI-801313EB  
-**Epic:** EP-56AE0F69  
+**Backlog item:** BI-801313EB
+**Epic:** EP-56AE0F69
 **Status:** design candidate (no implementation claim)
 
 ## Problem
