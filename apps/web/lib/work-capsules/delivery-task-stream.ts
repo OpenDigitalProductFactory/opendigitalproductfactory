@@ -41,8 +41,8 @@ export async function startDeliveryTaskHubSession(input: {
 }): Promise<() => void> {
   let active = true;
   let snapshotSent = false;
-  const pending = new Set<string>();
-  let chain = Promise.resolve();
+  const pendingWorkroomIds = new Set<string>();
+  let drainPromise: Promise<void> | null = null;
 
   const reload = async (workroomId: string) => {
     if (!active) return;
@@ -58,14 +58,29 @@ export async function startDeliveryTaskHubSession(input: {
     }
   };
 
+  const drainPendingWorkrooms = (): Promise<void> => {
+    if (drainPromise) return drainPromise;
+    drainPromise = (async () => {
+      while (active && snapshotSent && pendingWorkroomIds.size > 0) {
+        const workroomId = pendingWorkroomIds.values().next().value;
+        if (typeof workroomId !== "string") break;
+        pendingWorkroomIds.delete(workroomId);
+        await reload(workroomId);
+      }
+    })().finally(() => {
+      drainPromise = null;
+      if (active && snapshotSent && pendingWorkroomIds.size > 0) void drainPendingWorkrooms();
+    });
+    return drainPromise;
+  };
+
   const unsubscribe = await input.subscribe((event) => {
     if (!active) return;
+    pendingWorkroomIds.add(event.workCapsuleId);
     if (!snapshotSent) {
-      pending.add(event.workCapsuleId);
       return;
     }
-    chain = chain.then(() => reload(event.workCapsuleId));
-    return chain;
+    return drainPendingWorkrooms();
   });
 
   try {
@@ -73,22 +88,20 @@ export async function startDeliveryTaskHubSession(input: {
     if (active) {
       input.send({ type: "snapshot", ...snapshot });
       snapshotSent = true;
-      for (const workroomId of pending) chain = chain.then(() => reload(workroomId));
-      pending.clear();
+      void drainPendingWorkrooms();
     }
   } catch {
     if (active) {
       input.send({ type: "error", error: "snapshot_failed", observedAt: new Date().toISOString() });
       snapshotSent = true;
-      for (const workroomId of pending) chain = chain.then(() => reload(workroomId));
-      pending.clear();
+      void drainPendingWorkrooms();
     }
   }
 
   return () => {
     if (!active) return;
     active = false;
-    pending.clear();
+    pendingWorkroomIds.clear();
     unsubscribe();
   };
 }

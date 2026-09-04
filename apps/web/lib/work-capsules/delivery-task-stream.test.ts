@@ -71,4 +71,36 @@ describe("delivery task hub stream", () => {
     expect(send).toHaveBeenLastCalledWith(expect.objectContaining({ type: "upsert" }));
     stop();
   });
+
+  it("coalesces repeated events for one Workroom while its row reload is in flight", async () => {
+    let onEvent: (event: { workCapsuleId: string; activityId: string }) => void | Promise<void> = () => {};
+    let resolveFirstReload: ((value: { capsuleId: string; row: never }) => void) | undefined;
+    const firstReload = new Promise<{ capsuleId: string; row: never }>((resolve) => {
+      resolveFirstReload = resolve;
+    });
+    const loadRow = vi.fn()
+      .mockReturnValueOnce(firstReload)
+      .mockResolvedValue({ capsuleId: "WC-1", row: { capsuleId: "WC-1", observedAt: "2026-09-04T12:02:00.000Z" } });
+    const stop = await startDeliveryTaskHubSession({
+      send: vi.fn(),
+      loadSnapshot: vi.fn().mockResolvedValue({ rows: [], nextCursor: null, observedAt: "2026-09-04T12:00:00.000Z" }),
+      loadRow,
+      subscribe: vi.fn(async (listener) => {
+        onEvent = listener;
+        return vi.fn();
+      }),
+    });
+
+    const reloads = [
+      onEvent({ workCapsuleId: "WC-1", activityId: "activity-1" }),
+      onEvent({ workCapsuleId: "WC-1", activityId: "activity-2" }),
+      onEvent({ workCapsuleId: "WC-1", activityId: "activity-3" }),
+    ];
+    await vi.waitFor(() => expect(loadRow).toHaveBeenCalledTimes(1));
+    resolveFirstReload?.({ capsuleId: "WC-1", row: { capsuleId: "WC-1", observedAt: "2026-09-04T12:01:00.000Z" } as never });
+    await Promise.all(reloads);
+
+    expect(loadRow).toHaveBeenCalledTimes(2);
+    stop();
+  });
 });
