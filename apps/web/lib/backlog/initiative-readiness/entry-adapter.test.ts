@@ -243,6 +243,21 @@ describe("projectBacklogItemReadiness", () => {
     expect(projection.decision).toMatchObject({ verdict: "allowed", profile: "feature" });
   });
 
+  it("classifies a refactor as governed feature work instead of advisory doc-only work", () => {
+    const projection = projectBacklogItemReadiness({
+      item: { ...item, workType: "refactor" },
+      activities: [],
+      target: "design",
+      transitionObject,
+      authorization: "pass",
+      capsuleIdentity: "pass",
+      evaluatedAt: "2026-08-22T00:00:00.000Z",
+    });
+
+    expect(projection.governed).toBe(true);
+    expect(projection.decision).toMatchObject({ verdict: "allowed", profile: "feature" });
+  });
+
   it("fails closed for an implementation claim with only textual spec and plan hints", () => {
     const projection = projectBacklogItemReadiness({
       item,

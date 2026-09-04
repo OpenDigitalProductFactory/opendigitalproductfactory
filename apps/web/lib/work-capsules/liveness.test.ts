@@ -142,6 +142,46 @@ describe("classifyWorkCapsuleLiveness", () => {
     expect(v.isReapable).toBe(false);
   });
 
+  it("AC-FEAF-003: a terminal task outranks a stale active-session lease", () => {
+    const v = classifyWorkCapsuleLiveness(
+      row({
+        executorKind: "codex-desktop",
+        leaseExpiresAt: new Date("2026-08-05T16:00:00.000Z"),
+        taskRun: { status: "completed", updatedAt: new Date("2026-08-05T14:58:00.000Z") },
+      } as Partial<CapsuleLivenessInput>),
+      NOW,
+    );
+    expect(v).toMatchObject({
+      liveness: "execution-terminal",
+      isLive: false,
+      isReapable: true,
+      disposition: "abandoned",
+    });
+  });
+
+  it("AC-FEAF-003: a queued durable wait prevents false reaping when execution is not terminal", () => {
+    const v = classifyWorkCapsuleLiveness(
+      row({
+        leaseExpiresAt: new Date("2026-08-03T00:00:00.000Z"),
+        taskRun: { status: "working", updatedAt: new Date("2026-08-05T14:50:00.000Z") },
+        durableWait: { state: "queued", signaledAt: new Date("2026-08-05T14:55:00.000Z") },
+      } as Partial<CapsuleLivenessInput>),
+      NOW,
+    );
+    expect(v).toMatchObject({ liveness: "durable-wait", isLive: true, isReapable: false });
+  });
+
+  it("AC-FEAF-003: contradictory terminal execution and durable wait require recovery", () => {
+    const v = classifyWorkCapsuleLiveness(
+      row({
+        taskRun: { status: "failed", updatedAt: new Date("2026-08-05T14:58:00.000Z") },
+        durableWait: { state: "active", signaledAt: new Date("2026-08-05T14:59:00.000Z") },
+      } as Partial<CapsuleLivenessInput>),
+      NOW,
+    );
+    expect(v).toMatchObject({ liveness: "recovery-required", isLive: false, isReapable: false });
+  });
+
   it("treats an open PR as live even after the authoring lease lapsed", () => {
     const v = classifyWorkCapsuleLiveness(
       row({
