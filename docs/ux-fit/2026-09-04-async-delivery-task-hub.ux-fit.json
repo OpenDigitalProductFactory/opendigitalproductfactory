@@ -3,10 +3,7 @@
   "decidedOption": "workroom-event-hub",
   "scope": {
     "files": [
-      "apps/web/app/(shell)/build/work/[capsuleId]/page.tsx",
-      "apps/web/app/(shell)/build/work/page.tsx",
-      "apps/web/components/build/work-control/DeliveryTaskHub.tsx",
-      "apps/web/components/build/work-control/WorkControlPanel.tsx"
+      "apps/web/components/build/work-control/DeliveryTaskHub.tsx"
     ]
   },
   "evidence": {
