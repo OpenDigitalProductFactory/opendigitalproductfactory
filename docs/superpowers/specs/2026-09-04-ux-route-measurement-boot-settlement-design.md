@@ -86,6 +86,16 @@ fixture, authorization, or user-visible copy changes.
 5. Require the PR-level and merge-group route sweeps to pass on the existing
    frozen baseline; do not re-freeze 207 or 980.
 
+Protected run `33863742160` confirmed both target routes at their settled
+structures (`/platform/tools/catalog/sync` at 206 words and
+`/platform/tools/discovery` at 965 words). The same run exposed one intentional
+downstream structure change on `/platform/ai/providers`: its scheduled-jobs
+table now includes the boot-provisioned infrastructure-prune row before the
+first request. All route metrics and visible copy remained unchanged. Manual
+exact-tree baseline run `33865180652` captured that canonical post-boot tree;
+only the `/platform/ai/providers` accessibility snapshot is adopted from the
+artifact. The other 179 measured differences are deliberately discarded.
+
 Rollback is the source commit only. There is no migration or durable-data
 rewrite.
 
