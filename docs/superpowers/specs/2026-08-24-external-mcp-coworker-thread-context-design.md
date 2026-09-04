@@ -393,6 +393,50 @@ their prior missing-thread refusal while leaving any already-created
 AgentThread and TaskRun records as immutable audit history. No destructive data
 cleanup is required.
 
+## 2026-09-03 live-acceptance amendment: bound review is the approval
+
+The deployed threadless handoff contract reached the independent reviewer, but
+the generic coworker HITL policy then treated the review receipt as an ordinary
+side effect and demanded a second employee approval. That reintroduced the
+single-human dead end at the terminal writer rather than at dispatch.
+
+The architecture decision is that an exact server-issued independent-review
+TaskRun may execute its bound `record_initiative_*_review` writer immediately.
+This is not a general HITL bypass. It applies only after the server has verified
+all of the following: external-MCP task provenance, one immutable artifact,
+one backlog-item subject, the exact writer in TaskRun authority scope, an
+active reviewer holding that writer's grant, the delegating human's capability
+and subject access, and the existing principal-level author/reviewer
+independence check. Ordinary coworker side effects and unbound review calls
+retain the coworker's configured approval policy.
+
+The missing-baseline response also names an executable external-client route.
+It directs the caller to re-enter the existing Workroom with
+`claim_backlog_item_for_work(workIntent="implementation")` and execute the
+returned spec-approval `recovery.reviewerRoutes[].requestCoworker` packet
+verbatim. The caller does not hand-author reviewer identity or artifact scope.
+
+### Live evidence
+
+- Live readiness returned `CAN-TEST` for registry repair merge
+  `6c166b1c88524f0f0c8a033c42d9ac1b544f1ccc`; the install served
+  `f28f65b95b54ae71d754a191b47435894899f33e`.
+- A hand-authored reviewer request reached `AGT-181` but its TaskRun lacked the
+  initiative writer grant and completed without a receipt. This is the
+  counter-example proving that prompt text does not confer authority.
+- Implementation readiness for `BI-B131F357` returned a server-issued route to
+  `AGT-WS-REVIEW` with exactly `tool:read_source_at_version`,
+  `tool:record_initiative_design_review`, and
+  `backlog-item:BI-B131F357`.
+- TaskRun
+  `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-EFB76C86C64C` read provider blob
+  `1b74449329dc568fc150838c9e21ae200caf25cd` at commit
+  `7b60e213ac9e679be32302e3348fa0603469f9f5`, then attempted a passing
+  `record_initiative_design_review` call as the independent reviewer.
+- The terminal writer was rejected solely with `approval_required`, producing
+  envelope `cmtme5f140ire01nvd0n5jeo4`. No self-approval, fabricated receipt,
+  direct database write, or weakened independence check was used.
+
 ## Acceptance criteria traceability
 
 | BI acceptance criterion | Design coverage |
