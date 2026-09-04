@@ -6,7 +6,8 @@ status: active
 
 - **Backlog item:** `BI-D2A51B36`
 - **Epic:** `EP-5102F494`
-- **Workroom:** `WC-B0DD2B2F`
+- **Workroom:** `WC-19B43FAC`
+- **Review state:** Ready for independent specification approval
 - **Architecture dependency:** `BI-2C80E6EA`, merged in PR #4494
 - **Earlier decision:** `DI-C955877F245D`, superseded by the verified-substrate decision below
 - **Companion plan:** `docs/superpowers/plans/2026-08-23-bi-d2a51b36-resource-occupancy.md`
@@ -102,6 +103,111 @@ A shared repository validates profile kind, capacity unit, maximum capacity,
 organization/storefront scope, lifecycle, and expected version. Animal-welfare
 and hospitality adapters use this repository for canonical Resource persistence;
 legacy hospitality mirroring remains compatibility work, not a second authority.
+
+The shared command boundary uses server-derived tenancy and a narrow public
+shape. Callers may supply labels and capacity facts, but never an organization,
+storefront, resource domain, or capacity unit:
+
+```ts
+type HousingResourceCommand =
+  | {
+      action: "create";
+      label: string;
+      kindSlug: "kennel" | "foster-home";
+      serviceArea: string | null;
+      capacity: number;
+      idempotencyKey: string;
+    }
+  | {
+      action: "update";
+      resourceId: string;
+      expectedVersion: number;
+      label?: string;
+      serviceArea?: string | null;
+      capacity?: number;
+      blockedReason?: string | null;
+      lifecycle?: "active" | "retired";
+      idempotencyKey: string;
+    };
+```
+
+The repository resolves `organizationId`, `storefrontId`, `domain: "care"`,
+`capacityUnit: "animals"`, the configured kind ceiling, and the current version
+from the authenticated server context. Success returns the full authoritative
+resource projection, including its new version. Version mismatch returns
+`resource_conflict`; validation, authorization, and idempotency errors use stable
+machine codes plus operator-readable messages.
+
+## Command and HTTP contracts
+
+The generic routes are adapters over shared repositories, not new authorities:
+
+| Route | Method | Contract |
+| --- | --- | --- |
+| `/api/resources` | `GET` | List active and retired resources visible to the authenticated organization, filtered only by server-allowed domain/kind query values. |
+| `/api/resources` | `POST` | Create one profile-governed resource from `HousingResourceCommand.action = "create"`; return `201` with the authoritative projection. |
+| `/api/resources/[resourceId]` | `PATCH` | Rename, resize, block/unblock, or retire with `expectedVersion`; return `409 resource_conflict` when stale. |
+| `/api/resource-occupancy` | `POST` | Place or move one subject using `PlacementCommand`; return current placement and destination capacity. |
+| `/api/resource-occupancy/[allocationId]` | `PATCH` | Release the current stay using `ReleaseCommand`; return the closed allocation and current placement `null`. |
+
+The Ward server actions call these services directly after `requireAdmin()` and
+server-side organization/storefront resolution. They do not make loopback HTTP
+requests and do not accept authority-bearing tenancy fields from form data.
+
+```ts
+type PlacementCommand = {
+  animalRef: string;
+  destinationResourceId: string;
+  quantity: 1;
+  placedAt: string;
+  reason?: string;
+  idempotencyKey: string;
+};
+
+type ReleaseCommand = {
+  allocationId: string;
+  expectedResourceId: string;
+  releasedAt: string;
+  reason: string;
+  idempotencyKey: string;
+};
+
+type OccupancyResult = {
+  allocationId: string;
+  animalRef: string;
+  resourceId: string;
+  placedAt: string;
+  releasedAt: string | null;
+  releaseReason: string | null;
+  capacity: { occupied: number; total: number; available: number };
+};
+```
+
+Invalid JSON or fields return `400 invalid_request`; unknown or cross-tenant
+subjects/resources return `404 not_found`; blocked, retired, incompatible, or
+full destinations return `409` with a specific stable code; missing write
+authority returns `403 forbidden`; unexpected failures return a correlation id
+without leaking foster or tenancy data.
+
+## Persistence mapping
+
+No new entity is introduced. The write contract maps exactly to deployed
+columns:
+
+| Contract fact | Canonical persistence |
+| --- | --- |
+| Housing unit identity and optimistic version | `Resource.id`, `Resource.version` |
+| Operator-safe label and area | `Resource.name`, `Resource.serviceArea` |
+| Kind and unit | `Resource.kindSlug`, `Resource.capacityUnit` |
+| Capacity and availability | `Resource.capacity`, active allocation quantity sum |
+| Block/retire state | existing Resource lifecycle and block fields |
+| Animal placement | `ResourceCapacityAllocation.demandSlug = "animal-occupancy"`, `demandRef = animalRef` |
+| Stay interval | allocation `startsAt`, technical `endsAt`, business `releasedAt` |
+| Move/release audit | allocation `releaseReason`, immutable prior row retained |
+| Retry identity | existing allocation/request idempotency key contract |
+
+Reads always derive current placement from the single unreleased allocation;
+they never persist a duplicate `currentResourceId` on `AdoptableAnimal`.
 
 ## Occupancy transaction
 
