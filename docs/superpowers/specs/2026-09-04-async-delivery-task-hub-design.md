@@ -30,6 +30,8 @@ This feature is a read model and notification projection over existing authority
 
 `BI-801313EB` owns operation persistence, resume/cancel semantics, and queue integration. This slice does not modify its schema, Inngest registration, or inference workers. Until its public query contract is present, the hub reads Workroom's currently linked TaskRun and exposes one typed `asyncOperation` projection seam. Integrating a richer core handle later replaces only that adapter, not the page or notification model.
 
+This task-hub slice neither defines nor replaces a queue, worker, retry policy, or dead-letter mechanism. Those reliability and idempotency contracts remain entirely in the async-operation core; the hub consumes only its authorized read model alongside existing Workroom facts.
+
 ## Research and alternatives
 
 The shape was selected after comparing three established operator patterns and the browser delivery standard.
@@ -173,7 +175,7 @@ The create/adopt controls remain below the operational overview and preserve the
 | AC-DTH-004 | OBJ-DTH-001, OBJ-DTH-002, OBJ-DTH-006 | Component tests cover grouped rows, loading/reconnecting/partial/empty/error, semantic actions, accessible names, and retained confirmed content. |
 | AC-DTH-005 | OBJ-DTH-006 | Measured UX-fit manifest covers desktop/mobile, light/dark, keyboard/focus, overflow, and route budget. |
 | AC-DTH-006 | OBJ-DTH-007 | Legacy Workroom grouping/presentation is removed from the table and shared by page, stream, and notifications; module-size and duplication guards pass. |
-| AC-DTH-007 | OBJ-DTH-001–OBJ-DTH-007 | DCO, protected PR/merge-group checks, canonical release, exact-SHA live readiness, and authenticated live hub/reconnect/notification acceptance pass. |
+| AC-DTH-007 | OBJ-DTH-001, OBJ-DTH-002, OBJ-DTH-003, OBJ-DTH-004, OBJ-DTH-005, OBJ-DTH-006, OBJ-DTH-007 | DCO, protected PR/merge-group checks, canonical release, exact-SHA live readiness, and authenticated live hub/reconnect/notification acceptance pass. |
 
 ## Rollback
 

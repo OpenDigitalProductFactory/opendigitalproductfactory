@@ -123,7 +123,7 @@ The implementation uses the existing Notification table and realtime attention b
 
 | Deliverable key | Requirements | Flows | Contracts | Verification |
 | --- | --- | --- | --- | --- |
-| `delivery-task-hub` | OBJ-DTH-001–OBJ-DTH-007; AC-DTH-001–AC-DTH-007 | `workroom-list→bounded-snapshot→event-upsert→reconnect-snapshot`; `durable-transition→dedupe→notification→semantic-link`; `inspect/resume/review/handoff→canonical-owner-surface` | Workroom identity, TaskRun status, Workroom activity bus, Notification/attention bus, async adapter seam, `view_platform` | pure projection/store/stream/notification tests; component/a11y tests; typecheck/guards; UX-fit; protected CI; exact-SHA live acceptance |
+| `delivery-task-hub` | OBJ-DTH-001, OBJ-DTH-002, OBJ-DTH-003, OBJ-DTH-004, OBJ-DTH-005, OBJ-DTH-006, OBJ-DTH-007; AC-DTH-001, AC-DTH-002, AC-DTH-003, AC-DTH-004, AC-DTH-005, AC-DTH-006, AC-DTH-007 | `workroom-list→bounded-snapshot→event-upsert→reconnect-snapshot`; `durable-transition→dedupe→notification→semantic-link`; `inspect/resume/review/handoff→canonical-owner-surface` | Workroom identity, TaskRun status, Workroom activity bus, Notification/attention bus, async adapter seam, `view_platform` | pure projection/store/stream/notification tests; component/a11y tests; typecheck/guards; UX-fit; protected CI; exact-SHA live acceptance |
 
 ## Refactoring allocation
 
