@@ -1,5 +1,5 @@
 ---
-status: draft
+status: proposed
 ---
 
 # Pet Rescue operating system and resilient Help design
@@ -33,16 +33,47 @@ to hide partial delivery behind the integration item.
 
 ## 2. Outcomes and objective baseline
 
-| Objective | Baseline | Target |
+The current baseline includes the Pet Rescue value streams, the
+`AdoptableAnimal` catalog, the mission-impact strip, and the canonical ward and
+occupancy surface merged in PRs #4972, #5000, and #5022. This design consumes
+those delivered capabilities; it does not recreate them.
+
+**OBJ-RESCUE-IDENTITY:** Establish one durable operational animal identity while
+keeping the public adoption listing an optional projection.
+
+**OBJ-RESCUE-INTAKE:** Preserve intake source, custody stage, legal holds, and
+outcome history across re-entry instead of overwriting the current listing.
+
+**OBJ-RESCUE-CAPACITY:** Reuse the delivered canonical Resource occupancy and
+ward surface as the housing spine for intake, care, and placement.
+
+**OBJ-RESCUE-CARE:** Make appointments, clinical facts, recurring care,
+completion, exceptions, and escalation visible per animal without treating an
+animal as a human patient.
+
+**OBJ-RESCUE-ADOPTION:** Connect application, screening, visits, reservation,
+placement, and return as one governed trace from inquiry to outcome.
+
+**OBJ-RESCUE-STEWARDSHIP:** Attribute posted cost and restricted funding to the
+animal and program so stewardship readouts reconcile to canonical finance.
+
+**OBJ-RESCUE-HOME:** Make the Pet Rescue opening viewport answer animal-welfare
+questions and provide durable drill-ins to intake, care, capacity, adoption,
+and stewardship work.
+
+**OBJ-HELP-RECOVERY:** Resolve Help to a valid canonical document or a truthful
+contextual index so missing or renamed content never becomes a record 404.
+
+| Acceptance | Objective | Statement |
 |---|---|---|
-| `OBJ-RESCUE-IDENTITY` | `AdoptableAnimal` is a public listing and is the only animal row. | Every animal has one operational `AnimalProfile`; publication is optional. |
-| `OBJ-RESCUE-INTAKE` | No rescue intake/custody episode or legal-hold workflow. | Intake source, custody stage, legal hold, and outcome history survive re-entry. |
-| `OBJ-RESCUE-CAPACITY` | No housing or foster occupancy. | Kennels, rooms, and foster places use canonical resources and allocations with truthful free capacity. |
-| `OBJ-RESCUE-CARE` | No animal clinical history or daily care schedule. | Appointments, clinical facts, recurring care, completion, exceptions, and escalation are visible per animal. |
-| `OBJ-RESCUE-ADOPTION` | Enquiries exist, but no governed application/placement lifecycle. | Application, screening, visits, reservation, adoption, and return are one trace. |
-| `OBJ-RESCUE-STEWARDSHIP` | Donations exist without fund restrictions or animal cost attribution. | Restricted funds and animal-attributed ledger lines support stewardship and cost-per-animal readouts. |
-| `OBJ-RESCUE-HOME` | Generic nonprofit home shows programs, members, and handoffs. | Pet Rescue opens on animals, capacity, care exceptions, appointments, long stays, and stewardship signals. |
-| `OBJ-HELP-RECOVERY` | A mapped but missing doc calls `notFound()`. | Help resolves a valid canonical page or a truthful contextual index; it never dead-ends. |
+| AC-RESCUE-IDENTITY-01 | OBJ-RESCUE-IDENTITY | Existing public animals gain a stable operational identity without invented custody, care, or outcome facts. |
+| AC-RESCUE-INTAKE-01 | OBJ-RESCUE-INTAKE | An operator can admit, stage, hold, outcome, and later re-admit an animal while retaining the prior episode and events. |
+| AC-RESCUE-CAPACITY-01 | OBJ-RESCUE-CAPACITY | Intake and animal detail read the same Resource and ResourceCapacityAllocation facts as the delivered ward surface, including unknown and blocked capacity. |
+| AC-RESCUE-CARE-01 | OBJ-RESCUE-CARE | An operator can see due care, missed or exceptional care, appointments, and a correctable clinical/welfare history for one animal. |
+| AC-RESCUE-ADOPTION-01 | OBJ-RESCUE-ADOPTION | An inquiry can become a screened application and placement, and a return preserves the placement before opening a new custody episode. |
+| AC-RESCUE-STEWARDSHIP-01 | OBJ-RESCUE-STEWARDSHIP | Restricted balances and animal cost use posted fund and subject dimensions, not a parallel rescue ledger. |
+| AC-RESCUE-HOME-01 | OBJ-RESCUE-HOME | Every first-viewport signal drills into a bounded operational queue and unavailable data is distinguished from a truthful zero. |
+| AC-HELP-RECOVERY-01 | OBJ-HELP-RECOVERY | Header Help, legacy aliases, missing seeds, and unknown direct slugs render a valid documentation destination with recovery context and intact authorization. |
 
 ## 3. Research & benchmarking
 
@@ -88,7 +119,7 @@ to hide partial delivery behind the integration item.
 |---|---|---|---|
 | Public animal listing | `AdoptableAnimal`, `MediaAttachment` | vertical-native but catalog-bound | Keep as optional projection; backfill operational identity. |
 | Animal identity/history | None beyond listing | absent | Add `AnimalProfile` and custody episodes. |
-| Housing/foster capacity | `Resource`, `ResourceAvailability`, `ResourceCapacityPool`, `ResourceCapacityAllocation` | canonical | Add animal-welfare domain vocabulary and a rescue adapter; no clone tables. |
+| Housing/foster capacity | `Resource`, `ResourceAvailability`, `ResourceCapacityPool`, `ResourceCapacityAllocation`, `/workspace/ward` | canonical and delivered | Reuse the shipped ward store and occupancy projection; add only animal/custody integration needed by the remaining workflows. |
 | Scheduled veterinary visit | subject-agnostic `CareAppointment(subjectKindSlug, subjectRef)` | canonical | Use `animal-profile` + stable animal id; no patient row. |
 | Intake forms | subject-agnostic `CareIntakePacket` and versioned `CareIntakeResponse` | canonical | Use for health/behavior assessments; keep custody stage on the custody episode. |
 | Clinical facts | Human `PatientProfile` exists but no subject-agnostic condition/medication/observation record | absent | Add one generic `CareRecord`, not an animal medical JSON blob. |
@@ -98,7 +129,7 @@ to hide partial delivery behind the integration item.
 | Donations | `StorefrontDonation` | canonical | Link optional restricted fund. |
 | Restricted funds | `FundBudgetLine.fund` is municipal and string-bound | vertical-bound | Add generic finance fund; do not reuse municipal budget vocabulary. |
 | Cost per animal | `JournalLine` has customer/contact dimensions only | partial | Add optional subject dimension and fund relation to the canonical line. |
-| Pet Rescue first viewport | Generic `home-nonprofit-community` profile | partial | Add leaf profile and one bounded composed read model. |
+| Pet Rescue first viewport | Pet Rescue mission-impact strip plus generic nonprofit boards | partial | Extend the existing leaf-aware composition with bounded care, intake, adoption, and stewardship signals; preserve shipped animal/capacity tiles. |
 | Help | route map + filesystem docs loader + contextual quick help | canonical but brittle | Add canonical resolver and recovery contract. |
 
 Quoted absence checks were run across `packages/db/prisma/schema` for animal
@@ -240,6 +271,11 @@ work and require human acknowledgement; no coworker makes a treatment or
 euthanasia decision.
 
 ### 5.4 Housing and foster allocation
+
+PRs #5000 and #5022 already delivered the generic occupancy projection,
+Pet Rescue ward store, kennel write shapes, capacity tile, and `/workspace/ward`
+experience on current `main`. They are dependencies and acceptance evidence,
+not work to duplicate in this branch.
 
 - A kennel, room, isolation space, or foster home is `Resource(domain =
   animal-welfare)`.
@@ -451,7 +487,7 @@ queries.
 | Slice | Backlog item | Primary acceptance evidence |
 |---|---|---|
 | Help resolver and recovery UI | `BI-AE7C386B` | resolver/unit tests, header/direct-route tests, running Help path |
-| Identity + housing/capacity | `BI-D2A51B36` | migration/backfill tests, allocator tests, running capacity view |
+| Identity integration with delivered housing/capacity | `BI-D2A51B36` | existing PRs #5000/#5022 plus animal-to-occupancy integration tests and running capacity drill-in |
 | Subject clinical history + vet coordination | `BI-97290291` | care-record and appointment tests, animal care detail |
 | Custody/intake pipeline | `BI-7111AF0C` | state-machine/legal-hold tests, running intake queue |
 | Recurring daily care | `BI-5A25EC37` | recurrence/completion/exception tests, running care board |
@@ -503,4 +539,3 @@ Before publication:
   `DI-0AFD05E602CA` with no commandment conflict.
 - **Recommended next step:** immutable design review through the governed
   initiative-readiness route, then a coverage-recorded implementation plan.
-
