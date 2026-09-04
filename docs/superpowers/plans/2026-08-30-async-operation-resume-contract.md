@@ -66,7 +66,8 @@ Deliverable 0 is a safe enabling repair owned by BI-2B619BC9 and may ship first,
 - Decision: decomposed
 - Parent: `BI-801313EB`
 - Historical receipt (superseded; evidence only): `cmtmikg460wqu01nvgifvg6rq`
-- Current receipt: `cmtmquzgh040001pbmb4j4y7j` (server-validated against commit `dbd8f76aa3e856ec5209e72d8c0ce57e11c8ca4a`, plan blob `1fa0bd9a83f60683343de8dca458c7337f06bc8c`)
+- Receipt: `cmtmquzgh040001pbmb4j4y7j`
+- Receipt binding: server-validated against commit `dbd8f76aa3e856ec5209e72d8c0ce57e11c8ca4a`, plan blob `1fa0bd9a83f60683343de8dca458c7337f06bc8c`
 - Current coverage: **validated.** The fresh receipt covers the revised durable lifecycle contract, flow ordering, authority boundary, and verification semantics. The historical receipt remains evidence only and is not reused for current readiness.
 - Dependencies: `BI-2B619BC9`: none; `BI-801313EB`: `typed-provider-start-boundary`; `BI-05D7A0DC`: `durable-lifecycle-core`
 - `typed-provider-start-boundary` -> `BI-2B619BC9`
