@@ -107,18 +107,38 @@ export const asyncAdapter: ExecutionAdapterHandler = {
     // Interactions API pattern: { id, object: "interaction", status }. Require
     // the resource discriminator and a documented status so a generic response
     // ID can never become durable polling authority.
-    const interactionStatuses = new Set([
+    const nonterminalInteractionStatuses = new Set([
       "in_progress",
-      "requires_action",
+      "queued",
+    ]);
+    const terminalInteractionStatuses = new Set([
       "completed",
       "failed",
       "cancelled",
       "incomplete",
+      "budget_exceeded",
     ]);
+    const interactionStatus = typeof data.status === "string" ? data.status : null;
     if ((data.object !== undefined && data.object !== "interaction")
-      || !interactionStatuses.has(String(data.status))) {
+      || (interactionStatus !== "requires_action"
+        && !nonterminalInteractionStatuses.has(interactionStatus ?? "")
+        && !terminalInteractionStatuses.has(interactionStatus ?? ""))) {
       throw new InferenceError(
         `Gemini returned an invalid interaction response`,
+        "provider_error",
+        providerId,
+      );
+    }
+    if (interactionStatus === "requires_action") {
+      throw new InferenceError(
+        "Gemini async start returned requires_action, but no continuation path is available",
+        "provider_error",
+        providerId,
+      );
+    }
+    if (terminalInteractionStatuses.has(interactionStatus ?? "")) {
+      throw new InferenceError(
+        `Gemini async start returned terminal interaction status ${interactionStatus}`,
         "provider_error",
         providerId,
       );

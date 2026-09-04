@@ -325,11 +325,17 @@ async function pollGemini(
     };
   }
 
-  if (status === "in_progress" || status === "requires_action" || status === "queued") {
+  if (status === "in_progress" || status === "queued") {
     return {
       done: false,
       progressMessage: status,
     };
+  }
+
+  if (status === "requires_action") {
+    throw new Error(
+      "Gemini interaction requires_action, but no continuation path is available",
+    );
   }
 
   if (status === "cancelled") {

@@ -132,6 +132,53 @@ describe("asyncAdapter", () => {
     });
   });
 
+  it("Gemini: accepts a queued interaction as a nonterminal async start", async () => {
+    stubFetchOk({
+      id: "interaction-queued-xyz",
+      object: "interaction",
+      status: "queued",
+    });
+
+    await expect(asyncAdapter.execute(makeRequest())).resolves.toMatchObject({
+      asyncOperation: {
+        status: "accepted",
+        providerOperationId: "interaction-queued-xyz",
+      },
+    });
+  });
+
+  it("Gemini: refuses requires_action because this adapter has no continuation path", async () => {
+    stubFetchOk({
+      id: "interaction-action-required",
+      object: "interaction",
+      status: "requires_action",
+    });
+
+    await expect(asyncAdapter.execute(makeRequest())).rejects.toMatchObject({
+      code: "provider_error",
+      message: expect.stringMatching(/requires_action.*continuation/i),
+    });
+  });
+
+  it.each([
+    "completed",
+    "incomplete",
+    "failed",
+    "cancelled",
+    "budget_exceeded",
+  ])("Gemini: refuses terminal create status %s", async (status) => {
+    stubFetchOk({
+      id: `interaction-${status}`,
+      object: "interaction",
+      status,
+    });
+
+    await expect(asyncAdapter.execute(makeRequest())).rejects.toMatchObject({
+      code: "provider_error",
+      message: expect.stringContaining(`terminal interaction status ${status}`),
+    });
+  });
+
   it("Gemini: uses the agent field for a managed Deep Research agent", async () => {
     // The provider schema permits omission of the optional object discriminator.
     stubFetchOk({ id: "interaction-op1", status: "in_progress" });

@@ -148,11 +148,28 @@ describe("pollAsyncOperation Gemini Interactions API", () => {
     });
   });
 
-  it("preserves requires_action as a nonterminal provider state", async () => {
+  it("fails closed on requires_action when no continuation path exists", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response({
       id: "interaction/id with spaces",
       object: "interaction",
       status: "requires_action",
+    })));
+
+    await expect(pollAsyncOperation("async-op-1")).resolves.toBe("failed");
+    expect(mocks.updateOperation).toHaveBeenCalledWith({
+      where: { id: "async-op-1" },
+      data: expect.objectContaining({
+        status: "failed",
+        errorMessage: expect.stringMatching(/requires_action.*continuation/i),
+      }),
+    });
+  });
+
+  it("preserves a queued interaction as nonterminal", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response({
+      id: "interaction/id with spaces",
+      object: "interaction",
+      status: "queued",
     })));
 
     await expect(pollAsyncOperation("async-op-1")).resolves.toBe("running");
@@ -160,7 +177,7 @@ describe("pollAsyncOperation Gemini Interactions API", () => {
       where: { id: "async-op-1" },
       data: {
         progressPct: undefined,
-        progressMessage: "requires_action",
+        progressMessage: "queued",
       },
     });
   });

@@ -615,20 +615,9 @@ async function routeAndCallAttempt(
     // returned below. The typed boundary prevents fallback projection from
     // silently dropping the provider handle (the former `raw` path did).
     if (result.asyncOperation?.status === "accepted") {
-      // The async start is a real provider dispatch even though its eventual
-      // completion usage is not available yet. Persist the zero-token start
-      // row before the early return; the durable lifecycle will append final
-      // usage when the provider operation completes.
-      await persistRoutedTokenUsage({
-        traceId,
-        agentId: options?.agentId ?? "unknown",
-        providerId: result.providerId,
-        contextKey: routedContextKey(options),
-        inputTokens: result.tokenUsage?.inputTokens ?? 0,
-        outputTokens: result.tokenUsage?.outputTokens ?? 0,
-        inferenceMs: result.inferenceMs,
-        recordZeroUsage: true,
-      });
+      // The provider has already accepted real work. Establish the durable
+      // lifecycle record before anything else can fail, then settle the
+      // dispatch audit before exposing acceptance to the caller.
       const { createAsyncOperation } = await import("@/lib/async-inference");
       const asyncOpId = await createAsyncOperation({
         providerId: result.providerId,
@@ -638,6 +627,17 @@ async function routeAndCallAttempt(
         requestContext: { taskType, sensitivity, messages: messages.length },
         threadId: options?.threadId,
         maxDurationMs: options?.maxDurationMs,
+      });
+      await persistRoutedTokenUsage({
+        traceId,
+        agentId: options?.agentId ?? "unknown",
+        providerId: result.providerId,
+        contextKey: routedContextKey(options),
+        inputTokens: result.tokenUsage?.inputTokens ?? 0,
+        outputTokens: result.tokenUsage?.outputTokens ?? 0,
+        inferenceMs: result.inferenceMs,
+        recordZeroUsage: true,
+        requirePersistence: true,
       });
 
       return {

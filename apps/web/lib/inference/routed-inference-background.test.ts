@@ -177,8 +177,9 @@ describe("routeAndCall background starts", () => {
     });
   });
 
-  it("does not return an accepted provider handle before its dispatch audit settles", async () => {
+  it("persists the durable operation before audit settlement and waits before returning accepted", async () => {
     let releaseAudit!: () => void;
+    let outwardSettled = false;
     mocks.logTokenUsage.mockReturnValueOnce(new Promise<void>((resolve) => {
       releaseAudit = resolve;
     }));
@@ -194,13 +195,39 @@ describe("routeAndCall background starts", () => {
         maxDurationMs: 60_000,
         persistDecision: false,
       },
-    );
+    ).finally(() => {
+      outwardSettled = true;
+    });
 
     await vi.waitFor(() => expect(mocks.logTokenUsage).toHaveBeenCalledOnce());
-    expect(mocks.createAsyncOperation).not.toHaveBeenCalled();
+    expect(mocks.createAsyncOperation).toHaveBeenCalledOnce();
+    expect(mocks.createAsyncOperation.mock.invocationCallOrder[0])
+      .toBeLessThan(mocks.logTokenUsage.mock.invocationCallOrder[0]);
+    expect(outwardSettled).toBe(false);
 
     releaseAudit();
     await expect(pending).resolves.toMatchObject({ asyncOperationId: "async-op-row-1" });
+  });
+
+  it("keeps the durable operation but refuses outward acceptance when dispatch audit fails", async () => {
+    mocks.logTokenUsage.mockRejectedValueOnce(new Error("token audit unavailable"));
+
+    const pending = routeAndCall(
+      [{ role: "user", content: "Research this topic." }],
+      "You research.",
+      "internal",
+      {
+        taskType: "research",
+        interactionMode: "background",
+        threadId: "thread-1",
+        maxDurationMs: 60_000,
+        persistDecision: false,
+      },
+    );
+
+    await expect(pending).rejects.toThrow("token audit unavailable");
     expect(mocks.createAsyncOperation).toHaveBeenCalledOnce();
+    expect(mocks.createAsyncOperation.mock.invocationCallOrder[0])
+      .toBeLessThan(mocks.logTokenUsage.mock.invocationCallOrder[0]);
   });
 });
