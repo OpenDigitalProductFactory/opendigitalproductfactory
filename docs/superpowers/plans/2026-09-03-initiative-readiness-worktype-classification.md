@@ -47,6 +47,18 @@ Contracts exercised by this plan are `deriveAuthoritativeReadinessProfile` and
 |---|---|---|---|---|
 | `closed-worktype-profile-mapping` | OBJ-WTC-001, OBJ-WTC-002, OBJ-WTC-003 | `deriveAuthoritativeReadinessProfile`, `deriveBuildProcessType` | Implementation sequence | AC-WTC-001, AC-WTC-002, AC-WTC-003, AC-WTC-004, AC-WTC-005 |
 
+## Backlog coverage
+
+- Decision: atomic
+- Parent: `BI-1B5B4CEC`
+- Receipt: `cmtmfkozx0n9c01nv6yvq4dp0`
+- Immutable plan artifact: commit
+  `f0838e6c7d93334a5d8f9d5667513543b7e66797`, provider blob
+  `2e5e20899e6ba80ba9f2ff8e87eb8deaffe4de59`
+- Dependencies: none
+- Rationale: The mapping, regression proof, and live acceptance alter one
+  authoritative readiness contract and are not independently shippable.
+
 ## Completion boundary
 
 Completion requires the mapping and regression test to pass on the exact tree,
