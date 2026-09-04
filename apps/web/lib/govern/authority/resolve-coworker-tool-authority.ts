@@ -11,6 +11,7 @@ import {
   parseInitiativeReviewBinding,
   validateInitiativeReviewAuthorityScope,
 } from "@/lib/mcp-task-review-contract";
+import { INITIATIVE_READINESS_LANES } from "@/lib/tak/initiative-readiness-tool-grants";
 
 import {
   buildCoworkerApprovalBinding,
@@ -182,9 +183,16 @@ export async function resolveInitiativeAuthorityContext(input: {
 export function deriveCoworkerApprovalPolicy(input: {
   hitlTierDefault: number;
   hitlPolicy: string | null;
+  serverBoundIndependentReview?: boolean;
 }): CoworkerApprovalPolicy {
   const policy = input.hitlPolicy?.trim().toLowerCase() ?? "";
+  // A server-issued initiative-review TaskRun is already constrained to one
+  // immutable artifact, one backlog item, one exact writer, and a separately
+  // granted reviewer principal. Requiring the delegating employee to approve
+  // that writer again turns the independent review into a human proxy gate and
+  // makes the single-human installation path impossible to complete.
   if (input.hitlTierDefault <= 1 || policy === "always") return "all";
+  if (input.serverBoundIndependentReview) return "none";
   if (
     input.hitlTierDefault === 2
     || policy === "proposal_for_external_writes"
@@ -310,6 +318,10 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
     const approvalPolicy = deriveCoworkerApprovalPolicy({
       hitlTierDefault: agent.hitlTierDefault,
       hitlPolicy: agent.governanceProfile?.hitlPolicy ?? null,
+      serverBoundIndependentReview: Boolean(
+        trustedBoundItemId
+        && INITIATIVE_READINESS_LANES[execution.toolName]?.independent === true,
+      ),
     });
     const sensitivity = coerceDataSensitivity(agent.sensitivity);
     const decisionVersionIds = [
