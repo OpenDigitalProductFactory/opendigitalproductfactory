@@ -596,6 +596,17 @@ Before publication:
 7. Independent semantic review of the stable committed tree, then DCO PR and
    merge queue.
 
+### 13.1 Implementation risk register
+
+These risks remain owned through implementation rather than disappearing at
+design approval:
+
+| Risk | Implementation mitigation | Release evidence and owner |
+|---|---|---|
+| Privacy leakage across adopter, donor, foster, clinical, or legal-hold records | Enforce organization scope and the animal-welfare capability on every command and read model; keep sensitive data out of browser persistence, logs, public projections, and Help query parameters; add negative authorization and serialization tests. | Security/privacy test suite plus public-payload snapshots; owner: Pet Rescue identity and route slices. |
+| Scale degradation from unbounded animal history, capacity scans, or cockpit aggregation | Implement the cursor limits and composite indexes in §11, keep cockpit sources independently bounded, and add representative high-cardinality fixtures with measured query-plan evidence before the shared runtime verification. | Migration/query-plan tests and measured aggregation results; owner: data migration and cockpit slices. |
+| Integration drift between custody, housing, care, work, finance, and the public adoption projection | Route writes through typed domain commands, keep cross-model invariants transactional, publish projections only after commit, surface source availability and `asOf`, and add contract tests for each handoff plus rollback behavior. | Cross-service integration tests and the end-to-end intake-to-placement walkthrough; owner: each domain slice, reconciled by `BI-7A38F667`. |
+
 ## 14. Architecture review (advisory)
 
 - **Alignment summary:** aligned after choosing a canonical operational animal
