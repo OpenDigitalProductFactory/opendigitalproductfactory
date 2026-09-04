@@ -265,6 +265,24 @@ The coverage decision is `decomposed`: the existing child items remain independe
 revertible, while the operator-directed publication boundary is one PR. The plan-coverage receipt
 must map every baseline objective to at least one row above before implementation starts.
 
+### Machine-checkable traceability
+
+The identifiers below are deliberately verbatim. They bind each independently traceable
+deliverable to one approved objective, one acceptance statement, its durable contracts, the plan
+flow that implements it, and the verification evidence that will close it.
+
+| Key | Objective | Acceptance | Contracts | Flow | Verification |
+|---|---|---|---|---|---|
+| `animal-identity` | `OBJ-RESCUE-IDENTITY` | `AC-RESCUE-IDENTITY-01` | `AnimalProfile`, `AnimalCustodyEpisode`, `AnimalCustodyEvent` | `phase-1`, `phase-2` | `AC-RESCUE-IDENTITY-01` |
+| `housing-capacity` | `OBJ-RESCUE-CAPACITY` | `AC-RESCUE-CAPACITY-01` | `Resource`, `ResourceCapacityAllocation` | `phase-3` | `AC-RESCUE-CAPACITY-01` |
+| `veterinary-care` | `OBJ-RESCUE-CARE` | `AC-RESCUE-CARE-01` | `CareRecord`, `CareAppointment`, `SubjectReference.v1` | `phase-4` | `AC-RESCUE-CARE-01` |
+| `custody-intake` | `OBJ-RESCUE-INTAKE` | `AC-RESCUE-INTAKE-01` | `AnimalCustodyEpisode`, `AnimalCustodyEvent` | `phase-2`, `phase-3` | `AC-RESCUE-INTAKE-01` |
+| `daily-care` | `OBJ-RESCUE-CARE` | `AC-RESCUE-CARE-01` | `WorkEngagement`, `SubjectReference.v1` | `phase-4` | `AC-RESCUE-CARE-01` |
+| `adoption-return` | `OBJ-RESCUE-ADOPTION` | `AC-RESCUE-ADOPTION-01` | `AdoptionApplication`, `AnimalPlacement`, `StorefrontInquiry` | `phase-5` | `AC-RESCUE-ADOPTION-01` |
+| `restricted-stewardship` | `OBJ-RESCUE-STEWARDSHIP` | `AC-RESCUE-STEWARDSHIP-01` | `FinancialFund`, `FinancialJournalLine` | `phase-6` | `AC-RESCUE-STEWARDSHIP-01` |
+| `resilient-help` | `OBJ-HELP-RECOVERY` | `AC-HELP-RECOVERY-01` | `ContextualDocsResolver.v1` | `phase-8` | `AC-HELP-RECOVERY-01` |
+| `rescue-cockpit` | `OBJ-RESCUE-HOME` | `AC-RESCUE-HOME-01` | `WorkspaceHomeProfile`, `BoundedSourceState` | `phase-7`, `phase-9` | `AC-RESCUE-HOME-01` |
+
 ## Rollback and release boundary
 
 - Database expansion is additive; application rollback retains unused tables and nullable links.
