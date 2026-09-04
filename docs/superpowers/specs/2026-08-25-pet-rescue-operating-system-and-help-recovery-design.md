@@ -65,6 +65,14 @@ The governing architecture contract is:
   cover commands, transactions, projections, authorization denials, and Help
   fallback behavior.
 
+An architecture approval is valid only when its recorded rationale describes
+that contract accurately. In particular, this proposal cannot be approved on
+the basis of microservices, a new datastore, a new disaster-recovery design, or
+another capability expressly excluded below. A reviewer must judge the actual
+modular-monolith boundaries, transactional behavior, authorization model,
+bounded projections, migration plan, and verification evidence in this
+document; a nominal `pass` paired with a contradictory rationale is rejected.
+
 This PR adds no second application, deployment, identity store, workflow engine,
 ledger, scheduler, design system, MongoDB datastore, message broker, or
 geospatial/location-tracking subsystem. It uses the existing PostgreSQL database
