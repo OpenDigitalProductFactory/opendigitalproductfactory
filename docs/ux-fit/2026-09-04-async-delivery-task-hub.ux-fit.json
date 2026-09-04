@@ -4,6 +4,7 @@
   "scope": {
     "files": [
       "apps/web/components/build/work-control/DeliveryTaskHub.tsx",
+      "apps/web/components/work-capsules/DeliveryTaskCard.tsx",
       "apps/web/app/(shell)/build/work/[capsuleId]/page.tsx"
     ]
   },
