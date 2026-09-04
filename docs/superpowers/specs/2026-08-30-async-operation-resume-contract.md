@@ -48,6 +48,27 @@ Extend the existing `AsyncInferenceOp`, `TaskRun`, Inngest, and agent event bus.
 
 `start_indeterminate` is a reconciliation hold, not a retry state. It can move only to `running`, `failed`, `cancelled`, or `expired` after exact provider reconciliation and never authorizes another provider-start POST. Existing persisted values are migrated with an expand/backfill/validate/contract sequence; an unknown legacy value aborts the contract step and is ledgered rather than coerced.
 
+### Canonical lifecycle status type
+
+The implementation owns this single shared contract; no storage, event, webhook, read-model, or UI layer may redeclare `status` as a free string:
+
+```ts
+export const ASYNC_INFERENCE_OPERATION_STATUSES = [
+  "pending",
+  "start_indeterminate",
+  "running",
+  "completed",
+  "failed",
+  "cancelled",
+  "expired",
+] as const;
+
+export type AsyncInferenceOperationStatus =
+  (typeof ASYNC_INFERENCE_OPERATION_STATUSES)[number];
+```
+
+The database constraint and every boundary parser accept exactly those serialized values. Provider-owned status text remains untrusted input and is normalized into this contract only by the provider adapter; it is never copied directly into platform lifecycle state.
+
 ## Research & Benchmarking
 
 - [Temporal durable execution](https://docs.temporal.io/) provides crash-proof workflow history, signals, timers, and activity retries. DPF adopts durable checkpoints and typed signals, but keeps Postgres `AsyncInferenceOp` and Inngest rather than adding a second workflow service.
