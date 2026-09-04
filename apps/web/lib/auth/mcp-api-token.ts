@@ -8,6 +8,7 @@
 import { createHash, randomBytes } from "crypto";
 import { prisma } from "@dpf/db";
 import { decryptSecret, encryptSecret } from "@/lib/govern/credential-crypto";
+import { isPatIssuanceClosed } from "@/lib/auth/oauth-policy";
 
 export type McpTokenScope = "read" | "write" | "admin";
 export type McpTokenCapability = "read" | "write";
@@ -57,7 +58,8 @@ export type IssueMcpTokenResult =
         | "empty_scopes"
         | "invalid_scope"
         | "invalid_capability"
-        | "missing_build_id";
+        | "missing_build_id"
+        | "issuance_closed";
       message: string;
     };
 
@@ -204,6 +206,22 @@ function normalizePersistedScope(scope: unknown, capability: unknown): McpTokenS
 export async function issueMcpApiToken(
   input: IssueMcpTokenInput,
 ): Promise<IssueMcpTokenResult> {
+  // PAT retirement, stage one (design 2026-08-26 §9.5). Issuance closes before
+  // resolution does, so an operator can stop the bleeding — no NEW long-lived
+  // secrets — while every already-configured client keeps working until the
+  // horizon. Ephemeral build-ship tokens are exempt: they are minted and
+  // revoked by the platform itself within one build phase, are not a client
+  // credential anyone configures, and blocking them would break shipping
+  // rather than migrate anybody.
+  if (isPatIssuanceClosed() && input.kind !== "ephemeral_ship") {
+    return {
+      ok: false,
+      error: "issuance_closed",
+      message:
+        "MCP personal access tokens are no longer issued on this installation. Connect the client over OAuth, or create a client_credentials client in Admin > Platform Development for a headless caller.",
+    };
+  }
+
   const name = input.name?.trim();
   if (!name) {
     return { ok: false, error: "missing_name", message: "name is required" };

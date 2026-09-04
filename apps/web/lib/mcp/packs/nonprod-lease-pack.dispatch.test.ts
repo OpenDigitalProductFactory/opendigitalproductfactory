@@ -7,6 +7,8 @@ const {
   mockReleaseNonprodEnvironmentLease,
   mockRenewNonprodEnvironmentLease,
   mockRecordLocalIntegrationResult,
+  mockCheckpointNonprodLeaseWait,
+  mockSettleNonprodLeaseWait,
 } = vi.hoisted(() => ({
   mockListActiveNonprodEnvironmentLeases: vi.fn(),
   mockListQueuedNonprodEnvironmentLeases: vi.fn(),
@@ -14,6 +16,8 @@ const {
   mockReleaseNonprodEnvironmentLease: vi.fn(),
   mockRenewNonprodEnvironmentLease: vi.fn(),
   mockRecordLocalIntegrationResult: vi.fn(),
+  mockCheckpointNonprodLeaseWait: vi.fn(),
+  mockSettleNonprodLeaseWait: vi.fn(),
 }));
 
 vi.mock("@/lib/kernel/load-enforceable-principles", () => ({
@@ -36,11 +40,17 @@ vi.mock("@/lib/nonprod/local-integration", () => ({
   recordLocalIntegrationResult: mockRecordLocalIntegrationResult,
 }));
 
+vi.mock("@/lib/nonprod/durable-wait", () => ({
+  checkpointNonprodLeaseWait: mockCheckpointNonprodLeaseWait,
+  settleNonprodLeaseWait: mockSettleNonprodLeaseWait,
+}));
+
 import { executeTool } from "@/lib/mcp-tools";
 
 describe("nonproduction environment MCP tools", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockCheckpointNonprodLeaseWait.mockResolvedValue({ taskRunId: "TR-NONPROD-WAIT" });
   });
 
   it("lists active nonproduction environment leases", async () => {
@@ -116,7 +126,13 @@ describe("nonproduction environment MCP tools", () => {
       status: "queued",
       queuePosition: 1,
       waitAgeMs: 125,
+      resumeMode: "durable-task",
+      taskRunId: "TR-NONPROD-WAIT",
     });
+    expect(mockCheckpointNonprodLeaseWait).toHaveBeenCalledWith(expect.objectContaining({
+      userId: "user-1",
+      queuePosition: 1,
+    }));
   });
 
   it("releases a nonproduction environment lease", async () => {

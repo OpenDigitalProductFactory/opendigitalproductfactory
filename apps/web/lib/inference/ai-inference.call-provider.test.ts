@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   mockPrisma,
+  mockGetDecryptedCredential,
   mockGetProviderBearerToken,
   mockAdapterExecute,
   mockStartTimer,
@@ -13,6 +14,7 @@ const {
       findUnique: vi.fn(),
     },
   },
+  mockGetDecryptedCredential: vi.fn(),
   mockGetProviderBearerToken: vi.fn(),
   mockAdapterExecute: vi.fn(),
   mockStartTimer: vi.fn(),
@@ -25,7 +27,7 @@ vi.mock("@dpf/db", () => ({
 }));
 
 vi.mock("@/lib/ai-provider-internals", () => ({
-  getDecryptedCredential: vi.fn(),
+  getDecryptedCredential: mockGetDecryptedCredential,
   getProviderExtraHeaders: vi.fn(() => ({})),
   getProviderBearerToken: mockGetProviderBearerToken,
   isAnthropicProvider: vi.fn(() => false),
@@ -65,6 +67,26 @@ describe("callProvider", () => {
       inferenceMs: 12,
       raw: {},
     });
+  });
+
+  it("omits async-operation metadata for a synchronous adapter result", async () => {
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({
+      providerId: "openai",
+      authMethod: "api_key",
+      authHeader: "Authorization",
+      baseUrl: "https://api.openai.com/v1",
+      endpoint: null,
+    });
+    mockGetDecryptedCredential.mockResolvedValueOnce({ secretRef: "test-key" });
+
+    const result = await callProvider(
+      "openai",
+      "model-under-test",
+      [{ role: "user", content: "Answer synchronously" }],
+      "You are helpful.",
+    );
+
+    expect(result).not.toHaveProperty("asyncOperation");
   });
 
   it("routes Codex OAuth execution through the ChatGPT backend", async () => {
@@ -122,6 +144,51 @@ describe("callProvider", () => {
     );
   });
 
+  it("projects typed async-operation start metadata from the adapter", async () => {
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({
+      providerId: "gemini",
+      authMethod: "api_key",
+      authHeader: "x-goog-api-key",
+      baseUrl: "https://generativelanguage.googleapis.com/v1beta",
+      endpoint: null,
+    });
+    mockGetDecryptedCredential.mockResolvedValueOnce({ secretRef: "test-key" });
+    mockAdapterExecute.mockResolvedValueOnce({
+      text: "",
+      toolCalls: [],
+      usage: { inputTokens: 0, outputTokens: 0 },
+      inferenceMs: 12,
+      asyncOperation: {
+        status: "accepted",
+        providerOperationId: "operations/provider-op-1",
+      },
+    });
+
+    const result = await callProvider(
+      "gemini",
+      "model-under-test",
+      [{ role: "user", content: "Research this" }],
+      "You research.",
+      undefined,
+      {
+        providerId: "gemini",
+        modelId: "model-under-test",
+        recipeId: null,
+        contractFamily: "background.research",
+        executionAdapter: "async",
+        maxTokens: 0,
+        providerSettings: {},
+        toolPolicy: {},
+        responsePolicy: {},
+      },
+    );
+
+    expect(result.asyncOperation).toEqual({
+      status: "accepted",
+      providerOperationId: "operations/provider-op-1",
+    });
+  });
+
   it("forwards attribution.agentMessageId into AdapterRunTelemetry on the success path", async () => {
     // Regression for PR #964 follow-up: the assistant-turn badge query joins
     // AdapterRunTelemetry → AgentMessage on agentMessageId. callProvider is
@@ -163,5 +230,214 @@ describe("callProvider", () => {
         agentMessageId: "msg_pending_42",
       }),
     );
+  });
+
+  it("fails closed when a CLI adapter cannot enforce required tool choice", async () => {
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({
+      providerId: "anthropic-sub",
+      authMethod: "oauth2_authorization_code",
+      authHeader: "Authorization",
+      baseUrl: null,
+      endpoint: null,
+    });
+
+    await expect(callProvider(
+      "anthropic-sub",
+      "claude-sonnet-4-6",
+      [{ role: "user", content: "Record it." }],
+      "Use the writer.",
+      [{ type: "function", function: { name: "record_review", parameters: {} } }],
+      {
+        providerId: "anthropic-sub",
+        modelId: "claude-sonnet-4-6",
+        recipeId: null,
+        contractFamily: "sync.review",
+        executionAdapter: "claude-cli",
+        maxTokens: 1024,
+        providerSettings: {},
+        toolPolicy: { toolChoice: "required" },
+        responsePolicy: {},
+      },
+    )).rejects.toThrow(/cannot enforce required tool choice/i);
+    expect(mockAdapterExecute).not.toHaveBeenCalled();
+  });
+
+  it("permits one explicitly bound terminal writer through a CLI adapter", async () => {
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({
+      providerId: "anthropic-sub",
+      authMethod: "oauth2_authorization_code",
+      authHeader: "Authorization",
+      baseUrl: null,
+      endpoint: null,
+    });
+
+    await callProvider(
+      "anthropic-sub",
+      "claude-sonnet-4-6",
+      [{ role: "user", content: "Record it." }],
+      "Use the writer.",
+      [{ type: "function", function: { name: "record_initiative_evidence", parameters: {} } }],
+      {
+        providerId: "anthropic-sub",
+        modelId: "claude-sonnet-4-6",
+        recipeId: null,
+        contractFamily: "sync.review",
+        executionAdapter: "claude-cli",
+        maxTokens: 1024,
+        providerSettings: {},
+        toolPolicy: { toolChoice: "required" },
+        responsePolicy: { terminalWriterToolName: "record_initiative_evidence" },
+      },
+      undefined,
+      { userId: "user-1", agentId: "reviewer-1", threadId: "thread-1", routeContext: "external-mcp" },
+    );
+
+    expect(mockAdapterExecute).toHaveBeenCalledWith(expect.objectContaining({
+      tools: [expect.objectContaining({
+        function: expect.objectContaining({ name: "record_initiative_evidence" }),
+      })],
+      plan: expect.objectContaining({
+        toolPolicy: expect.objectContaining({ toolChoice: "required" }),
+        responsePolicy: expect.objectContaining({ terminalWriterToolName: "record_initiative_evidence" }),
+      }),
+    }));
+  });
+
+  it("permits the live Codex CLI route for one governed bound terminal writer", async () => {
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({
+      providerId: "codex",
+      authMethod: "oauth2_authorization_code",
+      authHeader: "Authorization",
+      baseUrl: "https://api.openai.com/v1",
+      endpoint: null,
+    });
+
+    await callProvider(
+      "codex",
+      "gpt-5.4",
+      [{ role: "user", content: "Record the objective mapping." }],
+      "Use the sole governed writer.",
+      [{ type: "function", function: { name: "record_initiative_evidence", parameters: {} } }],
+      {
+        providerId: "codex",
+        modelId: "gpt-5.4",
+        recipeId: null,
+        contractFamily: "sync.review",
+        executionAdapter: "codex-cli",
+        maxTokens: 1024,
+        providerSettings: {},
+        toolPolicy: { toolChoice: "required" },
+        responsePolicy: { terminalWriterToolName: "record_initiative_evidence" },
+      },
+      undefined,
+      { userId: "user-1", agentId: "reviewer-1", threadId: "thread-1", routeContext: "external-mcp" },
+    );
+
+    expect(mockAdapterExecute).toHaveBeenCalledWith(expect.objectContaining({
+      providerId: "codex",
+      tools: [expect.objectContaining({
+        function: expect.objectContaining({ name: "record_initiative_evidence" }),
+      })],
+      plan: expect.objectContaining({
+        executionAdapter: "codex-cli",
+        toolPolicy: expect.objectContaining({ toolChoice: "required" }),
+        responsePolicy: expect.objectContaining({ terminalWriterToolName: "record_initiative_evidence" }),
+      }),
+    }));
+  });
+
+  it("rejects a terminal-writer marker when more than one tool is attached", async () => {
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({
+      providerId: "codex",
+      authMethod: "oauth2_authorization_code",
+      authHeader: "Authorization",
+      baseUrl: "https://api.openai.com/v1",
+      endpoint: null,
+    });
+
+    await expect(callProvider(
+      "codex",
+      "gpt-5.4",
+      [{ role: "user", content: "Record it." }],
+      "Use the writer.",
+      [
+        { type: "function", function: { name: "read_source_at_version", parameters: {} } },
+        { type: "function", function: { name: "record_initiative_evidence", parameters: {} } },
+      ],
+      {
+        providerId: "codex",
+        modelId: "gpt-5.4",
+        recipeId: null,
+        contractFamily: "sync.review",
+        executionAdapter: "codex-cli",
+        maxTokens: 1024,
+        providerSettings: {},
+        toolPolicy: { toolChoice: "required" },
+        responsePolicy: { terminalWriterToolName: "record_initiative_evidence" },
+      },
+      undefined,
+      { userId: "user-1", agentId: "reviewer-1", threadId: "thread-1", routeContext: "external-mcp" },
+    )).rejects.toThrow(/cannot enforce required tool choice/i);
+    expect(mockAdapterExecute).not.toHaveBeenCalled();
+  });
+
+  it("rejects a terminal-writer marker that does not exactly match the sole tool", async () => {
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({
+      providerId: "anthropic-sub",
+      authMethod: "oauth2_authorization_code",
+      authHeader: "Authorization",
+      baseUrl: null,
+      endpoint: null,
+    });
+
+    await expect(callProvider(
+      "anthropic-sub",
+      "claude-sonnet-4-6",
+      [{ role: "user", content: "Record it." }],
+      "Use the writer.",
+      [{ type: "function", function: { name: "record_initiative_evidence", parameters: {} } }],
+      {
+        providerId: "anthropic-sub",
+        modelId: "claude-sonnet-4-6",
+        recipeId: null,
+        contractFamily: "sync.review",
+        executionAdapter: "claude-cli",
+        maxTokens: 1024,
+        providerSettings: {},
+        toolPolicy: { toolChoice: "required" },
+        responsePolicy: { terminalWriterToolName: "different_writer" },
+      },
+    )).rejects.toThrow(/cannot enforce required tool choice/i);
+    expect(mockAdapterExecute).not.toHaveBeenCalled();
+  });
+
+  it("rejects a matching terminal-writer marker without a governed MCP session", async () => {
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({
+      providerId: "anthropic-sub",
+      authMethod: "oauth2_authorization_code",
+      authHeader: "Authorization",
+      baseUrl: null,
+      endpoint: null,
+    });
+
+    await expect(callProvider(
+      "anthropic-sub",
+      "claude-sonnet-4-6",
+      [{ role: "user", content: "Record it." }],
+      "Use the writer.",
+      [{ type: "function", function: { name: "record_initiative_evidence", parameters: {} } }],
+      {
+        providerId: "anthropic-sub",
+        modelId: "claude-sonnet-4-6",
+        recipeId: null,
+        contractFamily: "sync.review",
+        executionAdapter: "claude-cli",
+        maxTokens: 1024,
+        providerSettings: {},
+        toolPolicy: { toolChoice: "required" },
+        responsePolicy: { terminalWriterToolName: "record_initiative_evidence" },
+      },
+    )).rejects.toThrow(/cannot enforce required tool choice/i);
+    expect(mockAdapterExecute).not.toHaveBeenCalled();
   });
 });

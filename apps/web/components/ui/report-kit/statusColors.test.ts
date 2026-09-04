@@ -98,6 +98,9 @@ describe("statusColors", () => {
   });
 
   it("maps Work Room state, outcome health, and activity through shared domains", () => {
+    expect(resolveIntent("workroom", "working")).toBe("accent");
+    expect(resolveIntent("workroom", "blocked")).toBe("danger");
+    expect(resolveIntent("workroom", "complete")).toBe("success");
     expect(resolveIntent("workCaseState", "waiting-on-person")).toBe("warning");
     expect(resolveIntent("workroomOutcomeHealth", "at-risk")).toBe("warning");
     expect(resolveIntent("workroomActivity", "message")).toBe("neutral");

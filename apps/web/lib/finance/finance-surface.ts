@@ -24,6 +24,8 @@
 // isolation and never pulls a server-only module into a client bundle. The
 // server resolves the org's archetype and calls resolveFinanceSurface.
 
+import { PET_RESCUE_ENTRY_POINTS, PET_RESCUE_MONEY_JOBS } from "./pet-rescue-finance";
+
 export type FinanceSurfaceMode = "owner-first" | "standard";
 
 /**
@@ -32,6 +34,7 @@ export type FinanceSurfaceMode = "owner-first" | "standard";
  * not one of the three known subtypes.
  */
 export type FoodHospitalitySubtype = "restaurant" | "catering" | "bakery" | "generic";
+export type FinanceSurfaceSubtype = FoodHospitalitySubtype | "pet-rescue";
 
 /**
  * A live figure the finance overview page computes and slots into a money job.
@@ -73,6 +76,9 @@ export type FinanceInvoiceEntryPointId =
   | "custom-order"
   | "counter-sale"
   | "delivery"
+  | "donation"
+  | "grant"
+  | "sponsorship"
   | "blank";
 
 export type FinanceInvoiceEntryPoint = {
@@ -94,7 +100,7 @@ export type FinanceAdvancedSection = {
 export type FinanceSurfaceModel = {
   archetypeCategory: string | null;
   /** Null in standard mode. */
-  subtype: FoodHospitalitySubtype | null;
+  subtype: FinanceSurfaceSubtype | null;
   mode: FinanceSurfaceMode;
   headline: string;
   subhead: string;
@@ -104,6 +110,24 @@ export type FinanceSurfaceModel = {
   invoiceEntryPoints: FinanceInvoiceEntryPoint[];
   /** Deferred accounting/back-office internals (empty in standard mode). */
   advancedSections: FinanceAdvancedSection[];
+  primaryActionLabel: string;
+  entryPointSectionLabel: string;
+  advancedSectionLabel: string;
+  advancedSectionDescription: string;
+  navigationLabels: Record<"revenue" | "spend" | "close" | "configuration", string>;
+  recentRecordsLabel: string;
+  recentRecordsEmpty: string;
+  setupDescription?: string;
+  /** Visible metric/table nouns when the persisted record type is an internal implementation detail. */
+  metricCopy?: {
+    outstandingSingular: string;
+    outstandingPlural: string;
+    receivedSingular: string;
+    receivedPlural: string;
+    emptyOverdue: string;
+    recentAccountHeader: string;
+    recentEmpty: string;
+  };
 };
 
 // Archetype categories that get the owner-first money-jobs surface. Keyed on
@@ -481,6 +505,41 @@ export function resolveFinanceSurface(
 ): FinanceSurfaceModel {
   const normalized = category ?? null;
 
+  if (["pet-rescue", "animal-shelter"].includes((archetypeId ?? "").toLowerCase())) {
+    return {
+      archetypeCategory: normalized,
+      subtype: "pet-rescue",
+      mode: "owner-first",
+      headline: "Funding & stewardship",
+      subhead: "Donations and grants coming in, animal-care costs going out, and funds available for the mission.",
+      moneyJobs: PET_RESCUE_MONEY_JOBS,
+      invoiceEntryPoints: PET_RESCUE_ENTRY_POINTS,
+      advancedSections: foodHospitalityAdvancedSections(),
+      primaryActionLabel: "Record contribution",
+      entryPointSectionLabel: "Record funding",
+      advancedSectionLabel: "Finance administration",
+      advancedSectionDescription: "Accounting, banking, reporting, and compliance detail.",
+      navigationLabels: {
+        revenue: "Funding",
+        spend: "Care spending",
+        close: "Stewardship",
+        configuration: "Configuration",
+      },
+      recentRecordsLabel: "Recent contributions",
+      recentRecordsEmpty: "No contributions recorded yet. Record a donation, grant, or sponsorship to get started.",
+      setupDescription: "Set up donations, grants, care spending, and stewardship reporting for this rescue.",
+      metricCopy: {
+        outstandingSingular: "commitment",
+        outstandingPlural: "commitments",
+        receivedSingular: "contribution",
+        receivedPlural: "contributions",
+        emptyOverdue: "no commitments recorded yet",
+        recentAccountHeader: "Supporter or funder",
+        recentEmpty: "No contributions yet.",
+      },
+    };
+  }
+
   if (normalized != null && OWNER_FIRST_CATEGORIES.has(normalized)) {
     const subtype = resolveFoodHospitalitySubtype(archetypeId);
     return {
@@ -492,6 +551,13 @@ export function resolveFinanceSurface(
       moneyJobs: MONEY_JOBS_BY_SUBTYPE[subtype],
       invoiceEntryPoints: ENTRY_POINTS_BY_SUBTYPE[subtype],
       advancedSections: foodHospitalityAdvancedSections(),
+      primaryActionLabel: "New Invoice",
+      entryPointSectionLabel: "Start a bill",
+      advancedSectionLabel: "Accounting & admin",
+      advancedSectionDescription: "VAT, dunning, payment runs, ledger reports, bank rules, and AI spend — the back-office detail, out of the way until you need it.",
+      navigationLabels: { revenue: "Revenue", spend: "Spend", close: "Close", configuration: "Configuration" },
+      recentRecordsLabel: "Recent Invoices",
+      recentRecordsEmpty: "No invoices yet. Bill a booking, order, or catering job to get started.",
     };
   }
 
@@ -504,6 +570,13 @@ export function resolveFinanceSurface(
     moneyJobs: [],
     invoiceEntryPoints: [],
     advancedSections: [],
+    primaryActionLabel: "New Invoice",
+    entryPointSectionLabel: "Start a bill",
+    advancedSectionLabel: "Accounting & admin",
+    advancedSectionDescription: "Accounting and back-office detail.",
+    navigationLabels: { revenue: "Revenue", spend: "Spend", close: "Close", configuration: "Configuration" },
+    recentRecordsLabel: "Recent Invoices",
+    recentRecordsEmpty: "No invoices yet. Create your first invoice to get started.",
   };
 }
 
@@ -529,7 +602,10 @@ export type FinanceInvoiceContext =
   | "event-balance"
   | "custom-order"
   | "counter-sale"
-  | "delivery";
+  | "delivery"
+  | "donation"
+  | "grant"
+  | "sponsorship";
 
 export type FinanceInvoiceCopy = {
   /** Subhead under the "New Invoice" heading. */
@@ -642,6 +718,27 @@ export function resolveFinanceInvoiceCopy(
   category: string | null | undefined,
   archetypeId?: string | null,
 ): FinanceInvoiceCopy {
+  if (["pet-rescue", "animal-shelter"].includes((archetypeId ?? "").toLowerCase())) {
+    return {
+      newInvoiceSubhead: "Record a contribution, grant, or sponsorship supporting animal care.",
+      signatureHint: "The supporter or funder can acknowledge the contribution before payment.",
+      customerLabel: "Supporter or funder",
+      contexts: {
+        donation: {
+          title: "Record a donation",
+          description: "Record a donation from an individual or community supporter.",
+        },
+        grant: {
+          title: "Record a grant",
+          description: "Record awarded grant funding and its expected payment.",
+        },
+        sponsorship: {
+          title: "Record a sponsorship",
+          description: "Record sponsorship for an animal or rescue programme.",
+        },
+      },
+    };
+  }
   if (!isOwnerFirstFinanceCategory(category)) return PROFESSIONAL_INVOICE_COPY;
   return INVOICE_COPY_BY_SUBTYPE[resolveFoodHospitalitySubtype(archetypeId)];
 }
@@ -658,6 +755,9 @@ const FINANCE_INVOICE_CONTEXTS: ReadonlySet<string> = new Set<FinanceInvoiceCont
   "custom-order",
   "counter-sale",
   "delivery",
+  "donation",
+  "grant",
+  "sponsorship",
 ]);
 
 export function isFinanceInvoiceContext(

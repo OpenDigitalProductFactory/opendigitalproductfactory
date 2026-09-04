@@ -26,19 +26,33 @@ is unavailable and does not offer or queue an upgrade.
 
 ## Workflow
 
-1. Confirm the status card shows a resolved immutable update. If it says current
-   or unavailable, there is no upgrade action to trigger.
+1. Confirm the status card shows a resolved immutable update. The card reports
+   **You’re current** only when nothing newer is waiting; if it says that, or
+   says updates are unavailable on this install, there is no upgrade action to
+   trigger.
+
+   A waiting update stays named on the card while an upgrade is running
+   (**Installing now**) and after one fails (**Update still pending**), so a
+   failed or in-progress attempt never reads as being up to date.
 2. Review the pending upgrade and what it will change before triggering anything.
-3. Trigger the upgrade only inside an approved deployment window. Normal changes
-   respect the window; only an emergency change may override it.
-4. Watch the deployment status — the page updates automatically while the build
-   and swap are in progress. A normal upgrade completes in a few minutes.
+3. Trigger the upgrade only inside an approved deployment window. The server
+   durably admits the request and assigns its `SUR-*` run identity before queue
+   dispatch begins. Normal changes respect the window; only an emergency change
+   may override it.
+4. Watch the deployment status — the page distinguishes a request waiting for
+   dispatch, active dispatch, indeterminate dispatch reconciliation, and a
+   definite dispatch failure. It updates automatically while the build and swap
+   are in progress. A normal upgrade completes in a few minutes.
 5. Confirm the health check passed after the swap, and read the deployment log if
    it did not.
 
 You may navigate away after the upgrade has been accepted. Leaving the page stops
 only that page's live status reads; it does not cancel or pause the durable upgrade.
 When you return, the page reloads the current run state and resumes live updates.
+If the browser loses the trigger response, do not click again. The action remains
+disabled until the server reports a durable disposition for the admitted run.
+The same `SUR-*` identity is reconciled after a delayed or ambiguous dispatch, so
+a page reload or process restart cannot create a second physical upgrade.
 
 The owner status card and upgrade action stay visible on arrival. Open
 **Deploy controls & history** only when you need technical controls, run
@@ -71,8 +85,16 @@ upgrade. Nothing is lost by waiting.
 
 ## Recovery And Help
 
-- If an upgrade fails, open the deployment log for the retryable diagnosis, then
-  re-run the upgrade.
+- If an upgrade fails, the status card states the cause in plain language — for
+  example **The server ran out of memory** or **A software download failed** —
+  along with whether re-running is likely to help. Some causes (your changes
+  clashing with the update, uncommitted local edits) will not clear on a retry
+  and say so; those need a decision rather than another attempt.
+- The deployment log remains the full diagnosis behind that summary. Read it
+  when the stated cause is not enough, not to discover what the cause was.
+- If dispatch is indeterminate, leave the action alone while the server
+  reconciles the admitted `SUR-*` run. A definite pre-dispatch refusal is shown
+  against that same run identity and means no upgrade mutation began.
 - If update status is unavailable, read the technical reason under **Deploy
   controls & history**. Repair registry access or install identity before
   retrying; the unavailable state has not queued or mutated anything.
@@ -85,5 +107,5 @@ upgrade. Nothing is lost by waiting.
 
 - triggering an upgrade outside an approved deployment window
 - treating a failed, rolled-back deployment as if the swap had succeeded
-- re-running an upgrade without first reading the failure diagnosis in the log
+- re-running an upgrade the card has already said a retry will not fix
 - starting expensive local-CI work while the portal reports active quiescence

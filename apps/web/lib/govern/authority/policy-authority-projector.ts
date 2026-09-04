@@ -409,7 +409,11 @@ export async function persistPolicyAuthorityProjection(input: {
         humanContextRef: input.approvalBinding.actingHumanUserId,
         agentContextRef: input.approvalBinding.actingAgentId,
         delegationGrantId: input.projection.delegationGrantId,
-        organizationId: input.projection.organizationId,
+        // "platform" is the canonical authority-scope sentinel for an
+        // organizationless platform BI, not an Organization primary key.
+        organizationId: input.projection.organizationId === "platform"
+          ? null
+          : input.projection.organizationId,
         purposeOfUse: "policy-derived-action-authorization",
         policyVersion: input.projection.profileVersionId,
         actionKey: input.projection.actionKey,

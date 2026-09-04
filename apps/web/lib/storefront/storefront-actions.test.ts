@@ -24,6 +24,7 @@ vi.mock("@dpf/db", () => {
     productSold: { upsert: vi.fn() },
     productFulfillmentInstance: { upsert: vi.fn() },
     storefrontDonation: { create: vi.fn() },
+    orgSettings: { findFirst: vi.fn() },
     bookingHold: { findFirst: vi.fn(), delete: vi.fn() },
     $queryRaw: vi.fn(),
     // Interactive-transaction shim: run the callback against the same mock so
@@ -94,6 +95,50 @@ describe("submitDonation", () => {
       amount: 10,
     });
     expect(result.ok).toBe(false);
+  });
+
+  function acceptDonations(baseCurrency: string | null) {
+    vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue(
+      mockPublishedStorefront as never,
+    );
+    vi.mocked(prisma.orgSettings.findFirst).mockResolvedValue(
+      baseCurrency == null ? (null as never) : ({ baseCurrency } as never),
+    );
+    vi.mocked(prisma.storefrontDonation.create).mockResolvedValue({
+      donationRef: "DON-TESTREF",
+    } as never);
+  }
+
+  function storedCurrency(): string {
+    const call = vi.mocked(prisma.storefrontDonation.create).mock.calls[0]?.[0] as {
+      data: { currency: string };
+    };
+    return call.data.currency;
+  }
+
+  // `DonationForm` sends no currency, and this defaulted to a hardcoded "GBP",
+  // so a USD rescue showed the donor `$50` and wrote GBP to its books
+  // (BI-685ADDCD). Every gift on every non-GBP install was affected.
+  it("records the gift in the workspace's own currency", async () => {
+    acceptDonations("USD");
+    await submitDonation("acme-vet", { donorEmail: "d@e.com", amount: 50 });
+    expect(storedCurrency()).toBe("USD");
+  });
+
+  it("falls back to USD when the workspace has no settings row", async () => {
+    acceptDonations(null);
+    await submitDonation("acme-vet", { donorEmail: "d@e.com", amount: 50 });
+    expect(storedCurrency()).toBe("USD");
+  });
+
+  it("honours an explicit currency, so a later multi-currency flow still works", async () => {
+    acceptDonations("USD");
+    await submitDonation("acme-vet", {
+      donorEmail: "d@e.com",
+      amount: 50,
+      currency: "EUR",
+    });
+    expect(storedCurrency()).toBe("EUR");
   });
 });
 

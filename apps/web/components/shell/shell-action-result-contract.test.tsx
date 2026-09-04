@@ -197,3 +197,43 @@ describe("shell action-result contract", () => {
     });
   });
 });
+
+// A kennel technician does morning rounds at 768x1024. The mode toggle and its
+// explanation lived inside #primary-navigation-menu, which is `hidden` below
+// `lg`, so at tablet width the buttons measured 0x0 with a null offsetParent
+// and the explanation vanished — locking the one worker Simple mode exists for
+// into Full mode, looking at Build Studio while feeding a dog (BI-6395DA89).
+describe("the mode control is reachable at tablet width", () => {
+  it("does not sit inside the collapsible navigation menu", () => {
+    const { container } = render(<AppRail sections={sections} mode="worker" />);
+
+    const menu = container.querySelector("#primary-navigation-menu");
+    expect(menu).not.toBeNull();
+
+    for (const name of ["Switch to Simple view", "Switch to Full view"]) {
+      const button = screen.getByRole("button", { name });
+      expect(
+        menu!.contains(button),
+        `${name} is inside the menu that is hidden below lg`,
+      ).toBe(false);
+    }
+  });
+
+  it("keeps the mode explanation outside that menu too", () => {
+    const { container } = render(<AppRail sections={sections} mode="worker" />);
+
+    const menu = container.querySelector("#primary-navigation-menu")!;
+    const explanation = screen.getByText(navModeExplanation("worker"));
+    expect(menu.contains(explanation)).toBe(false);
+  });
+
+  it("still collapses the navigation destinations themselves", () => {
+    const { container } = render(<AppRail sections={sections} mode="operator" />);
+
+    // The menu must keep its responsive collapse — only the mode control moved.
+    const menu = container.querySelector("#primary-navigation-menu")!;
+    expect(menu.className).toContain("hidden");
+    expect(menu.className).toContain("lg:flex");
+    expect(menu.querySelectorAll("a").length).toBeGreaterThan(0);
+  });
+});

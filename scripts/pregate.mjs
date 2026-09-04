@@ -309,13 +309,27 @@ export async function recoverInterruptedGateState({
     ...(Array.isArray(state.leaseEvents) ? state.leaseEvents : []),
     recoveryEvent,
   ];
+  // BI-D088D06D: the wrapper exiting before a terminal state is infrastructure
+  // — a killed process, a host under pressure, a lost control plane. It is NOT
+  // a grade on the diff, and it never graded the diff: the run died before it
+  // could. Writing "failed" here made pregate:status report FAIL, which reads as
+  // "your code is bad", permanently consumed that SHA's verdict, and forced an
+  // amend to a fresh SHA. Measured 2026-09-02: 4 of 5 gated branches needed more
+  // than one lease attempt.
+  //
+  // The queued path already recovers (it rewrites status "queued" and preserves
+  // the lease). The running path cannot preserve the lease — the slot must be
+  // freed for the next claimant — but it must still tell the truth about cause.
+  // `blocked_*` is the vocabulary pregate-status already classifies as
+  // INCONCLUSIVE, so this needs no reader change and inherits the honest
+  // headline the blocked statuses already earn.
   writeStateImpl(stateFile, {
     branch,
     sha,
     gatePassed: false,
     leaseId: state.leaseId,
     evidenceId: "",
-    status: "failed",
+    status: "blocked_wrapper_exited",
     expiresAt: state.expiresAt || "",
     resilience: state.resilience ?? null,
     leaseEvents,
@@ -498,6 +512,14 @@ export async function reviveInterruptedQueuedGate({
   return { revived: false, reason: "no-queued-state" };
 }
 
+/**
+ * `gate-worktree.mjs` exits with this when authoritative control-plane state
+ * parks the gate without running CI. Waiting is not failure and must never be
+ * recovered as an interrupted execution.
+ */
+export const EXIT_DURABLE_CONTROL_PLANE_WAIT = 75;
+export const EXIT_DURABLE_QUEUE_WAIT = EXIT_DURABLE_CONTROL_PLANE_WAIT;
+
 export async function recoverInterruptedGate({
   args = [],
   result,
@@ -510,6 +532,24 @@ export async function recoverInterruptedGate({
   const status = result?.status ?? 1;
   if (status === 0 || args.includes("--dry-run") || args.includes("--finalize-evidence")) {
     return { recovered: false, reason: "not-a-recoverable-invocation" };
+  }
+  // BI-465B3D60. Exit 75 is the gate telling us it QUEUED, not that it broke:
+  // gate-worktree.mjs exits 75 after printing {status:"queued", code:
+  // "local_ci_durable_wait", resumeMode:"durable-task"} because the lease is a
+  // durable task that outlives this process and resumes on the next invocation.
+  //
+  // Recovery fired on any non-zero status, so it treated that as an interrupted
+  // run, tried to release a lease this process does not own
+  // (nonprod_lease_not_owner, retryable:false), and stamped the state `failed`.
+  // `pregate:status` then reported "status failed with NO recorded reason" for a
+  // lease that was queued, healthy and heartbeating — the exact category error
+  // this item was filed for ("losing a slot is not the same verdict as failing a
+  // gate"), reintroduced downstream of the classifier that already handles 75.
+  //
+  // Reproduced on a five-deep queue, unpiped and with no concurrent reader, on
+  // three consecutive invocations while the position advanced 3 -> 2.
+  if (status === EXIT_DURABLE_CONTROL_PLANE_WAIT) {
+    return { recovered: false, reason: "durable-control-plane-wait" };
   }
   let context;
   try {

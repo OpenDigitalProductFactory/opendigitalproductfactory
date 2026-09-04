@@ -28,6 +28,10 @@ import { cliSaturationPercent } from "./cli-concurrency";
 import { usesCodexCli, usesCliAdapter } from "./provider-utils";
 import { isLocalProviderId } from "./provider-locality";
 import { satisfiesMinimumCapabilities } from "./agent-capability-types";
+import {
+  endpointClearsSensitivity,
+  endpointGenuinelyClearsSensitivity,
+} from "./sensitivity-clearance";
 import { QUALITY_TIERS, type QualityTier } from "./quality-tiers";
 import {
   estimateSuccessProbability,
@@ -88,16 +92,11 @@ function getProviderConstraintExclusionReason(
  * internal business data — run Build Studio code-gen. An endpoint with no
  * clearance at all is never eligible.
  */
-export function endpointClearsSensitivity(
-  ep: EndpointManifest,
-  sensitivity: RequestContract["sensitivity"],
-): boolean {
-  if (ep.sensitivityClearance.includes(sensitivity)) return true;
-  if (sensitivity === "development" && ep.sensitivityClearance.includes("public")) {
-    return true;
-  }
-  return false;
-}
+// The data-sensitivity fence predicates live in ./sensitivity-clearance (extracted
+// so the break-glass override's second path did not push this module over its size
+// ceiling; imported above for internal use). Re-exported so existing importers of
+// pipeline-v2 are unaffected. (BI-4512E7D2)
+export { endpointClearsSensitivity, endpointGenuinelyClearsSensitivity };
 
 export function getExclusionReasonV2(
   ep: EndpointManifest,
@@ -107,6 +106,11 @@ export function getExclusionReasonV2(
   // accidental overlap cannot broaden eligibility.
   const providerConstraintReason = getProviderConstraintExclusionReason(ep, contract);
   if (providerConstraintReason) return providerConstraintReason;
+
+  // Account/transport compatibility is a hard platform fact, not a score.
+  // Preserve the endpoint in the excluded trace so runtime-health previews
+  // explain the incompatibility while a supported sibling model can win.
+  if (ep.eligibilityExclusionReason) return ep.eligibilityExclusionReason;
 
   // EP-AGENT-CAP-002: Agent capability floor — hard filter, non-negotiable.
   // Must run BEFORE status/graceful-degradation checks so a tool-incapable
@@ -544,10 +548,19 @@ export async function routeEndpointV2(
       `excluded=${allCandidates.length}`,
     );
     for (const line of allExcludedReasons) console.warn(`[routing]   ✗ ${line}`);
+    // When an active, capable provider was dropped PURELY on sensitivity clearance
+    // (gate 7 in getExclusionReasonV2 returns its reason only after status,
+    // capability and quality gates have passed), the empty set is a data-governance
+    // block, not an outage. Surface that so the coworker-facing copy names the real
+    // lever (clear a business account / provision a local model) instead of sending
+    // the operator to re-check already-connected providers. (BI-431524DF)
+    const clearanceBlocked = allExcludedReasons.some((r) =>
+      /Sensitivity clearance missing/i.test(r),
+    );
     return {
       selectedEndpoint: null,
       selectedModelId: null,
-      reason: `No eligible endpoints for task type '${contract.taskType}' with sensitivity '${sensitivity}'. ${allCandidates.length} endpoint(s) excluded.`,
+      reason: `No eligible endpoints for task type '${contract.taskType}' with sensitivity '${sensitivity}'. ${allCandidates.length} endpoint(s) excluded.${clearanceBlocked ? ` No connected provider is cleared for '${sensitivity}' data.` : ""}`,
       fitnessScore: 0,
       fallbackChain: [],
       candidates: allCandidates,

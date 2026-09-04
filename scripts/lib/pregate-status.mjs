@@ -30,14 +30,33 @@
 //
 // Pure aside from injected readers, so the verdict logic unit-tests without a
 // gate run or a filesystem.
+//
+// BI-51353470: a record whose status is queued/cancelled never ran — that is
+// INCONCLUSIVE, not FAIL. A metadata candidateSha that is not HEAD is STALE
+// in the headline, not FAIL with a buried metadata line.
 
 /** Terminal verdicts, ordered worst-to-best for slot reconciliation. */
 export const PREGATE_VERDICTS = Object.freeze([
   "NO-RECORD",
+  "INCONCLUSIVE",
   "FAIL",
   "STALE",
   "PENDING",
   "PASS",
+]);
+
+/** Statuses that mean the gate was never admitted / never finished. Not FAIL. */
+const UNFINISHED_GATE_STATUSES = new Set(["queued", "cancelled"]);
+
+/**
+ * BI-8392DA16 / BI-2AB94B5A. A `blocked_*` status is infrastructure evidence —
+ * the child was killed, the sandbox drifted, or the control plane starved.
+ * FAIL is a claim about the diff. These must never share a headline.
+ */
+const BLOCKED_GATE_STATUSES = new Set([
+  "blocked_sandbox_drift",
+  "blocked_control_plane_starvation",
+  "blocked_child_signal_death",
 ]);
 
 function rank(verdict) {
@@ -187,6 +206,45 @@ export function classifySlotRecord({ state, metadata, headSha, headBranch = "", 
   }
 
   if (state.gatePassed !== true) {
+    // BI-51353470: a metadata candidateSha that is not HEAD is STALE in the
+    // headline, not FAIL with a buried metadata line. Observed: FAIL quoting
+    // a previous run's vitest command while gated claimed the current HEAD.
+    if (candidateSha && headSha && candidateSha !== headSha) {
+      return {
+        ...base,
+        verdict: "STALE",
+        reason: `metadata record gated ${candidateSha.slice(0, 12)}, not HEAD ${headSha.slice(0, 12)} — re-run pregate`,
+        staleness: "metadata-mismatch",
+      };
+    }
+    const status = String(state.status || "");
+    // BI-5529B5AC: another slot PASSED this branch+SHA and the gate rewrote this
+    // losing record to say so. Bookkeeping, not a verdict on the diff.
+    if (status === "superseded" || state.supersededBy) {
+      const winner = state.supersededBy?.slotKey || "another slot";
+      return {
+        ...base,
+        verdict: "INCONCLUSIVE",
+        reason: `gate record superseded — ${winner} passed this SHA; this slot's ${state.supersededStatus || "prior"} record is not a verdict`,
+      };
+    }
+    if (UNFINISHED_GATE_STATUSES.has(status)) {
+      return {
+        ...base,
+        verdict: "INCONCLUSIVE",
+        reason: `gate record status ${status} — the gate did not run. This is not a failure of the diff. Re-run pregate.`,
+      };
+    }
+    if (BLOCKED_GATE_STATUSES.has(status) || status.startsWith("blocked_")) {
+      const stated = state?.failureReason || state?.error || "";
+      return {
+        ...base,
+        verdict: "INCONCLUSIVE",
+        reason: stated
+          ? `gate record status ${status} — infrastructure, not a product verdict. ${stated}`
+          : `gate record status ${status} — infrastructure, not a product verdict. The run was blocked before it could grade the diff. Re-run when the host is quieter; do not treat this as a failure of the code.`,
+      };
+    }
     return {
       ...base,
       verdict: "FAIL",

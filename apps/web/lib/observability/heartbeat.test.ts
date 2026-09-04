@@ -17,7 +17,13 @@ vi.mock("@dpf/db", () => ({
   },
 }));
 
-import { heartbeat, markTaskRunWorking, withHeartbeatTicker } from "./heartbeat";
+import {
+  heartbeat,
+  markTaskRunWorking,
+  reserveTaskRunGenerationWorking,
+  reserveSubmittedTaskRunWorking,
+  withHeartbeatTicker,
+} from "./heartbeat";
 
 beforeEach(() => {
   mockUpdateMany.mockReset();
@@ -61,6 +67,57 @@ describe("markTaskRunWorking()", () => {
     expect(mockUpdate).toHaveBeenCalledWith({
       where: { taskRunId: "TR-3" },
       data: { status: "working", lastHeartbeatAt: expect.any(Date) },
+    });
+  });
+});
+
+describe("reserveSubmittedTaskRunWorking()", () => {
+  it("CAS-reserves one submitted generation with its first heartbeat atomically", async () => {
+    mockUpdateMany.mockResolvedValue({ count: 1 });
+    const updatedAt = new Date("2026-08-28T01:00:00.000Z");
+    const progressPayload = { resourceWait: { attempt: 1 }, resumeReservedAt: "now" };
+
+    const reserved = await reserveSubmittedTaskRunWorking({
+      taskRunId: "TR-CAPACITY",
+      updatedAt,
+      progressPayload,
+    });
+
+    expect(reserved).toBe(true);
+    expect(mockUpdateMany).toHaveBeenCalledWith({
+      where: { taskRunId: "TR-CAPACITY", status: "submitted", updatedAt },
+      data: {
+        status: "working",
+        lastHeartbeatAt: expect.any(Date),
+        completedAt: null,
+        progressPayload,
+      },
+    });
+  });
+});
+
+describe("reserveTaskRunGenerationWorking()", () => {
+  it("CAS-reserves an exact nonterminal generation with its first heartbeat atomically", async () => {
+    mockUpdateMany.mockResolvedValue({ count: 1 });
+    const updatedAt = new Date("2026-08-28T01:00:00.000Z");
+    const progressPayload = { terminalWriterWait: { attempt: 3 }, resumeReservedAt: "now" };
+
+    const reserved = await reserveTaskRunGenerationWorking({
+      taskRunId: "TR-WRITER",
+      expectedStatus: "input-required",
+      updatedAt,
+      progressPayload,
+    });
+
+    expect(reserved).toBe(true);
+    expect(mockUpdateMany).toHaveBeenCalledWith({
+      where: { taskRunId: "TR-WRITER", status: "input-required", updatedAt },
+      data: {
+        status: "working",
+        lastHeartbeatAt: expect.any(Date),
+        completedAt: null,
+        progressPayload,
+      },
     });
   });
 });

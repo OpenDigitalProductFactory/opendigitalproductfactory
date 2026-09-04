@@ -131,6 +131,18 @@ describe("resolveWorkroomPosture", () => {
     expect(posture.verificationDepth).toBe("deep");
   });
 
+  it("threads build rightsizing stakes through the room posture resolver", () => {
+    const posture = resolveWorkroomPosture(
+      { ...FACTS, stakes: { qualityFirst: true, deliverableSensitivity: "high" } },
+      context(),
+      WED_1000,
+    )!;
+    expect(posture.verificationDepth).toBe("deep");
+    expect(posture.adjustments).toEqual(expect.arrayContaining([
+      expect.objectContaining({ field: "verificationDepth", reasonCode: "stakes_high_sensitivity" }),
+    ]));
+  });
+
   it("raises pace for an emergency-reactive archetype", () => {
     const posture = resolveWorkroomPosture(
       FACTS,

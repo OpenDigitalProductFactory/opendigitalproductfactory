@@ -3,6 +3,7 @@ import {
   buildLocalFallbackBanner,
   classifyExclusionReason,
   extractLocalFallbackFacts,
+  escalationCameOnlyFromHistory,
   type DowngradeCause,
 } from "./downgrade-explanation";
 
@@ -192,7 +193,12 @@ describe("buildLocalFallbackBanner", () => {
     expect(banner).not.toContain("usually because");
   });
 
-  it("combines distinct causes without repeating one", () => {
+  // BI-FB184D69. This asserted the opposite — that both causes appear in the
+  // sentence. Co-billing them is what sent the reported owner after a capability
+  // that was never binding while residency held every route back. `excludedReasons`
+  // is in ranking order, so the first survivable cause owns the outcome; the rest
+  // are counted, not named.
+  it("names only the binding cause and counts the rest", () => {
     const banner = buildLocalFallbackBanner({
       excludedReasons: [
         "Context window too small: 24576 < 32000",
@@ -202,8 +208,23 @@ describe("buildLocalFallbackBanner", () => {
       offProviderNames: [],
     });
     expect(banner).toContain("longer than its context window");
-    expect(banner).toContain("needed a capability it doesn't offer");
+    expect(banner).not.toContain("needed a capability it doesn't offer");
+    expect(banner).toContain("One other provider was ruled out for a different reason.");
     expect(banner.match(/context window/g)).toHaveLength(1);
+  });
+
+  // The live shape from the report: eight residency exclusions, one capability.
+  it("names residency, not the single capability exclusion behind it", () => {
+    const banner = buildLocalFallbackBanner({
+      excludedReasons: [
+        ...Array.from({ length: 8 }, () =>
+          "Residency policy 'local_only' requires a local provider (Docker Model Runner or Ollama)"),
+        "Agent requires capability 'toolUse' (EP-AGENT-CAP-002)",
+      ],
+      offProviderNames: [],
+    });
+    expect(banner).toContain("data policy required this work to stay on this machine");
+    expect(banner).not.toContain("capability it doesn't offer");
   });
 
   it("drops the catch-all phrase once a specific cause is known", () => {
@@ -260,5 +281,80 @@ describe("buildLocalFallbackBanner", () => {
     });
     expect(banner).toContain("longer than its context window");
     expect(banner).not.toContain("isn't switched on");
+  });
+});
+
+// BI-706530B2. Sensitivity is recomputed over the whole payload every turn and
+// history is resent every turn, so one triggering message restricts every later
+// turn in that thread for as long as the thread lives. Observed live: a user
+// typed "accounting, payroll, CRM, backup" while asking about SaaS spend, and
+// the thread routed local-only from then on with nothing saying why.
+describe("escalationCameOnlyFromHistory", () => {
+  const at = (index: number) => ({ path: `messages[${index}].content` });
+
+  it("is true when the only evidence is several turns back", () => {
+    expect(escalationCameOnlyFromHistory([at(0), at(2)], 5)).toBe(true);
+  });
+
+  it("is false when the latest message is itself sensitive", () => {
+    // Not "history" — a new thread would behave identically, so offering one
+    // would be worse than saying nothing.
+    expect(escalationCameOnlyFromHistory([at(0), at(4)], 5)).toBe(false);
+  });
+
+  it("is false with no evidence at all", () => {
+    expect(escalationCameOnlyFromHistory([], 5)).toBe(false);
+    expect(escalationCameOnlyFromHistory(undefined, 5)).toBe(false);
+  });
+
+  it("is false on a first turn, where there is no history to blame", () => {
+    expect(escalationCameOnlyFromHistory([at(0)], 1)).toBe(false);
+  });
+
+  it("ignores prompt and non-message evidence", () => {
+    // Prompt provenance is handled by BI-463BE12A; a new thread would carry the
+    // same prompt, so it must not drive this hint.
+    expect(escalationCameOnlyFromHistory(
+      [{ path: "systemPrompt.instruction[0]" }, { path: "systemPrompt" }],
+      5,
+    )).toBe(false);
+    expect(escalationCameOnlyFromHistory(
+      [{ path: "systemPrompt" }, at(1)],
+      5,
+    )).toBe(true);
+  });
+
+  it("reads tool-call argument paths on an earlier message as history", () => {
+    expect(escalationCameOnlyFromHistory(
+      [{ path: "messages[1].toolCalls[0].arguments.discipline" }],
+      4,
+    )).toBe(true);
+  });
+});
+
+describe("buildLocalFallbackBanner names the action that works", () => {
+  const base = { excludedReasons: ["Sensitivity clearance missing for 'restricted'"], offProviderNames: [] };
+
+  it("tells the owner a new conversation clears it", () => {
+    const banner = buildLocalFallbackBanner({ ...base, historicalOnly: true });
+
+    expect(banner).toMatch(/earlier in this conversation/);
+    expect(banner).toMatch(/Starting a new conversation clears it/);
+  });
+
+  it("stays quiet when the current message is the cause", () => {
+    const banner = buildLocalFallbackBanner({ ...base, historicalOnly: false });
+
+    expect(banner).not.toMatch(/new conversation/);
+  });
+
+  it("is unchanged for the switched-off-provider case", () => {
+    const banner = buildLocalFallbackBanner({
+      excludedReasons: [],
+      offProviderNames: ["Claude"],
+      historicalOnly: true,
+    });
+
+    expect(banner).toMatch(/switched off/);
   });
 });

@@ -26,6 +26,9 @@
 //     ambiguous response ⇒ WARN and pass, printing exactly what was skipped.
 //     CI without a live install must never hard-fail here; the gate bites on
 //     contributor machines and installs where the portal is up.
+//   - DOES NOT degrade on an unresolvable BASE_SHA (BI-B6433DC6). "I could not
+//     compute the diff" is not "the diff was empty". That case exits non-zero
+//     and must never print OK.
 //
 //   node scripts/check-doc-anchor-existence.mjs            # check (CI)
 //   node scripts/check-doc-anchor-existence.mjs --update   # regenerate the grandfather baseline
@@ -35,10 +38,13 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
+
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { formatTxtBudgetHeader, parseTxtBudgetHeader } from "./lib/baseline-budget.mjs";
+import { listChangedFiles, runGit } from "./lib/git-changed-files.mjs";
+
+export { listChangedFiles, runGit };
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const BASELINE_PATH = path.join(REPO_ROOT, "scripts", "doc-anchor-baseline.txt");
@@ -122,6 +128,26 @@ export function interpretToolResponse(kind, id, body) {
 }
 
 /** POST one MCP tools/call. Returns the raw response text, or null on failure. */
+/**
+ * True when a catalog response admits it did not return everything. The tool
+ * reports `total`/`fetched`/`truncated`; any of those signalling a short read
+ * means an id absent from the page is not evidence the id does not exist.
+ */
+export function isTruncatedListing(body) {
+  let parsed;
+  try {
+    parsed = typeof body === "string" ? JSON.parse(body) : body;
+  } catch {
+    return true; // unparseable is not proof of completeness
+  }
+  const text = JSON.stringify(parsed?.result ?? parsed ?? null);
+  if (/"truncated"\s*:\s*true/.test(text)) return true;
+  const total = text.match(/"total"\s*:\s*(\d+)/);
+  const fetched = text.match(/"fetched"\s*:\s*(\d+)/);
+  if (total && fetched && Number(fetched[1]) < Number(total[1])) return true;
+  return false;
+}
+
 export async function callTool(endpoint, token, name, args) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
@@ -174,13 +200,6 @@ export async function verifyAnchors(pairs, lookup) {
 }
 
 const REF_RE = /^[A-Za-z0-9._\-/]{1,200}$/;
-function git(...args) {
-  try {
-    return execFileSync("git", args, { cwd: REPO_ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
-  } catch (e) {
-    return (e.stdout && e.stdout.toString()) || "";
-  }
-}
 
 function scanAllDocs() {
   const pairs = [];
@@ -232,14 +251,18 @@ async function main() {
     console.error(`[doc-anchor] refusing unsafe BASE_SHA: ${JSON.stringify(base)}`);
     process.exit(1);
   }
-  const diffOutput = git("diff", "--name-only", `${base}...HEAD`);
-  if (!diffOutput.trim()) {
-    console.log(`[doc-anchor] No diff against ${base} (or ref unavailable) — nothing to check. OK.`);
+  const changed = listChangedFiles(base);
+  if (changed.status === "unresolvable") {
+    console.error(`[doc-anchor] cannot resolve ${base} — the guard did not run. This is not a pass.`);
+    console.error("[doc-anchor] Remedy: git fetch --deepen 50 origin  (or git fetch origin main) and re-run.");
+    if (changed.detail) console.error(`[doc-anchor] git: ${changed.detail}`);
+    process.exit(1);
+  }
+  if (changed.files.length === 0) {
+    console.log(`[doc-anchor] No diff against ${base} — nothing to check. OK.`);
     return;
   }
-  const changedDocs = diffOutput
-    .split("\n").map((s) => s.trim())
-    .filter((f) => f.startsWith("docs/") && f.endsWith(".md"));
+  const changedDocs = changed.files.filter((f) => f.startsWith("docs/") && f.endsWith(".md"));
 
   const newPairs = [];
   for (const doc of changedDocs) {
@@ -268,7 +291,17 @@ async function main() {
   const lookup = async (kind, id) => {
     if (kind === "epic") {
       if (epicListing === null) {
-        epicListing = (await callTool(endpoint, token, "list_epics", {})) ?? "unreachable";
+        // list_epics defaults to 100 rows. An install with more epics than that
+        // returned a TRUNCATED catalog, and every id past the cut read as
+        // "missing" — a correctly cited, freshly filed epic failed the guard.
+        // Ask for the documented maximum, and if the catalog is STILL truncated
+        // treat epic lookups as unverifiable rather than absent: everywhere else
+        // this guard fails open on uncertainty, and a partial listing is exactly
+        // that. Absence must be proven, never inferred from a short page.
+        const listing = await callTool(endpoint, token, "list_epics", { limit: 1000 });
+        epicListing = listing == null || isTruncatedListing(listing)
+          ? "unreachable"
+          : listing;
       }
       if (epicListing === "unreachable") return "unknown";
       return interpretToolResponse("epic", id, epicListing);

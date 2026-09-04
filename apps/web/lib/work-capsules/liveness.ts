@@ -32,13 +32,38 @@ const TERMINAL_STATUSES = new Set(["complete", "abandoned", "archived"]);
 /** Linked FeatureBuild phases that mean the build is closed out. */
 const TERMINAL_BUILD_PHASES = new Set(["complete", "failed", "abandoned"]);
 
+/** Durable TaskRun states that prove the authoring turn can no longer advance. */
+const TERMINAL_TASK_RUN_STATUSES = new Set([
+  "completed",
+  "failed",
+  "canceled",
+  "rejected",
+  "archived",
+]);
+
 export type WorkCapsuleLiveness =
   /** Demonstrably live: valid lease, open PR, or recent real activity. */
   | "live"
-  /** Lease-backed executor whose lease has elapsed — the session died. */
+  /** Work is DELIVERED: its branch head is reachable from the trunk (merged).
+   *  The session need not resume; the room is closed out as delivered, not
+   *  abandoned. Detected procedurally from local git reachability — no LLM, no
+   *  GitHub API. */
+  | "delivered"
+  /** Server-owned nonproduction capacity wait; the executor is suspended, not dead. */
+  | "durable-wait"
+  /** Lease-backed external session whose lease elapsed but only recently — a
+   *  token-limited client is PAUSED, not dead, and resumes + renews when tokens
+   *  return. Withheld from reaping until past the resume grace window. */
+  | "paused"
+  /** Lease-backed executor whose lease elapsed past the resume grace — the
+   *  session is truly gone. */
   | "lease-expired"
   /** Linked Build Studio build is complete/failed/abandoned — nothing to do. */
   | "build-terminal"
+  /** Linked TaskRun/turn is terminal while stale session state still claims activity. */
+  | "execution-terminal"
+  /** Independently durable facts contradict; preserve the room for reconciliation. */
+  | "recovery-required"
   /** No live signal and older than the idle floor (the frozen-14:00 case). */
   | "idle-stale"
   /** Capsule status is already terminal (complete/abandoned/archived). */
@@ -46,13 +71,30 @@ export type WorkCapsuleLiveness =
   /** Null lease, no build/sync signal, but recent enough to withhold judgment. */
   | "no-signal";
 
-/** The dead states a governed reaper may act on. Excludes `terminal` (already
- *  closed) and `no-signal`/`live` (benefit of the doubt). */
+/** How a governed reaper should close a room the classifier says to act on. */
+export type WorkCapsuleDisposition =
+  /** Work merged — archive as delivered; safe to reap worktree + merged branch. */
+  | "delivered"
+  /** Session dead, work not merged — abandon; branch is UNMERGED (its commits
+   *  live only there) so it is protected from deletion pending operator review. */
+  | "abandoned";
+
+/** The states a governed reaper may act on. `delivered` closes out as delivered;
+ *  the dead states abandon. Excludes `terminal` (already closed), `paused`
+ *  (may resume), and `no-signal`/`live` (benefit of the doubt). */
 const REAPABLE_LIVENESS = new Set<WorkCapsuleLiveness>([
+  "delivered",
   "lease-expired",
   "build-terminal",
+  "execution-terminal",
   "idle-stale",
 ]);
+
+/** Default resume grace for a lease-expired external session: a token-limited
+ *  client (Claude/Codex/Grok) may be down for a usage-window duration and will
+ *  return. Conservative — err toward NOT reaping a session that may resume. A
+ *  DELIVERED (merged) room bypasses the grace: it need not resume. */
+export const WORK_CAPSULE_PAUSE_GRACE_MS = 24 * 60 * 60 * 1000;
 
 export type CapsuleLivenessInput = {
   status: string;
@@ -69,15 +111,31 @@ export type CapsuleLivenessInput = {
    * null-lease capsule has. Absent/null for non-BS capsules or when not loaded.
    */
   featureBuild?: { phase: string | null; lastActivityAt: Date | null } | null;
+  /** Independent durable execution state; provider/session flags cannot override it. */
+  taskRun?: { status: string | null; updatedAt: Date | null } | null;
+  durableWait?: { state: "queued" | "active"; signaledAt: Date | null } | null;
+  /**
+   * Whether this capsule's work is DELIVERED, computed by the caller from LOCAL
+   * git reachability (branch head reachable from the trunk = merged) — never the
+   * GitHub PR API and never an LLM. When `merged` is true the room is closed out
+   * as delivered regardless of lease state. Absent/null when not computed.
+   */
+  deliveredSignal?: { merged: boolean } | null;
 };
 
 export type CapsuleLivenessVerdict = {
   liveness: WorkCapsuleLiveness;
   /** True when this should read as ACTIVE on a board. `no-signal` (recent but
-   *  unproven) counts as live so a brand-new capsule is never shown as dead. */
+   *  unproven) counts as live so a brand-new capsule is never shown as dead;
+   *  `paused` counts as live so a token-limited session that may resume is not
+   *  shown as dead. */
   isLive: boolean;
-  /** True when a governed reaper may transition this capsule to abandoned. */
+  /** True when a governed reaper may act on this capsule (close it out). See
+   *  {@link disposition} for how. */
   isReapable: boolean;
+  /** How to close out, when reapable: `delivered` (archive) vs `abandoned`. Null
+   *  when not reapable. */
+  disposition: WorkCapsuleDisposition | null;
   reason: string;
   /**
    * The timestamp that actually governs liveness — lease expiry, last build
@@ -113,6 +171,7 @@ export function classifyWorkCapsuleLiveness(
   input: CapsuleLivenessInput,
   now: Date = new Date(),
   idleMs: number = WORK_CAPSULE_IDLE_STALE_MS,
+  pauseGraceMs: number = WORK_CAPSULE_PAUSE_GRACE_MS,
 ): CapsuleLivenessVerdict {
   const verdict = (
     liveness: WorkCapsuleLiveness,
@@ -120,8 +179,20 @@ export function classifyWorkCapsuleLiveness(
     trueLivenessAt: Date | null,
   ): CapsuleLivenessVerdict => ({
     liveness,
-    isLive: liveness === "live" || liveness === "no-signal",
+    // `paused` reads as live so a token-limited session that may resume is never
+    // shown as dead or reaped; `delivered` does NOT (it should be closed out).
+    isLive:
+      liveness === "live" ||
+      liveness === "durable-wait" ||
+      liveness === "no-signal" ||
+      liveness === "paused",
     isReapable: REAPABLE_LIVENESS.has(liveness),
+    disposition:
+      liveness === "delivered"
+        ? "delivered"
+        : REAPABLE_LIVENESS.has(liveness)
+          ? "abandoned"
+          : null,
     reason,
     trueLivenessAt,
   });
@@ -130,11 +201,51 @@ export function classifyWorkCapsuleLiveness(
     return verdict("terminal", `Capsule already ${input.status}.`, null);
   }
 
+  // DELIVERED wins over every liveness signal: if the branch head is reachable
+  // from the trunk (merged — computed locally, no GitHub API, no LLM) the work
+  // is done and the session need not resume, so close out as delivered rather
+  // than waiting on a lease or mislabelling it abandoned.
+  if (input.deliveredSignal?.merged) {
+    return verdict(
+      "delivered",
+      "Work merged (branch reachable from trunk) — closing out as delivered.",
+      input.lastSyncedAt ?? input.leaseExpiresAt ?? null,
+    );
+  }
+
   // An open PR is the live artifact even if the authoring session's lease has
   // since lapsed — the work is in review / the merge queue, not abandoned.
   if (hasOpenPr(input)) {
     const label = input.pullRequestNumber ? `PR #${input.pullRequestNumber}` : "an open PR";
     return verdict("live", `Parked in review as ${label}.`, input.lastSyncedAt ?? null);
+  }
+
+  const taskRun = input.taskRun ?? null;
+  const taskRunTerminal = Boolean(
+    taskRun?.status && TERMINAL_TASK_RUN_STATUSES.has(taskRun.status),
+  );
+  if (taskRunTerminal && input.durableWait) {
+    return verdict(
+      "recovery-required",
+      `TaskRun is ${taskRun?.status} but a durable nonproduction wait remains active; reconcile the stale fact before reaping or resuming.`,
+      taskRun?.updatedAt ?? input.durableWait.signaledAt,
+    );
+  }
+  if (taskRunTerminal) {
+    return verdict(
+      "execution-terminal",
+      `TaskRun is ${taskRun?.status}; stale provider-session or lease state cannot keep the Workroom active.`,
+      taskRun?.updatedAt ?? null,
+    );
+  }
+
+  if (input.durableWait) {
+    const action = input.durableWait.state === "active" ? "executing" : "waiting for capacity";
+    return verdict(
+      "durable-wait",
+      `Durable nonproduction lease is ${action}; the Workroom must not be reaped.`,
+      input.durableWait.signaledAt,
+    );
   }
 
   const build = input.featureBuild ?? null;
@@ -146,12 +257,26 @@ export function classifyWorkCapsuleLiveness(
     );
   }
 
-  // Lease-backed executor: the lease IS the liveness contract.
+  // Lease-backed executor: the lease IS the liveness contract. On expiry, a
+  // token-limited client is PAUSED (not dead) and resumes + renews when tokens
+  // return, so withhold reaping until past the resume grace window.
   if (input.leaseExpiresAt != null) {
-    const expired = input.leaseExpiresAt.getTime() <= now.getTime();
+    const elapsed = now.getTime() - input.leaseExpiresAt.getTime();
+    const expired = elapsed >= 0;
     if (expired) {
-      const age = humanAge(now.getTime() - input.leaseExpiresAt.getTime());
-      return verdict("lease-expired", `Lease expired ${age} ago — session died.`, input.leaseExpiresAt);
+      const age = humanAge(elapsed);
+      if (elapsed <= pauseGraceMs) {
+        return verdict(
+          "paused",
+          `Lease expired ${age} ago — within the ${humanAge(pauseGraceMs)} resume grace; a token-limited session may return.`,
+          input.leaseExpiresAt,
+        );
+      }
+      return verdict(
+        "lease-expired",
+        `Lease expired ${age} ago — past the ${humanAge(pauseGraceMs)} resume grace; session is gone.`,
+        input.leaseExpiresAt,
+      );
     }
     const remaining = humanAge(input.leaseExpiresAt.getTime() - now.getTime());
     return verdict("live", `Lease valid for ${remaining}.`, input.leaseExpiresAt);

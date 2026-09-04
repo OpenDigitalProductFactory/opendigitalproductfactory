@@ -4,6 +4,7 @@
  */
 import { prisma } from "@dpf/db";
 import { providerHasConfiguredCredential } from "@/lib/ai-provider-internals";
+import { loadActiveRiskAcceptedClearances } from "@/lib/govern/clearance-overrides";
 import type {
   EndpointManifest,
   ProviderTier,
@@ -82,6 +83,7 @@ import {
 } from "./route-decision-attribution";
 import { MODEL_ROUTING_ENDPOINT_TYPES } from "./provider-eligibility";
 import { serializeActivityHarnessAudit } from "./activity-harness-audit";
+import { codexSubscriptionModelExclusionReason } from "./codex-subscription-model-eligibility";
 
 /**
  * EP-MODEL-CAP-001-B: Source-priority tool use resolution.
@@ -188,9 +190,14 @@ async function queryEndpointManifests(): Promise<EndpointManifest[]> {
     ] as const),
   ));
 
+  // Break-glass (BI-4512E7D2): fold in any operator-accepted risk overrides as a
+  // SEPARATE per-provider signal. Empty for every provider unless an operator
+  // explicitly created one, so this is inert on a default install.
+  const riskAcceptedByProvider = await loadActiveRiskAcceptedClearances();
+
   return profiles
     .filter((profile) => readiness.get(profile.providerId) === true)
-    .map((profile) => profileToManifest(profile));
+    .map((profile) => profileToManifest(profile, undefined, riskAcceptedByProvider));
 }
 
 type ProfileWithProvider = Awaited<
@@ -208,7 +215,14 @@ type ProfileWithProvider = Awaited<
 function profileToManifest(
   mp: ProfileWithProvider,
   statusOverride?: EndpointManifest["status"],
+  riskAcceptedByProvider?: Map<string, SensitivityLevel[]>,
 ): EndpointManifest {
+  const eligibilityExclusionReason = codexSubscriptionModelExclusionReason({
+    providerId: mp.providerId,
+    authMethod: mp.provider.authMethod,
+    modelId: mp.modelId,
+  });
+
   return {
     id: mp.id,
     providerId: mp.providerId,
@@ -222,6 +236,7 @@ function profileToManifest(
         : mp.provider.status)) as EndpointManifest["status"],
     providerTier: classifyProviderTier(mp.providerId),
     sensitivityClearance: mp.provider.sensitivityClearance as SensitivityLevel[],
+    riskAcceptedClearances: riskAcceptedByProvider?.get(mp.providerId) ?? [],
     // Keep null (UNKNOWN) distinct from false (an explicit floor). Coercing to
     // false here made every undiscoverable-capability endpoint permanently
     // ineligible for tool work with no recovery path (BI-DFC30977).
@@ -231,6 +246,7 @@ function profileToManifest(
     maxContextTokens: mp.maxContextTokens ?? mp.provider.maxContextTokens,
     maxOutputTokens: mp.maxOutputTokens ?? mp.provider.maxOutputTokens,
     modelRestrictions: mp.provider.modelRestrictions,
+    ...(eligibilityExclusionReason ? { eligibilityExclusionReason } : {}),
     reasoning: mp.reasoning,
     codegen: mp.codegen,
     toolFidelity: mp.toolFidelity,

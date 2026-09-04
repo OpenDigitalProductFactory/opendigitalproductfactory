@@ -31,9 +31,13 @@ import {
   coworkerEnvelopesAwaitingDecision,
   coworkerEnvelopesExpiredUnactioned,
 } from "@/lib/operate/metrics";
-import { parseInitiativeReviewBinding } from "@/lib/mcp-task-submit";
+import { parseInitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
 
 import { attentionAuthorForAgent } from "../attribution";
+import {
+  envelopeIdFromExecutionResult,
+  summarizeCoworkerEnvelopeDecision,
+} from "../coworker-envelope-decision";
 import type {
   AttentionEnvelopeApproval,
   AttentionEnvelopeReviewBinding,
@@ -55,6 +59,8 @@ export type CoworkerEnvelopeRow = {
   taskRunId: string | null;
   expiresAt: Date | null;
   createdAt: Date;
+  argsJson?: unknown;
+  proposedParameters?: unknown;
   taskRun: { a2aMetadata: unknown } | null;
 };
 
@@ -100,6 +106,14 @@ export function coworkerEnvelopeToAttentionItem(
 ): AttentionItem {
   const expired = row.expiresAt !== null && row.expiresAt.getTime() <= nowMs;
   const reviewBinding = reviewBindingOf(row);
+  const decision = summarizeCoworkerEnvelopeDecision({
+    toolName: row.manifestActionId,
+    proposedParameters: row.proposedParameters,
+    argsJson: row.argsJson,
+    reviewBinding,
+    recommenderAgentId: row.coworkerAgentId,
+    authorizerUserId: row.delegatingUserId,
+  });
   const approval: AttentionEnvelopeApproval = {
     envelopeId: row.id,
     coworkerAgentId: row.coworkerAgentId,
@@ -110,6 +124,7 @@ export function coworkerEnvelopeToAttentionItem(
     taskRunId: row.taskRunId,
     expiresAtIso: row.expiresAt?.toISOString() ?? null,
     actionable: row.status === DECIDABLE_STATUS && !expired,
+    decision,
     ...(reviewBinding ? { reviewBinding } : {}),
     approveHref: envelopeApproveRoute(row.id),
     declineHref: envelopeDeclineRoute(row.id),
@@ -140,7 +155,7 @@ export function coworkerEnvelopeToAttentionItem(
     // envelope endpoints; an href here would become an owner button that
     // navigates away from the only surface that can settle the envelope.
     actions: [
-      { kind: "approve", label: "Approve action" },
+      { kind: "approve", label: "Authorize" },
       { kind: "reject", label: "Decline" },
     ],
     deepLink: "/workspace/inbox",
@@ -186,9 +201,14 @@ export async function loadCoworkerEnvelopeItems(
       taskRunId: true,
       expiresAt: true,
       createdAt: true,
+      argsJson: true,
       taskRun: { select: { a2aMetadata: true } },
     },
   });
+  const proposedByEnvelopeId = await loadProposedParameters(
+    db,
+    rows as unknown as CoworkerEnvelopeRow[],
+  );
   // Fire-and-forget backlog observation (BI-78D3CF1E). The query above
   // deliberately EXCLUDES expired envelopes, because an expired one is not
   // actionable — which is exactly why nothing could see them lapsing. This
@@ -223,6 +243,49 @@ export async function loadCoworkerEnvelopeItems(
   });
 
   return (rows as unknown as CoworkerEnvelopeRow[]).map((row) =>
-    coworkerEnvelopeToAttentionItem(row, nowMs),
+    coworkerEnvelopeToAttentionItem(
+      {
+        ...row,
+        ...(proposedByEnvelopeId.has(row.id)
+          ? { proposedParameters: proposedByEnvelopeId.get(row.id) }
+          : {}),
+      },
+      nowMs,
+    ),
   );
+}
+
+type ProposedExecutionRow = {
+  taskRunId: string | null;
+  toolName: string;
+  parameters: unknown;
+  result: unknown;
+};
+
+async function loadProposedParameters(
+  db: Db,
+  rows: CoworkerEnvelopeRow[],
+): Promise<Map<string, unknown>> {
+  const taskRunIds = rows
+    .map((row) => row.taskRunId)
+    .filter((id): id is string => typeof id === "string" && id.length > 0);
+  if (taskRunIds.length === 0) return new Map();
+  const executions = await db.toolExecution.findMany({
+    where: {
+      taskRunId: { in: taskRunIds },
+      success: false,
+    },
+    orderBy: { createdAt: "desc" },
+    select: { taskRunId: true, toolName: true, parameters: true, result: true },
+  }) as ProposedExecutionRow[];
+  const proposed = new Map<string, unknown>();
+  for (const row of rows) {
+    const match = executions.find((execution) =>
+      execution.taskRunId === row.taskRunId
+      && execution.toolName === row.manifestActionId
+      && envelopeIdFromExecutionResult(execution.result) === row.id,
+    );
+    if (match) proposed.set(row.id, match.parameters);
+  }
+  return proposed;
 }

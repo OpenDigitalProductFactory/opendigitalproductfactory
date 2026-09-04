@@ -129,14 +129,13 @@ const definitions: ToolDefinition[] = [
   },
 ];
 
-async function principleDecide(
+export async function runPrincipleDecision(
   params: Record<string, unknown>,
   context?: Parameters<ToolPackHandler>[2],
+  policyProjection?: import("@/lib/decision/kernel-consult-ledger").KernelConsultPolicyProjection,
 ): Promise<ToolResult> {
-  // Phase 2 Task 2.7. Pulls in-scope commandments from Postgres (always
-  // applied) and relevant core/contextual principles from Qdrant, then
-  // runs the pure decide() math. Returns a contribution ledger so
-  // callers can render the why, not just the what.
+  // Pull in-scope commandments plus relevant core/contextual principles, run
+  // the pure scoring math, and return its contribution ledger.
   const validPopulations = new Set([
     "in_platform_coworker",
     "external_coding_agent",
@@ -762,6 +761,7 @@ async function principleDecide(
     // Trust-envelope: persist evidence citations onto the ledger row and seal
     // the decision into the append-only hash chain (BI-EA97E5CD / BI-81CC5D8E).
     ...ledgerArgs,
+    policyProjection: policyProjection ?? null,
   });
 
   return {
@@ -786,7 +786,7 @@ async function principleDecide(
 }
 
 const handlers: Record<string, ToolPackHandler> = {
-  principle_decide: (params, _userId, context) => principleDecide(params, context),
+  principle_decide: (params, _userId, context) => runPrincipleDecision(params, context),
 };
 
 export const principleDecidePack: ToolPack = {

@@ -35,6 +35,7 @@ const db = {
     findFirst: vi.fn(),
     update: vi.fn(),
   },
+  $queryRaw: vi.fn(),
   $transaction: vi.fn(async (fn: (tx: typeof db) => Promise<unknown>) => fn(db)),
 };
 const mockRevalidatePortalContext = revalidatePortalContext as ReturnType<typeof vi.fn>;
@@ -48,6 +49,7 @@ function resetDbMocks() {
   db.workroomActivity.create.mockReset();
   db.backlogItem.findFirst.mockReset();
   db.backlogItem.update.mockReset();
+  db.$queryRaw.mockReset();
   db.$transaction.mockReset();
   db.$transaction.mockImplementation(async (fn: (tx: typeof db) => Promise<unknown>) => fn(db));
   mockRevalidatePortalContext.mockReset();
@@ -285,6 +287,59 @@ describe("work capsule store", () => {
       data: expect.objectContaining({ kind: "adopted" }),
     }));
     expect(db.workroom.create).not.toHaveBeenCalled();
+  });
+
+  // BI-69BBC446: worktreePath moved only on lateBind, so re-adopting an
+  // ALREADY-bound room accepted the parameter, returned success, and silently
+  // kept the old path — while headSha beside it synced. A worktree is reaped and
+  // rebuilt under a new directory far more often than a room changes branches,
+  // and the stale path then fails the claim readback with an identity mismatch
+  // that names the wrong field. Observed on WC-0BE07607.
+  it("syncs a moved worktree path onto an already-bound capsule", async () => {
+    db.workroom.findFirst.mockResolvedValue({
+      id: "row-1",
+      capsuleId: "WC-MOVED1",
+      status: "ready",
+      // Already bound, so lateBind is false — the case that used to drop it.
+      backlogItemId: "BI-SYNC",
+      executorRef: "session-1",
+      headBranch: "feat/sync",
+      headSha: "same-head",
+      worktreePath: "/worktrees/old-location",
+    });
+    db.workroom.update.mockResolvedValue({
+      id: "row-1", capsuleId: "WC-MOVED1", worktreePath: "/worktrees/new-location",
+    });
+
+    const result = await adoptWorktreeCapsule({
+      db: capsuleDb(),
+      input: {
+        title: "Move worktree",
+        objective: "The old worktree was reaped; the branch now lives elsewhere.",
+        repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+        headBranch: "feat/sync",
+        worktreePath: "/worktrees/new-location",
+        backlogItemId: "BI-SYNC",
+        executorRef: "session-1",
+        headSha: "same-head",
+      },
+      actor: { userId: "user-1", agentId: "claude", principalId: "principal-1" },
+    });
+
+    expect(result.worktreePath).toBe("/worktrees/new-location");
+    expect(db.workroom.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { capsuleId: "WC-MOVED1" },
+      data: expect.objectContaining({ worktreePath: "/worktrees/new-location" }),
+    }));
+    // The move is auditable, not silent in either direction.
+    expect(db.workroomActivity.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        payload: expect.objectContaining({
+          worktreePath: "/worktrees/new-location",
+          previousWorktreePath: "/worktrees/old-location",
+        }),
+      }),
+    }));
   });
 
   it("leaves an existing capsule untouched when the adopt call repeats the same head", async () => {
@@ -645,6 +700,14 @@ describe("work capsule store", () => {
       executorRef: "session-A",
     };
     const actor = { userId: "user-1", agentId: "agent-1", principalId: "PRN-1" };
+    const ownershipRoom = (overrides: Record<string, unknown> = {}) => ({
+      capsuleId: "WC-CLAIM-A", title: "Existing work", status: "working", source: "external-adoption",
+      backlogItemId: "BI-7D20BFDF", repositoryFullName: baseInput.repositoryFullName,
+      executorKind: "codex-desktop", executorRef: "session-B", leaseHolderPrincipalId: "PRN-2",
+      headBranch: "feat/first-branch", worktreePath: "/wt/a", pullRequestUrl: null,
+      pullRequestNumber: null, leaseExpiresAt: new Date("2099-01-01T00:00:00.000Z"),
+      lastSyncedAt: null, updatedAt: new Date(), featureBuildId: null, ...overrides,
+    });
 
     it("throws a clear error when the BacklogItem does not exist", async () => {
       db.backlogItem.findFirst.mockResolvedValueOnce(null);
@@ -678,6 +741,7 @@ describe("work capsule store", () => {
       expect(result.capsuleId).toBe("WC-CLAIM01");
       expect(result.claimed).toBe(true);
       expect(result.conflict).toBeNull();
+      expect(db.$queryRaw).toHaveBeenCalledTimes(1);
       expect(db.backlogItem.update).toHaveBeenCalledWith(expect.objectContaining({
         data: expect.objectContaining({
           claimStatus: "active",
@@ -736,52 +800,33 @@ describe("work capsule store", () => {
       }));
     });
 
-    it("returns a non-blocking conflict and does NOT overwrite a fresh claim held by another agent", async () => {
-      const now = new Date("2026-07-06T12:00:00.000Z");
+    it("refuses a different live Workroom before creating another capsule", async () => {
       db.backlogItem.findFirst.mockResolvedValueOnce({
         id: "bi-row-1",
         itemId: "BI-7D20BFDF",
         epicId: null,
-        claimStatus: "active",
-        claimedById: "other-user",
-        claimedByAgentId: "other-agent",
-        claimedAt: new Date(now.getTime() - 60 * 60 * 1000), // 1h ago = fresh
+        claimStatus: null, claimedById: null, claimedByAgentId: null, claimedAt: null,
       });
-      db.workroom.findFirst.mockResolvedValueOnce(null);
-      db.workroom.create.mockResolvedValueOnce({
-        id: "row-1",
-        capsuleId: "WC-CLAIM02",
-        headBranch: baseInput.headBranch,
-        worktreePath: baseInput.worktreePath,
-      });
-      db.workroom.findMany.mockResolvedValueOnce([]);
+      db.workroom.findMany.mockResolvedValueOnce([ownershipRoom()]);
 
-      const result = await claimBacklogItemWorkspace({ db: capsuleDb(), input: baseInput, actor, now });
+      await expect(claimBacklogItemWorkspace({ db: capsuleDb(), input: baseInput, actor }))
+        .rejects.toMatchObject({ code: "backlog_item_already_claimed", backlogItemId: "BI-7D20BFDF" });
 
-      // Capsule still bound (soft claim), but the BI claim is untouched.
-      expect(result.capsuleId).toBe("WC-CLAIM02");
-      expect(result.claimed).toBe(false);
+      expect(db.workroom.create).not.toHaveBeenCalled();
       expect(db.backlogItem.update).not.toHaveBeenCalled();
-      expect(result.conflict?.backlogClaim).toMatchObject({
-        claimedByAgentId: "other-agent",
-        claimAgeMinutes: 60,
-      });
     });
 
-    it("reclaims a STALE (>12h) claim held by another agent", async () => {
-      const now = new Date("2026-07-06T12:00:00.000Z");
+    it("replaces a dead Workroom because stale BI timestamps are not liveness", async () => {
+      const now = new Date("2026-08-31T18:00:00.000Z");
       db.backlogItem.findFirst.mockResolvedValueOnce({
-        id: "bi-row-1",
-        itemId: "BI-7D20BFDF",
-        epicId: null,
-        claimStatus: "active",
-        claimedById: "other-user",
-        claimedByAgentId: "other-agent",
-        claimedAt: new Date(now.getTime() - 13 * 60 * 60 * 1000), // 13h ago = stale
+        id: "bi-row-1", itemId: "BI-7D20BFDF", epicId: null, claimStatus: "active",
+        claimedById: "other-user", claimedByAgentId: "other-agent", claimedAt: now,
       });
+      // Lease dead ~1.75d before now — past the 24h resume grace, so genuinely dead
+      // (not a token-paused session that would be protected within the grace).
+      db.workroom.findMany.mockResolvedValueOnce([ownershipRoom({ leaseExpiresAt: new Date("2026-08-30T00:00:00.000Z") })]);
       db.workroom.findFirst.mockResolvedValueOnce(null);
       db.workroom.create.mockResolvedValueOnce({ id: "row-1", capsuleId: "WC-CLAIM03" });
-      db.workroom.findMany.mockResolvedValueOnce([]);
       db.backlogItem.update.mockResolvedValueOnce({ id: "bi-row-1" });
 
       const result = await claimBacklogItemWorkspace({ db: capsuleDb(), input: baseInput, actor, now });
@@ -791,40 +836,40 @@ describe("work capsule store", () => {
       expect(db.backlogItem.update).toHaveBeenCalledTimes(1);
     });
 
-    it("allows a second capsule on a different branch for the same BI without a blocking claim conflict", async () => {
+    it("PROTECTS a token-paused Workroom (lease expired within the resume grace) from being claim-stolen", async () => {
+      const now = new Date("2026-08-31T18:00:00.000Z");
       db.backlogItem.findFirst.mockResolvedValueOnce({
-        id: "bi-row-1",
-        itemId: "BI-7D20BFDF",
-        epicId: null,
-        claimStatus: null,
-        claimedById: null,
-        claimedByAgentId: null,
-        claimedAt: null,
+        id: "bi-row-1", itemId: "BI-7D20BFDF", epicId: null, claimStatus: "active",
+        claimedById: "other-user", claimedByAgentId: "other-agent", claimedAt: now,
       });
+      // Lease expired 1h ago — inside the 24h grace ⇒ paused ⇒ isLive ⇒ still owned.
+      db.workroom.findMany.mockResolvedValueOnce([ownershipRoom({ leaseExpiresAt: new Date("2026-08-31T17:00:00.000Z") })]);
+
+      await expect(claimBacklogItemWorkspace({ db: capsuleDb(), input: baseInput, actor, now }))
+        .rejects.toMatchObject({ code: "backlog_item_already_claimed", backlogItemId: "BI-7D20BFDF" });
+      expect(db.workroom.create).not.toHaveBeenCalled();
+    });
+
+    it("allows and audits a reasoned force override", async () => {
+      db.backlogItem.findFirst.mockResolvedValueOnce({
+        id: "bi-row-1", itemId: "BI-7D20BFDF", epicId: null,
+        claimStatus: "active", claimedById: "other-user", claimedByAgentId: "other-agent", claimedAt: new Date(),
+      });
+      db.workroom.findMany.mockResolvedValueOnce([ownershipRoom()]);
       db.workroom.findFirst.mockResolvedValueOnce(null);
-      db.workroom.create.mockResolvedValueOnce({
-        id: "row-2",
-        capsuleId: "WC-CLAIM-B",
-        headBranch: "feat/second-branch",
-      });
-      // Another capsule already exists on a DIFFERENT branch for the same BI.
-      db.workroom.findMany.mockResolvedValueOnce([
-        { capsuleId: "WC-CLAIM-A", headBranch: "feat/first-branch", worktreePath: "/wt/a", executorRef: "session-B", leaseHolderPrincipalId: "PRN-2" },
-      ]);
-      db.backlogItem.update.mockResolvedValueOnce({ id: "bi-row-1" });
+      db.workroom.create.mockResolvedValueOnce({ id: "row-2", capsuleId: "WC-CLAIM-B", headBranch: "feat/second-branch" });
 
       const result = await claimBacklogItemWorkspace({
         db: capsuleDb(),
-        input: { ...baseInput, headBranch: "feat/second-branch" },
+        input: { ...baseInput, headBranch: "feat/second-branch", force: true, overrideReason: "Split independent acceptance lanes." },
         actor,
       });
 
-      // The second branch still claims the BI (no other fresh BI claim) and binds,
-      // but the other in-flight location is surfaced as advisory conflict metadata.
-      expect(result.claimed).toBe(true);
-      expect(result.conflict?.backlogClaim).toBeNull();
-      expect(result.conflict?.otherLocations).toHaveLength(1);
-      expect(result.conflict?.otherLocations[0]?.capsuleId).toBe("WC-CLAIM-A");
+      expect(result).toMatchObject({ claimed: false, conflict: { otherLocations: [{ capsuleId: "WC-CLAIM-A" }] } });
+      expect(db.backlogItem.update).not.toHaveBeenCalled();
+      expect(db.workroomActivity.create).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({ kind: "backlog-claim-override", payload: expect.objectContaining({ reason: "Split independent acceptance lanes." }) }),
+      }));
     });
 
     it("is idempotent: reusing the same branch returns the existing capsule (no duplicate create)", async () => {
@@ -848,7 +893,10 @@ describe("work capsule store", () => {
         headBranch: baseInput.headBranch,
         worktreePath: baseInput.worktreePath,
       });
-      db.workroom.findMany.mockResolvedValueOnce([]);
+      db.workroom.findMany.mockResolvedValueOnce([ownershipRoom({
+        capsuleId: "WC-CLAIM01", headBranch: baseInput.headBranch, worktreePath: baseInput.worktreePath,
+        executorRef: "session-A", leaseHolderPrincipalId: "PRN-1",
+      })]);
       db.backlogItem.update.mockResolvedValueOnce({ id: "bi-row-1" });
 
       const result = await claimBacklogItemWorkspace({ db: capsuleDb(), input: baseInput, actor });

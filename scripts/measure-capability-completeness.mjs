@@ -195,6 +195,33 @@ export const PLANE_CONTRACT = {
 
 export const PLANES = Object.keys(PLANE_CONTRACT);
 
+/**
+ * Files that declare work shapes. The runtime registry merges them into
+ * ALL_SHAPES; a static scanner cannot call listWorkShapes(), so the list is
+ * explicit and guarded — see measure-capability-completeness.test.mjs, which
+ * fails when a work-management file names an accountable agent and is absent
+ * here. Reading only the first of these under-reported seven agents as having
+ * no work shape at all.
+ */
+/**
+ * Files that declare coworker self-tasks, each as a named object literal. Split
+ * for the same reason the shapes were: coworker-self-tasks.ts sat 51 lines from
+ * the 800-line ceiling. The runtime spreads the second into the first; a static
+ * scanner has to union them itself, and a spread is invisible to
+ * parseTopLevelKeys — reading only the first file would report every coworker in
+ * the second as having no recurring trigger at all.
+ */
+export const SELF_TASK_SOURCES = [
+  { file: "apps/web/lib/operate/scheduled-jobs/coworker-self-tasks.ts", literal: "COWORKER_SELF_TASKS" },
+  { file: "apps/web/lib/operate/scheduled-jobs/coworker-standing-self-tasks.ts", literal: "COWORKER_STANDING_SELF_TASKS" },
+];
+
+export const SHAPE_SOURCE_FILES = [
+  "apps/web/lib/work-management/work-shapes.ts",
+  "apps/web/lib/work-management/standing-operations-shapes.ts",
+  "apps/web/lib/work-management/coworker-standing-shapes.ts",
+];
+
 /** Identity classes. Expectations differ by class; none is excluded. */
 export const IDENTITY_CLASSES = {
   "active-roster": "Active in the canonical registry and seeded onto the workforce roster.",
@@ -362,7 +389,25 @@ export function loadSubstrate() {
   const onboardingGrants = parseStringArrayMap(
     objectLiteralBody(workforce.slice(workforce.indexOf("ONBOARDING_AGENT_GRANTS")), "ONBOARDING_AGENT_GRANTS"),
   );
-  for (const [k, v] of onboardingGrants) if (!heldGrants.has(k)) heldGrants.set(k, v);
+  for (const [k, v] of onboardingGrants) {
+    if (!heldGrants.has(k)) heldGrants.set(k, v);
+    // onboarding-coo is seeded by bootstrap-first-run rather than the bulk
+    // COWORKER_AGENT_SEEDS loop. It is still a real workforce identity and must
+    // not be misreported as active-registry-only merely because its seed door
+    // is separate.
+    if (!roster.includes(k)) roster.push(k);
+  }
+  // Registry-only agents are seeded from config_profile.tool_grants, not from
+  // HARDCODED_COWORKER_GRANTS. Omitting this source made 53 agents look locked
+  // out of WSID even though both the canonical registry and live
+  // AgentToolGrant rows held registry_read. Roster coworkers remain governed
+  // by the workforce seed below; this adds the other authoritative namespace.
+  for (const agent of registry) {
+    const grants = agent.config_profile?.tool_grants;
+    if (Array.isArray(grants) && !heldGrants.has(agent.agent_name)) {
+      heldGrants.set(agent.agent_name, grants);
+    }
+  }
   // Bootstrap-created agents are real runtime identities even though they are
   // not in the workforce-seed roster; a skill assigned to one does reach it.
   const onboardingAgents = new Set(onboardingGrants.keys());
@@ -407,11 +452,38 @@ export function loadSubstrate() {
       const fm = parseSkillFrontmatter(fs.readFileSync(skillMd, "utf8"));
       packSkillNames.add(fm?.name ?? entry.name);
       packSkillNames.add(entry.name);
+      // The pack namespace also has to enter `skills`, not only contribute a
+      // name. AGENTS.md §11 makes this format the REQUIRED home for a new DPF
+      // skill, so leaving it out of the array meant a correctly-authored skill
+      // was invisible to the cadence and tools+skills planes: assignTo,
+      // taskType and cadence were parsed here and then dropped. The comment
+      // above already claimed both namespaces; only the name half was true.
+      if (fm) {
+        skills.push({
+          file: normalizeGeneratedPath(path.relative(REPO_ROOT, skillMd)),
+          name: fm.name ?? entry.name,
+          assignTo: Array.isArray(fm.assignTo) ? fm.assignTo : [],
+          taskType: fm.taskType ?? null,
+          cadence: fm.cadence ?? null,
+        });
+      }
     }
   }
 
   // ── Shape sources: the declared work-shape registry (TAK §8.11).
-  const shapesSrc = stripLineComments(read("apps/web/lib/work-management/work-shapes.ts"));
+  //
+  // The registry is split across files and merged into ALL_SHAPES at runtime, so
+  // reading work-shapes.ts alone under-reports. Every shape in
+  // standing-operations-shapes.ts declares stages and a governed-decision gate,
+  // is imported into ALL_SHAPES, and was still measured as "no declared work
+  // shape" for the seven agents it makes accountable — a false gap that reads
+  // as an unbounded coworker.
+  //
+  // A static scanner cannot call listWorkShapes(), so the source list is
+  // explicit. SHAPE_SOURCE_FILES is exported and guarded by a test that fails
+  // when a work-management file declares an accountable agent and is not listed
+  // here, so a third shape file cannot go unread the way the second one did.
+  const shapesSrc = SHAPE_SOURCE_FILES.map((file) => stripLineComments(read(file))).join("\n");
   const shapeAgents = new Map();
   for (const m2 of shapesSrc.matchAll(/accountablePrincipalRef:\s*"agent:([a-z0-9-]+)"/g)) {
     const stagesDeclared = /stages:\s*\[/.test(shapesSrc);
@@ -420,8 +492,11 @@ export function loadSubstrate() {
   }
 
   // ── Cadence sources.
-  const selfTasksSrc = stripLineComments(read("apps/web/lib/operate/scheduled-jobs/coworker-self-tasks.ts"));
-  const selfTaskAgents = new Set(parseTopLevelKeys(objectLiteralBody(selfTasksSrc, "COWORKER_SELF_TASKS")));
+  const selfTaskAgents = new Set(
+    SELF_TASK_SOURCES.flatMap(({ file, literal }) =>
+      parseTopLevelKeys(objectLiteralBody(stripLineComments(read(file)), literal)),
+    ),
+  );
   const jobCatalog = read("apps/web/lib/operate/scheduled-jobs/catalog.ts");
 
   // ── Evidence: curated golden journeys.
@@ -571,7 +646,16 @@ function firstHandle(ident, lookup) {
 }
 
 export function scoreIdentity(ident, s) {
-  const grantHit = firstHandle(ident, (h) => (s.heldGrants.has(h) ? s.heldGrants.get(h) : null));
+  // A bridged roster identity is reseeded from HARDCODED_COWORKER_GRANTS, which
+  // is authoritative for its live standing grants. Registry-only identities
+  // instead use agent_registry.json config_profile.tool_grants.
+  const grantHandles = ident.onRoster && ident.rosterSlug
+    ? [ident.rosterSlug]
+    : [...ident.handles];
+  const grantHit = firstHandle(
+    { handles: grantHandles },
+    (h) => (s.heldGrants.has(h) ? s.heldGrants.get(h) : null),
+  );
   const held = grantHit?.value ?? [];
   const expanded = expandGrants(held, s.grantImplications);
 

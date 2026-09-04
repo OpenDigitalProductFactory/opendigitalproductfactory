@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-
 const db = vi.hoisted(() => ({
   findFirst: vi.fn(),
   findUnique: vi.fn(),
@@ -19,7 +18,7 @@ const autonomous = vi.hoisted(() => ({
   resolveTools: vi.fn(),
 }));
 const records = vi.hoisted(() => ({ create: vi.fn() }));
-
+const queue = vi.hoisted(() => ({ send: vi.fn() }));
 vi.mock("@dpf/db", () => ({
   prisma: {
     taskRun: {
@@ -44,9 +43,10 @@ vi.mock("@/lib/tak/autonomous-work-run", () => ({
 vi.mock("@/lib/tak/task-records", () => ({
   createTaskMessage: (...args: unknown[]) => records.create(...args),
 }));
-
+vi.mock("@/lib/queue/inngest-client", () => ({
+  inngest: { send: (...args: unknown[]) => queue.send(...args) },
+}));
 import { submitRemoteCoworkerTask } from "./mcp-task-submit";
-
 const userContext = { platformRole: "developer", isSuperuser: false };
 const immutableParams = {
   agentId: "AGT-WS-REVIEW",
@@ -59,7 +59,6 @@ const immutableParams = {
   authorityScope: ["initiative_design_review"],
   collaborationKind: "summon",
 };
-
 function submit(tokenId: string, params: Record<string, unknown> = immutableParams) {
   return submitRemoteCoworkerTask({
     token: { tokenId, userId: "user-1", capability: "write", source: "pat" },
@@ -67,9 +66,10 @@ function submit(tokenId: string, params: Record<string, unknown> = immutablePara
     params,
   });
 }
-
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.unstubAllEnvs();
+  vi.stubEnv("DPF_EXTERNAL_MCP_TASK_ASYNC", "0");
   db.findFirst.mockResolvedValue(null);
   db.findUnique.mockResolvedValue({ status: "working" });
   db.findEnvelope.mockResolvedValue(null);
@@ -83,6 +83,7 @@ beforeEach(() => {
   db.upsertThread.mockResolvedValue({ id: "thread-external" });
   db.update.mockResolvedValue({});
   db.updateMany.mockResolvedValue({ count: 1 });
+  queue.send.mockResolvedValue({ ids: ["event-1"] });
   autonomous.create.mockImplementation(async (input: Record<string, unknown>) => ({
     id: "task-internal",
     taskRunId: input["taskRunId"],
@@ -104,6 +105,22 @@ beforeEach(() => {
 });
 
 describe("submitRemoteCoworkerTask idempotency", () => {
+  it("returns the durable task handle before a background execution settles", async () => {
+    vi.stubEnv("DPF_EXTERNAL_MCP_TASK_ASYNC", "1");
+    autonomous.execute.mockImplementation(() => new Promise(() => {}));
+
+    const outcome = await submit("PAT-ASYNC", {
+      ...immutableParams,
+      riskClass: "bounded-write",
+    });
+
+    expect(outcome).toMatchObject({
+      kind: "result",
+      result: { status: "submitted", idempotentReplay: false },
+    });
+    expect(autonomous.execute).not.toHaveBeenCalled();
+  });
+
   it("preserves input-required when a governed tool pauses the active TaskRun", async () => {
     db.findUnique.mockResolvedValue({ status: "input-required" });
 
@@ -175,6 +192,7 @@ describe("submitRemoteCoworkerTask idempotency", () => {
             kind: "missing-terminal-writer",
             writerToolName: "record_initiative_evidence",
             resumeMode: "same-taskrun",
+            dispatchContract: "required-tool-call",
             attempt: 1,
             observedAt: expect.any(String),
           },
@@ -212,7 +230,16 @@ describe("submitRemoteCoworkerTask idempotency", () => {
       taskRunId: "TR-MCP-APPROVED",
       status: "input-required",
       updatedAt: new Date("2026-08-24T07:00:00.000Z"),
-      progressPayload: { requiresApproval: true },
+      progressPayload: {
+        requiresApproval: true,
+        approvalRecovery: {
+          schemaVersion: 1,
+          kind: "expired-approved-envelope",
+          sourceEnvelopeId: "ENV-EXPIRED",
+          replacementEnvelopeId: "ENV-APPROVED",
+          inferenceRerun: false,
+        },
+      },
       a2aMetadata: {
         idempotencyKey: params.idempotencyKey,
         apiTokenId: "PAT-A",
@@ -280,6 +307,13 @@ describe("submitRemoteCoworkerTask idempotency", () => {
       },
       data: {
         progressPayload: {
+          approvalRecovery: {
+            schemaVersion: 1,
+            kind: "expired-approved-envelope",
+            sourceEnvelopeId: "ENV-EXPIRED",
+            replacementEnvelopeId: "ENV-APPROVED",
+            inferenceRerun: false,
+          },
           requiresApproval: true,
           approvalResumeReserved: true,
         },
@@ -288,6 +322,22 @@ describe("submitRemoteCoworkerTask idempotency", () => {
     expect(db.update).toHaveBeenCalledWith({
       where: { taskRunId: "TR-MCP-APPROVED" },
       data: { status: "working", lastHeartbeatAt: expect.any(Date) },
+    });
+    expect(db.update).toHaveBeenCalledWith({
+      where: { taskRunId: "TR-MCP-APPROVED" },
+      data: {
+        status: "completed",
+        completedAt: expect.any(Date),
+        progressPayload: expect.objectContaining({
+          approvalRecovery: expect.objectContaining({
+            kind: "expired-approved-envelope",
+            sourceEnvelopeId: "ENV-EXPIRED",
+            replacementEnvelopeId: "ENV-APPROVED",
+            inferenceRerun: false,
+          }),
+          resumedFromApproval: true,
+        }),
+      },
     });
     expect(outcome).toMatchObject({
       kind: "result",
@@ -391,8 +441,6 @@ describe("submitRemoteCoworkerTask idempotency", () => {
         taskRunId: "TR-MCP-CONCURRENT",
         status: "working",
         progressPayload: null,
-        // Rows from before request digests were introduced remain replayable,
-        // but the lookup is still scoped to this exact PAT.
         a2aMetadata: { idempotencyKey: immutableParams.idempotencyKey, apiTokenId: "PAT-A" },
       });
 

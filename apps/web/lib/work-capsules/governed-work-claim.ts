@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import {
   INITIATIVE_READINESS_POLICY_VERSION,
   projectBacklogItemReadiness,
+  readinessRequirement,
   type InitiativeReadinessDecision,
   type InitiativeReadinessActivity,
 } from "@/lib/backlog/initiative-readiness";
@@ -33,6 +34,8 @@ type ClaimInput = {
   executorRef?: string | null;
   title?: string;
   objective?: string;
+  force?: boolean;
+  overrideReason?: string | null;
 };
 
 type ClaimResult = Awaited<ReturnType<typeof claimBacklogItemWorkspace>>;
@@ -145,9 +148,15 @@ async function resolveRecoveryOutsideTransaction(args: {
 }
 
 class CapsuleIdentityMismatch extends Error {
-  constructor(readonly decision: InitiativeReadinessDecision) {
-    super("Claimed Workroom identity did not match the requested subject, branch, worktree, executor, lease, and intent.");
+  constructor(readonly decision: InitiativeReadinessDecision, readonly mismatches: readonly string[] = []) {
+    super(mismatches.length > 0
+      ? `Claimed Workroom identity did not match the request. ${mismatches.map(endWithPeriod).join(" ")}`
+      : "Claimed Workroom identity did not match the requested subject, branch, worktree, executor, lease, and intent.");
   }
+}
+
+function endWithPeriod(text: string): string {
+  return /[.!?]$/.test(text.trim()) ? text.trim() : `${text.trim()}.`;
 }
 
 function targetForIntent(intent: WorkIntent): "design" | "plan" | "implementation" {
@@ -202,6 +211,89 @@ async function recordDecision(args: {
   } });
 }
 
+/**
+ * Why the claimed workroom is not the one the caller asked for, in the
+ * caller's own terms.
+ *
+ * BI-69BBC446: this was one `||` chain returning null, so fourteen distinct
+ * causes — an expired lease, a foreign executor, a rewritten branch — all
+ * surfaced as the single sentence "the recorded branch and head no longer
+ * match. Re-sync with adopt_worktree". On WC-0BE07607 the branch and head
+ * matched exactly and the lease had expired nine hours earlier; the remedy
+ * sent the caller re-syncing two fields that were already correct, and the
+ * branch sat unclaimable for two days. A blocker that names the wrong field
+ * is worse than one that names none, because it is actionable and wrong.
+ */
+function readbackMismatches(args: {
+  row: Record<string, unknown> | null;
+  intentPayload: unknown;
+  input: ClaimInput;
+  actor: WorkCapsuleActor;
+  capsuleId: string;
+  workIntent: WorkIntent;
+  now: Date;
+}): string[] {
+  const row = args.row;
+  if (!row) return [`No workroom row exists for ${args.capsuleId}`];
+  const reasons: string[] = [];
+  const differs = (label: string, actual: unknown, expected: unknown) => {
+    if (actual !== expected) {
+      reasons.push(`${label} is ${format(actual)}, the claim asked for ${format(expected)}`);
+    }
+  };
+  differs("The workroom id", row.capsuleId, args.capsuleId);
+  differs("The bound backlog item", row.backlogItemId, args.input.backlogItemId);
+  differs("The repository", row.repositoryFullName, args.input.repositoryFullName);
+  differs("The recorded branch", row.headBranch, args.input.headBranch);
+  differs("The recorded worktree path", row.worktreePath, args.input.worktreePath);
+  differs("The executor kind", row.executorKind, args.input.executorKind ?? null);
+  differs("The executor ref", row.executorRef, args.input.executorRef ?? null);
+  if (row.archivedAt != null) reasons.push("The workroom is archived");
+  if (["abandoned", "archived", "complete", "superseded"].includes(String(row.status))) {
+    reasons.push(`The workroom status is ${format(row.status)}, which is terminal — claim a new one`);
+  }
+  if (row.leaseHolderPrincipalId !== args.actor.principalId) {
+    reasons.push("The lease is held by a different principal — that session still owns this workroom");
+  }
+  const lease = leaseExpiry(row);
+  if (!lease) {
+    reasons.push("The workroom has no lease expiry recorded — re-claim it");
+  } else if (lease.getTime() <= args.now.getTime()) {
+    // The observed BI-69BBC446 case. Named with both timestamps because "the
+    // lease expired" invites the reader to wonder by how much, and the answer
+    // changes the remedy: minutes means heartbeat, days means re-claim.
+    reasons.push(
+      `The lease expired at ${lease.toISOString()} (now ${args.now.toISOString()}) — `
+      + "renew it with heartbeat_workroom, or re-claim if the work has moved on",
+    );
+  }
+  const parsedIntent = parseWorkIntentDeclared(args.intentPayload);
+  if (!parsedIntent.ok) {
+    reasons.push("No readable work-intent declaration is recorded on the workroom");
+  } else {
+    differs("The declared work intent", parsedIntent.intent, args.workIntent);
+    if (parsedIntent.subject.kind !== "backlog-item") {
+      reasons.push(`The declared subject is a ${format(parsedIntent.subject.kind)}, not a backlog item`);
+    } else {
+      differs("The declared subject", parsedIntent.subject.id, args.input.backlogItemId);
+    }
+  }
+  return reasons;
+}
+
+function format(value: unknown): string {
+  return value == null ? "unset" : `"${String(value)}"`;
+}
+
+function leaseExpiry(row: Record<string, unknown>): Date | null {
+  if (row.leaseExpiresAt instanceof Date) return row.leaseExpiresAt;
+  if (typeof row.leaseExpiresAt === "string") {
+    const parsed = new Date(row.leaseExpiresAt);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+  return null;
+}
+
 function exactReadback(args: {
   row: Record<string, unknown> | null;
   intentPayload: unknown;
@@ -211,27 +303,11 @@ function exactReadback(args: {
   workIntent: WorkIntent;
   now: Date;
 }): ExactReadback | null {
+  if (readbackMismatches(args).length > 0) return null;
+  const row = args.row as Record<string, unknown>;
   const parsedIntent = parseWorkIntentDeclared(args.intentPayload);
-  const row = args.row;
-  const lease = row?.leaseExpiresAt instanceof Date
-    ? row.leaseExpiresAt
-    : typeof row?.leaseExpiresAt === "string" ? new Date(row.leaseExpiresAt) : null;
-  if (!row
-    || row.capsuleId !== args.capsuleId
-    || row.backlogItemId !== args.input.backlogItemId
-    || row.repositoryFullName !== args.input.repositoryFullName
-    || row.headBranch !== args.input.headBranch
-    || row.worktreePath !== args.input.worktreePath
-    || row.executorKind !== (args.input.executorKind ?? null)
-    || row.executorRef !== (args.input.executorRef ?? null)
-    || row.archivedAt != null
-    || ["abandoned", "archived", "complete", "superseded"].includes(String(row.status))
-    || row.leaseHolderPrincipalId !== args.actor.principalId
-    || !lease || lease.getTime() <= args.now.getTime()
-    || !parsedIntent.ok
-    || parsedIntent.intent !== args.workIntent
-    || parsedIntent.subject.kind !== "backlog-item"
-    || parsedIntent.subject.id !== args.input.backlogItemId) return null;
+  const lease = leaseExpiry(row)!;
+  if (!parsedIntent.ok) return null;
   return {
     capsuleId: String(row.capsuleId),
     backlogItemId: String(row.backlogItemId),
@@ -399,7 +475,12 @@ export async function claimGovernedBacklogWorkspace(args: {
         workIntent,
         now,
       });
-      if (!readback) throw new CapsuleIdentityMismatch(evaluated);
+      if (!readback) {
+        throw new CapsuleIdentityMismatch(evaluated, readbackMismatches({
+          row, intentPayload: latestIntent?.payload, input: args.input,
+          actor: args.actor, capsuleId: claim.capsuleId, workIntent, now,
+        }));
+      }
       await recordDecision({ db: tx, backlogItemRowId: item.id, decision: evaluated, workIntent, actor: args.actor });
       return claimSuccess({ workIntent, readiness: evaluated, claim, readback });
     });
@@ -422,7 +503,13 @@ export async function claimGovernedBacklogWorkspace(args: {
     const denied: InitiativeReadinessDecision = {
       ...priorDecision,
       verdict: "denied",
-      blockers: [{ code: "CAPSULE_IDENTITY_MISMATCH", state: "fail", accountableRole: "delivery-coordinator", evidenceRefs: [] }],
+      blockers: [readinessRequirement({
+        code: "CAPSULE_IDENTITY_MISMATCH",
+        state: "fail",
+        accountableRole: "delivery-coordinator",
+        profile: priorDecision.profile,
+        reasons: error.mismatches,
+      })],
     };
     await recordDecision({ db: args.db, backlogItemRowId, decision: denied, workIntent, actor: args.actor });
     return {

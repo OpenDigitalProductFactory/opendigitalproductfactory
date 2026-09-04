@@ -174,6 +174,32 @@ describe("principle-decide pack — handler behavior (delegation preserved)", ()
     });
   });
 
+  it("does not let a public principle_decide caller attach an action authorization binding", async () => {
+    wiki.decide.mockReturnValue({
+      recommendation: { optionId: "proceed", confidence: "high", composite: 1, margin: 1 },
+      scores: [{ optionId: "proceed", composite: 1, contributions: [] }],
+      flags: { structuredCoverage: "strong", semanticFallbackRatio: 0, autonomyEligible: true },
+      reasoning: "clear winner",
+    });
+
+    await principleDecidePack.handlers.principle_decide(
+      {
+        context: "caller-controlled attempt",
+        callingPopulation: "human",
+        options: [{ id: "proceed", description: "Proceed", features: { governance_compliance: 1 } }],
+        policyProjection: {
+          policyAffirmativeOptionId: "proceed",
+          policyActionBinding: { actionKey: "record_initiative_evidence" },
+        },
+      },
+      "u1",
+    );
+
+    expect(decision.recordKernelConsultInteraction).toHaveBeenCalledWith(
+      expect.objectContaining({ policyProjection: null }),
+    );
+  });
+
   it("fails fast on an unknown ringScope value", async () => {
     const res = await principleDecidePack.handlers.principle_decide(
       {

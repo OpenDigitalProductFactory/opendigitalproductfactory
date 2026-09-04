@@ -18,7 +18,7 @@ import { SystemEventProvider } from "@/components/platform/SystemEventProvider";
 import { ShellBannerOverlay } from "@/components/shell/ShellBannerOverlay";
 import { ModelWarmup } from "@/components/shell/ModelWarmup";
 import { SetupOverlay } from "@/components/setup/SetupOverlay";
-import { getShellNavSections } from "@/lib/permissions";
+import { getGrantedCapabilities, getShellNavSections } from "@/lib/permissions";
 import { cookies } from "next/headers";
 import { getActiveOrgCapabilities } from "@/lib/storefront/org-capabilities.server";
 import { AppRail } from "@/components/shell/AppRail";
@@ -28,6 +28,7 @@ import { resolveHomePhoneCountry } from "@/lib/phone-country.server";
 import { PhoneCountryProvider } from "@/components/ui/PhoneCountryContext";
 import { NAV_MODE_COOKIE, resolveNavModeFromCookie } from "@/lib/navigation/nav-mode";
 import { UxInitialLoadBoundary } from "@/components/shell/UxInitialLoadBoundary";
+import { resolveCustomerSurface } from "@/lib/owner-first/archetype-surface";
 
 export default async function ShellLayout({ children }: { children: React.ReactNode }) {
   // First-run check — redirect to setup if no org exists.
@@ -54,6 +55,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
     useUnifiedCoworker,
     phoneCountry,
     activeOrgCapabilities,
+    storefrontConfig,
   ] = await Promise.all([
     prisma.discoveryRun.findFirst({
       orderBy: { startedAt: "desc" },
@@ -76,6 +78,9 @@ export default async function ShellLayout({ children }: { children: React.ReactN
       // entries just stay hidden.
       console.error("[shell-nav] active-capability resolution failed", error);
       return new Set<string>() as ReadonlySet<string>;
+    }),
+    prisma.storefrontConfig.findFirst({
+      select: { archetype: { select: { archetypeId: true } } },
     }),
   ]);
 
@@ -160,16 +165,29 @@ export default async function ShellLayout({ children }: { children: React.ReactN
   // "operator" = the full rail; "Simple" writes worker via the rail toggle.
   // Operator is always one toggle away, so worker mode never strands a user.
   const navMode = resolveNavModeFromCookie((await cookies()).get(NAV_MODE_COOKIE)?.value);
-  const shellNavSections = activeSetup
+  const userContext = {
+    userId: user.id,
+    platformRole: user.platformRole,
+    isSuperuser: user.isSuperuser,
+  };
+  const customerSurface = resolveCustomerSurface(storefrontConfig?.archetype.archetypeId, []);
+  const shellNavSections = (activeSetup
     ? []
-    : getShellNavSections(
-        {
-          userId: user.id,
-          platformRole: user.platformRole,
-          isSuperuser: user.isSuperuser,
-        },
-        { activeOrgCapabilities, mode: navMode },
-      );
+    : getShellNavSections(userContext, { activeOrgCapabilities, mode: navMode })).map((section) => ({
+      ...section,
+      items: section.items.map((item) =>
+        item.key === "customer"
+          ? {
+              ...item,
+              label: customerSurface.shellLabel,
+              description: customerSurface.detailHint,
+            }
+          : item,
+      ),
+    }));
+  // The breadcrumb offers only what this principal can open. Same registry the
+  // rail filters on and the destination route enforces (BI-2777B86B).
+  const grantedCapabilities = getGrantedCapabilities(userContext);
 
   return (
     <PhoneCountryProvider country={phoneCountry}>
@@ -271,7 +289,12 @@ export default async function ShellLayout({ children }: { children: React.ReactN
                   className="mx-auto w-full"
                   style={{ maxWidth: "var(--shell-page-content-max-width, none)" }}
                 >
-                  {shellNavSections.length > 0 && <ShellBreadcrumb />}
+                  {shellNavSections.length > 0 && (
+                    <ShellBreadcrumb
+                      capabilities={grantedCapabilities}
+                      labelOverrides={{ customer: customerSurface.shellLabel }}
+                    />
+                  )}
                   <UxInitialLoadBoundary>{children}</UxInitialLoadBoundary>
                 </div>
               </div>

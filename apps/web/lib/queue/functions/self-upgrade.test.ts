@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createHash } from "node:crypto";
-import { configureReleaseUpgradeTest, registerCoreSelfUpgradeSuccessTest, registerInstallStateHandoffTests, registerSelfUpgradeFunctionTests } from "./self-upgrade-handoff.test-support";
+import { configureReleaseUpgradeTest, registerCoreSelfUpgradeSuccessTest, registerInstallStateHandoffTests, registerReleaseWorkerTargetRecoveryTests, registerSelfUpgradeFunctionTests } from "./self-upgrade-handoff.test-support";
 
 const TEST_INSTALL_STATE = JSON.stringify({ platform: "linux", arch: "amd64" });
 const TEST_INSTALL_STATE_HASH = createHash("sha256").update(TEST_INSTALL_STATE).digest("hex");
@@ -23,11 +23,13 @@ const mocks = vi.hoisted(() => ({
   completeRun: vi.fn(),
   failRun: vi.fn(),
   skipRun: vi.fn(),
+  deferAdmittedRunForRedispatch: vi.fn(),
   updateRunPlan: vi.fn(),
   recordRunRecoveryPoint: vi.fn(),
   recordPromoterReadiness: vi.fn(),
   getLatestRun: vi.fn(),
   getLatestSucceededRun: vi.fn(),
+  getRun: vi.fn(),
   runPromoter: vi.fn(),
   isPromoterAvailable: vi.fn().mockResolvedValue(true),
   ensurePromoterImage: vi
@@ -53,37 +55,31 @@ const mocks = vi.hoisted(() => ({
   readFile: vi.fn(async (path: string) => path.endsWith("install-state.json") ? '{"platform":"linux","arch":"amd64"}' : "s".repeat(32)),
   resolveSelfUpgradeHostIdentity: vi.fn(() => ({ platform: "linux", arch: "amd64", provenance: "explicit" })),
   readRegistryReleaseCandidate: vi.fn(),
+  loadVerifiedReleaseTargetEvidence: vi.fn(),
+  recordVerifiedReleaseTargetEvidence: vi.fn().mockResolvedValue(true),
 }));
-
 vi.mock("@/lib/self-upgrade/config", () => ({
   getSelfUpgradeConfig: mocks.getSelfUpgradeConfig,
   resolveSelfUpgradeHostIdentity: mocks.resolveSelfUpgradeHostIdentity,
 }));
-
 vi.mock("@/lib/self-upgrade/support", () => ({
   readSelfUpgradeSupport: mocks.readSelfUpgradeSupport,
 }));
-
 vi.mock("node:fs/promises", () => ({ readFile: mocks.readFile }));
-
 vi.mock("@/lib/self-upgrade/registry-release", () => ({ readRegistryReleaseCandidate: mocks.readRegistryReleaseCandidate }));
-
+vi.mock("@/lib/release-health/state", () => ({ loadVerifiedReleaseTargetEvidence: mocks.loadVerifiedReleaseTargetEvidence, recordVerifiedReleaseTargetEvidence: mocks.recordVerifiedReleaseTargetEvidence }));
 vi.mock("@/lib/self-upgrade/window", () => ({
   isUpgradeWindowOpen: mocks.isUpgradeWindowOpen,
 }));
-
 vi.mock("@/lib/operating-hours-read", () => ({
   resolveOperatingScheduleForSystem: mocks.resolveOperatingScheduleForSystem,
 }));
-
 vi.mock("@/lib/self-upgrade/auto-window", () => ({
   resolveAutoUpgradeWindow: mocks.resolveAutoUpgradeWindow,
 }));
-
 vi.mock("@/lib/self-upgrade/blackout", () => ({
   getActiveSelfUpgradeBlackout: mocks.getActiveSelfUpgradeBlackout,
 }));
-
 vi.mock("@/lib/self-upgrade/last-check", () => ({
   getLastCheckedAt: mocks.getLastCheckedAt,
   recordCheckedAt: mocks.recordCheckedAt,
@@ -126,13 +122,15 @@ vi.mock("@/lib/self-upgrade/run-store", () => ({
   completeRun: mocks.completeRun,
   failRun: mocks.failRun,
   skipRun: mocks.skipRun,
+  deferAdmittedRunForRedispatch: mocks.deferAdmittedRunForRedispatch,
   updateRunPlan: mocks.updateRunPlan,
   recordRunRecoveryPoint: mocks.recordRunRecoveryPoint,
   recordPromoterReadiness: mocks.recordPromoterReadiness,
   getLatestRun: mocks.getLatestRun,
   getLatestSucceededRun: mocks.getLatestSucceededRun,
+  getRun: mocks.getRun,
 }));
-
+vi.mock("@/lib/self-upgrade/delivery-admission", () => ({ rejectDuplicateSelfUpgradeDelivery: vi.fn().mockResolvedValue(null) }));
 vi.mock("@/lib/self-upgrade/promoter", async (importOriginal) => ({
   // Keep the real pure exports (constants like PROMOTER_ALREADY_RUNNING_EXIT_CODE
   // that the orchestrator imports statically) and mock only the spawn-heavy fns.
@@ -301,6 +299,7 @@ describe("success path", () => {
   });
 
   registerCoreSelfUpgradeSuccessTest({ mocks, runSelfUpgrade });
+  registerReleaseWorkerTargetRecoveryTests({ mocks, runSelfUpgrade, installState: TEST_INSTALL_STATE });
 
   it("classifies a source-free consumer at the verified release as up to date without Git", async () => {
     const sourceSha = "a".repeat(40);
@@ -493,12 +492,12 @@ describe("success path", () => {
     expect(mocks.startQuiescence).not.toHaveBeenCalled();
   });
 
-  it("scheduled poll keeps the conservative 'any surface skips' behavior on a soft blocker (BI-F36E7510)", async () => {
-    mocks.captureActiveSessionBlockers.mockResolvedValueOnce({
-      surfaces: [{ surface: "request.recent-tool-execution", kind: "soft" }],
-    });
-    const result = await runSelfUpgrade({ triggeredBy: "cron", scheduled: true });
-    expect(result).toMatchObject({ skipped: true, reason: "activity-in-flight" });
+  it("scheduled poll drains on a soft blocker and skips only on a hard one (BI-A9F04B91)", async () => {
+    mocks.captureActiveSessionBlockers.mockResolvedValueOnce({ surfaces: [{ surface: "request.recent-tool-execution", kind: "soft" }] });
+    expect(await runSelfUpgrade({ triggeredBy: "cron", scheduled: true })).not.toMatchObject({ reason: "activity-in-flight" });
+    expect(mocks.startQuiescence).toHaveBeenCalled();
+    mocks.startQuiescence.mockClear(); mocks.captureActiveSessionBlockers.mockResolvedValueOnce({ surfaces: [{ surface: "build-studio.phase.plan", kind: "hard" }] });
+    expect(await runSelfUpgrade({ triggeredBy: "cron", scheduled: true })).toMatchObject({ skipped: true, reason: "activity-in-flight" });
     expect(mocks.startQuiescence).not.toHaveBeenCalled();
   });
   it("runs the promoter with the host install path, backup, image, and health paths", async () => {
@@ -506,8 +505,8 @@ describe("success path", () => {
     await runSelfUpgrade({ triggeredBy: "ops" });
     expect(mocks.runPromoter).toHaveBeenCalledWith(
       expect.objectContaining({
-        // Promoter mounts daemon-resolved host paths, never portal paths.
         hostInstallPath: "/Users/me/dpf",
+        canonicalInstallPath: "/Users/me/dpf",
         targetSha: "abc1234deadbeef",
         backupPath: "/backups/self-upgrade/SUR-AAAABBBB",
         healthUrl: "http://localhost:3000/api/health",

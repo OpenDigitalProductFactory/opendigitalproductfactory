@@ -314,6 +314,24 @@ model InitiativeArtifactRetentionPin {
   @@index([sourceKind, createdAt(sort: Desc)])
 }
 
+// BI-4CB2EF76: persisted Workroom roster. Coordinator on this enum is explicit
+// assignment; read-model derivation never writes a row. Hyphens are not used
+// (values match apps/web/lib/work-management/room-types.ts).
+enum WorkroomParticipantRole {
+  accountable
+  coordinator
+  contributor
+  specialist
+  approver
+  reviewer
+  observer
+}
+
+enum WorkroomParticipantAssignmentSource {
+  explicit
+  legacy
+}
+
 /// The Workroom is the canonical unit of what we claim and where we work
 /// (founder-directed 2026-08-15, renamed from WorkCapsule). @@map retains the
 /// physical table name so this rename is metadata-only over live rows; the
@@ -389,6 +407,10 @@ model Workroom {
   leaseHolderPrincipal    Principal?               @relation("WorkroomLeaseHolder", fields: [leaseHolderPrincipalId], references: [id], onDelete: SetNull)
   createdByPrincipal      Principal?               @relation("WorkroomCreator", fields: [createdByPrincipalId], references: [id], onDelete: SetNull)
   requestedByPrincipal    Principal?               @relation("WorkroomRequester", fields: [requestedByPrincipalId], references: [id], onDelete: SetNull)
+  participants            WorkroomParticipant[]    @relation("WorkroomParticipants")
+  outgoingRelations       WorkroomRelation[]       @relation("WorkroomRelationFrom")
+  incomingRelations       WorkroomRelation[]       @relation("WorkroomRelationTo")
+  asyncInferenceOps       AsyncInferenceOp[]        @relation("WorkroomAsyncInferenceOperations")
 
   @@index([status, updatedAt])
   @@index([backlogItemId])
@@ -427,6 +449,58 @@ model WorkroomActivity {
   @@index([kind, recordedAt(sort: Desc)])
   @@index([recordedAt]) // retention sweep cutoff scan, apps/web/lib/operate/retention/execute.ts:99
   @@map("WorkCapsuleActivity")
+}
+
+// BI-4CB2EF76: canonical Workroom roster. One row per (room, principal).
+// Explicit vs legacy is assignment provenance; derived coordinators stay
+// read-model only. Table name matches WorkCapsule mapping.
+model WorkroomParticipant {
+  id                 String                              @id @default(cuid())
+  workroomId         String
+  workroom           Workroom                            @relation("WorkroomParticipants", fields: [workroomId], references: [id], onDelete: Cascade)
+  principalId        String
+  principal          Principal                           @relation("WorkroomParticipantPrincipal", fields: [principalId], references: [id], onDelete: Restrict)
+  roles              WorkroomParticipantRole[]
+  assignmentSource   WorkroomParticipantAssignmentSource
+  enteredReason      String?
+  currentWorkSummary String?
+  lifecycle          RecordLifecycle                     @default(active)
+  lifecycleAt        DateTime?
+  lifecycleReason    String?
+  createdAt          DateTime                            @default(now())
+  updatedAt          DateTime                            @updatedAt
+
+  @@unique([workroomId, principalId])
+  @@index([principalId])
+  @@index([workroomId, lifecycle])
+  @@index([assignmentSource])
+  @@map("WorkCapsuleParticipant")
+}
+
+// BI-662254C6: five work-coordination relations. Not a parent column — contains,
+// spawned-from, depends-on, blocks, and contributes-to are different facts.
+// Portfolio dependencies stay on Workroom.dependsOnPortfolioRoles.
+enum WorkroomRelationKind {
+  contains
+  spawned_from   @map("spawned-from")
+  depends_on     @map("depends-on")
+  blocks
+  contributes_to @map("contributes-to")
+}
+
+model WorkroomRelation {
+  id             String               @id @default(cuid())
+  fromWorkroomId String
+  toWorkroomId   String
+  relation       WorkroomRelationKind
+  createdAt      DateTime             @default(now())
+  fromWorkroom   Workroom             @relation("WorkroomRelationFrom", fields: [fromWorkroomId], references: [id], onDelete: Cascade)
+  toWorkroom     Workroom             @relation("WorkroomRelationTo", fields: [toWorkroomId], references: [id], onDelete: Cascade)
+
+  @@unique([fromWorkroomId, toWorkroomId, relation])
+  @@index([toWorkroomId, relation])
+  @@index([relation])
+  @@map("WorkCapsuleRelation")
 }
 
 model Epic {

@@ -76,6 +76,12 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   CodebaseManifest: "internal",
   ServiceOffering: "internal",
   BacklogItem: "internal",
+  // BI-4CB2EF76: room roster is operational membership (principal FK + roles).
+  // Display names stay on Principal; this table is not a second identity store.
+  WorkroomParticipant: "internal",
+  // BI-662254C6: work-coordination edges between rooms. Operational structure,
+  // not a second identity or portfolio-dependency store.
+  WorkroomRelation: "internal",
   InitiativeArtifactRetentionPin: "confidential",
   Epic: "internal",
   EpicPortfolio: "internal",
@@ -230,6 +236,13 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   // Operator-authored floor plans can expose internal room, table, equipment,
   // and site geometry plus references to live operational entities.
   OperationalSceneLayout: "confidential",
+  AnimalProfile: "confidential",
+  AnimalCustodyEpisode: "confidential",
+  AnimalCustodyEvent: "confidential",
+  AnimalAdoptionApplication: "confidential",
+  AnimalPlacement: "confidential",
+  CareRecord: "confidential",
+  FinancialFund: "internal",
   Engagement: "confidential",
   Opportunity: "confidential",
   Quote: "confidential",
@@ -289,10 +302,19 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   PushDeviceRegistration: "confidential",
   ExternalEvidenceRecord: "confidential",
   AsyncInferenceOp: "confidential",
+  AsyncInferenceOperationTransition: "confidential",
   // Connection posture can reference the restricted ModelProvider catalog and
   // credential/contract records. Copying it without those parents creates an
   // invalid preview and exposes organization-specific provider governance.
   AiProviderConnection: "restricted",
+  // MCP OAuth authorization server (BI-E4DFDCB0). All three hold or gate
+  // credentials: OAuthClient carries a hashed AND an encrypted client secret,
+  // and the code/refresh tables hold hashes that are directly exchangeable for
+  // an access token. "restricted" means never copied to a dev environment,
+  // which is the only correct answer for an auth-token table.
+  OAuthClient: "restricted",
+  OAuthAuthorizationCode: "restricted",
+  OAuthRefreshToken: "restricted",
   // Embeddings are derived from source content and may retain semantic detail
   // even when the source text is otherwise obfuscated.
   VectorEmbedding: "restricted",
@@ -312,6 +334,7 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   UserGroup: "restricted",
   CredentialEntry: "restricted",
   DataPolicyException: "restricted",
+  ProviderClearanceOverride: "restricted",
   OAuthPendingFlow: "restricted",
   ModelProvider: "restricted",
   DiscoveredModel: "restricted",

@@ -26,6 +26,7 @@ docs/founder-kernel/wiki/principles/no-native-browser-dialogs.md
 docs/founder-kernel/wiki/principles/one-common-process-three-surfaces.md	Four peer surfaces, one process.
 docs/founder-kernel/wiki/principles/one-concern-per-pr.md	All changes land via PR against `main`, DCO-signed, scoped to one clean revert.
 docs/founder-kernel/wiki/principles/plan-before-install-paths.md	Plan before acting on install/seed/template paths.
+docs/founder-kernel/wiki/principles/platform-function-never-depends-on-a-client.md	Platform function never depends on a client.
 docs/founder-kernel/wiki/principles/reap-sidecars-to-upgrade-tools.md	Tooling upgrade = operator-triggered quiesce → reap → upgrade → resume.
 docs/founder-kernel/wiki/principles/research-and-use-standards.md	Research and use standards.
 docs/founder-kernel/wiki/principles/responsible-capacity-utilization.md	Use paid AI capacity responsibly.

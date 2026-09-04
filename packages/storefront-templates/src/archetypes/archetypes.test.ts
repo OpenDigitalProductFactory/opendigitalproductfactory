@@ -28,9 +28,10 @@ describe("archetype catalog", () => {
         subjectTypes: ["animal"],
         housesSubjects: true,
         schedulesSubjects: true,
-        resourceKinds: [
-          { kindSlug: "kennel", capacityUnit: "animals", maxCapacity: 100 },
-        ],
+      resourceKinds: [
+        { kindSlug: "kennel", capacityUnit: "animals", maxCapacity: 100 },
+        { kindSlug: "foster-home", capacityUnit: "animals", maxCapacity: 12 },
+      ],
       });
     }
 

@@ -27,6 +27,8 @@
 //   - DEGRADES GRACEFULLY: no bearer token, unreachable endpoint, or an
 //     ambiguous response ⇒ WARN and pass, printing exactly what was skipped.
 //     A gate that cannot reach the install must never invent a defect.
+//   - DOES NOT degrade on an unresolvable BASE_SHA (BI-B263E76C / twin of
+//     BI-B6433DC6). Reuses listChangedFiles from check-doc-anchor-existence.
 //
 //   node scripts/check-live-blocker-references.mjs            # check (CI)
 //   node scripts/check-live-blocker-references.mjs --update   # regenerate the baseline
@@ -37,6 +39,7 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { callTool, DEFAULT_ENDPOINT } from "./check-doc-anchor-existence.mjs";
+import { listChangedFiles, runGit } from "./lib/git-changed-files.mjs";
 import { formatTxtBudgetHeader, parseTxtBudgetHeader } from "./lib/baseline-budget.mjs";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -124,8 +127,14 @@ function isScannedSource(file) {
 }
 
 function scanAllSources() {
+  const listed = runGit(["ls-files"]);
+  if (!listed.ok) {
+    console.error("[live-blocker] git ls-files failed — the --update scan did not run. This is not a pass.");
+    if (listed.stderr) console.error(`[live-blocker] git: ${listed.stderr.trim()}`);
+    process.exit(1);
+  }
   const pairs = [];
-  for (const file of git("ls-files").split("\n").map((s) => s.trim()).filter(isScannedSource)) {
+  for (const file of listed.stdout.split("\n").map((s) => s.trim()).filter(isScannedSource)) {
     const abs = path.join(REPO_ROOT, file);
     if (!fs.existsSync(abs)) continue;
     for (const id of extractLiveBlockerCitations(fs.readFileSync(abs, "utf8"))) pairs.push({ file, id });
@@ -159,12 +168,18 @@ async function main() {
     console.error(`[live-blocker] refusing unsafe BASE_SHA: ${JSON.stringify(base)}`);
     process.exit(1);
   }
-  const diffOutput = git("diff", "--name-only", `${base}...HEAD`);
-  if (!diffOutput.trim()) {
-    console.log(`[live-blocker] No diff against ${base} (or ref unavailable) — nothing to check. OK.`);
+  const listed = listChangedFiles(base);
+  if (listed.status === "unresolvable") {
+    console.error(`[live-blocker] cannot resolve ${base} — the guard did not run. This is not a pass.`);
+    console.error("[live-blocker] Remedy: git fetch --deepen 50 origin  (or git fetch origin main) and re-run.");
+    if (listed.detail) console.error(`[live-blocker] git: ${listed.detail}`);
+    process.exit(1);
+  }
+  if (listed.files.length === 0) {
+    console.log(`[live-blocker] No diff against ${base} — nothing to check. OK.`);
     return;
   }
-  const changed = diffOutput.split("\n").map((s) => s.trim()).filter(isScannedSource);
+  const changed = listed.files.filter(isScannedSource);
 
   const newPairs = [];
   for (const file of changed) {

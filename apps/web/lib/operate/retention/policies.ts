@@ -185,6 +185,24 @@ export const purgeStaleAgentThreads: RetentionCustomPurge = async ({
 
 export const PURGE_POLICIES: readonly PurgePolicy[] = [
   {
+    model: "oAuthAuthorizationCode",
+    label: "OAuth authorization codes",
+    category: "audit-log",
+    timestampField: "createdAt",
+    baseRetentionDays: DAYS_90,
+    rationale:
+      "Single-use OAuth codes that expire in minutes (BI-E4DFDCB0). A row is dead the moment it is exchanged or expires; the exchange itself is recorded in AuthorizationDecisionLog, so nothing of record is lost. Purged on the shortest available window purely to stop the table growing.",
+  },
+  {
+    model: "oAuthRefreshToken",
+    label: "OAuth refresh tokens",
+    category: "audit-log",
+    timestampField: "createdAt",
+    baseRetentionDays: DAYS_365,
+    rationale:
+      "Rotating refresh tokens for MCP clients (BI-E4DFDCB0). Retained past their own expiry on purpose: the rotation chain is what makes a replayed token detectable, so a purge window shorter than the refresh TTL would erase the evidence of a stolen token. One year comfortably exceeds the 30-day default TTL.",
+  },
+  {
     model: "toolExecution",
     label: "Tool execution audit log",
     category: "audit-log",
@@ -616,6 +634,12 @@ export const RETAINED_DATASETS: readonly RetainedDataset[] = [
   // obligations forbid auto-purge. Raw SecurityEvent/Detection telemetry purges
   // on the security-audit window above; the CASE is retained.
   { model: "securityCase", label: "Security cases", regulatoryBasis: "Security incident record (breach-notification / forensic / legal-hold)", minRetentionYears: 7 },
+  // Break-glass risk-acceptance records (BI-4512E7D2). An operator's informed
+  // decision to let a provider serve data its account is not verified-safe for —
+  // and its revocation — are the record a security or data-protection review
+  // turns on. Retained (never auto-purged) so an expired/revoked override remains
+  // provable after the fact; low volume (rare operator actions), so no growth risk.
+  { model: "providerClearanceOverride", label: "Provider clearance overrides", regulatoryBasis: "Security decision audit — informed risk-acceptance of provider data exposure", minRetentionYears: 7 },
   { model: "complianceAuditLog", label: "Compliance audit log", regulatoryBasis: "Compliance change audit", minRetentionYears: 7 },
   { model: "complianceAudit", label: "Compliance audits", regulatoryBasis: "Audit record retention", minRetentionYears: 7 },
   { model: "auditFinding", label: "Audit findings", regulatoryBasis: "Audit record retention", minRetentionYears: 7 },

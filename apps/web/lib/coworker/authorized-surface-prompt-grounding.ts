@@ -144,6 +144,12 @@ export async function groundPromptWithAuthorizedSurface(
   sessionId?: string;
   surfaceId?: string;
   guidanceHighlights?: string[];
+  /**
+   * The exact block appended, so the caller can declare it as an INSTRUCTION
+   * span instead of letting it be screened as payload (BI-D9D661ED). This is a
+   * projection of the platform's own UX, not customer data.
+   */
+  instructionBlock?: string;
 }> {
   const selector = {
     route: input.context.route,
@@ -178,6 +184,7 @@ export async function groundPromptWithAuthorizedSurface(
       sessionId: opened.session.sessionId,
       surfaceId: snapshot.graph.surfaceId,
       guidanceHighlights: [...(snapshot.graph.summary.highlights ?? [])],
+      instructionBlock: block,
     };
   } catch (error) {
     console.warn(

@@ -116,6 +116,14 @@
     "node": ">=20",
     "pnpm": ">=9"
   },
+  "pnpm": {
+    "ignoredBuiltDependencies": [
+      "@scarf/scarf",
+      "protobufjs",
+      "puppeteer",
+      "unrs-resolver"
+    ]
+  },
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",
     "@mermaid-js/mermaid-cli": "11.16.0",

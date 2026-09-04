@@ -18,6 +18,7 @@ import { prisma } from "@dpf/db";
 import {
   FEDERATION_PEER_ALIAS_TYPE,
   FEDERATION_PEER_PRINCIPAL_KIND,
+  federationPeerPrincipalId,
   inverseRole,
   isFederationRole,
   linkStateFromRow,
@@ -147,42 +148,24 @@ export async function enrollFederationLink(
       where: { id: tokenRow.id, consumedAt: null },
       data: { consumedAt: now },
     });
-
-    const principal = await tx.principal.create({
-      data: {
-        principalId: `principal_${linkId}`,
-        kind: FEDERATION_PEER_PRINCIPAL_KIND,
-        displayName: input.displayName,
-      },
-    });
-    await tx.principalAlias.create({
-      data: { principalId: principal.id, aliasType: FEDERATION_PEER_ALIAS_TYPE, aliasValue: linkId },
-    });
-
-    const link = await tx.federationLink.create({
-      data: {
-        linkId,
-        principalId: principal.id,
-        role: ourRole,
-        peerAuthorityUrl: input.peerAuthorityUrl,
-        peerOrganizationRef: input.peerOrganizationRef ?? null,
-        peerDeviceId: input.peerDeviceId ?? null,
-        localOrganizationId: input.localOrganizationId ?? null,
-        // Dual approval: both null at enrollment; trusted only after both approve.
-        linkState: "pending",
-        tokenHash: linkToken.hash,
-        tokenPrefix: linkToken.prefix,
-        tokenRotatedAt: now,
-        // Mutual handshake: the connector's inbound token becomes OUR outbound
-        // token, so the inviter can relay its approval and push demand back.
-        // Absent (older connector) → one-directional link, as before.
-        peerTokenEnc: input.callbackToken ? encryptSecret(input.callbackToken) : null,
-        enrolledAt: now,
-        metadata: {
-          ...(input.metadata ?? {}),
-          proposedProjection: tokenRow.proposedProjection ?? null,
-          proposedAuthorityBand: tokenRow.proposedAuthorityBand ?? null,
-        } as never,
+    const link = await createFederationLinkRow(tx, {
+      linkId,
+      role: ourRole,
+      peerAuthorityUrl: input.peerAuthorityUrl,
+      displayName: input.displayName,
+      peerOrganizationRef: input.peerOrganizationRef ?? null,
+      peerDeviceId: input.peerDeviceId ?? null,
+      localOrganizationId: input.localOrganizationId ?? null,
+      inboundToken: linkToken,
+      callbackToken: input.callbackToken ?? null,
+      // Dual approval: both null at enrollment; trusted only after both approve.
+      approvedAtLocal: null,
+      approvedAtPeer: null,
+      now,
+      metadata: {
+        ...(input.metadata ?? {}),
+        proposedProjection: tokenRow.proposedProjection ?? null,
+        proposedAuthorityBand: tokenRow.proposedAuthorityBand ?? null,
       },
     });
 
@@ -193,6 +176,79 @@ export async function enrollFederationLink(
   });
 
   return { ok: true, linkId, linkToken: linkToken.plaintext, role: ourRole, linkState: "pending" };
+}
+
+export interface FederationLinkRowInput {
+  linkId: string;
+  role: FederationRole;
+  peerAuthorityUrl: string;
+  displayName: string;
+  peerOrganizationRef: string | null;
+  peerDeviceId: string | null;
+  peerInstallationId?: string | null;
+  localOrganizationId: string | null;
+  /** Our inbound token (the peer authenticates to us with it); we keep the hash. */
+  inboundToken: { hash: string; prefix: string };
+  /** The peer's inbound token in clear; stored encrypted as our outbound token. */
+  callbackToken: string | null;
+  approvedAtLocal: Date | null;
+  approvedAtPeer: Date | null;
+  approvedByPrincipalId?: string | null;
+  now: Date;
+  metadata: Record<string, unknown>;
+}
+
+interface FederationLinkTx {
+  principal: { create(args: unknown): Promise<{ id: string }> };
+  principalAlias: { create(args: unknown): Promise<unknown> };
+  federationLink: { create(args: unknown): Promise<{ id: string }> };
+}
+
+/**
+ * The token-independent half of enrolment: principal, alias and link row.
+ * Shared by the invitation path (born pending) and the organization-membership
+ * path (born trusted, EP-ZERO-CONFIG-FEDERATION §5.6) so the two can never
+ * drift in what a link row carries.
+ */
+export async function createFederationLinkRow(tx: FederationLinkTx, input: FederationLinkRowInput): Promise<{ id: string }> {
+  const principal = await tx.principal.create({
+    data: {
+      principalId: federationPeerPrincipalId(input.linkId),
+      kind: FEDERATION_PEER_PRINCIPAL_KIND,
+      displayName: input.displayName,
+    },
+  });
+  await tx.principalAlias.create({
+    data: { principalId: principal.id, aliasType: FEDERATION_PEER_ALIAS_TYPE, aliasValue: input.linkId },
+  });
+  const linkState = linkStateFromRow({
+    approvedAtLocal: input.approvedAtLocal,
+    approvedAtPeer: input.approvedAtPeer,
+    revokedAt: null,
+    quarantinedAt: null,
+  });
+  return tx.federationLink.create({
+    data: {
+      linkId: input.linkId,
+      principalId: principal.id,
+      role: input.role,
+      peerAuthorityUrl: input.peerAuthorityUrl,
+      peerOrganizationRef: input.peerOrganizationRef,
+      peerDeviceId: input.peerDeviceId,
+      peerInstallationId: input.peerInstallationId ?? null,
+      localOrganizationId: input.localOrganizationId,
+      linkState,
+      tokenHash: input.inboundToken.hash,
+      tokenPrefix: input.inboundToken.prefix,
+      tokenRotatedAt: input.now,
+      peerTokenEnc: input.callbackToken ? encryptSecret(input.callbackToken) : null,
+      approvedAtLocal: input.approvedAtLocal,
+      approvedAtPeer: input.approvedAtPeer,
+      approvedByPrincipalId: input.approvedByPrincipalId ?? null,
+      enrolledAt: input.now,
+      metadata: input.metadata as never,
+    },
+  });
 }
 
 // ── Dual approval + lifecycle (operator / peer actions) ──────────────────────

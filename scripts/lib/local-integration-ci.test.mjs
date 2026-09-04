@@ -89,7 +89,7 @@ describe("createLocalIntegrationPlan", () => {
 
     assert.deepEqual(plan.commands.map((command) => command.join(" ")), [
       "git checkout -B local-integration/doc-build-studio-decision-skill-packs origin/main",
-      "git merge --no-ff --no-edit doc/build-studio-decision-skill-packs",
+      "git merge --no-ff --no-edit --signoff doc/build-studio-decision-skill-packs",
       "node scripts/ci-evidence-plan.mjs --event local-ci --base origin/main --head HEAD",
       "node scripts/sandbox-freshness-preflight.mjs --converge --branch local-integration/doc-build-studio-decision-skill-packs",
       "pnpm --filter @dpf/db exec prisma generate",
@@ -97,9 +97,23 @@ describe("createLocalIntegrationPlan", () => {
       "node scripts/check-doc-links.mjs",
       "node scripts/check-guards.mjs",
       "env NODE_OPTIONS=--max-old-space-size=16384 node scripts/local-ci-typecheck-runner.mjs",
-      "env NODE_OPTIONS=--no-experimental-webstorage node scripts/local-ci-vitest-runner.mjs --initial-workers 4 --retry-workers 2",
+      "env NODE_OPTIONS=--no-experimental-webstorage node scripts/local-ci-vitest-runner.mjs --initial-workers 4 --retry-workers 2 --base origin/main",
       "env NODE_ENV=production NODE_OPTIONS=--max-old-space-size=16384 pnpm --filter web exec next build",
     ]);
+  });
+
+  it("merges the invoking SHA when supplied, not the branch name (BI-E3044AEC)", () => {
+    const sha = "65aaf56ec10babcdef0123456789abcdef0123";
+    const plan = createLocalIntegrationPlan({
+      candidateBranch: "fix/embedding-coverage-selfheal",
+      candidateSha: sha,
+      mode: "single-branch",
+      siblingBranches: [],
+      hostPlatform: "linux",
+    });
+    const commands = plan.commands.map((command) => command.join(" "));
+    assert.ok(commands.includes(`git merge --no-ff --no-edit --signoff ${sha}`));
+    assert.ok(!commands.some((c) => c === "git merge --no-ff --no-edit --signoff fix/embedding-coverage-selfheal"));
   });
 
   it("routes Windows production builds through the bounded watchdog wrapper", () => {
@@ -141,7 +155,7 @@ describe("createLocalIntegrationPlan", () => {
     });
 
     assert.ok(plan.commands.map((command) => command.join(" ")).includes(
-      "env NODE_OPTIONS=--no-experimental-webstorage node scripts/local-ci-vitest-runner.mjs --initial-workers 4 --retry-workers 2",
+      "env NODE_OPTIONS=--no-experimental-webstorage node scripts/local-ci-vitest-runner.mjs --initial-workers 4 --retry-workers 2 --base origin/main",
     ));
   });
 
@@ -158,7 +172,7 @@ describe("createLocalIntegrationPlan", () => {
     ));
     assert.equal(
       vitestCommand,
-      "env NODE_OPTIONS=--no-experimental-webstorage node scripts/local-ci-vitest-runner.mjs --initial-workers 4 --retry-workers 2",
+      "env NODE_OPTIONS=--no-experimental-webstorage node scripts/local-ci-vitest-runner.mjs --initial-workers 4 --retry-workers 2 --base origin/main",
     );
   });
 
@@ -173,7 +187,7 @@ describe("createLocalIntegrationPlan", () => {
 
     assert.deepEqual(plan.commands.slice(0, 2).map((command) => command.join(" ")), [
       "git checkout -B local-integration/feat-local-ci-content-evidence refs/dpf/integration/main",
-      "git merge --no-ff --no-edit feat/local-ci-content-evidence",
+      "git merge --no-ff --no-edit --signoff feat/local-ci-content-evidence",
     ]);
     assert.ok(!plan.commands.map((command) => command.join(" ")).some((command) => command.startsWith("git fetch ")));
     assert.equal(plan.baseRef, "refs/dpf/integration/main");
@@ -239,7 +253,7 @@ describe("createLocalIntegrationPlan", () => {
 
     assert.deepEqual(plan.commands.map((command) => command.join(" ")), [
       "git checkout -B local-integration/docs-gate-flow origin/main",
-      "git merge --no-ff --no-edit docs/gate-flow",
+      "git merge --no-ff --no-edit --signoff docs/gate-flow",
       "node scripts/ci-evidence-plan.mjs --event local-ci --base origin/main --head HEAD",
       "node scripts/gen-doc-index.mjs --check",
       "node scripts/check-doc-links.mjs",
@@ -296,10 +310,10 @@ describe("createLocalIntegrationPlan", () => {
 
     assert.equal(plan.integrationBranch, "local-integration/feat-build-studio-decision-skills-slice-1");
     assert.ok(plan.commands.map((command) => command.join(" ")).includes(
-      "git merge --no-ff --no-edit feat/environment-broker",
+      "git merge --no-ff --no-edit --signoff feat/environment-broker",
     ));
     assert.ok(plan.commands.map((command) => command.join(" ")).includes(
-      "git merge --no-ff --no-edit fix/build-studio-copy",
+      "git merge --no-ff --no-edit --signoff fix/build-studio-copy",
     ));
   });
 

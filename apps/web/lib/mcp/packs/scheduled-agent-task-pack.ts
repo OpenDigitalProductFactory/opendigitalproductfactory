@@ -50,7 +50,7 @@ const definitions: ToolDefinition[] = [
         },
         trigger: {
           type: "object",
-          description: "WHY this job exists, so immediacy is judgeable at fire time (BI-5087F34F).",
+          description: "WHY this job exists, so immediacy is judgeable at fire time (BI-5087F34F). Recorded either way — omit it and the job records kind 'time'. Supply workroomId to have the room's posture govern this job's pace at fire time.",
           properties: {
             kind: { type: "string", enum: [...SCHEDULED_WORK_TRIGGER_KINDS], description: "Trigger source." },
             workroomId: { type: "string", description: "Room this job serves, if any." },
@@ -177,19 +177,28 @@ async function createScheduledAgentTaskHandler(
     && !Array.isArray(triggerParam.obligation)
       ? (triggerParam.obligation as Record<string, unknown>)
       : null;
-  const taskConfig = triggerParam
-    ? withScheduledWorkTrigger(baseTaskConfig, {
-        kind: triggerParam.kind as ScheduledWorkTriggerKind,
-        workroomId: typeof triggerParam.workroomId === "string" ? triggerParam.workroomId : null,
-        obligation:
-          typeof obligationParam?.dueAt === "string"
-            ? {
-                dueAt: obligationParam.dueAt,
-                label: typeof obligationParam.label === "string" ? obligationParam.label : null,
-              }
-            : null,
-      })
-    : baseTaskConfig;
+  // BI-5087F34F set out to record WHY a job exists, not just when. Recording it
+  // only when a caller opted in left most tasks with no answer: of 53 live tasks
+  // 13 carried a trigger, and none of the 12 ACTIVE ones did. An optional
+  // provenance record is one most callers never supply.
+  //
+  // So the record is now unconditional. "time" is the honest default for a job
+  // created on a cron with no stated cause — it is what a scheduled job IS, not
+  // a guess about intent. A caller that knows better still supplies its own kind,
+  // the room it serves, and the obligation it races; nothing about that path
+  // changes. What changes is that "why does this job exist" now always has an
+  // answer, which is what the posture ladder reads at fire time.
+  const taskConfig = withScheduledWorkTrigger(baseTaskConfig, {
+    kind: (triggerParam?.kind as ScheduledWorkTriggerKind | undefined) ?? "time",
+    workroomId: typeof triggerParam?.workroomId === "string" ? triggerParam.workroomId : null,
+    obligation:
+      typeof obligationParam?.dueAt === "string"
+        ? {
+            dueAt: obligationParam.dueAt,
+            label: typeof obligationParam.label === "string" ? obligationParam.label : null,
+          }
+        : null,
+  });
   const result = await scheduleAgentTaskFor(userId, {
     agentId: String(params.agentId ?? ""),
     title: String(params.title ?? ""),

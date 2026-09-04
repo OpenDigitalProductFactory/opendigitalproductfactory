@@ -10,6 +10,7 @@ import {
 } from "./lib/ci-policy-guards.mjs";
 
 const EXPECTED_LEGACY_JOBS = [
+  "actuator-inputs-writable",
   "application-boundary-guard",
   "archetype-completeness-guard",
   "build-studio-namespace-guard",
@@ -30,6 +31,7 @@ const EXPECTED_LEGACY_JOBS = [
   "docs-impact-gate",
   "docs-link-integrity",
   "docs-staleness-detector",
+  "employment-event-writers",
   "endpoint-classification-guard",
   "finding-substrate-guard",
   "fk-index-coverage-guard",
@@ -37,6 +39,7 @@ const EXPECTED_LEGACY_JOBS = [
   "fresh-install-reliability",
   "gate-executor-liveness",
   "governed-teardown-guard",
+  "guard-conformance-marks",
   "host-port-range-guard",
   "installer-help-contract",
   "installer-skip-visibility",
@@ -60,6 +63,7 @@ const EXPECTED_LEGACY_JOBS = [
   "published-image-freshness",
   "release-asset-contract",
   "release-compose-pins",
+  "rendered-backlog-pointers",
   "repo-guard-loop",
   "reporting-composition-guard",
   "retention-enrollment-guard",
@@ -75,6 +79,7 @@ const EXPECTED_LEGACY_JOBS = [
   "test-clock-bomb-guard",
   "test-cwd-independence-guard",
   "tool-surface-guard",
+  "unattributable-deferral",
   "ux-fit-gate",
   "ux-primitive-adoption-guard",
   "work-unit-conformance-guard",

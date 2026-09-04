@@ -9,7 +9,7 @@ import {
 function link(overrides: Partial<PairingLink> = {}): PairingLink {
   return {
     linkId: "FL-0001",
-    linkState: "active",
+    linkState: "trusted",
     relationshipPreset: "same-organization",
     peerLabel: "operator-production",
     ...overrides,
@@ -76,6 +76,20 @@ describe("resolveInstallationPairing", () => {
     expect(resolveInstallationPairing({ links: [link({ linkState: "pending" })] }).source).toBe(
       "none",
     );
+  });
+
+  it("counts only the trust state a link can actually hold (BI-D92A50F4)", () => {
+    // `resolveLinkTrust` produces pending | trusted | quarantined | revoked and
+    // nothing else. Any other spelling means the resolver can never match a real
+    // row and work sync reports "nowhere to mirror" while mirroring succeeds.
+    expect(resolveInstallationPairing({ links: [link({ linkState: "trusted" })] }).source).toBe(
+      "federation-link",
+    );
+    for (const impossible of ["active", "approved", "quarantined", "revoked"]) {
+      expect(resolveInstallationPairing({ links: [link({ linkState: impossible })] }).source).toBe(
+        "none",
+      );
+    }
   });
 
   it("ignores cross-organization links — those are not a pairing", () => {

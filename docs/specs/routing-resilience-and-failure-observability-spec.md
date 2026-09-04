@@ -167,6 +167,53 @@ Acceptance:
 - `pipeline-v2` candidate traces explain the runtime exclusion.
 - No rate-limit-only path flips `ModelProvider.status` from `active` to `disabled`.
 
+#### 4.1a Local pool refusal is not an upstream rate limit (implemented)
+
+The wait-and-retry in step 2 is correct for an **upstream** 429: the provider was
+asked, answered "later", and may answer on retry.
+
+It is wrong for a **local** refusal. `ai-inference.ts` consults `getCliPoolStatus`
+and throws `rate_limit` *before the call leaves the process* when a CLI pool is
+known-saturated, expressly so the chain falls through — nothing was asked of the
+provider, and the reset is wall-clock, so waiting cannot make it answer sooner.
+Honouring the wait there defeats the pool check's whole purpose, and the two
+mechanisms cancelled each other out.
+
+Measured cost on a live install: every governed review ended
+`missing-terminal-writer`. The reviewer read its artifact successfully with
+`toolAccuracy=1.00`, then its next inference call spent the entire
+`MAX_DURATION_REVIEW_MS` (300s) budget on repeated 30s sleeps against a saturated
+`codex` pool — one turn ran 344s with `provider=unknown`, never binding a model —
+while a healthy provider sat at index 1 of the chain.
+
+Implemented shape:
+
+- `InferenceError` carries `localPoolExhausted`, set **only** by the EP-COST pool
+  check in `ai-inference.ts`.
+- `callWithFallbackChain` skips its wait-and-retry for that case **and only when
+  an untried entry remains in the chain**.
+
+The second condition is load-bearing for installs other than the one this was
+found on. Where the saturated pool is the *whole* chain — a single-provider
+install — the wait is the only recovery there is, and skipping it would convert a
+30 second delay into an immediate hard failure. The first draft of this change
+skipped unconditionally and would have regressed exactly those installs; a
+regression test now pins the single-provider case.
+
+Residual case, deliberately not handled: if every remaining entry is itself a
+saturated CLI pool, the chain now exhausts without the one extra post-wait
+attempt it previously got. That is a narrow shape (two CLI adapters, both
+saturated, no API adapter configured) and it fails fast rather than silently
+consuming a turn budget, but it is a real behaviour change and belongs in the
+next revision if it is observed.
+
+Acceptance:
+
+- A local pool refusal with an untried alternative advances immediately; the
+  `Rate limited on pinned provider` log does not appear.
+- A local pool refusal with no alternative still waits and retries.
+- A genuine upstream 429 still waits and retries unchanged.
+
 ### 4.2 Error Classification and Remediation Propagation
 
 The adapter and fallback layer must preserve the difference between auth failure, rate limit, overload, provider error, and request-too-large.

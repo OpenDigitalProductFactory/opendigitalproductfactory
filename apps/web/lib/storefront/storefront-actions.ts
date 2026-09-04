@@ -699,6 +699,13 @@ export async function submitOrder(
 
 // ── Donation ──────────────────────────────────────────────────────────────────
 
+/** The workspace's own base currency — the one source `/s/[slug]/donate` also
+ *  renders its symbol from. Falls back to USD, matching `resolveInquiryFormSchema`. */
+async function resolveOrgBaseCurrency(): Promise<string> {
+  const settings = await prisma.orgSettings.findFirst({ select: { baseCurrency: true } });
+  return settings?.baseCurrency ?? "USD";
+}
+
 export async function submitDonation(
   slug: string,
   data: {
@@ -722,7 +729,15 @@ export async function submitDonation(
       donorEmail: data.donorEmail,
       donorName: data.donorName,
       amount: data.amount,
-      currency: data.currency ?? "GBP",
+      // The workspace's own currency, never a hardcoded one. This read
+      // `data.currency ?? "GBP"`, and `DonationForm` passes no currency, so on
+      // every non-GBP install the donate page showed the org's symbol while the
+      // row was written GBP (BI-685ADDCD). A USD rescue took $50 and $25 and its
+      // books said GBP. Resolved on the server so the stored code cannot drift
+      // from the symbol the donor saw — the donate page derives that symbol from
+      // this same `OrgSettings.baseCurrency`. An explicit currency still wins, so
+      // a later multi-currency flow is not foreclosed.
+      currency: data.currency ?? (await resolveOrgBaseCurrency()),
       campaignId: data.campaignId,
       message: data.message,
       isAnonymous: data.isAnonymous ?? false,

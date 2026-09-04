@@ -26,7 +26,30 @@ export function technicalFields(item: AttentionItem): OwnerTechnicalField[] {
     { label: "Risk", value: item.riskClass },
     { label: "Why it was routed", value: residueReasonLabel(item.triage.residueReason) },
     { label: "Original context", value: item.context || "No extra context recorded" },
+    ...envelopeTechnicalFields(item),
   ];
+}
+
+function envelopeTechnicalFields(item: AttentionItem): OwnerTechnicalField[] {
+  const envelope = item.envelope;
+  if (!envelope) return [];
+  const fields: OwnerTechnicalField[] = [
+    { label: "Coworker", value: envelope.coworkerAgentId },
+    { label: "Requested action", value: envelope.manifestActionId },
+    { label: "Status", value: envelope.status },
+    { label: "Open until", value: envelope.expiresAtIso ?? "No time limit" },
+  ];
+  if (envelope.taskRunId) fields.push({ label: "Task", value: envelope.taskRunId });
+  const binding = envelope.reviewBinding;
+  if (binding) {
+    fields.push(
+      { label: "Repository", value: binding.repositoryFullName },
+      { label: "Commit", value: binding.commitSha },
+      { label: "File", value: binding.path },
+      { label: "Blob", value: binding.providerBlobId },
+    );
+  }
+  return fields;
 }
 
 export function builderActions(item: AttentionItem): OwnerDecisionChoice[] {

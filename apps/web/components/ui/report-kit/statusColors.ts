@@ -56,6 +56,18 @@ export function intentStyle(intent: Intent): IntentStyle {
  * (e.g. complaints) so each gets its own namespace.
  */
 export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
+  // Durable provider operations. start_indeterminate is deliberately warning:
+  // the provider POST may have crossed, so the platform reconciles rather
+  // than presenting it as pending or repeating the side effect.
+  asyncInferenceOperation: {
+    pending: "neutral",
+    start_indeterminate: "warning",
+    running: "info",
+    completed: "success",
+    failed: "danger",
+    cancelled: "neutral",
+    expired: "warning",
+  },
   // Edge operational health and operator-governed trust are deliberately
   // separate axes. Both Edge Nodes and Connections consume these semantics.
   edgeHealth: {
@@ -451,6 +463,21 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
     done: "success",
     deferred: "neutral",
     retired: "neutral",
+  },
+  // Canonical Workroom lifecycle. This is distinct from true liveness: status
+  // says where the room is in its workflow while liveness says whether its
+  // recorded execution evidence is still alive.
+  workroom: {
+    draft: "neutral",
+    ready: "info",
+    working: "accent",
+    blocked: "danger",
+    verifying: "info",
+    "ready-for-review": "warning",
+    "ready-for-promotion": "warning",
+    complete: "success",
+    abandoned: "neutral",
+    archived: "neutral",
   },
   // Workspace Work Room semantics. These domains are shared by the My Work
   // lens and room detail shell so neither surface carries a private color map.

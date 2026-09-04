@@ -18,15 +18,20 @@ elseif ($NoEdge) { $env:DPF_INCLUDE_EDGE = '0' }
 $includeEdge = $false
 $stateLib = Join-Path $DPF_DIR "scripts\installer\lib\state.ps1"
 if (-not (Test-Path -LiteralPath $stateLib)) { $stateLib = Join-Path $DPF_DIR "installer\lib\state.ps1" }
-try {
-    if (Test-Path -LiteralPath $stateLib) {
-        . $stateLib
+if (Test-Path -LiteralPath $stateLib) {
+    . $stateLib
+    try {
         $includeEdge = Resolve-DpfEdgeEnabled -InstallDir $DPF_DIR
-    } else {
+    } catch {
         $includeEdge = ($env:DPF_INCLUDE_EDGE -eq '1')
     }
-} catch {
+} else {
     $includeEdge = ($env:DPF_INCLUDE_EDGE -eq '1')
+}
+
+$consumerReleaseTag = Resolve-DpfConsumerReleaseImageTag -InstallDir $DPF_DIR
+if ($consumerReleaseTag) {
+    Write-Host "Using recorded consumer release tag $consumerReleaseTag" -ForegroundColor Cyan
 }
 
 $capabilityProjection = Resolve-DpfCapabilityComposeProfiles -InstallDir $DPF_DIR

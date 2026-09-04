@@ -11,11 +11,14 @@ import {
 } from "./environment-lease-pool-policy";
 import { isHeavyResourceClass, type HeavyResourceClass } from "./host-resource-policy";
 import localCiSlotResources from "./local-ci-slot-resources.json";
+import { assertRenewalSlotBinding, type NonprodSlotBinding } from "./environment-lease-slot-binding";
 import { recordQueueTransition } from "@/lib/queue/queue-telemetry";
 import { gateRunDispositionsTotal } from "@/lib/operate/metrics";
 import type { NonprodOwnerProvider } from "./nonprod-owner-provider";
-import { isImmutableGateClaimKey, resolveLocalCiTerminalEvidence } from "@/lib/gates/gate-run-identity";
+import { isImmutableGateClaimKey } from "@/lib/gates/gate-run-identity";
+import { settleTerminalGateLease } from "./environment-lease-terminal-evidence";
 import { admittedLeaseTtlMs, DEFAULT_LEASE_TTL_MS, requestedTtlMs } from "./environment-lease-timing";
+import { afterNonprodLeaseRelease, publishNonprodCapacityForHead } from "./durable-wait";
 export { NONPROD_OWNER_PROVIDERS, type NonprodOwnerProvider } from "./nonprod-owner-provider";
 export {
   admittedLeaseTtlMs,
@@ -34,17 +37,6 @@ export {
 export type NonprodEnvironmentKey = "active-candidate" | "local-integration-ci" | "host-heavy-resource";
 type NonprodSlotKey = keyof typeof localCiSlotResources.slots;
 export const NONPROD_SLOT_KEYS = Object.freeze(Object.keys(localCiSlotResources.slots) as NonprodSlotKey[]);
-
-function expectedLocalCiSlotBinding(slotKey: NonprodSlotKey) {
-  const resources = localCiSlotResources.slots[slotKey];
-  return {
-    manifestVersion: localCiSlotResources.schemaVersion,
-    slotKey,
-    url: `http://localhost:${resources.portalPort}`,
-    ports: [resources.portalPort, resources.postgresPort],
-    cleanupCommand: `node scripts/local-ci-slot-cleanup.mjs --slot-key ${slotKey}`,
-  };
-}
 
 type LeaseModel = typeof prisma.nonProductionEnvironmentLease;
 type LeaseTx = Pick<
@@ -93,6 +85,15 @@ async function inLeaseTransaction<T>(
       if (!["P2002", "P2034"].includes(code) || attempt >= 2) throw error;
     }
   }
+}
+
+/**
+ * Lanes whose queue head is WOKEN, never promoted: the head's own next claim is
+ * the only transaction that may admit it.
+ */
+function isSelfAdmittingEnvironment(environmentKey: string): boolean {
+  return environmentKey === "local-integration-ci"
+    || environmentKey === "host-heavy-resource";
 }
 
 function queueKey(environmentKey: string): string {
@@ -149,6 +150,9 @@ async function reconcileEnvironmentInTransaction(input: {
   environmentKey: string;
   now: Date;
   slotKeys: string[];
+  /** BI-B1CB7EC3: only these rows may take a slot on this pass. */
+  admissibleLeaseIds?: string[];
+  livenessWindowMs?: number;
 }): Promise<{
   expiredLeaseIds: string[];
   admittedLeaseIds: string[];
@@ -172,6 +176,8 @@ async function reconcileEnvironmentInTransaction(input: {
     })),
     now: input.now,
     slotKeys: input.slotKeys,
+    admissibleLeaseIds: input.admissibleLeaseIds,
+    livenessWindowMs: input.livenessWindowMs,
   });
 
   if (plan.expiredLeaseIds.length > 0) {
@@ -328,21 +334,17 @@ export async function claimNonprodEnvironmentLease(input: {
       && isTerminalLeaseStatus(lease.status)
       && isImmutableGateClaimKey(input.claimKey)
     ) {
-      return {
-        ...await resolveLocalCiTerminalEvidence({
-          claimKey: input.claimKey!,
-          evidenceRecordId: lease.evidenceRecordId,
-          now,
-          loadEvidence: async (id) => tx.externalEvidenceRecord
-            ? tx.externalEvidenceRecord.findUnique({
-              where: { id },
-              select: { id: true, operationType: true, details: true },
-            })
-            : null,
-        }),
+      const settlement = await settleTerminalGateLease({
+        tx,
         lease,
-        poolPolicy,
-      };
+        claimKey: input.claimKey!,
+        now,
+        ttlMs,
+      });
+      if (settlement.kind === "settled") {
+        return { ...settlement.projection, lease, poolPolicy };
+      }
+      lease = settlement.lease;
     }
 
     if (lease && isTerminalLeaseStatus(lease.status)) {
@@ -435,11 +437,21 @@ export async function claimNonprodEnvironmentLease(input: {
       created = true;
     }
 
+    // Release and reaping already wake the durable queue head instead of
+    // promoting it (see releaseNonprodEnvironmentLease). A claim follows the
+    // same rule: it admits only itself, never a waiter whose owner may have
+    // exited after a durable-wait exit 75, and only when no older waiter is
+    // provably alive (BI-B1CB7EC3).
+    const selfAdmitting = isSelfAdmittingEnvironment(input.environmentKey);
     const reconciliation = await reconcileEnvironmentInTransaction({
       tx,
       environmentKey: input.environmentKey,
       now,
       slotKeys: poolPolicy.slotKeys,
+      admissibleLeaseIds: selfAdmitting ? [lease.id] : undefined,
+      livenessWindowMs: selfAdmitting
+        ? admittedLeaseTtlMs(input.environmentKey, ttlMs)
+        : undefined,
     });
     admittedNow = reconciliation.admittedLeaseIds.includes(lease.id);
     queueDepth = reconciliation.queueDepth;
@@ -566,12 +578,9 @@ export async function releaseNonprodEnvironmentLease(input: {
       environmentKey: current.environmentKey,
       now,
       // A local-CI waiter carries the fresh client-side host observation needed
-      // to prove capacity. Preserve FIFO here and let its next claim poll admit
-      // it; a release must not promote from server-only or stale pressure.
-      slotKeys: current.environmentKey === "local-integration-ci"
-        || current.environmentKey === "host-heavy-resource"
-        ? []
-        : ["slot-0"],
+      // to prove capacity. Preserve FIFO here and wake the durable queue head;
+      // its one fresh claim can admit with current pressure evidence.
+      slotKeys: isSelfAdmittingEnvironment(current.environmentKey) ? [] : ["slot-0"],
     });
     return {
       lease,
@@ -619,6 +628,7 @@ export async function releaseNonprodEnvironmentLease(input: {
     }
   }
   void emitLeaseTransitions(transitions);
+  await afterNonprodLeaseRelease({ db: db as never, lease: result.lease, priorStatus, now });
   return result.lease;
 }
 
@@ -627,13 +637,7 @@ export async function renewNonprodEnvironmentLease(input: {
   leaseId: string;
   ownerSessionId: string;
   ttlMs?: number;
-  slotBinding?: {
-    manifestVersion: 1;
-    slotKey: "slot-0" | "slot-1";
-    url: string;
-    ports: number[];
-    cleanupCommand: string;
-  };
+  slotBinding?: NonprodSlotBinding;
   hostPressure?: LocalCiHostPressure;
   capacityBroker?: LocalCiCapacityBroker;
   now?: Date;
@@ -655,27 +659,7 @@ export async function renewNonprodEnvironmentLease(input: {
   if (lease.ownerSessionId !== input.ownerSessionId) return { status: "lost", reason: "not-owner" };
   if (lease.expiresAt.getTime() <= now.getTime()) return { status: "lost", reason: "expired" };
   if (input.slotBinding) {
-    const slotKey = lease.slotKey as NonprodSlotKey | null;
-    if (
-      !slotKey
-      || !NONPROD_SLOT_KEYS.includes(slotKey)
-      || lease.slotManifestVersion !== input.slotBinding.manifestVersion
-      || slotKey !== input.slotBinding.slotKey
-    ) {
-      throw new Error("nonprod_slot_binding_mismatch");
-    }
-    const expected = expectedLocalCiSlotBinding(slotKey);
-    if (
-      input.slotBinding.manifestVersion !== expected.manifestVersion
-      || input.slotBinding.url !== expected.url
-      || input.slotBinding.cleanupCommand !== expected.cleanupCommand
-      || input.slotBinding.ports.length !== expected.ports.length
-      || input.slotBinding.ports.some(
-        (port, index) => port !== expected.ports[index],
-      )
-    ) {
-      throw new Error("nonprod_slot_resource_binding_mismatch");
-    }
+    assertRenewalSlotBinding(lease, input.slotBinding);
   } else if (
     lease.slotManifestVersion === 1
     && lease.phase === "admitted-unbound"
@@ -751,13 +735,11 @@ export async function reapExpiredNonprodEnvironmentLeases(input: {
         tx,
         environmentKey,
         now,
-        slotKeys: environmentKey === "local-integration-ci"
-          || environmentKey === "host-heavy-resource"
-          ? []
-          : ["slot-0"],
+        slotKeys: isSelfAdmittingEnvironment(environmentKey) ? [] : ["slot-0"],
       });
       promotedLeaseIds.push(...result.admittedLeaseIds);
     });
+    await publishNonprodCapacityForHead({ db: db as never, environmentKey, causeLeaseId: `expired-${Math.floor(now.getTime() / 300_000)}`, now });
   }
   const changedIds = [...new Set([
     ...lapsed.map((row) => row.id),

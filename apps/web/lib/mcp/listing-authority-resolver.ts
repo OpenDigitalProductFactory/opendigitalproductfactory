@@ -6,6 +6,8 @@
 
 import "server-only";
 
+import type { McpAuthSource } from "@/lib/mcp/tool-tier";
+
 import { prisma } from "@dpf/db";
 
 import { loadEffectiveAuthContext } from "@/lib/identity/load-effective-auth-context";
@@ -22,7 +24,7 @@ import {
 type ListingToken = {
   userId: string;
   agentId: string | null;
-  source: "pat" | "session-jwt";
+  source: McpAuthSource;
 };
 
 // The acting agent's stored data sensitivity, or null when it cannot be
@@ -65,7 +67,12 @@ async function resolveHumanClearanceForListing(
     },
     grantedCapabilities: getGrantedCapabilities(userContext),
     authentication: {
-      source: token.source === "pat" ? "bearer" : "session",
+      // An OAuth access token IS a bearer credential presented in the
+      // Authorization header, exactly like a PAT — only the issuance path
+      // differs. Mapping it to "bearer" is what keeps tools/list identical
+      // across issuance paths; treating it as anything else would fork the
+      // clearance axis and break the parity the design requires (§8).
+      source: token.source === "session-jwt" ? "session" : "bearer",
       methods: [],
     },
     actingAgentId: token.agentId,

@@ -19,7 +19,7 @@ abstract: |
 ## Why it's cited
 
 The index is a starting point for a future authorized implementation mapping. DPF's current product,
-service, deployment, and runtime distinctions are independently expressed in FPAW.
+service, deployment, and runtime distinctions are independently expressed in PAAW.
 
 ## Rights boundary
 

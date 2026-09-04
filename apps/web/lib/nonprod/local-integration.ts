@@ -5,6 +5,7 @@ import {
   type PlatformConfigCircuitBreakerStore,
 } from "./local-ci-pool-circuit-breaker";
 import type { NonprodOwnerProvider } from "./nonprod-owner-provider";
+import type { LocalIntegrationStatus } from "../../../../scripts/lib/local-integration-status.mjs";
 
 export type LocalIntegrationResultInput = {
   actorUserId: string;
@@ -15,15 +16,12 @@ export type LocalIntegrationResultInput = {
   taskRunId?: string;
   candidateBranch: string;
   mode: "single-branch" | "sibling-set" | "post-merge-main";
-  // "blocked_sandbox_drift": the shared sandbox's installed dependency graph
-  // did not match the lockfile (or was mid-install), so the gate refused to
-  // produce product evidence. A sandbox defect, not a product failure (BI-ECDF9520).
-  status:
-    | "passed"
-    | "failed"
-    | "conflict"
-    | "blocked_sandbox_drift"
-    | "blocked_control_plane_starvation";
+  // Every `blocked_*` status is a gate/infrastructure defect, not a product
+  // failure: the sandbox's dependency graph did not match the lockfile
+  // (BI-ECDF9520), the control plane degraded, or the build child was killed by
+  // a signal. The set is shared with the gate scripts so the producer and the
+  // recorder cannot drift apart again (BI-C59AC8AF).
+  status: LocalIntegrationStatus;
   summary: string;
   evidence: Prisma.InputJsonValue;
   gateKey?: string;

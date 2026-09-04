@@ -264,6 +264,12 @@ The entire animal surface in the shipped product is `/storefront/animals`:
 is a storefront surface — the public section, the storefront admin manager, the catalog API.
 There are no operational surfaces at all.
 
+One read-only staff surface has since been added on top of the same row: `/storefront/animals/waiting`,
+the **adoption waiting list** (BI-899D7F00) — every animal with status `available`, longest wait
+first, with whole days since `publishedAt`; future-dated listings sit last with no count, undated
+last of all, capped at the 100 longest-waiting and saying so. It is the newsletter-picking page
+the owner asked for five times; it adds no field and no model.
+
 Verified absent — searches over `packages/db/prisma/schema/*.prisma` returning zero:
 `StrayReport`/`FieldReport`/`IntakeRequest`, `Kennel`, `Euthan*`, `Vaccinat*`/`Immuniz*`,
 `Microchip`, `Foster`, `WalkIn`. Apparent hits for "tier" (`riskTier`, `hitlTier`) and
@@ -324,6 +330,106 @@ free-text event rather than an appointment against the animal. *A step recorded 
 because a control could not be found is a discoverability finding, not a capability one — check
 which before designing the fix.*
 
+**A second row needs correcting, in the other direction.** The 16:00 step recorded the outcomes as
+correct. They were correct while empty. Two gifts taken through `/s/rescue/donate` — $50 and $25,
+one currency, on a workspace that has never held a second — turned **Donations received** into
+`Unavailable · Multiple donation currencies are not combined`. Two defects met there. First,
+`submitDonation` stamped a hardcoded `GBP` on every gift while the donate page rendered the
+workspace's own symbol, so a USD install showed the donor `$50` and wrote GBP to its books; every
+gift on every non-GBP install was affected, not only this archetype. Second, `summarizeDonations`
+counted rows rather than currencies — `matching.length !== rows.length` is true whenever the gifts
+are in *any* single currency other than the workspace's — so one currency reported as several and
+the tile withheld a total it already held. Both fixed (`BI-685ADDCD`): the stored code now comes
+from `OrgSettings.baseCurrency`, the same source the symbol comes from, and gifts sharing one
+currency total wherever that currency came from. A genuine mix shows each currency side by side
+rather than nothing. **The two recorded gifts still carry `GBP`** — the platform does not silently
+rewrite the currency of an amount someone gave, so correcting them is the operator's call.
+*A metric that was honest while empty has not been measured. Populate it before scoring it.*
+
+## 6c. Re-run after the operating-day fixes — measured 2026-09-01
+
+§6b measured the day before any of it was fixed. This is the same ten steps, same install, run
+after the tranche-1 fixes shipped and were deployed. Install `v2026.09.01`, serving `52ab1d0db4`,
+founder account plus the public path signed out, at 768×1024.
+
+**Operability 0.40** — of ten steps, **0 completed, 8 partial, 2 impossible**. It was **0.30** on
+2026-08-26 (0 completed, 6 partial, 4 impossible). **Coverage is unchanged at 0.05.**
+
+| Step | 08-26 | 09-01 | What moved, or did not |
+|---|---|---|---|
+| 08:00 stray intake | partial | partial | Measured absent again: no microchip, finder, hold-clock or housing field. What changed is that what *was* typed is now correctable, and Delete asks first |
+| 09:00 owner surrender | partial | partial | Still one admission path; no pathway, ownership transfer or reason code |
+| 09:30 rounds | impossible | impossible | No round, care record or medication log |
+| 10:00 medical | impossible | **partial** | A `New event` control now exists, so a slot can be recorded. Still no vaccination record and no booster dates |
+| 11:00 walk-in adopter | partial | partial | A hold still shows without reason or date, and still blocks nothing |
+| 12:00 publish and share | partial | partial | **Zero per-animal URLs, zero listing filters.** The archetype's primary acquisition channel is still unreachable |
+| 13:00 found-pet call | impossible | **partial** | The caller gets through: the contact form takes name, email, **phone** and message with no donation. Searching intake records is still impossible |
+| 14:00 foster placement | impossible | impossible | No placement, supplies or return date |
+| 15:00 adoption | partial | partial | Outcome still untyped; no contract, fee or chip re-registration |
+| 16:00 numbers | partial | partial | Outcomes and donations now readable; kennels-free still unanswerable; intakes still not recorded as intakes |
+
+**The delta is +0.10, and it is honest about its size.** Two steps moved impossible → partial.
+Nothing reached *completed*, and nothing will until an animal can exist independently of a
+storefront listing (`BI-4F8A484C`). The tranche removed ways the product misled or obstructed the
+operator; it did not add the records the day is made of. That is precisely why coverage did not
+move, and why the two numbers are reported apart.
+
+**Confirmed fixed, each measured rather than asserted:**
+
+- The public contact form reads `Full name*, Email*, Phone, Message`. The required donation is
+  gone and the phone number a found-pet caller must leave is back.
+- The inbox reads **"6 things need you today"** with **zero** "Help your coworker continue?"
+  cards. It was 42 items, 34 of them identical platform runs.
+- Six **Details** disclosures on the animals page — breed, age, sex, size and description are
+  correctable after creation.
+- The value-stream strip renders **zero chevrons**; unobservable stages show a dash.
+- The Simple/Full toggle is **visible and clickable at 768px**, where it previously measured 0×0.
+- `DONATIONS RECEIVED` now reads **`£75 · $10 · 3 gifts · kept apart by currency`**. It read
+  `Unavailable` on 2026-08-27 because a hardcoded default recorded USD gifts as GBP; the writer
+  was corrected and the tile now totals each currency instead of refusing outright. Worth
+  recording: the refusal was always correct behaviour — the defect was upstream of it.
+
+**Re-verified on the next build, `v2026.09.02` — two rows firm up, the figure does not move.**
+
+- **10:00 medical.** §6c scored this partial because a `New event` control had appeared. On
+  `v2026.09.01` that control did not actually work: the dialog closed as though it had saved and
+  the POST returned `503`, so no slot was ever recorded. On `v2026.09.02` the same booking
+  **persists across a reload**. The row was right in the end, but it had been scored from the
+  presence of a control rather than from a saved record — worth naming, because *control exists*
+  and *write succeeds* are different measurements and only the second one is the step.
+- **16:00 numbers.** The cockpit now states the population: **`Animals in care — 6 animals · 4 on
+  hold · 1 available · 1 pending`**, ahead of any money, and the adoption recorded during the run
+  moved `Animals placed` to 1. Kennels-free is still unanswerable and intakes are still not
+  recorded as intakes, so the row stays partial.
+
+Operability stays **0.40**. Both changes improved a step that was already partial rather than
+converting one, which is the pattern this whole tranche has followed: the product has become
+markedly less misleading without becoming more capable. Nothing reaches *completed*, and the two
+steps still impossible — rounds and foster placement — are both waiting on the same keystone.
+
+**A measurement caution earned during this re-run.** Three apparent defects — a `503` on the
+calendar write, an animal status change that fired no request at all, and a "Reload to reconnect"
+banner — were all one thing: the portal was mid-upgrade and restarting underneath the run. Every
+one of them would have been filed as a product defect. Before recording a failed step, confirm the
+install is healthy and serving the build you think it is; a run against a restarting container
+measures the restart.
+
+**Still measured absent, and the reason:** no volunteer or foster-carer worker class on the People
+surface, no ward or foster-home work location, and no rescue role. The archetype declares all of
+them; the seeder that applies them read a cuid where a slug was required and therefore seeded
+nothing. That is the fix in this change.
+
+**The AI roster still has no animal-welfare specialist** (`BI-DC11C687`), and the attempt to add
+one is worth recording because it names the real cost. A coworker is not a registry row: the
+lifecycle conformance gate refused it for having no `AGENT_MODEL_CONFIG_DEFAULTS` floor — *"no
+minimum model tier, so a weak local model can serve it"* — and the capability measure refused it
+for sitting at corpus level 1, *bound to a family that has no corpus pages*. Reaching level 3 needs
+a `docs/professions/animal-welfare-operations/` craft corpus, the way `agricultural-operations`
+carries four pages for the farm-ranch steward. That corpus is the work, and it is its own piece.
+The eight roles therefore summon the general coworkers for now, and a test asserts they roster only
+coworkers that actually exist rather than a ghost. *The gate was right to refuse: a specialist with
+no craft corpus and no model floor is a name, not expertise.*
+
 ### What the run found that §6 could not
 
 Three findings sit outside the thirty entities entirely, and each alone prevents the business
@@ -333,6 +439,13 @@ running as more than one person with a clipboard:
    Manager` are both refused the only animal surface; only the superuser reaches it. Recruiting
    has no create control, the organization has zero departments and zero positions, and employment
    type has no volunteer. See §5b for what the day actually requires. *(BI-2777B86B, BI-A30152B6)*
+   **The navigation half was fixed 2026-08-29**: the shell breadcrumb offered both roles a *Portal*
+   crumb to `/storefront` — the one page whose layout refuses them — because the rail filtered on
+   `view_storefront` and the trail filtered on nothing. Both now read the same granted set, so the
+   product no longer advertises a door these roles cannot open. **The refusal itself stands.**
+   Granting storefront-manage to an operational role would make the 404 go away and cement animals
+   living under storefront and marketing administration, which is the actual defect
+   (`BI-4F8A484C`).
 2. **Every public inbound channel requires a donation.** Both the adoption enquiry and the
    site-wide contact form reject a submission without a donation amount, so the found-pet caller,
    the surrendering owner and the would-be volunteer are all turned away at the door. This stands
@@ -356,6 +469,9 @@ running as more than one person with a clipboard:
 - Consumer vocabulary is right — Donate, Adopt, Enquire; no price on an animal.
 - The cockpit puts storefront enquiries above the platform attention list.
 - `/performance` refuses to show numbers it has not computed.
+- The sixteen value-stream stages carry no chevron and nothing that reads as clickable, and the
+  fifteen with no queue bound to them show a dash rather than a zero no query could have produced
+  (`BI-AF50DBD5`; re-verified 2026-08-29 at 1440 and at 768x1024).
 - No horizontal overflow at 768×1024 on any surface tried.
 
 ### Two archetype-specific traps for the next run
@@ -367,9 +483,19 @@ screen. This is the concrete case for element 10 of the canonical minimal substr
 
 **Destructive controls are undersized for the tablet the work is done on.** At 768×1024 the
 per-animal Delete measured 59×28 px and the photo remove control 24×24, both unconfirmed, on the
-device a kennel technician holds one-handed. The per-animal Delete was fixed on 2026-08-27 — it
-asks first, and both it and its confirmation carry a 44 px target. **The photo remove control is
-unchanged**: still 24×24 and still unconfirmed.
+device a kennel technician holds one-handed. **Both fixed** — the per-animal Delete on 2026-08-27,
+the photo remove on 2026-08-28. Each asks first, and every one of the four controls carries a 44 px
+target.
+
+**The tablet worker could not reach Simple mode — the one thing §7 credits with solving the density
+problem for them.** The Simple/Full toggle and its mode explanation lived inside
+`#primary-navigation-menu`, which is `hidden` below `lg`, so at 768px the buttons measured 0×0 with
+a null `offsetParent` and the explanation vanished. The kennel technician doing rounds was locked
+in Full mode, looking at Build Studio, Backlog, Architecture, Delivery, Platform Hub and Admin
+while recording that a dog had been fed. Fixed 2026-08-28 (`BI-6395DA89`): the mode control sits
+outside the collapsible menu and is reachable at every width; the destinations themselves still
+collapse. *A control inside a responsive disclosure is not reachable — measure the control at the
+width the work is done at, not only at desktop.*
 
 ## 7. UX requirements
 
@@ -529,4 +655,4 @@ The archetype may be described as supported when:
 
 An archetype below **0.6 coverage** must not be described as supported in external material, and
 below **0.8 operability** must not be described as operable. Current: **0.05 coverage**
-(2026-08-25), **0.30 operability** (2026-08-26).
+(2026-08-25), **0.40 operability** (2026-09-01, §6c).

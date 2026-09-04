@@ -4,6 +4,8 @@ export type TerminalToolPolicy = {
   minimumSuccessfulReaderCalls: number;
   maximumReaderCalls: number;
   immutableReaderArguments?: ImmutableReaderArguments;
+  terminalPhase?: "writer-only";
+  persistedEvidenceAvailable?: boolean;
 };
 
 export type ImmutableReaderArguments = {
@@ -52,6 +54,19 @@ export function createInitiativeReviewTerminalToolPolicy(
         },
       }
     : null;
+}
+
+/**
+ * Resume a review that already persisted successful immutable evidence without
+ * reopening the reader surface. The resumed turn is a bounded writer phase:
+ * the model may propose only the independently selected governed assessment.
+ */
+export function enterTerminalWriterPhase(policy: TerminalToolPolicy): TerminalToolPolicy {
+  return {
+    ...policy,
+    terminalPhase: "writer-only",
+    persistedEvidenceAvailable: true,
+  };
 }
 
 export type TerminalToolArgumentDisposition =
@@ -183,6 +198,21 @@ export function summarizeTerminalToolProgress(
 ): TerminalToolProgress {
   const readers = new Set(policy.readerToolNames);
   const readerRecords = records.filter((record) => readers.has(record.name));
+  if (policy.persistedEvidenceAvailable) {
+    return {
+      readerAttempts: readerRecords.length,
+      successfulReaderCalls: Math.max(
+        policy.minimumSuccessfulReaderCalls,
+        readerRecords.filter((record) => record.result.success).length,
+      ),
+      evidenceAvailable: true,
+      partialEvidence: false,
+      continuationCursor: null,
+      paginationInvalid: false,
+      writerAttempted: records.some((record) => record.name === policy.writerToolName),
+      readerBudgetExhausted: readerRecords.length >= policy.maximumReaderCalls,
+    };
+  }
   const successfulReaderCalls = readerRecords.filter((record) => record.result.success).length;
   const binding = policy.immutableReaderArguments;
   let attemptActive = false;
@@ -277,6 +307,16 @@ export function resolveTerminalToolCall(
   toolName: string,
 ): TerminalToolCallDisposition {
   const progress = summarizeTerminalToolProgress(policy, records);
+  if (policy.terminalPhase === "writer-only" && policy.readerToolNames.includes(toolName)) {
+    return {
+      kind: "refuse",
+      result: {
+        success: false,
+        error: "terminal_writer_phase_reader_refused",
+        message: `Immutable evidence is already persisted. Call ${policy.writerToolName} now.`,
+      },
+    };
+  }
   if (toolName === policy.writerToolName && !progress.evidenceAvailable) {
     return {
       kind: "refuse",
@@ -337,6 +377,9 @@ export function applyTerminalToolSurface(
   records: readonly TerminalToolRecord[],
   providerTools: readonly Record<string, unknown>[],
 ): Array<Record<string, unknown>> {
+  if (policy.terminalPhase === "writer-only") {
+    return selectTerminalToolSurface(providerTools, [policy.writerToolName]);
+  }
   const progress = summarizeTerminalToolProgress(policy, records);
   if (progress.writerAttempted) return [...providerTools];
   if (progress.evidenceAvailable) return selectTerminalToolSurface(providerTools, [policy.writerToolName]);
@@ -350,6 +393,9 @@ export function buildTerminalToolReminder(
   records: readonly TerminalToolRecord[],
 ): string {
   const progress = summarizeTerminalToolProgress(policy, records);
+  if (policy.terminalPhase === "writer-only") {
+    return `Immutable evidence is already persisted. Call ${policy.writerToolName} now; do not read again or respond with prose first.`;
+  }
   if (progress.evidenceAvailable) return `Call ${policy.writerToolName} now; complete immutable evidence is available.`;
   if (progress.readerBudgetExhausted) return "Immutable traversal is incomplete and the bounded reader budget is exhausted; do not record a disposition.";
   if (progress.partialEvidence) return `Continue read_source_at_version with cursor ${progress.continuationCursor}; the writer remains unavailable until traversal completes.`;
@@ -377,7 +423,7 @@ export function resolveTerminalTextExit(
       kind: "input-required",
       reason: "missing-terminal-writer",
       writerToolName: policy.writerToolName,
-      message: "The independent review stopped without recording a governed assessment. No receipt was created.",
+      message: `The provider did not honor the required writer tool-call contract for ${policy.writerToolName}. The same TaskRun remains resumable. No receipt was created.`,
     };
   }
   if (!progress.evidenceAvailable) {

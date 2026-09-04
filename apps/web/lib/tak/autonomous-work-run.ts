@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import { prisma } from "@dpf/db";
 import type { Prisma } from "@dpf/db";
+import type { MessageOrigin } from "@/lib/inference/data-screening/types";
 import type { ChatMessage } from "@/lib/ai-inference";
 import { resolveCoworkerReviewPattern } from "@/lib/golden-triangle/coworker-review";
 import { reviewCoworkerDraft } from "@/lib/tak/coworker-inline-review";
@@ -316,6 +317,8 @@ export async function executeAutonomousAgenticLoop(input: {
   systemPrompt: string;
   /** Instruction spans within `systemPrompt`, forwarded to routing (BI-463BE12A). */
   systemPromptInstructionSpans?: string[];
+  /** What each entry of `chatHistory` is — labels only (BI-40EF7C44). */
+  messageOrigins?: readonly MessageOrigin[];
   chatHistory: ChatMessage[];
   sensitivity: RouteSensitivity;
   tools: ToolDefinition[];
@@ -338,6 +341,7 @@ export async function executeAutonomousAgenticLoop(input: {
   featureBuildId?: string | null;
   modelRequirements?: Record<string, unknown>;
   apiTokenId?: string | null;
+  tokenScope?: "read" | "write" | "admin";
   /**
    * Governed Hermes learning Slice 1: when the user message invokes a specific
    * coworker skill (via the canonical `Use the <id> skill.` marker), the
@@ -390,6 +394,12 @@ export async function executeAutonomousAgenticLoop(input: {
   // craft knowledge. Gate on !== "chat" so chat is never double-injected. Total
   // + fail-open: on any error the original prompt is used unchanged.
   let systemPrompt = input.systemPrompt;
+  // Instruction spans are computed by the CALLER from the persona, before the
+  // groundings below append to the prompt. AUTHORIZED_SURFACE_PROMPT is listed
+  // as INSTRUCTION by the provenance design, but it is appended here — after
+  // the caller computed its spans — so it landed in the data remainder and was
+  // screened as payload (BI-D9D661ED). Collect it and declare it.
+  const groundedInstructionSpans: string[] = [];
   if (input.interactionMode !== "chat") {
     const { groundPromptWithProfessionCorpus, defaultProfessionGroundingDeps } = await import(
       "@/lib/tak/profession-grounding"
@@ -403,6 +413,10 @@ export async function executeAutonomousAgenticLoop(input: {
       },
       defaultProfessionGroundingDeps,
     ).catch(() => ({ systemPrompt, grounded: false }));
+    // The profession corpus is deliberately NOT declared instruction: the
+    // ratified provenance design lists retrieved corpus content as DATA, since
+    // a corpus can carry real values. Only statically-authored platform
+    // instruction is labelled here.
     systemPrompt = grounding.systemPrompt;
   }
 
@@ -433,6 +447,9 @@ export async function executeAutonomousAgenticLoop(input: {
     authorizedToolNames,
   }).catch(() => ({ systemPrompt, grounded: false as const }));
   systemPrompt = surfaceGrounding.systemPrompt;
+  if ("instructionBlock" in surfaceGrounding && surfaceGrounding.instructionBlock) {
+    groundedInstructionSpans.push(surfaceGrounding.instructionBlock);
+  }
   const { isAuthorizedSurfaceGuidanceRequest } = await import(
     "@/lib/coworker/authorized-surface-prompt-grounding"
   );
@@ -455,8 +472,12 @@ export async function executeAutonomousAgenticLoop(input: {
     result = await withInferenceOrigin(inferenceOrigin, () =>
       runAgenticLoop({
         systemPrompt,
-        systemPromptInstructionSpans: input.systemPromptInstructionSpans,
+        systemPromptInstructionSpans: [
+          ...(input.systemPromptInstructionSpans ?? []),
+          ...groundedInstructionSpans,
+        ],
         chatHistory: input.chatHistory,
+        messageOrigins: input.messageOrigins,
         sensitivity: input.sensitivity,
         tools: input.tools,
         toolsForProvider,
@@ -467,6 +488,7 @@ export async function executeAutonomousAgenticLoop(input: {
         threadId: input.threadId,
         taskRunId: input.taskRunId,
         apiTokenId: input.apiTokenId,
+        tokenScope: input.tokenScope,
         taskType: input.taskType,
         effortWarrant: input.effortWarrant,
         terminalToolPolicy: input.terminalToolPolicy,

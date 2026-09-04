@@ -5,14 +5,9 @@ import { copyFileSync, existsSync, mkdtempSync, writeFileSync, chmodSync, mkdirS
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
-// High-fidelity functional proof of scripts/promote.sh: run the REAL script
-// through all six steps against a REAL git repo, faking only the external
-// boundaries — `docker` (the image build is orthogonal to the stamp logic) and
-// `curl` (the portal's /api/health/sha). The fake portal "reports" whatever
-// DPF_VERSION the build stamped, by echoing $DPF_VERSION — which is exactly how
-// the real round-trip works (DPF_VERSION build-arg → /app/.dpf-image-version →
-// /api/health/sha). So a passing sha-verify here means the same thing it means
-// in production: the running runtime reports the SHA of the code that was built.
+// High-fidelity proof of the real promote.sh against a real Git repo, faking
+// only Docker and HTTP. The fake portal reports the stamped DPF_VERSION, so
+// sha-verify exercises the production build-arg -> image -> endpoint contract.
 
 const SCRIPT = resolve(__dirname, "../../../../scripts/promote.sh");
 const REPO_ROOT = resolve(__dirname, "../../../..");
@@ -100,7 +95,8 @@ case "$*" in
   "create "*) printf "candidate-container" ;;
   "cp candidate-container:/dpf-release-assets/. "*)
     for destination in "$@"; do :; done
-    cp -R "$DPF_TEST_RELEASE_ASSETS"/. "$destination"
+    # Match Docker's directory-copy semantics on both platforms.
+    mkdir -p "$destination"; cp -R "$DPF_TEST_RELEASE_ASSETS"/. "$destination/"
     ;;
   *"recover-human-principal-backfill-migration.mjs --verify-rolled-back"*)
     [ "\${DPF_TEST_PRINCIPAL_VERIFY_FAIL:-no}" = "yes" ] && exit 1
@@ -152,6 +148,7 @@ exit 0
 
 function runPromote(opts: {
   source: string;
+  installRoot?: string;
   backup: string;
   targetSha: string;
   fakeBin: string;
@@ -173,11 +170,8 @@ function runPromote(opts: {
   const secretPath = join(stateDir, "runtime-transition.secret");
   writeFileSync(secretPath, secret);
   const stateBytes = readFileSync(join(stateDir, "install-state.json"));
-  // Ask the canonical migrator for the real projection. The previous fixture
-  // asserted `projectionHash === sourceHash`, which is never true of an actual
-  // projection; it went unnoticed only because promote.sh skipped the migrator
-  // whenever the schema version did not change, so the carrier's CAS binding
-  // was never checked (BI-AA6FBAD0).
+  // Use the canonical migrator: a real projection hash differs from sourceHash,
+  // and the fixture must exercise that CAS binding (BI-AA6FBAD0).
   const projection = JSON.parse(execFileSync(process.execPath, [MIGRATOR,
     "--state", join(stateDir, "install-state.json"), "--catalog", CATALOG,
     "--host-platform", "linux", "--host-arch", "amd64"], { encoding: "utf8" })) as { sourceHash: string; projectionHash: string };
@@ -201,6 +195,7 @@ function runPromote(opts: {
     "unset DPF_STATE_DIR",
     `export PATH=${shellQuote(toBashPath(opts.fakeBin))}:"$PATH"`,
     `export PROMOTE_SOURCE=${shellQuote(toBashPath(opts.source))}`,
+    ...(opts.installRoot ? [`export PROMOTE_INSTALL_ROOT=${shellQuote(toBashPath(opts.installRoot))}`] : []),
     `export PROMOTE_TARGET_SHA=${shellQuote(opts.targetSha)}`,
     `export PROMOTE_BACKUP_PATH=${shellQuote(toBashPath(opts.backup))}`,
     `export DPF_PROMOTER_STATE_DIR=${shellQuote(toBashPath(join(opts.backup, "state")))}`,
@@ -265,11 +260,8 @@ function makeScratch(): { root: string; source: string; backup: string; fakeBin:
   const backup = join(root, "backup");
   const stateDir = join(backup, "state");
   mkdirSync(stateDir, { recursive: true });
-  // Produce the install-state the way an install actually gets one: hand a
-  // legacy state to the canonical migrator. Hand-assembling the capability
-  // snapshot here re-derived the closure by hand and drifted from the resolver;
-  // the legacy default already enables `runtime:build`, which is what the
-  // sandbox-refresh path in this fixture exercises.
+  // Produce state through the canonical legacy migrator so capability closure
+  // cannot drift from the runtime resolver.
   writeFileSync(join(stateDir, "install-state.json"), JSON.stringify({
     schemaVersion: 1, installerVersion: "functional", platform: "linux", arch: "amd64",
     installPath: "/opt/dpf", stateDir: "/dpf-state", composeProjectName: "dpf",
@@ -295,6 +287,7 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
   ])("promotes a verified release into a source-free install for a $caller", ({ caller, configDigest, engineImageId, platformArchitecture, enginePlatformArchitecture, frozenStrata, missingModernStratum, repoImageId, registryConfigDigest, duplicatePlatform, expectedStatus }) => {
     const { root, source, backup, fakeBin } = makeScratch();
     const targetSha = "b".repeat(40);
+    const installRoot = join(root, "canonical-install");
     const candidateAssets = join(root, "candidate-assets");
     const gitLog = join(root, "git.log");
     const dockerLog = join(root, "docker.log");
@@ -303,6 +296,7 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
       writeFileSync(join(source, "docker-compose.release.yml"), "services: {}\n");
       writeFileSync(join(source, ".install-mode"), "consumer\n");
       writeFileSync(join(source, ".env"), "KEEP_ME=yes\nDPF_IMAGE_TAG=v1.0.0\nGHCR_OWNER=opendigitalproductfactory\n");
+      mkdirSync(installRoot, { recursive: true });
       mkdirSync(candidateAssets, { recursive: true });
       for (const relativePath of [
         "docker-compose.yml",
@@ -327,6 +321,9 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
       const currentManaged = ["docker-compose.yml", "docker-compose.release.yml"];
       writeFileSync(join(source, ".verified-release-assets.sha256"), currentManaged.map(path => `${createHash("sha256").update(readFileSync(join(source, path))).digest("hex")}  ./${path}`).join("\n") + "\n");
       writeFileSync(join(source, ".verified-release-assets-version"), "v1.0.0");
+      for (const relativePath of [...currentManaged, ".env", ".verified-release-assets.sha256", ".verified-release-assets-version"]) {
+        copyFileSync(join(source, relativePath), join(installRoot, relativePath));
+      }
       const statePath = join(backup, "state", "install-state.json");
       const existing = JSON.parse(readFileSync(statePath, "utf8"));
       writeFileSync(statePath, JSON.stringify({
@@ -335,7 +332,7 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
         installerVersion: "v1.0.0",
         lastSuccessfulInstallVersion: "v1.0.0",
         arch: "amd64",
-        installPath: source,
+        installPath: installRoot,
         installMode: "consumer",
         composeFiles: ["docker-compose.yml", "docker-compose.release.yml"],
         imageTag: "v1.0.0",
@@ -348,7 +345,7 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
         platformManifestDigest: missingModernStratum ? undefined : `sha256:${"b".repeat(64)}`, configDigest, engineImageId, platformOs: "linux",
         platformArchitecture, enginePlatformArchitecture, frozenStrata, repoImageId, registryConfigDigest, duplicatePlatform, candidateAssets, gitLog,
       };
-      const r = runPromote({ source, backup, targetSha, fakeBin, dockerLog, release });
+      const r = runPromote({ source, installRoot, backup, targetSha, fakeBin, dockerLog, composeEnvFile: join(installRoot, ".env"), release });
       expect(r.status, r.stderr).toBe(expectedStatus);
       if (expectedStatus !== 0) {
         expect(r.stderr).toMatch(/(?:missing required variables|not a pulled repository digest|could not resolve an immutable|resolved config digest .* does not match|does not match resolved (?:config\/platform\/channel identities|candidate linux\/amd64))/);
@@ -362,8 +359,11 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
       } else {
         expect(r.stdout).toContain("step=release-identity mode=legacy-bootstrap");
       }
-      expect(readFileSync(join(source, ".env"), "utf8")).toMatch(/^KEEP_ME=yes$/m);
-      expect(readFileSync(join(source, ".env"), "utf8")).toMatch(/^DPF_IMAGE_TAG=v2\.0\.0$/m);
+      expect(readFileSync(join(installRoot, ".env"), "utf8")).toMatch(/^KEEP_ME=yes$/m);
+      expect(readFileSync(join(installRoot, ".env"), "utf8")).toMatch(/^DPF_IMAGE_TAG=v2\.0\.0$/m);
+      expect(readFileSync(join(installRoot, ".verified-release-assets-version"), "utf8").trim()).toBe("v2.0.0");
+      expect(readFileSync(join(source, ".env"), "utf8")).toMatch(/^DPF_IMAGE_TAG=v1\.0\.0$/m);
+      expect(readFileSync(join(source, ".verified-release-assets-version"), "utf8").trim()).toBe("v1.0.0");
       expect(JSON.parse(readFileSync(statePath, "utf8")).imageTag).toBe("v2.0.0");
       const calls = readFileSync(dockerLog, "utf8");
       expect(calls).toContain("pull portal postgres");

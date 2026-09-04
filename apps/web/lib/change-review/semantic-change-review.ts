@@ -181,14 +181,34 @@ REVIEW CHECKLIST — evaluate EVERY item before responding:
 6. Does the code use CSS variables (var(--dpf-*)) for all colors — no text-white, bg-white, text-black, bg-black, or inline hex values? (Exception: text-white on accent-background buttons, semantic status colors from ThemeTokens.states)
 7. Are interactive elements keyboard-accessible with visible focus indicators? Do form inputs have associated labels? Do buttons have descriptive accessible names?
 
+CANNOT VERIFY: if the change described above is not actually present in what you can read — the tree you can see does not contain it, the artifact is empty, or you are looking at different code — respond with decision "cannot-verify" and say so in the summary. That is NOT a code issue and must NOT be reported as one: a finding about the code presumes you read the code. Answering "pass" or "fail" asserts that you reviewed THIS change.
+
 DECISION DISCIPLINE: report the genuine BLOCKING issues in a single response — be comprehensive about real blockers so there are no surprises on re-review, but do NOT pad the list with nice-to-haves. Reserve "critical" for issues that would cause data loss, security holes, or broken functionality; "important"/"minor" do not block. If the change is correct and tested at a level appropriate to its scope, return "pass". A short, converging review beats an exhaustive one.
 
 RESPOND WITH EXACTLY THIS JSON FORMAT (no other text):
 {
-  "decision": "pass" or "fail",
+  "decision": "pass" or "fail" or "cannot-verify",
   "issues": [{"severity": "critical|important|minor", "description": "..."}],
   "summary": "one sentence summary"
 }`;
+}
+
+/**
+ * A reviewer that reports it could not see the change, but files that report as a
+ * code finding instead of using the cannot-verify channel (BI-82902891). Kept
+ * deliberately narrow: it requires the reviewed MATERIAL to be the subject, so an
+ * ordinary finding like "a loading state is not present" does not trip it. A false
+ * positive costs one retry; a false negative publishes a review of code nobody read.
+ */
+const UNREVIEWABLE_FINDING = [
+  /\b(?:tree|artifact|diff|changeset|working copy|workspace|repository)\b[^.]{0,80}\b(?:does not contain|do not contain|is empty|are empty|not available|not present|could not be (?:read|resolved|located|found))/i,
+  /\bcould not\b[^.]{0,40}\b(?:see|read|locate|access|review|verify)\b[^.]{0,40}\b(?:change|diff|artifact|code|tree)\b/i,
+  /\breceipt integrity failure\b/i,
+];
+
+function reportsUnreviewableChange(issues: readonly SemanticReviewIssue[], summary: string): boolean {
+  return [...issues.map((issue) => issue.description), summary]
+    .some((text) => UNREVIEWABLE_FINDING.some((pattern) => pattern.test(text)));
 }
 
 export function parseSemanticReviewResponse(raw: string): SemanticReviewResult {
@@ -206,10 +226,30 @@ export function parseSemanticReviewResponse(raw: string): SemanticReviewResult {
           suggestion: issue.suggestion ? String(issue.suggestion) : undefined,
         }))
       : [];
+    const summary = String(parsed.summary ?? "Review complete");
+    // BI-82902891: a reviewer that could not see the change must never reach the
+    // pass path. Before this channel existed the response contract offered only
+    // pass|fail and the decision came from issue severity alone, so "the tree I
+    // was given does not contain this change" arrived as an `important` issue
+    // and aggregated into a PASS — an independent-review receipt for a change
+    // nobody had read. Inability to review is an INCONCLUSIVE outcome, which
+    // already fails closed downstream, not a finding about the code.
+    const stated = String(parsed.decision ?? "").trim().toLowerCase().replaceAll("_", "-");
+    // The channel is the contract, but a reviewer that ignores it and files
+    // "I could not see this change" as a finding must not reach the pass path
+    // either — that is the exact shape of the BI-82902891 incident.
+    if (stated === "cannot-verify" || reportsUnreviewableChange(issues, summary)) {
+      return {
+        decision: "inconclusive",
+        issues,
+        summary,
+        inconclusiveReason: "reviewer-could-not-verify-change",
+      };
+    }
     return {
       decision: issues.some((issue) => issue.severity === "critical") ? "fail" : "pass",
       issues,
-      summary: String(parsed.summary ?? "Review complete"),
+      summary,
     };
   } catch {
     return {

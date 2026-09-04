@@ -250,6 +250,29 @@ describe("routing-loader cache (BI-OPT-ROUTING-CACHE)", () => {
     expect(mockProviderHasConfiguredCredential).toHaveBeenCalledWith("docker-model-runner", "none");
   });
 
+  it("marks unsupported ChatGPT-subscription models ineligible without hiding supported fallbacks", async () => {
+    mockPrisma.modelProfile.findMany.mockResolvedValue([
+      {
+        ...profileRow,
+        providerId: "codex",
+        modelId: "gpt-5.3-codex",
+        provider: { ...profileRow.provider, authMethod: "oauth2_authorization_code" },
+      },
+      {
+        ...profileRow,
+        id: "mp-2",
+        providerId: "codex",
+        modelId: "gpt-5.4",
+        provider: { ...profileRow.provider, authMethod: "oauth2_authorization_code" },
+      },
+    ]);
+
+    const manifests = await loadEndpointManifests(900_002);
+    expect(manifests).toHaveLength(2);
+    expect(manifests[0]?.eligibilityExclusionReason).toMatch(/not supported.*ChatGPT account/i);
+    expect(manifests[1]?.eligibilityExclusionReason).toBeUndefined();
+  });
+
   it("loads each loader's DB rows exactly once across a 200-iteration turn", async () => {
     const t0 = 1_000_000;
     // Simulate the agentic loop calling prepareRoute's loaders every iteration.

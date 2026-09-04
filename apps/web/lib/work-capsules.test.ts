@@ -126,6 +126,7 @@ describe("layer-scoped capsule metadata", () => {
   it("normalizes empty scope input to nullable fields and empty relationship arrays", () => {
     expect(normalizeWorkCapsuleScopeInput(undefined)).toEqual({
       workroomShape: null,
+      workShape: null,
       decisionScope: null,
       portfolioRole: null,
       servedPersona: null,
@@ -153,6 +154,7 @@ describe("layer-scoped capsule metadata", () => {
       dependsOnPortfolioRoles: ["foundational"],
     })).toEqual({
       workroomShape: null,
+      workShape: null,
       decisionScope: "wwwd",
       portfolioRole: "productsAndServicesSold",
       servedPersona: "customer",

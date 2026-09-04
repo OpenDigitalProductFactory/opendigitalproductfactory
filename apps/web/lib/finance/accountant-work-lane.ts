@@ -1,4 +1,10 @@
 import {
+  openIntent,
+  resolveNextSteps,
+  type NextStepPointer,
+  type ResolvedNextStep,
+} from "@/lib/backlog/next-step-pointer";
+import {
   buildQuickBooksReadinessDescriptor,
   type QuickBooksReadinessConnection,
 } from "@/lib/integrations/quickbooks/readiness";
@@ -31,7 +37,7 @@ export type AccountantLaneHandoff = {
   boundary: string;
 };
 
-export type AccountantProviderBoundary = {
+export type AccountantProviderBoundary<Step = NextStepPointer> = {
   provider: string;
   label: string;
   href: string;
@@ -39,10 +45,10 @@ export type AccountantProviderBoundary = {
   currentCoverage: string[];
   missingCoverage: string[];
   writeBoundary: string;
-  nextBacklogItemId: string;
+  nextStep: Step;
 };
 
-export type AccountantWorkLane = {
+export type AccountantWorkLane<Step = NextStepPointer> = {
   roleId: "bookkeeper_accountant";
   roleLabel: string;
   taxonomyNodeId: string;
@@ -50,10 +56,10 @@ export type AccountantWorkLane = {
   maturityTarget: "observe";
   workstreams: AccountantWorkstream[];
   handoffs: AccountantLaneHandoff[];
-  providerBoundaries: AccountantProviderBoundary[];
+  providerBoundaries: AccountantProviderBoundary<Step>[];
   promotionGuardrail: string;
   nextWorkflow: {
-    backlogItemId: string;
+    nextStep: Step;
     title: string;
     route: string;
     reason: string;
@@ -172,7 +178,7 @@ export function buildBookkeeperAccountantWorkLane(
       missingCoverage: quickBooksMissingCoverage,
       writeBoundary:
         "QuickBooks staging is source-attributed and non-editable; no write-back or DPF-primary accounting ownership until entity links, reconciliation evidence, rollback/export, and accountant review are proven.",
-      nextBacklogItemId: "BI-4025EF5F",
+      nextStep: openIntent("Entity links and review queue"),
     },
     {
       provider: "stripe",
@@ -183,7 +189,7 @@ export function buildBookkeeperAccountantWorkLane(
       missingCoverage: ["Fees", "Payout deposits", "Invoice allocation matching", "QuickBooks reconciliation"],
       writeBoundary:
         "Stripe remains the payment processor; DPF should reconcile payment evidence before promoting billing records.",
-      nextBacklogItemId: "BI-2DB52EAB",
+      nextStep: openIntent("Fee and payout reconciliation"),
     },
     {
       provider: "bank-feed-provider",
@@ -194,13 +200,13 @@ export function buildBookkeeperAccountantWorkLane(
       missingCoverage: ["Direct bank feeds", "Statement source custody", "Automated reconciliation evidence"],
       writeBoundary:
         "Bank feeds stay unmapped until DPF chooses provider ownership and proves rollback/export expectations.",
-      nextBacklogItemId: "BI-47366954",
+      nextStep: openIntent("Provider ownership decision"),
     },
   ],
   promotionGuardrail:
     "DPF does not become the accounting system of record until read coverage, import staging, reconciliation evidence, rollback/export, and accountant review workflows are proven in dual-run.",
   nextWorkflow: {
-    backlogItemId: "BI-4025EF5F",
+    nextStep: openIntent("Entity links and review queue"),
     title: "QuickBooks import review queue and accounting entity links",
     route: "/platform/tools/integrations/quickbooks",
     reason:
@@ -209,15 +215,35 @@ export function buildBookkeeperAccountantWorkLane(
   };
 }
 
+/** The lane once every declared next step has been checked against the backlog. */
+export type ResolvedAccountantWorkLane = AccountantWorkLane<ResolvedNextStep>;
+
 /**
  * Load the accountant work lane with the install's REAL QuickBooks connection
- * state. Async because it reads the integration-credential substrate.
+ * state. Async because it reads the integration-credential substrate, and
+ * because a declared next step is a claim about the backlog that this lane
+ * checks before any surface renders it (BI-5BF97BAA).
  */
-export async function getBookkeeperAccountantWorkLane(): Promise<AccountantWorkLane> {
+export async function getBookkeeperAccountantWorkLane(): Promise<ResolvedAccountantWorkLane> {
   const quickBooksConnection = await loadQuickBooksReadinessConnection();
-  return buildBookkeeperAccountantWorkLane(quickBooksConnection);
+  const lane = buildBookkeeperAccountantWorkLane(quickBooksConnection);
+
+  const declared = [
+    ...lane.providerBoundaries.map((boundary) => boundary.nextStep),
+    lane.nextWorkflow.nextStep,
+  ];
+  const resolved = await resolveNextSteps(declared);
+
+  return {
+    ...lane,
+    providerBoundaries: lane.providerBoundaries.map((boundary, index) => ({
+      ...boundary,
+      nextStep: resolved[index],
+    })),
+    nextWorkflow: { ...lane.nextWorkflow, nextStep: resolved[resolved.length - 1] },
+  };
 }
 
-export function getAccountantLaneRouteHrefs(lane: AccountantWorkLane): string[] {
+export function getAccountantLaneRouteHrefs<Step>(lane: AccountantWorkLane<Step>): string[] {
   return Array.from(new Set(lane.workstreams.flatMap((workstream) => workstream.routes.map((route) => route.href))));
 }

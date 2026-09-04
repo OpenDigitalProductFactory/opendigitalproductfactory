@@ -43,6 +43,20 @@ vi.mock("@dpf/db", () => ({
     terminationRecord: {
       upsert: vi.fn(),
     },
+    // BI-2624B7EA: every employment event now actuates through
+    // recordAndActuateEmploymentEvent, which reads the worker's classification
+    // and jurisdiction and the organisation's employing set.
+    businessContext: {
+      findFirst: vi.fn(),
+    },
+    workroom: {
+      findUnique: vi.fn(),
+      findFirst: vi.fn(),
+      create: vi.fn(),
+    },
+    workroomActivity: {
+      create: vi.fn(),
+    },
     $transaction: vi.fn(),
   },
 }));
@@ -73,6 +87,11 @@ beforeEach(() => {
   vi.clearAllMocks();
 
   vi.mocked(prisma.$transaction).mockImplementation(async (callback) => callback(prisma as never));
+  // Undeclared employing jurisdictions: the actuator resolves the worker to
+  // operator work rather than opening a room, which is the correct posture for
+  // these tests — they assert profile creation, not actuation.
+  vi.mocked(prisma.businessContext.findFirst).mockResolvedValue(null as never);
+  vi.mocked(prisma.employmentEvent.create).mockResolvedValue({ eventId: "EEVT-test" } as never);
 
   authMock.mockResolvedValue({
     user: {
@@ -169,16 +188,20 @@ describe("createEmployeeProfile", () => {
   });
 
   it("issues a principal identity when HR creates a new employee profile", async () => {
+    const storedEmployee = {
+      id: "emp-db-1",
+      employeeId: "EMP-001",
+      userId: null,
+      displayName: "Ada Lovelace",
+      status: "active",
+      workEmail: "ada@example.com",
+    };
     vi.mocked(prisma.employeeProfile.findUnique)
+      // 1. duplicate check  2. the actuator reading the worker back
+      // (BI-2624B7EA)  3. syncEmployeePrincipal
       .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce({
-        id: "emp-db-1",
-        employeeId: "EMP-001",
-        userId: null,
-        displayName: "Ada Lovelace",
-        status: "active",
-        workEmail: "ada@example.com",
-      } as never);
+      .mockResolvedValueOnce(storedEmployee as never)
+      .mockResolvedValueOnce(storedEmployee as never);
     vi.mocked(prisma.employeeProfile.create).mockResolvedValue({
       id: "emp-db-1",
       displayName: "Ada Lovelace",

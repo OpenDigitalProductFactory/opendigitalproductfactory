@@ -145,8 +145,8 @@ vi.mock("@/components/golden-triangle/CoworkerPriorityControl", () => ({
   CoworkerPriorityControl: () => null,
 }));
 vi.mock(
-  "@/components/platform/coworker-record/CoworkerProactivitySetting",
-  () => ({ CoworkerProactivitySetting: () => null }),
+  "@/components/platform/coworker-record/CoworkerProactivityNote",
+  () => ({ CoworkerProactivityNote: () => null }),
 );
 vi.mock("@/components/platform/coworker-record/CoworkerRecordTabs", () => ({
   CoworkerRecordTabs: () => null,

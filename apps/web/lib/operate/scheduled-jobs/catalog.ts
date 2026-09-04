@@ -50,19 +50,19 @@ import {
   IDENTITY_INFERENCE_CRON,
   IDENTITY_INFERENCE_CADENCE,
 } from "@/lib/asset-intelligence/identity-inference-constants";
-
 /** core = platform-integrity cron, operator read-only. editable = cadence
  *  may be tuned by an operator after install. */
 import type { JobCategory, ScheduledJobCatalogEntry } from "./catalog-types";
+import { FLOW_JOB_CATALOG_ENTRIES } from "./catalog-flow";
 import { WATCH_JOB_CATALOG_ENTRIES } from "./catalog-watches";
 
 // Re-exported so existing importers of the catalog keep working; the types are
 // owned by ./catalog-types (BI-ED117C82).
 export type { JobCategory, ScheduledJobCatalogEntry };
 
-
 // Ordered roughly by operational prominence. core-locked jobs first.
 export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
+  ...FLOW_JOB_CATALOG_ENTRIES,
   {
     jobId: "index-integrity-sweep",
     inngestId: "ops/index-integrity-sweep",
@@ -192,7 +192,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     inngestId: "federation/demand-reconciliation",
     name: "Federated demand reconciliation",
     purpose:
-      "Projects approved same-organization platform demand, retries durable peer delivery, and withdraws records that leave the approved scope.",
+      "Projects approved same-organization platform demand, retries durable peer delivery, withdraws records that leave the approved scope, and pulls every same-organization peer's backlog into local read-only mirrors (work sync).",
     cron: "1,6,11,16,21,26,31,36,41,46,51,56 * * * *",
     cadence: "Every 5 minutes, offset by 1 minute",
     category: "core",
@@ -330,6 +330,18 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     category: "editable",
     tracksRunData: true,
     runNowEvent: "ops/data-retention.requested",
+  },
+  {
+    jobId: "regulatory-monitor-scan",
+    inngestId: "govern/regulatory-monitor-scan-scheduled",
+    name: "Regulatory monitor scan",
+    purpose:
+      "Re-scans active regulations for changes so the compliance surface reflects a current posture instead of aging into a false green. Before this, a scan ran only when an operator pressed \"Run Scan Now\" and never refreshed. Editable so an operator can retune the cadence or run one off-cadence. BI-DA37A602.",
+    cron: "0 6 * * 1",
+    cadence: "Weekly on Monday at 06:00",
+    category: "editable",
+    tracksRunData: false,
+    runNowEvent: "govern/regulatory-monitor-scan.requested",
   },
   {
     jobId: "inngest-retention-sweep",
@@ -568,7 +580,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     inngestId: "business/metrics-aggregator",
     name: "Business metrics aggregator",
     purpose:
-      "Builds tenant-scoped owner/manager performance snapshots from canonical operational evidence. The Performance view stays fast and preserves its last valid snapshot when a refresh fails.",
+      "Builds tenant-scoped owner/manager performance snapshots from canonical operational evidence for archetypes the metrics engine covers (hospitality today). On an install with no covered storefront it refreshes nothing by design. The Performance view stays fast and preserves its last valid snapshot when a refresh fails.",
     cron: "17 * * * *",
     cadence: "Hourly at :17",
     category: "editable",

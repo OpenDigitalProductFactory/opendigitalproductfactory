@@ -17,6 +17,7 @@ import {
   evaluateFederatedRoomAdmission,
   type FederatedRoomGateDecision,
 } from "./federated-room";
+import { persistExplicitWorkroomAssignmentsForWorkItem } from "./room-participant-assignment.server";
 import { appendRoomPolicyParticipant } from "./room-policy";
 import { decodeWorkCaseKey } from "./workspace-case-loader";
 
@@ -84,6 +85,12 @@ export async function admitFederatedRoomParticipant(input: {
     enteredReason: `Federated participant via link ${input.federationLinkId}`,
   });
   await prisma.workItem.update({ where: { id: item.id }, data: { evidence: newEvidence as never } });
+  await persistExplicitWorkroomAssignmentsForWorkItem({
+    workItemId: item.id,
+    principalRef: principal.principalId,
+    roles: ["contributor"],
+    enteredReason: `Federated participant via link ${input.federationLinkId}`,
+  });
 
   return { gate, mirroredPrincipalId: principal.principalId, workItemId: item.id };
 }

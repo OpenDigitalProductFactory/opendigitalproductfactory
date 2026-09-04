@@ -2,6 +2,13 @@ import type { ToolResult } from "@/lib/mcp-tools";
 import { resolveEpicRowId, resolveListLimit } from "./backlog-read-helpers";
 import { addScopeFilters, backlogScopeSelect, scopeData } from "./backlog-scope-metadata";
 
+const INITIATIVE_READINESS_ACTIVITY_KINDS = [
+  "initiative_gate_receipt",
+  "initiative_scope_baseline",
+  "plan_backlog_coverage",
+  "initiative_readiness_decision",
+];
+
 function addDeferralFilters(where: Record<string, unknown>, params: Record<string, unknown>): ToolResult | null {
   const conformance = params["deferralConformance"];
   if (conformance === "compliant") {
@@ -242,6 +249,29 @@ export async function listBacklogItems(params: Record<string, unknown>): Promise
   if (params["hasActiveBuild"] === true) where["activeBuildId"] = { not: null };
   else if (params["hasActiveBuild"] === false) where["activeBuildId"] = null;
 
+  // BI-28E8CB88 acceptance criterion 3: the items holding evidence the gates
+  // cannot read must be enumerable, so the backlog can be reconciled rather than
+  // silently stalled. When first measured on the live install, 38 items held
+  // `evidence` activities, 4 held `initiative_gate_receipt`, and the other 35
+  // had no way to be found.
+  if (params["evidenceNotCounted"] === true) {
+    const holdingEvidence = await prisma.backlogItemActivity.findMany({
+      where: { kind: "evidence" },
+      distinct: ["backlogItemId"],
+      select: { backlogItemId: true },
+    });
+    const holdingReceipts = await prisma.backlogItemActivity.findMany({
+      where: { kind: "initiative_gate_receipt" },
+      distinct: ["backlogItemId"],
+      select: { backlogItemId: true },
+    });
+    const withReceipts = new Set(holdingReceipts.map((row) => row.backlogItemId));
+    const stalled = holdingEvidence
+      .map((row) => row.backlogItemId)
+      .filter((id) => !withReceipts.has(id));
+    where["id"] = { in: stalled };
+  }
+
   const limit = resolveListLimit(params["limit"]);
   const matching = await prisma.backlogItem.count({ where });
   const items = await prisma.backlogItem.findMany({
@@ -269,7 +299,7 @@ export async function listBacklogItems(params: Record<string, unknown>): Promise
       epic: { select: { epicId: true } },
       activeBuild: { select: { phase: true, draftApprovedAt: true, kind: true } },
       activities: {
-        where: { kind: { in: ["initiative_gate_receipt", "initiative_scope_baseline", "plan_backlog_coverage"] } },
+        where: { kind: { in: INITIATIVE_READINESS_ACTIVITY_KINDS } },
         orderBy: [{ recordedAt: "desc" }, { id: "desc" }],
         take: 100,
         select: { id: true, kind: true, gateKey: true, recordedAt: true, payload: true },
@@ -290,6 +320,7 @@ export async function listBacklogItems(params: Record<string, unknown>): Promise
       item: {
         id: i.id,
         itemId: i.itemId,
+        status: i.status,
         type: i.type,
         source: i.source,
         workType: i.workType,
@@ -383,6 +414,8 @@ export async function getBacklogItem(params: Record<string, unknown>): Promise<T
   });
   if (!item)
     return { success: false, error: "not_found", message: `Item ${itemIdRaw} not found` };
+  const { loadBacklogWorkroomOwnership } = await import("@/lib/work-capsules/backlog-workroom-ownership");
+  const workroomOwnership = await loadBacklogWorkroomOwnership(prisma, [item.itemId, item.id]);
   const { deriveLifecycleLabel } = await import("@/lib/governed-backlog-workflow");
   const { searchSpecsAndPlans, specPlanCorpusCaveat } = await import("@/lib/backlog/spec-plan-search");
   const { corpus: specPlanCorpus, results: specPlanRefs } = await searchSpecsAndPlans({
@@ -400,6 +433,7 @@ export async function getBacklogItem(params: Record<string, unknown>): Promise<T
     item: {
       id: item.id,
       itemId: item.itemId,
+      status: item.status,
       type: item.type,
       source: item.source,
       workType: item.workType,
@@ -409,7 +443,7 @@ export async function getBacklogItem(params: Record<string, unknown>): Promise<T
       activeBuildKind: item.activeBuild?.kind ?? null,
     },
     activities: item.activities
-      .filter((activity) => ["initiative_gate_receipt", "initiative_scope_baseline", "plan_backlog_coverage"].includes(activity.kind))
+      .filter((activity) => INITIATIVE_READINESS_ACTIVITY_KINDS.includes(activity.kind))
       .map((activity) => ({ ...activity, gateKey: activity.gateKey ?? null })),
     hasSpec,
     hasPlan,
@@ -469,6 +503,8 @@ export async function getBacklogItem(params: Record<string, unknown>): Promise<T
             sandboxId: item.activeBuild.sandboxId,
           }
         : null,
+      workrooms: workroomOwnership.workrooms,
+      activeWorkrooms: workroomOwnership.liveWorkrooms,
       readiness,
       specPlanCorpus,
       specPlanFiles: specPlanRefs.map((r) => ({
@@ -546,7 +582,7 @@ export async function getNextRecommendedWork(params: Record<string, unknown>): P
       epic: { select: { epicId: true, status: true } },
       activeBuild: { select: { kind: true } },
       activities: {
-        where: { kind: { in: ["initiative_gate_receipt", "initiative_scope_baseline", "plan_backlog_coverage"] } },
+        where: { kind: { in: INITIATIVE_READINESS_ACTIVITY_KINDS } },
         orderBy: [{ recordedAt: "desc" }, { id: "desc" }],
         take: 100,
         select: { id: true, kind: true, gateKey: true, recordedAt: true, payload: true },
@@ -565,6 +601,7 @@ export async function getNextRecommendedWork(params: Record<string, unknown>): P
       item: {
         id: i.itemId,
         itemId: i.itemId,
+        status: i.status,
         type: i.type,
         source: i.source,
         workType: i.workType,

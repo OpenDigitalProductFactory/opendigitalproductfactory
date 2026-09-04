@@ -4,19 +4,20 @@ import { PortalContextStrip } from "@/components/portal-context/PortalContextStr
 import { StatCard } from "@/components/ui/report-kit/StatCard";
 import type { PortalContextEnvelope } from "@/lib/portal-context";
 import type { CapsuleLivenessSummary } from "@/lib/work-capsules/liveness-inventory";
+import type { DeliveryTaskHubPage } from "@/lib/work-capsules/delivery-task-hub-store";
 import { AdoptableWorktreeTable, type AdoptableWorktreeRow } from "./AdoptableWorktreeTable";
 import { CreateGovernedWorkForm, type CreateGovernedWorkAction } from "./CreateGovernedWorkForm";
-import { WorkCapsuleTable, type WorkCapsuleRow } from "./WorkCapsuleTable";
+import { DeliveryTaskHub } from "./DeliveryTaskHub";
 
 export function WorkControlPanel({
-  capsules,
+  deliveryHub,
   adoptable,
-  livenessSummary = { scanned: capsules.length, live: capsules.length, history: 0, reapable: 0, byLiveness: {} },
+  livenessSummary = { scanned: deliveryHub.rows.length, live: deliveryHub.rows.filter((row) => row.group !== "complete").length, history: 0, reapable: 0, byLiveness: {}, heavyLane: { executing: 0, nextReady: 0, dormant: 0 }, progressSlo: { oldestWaitMs: null, maxNoTransitionMs: null } },
   createAction,
   canCreateGovernedWork = false,
   portalContext,
 }: {
-  capsules: WorkCapsuleRow[];
+  deliveryHub: DeliveryTaskHubPage;
   adoptable: AdoptableWorktreeRow[];
   livenessSummary?: CapsuleLivenessSummary;
   createAction: CreateGovernedWorkAction;
@@ -68,6 +69,8 @@ export function WorkControlPanel({
         <StatCard label="Definitions" value="Architecture" href="/ea/workrooms" />
       </div>
 
+      <DeliveryTaskHub initialPage={deliveryHub} />
+
       {canCreateGovernedWork ? (
         <CreateGovernedWorkForm action={createAction} />
       ) : (
@@ -85,7 +88,6 @@ export function WorkControlPanel({
         </div>
       )}
 
-      <WorkCapsuleTable capsules={capsules} />
       <AdoptableWorktreeTable rows={adoptable} />
     </section>
   );

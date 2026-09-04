@@ -240,6 +240,11 @@ test("gate-worktree.mjs refuses to run when neither an explicit command, the stu
   cpSync(join(repoRoot, "scripts", "lib", "local-sandbox-fence.mjs"), join(temp, "scripts", "lib", "local-sandbox-fence.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "local-queue-observer.mjs"), join(temp, "scripts", "lib", "local-queue-observer.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "local-ci-slot-manifest.mjs"), join(temp, "scripts", "lib", "local-ci-slot-manifest.mjs"));
+  // local-ci-slot-manifest.mjs imports the platform-owned worktree base
+  // resolver (BI-0B2F0546). Without it the temp tree dies on
+  // ERR_MODULE_NOT_FOUND before the stub-refusal path can run — the same
+  // copies-scripts-by-name trap the lease-safety modules above document.
+  cpSync(join(repoRoot, "scripts", "lib", "worktree-base.mjs"), join(temp, "scripts", "lib", "worktree-base.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "local-ci-gate-state.mjs"), join(temp, "scripts", "lib", "local-ci-gate-state.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "evidence-validity-policy.mjs"), join(temp, "scripts", "lib", "evidence-validity-policy.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "pregate-console.mjs"), join(temp, "scripts", "lib", "pregate-console.mjs"));
@@ -249,6 +254,7 @@ test("gate-worktree.mjs refuses to run when neither an explicit command, the stu
   cpSync(join(repoRoot, "scripts", "lib", "local-ci-base-freshness.mjs"), join(temp, "scripts", "lib", "local-ci-base-freshness.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "git-fetch-shared-safe.mjs"), join(temp, "scripts", "lib", "git-fetch-shared-safe.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "entry-module.mjs"), join(temp, "scripts", "lib", "entry-module.mjs"));
+  cpSync(join(repoRoot, "scripts", "lib", "local-integration-status.mjs"), join(temp, "scripts", "lib", "local-integration-status.mjs"));
   cpSync(
     join(repoRoot, "apps", "web", "lib", "nonprod", "local-ci-slot-resources.json"),
     join(temp, "apps", "web", "lib", "nonprod", "local-ci-slot-resources.json"),
@@ -375,24 +381,22 @@ test("gate-worktree.mjs claims, records, and releases in order, and carries evid
   }
 });
 
-test("gate-worktree.mjs retries transient quiescence before durable admission", async () => {
+test("gate-worktree.mjs parks on authoritative quiescence without polling or claiming", async () => {
   const { dir } = makeTempRepo();
   let quiescenceReads = 0;
   const mcp = await startMockMcp({
     get_quiescence_status: () => {
       quiescenceReads += 1;
-      return quiescenceReads === 1
-        ? {
-          success: true,
-          data: {
-            level: "draining",
-            runId: "QR-TEST",
-            writesRefused: true,
-            retryAfterSeconds: 0.01,
-            drainBlockers: [{ surface: "build-phase", count: 1 }],
-          },
-        }
-        : { success: true, data: { level: "normal", writesRefused: false } };
+      return {
+        success: true,
+        data: {
+          level: "draining",
+          runId: "QR-TEST",
+          writesRefused: true,
+          retryAfterSeconds: 30,
+          drainBlockers: [{ surface: "build-phase", count: 1 }],
+        },
+      };
     },
     claim_nonprod_environment_lease: () => ({ success: true, entityId: "NPEL-Q" }),
     release_nonprod_environment_lease: () => ({ success: true }),
@@ -416,17 +420,14 @@ test("gate-worktree.mjs retries transient quiescence before durable admission", 
         DPF_GATE_RETRY_JITTER: "0",
       },
     );
-    assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
-    assert.match(result.stdout, /portal is draining; retrying governed admission/i);
-    assert.deepEqual(mcp.calls.map((call) => call.params.name), [
-      "get_quiescence_status",
-      "get_quiescence_status",
-      "list_nonprod_environment_leases",
-      "claim_nonprod_environment_lease",
-      "renew_nonprod_environment_lease",
-      "release_nonprod_environment_lease",
-      "record_local_integration_result",
-    ]);
+    assert.equal(result.status, 75, `${result.stdout}\n${result.stderr}`);
+    assert.match(result.stderr, /"code":"local_ci_quiescence_wait"/i);
+    assert.match(result.stderr, /"runId":"QR-TEST"/i);
+    assert.equal(quiescenceReads, 1);
+    assert.deepEqual(mcp.calls.map((call) => call.params.name), ["get_quiescence_status"]);
+    const state = JSON.parse(readFileSync(join(dir, ".git", "dpf-local-ci-gate.json"), "utf8"));
+    assert.equal(state.status, "blocked_quiescence");
+    assert.equal(state.quiescence.runId, "QR-TEST");
   } finally {
     await mcp.close();
   }
@@ -473,7 +474,14 @@ test("gate-worktree.mjs reports active lease contention and stale main before ex
 test("gate-worktree.mjs preserves a green gate for finalize-only evidence replay after quiescence", async () => {
   const { dir } = makeTempRepo();
   let recordAttempts = 0;
+  let preflightQuiescing = false;
   const mcp = await startMockMcp({
+    get_quiescence_status: () => preflightQuiescing
+      ? {
+        success: true,
+        data: { level: "draining", runId: "QR-FINALIZE", writesRefused: true, retryAfterSeconds: 30 },
+      }
+      : { success: true, data: { level: "normal", writesRefused: false } },
     claim_nonprod_environment_lease: () => ({ success: true, entityId: "NPEL-PENDING" }),
     release_nonprod_environment_lease: () => ({ success: true }),
     record_local_integration_result: () => {
@@ -512,6 +520,18 @@ test("gate-worktree.mjs preserves a green gate for finalize-only evidence replay
     assert.equal(pendingState.gatePassed, true);
     assert.equal(pendingState.evidencePending, true);
 
+    preflightQuiescing = true;
+    const parked = await runGateAsync(["--finalize-evidence", ...commonArgs], env);
+    assert.equal(parked.status, 75, `${parked.stdout}\n${parked.stderr}`);
+    assert.match(parked.stderr, /"code":"local_ci_quiescence_wait"/i);
+    assert.deepEqual(
+      JSON.parse(readFileSync(join(dir, ".git", "dpf-local-ci-gate.json"), "utf8")),
+      pendingState,
+      "parking a finalize-only replay must preserve the genuine green gate",
+    );
+    assert.equal(existsSync(pendingPath), true);
+
+    preflightQuiescing = false;
     const callCountBeforeFinalize = mcp.calls.length;
     const finalized = await runGateAsync(["--finalize-evidence", ...commonArgs], env);
     assert.equal(finalized.status, 0, `${finalized.stdout}\n${finalized.stderr}`);

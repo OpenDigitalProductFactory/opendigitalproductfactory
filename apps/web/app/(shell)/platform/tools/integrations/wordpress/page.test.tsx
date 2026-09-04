@@ -92,4 +92,25 @@ describe("WordPressIntegrationPage", () => {
     expect(html).toContain("Adoption day this Saturday");
     expect(html).not.toContain("Application Password");
   });
+
+  it("passes a persisted degraded state through to the operator surface", async () => {
+    mocks.auth.mockResolvedValue({ user: { platformRole: "superadmin", isSuperuser: true } });
+    mocks.can.mockReturnValue(true);
+    mocks.readSetupState.mockResolvedValue({
+      integrationId: "wordpress-self-hosted",
+      provider: "wordpress",
+      status: "degraded",
+      safeProjection: { siteName: "Second Chance Rescue", siteUrl: "https://rescue.example" },
+      lastErrorMsg: "WordPress could not be reached safely.",
+      lastTestedAt: new Date("2026-08-22T07:00:00.000Z"),
+    });
+    mocks.projectionCount.mockResolvedValueOnce(0).mockResolvedValueOnce(0);
+    mocks.projectionFindMany.mockResolvedValue([]);
+    mocks.publicationFindMany.mockResolvedValue([]);
+
+    const { default: Page } = await import("./page");
+    const html = renderToStaticMarkup(await Page());
+
+    expect(html).toContain('data-status="degraded"');
+  });
 });

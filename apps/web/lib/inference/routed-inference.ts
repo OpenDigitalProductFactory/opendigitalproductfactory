@@ -39,8 +39,9 @@ import {
   buildEffectiveRequestContract,
   buildInitialRouteContext,
 } from "@/lib/inference/route-contract-builder";
-import { logTokenUsage } from "@/lib/ai-inference";
+import { persistRoutedTokenUsage, routedContextKey } from "./routed-token-usage";
 import type { RouteAndCallOptions } from "./routed-inference-options";
+import { applyCallerExecutionPlanOverrides } from "./routed-inference-plan-overrides";
 import {
   applyObservedRouterEvidence,
   attachProviderSuitabilityReceipt,
@@ -59,7 +60,11 @@ import { soleCapabilityFloorFailure } from "@/lib/inference/routing-exclusion-at
 import { createRoutingTraceId } from "@/lib/routing/routing-trace";
 import { AI_ROUTING_ARCHITECTURE_VERSION } from "@/lib/routing/routing-architecture-version";
 import type { EndpointPreferences } from "@/lib/routing/preference-finalization";
-import { buildLocalFallbackBanner, extractLocalFallbackFacts } from "./downgrade-explanation";
+import { describeLocalFallback, type DowngradeCause } from "./downgrade-explanation";
+import {
+  admitRoutedAsyncOperation,
+  routeUsesDurableAsyncAdapter,
+} from "./async-operation-routed-admission";
 export type { RouteAndCallOptions } from "./routed-inference-options";
 // ─── Result type ────────────────────────────────────────────────────────────
 /** Unified inference result — flat token fields, V2 metadata included. */
@@ -80,6 +85,7 @@ export interface RoutedInferenceResult {
    * assert both at once. See ./downgrade-explanation.ts (BI-F4D3B9E9d).
    */
   downgradeReason: "provider-unavailable" | "not-eligible" | null;
+  downgradeCause?: DowngradeCause | null;
   /** True when tools were stripped due to capability degradation (local model). */
   toolsStripped: boolean;
   /**
@@ -199,6 +205,7 @@ async function prepareRoute(
     messages,
     systemPrompt,
     systemPromptInstructionSpans: options?.systemPromptInstructionSpans,
+    messageOrigins: options?.messageOrigins,
     tools: options?.tools,
     taskType,
     routeContext: initialRouteContext,
@@ -399,15 +406,12 @@ async function routeAndCallAttempt(
   // through callWithFallbackChain into every adapter in the fallback chain.
   // Caller-set effort wins; otherwise the resolved posture's effort applies
   // (EP-GOLDEN-TRIANGLE Slice 3). Balanced/no posture leaves effort untouched.
-  const effort = options?.effort ?? prepared.posture?.effort;
-  if (effort && decision.executionPlan) {
-    decision.executionPlan = {
-      ...decision.executionPlan,
-      providerSettings: {
-        ...decision.executionPlan.providerSettings,
-        effort,
-      },
-    };
+  if (decision.executionPlan) {
+    decision.executionPlan = applyCallerExecutionPlanOverrides(decision.executionPlan, {
+      effort: options?.effort ?? prepared.posture?.effort,
+      toolChoice: options?.toolChoice,
+      terminalWriterToolName: options?.terminalWriterToolName,
+    });
   }
 
   // BI-F4D3B9E9(c): persist the failed route decision BEFORE throwing so the
@@ -596,7 +600,51 @@ async function routeAndCallAttempt(
   }
 
   // 5. Dispatch — background (async) or foreground (sync)
+  // An async adapter performs a side-effecting provider start. It may only be
+  // reached through the durable background admission/worker path, where the
+  // provider handle cannot be discarded by a foreground response boundary.
+  if (routeUsesDurableAsyncAdapter(decision)
+    && options?.interactionMode !== "background") {
+    throw new Error("ASYNC_OPERATION_BACKGROUND_REQUIRED");
+  }
   if (options?.interactionMode === "background") {
+    if (routeUsesDurableAsyncAdapter(decision)) {
+      const admitted = await admitRoutedAsyncOperation({
+        decision,
+        messages,
+        systemPrompt,
+        tools: toolsStripped ? undefined : dispatchScreenInput.tools,
+        options,
+        traceId,
+      });
+      await persistRoutedTokenUsage({
+        traceId,
+        agentId: options.agentId ?? "unknown",
+        providerId: admitted.providerId,
+        contextKey: routedContextKey(options),
+        inputTokens: 0,
+        outputTokens: 0,
+        inferenceMs: 0,
+        recordZeroUsage: true,
+        requirePersistence: true,
+      });
+      return {
+        providerId: admitted.providerId,
+        modelId: admitted.modelId,
+        content: "",
+        toolCalls: [],
+        inputTokens: 0,
+        outputTokens: 0,
+        downgraded: false,
+        downgradeMessage: null,
+        downgradeReason: null,
+        toolsStripped,
+        routeDecision: decision,
+        asyncOperationId: admitted.operationId,
+        ...routedRehydrationHandle(prepared.rehydrationHandle),
+      };
+    }
+
     // EP-INF-009d: Start async operation, return immediately
     const result = await callWithFallbackChain(
       decision,
@@ -611,43 +659,12 @@ async function routeAndCallAttempt(
     );
     applyObservedRouterEvidence(decision, result.routingEvidence, routeDecisionLogId);
 
-    // If the adapter returned an operation ID (async adapter), create tracking record
-    const operationId = (result as any).raw?.operationId as string | undefined;
-    if (operationId) {
-      const { createAsyncOperation } = await import("@/lib/async-inference");
-      const asyncOpId = await createAsyncOperation({
-        providerId: result.providerId,
-        modelId: result.modelId,
-        operationId,
-        contractFamily: contract.contractFamily,
-        requestContext: { taskType, sensitivity, messages: messages.length },
-        threadId: options?.threadId,
-        maxDurationMs: options?.maxDurationMs,
-      });
-
-      return {
-        providerId: result.providerId,
-        modelId: result.modelId,
-        content: "",
-        toolCalls: [],
-        inputTokens: 0,
-        outputTokens: 0,
-        downgraded: false,
-        downgradeMessage: null,
-        downgradeReason: null,
-        toolsStripped,
-        routeDecision: decision,
-        asyncOperationId: asyncOpId,
-        ...routedRehydrationHandle(prepared.rehydrationHandle),
-      };
-    }
-
     // Every adapter dispatch persists TokenUsage (BI-28858D2F).
     void persistRoutedTokenUsage({
       traceId,
       agentId: options?.agentId ?? "unknown",
       providerId: result.providerId,
-      contextKey: options?.threadId ?? options?.taskType ?? "routed-call",
+      contextKey: routedContextKey(options),
       inputTokens: result.tokenUsage?.inputTokens ?? 0,
       outputTokens: result.tokenUsage?.outputTokens ?? 0,
       inferenceMs: result.inferenceMs,
@@ -663,7 +680,8 @@ async function routeAndCallAttempt(
       downgraded: result.downgraded,
       downgradeMessage: result.downgradeMessage,
       // Background path: only a real dispatch failure downgrades here.
-      downgradeReason: result.downgraded ? "provider-unavailable" : null,
+      downgradeReason: result.downgradeReason
+        ?? (result.downgraded ? "provider-unavailable" : null),
       toolsStripped,
       truncated: result.truncated ?? false,
       routeDecision: decision,
@@ -703,15 +721,16 @@ async function routeAndCallAttempt(
   // "is active" — wrong whenever a stronger provider is disabled and a weaker one
   // is not. Both facts are already in scope, so ./downgrade-explanation.ts reads
   // them instead of guessing.
-  const localFallbackBanner = fellToLocal
-    ? buildLocalFallbackBanner(
-      extractLocalFallbackFacts({
-        manifests,
-        candidates: decision.candidates,
-        sensitivity: decision.sensitivity,
-      }),
-    )
+  const localFallback = fellToLocal
+    ? describeLocalFallback({
+      manifests,
+      candidates: decision.candidates,
+      sensitivity: decision.sensitivity,
+      matchProvenance: decision.inferenceDataScreenReceipt?.matchProvenance,
+      messageCount: messages.length,
+    })
     : null;
+  const localFallbackBanner = localFallback?.banner ?? null;
 
   // 6. Persist TokenUsage row for the cost ledger (Phase J).
   // Fire-and-forget because metering must not block the response. A loud log
@@ -721,7 +740,7 @@ async function routeAndCallAttempt(
     traceId,
     agentId: options?.agentId ?? "unknown",
     providerId: result.providerId,
-    contextKey: options?.threadId ?? options?.taskType ?? "routed-call",
+    contextKey: routedContextKey(options),
     inputTokens: result.tokenUsage?.inputTokens ?? 0,
     outputTokens: result.tokenUsage?.outputTokens ?? 0,
     inferenceMs: result.inferenceMs,
@@ -738,11 +757,13 @@ async function routeAndCallAttempt(
     downgraded: result.downgraded || fellToLocal,
     downgradeMessage: result.downgradeMessage ?? localFallbackBanner,
     // Opposite causes; never both for one turn (BI-F4D3B9E9d).
-    downgradeReason: result.downgraded
-      ? "provider-unavailable"
-      : fellToLocal
-        ? "not-eligible"
-        : null,
+    downgradeReason: result.downgradeReason
+      ?? (result.downgraded
+        ? "provider-unavailable"
+        : fellToLocal
+          ? "not-eligible"
+          : null),
+    downgradeCause: localFallback?.cause ?? null,
     toolsStripped,
     truncated: result.truncated ?? false,
     routeDecision: decision,
@@ -750,48 +771,4 @@ async function routeAndCallAttempt(
     resolvedMaxContextTokens: selectedManifest?.maxContextTokens ?? null,
     ...routedRehydrationHandle(prepared.rehydrationHandle),
   };
-}
-
-// ─── Phase J: routed-call token usage persistence ──────────────────────────
-//
-// Every routed inference call must produce a `TokenUsage` row regardless of
-// which adapter served it. Before this fix, only the direct HTTP path
-// (`callProvider` in `ai-inference.ts`) wrote metering — the CLI subprocess
-// adapters (claude-cli, codex-cli) silently bypassed it. The result was a
-// $0 cost tally for ~100% of subscription-served traffic on a typical install.
-//
-// This wrapper is the *convenience* enforcement; the durable enforcement is
-// the OutcomeEvent-bus detector "outcome event without metering row" listed
-// in the routing-architecture spec §10.2. That bus check makes new dispatch
-// paths (future adapters) loud about forgetting to meter; this wrapper makes
-// it easy to satisfy by default.
-//
-// Errors are logged but never thrown — metering must never block the response.
-async function persistRoutedTokenUsage(input: {
-  traceId?: string | null;
-  agentId: string;
-  providerId: string;
-  contextKey: string;
-  inputTokens: number;
-  outputTokens: number;
-  // BI-105E8A1E: carry the adapter's measured latency so logTokenUsage's
-  // `compute` cost model can fire — it is the cost signal for a fully-local
-  // install, and was previously dropped here, leaving inferenceMs ~99% empty.
-  inferenceMs?: number;
-}): Promise<void> {
-  // Skip rows with zero tokens both ways. A successful call always reports at
-  // least the input prompt tokens; zero/zero usually means the adapter
-  // returned an error or stub. The audit row would be misleading.
-  if (input.inputTokens === 0 && input.outputTokens === 0) {
-    return;
-  }
-  try {
-    await logTokenUsage(input);
-  } catch (err) {
-    console.error(
-      `[routed-inference] token usage persistence failed: provider=${input.providerId} ` +
-      `agent=${input.agentId} in=${input.inputTokens} out=${input.outputTokens}`,
-      err,
-    );
-  }
 }

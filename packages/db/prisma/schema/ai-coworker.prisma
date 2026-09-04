@@ -144,10 +144,10 @@ model RecurrenceSchedule {
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
 
-  supersededBy     RecurrenceSchedule?  @relation("RecurrenceSupersede", fields: [supersededByScheduleId], references: [id], onDelete: SetNull)
-  supersedes       RecurrenceSchedule[] @relation("RecurrenceSupersede")
-  workEngagements  WorkEngagement[]
-  careAppointments CareAppointment[]
+  supersededBy              RecurrenceSchedule?    @relation("RecurrenceSupersede", fields: [supersededByScheduleId], references: [id], onDelete: SetNull)
+  supersedes                RecurrenceSchedule[]   @relation("RecurrenceSupersede")
+  workEngagements           WorkEngagement[]
+  careAppointments          CareAppointment[]
   // W19 (BI-99C76A90, pass §3.2-c): RecurrenceSchedule is the ONE canonical
   // recurrence primitive. Unified availability windows reference it, and
   // finance RecurringSchedule folds its `frequency` semantics onto it via
@@ -162,12 +162,15 @@ model RecurrenceSchedule {
 // A coworker's long-running work unit. A parent may carry a RecurrenceSchedule;
 // materialized occurrences are child rows (self-relation) keyed by occurrenceAt.
 model WorkEngagement {
-  id               String  @id @default(cuid())
-  organizationId   String
-  status           String  @default("planned") // planned|in-progress|completed|cancelled|failed
-  title            String
-  requestedOutcome String? @db.Text
-  createdByAgentId String?
+  id                  String  @id @default(cuid())
+  organizationId      String
+  status              String  @default("planned") // planned|in-progress|completed|cancelled|failed
+  title               String
+  requestedOutcome    String? @db.Text
+  createdByAgentId    String?
+  subjectKindSlug     String?
+  subjectRef          String?
+  locationResourceRef String?
 
   recurrenceScheduleId   String?
   parentWorkEngagementId String?
@@ -191,6 +194,8 @@ model WorkEngagement {
   // same occurrence. (NULL occurrenceAt rows — parents & non-recurring — are exempt.)
   @@unique([recurrenceScheduleId, occurrenceAt])
   @@index([organizationId, status, createdAt(sort: Desc)])
+  @@index([organizationId, subjectKindSlug, subjectRef])
+  @@index([organizationId, locationResourceRef, dueAt])
   @@index([parentWorkEngagementId])
   @@index([dueAt])
   @@index([status])
@@ -275,6 +280,11 @@ model Agent {
   workItemAssignments  WorkItem[]                  @relation("WorkItemAgent")
   workSchedule         WorkSchedule?               @relation("WorkScheduleAgent")
   authorityBindings    AuthorityBinding[]
+
+  // MCP OAuth authorization server (BI-E4DFDCB0): a client_credentials client
+  // or a refresh token may act AS this coworker identity.
+  oauthClients       OAuthClient[]
+  oauthRefreshTokens OAuthRefreshToken[]
 
   @@index([portfolioId]) // FK-leading (spine): active-agents-per-portfolio groupBy, apps/web/lib/evaluate/portfolio-data.ts:72
 }

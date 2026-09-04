@@ -84,13 +84,43 @@ Both postures resolve through one precedence order:
 1. Hard policy          residency · sensitivity ceiling · regulated ceiling   (never relaxed)
 2. Room declaration     an explicit choice made when the room was convened
 3. Derived              work shape × archetype stream × temporal band × stakes
-4. Agent                the coworker's own saved posture
+4. Agent                Golden Triangle priority only — never proactivity
 5. Org / activity-family
 6. Platform default     Balanced / balanced — byte-identical to today
 ```
 
 Layer 3 is the new one. Layers 1, 4, 5 and 6 already exist and keep their current
 meaning; layer 2 is new but is a straight reuse of the shape-claim mechanism.
+
+**Operator correction — proactivity is not identity state (2026-08-30).** The earlier
+ladder incorrectly retained the coworker's saved proactivity as an inheritance layer.
+For proactivity, the outcome-specific Workroom is authoritative: every participant
+shares its level, cadence, channel and action boundary. Participant-specific trust,
+qualifications, grants and autonomy envelopes remain safety ceilings and may only narrow
+the room; they never supply or override its proactivity. Unroomed activity uses the
+activity-family/platform default; proactive work without an outcome-specific Workroom is a
+modelling gap, not permission to fall back to identity. This correction does not change the
+separate Golden Triangle priority control.
+
+**Retired under `BI-87C9C91C` (2026-09-01).** The `agent:<agentId>` scope is gone from
+`scopeKeysForInput` in `lib/proactivity/proactivity-resolver.server.ts`, so no production
+resolver reads a per-coworker proactivity override. The controls that wrote one are gone
+with it: the coworker record's setting (replaced by a pointer to the room), the chat
+composer dock's proactivity half (its Golden Triangle priority half is a different axis and
+stays), and the consolidated roster, which is now a read-only projection of what a coworker
+does outside any room. `getCoworkerProactivityPreference`, `getCoworkerProactivityPreferences`
+and `saveCoworkerProactivityPreference` were deleted rather than deprecated — a save path
+whose value nothing reads reports success and changes nothing.
+
+Existing `aiCoworkerProactivity:agent:*` UserFacts are left in place and inert. They are
+deliberately NOT migrated into room declarations: an identity preference cannot be
+reinterpreted as an outcome preference without inventing a choice the owner never made.
+
+Two interactive paths that previously read the coworker's saved level — the coworker turn
+(`lib/actions/agent-coworker.ts`) and the opening briefing (`lib/agent/opening-briefing-loader.ts`)
+— now take the platform default, which is byte-identical to what an agent with no saved
+preference resolved before. Standing work that genuinely has an outcome resolves from the
+room instead, through `lib/work-management/drive-resolution.ts`.
 
 ### 3.2 The safety invariant
 

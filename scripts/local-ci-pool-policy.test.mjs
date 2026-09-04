@@ -156,7 +156,11 @@ test("admission reserves the host-native stage envelope above the safety floor",
     },
   };
 
-  for (const availableMemoryBytes of [12 * gib, 14 * gib]) {
+  // Expressed against the calibrated host-stage reserve rather than a literal,
+  // so recalibrating it (BI-E58B57EC) cannot silently turn a refusal into an
+  // admission. floor + reserve - 1 is one byte short of a single stage.
+  const stage = SLOT_RESOURCES.hostStagePolicy.admissionReserveBytes;
+  for (const availableMemoryBytes of [8 * gib, 8 * gib + stage - 1]) {
     const resolved = resolveLocalCiPoolPolicy({
       configValue,
       host: {
@@ -179,7 +183,7 @@ test("admission reserves the host-native stage envelope above the safety floor",
     configValue,
     host: {
       ...SAFE_HOST,
-      availableMemoryBytes: 20 * gib,
+      availableMemoryBytes: 8 * gib + stage,
       dockerAvailableMemoryBytes: 40 * gib,
       builderMemoryUsageBytes: [0, 0],
     },
@@ -195,7 +199,7 @@ test("admission reserves the host-native stage envelope above the safety floor",
     configValue,
     host: {
       ...SAFE_HOST,
-      availableMemoryBytes: 24 * gib,
+      availableMemoryBytes: 8 * gib + 2 * stage,
       dockerAvailableMemoryBytes: 40 * gib,
       builderMemoryUsageBytes: [0, 0],
     },
@@ -336,7 +340,10 @@ test("admission intersects Docker and host-stage capacity instead of returning t
     },
     host: {
       ...SAFE_HOST,
-      availableMemoryBytes: 14 * gib,
+      // One byte short of a single host-native stage above the floor, from the
+      // manifest so recalibration (BI-E58B57EC) cannot make this admit.
+      availableMemoryBytes:
+        8 * gib + SLOT_RESOURCES.hostStagePolicy.admissionReserveBytes - 1,
       dockerAvailableMemoryBytes: 20 * gib,
       builderMemoryUsageBytes: [0, 0],
     },

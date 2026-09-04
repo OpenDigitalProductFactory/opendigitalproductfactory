@@ -2,14 +2,19 @@
 // Phase 4 of BI-063BDF1B — real GitHub REST reader.
 //
 // Replaces the Phase 2 stub. Authenticates via the CredentialEntry row
-// with providerId "github-pr-sync" (created by the Contributor MCP card
-// from PR #1204; disjoint from the "git-backup" / "hive-contribution"
-// rows used by the contribution pipeline). Etag persistence uses
+// with providerId "github-pr-sync" when one exists, falling back to the
+// contribution-pipeline rows when it does not — see the comment on
+// GITHUB_READ_CREDENTIAL_PROVIDER_IDS below. The header used to say this row
+// was "created by the Contributor MCP card from PR #1204"; no such writer
+// exists in the tree, and believing it cost a day of looking for a settings
+// page that was never built (BI-69BBC446). Etag persistence uses
 // ScheduledJob.metadata.githubPrEtag so the rate-budget protection
 // survives the ContributorInventorySnapshot 7-day retention sweep.
 //
 // Spec: docs/superpowers/specs/2026-05-26-contributor-inventory-sync-design.md
 //   §"Per-source work" item 3, §"Etag persistence".
+
+import { Agent, fetch as undiciFetch } from "undici";
 
 import type { PullRequestSnapshot } from "./types";
 
@@ -46,6 +51,40 @@ export type GithubReaderDeps = {
 
 /** Resolved repo coordinates `{owner}/{repo}`. */
 export type RepoIdentity = { owner: string; name: string };
+
+export type GithubReadTransport = Readonly<{
+  fetch: typeof fetch;
+  close(): Promise<void>;
+}>;
+
+/**
+ * Control-plane GitHub reads must not inherit Next.js' framework-patched
+ * global fetch. Own the dispatcher explicitly and close it at the operation
+ * boundary; callers still inject a plain Fetch implementation in tests.
+ */
+export function createGithubReadTransport(): GithubReadTransport {
+  const dispatcher = new Agent();
+  const isolatedFetch = ((input: Parameters<typeof fetch>[0], init?: RequestInit) =>
+    undiciFetch(
+      input as Parameters<typeof undiciFetch>[0],
+      { ...init, dispatcher } as Parameters<typeof undiciFetch>[1],
+    ) as unknown as Promise<Response>) as typeof fetch;
+  return {
+    fetch: isolatedFetch,
+    close: async () => {
+      await dispatcher.close();
+    },
+  };
+}
+
+/** Release an unconsumed provider response before retrying or closing its dispatcher. */
+export async function cancelGithubResponseBody(response: Response): Promise<void> {
+  try {
+    await response.body?.cancel();
+  } catch {
+    // Cleanup cannot change the typed provider verdict already established.
+  }
+}
 
 /**
  * Production GitHub PR reader. Returns the rows for the open-PR list,
@@ -118,12 +157,39 @@ export type PrismaLike = Pick<
   "credentialEntry" | "platformDevConfig" | "scheduledJob"
 >;
 
-// Exported for reuse by release-health (BI-3630773C) — same optional
-// "github-pr-sync" credential; callers that can read public repos treat a
-// null return as "proceed unauthenticated", not an error.
-export async function resolveGithubToken(prisma: PrismaLike): Promise<string | null> {
+/**
+ * Credentials this reader will authenticate with, best first.
+ *
+ * "github-pr-sync" stays the preferred row: the disjoint-credential intent in
+ * this file's header is a real one, and an install that sets it keeps a token
+ * scoped to exactly this job.
+ *
+ * The fallbacks exist because that intent was never reachable. Nothing in the
+ * product writes "github-pr-sync" — the Contributor MCP card named in the
+ * header does not exist in the tree. The GitHub device flow writes
+ * "hive-contribution"; the Admin > Platform Development panel writes
+ * "git-backup". So this resolver returned null on every install, and every
+ * caller degraded to an unauthenticated request, which against a private
+ * repository fails outright (BI-69BBC446).
+ *
+ * That took down the whole initiative-readiness chain: no repository
+ * provenance means no plan-coverage receipt, so no spec-approval baseline, so
+ * no reviewer binding, so no independent design review — on an install that
+ * had a perfectly good active credential sitting one row away. Preferring a
+ * dedicated credential is right; being dead without one is not.
+ *
+ * These are read-only calls against the same repository the fallback tokens
+ * already push to, so no fallback widens what the install can reach.
+ */
+const GITHUB_READ_CREDENTIAL_PROVIDER_IDS = [
+  GITHUB_PR_CREDENTIAL_PROVIDER_ID,
+  "hive-contribution",
+  "git-backup",
+] as const;
+
+async function readCredential(prisma: PrismaLike, providerId: string): Promise<string | null> {
   const cred = await prisma.credentialEntry.findUnique({
-    where: { providerId: GITHUB_PR_CREDENTIAL_PROVIDER_ID },
+    where: { providerId },
     select: { secretRef: true, status: true },
   });
   if (!cred || cred.status !== "active" || !cred.secretRef) return null;
@@ -131,13 +197,24 @@ export async function resolveGithubToken(prisma: PrismaLike): Promise<string | n
   const stored = cred.secretRef;
   try {
     const { decryptSecret } = await import("@/lib/credential-crypto");
-    if (stored.startsWith("enc:")) {
-      return decryptSecret(stored);
-    }
-    return stored;
+    // A key rotation leaves an undecryptable row: skip it and try the next
+    // credential rather than reporting "no token" for a store that has one.
+    return stored.startsWith("enc:") ? decryptSecret(stored) : stored;
   } catch {
     return null;
   }
+}
+
+// Exported for reuse by release-health (BI-3630773C); callers that can read
+// public repos treat a null return as "proceed unauthenticated", not an error.
+export async function resolveGithubToken(prisma: PrismaLike): Promise<string | null> {
+  for (const providerId of GITHUB_READ_CREDENTIAL_PROVIDER_IDS) {
+    const token = await readCredential(prisma, providerId);
+    if (token) return token;
+  }
+  // Legacy env fallback, matching resolveHiveToken's chain so the two resolvers
+  // cannot disagree about whether this install has GitHub access.
+  return process.env.GITHUB_TOKEN ?? null;
 }
 
 // Exported for reuse by release-health (BI-3630773C).

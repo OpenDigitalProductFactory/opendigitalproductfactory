@@ -20,6 +20,7 @@ import type {
 import { getProviderDisplayNameForSpend } from "./ai-provider-cost-view";
 import { rollUpProviderModels, type ProfileForRollup } from "./provider-routing-rollup";
 import { resolveCredentialProviderId } from "./ai-provider-internals";
+import { parseAsyncInferenceOperationStatus } from "./async-operation-contract";
 
 /** Mask a secret to `••••••1234` (last 4 chars visible). */
 function maskSecret(value: string | null): string | null {
@@ -361,7 +362,7 @@ export const getAsyncOperations = cache(
       providerId: o.providerId,
       modelId: o.modelId,
       contractFamily: o.contractFamily,
-      status: o.status,
+      status: parseAsyncInferenceOperationStatus(o.status),
       progressPct: o.progressPct,
       progressMessage: o.progressMessage,
       errorMessage: o.errorMessage,

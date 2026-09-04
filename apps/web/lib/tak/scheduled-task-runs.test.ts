@@ -58,6 +58,41 @@ describe("detectScheduledRunInferenceFailure", () => {
   });
 });
 
+describe("detectScheduledRequiredToolFailure", () => {
+  it("rejects TR-SCHED-7841123E instead of recording ok when its required governed mutation executed zero tools", async () => {
+    const { detectScheduledRequiredToolFailure } = await import("./scheduled-task-runs");
+    expect(
+      detectScheduledRequiredToolFailure({
+        prompt: "Use only promote_to_build_studio to promote BI-37719AAB.",
+        authorizedTools: [
+          { name: "get_backlog_item", sideEffect: false },
+          { name: "promote_to_build_studio", sideEffect: true },
+        ],
+        executedTools: [],
+      }),
+    ).toBe("required governed tool promote_to_build_studio executed zero times");
+  });
+
+  it("does not mistake a pending action proposal for an executed governed mutation", async () => {
+    const { detectScheduledRequiredToolFailure } = await import("./scheduled-task-runs");
+    expect(
+      detectScheduledRequiredToolFailure({
+        prompt: "Use only promote_to_build_studio to promote BI-NOT-REAL.",
+        authorizedTools: [{ name: "promote_to_build_studio", sideEffect: true }],
+        executedTools: [
+          {
+            name: "promote_to_build_studio",
+            result: {
+              success: true,
+              data: { proposalId: "prop-live-repro", status: "proposed" },
+            },
+          },
+        ],
+      }),
+    ).toBe("required governed tool promote_to_build_studio executed zero times");
+  });
+});
+
 describe("createTaskRunForScheduledTask", () => {
   beforeEach(async () => {
     const { prisma } = await import("@dpf/db");

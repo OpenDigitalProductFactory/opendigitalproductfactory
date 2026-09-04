@@ -426,6 +426,9 @@ export type BuildReviewDeliberationInput = {
   /** Optional thread id — progress events from the deliberation layer fan
    *  out through the agent event bus for this thread. */
   threadId?: string;
+  /** Coworker that asked for the review — stamped on the bootstrapped
+   *  TaskRun so Right Now can place the run (BI-B3AB7FC9). */
+  agentId?: string;
   /** Opt-in to the debate pattern for this invocation. Omit for default
    *  peer review. */
   explicitPattern?: DeliberationPatternChoice;
@@ -451,7 +454,7 @@ export type BuildReviewDeliberationResult = {
 export async function runBuildReviewDeliberation(
   input: BuildReviewDeliberationInput,
 ): Promise<BuildReviewDeliberationResult> {
-  const { userId, buildId, phase, reviewerBranches, taskRunId, threadId, strategyProfile } = input;
+  const { userId, buildId, phase, reviewerBranches, taskRunId, threadId, agentId, strategyProfile } = input;
 
   const patternSlug: DeliberationPatternChoice =
     input.explicitPattern ?? defaultDeliberationPatternForPhase(phase);
@@ -476,6 +479,7 @@ export async function runBuildReviewDeliberation(
     patternSlug,
     taskRunId,
     threadId,
+    agentId,
     buildId,
     artifactType,
     strategyProfile: strategyProfile ?? "balanced",
@@ -1679,7 +1683,8 @@ export async function runBuildOrchestrator(params: {
   // NOTE: Cannot call advanceBuildPhase (server action) here because auth()
   // has no HTTP request context inside the agentic loop. Direct DB update instead.
   try {
-    const { checkPhaseGate, canTransitionPhase } = await import("@/lib/feature-build-types");
+    const { canTransitionPhase } = await import("@/lib/feature-build-types");
+    const { checkBuildPhaseGate } = await import("@/lib/work-posture/verification-depth-gate");
     const updatedBuild = await prisma.featureBuild.findUnique({ where: { buildId } });
     // The synthetic QA task (taskIndex === -1, "Full verification: tests +
     // typecheck") is dispatched to the model, which runs the full suite via
@@ -1717,8 +1722,15 @@ export async function runBuildOrchestrator(params: {
       } catch (scopeErr) {
         console.warn("[orchestrator] scoped verification for gate failed; using raw verificationOut:", (scopeErr as Error)?.message);
       }
-      const gate = checkPhaseGate("build", "review", {
-        verificationOut: verificationForGate as typeof updatedBuild.verificationOut,
+      const gate = await checkBuildPhaseGate({
+        buildId,
+        from: "build",
+        to: "review",
+        evidence: {
+          kind: updatedBuild.kind,
+          processSize: ((updatedBuild.plan as Record<string, unknown> | null)?.processSize as string | undefined) ?? "medium",
+          verificationOut: verificationForGate as typeof updatedBuild.verificationOut,
+        },
       });
       if (gate.allowed) {
         await prisma.featureBuild.update({ where: { buildId }, data: { phase: "review" } });

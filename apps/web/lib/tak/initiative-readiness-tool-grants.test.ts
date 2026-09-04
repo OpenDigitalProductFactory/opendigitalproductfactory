@@ -5,6 +5,7 @@ import type { InitiativeReadinessDecision } from "@/lib/backlog/initiative-readi
 import { parseInitiativeReviewBinding } from "@/lib/mcp-task-submit";
 
 import { resolveInitiativeReviewerRecovery } from "./initiative-readiness-tool-grants";
+import { readinessRequirement } from "@/lib/backlog/initiative-readiness/readiness-guidance";
 
 const decision: InitiativeReadinessDecision = {
   decisionId: "IRD-RECOVERY",
@@ -21,8 +22,8 @@ const decision: InitiativeReadinessDecision = {
   verdict: "input-required",
   satisfied: [],
   unmet: [
-    { code: "RESEARCH_REQUIRED", state: "missing", accountableRole: "design-author", evidenceRefs: [] },
-    { code: "PLAN_REQUIRED", state: "missing", accountableRole: "implementation-planner", evidenceRefs: [] },
+    readinessRequirement({ code: "RESEARCH_REQUIRED", state: "missing", accountableRole: "design-author" }),
+    readinessRequirement({ code: "PLAN_REQUIRED", state: "missing", accountableRole: "implementation-planner" }),
   ],
   blockers: [],
   evaluatedAt: "2026-08-24T17:00:00.000Z",
@@ -55,6 +56,52 @@ function grantRow(grantKey: string, agentId: string, displayName: string) {
 }
 
 describe("initiative readiness recovery routing", () => {
+  it("routes acceptance reconciliation through an exact objective-mapping evidence packet", async () => {
+    const acceptanceDecision: InitiativeReadinessDecision = {
+      ...decision,
+      target: "completion",
+      verdict: "denied",
+      unmet: [
+        readinessRequirement({
+          code: "OBJECTIVE_RECONCILIATION_REQUIRED",
+          state: "missing",
+          accountableRole: "acceptance-reviewer",
+        }),
+      ],
+    };
+    const recovery = await resolveInitiativeReviewerRecovery({
+      decision: acceptanceDecision,
+      currentAgentId: "AGT-AUTHOR",
+      db: { agentToolGrant: { findMany: vi.fn().mockResolvedValue([
+        grantRow("initiative_evidence_write", "AGT-WS-ACCEPT", "Acceptance Reviewer"),
+      ]) } },
+      dispatchContext,
+      canonicalArtifact,
+      expectedCurrentBaselineId: "baseline-current",
+    });
+
+    expect(recovery.escalations).toEqual([]);
+    expect(recovery.unroutable).toEqual([]);
+    expect(recovery.reviewerRoutes).toMatchObject([{
+      accountableRole: "acceptance-reviewer",
+      toolName: "record_initiative_evidence",
+      grant: "initiative_evidence_write",
+      gate: "objective-mapping",
+      targetAgentId: "AGT-WS-ACCEPT",
+      requestCoworker: {
+        requiredToolNames: ["record_initiative_evidence", "read_source_at_version"],
+        initiativeReviewBinding: {
+          writerToolName: "record_initiative_evidence",
+          itemId: "BI-A45D744A",
+          gate: "objective-mapping",
+          expectedCurrentBaselineId: "baseline-current",
+        },
+      },
+    }]);
+    expect(recovery.reviewerRoutes[0]?.requestCoworker.objective)
+      .toContain("Map every current OBJ-* and AC-* statement to post-baseline evidence");
+  });
+
   it("sequences independent spec approval before plan coverage when no baseline exists", async () => {
     const findMany = vi.fn().mockResolvedValue([
       grantRow("initiative_evidence_write", "AGT-WS-PORTFOLIO", "Portfolio Management"),
@@ -152,6 +199,28 @@ describe("initiative readiness recovery routing", () => {
       .toBe("IBL-7C41");
   });
 
+  it("binds the reader to the canonical artifact commit without changing the Workroom request key", async () => {
+    const artifactCommitSha = "a".repeat(40);
+    const recovery = await resolveInitiativeReviewerRecovery({
+      decision,
+      currentAgentId: "AGT-AUTHOR",
+      db: { agentToolGrant: { findMany: vi.fn().mockResolvedValue([
+        grantRow("initiative_evidence_write", "AGT-WS-BUILD", "Build Specialist"),
+      ]) } },
+      dispatchContext,
+      canonicalArtifact: { ...canonicalArtifact, commitSha: artifactCommitSha },
+      expectedCurrentBaselineId: "IBL-7C41",
+    });
+
+    expect(recovery.reviewerRoutes[0]?.requestCoworker).toMatchObject({
+      requestKey: `initiative-readiness:BI-A45D744A:research:${dispatchContext.headSha}`,
+      initiativeReviewBinding: {
+        artifactRef: { commitSha: artifactCommitSha },
+      },
+    });
+    expect(recovery.reviewerRoutes[0]?.requestCoworker.objective).toContain(`at ${artifactCommitSha}`);
+  });
+
   it("escalates with the provider remedy instead of emitting a route no coworker can execute", async () => {
     const recovery = await resolveInitiativeReviewerRecovery({
       decision,
@@ -187,7 +256,7 @@ describe("initiative readiness recovery routing", () => {
       decision: {
         ...decision,
         unmet: [
-          { code: "ARTIFACT_AUTHOR_REQUIRED", state: "missing", accountableRole: "artifact-resolver", evidenceRefs: [] },
+          readinessRequirement({ code: "ARTIFACT_AUTHOR_REQUIRED", state: "missing", accountableRole: "artifact-resolver" }),
         ],
       },
       currentAgentId: "AGT-AUTHOR",
@@ -248,7 +317,7 @@ describe("initiative readiness recovery routing", () => {
       decision: {
         ...decision,
         unmet: [
-          { code: "PLAN_REQUIRED", state: "missing", accountableRole: "implementation-planner", evidenceRefs: [] },
+          readinessRequirement({ code: "PLAN_REQUIRED", state: "missing", accountableRole: "implementation-planner" }),
         ],
       },
       currentAgentId: "AGT-AUTHOR",
@@ -279,7 +348,7 @@ describe("initiative readiness recovery routing", () => {
       decision: {
         ...decision,
         unmet: [
-          { code: "PLAN_REQUIRED", state: "missing", accountableRole: "implementation-planner", evidenceRefs: [] },
+          readinessRequirement({ code: "PLAN_REQUIRED", state: "missing", accountableRole: "implementation-planner" }),
         ],
       },
       currentAgentId: "AGT-AUTHOR",

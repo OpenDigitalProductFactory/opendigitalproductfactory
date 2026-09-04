@@ -6,3 +6,4 @@ export * from "./temporal-band";
 export * from "./tighten";
 export * from "./derive";
 export * from "./resolve";
+export * from "./provenance";

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { presentCapsuleRow } from "./work-capsule-presenter";
 
 describe("presentCapsuleRow", () => {
-  it("marks expired leases", () => {
+  it("marks expired leases (past the resume grace)", () => {
     const row = presentCapsuleRow({
       capsuleId: "WC-1",
       title: "Adopt work",
@@ -13,12 +13,31 @@ describe("presentCapsuleRow", () => {
       headBranch: "feat/adopt",
       worktreePath: "D:/DPF-adopt",
       pullRequestUrl: null,
-      leaseExpiresAt: new Date("2026-05-14T00:00:00.000Z"),
+      leaseExpiresAt: new Date("2026-05-12T00:00:00.000Z"), // ~49h before now — past 24h grace
+      lastSyncedAt: new Date("2026-05-12T00:00:00.000Z"),
+      updatedAt: new Date("2026-05-12T00:00:00.000Z"),
+    }, new Date("2026-05-14T01:00:00.000Z"));
+
+    expect(row.health).toBe("lease-expired");
+  });
+
+  it("marks a RECENTLY expired lease as paused, not lease-expired (token-limited session may resume)", () => {
+    const row = presentCapsuleRow({
+      capsuleId: "WC-PAUSE",
+      title: "Paused session",
+      status: "working",
+      source: "external-adoption",
+      executorKind: "grok-cli",
+      headBranch: "feat/paused",
+      worktreePath: "D:/DPF-paused",
+      pullRequestUrl: null,
+      leaseExpiresAt: new Date("2026-05-14T00:00:00.000Z"), // 1h before now — inside grace
       lastSyncedAt: new Date("2026-05-14T00:00:00.000Z"),
       updatedAt: new Date("2026-05-14T00:00:00.000Z"),
     }, new Date("2026-05-14T01:00:00.000Z"));
 
-    expect(row.health).toBe("lease-expired");
+    expect(row.health).toBe("paused");
+    expect(row.isLive).toBe(true);
   });
 
   it("marks stale scanner cache when the lease is still active", () => {

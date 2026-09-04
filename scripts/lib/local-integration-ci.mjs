@@ -278,8 +278,12 @@ export function createLocalIntegrationPlan(input) {
   const setupCommands = [
     ...(input.fetchBase ? [["git", "fetch", "origin", "main"]] : []),
     ["git", "checkout", "-B", branch, baseRef],
-    ["git", "merge", "--no-ff", "--no-edit", input.candidateBranch],
-    ...input.siblingBranches.map((sibling) => ["git", "merge", "--no-ff", "--no-edit", sibling]),
+    // BI-4820A197: sign the merge at creation so the gated HEAD is the HEAD
+    // the pre-push DCO hook will accept. BI-E3044AEC: merge the invoking
+    // worktree's SHA when supplied, not a branch name that may resolve to
+    // origin's (behind) tip inside the shared runner workspace.
+    ["git", "merge", "--no-ff", "--no-edit", "--signoff", input.candidateSha || input.candidateBranch],
+    ...input.siblingBranches.map((sibling) => ["git", "merge", "--no-ff", "--no-edit", "--signoff", sibling]),
     // Generate the same versioned, digest-bound evidence plan used by GitHub
     // after the exact integration tree exists. Documentation plans are
     // authoritative; other local lanes remain exhaustive during rollout.
@@ -342,6 +346,10 @@ export function createLocalIntegrationPlan(input) {
       HOST_TEST_INITIAL_WORKERS,
       "--retry-workers",
       HOST_TEST_RETRY_WORKERS,
+      // The integration base, so the stage can narrow to the tests this
+      // candidate can reach (BI-2227C37C). Absent or unreadable => exhaustive.
+      "--base",
+      baseRef,
     ],
     productionBuildCommand,
   ];

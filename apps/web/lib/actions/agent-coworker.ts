@@ -34,7 +34,7 @@ import { resolveRouteContext } from "@/lib/route-context-map";
 import { assembleSystemPromptWithProvenance } from "@/lib/prompt-assembler";
 import { composeCoworkerDomainContext } from "@/lib/tak/coworker-prompt-provenance";
 import { buildInitiativeBlock } from "@/lib/tak/initiative-block";
-import { getCoworkerProactivityPreference } from "@/lib/actions/proactivity";
+import type { ProactivityLevel } from "@/lib/proactivity/proactivity-types";
 import { resolveReadingLevelForRoute } from "@/lib/readability/policy";
 import type { QuestionPacket } from "@/lib/tak/question-packet";
 import { resolvePortalContextEnvelope } from "@/lib/portal-context";
@@ -96,6 +96,7 @@ import {
 // ─── Auth helper ────────────────────────────────────────────────────────────
 
 import { filterToolsForCoworkerRuntime, buildAdvisePromptSuffix } from "./coworker-tool-filter";
+import { labelHistory, prependLabelled } from "@/lib/tak/message-origins";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { requireUser } from "./shared/guards";
 import {
@@ -588,6 +589,9 @@ export async function sendMessage(input: {
     chatHistory = await applyRollingCompaction(chatHistory);
   }
 
+  // Labels for what each message IS, moved with the messages (BI-40EF7C44).
+  let labelled = labelHistory(chatHistory);
+
   // BI-FDECBE0A (EP-8C706944 P1): prepend the thread's durable rolling checkpoint
   // — a persisted running summary of every turn older than the recency window —
   // so long threads keep continuity that does not depend on vector recall. Strict
@@ -596,7 +600,7 @@ export async function sendMessage(input: {
     const { loadThreadCheckpointMessage } = await import("@/lib/tak/thread-checkpoint-runner");
     const checkpointMessage = await loadThreadCheckpointMessage(input.threadId);
     if (checkpointMessage) {
-      chatHistory = [checkpointMessage, ...chatHistory];
+      labelled = prependLabelled(labelled, checkpointMessage, "thread-checkpoint");
     }
   } catch (err) {
     console.warn("[thread-checkpoint] inject failed:", getErrorMessage(err));
@@ -611,12 +615,13 @@ export async function sendMessage(input: {
       const { loadUserBriefingMessage } = await import("@/lib/tak/coworker-briefing-runner");
       const briefingMessage = await loadUserBriefingMessage(agent.agentId, user.id);
       if (briefingMessage) {
-        chatHistory = [briefingMessage, ...chatHistory];
+        labelled = prependLabelled(labelled, briefingMessage, "user-briefing");
       }
     } catch (err) {
       console.warn("[coworker-briefing] inject failed:", getErrorMessage(err));
     }
   }
+  chatHistory = labelled.messages;
   const recentContentForClassification = chatHistory
     .filter((m) => m.role === "user")
     .slice(-3)
@@ -693,13 +698,13 @@ export async function sendMessage(input: {
   // attributes each tool call to the active skill.
   let activeSkillId: string | null = null;
 
-  // BI-E35A8AA4: the employee's Proactivity choice for this coworker drives an
-  // Initiative block that scales in-task effort. Resolved once and injected into
-  // BOTH prompt paths so behavior is surface-uniform. Fail-open to null
-  // (→ balanced) so a preference-lookup hiccup never breaks the response.
-  const proactivityLevel = await getCoworkerProactivityPreference(agent.agentId).catch(
-    () => null,
-  );
+  // BI-E35A8AA4 drove the Initiative block from this coworker's saved Proactivity
+  // choice. BI-87C9C91C removed that identity ownership: this is the interactive
+  // turn path with no Workroom in scope, so it takes the platform default and who
+  // is staffed to the conversation cannot change its initiative. `null` IS that
+  // default (buildInitiativeBlock maps it to balanced) — byte-identical to an
+  // agent with no saved preference. Spec §3.1.
+  const proactivityLevel: ProactivityLevel | null = null;
 
   // Resolve the LOCAL model's served context ONCE up front — it sizes BOTH the
   // per-turn tool-attachment cap (below) and the skills-catalog cap (in each
@@ -1943,6 +1948,7 @@ export async function sendMessage(input: {
         chatHistory,
         systemPrompt: populatedPrompt,
         systemPromptInstructionSpans,
+        messageOrigins: labelled.origins,
         sensitivity: agent.sensitivity,
         tools: attachedTools,
         toolsForProvider,

@@ -69,6 +69,20 @@ The order is fixed: **BI first, then plan.** [`dpf-file-backlog-item`](../dpf-fi
 
    Copy the returned receipt, parent BI, deliverable-to-BI mappings, and dependencies into a `## Backlog coverage` plan section. `mcp__dpf__check_plan_backlog_coverage` is the resumability check. If MCP is unavailable, the tool is missing, or the token lacks scope, stop and report that condition; Markdown checkboxes are not a fallback and planning/backlog completeness cannot be claimed.
 
+   This is the decomposition-pack contract, not the initiative-readiness review contract. The minimum shape is:
+
+   ```json
+   {
+     "itemId": "BI-...",
+     "planPath": "docs/superpowers/plans/YYYY-MM-DD-feature.md",
+     "planArtifactRef": { "kind": "repo-blob-at-commit", "repo": "owner/repo", "commitSha": "...", "path": "docs/superpowers/plans/YYYY-MM-DD-feature.md", "providerBlobId": "..." },
+     "decision": "decomposed",
+     "deliverables": [{ "title": "...", "requirementRefs": ["..."], "contractRefs": ["..."], "flowRefs": ["..."], "verificationRefs": ["..."] }]
+   }
+   ```
+
+   Use decision: `decomposed` when independently shippable deliverables map to live BIs, or decision: `atomic` with a substantive rationale when they do not. Do not send `gate`, `findings`, or `resolvedFindingRefs` from the readiness lane. Do not send `pass` or `fail` as the decision; those belong to review writers, not plan coverage. Do not send the literal `pass` decision value in this contract. Make one corrected coverage call after verifying the BI and immutable plan. If the server returns `traceability-incomplete`, change only the named prerequisite and retry once; never blind-retry. If the tool is unavailable or shadowed, record the exact refusal and stop rather than calling another lane or fabricating a receipt.
+
    Treat a rejected coverage write as a remediation contract, not a blind retry:
    - When the result is `traceability-incomplete`, add or repair the initiative baseline and mappings named by the response before making one corrected call. Do not repeat identical arguments.
    - When the result is `plan-artifact-invalid`, reconcile the Workroom to the exact current branch and head SHA, repair the artifact or provenance named by the response, then make one corrected call. Do not mint a new plan path to dodge immutable provenance.

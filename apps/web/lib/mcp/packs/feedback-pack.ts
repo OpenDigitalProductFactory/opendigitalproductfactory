@@ -123,7 +123,9 @@ async function registerTechDebt(
       itemId: item.itemId,
       title: item.title,
       type: item.type,
-      status: item.status,
+      // Tech debt is always filed open; a status copied through from another
+      // record is what the unattributable-deferral guard refuses (BI-9DA5F179).
+      status: "open",
       body: item.body,
       priority: item.priority,
       submittedById: userId,

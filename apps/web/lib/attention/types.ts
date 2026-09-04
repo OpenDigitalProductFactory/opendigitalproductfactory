@@ -1,5 +1,7 @@
 // The Attention Surface — projector output types (EP-ATTENTION-SURFACE, BI-D39484E7 + BI-61B9EB88).
 // Spec: docs/superpowers/specs/2026-06-23-human-attention-surface-design.md §4.1, §4.4.
+
+import type { EnvelopeDecisionSummary } from "./coworker-envelope-decision";
 //
 // `AttentionItem` is a READ-MODEL projection, NOT a persisted entity. Each queue's
 // truth stays in its owning model (single-source-of-truth); the inbox projects over
@@ -184,6 +186,8 @@ export type AttentionEnvelopeApproval = {
    *  moment. False hides every decision control. */
   actionable: boolean;
   reviewBinding?: AttentionEnvelopeReviewBinding;
+  /** Decision-first owner summary (BI-F95B0795). Always present; unknown shapes fail closed. */
+  decision: EnvelopeDecisionSummary;
   /** The authenticated envelope state-machine routes (lib/coworker/envelope-routes). */
   approveHref: string;
   declineHref: string;

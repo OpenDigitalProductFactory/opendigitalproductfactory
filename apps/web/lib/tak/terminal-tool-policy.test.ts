@@ -3,6 +3,7 @@ import {
   applyTerminalToolSurface,
   buildTerminalToolReminder,
   createInitiativeReviewTerminalToolPolicy,
+  enterTerminalWriterPhase,
   normalizeTerminalToolArguments,
   resolveTerminalTextExit,
   resolveTerminalToolCall,
@@ -269,7 +270,7 @@ describe("terminal tool policy", () => {
       kind: "input-required",
       reason: "missing-terminal-writer",
       writerToolName: "record_initiative_evidence",
-      message: expect.stringContaining("without recording a governed assessment"),
+      message: expect.stringContaining("did not honor the required writer tool-call contract"),
     });
   });
 
@@ -310,6 +311,27 @@ describe("terminal tool policy", () => {
     expect(resolveTerminalTextExit(policy, [read(), writer(false)], 0)).toEqual({ kind: "complete" });
     expect(summarizeTerminalToolProgress(policy, [read(), writer(false)])).toMatchObject({
       writerAttempted: true,
+    });
+  });
+
+  it("enters a writer-only terminal phase from persisted immutable evidence", () => {
+    const resumed = enterTerminalWriterPhase(policy);
+    const providerTools = [
+      { type: "function", function: { name: "read_source_at_version" } },
+      { type: "function", function: { name: "search_source_at_version" } },
+      { type: "function", function: { name: policy.writerToolName } },
+    ];
+
+    expect(summarizeTerminalToolProgress(resumed, [])).toMatchObject({
+      evidenceAvailable: true,
+      writerAttempted: false,
+    });
+    expect(applyTerminalToolSurface(resumed, [], providerTools)).toEqual([
+      { type: "function", function: { name: policy.writerToolName } },
+    ]);
+    expect(resolveTerminalToolCall(resumed, [], "read_source_at_version")).toMatchObject({
+      kind: "refuse",
+      result: { error: "terminal_writer_phase_reader_refused" },
     });
   });
 });
@@ -423,6 +445,29 @@ describe("agent loop terminal writer integration", () => {
     expect(vi.mocked(routeAndCall)).toHaveBeenCalledTimes(3);
   });
 
+  it("returns a missing-writer failure when the review budget expires after a successful read", async () => {
+    const now = vi.spyOn(Date, "now")
+      .mockReturnValueOnce(0)
+      .mockReturnValueOnce(0)
+      .mockReturnValue(300_001);
+    vi.mocked(routeAndCall).mockResolvedValueOnce(
+      response("", [{ id: "read", name: "read_source_at_version", arguments: {} }]) as never,
+    );
+
+    try {
+      const result = await runAgenticLoop(params);
+
+      expect(result.executedTools).toHaveLength(1);
+      expect(result.failure).toEqual({
+        kind: "terminal-writer-missing",
+        message: expect.stringContaining("No receipt was created"),
+      });
+      expect(vi.mocked(routeAndCall)).toHaveBeenCalledTimes(1);
+    } finally {
+      now.mockRestore();
+    }
+  });
+
   it("returns a missing-writer wait when routing fails after a successful read", async () => {
     vi.mocked(routeAndCall)
       .mockResolvedValueOnce(response("", [{ id: "read", name: "read_source_at_version", arguments: {} }]) as never)
@@ -441,6 +486,32 @@ describe("agent loop terminal writer integration", () => {
     });
   });
 
+  it("starts a resumed terminal-writer turn with only the governed writer", async () => {
+    const resumedPolicy = enterTerminalWriterPhase(policy);
+    vi.mocked(routeAndCall)
+      .mockResolvedValueOnce(response("I already have the persisted evidence.") as never)
+      .mockResolvedValueOnce(response("", [{ id: "writer", name: policy.writerToolName, arguments: {} }]) as never)
+      .mockResolvedValueOnce(response("The governed writer rejected the assessment, so no receipt exists.") as never);
+
+    const result = await runAgenticLoop({ ...params, terminalToolPolicy: resumedPolicy });
+
+    const firstTools = (vi.mocked(routeAndCall).mock.calls[0]![3] as { tools: typeof providerTools }).tools;
+    const secondTools = (vi.mocked(routeAndCall).mock.calls[1]![3] as { tools: typeof providerTools }).tools;
+    const firstToolChoice = (vi.mocked(routeAndCall).mock.calls[0]![3] as { toolChoice?: string }).toolChoice;
+    const secondToolChoice = (vi.mocked(routeAndCall).mock.calls[1]![3] as { toolChoice?: string }).toolChoice;
+    const firstTerminalWriter = (vi.mocked(routeAndCall).mock.calls[0]![3] as { terminalWriterToolName?: string }).terminalWriterToolName;
+    const secondTerminalWriter = (vi.mocked(routeAndCall).mock.calls[1]![3] as { terminalWriterToolName?: string }).terminalWriterToolName;
+    expect(firstTools.map((tool) => tool.function.name)).toEqual([policy.writerToolName]);
+    expect(secondTools.map((tool) => tool.function.name)).toEqual([policy.writerToolName]);
+    expect(firstToolChoice).toBe("required");
+    expect(secondToolChoice).toBe("required");
+    expect(firstTerminalWriter).toBe(policy.writerToolName);
+    expect(secondTerminalWriter).toBe(policy.writerToolName);
+    expect(result.executedTools).toEqual([
+      expect.objectContaining({ name: policy.writerToolName }),
+    ]);
+  });
+
   it("preserves ordinary route-failure handling when no terminal policy applies", async () => {
     vi.mocked(routeAndCall).mockRejectedValueOnce(
       new Error("The only eligible local model is busy with another background job."),
@@ -450,6 +521,8 @@ describe("agent loop terminal writer integration", () => {
 
     expect(result.failure?.kind).not.toBe("terminal-writer-missing");
     expect(result.content).not.toContain("No receipt was created");
+    expect((vi.mocked(routeAndCall).mock.calls[0]![3] as { toolChoice?: string }).toolChoice).toBeUndefined();
+    expect((vi.mocked(routeAndCall).mock.calls[0]![3] as { terminalWriterToolName?: string }).terminalWriterToolName).toBeUndefined();
   });
 
   it("executes, records, and carries forward server-bound arguments when the provider sends an empty object", async () => {
