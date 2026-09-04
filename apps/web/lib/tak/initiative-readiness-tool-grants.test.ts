@@ -199,6 +199,28 @@ describe("initiative readiness recovery routing", () => {
       .toBe("IBL-7C41");
   });
 
+  it("binds the reader to the canonical artifact commit without changing the Workroom request key", async () => {
+    const artifactCommitSha = "a".repeat(40);
+    const recovery = await resolveInitiativeReviewerRecovery({
+      decision,
+      currentAgentId: "AGT-AUTHOR",
+      db: { agentToolGrant: { findMany: vi.fn().mockResolvedValue([
+        grantRow("initiative_evidence_write", "AGT-WS-BUILD", "Build Specialist"),
+      ]) } },
+      dispatchContext,
+      canonicalArtifact: { ...canonicalArtifact, commitSha: artifactCommitSha },
+      expectedCurrentBaselineId: "IBL-7C41",
+    });
+
+    expect(recovery.reviewerRoutes[0]?.requestCoworker).toMatchObject({
+      requestKey: `initiative-readiness:BI-A45D744A:research:${dispatchContext.headSha}`,
+      initiativeReviewBinding: {
+        artifactRef: { commitSha: artifactCommitSha },
+      },
+    });
+    expect(recovery.reviewerRoutes[0]?.requestCoworker.objective).toContain(`at ${artifactCommitSha}`);
+  });
+
   it("escalates with the provider remedy instead of emitting a route no coworker can execute", async () => {
     const recovery = await resolveInitiativeReviewerRecovery({
       decision,
