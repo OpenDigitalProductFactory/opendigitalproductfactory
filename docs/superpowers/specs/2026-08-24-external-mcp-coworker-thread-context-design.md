@@ -437,6 +437,27 @@ verbatim. The caller does not hand-author reviewer identity or artifact scope.
   envelope `cmtme5f140ire01nvd0n5jeo4`. No self-approval, fabricated receipt,
   direct database write, or weakened independence check was used.
 
+### 2026-09-04 deployed follow-up: tier default is not an explicit veto
+
+Release `v2026.09.04-readiness-worktype-classification.1` deployed the first
+repair at served commit `11b2a11bc400ba540e733eeccc57a2c221218323`.
+`claim_backlog_item_for_work` then returned the reachable, server-authored
+`AGT-WS-REVIEW` packet for `BI-B131F357` with the exact design blob and no
+nonexistent blocker citation. A fresh `summon_coworker` call created TaskRun
+`TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-B910BE33643C`, carrying only the
+subject scope plus `record_initiative_design_review` and
+`read_source_at_version`; dispatch itself required no approval.
+
+The reviewer read the immutable design and attempted a passing receipt, but
+the writer still returned `approval_required`. The remaining cause was policy
+precedence: `AGT-WS-REVIEW` has the registry's generic
+`hitl_tier_default: 1`, and the resolver applied that default before the exact
+server-bound independent-review exception. The architecture decision is that
+an operator-authored `hitlPolicy: "always"` remains an explicit veto, while a
+numeric tier is only a default and cannot add a human proxy gate to the exact
+review boundary. Unbound calls, ordinary side effects, and the downstream
+principal-level author/reviewer collision check remain unchanged.
+
 ## Acceptance criteria traceability
 
 | BI acceptance criterion | Design coverage |
