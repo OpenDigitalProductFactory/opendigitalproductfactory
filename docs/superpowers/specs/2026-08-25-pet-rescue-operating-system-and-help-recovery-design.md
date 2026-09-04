@@ -742,51 +742,23 @@ design approval:
 | Scale degradation from unbounded animal history, capacity scans, or cockpit aggregation | Implement the cursor limits and composite indexes in §11, keep cockpit sources independently bounded, and add representative high-cardinality fixtures with measured query-plan evidence before the shared runtime verification. | Migration/query-plan tests and measured aggregation results; owner: data migration and cockpit slices. |
 | Integration drift between custody, housing, care, work, finance, and the public adoption projection | Route writes through typed domain commands, keep cross-model invariants transactional, publish projections only after commit, surface source availability and `asOf`, and add contract tests for each handoff plus rollback behavior. | Cross-service integration tests and the end-to-end intake-to-placement walkthrough; owner: each domain slice, reconciled by `BI-7A38F667`. |
 
-## 14. Architecture review (advisory)
+## 14. Architecture rationale
 
-- **Alignment summary:** aligned after choosing a canonical operational animal
-  identity with an optional public projection.
-- **Findings folded into this spec:**
-  - A public listing could not remain the operational aggregate; §5.1 now
-    establishes `AnimalProfile` and records `DI-0AFD05E602CA`.
-  - Rescue-only housing, task, appointment, or finance tables would duplicate
-    canonical services; §§5.3–5.4 instead extend resources, care, work, and
-    journal dimensions.
-  - A dashboard-first implementation would truthfully show only zeros; §12 puts
-    the cockpit last and requires partial-result contracts.
-  - Unbounded animal/timeline aggregation would fail at realistic history; §11
-    names cursor keys, limits, and the scale ceiling.
-  - Missing Help content is not a record-level 404; §8 makes it a recoverable
-    resolver outcome.
-  - The deployment model and operational evidence were previously implicit;
-    §5.0 now states the modular-monolith boundary and the required logs, metrics,
-    traces, redaction checks, and runtime correlation evidence.
-  - Cross-domain contracts could be mistaken for implicit service coupling;
-    §5.0 now defines versioned command/projection schemas, ownership rules,
-    idempotency, rollback, and compatibility tests without inventing network
-    services.
-  - No `person-service` is proposed. Section 5.0 explicitly keeps people,
-    customer, employee, and volunteer identity in their existing bounded
-    contexts and permits Pet Rescue modules to reference them only.
-  - Regional configuration could otherwise drift into route constants; §6.4
-    binds locale, currency, time zone, and versioned Pet Rescue policy to the
-    existing organization settings spine with an audited admin path and
-    multi-region boundary tests.
-- **Standards researched:** ASM, RefuPet, Shelter Hub, ASV 2022, and Shelter
-  Animals Count; adopted/rejected details are in §3.
-- **Escalated decisions:** canonical animal boundary, resolved by
-  `DI-0AFD05E602CA` with no commandment conflict.
-- **Recommended next step:** immutable design review through the governed
-  initiative-readiness route, then a coverage-recorded implementation plan.
+The current design embeds the selected architectural decisions rather than
+carrying alternatives forward as unresolved work:
 
-## 15. Historical design-review finding dispositions
+- `AnimalProfile` is the durable operational aggregate and the public listing
+  is an optional projection.
+- Resource capacity, care, recurring work, finance, people, and storefront
+  remain canonical; no rescue-specific duplicate service is introduced.
+- The workspace is assembled last from bounded, independently available read
+  models; it cannot convert missing data into a zero.
+- Authorization, organization isolation, PII projections, human approval,
+  pagination, scale, configuration, telemetry, and Help recovery are explicit
+  contracts with negative verification.
+- The design's industry and open-source evidence is recorded in §3; the
+  animal-identity trade-off is recorded in `DI-0AFD05E602CA`.
 
-| Finding | Disposition in this revision |
-|---|---|
-| Missing external wireframe evidence | No external Pet Rescue wireframe exists or is claimed. Section 7 is the written UI contract; implementation screenshots remain future verification evidence. |
-| Incomplete authorization boundary | Section 6.3 defines trusted request context, organization isolation, action/field boundaries, negative tests, and the fail-closed authorization prerequisite; §12 makes that prerequisite the first implementation task. |
-| Unbounded scale and connectivity behavior | Sections 11–11.1 bind pagination and scale verification, define in-install service seams and excluded external connectors, and state the online-only/offline-failure contract; §12 makes operator acceptance or a stopped publication explicit. |
-
-These prose dispositions explain how the design changed; they do not ask a new
-reviewer to resolve stale receipt identifiers. The failed receipts remain
-historical evidence against their original immutable blobs.
+Prior immutable review receipts remain historical evidence for their original
+blobs. The implementation-readiness review judges this current artifact and
+records only issues that remain open in this revision.
