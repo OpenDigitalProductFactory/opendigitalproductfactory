@@ -19,6 +19,14 @@ status: draft
 
 This plan atomically covers BI-2B619BC9 only. It restores the existing provider-start tracking boundary but deliberately does not claim the durable digest, CAS lease, worker/reconciliation, cursor-read, or notification outcomes owned by BI-801313EB and BI-05D7A0DC.
 
+## Traceability
+
+`FLOW-ASYNC-HANDLE-01` is the ordered sequence above: prove the lost handle, introduce the typed contract, use the supported provider protocol, persist the accepted start and routing provenance, then verify the complete slice.
+
+| Deliverable | Requirement refs | Contract refs | Flow refs | Verification refs |
+| --- | --- | --- | --- | --- |
+| Typed asynchronous provider-operation handle (atomic, not independently shippable) | OBJ-ASYNC-HANDLE-01, OBJ-ASYNC-HANDLE-02, OBJ-ASYNC-HANDLE-03, OBJ-ASYNC-HANDLE-04 | AsyncOperationStartResult, AsyncInferenceOp | FLOW-ASYNC-HANDLE-01 | AC-ASYNC-HANDLE-01, AC-ASYNC-HANDLE-02, AC-ASYNC-HANDLE-03, AC-ASYNC-HANDLE-04 |
+
 ## Rollback
 
 Revert the typed-handle slice as one commit. No schema migration is involved and historical `AsyncInferenceOp` rows remain readable.

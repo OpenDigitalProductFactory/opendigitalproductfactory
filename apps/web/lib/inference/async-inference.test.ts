@@ -37,6 +37,7 @@ const runningOperation = {
   modelId: "deep-research-pro-preview-12-2025",
   operationId: "interaction/id with spaces",
   status: "running",
+  // clock-bomb-guard: allow far-future sentinel keeps the polling fixture unexpired
   expiresAt: new Date("2099-01-01T00:00:00.000Z"),
   threadId: null,
 };
