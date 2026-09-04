@@ -76,18 +76,6 @@ The invariant scans production source, not only this table. Reads, failure/cance
 
 ## 3. Slice FND — delivered in PR #4348
 
-### 3.0 Follow-on classification repair — BI-1B5B4CEC
-
-The closed work-type contract widened after the original foundation shipped, but the readiness profile mapper remained partial. Deliver the repair as one bounded follow-on slice under the existing FND ownership:
-
-1. Extend the canonical design's §5.1 table with the `DI-CD15302DA59B` mapping: `bug`/`chore`/`refactor → fix`, `feature`/`tool`/`skill → feature`, and `doc → doc-only`.
-2. Add a failing exhaustive test driven from `BACKLOG_WORK_TYPE_VALUES`, plus entry-adapter and terminal-transition regressions proving `refactor` is governed and cannot pass through the advisory `doc-only` path.
-3. Replace the permissive string fallthrough with one typed, exhaustive work-type mapping while retaining aliases only for non-work-type signals (`type`, source/build kinds, and historical profiles).
-4. Keep unknown or malformed work types fail-closed as `classification-required`; do not create a new profile or weaken independent review.
-5. Run the focused readiness tests, web production build, preflight guards, and exact-tree integration gate before PR.
-
-This slice is blocked by neither a schema migration nor a new tool. It reuses the existing profile lattice and all current entry, review-packet, guidance, and terminal-transition consumers through `deriveAuthoritativeReadinessProfile`.
-
 ### 3.1 Red tests: policy and receipt trust
 
 Add focused tests before implementation:
