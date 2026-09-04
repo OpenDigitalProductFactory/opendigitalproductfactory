@@ -30,6 +30,24 @@ This feature is a read model and notification projection over existing authority
 
 `BI-801313EB` owns operation persistence, resume/cancel semantics, and queue integration. This slice does not modify its schema, Inngest registration, or inference workers. Until its public query contract is present, the hub reads Workroom's currently linked TaskRun and exposes one typed `asyncOperation` projection seam. Integrating a richer core handle later replaces only that adapter, not the page or notification model.
 
+## Research and alternatives
+
+The shape was selected after comparing three established operator patterns and the browser delivery standard.
+
+| Reference | Useful pattern | What DPF adopts | What DPF rejects |
+| --- | --- | --- | --- |
+| [Temporal Web UI](https://github.com/temporalio/documentation/blob/main/docs/web-ui.mdx) | A bounded execution list opens into compact or full event history, pending activities, workers, relationships, metadata, and governed actions. | Separate the compact Workroom shell from its paged evidence timeline; keep durable execution identity and explicit pending state. | A second workflow visibility store. DPF already has Workroom/TaskRun and must not mirror them into a task-hub ledger. |
+| [GitHub Actions run monitoring](https://docs.github.com/en/actions/how-tos/monitor-workflows/use-workflow-run-logs) and [`workflow_run` events](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#workflow_run) | The run list distinguishes requested, in-progress, and completed state; detailed checks/logs remain behind a run link; lifecycle events drive downstream handling. | Project a small status/result shell, deep-link to authoritative detail, and respond to durable lifecycle events rather than polling logs. | Presenting each check/job/tool execution as separate operator work or treating an event payload as final authority. |
+| [Linear Inbox](https://linear.app/docs/inbox) and [notifications](https://linear.app/docs/notifications) | Subscribed ownership/status changes create actionable inbox items with keyboard navigation, snooze/dismiss semantics, and deep links to the owning issue. | Notify only meaningful delivery transitions, deduplicate by durable source identity, and preserve a semantic Workroom destination. | A notification for every activity/progress update, or a notification row that becomes the delivery source of truth. |
+| [WHATWG Server-Sent Events](https://html.spec.whatwg.org/dev/server-sent-events.html) | `EventSource` provides authenticated HTTP server push, event ids, and automatic reconnect behavior. | One list-level stream, named semantic events, heartbeats, bounded reconnect snapshot, and explicit cancellation. | Tight status polling, one connection per row, or trusting `Last-Event-ID`/cursor data without authorization and validation. |
+
+Two alternatives were rejected:
+
+1. **A new async-task table and dashboard.** It would duplicate Workroom and TaskRun identity, eventually disagree about completion, and add another closeout process.
+2. **Client polling over the existing Workroom table.** It is superficially small but makes every browser repeatedly scan the same state, delays completion attention, and has no exact notification identity.
+
+The selected hybrid—canonical Workroom read model, event-first wake-up, bounded snapshot reconciliation, and semantic notification—matches the parent delivery-rail decision while adopting the compact-shell/detail split seen in the comparable implementations.
+
 ## Objectives
 
 **OBJ-DTH-001:** One operator view shows one stable delivery summary per Workroom, grouped into Ready, Working, Waiting, Needs attention, and Complete.
