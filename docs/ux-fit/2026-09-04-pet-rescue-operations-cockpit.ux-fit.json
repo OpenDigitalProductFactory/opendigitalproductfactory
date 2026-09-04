@@ -1,0 +1,27 @@
+{
+  "version": "1",
+  "decidedOption": "one-journey-cockpit-with-durable-drill-ins",
+  "decisionInteractionId": "IRD-101C4920C6B1",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/workspace/page.tsx",
+      "apps/web/app/(shell)/workspace/rescue/page.tsx",
+      "apps/web/app/(shell)/workspace/rescue/animals/page.tsx",
+      "apps/web/app/(shell)/workspace/rescue/intake/page.tsx",
+      "apps/web/app/(shell)/workspace/rescue/care/page.tsx",
+      "apps/web/app/(shell)/workspace/rescue/adoptions/page.tsx",
+      "apps/web/app/(shell)/workspace/rescue/stewardship/page.tsx",
+      "apps/web/components/animal-welfare/RescueCockpit.tsx",
+      "apps/web/app/(shell)/docs/[[...slug]]/page.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "approved-plan",
+    "consideredOptions": [
+      "one-journey-cockpit-with-durable-drill-ins",
+      "generic-nonprofit-home",
+      "separate-disconnected-rescue-tools"
+    ],
+    "note": "The approved plan resolves Pet Rescue before the nonprofit category, keeps one animal identity and one housing authority, and exposes Intake, Housing, Daily care, Adoptions, and Stewardship through stable links. Shared PageShell, Surface, StatCard, StatusBadge, Notice, and EmptyState primitives preserve theme, keyboard, density, and source-state semantics. The cockpit distinguishes Current, No records yet, and Unavailable, so missing sources never render a false zero. Help recovery stays inside the documentation layout and explains the redirect."
+  }
+}

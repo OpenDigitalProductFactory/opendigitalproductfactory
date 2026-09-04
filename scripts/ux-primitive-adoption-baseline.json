@@ -635,7 +635,7 @@
     "apps/web/components/platform/PlatformBanner.tsx": 2,
     "apps/web/components/platform/PlatformSummaryCard.tsx": 1,
     "apps/web/components/platform/PlatformTabNav.tsx": 2,
-    "apps/web/components/platform/ProviderAccountPostureForm.tsx": 7,
+    "apps/web/components/platform/ProviderAccountPostureForm.tsx": 6,
     "apps/web/components/platform/ProviderCostSourcePanel.tsx": 1,
     "apps/web/components/platform/ProviderSuitabilityGuide.tsx": 1,
     "apps/web/components/platform/ProviderTrustEvidencePanel.tsx": 1,

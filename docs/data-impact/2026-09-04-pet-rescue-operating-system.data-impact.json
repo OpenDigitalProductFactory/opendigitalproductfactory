@@ -1,0 +1,91 @@
+{
+  "version": "1",
+  "accountableOwner": "animal-welfare-operations",
+  "affectedCopies": [
+    "Pet Rescue workspace cockpit and drill-in summaries",
+    "Optional public AdoptableAnimal projection",
+    "Ward occupancy joins through the shared animal reference",
+    "Finance stewardship summaries derived from posted journal lines"
+  ],
+  "migration": {
+    "name": "20260904090000_pet_rescue_operating_system",
+    "backfill": "Creates one AnimalProfile per existing AdoptableAnimal from identity and public-state facts only, then links the listing. It intentionally creates no custody, care, application, placement, work, fund, or journal history."
+  },
+  "tests": [
+    "packages/db/src/pet-rescue-operating-model.test.ts",
+    "packages/db/src/subject-reference.test.ts",
+    "apps/web/lib/animal-welfare/lifecycle.test.ts",
+    "apps/web/lib/animal-welfare/care.test.ts",
+    "apps/web/lib/animal-welfare/adoption.test.ts",
+    "apps/web/lib/animal-welfare/cockpit.test.ts",
+    "apps/web/components/animal-welfare/RescueCockpit.test.tsx",
+    "apps/web/lib/finance/pet-rescue-finance.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:animal-profile",
+      "prismaModel": "AnimalProfile",
+      "lifecycleDisposition": "Explicit animal lifecycle; retained independently of the optional public listing and disposed only through organization and animal-record governance.",
+      "fields": [
+        {
+          "fieldId": "data:animal-profile#animalRef",
+          "resolution": "governed",
+          "reason": "Organization-scoped durable key shared by custody, care, work, placement, and finance.",
+          "provenance": "BI-4F8A484C and the Pet Rescue operating-model design",
+          "flags": ["subject"],
+          "fieldPolicy": "Must be organization-scoped, versioned when serialized, and excluded from public output unless explicitly allowlisted."
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:animal-custody-episode",
+      "prismaModel": "AnimalCustodyEpisode",
+      "lifecycleDisposition": "Closes only through an explicit outcome; returns open a new numbered episode and do not rewrite history.",
+      "fields": [{ "fieldId": "data:animal-custody-episode#legalHoldReason", "resolution": "governed", "reason": "Consequential placement constraint and legal evidence.", "provenance": "BI-7111AF0C", "flags": ["sensitive"], "fieldPolicy": "Visible only to authorized animal-welfare operators; release requires human approval and reason." }]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:animal-custody-event",
+      "prismaModel": "AnimalCustodyEvent",
+      "lifecycleDisposition": "Append-only event evidence follows the custody episode and is never independently age-purged.",
+      "fields": [{ "fieldId": "data:animal-custody-event#reason", "resolution": "governed", "reason": "Explains stage and hold decisions.", "provenance": "BI-7111AF0C", "flags": ["sensitive"], "fieldPolicy": "Minimized in lists and retained with the episode for audit continuity." }]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:animal-adoption-application",
+      "prismaModel": "AnimalAdoptionApplication",
+      "lifecycleDisposition": "Closes through an explicit application decision and remains placement provenance.",
+      "fields": [{ "fieldId": "data:animal-adoption-application#applicantName", "resolution": "governed", "reason": "Applicant identity is personal data.", "provenance": "BI-A442F129", "flags": ["subject", "sensitive"], "fieldPolicy": "PII-minimized queue projection; full value requires authorized detail access." }]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:animal-placement",
+      "prismaModel": "AnimalPlacement",
+      "lifecycleDisposition": "Placement and return are explicit states retained as custody provenance.",
+      "fields": [{ "fieldId": "data:animal-placement#adopterContactRef", "resolution": "governed", "reason": "Connects the placement to canonical contact identity.", "provenance": "BI-A442F129", "flags": ["subject", "sensitive"], "fieldPolicy": "Never included in the public animal listing; readable only through permitted placement detail." }]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:care-record",
+      "prismaModel": "CareRecord",
+      "lifecycleDisposition": "Facts correct by append-and-supersede, honor legal hold, and follow the governed animal record.",
+      "fields": [{ "fieldId": "data:care-record#subjectRef", "resolution": "governed", "reason": "Binds each fact to one organization-scoped subject.", "provenance": "BI-97290291", "flags": ["subject", "sensitive"], "fieldPolicy": "Reject cross-organization references; list projections exclude detailed clinical or welfare content." }]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:financial-fund",
+      "prismaModel": "FinancialFund",
+      "lifecycleDisposition": "Effective-dated finance definition retained while referenced by donations or posted journal lines.",
+      "fields": [{ "fieldId": "data:financial-fund#restriction", "resolution": "governed", "reason": "Controls stewardship interpretation of donated money.", "provenance": "BI-E861E8B8" }]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:shared-subject-dimensions",
+      "prismaModel": "WorkEngagement, JournalLine, StorefrontDonation",
+      "lifecycleDisposition": "Nullable dimensions inherit the lifecycle of their canonical work, journal, and donation records.",
+      "fields": [{ "fieldId": "data:shared-subject-dimensions#subjectRef", "resolution": "governed", "reason": "Adds one shared subject seam instead of rescue-specific work and ledger tables.", "provenance": "BI-5A25EC37 and BI-E861E8B8", "flags": ["subject"], "fieldPolicy": "Organization scope is enforced by the owning record and shared SubjectReference.v1 contract." }]
+    }
+  ]
+}

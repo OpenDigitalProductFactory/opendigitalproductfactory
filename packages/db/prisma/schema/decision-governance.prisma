@@ -166,14 +166,14 @@ model DeliberationRun {
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
-  taskRun              TaskRun                @relation(fields: [taskRunId], references: [id], onDelete: Cascade)
-  pattern              DeliberationPattern    @relation(fields: [patternId], references: [id])
+  taskRun              TaskRun                      @relation(fields: [taskRunId], references: [id], onDelete: Cascade)
+  pattern              DeliberationPattern          @relation(fields: [patternId], references: [id])
   outcome              DeliberationOutcome?
   resolutionProposals  DecisionResolutionProposal[]
   issueSets            DeliberationIssueSet[]
   claims               ClaimRecord[]
   evidenceBundles      EvidenceBundle[]
-  branchNodes          TaskNode[]             @relation("DeliberationRunBranchNodes")
+  branchNodes          TaskNode[]                   @relation("DeliberationRunBranchNodes")
   decisionInteractions DecisionInteraction[]
 
   @@index([taskRunId])
@@ -761,52 +761,52 @@ enum DecisionProposalStatus {
 // `interactionId` references DecisionInteraction.id (the row id), matching the
 // naming EscalationCapture and DeferralCapture already use on this spine.
 model DecisionResolutionProposal {
-  id                String                     @id @default(cuid())
-  proposalId        String                     @unique
+  id                   String                       @id @default(cuid())
+  proposalId           String                       @unique
   // "interaction" — one specific decision; "gap-cluster" — every unanswered
   // decision in a domain, which is the unit the review queue already groups by.
-  scopeKind         DecisionProposalScope
-  interactionId     String?
-  domainClass       String?
-  profileId         String
-  actionKind        DecisionProposalAction
+  scopeKind            DecisionProposalScope
+  interactionId        String?
+  domainClass          String?
+  profileId            String
+  actionKind           DecisionProposalAction
   // The artifact itself, shaped per actionKind (answer text, option id, axis
   // delta, page slug + body). Never applied from here — see the store.
-  draftPayload      Json                       @default("{}")
-  summary           String                     @db.Text
+  draftPayload         Json                         @default("{}")
+  summary              String                       @db.Text
   // [{ optionId, text }] — what each option costs, as the panel stated it.
-  consequences      Json                       @default("[]")
+  consequences         Json                         @default("[]")
   // [{ role, position, because }] — who disagreed and why. An empty panel
   // roster records as empty; a MISSING dissent field is a contract failure
   // upstream and blocks the proposal from being written at all.
-  dissent           Json                       @default("[]")
-  confidence        Float?
-  deliberationRunId String?
-  status            DecisionProposalStatus     @default(proposed)
+  dissent              Json                         @default("[]")
+  confidence           Float?
+  deliberationRunId    String?
+  status               DecisionProposalStatus       @default(proposed)
   // Row liveness, the ONE not-active convention (BI-C357FA5A). A draft the
   // corpus moved under, or whose decision was settled elsewhere, leaves
   // `active` here while `status` still records that nobody ever ruled on it.
-  lifecycle         RecordLifecycle            @default(active)
-  lifecycleAt       DateTime?
-  lifecycleReason   String?
-  ruledByUserId     String?
-  ruledAt           DateTime?
-  rulingNote        String?                    @db.Text
+  lifecycle            RecordLifecycle              @default(active)
+  lifecycleAt          DateTime?
+  lifecycleReason      String?
+  ruledByUserId        String?
+  ruledAt              DateTime?
+  rulingNote           String?                      @db.Text
   // What the human actually accepted when they edited the draft first. The
   // delta between draftPayload and this is the only honest measure of whether
   // the drafting is worth its cost.
-  acceptedPayload   Json?
+  acceptedPayload      Json?
   // Successor pointer for a supersede chain: a declared self-relation with a
   // leading index, never a bare *Id column.
   replacedByProposalId String?
-  createdAt         DateTime                   @default(now())
-  updatedAt         DateTime                   @updatedAt
-  interaction       DecisionInteraction?       @relation(fields: [interactionId], references: [id], onDelete: Cascade)
-  profile           DecisionPerspectiveProfile @relation(fields: [profileId], references: [profileId], onDelete: Cascade)
-  ruledByUser       User?                      @relation(fields: [ruledByUserId], references: [id], onDelete: SetNull)
-  deliberationRun   DeliberationRun?           @relation(fields: [deliberationRunId], references: [id], onDelete: SetNull)
-  replacedBy        DecisionResolutionProposal?  @relation("ProposalSupersession", fields: [replacedByProposalId], references: [id], onDelete: SetNull)
-  replaces          DecisionResolutionProposal[] @relation("ProposalSupersession")
+  createdAt            DateTime                     @default(now())
+  updatedAt            DateTime                     @updatedAt
+  interaction          DecisionInteraction?         @relation(fields: [interactionId], references: [id], onDelete: Cascade)
+  profile              DecisionPerspectiveProfile   @relation(fields: [profileId], references: [profileId], onDelete: Cascade)
+  ruledByUser          User?                        @relation(fields: [ruledByUserId], references: [id], onDelete: SetNull)
+  deliberationRun      DeliberationRun?             @relation(fields: [deliberationRunId], references: [id], onDelete: SetNull)
+  replacedBy           DecisionResolutionProposal?  @relation("ProposalSupersession", fields: [replacedByProposalId], references: [id], onDelete: SetNull)
+  replaces             DecisionResolutionProposal[] @relation("ProposalSupersession")
 
   @@index([status, createdAt])
   @@index([lifecycle, status, createdAt])
