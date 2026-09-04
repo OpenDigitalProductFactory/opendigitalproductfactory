@@ -10,6 +10,18 @@ status: active
 - **Delivery decision:** atomic
 - **Downstream measurement consumer:** `BI-69803ACC`
 
+## Design grounding
+
+- Existing specs/plans reviewed: this plan and
+  `docs/superpowers/specs/2026-09-04-flow-efficiency-adversarial-fixtures-design.md`.
+- Current code substrate reviewed: `apps/web/lib/work-capsules/liveness.ts`,
+  `apps/web/lib/work-capsules/activity-stream.ts`, and
+  `apps/web/lib/tak/thread-checkpoint.ts`.
+- Source of truth: durable Workroom, TaskRun, Git, event-cursor, and evidence facts;
+  provider/session flags remain observations rather than authority.
+- Decision: extend the existing pure reconciliation seams with bounded fixtures and
+  the minimum corrections they prove, without adding a queue, ledger, or lifecycle.
+
 ## Scope and atomicity
 
 Ship one test-led Phase 1 safety slice covering partial worktree create/delete,
@@ -23,7 +35,7 @@ atomic delivery.
 The seven-day pilot observation remains separate acceptance evidence. This plan does
 not shorten that window or infer its result.
 
-## Traceability and live backlog coverage
+## Backlog coverage
 
 | Deliverable | Objective / acceptance refs | Live BI | Dependency | Independently shippable |
 |---|---|---|---|---|
@@ -127,4 +139,3 @@ The minimum gate is:
 
 Unknown scope, stale evidence, or an unresolved guard expands verification; no command
 is removed merely to fit local capacity.
-
