@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 import {
+  addedLinesContainVisibleCopy,
   collectCopyPreservingRenames,
   MEASURED_AXES,
   MEASURED_AXIS_POLARITY,
@@ -97,6 +98,20 @@ test("measured numbers that regress the committed baseline are rejected per axis
   assert.ok(errors.some((e) => /buriedPrimaryAction/.test(e)));
 });
 
+test("the introducing 686-word tax measurement cannot pass against the stale 684 row", () => {
+  const manifest = load("green-sweep-measurement.ux-fit.json");
+  manifest.evidence.measured["/example"].defaultVisibleWords = 686;
+  const baseline = {
+    ...BASELINE,
+    routes: {
+      "/example": { ...BASELINE.routes["/example"], defaultVisibleWords: 684 },
+    },
+  };
+
+  const errors = checkMeasurementAgainstBaseline(manifest, baseline);
+  assert.ok(errors.some((error) => /defaultVisibleWords: 684 -> 686/.test(error)), errors.join("; "));
+});
+
 // ── the retirement itself ──
 
 test("a UI-impacting change with NO manifest fails and says the trailer is retired", () => {
@@ -124,6 +139,27 @@ test("UI control detection includes buttons, links, disclosures, and custom trig
   }
 
   assert.equal(UI_CONTROL_RE.test("<div>plain status</div>"), false);
+});
+
+test("added user-visible copy is UX-impacting even when it adds no control", () => {
+  assert.equal(addedLinesContainVisibleCopy(["+      <div>plain status</div>"]), true);
+  assert.equal(
+    addedLinesContainVisibleCopy([
+      '+  { value: "withheld", label: "Withheld" },',
+      '+  { value: "employer", label: "Employer" },',
+    ]),
+    true,
+  );
+});
+
+test("imports and styling-only additions are not mistaken for visible copy", () => {
+  assert.equal(
+    addedLinesContainVisibleCopy([
+      '+import { TaxCard } from "@/components/finance/tax-card";',
+      '+      <div className="flex gap-2 text-sm">{children}</div>',
+    ]),
+    false,
+  );
 });
 
 test("a trailer-shaped manifest cannot smuggle an acknowledgement through the gate", () => {
