@@ -7,6 +7,12 @@ status: active
 Backlog: BI-EB5E9BE3  
 Epic: EP-0AF96937
 
+## Objectives
+
+**OBJ-DDOR-001:** Make every unresolved organization-profile WWWD decision visible in the existing owner Review & adjust queue, regardless of the business route that created it.
+
+**OBJ-DDOR-002:** Preserve the queue's fail-closed exclusions for platform, build, task, profession, kernel, answered, and malformed decision records.
+
 ## Problem and named-ref reproduction
 
 On `origin/main` at `fdbff30390b22e6166e01c1335d791d4619cb685`, `apps/web/app/(shell)/coworker-decisions/review/page.tsx` restricts `openOrgRows` to `routeContext: "/coworker-business"`. Live production evidence `DME-0149168E05AC` shows funding decision `DI-BD8CB44CBFDC` was validly created from `/ops/demand` against the organization's WWWD profile but was absent from “Waiting on your call.” The owner therefore has no UI action that can unblock funding.
@@ -39,6 +45,15 @@ The existing organization `DecisionPerspectiveProfile.profileId` is the source o
 2. Resolve the organization profile before querying and use the shared predicate for `openOrgRows`.
 3. Run the focused test, related decision-review tests, prose/style guards, and the governed exact-tree gate.
 4. Merge through the queue, advance the canonical runtime through self-upgrade, and verify the live funding decision can be ruled from Review & adjust.
+
+## Acceptance mapping
+
+| ID | Objectives | Acceptance criterion |
+| --- | --- | --- |
+| AC-DDOR-001 | OBJ-DDOR-001 | An unresolved `/ops/demand` interaction evaluated against the organization profile appears in Review & adjust. |
+| AC-DDOR-002 | OBJ-DDOR-001 | The existing `/coworker-business` path remains visible. |
+| AC-DDOR-003 | OBJ-DDOR-002 | Kernel/WWMD, build-bound, task-bound, empty-question, profession-gate, answered, and non-organization-profile rows remain excluded. |
+| AC-DDOR-004 | OBJ-DDOR-001, OBJ-DDOR-002 | A red/green regression test and canonical-runtime UX exercise verify the repair. |
 
 ## Documentation impact
 
