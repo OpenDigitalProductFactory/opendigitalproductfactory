@@ -51,6 +51,8 @@ The governing architecture contract is:
 - **Boundaries:** custody, Resource capacity, care, recurring work, adoption,
   finance, and storefront keep ownership; versioned in-process TypeScript
   commands and transaction/outbox projections are the only integration paths.
+  Internal Next.js routes remain resource-oriented; domain command names are
+  not exposed as verb-based public endpoints.
 - **Security:** authenticated server context supplies organization and explicit
   capability; every repository repeats organization scope; applicant,
   volunteer, foster, clinical, legal-hold, donor, and finance PII is split into
@@ -96,8 +98,9 @@ projection/transaction behavior, and §12 the single-PR delivery order.
 |---|---|
 | Disaster or emergency-response system | This is routine animal-rescue operations; installation continuity remains a platform concern. |
 | New volunteer-management or notification service | Existing people, workforce, messaging, and work-engagement capabilities remain authoritative. |
-| New database, spatial tracking, or message broker | Existing PostgreSQL, Resource locations, transaction/outbox behavior, and deployment controls are reused. |
+| New database, GPS/spatial tracking, or message broker | Existing PostgreSQL, static Resource locations, transaction/outbox behavior, and deployment controls are reused; no rescue vehicle tracking is proposed. |
 | Rescue-specific workflow, ledger, scheduler, or identity silo | Existing custody-compatible domain commands, journal, recurrence, identity, and storefront boundaries are extended in place. |
+| Global species/breed catalog service | No such canonical service exists in the audited substrate. `speciesSlug` and `breed` remain open organization vocabulary; implementation rechecks the registry before adding any new type. |
 
 ## 2. Outcomes and objective baseline
 
