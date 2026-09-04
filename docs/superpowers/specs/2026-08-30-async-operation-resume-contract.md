@@ -14,21 +14,21 @@ DPF already persists `AsyncInferenceOp`, supports background interaction mode, a
 
 ## Objectives and acceptance criteria
 
-- **OBJ-ASYNC-01 — Stable identity:** one logical request has one server-owned operation identity; retried starts return the existing operation rather than creating a sibling.
-- **OBJ-ASYNC-02 — Durable resume:** a process restart or worker handoff resumes from the last persisted checkpoint without replaying completed side effects.
-- **OBJ-ASYNC-03 — Truthful lifecycle:** pending, running, completed, failed, cancelled, and expired states are persisted with bounded timestamps and auditable transitions.
-- **OBJ-ASYNC-04 — Observable progress:** progress and terminal events are emitted from durable transitions; consumers can reconcile with a cursor-bounded read instead of tight polling.
-- **OBJ-ASYNC-05 — Provenance:** final results retain provider/model/operation identity, request digest, and completion/error metadata.
+- **OBJ-ASYNC-01:** **Stable identity:** one logical request has one server-owned operation identity; retried starts return the existing operation rather than creating a sibling.
+- **OBJ-ASYNC-02:** **Durable resume:** a process restart or worker handoff resumes from the last persisted checkpoint without replaying completed side effects.
+- **OBJ-ASYNC-03:** **Truthful lifecycle:** pending, running, completed, failed, cancelled, and expired states are persisted with bounded timestamps and auditable transitions.
+- **OBJ-ASYNC-04:** **Observable progress:** progress and terminal events are emitted from durable transitions; consumers can reconcile with a cursor-bounded read instead of tight polling.
+- **OBJ-ASYNC-05:** **Provenance:** final results retain provider/model/operation identity, request digest, and completion/error metadata.
 
 The implementation is accepted only when:
 
-| ID | Acceptance criterion | Evidence |
-| --- | --- | --- |
-| AC-ASYNC-01 | Repeating an idempotent start with the same request digest returns the same operation ID and performs no duplicate provider start. | Vitest integration test + protected CI |
-| AC-ASYNC-02 | Restart/resume claims one pending operation and continues from its checkpoint under a compare-and-swap lease. | Failure-injection test + protected CI |
-| AC-ASYNC-03 | Provider transient failure retries with bounded backoff; permanent failure, cancellation, and expiry are terminal and idempotent. | Lifecycle matrix tests |
-| AC-ASYNC-04 | Event delivery is at-least-once and deduplicated by operation transition; reconciliation is cursor-bounded. | Event-bus/read-model tests |
-| AC-ASYNC-05 | Sync interaction mode remains behaviorally unchanged and async results are retrievable by operation ID with exact provenance. | Regression tests + typecheck/build |
+| ID | Objective | Acceptance criterion | Evidence |
+| --- | --- | --- | --- |
+| AC-ASYNC-01 | OBJ-ASYNC-01 | Repeating an idempotent start with the same request digest returns the same operation ID and performs no duplicate provider start. | Vitest integration test + protected CI |
+| AC-ASYNC-02 | OBJ-ASYNC-02 | Restart/resume claims one pending operation and continues from its checkpoint under a compare-and-swap lease. | Failure-injection test + protected CI |
+| AC-ASYNC-03 | OBJ-ASYNC-03 | Provider transient failure retries with bounded backoff; permanent failure, cancellation, and expiry are terminal and idempotent. | Lifecycle matrix tests |
+| AC-ASYNC-04 | OBJ-ASYNC-04 | Event delivery is at-least-once and deduplicated by operation transition; reconciliation is cursor-bounded. | Event-bus/read-model tests |
+| AC-ASYNC-05 | OBJ-ASYNC-05 | Sync interaction mode remains behaviorally unchanged and async results are retrievable by operation ID with exact provenance. | Regression tests + typecheck/build |
 
 ## Scope and non-goals
 
