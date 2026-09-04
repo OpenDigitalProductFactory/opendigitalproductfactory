@@ -5,8 +5,9 @@ status: proposed
 # Pet Rescue operating system and resilient Help design
 
 **Integration backlog item:** `BI-7A38F667`  
-**Covered Pet Rescue items:** `BI-D2A51B36`, `BI-97290291`, `BI-7111AF0C`,
-`BI-5A25EC37`, `BI-A442F129`, `BI-7A38F667` (`EP-5102F494`)  
+**Covered Pet Rescue items:** `BI-4F8A484C`, `BI-D2A51B36`, `BI-97290291`,
+`BI-7111AF0C`, `BI-5A25EC37`, `BI-A442F129`, `BI-E861E8B8`,
+`BI-7A38F667` (`EP-5102F494`)
 **Covered Help item:** `BI-AE7C386B` (`EP-56AE0F69`)  
 **Workroom:** `WC-16B8E810`  
 **Architecture decision:** `DI-0AFD05E602CA`
@@ -25,11 +26,12 @@ operating system for the three value streams already defined in Architecture:
 It also repairs global Help so a renamed, removed, or unseeded document cannot
 strand an operator on a 404.
 
-The implementation is one integrated PR because the operator explicitly
-requires one source sandbox and one publication event. That is a packaging
-decision, not a data-boundary decision: every deliverable retains its existing
-backlog identity, acceptance evidence, and test seam. The branch is not allowed
-to hide partial delivery behind the integration item.
+This is one umbrella design and one coordinated implementation PR, matching the
+operator's explicit constraint to use one source sandbox and one publication
+event. Each independently reviewable slice retains its existing backlog item,
+acceptance evidence, verification seam, and clean-revert commit inside the
+shared governed Workroom and branch. A shared nonproduction lease verifies the
+assembled change without letting the integration item hide partial delivery.
 
 ## 2. Outcomes and objective baseline
 
@@ -329,6 +331,40 @@ Database constraints cover uniqueness and FKs. Service transactions cover
 cross-model state transitions; PostgreSQL checks/exclusions cover invariants
 that cannot be expressed in Prisma.
 
+### 6.3 API authentication and authorization
+
+Internal route handlers and server actions derive a trusted request context from
+the authenticated session and server-side organization membership:
+`{ principalId, organizationId, capabilities }`. A request body, query, path,
+cookie outside the authenticated session, or imported source record may select a
+record, but it never supplies authority or organization scope. Repositories
+repeat `organizationId` in every read and write predicate. An unauthenticated
+request fails before repository access; a signed-in principal without the
+required capability fails before data is loaded; an absent or cross-organization
+record is not disclosed.
+
+Authorization is action- and field-specific:
+
+| Boundary | Required authority |
+|---|---|
+| Public animal listing | No internal session; the existing public serializer exposes only explicitly published allowlisted fields. |
+| Rescue operational reads | Authenticated organization member plus a domain-appropriate operational read grant. Clinical, legal-hold, foster-address, applicant, donor, and finance fields require their own narrower projection. |
+| Intake, housing, daily-care, appointment, and adoption workflow writes | Authenticated organization member plus explicit animal-welfare operating authority for that action; every transition records the principal and reason. |
+| Clinical corrections and medical detail | Animal-welfare operating authority plus clinical scope; corrections supersede prior facts and never erase them. |
+| Restricted-fund, journal-line, and cost detail | Existing `view_finance` or `manage_finance` capability as appropriate; animal-welfare authority alone cannot expose or post finance data. |
+| Legal-hold release, adoption approval, euthanasia, and fund-restriction release | Explicit human approval at the consequential-action boundary; no background job, inferred occupation, or AI coworker can self-authorize it. |
+
+The current closed `CapabilityKey` catalog has no animal-welfare operating
+grant, and `HR-600` occupations are explicitly narrowing-only. The implementation
+must not borrow `view_operations`, `operate_customer`, or another semantically
+unrelated capability for rescue writes. Before the first write slice can be
+planned, a linked authorization prerequisite must either approve an existing
+domain-capability mechanism or add the smallest animal-welfare grant and its
+occupation-aware narrowing policy. Until that prerequisite is approved, all new
+rescue mutations fail closed. Authentication, cross-organization isolation,
+capability denial, field redaction, and consequential-action approval each need
+negative tests.
+
 ## 7. Pet Rescue user experience
 
 ### 7.1 Navigation
@@ -382,6 +418,12 @@ One summary is rendered once; detail tabs do not create competing summaries.
 - Status is expressed in text and semantics, never color alone.
 - Controls meet the 44px tap target and preserve keyboard/focus order.
 - Desktop, narrow viewport, light theme, and dark theme are verified.
+
+There is no Pet Rescue wireframe or mockup artifact in the repository, and this
+design does not claim one. Sections 7.1–7.4 are the normative interaction and
+layout contract. Rendered narrow/wide and light/dark screenshots are produced as
+implementation verification evidence after the real routes exist; they are not
+retroactively described as design inputs.
 
 ## 8. Resilient Help contract
 
@@ -465,8 +507,10 @@ runtime files are patched.
 
 ## 11. Scale and reporting
 
-- List reads use `(organizationId, status/stage, updatedAt, id)` cursor indexes.
-- Timelines use `(animalProfileId, occurredAt, id)` cursors.
+- List reads use `(organizationId, status/stage, updatedAt, id)` cursor indexes,
+  default to 50 rows, and reject a requested page size above 100.
+- Timelines use `(animalProfileId, occurredAt, id)` cursors, default to 50 rows,
+  and reject a requested page size above 100.
 - Capacity conflicts are interval/index constrained; no N-by-N resource scan.
 - Cockpit aggregation issues bounded group/count/sum queries and returns per
   source `{ state: available|empty|unavailable, asOf, data }`.
@@ -482,21 +526,56 @@ federated animal matching are outside `EP-5102F494`; a future federation epic
 must add aggregate exchange and conflict contracts rather than widening these
 queries.
 
+Migration tests use a fixture with existing public listings and prove that the
+backfill is resumable and idempotent. Query verification uses representative
+high-cardinality fixtures and `EXPLAIN` evidence to reject sequential scans on
+the bounded list, timeline, capacity-conflict, and cockpit paths. Any latency
+budget is recorded from the repository's measured performance harness rather
+than invented in this document.
+
+### 11.1 Integration and connectivity boundary
+
+This initiative integrates DPF services inside one installation: animal identity
+is the stable subject reference; custody owns lifecycle state; Resource capacity
+owns placement; care owns appointments and assessed facts; work owns recurring
+commitments; finance owns posted money; the storefront owns only the optional
+public projection. Multi-model invariants run in one database transaction where
+atomicity is required. Read projections may refresh after commit, expose `asOf`,
+and report a named source as unavailable instead of substituting stale data.
+
+External shelter-management imports, veterinary-practice synchronization,
+microchip registries, payment-provider changes, and cross-install federation are
+not in this initiative. A later connector must translate into these canonical
+commands and keep source provenance; it may not write the tables directly.
+
+The first release is online-only. It does not cache adopter, donor, foster,
+clinical, or legal-hold records in browser storage and does not queue mutations
+for later replay. If connectivity is lost, the UI preserves only non-sensitive
+in-memory input, shows that the write was not accepted, and requires an explicit
+retry after reauthentication. It never renders optimistic completion. Because
+the standing Pet Rescue operating model calls for signal-tolerant rounds, offline
+capture and conflict resolution remain a named follow-up requirement and a
+production-rollout risk, not an implied capability of this scope.
+
 ## 12. Delivery slices and acceptance trace
 
 | Slice | Backlog item | Primary acceptance evidence |
 |---|---|---|
 | Help resolver and recovery UI | `BI-AE7C386B` | resolver/unit tests, header/direct-route tests, running Help path |
-| Identity integration with delivered housing/capacity | `BI-D2A51B36` | existing PRs #5000/#5022 plus animal-to-occupancy integration tests and running capacity drill-in |
+| Canonical animal identity and public-listing projection | `BI-4F8A484C` | migration/backfill tests, publication-boundary tests, durable animal detail |
+| Housing/capacity integration | `BI-D2A51B36` | existing PRs #5000/#5022 plus animal-to-occupancy integration tests and running capacity drill-in |
 | Subject clinical history + vet coordination | `BI-97290291` | care-record and appointment tests, animal care detail |
 | Custody/intake pipeline | `BI-7111AF0C` | state-machine/legal-hold tests, running intake queue |
 | Recurring daily care | `BI-5A25EC37` | recurrence/completion/exception tests, running care board |
 | Adoption and return | `BI-A442F129` | application/placement transaction tests, running adoption flow |
-| Pet Rescue home and stewardship projection | `BI-7A38F667` | partial-result aggregation tests, responsive/themed cockpit verification |
+| Restricted funds and animal-cost attribution | `BI-E861E8B8` | posting/dimension/reconciliation tests, bounded stewardship readouts |
+| Pet Rescue home | `BI-7A38F667` | partial-result aggregation tests, responsive/themed cockpit verification |
 
-All slices are implemented test-first and committed on the same branch. The
-single PR body lists the individual BI evidence rather than claiming the root BI
-implicitly covers its children.
+The delivery decision is `decomposed`: each row is independently shippable and
+retains its own BI and test-first evidence, while the operator-directed packaging
+uses one shared Workroom, branch, nonproduction lease, and PR. The root plan
+records dependencies and objective coverage across that coordinated delivery;
+scope is claimed explicitly for every implementation path before editing.
 
 ## 13. Verification contract
 
@@ -539,3 +618,14 @@ Before publication:
   `DI-0AFD05E602CA` with no commandment conflict.
 - **Recommended next step:** immutable design review through the governed
   initiative-readiness route, then a coverage-recorded implementation plan.
+
+## 15. Current design-review finding dispositions
+
+| Finding | Disposition in this revision |
+|---|---|
+| `IF-B0AEDBE9A774B561` | No external Pet Rescue wireframe exists or is claimed. Section 7 is the written UI contract; implementation screenshots remain future verification evidence. |
+| `IF-0C274B6495B036E2` | Section 6.3 now defines trusted request context, organization isolation, action/field boundaries, negative tests, and the fail-closed authorization prerequisite exposed by the current capability catalog. |
+| `IF-91AD392C75C37050` | Sections 11–11.1 now bind pagination and scale verification, define in-install service seams and excluded external connectors, and state the online-only/offline-failure contract and follow-up risk. |
+
+These are dispositions for independent re-review, not a self-issued pass. The
+failed receipt remains historical evidence against its original immutable blob.
