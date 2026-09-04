@@ -28,6 +28,11 @@ describe("WardOperations", () => {
     expect(html).toMatch(/Save changes/i);
     expect(html).toContain('name="capacity"');
     expect(html).toContain("min-h-11");
+    const visibleControls = [...html.matchAll(/<(?:input|select|button)\b[^>]*>/g)]
+      .map(([tag]) => tag)
+      .filter((tag) => !tag.includes('type="hidden"'));
+    expect(visibleControls.length).toBeGreaterThan(0);
+    for (const control of visibleControls) expect(control).toContain("min-h-11");
     expect(html).not.toMatch(/home address/i);
   });
 

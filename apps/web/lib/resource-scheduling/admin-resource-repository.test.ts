@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ALL_ARCHETYPES } from "@dpf/storefront-templates";
 
 import {
   ResourceCommandError,
   createAdminResource,
   listAdminResources,
+  resolveManagedResourceProfiles,
   updateAdminResource,
 } from "./admin-resource-repository";
 
@@ -25,6 +27,23 @@ function client() {
 
 describe("admin resource repository", () => {
   beforeEach(() => vi.clearAllMocks());
+
+  it("uses the current built-in archetype profile for an already-activated organization", () => {
+    const current = ALL_ARCHETYPES.find((archetype) => archetype.archetypeId === "pet-rescue")!;
+    const staleActivationProfile = {
+      ...current.activationProfile,
+      processProfile: {
+        ...current.activationProfile!.processProfile!,
+        resourceKinds: [{ kindSlug: "kennel", capacityUnit: "animals", maxCapacity: 100 }],
+      },
+    };
+    expect(resolveManagedResourceProfiles({
+      archetypeId: "pet-rescue",
+      activationProfile: staleActivationProfile,
+      allowedKindSlugs: ["kennel", "foster-home"],
+      capacityUnit: "animals",
+    })).toEqual(profiles);
+  });
 
   it("lists only the server-scoped domain and configured kinds", async () => {
     const db = client();

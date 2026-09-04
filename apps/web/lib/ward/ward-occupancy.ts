@@ -60,6 +60,7 @@ export interface WardZone {
   /** The shelter's own name for the area. Never invented. */
   area: string;
   units: WardUnit[];
+  capacity: number;
   occupied: number;
   free: number;
   outOfService: number;
@@ -78,6 +79,10 @@ export interface WardBoard {
 
 /** An area label every shelter can read, for housing that was never grouped. */
 export const UNGROUPED_AREA = "Unassigned area";
+
+export function formatHousingAvailability(available: number): string {
+  return `${available} ${available === 1 ? "space remains" : "spaces remain"} there.`;
+}
 
 function unitState(kennel: KennelRow, occupantCount: number): WardUnit["state"] {
   if (kennel.blockedReason) return "out-of-service";
@@ -144,8 +149,9 @@ export function buildWardBoard(input: {
       state,
     };
 
-    const zone = zones.get(area) ?? { area, units: [], occupied: 0, free: 0, outOfService: 0 };
+    const zone = zones.get(area) ?? { area, units: [], capacity: 0, occupied: 0, free: 0, outOfService: 0 };
     zone.units.push(unit);
+    zone.capacity += capacity;
     if (state === "out-of-service") zone.outOfService += capacity;
     else {
       zone.occupied += occupants.length;

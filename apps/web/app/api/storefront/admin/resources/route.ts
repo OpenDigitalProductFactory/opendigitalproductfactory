@@ -2,13 +2,13 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@dpf/db";
-import { readActivationProfile } from "@dpf/storefront-templates";
 
 import { auth } from "@/lib/auth";
 import {
   ResourceCommandError,
   createAdminResource,
   listAdminResources,
+  resolveManagedResourceProfiles,
   type AdminResourceClient,
   type ManagedResourceProfile,
 } from "@/lib/resource-scheduling/admin-resource-repository";
@@ -24,14 +24,16 @@ async function housingContext(): Promise<{
     select: {
       id: true,
       organizationId: true,
-      archetype: { select: { activationProfile: true } },
+      archetype: { select: { archetypeId: true, activationProfile: true } },
     },
   });
-  const profile = readActivationProfile(config?.archetype.activationProfile);
-  if (!config || !profile?.processProfile.housesSubjects) return null;
-  const profiles = profile.processProfile.resourceKinds.filter(
-    (kind) => HOUSING_KINDS.has(kind.kindSlug) && kind.capacityUnit === "animals",
-  );
+  if (!config) return null;
+  const profiles = resolveManagedResourceProfiles({
+    archetypeId: config.archetype.archetypeId,
+    activationProfile: config.archetype.activationProfile,
+    allowedKindSlugs: [...HOUSING_KINDS],
+    capacityUnit: "animals",
+  });
   return profiles.length > 0
     ? { organizationId: config.organizationId, storefrontId: config.id, profiles }
     : null;

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { ALL_ARCHETYPES, readActivationProfile } from "@dpf/storefront-templates";
 
 export type ManagedResourceLifecycle = "active" | "retired";
 
@@ -6,6 +7,25 @@ export interface ManagedResourceProfile {
   kindSlug: string;
   capacityUnit: string;
   maxCapacity: number;
+}
+
+export function resolveManagedResourceProfiles(input: {
+  archetypeId?: string | null;
+  activationProfile: unknown;
+  allowedKindSlugs: readonly string[];
+  capacityUnit: string;
+}): ManagedResourceProfile[] {
+  const currentBuiltIn = input.archetypeId
+    ? ALL_ARCHETYPES.find((archetype) => archetype.archetypeId === input.archetypeId)
+    : undefined;
+  const activation = readActivationProfile(
+    currentBuiltIn?.activationProfile ?? input.activationProfile,
+  );
+  if (!activation?.processProfile.housesSubjects) return [];
+  const allowed = new Set(input.allowedKindSlugs);
+  return activation.processProfile.resourceKinds.filter(
+    (kind) => allowed.has(kind.kindSlug) && kind.capacityUnit === input.capacityUnit,
+  );
 }
 
 export interface ManagedResource {

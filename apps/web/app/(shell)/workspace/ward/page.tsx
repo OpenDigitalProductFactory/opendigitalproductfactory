@@ -183,7 +183,7 @@ function WardMap({ board }: { board: NonNullable<Awaited<ReturnType<typeof loadW
           <div className="mb-3 flex flex-wrap items-baseline gap-3">
             <h2 className="text-sm font-semibold text-[var(--dpf-text)]">{zone.area}</h2>
             <span className="text-xs text-[var(--dpf-muted)]">
-              {zone.free} free of {zone.units.length}
+              {zone.free} free of {zone.capacity}
               {zone.outOfService > 0 ? ` · ${zone.outOfService} out of service` : ""}
             </span>
           </div>

@@ -2,12 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@dpf/db";
-import { readActivationProfile } from "@dpf/storefront-templates";
 
 import { auth } from "@/lib/auth";
 import {
   ResourceCommandError,
   createAdminResource,
+  resolveManagedResourceProfiles,
   updateAdminResource,
   type AdminResourceClient,
 } from "@/lib/resource-scheduling/admin-resource-repository";
@@ -19,6 +19,7 @@ import {
 } from "@/lib/resource-scheduling/resource-occupancy";
 import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 import { newId } from "@/lib/shared/new-id";
+import { formatHousingAvailability } from "@/lib/ward/ward-occupancy";
 
 export type HousingActionResult = ActionResult<{ message: string }>;
 
@@ -26,12 +27,14 @@ async function context() {
   const session = await auth();
   if (!session?.user || (session.user as { type?: string }).type !== "admin") return null;
   const config = await prisma.storefrontConfig.findFirst({
-    select: { id: true, organizationId: true, archetype: { select: { activationProfile: true } } },
+    select: { id: true, organizationId: true, archetype: { select: { archetypeId: true, activationProfile: true } } },
   });
-  const activation = readActivationProfile(config?.archetype.activationProfile);
-  const profiles = activation?.processProfile.resourceKinds.filter(
-    (kind) => ["kennel", "foster-home"].includes(kind.kindSlug) && kind.capacityUnit === "animals",
-  ) ?? [];
+  const profiles = resolveManagedResourceProfiles({
+    archetypeId: config?.archetype.archetypeId,
+    activationProfile: config?.archetype.activationProfile,
+    allowedKindSlugs: ["kennel", "foster-home"],
+    capacityUnit: "animals",
+  });
   return config && profiles.length > 0 ? { config, profiles } : null;
 }
 
@@ -84,7 +87,7 @@ export async function manageHousingAction(
         },
       });
       revalidatePath("/workspace/ward");
-      return ok({ message: `Placement saved. ${placement.capacity.available} spaces remain there.` });
+      return ok({ message: `Placement saved. ${formatHousingAvailability(placement.capacity.available)}` });
     }
 
     if (intent === "release") {

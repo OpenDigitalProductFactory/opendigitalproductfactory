@@ -4,7 +4,6 @@
   "decisionInteractionId": "DI-F289DBB51DCB",
   "scope": {
     "files": [
-      "apps/web/app/(shell)/workspace/ward/page.tsx",
       "apps/web/components/ward/WardOperations.tsx"
     ]
   },
@@ -24,6 +23,6 @@
     "sourceTruth": "Resource owns housing kind, label, capacity, block and lifecycle; ResourceCapacityAllocation owns the append-preserving stay; the Ward projection owns combined counts.",
     "states": "No housing points to Housing setup without claiming zero capacity. No open destination explains unblock/add/release recovery. Shared SubmitButton and FormStatus expose pending, success, validation, permission, and conflict outcomes.",
     "aiBoundary": "No control sends a coworker prompt. Every action is a direct governed server command with server-derived tenancy.",
-    "verification": "Focused component, route, repository, occupancy, Ward, and archetype tests plus typecheck; governed desktop and 390px browser verification is required before merge. All color roles use existing DPF tokens and interactive targets use the shared control scale."
+    "verification": "Focused component, route, repository, occupancy, Ward, and archetype tests plus typecheck passed. Governed browser verification at 1280x720 and 390x844 confirmed no horizontal overflow, every visible Ward input/select/button is at least 44px high, and create, place, move, release, pause, and return-to-service paths work. All color roles use existing DPF tokens."
   }
 }

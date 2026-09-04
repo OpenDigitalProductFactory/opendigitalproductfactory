@@ -2,7 +2,6 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@dpf/db";
-import { readActivationProfile } from "@dpf/storefront-templates";
 
 import { auth } from "@/lib/auth";
 import {
@@ -11,6 +10,7 @@ import {
   releaseResourceOccupant,
   type OccupancyClient,
 } from "@/lib/resource-scheduling/resource-occupancy";
+import { resolveManagedResourceProfiles } from "@/lib/resource-scheduling/admin-resource-repository";
 
 function errorResponse(error: unknown) {
   if (error instanceof OccupancyCommandError) {
@@ -34,12 +34,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ code: "unauthorized", message: "Unauthorized" }, { status: 401 });
   }
   const config = await prisma.storefrontConfig.findFirst({
-    select: { organizationId: true, archetype: { select: { activationProfile: true } } },
+    select: { organizationId: true, archetype: { select: { archetypeId: true, activationProfile: true } } },
   });
-  const activation = readActivationProfile(config?.archetype.activationProfile);
-  const allowedKinds = activation?.processProfile.resourceKinds
-    .filter((kind) => ["kennel", "foster-home"].includes(kind.kindSlug) && kind.capacityUnit === "animals")
-    .map((kind) => kind.kindSlug) ?? [];
+  const allowedKinds = resolveManagedResourceProfiles({
+    archetypeId: config?.archetype.archetypeId,
+    activationProfile: config?.archetype.activationProfile,
+    allowedKindSlugs: ["kennel", "foster-home"],
+    capacityUnit: "animals",
+  }).map((kind) => kind.kindSlug);
   if (!config || allowedKinds.length === 0) {
     return NextResponse.json({ code: "housing_not_configured", message: "Housing is not configured." }, { status: 404 });
   }

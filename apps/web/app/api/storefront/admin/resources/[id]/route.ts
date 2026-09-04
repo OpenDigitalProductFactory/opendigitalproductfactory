@@ -2,11 +2,11 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@dpf/db";
-import { readActivationProfile } from "@dpf/storefront-templates";
 
 import { auth } from "@/lib/auth";
 import {
   ResourceCommandError,
+  resolveManagedResourceProfiles,
   updateAdminResource,
   type AdminResourceClient,
 } from "@/lib/resource-scheduling/admin-resource-repository";
@@ -20,12 +20,14 @@ export async function PATCH(
     return NextResponse.json({ code: "unauthorized", message: "Unauthorized" }, { status: 401 });
   }
   const config = await prisma.storefrontConfig.findFirst({
-    select: { organizationId: true, archetype: { select: { activationProfile: true } } },
+    select: { organizationId: true, archetype: { select: { archetypeId: true, activationProfile: true } } },
   });
-  const activation = readActivationProfile(config?.archetype.activationProfile);
-  const profiles = activation?.processProfile.resourceKinds.filter(
-    (kind) => ["kennel", "foster-home"].includes(kind.kindSlug) && kind.capacityUnit === "animals",
-  ) ?? [];
+  const profiles = resolveManagedResourceProfiles({
+    archetypeId: config?.archetype.archetypeId,
+    activationProfile: config?.archetype.activationProfile,
+    allowedKindSlugs: ["kennel", "foster-home"],
+    capacityUnit: "animals",
+  });
   if (!config || profiles.length === 0) {
     return NextResponse.json({ code: "housing_not_configured", message: "Housing is not configured." }, { status: 404 });
   }
