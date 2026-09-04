@@ -2600,6 +2600,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       executedTools.push({ name: tc.name, args: tc.arguments, result: toolResult });
       if (toolResult.success && params.terminalToolPolicy?.readerToolNames.includes(tc.name)) {
         terminalToolSurfaceOverride = null;
+        terminalToolNudges = 0;
       }
       iterationResults.push({ tc, toolResult });
       onProgress?.({ type: "tool:complete", tool: tc.name, success: toolResult.success });

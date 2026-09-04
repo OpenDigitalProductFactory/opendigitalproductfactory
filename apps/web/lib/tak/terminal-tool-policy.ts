@@ -22,7 +22,8 @@ type ImmutableReaderArtifactRef = {
 
 export type TerminalToolRecord = {
   name: string;
-  result: { success: boolean };
+  args?: Record<string, unknown>;
+  result: { success: boolean; data?: Record<string, unknown> };
 };
 
 const INITIATIVE_REVIEW_READER_NAMES = [
@@ -152,6 +153,9 @@ export type TerminalToolProgress = {
   readerAttempts: number;
   successfulReaderCalls: number;
   evidenceAvailable: boolean;
+  partialEvidence: boolean;
+  continuationCursor: string | null;
+  paginationInvalid: boolean;
   writerAttempted: boolean;
   readerBudgetExhausted: boolean;
 };
@@ -180,10 +184,88 @@ export function summarizeTerminalToolProgress(
   const readers = new Set(policy.readerToolNames);
   const readerRecords = records.filter((record) => readers.has(record.name));
   const successfulReaderCalls = readerRecords.filter((record) => record.result.success).length;
+  const binding = policy.immutableReaderArguments;
+  let attemptActive = false;
+  let expectedCursor: string | null = null;
+  let expectedStartLine: number | null = null;
+  let expectedTotalLines: number | null = null;
+  let evidenceComplete = false;
+  let paginationInvalid = false;
+
+  for (const record of readerRecords) {
+    if (record.name !== "read_source_at_version" || !record.result.success) continue;
+    const data = record.result.data;
+    const validIdentity = binding && data
+      && data["repositoryFullName"] === binding.repositoryFullName
+      && data["path"] === binding.path
+      && data["version"] === binding.version
+      && data["blobId"] === binding.expectedBlobId;
+    const startLine = data?.["startLine"];
+    const endLine = data?.["endLine"];
+    const totalLines = data?.["totalLines"];
+    const hasMore = data?.["hasMore"];
+    const nextCursor = data?.["nextCursor"];
+    const validPage = validIdentity
+      && boundedInteger(startLine, 1, Number.MAX_SAFE_INTEGER)
+      && boundedInteger(endLine, 1, Number.MAX_SAFE_INTEGER)
+      && boundedInteger(totalLines, 1, Number.MAX_SAFE_INTEGER)
+      && endLine >= startLine
+      && endLine <= totalLines
+      && typeof hasMore === "boolean"
+      && (hasMore ? endLine < totalLines : endLine === totalLines)
+      && (hasMore ? typeof nextCursor === "string" && nextCursor.length > 0 : nextCursor === null);
+    if (!validPage) {
+      attemptActive = false;
+      expectedCursor = null;
+      expectedStartLine = null;
+      expectedTotalLines = null;
+      evidenceComplete = false;
+      paginationInvalid = true;
+      continue;
+    }
+
+    const suppliedCursor = record.args?.["cursor"];
+    const suppliedStartLine = record.args?.["startLine"];
+    const startsAtBeginning = startLine === 1
+      && suppliedCursor === undefined
+      && (suppliedStartLine === undefined || suppliedStartLine === 1);
+    if (startsAtBeginning) {
+      attemptActive = true;
+      expectedStartLine = startLine;
+      expectedTotalLines = totalLines;
+      paginationInvalid = false;
+    } else if (!attemptActive
+      || typeof suppliedCursor !== "string"
+      || suppliedCursor !== expectedCursor
+      || startLine !== expectedStartLine
+      || totalLines !== expectedTotalLines) {
+      attemptActive = false;
+      expectedCursor = null;
+      expectedStartLine = null;
+      expectedTotalLines = null;
+      evidenceComplete = false;
+      paginationInvalid = true;
+      continue;
+    }
+
+    if (hasMore) {
+      expectedCursor = nextCursor as string;
+      expectedStartLine = endLine + 1;
+      evidenceComplete = false;
+    } else {
+      expectedCursor = null;
+      expectedStartLine = null;
+      evidenceComplete = attemptActive;
+      attemptActive = false;
+    }
+  }
   return {
     readerAttempts: readerRecords.length,
     successfulReaderCalls,
-    evidenceAvailable: successfulReaderCalls >= policy.minimumSuccessfulReaderCalls,
+    evidenceAvailable: evidenceComplete,
+    partialEvidence: attemptActive && expectedCursor !== null,
+    continuationCursor: attemptActive ? expectedCursor : null,
+    paginationInvalid,
     writerAttempted: records.some((record) => record.name === policy.writerToolName),
     readerBudgetExhausted: readerRecords.length >= policy.maximumReaderCalls,
   };
@@ -200,8 +282,22 @@ export function resolveTerminalToolCall(
       kind: "refuse",
       result: {
         success: false,
-        error: "terminal_writer_requires_evidence",
-        message: "Read the bound immutable evidence before recording the governed assessment.",
+        error: progress.partialEvidence
+          ? "terminal_writer_requires_complete_evidence"
+          : "terminal_writer_requires_evidence",
+        message: progress.partialEvidence
+          ? `Continue the bound immutable read with cursor ${progress.continuationCursor} before recording the governed assessment.`
+          : "Read the bound immutable evidence from the beginning before recording the governed assessment.",
+      },
+    };
+  }
+  if (policy.readerToolNames.includes(toolName) && progress.evidenceAvailable) {
+    return {
+      kind: "refuse",
+      result: {
+        success: false,
+        error: "terminal_evidence_complete",
+        message: `The complete bound artifact has been read. Call ${policy.writerToolName} now.`,
       },
     };
   }
@@ -211,7 +307,7 @@ export function resolveTerminalToolCall(
       result: {
         success: false,
         error: "terminal_reader_budget_exhausted",
-        message: `The bounded evidence budget is complete. Call ${policy.writerToolName} now.`,
+        message: "The bounded evidence budget ended before complete traversal. No governed disposition can be recorded.",
       },
     };
   }
@@ -242,9 +338,11 @@ export function applyTerminalToolSurface(
   providerTools: readonly Record<string, unknown>[],
 ): Array<Record<string, unknown>> {
   const progress = summarizeTerminalToolProgress(policy, records);
-  return progress.readerBudgetExhausted && !progress.writerAttempted
-    ? selectTerminalToolSurface(providerTools, [policy.writerToolName])
-    : [...providerTools];
+  if (progress.writerAttempted) return [...providerTools];
+  if (progress.evidenceAvailable) return selectTerminalToolSurface(providerTools, [policy.writerToolName]);
+  if (progress.readerBudgetExhausted) return [];
+  if (progress.partialEvidence) return selectTerminalToolSurface(providerTools, ["read_source_at_version"]);
+  return [...providerTools];
 }
 
 export function buildTerminalToolReminder(
@@ -252,7 +350,9 @@ export function buildTerminalToolReminder(
   records: readonly TerminalToolRecord[],
 ): string {
   const progress = summarizeTerminalToolProgress(policy, records);
-  if (progress.readerBudgetExhausted) return `Call ${policy.writerToolName} now; the bounded evidence budget is complete.`;
+  if (progress.evidenceAvailable) return `Call ${policy.writerToolName} now; complete immutable evidence is available.`;
+  if (progress.readerBudgetExhausted) return "Immutable traversal is incomplete and the bounded reader budget is exhausted; do not record a disposition.";
+  if (progress.partialEvidence) return `Continue read_source_at_version with cursor ${progress.continuationCursor}; the writer remains unavailable until traversal completes.`;
   const remaining = policy.maximumReaderCalls - progress.readerAttempts;
   return `Use the immutable evidence readers before ${policy.writerToolName}. ${remaining} bounded evidence calls remain; reserve the terminal step for the governed writer.`;
 }
@@ -264,6 +364,14 @@ export function resolveTerminalTextExit(
 ): TerminalTextExitDisposition {
   const progress = summarizeTerminalToolProgress(policy, records);
   if (progress.writerAttempted) return { kind: "complete" };
+  if (progress.readerBudgetExhausted && !progress.evidenceAvailable) {
+    return {
+      kind: "input-required",
+      reason: "missing-terminal-writer",
+      writerToolName: policy.writerToolName,
+      message: "Immutable evidence traversal is incomplete and its bounded read budget is exhausted. No receipt was created.",
+    };
+  }
   if (nudgesUsed > 0) {
     return {
       kind: "input-required",
@@ -273,10 +381,13 @@ export function resolveTerminalTextExit(
     };
   }
   if (!progress.evidenceAvailable) {
+    const partial = progress.partialEvidence;
     return {
       kind: "nudge",
-      allowedToolNames: [...policy.readerToolNames],
-      message: "Read the bound immutable evidence now. Do not finish from prompt context alone.",
+      allowedToolNames: partial ? ["read_source_at_version"] : [...policy.readerToolNames],
+      message: partial
+        ? `Continue read_source_at_version with cursor ${progress.continuationCursor}. Do not assess the artifact before the terminal page returns hasMore=false.`
+        : "Read the bound immutable evidence from the beginning now. Do not finish from prompt context alone.",
     };
   }
   return {
