@@ -28,7 +28,7 @@ const createInput: CreateOrReplayAsyncOperationInput = {
   modelId: "deep-research",
   contractFamily: "research",
   screenedRequestContext: { promptRef: "screened:1" },
-  expiresAt: new Date("2026-09-04T13:00:00.000Z"),
+  expiresAt: new Date("2026-09-04T13:00:00.000Z"), // clock-bomb-guard: allow fixed persisted-row fixture; no wall-clock branch
 };
 
 function row(overrides: Record<string, unknown> = {}) {

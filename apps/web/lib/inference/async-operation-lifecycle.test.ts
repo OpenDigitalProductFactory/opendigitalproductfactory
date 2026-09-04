@@ -47,7 +47,7 @@ function record(overrides: Partial<AsyncOperationRecord> = {}): AsyncOperationRe
     updatedAt: new Date("2026-09-04T11:00:00.000Z"),
     startedAt: null,
     completedAt: null,
-    expiresAt: new Date("2026-09-04T12:00:00.000Z"),
+    expiresAt: new Date("2026-09-04T12:00:00.000Z"), // clock-bomb-guard: allow fixed record fixture; no wall-clock branch
     ...overrides,
   };
 }
@@ -79,7 +79,7 @@ const input = {
       responsePolicy: {},
     },
   },
-  expiresAt: new Date("2026-09-04T12:00:00.000Z"),
+  expiresAt: new Date("2026-09-04T12:00:00.000Z"), // clock-bomb-guard: allow fixed admission fixture; no wall-clock branch
 };
 
 describe("durable async operation admission", () => {

@@ -267,7 +267,7 @@ describe("getAsyncOperations", () => {
       createdAt: new Date("2026-09-04T12:00:00.000Z"),
       startedAt: null,
       completedAt: null,
-      expiresAt: new Date("2026-09-04T13:00:00.000Z"),
+      expiresAt: new Date("2026-09-04T13:00:00.000Z"), // clock-bomb-guard: allow fixed persisted-row fixture; no wall-clock branch
     }]);
 
     await expect(getAsyncOperations()).rejects.toThrow(
