@@ -69,6 +69,26 @@ describe("callProvider", () => {
     });
   });
 
+  it("omits async-operation metadata for a synchronous adapter result", async () => {
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({
+      providerId: "openai",
+      authMethod: "api_key",
+      authHeader: "Authorization",
+      baseUrl: "https://api.openai.com/v1",
+      endpoint: null,
+    });
+    mockGetDecryptedCredential.mockResolvedValueOnce({ secretRef: "test-key" });
+
+    const result = await callProvider(
+      "openai",
+      "model-under-test",
+      [{ role: "user", content: "Answer synchronously" }],
+      "You are helpful.",
+    );
+
+    expect(result).not.toHaveProperty("asyncOperation");
+  });
+
   it("routes Codex OAuth execution through the ChatGPT backend", async () => {
     mockPrisma.modelProvider.findUnique.mockImplementation(({ where }: { where: { providerId: string } }) => {
       if (where.providerId === "codex") {

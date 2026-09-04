@@ -145,25 +145,27 @@ export async function pollAsyncOperation(opId: string): Promise<AsyncOpStatus> {
     const pollResult = await pollProvider(op.providerId, op.operationId);
 
     if (pollResult.done) {
-      // Operation complete
+      const terminalStatus = pollResult.terminalStatus ?? "completed";
+      const progressMessage = pollResult.progressMessage
+        ?? (terminalStatus === "cancelled" ? "Cancelled" : "Complete");
       await prisma.asyncInferenceOp.update({
         where: { id: opId },
         data: {
-          status: "completed",
+          status: terminalStatus,
           completedAt: new Date(),
           progressPct: 100,
-          progressMessage: "Complete",
+          progressMessage,
           resultText: pollResult.text,
           ...(pollResult.raw ? { resultData: pollResult.raw as Prisma.InputJsonValue } : {}),
         },
       });
       if (op.threadId) {
         agentEventBus.emit(op.threadId, {
-          type: "async:complete" as any,
+          type: terminalStatus === "cancelled" ? "async:cancelled" : "async:complete",
           operationId: opId,
         });
       }
-      return "completed";
+      return terminalStatus;
     }
 
     // Still running — update progress
@@ -211,6 +213,7 @@ export async function pollAsyncOperation(opId: string): Promise<AsyncOpStatus> {
 
 interface PollResult {
   done: boolean;
+  terminalStatus?: "completed" | "cancelled";
   text?: string;
   raw?: Record<string, unknown>;
   progressPct?: number;
@@ -280,7 +283,7 @@ async function pollGemini(
   }
 
   const status = typeof data.status === "string" ? data.status : null;
-  if (status === "completed") {
+  if (status === "completed" || status === "incomplete") {
     const steps: unknown[] = Array.isArray(data.steps) ? data.steps : [];
     const modelOutputs = steps.filter((step): step is Record<string, unknown> => (
         typeof step === "object" && step !== null && !Array.isArray(step)
@@ -305,6 +308,8 @@ async function pollGemini(
 
     return {
       done: true,
+      terminalStatus: "completed",
+      progressMessage: status === "incomplete" ? "Incomplete" : "Complete",
       text,
       raw: {
         ...data,
@@ -320,10 +325,19 @@ async function pollGemini(
     };
   }
 
-  if (status === "in_progress") {
+  if (status === "in_progress" || status === "requires_action" || status === "queued") {
     return {
       done: false,
       progressMessage: status,
+    };
+  }
+
+  if (status === "cancelled") {
+    return {
+      done: true,
+      terminalStatus: "cancelled",
+      progressMessage: "Cancelled",
+      raw: data,
     };
   }
 
@@ -432,9 +446,8 @@ export async function cancelAsyncOperation(opId: string): Promise<void> {
 
   if (op.threadId) {
     agentEventBus.emit(op.threadId, {
-      type: "async:failed" as any,
+      type: "async:cancelled",
       operationId: opId,
-      error: "Cancelled by caller",
     });
   }
 }

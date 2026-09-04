@@ -176,4 +176,31 @@ describe("routeAndCall background starts", () => {
       downgradeReason: "not-eligible",
     });
   });
+
+  it("does not return an accepted provider handle before its dispatch audit settles", async () => {
+    let releaseAudit!: () => void;
+    mocks.logTokenUsage.mockReturnValueOnce(new Promise<void>((resolve) => {
+      releaseAudit = resolve;
+    }));
+
+    const pending = routeAndCall(
+      [{ role: "user", content: "Research this topic." }],
+      "You research.",
+      "internal",
+      {
+        taskType: "research",
+        interactionMode: "background",
+        threadId: "thread-1",
+        maxDurationMs: 60_000,
+        persistDecision: false,
+      },
+    );
+
+    await vi.waitFor(() => expect(mocks.logTokenUsage).toHaveBeenCalledOnce());
+    expect(mocks.createAsyncOperation).not.toHaveBeenCalled();
+
+    releaseAudit();
+    await expect(pending).resolves.toMatchObject({ asyncOperationId: "async-op-row-1" });
+    expect(mocks.createAsyncOperation).toHaveBeenCalledOnce();
+  });
 });

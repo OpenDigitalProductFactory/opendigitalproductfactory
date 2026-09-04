@@ -738,7 +738,7 @@ export async function callProvider(
     inputTokens: result.usage.inputTokens,
     outputTokens: result.usage.outputTokens,
     inferenceMs: result.inferenceMs,
-    asyncOperation: result.asyncOperation,
+    ...(result.asyncOperation !== undefined && { asyncOperation: result.asyncOperation }),
     ...(result.toolCalls.length > 0 && { toolCalls: result.toolCalls }),
     responseId: result.responseId,
     truncated: result.truncated ?? false,

@@ -147,4 +147,63 @@ describe("pollAsyncOperation Gemini Interactions API", () => {
       }),
     });
   });
+
+  it("preserves requires_action as a nonterminal provider state", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response({
+      id: "interaction/id with spaces",
+      object: "interaction",
+      status: "requires_action",
+    })));
+
+    await expect(pollAsyncOperation("async-op-1")).resolves.toBe("running");
+    expect(mocks.updateOperation).toHaveBeenCalledWith({
+      where: { id: "async-op-1" },
+      data: {
+        progressPct: undefined,
+        progressMessage: "requires_action",
+      },
+    });
+  });
+
+  it("persists a provider cancellation as cancelled rather than failed", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response({
+      id: "interaction/id with spaces",
+      object: "interaction",
+      status: "cancelled",
+    })));
+
+    await expect(pollAsyncOperation("async-op-1")).resolves.toBe("cancelled");
+    expect(mocks.updateOperation).toHaveBeenCalledWith({
+      where: { id: "async-op-1" },
+      data: expect.objectContaining({
+        status: "cancelled",
+        progressPct: 100,
+        progressMessage: "Cancelled",
+      }),
+    });
+  });
+
+  it("preserves an incomplete interaction's partial result", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response({
+      id: "interaction/id with spaces",
+      object: "interaction",
+      status: "incomplete",
+      steps: [
+        { type: "model_output", content: [{ type: "text", text: "Partial research" }] },
+      ],
+      usage: { total_input_tokens: 17, total_output_tokens: 4 },
+    })));
+
+    await expect(pollAsyncOperation("async-op-1")).resolves.toBe("completed");
+    expect(mocks.updateOperation).toHaveBeenCalledWith({
+      where: { id: "async-op-1" },
+      data: expect.objectContaining({
+        status: "completed",
+        progressPct: 100,
+        progressMessage: "Incomplete",
+        resultText: "Partial research",
+        resultData: expect.objectContaining({ status: "incomplete" }),
+      }),
+    });
+  });
 });

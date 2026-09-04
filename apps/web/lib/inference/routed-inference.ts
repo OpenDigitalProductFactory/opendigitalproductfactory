@@ -619,7 +619,7 @@ async function routeAndCallAttempt(
       // completion usage is not available yet. Persist the zero-token start
       // row before the early return; the durable lifecycle will append final
       // usage when the provider operation completes.
-      void persistRoutedTokenUsage({
+      await persistRoutedTokenUsage({
         traceId,
         agentId: options?.agentId ?? "unknown",
         providerId: result.providerId,
