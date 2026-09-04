@@ -4,9 +4,11 @@ status: active
 
 # Async completion and Workroom-aware delivery task hub implementation plan
 
-**Backlog item:** `BI-05D7A0DC`  
-**Workroom:** `WC-1D24739C`  
-**Design:** [`2026-09-04-async-delivery-task-hub-design.md`](../specs/2026-09-04-async-delivery-task-hub-design.md)  
+**Backlog item:** `BI-05D7A0DC`
+
+**Workroom:** `WC-1D24739C`
+
+**Design:** [`2026-09-04-async-delivery-task-hub-design.md`](../specs/2026-09-04-async-delivery-task-hub-design.md)
 **Dependency:** `BI-801313EB` durable async lifecycle; integrate through one adapter seam and do not edit its persistence or queue registry.
 
 ## Outcome and delivery boundary
