@@ -17,7 +17,7 @@ DPF already persists `AsyncInferenceOp`, supports background interaction mode, a
 - **OBJ-ASYNC-00:** **Typed start boundary:** an accepted provider operation crosses the adapter, inference, and fallback layers as an explicit typed handle so the platform can persist its own tracking identity without inspecting provider-specific raw payloads.
 - **OBJ-ASYNC-01:** **Stable identity:** one logical request has one server-owned operation identity; retried starts return the existing operation rather than creating a sibling.
 - **OBJ-ASYNC-02:** **Durable resume:** a process restart or worker handoff resumes from the last persisted checkpoint without replaying completed side effects.
-- **OBJ-ASYNC-03:** **Truthful lifecycle:** pending, running, completed, failed, cancelled, and expired states are persisted with bounded timestamps and auditable transitions.
+- **OBJ-ASYNC-03:** **Truthful lifecycle:** the closed `AsyncInferenceOperationStatus` set (`pending`, `start_indeterminate`, `running`, `completed`, `failed`, `cancelled`, `expired`) is persisted with bounded timestamps and auditable transitions.
 - **OBJ-ASYNC-04:** **Observable progress:** progress and terminal events are emitted from durable transitions; consumers can reconcile with a cursor-bounded read instead of tight polling.
 - **OBJ-ASYNC-05:** **Provenance:** final results retain provider/model/operation identity, request digest, and completion/error metadata.
 
@@ -28,8 +28,8 @@ The implementation is accepted only when:
 | AC-ASYNC-00 | OBJ-ASYNC-00 | A successful async adapter start exposes one typed provider-owned operation handle through `AdapterResult`, `InferenceResult`, and `FallbackResult`; routed inference persists the corresponding platform `AsyncInferenceOp`. Sync results expose no async handle, raw provider metadata is never treated as operation authority, and a provider without an explicit long-running-operation response contract is rejected before dispatch. | Focused propagation/regression tests + typecheck + protected CI |
 | AC-ASYNC-01 | OBJ-ASYNC-01 | Repeating an idempotent start with the same request digest returns the same operation ID and performs no duplicate provider start. | Vitest integration test + protected CI |
 | AC-ASYNC-02 | OBJ-ASYNC-02 | Restart/resume claims one pending operation and continues from its checkpoint under a compare-and-swap lease. | Failure-injection test + protected CI |
-| AC-ASYNC-03 | OBJ-ASYNC-03 | Provider transient failure retries with bounded backoff; permanent failure, cancellation, and expiry are terminal and idempotent. | Lifecycle matrix tests |
-| AC-ASYNC-04 | OBJ-ASYNC-04 | Event delivery is at-least-once and deduplicated by operation transition; reconciliation is cursor-bounded. | Event-bus/read-model tests |
+| AC-ASYNC-03 | OBJ-ASYNC-03 | Provider transient failure retries with bounded backoff; an ambiguous non-idempotent provider start enters `start_indeterminate`; permanent failure, cancellation, and expiry are terminal and idempotent. Only the canonical status enum is accepted at storage, transition, event, and read boundaries; unknown values fail closed. | Lifecycle and status-parser matrix tests |
+| AC-ASYNC-04 | OBJ-ASYNC-04 | Event delivery is at-least-once and deduplicated by operation transition; reconciliation is cursor-bounded. Every outbox/webhook payload carries `status: AsyncInferenceOperationStatus`, never a free string. | Event-schema/event-bus/read-model tests |
 | AC-ASYNC-05 | OBJ-ASYNC-05 | Sync interaction mode remains behaviorally unchanged and async results are retrievable by operation ID with exact provenance. | Regression tests + typecheck/build |
 
 ## Scope and non-goals
@@ -43,7 +43,7 @@ Extend the existing `AsyncInferenceOp`, `TaskRun`, Inngest, and agent event bus.
 3. Create-or-replay `AsyncInferenceOp` by `(authority scope, request key)`. Return the existing operation only when the stored digest matches; reject payload drift, and never globally deduplicate equal content submitted by different callers.
 4. Persist checkpoint sequence and lease ownership on the operation; workers claim with CAS and heartbeat progress.
 5. Model provider calls as idempotent steps. A retry may re-read a provider operation but cannot create a second provider operation for the same logical request.
-6. Persist a monotonic transition/outbox record in the same transaction as each durable state change, then emit it. Consumers use `(operationId, sequence)` plus a cursor-bounded reconciliation query; notification transport is advisory.
+6. Define one shared closed `AsyncInferenceOperationStatus` enum: `pending | start_indeterminate | running | completed | failed | cancelled | expired`. `pending`, `start_indeterminate`, and `running` are non-terminal; the remaining values are terminal. Persist a monotonic transition/outbox record in the same transaction as each durable state change, then emit it with the canonical enum value. Storage adapters, webhook/event parsers, and read models reject unknown values rather than widening them to `string`. Consumers use `(operationId, sequence)` plus a cursor-bounded reconciliation query; notification transport is advisory.
 7. Enforce `expiresAt` and cancellation before each provider call and transition exactly once to a terminal state.
 
 ## Research & Benchmarking

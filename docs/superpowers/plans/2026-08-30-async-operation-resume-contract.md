@@ -12,7 +12,7 @@ For agentic workers: execute this plan one independently reviewable backlog item
 ## Deliverables
 
 0. **Typed provider-start boundary (`BI-2B619BC9`)** — replace the broken raw-payload lookup with an explicit `AsyncOperationStartResult` propagated through adapter, inference, and fallback results. Persist the existing platform tracking row from that typed provider handle; keep sync result shapes unchanged and never expose raw provider data as authority.
-1. **Identity and checkpoint contract** — extend `AsyncInferenceOp` with a caller/TaskRun-scoped request key, canonical request digest, checkpoint sequence, transition outbox, and lease fields; add additive migration and CAS helpers. Verify duplicate starts, cross-caller isolation, digest conflicts, and concurrent claims.
+1. **Identity and checkpoint contract** — extend `AsyncInferenceOp` with a caller/TaskRun-scoped request key, canonical request digest, checkpoint sequence, transition outbox, and lease fields; add additive migration and CAS helpers. Define `AsyncInferenceOperationStatus` as the closed `pending | start_indeterminate | running | completed | failed | cancelled | expired` enum and use it at persistence, transition-event, webhook, and read boundaries. Verify duplicate starts, cross-caller isolation, digest conflicts, concurrent claims, legal transitions, and rejection of unknown status values.
 2. **Durable worker/resume path** — add an Inngest-triggered worker that claims pending/running operations, resumes from the checkpoint, applies bounded retry/expiry/cancel rules, and emits transition events. Verify restart and provider-failure matrices.
 3. **Read/reconcile API** — expose cursor-bounded operation listing and idempotent result retrieval for a task/workroom. Verify event loss/reconnect reconciliation and provenance.
 
@@ -30,8 +30,9 @@ Deliverable 0 is a safe enabling repair owned by BI-2B619BC9 and may ship first,
 ### Phase 1 — schema and contract (RED → GREEN)
 
 - Resolve impact paths and existing tests before editing.
-- Add failing tests for same-scope duplicate start, different-scope equal payloads, conflicting digest, ambiguous provider-start timeout, CAS lease loss, and checkpoint monotonicity.
-- Implement additive fields/helpers; run affected Vitest and typecheck.
+- Add failing tests for same-scope duplicate start, different-scope equal payloads, conflicting digest, ambiguous provider-start timeout, CAS lease loss, checkpoint monotonicity, and unknown lifecycle status at every external boundary.
+- Implement additive fields/helpers plus the shared `AsyncInferenceOperationStatus` enum and strict parser. Backfill/validate existing rows before enforcing the database constraint; event and webhook payload types must import the same contract rather than redeclare a free `string`.
+- Verify that an ambiguous provider start enters `start_indeterminate`, that only the worker/reconciler can leave it, and that every terminal transition is idempotent; run affected Vitest and typecheck.
 
 ### Phase 2 — worker and lifecycle (RED → GREEN)
 
@@ -55,7 +56,7 @@ Deliverable 0 is a safe enabling repair owned by BI-2B619BC9 and may ship first,
 
 - Provider APIs may not expose idempotent operation creation. Persist the provider operation ID before any retry and fail closed when it is absent.
 - A stale worker lease could strand work. Use bounded lease expiry plus event-triggered reconciliation; never allow two active owners.
-- Event delivery can duplicate or disappear. Persist transition sequence, dedupe by `(operationId, sequence)`, and reconcile by cursor.
+- Event delivery can duplicate or disappear. Persist transition sequence, dedupe by `(operationId, sequence)`, carry only the shared lifecycle enum in event/webhook status fields, reject unknown values, and reconcile by cursor.
 - Roll back by disabling the worker trigger; retain the additive schema and serve existing terminal results.
 
 ## Backlog coverage
