@@ -2,9 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   observeRescueSource,
+  loadRescueQueue,
   rescueDayWindow,
   resolveRescueOrganizationScope,
   type RescueScopeDb,
+  type RescueQueueDb,
 } from "./cockpit-loader";
 
 function scopeDb(input: {
@@ -116,5 +118,22 @@ describe("Pet Rescue organization scope", () => {
       asOf: "2026-09-04T12:00:00.000Z",
     });
     expect(result.reason).not.toContain("secret-host");
+  });
+
+  it("bounds and organization-scopes missed-care drill-in rows", async () => {
+    const findMany = vi.fn(async () => []);
+    const db = { workEngagement: { findMany } } as unknown as RescueQueueDb;
+    const now = new Date("2026-09-04T12:00:00.000Z");
+
+    await loadRescueQueue("org-active", "care", "missed", now, db);
+
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({
+      take: 25,
+      where: expect.objectContaining({
+        organizationId: "org-active",
+        subjectKindSlug: "animal-profile",
+        dueAt: { lt: now },
+      }),
+    }));
   });
 });

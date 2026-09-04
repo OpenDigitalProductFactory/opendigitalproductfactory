@@ -103,6 +103,11 @@ const ACTIVE_APPLICATION_STATUSES = [
   "waitlisted",
 ] as const;
 
+export type RescueQueueDb = Pick<
+  typeof prisma,
+  "animalProfile" | "animalCustodyEpisode" | "workEngagement" | "animalAdoptionApplication" | "financialFund"
+>;
+
 function zonedParts(date: Date, timeZone: string) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone,
@@ -158,14 +163,15 @@ export function rescueDayWindow(now: Date, timeZone: string): { start: Date; end
   };
 }
 
-async function loadRescueQueue(
+export async function loadRescueQueue(
   organizationId: string,
   area: Exclude<RescueFilterArea, "overview">,
   filter: RescueFilter,
   now: Date,
+  db: RescueQueueDb = prisma,
 ): Promise<RescueQueueData> {
   if (area === "animals") {
-    const rows = await prisma.animalProfile.findMany({
+    const rows = await db.animalProfile.findMany({
       where: { organizationId, lifecycleStatus: { in: ["in_care", "placement_ready"] } },
       orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
       take: QUEUE_LIMIT,
@@ -188,7 +194,7 @@ async function loadRescueQueue(
   }
 
   if (area === "intake") {
-    const rows = await prisma.animalCustodyEpisode.findMany({
+    const rows = await db.animalCustodyEpisode.findMany({
       where: filter === "legal-hold"
         ? { organizationId, closedAt: null, legalHoldActive: true }
         : { organizationId, closedAt: null, currentStage: "intake" },
@@ -220,7 +226,7 @@ async function loadRescueQueue(
   }
 
   if (area === "care") {
-    const rows = await prisma.workEngagement.findMany({
+    const rows = await db.workEngagement.findMany({
       where: {
         organizationId,
         subjectKindSlug: "animal-profile",
@@ -248,7 +254,7 @@ async function loadRescueQueue(
   }
 
   if (area === "adoptions" && filter === "no-interest") {
-    const rows = await prisma.animalProfile.findMany({
+    const rows = await db.animalProfile.findMany({
       where: {
         organizationId,
         lifecycleStatus: "placement_ready",
@@ -275,7 +281,7 @@ async function loadRescueQueue(
   }
 
   if (area === "adoptions") {
-    const rows = await prisma.animalAdoptionApplication.findMany({
+    const rows = await db.animalAdoptionApplication.findMany({
       where: { organizationId, status: { in: [...ACTIVE_APPLICATION_STATUSES] } },
       orderBy: [{ submittedAt: "asc" }, { id: "asc" }],
       take: QUEUE_LIMIT,
@@ -303,7 +309,7 @@ async function loadRescueQueue(
     };
   }
 
-  const rows = await prisma.financialFund.findMany({
+  const rows = await db.financialFund.findMany({
     where: {
       organizationId,
       isActive: true,

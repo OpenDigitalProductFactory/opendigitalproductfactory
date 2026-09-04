@@ -81,7 +81,7 @@ function MetricGrid({ data }: { data: RescueCockpitData }) {
       <StatCard label="Housing free" value={capacity?.free ?? "—"} hint={<SourceStatus source={data.sources.capacity} timeZone={data.presentation.timeZone} />} href="/workspace/ward" intent={capacity && capacity.free === 0 ? "warning" : undefined} />
       <StatCard label="Care due today" value={care?.dueToday ?? "—"} hint={<SourceStatus source={data.sources.care} timeZone={data.presentation.timeZone} />} href="/workspace/rescue/care" intent={care && care.missed > 0 ? "danger" : undefined} />
       <StatCard label="Active applications" value={adoptions?.activeApplications ?? "—"} hint={<SourceStatus source={data.sources.adoptions} timeZone={data.presentation.timeZone} />} href="/workspace/rescue/adoptions" />
-      <StatCard label="Posted animal cost" value={stewardship ? formatMoney(stewardship.postedAnimalCost, data.presentation.currency, data.presentation.locale) : "—"} hint={<SourceStatus source={data.sources.stewardship} timeZone={data.presentation.timeZone} />} href="/workspace/rescue/stewardship" />
+      <StatCard label="Posted animal cost" value={stewardship ? formatMoney(stewardship.postedAnimalCost, data.presentation.currency, data.presentation.locale, { maximumFractionDigits: 2 }) : "—"} hint={<SourceStatus source={data.sources.stewardship} timeZone={data.presentation.timeZone} />} href="/workspace/rescue/stewardship" />
     </div>
   );
 }
@@ -112,7 +112,7 @@ function AreaBody({ area, data }: { area: RescueArea; data: RescueCockpitData })
     ],
     stewardship: [
       { label: "Restricted funds", value: sources.stewardship.data?.restrictedFunds ?? "—", hint: "Active restricted fund records" },
-      { label: "Posted animal cost", value: sources.stewardship.data ? formatMoney(sources.stewardship.data.postedAnimalCost, data.presentation.currency, data.presentation.locale) : "—", hint: "Net posted animal-subject debit in base currency" },
+      { label: "Posted animal cost", value: sources.stewardship.data ? formatMoney(sources.stewardship.data.postedAnimalCost, data.presentation.currency, data.presentation.locale, { maximumFractionDigits: 2 }) : "—", hint: "Net posted animal-subject debit in base currency" },
     ],
   };
   const source = area === "animals" || area === "intake" ? sources.animals : sources[area];
