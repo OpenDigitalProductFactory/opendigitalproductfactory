@@ -33,14 +33,18 @@ This plan maps to `BI-D2A51B36`. Resource maintenance, placement transaction,
 foster support, and the operator controls are one usable workflow: shipping any
 one without the others leaves the Ward read-only or its capacity incomplete.
 
-| Deliverable | Acceptance | Primary verification |
-| --- | --- | --- |
-| Profile-governed kennel and foster kinds | `AC-HOUSING-001`, `006` | archetype and profile tests |
-| Shared canonical Resource commands | `AC-HOUSING-001`, `004`, `008` | repository and hospitality compatibility tests |
-| Atomic move/release command | `AC-HOUSING-002`–`005` | transaction service and route tests |
-| Combined ward read model | `AC-HOUSING-003`, `006`, `008` | ward projection/store tests |
-| Ward operator controls | `AC-HOUSING-007`, `008` | component, route, and governed-browser evidence |
-| Release evidence | `AC-HOUSING-009` | semantic review, exact-tree CI, PR health, protected merge |
+Every row below is non-independently shippable and remains bound to
+`BI-D2A51B36`. The keys and references are the machine-readable four-way
+traceability contract used by the plan-coverage writer.
+
+| Key | Deliverable | Requirements | Contracts | Flow | Acceptance verification | Depends on |
+| --- | --- | --- | --- | --- | --- | --- |
+| `housing-profile-kinds` | Profile-governed kennel and foster kinds | `OBJ-HOUSING-001`, `OBJ-HOUSING-003`, `OBJ-HOUSING-005` | `Resource`, `activation-profile.resourceKinds` | `housing-resource-configuration` | `AC-HOUSING-001`, `AC-HOUSING-006` | — |
+| `canonical-resource-commands` | Shared canonical Resource commands | `OBJ-HOUSING-001`, `OBJ-HOUSING-005` | `HousingResourceCommand`, `Resource` | `housing-resource-maintenance` | `AC-HOUSING-001`, `AC-HOUSING-004`, `AC-HOUSING-008` | `housing-profile-kinds` |
+| `atomic-occupancy` | Atomic place, move, and release command | `OBJ-HOUSING-002`, `OBJ-HOUSING-003`, `OBJ-HOUSING-004` | `PlacementCommand`, `ReleaseCommand`, `ResourceCapacityAllocation` | `animal-place-move-release` | `AC-HOUSING-002`, `AC-HOUSING-003`, `AC-HOUSING-004`, `AC-HOUSING-005`, `AC-HOUSING-006` | `canonical-resource-commands` |
+| `combined-ward-read-model` | Combined kennel and foster-home Ward read model | `OBJ-HOUSING-003`, `OBJ-HOUSING-005`, `OBJ-HOUSING-006` | `WardBoard`, `ResourceCapacityAllocation` | `ward-capacity-projection` | `AC-HOUSING-003`, `AC-HOUSING-006`, `AC-HOUSING-008` | `atomic-occupancy` |
+| `ward-operator-controls` | Accessible housing operations in the Ward workspace | `OBJ-HOUSING-001`, `OBJ-HOUSING-002`, `OBJ-HOUSING-003`, `OBJ-HOUSING-006` | `/workspace/ward`, `WardOperations` | `ward-housing-operations` | `AC-HOUSING-007`, `AC-HOUSING-008` | `combined-ward-read-model` |
+| `protected-delivery` | Protected verification and delivery of the complete slice | `OBJ-HOUSING-001`, `OBJ-HOUSING-002`, `OBJ-HOUSING-003`, `OBJ-HOUSING-004`, `OBJ-HOUSING-005`, `OBJ-HOUSING-006` | `DCO`, `protected-merge`, `EP-5102F494.single-PR-per-item` | `protected-delivery` | `AC-HOUSING-001`, `AC-HOUSING-002`, `AC-HOUSING-003`, `AC-HOUSING-004`, `AC-HOUSING-005`, `AC-HOUSING-006`, `AC-HOUSING-007`, `AC-HOUSING-008`, `AC-HOUSING-009` | all preceding rows |
 
 ## Phase 1 — design and readiness
 
