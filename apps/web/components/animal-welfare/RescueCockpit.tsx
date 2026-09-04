@@ -4,7 +4,14 @@ import { CockpitShell } from "@/components/page-shells/PageShell";
 import { EmptyState, Notice, StatCard, StatusBadge } from "@/components/ui/report-kit";
 import { Surface } from "@/components/ui/Surface";
 import type { loadRescueCockpitData } from "@/lib/animal-welfare/cockpit-loader";
-import type { RescueSources, SourceState } from "@/lib/animal-welfare/cockpit";
+import { formatInstant } from "@/lib/datetime";
+import { formatMoney } from "@/lib/org-locale/org-locale";
+import type {
+  RescueFilter,
+  RescueQueueData,
+  RescueSources,
+  SourceState,
+} from "@/lib/animal-welfare/cockpit";
 
 export type RescueCockpitData = Awaited<ReturnType<typeof loadRescueCockpitData>>;
 export type RescueArea = "overview" | "animals" | "intake" | "care" | "adoptions" | "stewardship";
@@ -25,13 +32,18 @@ function sourceLabel(source: SourceState<unknown>) {
   return "Current";
 }
 
-function SourceStatus({ source }: { source: SourceState<unknown> }) {
+function SourceStatus({ source, timeZone }: { source: SourceState<unknown>; timeZone: string }) {
   return (
-    <StatusBadge
-      intent={source.state === "unavailable" ? "warning" : source.state === "empty" ? "neutral" : "success"}
-      label={sourceLabel(source)}
-      uppercase={false}
-    />
+    <span className="flex flex-wrap items-center gap-2">
+      <StatusBadge
+        intent={source.state === "unavailable" ? "warning" : source.state === "empty" ? "neutral" : "success"}
+        label={sourceLabel(source)}
+        uppercase={false}
+      />
+      <time dateTime={source.asOf} className="text-[10px] text-[var(--dpf-muted)]">
+        As of {formatInstant(source.asOf, { timeZone })}
+      </time>
+    </span>
   );
 }
 
@@ -65,11 +77,11 @@ function MetricGrid({ data }: { data: RescueCockpitData }) {
   const stewardship = data.sources.stewardship.data;
   return (
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-      <StatCard label="Animals in care" value={animals?.inCare ?? "—"} hint={<SourceStatus source={data.sources.animals} />} href="/workspace/rescue/animals" />
-      <StatCard label="Housing free" value={capacity?.free ?? "—"} hint={<SourceStatus source={data.sources.capacity} />} href="/workspace/ward" intent={capacity && capacity.free === 0 ? "warning" : undefined} />
-      <StatCard label="Care due today" value={care?.dueToday ?? "—"} hint={<SourceStatus source={data.sources.care} />} href="/workspace/rescue/care" intent={care && care.missed > 0 ? "danger" : undefined} />
-      <StatCard label="Active applications" value={adoptions?.activeApplications ?? "—"} hint={<SourceStatus source={data.sources.adoptions} />} href="/workspace/rescue/adoptions" />
-      <StatCard label="Posted animal cost" value={stewardship ? stewardship.postedAnimalCost.toLocaleString(undefined, { style: "currency", currency: "USD" }) : "—"} hint={<SourceStatus source={data.sources.stewardship} />} href="/workspace/rescue/stewardship" />
+      <StatCard label="Animals in care" value={animals?.inCare ?? "—"} hint={<SourceStatus source={data.sources.animals} timeZone={data.presentation.timeZone} />} href="/workspace/rescue/animals" />
+      <StatCard label="Housing free" value={capacity?.free ?? "—"} hint={<SourceStatus source={data.sources.capacity} timeZone={data.presentation.timeZone} />} href="/workspace/ward" intent={capacity && capacity.free === 0 ? "warning" : undefined} />
+      <StatCard label="Care due today" value={care?.dueToday ?? "—"} hint={<SourceStatus source={data.sources.care} timeZone={data.presentation.timeZone} />} href="/workspace/rescue/care" intent={care && care.missed > 0 ? "danger" : undefined} />
+      <StatCard label="Active applications" value={adoptions?.activeApplications ?? "—"} hint={<SourceStatus source={data.sources.adoptions} timeZone={data.presentation.timeZone} />} href="/workspace/rescue/adoptions" />
+      <StatCard label="Posted animal cost" value={stewardship ? formatMoney(stewardship.postedAnimalCost, data.presentation.currency, data.presentation.locale) : "—"} hint={<SourceStatus source={data.sources.stewardship} timeZone={data.presentation.timeZone} />} href="/workspace/rescue/stewardship" />
     </div>
   );
 }
@@ -100,7 +112,7 @@ function AreaBody({ area, data }: { area: RescueArea; data: RescueCockpitData })
     ],
     stewardship: [
       { label: "Restricted funds", value: sources.stewardship.data?.restrictedFunds ?? "—", hint: "Active restricted fund records" },
-      { label: "Posted animal cost", value: sources.stewardship.data ? sources.stewardship.data.postedAnimalCost.toLocaleString(undefined, { style: "currency", currency: "USD" }) : "—", hint: "Net posted animal-subject debit" },
+      { label: "Posted animal cost", value: sources.stewardship.data ? formatMoney(sources.stewardship.data.postedAnimalCost, data.presentation.currency, data.presentation.locale) : "—", hint: "Net posted animal-subject debit in base currency" },
     ],
   };
   const source = area === "animals" || area === "intake" ? sources.animals : sources[area];
@@ -117,7 +129,115 @@ function AreaBody({ area, data }: { area: RescueArea; data: RescueCockpitData })
   );
 }
 
-export function RescueCockpit({ data, area = "overview" }: { data: RescueCockpitData; area?: RescueArea }) {
+const FILTERS: Partial<Record<RescueArea, Array<{ value: RescueFilter; label: string; href: string }>>> = {
+  intake: [
+    { value: "all", label: "Intake review", href: "/workspace/rescue/intake" },
+    { value: "legal-hold", label: "Legal holds", href: "/workspace/rescue/intake?filter=legal-hold" },
+  ],
+  care: [
+    { value: "all", label: "Open care", href: "/workspace/rescue/care" },
+    { value: "missed", label: "Missed", href: "/workspace/rescue/care?filter=missed" },
+  ],
+  adoptions: [
+    { value: "all", label: "Applications", href: "/workspace/rescue/adoptions" },
+    { value: "no-interest", label: "No interest", href: "/workspace/rescue/adoptions?filter=no-interest" },
+  ],
+};
+
+function FilterNavigation({ area, filter }: { area: RescueArea; filter: RescueFilter }) {
+  const filters = FILTERS[area];
+  if (!filters) return null;
+  return (
+    <nav aria-label={`${area} filters`} className="mb-4 flex flex-wrap gap-2">
+      {filters.map((item) => (
+        <Link
+          key={item.value}
+          href={item.href}
+          aria-current={filter === item.value ? "page" : undefined}
+          className={[
+            "dpf-tap-target rounded-full border px-3 py-1 text-sm",
+            filter === item.value
+              ? "border-[var(--dpf-accent)] bg-[var(--dpf-accent-soft)] text-[var(--dpf-text)]"
+              : "border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]",
+          ].join(" ")}
+        >
+          {item.label}
+        </Link>
+      ))}
+    </nav>
+  );
+}
+
+function readableStatus(value: string) {
+  return value.replaceAll("_", " ").replaceAll("-", " ");
+}
+
+function QueuePanel({
+  queue,
+  timeZone,
+}: {
+  queue: SourceState<RescueQueueData> | null;
+  timeZone: string;
+}) {
+  if (!queue) return null;
+  if (queue.state === "unavailable") {
+    return (
+      <Notice variant="warn" title="Record list unavailable">
+        {queue.reason}
+      </Notice>
+    );
+  }
+  return (
+    <Surface as="section" className="mt-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold text-[var(--dpf-text)]">{queue.data.title}</h2>
+          <p className="mt-1 text-sm text-[var(--dpf-muted)]">{queue.data.description}</p>
+        </div>
+        {queue.data.action ? (
+          <Link className="dpf-tap-target text-sm font-medium text-[var(--dpf-accent)]" href={queue.data.action.href}>
+            {queue.data.action.label}
+          </Link>
+        ) : null}
+      </div>
+      {queue.data.rows.length === 0 ? (
+        <p className="mt-4 rounded-lg border border-dashed border-[var(--dpf-border)] p-4 text-sm text-[var(--dpf-muted)]">
+          No records match this view.
+        </p>
+      ) : (
+        <ul className="mt-4 divide-y divide-[var(--dpf-border)] border-y border-[var(--dpf-border)]">
+          {queue.data.rows.map((row) => (
+            <li key={row.id} className="grid gap-1 py-3 text-sm sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-4">
+              <div className="min-w-0">
+                <p className="truncate font-medium text-[var(--dpf-text)]">{row.primary}</p>
+                <p className="truncate text-[var(--dpf-muted)]">
+                  <span className="font-mono text-xs">{row.reference}</span>
+                  {row.detail ? ` · ${row.detail}` : ""}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--dpf-muted)] sm:justify-end">
+                <span className="capitalize">{readableStatus(row.status)}</span>
+                {row.occurredAt ? (
+                  <time dateTime={row.occurredAt}>{formatInstant(row.occurredAt, { timeZone })}</time>
+                ) : null}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Surface>
+  );
+}
+
+export function RescueCockpit({
+  data,
+  area = "overview",
+  filter = "all",
+}: {
+  data: RescueCockpitData;
+  area?: RescueArea;
+  filter?: RescueFilter;
+}) {
   const unavailable = Object.entries(data.sources).filter(([, source]) => source.state === "unavailable");
   const title = area === "overview" ? "Rescue operations" : NAV.find((item) => item.key === area)?.label ?? "Rescue operations";
   return (
@@ -134,7 +254,9 @@ export function RescueCockpit({ data, area = "overview" }: { data: RescueCockpit
       technicalDetailsLabel="Data source status"
     >
       <RescueNavigation current={area} />
+      <FilterNavigation area={area} filter={filter} />
       <AreaBody area={area} data={data} />
+      <QueuePanel queue={data.queue} timeZone={data.presentation.timeZone} />
       {area === "overview" ? (
         <Surface as="section" className="mt-5">
           <h2 className="text-sm font-semibold text-[var(--dpf-text)]">Three connected value streams</h2>

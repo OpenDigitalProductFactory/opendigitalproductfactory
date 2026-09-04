@@ -2,16 +2,24 @@ import { redirect } from "next/navigation";
 
 import { RescueCockpit, type RescueArea } from "./RescueCockpit";
 import { auth } from "@/lib/auth";
-import { loadRescueCockpitData, resolveRescueOrganizationId } from "@/lib/animal-welfare/cockpit-loader";
+import { loadRescueCockpitData, resolveRescueOrganizationScope } from "@/lib/animal-welfare/cockpit-loader";
+import { parseRescueFilter } from "@/lib/animal-welfare/cockpit";
 import { EmptyState } from "@/components/ui/report-kit";
 import { can } from "@/lib/govern/permissions";
 
-export async function RescueRoutePage({ area }: { area: RescueArea }) {
+export async function RescueRoutePage({
+  area,
+  searchParams,
+}: {
+  area: RescueArea;
+  searchParams?: Promise<{ filter?: string | string[] }>;
+}) {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!can(session.user, "view_animal_welfare")) redirect("/workspace");
-  const organizationId = await resolveRescueOrganizationId();
-  if (!organizationId) {
+  const filter = parseRescueFilter(area, (await searchParams)?.filter);
+  const scope = await resolveRescueOrganizationScope(session.user.id);
+  if (!scope) {
     return (
       <EmptyState
         title="Pet Rescue is not configured"
@@ -22,7 +30,11 @@ export async function RescueRoutePage({ area }: { area: RescueArea }) {
   return (
     <RescueCockpit
       area={area}
-      data={await loadRescueCockpitData(organizationId, {
+      filter={filter}
+      data={await loadRescueCockpitData(scope.organizationId, {
+        area,
+        filter,
+        timeZone: scope.timeZone,
         canViewFinance: can(session.user, "view_finance"),
       })}
     />

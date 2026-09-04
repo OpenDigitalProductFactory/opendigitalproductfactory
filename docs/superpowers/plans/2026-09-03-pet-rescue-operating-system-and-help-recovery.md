@@ -11,9 +11,9 @@ status: active
 
 ## Outcome
 
-Second Chance Animal Rescue opens DPF to an animal-welfare operating cockpit and can move one
-durable animal record from intake through housing, care and placement without losing prior
-custody, care, capacity, finance or adoption history. Help always resolves to a valid guide or a
+Second Chance Animal Rescue opens DPF to an animal-welfare operating cockpit backed by one
+durable animal identity and shared lifecycle contracts spanning intake, housing, care and placement
+without losing prior custody, care, capacity, finance or adoption history. Help always resolves to a valid guide or a
 truthful recovery page. Existing workroom-definition discoverability, Pet Rescue value-stream
 alignment and public-site wording remain regression-tested baseline capabilities; this plan does
 not fork them into a second builder surface.
@@ -24,6 +24,10 @@ Every phase starts with a failing behavior test and ends at an operator-visible 
 seam. Schema changes are additive, organization-scoped and migration-tested from existing
 `AdoptableAnimal` data. Each slice receives its own signed commit for review and clean rollback,
 but all commits publish through one PR. No implementation claims completion from a mocked surface.
+
+This publication boundary delivers the durable records, truthful metrics and bounded read queues.
+Transactional operator actions remain independently tracked on the child backlog items below; the
+cockpit does not present those actions as executable before their command paths are delivered.
 
 Approximately twenty percent of the implementation budget is reserved for reusable substrate:
 the subject/location extension on `WorkEngagement`, a shared subject reference contract, bounded

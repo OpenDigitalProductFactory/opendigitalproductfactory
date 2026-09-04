@@ -641,7 +641,7 @@ enum AnimalPlacementStatus {
 }
 
 enum AnimalCustodyEventKind {
-  stage_transition @map("stage-transition")
+  stage_transition    @map("stage-transition")
   legal_hold_released @map("legal-hold-released")
   correction
 }
@@ -717,19 +717,19 @@ model AnimalCustodyEpisode {
 
 /// Append-only custody timeline; sequence is monotonic inside an episode.
 model AnimalCustodyEvent {
-  id               String              @id @default(cuid())
-  eventRef         String              @unique
-  organizationId   String
-  animalProfileId  String
-  custodyEpisodeId String
-  sequence         Int
-  fromStage        AnimalCustodyStage?
-  toStage          AnimalCustodyStage
-  kind             AnimalCustodyEventKind @default(stage_transition)
-  reason           String?
+  id                String                 @id @default(cuid())
+  eventRef          String                 @unique
+  organizationId    String
+  animalProfileId   String
+  custodyEpisodeId  String
+  sequence          Int
+  fromStage         AnimalCustodyStage?
+  toStage           AnimalCustodyStage
+  kind              AnimalCustodyEventKind @default(stage_transition)
+  reason            String?
   actorPrincipalRef String
-  occurredAt       DateTime            @default(now())
-  createdAt        DateTime            @default(now())
+  occurredAt        DateTime               @default(now())
+  createdAt         DateTime               @default(now())
 
   organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   animal       AnimalProfile        @relation(fields: [animalProfileId, organizationId], references: [id, organizationId], onDelete: Restrict)
@@ -741,21 +741,21 @@ model AnimalCustodyEvent {
 }
 
 model AnimalAdoptionApplication {
-  id                  String                          @id @default(cuid())
-  applicationRef      String                          @unique
-  organizationId      String
-  animalProfileId     String
-  inquiryRef          String?
-  applicantContactRef String?
-  applicantName       String?
-  status              AnimalAdoptionApplicationStatus @default(submitted)
+  id                   String                          @id @default(cuid())
+  applicationRef       String                          @unique
+  organizationId       String
+  animalProfileId      String
+  inquiryRef           String?
+  applicantContactRef  String?
+  applicantName        String?
+  status               AnimalAdoptionApplicationStatus @default(submitted)
   reviewerPrincipalRef String?
-  decisionReason      String?
-  submittedAt         DateTime                        @default(now())
-  decidedAt           DateTime?
-  version             Int                             @default(1)
-  createdAt           DateTime                        @default(now())
-  updatedAt           DateTime                        @updatedAt
+  decisionReason       String?
+  submittedAt          DateTime                        @default(now())
+  decidedAt            DateTime?
+  version              Int                             @default(1)
+  createdAt            DateTime                        @default(now())
+  updatedAt            DateTime                        @updatedAt
 
   organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   animal       AnimalProfile    @relation(fields: [animalProfileId, organizationId], references: [id, organizationId], onDelete: Restrict)

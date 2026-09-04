@@ -23,6 +23,40 @@ export type RescueSources = {
   stewardship: SourceState<{ restrictedFunds: number; postedAnimalCost: number }>;
 };
 
+export type RescueFilterArea = "overview" | "animals" | "intake" | "care" | "adoptions" | "stewardship";
+export type RescueFilter = "all" | "missed" | "legal-hold" | "no-interest";
+
+export type RescueQueueRow = {
+  id: string;
+  reference: string;
+  primary: string;
+  detail: string | null;
+  status: string;
+  occurredAt: string | null;
+};
+
+export type RescueQueueData = {
+  title: string;
+  description: string;
+  rows: RescueQueueRow[];
+  limit: number;
+  action: { label: string; href: string } | null;
+};
+
+const AREA_FILTERS: Record<RescueFilterArea, readonly RescueFilter[]> = {
+  overview: ["all"],
+  animals: ["all"],
+  intake: ["all", "legal-hold"],
+  care: ["all", "missed"],
+  adoptions: ["all", "no-interest"],
+  stewardship: ["all"],
+};
+
+export function parseRescueFilter(area: RescueFilterArea, value: string | string[] | undefined): RescueFilter {
+  if (typeof value !== "string") return "all";
+  return AREA_FILTERS[area].includes(value as RescueFilter) ? value as RescueFilter : "all";
+}
+
 export function buildRescueCockpit(sources: RescueSources) {
   const attention: Array<{ label: string; count: number; href: string; intent: "critical" | "warning" | "info" }> = [];
   if (sources.care.state !== "unavailable" && sources.care.data.missed > 0) {

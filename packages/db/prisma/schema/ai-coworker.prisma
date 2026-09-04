@@ -162,14 +162,14 @@ model RecurrenceSchedule {
 // A coworker's long-running work unit. A parent may carry a RecurrenceSchedule;
 // materialized occurrences are child rows (self-relation) keyed by occurrenceAt.
 model WorkEngagement {
-  id                 String  @id @default(cuid())
-  organizationId     String
-  status             String  @default("planned") // planned|in-progress|completed|cancelled|failed
-  title              String
-  requestedOutcome   String? @db.Text
-  createdByAgentId   String?
-  subjectKindSlug    String?
-  subjectRef         String?
+  id                  String  @id @default(cuid())
+  organizationId      String
+  status              String  @default("planned") // planned|in-progress|completed|cancelled|failed
+  title               String
+  requestedOutcome    String? @db.Text
+  createdByAgentId    String?
+  subjectKindSlug     String?
+  subjectRef          String?
   locationResourceRef String?
 
   recurrenceScheduleId   String?

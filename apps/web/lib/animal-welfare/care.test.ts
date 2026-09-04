@@ -22,8 +22,8 @@ describe("animal care facts", () => {
       recordedAt: new Date("2026-09-04T09:00:00Z"),
     });
 
-    expect(prior.status).toBe("superseded");
-    expect(prior.supersededById).toBe("care-2");
+    expect(prior.lifecycle).toBe("superseded");
+    expect(prior.successorId).toBe("care-2");
     expect(correction.correctsId).toBe("care-1");
     expect(correction.value).toBe("8");
   });

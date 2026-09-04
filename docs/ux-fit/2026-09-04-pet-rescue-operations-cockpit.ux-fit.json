@@ -4,7 +4,6 @@
   "decisionInteractionId": "IRD-101C4920C6B1",
   "scope": {
     "files": [
-      "apps/web/app/(shell)/workspace/page.tsx",
       "apps/web/app/(shell)/workspace/rescue/page.tsx",
       "apps/web/app/(shell)/workspace/rescue/animals/page.tsx",
       "apps/web/app/(shell)/workspace/rescue/intake/page.tsx",
@@ -12,11 +11,13 @@
       "apps/web/app/(shell)/workspace/rescue/adoptions/page.tsx",
       "apps/web/app/(shell)/workspace/rescue/stewardship/page.tsx",
       "apps/web/components/animal-welfare/RescueCockpit.tsx",
+      "apps/web/components/animal-welfare/RescueRoutePage.tsx",
+      "apps/web/components/animal-welfare/RescueWorkspaceEntry.tsx",
       "apps/web/app/(shell)/docs/[[...slug]]/page.tsx"
     ]
   },
   "evidence": {
-    "kind": "approved-plan",
+    "kind": "propose-n-pick",
     "consideredOptions": [
       "one-journey-cockpit-with-durable-drill-ins",
       "generic-nonprofit-home",

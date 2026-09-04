@@ -8,25 +8,27 @@ export type AnimalCareRecord = {
   subjectKindSlug: "animal-profile";
   subjectRef: string;
   kind: CareRecordKind;
-  status: "active" | "superseded" | "entered-in-error";
+  lifecycle: "active" | "superseded" | "quarantined";
+  lifecycleAt?: Date;
+  lifecycleReason?: string;
   value?: string;
   unit?: string;
   effectiveAt: Date;
   authorPrincipalId: string;
   correctsId?: string;
-  supersededById?: string;
+  successorId?: string;
   correctionReason?: string;
   recordedAt: Date;
 };
 
-export function recordCareFact(input: Omit<AnimalCareRecord, "subjectKindSlug" | "status" | "recordedAt"> & { recordedAt?: Date }): AnimalCareRecord {
+export function recordCareFact(input: Omit<AnimalCareRecord, "subjectKindSlug" | "lifecycle" | "recordedAt"> & { recordedAt?: Date }): AnimalCareRecord {
   if (!input.organizationId || !input.subjectRef || !input.authorPrincipalId) {
     throw new Error("Care facts require organization, subject, and author");
   }
   return {
     ...input,
     subjectKindSlug: "animal-profile",
-    status: "active",
+    lifecycle: "active",
     recordedAt: input.recordedAt ?? new Date(),
   };
 }
@@ -35,21 +37,27 @@ export function correctCareRecord(
   original: AnimalCareRecord,
   input: { id: string; value: string; reason: string; authorPrincipalId: string; recordedAt: Date },
 ) {
-  if (original.status !== "active") throw new Error("Only an active care fact can be corrected");
+  if (original.lifecycle !== "active") throw new Error("Only an active care fact can be corrected");
   if (!input.reason.trim()) throw new Error("A correction reason is required");
   const correction: AnimalCareRecord = {
     ...original,
     id: input.id,
     value: input.value,
-    status: "active",
+    lifecycle: "active",
     correctsId: original.id,
-    supersededById: undefined,
+    successorId: undefined,
     correctionReason: input.reason,
     authorPrincipalId: input.authorPrincipalId,
     recordedAt: input.recordedAt,
   };
   return {
-    prior: { ...original, status: "superseded" as const, supersededById: input.id },
+    prior: {
+      ...original,
+      lifecycle: "superseded" as const,
+      lifecycleAt: input.recordedAt,
+      lifecycleReason: input.reason,
+      successorId: input.id,
+    },
     correction,
   };
 }

@@ -9,7 +9,7 @@
   ],
   "migration": {
     "name": "20260904090000_pet_rescue_operating_system",
-    "backfill": "Creates one AnimalProfile per existing AdoptableAnimal from identity and public-state facts only, then links the listing. It intentionally creates no custody, care, application, placement, work, fund, or journal history."
+    "backfill": "Creates one AnimalProfile per existing AdoptableAnimal from identity and public-state facts only, then links the listing. It intentionally creates no custody, care, application, placement, work, fund, or journal history. The companion 20260904091500 migration immediately aligns new CareRecord rows to the shared RecordLifecycle convention."
   },
   "tests": [
     "packages/db/src/pet-rescue-operating-model.test.ts",
@@ -18,6 +18,7 @@
     "apps/web/lib/animal-welfare/care.test.ts",
     "apps/web/lib/animal-welfare/adoption.test.ts",
     "apps/web/lib/animal-welfare/cockpit.test.ts",
+    "apps/web/lib/animal-welfare/cockpit-loader.test.ts",
     "apps/web/components/animal-welfare/RescueCockpit.test.tsx",
     "apps/web/lib/finance/pet-rescue-finance.test.ts"
   ],
@@ -85,7 +86,10 @@
       "assetId": "data:shared-subject-dimensions",
       "prismaModel": "WorkEngagement, JournalLine, StorefrontDonation",
       "lifecycleDisposition": "Nullable dimensions inherit the lifecycle of their canonical work, journal, and donation records.",
-      "fields": [{ "fieldId": "data:shared-subject-dimensions#subjectRef", "resolution": "governed", "reason": "Adds one shared subject seam instead of rescue-specific work and ledger tables.", "provenance": "BI-5A25EC37 and BI-E861E8B8", "flags": ["subject"], "fieldPolicy": "Organization scope is enforced by the owning record and shared SubjectReference.v1 contract." }]
+      "fields": [
+        { "fieldId": "data:shared-subject-dimensions#subjectRef", "resolution": "governed", "reason": "Adds one shared subject seam instead of rescue-specific work and ledger tables.", "provenance": "BI-5A25EC37 and BI-E861E8B8", "flags": ["subject"], "fieldPolicy": "Organization scope is enforced by the owning record and shared SubjectReference.v1 contract." },
+        { "fieldId": "data:shared-subject-dimensions#fundId", "resolution": "governed", "reason": "Optionally attributes a donation or journal line to one canonical FinancialFund without inferring a fund for existing records.", "provenance": "BI-E861E8B8", "flags": [], "fieldPolicy": "The nullable foreign key must reference a persisted FinancialFund; legacy rows remain unattributed until an operator records the relationship." }
+      ]
     }
   ]
 }
