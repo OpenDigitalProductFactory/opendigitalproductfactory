@@ -236,6 +236,13 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   // Operator-authored floor plans can expose internal room, table, equipment,
   // and site geometry plus references to live operational entities.
   OperationalSceneLayout: "confidential",
+  AnimalProfile: "confidential",
+  AnimalCustodyEpisode: "confidential",
+  AnimalCustodyEvent: "confidential",
+  AnimalAdoptionApplication: "confidential",
+  AnimalPlacement: "confidential",
+  CareRecord: "confidential",
+  FinancialFund: "internal",
   Engagement: "confidential",
   Opportunity: "confidential",
   Quote: "confidential",

@@ -44,6 +44,7 @@ import { INITIATIVE_GOVERNANCE_ASSETS } from "./initiative-governance-assets";
 import { FEDERATION_INTRODUCTION_ASSETS } from "./federation-introduction-assets";
 import { BUSINESS_PERFORMANCE_ASSETS } from "./business-performance-assets";
 import { EXTERNAL_CHANNEL_ASSETS } from "./external-channel-assets";
+import { ANIMAL_WELFARE_ASSETS } from "./animal-welfare-assets";
 
 // ─── Definitions (spec §6.1) ─────────────────────────────────────────────────
 export type FieldResolution = "inherited" | "governed" | "not-applicable";
@@ -726,6 +727,7 @@ const SEED_ASSETS: readonly DataAssetDefinition[] = [
   ...INITIATIVE_GOVERNANCE_ASSETS,
   ...FEDERATION_INTRODUCTION_ASSETS,
   ...EXTERNAL_CHANNEL_ASSETS,
+  ...ANIMAL_WELFARE_ASSETS,
    {
     id: "data:agent-conversation",
     physical: { prismaModel: "AgentMessage" },
