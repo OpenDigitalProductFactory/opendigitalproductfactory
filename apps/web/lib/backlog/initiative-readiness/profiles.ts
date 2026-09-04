@@ -35,9 +35,9 @@ function profileFromString(value: string | null | undefined): ReadinessProfile |
   if (!normalized) return null;
   if (["archetype", "new-archetype", "vertical"].includes(normalized)) return "archetype";
   if (["cross-domain", "crossdomain", "platform-wide"].includes(normalized)) return "cross-domain";
-  if (["bug", "defect", "fix"].includes(normalized)) return "fix";
+  if (["bug", "defect", "fix", "chore"].includes(normalized)) return "fix";
   if (["doc", "docs", "documentation", "doc-only"].includes(normalized)) return "doc-only";
-  if (["feature", "enhancement", "build"].includes(normalized)) return "feature";
+  if (["feature", "enhancement", "build", "tool", "skill", "refactor"].includes(normalized)) return "feature";
   return null;
 }
 
