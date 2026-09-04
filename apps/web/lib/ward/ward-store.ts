@@ -1,5 +1,6 @@
 import {
   ANIMAL_OCCUPANCY_DEMAND_SLUG,
+  HOUSING_KIND_SLUGS,
   KENNEL_KIND_SLUG,
   buildWardBoard,
   type KennelRow,
@@ -66,14 +67,20 @@ export async function loadWardBoard(input: {
   if (!db.resource?.findMany) return null;
 
   const kennels = await db.resource.findMany({
-    where: { organizationId, kindSlug: KENNEL_KIND_SLUG, lifecycle: "active" },
+    where: {
+      organizationId,
+      kindSlug: { in: [...HOUSING_KIND_SLUGS] },
+      lifecycle: "active",
+    },
     select: {
       id: true,
       label: true,
+      kindSlug: true,
       serviceArea: true,
       capacity: true,
       blockedReason: true,
       lifecycle: true,
+      version: true,
     },
   });
   if (kennels.length === 0) return null;
@@ -86,7 +93,7 @@ export async function loadWardBoard(input: {
             demandSlug: ANIMAL_OCCUPANCY_DEMAND_SLUG,
             releasedAt: null,
           },
-          select: { resourceId: true, demandRef: true, startsAt: true, releasedAt: true },
+          select: { id: true, resourceId: true, demandRef: true, startsAt: true, releasedAt: true },
         })
       : Promise.resolve([] as OccupancyRow[]),
     db.adoptableAnimal?.findMany

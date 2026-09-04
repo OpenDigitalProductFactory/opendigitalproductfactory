@@ -29,6 +29,7 @@ describe("seedStorefrontArchetypes", () => {
         schedulesSubjects: true,
         resourceKinds: [
           { kindSlug: "kennel", capacityUnit: "animals", maxCapacity: 100 },
+          { kindSlug: "foster-home", capacityUnit: "animals", maxCapacity: 12 },
         ],
       },
       "animal-shelter": {
@@ -38,6 +39,7 @@ describe("seedStorefrontArchetypes", () => {
         schedulesSubjects: true,
         resourceKinds: [
           { kindSlug: "kennel", capacityUnit: "animals", maxCapacity: 100 },
+          { kindSlug: "foster-home", capacityUnit: "animals", maxCapacity: 12 },
         ],
       },
     } as const;

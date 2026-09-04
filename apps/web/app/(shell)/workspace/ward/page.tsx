@@ -7,6 +7,11 @@ import { auth } from "@/lib/auth";
 import { OWNER_FIRST_NEXT_ACTION_ATTR } from "@/lib/owner-first/ux-audit";
 import { Surface } from "@/components/ui/Surface";
 import { WardList, type WardListRow } from "@/components/ward/WardList";
+import {
+  WardOperations,
+  type WardOperationAnimal,
+  type WardOperationResource,
+} from "@/components/ward/WardOperations";
 import { loadWardBoard, type WardStoreClient } from "@/lib/ward/ward-store";
 import { summarizeKennelCapacity, type WardUnit } from "@/lib/ward/ward-occupancy";
 
@@ -73,19 +78,17 @@ export default async function WardPage({ searchParams }: Props) {
       </div>
 
       {board == null ? (
-        <Surface padding="lg">
-          <p className="text-sm font-medium text-[var(--dpf-text)]">No housing recorded yet</p>
-          <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--dpf-muted)]">
-            Not the same as having no room. Record the kennels first.
-          </p>
-          <Link
-            href="/workspace"
-            className="mt-3 inline-block text-sm font-medium text-[var(--dpf-accent)]"
-            {...{ [OWNER_FIRST_NEXT_ACTION_ATTR]: "true" }}
-          >
-            Back to Operations
-          </Link>
-        </Surface>
+        <>
+          <Surface padding="lg">
+            <p className="text-sm font-medium text-[var(--dpf-text)]">No housing recorded yet</p>
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--dpf-muted)]">
+              Not the same as having no room. Add a kennel or foster home below.
+            </p>
+          </Surface>
+          <Surface padding="lg">
+            <WardOperations animals={[]} resources={[]} />
+          </Surface>
+        </>
       ) : (
         <>
           {board.unplaced.length > 0 ? (
@@ -104,10 +107,47 @@ export default async function WardPage({ searchParams }: Props) {
           ) : null}
 
           {asList ? <WardList rows={wardListRows(board)} /> : <WardMap board={board} />}
+          <Surface padding="lg">
+            <WardOperations {...wardOperationData(board)} />
+          </Surface>
         </>
       )}
     </div>
   );
+}
+
+function wardOperationData(
+  board: NonNullable<Awaited<ReturnType<typeof loadWardBoard>>>,
+): { animals: WardOperationAnimal[]; resources: WardOperationResource[] } {
+  const resources: WardOperationResource[] = board.zones.flatMap((zone) =>
+    zone.units.map((unit) => ({
+      id: unit.kennelId,
+      label: unit.label,
+      kindSlug: unit.kindSlug,
+      capacity: unit.capacity,
+      occupied: unit.occupants.length,
+      available: unit.blockedReason ? 0 : Math.max(unit.capacity - unit.occupants.length, 0),
+      blockedReason: unit.blockedReason,
+      version: unit.version,
+    })),
+  );
+  const placed: WardOperationAnimal[] = board.zones.flatMap((zone) =>
+    zone.units.flatMap((unit) =>
+      unit.occupants.map((occupant) => ({
+        animalRef: occupant.animalRef,
+        name: occupant.animalName,
+        allocationId: occupant.allocationId,
+        resourceId: unit.kennelId,
+      })),
+    ),
+  );
+  return {
+    resources,
+    animals: [
+      ...placed,
+      ...board.unplaced.map((animal) => ({ ...animal, allocationId: null, resourceId: null })),
+    ].sort((a, b) => a.name.localeCompare(b.name)),
+  };
 }
 
 function ViewTab({ href, label, active }: { href: string; label: string; active: boolean }) {
@@ -143,7 +183,7 @@ function WardMap({ board }: { board: NonNullable<Awaited<ReturnType<typeof loadW
           <div className="mb-3 flex flex-wrap items-baseline gap-3">
             <h2 className="text-sm font-semibold text-[var(--dpf-text)]">{zone.area}</h2>
             <span className="text-xs text-[var(--dpf-muted)]">
-              {zone.free} free of {zone.units.length}
+              {zone.free} free of {zone.capacity}
               {zone.outOfService > 0 ? ` · ${zone.outOfService} out of service` : ""}
             </span>
           </div>
