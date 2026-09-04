@@ -452,4 +452,60 @@ describe("routeAndCall background starts", () => {
     expect(mocks.admitDurableAsyncOperation).not.toHaveBeenCalled();
     expect(mocks.callWithFallbackChain).not.toHaveBeenCalled();
   });
+
+  it("keeps an exact durable execution constraint inert to saved dispatch posture", async () => {
+    mocks.resolveDispatchPosture.mockResolvedValueOnce({
+      effort: "high",
+      routeContext: {
+        budgetClass: "minimize_cost",
+        minimumDimensions: { quality: 4 },
+      },
+    });
+    const selected = await mocks.routeEndpointV2();
+    mocks.routeEndpointV2.mockResolvedValueOnce({
+      ...selected,
+      explorationMode: "champion",
+      executionPlan: {
+        ...selected.executionPlan,
+        recipeId: "closed-recipe-1",
+      },
+    });
+
+    await expect(routeAndCall(
+      [{ role: "user", content: "Research this topic." }],
+      "You research.",
+      "internal",
+      {
+        taskType: "research",
+        interactionMode: "background",
+        persistDecision: false,
+        agentId: "AGT-WITH-SAVED-POSTURE",
+        durableAsyncOperation: {
+          ...durableAuthority,
+          expectedExecution: {
+            providerId: "gemini",
+            contractFamily: "background.research",
+            executionAdapter: "async",
+            explorationMode: "champion",
+            plans: [{
+              recipeId: "closed-recipe-1",
+              modelId: "model-under-test",
+              maxTokens: 0,
+              providerSettings: {},
+              toolPolicy: {},
+              responsePolicy: {},
+            }],
+          },
+        },
+      },
+    )).resolves.toMatchObject({ asyncOperationId: "async-op-row-1" });
+
+    expect(mocks.resolveDispatchPosture).not.toHaveBeenCalled();
+    expect(mocks.admitDurableAsyncOperation).toHaveBeenCalledOnce();
+    expect(mocks.admitDurableAsyncOperation).toHaveBeenCalledWith(expect.objectContaining({
+      screenedRequestContext: expect.objectContaining({
+        executionPlan: expect.objectContaining({ providerSettings: {} }),
+      }),
+    }));
+  });
 });
