@@ -73,6 +73,13 @@ and the workspace only composes bounded read models. Section 5 defines the data
 links, §6 the commands and invariants, §7 the integrated navigation, §11 the
 projection/transaction behavior, and §12 the single-PR delivery order.
 
+| Explicit non-goal | Existing capability retained |
+|---|---|
+| Disaster or emergency-response system | This is routine animal-rescue operations; installation continuity remains a platform concern. |
+| New volunteer-management or notification service | Existing people, workforce, messaging, and work-engagement capabilities remain authoritative. |
+| New database, spatial tracking, or message broker | Existing PostgreSQL, Resource locations, transaction/outbox behavior, and deployment controls are reused. |
+| Rescue-specific workflow, ledger, scheduler, or identity silo | Existing custody-compatible domain commands, journal, recurrence, identity, and storefront boundaries are extended in place. |
+
 ## 2. Outcomes and objective baseline
 
 The current baseline includes the Pet Rescue value streams, the
