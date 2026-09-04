@@ -6,6 +6,7 @@ import { callProvider, InferenceError } from "@/lib/ai-inference";
 import { resolveLocalToolCeiling } from "./local-tool-ceiling";
 import { resolveLocalToolFidelityCeiling } from "./local-tool-fidelity";
 import type { ChatMessage } from "@/lib/ai-inference";
+import type { AsyncOperationStartResult } from "./adapter-types";
 import { prisma } from "@dpf/db";
 import type { RouteDecision } from "./types";
 import type { RoutedExecutionPlan } from "./recipe-types";
@@ -110,7 +111,11 @@ export interface FallbackResult {
   // metering so the `compute` cost model (watts × time) can price local
   // inference. Optional because a screened/stub path may not measure it.
   inferenceMs?: number;
+  /** Typed provider start handle preserved across the fallback projection. */
+  asyncOperation?: AsyncOperationStartResult;
   downgraded: boolean;
+  /** Distinguishes a failed dispatch from a configured route that was ineligible. */
+  downgradeReason: "provider-unavailable" | "not-eligible" | null;
   downgradeMessage: string | null;
   responseId?: string;
   /** True when the provider stopped at the output-token ceiling (BI-1D144CC1). */
@@ -384,7 +389,12 @@ export async function callWithFallbackChain(
         decision.preferenceResolution?.fallbackUsed === true;
       const unavailablePreference =
         decision.preferenceResolution?.unavailable[0] ?? null;
-      const downgraded = i > 0 || preferenceMiss;
+      const downgradeReason = i > 0
+        ? "provider-unavailable"
+        : preferenceMiss
+          ? "not-eligible"
+          : null;
+      const downgraded = downgradeReason !== null;
       const raw = result.raw && typeof result.raw === "object"
         ? result.raw as Record<string, unknown>
         : null;
@@ -399,8 +409,12 @@ export async function callWithFallbackChain(
             ? { inputTokens: result.inputTokens, outputTokens: result.outputTokens }
             : undefined,
         inferenceMs: result.inferenceMs,
+        ...(result.asyncOperation !== undefined && {
+          asyncOperation: result.asyncOperation,
+        }),
         truncated: result.truncated,
         downgraded,
+        downgradeReason,
         downgradeMessage: downgraded
           ? preferenceMiss
             ? unavailablePreference

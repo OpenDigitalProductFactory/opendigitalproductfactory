@@ -145,25 +145,27 @@ export async function pollAsyncOperation(opId: string): Promise<AsyncOpStatus> {
     const pollResult = await pollProvider(op.providerId, op.operationId);
 
     if (pollResult.done) {
-      // Operation complete
+      const terminalStatus = pollResult.terminalStatus ?? "completed";
+      const progressMessage = pollResult.progressMessage
+        ?? (terminalStatus === "cancelled" ? "Cancelled" : "Complete");
       await prisma.asyncInferenceOp.update({
         where: { id: opId },
         data: {
-          status: "completed",
+          status: terminalStatus,
           completedAt: new Date(),
           progressPct: 100,
-          progressMessage: "Complete",
+          progressMessage,
           resultText: pollResult.text,
           ...(pollResult.raw ? { resultData: pollResult.raw as Prisma.InputJsonValue } : {}),
         },
       });
       if (op.threadId) {
         agentEventBus.emit(op.threadId, {
-          type: "async:complete" as any,
+          type: terminalStatus === "cancelled" ? "async:cancelled" : "async:complete",
           operationId: opId,
         });
       }
-      return "completed";
+      return terminalStatus;
     }
 
     // Still running — update progress
@@ -211,6 +213,7 @@ export async function pollAsyncOperation(opId: string): Promise<AsyncOpStatus> {
 
 interface PollResult {
   done: boolean;
+  terminalStatus?: "completed" | "cancelled";
   text?: string;
   raw?: Record<string, unknown>;
   progressPct?: number;
@@ -253,11 +256,10 @@ async function pollGemini(
   operationId: string,
   headers: Record<string, string>,
 ): Promise<PollResult> {
-  // Google LRO: GET {baseUrl}/{operationName}
-  // operationId is the full "operations/..." path
-  const url = operationId.startsWith("http")
-    ? operationId
-    : `${baseUrl}/${operationId}`;
+  // Interaction IDs are opaque provider-owned identities. Always poll beneath
+  // the configured provider base so a stored value can never redirect auth
+  // headers to an attacker-controlled host.
+  const url = `${baseUrl.replace(/\/+$/, "")}/interactions/${encodeURIComponent(operationId)}`;
 
   const res = await fetch(url, {
     method: "GET",
@@ -271,41 +273,91 @@ async function pollGemini(
   }
 
   const data = (await res.json()) as Record<string, unknown>;
-  const done = data.done === true;
+  if (data.id !== operationId) {
+    throw new Error(
+      `Interaction identity mismatch: requested ${operationId}, received ${String(data.id ?? "missing")}`,
+    );
+  }
+  if (data.object !== undefined && data.object !== "interaction") {
+    throw new Error(`Unexpected Gemini interaction object: ${String(data.object)}`);
+  }
 
-  if (done) {
-    // Extract result from Google LRO response
-    const response = data.response as Record<string, unknown> | undefined;
-    const candidates = (response?.candidates as Array<{
-      content?: { parts?: Array<{ text?: string }> };
-    }>) ?? [];
-    const text = candidates[0]?.content?.parts?.map(p => p.text ?? "").join("") ?? "";
-
-    const usageMetadata = (response?.usageMetadata as Record<string, number>) ?? {};
+  const status = typeof data.status === "string" ? data.status : null;
+  if (status === "completed" || status === "incomplete") {
+    const steps: unknown[] = Array.isArray(data.steps) ? data.steps : [];
+    const modelOutputs = steps.filter((step): step is Record<string, unknown> => (
+        typeof step === "object" && step !== null && !Array.isArray(step)
+        && (step as Record<string, unknown>).type === "model_output"
+      ));
+    const lastModelOutput = modelOutputs[modelOutputs.length - 1];
+    const outputContent: unknown[] = Array.isArray(lastModelOutput?.content)
+      ? lastModelOutput.content
+      : [];
+    const text = outputContent
+      .filter((item): item is Record<string, unknown> => (
+        typeof item === "object" && item !== null && !Array.isArray(item)
+        && (item as Record<string, unknown>).type === "text"
+      ))
+      .map((item) => typeof item.text === "string" ? item.text : "")
+      .join("");
+    const usage = (
+      typeof data.usage === "object" && data.usage !== null && !Array.isArray(data.usage)
+        ? data.usage
+        : {}
+    ) as Record<string, unknown>;
 
     return {
       done: true,
+      terminalStatus: "completed",
+      progressMessage: status === "incomplete" ? "Incomplete" : "Complete",
       text,
       raw: {
         ...data,
         usage: {
-          inputTokens: usageMetadata.promptTokenCount ?? 0,
-          outputTokens: usageMetadata.candidatesTokenCount ?? 0,
+          inputTokens: typeof usage.total_input_tokens === "number"
+            ? usage.total_input_tokens
+            : 0,
+          outputTokens: typeof usage.total_output_tokens === "number"
+            ? usage.total_output_tokens
+            : 0,
         },
       },
     };
   }
 
-  // Still running — extract progress from metadata
-  const metadata = data.metadata as Record<string, unknown> | undefined;
-  const progressPct = typeof metadata?.progress === "number" ? metadata.progress : undefined;
-  const progressMessage = typeof metadata?.status === "string" ? metadata.status : undefined;
+  if (status === "in_progress" || status === "queued") {
+    return {
+      done: false,
+      progressMessage: status,
+    };
+  }
 
-  return {
-    done: false,
-    progressPct,
-    progressMessage,
-  };
+  if (status === "requires_action") {
+    throw new Error(
+      "Gemini interaction requires_action, but no continuation path is available",
+    );
+  }
+
+  if (status === "cancelled") {
+    return {
+      done: true,
+      terminalStatus: "cancelled",
+      progressMessage: "Cancelled",
+      raw: data,
+    };
+  }
+
+  const errors = Array.isArray(data.errors) ? data.errors : [];
+  const providerMessage = errors
+    .filter((entry): entry is Record<string, unknown> => (
+      typeof entry === "object" && entry !== null && !Array.isArray(entry)
+    ))
+    .map((entry) => typeof entry.message === "string" ? entry.message : "")
+    .filter(Boolean)
+    .join("; ");
+  throw new Error(
+    `Gemini interaction ${status ?? "missing-status"}${providerMessage ? `: ${providerMessage}` : ""}`,
+  );
 }
 
 async function pollGeneric(
@@ -400,9 +452,8 @@ export async function cancelAsyncOperation(opId: string): Promise<void> {
 
   if (op.threadId) {
     agentEventBus.emit(op.threadId, {
-      type: "async:failed" as any,
+      type: "async:cancelled",
       operationId: opId,
-      error: "Cancelled by caller",
     });
   }
 }
