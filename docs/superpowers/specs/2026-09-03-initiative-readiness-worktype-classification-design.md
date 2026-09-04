@@ -70,17 +70,13 @@ This is one atomic fix. The test and mapping are not independently shippable.
 
 ## Acceptance and traceability
 
-- **AC-WTC-001:** All seven closed work types map deterministically. Verify
-  OBJ-WTC-001 with the table in `initiative-readiness-policy.test.ts`.
-- **AC-WTC-002:** `refactor`, `tool`, and `skill` map to `feature`; `chore`
-  maps to `fix`. Verify OBJ-WTC-001 with the focused readiness test.
-- **AC-WTC-003:** Unknown values return no profile. Verify OBJ-WTC-002 with
-  the explicit `unknown-work` assertion in the focused readiness test.
-- **AC-WTC-004:** Stronger scope and historical profiles remain monotonic.
-  Verify OBJ-WTC-002 with the existing strongest-profile tests.
-- **AC-WTC-005:** BI-7C1F43E3 no longer reports `CLASSIFICATION_REQUIRED`
-  solely for `workType=refactor`. Verify OBJ-WTC-003 with a post-release live
-  MCP read.
+| Acceptance ID | Objective links | Statement and verification |
+|---|---|---|
+| AC-WTC-001 | OBJ-WTC-001 | All seven closed work types map deterministically; verify with the table in `initiative-readiness-policy.test.ts`. |
+| AC-WTC-002 | OBJ-WTC-001 | `refactor`, `tool`, and `skill` map to `feature`, while `chore` maps to `fix`; verify with the focused readiness test. |
+| AC-WTC-003 | OBJ-WTC-002 | Unknown values return no profile; verify with the explicit `unknown-work` assertion in the focused readiness test. |
+| AC-WTC-004 | OBJ-WTC-002 | Stronger scope and historical profiles remain monotonic; verify with the existing strongest-profile tests. |
+| AC-WTC-005 | OBJ-WTC-003 | BI-7C1F43E3 no longer reports `CLASSIFICATION_REQUIRED` solely for `workType=refactor`; verify with a post-release live MCP read. |
 
 ## Risks and rollback
 
