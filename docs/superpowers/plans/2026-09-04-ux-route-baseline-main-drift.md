@@ -17,12 +17,20 @@ status: active
 
 - Backlog: `BI-91DF9A6B`
 - Requirements: `OBJ-1`, `OBJ-2`, `OBJ-3`
-- Contracts: static UX-impact classification plus the existing measured route
-  baseline; no runtime ratchet or route-inventory change.
-- Flow: execute the design's ordered fix sequence from red classification proof
-  through two same-SHA freezes, conservative merge, focused checks, and protected
-  merge.
-- Verification: `AC-1` through `AC-7`.
+- Contracts:
+  - `CONTRACT-COPY-CLASSIFICATION`: static UX-impact classification.
+  - `CONTRACT-MEASURED-ROUTE-BASELINE`: the existing measured route baseline.
+  - `CONTRACT-NO-RUNTIME-RATCHET`: no runtime-ratchet change.
+  - `CONTRACT-NO-ROUTE-INVENTORY-CHANGE`: no route-inventory change.
+- Flow:
+  - `FLOW-1`: red classification proof.
+  - `FLOW-2`: first same-SHA freeze (`33842857763`).
+  - `FLOW-3`: second same-SHA freeze (`33843669436`).
+  - `FLOW-4`: conservative merge of only independently reproducible rows.
+  - `FLOW-5`: focused checks.
+  - `FLOW-6`: protected merge.
+- Verification: `AC-1`, `AC-2`, `AC-3`, `AC-4`, `AC-5`, `AC-6`, and
+  `AC-7`.
 - Calibration evidence: protected runs `33842857763` and `33843669436` at the
   same SHA both produced the exact 686-word tax record. The whole-file merge
   refusal for five unrelated nondeterministic routes is retained; only the
