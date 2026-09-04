@@ -628,6 +628,20 @@ uses one shared Workroom, branch, nonproduction lease, and PR. The root plan
 records dependencies and objective coverage across that coordinated delivery;
 scope is claimed explicitly for every implementation path before editing.
 
+The implementation plan must begin with the authorization prerequisite in
+§6.3. No Pet Rescue mutation, fixture that depends on a mutation, or shared
+runtime walkthrough may start until the smallest animal-welfare capability and
+its occupation-aware narrowing policy are present with denial/isolation tests.
+That prerequisite is delivered in the canonical animal-identity slice and is
+called out as a blocking dependency for intake, care, housing, and adoption.
+
+Offline capture is not silently accepted by implementation. The publication
+checklist carries an explicit `online-only` release decision: either the
+accountable operator accepts the failure behavior and named follow-up backlog
+item described in §11.1, or publication stops. The shared runtime walkthrough
+must demonstrate lost-connectivity behavior, retained non-sensitive in-memory
+input, no queued mutation, and explicit retry after reauthentication.
+
 ## 13. Verification contract
 
 Before publication:
@@ -695,13 +709,14 @@ design approval:
 - **Recommended next step:** immutable design review through the governed
   initiative-readiness route, then a coverage-recorded implementation plan.
 
-## 15. Current design-review finding dispositions
+## 15. Historical design-review finding dispositions
 
 | Finding | Disposition in this revision |
 |---|---|
-| `IF-B0AEDBE9A774B561` | No external Pet Rescue wireframe exists or is claimed. Section 7 is the written UI contract; implementation screenshots remain future verification evidence. |
-| `IF-0C274B6495B036E2` | Section 6.3 now defines trusted request context, organization isolation, action/field boundaries, negative tests, and the fail-closed authorization prerequisite exposed by the current capability catalog. |
-| `IF-91AD392C75C37050` | Sections 11–11.1 now bind pagination and scale verification, define in-install service seams and excluded external connectors, and state the online-only/offline-failure contract and follow-up risk. |
+| Missing external wireframe evidence | No external Pet Rescue wireframe exists or is claimed. Section 7 is the written UI contract; implementation screenshots remain future verification evidence. |
+| Incomplete authorization boundary | Section 6.3 defines trusted request context, organization isolation, action/field boundaries, negative tests, and the fail-closed authorization prerequisite; §12 makes that prerequisite the first implementation task. |
+| Unbounded scale and connectivity behavior | Sections 11–11.1 bind pagination and scale verification, define in-install service seams and excluded external connectors, and state the online-only/offline-failure contract; §12 makes operator acceptance or a stopped publication explicit. |
 
-These are dispositions for independent re-review, not a self-issued pass. The
-failed receipt remains historical evidence against its original immutable blob.
+These prose dispositions explain how the design changed; they do not ask a new
+reviewer to resolve stale receipt identifiers. The failed receipts remain
+historical evidence against their original immutable blobs.
