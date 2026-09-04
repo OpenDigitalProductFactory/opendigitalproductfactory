@@ -51,7 +51,11 @@ describe("loadWardBoard", () => {
 
     const [firstCall] = db.resource.findMany.mock.calls;
     const where = (firstCall?.[0] as { where: Record<string, unknown> } | undefined)?.where;
-    expect(where).toMatchObject({ organizationId: "org-1", kindSlug: "kennel", lifecycle: "active" });
+    expect(where).toMatchObject({
+      organizationId: "org-1",
+      kindSlug: { in: ["kennel", "foster-home"] },
+      lifecycle: "active",
+    });
   });
 
   it("asks only for open stays — a released one is history, not an occupant", async () => {

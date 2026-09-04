@@ -57,6 +57,7 @@ const ANIMAL_WELFARE_ACTIVATION_PROFILE = {
     schedulesSubjects: true,
     resourceKinds: [
       { kindSlug: "kennel", capacityUnit: "animals", maxCapacity: 100 },
+      { kindSlug: "foster-home", capacityUnit: "animals", maxCapacity: 12 },
     ],
     supportingCapabilities: [
       "fundraising",

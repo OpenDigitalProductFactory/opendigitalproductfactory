@@ -2,7 +2,7 @@
 //
 // A measured operating day found the rescue unable to answer two questions at
 // any point: where is this animal, and how many kennels are free. This route
-// exists to answer exactly those two and nothing else.
+// answers those two and provides the shortest safe action path to correct them.
 
 import type { PurposeContractModule } from ".";
 
@@ -18,11 +18,11 @@ export const WARD_PURPOSE_CONTRACTS: PurposeContractModule = [
         "Finding where an animal sleeps, and how much room is left, without asking a colleague or reading a whiteboard.",
       prerequisites: [
         "Signed in with access to the Operations family.",
-        "The shelter has recorded its housing units as kennel resources.",
+        "The shelter has configured kennel or foster-home resources, or an administrator is ready to add the first one.",
       ],
-      job: "See every unit in the wards, who is in it, and which units are free.",
+      job: "See every housing place, who is in it, what capacity is free, and place or release an animal.",
       successOutcome:
-        "The worker can name the unit an animal is in, and say how many units are free, without counting rows.",
+        "The worker can name an animal's housing, state the combined free capacity, and correct a placement without leaving the Ward.",
       findability: {
         parentArea: "Operations",
         entryPoints: ["/workspace", "Operations > Ward"],
@@ -31,30 +31,40 @@ export const WARD_PURPOSE_CONTRACTS: PurposeContractModule = [
         expectedPath: ["/workspace", "/workspace/ward"],
       },
       contentRoles: {
-        defaultVisibleKeys: ["lead-summary", "open-ward-map"],
+        defaultVisibleKeys: ["lead-summary", "open-ward-map", "place-or-move"],
         deferredRegions: [
           {
             key: "ward-list",
             role: "The same units as a table, adding area and state per row.",
             trigger: "Worker chooses List.",
           },
+          {
+            key: "housing-setup",
+            role: "Create, pause, restore, or retire kennel and foster-home resources.",
+            trigger: "Administrator opens Housing setup.",
+          },
+          {
+            key: "release-current-stay",
+            role: "Close a current stay while preserving its history.",
+            trigger: "Administrator opens Release a current stay.",
+          },
         ],
       },
       familyConsistency: {
         terminology:
-          "Speak the shelter's own words: wards, kennels, units, free. Never items, inventory, or slots.",
+          "Speak the shelter's own words: wards, kennels, foster homes, housing, free. Never items, inventory, or slots.",
         actionLocation:
-          "The map and list views switch from one control beside the occupancy count; the page itself is read-only.",
+          "Map and list remain beside the occupancy count; routine placement is on the Ward and lower-frequency roster maintenance is disclosed below it.",
         feedbackPrimitive:
-          "Occupancy is read from the drawn units and a stated free count; there are no dialogs or destructive actions.",
+          "Shared form primitives announce pending, success, validation, permission, and conflict states; history-preserving release and retirement explain their consequence.",
         disclosurePattern:
-          "Occupied of total and free lead the page, then the map. The list is one control away so reading grade and word budgets pass with workspace chrome included.",
+          "Occupied of total and free lead the page, then the map and routine placement. Release and roster setup stay behind separate native disclosures.",
         returnBehavior: "The worker returns to Operations through the same workspace navigation family.",
       },
     },
     stateScenarios: {
       "housing-recorded": {
-        statePredicate: "The organization has at least one active kennel resource.",
+        statePredicate: "The organization has at least one active kennel or foster-home resource.",
         stateSource: {
           oracleKey: "route-owned-read-model",
           sourceRef: "apps/web/lib/ward/ward-store.ts#loadWardBoard",
@@ -66,7 +76,7 @@ export const WARD_PURPOSE_CONTRACTS: PurposeContractModule = [
         },
         prohibitedActionKeys: ["delete-kennel"],
         completionSignal:
-          "Every unit shows either its occupant or that it is free, and the free count matches the units drawn as free.",
+          "Every housing resource shows its occupants or open capacity, and the combined free count matches the board.",
         errorCorrection:
           "A wrong occupant is corrected by moving the animal, which closes its stay rather than deleting the record.",
         recovery: {
@@ -92,15 +102,15 @@ export const WARD_PURPOSE_CONTRACTS: PurposeContractModule = [
         completionSignal:
           "The page says no housing is recorded and does not state a free count at all.",
         errorCorrection:
-          "The shelter records its kennels; the page does not invent a roster on its behalf.",
+          "The shelter adds its first kennel or foster home in Housing setup; the page does not invent a roster.",
         recovery: {
-          actionKey: "open-workspace",
-          routePath: "/workspace",
+          actionKey: "open-housing-setup",
+          routePath: "/workspace/ward",
         },
       },
       "animals-without-a-unit": {
         statePredicate:
-          "The organization holds animals in care that have no open kennel stay.",
+          "The organization holds animals in care that have no open housing stay.",
         stateSource: {
           oracleKey: "route-owned-read-model",
           sourceRef: "apps/web/lib/ward/ward-occupancy.ts#buildWardBoard",
@@ -124,9 +134,9 @@ export const WARD_PURPOSE_CONTRACTS: PurposeContractModule = [
     taskProtocol: {
       startRoute: "/workspace/ward",
       taskPrompt:
-        "Find out where an animal is sleeping, and how many kennels are free.",
+        "Find where an animal is staying, state the combined free capacity, and place an unplaced animal.",
       completionOracle:
-        "The worker names the unit an animal is in and states the free count, without counting rows and without asking a colleague.",
+        "The worker names the housing, states the free count, and receives settled confirmation after placing the animal.",
       falseSuccessConditions: [
         "A shelter that has recorded no kennels is shown a free count, which reads as a full or empty building it never reported.",
         "Animals in care with no kennel recorded are omitted, so the free count implies a completeness the board does not have.",
@@ -138,6 +148,8 @@ export const WARD_PURPOSE_CONTRACTS: PurposeContractModule = [
         "Every unit renders either its occupant or that it is free.",
         "Unplaced animals are named, with the free count qualified.",
         "The list flip carries the same units as the map and no fewer.",
+        "Routine placement remains visible; release and roster maintenance are progressively disclosed.",
+        "Every mutating form announces pending and settled success or failure.",
       ],
     },
     ratifiedBy: {

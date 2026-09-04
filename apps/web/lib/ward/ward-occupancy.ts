@@ -17,19 +17,24 @@ import type { AnimalsInCare } from "@/lib/twin/archetype-outcomes";
 
 export const ANIMAL_OCCUPANCY_DEMAND_SLUG = "animal-occupancy";
 export const KENNEL_KIND_SLUG = "kennel";
+export const FOSTER_HOME_KIND_SLUG = "foster-home";
+export const HOUSING_KIND_SLUGS = [KENNEL_KIND_SLUG, FOSTER_HOME_KIND_SLUG] as const;
 
 export interface KennelRow {
   id: string;
   label: string;
+  kindSlug?: string;
   /** Ward, room or site. Absent means the shelter never grouped its housing. */
   serviceArea: string | null;
   capacity: number;
   /** Set while a unit is out of service — deep clean, repair, quarantine. */
   blockedReason: string | null;
   lifecycle: string;
+  version?: number;
 }
 
 export interface OccupancyRow {
+  id?: string;
   resourceId: string | null;
   demandRef: string;
   startsAt: Date;
@@ -39,6 +44,10 @@ export interface OccupancyRow {
 export interface WardUnit {
   kennelId: string;
   label: string;
+  kindSlug: string;
+  capacity: number;
+  version: number;
+  occupants: Array<{ allocationId: string | null; animalRef: string; animalName: string; since: Date }>;
   /** `null` when free, or when the occupant's animal row has since gone. */
   animalRef: string | null;
   animalName: string | null;
@@ -70,9 +79,9 @@ export interface WardBoard {
 /** An area label every shelter can read, for housing that was never grouped. */
 export const UNGROUPED_AREA = "Unassigned area";
 
-function unitState(kennel: KennelRow, occupantRef: string | null): WardUnit["state"] {
+function unitState(kennel: KennelRow, occupantCount: number): WardUnit["state"] {
   if (kennel.blockedReason) return "out-of-service";
-  return occupantRef ? "occupied" : "free";
+  return occupantCount > 0 ? "occupied" : "free";
 }
 
 /**
@@ -94,40 +103,54 @@ export function buildWardBoard(input: {
   // Last one wins if a unit somehow holds two open allocations: showing the most
   // recent is closer to the truth than showing an arbitrary one, and the double
   // booking still surfaces because the earlier animal lands in `unplaced`.
-  const byKennel = new Map<string, OccupancyRow>();
+  const byKennel = new Map<string, OccupancyRow[]>();
   for (const row of open) {
-    const current = byKennel.get(row.resourceId!);
-    if (!current || row.startsAt > current.startsAt) byKennel.set(row.resourceId!, row);
+    const current = byKennel.get(row.resourceId!) ?? [];
+    current.push(row);
+    current.sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
+    byKennel.set(row.resourceId!, current);
   }
 
-  const placedRefs = new Set([...byKennel.values()].map((row) => row.demandRef));
+  const placedRefs = new Set<string>();
   const zones = new Map<string, WardZone>();
 
   for (const kennel of input.kennels) {
     const area = kennel.serviceArea?.trim() || UNGROUPED_AREA;
-    const occupant = byKennel.get(kennel.id) ?? null;
-    const animalRef = occupant?.demandRef ?? null;
-    // An occupant whose animal row is gone leaves the unit reading free rather
-    // than naming a ghost.
-    const animalName = animalRef ? input.animalNames.get(animalRef) ?? null : null;
-    const effectiveRef = animalName ? animalRef : null;
-    const state = unitState(kennel, effectiveRef);
+    const capacity = Math.max(kennel.capacity, 0);
+    const occupancy = [...(byKennel.get(kennel.id) ?? [])]
+      .sort((a, b) => b.startsAt.getTime() - a.startsAt.getTime())
+      .slice(0, capacity);
+    const occupants = occupancy.flatMap((row) => {
+      const animalName = input.animalNames.get(row.demandRef);
+      return animalName
+        ? [{ allocationId: row.id ?? null, animalRef: row.demandRef, animalName, since: row.startsAt }]
+        : [];
+    });
+    for (const occupant of occupants) placedRefs.add(occupant.animalRef);
+    const primary = occupants[0] ?? null;
+    const state = unitState(kennel, occupants.length);
 
     const unit: WardUnit = {
       kennelId: kennel.id,
       label: kennel.label,
-      animalRef: effectiveRef,
-      animalName,
-      since: effectiveRef ? occupant?.startsAt ?? null : null,
+      kindSlug: kennel.kindSlug ?? KENNEL_KIND_SLUG,
+      capacity,
+      version: kennel.version ?? 1,
+      occupants,
+      animalRef: primary?.animalRef ?? null,
+      animalName: primary?.animalName ?? null,
+      since: primary?.since ?? null,
       blockedReason: kennel.blockedReason,
       state,
     };
 
     const zone = zones.get(area) ?? { area, units: [], occupied: 0, free: 0, outOfService: 0 };
     zone.units.push(unit);
-    if (state === "occupied") zone.occupied += 1;
-    else if (state === "out-of-service") zone.outOfService += 1;
-    else zone.free += 1;
+    if (state === "out-of-service") zone.outOfService += capacity;
+    else {
+      zone.occupied += occupants.length;
+      zone.free += Math.max(capacity - occupants.length, 0);
+    }
     zones.set(area, zone);
   }
 
@@ -140,7 +163,7 @@ export function buildWardBoard(input: {
 
   return {
     zones: ordered,
-    totalUnits: input.kennels.length,
+    totalUnits: input.kennels.reduce((sum, row) => sum + Math.max(row.capacity, 0), 0),
     occupied: ordered.reduce((sum, zone) => sum + zone.occupied, 0),
     free: ordered.reduce((sum, zone) => sum + zone.free, 0),
     outOfService: ordered.reduce((sum, zone) => sum + zone.outOfService, 0),

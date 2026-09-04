@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 647,
+  "routeCount": 650,
   "routes": [
     {
       "routePath": "/",
@@ -1791,6 +1791,48 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/api/storefront/admin/publish/route.ts"
+    },
+    {
+      "routePath": "/api/storefront/admin/resource-occupancies",
+      "kind": "route",
+      "segments": [
+        "api",
+        "storefront",
+        "admin",
+        "resource-occupancies"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/storefront/admin/resource-occupancies/route.ts",
+      "exposure": "public"
+    },
+    {
+      "routePath": "/api/storefront/admin/resources",
+      "kind": "route",
+      "segments": [
+        "api",
+        "storefront",
+        "admin",
+        "resources"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/storefront/admin/resources/route.ts",
+      "exposure": "public"
+    },
+    {
+      "routePath": "/api/storefront/admin/resources/[id]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "storefront",
+        "admin",
+        "resources",
+        "[id]"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/api/storefront/admin/resources/[id]/route.ts",
+      "exposure": "public"
     },
     {
       "routePath": "/api/storefront/admin/sections/[id]",

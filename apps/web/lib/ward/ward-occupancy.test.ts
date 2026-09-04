@@ -11,6 +11,7 @@ import {
 
 function kennel(over: Partial<KennelRow> & Pick<KennelRow, "id" | "label">): KennelRow {
   return {
+    kindSlug: "kennel",
     serviceArea: "Dog ward",
     capacity: 1,
     blockedReason: null,
@@ -42,6 +43,36 @@ describe("buildWardBoard", () => {
     expect(d1?.animalName).toBe("Ranger");
     expect(d1?.state).toBe("occupied");
     expect(board.zones[0]?.units.find((unit) => unit.label === "D2")?.state).toBe("free");
+  });
+
+  it("combines kennel and foster-home capacity instead of counting resource rows", () => {
+    const board = buildWardBoard({
+      kennels: [
+        kennel({ id: "k1", label: "D1", capacity: 1 }),
+        kennel({
+          id: "f1",
+          label: "Northside foster",
+          kindSlug: "foster-home",
+          serviceArea: "Foster network",
+          capacity: 3,
+        }),
+      ],
+      occupancy: [
+        occupancy({ resourceId: "f1", demandRef: "a1" }),
+        occupancy({ resourceId: "f1", demandRef: "a2" }),
+      ],
+      animalNames: new Map([
+        ["a1", "Ranger"],
+        ["a2", "Willow"],
+      ]),
+    });
+
+    expect(board.totalUnits).toBe(4);
+    expect(board.occupied).toBe(2);
+    expect(board.free).toBe(2);
+    const foster = board.zones.flatMap((zone) => zone.units).find((unit) => unit.kennelId === "f1");
+    expect(foster).toMatchObject({ kindSlug: "foster-home", capacity: 3 });
+    expect(foster?.occupants.map((row) => row.animalName)).toEqual(["Ranger", "Willow"]);
   });
 
   it("treats a released allocation as history, not as an occupant", () => {

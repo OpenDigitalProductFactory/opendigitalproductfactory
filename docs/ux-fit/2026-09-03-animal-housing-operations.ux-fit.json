@@ -1,0 +1,29 @@
+{
+  "version": "1",
+  "decidedOption": "extend-existing-ward-with-progressive-housing-controls",
+  "decisionInteractionId": "DI-F289DBB51DCB",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/workspace/ward/page.tsx",
+      "apps/web/components/ward/WardOperations.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "decisionInteractionId": "DI-F289DBB51DCB",
+    "consideredOptions": [
+      "extend-existing-ward-with-progressive-housing-controls",
+      "create-separate-animal-housing-admin-page",
+      "keep-ward-read-only-and-require-api-use"
+    ]
+  },
+  "notes": {
+    "decision": "Fits with guardrails. Workspace > Ward remains the canonical home for kennel and foster occupancy. Routine placement is visible; release and roster maintenance use separate disclosures. No navigation layer or second animal-management route is added.",
+    "persona": "A kennel technician or shelter manager needs to see free capacity and correct an animal's placement without knowing Resource or allocation schema vocabulary.",
+    "reuse": "The existing Ward map/list, Surface, shared form primitives, and canonical Resource read model are extended. No dashboard, metric primitive, status-color map, or duplicate data authority is introduced.",
+    "sourceTruth": "Resource owns housing kind, label, capacity, block and lifecycle; ResourceCapacityAllocation owns the append-preserving stay; the Ward projection owns combined counts.",
+    "states": "No housing points to Housing setup without claiming zero capacity. No open destination explains unblock/add/release recovery. Shared SubmitButton and FormStatus expose pending, success, validation, permission, and conflict outcomes.",
+    "aiBoundary": "No control sends a coworker prompt. Every action is a direct governed server command with server-derived tenancy.",
+    "verification": "Focused component, route, repository, occupancy, Ward, and archetype tests plus typecheck; governed desktop and 390px browser verification is required before merge. All color roles use existing DPF tokens and interactive targets use the shared control scale."
+  }
+}
