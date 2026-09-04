@@ -116,8 +116,7 @@ extends that contract; it does not replace or narrow the original safeguards.
   `OBJ-DE-005`, `OBJ-E2B-001`, `OBJ-E2B-002`, `OBJ-E2B-003`, and `OBJ-E2B-004`.
 - Contract refs: `immutable-source terminal-writer contract` and
   `exact-bound stalled and failed replay contract`.
-- Flow refs: `exact request replay -> compare-and-set reservation -> immutable
-  hydration -> writer-only turn -> governed approval or receipt`.
+- Flow refs: `writer-only turn`.
 - Verification refs: `AC-DE-001`, `AC-DE-002`, `AC-DE-003`, `AC-DE-004`,
   `AC-DE-005`, `AC-DE-006`, `AC-DE-007`, `AC-E2B-001`, `AC-E2B-002`,
   `AC-E2B-003`, `AC-E2B-004`, `AC-E2B-005`, and `AC-E2B-006`.
