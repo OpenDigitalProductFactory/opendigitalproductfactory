@@ -23,7 +23,7 @@ async function requireManagePlatform(): Promise<void> {
 }
 
 /** Ensure the ScheduledJob record exists. Call from page load. */
-async function ensureInfraPruneJob(): Promise<{
+export async function ensureInfraPruneJob(): Promise<{
   schedule: string;
   nextRunAt: Date | null;
 }> {
@@ -77,15 +77,6 @@ export async function runInfraPruneNow(): Promise<{ ok: boolean; marked: number;
     }).catch(() => {});
     return { ok: false, marked: 0, deleted: 0, error };
   }
-}
-
-/**
- * Called from the platform sync page server component on each load.
- * Ensures the job record exists. Actual pruning is handled by Inngest cron
- * (see lib/queue/functions/infra-prune.ts).
- */
-export async function runInfraPruneIfDue(): Promise<void> {
-  await ensureInfraPruneJob();
 }
 
 /** Update the schedule for the infra prune job. */
