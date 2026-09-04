@@ -20,10 +20,16 @@ This is one atomic repair. The query predicate, its regression test, and the pag
 
 ## Traceability
 
-- Requirement: every unresolved organization-profile WWWD decision is owner-rulable through Review & adjust.
-- Contract: `DecisionPerspectiveProfile.profileId` is the organization decision-ownership boundary.
-- Flow: `/ops/demand` → `DecisionInteraction` → Review & adjust → existing `OrgDecisionCaptureList` resolution.
-- Verification: focused red/green predicate test, related decision-review tests, exact-tree local-CI evidence, and canonical-runtime UX exercise.
+| Ref | Trace |
+| --- | --- |
+| OBJ-DDOR-001 | Every unresolved organization-profile WWWD decision is owner-rulable through Review & adjust. |
+| OBJ-DDOR-002 | Platform, build, task, profession, kernel, answered, and malformed decisions remain excluded. |
+| CONTRACT-DDOR-001 | `DecisionPerspectiveProfile.profileId` is the organization decision-ownership boundary. |
+| FLOW-DDOR-001 | `/ops/demand` → `DecisionInteraction` → Review & adjust → existing `OrgDecisionCaptureList` resolution. |
+| AC-DDOR-001 | An unresolved `/ops/demand` organization decision appears in Review & adjust. |
+| AC-DDOR-002 | Existing `/coworker-business` decisions remain visible. |
+| AC-DDOR-003 | Every fail-closed exclusion remains enforced. |
+| AC-DDOR-004 | Red/green predicate tests and canonical-runtime UX verify the repair. |
 
 ## Risks and rollback
 
