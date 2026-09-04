@@ -156,9 +156,31 @@ The seven slices strengthen this architecture at distinct seams. None introduces
 
 ## 8. BI-E22C3D75 — Principal-gated customer and social sign-in
 
-This independently shippable successor now has a BI-scoped canonical baseline at
-[`2026-09-04-customer-social-principal-gated-sign-in-design.md`](2026-09-04-customer-social-principal-gated-sign-in-design.md).
-The dedicated artifact prevents this BI's plan-coverage gate from inheriting the objectives and acceptance contracts of the six sibling successors in this umbrella.
+### Objectives
+
+**OBJ-PRI-001:** Resolve or materialize the canonical Principal and alias before customer password or social session issuance.
+
+**OBJ-PRI-002:** Apply active, conflict, tenant/account, and authentication-authority checks consistently across password, social, linking, onboarding, and deactivation flows.
+
+**OBJ-PRI-003:** Preserve customer/contact domain semantics while eliminating authorization-before-identity asymmetry.
+
+### Design
+
+- Introduce one sign-in authorization seam that accepts a verified credential/assertion and returns an authorized Principal-rooted session subject or a stable refusal.
+- CustomerContact remains the customer-domain credential/profile holder and account-scoping record; `PrincipalAlias` binds it to authority.
+- Auto-linking requires verified provider identifiers and the existing guarded linking rules. Ambiguous or conflicting aliases refuse rather than choose.
+- Onboarding creates the contact, Principal, and alias transactionally before session issuance.
+- Deactivation makes the credential holder and Principal authorization outcome consistent in the same transaction/invariant.
+- Effective auth loads by canonical principal identity and derives customer/account scope; it does not materialize another identity cache.
+
+### Acceptance contract
+
+| Acceptance | Objective | Statement |
+|---|---|---|
+| AC-PRI-001 | OBJ-PRI-001 | No customer password or social session is issued before an active canonical Principal authorizes it. |
+| AC-PRI-002 | OBJ-PRI-002 | Inactive, unresolved, and conflicted principals fail consistently across all sign-in/link paths. |
+| AC-PRI-003 | OBJ-PRI-002 | Onboarding and deactivation cannot leave a session-capable split state. |
+| AC-PRI-004 | OBJ-PRI-003 | Existing customer account/contact scoping is preserved and derived from the Principal-rooted context. |
 
 ## 9. BI-DD3BBD02 — social-provider secrets in the credential kernel
 
