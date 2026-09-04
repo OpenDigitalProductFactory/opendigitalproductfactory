@@ -1,5 +1,5 @@
 ---
-status: active
+status: binding
 ---
 
 # Demand Decision Owner Ruling — Fix Design

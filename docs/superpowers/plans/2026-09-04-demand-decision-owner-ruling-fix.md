@@ -31,4 +31,4 @@ The blast radius is the owner decision inbox query. Over-broad selection could e
 
 ## Backlog coverage
 
-Pending governed `record_plan_backlog_coverage` receipt for atomic BI-EB5E9BE3.
+The atomic mapping above is pending a governed receipt because no initiative scope baseline exists for BI-EB5E9BE3. The independent spec-approval route must establish that baseline before the coverage writer can bind this plan to it.
