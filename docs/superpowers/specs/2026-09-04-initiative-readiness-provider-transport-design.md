@@ -127,6 +127,21 @@ tests. Contributor inventory behavior is unchanged in this slice.
 5. Repeat the real Phase 1 claim and retain the readiness decision proving
    executable routes rather than `no-canonical-artifact`.
 
+## Implementation sequence
+
+1. Capture RED lifecycle fixtures proving a framework-global failure is bypassed
+   by the default isolated transport, the injected-fetch path is unchanged, and
+   every production dispatcher is closed.
+2. Add `createGithubReadTransport()` beside the existing repository identity
+   and credential helpers, using `undici.Agent` and `undici.fetch`.
+3. Move canonical discovery and both repository-artifact read paths onto one
+   operation-scoped transport while preserving their existing error mapping.
+4. Run focused and graph-linked tests, typecheck, build, semantic review, and
+   protected CI; record any unavailable local capacity lane as inconclusive.
+5. Deliver through a DCO-signed protected PR, advance the canonical runtime,
+   and replay the real `BI-7C1F43E3` claim. The replay proves reachability only;
+   it does not satisfy a review gate.
+
 ## Non-goals
 
 - Changing readiness policy or treating infrastructure failure as PASS.

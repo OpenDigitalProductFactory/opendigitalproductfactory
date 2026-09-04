@@ -74,6 +74,54 @@ function providerFetch(signOff = "Signed-off-by: Author <author@example.com>") {
 }
 
 describe("resolveRepositoryArtifact", () => {
+  it("uses and closes the isolated production transport for immutable blob reads", async () => {
+    const frameworkFetch = vi.fn().mockRejectedValue(new Error("framework context unavailable"));
+    vi.stubGlobal("fetch", frameworkFetch);
+    const isolatedFetch = providerFetch();
+    const close = vi.fn().mockResolvedValue(undefined);
+
+    try {
+      const result = await readRepositoryProviderBlob({
+        repositoryFullName: locator.repositoryFullName,
+        commitSha: locator.commitSha,
+        path: locator.path,
+        expectedBlobId: locator.providerBlobId,
+        db: db() as never,
+        transportFactory: () => ({ fetch: isolatedFetch as unknown as typeof fetch, close }),
+      } as never);
+
+      expect(result).toEqual({ ok: true, data: bytes });
+      expect(isolatedFetch).toHaveBeenCalledTimes(1);
+      expect(frameworkFetch).not.toHaveBeenCalled();
+      expect(close).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("reuses one isolated transport for commit provenance and blob verification", async () => {
+    const frameworkFetch = vi.fn().mockRejectedValue(new Error("framework context unavailable"));
+    vi.stubGlobal("fetch", frameworkFetch);
+    const isolatedFetch = providerFetch();
+    const close = vi.fn().mockResolvedValue(undefined);
+
+    try {
+      const result = await resolveRepositoryArtifact({
+        locator,
+        subject: { kind: "backlog-item", id: "BI-TEST" },
+        db: db() as never,
+        transportFactory: () => ({ fetch: isolatedFetch as unknown as typeof fetch, close }),
+      } as never);
+
+      expect(result).toMatchObject({ ok: true });
+      expect(isolatedFetch).toHaveBeenCalledTimes(2);
+      expect(frameworkFetch).not.toHaveBeenCalled();
+      expect(close).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("retries one transient blob transport failure inside the same provider read", async () => {
     const fetchImpl = vi.fn()
       .mockRejectedValueOnce(new Error("token=must-not-leak"))
