@@ -56,7 +56,9 @@ export async function resumeApprovedRemoteTask(input: {
   userContext: UserContext;
   parsed: RemoteTaskSubmitParams;
 }): Promise<RemoteTaskSubmitOutcome | null> {
-  if (input.existing.status !== "input-required") return null;
+  const recoveringCompletedProjection = input.existing.status === "completed";
+  if (input.existing.status !== "input-required" && !recoveringCompletedProjection) return null;
+  if (recoveringCompletedProjection && !input.parsed.initiativeReviewBinding) return null;
 
   const envelope = await prisma.coworkerActionEnvelope.findFirst({
     where: {
@@ -69,6 +71,10 @@ export async function resumeApprovedRemoteTask(input: {
     select: { id: true, threadId: true, manifestActionId: true },
   }) as ApprovedRemoteTaskEnvelope | null;
   if (!envelope) return null;
+  if (
+    recoveringCompletedProjection
+    && envelope.manifestActionId !== input.parsed.initiativeReviewBinding?.writerToolName
+  ) return null;
 
   const proposedExecution = await prisma.toolExecution.findFirst({
     where: {
@@ -86,10 +92,11 @@ export async function resumeApprovedRemoteTask(input: {
   const reservation = await prisma.taskRun.updateMany({
     where: {
       taskRunId: input.existing.taskRunId,
-      status: "input-required",
+      status: input.existing.status,
       updatedAt: input.existing.updatedAt,
     },
     data: {
+      ...(recoveringCompletedProjection ? { completedAt: null } : {}),
       progressPayload: {
         ...(input.existing.progressPayload && typeof input.existing.progressPayload === "object"
           && !Array.isArray(input.existing.progressPayload)

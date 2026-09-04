@@ -191,8 +191,12 @@ export function deriveCoworkerApprovalPolicy(input: {
   // granted reviewer principal. Requiring the delegating employee to approve
   // that writer again turns the independent review into a human proxy gate and
   // makes the single-human installation path impossible to complete.
-  if (input.hitlTierDefault <= 1 || policy === "always") return "all";
+  // `always` is an explicit operator policy and still wins. A numeric tier is
+  // only the coworker's generic default, so it must not re-wrap this already
+  // authorized independent-review boundary in a second human approval.
+  if (policy === "always") return "all";
   if (input.serverBoundIndependentReview) return "none";
+  if (input.hitlTierDefault <= 1) return "all";
   if (
     input.hitlTierDefault === 2
     || policy === "proposal_for_external_writes"
