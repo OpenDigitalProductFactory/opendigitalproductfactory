@@ -37,6 +37,14 @@ not shorten that window or infer its result.
 
 ## Backlog coverage
 
+- Decision: atomic
+- Parent: BI-7C1F43E3
+- Receipt: cmtn9q8mp01g801p5w675j2zq
+- Rationale: All six adversarial fixtures jointly establish one truthful
+  concurrency-readiness baseline; partial delivery would make that claim
+  misleading and cannot be shipped independently.
+- Dependencies: none
+
 | Deliverable | Objective / acceptance refs | Live BI | Dependency | Independently shippable |
 |---|---|---|---|---|
 | Phase 1 adversarial control-plane fixture pack and minimal owning corrections | OBJ-FEAF-BINDING; OBJ-FEAF-LIVENESS; OBJ-FEAF-EVENTS; OBJ-FEAF-RESUME; OBJ-FEAF-BASELINE; AC-FEAF-001..008 | BI-7C1F43E3 | merged pilot PR #5029 and classification repair PR #5035 | No — partial coverage cannot establish concurrency readiness |
