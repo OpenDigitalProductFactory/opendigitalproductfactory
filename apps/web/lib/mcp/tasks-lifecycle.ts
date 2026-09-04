@@ -15,6 +15,8 @@
 // Auth-context binding is a spec MUST: get/result/cancel verify the row's
 // userId == the caller, and list filters on userId (index @@index([userId,status])).
 
+import { createHash } from "node:crypto";
+
 import { prisma } from "@dpf/db";
 import {
   readPrismaAuthorizedAsyncOperation,
@@ -72,6 +74,38 @@ const DPF_TO_MCP_STATE: Record<string, string> = {
 };
 
 const TERMINAL_DPF_STATES = new Set(["completed", "failed", "canceled", "rejected", "archived"]);
+const DURABLE_RESULT_TEXT_JSON_BUDGET = Math.floor(MCP_ROUTE_TOOL_RESULT_CHAR_CAP / 3);
+
+function boundedDurableResultText(value: string | null): {
+  text: string | null;
+  truncated: boolean;
+  sha256: string | null;
+  originalChars: number;
+} {
+  if (value === null) {
+    return { text: null, truncated: false, sha256: null, originalChars: 0 };
+  }
+  const sha256 = createHash("sha256").update(value, "utf8").digest("hex");
+  if (JSON.stringify(value).length <= DURABLE_RESULT_TEXT_JSON_BUDGET) {
+    return { text: value, truncated: false, sha256, originalChars: value.length };
+  }
+  let low = 0;
+  let high = value.length;
+  while (low < high) {
+    const candidate = Math.ceil((low + high) / 2);
+    if (JSON.stringify(value.slice(0, candidate)).length <= DURABLE_RESULT_TEXT_JSON_BUDGET) {
+      low = candidate;
+    } else {
+      high = candidate - 1;
+    }
+  }
+  return {
+    text: value.slice(0, low),
+    truncated: true,
+    sha256,
+    originalChars: value.length,
+  };
+}
 
 /** Map a DPF/A2A TaskRun.status to the MCP-spec wire state. Pure. */
 export function mcpTaskStateForWire(dpfStatus: string): string {
@@ -263,13 +297,20 @@ export async function handleTasksResult(
     const operation = await readDurableTaskOperation(row, userId, durableIdentity);
     const status = durableOperationTaskStatus(operation.status);
     const terminal = status !== "working";
+    const boundedResult = boundedDurableResultText(operation.resultText);
+    const boundedError = boundedDurableResultText(operation.errorMessage);
     let structured: Record<string, unknown> = {
       taskId,
       status,
       terminal,
-      resultText: operation.resultText,
-      resultData: operation.resultData,
-      errorMessage: operation.errorMessage,
+      resultText: boundedResult.text,
+      resultTruncated: boundedResult.truncated,
+      resultSha256: boundedResult.sha256,
+      resultOriginalChars: boundedResult.originalChars,
+      errorMessage: boundedError.text,
+      errorTruncated: boundedError.truncated,
+      errorSha256: boundedError.sha256,
+      errorOriginalChars: boundedError.originalChars,
       completedAt: operation.completedAt?.toISOString() ?? null,
       provenance: {
         asyncOperationId: operation.operationId,
@@ -282,14 +323,8 @@ export async function handleTasksResult(
         transitionSequence: operation.transitionSequence,
       },
     };
-    if (JSON.stringify(structured).length > MCP_ROUTE_TOOL_RESULT_CHAR_CAP) {
-      structured = {
-        ...structured,
-        resultData: { _truncated: true, _note: "Async result data exceeded the MCP route result cap." },
-      };
-    }
-    const resultText = operation.resultText
-      ?? operation.errorMessage
+    const resultText = boundedResult.text
+      ?? boundedError.text
       ?? (terminal
         ? `Durable inference task ${taskId} ended with status ${status}.`
         : `Task ${taskId} is not yet terminal (status: ${status}). Poll tasks/get until it completes.`);

@@ -32,7 +32,7 @@ import {
 const selectedRecipe = {
   id: "recipe-db-1",
   providerId: "gemini",
-  modelId: "deep-research-pro-preview-12-2025",
+  modelId: "gemini-3.1-pro-preview",
   contractFamily: DURABLE_INFERENCE_TASK_CONTRACT_FAMILY,
   version: 1,
   status: "champion",
@@ -52,7 +52,12 @@ beforeEach(() => {
     asyncOperationId: "async-op-1",
     routeDecision: {
       explorationMode: "champion",
-      executionPlan: { ...selectedRecipe, recipeId: selectedRecipe.id },
+      executionPlan: {
+        ...selectedRecipe,
+        recipeId: selectedRecipe.id,
+        maxTokens: 4_096,
+        providerSettings: {},
+      },
     },
   });
 });
@@ -63,6 +68,7 @@ describe("durable-inference TaskRun runtime", () => {
       seeded: 1,
       validated: 1,
       recipeIds: [selectedRecipe.id],
+      recipes: [{ id: selectedRecipe.id, modelId: selectedRecipe.modelId }],
     });
 
     expect(db.findProfiles).toHaveBeenCalledWith({
@@ -85,6 +91,19 @@ describe("durable-inference TaskRun runtime", () => {
         responsePolicy: { strictSchema: false, stream: false },
       }),
     });
+  });
+
+  it("does not seed a closed bounded recipe for managed agents without a token ceiling", async () => {
+    db.findProfiles.mockResolvedValueOnce([{ modelId: "deep-research-pro-preview-12-2025" }]);
+
+    await expect(ensureDurableInferenceTaskRecipes()).resolves.toEqual({
+      seeded: 0,
+      validated: 0,
+      recipeIds: [],
+      recipes: [],
+    });
+    expect(db.findRecipe).not.toHaveBeenCalled();
+    expect(db.createRecipe).not.toHaveBeenCalled();
   });
 
   it("calls routed inference once with only server-derived TaskRun authority", async () => {
@@ -125,6 +144,21 @@ describe("durable-inference TaskRun runtime", () => {
             principalId: null,
             isSuperuser: false,
           },
+          expectedExecution: {
+            providerId: "gemini",
+            contractFamily: DURABLE_INFERENCE_TASK_CONTRACT_FAMILY,
+            executionAdapter: "async",
+            explorationMode: "champion",
+            plans: [{
+              recipeId: selectedRecipe.id,
+              modelId: selectedRecipe.modelId,
+              maxTokens: 4_096,
+              providerSettings: {},
+              toolPolicy: { toolChoice: "none", allowParallelToolCalls: false },
+              responsePolicy: { strictSchema: false, stream: false },
+            }],
+          },
+          deferInitialWake: true,
         },
       }),
     );

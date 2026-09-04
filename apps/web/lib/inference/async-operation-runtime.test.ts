@@ -8,7 +8,10 @@ vi.mock("@/lib/execution/adapters/async-operation-events", () => ({
   publishAsyncOperationTransitionEvent: vi.fn(),
 }));
 
-import { normalizeDurableAsyncProviderPoll } from "./async-operation-runtime";
+import {
+  durableMcpTaskWakeDisposition,
+  normalizeDurableAsyncProviderPoll,
+} from "./async-operation-runtime";
 
 describe("durable provider poll normalization", () => {
   it("projects a supported provider terminal failure without retry", () => {
@@ -74,5 +77,41 @@ describe("durable provider poll normalization", () => {
       text: "result",
       raw: { usage: {} },
     })).toEqual({ kind: "completed", text: "result", data: { usage: {} } });
+  });
+});
+
+describe("durable MCP TaskRun provider-wake gate", () => {
+  it("waits until the TaskRun durably projects the exact operation", () => {
+    expect(durableMcpTaskWakeDisposition({
+      operationId: "async-op-1",
+      progressPayload: { durableInference: { state: "admitting" } },
+    })).toBe("wait");
+  });
+
+  it("propagates pre-admission cancellation before provider work can start", () => {
+    expect(durableMcpTaskWakeDisposition({
+      operationId: "async-op-1",
+      progressPayload: {
+        durableInference: {
+          state: "admitting",
+          cancellationRequestedAt: "2026-09-04T12:00:00.000Z",
+        },
+      },
+    })).toBe("cancel");
+  });
+
+  it("accepts only the exact TaskRun-projected operation id", () => {
+    expect(durableMcpTaskWakeDisposition({
+      operationId: "async-op-1",
+      progressPayload: {
+        durableInference: { state: "admitted", asyncOperationId: "async-op-1" },
+      },
+    })).toBe("ready");
+    expect(() => durableMcpTaskWakeDisposition({
+      operationId: "async-op-1",
+      progressPayload: {
+        durableInference: { state: "admitted", asyncOperationId: "other-op" },
+      },
+    })).toThrow("DURABLE_INFERENCE_OPERATION_ID_MISMATCH");
   });
 });

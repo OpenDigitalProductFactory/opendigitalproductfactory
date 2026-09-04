@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const db = vi.hoisted(() => ({
   findOperation: vi.fn(),
+  listOperations: vi.fn(),
   settle: vi.fn(),
   findTask: vi.fn(),
 }));
@@ -10,7 +11,10 @@ const events = vi.hoisted(() => ({ emit: vi.fn() }));
 
 vi.mock("@dpf/db", () => ({
   prisma: {
-    asyncInferenceOp: { findUnique: (...args: unknown[]) => db.findOperation(...args) },
+    asyncInferenceOp: {
+      findUnique: (...args: unknown[]) => db.findOperation(...args),
+      findMany: (...args: unknown[]) => db.listOperations(...args),
+    },
     taskRun: {
       updateMany: (...args: unknown[]) => db.settle(...args),
       findUnique: (...args: unknown[]) => db.findTask(...args),
@@ -24,7 +28,10 @@ vi.mock("@/lib/tak/agent-event-bus", () => ({
   agentEventBus: { emit: (...args: unknown[]) => events.emit(...args) },
 }));
 
-import { settleDurableInferenceTaskTransition } from "./mcp-task-durable-inference-transition";
+import {
+  reconcileDurableInferenceTaskTransitions,
+  settleDurableInferenceTaskTransition,
+} from "./mcp-task-durable-inference-transition";
 import {
   DURABLE_INFERENCE_TASK_CONTRACT_FAMILY,
   DURABLE_INFERENCE_TASK_RECIPE_ID,
@@ -104,6 +111,7 @@ beforeEach(() => {
     taskRun: task(),
   });
   db.settle.mockResolvedValue({ count: 1 });
+  db.listOperations.mockResolvedValue([]);
   db.findTask.mockResolvedValue(null);
   runtime.read.mockResolvedValue({
     operation: operation(),
@@ -113,6 +121,37 @@ beforeEach(() => {
 });
 
 describe("durable inference TaskRun transition consumer", () => {
+  it("reconciles a terminal operation whose transition consumer exhausted during quiescence", async () => {
+    db.listOperations.mockResolvedValueOnce([{
+      id: "async-op-1",
+      status: "completed",
+      transitionSequence: 3,
+    }]);
+
+    await expect(reconcileDurableInferenceTaskTransitions({ limit: 200 })).resolves.toEqual({
+      inspected: 1,
+      settled: 1,
+      alreadySettled: 0,
+    });
+    expect(db.listOperations).toHaveBeenCalledWith({
+      where: {
+        identityVersion: 1,
+        contractFamily: DURABLE_INFERENCE_TASK_CONTRACT_FAMILY,
+        status: { in: ["completed", "failed", "cancelled", "expired"] },
+        taskRunId: { not: null },
+        taskRun: { is: { status: { in: ["submitted", "working", "quiescing"] } } },
+      },
+      orderBy: [{ updatedAt: "asc" }, { id: "asc" }],
+      take: 100,
+      select: { id: true, status: true, transitionSequence: true },
+    });
+    expect(runtime.read).toHaveBeenCalledWith(expect.objectContaining({
+      target: { kind: "task-run", taskRunId: "TR-MCP-DURABLE" },
+      afterSequence: 2,
+    }));
+    expect(db.settle).toHaveBeenCalledOnce();
+  });
+
   it("settles a completed operation once with exact provider provenance", async () => {
     const result = await settleDurableInferenceTaskTransition({
       operationId: "async-op-1",
@@ -138,7 +177,8 @@ describe("durable inference TaskRun transition consumer", () => {
         completedAt: now,
         progressPayload: expect.objectContaining({
           durableInference: expect.objectContaining({
-            state: "completed",
+            state: "admitted",
+            providerState: "completed",
             asyncOperationId: "async-op-1",
             providerOperationId: "interaction-1",
             requestDigest: asyncRequestDigest,
@@ -164,7 +204,55 @@ describe("durable inference TaskRun transition consumer", () => {
     }))
       .resolves.toMatchObject({ status: "working", settled: true });
     expect(db.settle).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({ status: "working", completedAt: null }),
+      data: expect.objectContaining({
+        status: "working",
+        completedAt: null,
+        progressPayload: expect.objectContaining({
+          durableInference: expect.objectContaining({
+            state: "admitted",
+            providerState: "running",
+          }),
+        }),
+      }),
+    }));
+  });
+
+  it("retains admitting when a pending transition races ahead of TaskRun linkage", async () => {
+    const admitting = task("working");
+    admitting.progressPayload.durableInference = {
+      schemaVersion: 1,
+      recipeId: DURABLE_INFERENCE_TASK_RECIPE_ID,
+      state: "admitting",
+      attempt: 1,
+    } as never;
+    db.findOperation.mockResolvedValueOnce({
+      id: "async-op-1",
+      identityVersion: 1,
+      bindingDigest,
+      taskRun: admitting,
+    });
+    runtime.read.mockResolvedValueOnce({
+      operation: operation("pending"),
+      transitions: [{ sequence: 0, status: "pending" }],
+      nextCursor: 0,
+    });
+
+    await settleDurableInferenceTaskTransition({
+      operationId: "async-op-1",
+      sequence: 0,
+      status: "pending",
+      now,
+    });
+    expect(db.settle).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        progressPayload: expect.objectContaining({
+          durableInference: expect.objectContaining({
+            state: "admitting",
+            providerState: "pending",
+            asyncOperationId: "async-op-1",
+          }),
+        }),
+      }),
     }));
   });
 
@@ -260,7 +348,8 @@ describe("durable inference TaskRun transition consumer", () => {
 
   it("does not resettle an already terminal TaskRun on duplicate delivery", async () => {
     const completedTask = task("completed");
-    (completedTask.progressPayload.durableInference as Record<string, unknown>).state = "completed";
+    (completedTask.progressPayload.durableInference as Record<string, unknown>).providerState =
+      "completed";
     db.findOperation.mockResolvedValueOnce({
       id: "async-op-1",
       identityVersion: 1,

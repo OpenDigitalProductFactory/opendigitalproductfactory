@@ -58,7 +58,7 @@ export function parseResourceWaitProjection(value: unknown): ResourceWaitProject
   return wait as ResourceWaitProjection;
 }
 
-export function remoteTaskRequestDigest(parsed: RemoteTaskSubmitParams): string {
+function remoteTaskRequestPacket(parsed: RemoteTaskSubmitParams, version: 1 | 2) {
   const packet = {
     agentId: parsed.agentId,
     routeContext: parsed.routeContext,
@@ -68,12 +68,61 @@ export function remoteTaskRequestDigest(parsed: RemoteTaskSubmitParams): string 
     riskClass: parsed.riskClass,
     authorityScope: [...(parsed.authorityScope ?? [])].sort(),
     collaborationKind: parsed.collaborationKind ?? null,
+    ...(version === 2 ? { threadId: parsed.threadId ?? null } : {}),
     ...(parsed.initiativeReviewBinding
       ? { initiativeReviewBinding: parsed.initiativeReviewBinding }
       : {}),
     ...(parsed.recipeId ? { recipeId: parsed.recipeId } : {}),
   };
-  return createHash("sha256").update(JSON.stringify(packet)).digest("hex");
+  return packet;
+}
+
+export const REMOTE_TASK_REQUEST_DIGEST_VERSION = 2;
+
+export function remoteTaskRequestDigest(parsed: RemoteTaskSubmitParams): string {
+  return createHash("sha256")
+    .update(JSON.stringify(remoteTaskRequestPacket(parsed, 2)))
+    .digest("hex");
+}
+
+function legacyRemoteTaskRequestDigest(parsed: RemoteTaskSubmitParams): string {
+  return createHash("sha256")
+    .update(JSON.stringify(remoteTaskRequestPacket(parsed, 1)))
+    .digest("hex");
+}
+
+/**
+ * Verify new versioned digests and preserve exact replay of historical rows.
+ * Legacy rows did not hash threadId, so their separately persisted server
+ * snapshot must match before the old digest can be accepted.
+ */
+export function remoteTaskRequestMatches(
+  metadataValue: unknown,
+  parsed: RemoteTaskSubmitParams,
+): boolean {
+  return matchingRemoteTaskRequestDigest(metadataValue, parsed) !== null;
+}
+
+/** Return the exact persisted digest after version-aware packet validation. */
+export function matchingRemoteTaskRequestDigest(
+  metadataValue: unknown,
+  parsed: RemoteTaskSubmitParams,
+): string | null {
+  if (!metadataValue || typeof metadataValue !== "object" || Array.isArray(metadataValue)) return null;
+  const metadata = metadataValue as Record<string, unknown>;
+  const storedDigest = nonEmptyString(metadata["requestDigest"]);
+  if (!storedDigest) return null;
+  if (metadata["requestDigestVersion"] === REMOTE_TASK_REQUEST_DIGEST_VERSION) {
+    return storedDigest === remoteTaskRequestDigest(parsed) ? storedDigest : null;
+  }
+  if (metadata["requestDigestVersion"] !== undefined && metadata["requestDigestVersion"] !== 1) {
+    return null;
+  }
+  const requestedThreadId = nonEmptyString(metadata["requestedThreadId"]);
+  return requestedThreadId === (parsed.threadId ?? null)
+    && storedDigest === legacyRemoteTaskRequestDigest(parsed)
+    ? storedDigest
+    : null;
 }
 
 export function deterministicExternalTaskRunId(tokenId: string, idempotencyKey: string): string {

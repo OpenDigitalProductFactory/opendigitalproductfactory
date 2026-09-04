@@ -6,7 +6,7 @@ const runtime = vi.hoisted(() => ({
   reconcile: vi.fn(),
   publish: vi.fn(),
 }));
-const taskTransition = vi.hoisted(() => ({ settle: vi.fn() }));
+const taskTransition = vi.hoisted(() => ({ settle: vi.fn(), reconcile: vi.fn() }));
 const quiescence = vi.hoisted(() => ({
   between: vi.fn(),
   atEntry: vi.fn(),
@@ -22,6 +22,8 @@ vi.mock("@/lib/inference/async-operation-runtime", () => ({
 }));
 vi.mock("@/lib/mcp-task-durable-inference-transition", () => ({
   settleDurableInferenceTaskTransition: (...args: unknown[]) => taskTransition.settle(...args),
+  reconcileDurableInferenceTaskTransitions: (...args: unknown[]) =>
+    taskTransition.reconcile(...args),
 }));
 vi.mock("../quiescence-gates", () => ({
   gateBetweenSteps: (...args: unknown[]) => quiescence.between(...args),
@@ -36,6 +38,7 @@ beforeEach(() => {
   runtime.reconcile.mockResolvedValue({ inspected: 1, enqueued: 1 });
   runtime.publish.mockResolvedValue({ delivered: 1 });
   taskTransition.settle.mockResolvedValue({ status: "completed", taskRunId: "TR-1", settled: true });
+  taskTransition.reconcile.mockResolvedValue({ inspected: 1, settled: 1, alreadySettled: 0 });
   quiescence.between.mockResolvedValue({ resumedAfterWait: false });
   quiescence.atEntry.mockResolvedValue({ proceed: true });
 });
@@ -76,7 +79,7 @@ describe("durable async inference Inngest ownership", () => {
     expect(runtime.publish).toHaveBeenCalledOnce();
   });
 
-  it("recovers lost wakes from a bounded scheduled scan", async () => {
+  it("recovers lost wakes and terminal TaskRun projections from a bounded scheduled scan", async () => {
     vi.resetModules();
     const module = await import("./async-inference-operation");
     const registered = module.asyncInferenceOperationReconciliation as unknown as {
@@ -90,6 +93,25 @@ describe("durable async inference Inngest ownership", () => {
     });
     await registered.handler({ step });
     expect(runtime.reconcile).toHaveBeenCalledWith({ limit: 50 });
+    expect(taskTransition.reconcile).toHaveBeenCalledWith({ limit: 50 });
+  });
+
+  it("does not reconcile terminal TaskRuns when draining begins between recovery steps", async () => {
+    quiescence.between.mockResolvedValueOnce({
+      resumedAfterWait: false,
+      reason: "timed-out-waiting-for-cleared",
+    });
+    vi.resetModules();
+    const module = await import("./async-inference-operation");
+    const registered = module.asyncInferenceOperationReconciliation as unknown as {
+      handler(input: { step: Step }): Promise<unknown>;
+    };
+
+    await expect(registered.handler({ step })).rejects.toThrow(
+      "Durable TaskRun reconciliation remained quiesced: timed-out-waiting-for-cleared",
+    );
+    expect(runtime.reconcile).toHaveBeenCalledWith({ limit: 50 });
+    expect(taskTransition.reconcile).not.toHaveBeenCalled();
   });
 
   it("rejects an advisory wake without a bounded delivery time", async () => {

@@ -1,15 +1,22 @@
 import { prisma } from "@dpf/db";
 import type { Prisma } from "@dpf/db";
+import {
+  enqueuePrismaAsyncOperationWake,
+  requestPrismaAuthorizedAsyncOperationCancellation,
+} from "@/lib/inference/async-operation-runtime";
 import { agentEventBus } from "@/lib/tak/agent-event-bus";
 import type { TaskState } from "@/lib/tak/task-states";
-import { MCP_TASK_SELECT } from "@/lib/mcp/tasks-lifecycle";
+import { isTerminalTaskStatus, MCP_TASK_SELECT } from "@/lib/mcp/tasks-lifecycle";
 import {
   reserveSubmittedTaskRunWorking,
   reserveTaskRunGenerationWorking,
 } from "@/lib/observability/heartbeat";
 import { ok, type ActionSuccess } from "@/lib/shared/action-result";
 import { mcpTaskNotificationBus } from "./mcp-task-notification-bus";
-import { remoteTaskRequestDigest } from "./mcp-task-capacity-contract";
+import {
+  remoteTaskRequestDigest,
+  remoteTaskRequestMatches,
+} from "./mcp-task-capacity-contract";
 import {
   DURABLE_INFERENCE_TASK_RECIPE_ID,
   parseDurableInferenceProgress,
@@ -215,7 +222,7 @@ export function reconstructPersistedRemoteTask(
     ...(durableInference ? { recipeId: durableInference.recipeId } : {}),
   };
 
-  if (remoteTaskRequestDigest(parsed) !== requestDigest) {
+  if (!remoteTaskRequestMatches(metadata, parsed)) {
     return {
       ok: false,
       code: "request_digest_mismatch",
@@ -242,20 +249,49 @@ export function reconstructPersistedRemoteTask(
 }
 
 async function settleReconstructionFailure(
-  row: Pick<PersistedRemoteTask, "taskRunId" | "threadId" | "contextId">,
+  row: Pick<
+    PersistedRemoteTask,
+    | "taskRunId"
+    | "threadId"
+    | "contextId"
+    | "status"
+    | "updatedAt"
+    | "progressPayload"
+    | "a2aMetadata"
+  >,
   failure: ReconstructionFailure | { code: "authorization_revoked"; message: string },
-): Promise<void> {
-  await prisma.taskRun.update({
-    where: { taskRunId: row.taskRunId },
+): Promise<boolean> {
+  const durableMetadata = parseDurableInferenceTaskMetadata(
+    record(row.a2aMetadata)?.["durableInference"],
+  );
+  const durableProgress = parseDurableInferenceProgress(
+    record(row.progressPayload)?.["durableInference"],
+  );
+  const isExecutablePreAdmission = row.status === "submitted"
+    || Boolean(
+      durableMetadata
+      && DURABLE_RECOVERABLE_ADMISSION_STATES.has(row.status)
+      && durableProgress?.state === "admitting",
+    );
+  if (!isExecutablePreAdmission) return false;
+
+  const settled = await prisma.taskRun.updateMany({
+    where: {
+      taskRunId: row.taskRunId,
+      status: row.status,
+      updatedAt: row.updatedAt,
+    },
     data: {
       status: "failed",
       completedAt: new Date(),
       progressPayload: {
+        ...(record(row.progressPayload) ?? {}),
         error: failure.message,
         errorCode: failure.code,
       } as Prisma.InputJsonValue,
     },
   });
+  if (settled.count !== 1) return false;
   if (row.threadId) {
     agentEventBus.emit(row.threadId, {
       type: "task:status",
@@ -266,6 +302,7 @@ async function settleReconstructionFailure(
       message: failure.message,
     });
   }
+  return true;
 }
 
 export async function executePersistedRemoteTask(input: {
@@ -305,9 +342,40 @@ export async function executePersistedRemoteTask(input: {
   }) as PersistedRemoteTask | null;
   if (!row) return { status: "missing", taskRunId: input.taskRunId };
 
+  // Stale queue events are advisory. Canonical terminal state wins without
+  // reconstructing credentials that may lawfully have expired since submit.
+  if (isTerminalTaskStatus(row.status)) {
+    return { status: row.status, taskRunId: row.taskRunId, idempotentReplay: true };
+  }
+
+  const earlyProgress = record(row.progressPayload) ?? {};
+  const earlyDurableMetadata = parseDurableInferenceTaskMetadata(
+    record(row.a2aMetadata)?.["durableInference"],
+  );
+  const earlyDurableProgress = parseDurableInferenceProgress(
+    earlyProgress["durableInference"],
+  );
+  if (
+    earlyDurableMetadata
+    && DURABLE_RECOVERABLE_ADMISSION_STATES.has(row.status)
+    && earlyDurableProgress?.state === "admitted"
+    && earlyDurableProgress.asyncOperationId
+  ) {
+    // The wake path independently verifies the exact TaskRun/operation
+    // binding. Do not let later credential expiry strand admitted work.
+    await enqueuePrismaAsyncOperationWake(earlyDurableProgress.asyncOperationId);
+    return {
+      status: row.status,
+      taskRunId: row.taskRunId,
+      asyncOperationId: earlyDurableProgress.asyncOperationId,
+      idempotentReplay: true,
+    };
+  }
+
   const reconstructed = reconstructPersistedRemoteTask(row);
   if (!reconstructed.ok) {
-    await settleReconstructionFailure(row, reconstructed);
+    const settled = await settleReconstructionFailure(row, reconstructed);
+    if (!settled) return { status: "duplicate", taskRunId: row.taskRunId };
     const apiTokenId = string(record(row.a2aMetadata)?.["apiTokenId"]);
     if (apiTokenId) await publishMcpTaskStatus(row.taskRunId, apiTokenId);
     return { status: "failed", taskRunId: row.taskRunId, error: reconstructed.code };
@@ -330,7 +398,8 @@ export async function executePersistedRemoteTask(input: {
         code: "authorization_revoked" as const,
         message: "The submitting MCP credential is no longer active with sufficient authority.",
       };
-      await settleReconstructionFailure(row, failure);
+      const settled = await settleReconstructionFailure(row, failure);
+      if (!settled) return { status: "duplicate", taskRunId: row.taskRunId };
       await publishMcpTaskStatus(row.taskRunId, reconstructed.data.token.tokenId);
       return { status: "failed", taskRunId: row.taskRunId, error: failure.code };
     }
@@ -380,6 +449,7 @@ export async function executePersistedRemoteTask(input: {
     && existingDurableProgress?.state === "admitted"
     && existingDurableProgress.asyncOperationId
   ) {
+    await enqueuePrismaAsyncOperationWake(existingDurableProgress.asyncOperationId);
     return {
       status: row.status,
       taskRunId: row.taskRunId,
@@ -448,38 +518,90 @@ export async function executePersistedRemoteTask(input: {
       routeContext: reconstructed.data.parsed.routeContext,
       recipeId: durableRecipeId,
     });
-    const persisted = await prisma.taskRun.updateMany({
-      where: { taskRunId: row.taskRunId, status: DURABLE_TASK_WORKING_STATUS },
-      data: {
-        completedAt: null,
-        lastHeartbeatAt: new Date(),
-        progressPayload: {
-          ...progress,
-          dispatch: claimedProgressObject.dispatch,
-          durableInference: {
-            schemaVersion: 1,
-            recipeId: durableRecipeId,
-            state: "admitted",
-            attempt: durableAttempt,
-            asyncOperationId: admitted.asyncOperationId,
-            routingRecipeId: admitted.recipeId,
-            admittedAt: new Date().toISOString(),
-          },
-        } as Prisma.InputJsonValue,
-      },
-    });
-    if (persisted.count !== 1) {
-      return {
-        status: "duplicate",
-        taskRunId: row.taskRunId,
-        asyncOperationId: admitted.asyncOperationId,
-      };
+    let cancellationRequested = false;
+    let persisted = false;
+    for (let attempt = 0; attempt < 2 && !persisted; attempt += 1) {
+      const current = await prisma.taskRun.findFirst({
+        where: { taskRunId: row.taskRunId },
+        select: { status: true, updatedAt: true, progressPayload: true },
+      });
+      if (!current) throw new Error("DURABLE_INFERENCE_TASKRUN_MISSING_AFTER_ADMISSION");
+      const currentProgress = record(current.progressPayload) ?? {};
+      const currentDurable = parseDurableInferenceProgress(currentProgress["durableInference"]);
+      if (
+        currentDurable?.state === "admitted"
+        && currentDurable.asyncOperationId === admitted.asyncOperationId
+      ) {
+        await enqueuePrismaAsyncOperationWake(admitted.asyncOperationId);
+        return {
+          status: current.status,
+          taskRunId: row.taskRunId,
+          asyncOperationId: admitted.asyncOperationId,
+          idempotentReplay: true,
+        };
+      }
+      if (
+        !DURABLE_RECOVERABLE_ADMISSION_STATES.has(current.status)
+        || currentDurable?.state !== "admitting"
+      ) {
+        throw new Error("DURABLE_INFERENCE_TASKRUN_STATE_CONFLICT_AFTER_ADMISSION");
+      }
+      cancellationRequested = Boolean(currentDurable.cancellationRequestedAt);
+      const admittedAt = new Date();
+      const update = await prisma.taskRun.updateMany({
+        where: {
+          taskRunId: row.taskRunId,
+          status: current.status,
+          updatedAt: current.updatedAt,
+        },
+        data: {
+          completedAt: null,
+          lastHeartbeatAt: admittedAt,
+          progressPayload: {
+            ...currentProgress,
+            durableInference: {
+              ...currentDurable,
+              schemaVersion: 1,
+              recipeId: durableRecipeId,
+              state: "admitted",
+              attempt: durableAttempt,
+              asyncOperationId: admitted.asyncOperationId,
+              routingRecipeId: admitted.recipeId,
+              admittedAt: admittedAt.toISOString(),
+            },
+          } as Prisma.InputJsonValue,
+        },
+      });
+      persisted = update.count === 1;
     }
+    if (!persisted) {
+      throw new Error("DURABLE_INFERENCE_TASKRUN_ADMISSION_CAS_RETRY_REQUIRED");
+    }
+    if (cancellationRequested) {
+      const canceled = await requestPrismaAuthorizedAsyncOperationCancellation({
+        target: { kind: "task-run", taskRunId: row.taskRunId },
+        actor: {
+          userId: reconstructed.data.token.userId,
+          agentId: null,
+          principalId: null,
+          isSuperuser: false,
+        },
+        requestKey: reconstructed.data.parsed.idempotencyKey,
+      });
+      if (canceled.operationId !== admitted.asyncOperationId) {
+        throw new Error("DURABLE_INFERENCE_OPERATION_ID_MISMATCH");
+      }
+    }
+    // Advisory delivery happens only after the TaskRun owns the operation id.
+    // A failed send is safe: the operation row is durable and reconciliation,
+    // or an idempotent TaskRun worker retry, emits the same identity again.
+    await enqueuePrismaAsyncOperationWake(admitted.asyncOperationId);
     await publishMcpTaskStatus(row.taskRunId, reconstructed.data.token.tokenId);
     return {
       status: DURABLE_TASK_WORKING_STATUS,
       taskRunId: row.taskRunId,
       asyncOperationId: admitted.asyncOperationId,
+      ...(cancellationRequested ? { cancellationRequested: true } : {}),
     };
   }
 

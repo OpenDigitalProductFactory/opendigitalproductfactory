@@ -21,6 +21,11 @@ export type DurableInferenceProgress = {
   cancellationRequestedAt?: string;
 };
 
+export type DurableInferenceExecutionRecipeIdentity = {
+  id: string;
+  modelId: string;
+};
+
 export const DURABLE_INFERENCE_TASK_RECIPE = Object.freeze({
   id: DURABLE_INFERENCE_TASK_RECIPE_ID,
   taskType: "mcp-durable-inference-one-shot",
@@ -34,6 +39,55 @@ export const DURABLE_INFERENCE_TASK_RECIPE = Object.freeze({
     "Return only the final answer; do not request or invoke tools and do not claim side effects.",
   ].join(" "),
 });
+
+function exactScalarPolicy(
+  value: unknown,
+  expected: Readonly<Record<string, string | number | boolean>>,
+): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const actual = value as Record<string, unknown>;
+  const actualKeys = Object.keys(actual).sort();
+  const expectedKeys = Object.keys(expected).sort();
+  return actualKeys.length === expectedKeys.length
+    && actualKeys.every((key, index) => key === expectedKeys[index])
+    && expectedKeys.every((key) => actual[key] === expected[key]);
+}
+
+/**
+ * Revalidate the complete closed execution-plan fingerprint persisted with an
+ * admitted operation. This is used both after routing and when reconciliation
+ * repairs the operation-created/TaskRun-projection crash window.
+ */
+export function exactDurableInferenceExecutionRecipeId(input: {
+  executionPlan: unknown;
+  recipes: readonly DurableInferenceExecutionRecipeIdentity[];
+}): string | null {
+  if (!input.executionPlan || typeof input.executionPlan !== "object" || Array.isArray(input.executionPlan)) {
+    return null;
+  }
+  const plan = input.executionPlan as Record<string, unknown>;
+  const recipeId = typeof plan["recipeId"] === "string" ? plan["recipeId"].trim() : "";
+  const modelId = typeof plan["modelId"] === "string" ? plan["modelId"].trim() : "";
+  if (
+    !recipeId
+    || !modelId
+    || plan["providerId"] !== DURABLE_INFERENCE_TASK_RECIPE.providerId
+    || plan["contractFamily"] !== DURABLE_INFERENCE_TASK_CONTRACT_FAMILY
+    || plan["executionAdapter"] !== "async"
+    || plan["maxTokens"] !== 4_096
+    || !exactScalarPolicy(plan["providerSettings"], {})
+    || !exactScalarPolicy(plan["toolPolicy"], {
+      toolChoice: "none",
+      allowParallelToolCalls: false,
+    })
+    || !exactScalarPolicy(plan["responsePolicy"], {
+      strictSchema: false,
+      stream: false,
+    })
+    || !input.recipes.some((recipe) => recipe.id === recipeId && recipe.modelId === modelId)
+  ) return null;
+  return recipeId;
+}
 
 export function parseDurableInferenceTaskRecipeId(
   value: unknown,

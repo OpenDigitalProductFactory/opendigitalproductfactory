@@ -5,6 +5,7 @@ import {
   DURABLE_INFERENCE_TASK_CONTRACT_FAMILY,
   DURABLE_INFERENCE_TASK_RECIPE,
   DURABLE_INFERENCE_TASK_RECIPE_ID,
+  exactDurableInferenceExecutionRecipeId,
   type DurableInferenceTaskRecipeId,
 } from "./mcp-task-durable-inference-contract";
 
@@ -67,6 +68,7 @@ export async function ensureDurableInferenceTaskRecipes(): Promise<{
   seeded: number;
   validated: number;
   recipeIds: string[];
+  recipes: Array<{ id: string; modelId: string }>;
 }> {
   const profiles = await prisma.modelProfile.findMany({
     where: {
@@ -79,7 +81,9 @@ export async function ensureDurableInferenceTaskRecipes(): Promise<{
   let seeded = 0;
   let validated = 0;
   const recipeIds: string[] = [];
-  for (const profile of profiles) {
+  const recipes: Array<{ id: string; modelId: string }> = [];
+  for (const profile of profiles.filter((candidate) =>
+    !candidate.modelId.startsWith("deep-research-"))) {
     let recipe = await prisma.executionRecipe.findFirst({
       where: {
         providerId: DURABLE_INFERENCE_TASK_RECIPE.providerId,
@@ -119,10 +123,12 @@ export async function ensureDurableInferenceTaskRecipes(): Promise<{
         }) as RecipeRow | null;
       }
     }
-    recipeIds.push(validateRecipe(recipe, profile.modelId).id);
+    const validatedRecipe = validateRecipe(recipe, profile.modelId);
+    recipeIds.push(validatedRecipe.id);
+    recipes.push({ id: validatedRecipe.id, modelId: validatedRecipe.modelId });
     validated += 1;
   }
-  return { seeded, validated, recipeIds };
+  return { seeded, validated, recipeIds, recipes };
 }
 
 export async function admitDurableInferenceTask(input: {
@@ -172,21 +178,35 @@ export async function admitDurableInferenceTask(input: {
           principalId: null,
           isSuperuser: false,
         },
+        expectedExecution: {
+          providerId: DURABLE_INFERENCE_TASK_RECIPE.providerId,
+          contractFamily: DURABLE_INFERENCE_TASK_CONTRACT_FAMILY,
+          executionAdapter: "async",
+          explorationMode: "champion",
+          plans: seeded.recipes.map((recipe) => ({
+            recipeId: recipe.id,
+            modelId: recipe.modelId,
+            maxTokens: 4_096,
+            providerSettings: {},
+            toolPolicy: { toolChoice: "none", allowParallelToolCalls: false },
+            responsePolicy: { strictSchema: false, stream: false },
+          })),
+        },
+        deferInitialWake: true,
       },
     },
   );
   const plan = result.routeDecision.executionPlan;
+  const selectedRecipeId = exactDurableInferenceExecutionRecipeId({
+    executionPlan: plan,
+    recipes: seeded.recipes,
+  });
   if (
     !result.asyncOperationId
-    || !plan
-    || plan.executionAdapter !== "async"
-    || plan.providerId !== DURABLE_INFERENCE_TASK_RECIPE.providerId
-    || plan.contractFamily !== DURABLE_INFERENCE_TASK_CONTRACT_FAMILY
-    || !plan.recipeId
-    || !seeded.recipeIds.includes(plan.recipeId)
+    || !selectedRecipeId
     || result.routeDecision.explorationMode !== "champion"
   ) {
     throw new Error("DURABLE_INFERENCE_ASYNC_RECIPE_NOT_SELECTED");
   }
-  return { asyncOperationId: result.asyncOperationId, recipeId: plan.recipeId };
+  return { asyncOperationId: result.asyncOperationId, recipeId: selectedRecipeId };
 }

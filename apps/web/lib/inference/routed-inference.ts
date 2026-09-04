@@ -39,6 +39,7 @@ import {
   buildEffectiveRequestContract,
   buildInitialRouteContext,
 } from "@/lib/inference/route-contract-builder";
+import { assertDurableExecutionConstraint } from "./durable-execution-constraint";
 import { persistRoutedTokenUsage, routedContextKey } from "./routed-token-usage";
 import type { RouteAndCallOptions } from "./routed-inference-options";
 import { applyCallerExecutionPlanOverrides } from "./routed-inference-plan-overrides";
@@ -613,6 +614,8 @@ async function routeAndCallAttempt(
   if (options?.durableAsyncOperation && !routeUsesDurableAsyncAdapter(decision)) {
     throw new Error("ASYNC_OPERATION_EXECUTION_PLAN_REQUIRED");
   }
+  const expectedExecution = options?.durableAsyncOperation?.expectedExecution;
+  if (expectedExecution) assertDurableExecutionConstraint(decision, expectedExecution);
   if (options?.interactionMode === "background") {
     if (routeUsesDurableAsyncAdapter(decision)) {
       const admitted = await admitRoutedAsyncOperation({
@@ -620,6 +623,7 @@ async function routeAndCallAttempt(
         messages,
         systemPrompt,
         tools: toolsStripped ? undefined : dispatchScreenInput.tools,
+        screeningInput: dispatchScreenInput,
         options,
         traceId,
       });

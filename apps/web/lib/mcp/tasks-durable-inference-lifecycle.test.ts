@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const db = vi.hoisted(() => ({
   findTask: vi.fn(),
@@ -30,6 +30,7 @@ import {
   DURABLE_INFERENCE_TASK_CONTRACT_FAMILY,
   DURABLE_INFERENCE_TASK_RECIPE_ID,
 } from "../mcp-task-durable-inference-contract";
+import { MCP_ROUTE_TOOL_RESULT_CHAR_CAP } from "@/lib/tak/tool-result-budget";
 
 const requestDigest = "b".repeat(64);
 
@@ -74,7 +75,9 @@ function operation(status = "running") {
     progressPct: status === "completed" ? 100 : 45,
     progressMessage: status === "completed" ? null : "Provider operation in progress",
     resultText: status === "completed" ? "Durable final answer." : null,
-    resultData: status === "completed" ? { provenance: "provider" } : null,
+    resultData: status === "completed"
+      ? { provenance: "provider", hiddenPrompt: "must-not-cross-public-task-boundary" }
+      : null,
     errorMessage: status === "failed" ? "provider failed" : null,
     createdAt: new Date("2026-09-04T12:00:00.000Z"),
     updatedAt: new Date("2026-09-04T12:02:00.000Z"),
@@ -87,12 +90,18 @@ function operation(status = "running") {
 }
 
 beforeEach(() => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-09-04T12:02:00.000Z"));
   vi.clearAllMocks();
   db.findTask.mockResolvedValue(task());
   db.updateTask.mockResolvedValue(task({ status: "canceled" }));
   db.updateTasks.mockResolvedValue({ count: 1 });
   runtime.read.mockResolvedValue({ operation: operation(), transitions: [], nextCursor: 3 });
   runtime.cancel.mockResolvedValue(operation("running"));
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe("MCP Tasks durable inference lifecycle", () => {
@@ -204,7 +213,9 @@ describe("MCP Tasks durable inference lifecycle", () => {
           status: "completed",
           terminal: true,
           resultText: "Durable final answer.",
-          resultData: { provenance: "provider" },
+          resultTruncated: false,
+          resultOriginalChars: 21,
+          resultSha256: expect.stringMatching(/^[a-f0-9]{64}$/u),
           provenance: {
             asyncOperationId: "async-op-1",
             requestDigest,
@@ -217,6 +228,56 @@ describe("MCP Tasks durable inference lifecycle", () => {
         isError: false,
       },
     });
+    expect(JSON.stringify(result)).not.toContain("hiddenPrompt");
+    expect(JSON.stringify(result)).not.toContain('"provenance":"provider"');
+  });
+
+  it("bounds oversized provider text in both content and structured output", async () => {
+    const oversized = "\u0001".repeat(120_000);
+    runtime.read.mockResolvedValueOnce({
+      operation: { ...operation("completed"), resultText: oversized },
+      transitions: [],
+      nextCursor: 3,
+    });
+
+    const result = await handleTasksResult("user-1", { taskId: "TR-MCP-DURABLE" });
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") return;
+    const value = result.value as {
+      content: Array<{ text: string }>;
+      structuredContent: Record<string, unknown>;
+    };
+    expect(value.content[0]?.text.length).toBeLessThan(oversized.length);
+    expect(value.structuredContent).toMatchObject({
+      resultTruncated: true,
+      resultOriginalChars: oversized.length,
+      resultSha256: expect.stringMatching(/^[a-f0-9]{64}$/u),
+    });
+    expect(JSON.stringify(value).length).toBeLessThan(MCP_ROUTE_TOOL_RESULT_CHAR_CAP);
+  });
+
+  it("bounds oversized provider errors in both content and structured output", async () => {
+    const oversized = "provider-error\u0001".repeat(12_000);
+    runtime.read.mockResolvedValueOnce({
+      operation: { ...operation("failed"), errorMessage: oversized },
+      transitions: [],
+      nextCursor: 3,
+    });
+
+    const result = await handleTasksResult("user-1", { taskId: "TR-MCP-DURABLE" });
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") return;
+    const value = result.value as {
+      content: Array<{ text: string }>;
+      structuredContent: Record<string, unknown>;
+    };
+    expect(value.content[0]?.text.length).toBeLessThan(oversized.length);
+    expect(value.structuredContent).toMatchObject({
+      errorTruncated: true,
+      errorOriginalChars: oversized.length,
+      errorSha256: expect.stringMatching(/^[a-f0-9]{64}$/u),
+    });
+    expect(JSON.stringify(value).length).toBeLessThan(MCP_ROUTE_TOOL_RESULT_CHAR_CAP);
   });
 
   it("tasks/cancel delegates through the TaskRun-scoped runtime and does not directly settle the TaskRun", async () => {

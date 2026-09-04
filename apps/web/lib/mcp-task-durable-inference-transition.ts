@@ -16,6 +16,7 @@ import {
 import { mcpTaskNotificationBus } from "./mcp-task-notification-bus";
 
 const TERMINAL_TASK_STATES = new Set(["completed", "failed", "canceled", "rejected", "archived"]);
+const TERMINAL_OPERATION_STATES = ["completed", "failed", "cancelled", "expired"] as const;
 
 function record(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -54,13 +55,21 @@ function durableProgressPatch(input: {
   operation: Awaited<ReturnType<typeof readPrismaAuthorizedAsyncOperation>>["operation"];
   now: Date;
 }): Prisma.InputJsonValue {
+  // Admission state is the provider-wake gate. Provider lifecycle is a
+  // separate observation: changing admitted -> running here would deadlock
+  // every later poll wake. If a pending transition races ahead of TaskRun
+  // linkage, retain admitting so TaskRun reconciliation can finish admission.
+  const admissionState = input.priorDurable["state"] === "admitting"
+    ? "admitting"
+    : "admitted";
   return {
     ...input.progress,
     durableInference: {
       ...input.priorDurable,
       schemaVersion: 1,
       recipeId: DURABLE_INFERENCE_TASK_RECIPE_ID,
-      state: input.operation.status,
+      state: admissionState,
+      providerState: input.operation.status,
       asyncOperationId: input.operation.operationId,
       requestDigest: input.operation.requestDigest,
       providerId: input.operation.providerId,
@@ -76,6 +85,20 @@ function durableProgressPatch(input: {
       observedAt: input.now.toISOString(),
     },
   } as Prisma.InputJsonValue;
+}
+
+function priorProjectedTaskStatus(
+  durable: Record<string, unknown>,
+): ReturnType<typeof taskStatus> | null {
+  const value = typeof durable["providerState"] === "string"
+    ? durable["providerState"]
+    // Compatibility with the short pre-separation development window.
+    : durable["state"];
+  try {
+    return taskStatus(parseAsyncInferenceOperationStatus(value));
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -151,9 +174,7 @@ export async function settleDurableInferenceTaskTransition(input: {
     throw new Error("DURABLE_INFERENCE_OPERATION_ID_MISMATCH");
   }
   if (TERMINAL_TASK_STATES.has(row.status)) {
-    const priorStatus = typeof priorDurable["state"] === "string"
-      ? taskStatus(parseAsyncInferenceOperationStatus(priorDurable["state"]))
-      : null;
+    const priorStatus = priorProjectedTaskStatus(priorDurable);
     if (priorStatus !== row.status) {
       throw new Error("DURABLE_INFERENCE_TERMINAL_PROJECTION_MISMATCH");
     }
@@ -238,9 +259,7 @@ export async function settleDurableInferenceTaskTransition(input: {
       throw new Error("DURABLE_INFERENCE_OPERATION_ID_MISMATCH");
     }
     if (TERMINAL_TASK_STATES.has(latest.status)) {
-      const latestStatus = typeof latestDurable["state"] === "string"
-        ? taskStatus(parseAsyncInferenceOperationStatus(latestDurable["state"]))
-        : null;
+      const latestStatus = priorProjectedTaskStatus(latestDurable);
       if (latestStatus !== latest.status) {
         throw new Error("DURABLE_INFERENCE_TERMINAL_PROJECTION_MISMATCH");
       }
@@ -303,4 +322,50 @@ export async function settleDurableInferenceTaskTransition(input: {
     if (task) mcpTaskNotificationBus.publish(apiTokenId, task);
   }
   return { status, taskRunId: row.taskRunId, settled: true };
+}
+
+/**
+ * Repair a TaskRun projection when the transition event was accepted by the
+ * queue but its consumer exhausted while the platform remained quiesced.
+ *
+ * The scan is deliberately restricted to the closed public Tasks contract and
+ * nonterminal TaskRuns. Settlement still re-enters the TaskRun-scoped
+ * authorization and immutable-binding checks above; the scan itself grants no
+ * authority and carries no provider result.
+ */
+export async function reconcileDurableInferenceTaskTransitions(input: {
+  limit?: number;
+} = {}): Promise<{ inspected: number; settled: number; alreadySettled: number }> {
+  const limit = Math.max(1, Math.min(input.limit ?? 50, 100));
+  const candidates = await prisma.asyncInferenceOp.findMany({
+    where: {
+      identityVersion: 1,
+      contractFamily: DURABLE_INFERENCE_TASK_CONTRACT_FAMILY,
+      status: { in: [...TERMINAL_OPERATION_STATES] },
+      taskRunId: { not: null },
+      taskRun: {
+        is: { status: { in: ["submitted", "working", "quiescing"] } },
+      },
+    },
+    orderBy: [{ updatedAt: "asc" }, { id: "asc" }],
+    take: limit,
+    select: {
+      id: true,
+      status: true,
+      transitionSequence: true,
+    },
+  });
+
+  let settled = 0;
+  let alreadySettled = 0;
+  for (const candidate of candidates) {
+    const result = await settleDurableInferenceTaskTransition({
+      operationId: candidate.id,
+      sequence: candidate.transitionSequence,
+      status: candidate.status,
+    });
+    if (result.settled) settled += 1;
+    else alreadySettled += 1;
+  }
+  return { inspected: candidates.length, settled, alreadySettled };
 }

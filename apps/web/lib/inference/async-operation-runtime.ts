@@ -45,9 +45,31 @@ import {
   publishAsyncOperationTransitionEvent,
 } from "@/lib/execution/adapters/async-operation-events";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { DURABLE_INFERENCE_TASK_CONTRACT_FAMILY } from "@/lib/mcp-task-durable-inference-contract";
+import { assertDurableDispatchScreen } from "./durable-dispatch-screen";
+import { getLocalOnlyInferenceFresh } from "./local-only";
 
 function createStore(): PrismaAsyncOperationStore {
   return new PrismaAsyncOperationStore(prisma as unknown as AsyncOperationDatabase);
+}
+
+function jsonObject(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+export function durableMcpTaskWakeDisposition(input: {
+  operationId: string;
+  progressPayload: unknown;
+}): "ready" | "cancel" | "wait" {
+  const durable = jsonObject(jsonObject(input.progressPayload)?.["durableInference"]);
+  if (typeof durable?.["cancellationRequestedAt"] === "string") return "cancel";
+  if (durable?.["state"] !== "admitted") return "wait";
+  if (durable["asyncOperationId"] !== input.operationId) {
+    throw new Error("DURABLE_INFERENCE_OPERATION_ID_MISMATCH");
+  }
+  return "ready";
 }
 
 function pollFailureIsRetryable(error: unknown): boolean {
@@ -83,6 +105,16 @@ export function normalizeDurableAsyncProviderPoll(
 }
 
 const productionProviderIo: DurableAsyncProviderIo = {
+  async authorizeDispatch({ providerId, context }) {
+    assertDurableDispatchScreen({
+      evidence: context.dispatchScreen,
+      messages: context.messages,
+      systemPrompt: context.systemPrompt,
+      tools: context.tools,
+      providerId,
+      localOnlyInference: await getLocalOnlyInferenceFresh(),
+    });
+  },
   dispatch: ({ providerId, modelId, context }) => callProvider(
     providerId,
     modelId,
@@ -123,6 +155,7 @@ async function enqueueWake(wake: AsyncOperationWake): Promise<void> {
 type DurableAsyncOperationAuthority = {
   request: AsyncOperationAuthorityRequest;
   actor: AsyncOperationAuthorityActor;
+  deferInitialWake?: boolean;
 };
 
 function authorityDatabase(): AsyncOperationAuthorityDatabase {
@@ -144,8 +177,15 @@ export async function admitPrismaDurableAsyncOperation(
       db: authorityDatabase(),
     }),
     store,
-    enqueue: (operationId) => enqueueWake({ operationId, notBefore: new Date() }),
+    enqueue: input.deferInitialWake
+      ? async () => undefined
+      : (operationId) => enqueueWake({ operationId, notBefore: new Date() }),
   });
+}
+
+/** Enqueue a previously admitted operation after its owning TaskRun projection is durable. */
+export async function enqueuePrismaAsyncOperationWake(operationId: string): Promise<void> {
+  await enqueueWake({ operationId, notBefore: new Date() });
 }
 
 /** List durable handles for one authorized semantic TaskRun/Workroom scope. */
@@ -198,6 +238,29 @@ export async function runPrismaAsyncOperationWake(input: {
   workerId: string;
 }) {
   const store = createStore();
+  const operation = await store.loadForWorker(input.operationId);
+  if (operation?.contractFamily === DURABLE_INFERENCE_TASK_CONTRACT_FAMILY) {
+    if (!operation.taskRunId) throw new Error("DURABLE_INFERENCE_TASKRUN_BINDING_MISSING");
+    const taskRun = await prisma.taskRun.findUnique({
+      where: { id: operation.taskRunId },
+      select: { progressPayload: true },
+    });
+    if (!taskRun) throw new Error("DURABLE_INFERENCE_TASKRUN_BINDING_MISSING");
+    const disposition = durableMcpTaskWakeDisposition({
+      operationId: operation.id,
+      progressPayload: taskRun.progressPayload,
+    });
+    if (disposition === "wait") {
+      return { status: operation.status, disposition: "busy" as const, nextWakeAt: null };
+    }
+    if (disposition === "cancel") {
+      await store.requestAuthorizedCancellation({
+        authorityScopeKey: operation.authorityScopeKey,
+        requestKey: operation.requestKey,
+        now: new Date(),
+      });
+    }
+  }
   const provider = createDurableAsyncProviderDependencies(productionProviderIo);
   return runAsyncOperationWake(input, {
     runWorker: (workerInput) => runDurableAsyncOperationWorker(workerInput, {

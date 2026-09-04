@@ -69,6 +69,23 @@ export interface RouteAndCallOptions {
   durableAsyncOperation?: {
     request: AsyncOperationAuthorityRequest;
     actor: AsyncOperationAuthorityActor;
+    /** Closed callers can constrain the selected plan before durable admission. */
+    expectedExecution?: {
+      providerId: string;
+      contractFamily: string;
+      executionAdapter: "async";
+      explorationMode: "champion";
+      plans: readonly {
+        recipeId: string;
+        modelId: string;
+        maxTokens: number;
+        providerSettings: Readonly<Record<string, unknown>>;
+        toolPolicy: Readonly<Record<string, unknown>>;
+        responsePolicy: Readonly<Record<string, unknown>>;
+      }[];
+    };
+    /** The closed caller persists its TaskRun projection before the first wake. */
+    deferInitialWake?: boolean;
   };
   threadId?: string;
   maxDurationMs?: number;

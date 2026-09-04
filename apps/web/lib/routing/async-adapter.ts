@@ -41,6 +41,18 @@ function normalizeInteractionsBaseUrl(baseUrl: string): string {
   return baseUrl.replace(/\/+$/, "");
 }
 
+function boundedModelGenerationConfig(request: AdapterRequest): Record<string, unknown> | null {
+  const maxTokens = request.plan.maxTokens;
+  if (!Number.isSafeInteger(maxTokens) || maxTokens <= 0) {
+    throw new InferenceError(
+      "Gemini model interactions require an enforceable positive output-token ceiling",
+      "provider_error",
+      request.providerId,
+    );
+  }
+  return { max_output_tokens: maxTokens };
+}
+
 // ── Async Adapter ───────────────────────────────────────────────────────────
 
 export const asyncAdapter: ExecutionAdapterHandler = {
@@ -66,11 +78,21 @@ export const asyncAdapter: ExecutionAdapterHandler = {
     const modelOrAgent = isManagedInteractionsAgent(modelId)
       ? { agent: modelId }
       : { model: modelId.replace(/^models\//, "") };
+    if (isManagedInteractionsAgent(modelId) && request.plan.maxTokens > 0) {
+      throw new InferenceError(
+        "Managed Interactions agents cannot enforce the requested output-token ceiling",
+        "provider_error",
+        providerId,
+      );
+    }
     const body: Record<string, unknown> = {
       ...modelOrAgent,
       input: prompt,
       ...(request.systemPrompt.trim().length > 0
         ? { system_instruction: request.systemPrompt }
+        : {}),
+      ...(!isManagedInteractionsAgent(modelId)
+        ? { generation_config: boundedModelGenerationConfig(request) }
         : {}),
       background: true,
     };
