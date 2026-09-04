@@ -1,3 +1,5 @@
+import { BACKLOG_WORK_TYPE_VALUES, type BacklogWorkType } from "@/lib/explore/backlog";
+
 import type { ReadinessProfile } from "./types";
 
 const PROFILE_STRENGTH: Record<ReadinessProfile, number> = {
@@ -30,6 +32,21 @@ export type InitiativeProfileSignals = {
   recordedProfiles?: readonly ReadinessProfile[];
 };
 
+const READINESS_PROFILE_BY_WORK_TYPE = {
+  bug: "fix",
+  chore: "fix",
+  refactor: "feature",
+  feature: "feature",
+  tool: "feature",
+  skill: "feature",
+  doc: "doc-only",
+} satisfies Record<BacklogWorkType, ReadinessProfile>;
+
+function profileFromWorkType(value: string | null | undefined): ReadinessProfile | null {
+  if (!value || !(BACKLOG_WORK_TYPE_VALUES as readonly string[]).includes(value)) return null;
+  return READINESS_PROFILE_BY_WORK_TYPE[value as BacklogWorkType];
+}
+
 function profileFromString(value: string | null | undefined): ReadinessProfile | null {
   const normalized = value?.trim().toLocaleLowerCase("en-US").replaceAll("_", "-");
   if (!normalized) return null;
@@ -55,10 +72,12 @@ function profileFromScopeKind(value: string | null | undefined): ReadinessProfil
 
 /** Monotonic profile projection from immutable history and current structured substrate. */
 export function deriveAuthoritativeReadinessProfile(signals: InitiativeProfileSignals): ReadinessProfile | null {
+  const workTypeProfile = profileFromWorkType(signals.workType);
+  if (signals.workType != null && workTypeProfile === null) return null;
   const candidates = [
     profileFromString(signals.type),
     profileFromString(signals.source),
-    profileFromString(signals.workType),
+    workTypeProfile,
     profileFromScopeKind(signals.scopeKind),
     profileFromString(signals.activeBuildKind),
     ...(signals.recordedProfiles ?? []),
