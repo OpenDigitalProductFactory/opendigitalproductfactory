@@ -2,7 +2,7 @@
 status: proposed
 ---
 
-# Pet Rescue operating system and resilient Help design
+# Pet Rescue operating experience and resilient Help design
 
 **Integration backlog item:** `BI-7A38F667`  
 **Covered Pet Rescue items:** `BI-4F8A484C`, `BI-D2A51B36`, `BI-97290291`,
@@ -14,8 +14,9 @@ status: proposed
 
 ## 1. Decision summary
 
-This change turns the Pet Rescue archetype from a public animal catalog into an
-operating system for the three value streams already defined in Architecture:
+This change turns the Pet Rescue archetype from a public animal catalog into a
+whole-business operating experience for the three value streams already defined
+in Architecture:
 
 1. **Rescue and intake** — bring an animal into custody safely and lawfully.
 2. **Health and welfare** — house the animal, coordinate clinical care, and
@@ -32,6 +33,42 @@ event. Each independently reviewable slice retains its existing backlog item,
 acceptance evidence, verification seam, and clean-revert commit inside the
 shared governed Workroom and branch. A shared nonproduction lease verifies the
 assembled change without letting the integration item hide partial delivery.
+
+### 1.1 Why this belongs inside DPF
+
+DPF is the shared whole-business platform that activates different business
+archetypes; Pet Rescue is an already-supported leaf archetype, not a new company
+mission or a separate product. The current install already contains its public
+animal listing, nonprofit workspace, value streams, resource capacity, finance,
+people, care scheduling, recurring work, and AI-coworker substrate. The gap is
+that those generic capabilities are not yet composed into the rescue operator's
+intake-to-placement work.
+
+This PR adds no second application, deployment, identity store, workflow engine,
+ledger, scheduler, or design system. It extends the existing DPF modules and
+navigation in place:
+
+```text
+Storefront inquiry/listing
+        │
+        ▼
+Animal identity + custody ── Resource capacity
+        │                     │
+        ├── Care appointments + subject care records
+        ├── Recurring WorkEngagement commitments
+        ├── Adoption application + placement
+        └── JournalLine subject/fund dimensions
+                    │
+                    ▼
+       Pet Rescue workspace projections
+```
+
+The optional public listing remains a storefront projection. Custody owns
+animal lifecycle, Resource owns placement capacity, care owns clinical and
+appointment facts, work owns recurring commitments, finance owns posted money,
+and the workspace only composes bounded read models. Section 5 defines the data
+links, §6 the commands and invariants, §7 the integrated navigation, §11 the
+projection/transaction behavior, and §12 the single-PR delivery order.
 
 ## 2. Outcomes and objective baseline
 
