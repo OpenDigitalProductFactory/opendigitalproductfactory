@@ -5,18 +5,20 @@ status: active
 # Initiative readiness closed-work-type classification implementation plan
 
 - **Backlog item:** BI-1B5B4CEC
-- **Workroom:** WC-421C49DA
+- **Initial delivery:** PR #5035 / WC-421C49DA
+- **Closure Workroom:** WC-D9BE05B3
 - **Design:** `docs/superpowers/specs/2026-09-03-initiative-readiness-worktype-classification-design.md`
 - **Canonical baseline:** `baseline-126c4811-660c-484c-a5c8-18898efc42b5`
 - **Delivery decision:** atomic
 
 ## Scope
 
-Repair the single authoritative `deriveAuthoritativeReadinessProfile` mapping
-so every closed backlog work type is classified consistently with
-`deriveBuildProcessType`, while unknown values remain fail-closed. The mapping,
-its table-driven regression test, and post-release BI-7C1F43E3 verification are
-one deliverable; none is independently safe to ship.
+Finish the single authoritative `deriveAuthoritativeReadinessProfile` mapping
+delivered by PR #5035: bind every closed backlog work type through a typed
+exhaustive record consistent with `deriveBuildProcessType`, and fail closed
+when a malformed work type appears beside permissive compatibility aliases.
+The typed map, its boundary regressions, the unoverridden exact-tree gate, and
+post-release BI-7C1F43E3 / BI-E22C3D75 verification are one deliverable.
 
 ## Traceability
 
@@ -31,15 +33,18 @@ Contracts exercised by this plan are `deriveAuthoritativeReadinessProfile` and
 
 ## Implementation sequence
 
-1. Preserve the committed table-driven Red over all seven closed work types and
-   the explicit unknown-value refusal.
-2. Extend the existing profile normalization function only: `chore` maps to
-   `fix`; `tool`, `skill`, and `refactor` map to `feature`.
-3. Run the focused and adjacent readiness suites, web typecheck, style and diff
-   guards, preflight, and the exact-tree gate.
-4. Deliver through DCO and protected GitHub checks, publish one canonical
-   release, upgrade through the governed path, and verify AC-WTC-005 by reading
-   BI-7C1F43E3 from the live runtime.
+1. Preserve PR #5035's valid-value red/green proof, then confirm a new red for
+   malformed work types masked by valid `type`, `source`, and build aliases.
+2. Replace work-type parsing with one `Record<BacklogWorkType,
+   ReadinessProfile>`; retain generic aliases only for non-work-type signals.
+3. Add entry and backlog-terminal regressions for truthful `refactor` work.
+4. Run focused and adjacent readiness, MCP-pack, and terminal-transition
+   suites, web typecheck, style and diff guards, and preflight.
+5. Obtain independent semantic review and pass the governed exact-tree gate
+   without an override before pushing the closure PR.
+6. Merge through the queue, publish and self-upgrade through the governed path,
+   then verify AC-WTC-005 by reading BI-7C1F43E3 and BI-E22C3D75 from the live
+   runtime.
 
 ## Atomic coverage projection
 
@@ -61,8 +66,9 @@ Contracts exercised by this plan are `deriveAuthoritativeReadinessProfile` and
 
 ## Completion boundary
 
-Completion requires the mapping and regression test to pass on the exact tree,
-all protected PR and merge-group checks to pass, the canonical release to be
-served, and live BI-7C1F43E3 to stop reporting `CLASSIFICATION_REQUIRED` solely
-because its truthful work type is `refactor`. This repair does not fabricate or
-waive any later completion evidence that BI-7C1F43E3 genuinely still requires.
+Completion requires the typed mapping and boundary regressions to pass on the
+exact tree without an override, all protected PR and merge-group checks to
+pass, the canonical release to be served, and live BI-7C1F43E3 and BI-E22C3D75
+to stop reporting `CLASSIFICATION_REQUIRED` solely because their truthful work
+type is `refactor`. This repair does not fabricate or waive later evidence
+either item genuinely still requires.
