@@ -4,12 +4,12 @@ status: proposed
 
 # Pet Rescue operating experience and resilient Help design
 
-**Integration backlog item:** `BI-7A38F667`  
+**Integration backlog item:** `BI-7A38F667`
 **Covered Pet Rescue items:** `BI-4F8A484C`, `BI-D2A51B36`, `BI-97290291`,
 `BI-7111AF0C`, `BI-5A25EC37`, `BI-A442F129`, `BI-E861E8B8`,
 `BI-7A38F667` (`EP-5102F494`)
-**Covered Help item:** `BI-AE7C386B` (`EP-56AE0F69`)  
-**Workroom:** `WC-16B8E810`  
+**Covered Help item:** `BI-AE7C386B` (`EP-56AE0F69`)
+**Workroom:** `WC-16B8E810`
 **Architecture decision:** `DI-0AFD05E602CA`
 
 ## 1. Decision summary

@@ -4,9 +4,9 @@ status: active
 
 # Pet Rescue operating system and Help recovery implementation plan
 
-**Design:** [2026-08-25-pet-rescue-operating-system-and-help-recovery-design.md](../specs/2026-08-25-pet-rescue-operating-system-and-help-recovery-design.md)  
-**Integration item:** `BI-7A38F667` · **Epic:** `EP-5102F494`  
-**Workroom:** `WC-16B8E810` · **Branch:** `feat/pet-rescue-operating-system`  
+**Design:** [2026-08-25-pet-rescue-operating-system-and-help-recovery-design.md](../specs/2026-08-25-pet-rescue-operating-system-and-help-recovery-design.md)
+**Integration item:** `BI-7A38F667` · **Epic:** `EP-5102F494`
+**Workroom:** `WC-16B8E810` · **Branch:** `feat/pet-rescue-operating-system`
 **Packaging:** one governed Workroom, one source worktree, one shared nonproduction lease, one PR
 
 ## Outcome
