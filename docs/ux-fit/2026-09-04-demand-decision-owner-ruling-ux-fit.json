@@ -1,0 +1,31 @@
+{
+  "version": "1",
+  "decidedOption": "profile-owned-decisions-in-the-existing-owner-inbox",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/coworker-decisions/review/page.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "sweep-measurement",
+    "baselineComparison": "unchanged",
+    "measured": {
+      "/coworker-decisions/review": {
+        "defaultVisibleWords": 215,
+        "leadBandWords": 0,
+        "primaryActions": 1,
+        "visibleFields": 0,
+        "maxChoicesPerControl": 0,
+        "subLegibleControls": 0,
+        "buriedPrimaryAction": 0,
+        "axeViolations": 2
+      }
+    }
+  },
+  "notes": {
+    "fit": "The repair changes which already-governed business decisions enter the existing list; it adds no copy, control, route, field, navigation layer, or disclosure.",
+    "cognitiveLoad": "One canonical owner inbox replaces route-specific discovery. The owner sees the same existing card and answer action for Demand funding decisions.",
+    "theme": "No visual styling changed. The existing surface remains composed from --dpf-* tokens.",
+    "measurement": "The route source adds no rendered JSX or user-facing words, so every committed arrival metric remains identical to apps/web/lib/ux-budget/route-budget-baseline.json."
+  }
+}

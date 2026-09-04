@@ -34,6 +34,7 @@ import {
   PROPOSAL_LABELS,
   PROPOSAL_QUEUE_COPY,
 } from "@/lib/decision/proposal-presentation";
+import { organizationDecisionInboxWhere } from "@/lib/decision/organization-decision-inbox";
 
 export const dynamic = "force-dynamic";
 
@@ -112,11 +113,14 @@ export default async function DecisionReviewPage({
   searchParams?: ReviewSearchParams;
 }) {
   const { focus: focusDomainClass = null } = (await searchParams) ?? {};
+  const orgProfile = await prisma.decisionPerspectiveProfile.findFirst({
+    where: { kind: "organization" },
+    select: { profileId: true },
+  });
   const [
     conflictRows,
     unresolvedRows,
     staleCount,
-    orgProfile,
     openOrgRows,
     principleRows,
     weightProposalRows,
@@ -157,19 +161,11 @@ export default async function DecisionReviewPage({
         select: { domainClass: true, question: true, profileId: true },
       }),
       prisma.perspectiveMaterial.count({ where: { freshness: "stale" } }),
-      prisma.decisionPerspectiveProfile.findFirst({
-        where: { kind: "organization" },
-        select: { profileId: true },
-      }),
-      // Unresolved WWWD business decisions (no build, unanswered) — the
-      // inline capture loop's inbox (BI-9677364B).
+      // Unresolved WWWD business decisions (no build/task, unanswered) — the
+      // inline capture loop's inbox (BI-9677364B, BI-EB5E9BE3). Profile
+      // ownership is canonical; a business surface's route is not.
       prisma.decisionInteraction.findMany({
-        where: {
-          outcomeType: { in: UNRESOLVED },
-          buildId: null,
-          routeContext: "/coworker-business",
-          humanOutcome: { equals: Prisma.DbNull },
-        },
+        where: organizationDecisionInboxWhere(orgProfile?.profileId ?? null, Prisma.DbNull),
         orderBy: { createdAt: "desc" },
         take: 20,
         select: {
