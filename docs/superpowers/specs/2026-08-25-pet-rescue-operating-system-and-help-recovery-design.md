@@ -45,8 +45,11 @@ that those generic capabilities are not yet composed into the rescue operator's
 intake-to-placement work.
 
 This PR adds no second application, deployment, identity store, workflow engine,
-ledger, scheduler, or design system. It extends the existing DPF modules and
-navigation in place:
+ledger, scheduler, design system, MongoDB datastore, message broker, or
+geospatial/location-tracking subsystem. It uses the existing PostgreSQL database
+and its transaction/outbox patterns. A `locationResourceId` is only a foreign
+key to a canonical room, kennel, or foster Resource; it is not live coordinate
+tracking. The change extends the existing DPF modules and navigation in place:
 
 ```text
 Storefront inquiry/listing
@@ -187,6 +190,10 @@ microservices, network RPC, a service mesh, or a `person-service`. Existing
 `Person`, `CustomerContact`, employee, and volunteer records remain in their
 current bounded contexts; Pet Rescue records reference those identities without
 moving foster, adopter, donor, or volunteer workflows into one new aggregate.
+It does not redefine installation-level high availability, backup, or disaster
+recovery. Those stay with DPF's existing deployment controls; this change proves
+that its additive migration is resumable, idempotent, and recoverable without
+requiring a second database.
 
 Inter-module writes use versioned TypeScript command/result contracts in the
 owning domain library. Command schemas reject unknown versions and fail closed
