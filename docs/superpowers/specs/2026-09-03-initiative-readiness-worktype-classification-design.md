@@ -54,7 +54,10 @@ historical classifications cannot be downgraded.
 ## Implementation sequence
 
 1. Add a table-driven red test for all seven closed work types and an unknown
-   value.
+   value. The committed Red checkpoint includes the explicit assertion
+   `deriveAuthoritativeReadinessProfile({ workType: "unknown-work" }) === null`
+   in `initiative-readiness-policy.test.ts`; the four intended failures are
+   only `chore`, `tool`, `skill`, and `refactor` receiving `null`.
 2. Extend the single profile normalization function with the missing closed
    values; do not add a second mapper.
 3. Run the focused readiness suite, adjacent readiness tests, web typecheck,
