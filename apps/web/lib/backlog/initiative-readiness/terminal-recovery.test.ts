@@ -6,6 +6,7 @@ import { resolveTerminalInitiativeRecovery } from "./terminal-recovery";
 
 const baseSha = "1".repeat(40);
 const headSha = "2".repeat(40);
+const baselineCommitSha = "5".repeat(40);
 const decision: InitiativeReadinessDecision = {
   decisionId: "IRD-TERMINAL",
   policyVersion: "initiative-readiness.v2",
@@ -83,6 +84,7 @@ describe("terminal initiative recovery", () => {
       artifactRef: {
         kind: "repo-blob-at-commit",
         repositoryFullName: room.repositoryFullName,
+        commitSha: baselineCommitSha,
         path: "docs/superpowers/specs/pinned-design.md",
         providerBlobId: "4".repeat(40),
       },
@@ -93,6 +95,7 @@ describe("terminal initiative recovery", () => {
     expect(ports.resolveRecovery).toHaveBeenCalledWith(expect.objectContaining({
       canonicalArtifact: {
         resolved: true,
+        commitSha: baselineCommitSha,
         path: "docs/superpowers/specs/pinned-design.md",
         providerBlobId: "4".repeat(40),
       },

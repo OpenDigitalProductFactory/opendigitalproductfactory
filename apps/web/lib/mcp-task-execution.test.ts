@@ -120,6 +120,10 @@ describe("remote task terminal-writer postcondition", () => {
         executedToolCount: 2,
       },
     });
+    expect(autonomous.execute).toHaveBeenCalledWith(expect.objectContaining({
+      apiTokenId: "PAT-WRITER-DURATION",
+      tokenScope: "write",
+    }));
   });
 
   it("parks an approval-required terminal writer even when the tool did not project TaskRun state", async () => {

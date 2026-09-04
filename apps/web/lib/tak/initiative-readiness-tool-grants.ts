@@ -152,7 +152,9 @@ export type InitiativeRecoveryDispatchContext = {
  * a pure routing decision over evidence it is handed.
  */
 export type InitiativeRecoveryCanonicalArtifact =
-  | { resolved: true; path: string; providerBlobId: string }
+  // A retained baseline already owns its immutable commit. Newly discovered
+  // branch artifacts omit it and inherit the Workroom head below.
+  | { resolved: true; path: string; providerBlobId: string; commitSha?: string }
   | { resolved: false; nextAction: string };
 
 type ReviewerRouteDb = {
@@ -417,18 +419,19 @@ function requestCoworkerPacket(args: {
   dispatch: InitiativeRecoveryDispatchContext;
   independent: boolean;
   /** Null for a lane whose writer the binding contract does not cover. */
-  artifact: { path: string; providerBlobId: string } | null;
+  artifact: { path: string; providerBlobId: string; commitSha?: string } | null;
   expectedCurrentBaselineId: string | null;
 }) {
   const reviewConstraint = args.independent ? "independently " : "";
+  const reviewSha = args.artifact?.commitSha ?? args.dispatch.headSha;
   const mappingInstruction = args.gate === "objective-mapping"
     ? " Map every current OBJ-* and AC-* statement to post-baseline evidence and submit the proposal with record_initiative_evidence(operation='objective-mapping')."
     : "";
   const base = {
     targetAgent: args.targetAgentId,
-    objective: `For ${args.decision.subject.id} in ${args.dispatch.workroomId} on ${args.dispatch.repositoryFullName}#${args.dispatch.branchName} at ${args.dispatch.headSha}, ${reviewConstraint}address ${args.gate} using ${args.toolName}.${
+    objective: `For ${args.decision.subject.id} in ${args.dispatch.workroomId} on ${args.dispatch.repositoryFullName}#${args.dispatch.branchName} at Workroom head ${args.dispatch.headSha}, ${reviewConstraint}address ${args.gate} using ${args.toolName}.${
       args.artifact
-        ? ` Read ${args.artifact.path} at that commit with ${IMMUTABLE_READER_TOOL},`
+        ? ` Read ${args.artifact.path} at ${reviewSha} with ${IMMUTABLE_READER_TOOL},`
         : ""
     } record a governed receipt only when the gate passes.${mappingInstruction}`,
     questionPacketSummary: `${args.gate} for ${args.decision.subject.id} at ${args.dispatch.headSha.slice(0, 12)}`,
@@ -450,7 +453,7 @@ function requestCoworkerPacket(args: {
       artifactRef: {
         kind: "repo-blob-at-commit" as const,
         repositoryFullName: args.dispatch.repositoryFullName,
-        commitSha: args.dispatch.headSha,
+        commitSha: reviewSha,
         path: args.artifact.path,
         providerBlobId: args.artifact.providerBlobId,
       },

@@ -177,6 +177,7 @@ export async function executeRemoteTaskAttempt(input: {
       threadId: input.threadId,
       taskRunId: run.taskRunId,
       apiTokenId: token.tokenId,
+      tokenScope: token.capability,
       taskType: "external-mcp",
       agentDisplayName: optionalString(agent.displayName) ?? resolvedAgentId,
       ...(effortWarrant ? { effortWarrant } : {}),

@@ -46,6 +46,7 @@ type BaselinePayload = {
   artifactRef?: {
     kind: "repo-blob-at-commit";
     repositoryFullName: string;
+    commitSha: string;
     path: string;
     providerBlobId: string;
   };
@@ -87,11 +88,13 @@ function parseBaselinePayloads(payloads: unknown[]): BaselinePayload[] | null {
     const artifactRef = ref && typeof ref === "object" && !Array.isArray(ref)
       && (ref as Record<string, unknown>).kind === "repo-blob-at-commit"
       && typeof (ref as Record<string, unknown>).repositoryFullName === "string"
+      && typeof (ref as Record<string, unknown>).commitSha === "string"
       && typeof (ref as Record<string, unknown>).path === "string"
       && typeof (ref as Record<string, unknown>).providerBlobId === "string"
       ? {
         kind: "repo-blob-at-commit" as const,
         repositoryFullName: (ref as Record<string, unknown>).repositoryFullName as string,
+        commitSha: (ref as Record<string, unknown>).commitSha as string,
         path: (ref as Record<string, unknown>).path as string,
         providerBlobId: (ref as Record<string, unknown>).providerBlobId as string,
       }
@@ -200,7 +203,11 @@ export async function resolveTerminalInitiativeRecovery(args: {
 
   const baselineArtifact = baseline.artifactRef?.repositoryFullName.toLocaleLowerCase("en-US")
       === room.repositoryFullName.toLocaleLowerCase("en-US")
-    ? { path: baseline.artifactRef.path, providerBlobId: baseline.artifactRef.providerBlobId }
+    ? {
+      commitSha: baseline.artifactRef.commitSha,
+      path: baseline.artifactRef.path,
+      providerBlobId: baseline.artifactRef.providerBlobId,
+    }
     : null;
   const discovered = baselineArtifact ? null : await ports.discoverArtifact({
       repositoryFullName: room.repositoryFullName,

@@ -341,6 +341,7 @@ export async function executeAutonomousAgenticLoop(input: {
   featureBuildId?: string | null;
   modelRequirements?: Record<string, unknown>;
   apiTokenId?: string | null;
+  tokenScope?: "read" | "write" | "admin";
   /**
    * Governed Hermes learning Slice 1: when the user message invokes a specific
    * coworker skill (via the canonical `Use the <id> skill.` marker), the
@@ -487,6 +488,7 @@ export async function executeAutonomousAgenticLoop(input: {
         threadId: input.threadId,
         taskRunId: input.taskRunId,
         apiTokenId: input.apiTokenId,
+        tokenScope: input.tokenScope,
         taskType: input.taskType,
         effortWarrant: input.effortWarrant,
         terminalToolPolicy: input.terminalToolPolicy,
