@@ -1,4 +1,8 @@
-# BI-D2A51B36 — Canonical animal housing occupancy
+---
+status: active
+---
+
+# BI-D2A51B36 — Complete the canonical animal housing workflow
 
 | Field | Value |
 | --- | --- |
@@ -6,231 +10,128 @@
 | Epic | `EP-5102F494` |
 | Workroom | `WC-B0DD2B2F` |
 | Branch | `feat/bi-d2a51b36-resource-occupancy` |
-| Status | Canonical spec review-ready; implementation gated |
-| Governing decision | `DI-C955877F245D` — `canonical-resource-occupancy`, high confidence, autonomy eligible |
-| Canonical spec candidate | `docs/superpowers/specs/2026-08-23-bi-d2a51b36-canonical-resource-occupancy-design.md` |
-
-> **For agentic workers:** execute this plan one independently reviewable backlog item at a time — one BI, one branch, one PR. Use `dpf-tdd` for red-green implementation, `dpf-local-merge-ci-before-push` plus the plan's completion gate before any success claim, and `dpf-pr-with-dco` for handoff.
+| Design | `docs/superpowers/specs/2026-08-23-bi-d2a51b36-canonical-resource-occupancy-design.md` |
 
 ## Outcome
 
-Second Chance Animal Rescue can answer two questions from its existing Animals management route:
+Complete the write reach behind the already-shipped Ward. A rescue can maintain
+kennels and foster homes, place or move an animal, release a stay, and trust the
+combined free-capacity number. The implementation reuses `Resource` and
+`ResourceCapacityAllocation`; it adds no table or resource domain.
 
-1. Where is each animal now, including a kennel, ward, or foster home?
-2. How much safe housing capacity is available before another intake is accepted?
+## Already delivered and retained
 
-Kennels and foster homes remain one capacity system. Moves preserve history. A blocked or full unit cannot receive another animal. The solution extends canonical `Resource`; it does not clone the hospitality resource stack or introduce an animal-only scheduling substrate.
+- PR #4494: subject-agnostic care and canonical Resource substrate.
+- PR #5000: ward occupancy and capacity projection.
+- PR #5022: Ward map/list and cockpit capacity surface.
 
-## Scope and acceptance
+These are dependencies and evidence, not work to duplicate.
 
-- Configure both `kennel` and `foster-home` resource kinds for the pet-rescue and animal-shelter activation profiles, with `capacityUnit: "animals"`.
-- Widen canonical `ResourceDomain` for animal-welfare resources.
-- Add a subject-polymorphic, append-preserving `ResourceOccupancy` ledger beside `Resource`.
-- Enforce one current occupancy per `(organization, subjectKindSlug, subjectRef)`, positive quantity, chronological history, organization identity, resource lifecycle, blocked-state, and capacity invariants.
-- Provide generic canonical Resource create/update commands and use the shared repository from both hospitality mirroring and animal-welfare management. Do not add an `animal-resources` route.
-- Project current location and movement history for each `AdoptableAnimal` from `subjectKindSlug="animal"` plus stable `animalRef`.
-- Show free capacity by housing kind and accepted animal size, blocked units with reasons, animals without housing, and a direct move/release action on `/storefront/animals`.
-- Keep housing management inside the existing internal Storefront > Animals route. Do not add global or section navigation.
-- Preserve current care and hospitality behavior.
+## Atomic coverage
 
-Out of scope: intake/legal holds (`BI-7111AF0C`), daily-care rounds (`BI-5A25EC37`), foster-person CRM, adoption workflow, veterinary workflow, supplies, funding, events, and Workspace tiles.
+This plan maps to `BI-D2A51B36`. Resource maintenance, placement transaction,
+foster support, and the operator controls are one usable workflow: shipping any
+one without the others leaves the Ward read-only or its capacity incomplete.
 
-## Research and benchmarking
+| Deliverable | Acceptance | Primary verification |
+| --- | --- | --- |
+| Profile-governed kennel and foster kinds | `AC-HOUSING-001`, `006` | archetype and profile tests |
+| Shared canonical Resource commands | `AC-HOUSING-001`, `004`, `008` | repository and hospitality compatibility tests |
+| Atomic move/release command | `AC-HOUSING-002`–`005` | transaction service and route tests |
+| Combined ward read model | `AC-HOUSING-003`, `006`, `008` | ward projection/store tests |
+| Ward operator controls | `AC-HOUSING-007`, `008` | component, route, and governed-browser evidence |
+| Release evidence | `AC-HOUSING-009` | semantic review, exact-tree CI, PR health, protected merge |
 
-The design uses open-source reference implementations as evidence, not as code dependencies.
+## Phase 1 — design and readiness
 
-- [Animal Shelter Manager](https://github.com/sheltermanager/asm3) is the mature reference. Its [current manual](https://sheltermanager.com/repo/asm3_help.pdf) treats adoption, transfer, and foster as movements with return dates and a current location. Adopt: location as a time-ordered movement history. Reject: its domain-specific monolith; DPF keeps occupancy subject-polymorphic.
-- [RefuPet / Hackapet](https://github.com/hackapet-project/petsync_web_V2) keeps shelter operations and animal records in one mobile-capable system. Adopt: one operator surface for the animal and its operational state. Reject: a separate application or route family for housing.
-- [Open Animal Rescue](https://github.com/leethobbit/OAR) is a self-hostable rescue manager for small shelters. Adopt: small-rescue operability and local control. Reject: copying a rescue-specific data model when canonical DPF resources already exist.
-- [albdangarcia/animal-shelter](https://github.com/albdangarcia/animal-shelter) preserves animal lifecycle history and uses atomic transactions for multi-record state changes. Adopt: a move closes the prior placement and opens the next in one transaction. Reject: letting a UI-only status update stand in for the history ledger.
+1. Reconcile the 2026-08-23 design with current `main` and the merged ward PRs.
+2. Record research against the immutable design commit.
+3. Obtain independent design/spec approval and objective baseline.
+4. Record this atomic plan coverage and independent plan review.
 
-No external runtime package is added.
+No product edit begins before the implementation projection allows it.
 
-## Design grounding
+## Phase 2 — Red: command contracts
 
-### Existing specifications and plans reviewed
+Add failing tests for:
 
-- `goal-objective.md` for `EP-5102F494`, including the dependency order and subject-agnostic constraint.
-- `BI-D2A51B36` in full.
-- `docs/superpowers/specs/2026-08-23-bi-d2a51b36-canonical-resource-occupancy-design.md`, the review-ready objective and acceptance baseline candidate.
-- `docs/platform-usability-standards.md`.
-- `docs/superpowers/plans/2026-05-26-portal-ux-simplification-spine.md`.
-- `apps/web/components/ui/report-kit/README.md`.
-- The merged `BI-2C80E6EA` plan and substrate at `origin/main`.
+- configured `kennel` and `foster-home` kinds;
+- Resource create/update lifecycle, version, capacity, organization, and kind
+  validation;
+- moving closes the previous stay and creates one new stay;
+- release closes without deleting;
+- blocked/full/retired/wrong-kind/cross-organization rejection;
+- idempotent replay;
+- transaction locking and bounded serialization retry;
+- the Ward reading both kennel and foster resources.
 
-### Code substrate reviewed
+Resolve related tests before Red and run the focused files to observe failure for
+the intended missing behavior.
 
-- `packages/db/prisma/schema/resource-scheduling.prisma`: canonical `Resource`, availability, capacity pools, and booking allocations.
-- `packages/db/prisma/schema/verticals-storefront.prisma`: `AdoptableAnimal` and its stable `animalRef`.
-- `apps/web/lib/resource-scheduling/admin-resource-profile.ts`: activation-profile resource validation.
-- `apps/web/app/api/storefront/admin/hospitality-resources/**`: legacy hospitality bridge and table-specific attributes.
-- `apps/web/app/(shell)/storefront/animals/page.tsx` and `AnimalsManager.tsx`: the existing canonical internal Animals route.
-- `packages/storefront-templates/src/archetypes/nonprofit-community.ts`: animal-welfare process profile.
+## Phase 3 — Green/refactor: shared Resource persistence
 
-### Source of truth
+Create a small canonical repository under
+`apps/web/lib/resource-scheduling/`. It owns validation and Resource
+persistence; the housing adapter and hospitality canonical mirror consume it.
+Keep hospitality response compatibility and legacy mirroring unchanged.
 
-- Housing unit identity, capacity, availability, and block reason: `Resource`.
-- Current and historical placement: `ResourceOccupancy`.
-- Animal identity and size: `AdoptableAnimal` keyed through stable `animalRef`.
-- Allowed housing kinds and capacity ceilings: archetype `processProfile.resourceKinds`.
-- Capacity readout: a pure projection over active resources, current occupancies, and animal size.
+Add `foster-home` to the animal-welfare activation profile. No demo rows or
+private address data are seeded.
 
-### Architecture decision
+## Phase 4 — Green: occupancy transaction and routes
 
-`DI-C955877F245D` compared three options:
+Create a generic occupancy service over `ResourceCapacityAllocation` and expose
+bounded admin routes:
 
-1. Add canonical subject-polymorphic `ResourceOccupancy`.
-2. Widen the booking-oriented `ResourceCapacityAllocation` into open-ended residence.
-3. Add animal-only `AnimalHousingPlacement`.
+- `GET/POST /api/storefront/admin/resources`;
+- `PATCH /api/storefront/admin/resources/[id]`;
+- `POST /api/storefront/admin/resource-occupancies`.
 
-The kernel selected option 1 with composite `12.153`, margin `6.040`, high confidence, no commandment conflict, and autonomy eligibility. It preserves booking allocation semantics and avoids the next vertical cloning housing placement again.
+Route adapters derive the active storefront and organization from the session,
+resolve the activation profile, and allow only the animal subject adapter for
+this slice. They do not accept caller-supplied authority fields.
 
-## Data design
+## Phase 5 — Green: Ward controls and read model
 
-`ResourceOccupancy` carries:
+Extend the ward read model to include `kennel` and `foster-home`, capacity by
+kind, available destinations, and bounded current-placement information.
 
-- organization-scoped resource relation;
-- open subject identity (`subjectKindSlug`, `subjectRef`);
-- positive `quantity`;
-- `startedAt`, nullable `endedAt`, and optional transition reason;
-- idempotency key and version/audit timestamps.
+Add one progressively disclosed housing form and one direct place/move/release
+workflow to `/workspace/ward`. Preserve the map/list flip, honest no-data state,
+focus, settled feedback, and narrow-width usability. Do not add navigation or a
+second animal-management page.
 
-Database constraints and indexes:
+## Phase 6 — verification and protected delivery
 
-- one active row per organization + subject identity via a partial unique index;
-- positive quantity;
-- `endedAt >= startedAt` when closed;
-- FK-leading indexes for current-resource capacity reads and subject history;
-- composite FK to `Resource(id, organizationId)` and FK to `Organization`.
-
-Application transaction:
-
-1. Resolve the subject and destination under the same organization/storefront.
-2. Read the destination Resource and current occupancy under serializable isolation.
-3. Reject retired, blocked, wrong-domain, wrong-kind, size-incompatible, or full resources.
-4. Close the prior occupancy and open the destination occupancy atomically; a null destination releases the subject.
-5. Retry only PostgreSQL serialization conflicts within a small bounded retry count.
-
-No backfill is possible or required because no existing animal location field exists. Rollback is forward-only: stop new commands and ship a compensating migration/code change; do not drop occupancy history after production use.
-
-## UX fit review — animal housing operations
-
-- Decision: `fits-with-guardrails`
-- Owning area: Storefront
-- Route family: canonical internal `/storefront/animals`; no new page route
-- Primary persona: shelter coordinator deciding where an animal is housed and whether safe intake capacity remains
-- Navigation layer touched: contextual actions only
-- Reuse/convergence: existing Animals manager, shared form primitives, report-kit `StatCard`, `StatusBadge`, `EmptyState`, and progressive disclosure; no new dashboard/card dialect
-- Source truth: `Resource`, `ResourceOccupancy`, `AdoptableAnimal`, and the archetype process profile
-- Empty/failure behavior: explain that housing units must be added before assignment; distinguish no units, all units blocked/full, no matching size, failed save, and permission failure
-- AI boundary: no prompt send
-- Required plan/spec edits:
-  - Make free capacity and animals without housing visible before catalog/photo editing.
-  - Keep housing-unit setup behind a contextual disclosure while the move action stays reachable.
-  - Use stable field labels, visible pending/success/error state, 44px targets, and token-only styling.
-- Evidence before merge:
-  - schema/migration invariants and concurrency tests;
-  - route tests for auth, configuration, blocked/full/size mismatch, move, release, and history;
-  - component tests for honest empty/error states and reachable primary actions;
-  - measured `/storefront/animals` UX budget manifest;
-  - governed browser exercise at desktop and narrow viewport with seeded kennel, foster, blocked, full, and unassigned cases.
-- Captured in: this plan and `docs/ux-fit/2026-08-23-animal-housing-operations.ux-fit.json`
-
-## Delivery phases
-
-### Phase 1 — Red: schema and invariant tests
-
-Deliverable: failing tests describe the canonical enum/model, partial uniqueness, constraints, relations, indexes, and activation-profile housing kinds.
-
-Paths:
-
-- `packages/db/src/resource-occupancy-model.test.ts`
-- `packages/storefront-templates/src/archetypes/archetypes.test.ts`
-
-Verification: affected DB and storefront-template Vitest targets fail for the missing model/profile behavior before production edits.
-
-### Phase 2 — Green: forward-only occupancy substrate
-
-Deliverable: Prisma schema plus migration for `ResourceOccupancy` and `animal_welfare`, with no data rewrite.
-
-Paths:
-
-- `packages/db/prisma/schema/resource-scheduling.prisma`
-- `packages/db/prisma/schema/core-identity.prisma`
-- `packages/db/prisma/migrations/20260823012000_resource_occupancy/migration.sql`
-- `packages/storefront-templates/src/archetypes/nonprofit-community.ts`
-
-Verification: Prisma format/generate/validate, migration safety and timestamp collision checks, clean-schema replay, upgrade replay from current main, physical index/FK/constraint assertions, and phase-one tests green.
-
-### Phase 3 — Red/green: shared repositories and generic routes
-
-Deliverable: one canonical admin-resource repository and one occupancy command service, consumed by generic Resource routes and the hospitality mirror path.
-
-Paths:
-
-- `apps/web/lib/resource-scheduling/admin-resource-repository*`
-- `apps/web/lib/resource-scheduling/resource-occupancy*`
-- `apps/web/app/api/storefront/admin/resources/**`
-- `apps/web/app/api/storefront/admin/resource-occupancies/route*`
-- `apps/web/app/api/storefront/admin/hospitality-resources/**`
-
-Verification: affected repository and route tests cover validation, auth, domain/profile resolution, optimistic concurrency, full/blocked/retired resources, size compatibility, moves, release, history, and serialization retry.
-
-### Phase 4 — Red/green: housing read model and Animals UX
-
-Deliverable: a pure capacity/location projection and a refactored `/storefront/animals` operator surface.
-
-Paths:
-
-- `apps/web/lib/animal-welfare/housing*`
-- `apps/web/app/(shell)/storefront/animals/page.tsx`
-- `apps/web/components/storefront-admin/AnimalsManager*`
-- `apps/web/app/api/storefront/admin/animals/[id]/route.ts`
-
-Verification: capacity summary tests cover type, size, blocked, full, and unassigned states; component tests prove clear next actions and settled mutation feedback; existing animal catalog/media behavior remains.
-
-### Phase 5 — Generated artifacts, governed UX, and completion gate
-
-Deliverable: all generated companions, UX measurement, documentation impact, and exact-tree evidence are current.
-
-Verification:
-
-- regenerate route manifest, route audience, route shells, route purpose, doc index, and architecture counts after the concurrent generated-file lease is released;
-- run affected Vitest suites, typechecks, Prisma checks, migration guards, schema guards, prose guard, style-drift guard, doc anchors, and `pnpm run pregate:preflight`;
-- acquire the governed nonproduction environment and measure `/storefront/animals` at desktop and narrow viewport;
-- commit the measured UX-fit manifest with exact UI-impacting file scope;
-- obtain independent semantic review of the stable commit;
-- run exact-tree local integration CI, push, open a ready PR, enable squash auto-merge, run `pnpm pr:health`, and verify the merged commit has one parent.
-
-## Backlog coverage
-
-Decision: `atomic`.
-
-The schema, command transaction, capacity projection, and operator workflow are one safety invariant. Shipping any subset independently would either create unused substrate or expose a placement UI without enforced capacity/history. The goal also requires one PR per epic item. All work maps to `BI-D2A51B36`; no independent delivery boundary is left only in this document.
-
-Coverage receipt: blocked. `record_plan_backlog_coverage` resolved the immutable
-provider blob at commit `835a30eddf5376702d234eada11ab3240afe7e96`, then returned
-`traceability-incomplete` because `BI-D2A51B36` has no
-`initiative_scope_baseline`. The server states that the baseline is not reachable
-from an MCP session. Its suggested `BI-B9403248` anchor is not live; the verified
-live remediation item is `BI-0996913C` ("Make plan-coverage baseline remediation
-reachable and live-anchor safe"). This plan's atomic mapping remains the durable
-fallback record; it is not represented as a successful coverage receipt.
+1. Run focused web and storefront-template tests plus typecheck.
+2. Run prose/style guards and `pnpm run pregate:preflight`.
+3. Regenerate route, audience, shell, purpose, doc-impact/index, business-type,
+   and architecture artifacts required by the change-impact contract.
+4. Use a governed nonproduction lease for authenticated desktop and 390px Ward
+   verification with kennel, foster, blocked, full, unplaced, success, failure,
+   and permission states.
+5. Commit the UX-fit evidence and obtain fresh exact-tree semantic review.
+6. Run governed exact-tree local CI.
+7. Push normally, open one DCO-signed PR for `BI-D2A51B36`, enable squash
+   auto-merge, read bot findings, run PR health, and verify protected merge.
+8. Verify the live Ward after the normal deployment path, record acceptance and
+   outcome reconciliation, close the BI/Workroom, and continue to
+   `BI-7111AF0C`.
 
 ## Risk and rollback
 
 | Risk | Control | Rollback |
 | --- | --- | --- |
-| Concurrent moves overfill a unit | serializable transaction, partial uniqueness, capacity recheck, bounded conflict retry | disable mutation route; ship compensating command fix without deleting history |
-| Generic occupancy becomes an untyped polymorphic orphan | closed subject-kind validation at the route/repository boundary and stable semantic refs | reject unsupported kinds; preserve ledger rows for audit |
-| Hospitality behavior regresses during refactor | keep legacy clone compatibility and existing route tests; shared repository changes canonical write/read only | revert adapter consumption while retaining additive schema |
-| New route/UI drifts from portal UX | no new page/nav, existing primitives, measured UX budget, desktop+narrow browser test | remove contextual controls while retaining substrate behind APIs |
-| Migration collides with concurrent main | timestamp-collision check immediately before commit and rebase/update from origin/main | rebump migration directory through `git mv` before publication |
-| Generated route files overlapped WordPress work | resolved: PR #4478 merged at `2b3ea261f841df1f68fcfe6720bda546044aaf92` and `WC-38FD13D8` released all claims; refresh from merged main and regenerate once implementation is authorized | regenerate from current main; do not reuse stale generated JSON |
+| Concurrent double placement | subject/resource transaction locks and serializable retry | disable route; preserve ledger |
+| False free-capacity number | count active, unblocked resources and open allocations only | remove controls; retain prior read-only board |
+| Foster privacy leak | operator-safe Resource label only; no address projection | remove unsafe attribute; preserve occupancy |
+| Hospitality regression | adapter compatibility tests around shared helper | restore adapter call while keeping helper unused |
+| Route or UI drift | generated route artifacts, UX-fit measurement, governed browser | remove new controls/routes without data loss |
 
-## Documentation and gate decisions
+## Documentation and seed disposition
 
-- Documentation impact: this plan plus generated architecture counts and route/doc indexes. No user guide update until the workflow is proven in the governed preview.
-- Data impact: additive enum value and table; no backfill; no destructive DDL; rollback by forward compensating migration.
-- Seed contribution fit: adds the already-required foster-home resource kind to the animal-welfare process profile; it does not add demo records or pet-rescue-only platform behavior outside that profile.
-- Refactoring budget: shared canonical resource/occupancy repositories and replacement of hand-rolled Animals form/status patterns are the deliberate ~20% convergence work.
+- Design and plan above are the authority.
+- User guide changes only describe behavior proven in the governed preview.
+- Seed-fit is archetype-scoped: one `foster-home` resource kind, no demo records.
+- Data impact is `not-applicable`: no schema, migration, or backfill.
+- Refactoring budget is concentrated in shared Resource validation/persistence.
