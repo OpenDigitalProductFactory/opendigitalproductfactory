@@ -945,7 +945,6 @@ function truncateMessageContent(content: string, maxChars: number, label: string
   return `${content.slice(0, Math.max(0, maxChars - suffix.length))}${suffix}`;
 }
 
-
 function compactAgenticMessages(
   messages: ChatMessage[],
   maxContextTokens?: number | null,
@@ -1110,6 +1109,7 @@ export type RunAgenticLoopParams = {
    * call records the same token id in ToolExecution audit rows.
    */
   apiTokenId?: string | null;
+  tokenScope?: "read" | "write" | "admin";
   /**
    * Governed Hermes learning Slice 1: active coworker skill for this run.
    * When set, every governed tool call records the same skillId in
@@ -1139,7 +1139,6 @@ export type RunAgenticLoopParams = {
   enableExecutionPlan?: boolean;
   /** Bounded evidence-reader surface with a reserved governed writer step. */
   terminalToolPolicy?: TerminalToolPolicy;
-
 };
 
 export async function runAgenticLoop(params: RunAgenticLoopParams): Promise<AgenticResult> {
@@ -2520,6 +2519,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
             threadId,
             taskRunId: taskRunId ?? undefined,
             apiTokenId: apiTokenId ?? undefined,
+            tokenScope: params.tokenScope,
             skillId: tracker.activeSkillId ?? undefined,
             // In-portal coworker chat turns attach COWORKER_READ_BASELINE_GRANTS
             // to the tool surface (actions/agent-coworker.ts). Flag the turn so

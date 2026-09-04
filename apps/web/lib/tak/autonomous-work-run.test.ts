@@ -716,12 +716,14 @@ describe("createAutonomousWorkRun", () => {
       threadId: "thread-1",
       taskRunId: "TR-MCP-ABCDEF12",
       apiTokenId: "tok_remote",
+      tokenScope: "write",
     });
 
     expect(agentic.runAgenticLoop).toHaveBeenCalledWith(
       expect.objectContaining({
         taskRunId: "TR-MCP-ABCDEF12",
         apiTokenId: "tok_remote",
+        tokenScope: "write",
       }),
     );
   });
