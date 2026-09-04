@@ -10,6 +10,14 @@ Epic: `EP-56AE0F69`
 Extends: `2026-08-15-resilient-concurrent-development-process.md` and `2026-06-05-unified-delivery-surfaces-execution-alignment-design.md`  
 Workroom: `WC-1B73A988`
 
+> **2026-09-03 throughput extension.** The local-first campaign, paired-install
+> placement, PR/review-tail controller, operator delivery rail, and outcome
+> scorecard are specified in
+> [`2026-09-03-local-first-agentic-delivery-throughput-design.md`](2026-09-03-local-first-agentic-delivery-throughput-design.md).
+> They consume this control plane; they do not replace its gate identity, durable
+> wait, proportional evidence, or atomic completion packet. `BI-7C1F43E3` remains
+> independently owned through its live pilot.
+
 ## Decision in one paragraph
 
 Adopt a server-owned, event-driven delivery control plane built on the existing Workroom, TaskRun, NonProductionEnvironmentLease, QueueTelemetryEvent, Inngest, and evidence records. Compute one immutable gate identity before scarce capacity is claimed; park waiting work durably; wake it from capacity/review/input events; and close work only with an atomic evidence packet that matches the candidate, plan, and objective baseline. Do not add a second queue, a second Workroom ledger, or a client polling protocol. This is the smallest architecture that addresses the measured failure mode without weakening protected CI, immutable provenance, approval, or receipt requirements.
