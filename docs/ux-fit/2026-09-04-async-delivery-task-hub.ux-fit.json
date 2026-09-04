@@ -10,18 +10,18 @@
   },
   "evidence": {
     "kind": "sweep-measurement",
-    "baselineComparison": "improved",
-    "measurementScope": "DeliveryTaskHub arrival state with five active rows in one group; two cards visible and three behind the native disclosure",
+    "baselineComparison": "reviewed-refreeze",
+    "measurementScope": "Authenticated /build/work arrival state from the repository UX sweep: the existing route shell plus one seeded active delivery row, with collapsed detail excluded by measurement",
     "measured": {
       "/build/work": {
-        "defaultVisibleWords": 106,
+        "defaultVisibleWords": 237,
         "leadBandWords": 14,
         "primaryActions": 1,
-        "visibleFields": 0,
-        "maxChoicesPerControl": 0,
+        "visibleFields": 3,
+        "maxChoicesPerControl": 5,
         "subLegibleControls": 0,
         "buriedPrimaryAction": 0,
-        "axeViolations": 0
+        "axeViolations": 2
       }
     },
     "verification": {
