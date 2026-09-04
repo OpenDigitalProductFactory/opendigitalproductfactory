@@ -454,15 +454,13 @@ Authorization is action- and field-specific:
 | Legal-hold release, adoption approval, euthanasia, and fund-restriction release | Explicit human approval at the consequential-action boundary; no background job, inferred occupation, or AI coworker can self-authorize it. |
 
 The current closed `CapabilityKey` catalog has no animal-welfare operating
-grant, and `HR-600` occupations are explicitly narrowing-only. The implementation
-must not borrow `view_operations`, `operate_customer`, or another semantically
-unrelated capability for rescue writes. Before the first write slice can be
-planned, a linked authorization prerequisite must either approve an existing
-domain-capability mechanism or add the smallest animal-welfare grant and its
-occupation-aware narrowing policy. Until that prerequisite is approved, all new
-rescue mutations fail closed. Authentication, cross-organization isolation,
-capability denial, field redaction, and consequential-action approval each need
-negative tests.
+grant, and `HR-600` occupations are explicitly narrowing-only. Phase 1 of this
+same delivery adds the smallest animal-welfare grant and its occupation-aware
+narrowing policy; it does not borrow `view_operations`, `operate_customer`, or
+another semantically unrelated capability. Intake, care, housing, and adoption
+commands import that Phase 1 guard, so they cannot be built or enabled without
+it. Authentication, cross-organization isolation, capability denial, field
+redaction, and consequential-action approval each need negative tests.
 
 ### 6.4 Organization and regional configuration
 
@@ -698,12 +696,11 @@ uses one shared Workroom, branch, nonproduction lease, and PR. The root plan
 records dependencies and objective coverage across that coordinated delivery;
 scope is claimed explicitly for every implementation path before editing.
 
-The implementation plan must begin with the authorization prerequisite in
-§6.3. No Pet Rescue mutation, fixture that depends on a mutation, or shared
-runtime walkthrough may start until the smallest animal-welfare capability and
-its occupation-aware narrowing policy are present with denial/isolation tests.
-That prerequisite is delivered in the canonical animal-identity slice and is
-called out as a blocking dependency for intake, care, housing, and adoption.
+The implementation plan begins with the authorization contract in §6.3 as
+Phase 1 of the canonical animal-identity slice. Its capability, narrowing
+policy, and denial/isolation tests are part of this PR. Intake, care, housing,
+and adoption follow as explicit dependent tasks; the plan contains no external
+authorization dependency and no rescue mutation can compile around the guard.
 
 Offline capture is not silently accepted by implementation. The publication
 checklist carries an explicit `online-only` release decision: either the
