@@ -38,7 +38,8 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { callTool, DEFAULT_ENDPOINT, listChangedFiles } from "./check-doc-anchor-existence.mjs";
+import { callTool, DEFAULT_ENDPOINT } from "./check-doc-anchor-existence.mjs";
+import { listChangedFiles, runGit } from "./lib/git-changed-files.mjs";
 import { formatTxtBudgetHeader, parseTxtBudgetHeader } from "./lib/baseline-budget.mjs";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -126,8 +127,14 @@ function isScannedSource(file) {
 }
 
 function scanAllSources() {
+  const listed = runGit(["ls-files"]);
+  if (!listed.ok) {
+    console.error("[live-blocker] git ls-files failed — the --update scan did not run. This is not a pass.");
+    if (listed.stderr) console.error(`[live-blocker] git: ${listed.stderr.trim()}`);
+    process.exit(1);
+  }
   const pairs = [];
-  for (const file of git("ls-files").split("\n").map((s) => s.trim()).filter(isScannedSource)) {
+  for (const file of listed.stdout.split("\n").map((s) => s.trim()).filter(isScannedSource)) {
     const abs = path.join(REPO_ROOT, file);
     if (!fs.existsSync(abs)) continue;
     for (const id of extractLiveBlockerCitations(fs.readFileSync(abs, "utf8"))) pairs.push({ file, id });

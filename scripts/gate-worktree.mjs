@@ -59,7 +59,7 @@ export function describeLeaseCallFailure(error) {
     + "if this box regularly runs several gates at once";
 }
 import { summarizeLocalCiOutput } from "./lib/local-ci-failure-summary.mjs";
-import { classifyGateOutcome } from "./lib/sandbox-freshness.mjs";
+import { classifyGateOutcome, EXIT_CHILD_SIGNAL_DEATH } from "./lib/sandbox-freshness.mjs";
 import { fallbackStatusForUnknown } from "./lib/local-integration-status.mjs";
 import {
   authoritySafetyMarginMs,
@@ -88,7 +88,9 @@ import { classifyBaseResilience } from "./lib/local-ci-base-freshness.mjs";
 import { runPreAdmissionDocumentationLane } from "./lib/documentation-evidence-lane.mjs";
 import {
   createLocalCiPassEvidenceValidity,
+  projectReusedPassMetadata,
   readLocalCiGateState,
+  supersedeLosingSlotRecords,
   writeLocalCiGateState,
 } from "./lib/local-ci-gate-state.mjs";
 import {
@@ -168,6 +170,21 @@ async function observeLocalCiHostPressure(input) {
       (manifest) => manifest.schemaVersion === 1,
     ),
   });
+}
+
+/**
+ * BI-5529B5AC: the other slots' state files for this worktree, so a PASS can
+ * retire any losing record they hold for the same branch+SHA.
+ */
+function siblingSlotStateFiles({ currentSlotKey, rootClone, gitCommonDir, candidateGitDir }) {
+  return LOCAL_CI_SLOT_KEYS
+    .filter((slotKey) => slotKey !== currentSlotKey)
+    .map((slotKey) => createLocalCiSlotManifest({
+      slotKey,
+      rootClone,
+      gitCommonDir,
+      candidateGitDir,
+    }).evidence.state);
 }
 
 function retryDelayMs({ attempt, pollSeconds, retryAfterSeconds = 0 }) {
@@ -934,13 +951,23 @@ async function main() {
   const rootClone = resolveLocalCiRootClone(gitCommonDir);
   const queueObserverDirectory = process.env.DPF_LOCAL_QUEUE_OBSERVER_DIR
     || resolvePath(gitCommonDir, "dpf-local-ci-queue-observers");
+  let currentSlotKey = process.env.DPF_LOCAL_CI_SLOT_KEY || "slot-0";
   let slotManifest = createLocalCiSlotManifest({
-    slotKey: process.env.DPF_LOCAL_CI_SLOT_KEY || "slot-0",
+    slotKey: currentSlotKey,
     rootClone,
     gitCommonDir,
     candidateGitDir,
   });
   let stateFile = slotManifest.evidence.state;
+  // A PASS for this branch+SHA retires any losing sibling-slot record for the
+  // same branch+SHA (BI-5529B5AC). Called only after a passed, non-pending write.
+  const retireLosingSiblings = () => supersedeLosingSlotRecords({
+    winnerStateFile: stateFile,
+    winnerSlotKey: currentSlotKey,
+    siblingStateFiles: siblingSlotStateFiles({ currentSlotKey, rootClone, gitCommonDir, candidateGitDir }),
+    branch,
+    sha,
+  });
   let metadataFile = slotManifest.evidence.metadata;
   let pendingEvidenceFile = slotManifest.evidence.pending;
   let fullLogFile;
@@ -948,15 +975,16 @@ async function main() {
   let localFencePath = process.env.DPF_LOCAL_SANDBOX_FENCE_PATH
     || slotManifest.fence.path;
 
-  let quiescenceAttempt = 0;
-  for (;;) {
-    const quiescence = await readQuiescenceStatus({
-      mcpUrl: options.mcpUrl,
-      bearerToken,
-    });
-    if (!quiescenceBlocksWrites(quiescence)) break;
+  const quiescence = await readQuiescenceStatus({
+    mcpUrl: options.mcpUrl,
+    bearerToken,
+  });
+  if (quiescenceBlocksWrites(quiescence)) {
     const retryAfterSeconds = Number(quiescence.retryAfterSeconds || 30);
-    if (Date.now() >= deadline) {
+    // A finalize-only invocation may already carry a genuine green gate whose
+    // publication was deferred. Never replace that evidence with a wait
+    // projection merely because the control plane is currently quiescing.
+    if (!options.finalizeEvidence) {
       writeState(stateFile, {
         branch,
         sha,
@@ -969,28 +997,21 @@ async function main() {
         leaseEvents: [],
         quiescence,
       });
-      process.stderr.write(`gate-worktree: portal remained ${quiescence.level || "quiescing"} through the admission deadline.\n`);
-      process.stderr.write("gate-worktree: no expensive local-CI command was run; use get_quiescence_status for drain blockers.\n");
-      process.exit(4);
     }
-    // BI-2C7F51BA Defect 3 (secondary) — back off while the portal drains.
-    //
-    // `retryAfterSeconds` alone pins this at a fixed ~30s forever, and every
-    // poll is itself a ToolExecution row, i.e. the waiter re-arms the very
-    // `request.recent-tool-execution` soft blocker it is waiting on. Excluding
-    // read-only calls from that signal is the primary fix (quiescence.ts);
-    // widening the interval as the drain persists is the defence in depth.
-    // Capped at 8x the server's own retry-after so a cleared drain is still
-    // noticed within a few minutes of the 2h admission budget.
-    const drainBackoff = 2 ** Math.min(quiescenceAttempt, 3);
-    const delayMs = retryDelayMs({
-      attempt: quiescenceAttempt,
-      pollSeconds: options.pollSeconds,
-      retryAfterSeconds: retryAfterSeconds * drainBackoff,
-    });
-    quiescenceAttempt += 1;
-    waiting(`portal is ${quiescence.level || "quiescing"}; retrying governed admission in ${(delayMs / 1000).toFixed(1)}s...`);
-    await sleep(Math.min(delayMs, Math.max(10, deadline - Date.now())));
+    // Quiescence is already a durable, server-owned state. Keeping this local
+    // process alive to poll it creates the very wait traffic and recent-tool
+    // signal that the coordinator is trying to drain. Park once, preserve a
+    // machine-readable resume hint, and let the caller invoke pregate again
+    // after the coordinator's completion event or its normal task wake-up.
+    process.stderr.write(JSON.stringify({
+      status: "waiting",
+      code: "local_ci_quiescence_wait",
+      runId: quiescence.runId ?? quiescence.activeCoordinator?.runId ?? null,
+      level: quiescence.level ?? "quiescing",
+      retryAfterSeconds,
+      resumeMode: "durable-quiescence",
+    }) + "\n");
+    process.exit(75);
   }
 
   if (options.finalizeEvidence) {
@@ -1033,6 +1054,7 @@ async function main() {
         leaseEvents: state.leaseEvents ?? [],
         evidencePending: false,
       });
+      retireLosingSiblings();
       process.stdout.write(`finalized existing local-CI evidence: ${state.evidenceRecordId}\n`);
       process.exit(0); // exit-0: --finalize-evidence revalidated an already-recorded PASS for this sha
     }
@@ -1068,6 +1090,7 @@ async function main() {
       evidencePending: false,
     });
     rmSync(pendingEvidenceFile, { force: true });
+    retireLosingSiblings();
     process.stdout.write(`recorded pending local-CI evidence: ${evidenceId}\n`);
     process.exit(0); // exit-0: --finalize-evidence recorded the pending PASS evidence for this sha
   }
@@ -1269,7 +1292,27 @@ async function main() {
           { type: "reused", gateKey, evidenceId, at: new Date().toISOString() },
         ],
         evidencePending: false,
+        ...(passed ? { onPassWritten: retireLosingSiblings } : {}),
       });
+      // BI-C6B2D404: project current HEAD onto the metadata record so
+      // pregate:status does not report STALE against the prior candidateSha.
+      if (passed && metadataFile) {
+        let prior = null;
+        try {
+          prior = JSON.parse(readFileSync(metadataFile, "utf8"));
+        } catch {
+          prior = null;
+        }
+        writeFileSync(
+          metadataFile,
+          `${JSON.stringify(projectReusedPassMetadata(prior, {
+            sha,
+            branch,
+            evidenceId,
+            leaseId: canonicalLeaseId,
+          }), null, 2)}\n`,
+        );
+      }
       process.stdout.write(`reused canonical local-CI ${admission.resultClass} evidence: ${evidenceId}\n`);
       process.exit(passed ? 0 : 1);
     }
@@ -1314,6 +1357,7 @@ async function main() {
         expiresAt = admittedExpiresAt;
       }
       const admittedSlotKey = admission?.slotKey || "slot-0";
+      currentSlotKey = admittedSlotKey;
       slotManifest = createLocalCiSlotManifest({
         slotKey: admittedSlotKey,
         rootClone,
@@ -1787,7 +1831,7 @@ async function main() {
     process.stderr.write(`gate-worktree: lease fenced (${supervised.reason}); child process tree terminated\n`);
   }
   if (receivedSignal) {
-    runResult.status = 130;
+    runResult.status = EXIT_CHILD_SIGNAL_DEATH;
     runResult.output = `${runResult.output}\ngate-worktree: received ${receivedSignal}; child process tree terminated\n`;
     process.stderr.write(`gate-worktree: received ${receivedSignal}; child process tree terminated\n`);
   }
@@ -2015,6 +2059,12 @@ async function main() {
     die(`failed to record local integration evidence: ${JSON.stringify(evidenceResponse)}`);
   }
 
+  const capturedFailureCount = (failureSummary?.failedTests?.length || 0)
+    + (failureSummary?.failedChecks?.length || 0);
+  const persistedReason = outcome.summary
+    || (capturedFailureCount === 0 && runResult.status
+      ? `no stage failed; child exited ${runResult.status} after the last completed stage`
+      : "");
   writeState(stateFile, {
     branch,
     sha,
@@ -2028,6 +2078,10 @@ async function main() {
     resilience,
     leaseEvents,
     evidencePending: false,
+    failureReason: persistedReason,
+    failureSummary,
+    childExitCode: runResult.status,
+    ...(outcome.gatePassed ? { onPassWritten: retireLosingSiblings } : {}),
   });
 
   // BI-B1065D41 Phase 1: one bounded, stable block closes every run. On a pass
@@ -2063,6 +2117,11 @@ async function main() {
     process.stderr.write(`gate-worktree: BLOCKED (control-plane starvation): ${outcome.summary}\n`);
     process.exit(5);
   }
+  if (outcome.status === "blocked_child_signal_death") {
+    process.stderr.write(`gate-worktree: BLOCKED (child signal death): ${outcome.summary}\n`);
+    process.stderr.write("gate-worktree: this is infrastructure evidence, not a product failure; retry on a quieter host\n");
+    process.exit(EXIT_CHILD_SIGNAL_DEATH);
+  }
   die("gate failed");
 }
 
@@ -2084,6 +2143,10 @@ function writeState(stateFile, {
   recovery = null,
   queueObserver = null,
   admission = null,
+  failureReason = "",
+  failureSummary = null,
+  childExitCode = null,
+  onPassWritten = null,
 }) {
   writeLocalCiGateState(stateFile, {
     branch,
@@ -2103,7 +2166,19 @@ function writeState(stateFile, {
     recovery,
     queueObserver,
     admission,
+    failureReason,
+    failureSummary,
+    childExitCode,
   });
+  // BI-5529B5AC: only a committed, non-pending PASS may retire sibling losers.
+  if (typeof onPassWritten === "function" && gatePassed === true && !evidencePending) {
+    try {
+      onPassWritten();
+    } catch (error) {
+      process.stderr.write(`gate-worktree: could not retire sibling slot records: ${error?.message || error}
+`);
+    }
+  }
 }
 
 // A gate that silently skips main() exits 0 — a false "pass" — so the entry

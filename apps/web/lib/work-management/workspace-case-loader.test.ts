@@ -422,6 +422,8 @@ describe("workspace Work Case loader", () => {
         sponsorPrincipalRef: "PRN-USER-1",
         authoritySummary: "May prepare options; approval remains human",
         sourceRefs: [{ kind: "evidence", id: "TR-1", sourceType: "task-run" }],
+        assignmentSource: "conversation",
+        coordinatorSource: "none",
         }];
       },
     });

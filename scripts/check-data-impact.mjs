@@ -13,6 +13,7 @@
 
 import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
+import { listChangedFiles } from "./lib/git-changed-files.mjs";
 
 // ── Persistent-surface classification (kept conservative for the first ship) ──
 export const PERSISTENT_SURFACE_RULES = [
@@ -142,12 +143,17 @@ export function runGate({
   changed,
   readFile = (f) => readFileSync(f, "utf8"),
 } = {}) {
-  const files =
-    changed ??
-    git(["diff", "--name-only", `${base}...HEAD`])
-      .split("\n")
-      .map((s) => s.trim())
-      .filter(Boolean);
+  let files = changed;
+  if (!files) {
+    const listed = listChangedFiles(base);
+    if (listed.status === "unresolvable") {
+      return {
+        ok: false,
+        message: `cannot resolve ${base} — the guard did not run. This is not a pass. Remedy: git fetch --deepen 50 origin.`,
+      };
+    }
+    files = listed.files;
+  }
 
   const surfaces = classifyChangedSurfaces(files);
   if (surfaces.length === 0) {

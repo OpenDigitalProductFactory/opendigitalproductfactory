@@ -13,7 +13,8 @@
  *  - Hard constraints (residency, tier floor, latency ceiling) clamp the posture
  *    and are recorded as adjustments; residency is never relaxed.
  *  - Fail-closed is a first-class output (state "blocked" | "defer"), not a throw.
- *  - `verificationDepth` is emitted but inert until a verify step exists.
+ *  - `verificationDepth` is emitted for the shared verification gate and may be
+ *    tightened by a hard policy floor; it is never relaxed.
  */
 import type { QualityTier } from "../routing/quality-tiers";
 import type {
@@ -26,8 +27,19 @@ import type {
   PostureOverride,
 } from "./types";
 
-export const GOLDEN_TRIANGLE_COMPILER_VERSION = "0.2.0";
+export const GOLDEN_TRIANGLE_COMPILER_VERSION = "0.3.0";
 export const GOLDEN_TRIANGLE_PRESET_VERSION = "presets@1";
+
+const VERIFICATION_RANK = { none: 0, shallow: 1, deep: 2 } as const;
+
+function maxVerificationDepth(
+  current: OrchestrationBudget["verificationDepth"],
+  floor: NonNullable<OrchestrationBudget["verificationDepth"]>,
+): NonNullable<OrchestrationBudget["verificationDepth"]> {
+  return current && VERIFICATION_RANK[current] >= VERIFICATION_RANK[floor]
+    ? current
+    : floor;
+}
 
 const TIER_RANK: Record<QualityTier, number> = { basic: 0, adequate: 1, strong: 2, frontier: 3 };
 
@@ -198,12 +210,8 @@ function applyTaskClassFloor(
   }
 
   if (floor.verificationDepth) {
-    const rank = { none: 0, shallow: 1, deep: 2 } as const;
     const current = budget.verificationDepth;
-    const deeper =
-      current && rank[current] >= rank[floor.verificationDepth]
-        ? current
-        : floor.verificationDepth;
+    const deeper = maxVerificationDepth(current, floor.verificationDepth);
     if (deeper !== current) {
       adjustments.push({
         field: "verificationDepth",
@@ -279,6 +287,23 @@ export function compileGoldenTrianglePolicy(input: CompileInput): DecodedPolicy 
         reason: `Minimum tier raised to ${raised} by the task/agent floor.`,
       });
       posture.minimumTier = raised;
+    }
+  }
+
+  // ── Floor: verification depth (stake policy cannot be relaxed by posture) ──
+  if (policyConstraints?.verificationDepthFloor) {
+    const floor = policyConstraints.verificationDepthFloor;
+    const current = budget.verificationDepth;
+    const deeper = maxVerificationDepth(current, floor);
+    if (deeper !== current) {
+      adjustments.push({
+        field: "verificationDepth",
+        from: current,
+        to: deeper,
+        reasonCode: "verification_depth_floor",
+        reason: `Verification deepened to ${deeper} by the policy floor.`,
+      });
+      budget.verificationDepth = deeper;
     }
   }
 

@@ -36,6 +36,11 @@ export {
   DecisionProposalStatus,
 } from "../generated/client/client";
 export {
+  WorkroomParticipantRole,
+  WorkroomParticipantAssignmentSource,
+  WorkroomRelationKind,
+} from "../generated/client/client";
+export {
   PRINCIPAL_SENSITIVITIES,
   isPrincipalSensitivity,
   normalizePrincipalSensitivities,
@@ -266,6 +271,22 @@ export {
   type DemandRouteHopV1,
   type DemandSchemaVersion,
 } from "./federated-demand-contract";
+export {
+  OPERATIONAL_POSTURE_FIELDS,
+  OPERATIONAL_POSTURE_PROJECTION_TEMPLATE,
+  OPERATIONAL_POSTURE_SCHEMA_VERSIONS,
+  POSTURE_HEALTH_STATUSES,
+  computeOperationalPosturePayloadDigest,
+  validateOperationalPostureV1,
+  type OperationalPostureSchemaVersion,
+  type OperationalPostureV1,
+  type OperationalPostureValidationContext,
+  type PostureHealthRollupV1,
+  type PostureHealthStatus,
+  type PosturePatchSummaryV1,
+  type PostureResourceFootprintV1,
+  type PostureRuntimeSummaryV1,
+} from "./federated-operational-posture-contract";
 export {
   assertNoExcludedEgress,
   isForbiddenField,

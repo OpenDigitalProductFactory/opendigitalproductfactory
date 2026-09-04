@@ -107,6 +107,10 @@ function givenInstallArchetype(archetype: { archetypeId: string; category: strin
   mockPrisma.storefrontArchetype.findUnique.mockResolvedValue(archetype);
 }
 
+/** Distinct mocked model ids — see the fixture note in beforeEach. */
+const IT4IT_MODEL_ID = "it4it-model";
+const BIAN_MODEL_ID = "bian-model";
+
 beforeEach(() => {
   vi.clearAllMocks();
   mockPrisma.portfolio.findMany.mockResolvedValue([
@@ -116,7 +120,17 @@ beforeEach(() => {
     { id: "p4", slug: "products_and_services_sold", name: "Products and Services Sold" },
   ]);
   mockPrisma.eaAssessmentScope.upsert.mockResolvedValue({});
-  mockPrisma.eaReferenceModel.upsert.mockResolvedValue({ id: "model-1" });
+  // Distinct ids per model. This fixture used to resolve BOTH models to
+  // "model-1", which silently made every per-model assertion vacuous — a test
+  // asserting "BIAN was not imported" passed even when it was. Two tests were
+  // written against that fixture and confirmed passing against a REVERTED fix
+  // before the id collision was spotted. Key on the slug so the wrong model can
+  // never satisfy the right assertion.
+  mockPrisma.eaReferenceModel.upsert.mockImplementation(
+    async (args: { where: { slug: string } }) => ({
+      id: args.where.slug.startsWith("bian") ? BIAN_MODEL_ID : IT4IT_MODEL_ID,
+    }),
+  );
   mockPrisma.eaReferenceModelArtifact.upsert.mockResolvedValue({});
   mockPrisma.eaReferenceModelElement.upsert.mockImplementation(async (args: { where: { modelId_slug: { slug: string } } }) => ({
     id: `el-${args.where.modelId_slug.slug}`,
@@ -229,13 +243,12 @@ describe("seedEaReferenceModels", () => {
   });
 
   it("throws when the BIAN JSON import produces zero elements (BI-98D19DF2)", async () => {
-    // Both models resolve to the same mocked id ("model-1") in this fixture,
-    // so distinguish by call order: first count() is IT4IT, second is BIAN.
-    let call = 0;
-    mockPrisma.eaReferenceModelElement.count.mockImplementation(async () => {
-      call += 1;
-      return call === 1 ? 1 : 0;
-    });
+    // Key on the model id, not call order: order-dependent fixtures break
+    // silently the moment the seed reorders its counts.
+    mockPrisma.eaReferenceModelElement.count.mockImplementation(
+      async (args: { where: { modelId: string } }) =>
+        args.where.modelId === IT4IT_MODEL_ID ? 1 : 0,
+    );
 
     await expect(seedEaReferenceModels()).rejects.toThrow(/BIAN Service Landscape reference model imported zero elements/);
   });
@@ -265,11 +278,8 @@ describe("seedEaReferenceModels", () => {
 // "reports success while importing nothing" shape the assertion exists to
 // prevent, inverted into an assertion asserting the wrong thing.
 describe("industry scoping of reference models", () => {
-  // The shared fixture resolves BOTH models to the id "model-1", which makes
-  // any per-model assertion vacuous (a scoping bug still passes). These cases
-  // are specifically about which model got what, so they need distinct ids.
-  const IT4IT_ID = "it4it-model";
-  const BIAN_ID = "bian-model";
+  const IT4IT_ID = IT4IT_MODEL_ID;
+  const BIAN_ID = BIAN_MODEL_ID;
 
   function givenDistinctModelIds(): void {
     mockPrisma.eaReferenceModel.upsert.mockImplementation(

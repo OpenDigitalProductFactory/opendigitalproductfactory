@@ -40,8 +40,13 @@ describe("golden journeys (EP-COWORKER-LIFECYCLE Phase 2)", () => {
   });
 
   it("a coworker without curated journeys falls back to the derived probe", () => {
-    const journeys = journeysForCoworker("dispatcher");
-    expect(journeys).toEqual([derivedReadProbe("dispatcher")]);
+    // Deliberately a NON-roster id. This test names the fallback MECHANISM, and
+    // pinning it to a real coworker made it hostage to curation coverage: it
+    // began failing the moment that coworker was curated, which is the opposite
+    // of what it exists to catch. Every roster coworker now has a curated
+    // journey, so no real id can stand in for "uncurated".
+    const journeys = journeysForCoworker("not-a-seeded-coworker");
+    expect(journeys).toEqual([derivedReadProbe("not-a-seeded-coworker")]);
     expect(journeys[0].kind).toBe("derived");
   });
 

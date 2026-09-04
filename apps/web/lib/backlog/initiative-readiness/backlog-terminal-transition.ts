@@ -8,6 +8,7 @@ import {
   type ResolveCompletionEvidenceResult,
 } from "@/lib/backlog/completion-evidence-runtime";
 import { canonicalJson } from "@/lib/shared/canonical-json";
+import { isReachableFromTrunk, trunkRefExists } from "@/lib/work-capsules/git-scanner";
 
 import { projectBacklogItemReadiness, type InitiativeReadinessActivity } from "./entry-adapter";
 import {
@@ -93,6 +94,36 @@ function deliveryReasons(result: ResolveCompletionEvidenceResult): string[] {
   return reasons;
 }
 
+/**
+ * BI-B04A0203 (EP-4614F35E): a PR merged THROUGH the code gates — CI + the merge
+ * queue — is the strongest possible delivery evidence. Branch protection means it
+ * could not have reached the trunk without passing them, so a direct-merge item
+ * whose branch landed does not need a hand-built delivery manifest. Detect it
+ * PROCEDURALLY and LOCALLY: the item's Workroom head SHA reachable from origin/main
+ * == merged, reusing the room-closeout reachability helper — no GitHub API, no LLM.
+ * Best-effort: any failure (no bound room, no local trunk, git unavailable) returns
+ * false so the caller falls back to the recorded completion-evidence manifest.
+ */
+export type ResolveMergeDelivery = (args: { itemRowId: string; itemId: string }) => Promise<boolean>;
+
+async function defaultResolveMergeDelivery({ itemId }: { itemRowId: string; itemId: string }): Promise<boolean> {
+  try {
+    const room = await (prisma as unknown as {
+      workroom: { findFirst(args: unknown): Promise<{ headSha: string | null } | null> };
+    }).workroom.findFirst({
+      where: { backlogItemId: itemId, headSha: { not: null } },
+      orderBy: { updatedAt: "desc" },
+      select: { headSha: true },
+    });
+    if (!room?.headSha) return false;
+    const repoRoot = process.env.DPF_REPO_ROOT || process.cwd();
+    if (!(await trunkRefExists(repoRoot))) return false;
+    return (await isReachableFromTrunk(repoRoot, room.headSha)) === true;
+  } catch {
+    return false;
+  }
+}
+
 export async function completeBacklogItemTransition(args: {
   db?: BacklogTerminalDb;
   itemId: string;
@@ -107,6 +138,7 @@ export async function completeBacklogItemTransition(args: {
     resolveCompletionEvidence?: ResolveEvidence;
     reconcileObjectives?: ReconcileObjectives;
     projectReadiness?: ProjectReadiness;
+    resolveMergeDelivery?: ResolveMergeDelivery;
   };
 }): Promise<GovernedTerminalTransitionResult> {
   const db = args.db ?? (prisma as unknown as BacklogTerminalDb);
@@ -157,7 +189,13 @@ export async function completeBacklogItemTransition(args: {
         itemRowId: lockedItem.id,
         activities,
       });
-      const delivery = deliveryState(completion);
+      const mergedThroughGates = await (args.dependencies?.resolveMergeDelivery ?? defaultResolveMergeDelivery)({
+        itemRowId: lockedItem.id,
+        itemId: lockedItem.itemId,
+      });
+      // A merge through branch protection (CI + the merge queue) is authoritative
+      // delivery evidence and supersedes a missing/hand-built manifest (BI-B04A0203).
+      const delivery = mergedThroughGates ? "pass" : deliveryState(completion);
       const projected = (args.dependencies?.projectReadiness ?? projectBacklogItemReadiness)({
         item: { ...lockedItem, activeBuildKind: lockedItem.activeBuild?.kind ?? null },
         activities: activities as InitiativeReadinessActivity[],
@@ -178,7 +216,7 @@ export async function completeBacklogItemTransition(args: {
             ACCEPTANCE_EVIDENCE_REQUIRED: reconciliation.evidenceRefs,
             OBJECTIVE_RECONCILIATION_REQUIRED: reconciliation.evidenceRefs,
           },
-          requirementReasons: { DELIVERY_EVIDENCE_REQUIRED: deliveryReasons(completion) },
+          requirementReasons: { DELIVERY_EVIDENCE_REQUIRED: mergedThroughGates ? [] : deliveryReasons(completion) },
         },
         evaluatedAt,
       });
@@ -194,6 +232,7 @@ export async function completeBacklogItemTransition(args: {
           objectiveState: reconciliation.state,
           objectiveEvidenceRefs: reconciliation.evidenceRefs,
           deliveryState: delivery,
+          mergedThroughGates,
           deliveryEvidenceRefs: completion.kind === "evaluated"
             ? completion.verdict.normalizedManifest?.evidenceActivityIds ?? []
             : [],

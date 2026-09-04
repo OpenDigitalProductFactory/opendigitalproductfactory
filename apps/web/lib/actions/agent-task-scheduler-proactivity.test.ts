@@ -183,19 +183,24 @@ function arrangeMarketingSelfTask() {
 }
 
 describe("executeScheduledAgentTask — proactivity plan enforcement (BI-754C9E82)", () => {
-  function quietOverrideFact(agentId: string) {
+  // BI-87C9C91C: the level reaches the run through the WORK's route context, not
+  // through the coworker's identity. The `agent:` scope these fixtures used to
+  // carry no longer participates in resolution, so scoping them that way would
+  // silently test nothing — every assertion below would pass on the default.
+  const TASK_ROUTE = "/customer/marketing";
+  function quietOverrideFact(_agentId: string) {
     return {
       id: "fact-quiet-1",
-      key: `aiCoworkerProactivity:agent:${agentId}`,
-      value: JSON.stringify({ scopeKey: `agent:${agentId}`, level: "quiet" }),
+      key: `aiCoworkerProactivity:route-context:${TASK_ROUTE}`,
+      value: JSON.stringify({ scopeKey: `route-context:${TASK_ROUTE}`, level: "quiet" }),
       createdAt: new Date("2026-07-01T00:00:00.000Z"),
     };
   }
-  function assertiveOverrideFact(agentId: string) {
+  function assertiveOverrideFact(_agentId: string) {
     return {
       id: "fact-assertive-1",
-      key: `aiCoworkerProactivity:agent:${agentId}`,
-      value: JSON.stringify({ scopeKey: `agent:${agentId}`, level: "assertive" }),
+      key: `aiCoworkerProactivity:route-context:${TASK_ROUTE}`,
+      value: JSON.stringify({ scopeKey: `route-context:${TASK_ROUTE}`, level: "assertive" }),
       createdAt: new Date("2026-07-01T00:00:00.000Z"),
     };
   }

@@ -36,6 +36,8 @@ const ALL_SOURCES: AttentionSource[] = [
   "storefront-inquiry",
   "business-journey",
   "compliance-source-freshness",
+  "coworker-envelope",
+  "skill-proposal",
 ];
 
 /**

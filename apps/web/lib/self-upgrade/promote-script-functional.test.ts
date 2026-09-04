@@ -95,7 +95,8 @@ case "$*" in
   "create "*) printf "candidate-container" ;;
   "cp candidate-container:/dpf-release-assets/. "*)
     for destination in "$@"; do :; done
-    cp -R "$DPF_TEST_RELEASE_ASSETS"/. "$destination"
+    # Match Docker's directory-copy semantics on both platforms.
+    mkdir -p "$destination"; cp -R "$DPF_TEST_RELEASE_ASSETS"/. "$destination/"
     ;;
   *"recover-human-principal-backfill-migration.mjs --verify-rolled-back"*)
     [ "\${DPF_TEST_PRINCIPAL_VERIFY_FAIL:-no}" = "yes" ] && exit 1

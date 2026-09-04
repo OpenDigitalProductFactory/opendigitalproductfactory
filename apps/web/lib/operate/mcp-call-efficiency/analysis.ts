@@ -15,6 +15,12 @@ export type CallEfficiencyEvent = {
   agentId: string;
   userId: string;
   success: boolean;
+  /**
+   * A failed call where a policy correctly declined the action, rather than the
+   * tool breaking. Counted separately from failures so a working gate is never
+   * reported as a misbehaving tool (see refusal-codes.ts).
+   */
+  governedRefusal?: boolean;
   /** GovernedExecuteSource / ToolExecution.executionMode */
   executionMode: string;
   durationMs: number | null;
@@ -69,6 +75,8 @@ export type CallEfficiencyReport = {
     toolName: string;
     count: number;
     failCount: number;
+    /** Calls a policy correctly declined; excluded from failCount and successRate. */
+    refusalCount: number;
     successRate: number;
     avgDurationMs: number | null;
   }>;
@@ -179,6 +187,12 @@ function fitsRoutineMachineCadence(
   return true;
 }
 
+function isRoutineMachineCadence(events: CallEfficiencyEvent[]): boolean {
+  const minimumIntervalMs = ROUTINE_MACHINE_MIN_INTERVAL_MS[events[0]?.toolName ?? ""];
+  return minimumIntervalMs !== undefined
+    && fitsRoutineMachineCadence(events, minimumIntervalMs);
+}
+
 function surfaceLabel(e: CallEfficiencyEvent): string {
   if (e.apiTokenId) return `external-pat:${e.executionMode}`;
   return e.executionMode || "unknown";
@@ -250,6 +264,7 @@ export function analyzeCallEfficiency(
     {
       count: number;
       failCount: number;
+      refusalCount: number;
       durationSum: number;
       durationN: number;
       events: CallEfficiencyEvent[];
@@ -259,12 +274,17 @@ export function analyzeCallEfficiency(
     const row = toolMap.get(e.toolName) ?? {
       count: 0,
       failCount: 0,
+      refusalCount: 0,
       durationSum: 0,
       durationN: 0,
       events: [],
     };
     row.count += 1;
-    if (!e.success) row.failCount += 1;
+    // A governed refusal is neither a success nor a tool failure: it is the
+    // system correctly declining. Counting it as a failure is what filed
+    // `fix_instructions` findings against gates that were working.
+    if (e.governedRefusal) row.refusalCount += 1;
+    else if (!e.success) row.failCount += 1;
     if (e.durationMs != null) {
       row.durationSum += e.durationMs;
       row.durationN += 1;
@@ -277,7 +297,12 @@ export function analyzeCallEfficiency(
       toolName,
       count: v.count,
       failCount: v.failCount,
-      successRate: v.count > 0 ? (v.count - v.failCount) / v.count : 1,
+      refusalCount: v.refusalCount,
+      // Rate the TOOL on the calls it was actually responsible for. A gate that
+      // declines 90% of calls is not a 10%-reliable tool.
+      successRate: v.count - v.refusalCount > 0
+        ? (v.count - v.refusalCount - v.failCount) / (v.count - v.refusalCount)
+        : 1,
       avgDurationMs: v.durationN > 0 ? v.durationSum / v.durationN : null,
     }))
     .sort((a, b) => b.count - a.count)
@@ -301,6 +326,10 @@ export function analyzeCallEfficiency(
   for (const [, list] of thrashMap) {
     if (list.length < thrashThreshold) continue;
     const head = list[0]!;
+    if (isRoutineMachineCadence(list)) {
+      suppressedRoutineCadenceFindings += 1;
+      continue;
+    }
     const correlationId = eventCorrelationId(head)!;
     const waste = list.length - Math.max(2, Math.floor(thrashThreshold / 2));
     findings.push({
@@ -327,7 +356,7 @@ export function analyzeCallEfficiency(
   // Retry storm: fail then same tool within retryWindowMs (per correlation).
   const byCorrelation = groupByCorrelation(sorted);
   for (const [correlationId, list] of byCorrelation) {
-    const pairs = new Map<string, { n: number; ids: string[]; agentId: string }>();
+    const pairs = new Map<string, { n: number; refused: number; ids: string[]; agentId: string }>();
     for (let i = 0; i < list.length - 1; i++) {
       const a = list[i]!;
       const b = list[i + 1]!;
@@ -337,10 +366,16 @@ export function analyzeCallEfficiency(
       if (dt < 0 || dt > retryWindowMs) continue;
       const row = pairs.get(a.toolName) ?? {
         n: 0,
-        ids: [],
+        refused: 0,
+        ids: [] as string[],
         agentId: a.agentId,
       };
       row.n += 1;
+      // Retrying a governed refusal is still waste — often worse, because the
+      // refusal is non-retryable and the loop cannot terminate by succeeding.
+      // But it is the CALLER's loop, not a broken tool, and saying "fix tool
+      // errors" sends the reader to the wrong place.
+      if (a.governedRefusal) row.refused += 1;
       if (row.ids.length < 5) row.ids.push(a.id, b.id);
       pairs.set(a.toolName, row);
     }
@@ -351,9 +386,14 @@ export function analyzeCallEfficiency(
         severity: row.n >= retryStormMin * 2 ? "critical" : "warning",
         toolName,
         title: `Retry storm: ${toolName} (${row.n} fail→retry pairs)`,
-        detail:
-          `Execution principal ${correlationId} retried ${toolName} after failure ${row.n} times ` +
-          `within ${retryWindowMs / 1000}s windows. Fix tool errors or agent instructions.`,
+        detail: row.refused >= row.n / 2
+          ? `Execution principal ${correlationId} retried ${toolName} ${row.n} times within `
+            + `${retryWindowMs / 1000}s windows, and ${row.refused} of those followed a GOVERNED REFUSAL `
+            + `rather than a tool failure. The policy declined the action; re-calling cannot make it `
+            + `succeed. Fix the caller's retry loop — not the tool, and not its instructions on how to `
+            + `call it correctly.`
+          : `Execution principal ${correlationId} retried ${toolName} after failure ${row.n} times `
+            + `within ${retryWindowMs / 1000}s windows. Fix tool errors or agent instructions.`,
         evidence: {
           count: row.n,
           ...(list[0]?.threadId ? { threadId: list[0].threadId } : {}),
@@ -370,11 +410,7 @@ export function analyzeCallEfficiency(
   // High volume / high failure from tool rollup
   for (const t of topTools) {
     const toolEvents = toolMap.get(t.toolName)!.events;
-    const routineInterval = ROUTINE_MACHINE_MIN_INTERVAL_MS[t.toolName];
-    const routineCadenceHealthy = routineInterval !== undefined && fitsRoutineMachineCadence(
-      toolEvents,
-      routineInterval,
-    );
+    const routineCadenceHealthy = isRoutineMachineCadence(toolEvents);
     if (t.count >= highVolumeFloor && routineCadenceHealthy) {
       suppressedRoutineCadenceFindings += 1;
     } else if (t.count >= highVolumeFloor) {
@@ -407,23 +443,32 @@ export function analyzeCallEfficiency(
         });
       }
     }
+    // Rate the tool on the calls it was answerable for. Governed refusals are
+    // excluded from both the numerator and the denominator: a gate that declines
+    // most of what it is asked is working, and filing `fix_instructions` against
+    // it sends the next agent looking for a defect that is not there.
+    const answerableCalls = t.count - t.refusalCount;
+    const failureRate = answerableCalls > 0 ? t.failCount / answerableCalls : 0;
     if (
-      t.count >= highFailureMinSamples &&
-      t.failCount / t.count >= highFailureRate
+      answerableCalls >= highFailureMinSamples &&
+      failureRate >= highFailureRate
     ) {
       findings.push({
         kind: "high_failure",
-        severity: t.failCount / t.count >= 0.6 ? "critical" : "warning",
+        severity: failureRate >= 0.6 ? "critical" : "warning",
         toolName: t.toolName,
-        title: `High failure: ${t.toolName} (${(t.failCount / t.count * 100).toFixed(0)}%)`,
+        title: `High failure: ${t.toolName} (${(failureRate * 100).toFixed(0)}%)`,
         detail:
-          `${t.failCount}/${t.count} calls failed. Agents may be retrying blindly — ` +
-          `fix tool contract, grants, or skill guidance.`,
+          `${t.failCount}/${answerableCalls} answerable calls failed. Agents may be retrying blindly — ` +
+          `fix tool contract, grants, or skill guidance.` +
+          (t.refusalCount > 0
+            ? ` ${t.refusalCount} further call(s) were governed refusals and are excluded — the policy declined them, the tool did not fail.`
+            : ""),
         evidence: {
-          count: t.count,
+          count: answerableCalls,
           failCount: t.failCount,
           sampleIds: sorted
-            .filter((e) => e.toolName === t.toolName && !e.success)
+            .filter((e) => e.toolName === t.toolName && !e.success && !e.governedRefusal)
             .slice(0, 5)
             .map((e) => e.id),
         },

@@ -8,7 +8,15 @@ Status: draft for architecture review
 Backlog: `BI-7C1F43E3` — Restore flow efficiency across DPF external-agent delivery gates  
 Epic: `EP-56AE0F69`  
 Extends: `2026-08-15-resilient-concurrent-development-process.md` and `2026-06-05-unified-delivery-surfaces-execution-alignment-design.md`  
-Workroom: `WC-4C4D810C`
+Workroom: `WC-1B73A988`
+
+> **2026-09-03 throughput extension.** The local-first campaign, paired-install
+> placement, PR/review-tail controller, operator delivery rail, and outcome
+> scorecard are specified in
+> [`2026-09-03-local-first-agentic-delivery-throughput-design.md`](2026-09-03-local-first-agentic-delivery-throughput-design.md).
+> They consume this control plane; they do not replace its gate identity, durable
+> wait, proportional evidence, or atomic completion packet. `BI-7C1F43E3` remains
+> independently owned through its live pilot.
 
 ## Decision in one paragraph
 
@@ -49,6 +57,34 @@ The canonical BI baseline is four PRs in seven hours (0.57 PR/hour) and an earli
 - No second queue, agent-memory store, or parallel Workroom database.
 - No forced concurrency increase when RAM, provider capacity, or review authority is unavailable.
 - No assumption that a source-free install can resolve provenance from local Git.
+
+## Canonical objectives
+
+**OBJ-BDCP-WAIT:** Replace wait-only claim, list, lease-renewal, and quiescence polling with a server-owned durable wait that consumes no client process, model context, heartbeat, or heavyweight lease.
+
+**OBJ-BDCP-IDENTITY:** Bind every semantic review, exact-tree gate, release, upgrade, and replay to one immutable candidate identity so duplicate executions cannot be created for the same gate key.
+
+**OBJ-BDCP-WAKE:** Wake only the eligible durable waiter from authoritative capacity, review, approval, or input events, and reconcile missed events within five minutes without turning reconciliation into polling.
+
+**OBJ-BDCP-EVIDENCE:** Admit and complete work only from an exact immutable evidence plan and atomic evidence packet containing genuine baseline, coverage, delivery, acceptance, and runtime provenance references.
+
+**OBJ-BDCP-TRUTH:** Project Workroom and queue state from durable events with one typed blocker and next action, including explicit stale-projection handling.
+
+**OBJ-BDCP-FLOW:** Demonstrate in a seven-day pilot at least 95% fewer wait-only MCP calls, queue CPU p95 below one second per waiting minute, event wake p95 below 15 seconds, zero duplicate gates, and throughput of at least three protected PRs per hour without reducing quality.
+
+**OBJ-BDCP-SOURCE-FREE:** Keep source-free runtime provenance server-verified and fail closed; never fall back to local Git or trust client-supplied target identity.
+
+## Canonical acceptance links
+
+| Acceptance | Objective links | Verifiable outcome |
+| --- | --- | --- |
+| AC-BDCP-WAIT | OBJ-BDCP-WAIT | A blocked gate performs one authoritative quiescence read, persists a durable waiting state, exits with a stable resumable code, and does not poll or claim scarce capacity. |
+| AC-BDCP-IDENTITY | OBJ-BDCP-IDENTITY | Repeated requests for one gate key return the existing run or valid receipt; semantic review, exact-tree CI, release, upgrade, and replay each have zero duplicate executions. |
+| AC-BDCP-WAKE | OBJ-BDCP-WAKE | Capacity and approval events wake only the eligible waiter with p95 below 15 seconds, while bounded reconciliation repairs missed events within five minutes. |
+| AC-BDCP-EVIDENCE | OBJ-BDCP-EVIDENCE | Completion refuses missing, conflicting, stale, or non-receipted baseline, plan coverage, delivery, acceptance, or runtime evidence and never promotes `INCONCLUSIVE` to `PASS`. |
+| AC-BDCP-TRUTH | OBJ-BDCP-TRUTH | Workroom and queue projections show the durable state, typed blocker, and next action within 15 seconds of an event and expose any unresolved projection drift. |
+| AC-BDCP-FLOW | OBJ-BDCP-FLOW | One continuous seven-day pilot meets the call-reduction, CPU, wake, reconciliation, duplicate-gate, throughput, protected-check, and first-pass-quality thresholds. |
+| AC-BDCP-SOURCE-FREE | OBJ-BDCP-SOURCE-FREE | A source-free install verifies immutable provider and served-image identity or returns one typed blocker; it never consults local Git or accepts client target authority. |
 
 ## Constraints
 

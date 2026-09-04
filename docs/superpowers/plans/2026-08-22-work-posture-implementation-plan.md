@@ -21,9 +21,34 @@ status: active
 | G | `BI-BEDAFF57` | small | Archetype posture conformance test over the whole catalogue |
 | H | `BI-4EB2F1D0` | medium | Room surface renders the posture and its provenance |
 
-## Status ⟦runtime: 2026-08-28⟧
+## Status ⟦runtime: 2026-08-30⟧
 
-All eight slices have landed. Seven went across five PRs (#4488, #4492, #4569, and the
+### Slice E production-reach correction
+
+The 2026-08-30 live-substrate audit found that Slice E was overstated below. Its pure
+policy pieces landed: `joinAutonomy` is exhaustive, the verification requirement resolves
+from risk/depth, and `evaluateWorkCasePolicy` returns the named
+`missing_verification_evidence` denial. But `resolveWorkCaseAutonomyEnvelope` has no
+production caller and `createWorkCaseGovernanceHook` is not registered, so those pieces do
+not govern ordinary in-room tool calls. A unit-only policy is not load-bearing.
+
+The completion pass is bound to `BI-13ED1BE1` in Workroom `WC-3ECD32DA` and uses the
+already-registered Workroom governance hook as the production seam. The operator clarified
+that proactivity is one **Workroom setting shared by every participant**: each participant's
+own autonomy envelope may narrow the room boundary, but adding or changing a participant
+must never make the room more permissive. The same hook will consume canonical room
+verification receipts and the existing `resolveVerificationRequirement` policy, producing
+the existing named denial for consequential stake work. No participant-local proactivity
+setting and no second verification engine are introduced.
+
+Exit proof for this correction is production-seam coverage: two distinct participants are
+both capped by the same room action boundary; outward/floor actions without a verified
+receipt are denied by name in enforce mode; a verified receipt permits the action; and
+non-stake work is byte-for-byte unaffected at the decision boundary. The existing shadow
+mode remains audit-only.
+
+All eight slices have code on main, but the production-reach correction above remains the
+completion work for E. Seven went across five PRs (#4488, #4492, #4569, and the
 posture-governs branch); **H — the rich layer-by-layer provenance surface — landed on
 `feat/work-posture-provenance`.**
 
@@ -36,12 +61,42 @@ the room surface's existing collapsed "Pace and priority" disclosure and REPLACE
 "Why" list that section used to show, so the same reasons appear once, attributed to the
 layer that produced them, and the arrival view gains no words.
 
-Two follow-on wiring gaps were found while verifying H and filed rather than built: a
-scheduled tick still does not resolve posture through the room ladder (`BI-27C8484F`), and
-a coworker's ordinary in-room proactivity still resolves from the old identity ladder
-(`BI-87C9C91C`). Both are the same "posture resolves but nothing consumes it" defect on
-different execution paths, and are worth sequencing together so the room dimension is added
-to `ProactivityResolverInput` once.
+### Both follow-on wiring gaps are now built
+
+`BI-87C9C91C` landed as `fix/workroom-owned-proactivity` (PR #4949, squashed to main as
+`1317f126e`): the `agent:` preference scope is gone from `scopeKeysForInput`, the three
+per-coworker controls are removed, legacy `aiCoworkerProactivity:agent:*` facts are inert
+rather than migrated, and the interactive turn plus the opening briefing take the platform
+default. Its remaining scope is the interactive-turn room seam, deferred rather than
+guessed because a chat turn has no outcome-specific Workroom in scope.
+
+`BI-27C8484F` landed as `fix/scheduled-tick-room-posture`:
+`lib/scheduling/scheduled-work-posture.server.ts` reads the recorded trigger, resolves the
+room it names through `resolveWorkroomPosture`, and hands the result back to
+`executeScheduledAgentTask`. The scheduler's own resolved plan is passed in as the
+INHERITED baseline, so the room's layers move that plan rather than replacing it with a
+separately-derived one, and `temporalInputForTrigger` finally has a production caller — the
+obligation a tick is racing outranks the room's own due date. Tighten-only is re-asserted at
+the call site: a scheduled job can never acquire more authority by virtue of running in a
+room. A task naming no room keeps today's plan exactly; the room ladder never invents a room.
+
+**Reach, measured rather than claimed (live install, 2026-09-02).** 53 scheduled tasks, 12
+active. 13 carry a recorded trigger and 7 of those name a room — but **all 7 are inactive,
+and none of the 12 active tasks carries a trigger at all**. So the seam is correct and
+production-reachable and changes nothing on this install today. The inertness has moved
+from the code to the data: what is missing is now tasks created with a trigger, not wiring.
+That is a materially different problem from the one this item was filed for, and it is the
+same input-starvation shape as the room shape/posture claims.
+
+The two gaps as originally filed were: a
+scheduled tick did not resolve posture through the room ladder (`BI-27C8484F`), and
+a coworker's ordinary in-room proactivity resolved from the old identity ladder
+(`BI-87C9C91C`). The operator clarified that the latter is not merely a missing room input:
+AI-coworker identity must cease to own proactivity. That slice removes the `agent:` preference
+scope and the coworker-record, chat-dock and roster controls; room participants share the
+outcome-specific Workroom posture, while participant trust and authority remain tighten-only
+safety ceilings. Unroomed activity uses the activity-family/platform default. The two wiring
+items should still share the room-resolution seam, but neither may preserve identity fallback.
 
 Two items outside the original eight were found and closed on the way: the workroom shape
 had no write path at all (`BI-8C54B216`), and the posture was display-only

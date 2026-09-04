@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@dpf/db";
+import { resolveCloudProviderReadiness } from "@/lib/inference/cloud-provider-readiness";
 import { SETUP_STEPS, type StepStatus, type SetupContext } from "./setup-constants";
 import {
   projectSetupStepCompletion,
@@ -204,7 +205,29 @@ export async function getSetupContext(): Promise<SetupContext | null> {
     select: { context: true },
   });
   if (!progress) return null;
-  return (progress.context as SetupContext) ?? null;
+  const stored = (progress.context as SetupContext) ?? null;
+  if (!stored) return null;
+  // BI-575F0046 Slice 2: computed live, never stored. A stored answer goes stale
+  // the moment the owner connects a provider or completes its trust review, and
+  // the guidance built from it would then be confidently wrong.
+  const cloudProviderReadiness = await resolveSetupCloudReadiness();
+  return cloudProviderReadiness ? { ...stored, cloudProviderReadiness } : stored;
+}
+
+/** Live readiness for setup guidance — see SetupContext.cloudProviderReadiness. */
+async function resolveSetupCloudReadiness(): Promise<"none" | "public-only" | "ready" | undefined> {
+  try {
+    const providers = await prisma.modelProvider.findMany({
+      where: { status: "active" },
+      select: { providerId: true, name: true, status: true, sensitivityClearance: true },
+    });
+    return resolveCloudProviderReadiness(providers).state;
+  } catch {
+    // Setup guidance must not break because provider state could not be read.
+    // Undefined renders as "not known yet", which is honest; guessing "ready"
+    // or "none" would put a confident wrong sentence in the COO's mouth.
+    return undefined;
+  }
 }
 
 /** Merge a partial context update into the active (incomplete) setup record. No-op if no active setup. */

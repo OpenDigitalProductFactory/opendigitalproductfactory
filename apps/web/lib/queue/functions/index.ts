@@ -104,6 +104,10 @@ import {
   obligationAssuranceWatchRunNow,
 } from "./obligation-assurance-watch";
 import {
+  workroomDriveScheduled,
+  workroomDriveRunNow,
+} from "./workroom-drive";
+import {
   embeddingCoverageReconcileScheduled,
   embeddingCoverageReconcileRunNow,
 } from "./embedding-coverage-reconcile";
@@ -123,6 +127,10 @@ import {
 import { indexIntegritySweep } from "./index-integrity-sweep";
 import { localModelInstall } from "./local-model-install";
 import { nonprodCapacityAvailable, nonprodLeaseWaitReconciliation } from "./nonprod-lease-wait";
+import {
+  mcpTaskRunDispatchReconciliation,
+  mcpTaskRunExecute,
+} from "./mcp-task-run-execute";
 
 export const scheduledFunctions = [
   prometheusPoll,
@@ -182,6 +190,7 @@ export const scheduledFunctions = [
   embeddingCoverageReconcileScheduled, // BI-ED117C82: re-embeds published pages a boot hook could not reach; retries every 2h so a silent corpus gap self-heals
   businessJourneyWatchdogScheduled, // BI-E105303D / EP-PROACTIVE-OPS: exercises the install's critical business journeys against the running system, Mon/Wed/Fri 06:00
   obligationAssuranceWatchScheduled, // TAK §8.11: deadline-horizon sweep over recorded obligations, control reviews, and licence expiries, daily 05:40
+  workroomDriveScheduled, // BI-FCD639D9: standing Workroom drive — wake, lease, dispatch, attention, stop, every 15m
   canonicalImprovementDigest, // BI-8996BBBB: weekly [reference-doc] proposal digest -> canonical-source chore BI
   memoryConsolidationNightly, // BI-907C4327: EP-8C706944 P2 autoDream — nightly batch-dedupe + expire coworker notes / user facts, 04:20
   semanticMemoryReconcileScheduled, // BI-DG-001: EP-DATA-GOVERNANCE — nightly orphan reconciliation of the semantic-memory derived copy, 05:10 (after retention sweep)
@@ -191,6 +200,7 @@ export const scheduledFunctions = [
   indexIntegritySweep, // BI-D9C20A97: daily live-database btree/collation integrity sweep
   postmarkCallbackDispatchSweep,
   nonprodLeaseWaitReconciliation,
+  mcpTaskRunDispatchReconciliation,
 ];
 
 export const eventFunctions = [
@@ -229,11 +239,13 @@ export const eventFunctions = [
   embeddingCoverageReconcileRunNow, // BI-ED117C82: operator/agent "run now" embedding-coverage reconcile
   businessJourneyWatchdogRunNow, // BI-E105303D: operator "run now" business-journey watchdog sweep
   obligationAssuranceWatchRunNow, // TAK §8.11: operator "run now" obligation assurance watch
+  workroomDriveRunNow, // BI-FCD639D9: operator "run now" standing Workroom drive
   semanticMemoryReconcileRequested, // BI-DG-001: operator "run now" semantic-memory orphan reconciliation
   postmarkCallbackDispatchRequested,
   workPatternExperimentRun,
   dataControlOperationRecoveryRequested,
   nonprodCapacityAvailable,
+  mcpTaskRunExecute,
 ];
 
 export const allFunctions = [...scheduledFunctions, ...eventFunctions];

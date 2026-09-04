@@ -37,6 +37,35 @@ export function noEligibleModelHandoff(): string {
 }
 
 /**
+ * Routing eliminated every candidate specifically because no connected provider
+ * is cleared for this coworker's data sensitivity — the confidential-data fence
+ * working as designed, not an outage (BI-431524DF). The generic "no eligible
+ * model" copy sends the operator to re-check provider status, which is the wrong
+ * advice here: the providers ARE connected and active; they are held back only
+ * because a personal-subscription account carries no commercial no-training
+ * guarantee. Name the two real levers instead — clear a business cloud account,
+ * or provision a capable local model — and never imply a personal subscription
+ * should be attested.
+ */
+export function sensitivityClearanceHandoff(sensitivity: string): string {
+  return buildHumanHandoff({
+    blocker:
+      `This coworker handles ${sensitivity} work, and none of the connected AI providers are cleared for ` +
+      `${sensitivity} data. Cloud providers such as Claude or GPT stay limited to public work until their ` +
+      `account's data policy is reviewed — a personal subscription is deliberately not cleared for ${sensitivity} ` +
+      `data, so ${sensitivity} content is never sent to a provider that might train on it. The built-in local ` +
+      `model is cleared for it but is not strong enough for this request.`,
+    steps: [
+      `To let a cloud provider handle ${sensitivity} work: open Platform > AI Operations > Providers & Routing, ` +
+      `and only on a genuine business or enterprise account with a no-training agreement, attest its data policy ` +
+      `(mark it operator-attested, or upload the contract).`,
+      `To keep ${sensitivity} work fully on-premises: configure a stronger local model that is cleared for ${sensitivity} data.`,
+    ],
+    verify: `re-check which models this coworker can reach for ${sensitivity} work`,
+  });
+}
+
+/**
  * Endpoints exist but all transiently failed. Genuinely nothing to configure,
  * so the hand-off is one step — but it stays a hand-off, so the reply ends on
  * the user's next action rather than on the outage.
@@ -110,11 +139,18 @@ export function localCapacityHeldHandoff(
       ? "I couldn't confirm the local AI model was free to use, so I held off rather than risk disrupting something else running on this machine. Nothing is misconfigured."
       : "The only AI model allowed to handle this request is tied up with a background job on this machine, so I couldn't answer. Nothing is misconfigured.",
     steps: [
+      // BI-EBE25715: `expectedFreeAt` is ONE lease's expiry, not the time until
+      // the host is actually free. When other claims are waiting behind it the
+      // reservation is re-taken the moment it clears, so "send again in about
+      // two minutes" reads as a promise the platform cannot keep — observed on
+      // a host running 9-46 queued claims, where the same turn was refused for
+      // over an hour on that advice. Name the window as the earliest it COULD
+      // free, and say plainly that it depends on what else is queued.
       window
-        ? `Send the message again in ${window}, when that job is due to finish.`
-        : "Give it a couple of minutes, then send the message again.",
+        ? `Send the message again in ${window} at the earliest — sooner only if nothing else is waiting for this machine.`
+        : "It frees up when that job finishes. I can't tell from here how long that will be, so send the message again when you want me to retry.",
     ],
-    verify: "check the moment it frees up",
+    verify: "check whether it has freed up",
   });
 }
 
@@ -277,6 +313,17 @@ function describeToolRouteFailureMessage(
 
   const contextCapacityFailure = describeContextCapacityFailure(msg);
   if (contextCapacityFailure) return contextCapacityFailure;
+
+  // Data-governance gap, NOT an outage: every candidate was eliminated because no
+  // connected provider is cleared for this coworker's data sensitivity (the router
+  // appends this clause when an active, capable provider was dropped purely on
+  // clearance). Must be checked BEFORE the generic "No eligible endpoints" branch,
+  // whose copy ("re-check provider status") is wrong advice here — the providers
+  // are connected; they simply are not cleared for confidential data. (BI-431524DF)
+  const clearanceBlock = msg.match(/No connected provider is cleared for '([^']+)' data/i);
+  if (clearanceBlock) {
+    return sensitivityClearanceHandoff(clearanceBlock[1]);
+  }
 
   // Config/capacity gap: routing eliminated EVERY candidate (e.g. the cloud
   // provider's sign-in expired AND the bundled local model's context window is

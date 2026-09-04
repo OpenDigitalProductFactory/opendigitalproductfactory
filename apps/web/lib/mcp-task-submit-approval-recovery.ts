@@ -5,6 +5,10 @@ import { markTaskRunWorking } from "@/lib/observability/heartbeat";
 import { executeAutonomousWorkTool } from "@/lib/tak/autonomous-work-run";
 
 import { recoverStaleApprovedRemoteTask } from "./mcp-task-approval-recovery";
+import {
+  describeExternalApprovalLocation,
+  withExternalApprovalLocation,
+} from "./mcp/external-approval-location";
 import { isStaleApprovalRecoveryRun } from "./mcp-task-approval-recovery-contract";
 import type {
   ExistingRemoteTask,
@@ -163,11 +167,12 @@ export async function resumeApprovedRemoteTask(input: {
 const RECOVERABLE_STATUSES = new Set(["working", "stalled", "input-required", "failed"]);
 
 /**
- * Recover a stale approved writer envelope on the SAME TaskRun and request
- * digest. Supersedes the expired envelope with one carrying the identical
- * stored binding and writer arguments, then requires fresh exact approval
- * before the writer runs. It never reruns inference and never creates a
- * sibling TaskRun.
+ * Recover a stale governed writer envelope on the SAME TaskRun and request
+ * digest. This includes a proposal that expired before approval as well as an
+ * approved envelope that expired before execution. Supersedes the expired
+ * envelope with one carrying the identical stored binding and writer
+ * arguments, then requires fresh exact approval before the writer runs. It
+ * never reruns inference and never creates a sibling TaskRun.
  *
  * Returns null when the run is not a recovery candidate, leaving the caller's
  * ordinary replay path untouched.
@@ -196,7 +201,7 @@ export async function recoverStaleApprovalOnReplay(input: {
   if (recovery?.kind === "fresh-approval-required") {
     return {
       kind: "result",
-      result: {
+      result: withExternalApprovalLocation({
         taskRunId: existing.taskRunId,
         status: "input-required",
         idempotentReplay: true,
@@ -215,7 +220,11 @@ export async function recoverStaleApprovalOnReplay(input: {
           inferenceRerun: false,
         },
         isError: false,
-      },
+      }, describeExternalApprovalLocation({
+        envelopeId: recovery.replacementEnvelopeId,
+        delegatingUserId: input.token.userId,
+        taskRunId: existing.taskRunId,
+      })),
     };
   }
 

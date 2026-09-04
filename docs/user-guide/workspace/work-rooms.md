@@ -22,6 +22,8 @@ relatedCode:
 
 A Workroom is not an unbounded chat channel. It has a work boundary: purpose, outcome, scope, accountability, authority, sensitivity, measures, timing, and a closure rule. The platform keeps the underlying governed Work Case and its evidence; the room presents that structure in language suited to doing the work.
 
+From **Platform > Workrooms**, select a room ID to open this same canonical Workroom. Rooms tied to backlog work open that backlog case; rooms without a backlog item open their Work Capsule case, so the inventory never leads to a dead route.
+
 ## What You See First
 
 The top of a Workroom answers four questions:
@@ -68,6 +70,18 @@ Open **Details**, then **Participants**, to see why each person or coworker is i
 what they are working on, their authority summary, and an AI coworker's accountable
 sponsor. Coworkers created by the active thread's governed lineage appear automatically;
 the room does not provide an unrestricted coworker picker.
+
+Open **Details**, then **Process Overseer**, to see whether the room is following its declared
+activity shape. The panel names the coordinator, whether that assignment was explicit or derived,
+the current and next expected stage, the latest conformance result, any intervention reason, and a
+stable reconciliation reference. A derived coordinator is shown as compatibility-only: it helps
+older rooms remain understandable but is not treated as proof that active oversight is configured.
+
+For a shaped room, missing role, evidence, stage, budget, stop-condition, or authority information
+pauses the affected lifecycle transition before work is persisted. An AI coordinator must also have
+the required job-specific qualification and delegated authority. When either is unknown, the room
+asks for attention instead of assuming eligibility. Rooms without a declared activity shape keep
+their legacy behavior and the panel reports oversight as not applicable.
 
 ## Access and Other Channels
 

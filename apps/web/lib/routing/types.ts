@@ -61,6 +61,16 @@ export interface EndpointManifest {
   // Hard constraints
   sensitivityClearance: SensitivityLevel[];
   /**
+   * Break-glass (BI-4512E7D2): sensitivities an operator has EXPLICITLY
+   * risk-accepted for this provider despite it not being genuinely cleared. Kept
+   * separate from `sensitivityClearance` on purpose — that array keeps meaning
+   * "genuinely cleared / safe"; this one means "we accept the exposure". The
+   * fence honors either, but the two never merge, so exclusion traces and
+   * coworker copy stay truthful about which one applied. Empty/undefined by
+   * default for every provider (overrides default off).
+   */
+  riskAcceptedClearances?: SensitivityLevel[];
+  /**
    * Tri-state tool capability (BI-DFC30977):
    *   true  — known tool-capable.
    *   false — an EXPLICIT floor (provider backend, admin capabilityOverrides,
@@ -80,6 +90,12 @@ export interface EndpointManifest {
   maxContextTokens: number | null;
   maxOutputTokens: number | null;
   modelRestrictions: string[];
+  /**
+   * Account/transport-specific hard exclusion computed by the manifest loader.
+   * The endpoint remains in the candidate trace so runtime health can explain
+   * why it was skipped and show the supported fallback that won.
+   */
+  eligibilityExclusionReason?: string;
 
   // Capability profile (0-100)
   reasoning: number;

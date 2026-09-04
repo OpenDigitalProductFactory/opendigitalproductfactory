@@ -56,6 +56,52 @@ function grantRow(grantKey: string, agentId: string, displayName: string) {
 }
 
 describe("initiative readiness recovery routing", () => {
+  it("routes acceptance reconciliation through an exact objective-mapping evidence packet", async () => {
+    const acceptanceDecision: InitiativeReadinessDecision = {
+      ...decision,
+      target: "completion",
+      verdict: "denied",
+      unmet: [
+        readinessRequirement({
+          code: "OBJECTIVE_RECONCILIATION_REQUIRED",
+          state: "missing",
+          accountableRole: "acceptance-reviewer",
+        }),
+      ],
+    };
+    const recovery = await resolveInitiativeReviewerRecovery({
+      decision: acceptanceDecision,
+      currentAgentId: "AGT-AUTHOR",
+      db: { agentToolGrant: { findMany: vi.fn().mockResolvedValue([
+        grantRow("initiative_evidence_write", "AGT-WS-ACCEPT", "Acceptance Reviewer"),
+      ]) } },
+      dispatchContext,
+      canonicalArtifact,
+      expectedCurrentBaselineId: "baseline-current",
+    });
+
+    expect(recovery.escalations).toEqual([]);
+    expect(recovery.unroutable).toEqual([]);
+    expect(recovery.reviewerRoutes).toMatchObject([{
+      accountableRole: "acceptance-reviewer",
+      toolName: "record_initiative_evidence",
+      grant: "initiative_evidence_write",
+      gate: "objective-mapping",
+      targetAgentId: "AGT-WS-ACCEPT",
+      requestCoworker: {
+        requiredToolNames: ["record_initiative_evidence", "read_source_at_version"],
+        initiativeReviewBinding: {
+          writerToolName: "record_initiative_evidence",
+          itemId: "BI-A45D744A",
+          gate: "objective-mapping",
+          expectedCurrentBaselineId: "baseline-current",
+        },
+      },
+    }]);
+    expect(recovery.reviewerRoutes[0]?.requestCoworker.objective)
+      .toContain("Map every current OBJ-* and AC-* statement to post-baseline evidence");
+  });
+
   it("sequences independent spec approval before plan coverage when no baseline exists", async () => {
     const findMany = vi.fn().mockResolvedValue([
       grantRow("initiative_evidence_write", "AGT-WS-PORTFOLIO", "Portfolio Management"),

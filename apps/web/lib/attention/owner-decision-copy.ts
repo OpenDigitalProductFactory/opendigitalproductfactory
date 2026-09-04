@@ -23,7 +23,7 @@ const HEADLINE: Record<AttentionSource, string> = {
   "storefront-inquiry": "Reply to this enquiry?",
   "business-journey": "How should we fix this for customers?",
   "compliance-source-freshness": "Renew this compliance evidence?",
-  "coworker-envelope": "Approve this coworker action?",
+  "coworker-envelope": "Authorize this coworker record?",
   "skill-proposal": "Approve this change to a coworker skill?",
 };
 
@@ -78,6 +78,9 @@ const OWNER_SAFE_SITUATION: Partial<Record<AttentionSource, string>> = {
  *  the rationale the owner needs to decide — it was previously discarded. */
 export function situationFor(item: AttentionItem): string | undefined {
   if (SELF_EXPLANATORY_SOURCES.has(item.source)) return undefined;
+  if (item.source === "coworker-envelope" && item.envelope?.decision) {
+    return item.envelope.decision.recordedIfAuthorized;
+  }
   const translated = OWNER_SAFE_SITUATION[item.source];
   if (translated) return translated;
   const context = (item.context ?? "").trim();
@@ -93,6 +96,9 @@ export function headlineFor(item: AttentionItem): string {
   }
   if (item.source === "agent-proposal" && !/proactiv/i.test(item.title)) {
     return "Approve this coworker action?";
+  }
+  if (item.source === "coworker-envelope" && item.envelope?.decision) {
+    return item.envelope.decision.headline;
   }
   return HEADLINE[item.source];
 }
@@ -158,7 +164,10 @@ export function consequenceFor(item: AttentionItem): string {
     case "agent-proposal":
       return "If you do nothing, your coworker stays stuck here and the work behind it waits.";
     case "coworker-envelope":
-      return "If you do nothing, the approval window closes and your coworker stops.";
+      if (item.envelope?.decision) {
+        return `If you do nothing, ${item.envelope.decision.ifYouDoNothing}`;
+      }
+      return "If you do nothing, the window closes and the record is not written.";
     default:
       return "If you do nothing, this work stays paused while your digital team keeps it safe.";
   }
@@ -176,7 +185,8 @@ export function recommendationFor(item: AttentionItem): string {
     case "agent-proposal":
       return "accept only the stated boundary; this does not give the coworker new authority.";
     case "coworker-envelope":
-      return "check the exact record and the time left, then approve only if both are right.";
+      return item.envelope?.decision.recommendation
+        ?? "this action needs a person to record it";
     case "research-proposal":
       return "keep this in the weekly review unless it affects a decision due sooner.";
     case "coworker-memory":

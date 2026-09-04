@@ -379,8 +379,17 @@ export function resolveChildExit(result) {
  */
 export function clearStaleStageReceipts(metadataFile, { rm = rmSync } = {}) {
   const cleared = [];
-  for (const suffix of [".vitest.json", ".typecheck.json", ".build.json"]) {
-    const path = `${metadataFile}${suffix}`;
+  // BI-F22B4EEE: the metadata record itself is inherited across runs. A
+  // failing or killed run that never rewrote it left the previous run's
+  // candidateSha and execution.status in place. Delete it at start so neither
+  // field can be quoted as this run's verdict.
+  const paths = [
+    metadataFile,
+    `${metadataFile}.vitest.json`,
+    `${metadataFile}.typecheck.json`,
+    `${metadataFile}.build.json`,
+  ];
+  for (const path of paths) {
     try {
       rm(path, { force: true });
       cleared.push(path);

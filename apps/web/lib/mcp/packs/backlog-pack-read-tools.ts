@@ -2,6 +2,13 @@ import type { ToolResult } from "@/lib/mcp-tools";
 import { resolveEpicRowId, resolveListLimit } from "./backlog-read-helpers";
 import { addScopeFilters, backlogScopeSelect, scopeData } from "./backlog-scope-metadata";
 
+const INITIATIVE_READINESS_ACTIVITY_KINDS = [
+  "initiative_gate_receipt",
+  "initiative_scope_baseline",
+  "plan_backlog_coverage",
+  "initiative_readiness_decision",
+];
+
 function addDeferralFilters(where: Record<string, unknown>, params: Record<string, unknown>): ToolResult | null {
   const conformance = params["deferralConformance"];
   if (conformance === "compliant") {
@@ -292,7 +299,7 @@ export async function listBacklogItems(params: Record<string, unknown>): Promise
       epic: { select: { epicId: true } },
       activeBuild: { select: { phase: true, draftApprovedAt: true, kind: true } },
       activities: {
-        where: { kind: { in: ["initiative_gate_receipt", "initiative_scope_baseline", "plan_backlog_coverage"] } },
+        where: { kind: { in: INITIATIVE_READINESS_ACTIVITY_KINDS } },
         orderBy: [{ recordedAt: "desc" }, { id: "desc" }],
         take: 100,
         select: { id: true, kind: true, gateKey: true, recordedAt: true, payload: true },
@@ -313,6 +320,7 @@ export async function listBacklogItems(params: Record<string, unknown>): Promise
       item: {
         id: i.id,
         itemId: i.itemId,
+        status: i.status,
         type: i.type,
         source: i.source,
         workType: i.workType,
@@ -406,6 +414,8 @@ export async function getBacklogItem(params: Record<string, unknown>): Promise<T
   });
   if (!item)
     return { success: false, error: "not_found", message: `Item ${itemIdRaw} not found` };
+  const { loadBacklogWorkroomOwnership } = await import("@/lib/work-capsules/backlog-workroom-ownership");
+  const workroomOwnership = await loadBacklogWorkroomOwnership(prisma, [item.itemId, item.id]);
   const { deriveLifecycleLabel } = await import("@/lib/governed-backlog-workflow");
   const { searchSpecsAndPlans, specPlanCorpusCaveat } = await import("@/lib/backlog/spec-plan-search");
   const { corpus: specPlanCorpus, results: specPlanRefs } = await searchSpecsAndPlans({
@@ -423,6 +433,7 @@ export async function getBacklogItem(params: Record<string, unknown>): Promise<T
     item: {
       id: item.id,
       itemId: item.itemId,
+      status: item.status,
       type: item.type,
       source: item.source,
       workType: item.workType,
@@ -432,7 +443,7 @@ export async function getBacklogItem(params: Record<string, unknown>): Promise<T
       activeBuildKind: item.activeBuild?.kind ?? null,
     },
     activities: item.activities
-      .filter((activity) => ["initiative_gate_receipt", "initiative_scope_baseline", "plan_backlog_coverage"].includes(activity.kind))
+      .filter((activity) => INITIATIVE_READINESS_ACTIVITY_KINDS.includes(activity.kind))
       .map((activity) => ({ ...activity, gateKey: activity.gateKey ?? null })),
     hasSpec,
     hasPlan,
@@ -492,6 +503,8 @@ export async function getBacklogItem(params: Record<string, unknown>): Promise<T
             sandboxId: item.activeBuild.sandboxId,
           }
         : null,
+      workrooms: workroomOwnership.workrooms,
+      activeWorkrooms: workroomOwnership.liveWorkrooms,
       readiness,
       specPlanCorpus,
       specPlanFiles: specPlanRefs.map((r) => ({
@@ -569,7 +582,7 @@ export async function getNextRecommendedWork(params: Record<string, unknown>): P
       epic: { select: { epicId: true, status: true } },
       activeBuild: { select: { kind: true } },
       activities: {
-        where: { kind: { in: ["initiative_gate_receipt", "initiative_scope_baseline", "plan_backlog_coverage"] } },
+        where: { kind: { in: INITIATIVE_READINESS_ACTIVITY_KINDS } },
         orderBy: [{ recordedAt: "desc" }, { id: "desc" }],
         take: 100,
         select: { id: true, kind: true, gateKey: true, recordedAt: true, payload: true },
@@ -588,6 +601,7 @@ export async function getNextRecommendedWork(params: Record<string, unknown>): P
       item: {
         id: i.itemId,
         itemId: i.itemId,
+        status: i.status,
         type: i.type,
         source: i.source,
         workType: i.workType,

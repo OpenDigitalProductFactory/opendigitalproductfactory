@@ -20,7 +20,13 @@
 // Reads only routing metadata (statuses, reason strings, endpoint names) — never
 // prompts, tool payloads, credentials, or detected values.
 
-/** Plain-language cause classes, derived from `getExclusionReasonV2` output. */
+/**
+ * Plain-language cause classes, derived from `getExclusionReasonV2` output.
+ *
+ * Carried on `RoutedInferenceResult.downgradeCause` so the copy printed BELOW a
+ * downgrade banner argues from the constraint the banner actually named, rather
+ * than re-deriving it and contradicting it (BI-FB184D69).
+ */
 export type DowngradeCause =
   | "context-window"
   | "capability"
@@ -74,11 +80,93 @@ function causePhrase(cause: DowngradeCause): string {
   }
 }
 
+/**
+ * Did the sensitivity that forced this turn local come only from EARLIER
+ * messages, rather than from what the owner just asked (BI-706530B2)?
+ *
+ * Sensitivity is recomputed over the whole payload every turn, and history is
+ * resent every turn, so one triggering message restricts every later turn in
+ * that thread for as long as the thread lives. Observed live: a user typed
+ * "accounting, payroll, CRM, backup" while asking about SaaS spend, and the
+ * thread routed local-only from then on. Nothing said why, and nothing said a
+ * new thread would clear it — the only visible symptom was a coworker that had
+ * quietly become slower and less capable.
+ *
+ * This does not change what leaves the box. It reads the receipt the screener
+ * already produced and answers one question: is the owner being held back by
+ * something they said several turns ago? When yes, the banner can say so and
+ * point at the one action that works.
+ *
+ * Deliberately conservative: it returns false unless there is at least one
+ * match from an earlier message AND none from the latest one. A turn whose own
+ * content is sensitive is not "history", and saying otherwise would invite the
+ * owner to start a new thread that behaves identically.
+ */
+export function escalationCameOnlyFromHistory(
+  matchProvenance: ReadonlyArray<{ path: string }> | undefined,
+  messageCount: number,
+): boolean {
+  if (!matchProvenance?.length || messageCount < 2) return false;
+  const latestIndex = messageCount - 1;
+
+  let sawEarlier = false;
+  for (const match of matchProvenance) {
+    const index = Number(/^messages\[(\d+)\]/.exec(match.path)?.[1]);
+    if (!Number.isInteger(index)) continue; // prompt or tool-declaration evidence
+    if (index >= latestIndex) return false;
+    sawEarlier = true;
+  }
+  return sawEarlier;
+}
+
+/**
+ * The cause that ACTUALLY held this turn back.
+ *
+ * `excludedReasons` arrives in routing's own ranking order, so the first
+ * survivable cause belongs to the best route the owner could otherwise have
+ * used — clear it and the turn moves. The old code unioned every cause into one
+ * sentence, which read as though each were equally responsible. On the reported
+ * install eight of nine exclusions were residency and exactly one was a missing
+ * `toolUse` capability; the banner billed both, and the owner reasonably chased
+ * the capability. Only residency was binding (BI-FB184D69).
+ *
+ * A "not switched on" endpoint is never returned: that is the disabled-provider
+ * branch's story, and describing it inside "your configured providers stayed
+ * available" is the contradiction BI-F4D3B9E9(d) removed.
+ */
+export function bindingCause(excludedReasons: readonly string[]): DowngradeCause | null {
+  const causes = excludedReasons
+    .map(classifyExclusionReason)
+    .filter((cause) => cause !== "provider-off");
+  // A named cause outranks the catch-all regardless of position: "it wasn't
+  // eligible" tells the owner nothing they can act on.
+  return causes.find((cause) => cause !== "unknown") ?? causes[0] ?? null;
+}
+
+/** How many DISTINCT other causes were in play, for a count-only mention. */
+function otherCauseCount(
+  excludedReasons: readonly string[],
+  binding: DowngradeCause | null,
+): number {
+  if (!binding) return 0;
+  const distinct = new Set(
+    excludedReasons
+      .map(classifyExclusionReason)
+      .filter((cause) => cause !== "provider-off" && cause !== binding),
+  );
+  return distinct.size;
+}
+
 export type LocalFallbackBannerInput = {
   /** Excluded user-configured candidates, in routing's own ranking order. */
   excludedReasons: string[];
   /** Names of user-configured providers currently in a non-routable status. */
   offProviderNames: string[];
+  /**
+   * The sensitivity came only from earlier messages in this thread, not from
+   * what the owner just asked (BI-706530B2). Drives the one action that works.
+   */
+  historicalOnly?: boolean;
 };
 
 /** The manifest and candidate fields this module reads — nothing else. */
@@ -162,23 +250,69 @@ export function buildLocalFallbackBanner(input: LocalFallbackBannerInput): strin
       } at Platform > AI > Providers to restore full capability.`,
     );
   } else {
-    const causes = new Set(input.excludedReasons.map(classifyExclusionReason));
-    // A "not switched on" endpoint (status unconfigured/inactive) must never be
-    // described inside a "your configured providers stayed available" sentence —
-    // that reads as a contradiction, which is the whole class of bug being fixed
-    // here. Genuinely-off providers are named by the branch above instead.
-    causes.delete("provider-off");
-    // Drop "unknown" when a specific cause is also present — a named reason is
-    // strictly more useful than the catch-all phrasing.
-    if (causes.size > 1) causes.delete("unknown");
-    const phrases = [...causes].map(causePhrase);
+    const binding = bindingCause(input.excludedReasons);
+    const others = otherCauseCount(input.excludedReasons, binding);
     parts.push(
-      phrases.length > 0
-        ? `Your configured providers stayed available, but ${joinNames(phrases)}.`
+      binding
+        ? `Your configured providers stayed available, but ${causePhrase(binding)}.`
         : "Your configured providers stayed available but none was eligible for this request.",
+    );
+    // Named without being co-billed. An owner who reads two causes joined by
+    // "and" cannot tell which one to act on, and acting on the wrong one costs
+    // them another failed run (BI-FB184D69).
+    if (others > 0) {
+      parts.push(
+        others === 1
+          ? "One other provider was ruled out for a different reason."
+          : `${others} other providers were ruled out for different reasons.`,
+      );
+    }
+  }
+
+  // BI-706530B2: when the only sensitive evidence is several turns back, the
+  // owner is being held by something they said earlier and has no way to know
+  // it. Naming the one action that works is the difference between a thread
+  // that has quietly degraded and a thread they can do something about.
+  if (input.historicalOnly) {
+    parts.push(
+      "That came from earlier in this conversation rather than from what you just asked, "
+      + "so it will keep applying here. Starting a new conversation clears it.",
     );
   }
 
   parts.push(LOCAL_QUALITY_NOTE);
   return parts.join(" ");
+}
+
+/**
+ * One call for the whole local-fallback explanation (BI-706530B2, BI-FB184D69).
+ *
+ * routed-inference.ts previously assembled this inline — extract the facts,
+ * compute the history provenance, spread both into the builder. That is banner
+ * composition living in the routing module, and it pushed routed-inference over
+ * its 800-LOC ceiling. Composition belongs beside the thing being composed.
+ *
+ * It returns the binding cause alongside the banner so the copy printed BELOW
+ * the banner argues from the same constraint the banner named, rather than
+ * re-deriving it and contradicting it.
+ */
+export function describeLocalFallback(input: {
+  manifests: ReadonlyArray<ManifestFacts>;
+  candidates: ReadonlyArray<CandidateFacts>;
+  sensitivity: string;
+  matchProvenance: ReadonlyArray<{ path: string }> | undefined;
+  messageCount: number;
+}): { banner: string; cause: DowngradeCause | null } {
+  const facts = extractLocalFallbackFacts({
+    manifests: input.manifests,
+    candidates: input.candidates,
+    sensitivity: input.sensitivity,
+  });
+  return {
+    banner: buildLocalFallbackBanner({
+      ...facts,
+      historicalOnly: escalationCameOnlyFromHistory(input.matchProvenance, input.messageCount),
+    }),
+    cause: bindingCause(facts.excludedReasons),
+  };
 }

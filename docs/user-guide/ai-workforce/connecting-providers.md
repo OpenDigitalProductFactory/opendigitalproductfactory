@@ -5,6 +5,7 @@ order: 2
 relatedCode:
   - apps/web/lib/ai-inference.ts
   - apps/web/app/(shell)/platform/ai/providers/page.tsx
+  - apps/web/app/(shell)/platform/ai/providers/[providerId]/page.tsx
   - apps/web/components/platform/ProviderSuitabilityGuide.tsx
 ---
 
@@ -116,10 +117,13 @@ If you choose **Skip safely** or **Review later**, DPF does not treat the provid
 On each provider detail page, record:
 
 - the connected account type;
-- whether no-training treatment has been verified in the provider's current terms;
-- the processing regions enabled for that exact connection.
+- whether no-training treatment has been verified in the provider's current terms.
 
 This is recorded as an operator attestation, not contract proof. A DPA, BAA, supplier contract, special retention option, or regional entitlement still needs its own evidence. Provider-published privacy pages describe an offering; they do not prove what your account purchased or enabled.
+
+If the organization's business setup explicitly requires processing in a region, the page names that region and asks whether this connected account can guarantee it. The organization being based in the United States, EEA, UK, or elsewhere does not by itself prove what a provider account purchased or enabled. When no region is required, there is no region question, and saving the other account terms preserves any existing region evidence.
+
+After you save the declaration, the provider page separates **Technical readiness** from data-use eligibility. Technical readiness means the connection, model catalog, and routing metadata are prepared. The trust panel states whether the connection can handle the company work represented by the current setup or only public and synthetic work. Missing optional evidence may remain visible as history, but it does not raise an action. A missing or invalid required claim names the blocked scope and the next action. DPA evidence is requested only on policy paths that require it; it is not a universal provider-setup requirement.
 
 For EEA, UK, public-sector, healthcare, education, financial-services, or other regulated use, ask the COO to consult the Data Governance Agent. The answer should cite applicable regulator guidance and provider terms, identify unknowns, and recommend qualified review when it cannot substantiate a claim.
 

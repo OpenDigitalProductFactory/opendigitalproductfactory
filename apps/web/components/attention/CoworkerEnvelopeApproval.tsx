@@ -1,7 +1,7 @@
 "use client";
 
 // The owner-facing decision surface for one proposed CoworkerActionEnvelope
-// (BI-7CB2CCDE).
+// (BI-7CB2CCDE, decision-first copy BI-F95B0795).
 //
 // Deliberately NOT CoworkerProposalActions: that component settles an
 // AgentActionProposal through the proposal server actions. An envelope is a
@@ -9,10 +9,8 @@
 // its own expiry, so it gets its own component and posts only to the
 // authenticated envelope endpoints in lib/coworker/envelope-routes.
 //
-// The block above the buttons is the point of the card. An employee cannot
-// honestly approve a commit-bound reviewer action without seeing WHICH coworker,
-// WHICH action, on WHICH commit, path and blob, for WHICH gate, and how long the
-// window stays open. Approving blind is what the defect forced.
+// The primary block is the proposed decision and the human authorization to
+// record it. Identity plumbing lives under Technical detail.
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -21,7 +19,7 @@ import { Button } from "@/components/ui/Button";
 import { Surface } from "@/components/ui/Surface";
 import type { AttentionEnvelopeApproval } from "@/lib/attention/types";
 
-type Outcome = "approved" | "declined" | "settled";
+type Outcome = "authorized" | "declined" | "settled";
 
 export function CoworkerEnvelopeApproval({
   approval,
@@ -32,6 +30,7 @@ export function CoworkerEnvelopeApproval({
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const decision = approval.decision;
 
   async function decide(choice: "approve" | "decline") {
     // One in-flight decision per card. A second press while the first is open
@@ -45,7 +44,7 @@ export function CoworkerEnvelopeApproval({
         { method: "POST", headers: { "content-type": "application/json" } },
       );
       if (response.ok) {
-        setOutcome(choice === "approve" ? "approved" : "declined");
+        setOutcome(choice === "approve" ? "authorized" : "declined");
         router.refresh();
         return;
       }
@@ -69,31 +68,33 @@ export function CoworkerEnvelopeApproval({
   return (
     <div className="space-y-3">
       <Surface padding="sm" rounded="md">
-        <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
-          <Fact label="Coworker" value={approval.coworkerAgentId} />
-          <Fact label="Requested action" value={approval.manifestActionId} />
-          <Fact label="Status" value={approval.status} />
-          <Fact label="Open until" value={approval.expiresAtIso ?? "No time limit"} />
-          {approval.taskRunId ? <Fact label="Task" value={approval.taskRunId} /> : null}
-          <Fact label="Reason given" value={approval.rationale} wide />
+        <p className="text-dpf-caption font-semibold uppercase tracking-wider text-[var(--dpf-accent)]">
+          Human authorization needed
+        </p>
+        <p className="mt-1 text-xs leading-relaxed text-[var(--dpf-text)]">
+          {decision.authorization}.
+        </p>
+        <dl className="mt-3 grid gap-x-6 gap-y-2 sm:grid-cols-2">
+          {decision.subjectId ? <Fact label="Subject" value={decision.subjectId} /> : null}
+          {decision.gate ? <Fact label="Gate" value={decision.gate} /> : null}
+          {decision.decision ? <Fact label="Decision" value={decision.decision} /> : null}
+          <Fact
+            label="Findings"
+            value={
+              decision.findings.length === 0
+                ? "None"
+                : decision.findings.map((finding) => finding.issue).join(" ")
+            }
+            wide
+          />
+          {decision.reason ? <Fact label="Reason" value={decision.reason} wide /> : null}
+          <Fact label="Recommender" value={decision.recommenderLabel} />
+          <Fact label="Accountable authorizer" value={decision.authorizerLabel} />
         </dl>
+        <p className="mt-3 text-xs leading-relaxed text-[var(--dpf-muted)]">
+          {decision.authorizeDoes} {decision.declineDoes}
+        </p>
       </Surface>
-
-      {approval.reviewBinding ? (
-        <Surface padding="sm" rounded="md">
-          <p className="text-dpf-caption font-semibold uppercase tracking-wider text-[var(--dpf-accent)]">
-            Reviewed record
-          </p>
-          <dl className="mt-2 grid gap-x-6 gap-y-2 sm:grid-cols-2">
-            <Fact label="Subject" value={approval.reviewBinding.itemId} />
-            <Fact label="Gate" value={approval.reviewBinding.gate} />
-            <Fact label="Repository" value={approval.reviewBinding.repositoryFullName} />
-            <Fact label="Commit" value={approval.reviewBinding.commitSha} />
-            <Fact label="File" value={approval.reviewBinding.path} wide />
-            <Fact label="Blob" value={approval.reviewBinding.providerBlobId} wide />
-          </dl>
-        </Surface>
-      ) : null}
 
       {outcome ? (
         <p className="text-xs font-semibold text-[var(--dpf-text)]" role="status">
@@ -102,7 +103,7 @@ export function CoworkerEnvelopeApproval({
       ) : approval.actionable ? (
         <div className="flex flex-wrap gap-2">
           <Button size="sm" disabled={pending} onClick={() => void decide("approve")}>
-            Approve action
+            Authorize
           </Button>
           <Button
             variant="secondary"
@@ -129,8 +130,8 @@ export function CoworkerEnvelopeApproval({
 }
 
 function outcomeMessage(outcome: Outcome): string {
-  if (outcome === "approved") return "Action approved.";
-  if (outcome === "declined") return "Action declined.";
+  if (outcome === "authorized") return "Record authorized.";
+  if (outcome === "declined") return "Record declined.";
   return "This request was already settled.";
 }
 

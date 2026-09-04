@@ -25,6 +25,9 @@ const readFile = vi.fn();
 vi.mock("@/lib/shared/lazy-node", () => ({
   lazyFsPromises: () => ({ readdir, readFile }),
   lazyPath: () => ({ resolve: (...p: string[]) => p.join("/") }),
+  lazyExec: () => async () => {
+    throw new Error("no git in this fixture");
+  },
   getCwd: () => "/cwd",
 }));
 
@@ -38,7 +41,7 @@ async function load() {
   readFile.mockResolvedValueOnce("model User {}");
   // Explicit: git refused AND .git/HEAD was unreadable. Relying on the fs mock
   // running out of queued values would make this pass by accident.
-  return loadCommittedSchema({ readGit: noGit, readBranchFallback: async () => null });
+  return loadCommittedSchema({ skipDefaultBranch: true, readGit: noGit, readBranchFallback: async () => null });
 }
 
 describe("committed schema — unidentifiable tree", () => {
@@ -74,6 +77,7 @@ describe("committed schema — unidentifiable tree", () => {
     readdir.mockResolvedValueOnce(["a.prisma"]);
     readFile.mockResolvedValueOnce("model User {}");
     const r = await loadCommittedSchema({
+      skipDefaultBranch: true,
       readGit: async () => "main",
       readBranchFallback: async () => null,
     });

@@ -27,7 +27,7 @@ import {
 import { loadCoworkerEngagements } from "@/lib/coworker-identity/engagements-projection";
 import { loadCoworkerTeams } from "@/lib/coworker-identity/teams-projection";
 import { CoworkerPriorityControl } from "@/components/golden-triangle/CoworkerPriorityControl";
-import { CoworkerProactivitySetting } from "@/components/platform/coworker-record/CoworkerProactivitySetting";
+import { CoworkerProactivityNote } from "@/components/platform/coworker-record/CoworkerProactivityNote";
 import { CostFacetPanel } from "@/components/platform/coworker-identity/CostFacetPanel";
 import { EngagementsFacetPanel } from "@/components/platform/coworker-identity/EngagementsFacetPanel";
 import { TeamsFacetPanel } from "@/components/platform/coworker-identity/TeamsFacetPanel";
@@ -274,7 +274,7 @@ export default async function CoworkerIdentityPage({
             <span className="ml-auto text-xs font-medium text-[var(--dpf-accent)]">Change ▾</span>
           </summary>
           <div className="border-t border-[var(--dpf-border)] px-4 py-4">
-            <CoworkerProactivitySetting agentId={agent.agentId} />
+            <CoworkerProactivityNote />
           </div>
         </details>
       </section>

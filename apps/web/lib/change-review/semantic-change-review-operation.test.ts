@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { parseSemanticReviewResponse } from "./semantic-change-review";
 import {
   runSemanticChangeReview,
   selectSemanticReviewSpecialists,
@@ -46,6 +47,40 @@ describe("semantic change-review operation", () => {
     expect(out.activation.activate).toBe(true);
     expect(out.receipt.disposition).toBe("reviewed");
     expect(out.mayPublish).toBe(true);
+  });
+
+  // BI-82902891: the end-to-end assertion. A reviewer that could not see the
+  // change must not yield a publishable receipt. Before the cannot-verify
+  // channel existed this arrived as an `important` issue and published as a pass.
+  it("refuses publication when the reviewer could not verify the change", async () => {
+    const dispatch = vi.fn().mockResolvedValue(parseSemanticReviewResponse(JSON.stringify({
+      decision: "cannot-verify",
+      issues: [{
+        severity: "important",
+        description: "The committed tree available for review does not contain the claimed change.",
+      }],
+      summary: "Could not review: the artifact was not present in the reviewed tree.",
+    })));
+
+    const out = await runSemanticChangeReview(input(), { dispatch });
+
+    expect(out.receipt.result.decision).toBe("inconclusive");
+    expect(out.receipt.result.inconclusiveReason).toBe("reviewer-could-not-verify-change");
+    expect(out.mayPublish).toBe(false);
+    expect(out.nextAction).toBe("retry-review");
+  });
+
+  it("does not consume a repair round for a cannot-verify verdict", async () => {
+    // Inability to see the change is not a defect to repair, so it must not
+    // count toward the repair limit that escalates to operator-review.
+    const dispatch = vi.fn().mockResolvedValue(parseSemanticReviewResponse(
+      '{"decision":"cannot-verify","issues":[],"summary":"no artifact"}',
+    ));
+
+    const out = await runSemanticChangeReview(input({ repairRound: 2 }), { dispatch });
+
+    expect(out.repairLimitReached).toBe(false);
+    expect(out.nextAction).toBe("retry-review");
   });
 
   it.each(["codex-desktop", "claude-desktop", "grok-desktop"])(

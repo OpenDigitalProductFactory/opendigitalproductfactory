@@ -452,6 +452,21 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
     deferred: "neutral",
     retired: "neutral",
   },
+  // Canonical Workroom lifecycle. This is distinct from true liveness: status
+  // says where the room is in its workflow while liveness says whether its
+  // recorded execution evidence is still alive.
+  workroom: {
+    draft: "neutral",
+    ready: "info",
+    working: "accent",
+    blocked: "danger",
+    verifying: "info",
+    "ready-for-review": "warning",
+    "ready-for-promotion": "warning",
+    complete: "success",
+    abandoned: "neutral",
+    archived: "neutral",
+  },
   // Workspace Work Room semantics. These domains are shared by the My Work
   // lens and room detail shell so neither surface carries a private color map.
   workCaseState: {

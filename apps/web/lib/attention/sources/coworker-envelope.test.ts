@@ -43,6 +43,7 @@ function envelope(over: Partial<CoworkerEnvelopeRow> = {}): CoworkerEnvelopeRow 
     // clock-bomb-guard: allow coworkerEnvelopeToAttentionItem takes nowMs explicitly and never reads the wall clock
     expiresAt: new Date("2026-08-25T20:09:05.868Z"),
     createdAt: new Date("2026-08-25T19:54:05.871Z"),
+    proposedParameters: { decision: "pass" },
     taskRun: { a2aMetadata: { trigger: "external-mcp", initiativeReviewBinding: reviewBinding } },
     ...over,
   };
@@ -77,6 +78,11 @@ describe("coworkerEnvelopeToAttentionItem", () => {
     );
     expect(approval?.expiresAtIso).toBe("2026-08-25T20:09:05.868Z");
     expect(approval?.actionable).toBe(true);
+    expect(approval?.decision.kind).toBe("known");
+    expect(approval?.decision.recommendation).toBe("research passes with no findings");
+    expect(approval?.decision.authorization).toBe(
+      "record that receipt so implementation planning may continue",
+    );
   });
 
   it("carries the immutable review binding: subject, gate, commit, path and blob", () => {
@@ -146,7 +152,10 @@ describe("coworkerEnvelopeToAttentionItem", () => {
     );
     const card = projection.needsYouNow[0]!.card;
 
+    expect(card.headline).toBe("Authorize this research receipt?");
     expect(card.headline.split(/\s+/).length).toBeLessThanOrEqual(8);
+    expect(card.recommendation.text).toBe("research passes with no findings");
+    expect(card.situation).toMatch(/BI-MCP-EFF-0285909C/);
     expect(
       [
         card.headline,
@@ -217,11 +226,27 @@ describe("coworkerEnvelopeToAttentionItem", () => {
 
 // Owner projection and delegating-user isolation.
 
-function stubDb(rows: CoworkerEnvelopeRow[]) {
+function stubDb(
+  rows: CoworkerEnvelopeRow[],
+  executions: Array<{
+    taskRunId: string | null;
+    toolName: string;
+    parameters: unknown;
+    result: unknown;
+  }> = [],
+) {
   const findMany = vi.fn(async (args: { where: { delegatingUserId: string } }) =>
     rows.filter((row) => row.delegatingUserId === args.where.delegatingUserId),
   );
-  return { db: { coworkerActionEnvelope: { findMany } } as never, findMany };
+  const findExecutions = vi.fn(async () => executions);
+  return {
+    db: {
+      coworkerActionEnvelope: { findMany },
+      toolExecution: { findMany: findExecutions },
+    } as never,
+    findMany,
+    findExecutions,
+  };
 }
 
 describe("loadCoworkerEnvelopeItems", () => {
@@ -260,5 +285,26 @@ describe("loadCoworkerEnvelopeItems", () => {
     expect(await loadCoworkerEnvelopeItems(db, undefined, NOW)).toEqual([]);
     expect(await loadCoworkerEnvelopeItems(db, "", NOW)).toEqual([]);
     expect(findMany).not.toHaveBeenCalled();
+  });
+
+  it("joins the pending ToolExecution parameters onto the owner decision", async () => {
+    const row = envelope({ proposedParameters: undefined });
+    const { db } = stubDb([row], [
+      {
+        taskRunId: row.taskRunId,
+        toolName: row.manifestActionId,
+        parameters: { decision: "fail", findings: [{ issue: "Not reproduced.", severity: "important" }] },
+        result: { data: { envelopeId: row.id } },
+      },
+    ]);
+
+    const items = await loadCoworkerEnvelopeItems(db, OWNER, NOW);
+
+    expect(items[0]?.envelope?.decision.recommendation).toBe(
+      "research does not pass with 1 finding",
+    );
+    expect(items[0]?.envelope?.decision.findings).toEqual([
+      { issue: "Not reproduced.", severity: "important" },
+    ]);
   });
 });

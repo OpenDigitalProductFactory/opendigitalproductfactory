@@ -117,6 +117,7 @@ export async function getWorkControlData() {
         liveness: row.liveness as never,
         isLive: Boolean(row.isLive),
         isReapable: Boolean(row.isReapable),
+        disposition: (row.disposition ?? null) as never,
         reason: String(row.livenessReason),
         trueLivenessAt: row.trueLivenessAt ? new Date(String(row.trueLivenessAt)) : null,
       }),

@@ -3,18 +3,18 @@
   "selectionCliff": 15,
   "entries": {
     "registry.toolDefinitions": {
-      "value": 405,
-      "reason": "The 12 banking books-loop tools (S-FIN, BI-DE27D34E): the loop existed only as UI server actions, so no coworker could keep the books current. A bookkeeper needs to set up accounts, import a statement, categorize via rules, and reconcile through governed tools; no existing tool carries account setup, CSV statement import, or transaction matching. Six reads/banking_read, six writes/banking_write; the two money-of-record writes route the governance gate.",
-      "recordedAt": "2026-08-23"
+      "value": 406,
+      "reason": "issue_ux_verification_sign_in (BI-9369DEB5): a fully automated installation is verified by agents with no person present, and most pages are session-gated. No existing tool can put the platform's own browser behind a session; this one mints a one-time link for the seeded automation persona so an agent can judge layout, type, colour and overrun in a real browser without typing a password or asking the operator.",
+      "recordedAt": "2026-09-03"
     },
     "registry.packFiles": {
-      "value": 98,
-      "reason": "New banking-pack.ts groups the S-FIN books-loop tools as thin adapters over the existing, tested banking actions — a distinct finance domain that does not belong in any current pack.",
-      "recordedAt": "2026-08-23"
+      "value": 99,
+      "reason": "New ux-verification-pack.ts: browser-verification sign-in is a delivery-surface concern distinct from self-upgrade, sandbox and admin packs, and a single-tool pack keeps the grant (sandbox_execute) and capability (manage_platform) visible next to the tool they govern.",
+      "recordedAt": "2026-09-03"
     },
     "tier.coreToolNames": {
       "value": 30,
-      "reason": "Promotes find_coworker into the lean core tier so peer CLIs without client-side ToolSearch (Grok, Codex) can discover the coworker roster to route A2A handoffs — same rationale that keeps principle_decide/wiki_query core. Discovery-only; execution still gates on grants. BI-5FB59BC6.",
+      "reason": "Promotes find_coworker into the lean core tier so peer CLIs without client-side ToolSearch (Grok, Codex) can discover the coworker roster to route A2A handoffs \u2014 same rationale that keeps principle_decide/wiki_query core. Discovery-only; execution still gates on grants. BI-5FB59BC6.",
       "recordedAt": "2026-08-08"
     },
     "dispatch.maxAttachedTools": {

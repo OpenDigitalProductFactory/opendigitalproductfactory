@@ -211,6 +211,11 @@ describe("same-TaskRun approval recovery", () => {
       replacementEnvelopeId: "ENV-REPLACEMENT",
       replacementProposalExecutionId: "tool-proposal-new",
     });
+    expect(tx.coworkerActionEnvelope.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        status: { in: ["proposed", "approved", "failed"] },
+      }),
+    }));
     expect(tx.coworkerActionEnvelope.updateMany).toHaveBeenCalledWith({
       where: {
         id: "cmtcyo4h900m001pa2ma0itjn",
@@ -299,8 +304,80 @@ describe("same-TaskRun approval recovery", () => {
     }));
   });
 
+  it("supersedes an expired proposed envelope without rerunning the same TaskRun review", async () => {
+    const envelope = { ...expiredEnvelope(), status: "proposed" };
+    const { db, tx } = fakeDb(staleRun("input-required"), envelope);
+
+    const result = await recover(db);
+
+    expect(result).toEqual({
+      kind: "fresh-approval-required",
+      sourceEnvelopeId: envelope.id,
+      replacementEnvelopeId: "ENV-REPLACEMENT",
+      replacementProposalExecutionId: "tool-proposal-new",
+    });
+    expect(tx.coworkerActionEnvelope.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        taskRunId: TASK_RUN_ID,
+        status: { in: ["proposed", "approved", "failed"] },
+      }),
+    }));
+    expect(tx.coworkerActionEnvelope.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: envelope.id,
+        status: "proposed",
+        expiresAt: { lte: NOW },
+      },
+      data: { status: "cancelled", resolvedAt: NOW },
+    });
+    expect(tx.coworkerActionEnvelope.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        taskRunId: TASK_RUN_ID,
+        status: "proposed",
+        argsJson: envelope.argsJson,
+        approvalBindingFingerprint: envelope.approvalBindingFingerprint,
+      }),
+    }));
+    expect(tx.toolExecution.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        taskRunId: TASK_RUN_ID,
+        parameters: proposal().parameters,
+        executionMode: "proposal",
+      }),
+    }));
+    expect(tx.taskRun.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        status: "input-required",
+        progressPayload: expect.objectContaining({
+          approvalRecovery: expect.objectContaining({
+            kind: "expired-proposed-envelope",
+            sourceEnvelopeId: envelope.id,
+            inferenceRerun: false,
+            freshApprovalRequired: true,
+          }),
+        }),
+      }),
+    }));
+  });
+
   it("refuses to replace an unexpired approval on an input-required TaskRun", async () => {
     const envelope = { ...expiredEnvelope(), expiresAt: new Date("2026-08-28T13:50:00.000Z") };
+    const { db, tx } = fakeDb(staleRun("input-required"), envelope);
+
+    await expect(recover(db)).resolves.toBeNull();
+
+    expect(tx.coworkerActionEnvelope.updateMany).not.toHaveBeenCalled();
+    expect(tx.coworkerActionEnvelope.create).not.toHaveBeenCalled();
+    expect(tx.toolExecution.create).not.toHaveBeenCalled();
+    expect(tx.taskRun.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("refuses to replace an unexpired proposed envelope", async () => {
+    const envelope = {
+      ...expiredEnvelope(),
+      status: "proposed",
+      expiresAt: new Date("2026-08-28T13:50:00.000Z"),
+    };
     const { db, tx } = fakeDb(staleRun("input-required"), envelope);
 
     await expect(recover(db)).resolves.toBeNull();

@@ -261,9 +261,12 @@ export async function runSelfUpgrade(
     // defers with a real run + reason rather than a silent skip. The unattended
     // scheduled poll keeps the conservative "any surface skips" behavior — it
     // must never start a drain while ANY work is in flight (BI-F36E7510).
-    const blocking = params.scheduled
-      ? snapshot.surfaces
-      : snapshot.surfaces.filter((s) => s.kind === "hard");
+    // EP-ZERO-CONFIG-FEDERATION §5.5: the scheduled poll uses the SAME rule.
+    // "Any surface skips" meant an install with an edge node (heartbeat every
+    // minute) or a waiting agent session never had a quiet second at the top of
+    // the hour and never upgraded unattended (BI-A9F04B91). Soft signals enter
+    // the drain, which converges immediately when nothing hard is running.
+    const blocking = snapshot.surfaces.filter((s) => s.kind === "hard");
     if (blocking.length > 0) {
       const surfaces = blocking.map((s) => s.surface);
       return await skipAttempt(

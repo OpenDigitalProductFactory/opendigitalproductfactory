@@ -275,3 +275,49 @@ describe("the live BI-5CBDC146 refusal becomes actionable", () => {
     expect(verdict.allowed).toBe(true);
   });
 });
+
+// BI-CB3AEBBF. Blocker messages are bare clauses, so joining them with a plain
+// space produced "Completion evidence is missing source Completion evidence is
+// missing production-build" — read live off a real refusal. The reasons are the
+// part a caller acts on; running them together makes the reader hunt for the
+// sentence boundary to find the second missing dimension.
+describe("requirementNextAction reason joining", () => {
+  it("separates two unterminated reasons instead of running them together", () => {
+    const action = requirementNextAction({
+      code: "DELIVERY_EVIDENCE_REQUIRED",
+      state: "missing",
+      profile: "fix",
+      reasons: [
+        "Completion evidence is missing source",
+        "Completion evidence is missing production-build",
+      ],
+      unreadEvidenceRefs: [],
+    });
+
+    expect(action).toContain("missing source. Completion evidence");
+    expect(action).not.toContain("missing source Completion evidence");
+  });
+
+  it("does not double-punctuate a reason that already ends in a stop", () => {
+    const action = requirementNextAction({
+      code: "DELIVERY_EVIDENCE_REQUIRED",
+      state: "missing",
+      profile: "fix",
+      reasons: ["Evidence activity cmt123 does not resolve.", "Record fresh evidence:"],
+      unreadEvidenceRefs: [],
+    });
+
+    expect(action).not.toContain("..");
+    expect(action).toContain("does not resolve. Record fresh evidence:");
+  });
+
+  it("still returns null for a satisfied requirement", () => {
+    expect(requirementNextAction({
+      code: "DELIVERY_EVIDENCE_REQUIRED",
+      state: "pass",
+      profile: "fix",
+      reasons: ["ignored"],
+      unreadEvidenceRefs: [],
+    })).toBeNull();
+  });
+});

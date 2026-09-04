@@ -492,12 +492,12 @@ describe("success path", () => {
     expect(mocks.startQuiescence).not.toHaveBeenCalled();
   });
 
-  it("scheduled poll keeps the conservative 'any surface skips' behavior on a soft blocker (BI-F36E7510)", async () => {
-    mocks.captureActiveSessionBlockers.mockResolvedValueOnce({
-      surfaces: [{ surface: "request.recent-tool-execution", kind: "soft" }],
-    });
-    const result = await runSelfUpgrade({ triggeredBy: "cron", scheduled: true });
-    expect(result).toMatchObject({ skipped: true, reason: "activity-in-flight" });
+  it("scheduled poll drains on a soft blocker and skips only on a hard one (BI-A9F04B91)", async () => {
+    mocks.captureActiveSessionBlockers.mockResolvedValueOnce({ surfaces: [{ surface: "request.recent-tool-execution", kind: "soft" }] });
+    expect(await runSelfUpgrade({ triggeredBy: "cron", scheduled: true })).not.toMatchObject({ reason: "activity-in-flight" });
+    expect(mocks.startQuiescence).toHaveBeenCalled();
+    mocks.startQuiescence.mockClear(); mocks.captureActiveSessionBlockers.mockResolvedValueOnce({ surfaces: [{ surface: "build-studio.phase.plan", kind: "hard" }] });
+    expect(await runSelfUpgrade({ triggeredBy: "cron", scheduled: true })).toMatchObject({ skipped: true, reason: "activity-in-flight" });
     expect(mocks.startQuiescence).not.toHaveBeenCalled();
   });
   it("runs the promoter with the host install path, backup, image, and health paths", async () => {

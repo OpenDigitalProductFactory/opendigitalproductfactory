@@ -83,7 +83,6 @@ scripts/lib/docker-entrypoint-source-volume.test.mjs
 scripts/lib/dockerfile-portal-build.test.mjs
 scripts/lib/git-fetch-shared-safe.test.mjs
 scripts/lib/govern-capability-compose-args.test.mjs
-scripts/lib/lease-supervisor.test.mjs
 scripts/lib/lifecycle-capability-profile-contract.test.mjs
 scripts/lib/load-pinned-guard-typescript.test.mjs
 scripts/lib/local-ci-base-freshness.test.mjs
@@ -114,6 +113,7 @@ scripts/lib/transition-signing.test.mjs
 scripts/lifecycle-surface-policy.test.mjs
 scripts/local-ci-bounded-build.test.mjs
 scripts/local-ci-capacity-broker.test.mjs
+scripts/local-ci-host-stage-calibration.test.mjs
 scripts/local-ci-pool-policy.test.mjs
 scripts/local-ci-runner.test.mjs
 scripts/local-ci-slot-cleanup.test.mjs

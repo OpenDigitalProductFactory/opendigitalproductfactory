@@ -1,5 +1,6 @@
 import { prisma } from "@dpf/db";
 import { DEMAND_PROJECTION_TEMPLATES } from "@dpf/db/federated-demand-contract";
+import { hasFederatedWorkOriginMarker } from "@dpf/db/federated-work-contract";
 import type { FederationRelationshipPreset } from "@dpf/db/federation-link-types";
 
 import { FEDERATION_SYNCABLE_BACKLOG_STATUSES } from "@/lib/explore/backlog";
@@ -127,7 +128,11 @@ export async function runDemandReconciliation(
     // Parse the governed marker as a complete standalone line. A broad SQL
     // substring predicate both drops NULL bodies and mistakes explanatory prose
     // for an adopted peer envelope.
-    const eligibleItems = items.filter((item) => !hasFederatedDemandOriginMarker(item.body));
+    // A work-sync mirror (BI-FF8A57EF) is a peer's record held read-only here;
+    // projecting it as demand would hand the owner a copy of its own item.
+    const eligibleItems = items.filter(
+      (item) => !hasFederatedDemandOriginMarker(item.body) && !hasFederatedWorkOriginMarker(item.body),
+    );
     const eligibleIds = new Set(eligibleItems.map((item) => item.itemId));
     for (const link of automaticLinks) {
       for (const item of eligibleItems) {

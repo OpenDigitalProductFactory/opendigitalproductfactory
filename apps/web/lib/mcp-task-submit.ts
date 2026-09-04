@@ -1,4 +1,5 @@
 import { prisma } from "@dpf/db";
+import { withTaskRunApprovalLocation } from "./mcp/external-approval-location-lookup";
 import type { Prisma } from "@dpf/db";
 import { resolveCanonicalAgentId } from "@dpf/db/agent-identity";
 import type { UserContext } from "@/lib/permissions";
@@ -33,12 +34,43 @@ import {
   hydrateTerminalWriterContext,
   type PersistedTerminalReaderExecution,
 } from "./mcp-task-terminal-writer-context";
+import {
+  enqueuePersistedRemoteTaskSubmission,
+  externalMcpTaskAsyncEnabled,
+} from "./mcp-task-background-dispatch";
+import {
+  createTerminalWriterEscalation,
+  recoverTerminalWriterEscalation,
+  terminalWriterEscalationMessage,
+  terminalWriterEscalationStructuredContent,
+  terminalWriterEscalationWaitReason,
+} from "./mcp-task-terminal-writer-escalation";
 
 export {
   parseInitiativeReviewBinding,
   validateInitiativeReviewAuthorityScope,
 } from "./mcp-task-review-contract";
 export type { InitiativeReviewBinding } from "./mcp-task-review-contract";
+
+async function persistedTerminalReaderExecutions(
+  taskRunId: string,
+): Promise<PersistedTerminalReaderExecution[]> {
+  return prisma.toolExecution.findMany({
+    where: {
+      taskRunId,
+      toolName: "read_source_at_version",
+    },
+    orderBy: { createdAt: "asc" },
+    select: {
+      id: true,
+      toolName: true,
+      parameters: true,
+      result: true,
+      success: true,
+      createdAt: true,
+    },
+  }) as Promise<PersistedTerminalReaderExecution[]>;
+}
 
 export const REMOTE_RISK_CLASSES = ["read", "bounded-write", "high-risk"] as const;
 export type RemoteRiskClass = (typeof REMOTE_RISK_CLASSES)[number];
@@ -203,6 +235,7 @@ function replayOrConflict(existing: ExistingRemoteTask, requestDigest: string): 
       },
     };
   }
+  const terminalWriterEscalation = recoverTerminalWriterEscalation(existing.progressPayload);
   const terminalWriterWait = parseTerminalWriterWait(existing.progressPayload);
   const resourceWait = parseResourceWaitProjection(existing.progressPayload);
   return {
@@ -211,8 +244,14 @@ function replayOrConflict(existing: ExistingRemoteTask, requestDigest: string): 
       taskRunId: existing.taskRunId,
       status: existing.status,
       idempotentReplay: true,
-      requiresApproval: existing.status === "input-required" && !terminalWriterWait,
-      ...(terminalWriterWait ? {
+      requiresApproval: existing.status === "input-required" && !terminalWriterWait && !terminalWriterEscalation,
+      ...(terminalWriterEscalation ? {
+        resumable: false,
+        waitReason: terminalWriterEscalationWaitReason(terminalWriterEscalation),
+        content: remoteTaskContent(terminalWriterEscalationMessage(terminalWriterEscalation)),
+        structuredContent: terminalWriterEscalationStructuredContent(terminalWriterEscalation),
+        isError: false,
+      } : terminalWriterWait ? {
         resumable: true,
         waitReason: terminalWriterWait.kind,
       } : resourceWait ? {
@@ -232,8 +271,10 @@ async function reserveTerminalWriterReplay(input: {
 }): Promise<{
   wait: TerminalWriterWait;
   readerExecutions: PersistedTerminalReaderExecution[];
+  bootstrapReaderEvidence: boolean;
 } | null> {
   if (storedRequestDigest(input.existing) !== input.requestDigest) return null;
+  if (recoverTerminalWriterEscalation(input.existing.progressPayload)) return null;
 
   const existingWait = parseTerminalWriterWait(input.existing.progressPayload);
   const isProjectedWait = input.existing.status === "input-required" && existingWait !== null;
@@ -241,21 +282,7 @@ async function reserveTerminalWriterReplay(input: {
   if (!isProjectedWait && !isRecoverableCompletedExit) return null;
 
   const [readerExecutions, successfulWriter, writerAttempt] = await Promise.all([
-    prisma.toolExecution.findMany({
-      where: {
-        taskRunId: input.existing.taskRunId,
-        toolName: "read_source_at_version",
-      },
-      orderBy: { createdAt: "asc" },
-      select: {
-        id: true,
-        toolName: true,
-        parameters: true,
-        result: true,
-        success: true,
-        createdAt: true,
-      },
-    }),
+    persistedTerminalReaderExecutions(input.existing.taskRunId),
     prisma.toolExecution.findFirst({
       where: {
         taskRunId: input.existing.taskRunId,
@@ -273,7 +300,9 @@ async function reserveTerminalWriterReplay(input: {
       select: { id: true, success: true, result: true },
     }),
   ]);
-  if (readerExecutions.length === 0 || successfulWriter) return null;
+  if (successfulWriter) return null;
+  const bootstrapReaderEvidence = readerExecutions.length === 0;
+  if (bootstrapReaderEvidence && !isProjectedWait) return null;
 
   if (writerAttempt) {
     const proposalEnvelopeId = writerAttempt.success === false
@@ -318,7 +347,7 @@ async function reserveTerminalWriterReplay(input: {
     } as Prisma.InputJsonValue,
   });
   return reserved
-    ? { wait, readerExecutions: readerExecutions as PersistedTerminalReaderExecution[] }
+    ? { wait, readerExecutions, bootstrapReaderEvidence }
     : null;
 }
 
@@ -464,6 +493,10 @@ export async function submitRemoteCoworkerTask(input: {
     const replay = replayOrConflict(existing, requestDigest);
     if (
       storedRequestDigest(existing) === requestDigest
+      && recoverTerminalWriterEscalation(existing.progressPayload)
+    ) return replay;
+    if (
+      storedRequestDigest(existing) === requestDigest
       && existing.status === "input-required"
     ) {
       const resumed = await resumeApprovedRemoteTask({
@@ -506,9 +539,49 @@ export async function submitRemoteCoworkerTask(input: {
         })
       : null;
     if (terminalWriterReservation && terminalToolPolicy && existing.id && existing.threadId) {
-      const hydration = await hydrateTerminalWriterContext({
+      let readerExecutions = terminalWriterReservation.readerExecutions;
+      let bootstrapFailure: { ok: false; code: string; error: string } | null = null;
+      if (terminalWriterReservation.bootstrapReaderEvidence) {
+        const immutableReaderArguments = terminalToolPolicy.immutableReaderArguments;
+        if (!immutableReaderArguments) {
+          bootstrapFailure = {
+            ok: false,
+            code: "terminal_writer_context_reader_failed",
+            error: "The terminal writer policy does not contain an immutable reader binding.",
+          };
+        } else {
+          const bootstrapRead = await executeAutonomousWorkTool({
+            toolName: "read_source_at_version",
+            args: {
+              ...immutableReaderArguments,
+              startLine: 1,
+              maxLines: 200,
+              maxChars: 3_200,
+            },
+            userId: token.userId,
+            userContext,
+            routeContext: parsed.routeContext,
+            agentId: resolveCanonicalAgentId(parsed.agentId),
+            threadId: existing.threadId,
+            taskRunId: existing.taskRunId,
+            apiTokenId: token.tokenId,
+            tokenScope: token.capability,
+            externalAccessEnabled: true,
+          });
+          if (!bootstrapRead.success) {
+            bootstrapFailure = {
+              ok: false,
+              code: "terminal_writer_context_reader_failed",
+              error: bootstrapRead.message || "The governed immutable bootstrap read failed.",
+            };
+          } else {
+            readerExecutions = await persistedTerminalReaderExecutions(existing.taskRunId);
+          }
+        }
+      }
+      const hydration = bootstrapFailure ?? await hydrateTerminalWriterContext({
         policy: terminalToolPolicy,
-        executions: terminalWriterReservation.readerExecutions,
+        executions: readerExecutions,
         readPage: async (args) => executeAutonomousWorkTool({
           toolName: "read_source_at_version",
           args,
@@ -528,6 +601,13 @@ export async function submitRemoteCoworkerTask(input: {
         ? existing.progressPayload as Record<string, unknown>
         : {};
       if (!hydration.ok) {
+        const escalation = hydration.code === "terminal_writer_context_truncated"
+          ? createTerminalWriterEscalation({
+              code: "terminal_writer_context_truncated",
+              writerToolName: terminalToolPolicy.writerToolName,
+              attempt: terminalWriterReservation.wait.attempt,
+            })
+          : null;
         await prisma.taskRun.update({
           where: { taskRunId: existing.taskRunId },
           data: {
@@ -543,6 +623,7 @@ export async function submitRemoteCoworkerTask(input: {
                 message: hydration.error,
                 observedAt: new Date().toISOString(),
               },
+              ...(escalation ? { terminalWriterEscalation: escalation } : {}),
             },
           },
         });
@@ -554,11 +635,17 @@ export async function submitRemoteCoworkerTask(input: {
             idempotentReplay: true,
             resumedFromTerminalWriterWait: false,
             requiresApproval: false,
-            resumable: true,
-            waitReason: "terminal-writer-context-unavailable",
-            content: remoteTaskContent(hydration.error),
-            structuredContent: { error: hydration.code },
-            isError: true,
+            resumable: escalation ? false : true,
+            waitReason: escalation
+              ? terminalWriterEscalationWaitReason(escalation)
+              : "terminal-writer-context-unavailable",
+            content: remoteTaskContent(
+              escalation ? terminalWriterEscalationMessage(escalation) : hydration.error,
+            ),
+            structuredContent: escalation
+              ? terminalWriterEscalationStructuredContent(escalation)
+              : { error: hydration.code },
+            isError: escalation ? false : true,
           },
         };
       }
@@ -674,15 +761,19 @@ export async function submitRemoteCoworkerTask(input: {
 
     return {
       kind: "result",
-      result: {
+      result: await withTaskRunApprovalLocation({
         taskRunId: run.taskRunId,
         status: "input-required",
         idempotentReplay: false,
         requiresApproval: true,
         content: remoteTaskContent("Remote task submitted and paused for employee approval."),
         isError: false,
-      },
+      }, { taskRunId: run.taskRunId, callerUserId: token.userId }),
     };
+  }
+
+  if (externalMcpTaskAsyncEnabled()) {
+    return { kind: "result", result: await enqueuePersistedRemoteTaskSubmission(run.taskRunId) };
   }
 
   return executeRemoteTaskAttempt({

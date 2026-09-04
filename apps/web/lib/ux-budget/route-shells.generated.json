@@ -1,11 +1,11 @@
 {
   "generator": "apps/web/scripts/build-route-shells.ts",
-  "pageRouteCount": 325,
+  "pageRouteCount": 327,
   "migratedCount": 1,
   "summary": {
     "cockpit": 17,
     "list": 6,
-    "detail": 252,
+    "detail": 254,
     "settings": 12,
     "form": 17,
     "public": 21,
@@ -3665,6 +3665,18 @@
       "confidence": "high"
     },
     {
+      "routePath": "/storefront/animals/waiting",
+      "shell": "detail",
+      "audience": "owner",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "sweepEligible": true,
+      "confidence": "high"
+    },
+    {
       "routePath": "/storefront/dispatch",
       "shell": "detail",
       "audience": "owner",
@@ -3811,7 +3823,8 @@
         "next-action-marker",
         "lead-band"
       ],
-      "sweepEligible": true,
+      "sweepEligible": false,
+      "sweepExclusionReason": "setup-phase-only",
       "confidence": "high"
     },
     {
@@ -3976,8 +3989,7 @@
         "next-action-marker",
         "lead-band"
       ],
-      "sweepEligible": false,
-      "sweepExclusionReason": "dynamic-fixture-required",
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -4021,6 +4033,18 @@
       "routePath": "/workspace/my-queue",
       "shell": "detail",
       "audience": "worker",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "sweepEligible": true,
+      "confidence": "high"
+    },
+    {
+      "routePath": "/workspace/ward",
+      "shell": "detail",
+      "audience": "owner",
       "migrated": false,
       "exemptChecks": [
         "next-action-marker",

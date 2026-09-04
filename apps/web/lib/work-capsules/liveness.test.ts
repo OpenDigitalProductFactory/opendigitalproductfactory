@@ -33,7 +33,10 @@ describe("classifyWorkCapsuleLiveness", () => {
     expect(v.trueLivenessAt).toBeNull();
   });
 
-  it("treats an expired lease as dead regardless of updatedAt", () => {
+  it("treats a RECENTLY expired lease as PAUSED (token-limited session may resume), not reapable", () => {
+    // A lease that lapsed only 1h ago is within the resume grace: a token-limited
+    // Claude/Codex/Grok session commonly returns when its usage window resets, so
+    // the room must NOT be reaped yet — but it is also not confidently live.
     const v = classifyWorkCapsuleLiveness(
       row({
         executorKind: "codex-desktop",
@@ -43,10 +46,76 @@ describe("classifyWorkCapsuleLiveness", () => {
       }),
       NOW,
     );
+    expect(v.liveness).toBe("paused");
+    expect(v.isLive).toBe(true); // never shown as dead while it may resume
+    expect(v.isReapable).toBe(false); // never reaped inside the grace
+    expect(v.disposition).toBeNull();
+    expect(v.trueLivenessAt).toEqual(new Date("2026-08-05T14:00:00.000Z"));
+  });
+
+  it("treats a lease expired PAST the resume grace as dead (lease-expired → abandon)", () => {
+    const v = classifyWorkCapsuleLiveness(
+      row({
+        executorKind: "codex-desktop",
+        leaseExpiresAt: new Date("2026-08-04T00:00:00.000Z"), // ~39h ago, past 24h grace
+        updatedAt: NOW,
+      }),
+      NOW,
+    );
     expect(v.liveness).toBe("lease-expired");
     expect(v.isLive).toBe(false);
     expect(v.isReapable).toBe(true);
-    expect(v.trueLivenessAt).toEqual(new Date("2026-08-05T14:00:00.000Z"));
+    expect(v.disposition).toBe("abandoned"); // dead + UNMERGED → protect the branch
+  });
+
+  it("honours a caller-supplied pause grace (0 grace ⇒ expired lease is immediately dead)", () => {
+    const v = classifyWorkCapsuleLiveness(
+      row({ executorKind: "codex-desktop", leaseExpiresAt: new Date("2026-08-05T14:00:00.000Z") }),
+      NOW,
+      undefined,
+      0, // no grace
+    );
+    expect(v.liveness).toBe("lease-expired");
+    expect(v.isReapable).toBe(true);
+  });
+
+  it("classifies a MERGED room as DELIVERED (archive), overriding lease state — procedural, no LLM", () => {
+    // deliveredSignal is computed by the caller from LOCAL git reachability.
+    const v = classifyWorkCapsuleLiveness(
+      row({
+        executorKind: "grok-cli",
+        leaseExpiresAt: new Date("2026-08-05T14:00:00.000Z"), // within grace: would be `paused`…
+        deliveredSignal: { merged: true }, // …but merged wins.
+      }),
+      NOW,
+    );
+    expect(v.liveness).toBe("delivered");
+    expect(v.isLive).toBe(false); // delivered work is closed out, not "active"
+    expect(v.isReapable).toBe(true);
+    expect(v.disposition).toBe("delivered"); // archive, and its branch is safe to reap
+    expect(v.reason).toContain("merged");
+  });
+
+  it("delivered wins over a still-valid lease", () => {
+    const v = classifyWorkCapsuleLiveness(
+      row({
+        executorKind: "grok-cli",
+        leaseExpiresAt: new Date("2026-08-05T16:00:00.000Z"), // valid lease
+        deliveredSignal: { merged: true },
+      }),
+      NOW,
+    );
+    expect(v.liveness).toBe("delivered");
+    expect(v.disposition).toBe("delivered");
+  });
+
+  it("an UNMERGED delivered signal is inert (deliveredSignal.merged=false ⇒ normal liveness)", () => {
+    const v = classifyWorkCapsuleLiveness(
+      row({ executorKind: "grok-cli", leaseExpiresAt: new Date("2026-08-05T16:00:00.000Z"), deliveredSignal: { merged: false } }),
+      NOW,
+    );
+    expect(v.liveness).toBe("live"); // valid lease, not merged
+    expect(v.disposition).toBeNull();
   });
 
   it("treats a valid lease as live", () => {

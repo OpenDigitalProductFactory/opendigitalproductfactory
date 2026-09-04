@@ -26,6 +26,7 @@ import {
   parseStringArrayMap,
   parseTopLevelKeys,
   stripLineComments,
+  SHAPE_SOURCE_FILES,
 } from "./measure-capability-completeness.mjs";
 
 test("canonical registry tool grants participate in capability reachability", () => {
@@ -36,6 +37,10 @@ test("canonical registry tool grants participate in capability reachability", ()
     held.includes("registry_read"),
     "agent_registry.json config_profile.tool_grants must be measured for registry-only identities",
   );
+});
+
+test("the alternate onboarding seed participates in the workforce roster", () => {
+  assert.ok(loadSubstrate().roster.includes("onboarding-coo"));
 });
 
 test("generated capability paths use repository-stable separators", () => {
@@ -248,4 +253,40 @@ test("the shipped artifact shows a coworker with a declared shape AND a declared
   assert.ok(shaped.length > 0, "no agent has a declared work shape");
   // Its cadence must be declared on the skill, not only in a registry.
   assert.ok(shaped.some((a) => a.planes.cadence.level === 3));
+});
+
+test("every work-management file that names an accountable agent is a declared shape source", () => {
+  // The registry is split across files and merged into ALL_SHAPES at runtime.
+  // The scanner is static and reads a fixed list, so a new shape file is
+  // invisible to it — which is exactly how standing-operations-shapes.ts went
+  // unread while declaring twelve shapes for seven agents, reporting all seven
+  // as having no work shape at all. A false all-clear on the shape plane reads
+  // as "nothing bounds what this coworker's standing work may do".
+  const dir = path.join(REPO_ROOT, "apps", "web", "lib", "work-management");
+  const declaring = fs.readdirSync(dir)
+    .filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts"))
+    .filter((f) => /accountablePrincipalRef:\s*"agent:/.test(fs.readFileSync(path.join(dir, f), "utf8")))
+    .map((f) => `apps/web/lib/work-management/${f}`)
+    .sort();
+
+  assert.deepEqual(
+    declaring.filter((f) => !SHAPE_SOURCE_FILES.includes(f)),
+    [],
+    "a work-management file declares an accountable agent but is not in SHAPE_SOURCE_FILES — "
+    + "add it there, or the measure will report those agents as having no work shape",
+  );
+});
+
+test("the standing-operations shapes are actually seen by the measure", () => {
+  // Regression: the file was imported into ALL_SHAPES and still measured as absent.
+  const artifact = shippedArtifact();
+  const byKey = new Map(artifact.agents.map((a) => [a.key, a]));
+  for (const key of ["AGT-WS-BUILD", "AGT-WS-REVIEW", "AGT-WS-PLATFORM"]) {
+    const agent = byKey.get(key);
+    if (!agent) continue;
+    assert.ok(
+      agent.planes.shape.level >= 2,
+      `${key} is accountable for a standing-operations stage but measures shape level ${agent.planes.shape.level}`,
+    );
+  }
 });

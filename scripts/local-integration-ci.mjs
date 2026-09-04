@@ -60,6 +60,7 @@ if (!candidateBranch) {
 
 const plan = createLocalIntegrationPlan({
   candidateBranch,
+  candidateSha: candidateSha || undefined,
   baseRef,
   mode,
   siblingBranches,

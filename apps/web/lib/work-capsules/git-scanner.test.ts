@@ -1,11 +1,15 @@
+import { tmpdir } from "node:os";
+
 import { describe, expect, it } from "vitest";
 
 import {
+  isReachableFromTrunk,
   parseGitStatusPorcelain,
   parseBranchList,
   parsePrUrlFromText,
   parseWorktreeList,
   shouldSurfaceAdoptableBranch,
+  trunkRefExists,
 } from "./git-scanner";
 
 describe("git scanner parsing", () => {
@@ -66,5 +70,29 @@ describe("git scanner parsing", () => {
       lastCommitAt: new Date("2025-12-01"),
       now: new Date("2026-05-14"),
     })).toBe(false);
+  });
+});
+
+// Real-git contract tests for the workroom-closeout DELIVERED signal. Read-only
+// (rev-parse / merge-base --is-ancestor), no mutation. Environment-tolerant:
+// the trunk-dependent assertions run only where a local trunk ref is present, so
+// the file stays green in a checkout that has not fetched origin/main.
+describe("delivered-signal git helpers (procedural, local)", () => {
+  it("trunkRefExists is false for a non-repo path", async () => {
+    expect(await trunkRefExists(tmpdir())).toBe(false);
+  });
+
+  it("isReachableFromTrunk returns null for a missing sha (no git call)", async () => {
+    expect(await isReachableFromTrunk(process.cwd(), null)).toBeNull();
+    expect(await isReachableFromTrunk(process.cwd(), undefined)).toBeNull();
+  });
+
+  it("decides reachability against a present local trunk", async () => {
+    const repoRoot = process.cwd();
+    if (!(await trunkRefExists(repoRoot))) return; // no local trunk here → skip
+    // The trunk tip is trivially an ancestor of itself → reachable/merged.
+    expect(await isReachableFromTrunk(repoRoot, "origin/main")).toBe(true);
+    // A well-formed but nonexistent sha is indeterminate → null, never a false merged.
+    expect(await isReachableFromTrunk(repoRoot, "0000000000000000000000000000000000000000")).toBeNull();
   });
 });

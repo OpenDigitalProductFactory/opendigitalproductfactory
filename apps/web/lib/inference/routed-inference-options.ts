@@ -13,6 +13,10 @@ export interface RouteAndCallOptions {
    * so omitting this is the safe default and changes nothing.
    */
   systemPromptInstructionSpans?: string[];
+  /** What each entry of `messages` is — a label per index, never content. */
+  messageOrigins?: readonly import(
+    "@/lib/inference/data-screening/types"
+  ).MessageOrigin[];
   tools?: Array<Record<string, unknown>>;
   taskType?: string;
   preferredProviderId?: string;

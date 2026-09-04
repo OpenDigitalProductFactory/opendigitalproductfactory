@@ -92,15 +92,19 @@ export function presentCapsuleRow(
   const staleCache = row.lastSyncedAt != null && now.getTime() - row.lastSyncedAt.getTime() > STALE_CACHE_MS;
 
   const health =
-    verdict.liveness === "lease-expired"
-      ? "lease-expired"
-      : verdict.liveness === "build-terminal"
-        ? "abandoned-build"
-        : verdict.liveness === "idle-stale"
-          ? "stalled"
-          : staleCache
-            ? "stale-cache"
-            : "ok";
+    verdict.liveness === "delivered"
+      ? "delivered"
+      : verdict.liveness === "paused"
+        ? "paused"
+        : verdict.liveness === "lease-expired"
+          ? "lease-expired"
+          : verdict.liveness === "build-terminal"
+            ? "abandoned-build"
+            : verdict.liveness === "idle-stale"
+              ? "stalled"
+              : staleCache
+                ? "stale-cache"
+                : "ok";
 
   return {
     capsuleId: row.capsuleId,

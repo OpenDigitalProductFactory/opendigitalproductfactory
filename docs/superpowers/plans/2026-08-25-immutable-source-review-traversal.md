@@ -173,3 +173,82 @@ This phase extends BI-DE58CFE8 on Workroom `WC-14EA9122` after WordPress complet
 6. Run focused terminal-policy, plan-override, and provider-dispatch tests; the linked inference/agent-loop blast radius; web typecheck; source/module/docs guards; pregate preflight; exact-tree CI; and semantic review. Record infrastructure failures as non-PASS and keep protected CI mandatory.
 7. Deliver one DCO-signed protected PR, one canonical release, and one governed live upgrade. Require exact served SHA and CAN-TEST.
 8. Resume only the preserved WordPress TaskRun on a server-authorized identical-key path. Accept only genuine immutable reads plus governed `record_initiative_evidence` execution and objective-mapping receipt, then close BI-A45D744A and WC-04941646 through their normal server gates.
+
+## Phase 13 — Bootstrap a resumable TaskRun that has no reader rows
+
+This phase extends BI-DE58CFE8 on Workroom `WC-14EA9122` after Portfolio Advisor TaskRun `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-634F7FF63BF8` persisted an explicit missing-terminal-writer wait before any reader or writer tool execution. WWMD decision `DI-6A51BE456F49` keeps the exact TaskRun and request digest authoritative.
+
+1. Preserve the exact zero-reader TaskRun, request key, digest, immutable artifact binding, and zero-writer/zero-envelope/zero-receipt state as the RED fixture. Do not mint a sibling identity.
+2. Add RED submission tests proving an identical replay currently cannot reserve an explicit wait with zero readers, while a completed route exit with no persisted evidence remains closed.
+3. Permit zero-reader reservation only for an explicit `input-required` terminal-writer wait. Retain the existing digest, writer-success, proposal-envelope, and compare-and-set protections.
+4. After reservation, execute exactly one bounded line-one `read_source_at_version` call using only the server-bound repository/path/commit/blob identity. Do not synthesize or directly trust its returned content.
+5. Re-query persisted reader ToolExecutions for the same TaskRun and pass only those durable rows into the existing hydration validator. Refactor the shared reader query so reservation and post-bootstrap hydration cannot drift.
+6. On failed tool execution, missing persistence, invalid binding, malformed result, or incomplete hydration, restore the same TaskRun to a typed resumable context failure and do not invoke writer-only inference.
+7. Prove the exact zero-row RED then GREEN, bootstrap failure, completed-no-evidence non-regression, existing persisted-reader recovery, adjacent submission/approval/capacity/tool-grant suites, web typecheck, style/docs/source guards, preflight, exact-tree CI, and semantic review. Record infrastructure-inconclusive gates as non-PASS.
+8. Deliver one DCO-signed protected PR, one canonical release, and one governed live upgrade. Require exact served SHA and CAN-TEST before one identical-key replay of `...634F7FF63BF8`.
+9. Accept only a genuine persisted immutable reader, governed writer execution, exact current approval envelope, receipt, and server baseline/mapping. Apply WWMD approval decision `DI-85F8C9528BE4` only when the envelope is exact, current, and immutable; otherwise fail closed.
+
+### Phase 13 atomic coverage
+
+The governed coverage writer cannot issue a receipt while the condition `no initiative scope baseline exists for BI-DE58CFE8` remains true. Until that prerequisite is repaired independently, this table is the canonical in-plan traceability record; it does not infer a baseline or receipt.
+
+| Deliverable | Requirement refs | Flow refs | Contract refs | Verification refs | Atomicity |
+| --- | --- | --- | --- | --- | --- |
+| Zero-reader same-TaskRun terminal-writer recovery | Phase 13.1, 13.3, 13.6, 13.9 | Phase 13.4, 13.5 | Phase 13.3, 13.6, 13.9 | Phase 13.2, 13.7, 13.8 | Reservation, the governed bootstrap read, persisted-row requery, hydration validation, and typed resumable failure form one fail-closed unit. Shipping any subset would either leave the preserved TaskRun unrecoverable or weaken evidence authority. |
+
+## Phase 14 — Supersede an expired unapproved writer proposal
+
+This phase extends BI-DE58CFE8 on Workroom `WC-14EA9122` for the exact PR #4891 design-review TaskRun `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-57CC78DB3778`. Its proposal envelope expired in `proposed`, leaving the same immutable review unable to obtain fresh approval or a genuine baseline.
+
+1. Preserve the TaskRun, request digest, writer proposal ToolExecution `cmthhuxly00a501qmsogavxv5`, expired envelope `cmthhuxlm00a201qmftzezz1k`, exact approval binding, and zero-receipt state as the RED fixture. Never approve the expired envelope or mint a sibling review.
+2. Add the failing transaction test proving the recovery query cannot see an expired `proposed` envelope. Add the paired refusal for an unexpired proposal.
+3. Extend the existing approval-recovery transaction, not terminal inference, to accept `proposed` only after expiry and only when TaskRun/digest/user/agent/writer/binding/proposal all match exactly.
+4. Compare-and-set the source envelope to `cancelled`, copy the stored envelope binding and proposal arguments into exactly one fresh proposal/envelope pair, and park the same TaskRun `input-required`. Roll back on any race.
+5. Preserve inference, the independent decision, grants, approval separation, writer validation, receipt semantics, and all historical rows unchanged. Refuse completed writers/receipts, conflicting or ambiguous bindings/proposals, and unexpired envelopes.
+6. Prove the exact RED then GREEN, unexpired refusal, existing approved/failed recovery cases, adjacent submission/terminal-writer tests, web typecheck, source/docs/style/preflight guards, and protected GitHub checks. Record any local or semantic infrastructure failure as non-PASS.
+7. Deliver one DCO-signed protected PR, one canonical release, and one governed live upgrade. Require exact served SHA and CAN-TEST before replaying `...57CC78DB3778` once.
+8. Accept only the fresh exact envelope, separately approved same-TaskRun writer execution, and genuine baseline. Then record atomic coverage and finish PR #4891 through its normal protected queue.
+
+### Phase 14 atomic coverage
+
+The existing BI-DE bootstrap has no initiative scope baseline, so this table remains traceability evidence rather than a fabricated coverage receipt.
+
+| Deliverable | Requirement refs | Flow refs | Contract refs | Verification refs | Atomicity |
+| --- | --- | --- | --- | --- | --- |
+| Expired proposed-envelope same-TaskRun recovery | Phase 14.1, 14.3, 14.5, 14.8 | Phase 14.3, 14.4 | Phase 14.3, 14.4, 14.5 | Phase 14.2, 14.6, 14.7 | Source-envelope cancellation, exact proposal rebinding, TaskRun parking, fresh approval, and writer receipt form one audit chain. Partial delivery would either reuse expired authority or rerun the independent review. |
+
+## Phase 15 — Enforce the terminal writer at the remote-task completion boundary
+
+This phase extends BI-DE58CFE8 after BI-FFBDDD96 research TaskRun `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-7991D9CAE467` completed at the review duration ceiling with one malformed read attempt, one successful exact-bound read, and no required writer, envelope, or receipt.
+
+1. Preserve the TaskRun, request key/digest, exact artifact binding, successful reader execution `cmti6qhl303tm01o0upfpg15y`, zero-writer state, and incorrect completed projection as RED evidence. Do not replay or mint a sibling before deployment.
+2. Add a remote submission RED that returns a normal agent-loop result containing the failed-then-successful reader history but no writer failure marker. Prove current code persists `completed`.
+3. Make the remote-task executor independently require the exact bound writer in governed executions or the active bound proposal before allowing completion.
+4. Reuse the existing `terminalWriterWait` state, retry limit, escalation, request identity, and approval handling. Do not create a parallel recovery state or infer a writer failure from unrelated tasks.
+5. Fail closed as `input-required/missing-terminal-writer` for every incomplete agent-loop exit, including duration and iteration exhaustion, while preserving successful writer/proposal behavior and non-review completion.
+6. Prove the exact RED then GREEN, all MCP-task and terminal-policy suites, web typecheck, style/diff/preflight guards, DCO, and every protected PR/merge-group check. Record broken local infrastructure as explicit non-PASS only.
+7. Deliver one protected merge, one canonical release, and one governed live upgrade. Require exact served SHA and CAN-TEST before any same-TaskRun recovery.
+8. Recover BI-FFBDDD96 through genuine persisted research and objective-mapping writers only; then reconcile its already-protected delivery and live acceptance evidence without fabricating a baseline, receipt, or objective result.
+
+### Phase 15 atomic coverage
+
+| Deliverable | Requirement refs | Flow refs | Contract refs | Verification refs | Atomicity |
+| --- | --- | --- | --- | --- | --- |
+| Executor-owned terminal-writer completion invariant | Phase 15.1, 15.3, 15.4, 15.8 | Phase 15.3, 15.5 | Phase 15.3, 15.4, 15.5 | Phase 15.2, 15.6, 15.7 | Agent-loop policy and executor postcondition ship together so no loop exit can falsely complete a governed review while ordinary tasks and genuine writer proposals retain their existing semantics. |
+
+## BI-DE58CFE8 atomic program coverage
+
+- Decision: `atomic`
+- Parent and delivery item: `BI-DE58CFE8`
+- Design contract: `docs/superpowers/specs/2026-08-25-immutable-source-review-traversal-design.md#bi-de58cfe8-objective-and-acceptance-contract`
+- Rollback: revert this documentation-only closure as one unit; it changes no
+  runtime, schema, authority, or persisted evidence behavior.
+- Rationale: the terminal-writer policy, evidence hydration, required-tool
+  routing, approval recovery, executor postcondition, and same-identity live
+  proof are one fail-closed review-completion boundary. Reverting or shipping
+  only one slice could either strand a governed TaskRun or permit an incomplete
+  review to escape as completed.
+
+| Deliverable | Requirement refs | Flow refs | Contract refs | Verification refs |
+| --- | --- | --- | --- | --- |
+| Same-identity terminal-writer resumability | OBJ-DE-001, OBJ-DE-002, OBJ-DE-003, OBJ-DE-004, OBJ-DE-005 | Phases 8-15 | BI-DE58CFE8 objective and acceptance contract; initiative-review terminal tool policy; persisted reader-history extension; failed reader-attempt isolation extension; CLI terminal-writer dispatch extension; zero-reader same-TaskRun recovery extension; expired proposal same-TaskRun recovery extension; executor postcondition | AC-DE-001, AC-DE-002, AC-DE-003, AC-DE-004, AC-DE-005, AC-DE-006, AC-DE-007; phase RED/GREEN suites; protected PR and merge-group checks; canonical release; served-SHA CAN-TEST; genuine same-TaskRun research writer receipt |

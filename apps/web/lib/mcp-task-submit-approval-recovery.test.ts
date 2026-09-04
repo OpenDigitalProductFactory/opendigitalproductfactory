@@ -243,7 +243,14 @@ describe("submitRemoteCoworkerTask approval recovery", () => {
     expect(outcome).toMatchObject({ kind: "result", result: {
       taskRunId: approvalBinding.taskRunId, status: "input-required",
       idempotentReplay: true, resumedFromApprovalRecovery: true, requiresApproval: true,
-      replacementEnvelopeId: "ENV-REPLACEMENT", structuredContent: {
+      replacementEnvelopeId: "ENV-REPLACEMENT",
+      approval: {
+        envelopeId: "ENV-REPLACEMENT",
+        delegatingUserId: "user-1",
+        inboxHref: "/workspace/inbox",
+        approveHref: "/api/agent/envelope/ENV-REPLACEMENT/approve",
+      },
+      structuredContent: {
         recovery: "expired-approved-envelope", sourceEnvelopeId: "ENV-EXPIRED",
         replacementProposalExecutionId: "tool-proposal-new", inferenceRerun: false,
       },

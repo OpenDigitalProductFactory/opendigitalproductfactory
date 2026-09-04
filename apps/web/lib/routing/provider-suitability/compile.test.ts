@@ -114,7 +114,11 @@ describe("AI workload data profiles", () => {
     ["health-phi", "restricted", "region-bound"],
     ["student-records", "restricted", "region-bound"],
     ["payments-finance", "restricted", "region-bound"],
-    ["source-code", "confidential", "region-bound"],
+    // BI-35FAE2DB follow-up: source code is INTERNAL, not confidential.
+    // `confidential` auto-attaches a mask obligation, and a masked payload is
+    // useless for the one thing code is sent for — being read. Genuine secrets
+    // are unchanged on the line below, which is what keeps this safe.
+    ["source-code", "internal", "region-bound"],
     ["secrets-credentials", "restricted", "local-only"],
   ] as const)("derives %s through the governed data vocabulary", (workloadClass, sensitivity, residencyClass) => {
     const profile = deriveAiWorkloadDataProfile({ workloadClass });

@@ -102,3 +102,53 @@ export async function getWorktreeDirtySummary(worktreePath: string): Promise<Git
   });
   return parseGitStatusPorcelain(stdout);
 }
+
+/**
+ * True when the trunk ref (default `origin/main`) resolves in this local repo —
+ * i.e. reachability checks here are meaningful. False when there is no local git
+ * repo, no fetched trunk, or git is unavailable (the portal-runtime case), so a
+ * caller can skip a whole batch of {@link isReachableFromTrunk} calls rather than
+ * fan out hundreds of failing spawns.
+ */
+export async function trunkRefExists(repoRoot: string, trunkRef = "origin/main"): Promise<boolean> {
+  try {
+    await execFileAsync("git", ["-C", repoRoot, "rev-parse", "--verify", "--quiet", `${trunkRef}^{commit}`], {
+      timeout: 5000,
+      windowsHide: true,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * True when `headSha` is an ancestor of the trunk (`git merge-base --is-ancestor`
+ * exits 0) — i.e. the branch's work has landed and the room is DELIVERED. This is
+ * the workroom-closeout "done" signal, computed PROCEDURALLY from the LOCAL repo:
+ * no GitHub PR API, no LLM, and it still answers when the network / external
+ * providers are down. Returns null when it cannot decide (missing sha, sha not
+ * fetched locally, or git error) so the caller withholds the delivered verdict
+ * rather than guessing. Reads objects only — never touches a worktree.
+ */
+export async function isReachableFromTrunk(
+  repoRoot: string,
+  headSha: string | null | undefined,
+  trunkRef = "origin/main",
+): Promise<boolean | null> {
+  if (!headSha) return null;
+  try {
+    await execFileAsync(
+      "git",
+      ["-C", repoRoot, "merge-base", "--is-ancestor", headSha, trunkRef],
+      { timeout: 5000, windowsHide: true },
+    );
+    return true; // exit 0 → headSha is reachable from trunk (merged)
+  } catch (err) {
+    // exit 1 → definitively NOT an ancestor (unmerged). Any other failure
+    // (unknown sha, bad ref, git missing) → indeterminate, withhold judgment.
+    const code = (err as { code?: number } | null)?.code;
+    if (code === 1) return false;
+    return null;
+  }
+}

@@ -15,6 +15,10 @@ import {
   getWorkCaseSourceEntry,
   type WorkCaseReceiptKind,
 } from "./source-registry";
+import {
+  hasPassingVerificationEvidence,
+  type VerificationEvidence,
+} from "./hitl-join";
 
 export type WorkCaseAutonomyMode = "autonomous" | "supervised" | "observed";
 
@@ -59,7 +63,7 @@ export interface WorkCasePolicyInput {
    * only when the envelope requires verification; a turn that needs it and has
    * none is DENIED by name rather than allowed to close on a promise.
    */
-  verificationEvidence?: readonly { verifiedAt?: string | null }[] | null;
+  verificationEvidence?: readonly VerificationEvidence[] | null;
 }
 
 export type WorkCasePolicyDenialReason =
@@ -153,10 +157,7 @@ export function evaluateWorkCasePolicy(
   // not keep. Scoped to consequential actions: reading and non-consequential
   // transitions are unaffected.
   if (action.consequential && input.envelope.requiresVerification) {
-    const verified = (input.verificationEvidence ?? []).some((entry) =>
-      Boolean(entry?.verifiedAt),
-    );
-    if (!verified) {
+    if (!hasPassingVerificationEvidence(input.verificationEvidence)) {
       return deny(
         "missing_verification_evidence",
         `Work Case action '${action.action}' requires verification evidence before it can close.`,

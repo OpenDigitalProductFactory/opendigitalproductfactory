@@ -95,7 +95,11 @@ vi.mock("@/lib/shared/lazy-node", () => ({
   }),
 }));
 
-import { writeContainerFileViaStdin, looksLikeCliAuthFailure } from "./codex-cli-adapter";
+import {
+  writeContainerFileViaStdin,
+  looksLikeCliAuthFailure,
+  looksLikeCliRateLimit,
+} from "./codex-cli-adapter";
 import type { AdapterRequest } from "./adapter-types";
 import type { RoutedExecutionPlan } from "./recipe-types";
 
@@ -326,5 +330,25 @@ describe("looksLikeCliAuthFailure", () => {
     expect(
       looksLikeCliAuthFailure("Re-authentication required (rate of failed auth attempts high)"),
     ).toBe(true);
+  });
+});
+
+describe("looksLikeCliRateLimit", () => {
+  it.each([
+    "ERROR: unexpected status 429 Too Many Requests",
+    "rate_limit_exceeded",
+    "Codex CLI rate limited",
+    "You've hit your weekly limit · resets 4pm (UTC)",
+    "usage limit reached; retry after 30 seconds",
+  ])("classifies genuine capacity exhaustion %j", (text) => {
+    expect(looksLikeCliRateLimit(text)).toBe(true);
+  });
+
+  it.each([
+    "The gpt-5.3-codex model is not supported when using Codex with a ChatGPT account. Please use a supported model (for example, gpt-5.4) or use Codex with an API key. ChatGPT subscription account access can degrade performance.",
+    "model produced an empty response",
+    "Reading prompt from stdin...",
+  ])("does not misclassify non-capacity stderr %j", (text) => {
+    expect(looksLikeCliRateLimit(text)).toBe(false);
   });
 });

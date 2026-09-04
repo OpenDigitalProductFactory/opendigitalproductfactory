@@ -95,7 +95,7 @@ export async function recoverStaleApprovedRemoteTask(
           delegatingUserId: input.userId,
           coworkerAgentId: input.agentId,
           manifestActionId: input.writerToolName,
-          status: { in: ["approved", "failed"] },
+          status: { in: ["proposed", "approved", "failed"] },
         },
         orderBy: { createdAt: "desc" },
         select: {
@@ -117,10 +117,7 @@ export async function recoverStaleApprovedRemoteTask(
         },
       });
       if (!envelope?.expiresAt || envelope.taskRunId !== input.taskRunId) return null;
-      if (
-        envelope.status === "failed"
-        && !providerFailure
-      ) return null;
+      if (envelope.status === "failed" && !providerFailure) return null;
 
       const binding = storedBinding(envelope);
       if (

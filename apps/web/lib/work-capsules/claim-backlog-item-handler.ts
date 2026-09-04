@@ -6,6 +6,7 @@ import { providerToExecutorKind } from "./external-session-capture";
 import { claimGovernedBacklogWorkspace } from "./governed-work-claim";
 import { branchOccupiedResult } from "./mcp-result-errors";
 import { defaultPlatformRepositoryFullName } from "./work-capsule-branch-identity";
+import { BacklogItemAlreadyClaimedError } from "./backlog-workroom-ownership";
 import type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
 
 type ToolContext = { agentId?: string; threadId?: string; taskRunId?: string; routeContext?: string } | undefined;
@@ -48,6 +49,8 @@ export async function claimBacklogItemForWork(args: {
         baseBranch: stringParam(params, "baseBranch") ?? "main",
         executorKind: providerToExecutorKind(provider),
         executorRef: sessionRef,
+        force: params["force"] === true,
+        overrideReason: stringParam(params, "overrideReason"),
       },
       actor: await args.resolveActor(args.userId, args.context),
       workIntent: requestedIntent as WorkIntent | null,
@@ -93,6 +96,14 @@ export async function claimBacklogItemForWork(args: {
       },
     };
   } catch (error) {
+    if (error instanceof BacklogItemAlreadyClaimedError) {
+      return {
+        success: false,
+        error: error.code,
+        message: `${error.message} Reuse that Workroom, wait until it is no longer live, or deliberately co-claim with force=true and overrideReason.`,
+        data: { backlogItemId: error.backlogItemId, liveWorkrooms: error.liveWorkrooms },
+      };
+    }
     const occupied = branchOccupiedResult(error);
     if (occupied) return occupied;
     const detail = error instanceof Error ? error.message : "Unknown failure";

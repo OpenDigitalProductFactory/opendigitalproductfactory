@@ -113,6 +113,24 @@ describe("production-build artifact workflow wiring", () => {
     );
   });
 
+  it("keeps branch-protection required contexts reporting on exact-tree reuse (BI-DAF33DF3)", () => {
+    const mergeJob = ci.match(/merge-readiness:[\s\S]*?(?=\n  [a-z0-9-]+:|\n*$)/)?.[0] || "";
+    assert.match(mergeJob, /name: Merge Readiness/);
+    assert.match(mergeJob, /if: always\(\)/);
+    assert.doesNotMatch(
+      mergeJob,
+      /reusable != 'true'/,
+      "Merge Readiness must still report when exact-tree reuse skips heavy jobs",
+    );
+    const uxJob = ci.match(/ux-route-sweep:\s*\n\s+name: UX Route Budget Sweep[\s\S]*?(?=\n  [a-z0-9-]+:|\n*$)/)?.[0] || "";
+    assert.match(uxJob, /if: always\(\)/);
+    assert.doesNotMatch(
+      uxJob,
+      /reusable != 'true'/,
+      "UX Route Budget Sweep must still report on the reuse path",
+    );
+  });
+
   it("grants only read access to workflow artifacts", () => {
     assert.match(ci, /permissions:[\s\S]*?actions: read[\s\S]*?contents: read/);
     assert.match(ux, /permissions:[\s\S]*?actions: read[\s\S]*?contents: read/);

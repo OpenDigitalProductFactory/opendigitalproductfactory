@@ -25,6 +25,11 @@ const scopeProperties = {
     description:
       "How a gate inside this room routes. Sets the room's action envelope and its posture: outward-review and approval-sign-off require verification before an action leaves, escalation raises urgency, craft-stewardship stays quiet. Omit when the room genuinely has no gate pattern — an unshaped room is reported as unshaped rather than guessed.",
   },
+  workShape: {
+    type: "string",
+    description:
+      "The standing ACTIVITY shape that drives this room, as key@version (for example dependency-advisory-watch@1.0.0). Distinct from workroomShape: that says who must be in the room for one consequential act, this says what wakes the room, which stages it moves through, who answers for each, and what stops it. A room without it never wakes on its own — the drive skips it. Use a key from the declared work-shape registry; a shape reference that is not key@version is refused rather than stored as a claim that can never match.",
+  },
   outcomeAnchor: {
     type: "object",
     additionalProperties: true,
@@ -144,7 +149,7 @@ const definitions: ToolDefinition[] = [
   {
     name: "claim_backlog_item_for_work",
     description:
-      "Claim a BacklogItem for work by binding it to the worktree + branch + session you are starting in. Governed work must declare design, review, plan, or implementation intent; legacy omission is evaluated as implementation and fails closed unless canonical readiness is allowed. Claim, intent event, readiness decision, and exact identity readback share one transaction. A branch bound to a different BI returns branch_occupied and preserves its history. The BI claim remains a soft coordination signal, not a lock.",
+      "Claim a BacklogItem by binding its worktree, branch, and session. Governed intent, readiness, claim, and readback share one transaction. Another live Workroom refuses the claim; deliberate co-delivery requires force plus an audited reason.",
     inputSchema: {
       type: "object",
       properties: {
@@ -156,6 +161,8 @@ const definitions: ToolDefinition[] = [
         provider: { type: "string", description: "Provider string (claude, codex, grok) — mapped to the closest executor kind." },
         sessionRef: { type: "string", description: "Owner/session id, stored as the workroom executorRef." },
         workIntent: { type: "string", enum: ["design", "review", "plan", "implementation"], description: "Lifecycle intent. Required for governed callers; omission is the legacy implementation-safe default." },
+        force: { type: "boolean", description: "Deliberately co-claim despite another live Workroom." },
+        overrideReason: { type: "string", description: "Required audit reason when force overrides live ownership." },
       },
       required: ["itemId", "worktreePath", "branchName", "provider", "sessionRef"],
     },

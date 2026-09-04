@@ -115,6 +115,23 @@ if [ -x "$root/scripts/seed-worktree-mcp.sh" ]; then
         printf '  [warn] MCP seed skipped (root .mcp.json not present yet)\n' >&2
 fi
 
+# Claim a Workroom for the new branch (BI-0B292D84 layer 1).
+#
+# AGENTS.md 12 requires a claim before work on every surface, and the claim
+# guard now REFUSES edits on a branch no live claim covers. Bind-at-birth
+# landed first in the Claude Code WorktreeCreate hook, which left THIS path --
+# the one this runbook documents and the CLI surfaces use -- creating unbound
+# worktrees. Coverage reached 95% by reconciliation and fell back to 82% within
+# a day as new branches came through here. Automating one of two entry points
+# does not automate the obligation.
+#
+# Never fatal: an unbound worktree is still usable, and creation must not fail
+# because the coordination plane is unreachable. The guard is what makes an
+# unbound tree consequential.
+if [ -f "$root/scripts/bind-worktree-cli.mjs" ] && command -v node >/dev/null 2>&1; then
+    node "$root/scripts/bind-worktree-cli.mjs" "$target" "$branch" || true
+fi
+
 cat <<EOF
 
   ✓ Collision-free worktree ready

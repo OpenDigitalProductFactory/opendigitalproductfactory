@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 695,
+  "pageCount": 696,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -461,6 +461,7 @@
         "recurring-obligation-work-shape-and-documentation-robustness",
         "1-the-finding-in-one-picture",
         "2-what-was-verified-not-asserted",
+        "21-self-tasks-now-span-two-modules-runtime-2026-09-02",
         "3-the-generalization-obligations-are-a-family-not-a-feature",
         "31-coverage-of-the-four-watch-types-today",
         "32-vertical-and-archetype-nuance",
@@ -1022,6 +1023,7 @@
         "5b-the-operators",
         "6-what-exists-today-measured-2026-08-25",
         "6b-what-can-be-done-today-measured-by-running-the-day-2026-08-26",
+        "6c-re-run-after-the-operating-day-fixes-measured-2026-09-01",
         "what-the-run-found-that-6-could-not",
         "what-worked-and-is-now-a-regression-surface",
         "two-archetype-specific-traps-for-the-next-run",
@@ -1920,7 +1922,8 @@
       "anchors": [
         "mcp-tool-authorization-runbook",
         "protocol-version-window-mechanics-landed-contract-pending-ratification",
-        "acting-coworker-binding-what-lets-a-token-join-a-work-room-bi-b986a18b",
+        "terminal-readiness-recovery-packets",
+        "acting-coworker-binding-what-lets-a-token-join-a-work-room",
         "diagnosing-requires-an-acting-coworker"
       ]
     },
@@ -2440,9 +2443,11 @@
         "work-shapes-and-the-decision-gate",
         "the-flow",
         "shape-is-four-orthogonal-choices-not-one-taxonomy",
+        "the-activity-shape-is-a-second-separate-claim-runtime-2026-09-02-bi-a967717a",
         "the-coordinator-is-the-workroom-process-overseer",
         "the-gate-which-scope-decides",
         "what-the-gate-does-to-the-turn",
+        "where-the-declared-shapes-live-runtime-2026-09-02",
         "what-is-actually-enforced-today",
         "the-shapes-next-steps-after-the-gate",
         "setting-the-posture-and-the-default-for-rooms",
@@ -4282,6 +4287,21 @@
         "sources"
       ]
     },
+    "docs/founder-kernel/wiki/principles/platform-function-never-depends-on-a-client.md": {
+      "publicHref": "/founder-kernel/wiki/principles/platform-function-never-depends-on-a-client/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "platform-function-never-depends-on-a-client",
+        "the-test",
+        "why",
+        "what-this-does-not-license",
+        "how-to-apply",
+        "decision-dimensions",
+        "related"
+      ]
+    },
     "docs/founder-kernel/wiki/principles/prefer-reversible-containment.md": {
       "publicHref": "/founder-kernel/wiki/principles/prefer-reversible-containment/",
       "portalHref": null,
@@ -5322,16 +5342,16 @@
         "evidence-weight-1-ceiling-2",
         "every-agent",
         "widest-gaps-detail",
-        "data-architect-data-architect-roster-only-44-attainable",
-        "data-steward-data-steward-roster-only-44-attainable",
-        "dispatcher-dispatcher-roster-only-44-attainable",
-        "integration-engineer-mcp-integration-engineer-roster-only-44-attainable",
-        "legal-operations-counsel-legal-operations-counsel-roster-only-44-attainable",
-        "security-engineer-security-engineer-roster-only-44-attainable",
-        "storefront-advisor-storefront-operations-manager-roster-only-44-attainable",
         "agt-100-policy-enforcement-agent-declared-only-48-attainable",
         "agt-101-strategy-alignment-agent-declared-only-48-attainable",
         "agt-102-portfolio-backlog-agent-declared-only-48-attainable",
+        "agt-110-portfolio-rationalization-agent-declared-only-48-attainable",
+        "agt-111-investment-analysis-agent-declared-only-48-attainable",
+        "agt-112-gap-analysis-agent-declared-only-48-attainable",
+        "agt-113-scope-agreement-agent-declared-only-48-attainable",
+        "agt-120-product-backlog-prioritization-agent-declared-only-48-attainable",
+        "agt-121-architecture-definition-agent-declared-only-48-attainable",
+        "agt-122-roadmap-assembly-agent-declared-only-48-attainable",
         "assignto-health"
       ]
     },
@@ -5602,6 +5622,9 @@
         "how-an-installation-advertises-its-own-address",
         "local-network-peers-over-http",
         "same-company-installations",
+        "what-survives-a-reinstall",
+        "backlog-sync-between-your-own-installations",
+        "joining-is-the-only-step",
         "customer-and-reseller-operation",
         "founder-hub-business-management",
         "privacy-and-recovery-behavior"
@@ -9106,6 +9129,7 @@
         "non-goals",
         "4-design",
         "41-runtime-circuit-breaker-and-retry-budget",
+        "41a-local-pool-refusal-is-not-an-upstream-rate-limit-implemented",
         "42-error-classification-and-remediation-propagation",
         "43-failure-observability",
         "44-tool-surface-scoping",
@@ -12267,6 +12291,7 @@
         "overview",
         "operations-and-performance",
         "spatial-operations-for-tables-and-rooms",
+        "the-ward-for-a-shelter",
         "confirming-an-operational-suggestion",
         "which-installation-you-are-on",
         "correcting-the-identity",

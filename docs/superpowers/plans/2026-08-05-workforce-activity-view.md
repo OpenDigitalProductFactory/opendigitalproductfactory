@@ -1,3 +1,6 @@
+---
+status: active
+---
 # Plan — AI workforce "Right Now" activity view
 
 - **Backlog item:** BI-1A68257F
@@ -120,3 +123,37 @@ though they could not block Self-Upgrade and had not heartbeated for weeks.
   surface.
 - Rollback: revert the application commit. There is no migration or runtime-data
   rewrite.
+
+## 2026-09-02 unattributed spend and platform work — BI-B3AB7FC9
+
+Live finding: the local model runner was saturated by `reviewDesignDoc`
+fan-outs (three `routeAndCall`s per review, ~100s each on the local model)
+while this page read **Working now 0 / 37** and named nothing. Two causes:
+
+- The review handlers passed no `agentId` / `threadId` / `buildId` to
+  `routeAndCall`, so every call metered as `TokenUsage.agentId = "unknown"`,
+  `contextKey = "routed-call"` — 30% of the day's tokens. The loader summed
+  tokens only over roster coworkers, so that bucket vanished from the card.
+- The deliberation TaskRun the review bootstraps carried no
+  `currentAgentId`, so the "working now" projection (keyed on the owning
+  coworker) had nowhere to put it.
+
+Changes:
+
+- `build-design-review-handler.ts` / `build-review-handlers.ts` carry the
+  calling coworker, thread and build into every reviewer call and into
+  `runBuildReviewDeliberation`; `orchestrator.ts` stamps
+  `initiatingAgentId` / `currentAgentId` on a bootstrapped TaskRun.
+  `routed-inference.ts` falls back to `build:<id>` for `contextKey` before
+  the bare `routed-call` sentinel.
+- `workforce-activity.ts`: **Tokens today** is now the whole ledger, with
+  `tokensUnattributed` / `costUnattributed` for rows no roster coworker
+  claims (the card flags a non-zero value). Live runs with no roster owner
+  are returned as `platformWork` and rendered as **Platform work in flight**
+  (title, status, source, build link, running-for) instead of an empty
+  "no coworkers working" state.
+
+Not in this change (filed separately): deliberation TaskRuns re-marked
+`working` by the async runner after the orchestrator settles them, and the
+build-resume job retrying the same failing review every 30 minutes with no
+backoff.

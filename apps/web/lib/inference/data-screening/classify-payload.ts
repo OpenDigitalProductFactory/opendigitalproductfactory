@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import type { ContentBlock } from "@/lib/inference/ai-inference";
 import type {
   GovernedPayloadHint,
+  MessageOrigin,
   InferenceDataClass,
   InferencePayloadClassification,
   InferencePayloadClassificationInput,
@@ -13,6 +14,7 @@ import type {
 type TextProbe = {
   path: string;
   text: string;
+  origin?: MessageOrigin;
 };
 
 type ClassRule = {
@@ -21,6 +23,14 @@ type ClassRule = {
   confidence: InferencePayloadMatch["confidence"];
   pathPattern?: RegExp;
   textPattern?: RegExp;
+  /**
+   * Occurrences matching this are removed from the probe text BEFORE
+   * `textPattern` is evaluated, so the rule fires only on evidence that is NOT
+   * exempt. Strip-then-retest rather than skip-if-present on purpose: a payload
+   * carrying both a DCO trailer and a genuine customer address must still
+   * match on the genuine one (BI-EBE25715).
+   */
+  textExemptionPattern?: RegExp;
   /**
    * BI-CD13D818 — this rule is built from vocabulary that is ALSO ordinary
    * English outside its protected domain ("performance", "benefits", "manager",
@@ -42,10 +52,25 @@ type ClassRule = {
 // Split by precision (BI-CD13D818). The first set names employment data and
 // nothing else; the second is real HR vocabulary that is ALSO everyday English
 // on an AI-operations, capacity, or product surface, so it needs corroboration.
+// Addresses that identify a COMMIT AUTHOR or the acting account, not a customer.
+// Matched with the surrounding trailer/identifier so a bare address elsewhere in
+// the same payload is still classified normally (BI-EBE25715).
+const GIT_AUTHORSHIP_EMAIL_PATTERN =
+  /(?:signed-off-by|co-authored-by|author|committer|reported-by|reviewed-by|acked-by|createdby(?:id)?|actorid)\s*:?\s*[^\n<]*<?[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}>?|<(?:noreply|no-reply|do-not-reply)@[A-Z0-9.-]+\.[A-Z]{2,}>/i;
+
 const EMPLOYEE_RECORD_VALUE_PATTERN =
-  /\b(?:salary|performance review|disciplinary|manager-only|payroll)\b/i;
+  /\b(?:salary|performance review|disciplinary|manager-only|payroll record|employee record|personnel file)\b/i;
+// BARE `payroll` moved here from the precise set (BI-67CAF494). It names a
+// DOMAIN, not a record: "the payroll module", "design payroll tax acquisition",
+// "help me with payroll" are all requests ABOUT payroll containing no payroll
+// data. Escalating on it alone meant a coworker could not be asked for help with
+// payroll at all — the request was clamped to local-only before anyone read it.
+//
+// The record-SHAPED phrases stay precise and still escalate alone: "payroll
+// record", "employee record", "personnel file" name the thing itself, as do a
+// salary figure or an SSN. The line is domain versus record, not topic.
 const EMPLOYEE_RECORD_AMBIGUOUS_VALUE_PATTERN =
-  /\b(?:compensation|benefits?)\b/i;
+  /\b(?:compensation|benefits?|payroll)\b/i;
 
 const SOURCE_CODE_VALUE_PATTERN =
   /(?:\b(?:const|let|var)\s+[A-Za-z_$][\w$]*\s*(?:[:=;,])|\bfunction\s+[A-Za-z_$][\w$]*\s*\(|\bclass\s+[A-Za-z_$][\w$]*(?:\s+extends\s+[A-Za-z_$][\w$]*)?\s*\{|\bimport\s+[\w*{},\s]+\s+from\s+["']|\bexport\s+(?:default\s+)?(?:const|let|var|function|class)\b|=>|```(?:ts|tsx|js|jsx|py|sql|sh|ps1)\b)/;
@@ -70,6 +95,20 @@ const CLASS_RULES: readonly ClassRule[] = [
     confidence: "deterministic",
     textPattern:
       /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b|\b(?:\+?1[-.\s]?)?\(?[2-9]\d{2}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b/i,
+    // BI-EBE25715: an address carried as AUTHORSHIP METADATA is not a customer
+    // contact record. Build Studio payloads routinely embed commit history —
+    // `Signed-off-by:` (the DCO the repo requires on every commit),
+    // `Co-Authored-By:`, `Author:` — plus the operator's own account id. Those
+    // matched `contact-detail` deterministically, which is precise evidence, so
+    // it escalated the turn to `confidential` on its own and the vertical
+    // customer-records pack denied external routing. The observed effect was
+    // that ordinary source-code turns were pinned to `local_only` and then died
+    // whenever local-CI held the host reservation.
+    //
+    // Scope is deliberately narrow: the address must sit in a recognised
+    // trailer/identifier position. A bare address anywhere else still matches,
+    // so a real customer email pasted into a message is unaffected.
+    textExemptionPattern: GIT_AUTHORSHIP_EMAIL_PATTERN,
   },
   {
     dataClass: "customer-records",
@@ -116,8 +155,18 @@ const CLASS_RULES: readonly ClassRule[] = [
     dataClass: "payments-finance",
     reason: "payment-or-finance-text",
     confidence: "inferred",
+    // `payroll` is deliberately absent from this list. It is employment
+    // vocabulary and belongs to the employee-records rules; carrying it here too
+    // made ONE word produce two distinct restricted reasons, which is exactly the
+    // corroboration bar — so the guard corroborated itself (BI-67CAF494).
+    //
+    // `invoice` and `bank account` are left precise on purpose. They read as
+    // domain words too, but no evidence shows them causing a false clamp, and
+    // demoting them stops semantic memory producing a mask obligation for
+    // confidential content — which silently DROPS the memory rather than storing
+    // it masked. Not changed without evidence that it needs changing.
     textPattern:
-      /\b(?:routing number|account number|credit card|invoice|bank account|payroll|tax id|ein|ssn)\b/i,
+      /\b(?:routing number|account number|credit card|invoice|bank account|tax id|ein|ssn)\b/i,
   },
   {
     dataClass: "health-phi",
@@ -234,6 +283,19 @@ const CONFIDENTIAL_CLASSES = new Set<InferenceDataClass>([
   "source-code",
 ]);
 
+/**
+ * Remove every occurrence of `exemption` from `text` so a rule's own pattern is
+ * evaluated against the remainder only. Returns the text unchanged when the
+ * exemption never matches, so the common path costs one failed regex test.
+ */
+function stripExemptSpans(text: string, exemption: RegExp): string {
+  const global = exemption.global
+    ? exemption
+    : new RegExp(exemption.source, `${exemption.flags}g`);
+  global.lastIndex = 0;
+  return text.replace(global, " ");
+}
+
 export function classifyInferencePayload(
   input: InferencePayloadClassificationInput,
 ): InferencePayloadClassification {
@@ -242,15 +304,19 @@ export function classifyInferencePayload(
 
   for (const probe of probes) {
     for (const rule of CLASS_RULES) {
+      const probeText = rule.textExemptionPattern
+        ? stripExemptSpans(probe.text, rule.textExemptionPattern)
+        : probe.text;
       if (
         rule.pathPattern?.test(normalizeProbePath(probe.path)) ||
-        rule.textPattern?.test(probe.text)
+        rule.textPattern?.test(probeText)
       ) {
         matches.push({
           dataClass: rule.dataClass,
           path: probe.path,
           reason: rule.reason,
           confidence: rule.confidence,
+          ...(probe.origin ? { origin: probe.origin } : {}),
         });
       }
     }
@@ -330,15 +396,19 @@ function collectTextProbes(input: InferencePayloadClassificationInput): TextProb
   }
 
   input.messages.forEach((message, index) => {
-    probes.push({ path: `messages[${index}].role`, text: message.role });
-    collectMessageContent(message.content, `messages[${index}].content`, probes);
+    // Labels only, and only for message-derived probes: the prompt and tool
+    // declarations have their own provenance story (BI-40EF7C44).
+    const origin = input.messageOrigins?.[index] ?? "turn";
+    probes.push({ path: `messages[${index}].role`, text: message.role, origin });
+    collectMessageContent(message.content, `messages[${index}].content`, probes, origin);
     if (message.toolCallId) {
-      probes.push({ path: `messages[${index}].toolCallId`, text: message.toolCallId });
+      probes.push({ path: `messages[${index}].toolCallId`, text: message.toolCallId, origin });
     }
     message.toolCalls?.forEach((toolCall, toolIndex) => {
       probes.push({
         path: `messages[${index}].toolCalls[${toolIndex}].name`,
         text: toolCall.name,
+        origin,
       });
       collectUnknown(
         toolCall.arguments,
@@ -364,9 +434,10 @@ function collectMessageContent(
   content: string | ContentBlock[],
   path: string,
   probes: TextProbe[],
+  origin?: MessageOrigin,
 ): void {
   if (typeof content === "string") {
-    probes.push({ path, text: content });
+    probes.push({ path, text: content, origin });
     return;
   }
 
@@ -552,6 +623,30 @@ const INSTRUCTION_PATH_PREFIX = "systemPrompt.instruction[";
 
 function isInstructionProvenance(match: InferencePayloadMatch): boolean {
   return match.path.startsWith(INSTRUCTION_PATH_PREFIX);
+}
+
+/**
+ * True when the DATA evidence is nothing but corroboration-gated vocabulary —
+ * a domain was named and no value was found.
+ *
+ * The distinction matters at the routing seam. A mask obligation exists to
+ * redact something before it leaves the boundary; when the only evidence is the
+ * word "payroll", there is no span to redact, so masking is a no-op and
+ * clamping the turn to local-only protects nothing while making the coworker
+ * unreachable for its own subject (BI-67CAF494).
+ *
+ * Deliberately strict: ONE precise match, or any declared governed hint, and
+ * this is false. It answers "is there anything here to mask?", not "is this
+ * probably fine?".
+ */
+export function isVocabularyOnlyEvidence(
+  matches: readonly InferencePayloadMatch[],
+  governedData?: readonly GovernedPayloadHint[],
+): boolean {
+  if (governedData && governedData.length > 0) return false;
+  const dataMatches = matches.filter((match) => !isInstructionProvenance(match));
+  if (dataMatches.length === 0) return false;
+  return dataMatches.every((match) => AMBIGUOUS_REASONS.has(match.reason));
 }
 
 /**
