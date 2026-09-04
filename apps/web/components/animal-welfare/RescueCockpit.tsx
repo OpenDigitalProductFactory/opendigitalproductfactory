@@ -26,6 +26,39 @@ const NAV: ReadonlyArray<{ key: RescueArea | "capacity"; label: string; href: st
   { key: "stewardship", label: "Stewardship", href: "/workspace/rescue/stewardship" },
 ];
 
+const QUIET_NEXT_ACTION: Record<RescueArea, { label: string; href: string; hint: string }> = {
+  overview: {
+    label: "Review intake",
+    href: "/workspace/rescue/intake",
+    hint: "Start with animals that still need an admission decision.",
+  },
+  animals: {
+    label: "Open housing board",
+    href: "/workspace/ward",
+    hint: "Check where animals are housed and what space remains.",
+  },
+  intake: {
+    label: "Open housing board",
+    href: "/workspace/ward",
+    hint: "Confirm safe space before the next admission.",
+  },
+  care: {
+    label: "Review missed care",
+    href: "/workspace/rescue/care?filter=missed",
+    hint: "Start with care that is already past due.",
+  },
+  adoptions: {
+    label: "Review animals without interest",
+    href: "/workspace/rescue/adoptions?filter=no-interest",
+    hint: "Find placement-ready animals with no active application.",
+  },
+  stewardship: {
+    label: "Open finance",
+    href: "/finance",
+    hint: "Review the source records behind funds and animal costs.",
+  },
+};
+
 function sourceLabel(source: SourceState<unknown>) {
   if (source.state === "unavailable") return "Unavailable";
   if (source.state === "empty") return "No records yet";
@@ -240,12 +273,15 @@ export function RescueCockpit({
 }) {
   const unavailable = Object.entries(data.sources).filter(([, source]) => source.state === "unavailable");
   const title = area === "overview" ? "Rescue operations" : NAV.find((item) => item.key === area)?.label ?? "Rescue operations";
+  const nextAction = data.attention[0]
+    ? { label: `${data.attention[0].label}: ${data.attention[0].count}`, href: data.attention[0].href }
+    : QUIET_NEXT_ACTION[area];
   return (
     <CockpitShell
       title={title}
       lead="Bring animals in safely, protect their daily welfare, and place them into lasting homes."
       attention={data.attention.length > 0 ? `${data.attention.reduce((sum, item) => sum + item.count, 0)} items need attention.` : undefined}
-      nextAction={data.attention[0] ? { label: `${data.attention[0].label}: ${data.attention[0].count}`, href: data.attention[0].href } : undefined}
+      nextAction={nextAction}
       technicalDetails={unavailable.length > 0 ? (
         <ul className="space-y-2 text-sm text-[var(--dpf-muted)]">
           {unavailable.map(([key, source]) => <li key={key}><span className="font-medium text-[var(--dpf-text)]">{key}</span>: {source.reason}</li>)}

@@ -5,6 +5,35 @@ import { sourceAvailable, sourceEmpty, sourceUnavailable } from "@/lib/animal-we
 import { RescueCockpit } from "./RescueCockpit";
 
 describe("RescueCockpit", () => {
+  it.each([
+    ["overview", "/workspace/rescue/intake"],
+    ["animals", "/workspace/ward"],
+    ["intake", "/workspace/ward"],
+    ["care", "/workspace/rescue/care?filter=missed"],
+    ["adoptions", "/workspace/rescue/adoptions?filter=no-interest"],
+    ["stewardship", "/finance"],
+  ] as const)("keeps a truthful owner-first next action on the %s route when no exception is active", (area, href) => {
+    const asOf = "2026-09-04T12:00:00.000Z";
+    const html = renderToStaticMarkup(<RescueCockpit
+      area={area}
+      data={{
+        attention: [],
+        presentation: { asOf, currency: "USD", locale: "en-US", timeZone: "America/Chicago" },
+        queue: null,
+        sources: {
+          animals: sourceEmpty({ inCare: 0, intakeReview: 0, legalHold: 0, placementReady: 0 }, asOf),
+          capacity: sourceEmpty({ free: 0, blocked: 0 }, asOf),
+          care: sourceEmpty({ dueToday: 0, missed: 0, exceptions: 0 }, asOf),
+          adoptions: sourceEmpty({ activeApplications: 0, readyWithoutInterest: 0 }, asOf),
+          stewardship: sourceEmpty({ restrictedFunds: 0, postedAnimalCost: 0 }, asOf),
+        },
+      }}
+    />);
+
+    expect(html).toContain("data-owner-first-next-action");
+    expect(html).toContain(`href="${href.replaceAll("&", "&amp;")}"`);
+  });
+
   it("names the three rescue value streams and never hides unavailable sources as zero", () => {
     const html = renderToStaticMarkup(<RescueCockpit data={{
       attention: [],
