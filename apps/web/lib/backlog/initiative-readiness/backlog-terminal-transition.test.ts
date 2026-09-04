@@ -25,11 +25,11 @@ function projected(verdict: "allowed" | "input-required") {
   return { governed: true, baselineId: "BASE-1", artifactHints: { hasSpec: true, hasPlan: true }, decision };
 }
 
-function fakeDb(casCount = 1) {
+function fakeDb(casCount = 1, workType = "feature") {
   const creates: unknown[] = [];
   const updateMany = vi.fn(async () => ({ count: casCount }));
   const item = {
-    id: "row-1", itemId: "BI-1", status: "in-progress", workType: "feature",
+    id: "row-1", itemId: "BI-1", status: "in-progress", workType,
     type: "portfolio", source: "user-request", scopeKind: "platform",
     archetypeCategories: [], archetypeIds: [], organizationId: "org-1", epicId: null,
     claimedAt: new Date("2026-08-22T07:00:00.000Z"), createdAt: new Date("2026-08-22T06:00:00.000Z"),
@@ -73,6 +73,45 @@ const authority = {
 };
 
 describe("completeBacklogItemTransition", () => {
+  it("refuses a refactor completion with missing governed evidence instead of passing as doc-only", async () => {
+    const fake = fakeDb(1, "refactor");
+    const result = await completeBacklogItemTransition({
+      db: fake.db,
+      itemId: "BI-1",
+      expectedStatus: "in-progress",
+      resolution: "Refactored the governed boundary.",
+      completionEvidence: {},
+      actor,
+      authority,
+      dependencies: {
+        resolveCompletionEvidence: async () => ({
+          kind: "evaluated",
+          item: { id: "row-1", itemId: "BI-1", status: "in-progress", workType: "refactor" },
+          verdict: {
+            allowed: true,
+            noOp: false,
+            normalizedManifest: {
+              workClass: "implementation",
+              evidenceActivityIds: ["E-1"],
+              useActiveBuildEvidence: false,
+            },
+            blockers: [],
+            nextAction: null,
+          },
+        }),
+        reconcileObjectives: () => ({
+          state: "missing",
+          baselineId: null,
+          evidenceRefs: [],
+          requiredStatementIds: [],
+        }),
+      },
+    });
+
+    expect(result).toMatchObject({ ok: false, decision: { profile: "feature" } });
+    expect(fake.updateMany).not.toHaveBeenCalled();
+  });
+
   it("does not mutate when server-derived objective reconciliation is incomplete", async () => {
     const fake = fakeDb();
     const result = await completeBacklogItemTransition({

@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 656,
+  "routeCount": 658,
   "routes": [
     {
       "routePath": "/",
@@ -4046,6 +4046,30 @@
         "capsuleId"
       ],
       "file": "apps/web/app/api/work-capsules/[capsuleId]/activity-stream/route.ts"
+    },
+    {
+      "routePath": "/api/work-capsules/delivery-page",
+      "kind": "route",
+      "segments": [
+        "api",
+        "work-capsules",
+        "delivery-page"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/work-capsules/delivery-page/route.ts",
+      "exposure": "authenticated"
+    },
+    {
+      "routePath": "/api/work-capsules/delivery-stream",
+      "kind": "route",
+      "segments": [
+        "api",
+        "work-capsules",
+        "delivery-stream"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/work-capsules/delivery-stream/route.ts",
+      "exposure": "authenticated"
     },
     {
       "routePath": "/auth/callback",

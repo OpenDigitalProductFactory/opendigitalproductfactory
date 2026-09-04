@@ -1,0 +1,43 @@
+{
+  "version": "1",
+  "decidedOption": "workroom-event-hub",
+  "scope": {
+    "files": [
+      "apps/web/components/build/work-control/DeliveryTaskHub.tsx",
+      "apps/web/components/work-capsules/DeliveryTaskCard.tsx",
+      "apps/web/app/(shell)/build/work/[capsuleId]/page.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "sweep-measurement",
+    "baselineComparison": "reviewed-refreeze",
+    "measurementScope": "Authenticated /build/work arrival state from the repository UX sweep: the existing route shell plus one seeded active delivery row, with collapsed detail excluded by measurement",
+    "measured": {
+      "/build/work": {
+        "defaultVisibleWords": 237,
+        "leadBandWords": 14,
+        "primaryActions": 1,
+        "visibleFields": 3,
+        "maxChoicesPerControl": 5,
+        "subLegibleControls": 0,
+        "buriedPrimaryAction": 0,
+        "axeViolations": 2
+      }
+    },
+    "verification": {
+      "responsive": "single-column cards with lg two-column enhancement; no table or horizontal overflow dependency",
+      "themes": "all foreground, surface, border, accent, warning, success, and focus states use DPF theme tokens",
+      "keyboard": "native details disclosure and links/buttons retain keyboard semantics, visible focus rings, and 44px minimum targets",
+      "states": [
+        "empty",
+        "connecting",
+        "reconnecting-with-confirmed-rows",
+        "partial",
+        "error-with-confirmed-rows",
+        "older-page-loading",
+        "semantic-review-and-result-destinations"
+      ],
+      "test": "apps/web/components/build/work-control/DeliveryTaskHub.test.tsx; apps/web/app/(shell)/build/work/[capsuleId]/page.test.tsx"
+    }
+  }
+}

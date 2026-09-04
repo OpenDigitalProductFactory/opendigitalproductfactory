@@ -83,6 +83,14 @@ entry with no migration, and is read back by `readWorkShapeClaim` / `resolveWork
 unarchived rooms **that carry a work-shape claim**, ordered, and bounded by
 `STANDING_ROOM_SCAN_LIMIT`.
 
+That same standing drive performs a bounded, best-effort notification reconciliation for
+Workroom-owned facts such as approval, review, lease expiry, and terminal state. Durable async
+inference transitions do not wait for that cadence: the event-only Task Hub consumer re-reads the
+canonical `(operationId, sequence)` transition, resolves its server-owned Workroom binding, writes
+a deterministic activity to the existing Workroom ledger, and then wakes the list stream. The
+event payload is never accepted as status, Workroom, recipient, or notification authority, and no
+parallel task ledger or scheduler is introduced.
+
 The filter is part of the query rather than a pass over the results, and the distinction is
 load-bearing ⟦runtime: corrected 2026-09-02⟧. The first implementation capped
 the row read at 200 and filtered for the claim afterwards in JavaScript, so the cap bounded

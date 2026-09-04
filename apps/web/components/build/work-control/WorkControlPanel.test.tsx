@@ -3,35 +3,45 @@ import { describe, expect, it, vi } from "vitest";
 
 import { WorkControlPanel } from "./WorkControlPanel";
 import type { PortalContextEnvelope } from "@/lib/portal-context";
+import type { DeliveryTaskHubPage } from "@/lib/work-capsules/delivery-task-hub-store";
+
+const emptyDeliveryHub: DeliveryTaskHubPage = {
+  rows: [],
+  nextCursor: null,
+  observedAt: "2026-09-04T12:00:00.000Z",
+};
 
 describe("WorkControlPanel", () => {
   it("renders active capsule rows", () => {
     const html = renderToStaticMarkup(
       <WorkControlPanel
-        capsules={[{
+        deliveryHub={{ ...emptyDeliveryHub, rows: [{
           capsuleId: "WC-1",
           title: "Adopt work",
+          objective: "Deliver the governed outcome",
+          group: "working",
           status: "working",
+          statusIntent: "info",
+          ownerLabel: "codex-desktop",
+          stageLabel: "Working",
           source: "external-adoption",
-          executorKind: "codex-desktop",
+          backlogItemId: "BI-1",
           branch: "feat/adopt",
-          scope: {
-            decisionScope: "wwwd",
-            decisionScopeLabel: "WWWD",
-            portfolioRole: "productsAndServicesSold",
-            portfolioRoleLabel: "Goods and Services for Sale",
-            servedPersona: "customer",
-            activityKind: "delivery",
-            activityKindLabel: "Delivery",
-            outcomeAnchorLabel: "Onboard Contoso",
-            servesPortfolioRoleLabels: ["Goods and Services for Sale"],
-            dependsOnPortfolioRoleLabels: ["Foundational"],
-          },
-          worktreePath: "D:/DPF-adopt",
-          pullRequestUrl: null,
-          health: "ok",
-          updatedAt: "2026-05-14T00:00:00.000Z",
-        }]}
+          taskRunId: null,
+          observedAt: "2026-09-04T12:00:00.000Z",
+          freshness: "fresh",
+          freshnessReason: null,
+          latestTransition: { id: "a1", kind: "status-changed", summary: "Implementation started", recordedAt: "2026-09-04T12:00:00.000Z" },
+          progress: null,
+          nextAction: null,
+          verifiedResult: null,
+          inspectHref: "/build/work/WC-1",
+          resumeHref: null,
+          pullRequestHref: null,
+          primaryAction: { label: "Inspect", href: "/build/work/WC-1" },
+          secondaryActions: [{ label: "Handoff", href: "/build/work/WC-1#handoff" }],
+          asyncOperation: { coreHandleAvailable: false },
+        }] }}
         adoptable={[]}
         livenessSummary={{ scanned: 2, live: 1, history: 1, reapable: 1, byLiveness: { live: 1, "lease-expired": 1 }, heavyLane: { executing: 0, nextReady: 0, dormant: 0 }, progressSlo: { oldestWaitMs: null, maxNoTransitionMs: null } }}
         createAction={vi.fn()}
@@ -39,11 +49,9 @@ describe("WorkControlPanel", () => {
     );
 
     expect(html).toContain("Development Workrooms");
+    expect(html).toContain("Delivery task hub");
     expect(html).toContain("Adopt work");
-    expect(html).toContain("WWWD");
-    expect(html).toContain("Goods and Services for Sale");
-    expect(html).toContain("customer");
-    expect(html).toContain("Onboard Contoso");
+    expect(html).toContain("Implementation started");
     expect(html).toContain("feat/adopt");
     expect(html).toContain("Live Workrooms");
     expect(html).toContain("1 inactive");
@@ -53,16 +61,16 @@ describe("WorkControlPanel", () => {
 
   it("renders empty state", () => {
     const html = renderToStaticMarkup(
-      <WorkControlPanel capsules={[]} adoptable={[]} createAction={vi.fn()} canCreateGovernedWork />,
+      <WorkControlPanel deliveryHub={emptyDeliveryHub} adoptable={[]} createAction={vi.fn()} canCreateGovernedWork />,
     );
 
-    expect(html).toContain("No live Workrooms.");
+    expect(html).toContain("No delivery Workrooms in this 30-day window");
     expect(html).toContain("Plan governed work");
   });
 
   it("shows the governed-work create form to manage_backlog holders", () => {
     const html = renderToStaticMarkup(
-      <WorkControlPanel capsules={[]} adoptable={[]} createAction={vi.fn()} canCreateGovernedWork />,
+      <WorkControlPanel deliveryHub={emptyDeliveryHub} adoptable={[]} createAction={vi.fn()} canCreateGovernedWork />,
     );
 
     // Door 2's create form is present, and the "reserved role" fallback is not.
@@ -74,7 +82,7 @@ describe("WorkControlPanel", () => {
     // BI-E167A8A6: default (no capability) hides door 2's create form so a
     // non-technical operator is not offered a second intake they cannot use.
     const html = renderToStaticMarkup(
-      <WorkControlPanel capsules={[]} adoptable={[]} createAction={vi.fn()} />,
+      <WorkControlPanel deliveryHub={emptyDeliveryHub} adoptable={[]} createAction={vi.fn()} />,
     );
 
     // No governed-work form heading/button ("Plan governed work"). The intro's
@@ -86,7 +94,7 @@ describe("WorkControlPanel", () => {
 
   it("states the relationship to the plain-English Start a new outcome door", () => {
     const html = renderToStaticMarkup(
-      <WorkControlPanel capsules={[]} adoptable={[]} createAction={vi.fn()} canCreateGovernedWork />,
+      <WorkControlPanel deliveryHub={emptyDeliveryHub} adoptable={[]} createAction={vi.fn()} canCreateGovernedWork />,
     );
 
     expect(html).toContain("Start a new outcome");
@@ -96,7 +104,7 @@ describe("WorkControlPanel", () => {
   it("renders the portal context strip when a server envelope is provided", () => {
     const html = renderToStaticMarkup(
       <WorkControlPanel
-        capsules={[]}
+        deliveryHub={emptyDeliveryHub}
         adoptable={[]}
         createAction={vi.fn()}
         portalContext={makePortalContextEnvelope()}
@@ -114,7 +122,7 @@ describe("WorkControlPanel", () => {
   it("renders adoptable worktree rows surfaced by the scanner", () => {
     const html = renderToStaticMarkup(
       <WorkControlPanel
-        capsules={[]}
+        deliveryHub={emptyDeliveryHub}
         adoptable={[{
           path: "D:/DPF-orphan",
           branch: "fix/orphan",

@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 
+import { BACKLOG_WORK_TYPE_VALUES, type BacklogWorkType } from "@/lib/explore/backlog";
+
 import {
   evaluateInitiativeReadiness,
   deriveAuthoritativeReadinessProfile,
   selectStrongestReadinessProfile,
   type InitiativeReadinessFacts,
   type ReadinessCode,
+  type ReadinessProfile,
 } from "./initiative-readiness";
 
 const subject = { kind: "backlog-item" as const, id: "BI-FEATURE" };
@@ -300,6 +303,32 @@ describe("evaluateInitiativeReadiness", () => {
 });
 
 describe("selectStrongestReadinessProfile", () => {
+  const expectedWorkTypeProfiles = {
+    bug: "fix",
+    chore: "fix",
+    refactor: "feature",
+    feature: "feature",
+    tool: "feature",
+    skill: "feature",
+    doc: "doc-only",
+  } satisfies Record<BacklogWorkType, ReadinessProfile>;
+
+  it.each(BACKLOG_WORK_TYPE_VALUES)("maps closed work type %s to its authoritative profile", (workType) => {
+    expect(deriveAuthoritativeReadinessProfile({ workType })).toBe(expectedWorkTypeProfiles[workType]);
+  });
+
+  it.each(["unknown-work", "", " refactor ", "Refactor"])(
+    "fails closed when work type %j is unknown or malformed even if permissive aliases are present",
+    (workType) => {
+      expect(deriveAuthoritativeReadinessProfile({
+        workType,
+        type: "feature",
+        source: "build",
+        activeBuildKind: "feature",
+      })).toBeNull();
+    },
+  );
+
   it("is monotonic and cannot downgrade structured archetype evidence", () => {
     expect(selectStrongestReadinessProfile(["fix", "feature", "archetype"])).toBe("archetype");
     expect(selectStrongestReadinessProfile(["archetype", "doc-only"])).toBe("archetype");
@@ -342,19 +371,4 @@ describe("selectStrongestReadinessProfile", () => {
     expect(deriveAuthoritativeReadinessProfile({ type: "feature", scopeKind })).toBe(expected);
   });
 
-  it.each([
-    ["bug", "fix"],
-    ["feature", "feature"],
-    ["chore", "fix"],
-    ["doc", "doc-only"],
-    ["tool", "feature"],
-    ["skill", "feature"],
-    ["refactor", "feature"],
-  ] as const)("maps closed backlog workType %s to readiness profile %s", (workType, expected) => {
-    expect(deriveAuthoritativeReadinessProfile({ workType })).toBe(expected);
-  });
-
-  it("keeps unknown work types unclassified", () => {
-    expect(deriveAuthoritativeReadinessProfile({ workType: "unknown-work" })).toBeNull();
-  });
 });
