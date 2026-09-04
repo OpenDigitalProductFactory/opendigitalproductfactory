@@ -46,6 +46,8 @@ Extend the existing `AsyncInferenceOp`, `TaskRun`, Inngest, and agent event bus.
 6. Define one shared closed `AsyncInferenceOperationStatus` enum: `pending | start_indeterminate | running | completed | failed | cancelled | expired`. `pending`, `start_indeterminate`, and `running` are non-terminal; the remaining values are terminal. Persist a monotonic transition/outbox record in the same transaction as each durable state change, then emit it with the canonical enum value. Storage adapters, webhook/event parsers, and read models reject unknown values rather than widening them to `string`. Consumers use `(operationId, sequence)` plus a cursor-bounded reconciliation query; notification transport is advisory.
 7. Enforce `expiresAt` and cancellation before each provider call and transition exactly once to a terminal state.
 
+`start_indeterminate` is a reconciliation hold, not a retry state. It can move only to `running`, `failed`, `cancelled`, or `expired` after exact provider reconciliation and never authorizes another provider-start POST. Existing persisted values are migrated with an expand/backfill/validate/contract sequence; an unknown legacy value aborts the contract step and is ledgered rather than coerced.
+
 ## Research & Benchmarking
 
 - [Temporal durable execution](https://docs.temporal.io/) provides crash-proof workflow history, signals, timers, and activity retries. DPF adopts durable checkpoints and typed signals, but keeps Postgres `AsyncInferenceOp` and Inngest rather than adding a second workflow service.
@@ -57,4 +59,5 @@ Extend the existing `AsyncInferenceOp`, `TaskRun`, Inngest, and agent event bus.
 - **Single source of truth:** `AsyncInferenceOp` owns operation lifecycle; `TaskRun` remains the agent/task projection; the event bus is delivery, not storage.
 - **Scale ceiling:** cursor-bounded reads and per-operation CAS are O(1) per transition; the first slice supports thousands of concurrent operations on existing indexes. A future sharded event/read-model epic is required before millions of operations.
 - **Failure posture:** unknown provider status, missing checkpoints, conflicting digests, lease loss, or an ambiguous provider-start timeout without provider idempotency fail closed to resumable/reconciliation states; no inferred completion and no blind repeat POST.
+- **Typed projection:** database/generated types, transition helpers, event payloads, cursor reads, and operator UI import the same lifecycle contract. The UI renders an explicit unknown/error state if validation fails; it never maps an unknown value to `pending`.
 - **Rollback:** disable the async worker trigger and continue serving persisted terminal results; schema changes are additive and forward-compatible.

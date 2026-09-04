@@ -43,6 +43,7 @@ Deliverable 0 is a safe enabling repair owned by BI-2B619BC9 and may ship first,
 ### Phase 3 — read/reconciliation surface
 
 - Add cursor-bounded list/result retrieval and event dedupe tests.
+- Return the shared lifecycle enum from the authorized read model and require the operator UI to render each canonical state explicitly; invalid persisted or event values surface a fail-closed error and are never displayed as `pending`.
 - Verify sync mode regression and exact provenance fields.
 - Document operator rollback and migration behavior.
 
