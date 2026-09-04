@@ -8,7 +8,7 @@ status: review-ready
 
 **Epic:** EP-413F2602
 
-**Design:** `docs/superpowers/specs/2026-08-30-security-authentication-hardening-successors-design.md` §8
+**Design:** `docs/superpowers/specs/2026-09-04-customer-social-principal-gated-sign-in-design.md`
 
 **Workroom:** WC-1BB2A6D1 · `feat/principal-gated-customer-auth` · `/Users/markbodman/dpf-worktrees/principal-gated-customer-auth-recovery`
 
@@ -78,6 +78,12 @@ Run focused authentication and identity tests, migration smoke against populated
 - **Dependencies:** existing Principal/PrincipalAlias, customer/partner linker, Auth.js providers, and populated-data migration substrate.
 - **Rationale:** listing, lifecycle, data repair, and session issuance are one authorization invariant; none is independently safe to ship.
 - **Governed receipt:** pending independent spec approval and immutable plan commit; record through `record_plan_backlog_coverage` before implementation.
+
+### Four-way traceability
+
+| Deliverable | Requirement refs | Contract refs | Flow refs | Verification refs |
+|---|---|---|---|---|
+| `customer-social-principal-gate` | OBJ-PRI-001, OBJ-PRI-002, OBJ-PRI-003 | Principal-gated customer and social sign-in | Phase 1 — red authority-contract tests; Phase 2 — one population-aware Principal authentication seam; Phase 3 — transactional lifecycle convergence and populated-data repair; Phase 4 — gate every customer and social session issuance path | AC-PRI-001, AC-PRI-002, AC-PRI-003, AC-PRI-004 |
 
 ## Risks and rollback
 

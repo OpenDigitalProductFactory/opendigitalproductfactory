@@ -156,44 +156,9 @@ The seven slices strengthen this architecture at distinct seams. None introduces
 
 ## 8. BI-E22C3D75 — Principal-gated customer and social sign-in
 
-**Section status:** reconciled for independent design review on 2026-09-04.
-
-### Objectives
-
-**OBJ-PRI-001:** Resolve or materialize the canonical Principal and alias before customer password or social session issuance.
-
-**OBJ-PRI-002:** Apply active, conflict, tenant/account, and authentication-authority checks consistently across password, social, linking, onboarding, and deactivation flows.
-
-**OBJ-PRI-003:** Preserve customer/contact domain semantics while eliminating authorization-before-identity asymmetry.
-
-### Design
-
-- Introduce one sign-in authorization seam that accepts a verified credential/assertion and returns an authorized Principal-rooted session subject or a stable refusal.
-- CustomerContact remains the customer-domain credential/profile holder and account-scoping record; `PrincipalAlias` binds it to authority.
-- Social identities are keyed by the provider plus its immutable subject identifier. Email is an asserted attribute used only by the guarded linking flow; it is never the canonical external identity key.
-- Auto-linking requires a provider assertion that explicitly marks the email verified and the existing guarded linking rules. Ambiguous or conflicting aliases refuse rather than choose.
-- Onboarding creates the contact, Principal, and alias transactionally before session issuance.
-- Deactivation makes the credential holder and Principal authorization outcome consistent in the same transaction/invariant.
-- Effective auth loads by canonical principal identity and derives customer/account scope; it does not materialize another identity cache.
-- The shared seam is population-aware but credential-neutral: password comparison and provider assertion validation remain at their existing boundaries, then the seam resolves or materializes exactly one Principal, checks active/contact/account/conflict state, and returns the canonical Principal id plus the existing customer scope projection.
-- Population repair is bounded and idempotent. The migration converges contacts set-wise, while the repeatable runtime invariant query pages or aggregates instead of loading an unbounded contact inventory.
-
-### BI-specific research and architecture fit
-
-- [OpenID Connect Core 1.0](https://openid.net/specs/openid-connect-core-1_0.html#ClaimStability) makes the issuer plus `sub` the stable end-user identifier and explicitly warns that claims such as email must not be used as unique identifiers. DPF adopts provider plus provider-account id as the social alias key and rejects email-only identity selection.
-- [Keycloak identity brokering](https://www.keycloak.org/docs/latest/server_admin/#_identity_broker) links an external provider identity to a local realm identity before issuing the application-facing token and supports explicit first-login/linking flows. DPF adopts that local-identity-before-session ordering, while rejecting Keycloak as a second identity/authorization system because Principal already owns that role.
-- [OWASP Session Management](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html) requires session management to bind authentication to access control. DPF applies the binding at the Auth.js issuance boundary: a verified credential or assertion is insufficient until the Principal authority decision passes.
-
-The existing `Principal`, `PrincipalAlias`, `CustomerContact`, `SocialIdentity`, and effective-auth context remain the normalized homes for authority, aliases, customer scope, provider assertions, and request authorization respectively. No schema model or session identity cache is added. The design scales with indexed point lookups per sign-in; the only whole-population operation is the one-time, set-based migration plus a bounded invariant check. Higher-volume identity reconciliation remains owned by EP-24741BBF rather than being duplicated here.
-
-### Acceptance contract
-
-| Acceptance | Objective | Statement |
-|---|---|---|
-| AC-PRI-001 | OBJ-PRI-001 | No customer password or social session is issued before an active canonical Principal authorizes it. |
-| AC-PRI-002 | OBJ-PRI-002 | Inactive, unresolved, and conflicted principals fail consistently across all sign-in/link paths. |
-| AC-PRI-003 | OBJ-PRI-002 | Onboarding and deactivation cannot leave a session-capable split state. |
-| AC-PRI-004 | OBJ-PRI-003 | Existing customer account/contact scoping is preserved and derived from the Principal-rooted context. |
+This independently shippable successor now has a BI-scoped canonical baseline at
+[`2026-09-04-customer-social-principal-gated-sign-in-design.md`](2026-09-04-customer-social-principal-gated-sign-in-design.md).
+The dedicated artifact prevents this BI's plan-coverage gate from inheriting the objectives and acceptance contracts of the six sibling successors in this umbrella.
 
 ## 9. BI-DD3BBD02 — social-provider secrets in the credential kernel
 
