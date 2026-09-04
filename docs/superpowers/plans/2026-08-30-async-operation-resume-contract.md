@@ -62,6 +62,14 @@ Deliverable 0 is a safe enabling repair owned by BI-2B619BC9 and may ship first,
 
 ## Backlog coverage
 
+- Decision: decomposed
+- Parent: `BI-801313EB`
+- Receipt: `cmtmikg460wqu01nvgifvg6rq`
+- Dependencies: `BI-2B619BC9`: none; `BI-801313EB`: `typed-provider-start-boundary`; `BI-05D7A0DC`: `durable-lifecycle-core`
+- `typed-provider-start-boundary` -> `BI-2B619BC9`
+- `durable-lifecycle-core` -> `BI-801313EB`
+- `notification-task-hub` -> `BI-05D7A0DC`
+
 This plan is decomposed. Phase 0 is independently shippable under BI-2B619BC9 and restores the pre-existing provider-handle tracking path without a standalone lifecycle claim. Phases 1–3 remain one atomic BI-801313EB functional acceptance unit and are not independently complete. BI-05D7A0DC owns the later notification UX.
 
 | Deliverable key | Backlog item | Independently shippable | Requirement refs | Contract refs | Flow refs | Verification refs | Depends on |
@@ -70,4 +78,4 @@ This plan is decomposed. Phase 0 is independently shippable under BI-2B619BC9 an
 | `durable-lifecycle-core` | `BI-801313EB` | Yes, as the atomic Phase 1–3 unit | `OBJ-ASYNC-01`, `OBJ-ASYNC-02`, `OBJ-ASYNC-03`, `OBJ-ASYNC-04`, `OBJ-ASYNC-05` | `CONTRACT-ASYNC-IDENTITY`, `CONTRACT-ASYNC-CHECKPOINT`, `CONTRACT-ASYNC-TRANSITION-OUTBOX`, `CONTRACT-ASYNC-RESULT-PROVENANCE` | `FLOW-ASYNC-START-RESUME-RECONCILE` | `AC-ASYNC-01`, `AC-ASYNC-02`, `AC-ASYNC-03`, `AC-ASYNC-04`, `AC-ASYNC-05` | `typed-provider-start-boundary` |
 | `notification-task-hub` | `BI-05D7A0DC` | Yes | `OBJ-ASYNC-04` | `CONTRACT-ASYNC-NOTIFICATION-HUB` | `FLOW-ASYNC-TRANSITION-NOTIFY` | `AC-ASYNC-04` | `durable-lifecycle-core` |
 
-The governed coverage receipt is recorded against the final immutable blob after this table is frozen. Its receipt ID belongs in Workroom evidence; editing the plan after that point requires a new coverage receipt rather than embedding the old receipt into changed bytes.
+The governed coverage receipt above was recorded against immutable plan blob `6493bc1476b4f1f3ce616a8ccb9fef943a38c041` at commit `f574804207670a44149c56317ef7b80d76accb06`, after the mapping table was frozen and before this receipt-only metadata insertion. Any later change to the plan's deliverables, mappings, dependencies, requirements, contracts, flows, or verification references requires a new receipt; the receipt-only insertion itself does not change that reviewed mapping.
