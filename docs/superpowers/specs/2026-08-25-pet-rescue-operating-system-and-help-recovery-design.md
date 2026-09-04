@@ -142,6 +142,35 @@ budgeting and employment respectively.
 
 ## 5. Canonical data architecture
 
+### 5.0 Deployment and module boundaries
+
+This design extends DPF's existing modular monolith: one Next.js application
+and one PostgreSQL transaction boundary per installation. It does not introduce
+microservices, network RPC, a service mesh, or a `person-service`. Existing
+`Person`, `CustomerContact`, employee, and volunteer records remain in their
+current bounded contexts; Pet Rescue records reference those identities without
+moving foster, adopter, donor, or volunteer workflows into one new aggregate.
+
+Inter-module writes use versioned TypeScript command/result contracts in the
+owning domain library. Command schemas reject unknown versions and fail closed
+before mutation. Cross-domain database changes that must agree use one
+transaction; after-commit projections carry an explicit schema version,
+source record id, organization id, and idempotency key. No module imports
+another module's route action or writes another module's table directly.
+Contract fixtures cover backward-compatible readers, unsupported-version
+rejection, duplicate delivery, rollback, and unavailable projection sources.
+
+Operational telemetry follows the same module boundary. Each command and
+projection emits a structured, PII-redacted log with request id, organization
+id, command/schema version, subject type, result, and duration; sensitive
+identifiers are tokenized rather than logged. Trace spans cover the route,
+transaction, projection refresh, and each cockpit source. Metrics include
+command failures, authorization denials, projection lag/failure, custody-stage
+transition failures, capacity conflicts, missed-care exceptions, and Help
+fallback resolutions. The shared runtime verification proves correlation from
+one request through its transaction and projection, verifies redaction, and
+records alert thresholds from measured baselines rather than inventing them.
+
 ### 5.1 Animal identity boundary
 
 `AnimalProfile` is the operational aggregate and the only source of identity,
@@ -623,6 +652,16 @@ design approval:
     names cursor keys, limits, and the scale ceiling.
   - Missing Help content is not a record-level 404; §8 makes it a recoverable
     resolver outcome.
+  - The deployment model and operational evidence were previously implicit;
+    §5.0 now states the modular-monolith boundary and the required logs, metrics,
+    traces, redaction checks, and runtime correlation evidence.
+  - Cross-domain contracts could be mistaken for implicit service coupling;
+    §5.0 now defines versioned command/projection schemas, ownership rules,
+    idempotency, rollback, and compatibility tests without inventing network
+    services.
+  - No `person-service` is proposed. Section 5.0 explicitly keeps people,
+    customer, employee, and volunteer identity in their existing bounded
+    contexts and permits Pet Rescue modules to reference them only.
 - **Standards researched:** ASM, RefuPet, Shelter Hub, ASV 2022, and Shelter
   Animals Count; adopted/rejected details are in §3.
 - **Escalated decisions:** canonical animal boundary, resolved by
