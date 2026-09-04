@@ -54,6 +54,14 @@ Deliverable 0 is a safe enabling repair owned by BI-2B619BC9 and may ship first,
 - Protected: DCO, merge queue, full unit suite, production build, CodeQL, route/policy guards.
 - Runtime: one governed nonproduction validation of duplicate-start, restart/resume, expiry/cancel, and exact result retrieval. No direct runtime mutation.
 
+## Runtime ownership and rollback runbook
+
+- `AsyncInferenceOp` plus `AsyncInferenceOperationTransition` are authoritative. Inngest events contain only the platform operation ID and are advisory wake-ups; they must never be used to reconstruct authority or provider identity.
+- The event worker performs one fenced lifecycle step. The scheduled reconciler re-enqueues only due, unleased durable rows, while the outbox publisher independently delivers monotonic transition events using the deterministic `(operationId, sequence)` identity.
+- Authorized consumers address an operation by an existing TaskRun or Workroom plus the exact request key. The server resolves that semantic scope to its internal foreign key. Bare platform IDs and provider IDs are deliberately unsupported on the durable read and cancellation surfaces.
+- To stop new provider start and poll side effects during rollback, set `DPF_ASYNC_OPERATION_WORKER_ENABLED=false`. Both the event worker and wake reconciler then return a disabled disposition without mutating rows. Keep the outbox publisher and read surface available so already-persisted state remains observable.
+- Do not roll back by restoring request-path provider POSTs. The additive columns, closed status contract/check constraint, legacy `identityVersion=0` rows, and transition history remain in place. Re-enable the worker only after the deployed code understands every persisted canonical lifecycle value.
+
 ## Risks and rollback
 
 - Provider APIs may not expose idempotent operation creation. Durable admission and the fenced CAS claim prevent concurrent starts, but they cannot prove whether a timed-out POST crossed the provider boundary. If the typed provider handle is absent after that boundary may have been crossed, persist `start_indeterminate` and never repeat the POST; leave that state only through exact provider reconciliation or an explicit terminal transition.

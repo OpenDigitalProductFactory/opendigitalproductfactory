@@ -253,6 +253,27 @@ describe("getAsyncOperations", () => {
       expect.objectContaining({ take: 50, orderBy: { createdAt: "desc" } }),
     );
   });
+
+  it("rejects an unknown persisted lifecycle status instead of projecting it as pending", async () => {
+    mockPrisma.asyncInferenceOp.findMany.mockResolvedValue([{
+      id: "op-unknown",
+      providerId: "gemini",
+      modelId: "gemini-3.1-pro",
+      contractFamily: "research",
+      status: "provider_maybe_started",
+      progressPct: null,
+      progressMessage: null,
+      errorMessage: null,
+      createdAt: new Date("2026-09-04T12:00:00.000Z"),
+      startedAt: null,
+      completedAt: null,
+      expiresAt: new Date("2026-09-04T13:00:00.000Z"),
+    }]);
+
+    await expect(getAsyncOperations()).rejects.toThrow(
+      "Invalid async inference operation status: provider_maybe_started",
+    );
+  });
 });
 
 describe("getTokenSpendByProvider", () => {

@@ -29,10 +29,11 @@ vi.mock("@/lib/ai-provider-internals", () => ({
   getProviderBearerToken: vi.fn(),
 }));
 
-import { pollAsyncOperation } from "./async-inference";
+import { pollAsyncOperation, pollAsyncProviderOperation } from "./async-inference";
 
 const runningOperation = {
   id: "async-op-1",
+  identityVersion: 0,
   providerId: "gemini",
   modelId: "deep-research-pro-preview-12-2025",
   operationId: "interaction/id with spaces",
@@ -132,20 +133,73 @@ describe("pollAsyncOperation Gemini Interactions API", () => {
   });
 
   it("fails closed on a terminal provider failure", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response({
+    const fetchMock = vi.fn().mockResolvedValue(response({
       id: "interaction/id with spaces",
       object: "interaction",
       status: "failed",
-      errors: [{ code: "provider-failure", message: "Research could not complete" }],
-    })));
+      errors: [{ code: "provider-failure", message: "Bearer secret-token customer prompt" }],
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const providerResult = await pollAsyncProviderOperation(
+      "gemini",
+      "interaction/id with spaces",
+    );
+    expect(providerResult).toMatchObject({
+      done: true,
+      terminalStatus: "failed",
+      errorMessage: "Gemini interaction failed",
+    });
+    expect(providerResult).not.toHaveProperty("raw");
 
     await expect(pollAsyncOperation("async-op-1")).resolves.toBe("failed");
     expect(mocks.updateOperation).toHaveBeenCalledWith({
       where: { id: "async-op-1" },
       data: expect.objectContaining({
         status: "failed",
-        errorMessage: expect.stringContaining("Research could not complete"),
+        errorMessage: "Gemini interaction failed",
       }),
+    });
+    expect(JSON.stringify(mocks.updateOperation.mock.calls.at(-1)?.[0]))
+      .not.toContain("secret-token");
+  });
+
+  it("does not retain a provider error body in a poll failure", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: false,
+      status: 503,
+      text: async () => "Bearer secret-token customer prompt text",
+      headers: new Headers(),
+    } as Response));
+
+    const result = await pollAsyncOperation("async-op-1");
+
+    expect(result).toBe("failed");
+    const durableWrite = mocks.updateOperation.mock.calls.at(-1)?.[0];
+    expect(durableWrite).toMatchObject({
+      data: expect.objectContaining({
+        status: "failed",
+        errorMessage: "Provider poll failed with HTTP 503",
+      }),
+    });
+    expect(JSON.stringify(durableWrite)).not.toContain("secret-token");
+    expect(JSON.stringify(durableWrite)).not.toContain("customer prompt text");
+  });
+
+  it("maps an unknown Gemini state to a terminal typed failure", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response({
+      id: "interaction/id with spaces",
+      object: "interaction",
+      status: "new_provider_state",
+    })));
+
+    await expect(pollAsyncProviderOperation(
+      "gemini",
+      "interaction/id with spaces",
+    )).resolves.toMatchObject({
+      done: true,
+      terminalStatus: "failed",
+      errorMessage: "Gemini interaction returned an unsupported status",
     });
   });
 
@@ -201,7 +255,7 @@ describe("pollAsyncOperation Gemini Interactions API", () => {
     });
   });
 
-  it("preserves an incomplete interaction's partial result", async () => {
+  it("fails an incomplete interaction without persisting its partial provider payload", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response({
       id: "interaction/id with spaces",
       object: "interaction",
@@ -212,16 +266,91 @@ describe("pollAsyncOperation Gemini Interactions API", () => {
       usage: { total_input_tokens: 17, total_output_tokens: 4 },
     })));
 
-    await expect(pollAsyncOperation("async-op-1")).resolves.toBe("completed");
+    await expect(pollAsyncOperation("async-op-1")).resolves.toBe("failed");
     expect(mocks.updateOperation).toHaveBeenCalledWith({
       where: { id: "async-op-1" },
       data: expect.objectContaining({
-        status: "completed",
+        status: "failed",
         progressPct: 100,
-        progressMessage: "Incomplete",
-        resultText: "Partial research",
-        resultData: expect.objectContaining({ status: "incomplete" }),
+        progressMessage: "Failed",
+        errorMessage: "Gemini interaction was incomplete",
       }),
     });
+    const durableWrite = mocks.updateOperation.mock.calls.at(-1)?.[0]?.data;
+    expect(durableWrite).not.toHaveProperty("resultText");
+    expect(durableWrite).not.toHaveProperty("resultData");
+  });
+});
+
+describe("pollAsyncProviderOperation generic terminal states", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.findProvider.mockResolvedValue({
+      baseUrl: "https://provider.example/v1",
+      authMethod: "none",
+      authHeader: null,
+    });
+  });
+
+  it("maps an explicit provider failure to a closed failed result", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response({
+      id: "provider-op-1",
+      status: "failed",
+      error: { message: "Bearer secret-token customer prompt" },
+    })));
+
+    await expect(pollAsyncProviderOperation("other", "provider-op-1")).resolves.toEqual({
+      done: true,
+      terminalStatus: "failed",
+      errorMessage: "Provider operation failed",
+      progressMessage: "Failed",
+    });
+  });
+
+  it("maps cancellation terminally instead of polling forever", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response({
+      operation_id: "provider-op-1",
+      status: "cancelled",
+      message: "Bearer secret-token customer prompt",
+    })));
+
+    await expect(pollAsyncProviderOperation("other", "provider-op-1")).resolves.toEqual({
+      done: true,
+      terminalStatus: "cancelled",
+      progressMessage: "Cancelled",
+    });
+  });
+
+  it("rejects a mismatched or unknown provider operation state", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response({
+      id: "different-op",
+      status: "running",
+    })));
+    await expect(pollAsyncProviderOperation("other", "provider-op-1"))
+      .rejects.toThrow("identity mismatch");
+
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response({
+      id: "provider-op-1",
+      status: "mystery",
+    })));
+    await expect(pollAsyncProviderOperation("other", "provider-op-1"))
+      .rejects.toThrow("unsupported status");
+
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response({
+      id: "provider-op-1",
+      status: "mystery",
+      done: true,
+      result: { text: "must not be accepted" },
+    })));
+    await expect(pollAsyncProviderOperation("other", "provider-op-1"))
+      .rejects.toThrow("unsupported status");
+
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response({
+      id: "provider-op-1",
+      status: "mystery",
+      done: false,
+    })));
+    await expect(pollAsyncProviderOperation("other", "provider-op-1"))
+      .rejects.toThrow("unsupported status");
   });
 });

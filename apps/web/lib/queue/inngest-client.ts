@@ -4,6 +4,12 @@ export const inngest = new Inngest({ id: "dpf-platform" });
 
 // Event payload types for type-safe event sending
 
+/** BI-801313EB: advisory wake for one already-persisted async operation. */
+export interface AsyncInferenceOperationRunEvent {
+  name: "inference/async-operation.run";
+  data: { operationId: string; notBefore: string };
+}
+
 export interface NonprodCapacityAvailableEvent {
   name: "nonprod/capacity.available";
   data: {

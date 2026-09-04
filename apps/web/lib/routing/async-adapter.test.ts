@@ -147,16 +147,18 @@ describe("asyncAdapter", () => {
     });
   });
 
-  it("Gemini: refuses requires_action because this adapter has no continuation path", async () => {
+  it("Gemini: preserves a requires_action handle so polling can fail it terminally", async () => {
     stubFetchOk({
       id: "interaction-action-required",
       object: "interaction",
       status: "requires_action",
     });
 
-    await expect(asyncAdapter.execute(makeRequest())).rejects.toMatchObject({
-      code: "provider_error",
-      message: expect.stringMatching(/requires_action.*continuation/i),
+    await expect(asyncAdapter.execute(makeRequest())).resolves.toMatchObject({
+      asyncOperation: {
+        status: "accepted",
+        providerOperationId: "interaction-action-required",
+      },
     });
   });
 
@@ -166,16 +168,18 @@ describe("asyncAdapter", () => {
     "failed",
     "cancelled",
     "budget_exceeded",
-  ])("Gemini: refuses terminal create status %s", async (status) => {
+  ])("Gemini: preserves the validated handle for terminal create status %s", async (status) => {
     stubFetchOk({
       id: `interaction-${status}`,
       object: "interaction",
       status,
     });
 
-    await expect(asyncAdapter.execute(makeRequest())).rejects.toMatchObject({
-      code: "provider_error",
-      message: expect.stringContaining(`terminal interaction status ${status}`),
+    await expect(asyncAdapter.execute(makeRequest())).resolves.toMatchObject({
+      asyncOperation: {
+        status: "accepted",
+        providerOperationId: `interaction-${status}`,
+      },
     });
   });
 
