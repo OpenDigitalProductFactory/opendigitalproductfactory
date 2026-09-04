@@ -101,7 +101,7 @@ no schema changes.
 - Decision: atomic
 - Parent: `BI-E2B632D2`
 - Design baseline: `baseline-f49b4926-7e2b-4511-8cdb-0e2fb903637e`
-- Receipt: pending immutable plan registration
+- Receipt: `cmtmd9eri7nj001miwklshlsr`
 - Rationale: stalled/failed admission, reservation checks, regressions, and live
   same-TaskRun proof are one replay contract and have no independently useful
   shipping boundary.
@@ -127,3 +127,9 @@ extends that contract; it does not replace or narrow the original safeguards.
 - Live `BI-BFBF1BBB` replay reconfirmed the cached failed-but-resumable mismatch.
 - Graph impact resolved: six exact related test suites were returned for
   `apps/web/lib/mcp-task-submit.ts`.
+- Design baseline `baseline-f49b4926-7e2b-4511-8cdb-0e2fb903637e`, research
+  receipt `initiative-7f4fa9fe-8e08-49f5-bc84-edbcd66f1898`, and plan coverage
+  receipt `cmtmd9eri7nj001miwklshlsr` passed before production-code edits.
+- The focused RED failed because the marked stalled TaskRun made zero
+  compare-and-set reservation calls. After the eligibility correction, the new
+  seven-case regression and all six graph-linked suites pass: 54 tests total.

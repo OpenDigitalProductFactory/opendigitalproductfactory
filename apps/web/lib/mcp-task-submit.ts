@@ -277,9 +277,11 @@ async function reserveTerminalWriterReplay(input: {
   if (recoverTerminalWriterEscalation(input.existing.progressPayload)) return null;
 
   const existingWait = parseTerminalWriterWait(input.existing.progressPayload);
-  const isProjectedWait = input.existing.status === "input-required" && existingWait !== null;
+  const isProjectedWait = existingWait !== null
+    && ["input-required", "stalled", "failed"].includes(input.existing.status);
   const isRecoverableCompletedExit = input.existing.status === "completed" && !existingWait;
   if (!isProjectedWait && !isRecoverableCompletedExit) return null;
+  if (existingWait && existingWait.writerToolName !== input.terminalToolPolicy.writerToolName) return null;
 
   const [readerExecutions, successfulWriter, writerAttempt] = await Promise.all([
     persistedTerminalReaderExecutions(input.existing.taskRunId),
@@ -308,17 +310,22 @@ async function reserveTerminalWriterReplay(input: {
     const proposalEnvelopeId = writerAttempt.success === false
       ? approvalEnvelopeIdFromWriterAttempt(writerAttempt.result)
       : null;
-    if (!proposalEnvelopeId) return null;
-    const declinedProposalEnvelope = await prisma.coworkerActionEnvelope.findFirst({
-      where: {
-        id: proposalEnvelopeId,
-        taskRunId: input.existing.taskRunId,
-        manifestActionId: input.terminalToolPolicy.writerToolName,
-        status: "declined",
-      },
-      select: { id: true },
-    });
-    if (declinedProposalEnvelope?.id !== proposalEnvelopeId) return null;
+    if (proposalEnvelopeId) {
+      const declinedProposalEnvelope = await prisma.coworkerActionEnvelope.findFirst({
+        where: {
+          id: proposalEnvelopeId,
+          taskRunId: input.existing.taskRunId,
+          manifestActionId: input.terminalToolPolicy.writerToolName,
+          status: "declined",
+        },
+        select: { id: true },
+      });
+      if (declinedProposalEnvelope?.id !== proposalEnvelopeId) return null;
+    } else if (
+      writerAttempt.success !== false
+      || !existingWait
+      || !["stalled", "failed"].includes(input.existing.status)
+    ) return null;
   }
 
   const progress = input.existing.progressPayload && typeof input.existing.progressPayload === "object"

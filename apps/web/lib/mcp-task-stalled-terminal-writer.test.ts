@@ -97,37 +97,45 @@ const readerExecution = {
   createdAt: new Date("2026-09-01T04:11:43.124Z"),
 };
 
+const updatedAt = new Date("2026-09-01T04:17:00.140Z");
+const terminalWriterWait = {
+  schemaVersion: 1,
+  kind: "missing-terminal-writer",
+  writerToolName: "record_initiative_evidence",
+  resumeMode: "same-taskrun",
+  attempt: 1,
+  observedAt: "2026-09-01T04:12:32.612Z",
+  dispatchContract: "required-tool-call",
+};
+
+function existingRun(
+  status: string,
+  overrides: Record<string, unknown> = {},
+) {
+  return {
+    id: "task-internal",
+    taskRunId: "TR-MCP-REAPER-STALLED",
+    userId: "user-1",
+    threadId: "thread-external",
+    contextId: "thread-external",
+    status,
+    lastHeartbeatAt: new Date("2026-09-01T04:16:32.587Z"),
+    completedAt: updatedAt,
+    updatedAt,
+    progressPayload: { terminalWriterWait },
+    a2aMetadata: {
+      requestDigest: remoteTaskRequestDigest(params),
+      idempotencyKey: params.idempotencyKey,
+      initiativeReviewBinding: params.initiativeReviewBinding,
+    },
+    ...overrides,
+  };
+}
+
 describe("reaper-stalled terminal writer resumption", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    const updatedAt = new Date("2026-09-01T04:17:00.140Z");
-    db.findFirst.mockResolvedValue({
-      id: "task-internal",
-      taskRunId: "TR-MCP-REAPER-STALLED",
-      userId: "user-1",
-      threadId: "thread-external",
-      contextId: "thread-external",
-      status: "stalled",
-      lastHeartbeatAt: new Date("2026-09-01T04:16:32.587Z"),
-      completedAt: updatedAt,
-      updatedAt,
-      progressPayload: {
-        terminalWriterWait: {
-          schemaVersion: 1,
-          kind: "missing-terminal-writer",
-          writerToolName: "record_initiative_evidence",
-          resumeMode: "same-taskrun",
-          attempt: 1,
-          observedAt: "2026-09-01T04:12:32.612Z",
-          dispatchContract: "required-tool-call",
-        },
-      },
-      a2aMetadata: {
-        requestDigest: remoteTaskRequestDigest(params),
-        idempotencyKey: params.idempotencyKey,
-        initiativeReviewBinding: params.initiativeReviewBinding,
-      },
-    });
+    db.findFirst.mockResolvedValue(existingRun("stalled"));
     db.findEnvelope.mockResolvedValue(null);
     db.findToolExecution.mockResolvedValue(null);
     db.findToolExecutions.mockResolvedValue([readerExecution]);
@@ -150,6 +158,22 @@ describe("reaper-stalled terminal writer resumption", () => {
       tools: [],
       toolsForProvider: [],
       deferredTools: [],
+    });
+    autonomous.executeTool.mockResolvedValue({
+      success: true,
+      message: "Read exact source.",
+      data: {
+        repositoryFullName: params.initiativeReviewBinding.artifactRef.repositoryFullName,
+        path: params.initiativeReviewBinding.artifactRef.path,
+        version: params.initiativeReviewBinding.artifactRef.commitSha,
+        blobId: params.initiativeReviewBinding.artifactRef.providerBlobId,
+        content: "export async function submitRemoteCoworkerTask() {}",
+        startLine: 1,
+        endLine: 1,
+        totalLines: 1,
+        hasMore: false,
+        nextCursor: null,
+      },
     });
     autonomous.execute.mockResolvedValue({
       content: "The governed local inference provider is still at capacity.",
@@ -200,6 +224,109 @@ describe("reaper-stalled terminal writer resumption", () => {
         taskRunId: "TR-MCP-REAPER-STALLED",
         idempotentReplay: true,
         resumedFromTerminalWriterWait: true,
+      },
+    });
+  });
+
+  it("resumes a failed exact-bound wait after a rejected non-proposal writer", async () => {
+    db.findFirst.mockResolvedValue(existingRun("failed"));
+    db.findToolExecution.mockImplementation(async (query: { where?: { success?: unknown } }) => (
+      query.where?.success === true
+        ? null
+        : {
+            id: "writer-rejected",
+            success: false,
+            result: { success: false, error: "OBJECTIVE_BASELINE_CONFLICT" },
+          }
+    ));
+
+    await submitRemoteCoworkerTask({
+      token: { tokenId: "token-research", userId: "user-1", capability: "write", source: "pat" },
+      userContext: { platformRole: "developer", isSuperuser: false },
+      params,
+    });
+
+    expect(db.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: {
+        taskRunId: "TR-MCP-REAPER-STALLED",
+        status: "failed",
+        updatedAt,
+      },
+    }));
+    expect(autonomous.execute).toHaveBeenCalledWith(expect.objectContaining({
+      taskRunId: "TR-MCP-REAPER-STALLED",
+      terminalToolPolicy: expect.objectContaining({ terminalPhase: "writer-only" }),
+    }));
+  });
+
+  it.each(["stalled", "failed"])("does not reopen a generic %s TaskRun", async (status) => {
+    db.findFirst.mockResolvedValue(existingRun(status, {
+      progressPayload: { summary: "Ordinary terminal task." },
+    }));
+
+    await submitRemoteCoworkerTask({
+      token: { tokenId: "token-research", userId: "user-1", capability: "write", source: "pat" },
+      userContext: { platformRole: "developer", isSuperuser: false },
+      params,
+    });
+
+    expect(db.updateMany).not.toHaveBeenCalled();
+    expect(autonomous.execute).not.toHaveBeenCalled();
+  });
+
+  it("does not reopen a wait whose writer binding changed", async () => {
+    db.findFirst.mockResolvedValue(existingRun("stalled", {
+      progressPayload: {
+        terminalWriterWait: {
+          ...terminalWriterWait,
+          writerToolName: "record_initiative_design_review",
+        },
+      },
+    }));
+
+    await submitRemoteCoworkerTask({
+      token: { tokenId: "token-research", userId: "user-1", capability: "write", source: "pat" },
+      userContext: { platformRole: "developer", isSuperuser: false },
+      params,
+    });
+
+    expect(db.updateMany).not.toHaveBeenCalled();
+    expect(autonomous.execute).not.toHaveBeenCalled();
+  });
+
+  it("does not reopen after a successful writer", async () => {
+    db.findToolExecution.mockResolvedValue({ id: "writer-success", success: true, result: {} });
+
+    await submitRemoteCoworkerTask({
+      token: { tokenId: "token-research", userId: "user-1", capability: "write", source: "pat" },
+      userContext: { platformRole: "developer", isSuperuser: false },
+      params,
+    });
+
+    expect(db.updateMany).not.toHaveBeenCalled();
+    expect(autonomous.execute).not.toHaveBeenCalled();
+  });
+
+  it("does not reopen a wait at the existing attempt ceiling", async () => {
+    db.findFirst.mockResolvedValue(existingRun("stalled", {
+      progressPayload: {
+        terminalWriterWait: { ...terminalWriterWait, attempt: 3 },
+      },
+    }));
+
+    const outcome = await submitRemoteCoworkerTask({
+      token: { tokenId: "token-research", userId: "user-1", capability: "write", source: "pat" },
+      userContext: { platformRole: "developer", isSuperuser: false },
+      params,
+    });
+
+    expect(db.updateMany).not.toHaveBeenCalled();
+    expect(autonomous.execute).not.toHaveBeenCalled();
+    expect(outcome).toMatchObject({
+      kind: "result",
+      result: {
+        resumable: false,
+        waitReason: "terminal-writer-retry-exhausted",
       },
     });
   });
