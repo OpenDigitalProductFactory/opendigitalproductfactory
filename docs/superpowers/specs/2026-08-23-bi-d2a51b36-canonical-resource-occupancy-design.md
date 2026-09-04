@@ -30,32 +30,33 @@ second occupancy authority.
 
 ## Outcomes
 
-1. A shelter operator can create and maintain kennels and foster homes from the
-   Ward without learning schema vocabulary.
-2. An operator can place, move, and release an animal while retaining its housing
-   history.
-3. The Ward reports one honest combined capacity picture across on-site and
-   foster housing, excluding blocked, retired, and full units.
-4. Concurrent moves cannot overfill a destination or leave an animal with two
-   active placements.
-5. Hospitality and animal welfare share canonical Resource persistence helpers;
-   no `animal-resources` clone is introduced.
-6. The existing `/workspace/ward` map/list remains the operator's home surface,
-   with direct actions that work at desktop and narrow widths.
+1. **OBJ-HOUSING-001:** A shelter operator can create and maintain kennels and
+   foster homes from the Ward without learning schema vocabulary.
+2. **OBJ-HOUSING-002:** An operator can place, move, and release an animal while
+   retaining its housing history.
+3. **OBJ-HOUSING-003:** The Ward reports one honest combined capacity picture
+   across on-site and foster housing, excluding blocked, retired, and full units.
+4. **OBJ-HOUSING-004:** Concurrent moves cannot overfill a destination or leave
+   an animal with two active placements.
+5. **OBJ-HOUSING-005:** Hospitality and animal welfare share canonical Resource
+   persistence helpers; no `animal-resources` clone is introduced.
+6. **OBJ-HOUSING-006:** The existing `/workspace/ward` map/list remains the
+   operator's home surface, with direct actions that work at desktop and narrow
+   widths.
 
 ## Acceptance manifest
 
-| ID | Acceptance |
-| --- | --- |
-| `AC-HOUSING-001` | Create, rename, block, unblock, and retire a configured housing Resource with optimistic version checks. |
-| `AC-HOUSING-002` | Place or move an in-care animal into a compatible unit; the prior stay closes and one new active allocation is created atomically. |
-| `AC-HOUSING-003` | Release closes the active stay with a reason and never deletes history. |
-| `AC-HOUSING-004` | Organization mismatch, unknown animal, wrong domain/kind/unit, blocked or retired resource, nonpositive capacity, and over-capacity moves fail explicitly. |
-| `AC-HOUSING-005` | Subject and destination transaction locks plus a serializable transaction prevent concurrent double placement and overfill. |
-| `AC-HOUSING-006` | `kennel` and `foster-home` use the same read, command, history, and capacity contracts. |
-| `AC-HOUSING-007` | Ward actions expose pending, validation, permission, conflict, retry, and settled-success states without adding navigation. |
-| `AC-HOUSING-008` | Existing ward, cockpit, animal, Resource, and hospitality behavior remains green. |
-| `AC-HOUSING-009` | The DCO-signed exact tree passes focused tests, typecheck, guards, UX fit, semantic review, local integration CI, PR health, and protected squash merge. |
+| ID | Objectives | Acceptance |
+| --- | --- | --- |
+| AC-HOUSING-001 | OBJ-HOUSING-001, OBJ-HOUSING-005 | Create, rename, block, unblock, and retire a configured housing Resource with optimistic version checks. |
+| AC-HOUSING-002 | OBJ-HOUSING-002, OBJ-HOUSING-003, OBJ-HOUSING-004 | Place or move an in-care animal into a compatible unit; the prior stay closes and one new active allocation is created atomically. |
+| AC-HOUSING-003 | OBJ-HOUSING-002 | Release closes the active stay with a reason and never deletes history. |
+| AC-HOUSING-004 | OBJ-HOUSING-001, OBJ-HOUSING-003, OBJ-HOUSING-004 | Organization mismatch, unknown animal, wrong domain/kind/unit, blocked or retired resource, nonpositive capacity, and over-capacity moves fail explicitly. |
+| AC-HOUSING-005 | OBJ-HOUSING-004 | Subject and destination transaction locks plus a serializable transaction prevent concurrent double placement and overfill. |
+| AC-HOUSING-006 | OBJ-HOUSING-001, OBJ-HOUSING-002, OBJ-HOUSING-003, OBJ-HOUSING-005 | `kennel` and `foster-home` use the same read, command, history, and capacity contracts. |
+| AC-HOUSING-007 | OBJ-HOUSING-001, OBJ-HOUSING-006 | Ward actions expose pending, validation, permission, conflict, retry, and settled-success states without adding navigation. |
+| AC-HOUSING-008 | OBJ-HOUSING-003, OBJ-HOUSING-005, OBJ-HOUSING-006 | Existing ward, cockpit, animal, Resource, and hospitality behavior remains green. |
+| AC-HOUSING-009 | OBJ-HOUSING-001, OBJ-HOUSING-002, OBJ-HOUSING-003, OBJ-HOUSING-004, OBJ-HOUSING-005, OBJ-HOUSING-006 | The DCO-signed exact tree passes focused tests, typecheck, guards, UX fit, semantic review, local integration CI, PR health, and protected squash merge. |
 
 ## Research and precedent
 
