@@ -1,6 +1,6 @@
 ---
 name: dpf-writing-plans
-description: "Use when a filed DPF backlog item needs an implementation plan before code is written — a multi-step build, a migration, a refactor with ordering constraints. A plan is for a BI, not for floating intent: file the BI first (dpf-file-backlog-item), then write a phased plan grounded in the existing substrate and saved to docs/superpowers/plans/."
+description: "Use when a filed DPF backlog item needs an implementation plan before code is written."
 
 # Agent Skills standard fields (Surface A — Claude Code)
 disable-model-invocation: false
@@ -69,6 +69,25 @@ The order is fixed: **BI first, then plan.** [`dpf-file-backlog-item`](../dpf-fi
 
    Copy the returned receipt, parent BI, deliverable-to-BI mappings, and dependencies into a `## Backlog coverage` plan section. `mcp__dpf__check_plan_backlog_coverage` is the resumability check. If MCP is unavailable, the tool is missing, or the token lacks scope, stop and report that condition; Markdown checkboxes are not a fallback and planning/backlog completeness cannot be claimed.
 
+   This is the decomposition-pack contract, not the initiative-readiness review contract. The minimum shape is:
+
+   ```json
+   {
+     "itemId": "BI-...",
+     "planPath": "docs/superpowers/plans/YYYY-MM-DD-feature.md",
+     "planArtifactRef": { "kind": "repo-blob-at-commit", "repo": "owner/repo", "commitSha": "...", "path": "docs/superpowers/plans/YYYY-MM-DD-feature.md", "providerBlobId": "..." },
+     "decision": "decomposed",
+     "deliverables": [{ "title": "...", "requirementRefs": ["..."], "contractRefs": ["..."], "flowRefs": ["..."], "verificationRefs": ["..."] }]
+   }
+   ```
+
+   Use decision: `decomposed` when independently shippable deliverables map to live BIs, or decision: `atomic` with a substantive rationale when they do not. Do not send `gate`, `findings`, or `resolvedFindingRefs` from the readiness lane. Do not send `pass` or `fail` as the decision; those belong to review writers, not plan coverage. Do not send the literal `pass` decision value in this contract. Make one corrected coverage call after verifying the BI and immutable plan. If the server returns `traceability-incomplete`, change only the named prerequisite and retry once; never blind-retry. If the tool is unavailable or shadowed, record the exact refusal and stop rather than calling another lane or fabricating a receipt.
+
+   Treat a rejected coverage write as a remediation contract, not a blind retry:
+   - When the result is `traceability-incomplete`, add or repair the initiative baseline and mappings named by the response before making one corrected call. Do not repeat identical arguments.
+   - When the result is `plan-artifact-invalid`, reconcile the Workroom to the exact current branch and head SHA, repair the artifact or provenance named by the response, then make one corrected call. Do not mint a new plan path to dodge immutable provenance.
+   - When the response says `retryable: false`, stop after following any explicit remediation that changes the request. If no authorized remediation is available, report the returned blocker; repeated calls cannot make the contract valid.
+
 6. **Name the risks and the rollback.** What could break (blast radius), and how to back out. A plan that only describes the happy path is half a plan.
 
 7. **Save it.** `docs/superpowers/plans/YYYY-MM-DD-<feature-name>.md`, cross-referencing the BI id and the coverage receipt. This path is where `search_specs_and_plans` and reviewers expect plans to live. **Format is opt-in:** Markdown is the default and stays fully supported, but when the plan leans on a flow/state diagram, a multi-column table, or side-by-side option fan-out, an HTML artifact often reads better and keeps the operator in the loop — see [`html-artifacts-guide.md`](../../../../docs/superpowers/html-artifacts-guide.md) and the `_templates/spec.template.html` starting point. If you ship HTML-only, leave a short Markdown stub carrying the canonical coverage section so `search_specs_and_plans` and the guard can find it.
@@ -85,4 +104,4 @@ The order is fixed: **BI first, then plan.** [`dpf-file-backlog-item`](../dpf-fi
 
 - Predecessor: [`dpf-file-backlog-item`](../dpf-file-backlog-item/SKILL.md) — the BI the plan implements.
 - Upstream of the approach decision: [`dpf-brainstorming`](../dpf-brainstorming/SKILL.md) → [`dpf-decision-via-kernel`](../dpf-decision-via-kernel/SKILL.md).
-- Plan/spec path conventions: AGENTS.md §16.
+- Plan/spec path conventions: [AGENTS.md §5](../../../../AGENTS.md).

@@ -24,6 +24,11 @@ function Listener({ onEvent }: { onEvent: (runId: string) => void }) {
   return null;
 }
 
+function LocalModelListener({ onEvent }: { onEvent: (operationId: string) => void }) {
+  useSystemEvent("system:local-model", (event) => onEvent(event.operationId));
+  return null;
+}
+
 describe("SystemEventProvider", () => {
   beforeEach(() => {
     resilient.options = null;
@@ -90,5 +95,26 @@ describe("SystemEventProvider", () => {
     expect(survivor).toHaveBeenCalledWith("SUR-2");
     expect(consoleError).toHaveBeenCalledOnce();
     consoleError.mockRestore();
+  });
+
+  it("delivers local model invalidations through the shared stream", () => {
+    const onEvent = vi.fn();
+    render(
+      <SystemEventProvider>
+        <LocalModelListener onEvent={onEvent} />
+      </SystemEventProvider>,
+    );
+
+    resilient.options?.onMessage(new MessageEvent("message", {
+      data: JSON.stringify({
+        type: "system:local-model",
+        operationId: "local-model-install:abc",
+        modelReference: "ai/qwen3:8B-Q4_K_M",
+        status: "running",
+        observedAt: "2026-08-24T01:00:00.000Z",
+      }),
+    }));
+
+    expect(onEvent).toHaveBeenCalledWith("local-model-install:abc");
   });
 });

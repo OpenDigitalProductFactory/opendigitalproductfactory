@@ -55,6 +55,33 @@ export function dropDualSeedAliasAgents<T extends { agentId: string }>(
 }
 
 /**
+ * Collapse dual-seed DUPLICATES only — the narrow sibling of
+ * dropDualSeedAliasAgents above.
+ *
+ * A coworker seeded in BOTH its slug form and its canonical AGT-* form is ONE
+ * identity. Any surface that lists agents and does not collapse them renders the
+ * same coworker twice (BI-74FD6420). Several did: the agent identity page and the
+ * proactivity roster both ran a bare agent.findMany.
+ *
+ * The difference from dropDualSeedAliasAgents matters. That one ALSO drops a
+ * canonical row whose slug twin is absent, because the roster's job is to list
+ * coworkers that are actually selectable. This one drops the slug row ONLY when
+ * its canonical twin is present, so a declared agent that was never seeded under
+ * a slug still appears. Use this on any surface that inventories agents rather
+ * than offering them for selection.
+ */
+export function collapseDualSeedDuplicates<T extends { agentId: string }>(
+  rows: T[],
+  slugToCanonical: Readonly<Record<string, string>> = COWORKER_SLUG_TO_CANONICAL_AGENT_ID,
+): T[] {
+  const present = new Set(rows.map((r) => r.agentId));
+  return rows.filter((r) => {
+    const canonical = slugToCanonical[r.agentId];
+    return !(canonical && canonical !== r.agentId && present.has(canonical));
+  });
+}
+
+/**
  * Detect dual-seed pairs that survive the render collapse as visible duplicates
  * (BI-6A1BFE77). The collapse map (COWORKER_SLUG_TO_CANONICAL_AGENT_ID) is
  * belt-and-suspenders that must be MANUALLY maintained: a coworker seeded in

@@ -4,6 +4,7 @@ import type {
   WorkCaseState,
   WorkCaseTimelineEvent,
 } from "./case-types";
+import { decodeWorkCaseKey, encodeWorkCaseKey } from "./case-key";
 import {
   buildWorkCaseDetail,
   buildWorkCaseSummary,
@@ -25,7 +26,10 @@ import {
 import type { WorkroomStructure } from "./room-structure";
 import type { WorkroomPostureContext } from "./room-posture";
 import { readWorkroomShapeClaim } from "./workroom-shape-claim";
-import type { WorkroomParticipantView, WorkroomView } from "./room-types";
+import { readWorkroomPostureClaim } from "./workroom-posture-claim";
+import { readStoredWorkroomDriveState } from "./workroom-drive-state";
+import { deriveWorkroomShape } from "./derive-workroom-shape";
+import type { WorkroomActivityKind, WorkroomParticipantView, WorkroomView } from "./room-types";
 import { getWorkCaseSourceEntry } from "./source-registry";
 import { fromWorkItemMessage } from "./receipt-envelope";
 import {
@@ -33,6 +37,8 @@ import {
   readWorkspaceRoomPolicy,
   type WorkspaceRoomPolicyParticipant,
 } from "./workspace-room-access";
+
+export { decodeWorkCaseKey, encodeWorkCaseKey } from "./case-key";
 
 const CLOSED_WORK_ITEM_STATUSES = ["completed", "cancelled"];
 
@@ -93,6 +99,12 @@ type WorkspaceWorkItemMessageRecord = {
 };
 
 export type WorkspaceWorkCapsuleRecord = {
+  /** The row the operator posture control writes back to. */
+  id?: string;
+  /** The WorkItem row this capsule is anchored to — lets the list loader group a
+   *  batched capsule fetch by item so the list projects the SAME state the detail
+   *  does (BI-2310EEE1). Optional so existing fakes/selects keep compiling. */
+  workItemId?: string | null;
   capsuleId: string;
   status: string;
   title: string;
@@ -101,6 +113,20 @@ export type WorkspaceWorkCapsuleRecord = {
   // without them simply yields no shape and no declared posture.
   scopeClaims?: unknown;
   activityKind?: string | null;
+  decisionScope?: string | null;
+  workspaceState?: unknown;
+};
+
+/** A capsule-activity row (WorkroomActivity, physical table WorkCapsuleActivity) —
+ *  the coding carrier's own execution journal (BI-1CF7B600). */
+export type WorkspaceWorkroomActivityRecord = {
+  id: string;
+  workCapsuleId: string;
+  kind: string;
+  summary: string;
+  recordedAt: Date | string;
+  recordedById?: string | null;
+  recordedByAgentId?: string | null;
 };
 
 export type WorkspaceCasePrismaClient = {
@@ -113,6 +139,9 @@ export type WorkspaceCasePrismaClient = {
   };
   workroom: {
     findMany(args: unknown): Promise<WorkspaceWorkCapsuleRecord[]>;
+  };
+  workroomActivity: {
+    findMany(args: unknown): Promise<WorkspaceWorkroomActivityRecord[]>;
   };
 };
 
@@ -154,6 +183,7 @@ export type WorkspaceRoomParticipantLoader = (input: {
   status: string;
   now: Date;
   policyParticipants: readonly WorkspaceRoomPolicyParticipant[];
+  workroomIds: readonly string[];
 }) => Promise<WorkroomParticipantView[]>;
 
 export type WorkspaceWorkCaseListItem = {
@@ -215,20 +245,6 @@ function sourceForItem(item: WorkspaceWorkItemRecord): { sourceType: string; sou
   };
 }
 
-export function encodeWorkCaseKey(ref: { sourceType: string; sourceId: string }): string {
-  return encodeURIComponent(`${ref.sourceType}:${ref.sourceId}`);
-}
-
-export function decodeWorkCaseKey(caseKey: string): { sourceType: string; sourceId: string } | null {
-  const decoded = decodeURIComponent(caseKey);
-  const separator = decoded.indexOf(":");
-  if (separator <= 0 || separator === decoded.length - 1) return null;
-  return {
-    sourceType: decoded.slice(0, separator),
-    sourceId: decoded.slice(separator + 1),
-  };
-}
-
 function dueSoon(dueAt: string | null, now: Date): boolean {
   if (!dueAt) return false;
   const due = new Date(dueAt).getTime();
@@ -237,7 +253,12 @@ function dueSoon(dueAt: string | null, now: Date): boolean {
   return due >= now.getTime() && due <= horizon;
 }
 
-function toListItem(item: WorkspaceWorkItemRecord, userId: string, now: Date): WorkspaceWorkCaseListItem {
+function toListItem(
+  item: WorkspaceWorkItemRecord,
+  userId: string,
+  now: Date,
+  capsules: readonly WorkspaceWorkCapsuleRecord[] = [],
+): WorkspaceWorkCaseListItem {
   const source = sourceForItem(item);
   const summary = buildWorkCaseSummary({
     source,
@@ -249,6 +270,15 @@ function toListItem(item: WorkspaceWorkItemRecord, userId: string, now: Date): W
       dueAt: item.dueAt,
       assignedToUserId: item.assignedToUserId,
     },
+    // Feed the SAME capsule the detail loader projects from (BI-2310EEE1) — most
+    // recent first, matching the detail's `updatedAt desc` order — so the list and
+    // the room agree on one derived state instead of the list showing the raw
+    // WorkItem status while the detail shows the capsule-projected state.
+    capsules: capsules.map((capsule) => ({
+      capsuleId: capsule.capsuleId,
+      status: capsule.status,
+      title: capsule.title,
+    })),
   });
   const dueAt = iso(item.dueAt);
   const urgentAttention = item.urgency === "emergency" || item.urgency === "urgent";
@@ -314,7 +344,29 @@ export async function loadWorkspaceWorkCaseLens({
     take: limit,
   });
 
-  const cases = items.map((item) => toListItem(item, userId, now)).sort(sortCases);
+  // BI-2310EEE1: batch-join the capsule(s) anchored to these items in ONE query
+  // (not per-item) so the list projects the same capsule-derived state the room
+  // detail does. Bounded by the item page above — no unbounded scan.
+  const itemRowIds = items.map((item) => item.id).filter((id): id is string => Boolean(id));
+  const capsuleRows = itemRowIds.length
+    ? await prismaClient.workroom.findMany({
+        where: { workItemId: { in: itemRowIds } },
+        select: { workItemId: true, capsuleId: true, status: true, title: true },
+        orderBy: [{ updatedAt: "desc" }],
+      })
+    : [];
+  const capsulesByItem = new Map<string, WorkspaceWorkCapsuleRecord[]>();
+  for (const capsule of capsuleRows) {
+    const key = capsule.workItemId;
+    if (!key) continue;
+    const bucket = capsulesByItem.get(key);
+    if (bucket) bucket.push(capsule);
+    else capsulesByItem.set(key, [capsule]);
+  }
+
+  const cases = items
+    .map((item) => toListItem(item, userId, now, item.id ? capsulesByItem.get(item.id) ?? [] : []))
+    .sort(sortCases);
 
   return {
     generatedAt: now.toISOString(),
@@ -403,6 +455,44 @@ function roomActivitiesFromMessages(
   }));
 }
 
+// The WorkroomActivityKind values a capsule row's `kind` may already be; anything
+// else degrades to a generic "external-event" so the entry still renders.
+const KNOWN_ACTIVITY_KINDS = new Set<WorkroomActivityKind>([
+  "message", "ask", "coworker-joined", "coworker-left", "coworker-handoff",
+  "work-started", "work-paused", "work-completed", "decision-proposed",
+  "decision-resolved", "artifact-added", "governed-action", "external-event",
+  "verification", "receipt", "cycle-opened", "cycle-closed",
+]);
+
+/**
+ * BI-1CF7B600: project the capsule's own execution journal (WorkroomActivity rows)
+ * into the room activity feed, so a capsule-sourced room no longer reads "No activity
+ * yet" while 20+ rows exist. `capsuleIdByRowId` maps the row's workCapsuleId (a Workroom
+ * row id) back to the WC-* id for the source reference.
+ */
+function roomActivitiesFromCapsuleActivity(
+  rows: readonly WorkspaceWorkroomActivityRecord[],
+  capsuleIdByRowId: ReadonlyMap<string, string>,
+): WorkroomActivityInput[] {
+  return rows.map((row) => ({
+    sourceEventId: row.id,
+    kind: KNOWN_ACTIVITY_KINDS.has(row.kind as WorkroomActivityKind)
+      ? (row.kind as WorkroomActivityKind)
+      : "external-event",
+    occurredAt: row.recordedAt,
+    actorRef: {
+      actorKind: row.recordedByAgentId ? "agent" : row.recordedById ? "person" : "system",
+      actorId: row.recordedByAgentId ?? row.recordedById ?? undefined,
+    },
+    summary: row.summary,
+    sourceRef: {
+      kind: "work-capsule",
+      id: capsuleIdByRowId.get(row.workCapsuleId) ?? row.workCapsuleId,
+      status: row.kind,
+    },
+  }));
+}
+
 function roomReceiptsFromMessages(
   item: WorkspaceWorkItemRecord,
   messages: WorkspaceWorkItemMessageRecord[],
@@ -473,22 +563,12 @@ export async function loadWorkspaceWorkCaseDetail({
   if (access.level !== "content" && access.level !== "action") return null;
   const roomPolicy = readWorkspaceRoomPolicy(item.evidence);
 
-  const [messages, participants, capsules] = await Promise.all([
+  const [messages, capsules] = await Promise.all([
     prismaClient.workItemMessage.findMany({
       where: { workItemId: { in: [item.id, ...(item.childItems ?? []).map((child) => child.id)] } },
       orderBy: [{ createdAt: "asc" }],
       take: 20,
     }),
-    participantLoader?.({
-      workItemId: item.id,
-      assignedToUserId: item.assignedToUserId,
-      assignedToAgentId: item.assignedToAgentId ?? null,
-      assignedThreadId: item.assignedThreadId ?? null,
-      title: item.title,
-      status: item.status,
-      now,
-      policyParticipants: roomPolicy.participants ?? [],
-    }) ?? Promise.resolve([]),
     // EP-WORK-CONVERGENCE (BI-650994D7): join the capsule(s) anchored to this WorkItem
     // so a coding carrier surfaces in its case instead of as a disjoint row.
     prismaClient.workroom.findMany({
@@ -498,15 +578,47 @@ export async function loadWorkspaceWorkCaseDetail({
       // one of the four shape axes. Both ride the existing query — no extra
       // round trip for the posture.
       select: {
+        // `id` is the row the operator control writes back to. Without it the
+        // control would render with nothing to target — the write path would
+        // exist and be unusable, which is the failure this whole epic is about.
+        id: true,
         capsuleId: true,
         status: true,
         title: true,
         scopeClaims: true,
         activityKind: true,
+        decisionScope: true,
+        workspaceState: true,
       },
       orderBy: [{ updatedAt: "desc" }],
     }),
   ]);
+  const participants = await (participantLoader?.({
+    workItemId: item.id,
+    assignedToUserId: item.assignedToUserId,
+    assignedToAgentId: item.assignedToAgentId ?? null,
+    assignedThreadId: item.assignedThreadId ?? null,
+    title: item.title,
+    status: item.status,
+    now,
+    policyParticipants: roomPolicy.participants ?? [],
+    workroomIds: capsules.map((capsule) => capsule.id).filter((id): id is string => Boolean(id)),
+  }) ?? Promise.resolve([]));
+  // BI-1CF7B600: the capsule's own execution journal (WorkroomActivity rows) so a
+  // capsule-sourced room shows its activity instead of "No activity yet". Keyed on the
+  // capsule row ids just fetched — one bounded query, newest first.
+  const capsuleRowIds = capsules.map((capsule) => capsule.id).filter((id): id is string => Boolean(id));
+  const capsuleActivityRows = capsuleRowIds.length
+    ? await prismaClient.workroomActivity.findMany({
+        where: { workCapsuleId: { in: capsuleRowIds } },
+        orderBy: [{ recordedAt: "desc" }],
+        take: 20,
+      })
+    : [];
+  const capsuleIdByRowId = new Map<string, string>();
+  for (const capsule of capsules) {
+    if (capsule.id) capsuleIdByRowId.set(capsule.id, capsule.capsuleId);
+  }
   const source = sourceForItem(item);
   const evidence = [
     ...evidenceFromWorkItem(item),
@@ -533,6 +645,9 @@ export async function loadWorkspaceWorkCaseDetail({
   const cycleCandidates = projectWorkItemCycleCarriers({
     items: item.childItems ?? [],
     messages,
+    scopeClaims: capsules[0]?.scopeClaims,
+    capsuleId: capsules[0]?.capsuleId,
+    openedAt: item.createdAt,
   });
   const sourceEntry = getWorkCaseSourceEntry(item.sourceType);
   const currentCycle = sourceEntry
@@ -546,6 +661,7 @@ export async function loadWorkspaceWorkCaseDetail({
     ? await structureLoader({ sourceType: source.sourceType, sourceId: source.sourceId })
     : null;
   const anchoredCapsule = capsules[0] ?? null;
+  const storedDrive = readStoredWorkroomDriveState(anchoredCapsule?.workspaceState);
   const postureContext = postureContextLoader
     ? await postureContextLoader({
         sourceType: source.sourceType,
@@ -554,15 +670,45 @@ export async function loadWorkspaceWorkCaseDetail({
         now,
       })
     : null;
+  // The identity the operator control needs to write back. Only present when a
+  // capsule actually anchors this case — a case with no room is not editable as
+  // a room, and the control is then not rendered at all.
+  const editablePosture = anchoredCapsule?.id
+    ? {
+        roomRowId: anchoredCapsule.id,
+        caseKey,
+        declaredShape: readWorkroomShapeClaim(anchoredCapsule.scopeClaims),
+        hasDeclaration: readWorkroomPostureClaim(anchoredCapsule.scopeClaims) !== null,
+      }
+    : null;
   const room = buildWorkroomView({
     caseKey,
     detail,
     structure,
-    postureContext,
-    shapeKey: readWorkroomShapeClaim(anchoredCapsule?.scopeClaims),
+    postureContext: postureContext ? { ...postureContext, editable: editablePosture } : null,
+    // A DECLARED shape always wins. Most rooms have never declared one
+    // (0 of 330 on the reference install), so fall back to deriving from what
+    // the room already is — and accept null when it does not say enough,
+    // rather than inventing a shape the posture would then act on.
+    shapeKey:
+      readWorkroomShapeClaim(anchoredCapsule?.scopeClaims)
+      ?? deriveWorkroomShape({
+        activityKind: anchoredCapsule?.activityKind ?? null,
+        decisionScope: anchoredCapsule?.decisionScope ?? null,
+        mode: sourceEntry?.roomProjection.mode ?? "finite",
+      })?.shape
+      ?? null,
     activityKind: anchoredCapsule?.activityKind ?? null,
     scopeClaims: anchoredCapsule?.scopeClaims,
     now,
+    processOverseerObservation: {
+      currentStageKey: storedDrive.currentStageKey,
+      proposedStageKey: storedDrive.currentStageKey,
+      receipts: storedDrive.receipts,
+      budgetUsage: storedDrive.budgetUsage,
+      stopConditionHits: storedDrive.stopConditionHits,
+      reviewDue: storedDrive.reviewDue,
+    },
     boundary: {
       purpose: item.description,
       outcome: null,
@@ -581,7 +727,10 @@ export async function loadWorkspaceWorkCaseDetail({
       closureRuleSummary: null,
       sourceRefs,
     },
-    activities: roomActivitiesFromMessages(item, messages),
+    activities: [
+      ...roomActivitiesFromMessages(item, messages),
+      ...roomActivitiesFromCapsuleActivity(capsuleActivityRows, capsuleIdByRowId),
+    ].sort((a, b) => new Date(b.occurredAt ?? 0).getTime() - new Date(a.occurredAt ?? 0).getTime()),
     currentCycle,
     completedCycles,
     outcomePacket: storedPackets[0] ?? null,
@@ -595,7 +744,10 @@ export async function loadWorkspaceWorkCaseDetail({
   });
 
   return {
-    summary: toListItem(item, userId, now),
+    // Same derivation as the list (BI-2310EEE1) — feed the capsules this loader
+    // already fetched so the room's headline state matches the list's instead of
+    // falling back to the raw WorkItem status.
+    summary: toListItem(item, userId, now, capsules),
     evidenceTimeline: detail.timeline,
     sourceRefs: detail.summary.sourceRefs,
     workItemId: item.id,

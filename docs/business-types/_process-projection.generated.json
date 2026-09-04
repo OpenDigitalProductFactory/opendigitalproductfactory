@@ -1,0 +1,349 @@
+{
+  "schemaVersion": 1,
+  "archetypes": {
+    "pet-rescue": {
+      "archetypeId": "pet-rescue",
+      "name": "Pet Rescue",
+      "category": "nonprofit-community",
+      "capacityUnit": "volunteer-or-bed-capacity",
+      "streams": [
+        {
+          "key": "intake-safe-placement",
+          "label": "Intake and safe placement",
+          "purpose": "Bring a stray, surrendered, or transferred animal into the rescue safely and place it within real capacity.",
+          "input": "Stray report, surrender request, or partner handoff",
+          "output": "Identified and triaged animal in an appropriate kennel or foster placement",
+          "responsibleRole": "Intake coordinator",
+          "stages": [
+            {
+              "key": "intake-report-handoff",
+              "label": "Report, retrieval, or handoff",
+              "order": 110,
+              "loadBearing": false,
+              "capabilityBindings": [],
+              "metricBindings": [
+                "intake-requests",
+                "retrieval-lead-time"
+              ],
+              "trustGateKeys": [
+                "intake-authority-and-safeguarding"
+              ],
+              "streamKey": "intake-safe-placement",
+              "input": "Stray report, surrender request, or partner handoff",
+              "output": "Accepted intake case and safe retrieval or transfer plan",
+              "responsibleRole": "Intake coordinator",
+              "handoffToStageKey": null
+            },
+            {
+              "key": "intake-identify-triage",
+              "label": "Identify and triage",
+              "order": 120,
+              "loadBearing": false,
+              "capabilityBindings": [],
+              "metricBindings": [
+                "intake-triage-time"
+              ],
+              "trustGateKeys": [
+                "immediate-welfare-triage"
+              ],
+              "streamKey": "intake-safe-placement",
+              "input": "Animal and intake case",
+              "output": "Identity, immediate welfare needs, and quarantine requirements",
+              "responsibleRole": "Animal care lead",
+              "handoffToStageKey": null
+            },
+            {
+              "key": "intake-capacity-decision",
+              "label": "Make the capacity decision",
+              "order": 130,
+              "loadBearing": true,
+              "capabilityBindings": [],
+              "metricBindings": [
+                "kennel-occupancy",
+                "foster-occupancy",
+                "capacity-referrals"
+              ],
+              "trustGateKeys": [
+                "safe-capacity-decision"
+              ],
+              "streamKey": "intake-safe-placement",
+              "input": "Triage result and live kennel and foster occupancy",
+              "output": "Admit, partner-transfer, or safe waitlist decision",
+              "responsibleRole": "Intake coordinator",
+              "handoffToStageKey": null
+            },
+            {
+              "key": "intake-quarantine-placement",
+              "label": "Quarantine and place",
+              "order": 140,
+              "loadBearing": true,
+              "capabilityBindings": [],
+              "metricBindings": [
+                "quarantine-occupancy",
+                "placement-moves"
+              ],
+              "trustGateKeys": [
+                "quarantine-and-placement-safety"
+              ],
+              "streamKey": "intake-safe-placement",
+              "input": "Admitted animal and quarantine requirements",
+              "output": "Recorded kennel or foster placement with isolation controls",
+              "responsibleRole": "Foster and kennel coordinator",
+              "handoffToStageKey": "welfare-daily-care"
+            }
+          ]
+        },
+        {
+          "key": "health-welfare",
+          "label": "Health and welfare",
+          "purpose": "Maintain each animal's daily welfare, treat medical needs, and decide when placement is responsible.",
+          "input": "Animal in kennel or foster care with an intake assessment",
+          "output": "Healthy or managed animal with an evidenced adoption-readiness decision",
+          "responsibleRole": "Animal care lead",
+          "stages": [
+            {
+              "key": "welfare-daily-care",
+              "label": "Deliver daily care",
+              "order": 210,
+              "loadBearing": true,
+              "capabilityBindings": [],
+              "metricBindings": [
+                "care-plan-completion",
+                "medication-adherence"
+              ],
+              "trustGateKeys": [],
+              "streamKey": "health-welfare",
+              "input": "Placed animal and care requirements",
+              "output": "Current feeding, medication, behaviour, and welfare record",
+              "responsibleRole": "Animal care team",
+              "handoffToStageKey": null
+            },
+            {
+              "key": "welfare-medical-treatment",
+              "label": "Assess and treat health needs",
+              "order": 220,
+              "loadBearing": false,
+              "capabilityBindings": [],
+              "metricBindings": [
+                "open-medical-cases",
+                "treatment-wait-time"
+              ],
+              "trustGateKeys": [
+                "veterinary-approval"
+              ],
+              "streamKey": "health-welfare",
+              "input": "Triage findings, symptoms, or scheduled veterinary need",
+              "output": "Veterinary assessment, treatment, and recovery plan",
+              "responsibleRole": "Veterinary coordinator",
+              "handoffToStageKey": null
+            },
+            {
+              "key": "welfare-rehabilitation-moves",
+              "label": "Rehabilitate and coordinate moves",
+              "order": 230,
+              "loadBearing": false,
+              "capabilityBindings": [],
+              "metricBindings": [
+                "rehabilitation-progress",
+                "placement-moves"
+              ],
+              "trustGateKeys": [
+                "safe-care-transfer"
+              ],
+              "streamKey": "health-welfare",
+              "input": "Care plan, behaviour plan, and current placement capacity",
+              "output": "Updated rehabilitation plan and safe kennel or foster placement",
+              "responsibleRole": "Foster and kennel coordinator",
+              "handoffToStageKey": null
+            },
+            {
+              "key": "welfare-exception",
+              "label": "Resolve welfare exceptions",
+              "order": 240,
+              "loadBearing": false,
+              "capabilityBindings": [],
+              "metricBindings": [
+                "open-welfare-exceptions",
+                "exception-response-time"
+              ],
+              "trustGateKeys": [
+                "welfare-escalation"
+              ],
+              "streamKey": "health-welfare",
+              "input": "Missed care, deteriorating health, behaviour risk, or placement breakdown",
+              "output": "Stabilised animal and evidenced escalation or revised plan",
+              "responsibleRole": "Duty manager",
+              "handoffToStageKey": null
+            },
+            {
+              "key": "welfare-adoption-readiness",
+              "label": "Decide adoption readiness",
+              "order": 250,
+              "loadBearing": true,
+              "capabilityBindings": [],
+              "metricBindings": [
+                "animals-adoption-ready",
+                "care-to-ready-time"
+              ],
+              "trustGateKeys": [
+                "adoption-readiness-approval"
+              ],
+              "streamKey": "health-welfare",
+              "input": "Medical, behaviour, welfare, and legal evidence",
+              "output": "Approved, deferred, or specialist-placement decision",
+              "responsibleRole": "Adoption lead",
+              "handoffToStageKey": "placement-promotion"
+            }
+          ]
+        },
+        {
+          "key": "adoption-placement",
+          "label": "Adoption and placement",
+          "purpose": "Match an adoption-ready animal to a suitable home, transfer custody safely, and support or reverse the placement when needed.",
+          "input": "Animal approved for adoption or specialist placement",
+          "output": "Stable placement, or an evidenced return and re-entry into care",
+          "responsibleRole": "Adoption lead",
+          "stages": [
+            {
+              "key": "placement-promotion",
+              "label": "Promote the animal",
+              "order": 310,
+              "loadBearing": false,
+              "capabilityBindings": [],
+              "metricBindings": [
+                "active-animal-profiles",
+                "qualified-interest"
+              ],
+              "trustGateKeys": [
+                "safe-public-disclosure"
+              ],
+              "streamKey": "adoption-placement",
+              "input": "Adoption-ready animal profile",
+              "output": "Accurate public profile and suitable applicant interest",
+              "responsibleRole": "Adoption coordinator",
+              "handoffToStageKey": null
+            },
+            {
+              "key": "placement-application-screening",
+              "label": "Screen the application",
+              "order": 320,
+              "loadBearing": false,
+              "capabilityBindings": [],
+              "metricBindings": [
+                "applications-in-screening",
+                "screening-lead-time"
+              ],
+              "trustGateKeys": [
+                "eligibility-and-safeguarding"
+              ],
+              "streamKey": "adoption-placement",
+              "input": "Adoption application and household information",
+              "output": "Eligible application with risks and needs recorded",
+              "responsibleRole": "Adoption coordinator",
+              "handoffToStageKey": null
+            },
+            {
+              "key": "placement-meet-home-check",
+              "label": "Meet and check the home",
+              "order": 330,
+              "loadBearing": false,
+              "capabilityBindings": [],
+              "metricBindings": [
+                "meet-and-greets",
+                "home-checks-open"
+              ],
+              "trustGateKeys": [
+                "home-and-landlord-check"
+              ],
+              "streamKey": "adoption-placement",
+              "input": "Eligible applicant and candidate animal",
+              "output": "Meet-and-greet evidence and any landlord or home check",
+              "responsibleRole": "Adoption coordinator",
+              "handoffToStageKey": null
+            },
+            {
+              "key": "placement-match-reservation",
+              "label": "Match and reserve",
+              "order": 340,
+              "loadBearing": true,
+              "capabilityBindings": [],
+              "metricBindings": [
+                "approved-matches",
+                "reservation-age"
+              ],
+              "trustGateKeys": [
+                "match-approval"
+              ],
+              "streamKey": "adoption-placement",
+              "input": "Animal needs and approved household evidence",
+              "output": "Approved match with a time-bounded reservation",
+              "responsibleRole": "Adoption lead",
+              "handoffToStageKey": null
+            },
+            {
+              "key": "placement-custody-transfer",
+              "label": "Transfer custody",
+              "order": 350,
+              "loadBearing": true,
+              "capabilityBindings": [],
+              "metricBindings": [
+                "completed-adoptions"
+              ],
+              "trustGateKeys": [
+                "custody-transfer-approval"
+              ],
+              "streamKey": "adoption-placement",
+              "input": "Approved match, agreement, identity, and care handover",
+              "output": "Signed custody transfer and post-adoption support plan",
+              "responsibleRole": "Adoption lead",
+              "handoffToStageKey": null
+            },
+            {
+              "key": "placement-follow-up",
+              "label": "Follow up after adoption",
+              "order": 360,
+              "loadBearing": false,
+              "capabilityBindings": [],
+              "metricBindings": [
+                "follow-ups-due",
+                "placement-stability"
+              ],
+              "trustGateKeys": [],
+              "streamKey": "adoption-placement",
+              "input": "Placed animal and scheduled follow-up plan",
+              "output": "Placement outcome, support actions, and early risk signals",
+              "responsibleRole": "Post-adoption coordinator",
+              "handoffToStageKey": null
+            },
+            {
+              "key": "placement-return-reentry",
+              "label": "Return and re-enter care",
+              "order": 370,
+              "loadBearing": false,
+              "capabilityBindings": [],
+              "metricBindings": [
+                "returns",
+                "return-response-time"
+              ],
+              "trustGateKeys": [
+                "return-and-reentry-safety"
+              ],
+              "streamKey": "adoption-placement",
+              "input": "Failed placement, surrender-back request, or safeguarding concern",
+              "output": "Safe custody return and reopened intake and welfare plan",
+              "responsibleRole": "Post-adoption coordinator",
+              "handoffToStageKey": "intake-identify-triage"
+            }
+          ]
+        }
+      ],
+      "supportingCapabilities": [
+        "Fundraising",
+        "Volunteer Coordination",
+        "Supplies",
+        "Compliance",
+        "Reporting"
+      ]
+    }
+  }
+}

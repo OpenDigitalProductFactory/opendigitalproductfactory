@@ -89,6 +89,9 @@ const CUSTOMER_ACCOUNT_ADAPTER: MergeAdapter = {
     { model: "inventoryRelationship", field: "customerAccountId" },
     { model: "portfolioQualityIssue", field: "customerAccountId" },
     { model: "invoice", field: "accountId" },
+    // Mileage attributed to a customer follows the surviving account (BI-E17E0034):
+    // a job-costed or rebillable trip must not strand on a tombstoned account.
+    { model: "trip", field: "customerAccountId" },
     {
       model: "masterDataSourceRef",
       field: "customerAccountId",

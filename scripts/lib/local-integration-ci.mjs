@@ -275,15 +275,27 @@ export function createLocalIntegrationPlan(input) {
     "HEAD",
     ...(input.evidencePlanOutput ? ["--output", input.evidencePlanOutput] : []),
   ];
-  const commands = [
+  const setupCommands = [
     ...(input.fetchBase ? [["git", "fetch", "origin", "main"]] : []),
     ["git", "checkout", "-B", branch, baseRef],
-    ["git", "merge", "--no-ff", "--no-edit", input.candidateBranch],
-    ...input.siblingBranches.map((sibling) => ["git", "merge", "--no-ff", "--no-edit", sibling]),
-    // Generate the same versioned, digest-bound evidence recommendation used
-    // by GitHub after the exact integration tree exists. Shadow mode records
-    // advice only; the exhaustive gate below remains the execution authority.
+    // BI-4820A197: sign the merge at creation so the gated HEAD is the HEAD
+    // the pre-push DCO hook will accept. BI-E3044AEC: merge the invoking
+    // worktree's SHA when supplied, not a branch name that may resolve to
+    // origin's (behind) tip inside the shared runner workspace.
+    ["git", "merge", "--no-ff", "--no-edit", "--signoff", input.candidateSha || input.candidateBranch],
+    ...input.siblingBranches.map((sibling) => ["git", "merge", "--no-ff", "--no-edit", "--signoff", sibling]),
+    // Generate the same versioned, digest-bound evidence plan used by GitHub
+    // after the exact integration tree exists. Documentation plans are
+    // authoritative; other local lanes remain exhaustive during rollout.
     evidencePlanCommand,
+  ];
+  const guardCommands = [
+    ["node", "scripts/gen-doc-index.mjs", "--check"],
+    ["node", "scripts/check-doc-links.mjs"],
+    ["node", "scripts/check-guards.mjs"],
+  ];
+  const executionLane = input.evidencePlan?.executionLane ?? "exhaustive";
+  const exhaustiveCommands = [
     // Step-zero sandbox freshness gate (BI-ECDF9520): after the merge changes
     // pnpm-lock.yaml, node_modules must be proven to match it before any
     // test/build result counts as product evidence. Exits 3/4 (sandbox drift /
@@ -309,12 +321,8 @@ export function createLocalIntegrationPlan(input) {
     ...(input.includeMigrateDeploy
       ? [["pnpm", "--filter", "@dpf/db", "exec", "prisma", "migrate", "deploy"]]
       : []),
-    // Fast PR guard parity: these CI jobs are cheap and fail before the heavy
-    // shards when committed docs/generated indexes or repo-wide guard ratchets
-    // are stale. Run them here so local-CI catches the same failures pre-push.
-    ["node", "scripts/gen-doc-index.mjs", "--check"],
-    ["node", "scripts/check-doc-links.mjs"],
-    ["node", "scripts/check-guards.mjs"],
+    // Fast PR guard parity runs before the expensive test/build gates.
+    ...guardCommands,
     // Fail fast on the definitive compile/type-generation proof before spending
     // the shared sandbox on the exhaustive suite. A red typecheck cannot become
     // green after tests, while successful candidates still execute every gate.
@@ -338,15 +346,23 @@ export function createLocalIntegrationPlan(input) {
       HOST_TEST_INITIAL_WORKERS,
       "--retry-workers",
       HOST_TEST_RETRY_WORKERS,
+      // The integration base, so the stage can narrow to the tests this
+      // candidate can reach (BI-2227C37C). Absent or unreadable => exhaustive.
+      "--base",
+      baseRef,
     ],
     productionBuildCommand,
   ];
+  const commands = executionLane === "documentation"
+    ? [...setupCommands, ...guardCommands]
+    : [...setupCommands, ...exhaustiveCommands];
   return {
     mode: input.mode,
     integrationBranch: branch,
     slotKey: input.slotKey ?? "",
     baseRef,
     buildStrategy,
+    executionLane,
     commands,
   };
 }

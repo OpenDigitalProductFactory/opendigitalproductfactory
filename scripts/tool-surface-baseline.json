@@ -3,14 +3,14 @@
   "selectionCliff": 15,
   "entries": {
     "registry.toolDefinitions": {
-      "value": 392,
-      "reason": "Adds get_capability_completeness (BI-B6157AAB): a READ-ONLY door onto the platform's own capability measure \u2014 which of the seven planes resolve for each of the 82 agent identities, plus the repo-level reference defects. It earns a permanent place because the platform is supposed to close its own gaps: without it, only a human outside the system can see them, which is the condition this whole programme exists to end. It adds nothing to the ACTING surface \u2014 it reports, and never changes authority.",
-      "recordedAt": "2026-08-20"
+      "value": 406,
+      "reason": "issue_ux_verification_sign_in (BI-9369DEB5): a fully automated installation is verified by agents with no person present, and most pages are session-gated. No existing tool can put the platform's own browser behind a session; this one mints a one-time link for the seeded automation persona so an agent can judge layout, type, colour and overrun in a real browser without typing a password or asking the operator.",
+      "recordedAt": "2026-09-03"
     },
     "registry.packFiles": {
-      "value": 96,
-      "reason": "Adds capability-completeness-pack, the single-tool pack serving get_capability_completeness. Kept as its own pack rather than folded into an existing one so its read-only contract stays legible: the pack declares one grant (registry_read) and no side-effecting handler.",
-      "recordedAt": "2026-08-20"
+      "value": 99,
+      "reason": "New ux-verification-pack.ts: browser-verification sign-in is a delivery-surface concern distinct from self-upgrade, sandbox and admin packs, and a single-tool pack keeps the grant (sandbox_execute) and capability (manage_platform) visible next to the tool they govern.",
+      "recordedAt": "2026-09-03"
     },
     "tier.coreToolNames": {
       "value": 30,

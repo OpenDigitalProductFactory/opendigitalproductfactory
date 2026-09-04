@@ -25,8 +25,10 @@ import { WORK_CAPSULE_IDLE_STALE_MS } from "@/lib/work-capsules";
 import {
   classifyWorkCapsuleLiveness,
   type CapsuleLivenessInput,
+  type WorkCapsuleDisposition,
   type WorkCapsuleLiveness,
 } from "./liveness";
+import { isReachableFromTrunk, trunkRefExists } from "./git-scanner";
 import { updateWorkCapsuleStatus, type CapsuleDb, type WorkCapsuleActor } from "./work-capsule-store";
 
 /** Capsule statuses the reaper will never touch — already closed out. */
@@ -108,6 +110,10 @@ export type ReapCandidate = {
   headBranch: string | null;
   worktreePath: string | null;
   liveness: WorkCapsuleLiveness;
+  /** How to close out: `delivered` (merged → archive; worktree + merged branch
+   *  are safe to reap) vs `abandoned` (dead, UNMERGED → abandon; branch protected
+   *  from deletion, its commits live only there). */
+  disposition: WorkCapsuleDisposition;
   reason: string;
   trueLivenessAt: string | null;
 };
@@ -120,6 +126,7 @@ type ReaperCapsuleRow = CapsuleLivenessInput & {
   title: string;
   source: string;
   headBranch: string | null;
+  headSha: string | null;
   worktreePath: string | null;
   featureBuildId: string | null;
 };
@@ -151,6 +158,8 @@ export function selectReapCandidates(
       headBranch: row.headBranch,
       worktreePath: row.worktreePath,
       liveness: verdict.liveness,
+      // Reapable verdicts always carry a disposition; default defensively.
+      disposition: verdict.disposition ?? "abandoned",
       reason: verdict.reason,
       trueLivenessAt: verdict.trueLivenessAt ? verdict.trueLivenessAt.toISOString() : null,
     });
@@ -264,6 +273,47 @@ const NON_TERMINAL_STATUSES = [
   "ready-for-promotion",
 ];
 
+/** The local repo the reaper checks branch reachability against. */
+function resolveReaperRepoRoot(): string {
+  return process.env.DPF_REPO_ROOT || process.cwd();
+}
+
+/**
+ * PROCEDURAL delivered-detection, no LLM and no GitHub API: for every row with a
+ * headSha, set `deliveredSignal` from LOCAL git reachability (branch head an
+ * ancestor of the trunk = merged). Mutates rows in place. Best-effort by design:
+ *   - a single `trunkRefExists` probe short-circuits the whole batch when there
+ *     is no local repo/trunk (the portal runtime), so it never fans out hundreds
+ *     of failing git spawns — every row then stays null and lease/grace governs;
+ *   - a per-row null (sha not fetched locally) leaves just that row null.
+ * Injectable git fns keep the pure-ish core unit-testable.
+ */
+export async function annotateDeliveredSignals(
+  rows: ReaperCapsuleRow[],
+  deps: {
+    repoRoot?: string;
+    hasTrunk?: (root: string) => Promise<boolean>;
+    reachable?: (root: string, sha: string | null | undefined) => Promise<boolean | null>;
+  } = {},
+): Promise<void> {
+  const repoRoot = deps.repoRoot ?? resolveReaperRepoRoot();
+  const hasTrunk = deps.hasTrunk ?? trunkRefExists;
+  const reachable = deps.reachable ?? isReachableFromTrunk;
+
+  const withSha = rows.filter((r) => Boolean(r.headSha));
+  if (withSha.length === 0) return;
+  if (!(await hasTrunk(repoRoot))) return; // repo-less runtime → skip; null everywhere.
+
+  for (const row of withSha) {
+    try {
+      const merged = await reachable(repoRoot, row.headSha);
+      if (merged !== null) row.deliveredSignal = { merged };
+    } catch {
+      // Best-effort: a single git failure never aborts the sweep.
+    }
+  }
+}
+
 /**
  * DB wrapper: scan non-terminal capsules, classify each against its true
  * liveness signals, and (when `dryRun` is false) transition the dead ones to
@@ -297,11 +347,19 @@ export async function reapStaleWorkCapsules(args: {
       pullRequestUrl: true,
       pullRequestNumber: true,
       headBranch: true,
+      headSha: true,
       worktreePath: true,
       featureBuildId: true,
     },
     take: 500,
   });
+
+  // DELIVERED detection — PROCEDURAL, LOCAL, no LLM, no GitHub API: a room whose
+  // branch head is reachable from the trunk has merged and is closed out as
+  // delivered (not abandoned). Reads git objects only (never a worktree), so it
+  // is junction-safe; degrades gracefully to null (→ lease/grace logic) wherever
+  // the local repo or the trunk ref is unavailable.
+  await annotateDeliveredSignals(capsules);
 
   // Batch-load the linked FeatureBuild snapshot for the build-studio capsules
   // (their only real liveness signal). FeatureBuild.updatedAt advances on genuine
@@ -330,23 +388,36 @@ export async function reapStaleWorkCapsules(args: {
   let reaped = 0;
   const actor = args.actor ?? SYSTEM_ACTOR;
   for (const candidate of candidates) {
+    // Disposition decides the closeout, NOT a single blanket "abandoned":
+    //   - delivered (merged) → ARCHIVE as delivered. The worktree + the merged
+    //     branch are safe to reap (their commits are on the trunk); worktree
+    //     removal + branch deletion stay with their own explicitly-gated janitors
+    //     — this DB-only step never touches them.
+    //   - abandoned (dead, UNMERGED) → ABANDON, reversibly. The branch is
+    //     PROTECTED from deletion: its commits live only there, and a paused
+    //     session may still hold it. Re-promote / re-adopt to resume.
+    const delivered = candidate.disposition === "delivered";
+    const nextStatus = delivered ? "archived" : "abandoned";
+    const reason = delivered
+      ? `Auto-archived as DELIVERED by the governed Workroom reaper (EP-WORKROOM-CLOSEOUT): ${candidate.reason} ` +
+        "Branch merged to trunk; its worktree and merged branch are safe to reap by their janitors."
+      : `Auto-abandoned by the governed Workroom reaper (WS9/BI-CBAAEA94): ${candidate.reason} ` +
+        "Re-promote the backlog item or re-adopt the branch to resume. Worktree and UNMERGED branch left untouched.";
     try {
       await updateWorkCapsuleStatus({
         db: args.db,
         capsuleId: candidate.capsuleId,
-        status: "abandoned",
-        reason:
-          `Auto-abandoned by the governed Workroom reaper (WS9/BI-CBAAEA94): ${candidate.reason} ` +
-          "Re-promote the backlog item or re-adopt the branch to resume. Worktree left untouched.",
+        status: nextStatus,
+        reason,
         actor,
         now,
       });
       reaped += 1;
       console.warn(
-        `[work-capsule-reaper] abandoned ${candidate.capsuleId} (${candidate.liveness}): ${candidate.reason}`,
+        `[work-capsule-reaper] ${delivered ? "archived (delivered)" : "abandoned"} ${candidate.capsuleId} (${candidate.liveness}): ${candidate.reason}`,
       );
     } catch (err) {
-      console.warn(`[work-capsule-reaper] failed to abandon ${candidate.capsuleId}:`, err);
+      console.warn(`[work-capsule-reaper] failed to close out ${candidate.capsuleId}:`, err);
     }
   }
   const backlogRepair = await reconcileTerminalCapsuleBacklogs({ db: args.db, dryRun: false, now });

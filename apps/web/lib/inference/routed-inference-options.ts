@@ -5,6 +5,18 @@ import type { RouteDecisionActor } from "@/lib/routing/route-decision-attributio
 
 /** Caller-owned constraints and preferences for canonical routing plus dispatch. */
 export interface RouteAndCallOptions {
+  /**
+   * Exact spans of `systemPrompt` that are platform-authored INSTRUCTION rather
+   * than the turn's data (BI-463BE12A / BI-9C14CB5D). Supplied by whoever knows
+   * the provenance — the prompt assembler for its static blocks, the calling
+   * surface for the coworker persona. Anything unlabelled is classified as data,
+   * so omitting this is the safe default and changes nothing.
+   */
+  systemPromptInstructionSpans?: string[];
+  /** What each entry of `messages` is — a label per index, never content. */
+  messageOrigins?: readonly import(
+    "@/lib/inference/data-screening/types"
+  ).MessageOrigin[];
   tools?: Array<Record<string, unknown>>;
   taskType?: string;
   preferredProviderId?: string;
@@ -51,6 +63,14 @@ export interface RouteAndCallOptions {
   persistDecision?: boolean;
   /** Forbid capability degradation that strips required tools. */
   requireTools?: boolean;
+  /**
+   * Caller-owned function-call requirement. `required` is stronger than
+   * `requireTools`: the endpoint must not return a prose-only completion while
+   * a governed terminal action is pending.
+   */
+  toolChoice?: "auto" | "required" | "none";
+  /** Exact sole writer guarded by the caller's terminal-tool policy. */
+  terminalWriterToolName?: string;
   minimumCapabilities?: import("@/lib/routing/agent-capability-types").AgentMinimumCapabilities;
   agentMinimumContextTokens?: number;
   agentId?: string;

@@ -8,7 +8,7 @@
 // Writes one bundle per epic (the bundle schema is single-epic), plus a manifest.
 // Everything it cannot represent is listed, never silently dropped.
 
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 import {
@@ -19,15 +19,19 @@ import {
 import { prisma } from "../src/client";
 
 const CAPTURE_CONFIG_KEY = "installation.backlog-capture.v1";
-const UNFINISHED_STATUSES = ["triaging", "open", "in-progress"] as const;
+// Everything that is not `done`. Recovery must preserve deferred and retired
+// work too: a reset destroys the row either way, and "we decided to stop" is a
+// judgement someone may revisit, unlike completed work which git already
+// records as a merged PR. Pass --all to include `done` as well.
+const NOT_DONE_STATUSES = ["triaging", "open", "in-progress", "deferred", "retired"] as const;
 
 function usage(): string {
   return [
     "Usage: pnpm --filter @dpf/db backlog:capture -- --out <dir> [--all] [--no-receipt]",
     "",
-    "Captures unfinished backlog work as reconcilable recovery bundles.",
+    "Captures every not-done backlog item as reconcilable recovery bundles.",
     "  --out <dir>    Directory to write bundles into (required).",
-    "  --all          Include done/deferred/retired items, not just unfinished work.",
+    "  --all          Include done items too, not just work that is not done.",
     "  --no-receipt   Do not record the capture receipt in PlatformConfig.",
     "",
     "Restore a bundle with: pnpm --filter @dpf/db backlog:reconcile -- <bundle.json> --apply",
@@ -60,10 +64,71 @@ function bundleFileName(epicId: string): string {
   return `${epicId.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.json`;
 }
 
+/**
+ * The description the bundle contract requires, or the title when the epic has none.
+ *
+ * `parseBacklogRecoveryBundle` rejects an empty description, and capture round-trips
+ * through it, so a single description-less epic would otherwise fail the whole run.
+ */
+function epicDescription(epic: { description?: string | null; title: string }): string {
+  const described = epic.description?.trim();
+  return described && described !== "" ? described : epic.title;
+}
+
+/** Files in the output directory that are records, not single-epic bundles. */
+const NON_BUNDLE_FILES = new Set(["manifest.json", "unassigned-items.json"]);
+
+/**
+ * Map each epic to the bundle file already committed for it.
+ *
+ * Re-capture must overwrite an epic's existing bundle, never write a second file
+ * beside it under a different name. A committed bundle carries a curated
+ * `bundleId`, `description`, and `planPath`; writing `ep-1faba22d.json` next to
+ * `purpose-aware-installation-ecosystem-productivity.json` would leave the
+ * curated one stale on disk while still looking authoritative — the exact
+ * failure this format exists to prevent.
+ */
+async function existingBundlesByEpic(
+  dir: string,
+): Promise<Map<string, { file: string; bundleId: string; description: string; planPath: string }>> {
+  const found = new Map<string, { file: string; bundleId: string; description: string; planPath: string }>();
+  let entries: string[];
+  try {
+    entries = await readdir(dir);
+  } catch {
+    return found;
+  }
+  for (const file of entries) {
+    if (!file.endsWith(".json") || NON_BUNDLE_FILES.has(file)) continue;
+    try {
+      const parsed = JSON.parse(await readFile(resolve(dir, file), "utf8")) as {
+        bundleId?: unknown;
+        description?: unknown;
+        source?: { planPath?: unknown };
+        epic?: { epicId?: unknown };
+      };
+      const epicId = parsed.epic?.epicId;
+      // Only the first file claiming an epic wins, so a stray duplicate cannot
+      // silently retarget the capture.
+      if (typeof epicId === "string" && !found.has(epicId)) {
+        found.set(epicId, {
+          file,
+          bundleId: typeof parsed.bundleId === "string" ? parsed.bundleId : "",
+          description: typeof parsed.description === "string" ? parsed.description : "",
+          planPath: typeof parsed.source?.planPath === "string" ? parsed.source.planPath : "",
+        });
+      }
+    } catch {
+      // An unreadable or non-bundle JSON file is not a capture target.
+    }
+  }
+  return found;
+}
+
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   const capturedAt = new Date().toISOString();
-  const statusFilter = args.all ? undefined : { in: [...UNFINISHED_STATUSES] };
+  const statusFilter = args.all ? undefined : { in: [...NOT_DONE_STATUSES] };
 
   const epics = await prisma.epic.findMany({
     orderBy: { epicId: "asc" },
@@ -77,7 +142,7 @@ async function main(): Promise<void> {
       scopeRationale: true,
       createdAt: true,
       completedAt: true,
-      backlogItems: {
+      items: {
         where: statusFilter ? { status: statusFilter } : undefined,
         orderBy: { itemId: "asc" },
         select: {
@@ -112,29 +177,40 @@ async function main(): Promise<void> {
   });
 
   await mkdir(args.out, { recursive: true });
+  const existing = await existingBundlesByEpic(args.out);
 
   const written: Array<{ epicId: string; file: string; itemCount: number }> = [];
   const skipped: BacklogCaptureSkip[] = [];
   let capturedItems = 0;
 
   for (const epic of epics) {
-    if (epic.backlogItems.length === 0) continue;
-    const items = epic.backlogItems.map(
+    if (epic.items.length === 0) continue;
+    const items = epic.items.map(
       (item) => ({ ...item, epicId: epic.epicId }) as unknown as BacklogCaptureItemRow,
     );
+    // Refreshing an epic keeps the identity and curation of its committed
+    // bundle; only a genuinely new epic gets generated defaults.
+    const prior = existing.get(epic.epicId);
     const result = buildBacklogRecoveryBundle({
-      bundleId: `capture-${epic.epicId.toLowerCase()}`,
-      description: `Backlog captured from this installation on ${capturedAt}.`,
+      bundleId: prior?.bundleId || `capture-${epic.epicId.toLowerCase()}`,
+      description:
+        prior?.description || `Backlog captured from this installation on ${capturedAt}.`,
       capturedAt,
       repository: "OpenDigitalProductFactory/opendigitalproductfactory",
-      planPath: "docs/superpowers/plans/2026-08-22-instance-identity-and-purpose.md",
-      epic: { ...epic, epicId: epic.epicId } as never,
+      planPath:
+        prior?.planPath || "docs/superpowers/plans/2026-08-22-instance-identity-and-purpose.md",
+      // The bundle contract requires a non-empty epic description, but Build
+      // Studio mints epics from a build title with no description at all. One
+      // such epic used to abort the ENTIRE capture — every other epic's work
+      // lost with it — so fall back to the title, which describes the epic as
+      // truthfully as anything available, rather than refusing to back up.
+      epic: { ...epic, epicId: epic.epicId, description: epicDescription(epic) } as never,
       items,
     });
     skipped.push(...result.skipped);
     if (!result.bundle) continue;
 
-    const file = bundleFileName(epic.epicId);
+    const file = prior?.file ?? bundleFileName(epic.epicId);
     await writeFile(
       resolve(args.out, file),
       `${JSON.stringify(result.bundle, null, 2)}\n`,
@@ -183,13 +259,13 @@ async function main(): Promise<void> {
   }
 
   const unfinishedItemCount = await prisma.backlogItem.count({
-    where: { status: { in: [...UNFINISHED_STATUSES] } },
+    where: { status: { in: [...NOT_DONE_STATUSES] } },
   });
 
   const manifest = {
     schemaVersion: 1,
     capturedAt,
-    scope: args.all ? "all" : "unfinished",
+    scope: args.all ? "all" : "not-done",
     bundles: written,
     capturedItemCount: capturedItems,
     unassignedItemCount: orphans.length,
@@ -221,7 +297,7 @@ async function main(): Promise<void> {
   process.stdout.write(
     [
       `Captured ${capturedItems} item(s) across ${written.length} bundle(s) into ${args.out}`,
-      `Unfinished items on this installation: ${unfinishedItemCount}`,
+      `Not-done items on this installation: ${unfinishedItemCount}`,
       orphans.length
         ? `Wrote ${orphans.length} item(s) with no epic to unassigned-items.json (not reconcilable — re-file them under an epic).`
         : "No items without an epic.",

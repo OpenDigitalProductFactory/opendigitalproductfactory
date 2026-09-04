@@ -104,6 +104,14 @@ export function WorkspaceCalendar({
   // automated UX measurement cannot race the server events and refreshed set.
   const [fetching, setFetching] = useState(true);
 
+  /** The month the operator is looking at, as `YYYY-MM-DD`. A new event should
+   *  land where they are, not in whatever month today happens to be. */
+  function viewDateIso(): string {
+    const api = calendarRef.current?.getApi();
+    const date = api?.getDate() ?? new Date();
+    return date.toISOString().split("T")[0]!;
+  }
+
   function toggleCategory(cat: string) {
     const next = new Set(hiddenCategories);
     if (next.has(cat)) next.delete(cat);
@@ -225,6 +233,19 @@ export function WorkspaceCalendar({
       className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4"
       data-dpf-ux-settle={fetching ? "pending" : undefined}
     >
+      {/* Create control. Creating an event has always been possible here, but the
+          only way in was clicking a day cell and nothing said so, while the
+          workspace agenda linked here promising exactly this (BI-460BFA84). */}
+      <div className="mb-3 flex items-center">
+        <button
+          type="button"
+          onClick={() => setCreatePopover({ date: viewDateIso() })}
+          className="rounded-md border border-[var(--dpf-accent)] px-3 py-1.5 text-dpf-caption font-medium text-[var(--dpf-accent)] hover:bg-[color-mix(in_srgb,var(--dpf-accent)_10%,transparent)]"
+        >
+          New event
+        </button>
+      </div>
+
       {/* Filter toolbar */}
       <div className="flex items-center gap-2 mb-4 flex-wrap">
         <span className="text-[10px] text-[var(--dpf-muted)] uppercase tracking-widest mr-2">Filter:</span>
@@ -344,7 +365,14 @@ export function WorkspaceCalendar({
           setDateChooser({ date: info.dateStr, rect: info.dayEl.getBoundingClientRect() });
         }}
         select={(info) => {
-          setDateChooser({ date: info.startStr, endDate: info.endStr, rect: null });
+          // A plain click fires dateClick AND select. Keep the rect dateClick
+          // measured so the menu stays anchored to the day the operator hit;
+          // a real drag-selection starts on a different date and re-anchors.
+          setDateChooser((prev) =>
+            prev && prev.date === info.startStr
+              ? { ...prev, endDate: info.endStr }
+              : { date: info.startStr, endDate: info.endStr, rect: null },
+          );
         }}
       />
 

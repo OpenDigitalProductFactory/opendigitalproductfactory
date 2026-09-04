@@ -8,6 +8,7 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
+  AUDIENCE_READING_LEVELS,
   auditUxBudget,
   budgetFor,
   countDisclosureRegions,
@@ -168,20 +169,78 @@ describe("budget axes", () => {
   it("does not fabricate a reading grade for an empty surface", () => {
     expect(measureUxBudget("<div></div>").readingGradeLevel).toBe(0);
   });
+
+  // ── BI-0ED0F6B3 — the reading grade measures difficulty, not punctuation ──
+
+  /** The /finance/mileage surface, in the markup shape that exposed the defect. */
+  const LABEL_SURFACE = `<main><h1>Mileage</h1><p>3 to sort</p><a>See my drives</a>
+    <table><tr><th>Date</th><th>Route</th><th>Miles</th><th>Sorted</th><th>Owed</th></tr></table>
+    <ul><li>Business</li><li>Personal</li><li>Commute</li></ul></main>`;
+
+  it("grades a surface of plain labels as plain", () => {
+    // Every word here is ordinary English. Before the fix the whole page
+    // collapsed into one "sentence" and graded in the teens.
+    const grade = measureUxBudget(LABEL_SURFACE).readingGradeLevel;
+    expect(grade).toBeLessThan(9);
+  });
+
+  it("cannot be gamed by punctuating the labels", () => {
+    const stopped = LABEL_SURFACE.replace(/<\/(h1|p|a|th|li)>/g, ".</$1>");
+    expect(measureUxBudget(stopped).readingGradeLevel).toBe(
+      measureUxBudget(LABEL_SURFACE).readingGradeLevel,
+    );
+  });
+
+  it("still fails a surface whose own words are dense", () => {
+    const dense = `<main><h1>Infrastructure</h1><p>Optimization</p>
+      <ul><li>Administrative</li><li>Documentation</li><li>Organizational</li></ul></main>`;
+    expect(measureUxBudget(dense).readingGradeLevel).toBeGreaterThan(9);
+  });
+
+  it("scores the route's own copy, not the shell chrome around it", () => {
+    const dense = `<main><h1>Infrastructure Optimization</h1>
+      <p>Administrative documentation of organizational infrastructure.</p>
+      <ul><li>Authorization</li><li>Diagnostics</li><li>Provisioning</li><li>Observability</li></ul>
+      <p>Reconciliation of heterogeneous configuration repositories.</p></main>`;
+    const chrome = `<header><a>Home</a><a>Work</a><a>Money</a></header><nav><ul><li>Jobs</li><li>Bills</li></ul></nav>`;
+    // Adding a rail of short, easy nav labels must not dilute the page's grade.
+    expect(measureUxBudget(chrome + dense).readingGradeLevel).toBe(
+      measureUxBudget(dense).readingGradeLevel,
+    );
+  });
+
+  it("keeps the whole surface when <main> does not hold the page's words", () => {
+    // A landmark wrapped around a client shell or a mocked subtree carries a
+    // word or two. Grading THAT would be worse than grading the chrome too.
+    const scrap = `<header><h1>Date</h1><p>Route</p><p>Miles</p><p>Sorted</p></header><main><div>Infrastructure</div></main>`;
+    expect(measureUxBudget(scrap).readingGradeLevel).toBe(
+      measureUxBudget(scrap.replace(/<\/?main>/g, "")).readingGradeLevel,
+    );
+  });
+
+  it("falls back to the whole surface when the shell marks no <main>", () => {
+    const noMain = `<div><h1>Date</h1><p>Route</p></div>`;
+    expect(measureUxBudget(noMain).readingGradeLevel).not.toBe(0);
+  });
 });
 
-describe("reading tier resolves from audience, not shell alone (BI-1DE6F69E)", () => {
+describe("reading tier resolves from audience and shell (BI-1DE6F69E, BI-0ED0F6B3)", () => {
   it("keeps the shell default for every audience without an override", () => {
-    for (const audience of ["owner", "worker", "customer", "public", "auth-setup"] as const) {
+    for (const audience of ["owner", "worker", "customer", "public", "auth-setup", "admin", "builder"] as const) {
       expect(readingLevelFor("detail", audience)).toBe("high-school");
       expect(readingLevelFor("cockpit", audience)).toBe("high-school");
     }
   });
 
-  it("gives operator surfaces the college tier the readability policy specifies", () => {
-    expect(readingLevelFor("detail", "admin")).toBe("college");
-    expect(readingLevelFor("list", "admin")).toBe("college");
-    expect(readingLevelFor("detail", "builder")).toBe("college");
+  it("holds operator surfaces to the strict tier, the re-tier having been withdrawn", () => {
+    // BI-1DE6F69E loosened admin/builder to college because EVERY /admin route
+    // failed at 9. Those grades were produced by counting full stops, not
+    // difficulty (BI-0ED0F6B3); corrected, /admin/graph-explorer reads 3.4 and
+    // /admin 8.2. The premise is withdrawn, so the exception is too.
+    expect(AUDIENCE_READING_LEVELS).toEqual({});
+    expect(readingLevelFor("detail", "admin")).toBe("high-school");
+    expect(readingLevelFor("list", "admin")).toBe("high-school");
+    expect(readingLevelFor("detail", "builder")).toBe("high-school");
   });
 
   it("falls back to the shell default when no audience is supplied", () => {
@@ -197,15 +256,16 @@ describe("reading tier resolves from audience, not shell alone (BI-1DE6F69E)", (
     expect(readingLevelFor("unclassified", "admin")).toBe("college");
   });
 
-  it("re-tiers the bar without deleting it — an operator surface still has a cap", () => {
-    // The whole point: 11.0 (the plainest admin surface measured) passes, but the
-    // family's real debt — 15.4, 18.6, 29.4, 57.9 — still fails.
+  it("holds an operator surface to grade 9, which the corrected measure lets it clear", () => {
+    // The measured admin family after BI-0ED0F6B3: graph-explorer 3.4, cockpit
+    // 6.4, data-stewardship 6.5, business-models 8.4, /admin 8.2 — all pass. The
+    // family's remaining debt (archetypes 14.9) is a visible advisory finding.
     const budget = budgetFor("detail", "admin");
-    expect(budget.readingLevel).toBe("college");
-    expect(meetsReadingLevel({ readingGradeLevel: 11 } as never, budget.readingLevel)).toBe(true);
-    expect(meetsReadingLevel({ readingGradeLevel: 13 } as never, budget.readingLevel)).toBe(true);
-    expect(meetsReadingLevel({ readingGradeLevel: 15.4 } as never, budget.readingLevel)).toBe(false);
-    expect(meetsReadingLevel({ readingGradeLevel: 57.9 } as never, budget.readingLevel)).toBe(false);
+    expect(budget.readingLevel).toBe("high-school");
+    for (const grade of [3.4, 6.4, 6.5, 8.2, 8.4]) {
+      expect(meetsReadingLevel({ readingGradeLevel: grade } as never, budget.readingLevel)).toBe(true);
+    }
+    expect(meetsReadingLevel({ readingGradeLevel: 14.9 } as never, budget.readingLevel)).toBe(false);
   });
 
   it("does not loosen a customer-facing surface", () => {
@@ -425,7 +485,30 @@ describe("generated route-shell registry", () => {
     // 199 -> 200: /workforce (EP-COWORKER-IDENTITY-360) — the AI Coworkers directory,
     // a business-domain peer to /employee and /customer, reusing the roster read-model;
     // static, no wall-clock or live-orchestration state, so it is sweep-eligible.
-    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(200);
+    // 200 -> 201: /platform/tools/integrations/wordpress is a bounded operator detail
+    // route over connection, projection, receipt, and drift read models; its measured
+    // preview is deterministic and carries an explicit page-purpose contract.
+    // 201 -> 202: /finance/mileage is a net-new driver-facing route (EP-MILEAGE-ABSORB)
+    // — the surface that makes the mileage substrate reachable.
+    // 205 -> 206: /workspace/cases/[caseKey] is the FIRST dynamic route the sweep
+    // can measure (BI-DE67A3EC). Every "[param]" route was excluded outright
+    // because nothing minted an id; the fixture now mints a deterministic work
+    // case and publishes its path, so a detail surface is measurable at last.
+    // Eligibility for a dynamic route is earned by that minting, not asserted —
+    // an eligible-but-unresolved route fails the run rather than measuring a 404.
+    // 206 -> 207: /workspace/ward (BI-F91D0685) — the ward board reads housing and
+    // occupancy from route-owned read models with no wall-clock or live-orchestration
+    // state, so its rendered output is stable and it carries a ratified page-purpose
+    // contract.
+    // 206 -> 207: /storefront/animals/waiting (BI-899D7F00) — the adoption waiting
+    // list, read-only over AdoptableAnimal.publishedAt. The first storefront route to
+    // be measurable: the sweep fixture now provisions one pet-rescue storefront with
+    // listed animals, which is the honest fixture context the storefront-setup-required
+    // exclusions were waiting for. Its siblings keep their exclusion until each gets its own.
+    // 207 -> 206: /storefront/setup joins setup-phase-only in the same PR — once the
+    // fixture provisions a storefront the wizard navigates away and cannot be measured.
+    // Net: 206 base + /workspace/ward + /storefront/animals/waiting - /storefront/setup = 207.
+    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(207);
     // 110 -> 113: the three exclusions above. Product Direction then adds seven
     // explicitly classified dynamic routes, bringing the combined total to 120.
     // 120 -> 121: /platform/ai/operations-map.
@@ -435,11 +518,11 @@ describe("generated route-shell registry", () => {
     // 360 detail page is a dynamic ([agentId]) route the generator auto-excludes with
     // reason "dynamic-fixture-required": the sweep cannot render it without a per-coworker
     // fixture, so it is not measured (not a live-state exclusion, a fixture one).
-    // 123 -> 124: /ops/stack-currency (BI-6328BCA6) joins the wall-clock exclusions — it
-    // renders currency relative to `now` (approaching-eol window, daysUntilEol).
-    // 124 -> 125: /ops/teardown reads a host evidence collection that a detached
-    // lifecycle runner can update concurrently with the sweep.
-    expect(registry.routes.filter((route) => !route.sweepEligible)).toHaveLength(125);
+    // Redirect-only routes are omitted from the page registry. Parameterized redirect
+    // detection removed five compatibility shims from this count in BI-7D2C4F02.
+    // 120 -> 119: the mirror of the eligibility gain above — /workspace/cases/[caseKey]
+    // left the excluded set when the fixture began minting its id.
+    expect(registry.routes.filter((route) => !route.sweepEligible)).toHaveLength(120);
   });
 
   it("keeps contextual sweep exclusions explicit, valid, and non-stale", () => {

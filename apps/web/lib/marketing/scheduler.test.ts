@@ -160,6 +160,67 @@ describe("planUpcomingForAssetTasks", () => {
     expect(result.skipped).toBe(1);
   });
 
+  it("suppresses planning entirely under a quiet marketing posture (BI-C26FE785)", async () => {
+    const result = await planUpcomingForAssetTasks({
+      organizationId: "org-1",
+      proactivity: { level: "quiet", policyId: "proactivity:marketing-campaign:quiet" },
+    });
+
+    expect(result.scheduled).toBe(0);
+    expect(result.suppressedByPosture).toBe(true);
+    // Quiet must not even read the task list: planning then staying silent would
+    // still spend budget and fill the outbound queue behind the owner's back.
+    expect(vi.mocked(prisma.marketingAssetTask.findMany)).not.toHaveBeenCalled();
+  });
+
+  it("starts creative earlier under an assertive marketing posture (BI-C26FE785)", async () => {
+    const createdAt = new Date(Date.now() - 60 * 60 * 1000);
+    vi.mocked(prisma.marketingAssetTask.findMany).mockResolvedValue([
+      { taskId: "task-1", dueWindow: "week 5", createdAt },
+    ] as never);
+    vi.mocked(prisma.scheduledOutboundAction.findFirst).mockResolvedValue(null as never);
+    vi.mocked(prisma.scheduledOutboundAction.create).mockResolvedValue({ scheduleId: "s-1" } as never);
+
+    const result = await planUpcomingForAssetTasks({
+      organizationId: "org-1",
+      proactivity: { level: "assertive", policyId: "proactivity:marketing-campaign:assertive" },
+    });
+
+    expect(result.scheduled).toBe(1);
+    expect(result.advanceDays).toBe(6);
+    // The persisted note must state the lead time actually used, not the constant.
+    const created = vi.mocked(prisma.scheduledOutboundAction.create).mock.calls[0]?.[0] as
+      | { data?: { notes?: string } }
+      | undefined;
+    expect(created?.data?.notes).toContain("Auto-planned 6 days");
+  });
+
+  it("never schedules less under assertive than under balanced (BI-C26FE785 regression)", async () => {
+    // "week 1" resolves to createdAt itself. Created 4 days ago, so balanced
+    // (3-day lead) still lands in the future, but a naive assertive 6-day lead
+    // would land in the past and skip the task — assertive doing LESS work.
+    const createdAt = new Date(Date.now() + 4 * 24 * 60 * 60 * 1000);
+    const task = [{ taskId: "task-1", dueWindow: "week 1", createdAt }] as never;
+
+    vi.mocked(prisma.scheduledOutboundAction.findFirst).mockResolvedValue(null as never);
+    vi.mocked(prisma.scheduledOutboundAction.create).mockResolvedValue({ scheduleId: "s-1" } as never);
+
+    vi.mocked(prisma.marketingAssetTask.findMany).mockResolvedValue(task);
+    const balanced = await planUpcomingForAssetTasks({
+      organizationId: "org-1",
+      proactivity: { level: "balanced", policyId: "proactivity:marketing-campaign:balanced" },
+    });
+
+    vi.mocked(prisma.marketingAssetTask.findMany).mockResolvedValue(task);
+    const assertive = await planUpcomingForAssetTasks({
+      organizationId: "org-1",
+      proactivity: { level: "assertive", policyId: "proactivity:marketing-campaign:assertive" },
+    });
+
+    expect(balanced.scheduled).toBe(1);
+    expect(assertive.scheduled).toBeGreaterThanOrEqual(balanced.scheduled);
+  });
+
   it("skips tasks whose computed schedule date is in the past", async () => {
     const createdAt = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000); // 8 days ago
     // "week 1" → createdAt itself → schedule = createdAt - 3 days → past

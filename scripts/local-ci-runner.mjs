@@ -13,7 +13,7 @@
 
 import { spawnSync } from "node:child_process";
 import { X_OK } from "node:constants";
-import { accessSync, chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { accessSync, chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { connect } from "node:net";
 import { delimiter, dirname, join } from "node:path";
 import {
@@ -28,6 +28,7 @@ import {
   resolveBaseFreshnessPolicy,
 } from "./lib/local-ci-base-freshness.mjs";
 import { ensureFullHistory } from "./lib/git-shallow-preflight.mjs";
+import { EXIT_CHILD_SIGNAL_DEATH } from "./lib/sandbox-freshness.mjs";
 import { parseRepositoryPnpmVersion, resolvePinnedPnpmInvocation } from "./lib/pinned-pnpm.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
 import { resolveHostCommandInvocation } from "./lib/host-command-invocation.mjs";
@@ -322,6 +323,83 @@ async function resolveDatabaseUrl(env, manifest) {
 
 export const LOCAL_CI_MISSING_DATABASE_URL = "postgresql://dpf:dpf_dev@127.0.0.1:1/dpf_local_ci_missing_database";
 
+/**
+ * Turn a spawnSync result into an exit code that says what happened
+ * (BI-F22B4EEE).
+ *
+ * `result.status ?? 1` was the whole bug. A child killed by a signal reports
+ * `status: null`, so the `?? 1` collapsed SIGKILL into exit 1 — the same code a
+ * failing test suite produces — and the signal was never read. classifyGateOutcome
+ * then recorded "local-CI lease gate failed.", a PRODUCT verdict, for a host that
+ * had run out of memory.
+ *
+ * That is the failure mode the blocked_* statuses exist to prevent, and it is the
+ * one that had no code. Observed live: the child died at the vitest ->
+ * production-build boundary after 25,447 tests passed, leaving no build receipt
+ * and no error text, on a box carrying ten concurrent gate claims.
+ *
+ * The signal name goes to stderr because the child's own output is inherited and
+ * ends mid-stream — without this line there is nothing anywhere saying a signal
+ * occurred, which is exactly how five gate runs produced no diagnosable reason.
+ */
+export function resolveChildExit(result) {
+  if (result?.signal) {
+    process.stderr.write(
+      `local-ci-runner: the build child was killed by ${result.signal} rather than exiting. ` +
+      "This is infrastructure evidence, not a product build failure — most often the host " +
+      "running out of memory under concurrent gate load. Re-run when the box is quieter.\n",
+    );
+    return EXIT_CHILD_SIGNAL_DEATH;
+  }
+  if (typeof result?.status === "number") return result.status;
+  // No status and no signal: spawn itself failed. Still not a product verdict,
+  // but we cannot claim a signal we did not observe.
+  if (result?.error) {
+    process.stderr.write(`local-ci-runner: could not run the build child: ${result.error.message}\n`);
+  }
+  return 1;
+}
+
+/**
+ * Clear the previous run's per-stage receipts before this run starts
+ * (BI-F22B4EEE).
+ *
+ * `local-integration-ci` reads `${metadataOut}.vitest.json`,
+ * `.typecheck.json` and `.build.json` back when it assembles evidence. They
+ * were never cleared between runs, so a run could find a PREVIOUS run's
+ * receipts and treat their stages as satisfied. Observed live: a "gate" that
+ * ran for 32 seconds — guard loop only, no typecheck, no vitest — and still
+ * emitted a verdict, with receipts beside it from a different tree saying
+ * `passed`.
+ *
+ * A stage that did not run in THIS run must not be able to leave evidence in
+ * it. Removal is best-effort: an absent file is the desired state, and failing
+ * the gate because a stale receipt could not be deleted would trade one wrong
+ * verdict for another.
+ */
+export function clearStaleStageReceipts(metadataFile, { rm = rmSync } = {}) {
+  const cleared = [];
+  // BI-F22B4EEE: the metadata record itself is inherited across runs. A
+  // failing or killed run that never rewrote it left the previous run's
+  // candidateSha and execution.status in place. Delete it at start so neither
+  // field can be quoted as this run's verdict.
+  const paths = [
+    metadataFile,
+    `${metadataFile}.vitest.json`,
+    `${metadataFile}.typecheck.json`,
+    `${metadataFile}.build.json`,
+  ];
+  for (const path of paths) {
+    try {
+      rm(path, { force: true });
+      cleared.push(path);
+    } catch {
+      // Best-effort by design — see above.
+    }
+  }
+  return cleared;
+}
+
 export function createLocalIntegrationChildInvocation({
   repoTop,
   candidate,
@@ -467,6 +545,9 @@ async function main() {
   const baseSha = baseFreshness.baseSha || "";
   const baseCommitDate = baseSha ? gitOrEmpty(["-C", repoTop, "show", "-s", "--format=%cI", baseSha]) : "";
   const metadataFile = env.DPF_LOCAL_CI_METADATA_FILE || manifest.evidence.metadata;
+  // BI-F22B4EEE: a stage that does not run in THIS run must not inherit the
+  // previous run's receipt and be counted as satisfied.
+  clearStaleStageReceipts(metadataFile);
 
   if (dryRun) {
     process.stdout.write("local-ci-runner dry-run\n");
@@ -543,7 +624,7 @@ async function main() {
   }
 
   const result = spawnSync(process.execPath, invocation.args, { cwd: workspace, stdio: "inherit", env: invocation.env });
-  process.exit(result.status ?? 1);
+  process.exit(resolveChildExit(result));
 }
 
 if (isEntryModule(import.meta.url)) main();

@@ -247,6 +247,49 @@ describe("validatePlanBacklogCoverageReceipt v2", () => {
     })).toMatchObject({ ok: false, code });
   });
 
+  // BI-38A353B2: two prior sessions bisected these refusals by trial because
+  // the text restated the rule instead of naming the offending value.
+  describe("a refusal names the offending value, not just the rule", () => {
+    it("names the deliverable whose traceability is incomplete", () => {
+      const result = validatePlanBacklogCoverageReceipt({
+        receipt: { ...v2, deliverables: [{ ...v2.deliverables[0]!, verificationRefs: [] }] },
+        mappedBacklogItems: [{ itemId: "BI-EXISTING-1", status: "open" }],
+        requireGovernedImplementation: true,
+        currentPlanDigest: "sha256:plan",
+        traceabilityContext,
+      });
+      expect(result).toMatchObject({ ok: false, code: "traceability-incomplete" });
+      expect((result as { error: string }).error).toContain(v2.deliverables[0]!.key);
+    });
+
+    it("names which acceptance ids no deliverable verifies", () => {
+      const result = validatePlanBacklogCoverageReceipt({
+        receipt: v2,
+        mappedBacklogItems: [
+          { itemId: "BI-EXISTING-1", status: "open" },
+          { itemId: "BI-EXISTING-2", status: "open" },
+        ],
+        requireGovernedImplementation: true,
+        currentPlanDigest: "sha256:plan",
+        traceabilityContext: { ...traceabilityContext, acceptanceIds: [...traceabilityContext.acceptanceIds, "AC-ORPHAN"] },
+      });
+      expect(result).toMatchObject({ ok: false, code: "traceability-incomplete" });
+      expect((result as { error: string }).error).toContain("AC-ORPHAN");
+    });
+
+    it("names which traceability input is absent rather than 'could not be resolved'", () => {
+      const result = validatePlanBacklogCoverageReceipt({
+        receipt: v2,
+        mappedBacklogItems: [{ itemId: "BI-EXISTING-1", status: "open" }],
+        requireGovernedImplementation: true,
+        currentPlanDigest: "sha256:plan",
+        traceabilityContext: { ...traceabilityContext, acceptanceIds: [] },
+      });
+      expect(result).toMatchObject({ ok: false, code: "traceability-incomplete" });
+      expect((result as { error: string }).error).toContain("acceptance ids");
+    });
+  });
+
   it("rejects arbitrary non-empty refs and requires every current acceptance criterion to be covered", () => {
     expect(validatePlanBacklogCoverageReceipt({
       receipt: {
@@ -284,7 +327,11 @@ function fakeDb(): {
 } {
   const activityCreate = vi.fn(async () => ({ id: "activity-receipt-1" }));
   const tx = {
-    $queryRaw: async <T>(_strings: TemplateStringsArray, ..._values: unknown[]) => [{ id: "parent-row" }] as unknown as T,
+    $queryRaw: async <T>(strings: TemplateStringsArray, ..._values: unknown[]) => (
+      strings.join("").includes('FROM "WorkCapsule"')
+        ? [{ id: "workroom-row", createdByPrincipalId: "p" }]
+        : [{ id: "parent-row" }]
+    ) as unknown as T,
     backlogItem: {
       findUnique: vi.fn(async ({ where }: { where: { itemId: string } }) =>
         where.itemId === "BI-PARENT"
@@ -459,6 +506,38 @@ describe("checkBranchPlanBacklogGate", () => {
 });
 
 describe("recordPlanBacklogCoverage", () => {
+  it("completes immutable provider I/O before opening the serializable transaction", async () => {
+    const { db } = fakeDb();
+    let providerComplete = false;
+    const resolveArtifact = vi.fn(async () => {
+      expect(db.$transaction).not.toHaveBeenCalled();
+      providerComplete = true;
+      return resolvePlan();
+    });
+
+    await recordPlanBacklogCoverage({
+      itemId: "BI-PARENT",
+      planPath: "docs/superpowers/plans/example.md",
+      planArtifactRef,
+      decision: "atomic",
+      rationale: "The enforcement layers must ship together as one compatibility boundary.",
+      deliverables: [{
+        key: "atomic",
+        title: "Atomic repair",
+        independentlyShippable: false,
+        dependsOn: [],
+        ...traceability,
+      }],
+      userId: "user-1",
+      db,
+      resolveArtifact,
+    });
+
+    expect(resolveArtifact).toHaveBeenCalledOnce();
+    expect(providerComplete).toBe(true);
+    expect(db.$transaction).toHaveBeenCalledOnce();
+  });
+
   it("records one structured receipt after live BI validation", async () => {
     const { db, activityCreate } = fakeDb();
     const result = await recordPlanBacklogCoverage({
@@ -510,9 +589,46 @@ describe("recordPlanBacklogCoverage", () => {
     });
   });
 
+  it("fails if Workroom authorship changes after immutable preflight", async () => {
+    const { db, activityCreate } = fakeDb();
+    const tx = db as PlanBacklogCoverageDb & { $queryRaw: NonNullable<PlanBacklogCoverageDb["$queryRaw"]> };
+    tx.$queryRaw = async <T>(strings: TemplateStringsArray, ..._values: unknown[]) => (
+      strings.join("").includes('FROM "WorkCapsule"')
+        ? [{ id: "workroom-row", createdByPrincipalId: "different-principal" }]
+        : [{ id: "parent-row" }]
+    ) as unknown as T;
+    db.$transaction = vi.fn(async (work) => work(tx));
+
+    const result = await recordPlanBacklogCoverage({
+      itemId: "BI-PARENT",
+      planPath: "docs/superpowers/plans/example.md",
+      planArtifactRef,
+      decision: "atomic",
+      rationale: "The enforcement layers must ship together as one compatibility boundary.",
+      deliverables: [{
+        key: "atomic",
+        title: "Atomic repair",
+        independentlyShippable: false,
+        dependsOn: [],
+        ...traceability,
+      }],
+      userId: "user-1",
+      db,
+      resolveArtifact: resolvePlan,
+    });
+
+    expect(result).toMatchObject({ ok: false, code: "plan-artifact-invalid" });
+    expect(activityCreate).not.toHaveBeenCalled();
+  });
+
   // BI-B9403248: an external session that hits this has no route forward and no
   // way to learn there is one — the baseline is minted by the initiative
-  // spec-approval gate, which no MCP tool exposes. The message must say so.
+  // spec-approval gate. The message must say so.
+  //
+  // BI-38A353B2: and it must say so WITHOUT citing a backlog id. The previous
+  // text told callers to cite BI-B9403248, which closed on 2026-08-21 while
+  // the block stayed live, so the gate instructed contributors to blame a
+  // fixed defect. A condition does not go stale; an id does.
   it("names the missing scope baseline and how it is minted, instead of failing opaquely", async () => {
     const { db, activityCreate } = fakeDb();
     db.backlogItemActivity.findMany = vi.fn(async () => []);
@@ -540,9 +656,14 @@ describe("recordPlanBacklogCoverage", () => {
 
     expect(result).toMatchObject({ ok: false, code: "traceability-incomplete" });
     const error = (result as { error: string }).error;
-    expect(error).toContain("initiative_scope_baseline");
+    expect(error).toContain("BI-PARENT");
+    expect(error).toContain("initiative scope baseline");
+    expect(error).toContain("record_initiative_design_review");
     expect(error).toContain("spec-approval");
-    expect(error).toContain("BI-B9403248");
+    expect(error).toContain("independent");
+    // The remediation must not hand the caller a backlog id to cite: the id
+    // goes stale the moment it closes, the condition never does.
+    expect(error).not.toMatch(/\b(?:BI|EP)-[0-9A-F]{8}\b/);
     expect(activityCreate).not.toHaveBeenCalled();
   });
 

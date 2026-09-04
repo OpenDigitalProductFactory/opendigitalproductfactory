@@ -1,0 +1,13 @@
+-- Trip gains the country the drive actually happened in, so mileage can be
+-- priced against per-country policy rather than one global rate.
+--
+-- DERIVED, never picked: the capturing device reverse-geocodes its own location
+-- and reports the ISO 3166-1 alpha-2 code. Nullable on purpose — an older client,
+-- a withheld location permission or no signal all yield NULL, and a NULL prices
+-- the trip on the employee's country of record instead of guessing.
+--
+-- Existing rows stay NULL. That is the correct backfill: we do not know where a
+-- historical trip was driven, and inventing a country would fabricate the very
+-- fact the column exists to record. Those trips keep pricing exactly as they do
+-- today, on the employee's country of record.
+ALTER TABLE "Trip" ADD COLUMN "countryCode" TEXT;

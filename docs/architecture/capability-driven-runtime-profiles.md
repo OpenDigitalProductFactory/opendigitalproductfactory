@@ -56,6 +56,33 @@ The transition protocol uses an HMAC-signed, expiring envelope containing the tr
 
 Health is an observation of the desired state, not permission to enable or disable a capability.
 
+### Retiring a capability
+
+Retirement is **declared, and it is two-phase**. A capability carries two independent axes: `state`
+(`active` | `disabled`) is *enablement* — whether this install has it turned on, tracked per-install in
+the database — and `lifecycle` (absent, meaning active, or `retired`) is *lifecycle* — whether the
+platform still offers it at all. Conflating them would make "the operator turned it off"
+indistinguishable from "the platform withdrew it", so a `retired` capability may not also be `state:
+active`; the compiler refuses that contradiction.
+
+To retire a capability:
+
+1. **Mark it** `lifecycle: "retired"` and `state: "disabled"` in the capability seed, and **leave the
+   entry in the catalog** for at least one release. Installs migrate off it on their next upgrade: the
+   projection drops it from `enabledRuntimeCapabilities`, restamps the snapshot, and reports it in
+   `droppedRetiredCapabilities` so the withdrawal is visible rather than silent.
+2. **Only then delete the entry**, once every supported install has upgraded past step 1.
+
+Deleting the entry without step 1 wedges every install that still has the capability enabled. Nothing
+vouches for an id that is simply absent, so it cannot be told apart from a corrupt or hand-edited
+snapshot — the projection fails closed, and the upgrade that would have dropped the capability is the
+upgrade it blocks (BI-5AA0345E). That is the same self-wedging shape as a moved catalog hash
+([install-state readiness migration](../superpowers/specs/2026-07-18-install-state-readiness-migration-design.md) §7)
+and an N-1 promoter build context.
+
+A retired capability that is still a dependency of a live one is a catalog authoring error, reported as
+`retired_runtime_capability_required`, not silently projected.
+
 ## Install, upgrade, consumer assets, and rollback
 
 The persistent snapshot stores sorted `enabledRuntimeCapabilities`, `capabilityCatalogHash`, and `capabilityStateVersion`. POSIX hosts use `$XDG_STATE_HOME/dpf/install-state.json` when `XDG_STATE_HOME` is set and otherwise `$HOME/.dpf/install-state.json`; Windows uses `%USERPROFILE%\.dpf\install-state.json`. A container reads the host directory through `/dpf-state` with the mount access appropriate to its responsibility.
@@ -94,6 +121,41 @@ The portal observes only containers in its own Docker Compose project. It discov
 
 Host diagnostics remain in installer-owned doctor and verification surfaces. They record the canonical Compose file chain, rendered configuration hash, container state, and redacted install state. Docker Engine itself is a host prerequisite and observation boundary, not a manifest service. Podman command aliases are rejected by installer preflight because the current contract requires standard Docker Engine.
 
+## Diagnosing capability drift (BI-5ACBAC50)
+
+Two authorities describe what is enabled: `enabledRuntimeCapabilities` in
+`install-state.json`, and `PlatformCapability.state` in the database. The
+transition protocol keeps them together — live state commits only after the
+signed host receipt proves the topology.
+
+When they disagree anyway, `projectCapabilityServices` throws
+`capability_state_stale:<capabilityId>` and refuses to project. That is
+deliberate: a projection that guessed which side to believe would hand backup,
+readiness and the health UI a topology neither source claims.
+
+The refusal used to name only the FIRST mismatch, and it happens inside the
+loader that runtime health and backup readiness call — so the surfaces that would
+explain the condition were the ones that could not render.
+`createOperationalCapabilityState` now re-raises that error with the full
+diagnosis from
+[`capability-state-divergence.ts`](../../apps/web/lib/platform-runtime/capability-state-divergence.ts):
+every drifted capability, and which way each drifted.
+
+- `live-active-not-enabled` — the database says on, the install snapshot does not
+  list it. Anything trusting capability state believes services are running that
+  the install never provisioned. This is the shape that let an installation
+  report `runtime:deep-observability` active while no collector existed, so every
+  metric-backed surface had no source and the state that would have revealed it
+  read healthy.
+- `enabled-not-live-active` — the install enabled it, the database says disabled.
+  The services may be running while the platform believes they are not, so
+  nothing tends them.
+- `missing-live-state` — no capability row at all.
+
+Reporting is not repair. The diagnosis says what diverged; it never decides which
+authority wins, because reconciling without first finding the writer that moved
+state outside the transition protocol leaves the cause in place.
+
 ## Safe operating rules
 
 - Change physical service facts in the substrate manifest and regenerate the catalog; do not hand-edit the generated catalog.
@@ -101,6 +163,7 @@ Host diagnostics remain in installer-owned doctor and verification surfaces. The
 - Change enabled state only through the governed transition API/saga. Do not set `COMPOSE_PROFILES` to bypass capability authority.
 - Preserve lifecycle overlays as explicit operator intent and capability profiles as resolved state.
 - Treat a stale hash, unknown capability, unknown observation, or failed receipt as an operator-visible fault. Do not infer a replacement state.
+- Retire a capability in two phases — mark it `retired` and leave the entry for a release, then delete it. Deleting the entry outright wedges every install that still has it enabled.
 - Use governed self-upgrade and its recovery point for release changes; do not mutate the live topology with an ad hoc Compose rebuild.
 - Do not remove optional volumes, schedules, or provider records merely because a capability is inactive.
 

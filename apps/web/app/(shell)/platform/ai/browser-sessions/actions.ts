@@ -76,6 +76,8 @@ export async function beginServiceAccountSetupAction(input: {
       siteKey,
       accountKey,
       displayName: input.displayName,
+      // The operator running the attended setup owns the account (BI-3181909E).
+      accountableOwnerUserId: session.user.id,
     });
     return {
       ok: true,

@@ -4,7 +4,7 @@ status: active
 
 # WordPress channel projection implementation plan
 
-> **For implementation agents:** Execute one live child BI at a time, in its own branch/worktree/PR. Do not implement the x-large umbrella `BI-F50B1E46` as one build. Revalidate the coverage receipt and re-run substrate/overlap checks before each child. Use `dpf-tdd` for code changes, `dpf-data-architecture-steward` for the schema slice, `dpf-ux-fit-review` for UI, and the normal DPF finishing/PR path.
+> **For implementation agents:** Deliver the child BIs through the three dependency-coherent batches below: foundation, backend, and UX/docs. Do not implement the x-large umbrella `BI-F50B1E46` as an undifferentiated build. Revalidate the coverage receipt and re-run substrate/overlap checks before each batch. Use `dpf-tdd` for code changes, `dpf-data-architecture-steward` for the schema slice, `dpf-ux-fit-review` for UI, and the normal DPF finishing/PR path.
 
 **Goal:** Let an internal DPF installation govern business content and publish approved posts, pages, media, and structured business projections to a customer-owned WordPress site without bundling a public CMS, hosting plane, CDN, or required inbound DPF URL.
 
@@ -33,6 +33,14 @@ status: active
 | 7 | Architecture/claims/runbook/adoption evidence | `BI-28185C18` | evidence from 1–6; documentation skeleton may begin earlier | medium |
 
 Parallelism is deliberately limited. Deliverables 1 and 2 may run in parallel. Deliverable 3 can start once the identity behavior in 1 is stable. Deliverables 4–6 are ordered because external writes cannot precede credential/network safety and the UX cannot promise states the source models do not yet own.
+
+### Executed delivery batches
+
+| Batch | Child BIs | Branch / PR | Status |
+| --- | --- | --- | --- |
+| Foundation | `BI-AE8A5B76`, `BI-93507D83` | `feat/external-channel-foundation` / #4442 | Published; refreshed exact-tree CI green |
+| Backend | `BI-46AE0EBC`, `BI-D2AA1064`, `BI-744F8083` | `feat/wordpress-channel-backend` / #4450 | Published as ready stacked PR; exact-tree CI green |
+| UX and adoption evidence | `BI-8D98C5E6`, `BI-28185C18` | `feat/deliver-wordpress-operator-ux-and-adoption-evide` | Implementing and verifying |
 
 Across the graph, reserve approximately 20% of implementation capacity for the refactoring named in each phase. The allocation pays for canonical boundaries, duplicate removal, shared adapters/presentation, and invariant tests; it is not a generic cleanup allowance.
 
@@ -308,6 +316,8 @@ Verification cases `VC-WP-01` through `VC-WP-10` are plan gates. Each child link
 - Fresh/unavailable/permission/drift states show one truthful next action; hidden diagnostics use progressive disclosure.
 - No setup/status click starts AI work. Draft assistance remains in existing AI drafting workflow; external publish always previews and confirms.
 - UI implementation must commit a measured UX-fit manifest and functional browser evidence, not screenshots alone.
+
+**Captured in:** `/platform/tools/integrations/wordpress`, the existing integrations catalog, and the existing Customer Marketing approval/publish queue. The implementation reuses shared form and report-kit primitives and extracts one provider-neutral external publication confirmation control shared with LinkedIn. The measured manifest is `docs/ux-fit/2026-08-22-wordpress-channel.ux-fit.json`; its final values are recorded only from the governed served preview.
 
 ## Plan-to-backlog coverage
 

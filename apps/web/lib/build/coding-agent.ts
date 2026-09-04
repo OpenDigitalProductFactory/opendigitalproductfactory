@@ -125,7 +125,18 @@ export function buildCodeGenPrompt(brief: FeatureBrief | null, plan: Record<stri
     "- When a schema change moves or renames existing data (e.g. moving a column to a new model, adding a non-nullable FK), document the required backfill SQL in a comment block at the top of the affected schema file section. Format: '// MIGRATION NOTE: <table> backfill required — <SQL summary>'. This comment is used when promoting the change to production via a proper migration file.",
     "- Do NOT silently discard existing data. If a field is being deprecated in favour of a new model, keep the old column in the sandbox schema until the backfill is verified.",
     "- Do NOT access any external services",
-    "- Output each file as: ### FILE: <path>\\n```typescript\\n<content>\\n```",
+    // The escape sequences here must be REAL newlines, not the literal
+    // characters "\\n". Written with double backslashes the model was shown
+    // '### FILE: <path>\\ntypescript...' as visible text and emitted that shape
+    // back, which the parser regex below (which requires actual newlines) can
+    // never match — so every build produced zero file writes and an empty diff.
+    "- Output each file exactly in this format, on separate lines:",
+    "### FILE: path/to/file.ts",
+    "```typescript",
+    "<full file contents>",
+    "```",
+    "- Output the COMPLETE file contents, not a fragment or a diff.",
+    "- Do not add commentary before or after the file blocks.",
   );
 
   return parts.join("\n");

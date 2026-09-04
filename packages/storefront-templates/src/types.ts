@@ -562,6 +562,30 @@ export interface ResourceKindProfile {
   maxCapacity: number;
 }
 
+export interface ArchetypeValueStreamStageProfile {
+  key: string;
+  label: string;
+  input: string;
+  output: string;
+  responsibleRole: string;
+  trustGateKeys: string[];
+  /** Explicit cross-stream or return handoff. In-stream sequence is implied by order. */
+  handoffTo?: string;
+  capabilityBindings?: ArchetypeModule[];
+  metricBindings?: string[];
+}
+
+export interface ArchetypeValueStreamProfile {
+  key: string;
+  label: string;
+  purpose: string;
+  input: string;
+  output: string;
+  responsibleRole: string;
+  loadBearingStageKeys: string[];
+  stages: ArchetypeValueStreamStageProfile[];
+}
+
 /**
  * Operational semantics that accompany an archetype without leaking into its
  * presentation vocabulary. Subject and resource slugs stay open for future
@@ -573,6 +597,10 @@ export interface ArchetypeProcessProfile {
   housesSubjects: boolean;
   schedulesSubjects: boolean;
   resourceKinds: ResourceKindProfile[];
+  /** Leaf-specific operating flows. Omit to use the shared commercial backbone. */
+  valueStreams?: ArchetypeValueStreamProfile[];
+  /** Supporting work that enables, but must not replace, the subject's primary flow. */
+  supportingCapabilities?: string[];
 }
 
 export interface ActivationProfile {
@@ -694,4 +722,54 @@ export interface ArchetypeDefinition {
    * docs/superpowers/specs/2026-07-12-operational-twin-framework-design.md §5.
    */
   twinProfile?: TwinProfileOverride;
+  /**
+   * Optional worker classes and work locations this archetype's day requires,
+   * on top of the platform defaults. Absence is the common case.
+   *
+   * The platform seeds an office business's answers — Full-time, Part-time,
+   * Contractor, Intern, Advisor, and Headquarters / Remote / Hybrid. Running a
+   * rescue found that none of those describes anywhere an animal lives, and
+   * that a shelter's largest labour pool has no worker class at all
+   * (BI-A30152B6). Both lists are open tables, not enums, so an archetype
+   * contributes rows rather than the platform widening a closed set.
+   *
+   * Applied per organization at setup completion, so an install only ever holds
+   * the vocabulary of the business it is actually running.
+   */
+  workforceProfile?: WorkforceProfile;
+}
+
+/** A worker class this archetype's day requires. `classification` is the legal
+ *  axis behind the label, and it is set only where the label states it outright
+ *  — the platform never infers one, because a wrong answer here is a wage claim
+ *  (see `WorkerClassification` in the schema). */
+export interface ArchetypeEmploymentType {
+  employmentTypeId: string;
+  name: string;
+  classification: WorkerClassificationSlug;
+}
+
+/** A place this archetype's people actually work. */
+export interface ArchetypeWorkLocation {
+  locationId: string;
+  name: string;
+  /** Open vocabulary, matching `WorkLocation.locationType`. */
+  locationType: string;
+}
+
+/** Mirrors the `WorkerClassification` Prisma enum. Kept as a union here so the
+ *  templates package stays free of a database dependency. */
+export type WorkerClassificationSlug =
+  | "employee"
+  | "contractor_direct"
+  | "contractor_agency"
+  | "temp_agency_worker"
+  | "eor_employee"
+  | "volunteer"
+  | "intern"
+  | "board_member";
+
+export interface WorkforceProfile {
+  employmentTypes?: ArchetypeEmploymentType[];
+  workLocations?: ArchetypeWorkLocation[];
 }

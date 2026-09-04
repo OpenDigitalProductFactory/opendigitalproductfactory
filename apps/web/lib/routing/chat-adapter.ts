@@ -34,19 +34,15 @@ import { withLocalInferenceLock } from "@/lib/queue/resource-lane";
 import { buildAnthropicSystem } from "./anthropic-cache";
 import { parseOpenRouterRoutingEvidence } from "./provider-suitability/openrouter-policy";
 import { resolveOpenAiCompatibleApiBase } from "./openai-base";
+import {
+  createInferenceTimeoutSignal,
+  resolveInferenceRuntimePolicy,
+} from "./local-inference-runtime-policy";
 
 // ─── Inference HTTP timeouts ──────────────────────────────────────────────────
-// A hung local Docker Model Runner endpoint must fail fast so callWithFallbackChain
-// can advance to a cloud endpoint (or surface a clear error) instead of leaving the
-// coworker on a "still working" spinner for three minutes — the failure observed in
-// the fresh-install audit (R1-*-O-001). Cloud providers keep the longer ceiling.
-// Both are env-overridable for operators on slow local hardware / cold model loads.
-const DEFAULT_INFERENCE_TIMEOUT_MS = Number(process.env.DPF_INFERENCE_TIMEOUT_MS) || 180_000;
-const LOCAL_INFERENCE_TIMEOUT_MS = Number(process.env.DPF_LOCAL_INFERENCE_TIMEOUT_MS) || 120_000;
-
-function resolveInferenceTimeoutMs(providerId: string): number {
-  return providerId === "local" ? LOCAL_INFERENCE_TIMEOUT_MS : DEFAULT_INFERENCE_TIMEOUT_MS;
-}
+// The runtime-policy module separates the governed, deliberately slower 27B
+// reviewer from generic local models. Both operator overrides and defaults stay
+// bounded, while the reviewer always receives its approved ten-minute window.
 
 // A single-GPU local endpoint (Docker Model Runner / Ollama) serves ONE request
 // at a time. The platform routinely fires inference concurrently — reviewBuildPlan
@@ -132,6 +128,33 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/**
+ * Collapse a JSON Schema union type to the scalar Gemini's proto accepts.
+ *
+ * `type: ["string", "null"]` is ordinary JSON Schema and every other provider
+ * takes it. Gemini's functionDeclarations are proto-backed, where `type` is a
+ * singular field, so a list is rejected outright:
+ *
+ *   Invalid JSON payload received. Unknown name "type" at
+ *   'tools[0].function_declarations[15].parameters.properties[9].value':
+ *   Proto field is not repeating, cannot start list.
+ *
+ * Returns the first non-null member as the type, and whether "null" was among
+ * them so the caller can set `nullable`. First-member choice is deliberate:
+ * a union's leading entry is the one authors write as the real type, with
+ * "null" appended, so it is the closest single type to the author's intent.
+ */
+function collapseGeminiUnionType(value: unknown): { type: unknown; nullable: boolean } | null {
+  if (!Array.isArray(value)) return null;
+  const members = value.filter((entry): entry is string => typeof entry === "string");
+  const concrete = members.filter((entry) => entry !== "null");
+  const nullable = members.length !== concrete.length;
+  // An all-null union carries no type at all; leaving it out is the only honest
+  // rendering, and Gemini treats a missing type as unconstrained.
+  if (concrete.length === 0) return nullable ? { type: undefined, nullable: true } : null;
+  return { type: concrete[0], nullable };
+}
+
 function sanitizeGeminiSchemaNode(value: unknown, propertyMap = false): unknown {
   if (Array.isArray(value)) {
     return value.map((item) => sanitizeGeminiSchemaNode(item));
@@ -145,10 +168,23 @@ function sanitizeGeminiSchemaNode(value: unknown, propertyMap = false): unknown 
     if (!propertyMap && GEMINI_UNSUPPORTED_SCHEMA_KEYS.has(key)) {
       continue;
     }
+    // BI-3907AF35: a union `type` reaches Gemini as a list and fails the whole
+    // request, so every coworker holding such a tool cannot run at all — not
+    // just for that tool. Collapse it here rather than asking every tool author
+    // to avoid ordinary JSON Schema.
+    if (!propertyMap && key === "type") {
+      const collapsed = collapseGeminiUnionType(child);
+      if (collapsed) {
+        if (collapsed.type !== undefined) sanitized[key] = collapsed.type;
+        if (collapsed.nullable) sanitized.nullable = true;
+        continue;
+      }
+    }
     sanitized[key] = sanitizeGeminiSchemaNode(child, !propertyMap && key === "properties");
   }
   return sanitized;
 }
+
 
 function toGeminiFunctionDeclarations(tools: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
   return tools
@@ -162,6 +198,9 @@ function toGeminiFunctionDeclarations(tools: Array<Record<string, unknown>>): Ar
       };
     });
 }
+
+/** Exported for test: the union collapse is the whole point of the fix. */
+export const __testing = { sanitizeGeminiSchemaNode, toGeminiFunctionDeclarations };
 
 // ─── Chat Adapter ────────────────────────────────────────────────────────────
 
@@ -226,6 +265,13 @@ export const chatAdapter: ExecutionAdapterHandler = {
           const fn = (t as { function?: { name?: string; description?: string; parameters?: unknown } }).function;
           return fn ? { name: fn.name, description: fn.description, input_schema: fn.parameters } : t;
         });
+        if (plan.toolPolicy.toolChoice) {
+          body.tool_choice = {
+            type: plan.toolPolicy.toolChoice === "required"
+              ? "any"
+              : plan.toolPolicy.toolChoice,
+          };
+        }
       }
 
       // Merge providerTools (e.g. computer use) into tools array
@@ -270,6 +316,18 @@ export const chatAdapter: ExecutionAdapterHandler = {
         const functionDeclarations = toGeminiFunctionDeclarations(tools);
         if (functionDeclarations.length > 0) {
           body.tools = [...((body.tools as Array<Record<string, unknown>>) ?? []), { functionDeclarations }];
+          if (plan.toolPolicy.toolChoice) {
+            body.toolConfig = {
+              functionCallingConfig: {
+                mode: plan.toolPolicy.toolChoice === "required"
+                  ? "ANY"
+                  : plan.toolPolicy.toolChoice.toUpperCase(),
+                ...(plan.toolPolicy.toolChoice === "required"
+                  ? { allowedFunctionNames: functionDeclarations.map((tool) => String(tool.name)) }
+                  : {}),
+              },
+            };
+          }
         }
       }
 
@@ -308,6 +366,7 @@ export const chatAdapter: ExecutionAdapterHandler = {
           }
           return t;
         });
+        if (plan.toolPolicy.toolChoice) body.tool_choice = plan.toolPolicy.toolChoice;
       }
 
     } else {
@@ -383,7 +442,10 @@ export const chatAdapter: ExecutionAdapterHandler = {
         method: "POST",
         headers: requestHeaders,
         body: JSON.stringify(body),
-        signal: AbortSignal.timeout(resolveInferenceTimeoutMs(providerId)),
+        signal: createInferenceTimeoutSignal(resolveInferenceRuntimePolicy(providerId, modelId, {
+          defaultTimeoutMs: process.env.DPF_INFERENCE_TIMEOUT_MS,
+          localTimeoutMs: process.env.DPF_LOCAL_INFERENCE_TIMEOUT_MS,
+        }).effectiveTimeoutMs),
       });
       res = providerId === "local" ? await withLocalInferenceLock(doFetch) : await doFetch();
     } catch (e) {

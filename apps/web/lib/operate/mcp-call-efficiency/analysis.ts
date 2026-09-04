@@ -15,6 +15,12 @@ export type CallEfficiencyEvent = {
   agentId: string;
   userId: string;
   success: boolean;
+  /**
+   * A failed call where a policy correctly declined the action, rather than the
+   * tool breaking. Counted separately from failures so a working gate is never
+   * reported as a misbehaving tool (see refusal-codes.ts).
+   */
+  governedRefusal?: boolean;
   /** GovernedExecuteSource / ToolExecution.executionMode */
   executionMode: string;
   durationMs: number | null;
@@ -22,6 +28,8 @@ export type CallEfficiencyEvent = {
   routeContext: string | null;
   apiTokenId: string | null;
   skillId: string | null;
+  /** Tool arguments captured by ToolExecution; used only for safe correlation hints. */
+  parameters: unknown;
 };
 
 export type EfficiencyActionKind =
@@ -49,6 +57,7 @@ export type EfficiencyFinding = {
     threadId?: string;
     agentId?: string;
     surface?: string;
+    correlationId?: string;
     sampleIds: string[];
   };
   recommendedAction: EfficiencyActionKind;
@@ -66,6 +75,8 @@ export type CallEfficiencyReport = {
     toolName: string;
     count: number;
     failCount: number;
+    /** Calls a policy correctly declined; excluded from failCount and successRate. */
+    refusalCount: number;
     successRate: number;
     avgDurationMs: number | null;
   }>;
@@ -78,9 +89,9 @@ export type CallEfficiencyReport = {
 };
 
 export type AnalyzeCallEfficiencyOptions = {
-  /** Same tool count in one thread to flag thrash. Default 8. */
+  /** Same tool count in one correlated execution to flag thrash. Default 8. */
   thrashThreshold?: number;
-  /** Absolute min calls for high_volume. Default 25. */
+  /** Calls from one correlated execution for high_volume. Default 25. */
   highVolumeFloor?: number;
   /** Fail rate (0–1) for high_failure. Default 0.35. */
   highFailureRate?: number;
@@ -106,19 +117,62 @@ const ROUTINE_MACHINE_MIN_INTERVAL_MS: Readonly<Record<string, number>> = {
   "edge.heartbeat": 60_000,
   "edge.discovery_runs.submit": 300_000,
   "edge.federation_candidates.submit": 90_000,
+  // The local-CI gate owns a two-minute lease and renews at TTL / 3. Thirty
+  // seconds leaves room for scheduler jitter while still exposing tight polls.
+  "renew_nonprod_environment_lease": 30_000,
 };
+
+function recordParameter(
+  parameters: unknown,
+  key: string,
+): string | null {
+  if (!parameters || typeof parameters !== "object" || Array.isArray(parameters)) {
+    return null;
+  }
+  const value = (parameters as Record<string, unknown>)[key];
+  return typeof value === "string" && value.trim().length > 0
+    ? value.trim()
+    : null;
+}
+
+/**
+ * Best available execution correlation, ordered from task-specific to broad.
+ * External JSON-RPC calls currently omit threadId and record agentId=unknown,
+ * but lease tools carry the durable ownerSessionId in their arguments.
+ */
+function eventCorrelationId(event: CallEfficiencyEvent): string | null {
+  if (event.threadId.trim().length > 0) return `thread:${event.threadId.trim()}`;
+  const ownerSessionId = recordParameter(event.parameters, "ownerSessionId");
+  if (ownerSessionId) return `owner-session:${ownerSessionId}`;
+  const agentId = event.agentId.trim();
+  if (agentId.length > 0 && agentId.toLowerCase() !== "unknown") {
+    return `agent:${agentId}`;
+  }
+  return null;
+}
+
+function groupByCorrelation(
+  events: readonly CallEfficiencyEvent[],
+): Map<string, CallEfficiencyEvent[]> {
+  const groups = new Map<string, CallEfficiencyEvent[]>();
+  for (const event of events) {
+    const correlationId = eventCorrelationId(event);
+    if (!correlationId) continue;
+    const rows = groups.get(correlationId) ?? [];
+    rows.push(event);
+    groups.set(correlationId, rows);
+  }
+  return groups;
+}
 
 function fitsRoutineMachineCadence(
   events: CallEfficiencyEvent[],
   minimumIntervalMs: number,
 ): boolean {
-  const byPrincipal = new Map<string, CallEfficiencyEvent[]>();
-  for (const event of events) {
-    const principal = event.agentId || event.threadId;
-    if (!principal) return false;
-    const rows = byPrincipal.get(principal) ?? [];
-    rows.push(event);
-    byPrincipal.set(principal, rows);
+  const byPrincipal = groupByCorrelation(events);
+  if (events.length > 0 && byPrincipal.size === 0) return false;
+  if ([...byPrincipal.values()].reduce((sum, rows) => sum + rows.length, 0) !== events.length) {
+    return false;
   }
 
   for (const rows of byPrincipal.values()) {
@@ -131,6 +185,12 @@ function fitsRoutineMachineCadence(
     if (rows.length > allowed) return false;
   }
   return true;
+}
+
+function isRoutineMachineCadence(events: CallEfficiencyEvent[]): boolean {
+  const minimumIntervalMs = ROUTINE_MACHINE_MIN_INTERVAL_MS[events[0]?.toolName ?? ""];
+  return minimumIntervalMs !== undefined
+    && fitsRoutineMachineCadence(events, minimumIntervalMs);
 }
 
 function surfaceLabel(e: CallEfficiencyEvent): string {
@@ -201,21 +261,35 @@ export function analyzeCallEfficiency(
   // Per-tool rollup
   const toolMap = new Map<
     string,
-    { count: number; failCount: number; durationSum: number; durationN: number }
+    {
+      count: number;
+      failCount: number;
+      refusalCount: number;
+      durationSum: number;
+      durationN: number;
+      events: CallEfficiencyEvent[];
+    }
   >();
   for (const e of sorted) {
     const row = toolMap.get(e.toolName) ?? {
       count: 0,
       failCount: 0,
+      refusalCount: 0,
       durationSum: 0,
       durationN: 0,
+      events: [],
     };
     row.count += 1;
-    if (!e.success) row.failCount += 1;
+    // A governed refusal is neither a success nor a tool failure: it is the
+    // system correctly declining. Counting it as a failure is what filed
+    // `fix_instructions` findings against gates that were working.
+    if (e.governedRefusal) row.refusalCount += 1;
+    else if (!e.success) row.failCount += 1;
     if (e.durationMs != null) {
       row.durationSum += e.durationMs;
       row.durationN += 1;
     }
+    row.events.push(e);
     toolMap.set(e.toolName, row);
   }
   const topTools = Array.from(toolMap.entries())
@@ -223,7 +297,12 @@ export function analyzeCallEfficiency(
       toolName,
       count: v.count,
       failCount: v.failCount,
-      successRate: v.count > 0 ? (v.count - v.failCount) / v.count : 1,
+      refusalCount: v.refusalCount,
+      // Rate the TOOL on the calls it was actually responsible for. A gate that
+      // declines 90% of calls is not a 10%-reliable tool.
+      successRate: v.count - v.refusalCount > 0
+        ? (v.count - v.refusalCount - v.failCount) / (v.count - v.refusalCount)
+        : 1,
       avgDurationMs: v.durationN > 0 ? v.durationSum / v.durationN : null,
     }))
     .sort((a, b) => b.count - a.count)
@@ -232,12 +311,14 @@ export function analyzeCallEfficiency(
   const findings: EfficiencyFinding[] = [];
 
   let suppressedRoutineCadenceFindings = 0;
+  let suppressedAggregateVolumeFindings = 0;
 
-  // Thrash: per (threadId, toolName)
+  // Thrash: per best-known execution correlation and tool.
   const thrashMap = new Map<string, CallEfficiencyEvent[]>();
   for (const e of sorted) {
-    if (!e.threadId) continue;
-    const key = `${e.threadId}::${e.toolName}`;
+    const correlationId = eventCorrelationId(e);
+    if (!correlationId) continue;
+    const key = `${correlationId}::${e.toolName}`;
     const list = thrashMap.get(key) ?? [];
     list.push(e);
     thrashMap.set(key, list);
@@ -245,19 +326,25 @@ export function analyzeCallEfficiency(
   for (const [, list] of thrashMap) {
     if (list.length < thrashThreshold) continue;
     const head = list[0]!;
+    if (isRoutineMachineCadence(list)) {
+      suppressedRoutineCadenceFindings += 1;
+      continue;
+    }
+    const correlationId = eventCorrelationId(head)!;
     const waste = list.length - Math.max(2, Math.floor(thrashThreshold / 2));
     findings.push({
       kind: "thrash",
       severity: list.length >= thrashThreshold * 2 ? "critical" : "warning",
       toolName: head.toolName,
-      title: `Thrash: ${head.toolName} ×${list.length} in one thread`,
+      title: `Thrash: ${head.toolName} ×${list.length} in one execution`,
       detail:
-        `Thread ${head.threadId} called ${head.toolName} ${list.length} times ` +
+        `Execution principal ${correlationId} called ${head.toolName} ${list.length} times ` +
         `(threshold ${thrashThreshold}). Likely missing skill, over-broad tool, or poll loop.`,
       evidence: {
         count: list.length,
-        threadId: head.threadId,
+        ...(head.threadId ? { threadId: head.threadId } : {}),
         agentId: head.agentId,
+        correlationId,
         surface: surfaceLabel(head),
         sampleIds: list.slice(0, 5).map((x) => x.id),
       },
@@ -266,16 +353,10 @@ export function analyzeCallEfficiency(
     });
   }
 
-  // Retry storm: fail then same tool within retryWindowMs (per thread)
-  const byThread = new Map<string, CallEfficiencyEvent[]>();
-  for (const e of sorted) {
-    if (!e.threadId) continue;
-    const list = byThread.get(e.threadId) ?? [];
-    list.push(e);
-    byThread.set(e.threadId, list);
-  }
-  for (const [threadId, list] of byThread) {
-    const pairs = new Map<string, { n: number; ids: string[]; agentId: string }>();
+  // Retry storm: fail then same tool within retryWindowMs (per correlation).
+  const byCorrelation = groupByCorrelation(sorted);
+  for (const [correlationId, list] of byCorrelation) {
+    const pairs = new Map<string, { n: number; refused: number; ids: string[]; agentId: string }>();
     for (let i = 0; i < list.length - 1; i++) {
       const a = list[i]!;
       const b = list[i + 1]!;
@@ -285,10 +366,16 @@ export function analyzeCallEfficiency(
       if (dt < 0 || dt > retryWindowMs) continue;
       const row = pairs.get(a.toolName) ?? {
         n: 0,
-        ids: [],
+        refused: 0,
+        ids: [] as string[],
         agentId: a.agentId,
       };
       row.n += 1;
+      // Retrying a governed refusal is still waste — often worse, because the
+      // refusal is non-retryable and the loop cannot terminate by succeeding.
+      // But it is the CALLER's loop, not a broken tool, and saying "fix tool
+      // errors" sends the reader to the wrong place.
+      if (a.governedRefusal) row.refused += 1;
       if (row.ids.length < 5) row.ids.push(a.id, b.id);
       pairs.set(a.toolName, row);
     }
@@ -299,13 +386,19 @@ export function analyzeCallEfficiency(
         severity: row.n >= retryStormMin * 2 ? "critical" : "warning",
         toolName,
         title: `Retry storm: ${toolName} (${row.n} fail→retry pairs)`,
-        detail:
-          `Thread ${threadId} retried ${toolName} after failure ${row.n} times ` +
-          `within ${retryWindowMs / 1000}s windows. Fix tool errors or agent instructions.`,
+        detail: row.refused >= row.n / 2
+          ? `Execution principal ${correlationId} retried ${toolName} ${row.n} times within `
+            + `${retryWindowMs / 1000}s windows, and ${row.refused} of those followed a GOVERNED REFUSAL `
+            + `rather than a tool failure. The policy declined the action; re-calling cannot make it `
+            + `succeed. Fix the caller's retry loop — not the tool, and not its instructions on how to `
+            + `call it correctly.`
+          : `Execution principal ${correlationId} retried ${toolName} after failure ${row.n} times `
+            + `within ${retryWindowMs / 1000}s windows. Fix tool errors or agent instructions.`,
         evidence: {
           count: row.n,
-          threadId,
+          ...(list[0]?.threadId ? { threadId: list[0].threadId } : {}),
           agentId: row.agentId,
+          correlationId,
           sampleIds: row.ids.slice(0, 5),
         },
         recommendedAction: "fix_instructions",
@@ -316,52 +409,66 @@ export function analyzeCallEfficiency(
 
   // High volume / high failure from tool rollup
   for (const t of topTools) {
-    const routineInterval = ROUTINE_MACHINE_MIN_INTERVAL_MS[t.toolName];
-    const routineCadenceHealthy = routineInterval !== undefined && fitsRoutineMachineCadence(
-      sorted.filter((event) => event.toolName === t.toolName),
-      routineInterval,
-    );
+    const toolEvents = toolMap.get(t.toolName)!.events;
+    const routineCadenceHealthy = isRoutineMachineCadence(toolEvents);
     if (t.count >= highVolumeFloor && routineCadenceHealthy) {
       suppressedRoutineCadenceFindings += 1;
     } else if (t.count >= highVolumeFloor) {
-      findings.push({
-        kind: "high_volume",
-        severity: t.count >= highVolumeFloor * 3 ? "critical" : "warning",
-        toolName: t.toolName,
-        title: `High volume: ${t.toolName} (${t.count} calls)`,
-        detail:
-          `${t.toolName} accounts for ${t.count} calls in the window ` +
-          `(${(t.successRate * 100).toFixed(0)}% success). Candidate for skill packaging, ` +
-          `richer tool, or event/webhook replacement if status-polling.`,
-        evidence: {
-          count: t.count,
-          failCount: t.failCount,
-          sampleIds: sorted
-            .filter((e) => e.toolName === t.toolName)
-            .slice(0, 5)
-            .map((e) => e.id),
-        },
-        recommendedAction: recommendForTool(t.toolName, "high_volume"),
-        wasteCallEstimate: Math.max(0, t.count - highVolumeFloor),
-      });
+      const dominant = [...groupByCorrelation(toolEvents).entries()]
+        .sort((a, b) => b[1].length - a[1].length)[0];
+      if (!dominant || dominant[1].length < highVolumeFloor) {
+        suppressedAggregateVolumeFindings += 1;
+      } else {
+        const [correlationId, correlatedEvents] = dominant;
+        const failCount = correlatedEvents.filter((event) => !event.success).length;
+        const correlatedSuccessRate =
+          (correlatedEvents.length - failCount) / correlatedEvents.length;
+        findings.push({
+          kind: "high_volume",
+          severity: correlatedEvents.length >= highVolumeFloor * 3 ? "critical" : "warning",
+          toolName: t.toolName,
+          title: `High volume: ${t.toolName} (${correlatedEvents.length} calls)`,
+          detail:
+            `${t.toolName} accounts for ${correlatedEvents.length} calls from ${correlationId} ` +
+            `(${(correlatedSuccessRate * 100).toFixed(0)}% success). Candidate for skill packaging, ` +
+            `richer tool, or event/webhook replacement if status-polling.`,
+          evidence: {
+            count: correlatedEvents.length,
+            failCount,
+            correlationId,
+            sampleIds: correlatedEvents.slice(0, 5).map((event) => event.id),
+          },
+          recommendedAction: recommendForTool(t.toolName, "high_volume"),
+          wasteCallEstimate: Math.max(0, correlatedEvents.length - highVolumeFloor),
+        });
+      }
     }
+    // Rate the tool on the calls it was answerable for. Governed refusals are
+    // excluded from both the numerator and the denominator: a gate that declines
+    // most of what it is asked is working, and filing `fix_instructions` against
+    // it sends the next agent looking for a defect that is not there.
+    const answerableCalls = t.count - t.refusalCount;
+    const failureRate = answerableCalls > 0 ? t.failCount / answerableCalls : 0;
     if (
-      t.count >= highFailureMinSamples &&
-      t.failCount / t.count >= highFailureRate
+      answerableCalls >= highFailureMinSamples &&
+      failureRate >= highFailureRate
     ) {
       findings.push({
         kind: "high_failure",
-        severity: t.failCount / t.count >= 0.6 ? "critical" : "warning",
+        severity: failureRate >= 0.6 ? "critical" : "warning",
         toolName: t.toolName,
-        title: `High failure: ${t.toolName} (${(t.failCount / t.count * 100).toFixed(0)}%)`,
+        title: `High failure: ${t.toolName} (${(failureRate * 100).toFixed(0)}%)`,
         detail:
-          `${t.failCount}/${t.count} calls failed. Agents may be retrying blindly — ` +
-          `fix tool contract, grants, or skill guidance.`,
+          `${t.failCount}/${answerableCalls} answerable calls failed. Agents may be retrying blindly — ` +
+          `fix tool contract, grants, or skill guidance.` +
+          (t.refusalCount > 0
+            ? ` ${t.refusalCount} further call(s) were governed refusals and are excluded — the policy declined them, the tool did not fail.`
+            : ""),
         evidence: {
-          count: t.count,
+          count: answerableCalls,
           failCount: t.failCount,
           sampleIds: sorted
-            .filter((e) => e.toolName === t.toolName && !e.success)
+            .filter((e) => e.toolName === t.toolName && !e.success && !e.governedRefusal)
             .slice(0, 5)
             .map((e) => e.id),
         },
@@ -392,6 +499,9 @@ export function analyzeCallEfficiency(
         ? "ToolExecution volume is sufficient for thrash/volume/failure findings. " +
           (suppressedRoutineCadenceFindings > 0
             ? `${suppressedRoutineCadenceFindings} raw-volume finding(s) were suppressed because calls fit contractual machine cadence. `
+            : "") +
+          (suppressedAggregateVolumeFindings > 0
+            ? `${suppressedAggregateVolumeFindings} raw-volume finding(s) were suppressed because unattributed aggregate traffic did not reach the threshold for one execution principal. `
             : "") +
           "tools/list and pre-auth denials remain unlogged gaps."
         : "Too few ToolExecution rows in window for reliable optimization; collect more traffic or widen the window.",

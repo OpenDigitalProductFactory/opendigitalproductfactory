@@ -19,6 +19,11 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { triggerSelfUpgrade, forceActiveRun, abortActiveRun } from "@/lib/actions/promotions";
 import { isExpectedDuringSwap } from "@/lib/self-upgrade/is-expected-during-swap";
+import {
+  describeSelfUpgradeActionState,
+  SELF_UPGRADE_ACTION_STATE,
+  type SelfUpgradeActionState,
+} from "@/lib/self-upgrade/action-state";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import type { LatestRun, QuiescenceActivity } from "@/lib/self-upgrade/run-types";
 import SelfUpgradeJobEngineHealthAlert, {
@@ -28,20 +33,24 @@ import { useOptionalSelfUpgradeLive } from "@/components/ops/SelfUpgradeLiveProv
 
 type Props = {
   enabled: boolean;
+  actionState: SelfUpgradeActionState;
   unavailableReason?: string | null;
   channel: string;
   latestRun: LatestRun | null;
   quiescence?: QuiescenceActivity | null;
   jobEngine?: JobEngineHealth;
+  targetBinding?: string | null;
 };
 
 export default function SelfUpgradeTriggerControl({
   enabled,
+  actionState,
   unavailableReason,
   channel,
   latestRun: initialLatestRun,
   quiescence: initialQuiescence,
   jobEngine: initialJobEngine,
+  targetBinding,
 }: Props) {
   const router = useRouter();
   const live = useOptionalSelfUpgradeLive();
@@ -50,10 +59,14 @@ export default function SelfUpgradeTriggerControl({
   const jobEngine = live?.snapshot.jobEngine ?? initialJobEngine;
   const [isPending, startTransition] = useTransition();
   const [override, setOverride] = useState(false);
-  const [justQueued, setJustQueued] = useState(false);
-  const [triggerResult, setTriggerResult] = useState<{ queued: boolean; reason?: string } | null>(
-    null,
-  );
+  const [triggerResult, setTriggerResult] = useState<{
+    queued: boolean;
+    reason?: string;
+    runId?: string;
+    dispatchStatus?: string;
+    uncertain?: boolean;
+  } | null>(null);
+  const [admissionUncertain, setAdmissionUncertain] = useState(false);
   const [forceConfirm, setForceConfirm] = useState(false);
   const [abortConfirm, setAbortConfirm] = useState(false);
   const [inFlightError, setInFlightError] = useState<string | null>(null);
@@ -62,33 +75,24 @@ export default function SelfUpgradeTriggerControl({
   // poll alive) instead of letting the page paint the global crash screen.
   const [restarting, setRestarting] = useState(false);
   const restartBaselineRef = useRef<string | null>(null);
+  const admissionBaselineRef = useRef<string | null>(null);
 
   const draining = !!quiescence && quiescence.level !== "normal";
   const queuedRun = latestRun?.status === "queued" || latestRun?.status === "pending";
   const upgradeInFlight = queuedRun || latestRun?.status === "running" || draining;
-  const triggerBusy = isPending || justQueued;
-
-  // The manual trigger only *queues* an upgrade: the server action returns
-  // `{ queued: true }` in well under a second, but the worker still has to
-  // fetch + compare SHAs before the run flips to "running". Hold a
-  // "Starting…" state until the run actually appears, poll so progress shows
-  // up on its own, and time out as a safety net if the queued event never
-  // materialises (e.g. skipped for cooldown).
-  useEffect(() => {
-    if (justQueued && upgradeInFlight) setJustQueued(false);
-  }, [justQueued, upgradeInFlight]);
-
-  useEffect(() => {
-    if (!justQueued) return;
-    const timeout = setTimeout(() => setJustQueued(false), 45_000);
-    return () => clearTimeout(timeout);
-  }, [justQueued]);
+  const triggerBusy = isPending || admissionUncertain;
+  const updateAvailable = actionState === SELF_UPGRADE_ACTION_STATE.UPDATE_AVAILABLE;
 
   // A compact fingerprint of the server-derived state. When it changes after
   // a swap-induced disconnect, the new container has answered and the
   // reconnect banner can clear.
   function serverSignature(): string {
-    return [latestRun?.runId ?? "", latestRun?.status ?? "", quiescence?.level ?? ""].join("|");
+    return [
+      latestRun?.runId ?? "",
+      latestRun?.status ?? "",
+      latestRun?.dispatchStatus ?? "",
+      quiescence?.level ?? "",
+    ].join("|");
   }
 
   useEffect(() => {
@@ -114,7 +118,6 @@ export default function SelfUpgradeTriggerControl({
   function enterRestarting() {
     restartBaselineRef.current = serverSignature();
     setRestarting(true);
-    setJustQueued(true);
     refreshStatus();
   }
 
@@ -132,21 +135,43 @@ export default function SelfUpgradeTriggerControl({
     setTriggerResult(null);
     setInFlightError(null);
     const force = override;
+    admissionBaselineRef.current = serverSignature();
     startTransition(async () => {
       try {
-        const result = await triggerSelfUpgrade(force ? { force: true } : undefined);
+        const result = await triggerSelfUpgrade({
+          ...(force ? { force: true } : {}),
+          ...(targetBinding ? { targetBinding } : {}),
+        });
         setTriggerResult(result);
-        if (result.queued) setJustQueued(true);
+        setAdmissionUncertain(false);
+        admissionBaselineRef.current = null;
         refreshStatus();
       } catch (err) {
-        if (isExpectedDuringSwap(err)) {
-          enterRestarting();
-        } else {
-          setTriggerResult({ queued: false, reason: getErrorMessage(err) || "trigger failed" });
-        }
+        // A severed trigger response is ambiguous: the server may already
+        // have persisted the admission even though the browser never received
+        // its result. Keep the mutation latched until durable server state
+        // changes. Force/abort requests are different because they already
+        // bind an existing run and can use the bounded swap-reconnect state.
+        setAdmissionUncertain(true);
+        setTriggerResult({
+          queued: false,
+          uncertain: true,
+          reason: getErrorMessage(err) || "The admission response was interrupted.",
+        });
+        refreshStatus();
       }
     });
   }
+
+  useEffect(() => {
+    if (!admissionUncertain || admissionBaselineRef.current === null) return;
+    if (serverSignature() !== admissionBaselineRef.current) {
+      admissionBaselineRef.current = null;
+      setAdmissionUncertain(false);
+      setTriggerResult(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [admissionUncertain, latestRun?.runId, latestRun?.status, latestRun?.dispatchStatus]);
 
   // BI-4F3B2FA9: escalate the active drain to forced — coordinator bypasses
   // all blockers on its next tick (~5s) and swaps, without restarting the run.
@@ -223,9 +248,19 @@ export default function SelfUpgradeTriggerControl({
 
       <SelfUpgradeJobEngineHealthAlert jobEngine={jobEngine} />
 
+      {latestRun?.dispatchStatus === "dispatch_failed" && (
+        <div
+          className="rounded-lg border border-[var(--dpf-destructive)]/30 bg-[var(--dpf-destructive)]/10 p-3 text-sm text-[var(--dpf-destructive)]"
+          role="status"
+          data-upgrade-dispatch-failed="true"
+        >
+          Upgrade admission {latestRun.runId} was not dispatched. {latestRun.dispatchError ?? "Review job-engine health before trying again."}
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-[var(--dpf-success)]" />
+          <span className="w-2 h-2 rounded-full bg-[var(--dpf-success)]" aria-hidden="true" />
           <span className="text-sm font-medium text-[var(--dpf-text)]">
             Self-Upgrade: <span data-upgrade-status="enabled">Enabled</span>
           </span>
@@ -314,12 +349,20 @@ export default function SelfUpgradeTriggerControl({
                 data-upgrade-inflight="true"
               >
                 {queuedRun
-                  ? "Upgrade queued — waiting for the worker…"
+                  ? latestRun?.dispatchStatus === "indeterminate"
+                    ? `Upgrade ${latestRun.runId} admitted — dispatch outcome is being reconciled…`
+                    : latestRun?.dispatchStatus === "dispatching"
+                      ? `Upgrade ${latestRun.runId} admitted — dispatching to the worker…`
+                      : latestRun?.dispatchStatus === "admission_pending"
+                        ? `Upgrade ${latestRun.runId} admitted — waiting for dispatch…`
+                        : "Upgrade queued — waiting for the worker…"
                   : "Upgrade in progress…"}
               </span>
             )
           ) : (
             <>
+            {updateAvailable ? (
+              <>
               <label className="flex items-center gap-1.5 text-xs text-[var(--dpf-muted)] cursor-pointer select-none">
                 <input
                   type="checkbox"
@@ -343,38 +386,52 @@ export default function SelfUpgradeTriggerControl({
                 className="px-4 py-2 text-sm font-semibold rounded-lg bg-[var(--dpf-accent)] text-white border border-[var(--dpf-accent)] shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50"
               >
                 {isPending
-                  ? "Upgrading..."
-                  : justQueued
-                    ? "Starting…"
-                    : override
+                  ? "Admitting…"
+                  : override
                       ? "Force upgrade now"
                       : "Upgrade now"}
               </button>
+              </>
+            ) : (
+              <span
+                className="text-xs text-[var(--dpf-muted)]"
+                data-upgrade-action-state={actionState}
+                role="status"
+              >
+                {describeSelfUpgradeActionState(actionState)}
+              </span>
+            )}
             </>
           )}
         </div>
       </div>
 
-      {triggerBusy && latestRun?.status !== "running" && !queuedRun && (
+      {updateAvailable && isPending && latestRun?.status !== "running" && !queuedRun && (
         <div
           className="text-xs text-[var(--dpf-muted)]"
           data-upgrade-starting="true"
           aria-live="polite"
         >
-          Upgrade starting — the worker is checking for a new build. This can take
-          a few seconds; progress will appear below. No need to click again.
+          Recording this upgrade before dispatch. Keep this page open; the durable
+          run will appear below as soon as admission commits.
         </div>
       )}
 
-      {triggerResult && (
+      {updateAvailable && triggerResult && (
         <div
           className={`p-3 rounded-lg text-sm ${
-            triggerResult.queued
+            triggerResult.uncertain
+              ? "bg-[var(--dpf-info)]/10 text-[var(--dpf-text)] border border-[var(--dpf-info)]/30"
+              : triggerResult.queued
               ? "bg-[var(--dpf-success)]/10 text-[var(--dpf-success)] border border-[var(--dpf-success)]/30"
               : "bg-[var(--dpf-destructive)]/10 text-[var(--dpf-destructive)] border border-[var(--dpf-destructive)]/30"
           }`}
         >
-          {triggerResult.queued ? "Upgrade queued." : `Not queued: ${triggerResult.reason}`}
+          {triggerResult.uncertain
+            ? `Admission response interrupted: ${triggerResult.reason} The server record is being checked; do not click again.`
+            : triggerResult.queued
+            ? `Upgrade admitted${triggerResult.runId ? ` as ${triggerResult.runId}` : ""}. Dispatch is tracked by this run; do not click again.`
+            : `Not admitted: ${triggerResult.reason}`}
         </div>
       )}
     </div>

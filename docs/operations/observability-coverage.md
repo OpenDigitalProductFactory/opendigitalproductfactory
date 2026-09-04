@@ -36,6 +36,8 @@ boot-time fail-loud for desired-state drift.
 | `dpf_dependency_up{service="model-runner"}` | same | gauge only (see follow-ups) |
 | `dpf_dependency_up{service="stt"}` | same | gauge only (see follow-ups) |
 | `dpf_http_unhandled_errors_total` | `instrumentation.ts` `onRequestError` | `UnhandledServerErrors` |
+| `dpf_coworker_envelopes_awaiting_decision` | `lib/coworker/envelope-observability.ts` | gauge only |
+| `dpf_coworker_envelopes_expired_unactioned` | same | see below — worth an alert |
 
 TTS probe contract (BI-7988DAD8): the probe requests `GET <DPF_TTS_URL>/health`
 and falls back to the base URL when `/health` 404s, because sidecars provisioned
@@ -45,6 +47,27 @@ export these gauges, so `docker-compose.macos.yml` sets the host-native
 `DPF_TTS_URL` on both services; without it the sandbox probes the base
 compose's `dpf-tts:8000` default (never running on macOS) and fires a phantom
 `VoiceServiceDown{job="sandbox"}`.
+
+### Coworker approval envelopes (BI-78D3CF1E)
+
+A `CoworkerActionEnvelope` is a coworker asking one named human to approve one
+side-effecting call. It expires 15 minutes after it is raised, and an envelope
+nobody answers transitions to nothing — no alert, no error, no row anywhere an
+operator looks. Seven lapsed unactioned on a live install before an approval
+surface existed, and the only way to learn that was to read the table.
+
+`dpf_coworker_envelopes_expired_unactioned` is the one to watch, and it cannot be
+derived from the obvious query: an expired envelope STILL reads
+`status = "proposed"`, because nothing rewrites it when the window closes. A
+naive proposed-count therefore reports blocked coworkers nobody can unblock.
+
+Both are gauges, not counters — they are observed when the owner attention inbox
+renders, so a counter would multiply by however often someone looks at the page.
+That also means the figures refresh only while somebody is using the portal; a
+persistently non-zero expired count is the signal, not its exact update moment.
+
+A failed count publishes NOTHING rather than a zero, because a fabricated zero
+reads as "nothing is lapsing" — the exact false comfort the metric removes.
 
 ## Platform split — Linux vs Windows host/infra alerts
 

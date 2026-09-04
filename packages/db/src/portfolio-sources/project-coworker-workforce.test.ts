@@ -183,3 +183,41 @@ describe("projectCoworkerWorkforce (BI-8F9EDD6C)", () => {
     expect(db._products.get(coworkerProductId("AGT-IDLE"))!.coverageStatus).toBe("available");
   });
 });
+
+describe("dual-seed collapse (BI-74FD6420)", () => {
+  it("mints ONE product for a coworker seeded under both its slug and its canonical id", async () => {
+    // productId is keyed on agentId, so projecting both twins mints two
+    // DigitalProducts with the same name for one peer — duplicate ROWS, which
+    // then surface anywhere active products are listed (e.g. /knowledge/new).
+    const db = makeDb({
+      agents: [
+        { ...COWORKER, agentId: "compliance-officer", displayName: "Compliance Officer" },
+        { ...COWORKER, agentId: "AGT-WS-COMPLIANCE", displayName: "Compliance Officer" },
+      ],
+    });
+
+    const result = await projectCoworkerWorkforce({ db: db as never });
+
+    expect(result.coworkers).toBe(1);
+  });
+
+  it("keeps a canonical coworker that has no slug twin", async () => {
+    const db = makeDb({
+      agents: [{ ...COWORKER, agentId: "AGT-WS-COMPLIANCE", displayName: "Compliance Officer" }],
+    });
+
+    const result = await projectCoworkerWorkforce({ db: db as never });
+
+    expect(result.coworkers).toBe(1);
+  });
+
+  it("keeps a slug coworker whose canonical twin is absent", async () => {
+    const db = makeDb({
+      agents: [{ ...COWORKER, agentId: "compliance-officer", displayName: "Compliance Officer" }],
+    });
+
+    const result = await projectCoworkerWorkforce({ db: db as never });
+
+    expect(result.coworkers).toBe(1);
+  });
+});

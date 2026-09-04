@@ -2344,7 +2344,7 @@
       "tier": "cross-cutting",
       "value_stream": "evaluate",
       "role": "reviewer",
-      "capability_domain": "Curates the founder-authored UX critique corpus and, once calibrated against it, critiques owner-facing surfaces for information hierarchy, content density, and cognitive load. Grounded in the ux-design profession corpus (WSID), not in a bare rubric — ungrounded design critique measures 13.1% valid. Established in its curation stage with NO gating authority: it may draft, cluster, and propose verdicts, but never attach one, and it cannot file backlog work, advance a build, or block a merge. Distinct from AGT-903 (WCAG/accessibility compliance) and from the HX UX Analyst (behavioural findings over user telemetry).",
+      "capability_domain": "Curates the founder-authored UX critique corpus and, once calibrated against it, critiques owner-facing surfaces for information hierarchy, content density, and cognitive load. Grounded in the ux-design profession corpus (WSID), not in a bare rubric \u2014 ungrounded design critique measures 13.1% valid. Established in its curation stage with NO gating authority: it may draft, cluster, and propose verdicts, but never attach one, and it cannot file backlog work, advance a build, or block a merge. Distinct from AGT-903 (WCAG/accessibility compliance) and from the HX UX Analyst (behavioural findings over user telemetry).",
       "human_supervisor_id": "HR-300",
       "hitl_tier_default": 3,
       "delegates_to": [],
@@ -2471,6 +2471,7 @@
           "per_task_limit": 50000
         },
         "tool_grants": [
+          "registry_read",
           "sandbox_execute",
           "work_capsule_read",
           "work_capsule_write",
@@ -2510,6 +2511,7 @@
           "per_task_limit": 50000
         },
         "tool_grants": [
+          "registry_read",
           "sandbox_execute",
           "work_capsule_read",
           "work_capsule_write",
@@ -2549,6 +2551,7 @@
           "per_task_limit": 50000
         },
         "tool_grants": [
+          "registry_read",
           "sandbox_execute",
           "work_capsule_read",
           "work_capsule_write",
@@ -2588,6 +2591,7 @@
           "per_task_limit": 25000
         },
         "tool_grants": [
+          "registry_read",
           "sandbox_execute",
           "work_capsule_read",
           "work_capsule_write",
@@ -3031,7 +3035,7 @@
       "tier": "specialist",
       "value_stream": "operate",
       "role": "operator",
-      "capability_domain": "AI SOC Tier-2 analyst (EP-SOVEREIGN-SOC). Deep investigation on escalated cases: pivots across SecurityEvents, builds the incident timeline, scopes blast radius, maps ATT&CK, recommends a verdict. Drafts case evidence and response proposals only — never executes.",
+      "capability_domain": "AI SOC Tier-2 analyst (EP-SOVEREIGN-SOC). Deep investigation on escalated cases: pivots across SecurityEvents, builds the incident timeline, scopes blast radius, maps ATT&CK, recommends a verdict. Drafts case evidence and response proposals only \u2014 never executes.",
       "human_supervisor_id": "HR-500",
       "hitl_tier_default": 1,
       "delegates_to": [],
@@ -3114,7 +3118,7 @@
       "tier": "specialist",
       "value_stream": "operate",
       "role": "operator",
-      "capability_domain": "AI SOC incident commander (EP-SOVEREIGN-SOC). Coordinates containment/remediation: drafts RemediationProposals on the proposal-not-action rail, owns the SecurityCase, manages customer communications. Never executes a response on a customer estate unilaterally — the customer approves and the customer's own runner acts.",
+      "capability_domain": "AI SOC incident commander (EP-SOVEREIGN-SOC). Coordinates containment/remediation: drafts RemediationProposals on the proposal-not-action rail, owns the SecurityCase, manages customer communications. Never executes a response on a customer estate unilaterally \u2014 the customer approves and the customer's own runner acts.",
       "human_supervisor_id": "HR-500",
       "hitl_tier_default": 2,
       "delegates_to": [
@@ -3160,7 +3164,7 @@
       "tier": "specialist",
       "value_stream": "cross-cutting",
       "role": "operator",
-      "capability_domain": "AI Ops Engineer: providers, models, costs, capability matching, failover, routing, workforce planning. Owns host resource health — disk free-space floors, Docker/container sprawl, and critical host alerts (BI-1C88254D).",
+      "capability_domain": "AI Ops Engineer: providers, models, costs, capability matching, failover, routing, workforce planning. Owns host resource health \u2014 disk free-space floors, Docker/container sprawl, and critical host alerts (BI-1C88254D).",
       "human_supervisor_id": "HR-500",
       "hitl_tier_default": 1,
       "delegates_to": [],
@@ -3234,18 +3238,18 @@
           "backend": null
         },
         "concurrency_limit": 2,
-      "tool_grants": [
-        "backlog_read",
-        "backlog_write",
-        "crm_read",
-        "marketing_read",
-        "marketing_write",
-        "portfolio_read",
-        "registry_read",
-        "web_search",
-        "work_capsule_read",
-        "initiative_evidence_write"
-      ]
+        "tool_grants": [
+          "backlog_read",
+          "backlog_write",
+          "crm_read",
+          "marketing_read",
+          "marketing_write",
+          "portfolio_read",
+          "registry_read",
+          "web_search",
+          "work_capsule_read",
+          "initiative_evidence_write"
+        ]
       }
     },
     {
@@ -3408,7 +3412,9 @@
       "hitl_tier_default": 1,
       "delegates_to": [],
       "escalates_to": "AGT-ORCH-000",
-      "it4it_sections": ["5.4 Operate Value Stream"],
+      "it4it_sections": [
+        "5.4 Operate Value Stream"
+      ],
       "status": "draft",
       "config_profile": {
         "model_binding": {
@@ -3450,7 +3456,10 @@
       "hitl_tier_default": 1,
       "delegates_to": [],
       "escalates_to": "AGT-WS-HR",
-      "it4it_sections": ["5.4 Operate Value Stream", "6.2.5 Workforce FC"],
+      "it4it_sections": [
+        "5.4 Operate Value Stream",
+        "6.2.5 Workforce FC"
+      ],
       "status": "draft",
       "config_profile": {
         "model_binding": {
@@ -3471,8 +3480,663 @@
           "backend": null
         },
         "concurrency_limit": 2,
-        "tool_grants": ["consumer_read", "registry_read"]
+        "tool_grants": [
+          "consumer_read",
+          "registry_read"
+        ]
       }
-    }
+    },
+    {
+      "agent_id": "AGT-WS-COMPLIANCE",
+      "agent_name": "compliance-officer",
+      "displayName": "Compliance Officer",
+      "tier": "specialist",
+      "value_stream": "cross-cutting",
+      "role": "specialist",
+      "capability_domain": "Regulatory compliance, policy governance, audit readiness and risk management. Owns the obligation-deadline work shape: watches recorded review dates, control review cadence, licence renewal and evidence freshness, and raises findings for a human to act on. Does not determine compliance, renew a licence, or submit a filing.",
+      "human_supervisor_id": "HR-000",
+      "hitl_tier_default": 0,
+      "delegates_to": [],
+      "escalates_to": "AGT-ORCH-000",
+      "it4it_sections": [
+        "6.1.1 Policy FC"
+      ],
+      "status": "active",
+      "config_profile": {
+        "model_binding": {
+          "model_id": null,
+          "temperature": 0.3,
+          "max_tokens": 8192
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 300
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 50000
+        },
+        "memory": {
+          "type": "persistent",
+          "backend": null
+        },
+        "concurrency_limit": 2,
+        "tool_grants": [
+          "policy_write",
+          "data_governance_validate",
+          "file_read",
+          "backlog_read",
+          "backlog_write",
+          "tool_evaluation_create",
+          "registry_read",
+          "web_search"
+        ]
+      }
+    },
+    {
+      "agent_id": "AGT-907",
+      "agent_name": "bookkeeper",
+      "tier": "operate",
+      "value_stream": "operate",
+      "role": "specialist",
+      "capability_domain": "Day-to-day bookkeeping: bank/card account setup, statement import, bank-rule categorization, and reconciliation of transactions against recorded payments; money-of-record writes route the governance gate for owner approval (BI-7D50DC56, S-BK)",
+      "human_supervisor_id": "HR-400",
+      "hitl_tier_default": 1,
+      "delegates_to": [],
+      "escalates_to": "HR-400",
+      "it4it_sections": [
+        "ITFM"
+      ],
+      "status": "defined",
+      "config_profile": {
+        "model_binding": {
+          "model_id": "claude-haiku-4-5-20251001",
+          "temperature": 0.1,
+          "max_tokens": 2048,
+          "provider_id": "anthropic",
+          "credential_ref": "anthropic-prod",
+          "auth_type": "api_key"
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 60
+        },
+        "token_budget": {
+          "daily_limit": 100000,
+          "per_task_limit": 5000
+        },
+        "tool_grants": [
+          "banking_read",
+          "banking_write",
+          "enrichment_write",
+          "crm_read",
+          "crm_write",
+          "document_read",
+          "work_room_read",
+          "work_room_write",
+          "registry_read",
+          "backlog_read"
+        ],
+        "memory": {
+          "type": "none",
+          "backend": null
+        },
+        "concurrency_limit": 8
+      }
+    },
+    {
+      "agent_id": "AGT-EXT-CLAUDE",
+      "agent_name": "external-claude-code",
+      "displayName": "Claude Code (external CLI)",
+      "aliases": [
+        "external-claude-code",
+        "claude"
+      ],
+      "tier": "specialist",
+      "value_stream": "integrate",
+      "role": "builder",
+      "capability_domain": "External Claude Code (external CLI) CLI session acting as a governed Work Room participant.",
+      "human_supervisor_id": "HR-100",
+      "hitl_tier_default": 1,
+      "delegates_to": [],
+      "escalates_to": "AGT-ORCH-200",
+      "it4it_sections": [
+        "6.2 Requirement to Deploy"
+      ],
+      "status": "active",
+      "config_profile": {
+        "model_binding": {
+          "model_id": null,
+          "temperature": 0.2,
+          "max_tokens": 8192
+        },
+        "execution_runtime": {
+          "type": "external_cli",
+          "timeout_seconds": 600
+        },
+        "token_budget": {
+          "daily_limit": 0,
+          "per_task_limit": 0
+        },
+        "memory": {
+          "type": "none",
+          "backend": null
+        },
+        "concurrency_limit": 4,
+        "tool_grants": [
+          "work_room_read",
+          "work_room_write",
+          "registry_read"
+        ]
+      }
+    },
+    {
+      "agent_id": "AGT-EXT-CODEX",
+      "agent_name": "external-codex",
+      "displayName": "Codex (external CLI)",
+      "aliases": [
+        "external-codex",
+        "codex"
+      ],
+      "tier": "specialist",
+      "value_stream": "integrate",
+      "role": "builder",
+      "capability_domain": "External Codex (external CLI) CLI session acting as a governed Work Room participant.",
+      "human_supervisor_id": "HR-100",
+      "hitl_tier_default": 1,
+      "delegates_to": [],
+      "escalates_to": "AGT-ORCH-200",
+      "it4it_sections": [
+        "6.2 Requirement to Deploy"
+      ],
+      "status": "active",
+      "config_profile": {
+        "model_binding": {
+          "model_id": null,
+          "temperature": 0.2,
+          "max_tokens": 8192
+        },
+        "execution_runtime": {
+          "type": "external_cli",
+          "timeout_seconds": 600
+        },
+        "token_budget": {
+          "daily_limit": 0,
+          "per_task_limit": 0
+        },
+        "memory": {
+          "type": "none",
+          "backend": null
+        },
+        "concurrency_limit": 4,
+        "tool_grants": [
+          "work_room_read",
+          "work_room_write",
+          "registry_read"
+        ]
+      }
+    },
+    {
+      "agent_id": "AGT-EXT-GROK",
+      "agent_name": "external-grok",
+      "displayName": "Grok (external CLI)",
+      "aliases": [
+        "external-grok",
+        "grok"
+      ],
+      "tier": "specialist",
+      "value_stream": "integrate",
+      "role": "builder",
+      "capability_domain": "External Grok (external CLI) CLI session acting as a governed Work Room participant.",
+      "human_supervisor_id": "HR-100",
+      "hitl_tier_default": 1,
+      "delegates_to": [],
+      "escalates_to": "AGT-ORCH-200",
+      "it4it_sections": [
+        "6.2 Requirement to Deploy"
+      ],
+      "status": "active",
+      "config_profile": {
+        "model_binding": {
+          "model_id": null,
+          "temperature": 0.2,
+          "max_tokens": 8192
+        },
+        "execution_runtime": {
+          "type": "external_cli",
+          "timeout_seconds": 600
+        },
+        "token_budget": {
+          "daily_limit": 0,
+          "per_task_limit": 0
+        },
+        "memory": {
+          "type": "none",
+          "backend": null
+        },
+        "concurrency_limit": 4,
+        "tool_grants": [
+          "work_room_read",
+          "work_room_write",
+          "registry_read"
+        ]
+      }
+    },
+    {
+        "agent_id": "AGT-WS-DATA-ARCHITECT",
+        "agent_name": "data-architect",
+        "displayName": "Data Architect",
+        "tier": "specialist",
+        "value_stream": "integrate",
+        "role": "builder",
+        "capability_domain": "Schema design, data modeling, migration validation, inverse-relation checks, and index optimization",
+        "hitl_tier_default": 1,
+        "delegates_to": [],
+        "escalates_to": "AGT-ORCH-300",
+        "it4it_sections": [],
+        "status": "active",
+        "config_profile": {
+          "model_binding": {
+            "model_id": null,
+            "temperature": 0.2,
+            "max_tokens": 8192
+          },
+          "execution_runtime": {
+            "type": "in_process",
+            "timeout_seconds": 300
+          },
+          "token_budget": {
+            "daily_limit": 200000,
+            "per_task_limit": 50000
+          },
+          "memory": {
+            "type": "persistent",
+            "backend": null
+          },
+          "concurrency_limit": 2,
+          "tool_grants": [
+            "file_read",
+            "sandbox_execute",
+            "architecture_read",
+            "registry_read",
+            "tool_script_exec"
+          ]
+        }
+      },
+      {
+        "agent_id": "AGT-WS-DATA-STEWARD",
+        "agent_name": "data-steward",
+        "displayName": "Data Steward",
+        "tier": "specialist",
+        "value_stream": "cross-cutting",
+        "role": "operator",
+        "capability_domain": "Master-data quality, duplicate resolution, record refresh, and merge governance",
+        "hitl_tier_default": 1,
+        "delegates_to": [],
+        "escalates_to": "AGT-ORCH-000",
+        "it4it_sections": [],
+        "status": "active",
+        "config_profile": {
+          "model_binding": {
+            "model_id": null,
+            "temperature": 0.2,
+            "max_tokens": 8192
+          },
+          "execution_runtime": {
+            "type": "in_process",
+            "timeout_seconds": 300
+          },
+          "token_budget": {
+            "daily_limit": 200000,
+            "per_task_limit": 50000
+          },
+          "memory": {
+            "type": "persistent",
+            "backend": null
+          },
+          "concurrency_limit": 2,
+          "tool_grants": [
+            "crm_read",
+            "crm_write",
+            "consumer_read",
+            "registry_read",
+            "backlog_read",
+            "web_search",
+            "tool_script_exec"
+          ]
+        }
+      },
+      {
+        "agent_id": "AGT-WS-DISPATCHER",
+        "agent_name": "dispatcher",
+        "displayName": "Dispatcher",
+        "tier": "specialist",
+        "value_stream": "operate",
+        "role": "operator",
+        "capability_domain": "Field-service scheduling, crew assignment, and customer-notification coordination",
+        "hitl_tier_default": 1,
+        "delegates_to": [],
+        "escalates_to": "AGT-ORCH-700",
+        "it4it_sections": [],
+        "status": "active",
+        "config_profile": {
+          "model_binding": {
+            "model_id": null,
+            "temperature": 0.2,
+            "max_tokens": 8192
+          },
+          "execution_runtime": {
+            "type": "in_process",
+            "timeout_seconds": 300
+          },
+          "token_budget": {
+            "daily_limit": 200000,
+            "per_task_limit": 50000
+          },
+          "memory": {
+            "type": "persistent",
+            "backend": null
+          },
+          "concurrency_limit": 2,
+          "tool_grants": [
+            "backlog_read",
+            "backlog_write",
+            "consumer_read",
+            "consumer_write",
+            "registry_read"
+          ]
+        }
+      },
+      {
+        "agent_id": "AGT-WS-INTEGRATION",
+        "agent_name": "integration-engineer",
+        "displayName": "MCP & Integration Engineer",
+        "tier": "specialist",
+        "value_stream": "integrate",
+        "role": "builder",
+        "capability_domain": "Coordination-plane stewardship, protocol compatibility, tool-contract review, and connector integration",
+        "hitl_tier_default": 1,
+        "delegates_to": [],
+        "escalates_to": "AGT-ORCH-300",
+        "it4it_sections": [],
+        "status": "draft",
+        "config_profile": {
+          "model_binding": {
+            "model_id": null,
+            "temperature": 0.2,
+            "max_tokens": 8192
+          },
+          "execution_runtime": {
+            "type": "in_process",
+            "timeout_seconds": 300
+          },
+          "token_budget": {
+            "daily_limit": 200000,
+            "per_task_limit": 50000
+          },
+          "memory": {
+            "type": "persistent",
+            "backend": null
+          },
+          "concurrency_limit": 2,
+          "tool_grants": [
+            "file_read",
+            "architecture_read",
+            "backlog_read",
+            "backlog_write",
+            "registry_read",
+            "tool_script_exec",
+            "web_search"
+          ]
+        }
+      },
+      {
+        "agent_id": "AGT-WS-LEGAL",
+        "agent_name": "legal-operations-counsel",
+        "displayName": "Legal Operations Counsel",
+        "tier": "specialist",
+        "value_stream": "cross-cutting",
+        "role": "specialist",
+        "capability_domain": "Legal review packet preparation, contract issue spotting, and counsel handoff coordination",
+        "hitl_tier_default": 1,
+        "delegates_to": [],
+        "escalates_to": "AGT-ORCH-000",
+        "it4it_sections": [],
+        "status": "active",
+        "config_profile": {
+          "model_binding": {
+            "model_id": null,
+            "temperature": 0.2,
+            "max_tokens": 8192
+          },
+          "execution_runtime": {
+            "type": "in_process",
+            "timeout_seconds": 300
+          },
+          "token_budget": {
+            "daily_limit": 200000,
+            "per_task_limit": 50000
+          },
+          "memory": {
+            "type": "persistent",
+            "backend": null
+          },
+          "concurrency_limit": 2,
+          "tool_grants": [
+            "file_read",
+            "document_read",
+            "document_write",
+            "registry_read"
+          ]
+        }
+      },
+      {
+        "agent_id": "AGT-WS-SECURITY",
+        "agent_name": "security-engineer",
+        "displayName": "Security Engineer",
+        "tier": "specialist",
+        "value_stream": "evaluate",
+        "role": "reviewer",
+        "capability_domain": "Exposure classification, vulnerability and supply-chain triage, and access-control review",
+        "hitl_tier_default": 1,
+        "delegates_to": [],
+        "escalates_to": "AGT-ORCH-100",
+        "it4it_sections": [],
+        "status": "draft",
+        "config_profile": {
+          "model_binding": {
+            "model_id": null,
+            "temperature": 0.2,
+            "max_tokens": 8192
+          },
+          "execution_runtime": {
+            "type": "in_process",
+            "timeout_seconds": 300
+          },
+          "token_budget": {
+            "daily_limit": 200000,
+            "per_task_limit": 50000
+          },
+          "memory": {
+            "type": "persistent",
+            "backend": null
+          },
+          "concurrency_limit": 2,
+          "tool_grants": [
+            "file_read",
+            "architecture_read",
+            "backlog_read",
+            "backlog_write",
+            "telemetry_read",
+            "web_search",
+            "registry_read"
+          ]
+        }
+      },
+      {
+        "agent_id": "AGT-WS-STOREFRONT",
+        "agent_name": "storefront-advisor",
+        "displayName": "Storefront Operations Manager",
+        "tier": "specialist",
+        "value_stream": "consume",
+        "role": "operator",
+        "capability_domain": "Portal operations, offer presentation, inbox review, and storefront administration",
+        "hitl_tier_default": 1,
+        "delegates_to": [],
+        "escalates_to": "AGT-ORCH-600",
+        "it4it_sections": [],
+        "status": "active",
+        "config_profile": {
+          "model_binding": {
+            "model_id": null,
+            "temperature": 0.2,
+            "max_tokens": 8192
+          },
+          "execution_runtime": {
+            "type": "in_process",
+            "timeout_seconds": 300
+          },
+          "token_budget": {
+            "daily_limit": 200000,
+            "per_task_limit": 50000
+          },
+          "memory": {
+            "type": "persistent",
+            "backend": null
+          },
+          "concurrency_limit": 2,
+          "tool_grants": [
+            "consumer_read",
+            "registry_read",
+            "backlog_read",
+            "backlog_write",
+            "marketing_read",
+            "marketing_write",
+            "storefront_read",
+            "stock_read",
+            "web_search"
+          ]
+        }
+      },
+      {
+        "agent_id": "AGT-WS-FINANCE",
+        "agent_name": "finance-controller",
+        "displayName": "Finance Controller",
+        "tier": "specialist",
+        "value_stream": "cross-cutting",
+        "role": "specialist",
+        "capability_domain": "Financial controls, budget governance, cost management, and financial reporting",
+        "hitl_tier_default": 1,
+        "delegates_to": [],
+        "escalates_to": "AGT-ORCH-000",
+        "it4it_sections": [],
+        "status": "active",
+        "config_profile": {
+          "model_binding": {
+            "model_id": null,
+            "temperature": 0.2,
+            "max_tokens": 8192
+          },
+          "execution_runtime": {
+            "type": "in_process",
+            "timeout_seconds": 300
+          },
+          "token_budget": {
+            "daily_limit": 200000,
+            "per_task_limit": 50000
+          },
+          "memory": {
+            "type": "persistent",
+            "backend": null
+          },
+          "concurrency_limit": 2,
+          "tool_grants": [
+            "registry_read",
+            "backlog_read",
+            "portfolio_read"
+          ]
+        }
+      },
+      {
+        "agent_id": "AGT-WS-MARKET-RESEARCH",
+        "agent_name": "market-research-analyst",
+        "displayName": "Market Research Analyst",
+        "tier": "specialist",
+        "value_stream": "explore",
+        "role": "specialist",
+        "capability_domain": "Competitive intelligence and cited public-web market research grounded in CRM context",
+        "hitl_tier_default": 1,
+        "delegates_to": [],
+        "escalates_to": "AGT-ORCH-200",
+        "it4it_sections": [],
+        "status": "draft",
+        "config_profile": {
+          "model_binding": {
+            "model_id": null,
+            "temperature": 0.2,
+            "max_tokens": 8192
+          },
+          "execution_runtime": {
+            "type": "in_process",
+            "timeout_seconds": 300
+          },
+          "token_budget": {
+            "daily_limit": 200000,
+            "per_task_limit": 50000
+          },
+          "memory": {
+            "type": "persistent",
+            "backend": null
+          },
+          "concurrency_limit": 2,
+          "tool_grants": [
+            "web_search",
+            "crm_read",
+            "registry_read"
+          ]
+        }
+      },
+      {
+        "agent_id": "AGT-WS-DOC",
+        "agent_name": "doc-specialist",
+        "displayName": "Documentation Specialist",
+        "tier": "specialist",
+        "value_stream": "cross-cutting",
+        "role": "specialist",
+        "capability_domain": "Documentation structure, architecture-diagram quality, rendering compatibility, and publication",
+        "hitl_tier_default": 1,
+        "delegates_to": [],
+        "escalates_to": "AGT-ORCH-000",
+        "it4it_sections": [],
+        "status": "active",
+        "config_profile": {
+          "model_binding": {
+            "model_id": null,
+            "temperature": 0.2,
+            "max_tokens": 8192
+          },
+          "execution_runtime": {
+            "type": "in_process",
+            "timeout_seconds": 300
+          },
+          "token_budget": {
+            "daily_limit": 200000,
+            "per_task_limit": 50000
+          },
+          "memory": {
+            "type": "persistent",
+            "backend": null
+          },
+          "concurrency_limit": 2,
+          "tool_grants": [
+            "file_read",
+            "registry_read",
+            "portfolio_read",
+            "document_read",
+            "document_write",
+            "document_publish"
+          ]
+        }
+      }
   ]
 }

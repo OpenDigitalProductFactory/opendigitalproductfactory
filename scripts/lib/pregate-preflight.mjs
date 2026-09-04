@@ -44,17 +44,26 @@ import { RUNNER_FAILURE_EXIT_CODE } from "../check-guards.mjs";
 export const PREFLIGHT_SKIP_ENV = "DPF_SKIP_PREGATE_PREFLIGHT_REASON";
 
 // Pull-request-profile gates that are commit-range-driven and therefore give a
-// truthful answer on a host worktree without PR context. Everything else in
-// that profile is excluded on purpose:
+// truthful answer on a host worktree without PR context.
+//
+// docs-impact / data-impact / spec-plan-doc were the "later slice once their
+// host-side behavior is proven" this list originally deferred. Proven on
+// 2026-08-23: the self-test dependencies that motivated the deferral are
+// removed by stripSelfTests() before anything runs, and what remains is four
+// commit-range scans totalling ~2.1s on a ~95s preflight. Leaving them out cost
+// a full CI round trip on #4558, where Docs Impact failed in CI on an edge the
+// preflight had just declared clean.
+//
+// Two gates stay excluded, and these reasons do NOT expire:
 //   - seed-fit-gate reads the PR body, which does not exist before push;
-//   - docs-impact-gate / data-impact-gate / spec-plan-doc-gate carry heavier
-//     self-test dependencies and are candidates for a later slice once their
-//     host-side behavior is proven;
 //   - decision-baseline MERGES origin/main into the branch — a tree mutation
 //     the preflight must never perform.
 export const LOCAL_SAFE_PR_GUARD_IDS = Object.freeze([
   "ux-fit-gate",
   "design-grounding-gate",
+  "docs-impact-gate",
+  "data-impact-gate",
+  "spec-plan-doc-gate",
 ]);
 
 // Exit-output signatures that mean "this host cannot run the guard", not
@@ -95,7 +104,28 @@ function stripSelfTests(entries) {
     .filter((entry) => entry.commands.length > 0);
 }
 
-export function buildPreflightPlan({ profiles = POLICY_GUARD_PROFILES } = {}) {
+/**
+ * BI-8CDA7F95: does this guard apply to the classified change scope?
+ *
+ * The scope comes from scripts/ci-change-scope.mjs — the same classifier
+ * ci.yml branches on — so host and cloud agree on what "docs-only" means. A
+ * guard is skipped ONLY when it DECLARES `inputs` that a docs-only diff cannot
+ * touch (`inputs: ["code"]`, see ci-policy-guards.mjs). No declaration, no
+ * classification, or any non-docs change: the guard runs. Never skip on a
+ * guess — a wrong skip is a false green (BI-7B249AFE).
+ */
+export function guardAppliesToScope(entry, changeScope) {
+  if (!changeScope || changeScope.docsOnly !== true) return true;
+  const inputs = Array.isArray(entry?.inputs) ? entry.inputs : null;
+  if (!inputs) return true;
+  return inputs.includes("docs");
+}
+
+/**
+ * The preflight plan for a change scope: the entries to run, and the entries
+ * left out because their declared inputs cannot be touched by this diff.
+ */
+export function planPreflight({ profiles = POLICY_GUARD_PROFILES, changeScope = null } = {}) {
   const source = stripSelfTests([
     ...(profiles.source ?? []),
     ...(profiles.workspace ?? []),
@@ -105,7 +135,14 @@ export function buildPreflightPlan({ profiles = POLICY_GUARD_PROFILES } = {}) {
       LOCAL_SAFE_PR_GUARD_IDS.includes(entry.id),
     ),
   );
-  return [...source, ...trailer];
+  const all = [...source, ...trailer];
+  const entries = all.filter((entry) => guardAppliesToScope(entry, changeScope));
+  const skippedByScope = all.filter((entry) => !guardAppliesToScope(entry, changeScope));
+  return { entries, skippedByScope, changeScope: changeScope ?? null };
+}
+
+export function buildPreflightPlan({ profiles = POLICY_GUARD_PROFILES, changeScope = null } = {}) {
+  return planPreflight({ profiles, changeScope }).entries;
 }
 
 function defaultExecute(command, args) {

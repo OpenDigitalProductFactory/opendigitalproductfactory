@@ -58,8 +58,6 @@ interface OvsmDb {
 }
 
 const ARCHETYPE_OVSM_SOURCE = "archetype-ovsm";
-/** Sentinel stageKey for the band element that holds the whole stream. */
-const BAND_STAGE_KEY = "__stream__";
 /** Cross-cuts are rendered as stages but are not part of the linear flow. */
 const FLOW_EXCLUDED_KEYS = new Set(["trust-compliance", "operate-improve"]);
 
@@ -90,23 +88,34 @@ function buildScopeRef(orgId: string): string {
   return `${orgId}:operational`;
 }
 
-function bandMetadata(orgId: string, ovsm: OperationalValueStream): Record<string, unknown> {
+function bandMetadata(
+  orgId: string,
+  ovsm: OperationalValueStream,
+  stream: OperationalValueStream["streams"][number],
+): Record<string, unknown> {
   return {
     projection: {
       layoutRole: "stream_band",
       source: ARCHETYPE_OVSM_SOURCE,
       orgId,
       archetypeId: ovsm.archetypeId,
-      stageKey: BAND_STAGE_KEY,
+      streamKey: stream.key,
+      stageKey: `__stream__:${stream.key}`,
     },
     operationalValueStream: {
       orgId,
       archetypeId: ovsm.archetypeId,
       category: ovsm.category,
+      streamKey: stream.key,
+      purpose: stream.purpose,
+      input: stream.input,
+      output: stream.output,
+      responsibleRole: stream.responsibleRole,
       loadBearingStageKeys: ovsm.loadBearingStageKeys,
       capacityUnit: ovsm.capacityUnit,
       demandSignature: ovsm.demandSignature,
       trustGates: ovsm.trustGates,
+      supportingCapabilities: ovsm.supportingCapabilities,
       // EaElement.itValueStream uses the EA notation's value-stream slugs
       // (evaluate/explore/…), a different taxonomy from the storefront IT4IT
       // stages, so the binding is stored here rather than mapped onto that field.
@@ -127,6 +136,7 @@ function stageMetadata(
       orgId,
       archetypeId: ovsm.archetypeId,
       stageKey: stage.key,
+      streamKey: stage.streamKey,
     },
     operationalValueStream: {
       orgId,
@@ -135,6 +145,10 @@ function stageMetadata(
       capabilityBindings: stage.capabilityBindings,
       metricBindings: stage.metricBindings,
       trustGateKeys: stage.trustGateKeys,
+      input: stage.input,
+      output: stage.output,
+      responsibleRole: stage.responsibleRole,
+      handoffToStageKey: stage.handoffToStageKey,
       // OVSM-level facts denormalized onto each stage for cheap reads.
       capacityUnit: ovsm.capacityUnit,
       demandSignature: ovsm.demandSignature,
@@ -309,50 +323,52 @@ export async function projectArchetypeValueStream(
   const currentElementIds = new Set<string>();
   const elementIdByStageKey = new Map<string, string>();
 
-  // Band element + view element.
-  const band = await resolveElement(db, {
-    orgId,
-    stageKey: BAND_STAGE_KEY,
-    elementTypeId: valueStreamType.id,
-    name: viewName,
-    description: `How ${ovsm.archetypeName} creates and delivers value`,
-    properties: bandMetadata(orgId, ovsm),
-  });
-  band.created ? (createdElements += 1) : (updatedElements += 1);
-  currentElementIds.add(band.id);
-
-  const bandViewElement = await resolveViewElement(db, {
-    viewId: view.id,
-    elementId: band.id,
-    parentViewElementId: null,
-    orderIndex: null,
-  });
-  bandViewElement.created ? (createdViewElements += 1) : (updatedViewElements += 1);
-
-  // Stage elements, ordered.
-  const orderedStages = [...ovsm.stages].sort((a, b) => a.order - b.order);
-  orderedStages.forEach((_, index) => index);
-  for (let index = 0; index < orderedStages.length; index += 1) {
-    const stage = orderedStages[index]!;
-    const element = await resolveElement(db, {
+  const orderedStreams = [...ovsm.streams];
+  for (let streamIndex = 0; streamIndex < orderedStreams.length; streamIndex += 1) {
+    const stream = orderedStreams[streamIndex]!;
+    const bandStageKey = `__stream__:${stream.key}`;
+    const band = await resolveElement(db, {
       orgId,
-      stageKey: stage.key,
-      elementTypeId: valueStreamStageType.id,
-      name: stage.label,
-      description: `${stage.label} — ${ovsm.archetypeName}`,
-      properties: stageMetadata(orgId, ovsm, stage),
+      stageKey: bandStageKey,
+      elementTypeId: valueStreamType.id,
+      name: stream.label,
+      description: stream.purpose,
+      properties: bandMetadata(orgId, ovsm, stream),
     });
-    element.created ? (createdElements += 1) : (updatedElements += 1);
-    currentElementIds.add(element.id);
-    elementIdByStageKey.set(stage.key, element.id);
+    band.created ? (createdElements += 1) : (updatedElements += 1);
+    currentElementIds.add(band.id);
 
-    const stageViewElement = await resolveViewElement(db, {
+    const bandViewElement = await resolveViewElement(db, {
       viewId: view.id,
-      elementId: element.id,
-      parentViewElementId: bandViewElement.id,
-      orderIndex: index,
+      elementId: band.id,
+      parentViewElementId: null,
+      orderIndex: streamIndex,
     });
-    stageViewElement.created ? (createdViewElements += 1) : (updatedViewElements += 1);
+    bandViewElement.created ? (createdViewElements += 1) : (updatedViewElements += 1);
+
+    const orderedStages = [...stream.stages].sort((a, b) => a.order - b.order);
+    for (let stageIndex = 0; stageIndex < orderedStages.length; stageIndex += 1) {
+      const stage = orderedStages[stageIndex]!;
+      const element = await resolveElement(db, {
+        orgId,
+        stageKey: stage.key,
+        elementTypeId: valueStreamStageType.id,
+        name: stage.label,
+        description: `${stage.label} — ${ovsm.archetypeName}`,
+        properties: stageMetadata(orgId, ovsm, stage),
+      });
+      element.created ? (createdElements += 1) : (updatedElements += 1);
+      currentElementIds.add(element.id);
+      elementIdByStageKey.set(stage.key, element.id);
+
+      const stageViewElement = await resolveViewElement(db, {
+        viewId: view.id,
+        elementId: element.id,
+        parentViewElementId: bandViewElement.id,
+        orderIndex: stageIndex,
+      });
+      stageViewElement.created ? (createdViewElements += 1) : (updatedViewElements += 1);
+    }
   }
 
   // Prune orphans no longer in the current stage set.
@@ -371,10 +387,28 @@ export async function projectArchetypeValueStream(
 
   // Linear flow between sequential primary stages (cross-cuts excluded).
   if (flowRelationshipType) {
-    const flowStages = orderedStages.filter((s) => !FLOW_EXCLUDED_KEYS.has(s.key));
-    for (let index = 0; index < flowStages.length - 1; index += 1) {
-      const fromId = elementIdByStageKey.get(flowStages[index]!.key);
-      const toId = elementIdByStageKey.get(flowStages[index + 1]!.key);
+    const flowPairs: Array<{ fromKey: string; toKey: string; handoff: boolean }> = [];
+    for (const stream of orderedStreams) {
+      const flowStages = [...stream.stages]
+        .sort((a, b) => a.order - b.order)
+        .filter((stage) => !FLOW_EXCLUDED_KEYS.has(stage.key));
+      for (let index = 0; index < flowStages.length - 1; index += 1) {
+        flowPairs.push({ fromKey: flowStages[index]!.key, toKey: flowStages[index + 1]!.key, handoff: false });
+      }
+      for (const stage of flowStages) {
+        if (stage.handoffToStageKey) {
+          flowPairs.push({ fromKey: stage.key, toKey: stage.handoffToStageKey, handoff: true });
+        }
+      }
+    }
+
+    const seenPairs = new Set<string>();
+    for (const pair of flowPairs) {
+      const pairKey = `${pair.fromKey}->${pair.toKey}`;
+      if (seenPairs.has(pairKey)) continue;
+      seenPairs.add(pairKey);
+      const fromId = elementIdByStageKey.get(pair.fromKey);
+      const toId = elementIdByStageKey.get(pair.toKey);
       if (!fromId || !toId) continue;
       const existingRel = await db.eaRelationship.findFirst({
         where: { fromElementId: fromId, toElementId: toId, relationshipTypeId: flowRelationshipType.id },
@@ -389,6 +423,7 @@ export async function projectArchetypeValueStream(
             notationSlug: "archimate4",
             properties: {
               projection: { source: ARCHETYPE_OVSM_SOURCE, orgId },
+              handoff: pair.handoff,
             },
           },
           select: { id: true },

@@ -43,6 +43,7 @@ import SelfUpgradeTriggerControl from "./SelfUpgradeTriggerControl";
 
 const baseProps = {
   enabled: true,
+  actionState: "update-available" as const,
   channel: "stable",
   latestRun: null,
 };
@@ -110,6 +111,25 @@ describe("SelfUpgradeTriggerControl – enabled", () => {
     expect(html).toContain("stable");
   });
 
+  it("does not expose upgrade or emergency controls when the install is current", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeTriggerControl {...baseProps} actionState="no-update" />,
+    );
+    expect(html).toContain("No update is ready");
+    expect(html).not.toContain('aria-label="Upgrade now"');
+    expect(html).not.toContain("Emergency override");
+  });
+
+  it("does not expose a mutation when update availability could not be verified", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeTriggerControl {...baseProps} actionState="unavailable" />,
+    );
+    expect(html).toContain("Update status unavailable");
+    expect(html).not.toContain('aria-label="Upgrade now"');
+    expect(html).not.toContain("Emergency override");
+    expect(html).not.toContain("Upgrade queued.");
+  });
+
   it("renders the Upgrade now button, marked as the primary / next action (BI-D77BF495)", () => {
     const html = renderToStaticMarkup(<SelfUpgradeTriggerControl {...baseProps} />);
     expect(html).toContain("Upgrade now");
@@ -145,6 +165,36 @@ describe("SelfUpgradeTriggerControl – running", () => {
     );
     expect(html).toContain("Upgrade in progress…");
     expect(html).not.toContain('aria-label="Upgrade now"');
+  });
+
+  it.each([
+    ["admission_pending", "waiting for dispatch"],
+    ["dispatching", "dispatching to the worker"],
+    ["indeterminate", "dispatch outcome is being reconciled"],
+  ])("projects durable %s state with the admitted run identity", (dispatchStatus, copy) => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeTriggerControl
+        {...baseProps}
+        latestRun={makeRun("pending", { dispatchStatus, startedAt: null, completedAt: null })}
+      />,
+    );
+    expect(html).toContain("SUR-0001 admitted");
+    expect(html).toContain(copy);
+    expect(html).not.toContain('aria-label="Upgrade now"');
+  });
+
+  it("projects a durable pre-dispatch failure with its run identity", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeTriggerControl
+        {...baseProps}
+        latestRun={makeRun("failed", {
+          dispatchStatus: "dispatch_failed",
+          dispatchError: "queue-dispatch-refused",
+        })}
+      />,
+    );
+    expect(html).toContain("SUR-0001 was not dispatched");
+    expect(html).toContain("queue-dispatch-refused");
   });
 
   it("surfaces Force now / Abort controls when the portal is draining (BI-4F3B2FA9)", () => {
@@ -198,10 +248,10 @@ describe("SelfUpgradeTriggerControl – trigger control", () => {
 // ─── Loading state ────────────────────────────────────────────────────────────
 
 describe("SelfUpgradeTriggerControl – loading", () => {
-  it("shows Upgrading... text when pending", () => {
+  it("shows durable admission text when pending", () => {
     shared.isPending = true;
     const html = renderToStaticMarkup(<SelfUpgradeTriggerControl {...baseProps} />);
-    expect(html).toContain("Upgrading...");
+    expect(html).toContain("Admitting…");
     expect(html).not.toContain(">Upgrade now<");
   });
 
@@ -221,7 +271,7 @@ describe("SelfUpgradeTriggerControl – loading", () => {
     shared.isPending = true;
     const html = renderToStaticMarkup(<SelfUpgradeTriggerControl {...baseProps} />);
     expect(html).toContain('data-upgrade-starting="true"');
-    expect(html).toContain("No need to click again");
+    expect(html).toContain("durable run will appear");
   });
 
   it("does not show the 'starting' hint once a run is already running", () => {
@@ -236,20 +286,20 @@ describe("SelfUpgradeTriggerControl – loading", () => {
 // ─── Success feedback ─────────────────────────────────────────────────────────
 
 describe("SelfUpgradeTriggerControl – success feedback", () => {
-  it("shows Upgrade queued. when trigger succeeds", () => {
+  it("shows durable admission feedback when trigger succeeds", () => {
     shared.triggerResult = { queued: true };
     const html = renderToStaticMarkup(<SelfUpgradeTriggerControl {...baseProps} />);
-    expect(html).toContain("Upgrade queued.");
+    expect(html).toContain("Upgrade admitted");
   });
 });
 
 // ─── Error feedback ───────────────────────────────────────────────────────────
 
 describe("SelfUpgradeTriggerControl – error feedback", () => {
-  it("shows Not queued message when trigger returns not queued", () => {
+  it("shows Not admitted when the durable request is refused", () => {
     shared.triggerResult = { queued: false, reason: "disabled" };
     const html = renderToStaticMarkup(<SelfUpgradeTriggerControl {...baseProps} />);
-    expect(html).toContain("Not queued:");
+    expect(html).toContain("Not admitted:");
   });
 
   it("shows the specific reason for not queuing", () => {

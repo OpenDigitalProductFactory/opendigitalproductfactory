@@ -49,12 +49,15 @@ export interface ReadabilityScore {
   gradeLevel: number;
 }
 
-export function analyzeReadability(rawText: string): ReadabilityScore {
-  const text = toProse(rawText);
-  const sentences = Math.max(
-    text.split(/[.!?]+/).map((s) => s.trim()).filter(Boolean).length,
-    1,
-  );
+/** Sentences a run of PROSE contains, split on terminal punctuation. */
+function proseSentences(text: string): string[] {
+  return text.split(/[.!?]+/).map((s) => s.trim()).filter(Boolean);
+}
+
+/** The Flesch–Kincaid arithmetic, given text and a sentence count established
+ *  by the caller. Both public analyzers differ only in how they count sentences. */
+function score(text: string, sentenceCount: number): ReadabilityScore {
+  const sentences = Math.max(sentenceCount, 1);
   const words = text.split(/\s+/).filter((w) => /[a-z0-9]/i.test(w));
   const wordCount = Math.max(words.length, 1);
   const syllables = words.reduce((n, w) => n + countSyllables(w), 0);
@@ -69,6 +72,82 @@ export function analyzeReadability(rawText: string): ReadabilityScore {
     readingEase: round1(206.835 - 1.015 * wps - 84.6 * spw),
     gradeLevel: round1(0.39 * wps + 11.8 * spw - 15.59),
   };
+}
+
+/**
+ * Flesch–Kincaid over PROSE — text whose sentence boundaries are full stops.
+ * Correct for a paragraph, a marketing snippet, a doc body.
+ *
+ * DO NOT use this on a rendered UI surface. See `analyzeUiReadability`.
+ */
+export function analyzeReadability(rawText: string): ReadabilityScore {
+  const text = toProse(rawText);
+  return score(text, proseSentences(text).length);
+}
+
+/**
+ * A UI surface's reading grade — BI-0ED0F6B3.
+ *
+ * WHY THIS IS NOT FLESCH–KINCAID. FK is `0.39 × words-per-sentence + 11.8 ×
+ * syllables-per-word − 15.59`. The first term assumes the text HAS sentences,
+ * and a user interface does not: it is headings, table cells, button labels,
+ * nav items and list items, almost none of them punctuated. Score a screen with
+ * FK and the whole page collapses into one enormous "sentence",
+ * words-per-sentence explodes, and the grade climbs for copy carrying no
+ * difficulty at all. That is how 185 of 201 routes came to fail this check, and
+ * how `/platform/identity/agents` reached grade 377 — a figure arithmetically
+ * impossible for prose.
+ *
+ * Segmenting a UI into utterances fixes the inflation but keeps the dependency:
+ * the sentence-length term is still there, still moved by where full stops
+ * happen to fall. So the term is DROPPED. What remains is the half of FK that
+ * was measuring language rather than layout:
+ *
+ *     grade = 11.8 × syllables-per-word − 15.59
+ *
+ * The coefficients are FK's own, so the scale and the existing caps
+ * (high-school 9, college 13) keep their meaning. Nothing about punctuation
+ * appears in the formula, which makes the measure punctuation-independent BY
+ * CONSTRUCTION rather than by assertion — the property is a fact about the
+ * arithmetic, not a claim a test has to keep re-checking.
+ *
+ * It separates the cases the policy actually cares about. Plain product copy
+ * runs about 1.76 syllables per word and scores 5.2; genuinely dense operator
+ * prose runs about 3.57 and scores 26.5. Same words-per-sentence in both, which
+ * is the point.
+ *
+ * WHAT IS GIVEN UP, AND WHY THAT IS ACCEPTABLE. Sentence length is a real
+ * readability signal, and this measure is blind to it: a screen carrying one
+ * 60-word paragraph of simple words grades the same as the same words in six
+ * sentences. That signal has its own home — `scripts/check-prose-lint.ts` flags
+ * any copy sentence over 25 words on the `longSentences` axis, scoring one
+ * sentence at a time where the term is meaningful. Splitting the two concerns
+ * is what lets each measure be honest: word difficulty here, sentence length
+ * there, and neither one pretending to measure the other.
+ */
+export function analyzeUiReadability(utterances: readonly string[]): UiReadabilityScore {
+  const texts = utterances.map((u) => toProse(u)).filter((t) => /[a-z0-9]/i.test(t));
+  const words = texts.join(" ").split(/\s+/).filter((w) => /[a-z0-9]/i.test(w));
+  const wordCount = Math.max(words.length, 1);
+  const syllables = words.reduce((n, w) => n + countSyllables(w), 0);
+  const spw = syllables / wordCount;
+  return {
+    words: wordCount,
+    utterances: texts.length,
+    syllables,
+    syllablesPerWord: round2(spw),
+    gradeLevel: round1(11.8 * spw - 15.59),
+  };
+}
+
+export interface UiReadabilityScore {
+  words: number;
+  /** Distinct UI utterances scored — headings, cells, labels, list items. */
+  utterances: number;
+  syllables: number;
+  syllablesPerWord: number;
+  /** Reading grade from word difficulty alone. No sentence-length term. */
+  gradeLevel: number;
 }
 
 // ── Reading levels & the tiered policy ──────────────────────────────────────

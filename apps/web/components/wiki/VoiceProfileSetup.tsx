@@ -61,7 +61,7 @@ export function VoiceProfileSetup({
   const [enabled, setEnabled] = useState(voiceEnabled)
   const [isPending, startTransition] = useTransition()
   const [resetting, setResetting] = useState(false)
-  const voiceSynth = useVoiceSynth()
+  const voiceSynth = useVoiceSynth({ purpose: "preview" })
 
   // Per-profile voice tuning (sliders). Seed from saved settings, else defaults.
   const [tuning, setTuning] = useState<Required<VoiceTuning>>({

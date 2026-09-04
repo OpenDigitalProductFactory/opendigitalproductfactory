@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const migration = readFileSync(
-  resolve(process.cwd(), "prisma/migrations/20260717032000_allow_staff_intake_review/migration.sql"),
+  resolve(__dirname, "../prisma/migrations/20260717032000_allow_staff_intake_review/migration.sql"),
   "utf8",
 );
 

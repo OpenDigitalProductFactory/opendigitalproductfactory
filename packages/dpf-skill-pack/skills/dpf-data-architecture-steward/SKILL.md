@@ -1,6 +1,6 @@
 ---
 name: dpf-data-architecture-steward
-description: Steward the live data architecture — explain the Prisma→EA data-model mirror, the ERD, schema-drift conformance findings, and impact. Use when asked about the data model, ERD, table/model relationships, foreign keys/indexes, schema structure, or "show/refresh the data architecture".
+description: "Use when asked about the DPF data model, ERD, table relationships, foreign keys, indexes, schema structure, or schema drift."
 disable-model-invocation: false
 user-invocable: true
 allowed-tools: mcp__dpf__describe_model mcp__dpf__query_ontology_graph mcp__dpf__explain_blast_radius mcp__dpf__search_code_graph mcp__dpf__wiki_query

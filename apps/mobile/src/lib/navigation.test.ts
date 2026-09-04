@@ -54,6 +54,38 @@ describe("resolveVisibleTabs", () => {
     ).toEqual(["customers", "index"]);
   });
 
+  it("shows Mileage only on an install that declares the capability", () => {
+    // The archetype fit: a field-mobile install (field service, trades,
+    // automotive, mobile beauty) declares "mileage" and its drivers get the
+    // tab; a fixed-premises install never sees it.
+    const fieldInstall = resolveVisibleTabs({
+      persona: { kind: "employee" },
+      capabilities: ["work-items", "mileage"],
+    });
+    expect(fieldInstall).toContain("mileage");
+
+    const salonInstall = resolveVisibleTabs({
+      persona: { kind: "employee" },
+      capabilities: ["work-items"],
+    });
+    expect(salonInstall).not.toContain("mileage");
+
+    // A default/operator app loads no capabilities, so the tab stays hidden
+    // rather than appearing for every install by accident.
+    expect(resolveVisibleTabs({})).not.toContain("mileage");
+  });
+
+  it("never shows Mileage to a walk-up visitor or a customer", () => {
+    // Drives belong to a worker. A customer persona has no employee record, so
+    // the tab would only ever show an error.
+    expect(
+      resolveVisibleTabs({ persona: { kind: "customer" }, capabilities: ["mileage"] }),
+    ).not.toContain("mileage");
+    expect(
+      resolveVisibleTabs({ persona: { kind: "visitor" }, capabilities: ["mileage"] }),
+    ).not.toContain("mileage");
+  });
+
   it("capability-gates a tab only when capabilities are known", () => {
     const registry: TabSpec[] = [
       { key: "index", personas: ["operator"] },

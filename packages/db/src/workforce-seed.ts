@@ -1,4 +1,8 @@
-import type { PrismaClient } from "../generated/client/client";
+export {
+  getDefaultEmploymentTypes,
+  getDefaultWorkLocations,
+  seedWorkforceReferenceData,
+} from "./workforce-reference-seed";
 
 export type CoworkerAgentSeed = {
   agentId: string;
@@ -265,6 +269,22 @@ export const COWORKER_AGENT_SEEDS: readonly CoworkerAgentSeed[] = [
     valueStream: "cross-cutting",
     sensitivity: "confidential",
   },
+  // Bookkeeper (BI-7D50DC56, slice S-BK of the Bookkeeping Work Room). Distinct
+  // from the Finance Controller's oversight role: the bookkeeper does the
+  // day-to-day transaction-level work — set up bank/card accounts, import
+  // statements, categorize via bank rules, and reconcile against payments,
+  // through the governed banking tools (BI-DE27D34E, S-FIN). Money-of-record
+  // writes (account setup, statement import) route the governance gate.
+  {
+    agentId: "bookkeeper",
+    slugId: "bookkeeper",
+    name: "Bookkeeper",
+    tier: 2,
+    type: "coworker",
+    description: "Keeps the books current from bank/card statements: account setup, statement import, bank-rule categorization, and reconciliation, with owner approval for money-of-record writes",
+    valueStream: "operate",
+    sensitivity: "confidential",
+  },
   // Field-dispatch coordinator for field-service archetypes. It coordinates the
   // field-service job lifecycle: scheduling, crew assignment, and customer
   // notification proposals.
@@ -340,6 +360,100 @@ export const COWORKER_AGENT_SEEDS: readonly CoworkerAgentSeed[] = [
     sensitivity: "internal",
     initialLifecycleStage: "draft",
   },
+  // EP-32B0E693 identity reconciliation. Each entry below already exists as an
+  // ACTIVE canonical registry identity. Seeding its slug projects that existing
+  // staffing state onto the workforce roster; it does not activate any of the
+  // declared-only IT4IT lattice or change the identity's authority.
+  {
+    agentId: "licensing-specialist",
+    slugId: "licensing-specialist",
+    name: "Licensing & Permit Specialist",
+    tier: 2,
+    type: "coworker",
+    description: "Archetype-aware licensing, permit, legality, display-obligation, and staff-credential readiness investigation",
+    valueStream: "cross-cutting",
+    sensitivity: "confidential",
+  },
+  {
+    agentId: "ux-accessibility-agent",
+    slugId: "ux-accessibility-agent",
+    name: "UX Accessibility Reviewer",
+    tier: 2,
+    type: "coworker",
+    description: "WCAG 2.2 AA, keyboard, semantic HTML, contrast, and DPF design-system conformance review",
+    valueStream: "evaluate",
+    sensitivity: "internal",
+  },
+  {
+    agentId: "soc-triage-analyst",
+    slugId: "soc-triage-analyst",
+    name: "SOC Triage Analyst",
+    tier: 2,
+    type: "coworker",
+    description: "Tier-1 security detection triage, enrichment, severity assessment, and case stewardship",
+    valueStream: "operate",
+    sensitivity: "restricted",
+  },
+  {
+    agentId: "soc-investigator",
+    slugId: "soc-investigator",
+    name: "SOC Investigator",
+    tier: 2,
+    type: "coworker",
+    description: "Deep security-case investigation, timeline construction, blast-radius analysis, and response proposals",
+    valueStream: "operate",
+    sensitivity: "restricted",
+  },
+  {
+    agentId: "soc-threat-hunter",
+    slugId: "soc-threat-hunter",
+    name: "SOC Threat Hunter",
+    tier: 2,
+    type: "coworker",
+    description: "Hypothesis-driven threat hunting and proposal-only detection-content improvement",
+    valueStream: "operate",
+    sensitivity: "restricted",
+  },
+  {
+    agentId: "soc-incident-commander",
+    slugId: "soc-incident-commander",
+    name: "SOC Incident Commander",
+    tier: 2,
+    type: "coworker",
+    description: "Security incident coordination, remediation proposals, case ownership, and customer communications",
+    valueStream: "operate",
+    sensitivity: "restricted",
+  },
+  {
+    agentId: "external-claude-code",
+    slugId: "external-claude-code",
+    name: "Claude Code (external CLI)",
+    tier: 2,
+    type: "coworker",
+    description: "External Claude Code CLI session acting as a governed Workroom participant",
+    valueStream: "integrate",
+    sensitivity: "internal",
+  },
+  {
+    agentId: "external-codex",
+    slugId: "external-codex",
+    name: "Codex (external CLI)",
+    tier: 2,
+    type: "coworker",
+    description: "External Codex CLI session acting as a governed Workroom participant",
+    valueStream: "integrate",
+    sensitivity: "internal",
+  },
+  {
+    agentId: "external-grok",
+    slugId: "external-grok",
+    name: "Grok (external CLI)",
+    tier: 2,
+    type: "coworker",
+    description: "External Grok CLI session acting as a governed Workroom participant",
+    valueStream: "integrate",
+    sensitivity: "internal",
+  },
 ];
 
 export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
@@ -377,9 +491,12 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
   // BI-6D10EB1F: web_search gates the public-web research doors
   // (search_public_web, fetch_public_website, analyze_public_website_branding);
   // crm_read lets it target and cite an opportunity/account WITHOUT mutating the
-  // pipeline (no crm_write); document_write + registry_write reach doc_save/
-  // doc_link so it can author and attach a cited brief. registry_read/
-  // document_read/code_graph_read arrive via COWORKER_READ_BASELINE_GRANTS. No
+  // pipeline (no crm_write). The role is read-and-propose: it returns the cited
+  // brief in conversation and may file a governed CRM enrichment proposal, but
+  // holds neither document_write nor registry_write. Those broad grants would
+  // also unlock unrelated knowledge, wiki, discovery, and document mutations.
+  // registry_read/document_read/code_graph_read arrive via the explicit grant
+  // below and COWORKER_READ_BASELINE_GRANTS. No
   // sandbox_execute: the Build-Studio scout/ideate research launchers are
   // feature-scoped, not owner-facing market research.
   // registry_read is explicit rather than implied by registry_write: the
@@ -387,7 +504,7 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
   // wiki-overlay-pack.test.ts pins registry_write as NOT conferring read on the
   // overlay list tool. Fix the coworker, not the semantics (BI-728FD7F2); the
   // implication question is filed separately.
-  "market-research-analyst": ["web_search", "crm_read", "document_write", "registry_write", "registry_read"],
+  "market-research-analyst": ["web_search", "crm_read", "registry_read"],
   // The Customer Success Manager operates the CRM (accounts, pipeline, quotes),
   // so it needs crm_read/crm_write — NOT backlog_write (which let it retire live
   // backlog items while flailing) or marketing_read (wrong domain). Its runtime
@@ -465,6 +582,11 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
     "backlog_read",
     "backlog_write",
     "tool_evaluation_create",
+    // onboard-regulation declares search_public_web, which TOOL_TO_GRANTS keys on
+    // web_search. Without it the skill was denied on every call — a broken skill
+    // that looked assigned. Surfaced by the tool-grant audit once the coworker
+    // gained a canonical registry record.
+    "web_search",
     // registry_read reaches evaluate_profession_decision (WSID) and
     // principle_decide (WWMD). Without it the coworker whose entire job is
     // governance was the one coworker locked out of the governance kernel, and
@@ -475,6 +597,24 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
   ],
   "legal-operations-counsel": ["file_read", "document_read", "document_write", "registry_read"],
   "finance-controller": ["registry_read", "backlog_read", "portfolio_read"],
+  // Bookkeeper (S-BK): the day-to-day books loop. banking_read/banking_write drive
+  // the governed banking tools (S-FIN); enrichment_write resolves vendor→supplier
+  // (BI-B2497DFB); crm_read/write for counterparties; document_read for
+  // receipts/statements; work_room_read/write to participate in the Bookkeeping
+  // Work Room. These MATCH the agent_registry.json config_profile.tool_grants for
+  // bookkeeper, so there is no seed↔registry divergence to sanction.
+  bookkeeper: [
+    "banking_read",
+    "banking_write",
+    "enrichment_write",
+    "crm_read",
+    "crm_write",
+    "document_read",
+    "work_room_read",
+    "work_room_write",
+    "registry_read",
+    "backlog_read",
+  ],
   // Reads field-service jobs and customer contact data, updates job status, and
   // proposes customer notifications for approval.
   dispatcher: ["backlog_read", "backlog_write", "consumer_read", "consumer_write", "registry_read"],
@@ -550,6 +690,15 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
     "tool_script_exec",
     "web_search",
   ],
+  "licensing-specialist": ["registry_read", "backlog_read", "backlog_write", "consumer_read", "policy_write", "policy_read", "initiative_compliance_review", "spec_plan_read", "web_search"],
+  "ux-accessibility-agent": ["file_read", "sandbox_execute", "work_capsule_read", "work_capsule_write", "work_capsule_adopt", "registry_read", "backlog_write", "decision_record_create", "initiative_ux_review", "web_search"],
+  "soc-triage-analyst": ["siem_read", "siem_investigate", "registry_read"],
+  "soc-investigator": ["siem_read", "siem_investigate", "siem_tune", "registry_read"],
+  "soc-threat-hunter": ["siem_read", "siem_tune", "registry_read"],
+  "soc-incident-commander": ["siem_read", "siem_investigate", "incident_respond", "registry_read"],
+  "external-claude-code": ["work_room_read", "work_room_write", "registry_read"],
+  "external-codex": ["work_room_read", "work_room_write", "registry_read"],
+  "external-grok": ["work_room_read", "work_room_write", "registry_read"],
 };
 
 /**
@@ -585,68 +734,3 @@ export const ONBOARDING_AGENT_GRANTS: Record<string, readonly string[]> = {
     "thread_write",
   ],
 };
-
-export function getDefaultEmploymentTypes() {
-  return [
-    { employmentTypeId: "emp-full-time", name: "Full-time" },
-    { employmentTypeId: "emp-part-time", name: "Part-time" },
-    { employmentTypeId: "emp-contractor", name: "Contractor" },
-    { employmentTypeId: "emp-intern", name: "Intern" },
-    { employmentTypeId: "emp-advisor", name: "Advisor" },
-  ] as const;
-}
-
-export function getDefaultWorkLocations() {
-  return [
-    {
-      locationId: "loc-hq",
-      name: "Headquarters",
-      locationType: "office",
-      timezone: "America/Chicago",
-    },
-    {
-      locationId: "loc-remote",
-      name: "Remote",
-      locationType: "remote",
-      timezone: null,
-    },
-    {
-      locationId: "loc-hybrid",
-      name: "Hybrid",
-      locationType: "hybrid",
-      timezone: null,
-    },
-  ] as const;
-}
-
-export async function seedWorkforceReferenceData(prisma: PrismaClient): Promise<void> {
-  for (const employmentType of getDefaultEmploymentTypes()) {
-    await prisma.employmentType.upsert({
-      where: { employmentTypeId: employmentType.employmentTypeId },
-      update: {
-        name: employmentType.name,
-        status: "active",
-      },
-      create: {
-        ...employmentType,
-        status: "active",
-      },
-    });
-  }
-
-  for (const workLocation of getDefaultWorkLocations()) {
-    await prisma.workLocation.upsert({
-      where: { locationId: workLocation.locationId },
-      update: {
-        name: workLocation.name,
-        locationType: workLocation.locationType,
-        timezone: workLocation.timezone,
-        status: "active",
-      },
-      create: {
-        ...workLocation,
-        status: "active",
-      },
-    });
-  }
-}

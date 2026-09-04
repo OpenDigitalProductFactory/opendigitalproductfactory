@@ -14,12 +14,14 @@
 // Each picked a model independently; nothing enforced "ONE generation model at a
 // time" or noticed when two had accumulated. Docker Model Runner loads one
 // `llama-server` per model with no concurrency cap, so two big models thrash /
-// OOM the GPU. This module centralises the policy; bootstrap + the Providers UX
-// import it, and the install scripts (which cannot import TS) mirror LOCAL_MODEL_TIERS
-// with a pointer comment. detectLocalModelOverCommit() is the drift safety-net.
+// OOM the GPU. The selectors now consume one data-only install policy, while this
+// module owns the runtime guards around it. detectLocalModelOverCommit() remains
+// the safety-net for models installed outside the default policy.
 //
 // PURE module — no prisma / fs / network / server-only imports — so the client
 // OllamaManagement component can import it directly.
+
+import installModelPolicy from "../../../../scripts/installer/local-model-policy.json";
 
 /**
  * Policy: the local runtime keeps at most ONE generation (chat/coder) model
@@ -63,7 +65,7 @@ export function classifyLocalModelRole(modelId: string): LocalModelRole {
  * resident — ~4 GB over weights — and the embedder adds ~1 GB. 5 GB covers both
  * with margin and is why a 24 GB card lands on the 30B, not the 35B.
  */
-export const MODEL_HEADROOM_GB = 5;
+export const MODEL_HEADROOM_GB = installModelPolicy.modelHeadroomGb;
 
 /**
  * Fraction of UNIFIED memory (Apple Silicon) usable for the model. macOS lets
@@ -71,10 +73,10 @@ export const MODEL_HEADROOM_GB = 5;
  * the Docker stack. So a 128 GB Mac has a far larger model budget than a 24 GB
  * discrete card — it can run an 80B where the 4090 runs a 30B.
  */
-export const UNIFIED_USABLE_FRACTION = 0.75;
+export const UNIFIED_USABLE_FRACTION = installModelPolicy.unifiedUsableFraction;
 
 /** Fraction of system RAM usable for CPU-only inference (leaves room for OS + stack). */
-export const CPU_USABLE_FRACTION = 0.5;
+export const CPU_USABLE_FRACTION = installModelPolicy.cpuUsableFraction;
 
 /**
  * Served context window (tokens) the platform auto-sets for the local GENERATION
@@ -169,91 +171,20 @@ export interface HostMemory {
  * Q4 resident WEIGHT footprint; the selector adds MODEL_HEADROOM_GB for context +
  * embedder before deciding what fits.
  *
- * Mirrored (with a pointer comment) by scripts/detect-hardware-host.ts and
- * install-dpf.{ps1,sh}, which cannot import TypeScript. Keep those in sync.
+ * Defined in the data-only installer policy so browser code, host detection,
+ * and the PowerShell installer all select from the same ordered list.
  */
 export interface LocalModelTier {
   model: string;
   /** Approximate resident weight footprint, GB (Q4). */
   weightsGb: number;
   label: string;
-  /**
-   * Known-good content digest, as `docker model inspect` reports it in `id`.
-   *
-   * Set this for any tier sourced from OUTSIDE Docker's curated `ai/` namespace.
-   * A HuggingFace reference like `...:Q4_K_M` names a FILE, not an immutable
-   * revision — the publisher can replace it in place — and `docker model pull`
-   * accepts no flags, so no revision or digest can be pinned at pull time. The
-   * installers compare against this value after pulling and warn on mismatch.
-   *
-   * Model weights are a CONTROL-PLANE input: they determine tool-calling and
-   * agentic behaviour, so substituted weights are a behavioural compromise, not
-   * merely a data one. This is detection, not prevention — the honest ceiling of
-   * what the platform can do given the pull API. (BI-73E9A282.)
-   *
-   * Omitted for `ai/` tiers: those resolve through Docker Hub's content-addressed
-   * registry, which already pins bytes to a tag.
-   */
-  expectedDigest?: string;
 }
 
-export const LOCAL_MODEL_TIERS: readonly LocalModelTier[] = [
-  { model: "ai/qwen3-coder-next", weightsGb: 48, label: "Qwen3-Coder-Next 80B (MoE, 3B active)" }, // big unified (Apple 128 GB) / 64 GB+ discrete
-  // Qwen3.8-27B replaces the Qwen3.6 35B-A3B tier it outranks on task completeness.
-  // DENSE 27B (all params active per token), so it is ~4x slower per turn than the
-  // MoE tiers around it — measured 10.3s vs 2.6s mean at 30-45 attached tools on an
-  // M5 Max. That trade is deliberate: the operator criterion for the local tier is a
-  // thorough, trustworthy result rather than time-to-answer (2026-08-16).
-  //
-  // Ranked ABOVE the 30B coder despite being the newer/smaller-footprint model
-  // because the ladder is "largest that fits" and quality here does not track size:
-  // a host that could run the 35B gets this instead.
-  //
-  // Pulled from HuggingFace, not the curated `ai/` namespace — `ai/qwen3.8` publishes
-  // only the 2.4T-A95B "Max" (1.31 TB). ggml-org is llama.cpp's own org, i.e. first-
-  // party to the runtime DMR embeds. Revisit if/when an `ai/qwen3.8:27b` tag lands.
-  // Verified 2026-08-16: this id resolves to quality tier `strong` (required by
-  // default coworkers) and capability family `qwen` (toolFidelity 80) in BOTH the
-  // pull form and the runtime form DMR registers. It does NOT yet resolve as
-  // vision-capable despite being a native VLM — see BI-C2EFF855.
-  {
-    model: "hf.co/ggml-org/Qwen3.8-27B-GGUF:Q4_K_M",
-    weightsGb: 18,
-    label: "Qwen3.8 27B (dense)",
-    // Captured on the canonical runtime 2026-08-16 from `docker model inspect`,
-    // alongside GGUF metadata: qwen35, 26.90B, MOSTLY_Q4_K_M, 17.66 GiB, 262144 ctx,
-    // general.license apache-2.0.
-    expectedDigest: "sha256:66c4f325bc71350f07fb2da4f92455553c7bbc8af5d7ee2095fbeac79b9e66c9",
-  },
-  { model: "ai/qwen3-coder", weightsGb: 16, label: "Qwen3-Coder 30B (MoE, 3B active)" }, // the 24 GB-card sweet spot (measured ~20.7 GB @ 24k ctx)
-  { model: "ai/qwen3:14B-Q6_K", weightsGb: 12, label: "Qwen3 14B" },
-  { model: "ai/qwen3:8B-Q4_K_M", weightsGb: 6, label: "Qwen3 8B" },
-  { model: "ai/qwen3:4B-UD-Q4_K_XL", weightsGb: 3, label: "Qwen3 4B" },
-] as const;
+export const LOCAL_MODEL_TIERS: readonly LocalModelTier[] = installModelPolicy.tiers;
 
 /** Smallest tier — the CPU-OK fallback when nothing larger fits the budget. */
 const SMALLEST_TIER = LOCAL_MODEL_TIERS[LOCAL_MODEL_TIERS.length - 1]!;
-
-/**
- * The known-good digest for a tier's model id, or null when the tier does not
- * pin one. Matches on the PULL form (what the tier declares) — installers
- * resolve the runtime form separately, and the digest is the same artifact
- * either way.
- */
-export function expectedDigestForModel(modelId: string): string | null {
-  const tier = LOCAL_MODEL_TIERS.find((t) => t.model === modelId);
-  return tier?.expectedDigest ?? null;
-}
-
-/**
- * True when a tier is sourced from outside Docker's curated `ai/` namespace and
- * therefore REQUIRES a pinned digest — a mutable upstream with no pull-time
- * revision pin is exactly the case the digest check exists for. Used by the
- * conformance test below so a future non-`ai/` tier cannot be added without one.
- */
-export function tierRequiresDigestPin(tier: LocalModelTier): boolean {
-  return !tier.model.startsWith("ai/");
-}
 
 /**
  * The memory budget (GB) actually available to a local model on this host:

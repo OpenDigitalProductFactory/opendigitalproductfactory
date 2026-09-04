@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createHash } from "node:crypto";
-import { registerInstallStateHandoffTests } from "./self-upgrade-handoff.test-support";
+import { configureReleaseUpgradeTest, registerCoreSelfUpgradeSuccessTest, registerInstallStateHandoffTests, registerReleaseWorkerTargetRecoveryTests, registerSelfUpgradeFunctionTests } from "./self-upgrade-handoff.test-support";
 
 const TEST_INSTALL_STATE = JSON.stringify({ platform: "linux", arch: "amd64" });
 const TEST_INSTALL_STATE_HASH = createHash("sha256").update(TEST_INSTALL_STATE).digest("hex");
@@ -16,17 +16,20 @@ const mocks = vi.hoisted(() => ({
   defaultGitRunner: vi.fn(),
   prepareUpgradeSource: vi.fn(),
   getDeployedSha: vi.fn(),
+  readCurrentContainerConfigDigest: vi.fn().mockResolvedValue(`sha256:${"a".repeat(64)}`),
   isFeatureBuildDeployed: vi.fn(),
   createRun: vi.fn(),
   startRun: vi.fn(),
   completeRun: vi.fn(),
   failRun: vi.fn(),
   skipRun: vi.fn(),
+  deferAdmittedRunForRedispatch: vi.fn(),
   updateRunPlan: vi.fn(),
   recordRunRecoveryPoint: vi.fn(),
   recordPromoterReadiness: vi.fn(),
   getLatestRun: vi.fn(),
   getLatestSucceededRun: vi.fn(),
+  getRun: vi.fn(),
   runPromoter: vi.fn(),
   isPromoterAvailable: vi.fn().mockResolvedValue(true),
   ensurePromoterImage: vi
@@ -51,40 +54,32 @@ const mocks = vi.hoisted(() => ({
   getActiveSelfUpgradeBlackout: vi.fn().mockResolvedValue(null),
   readFile: vi.fn(async (path: string) => path.endsWith("install-state.json") ? '{"platform":"linux","arch":"amd64"}' : "s".repeat(32)),
   resolveSelfUpgradeHostIdentity: vi.fn(() => ({ platform: "linux", arch: "amd64", provenance: "explicit" })),
-  readLatestReleaseStamp: vi.fn(),
+  readRegistryReleaseCandidate: vi.fn(),
+  loadVerifiedReleaseTargetEvidence: vi.fn(),
+  recordVerifiedReleaseTargetEvidence: vi.fn().mockResolvedValue(true),
 }));
-
 vi.mock("@/lib/self-upgrade/config", () => ({
   getSelfUpgradeConfig: mocks.getSelfUpgradeConfig,
   resolveSelfUpgradeHostIdentity: mocks.resolveSelfUpgradeHostIdentity,
 }));
-
 vi.mock("@/lib/self-upgrade/support", () => ({
   readSelfUpgradeSupport: mocks.readSelfUpgradeSupport,
 }));
-
 vi.mock("node:fs/promises", () => ({ readFile: mocks.readFile }));
-
-vi.mock("@/lib/release-health/release-runs-reader", () => ({
-  readLatestReleaseStamp: mocks.readLatestReleaseStamp,
-}));
-
+vi.mock("@/lib/self-upgrade/registry-release", () => ({ readRegistryReleaseCandidate: mocks.readRegistryReleaseCandidate }));
+vi.mock("@/lib/release-health/state", () => ({ loadVerifiedReleaseTargetEvidence: mocks.loadVerifiedReleaseTargetEvidence, recordVerifiedReleaseTargetEvidence: mocks.recordVerifiedReleaseTargetEvidence }));
 vi.mock("@/lib/self-upgrade/window", () => ({
   isUpgradeWindowOpen: mocks.isUpgradeWindowOpen,
 }));
-
 vi.mock("@/lib/operating-hours-read", () => ({
   resolveOperatingScheduleForSystem: mocks.resolveOperatingScheduleForSystem,
 }));
-
 vi.mock("@/lib/self-upgrade/auto-window", () => ({
   resolveAutoUpgradeWindow: mocks.resolveAutoUpgradeWindow,
 }));
-
 vi.mock("@/lib/self-upgrade/blackout", () => ({
   getActiveSelfUpgradeBlackout: mocks.getActiveSelfUpgradeBlackout,
 }));
-
 vi.mock("@/lib/self-upgrade/last-check", () => ({
   getLastCheckedAt: mocks.getLastCheckedAt,
   recordCheckedAt: mocks.recordCheckedAt,
@@ -119,19 +114,23 @@ vi.mock("@/lib/self-upgrade/completion", () => ({
   isFeatureBuildDeployed: mocks.isFeatureBuildDeployed,
 }));
 
+vi.mock("@/lib/self-upgrade/runtime-image-identity", () => ({ readCurrentContainerConfigDigest: mocks.readCurrentContainerConfigDigest }));
+
 vi.mock("@/lib/self-upgrade/run-store", () => ({
   createRun: mocks.createRun,
   startRun: mocks.startRun,
   completeRun: mocks.completeRun,
   failRun: mocks.failRun,
   skipRun: mocks.skipRun,
+  deferAdmittedRunForRedispatch: mocks.deferAdmittedRunForRedispatch,
   updateRunPlan: mocks.updateRunPlan,
   recordRunRecoveryPoint: mocks.recordRunRecoveryPoint,
   recordPromoterReadiness: mocks.recordPromoterReadiness,
   getLatestRun: mocks.getLatestRun,
   getLatestSucceededRun: mocks.getLatestSucceededRun,
+  getRun: mocks.getRun,
 }));
-
+vi.mock("@/lib/self-upgrade/delivery-admission", () => ({ rejectDuplicateSelfUpgradeDelivery: vi.fn().mockResolvedValue(null) }));
 vi.mock("@/lib/self-upgrade/promoter", async (importOriginal) => ({
   // Keep the real pure exports (constants like PROMOTER_ALREADY_RUNNING_EXIT_CODE
   // that the orchestrator imports statically) and mock only the spawn-heavy fns.
@@ -260,15 +259,7 @@ beforeEach(() => {
   );
 });
 
-describe("function registration", () => {
-  it("allFunctions includes selfUpgradeScheduled", () => {
-    expect(allFunctions).toContain(selfUpgradeScheduled);
-  });
-
-  it("allFunctions includes selfUpgradeManual", () => {
-    expect(allFunctions).toContain(selfUpgradeManual);
-  });
-});
+registerSelfUpgradeFunctionTests({ allFunctions, scheduled: selfUpgradeScheduled, manual: selfUpgradeManual });
 
 const ENABLED_CONFIG = {
   enabled: true,
@@ -307,33 +298,41 @@ describe("success path", () => {
     mocks.isFeatureBuildDeployed.mockResolvedValue(true);
   });
 
-  it("returns succeeded status when promoter exits 0", async () => {
-    const result = await runSelfUpgrade({ triggeredBy: "ops" });
-    expect(result).toMatchObject({ ok: true, status: "succeeded", runId: "SUR-AAAABBBB" });
-    expect(mocks.completeRun).toHaveBeenCalledWith("SUR-AAAABBBB");
-  });
+  registerCoreSelfUpgradeSuccessTest({ mocks, runSelfUpgrade });
+  registerReleaseWorkerTargetRecoveryTests({ mocks, runSelfUpgrade, installState: TEST_INSTALL_STATE });
 
   it("classifies a source-free consumer at the verified release as up to date without Git", async () => {
     const sourceSha = "a".repeat(40);
     const releaseState = JSON.stringify({ installMode: "consumer", imageTag: "v2.0.0", installPath: "/opt/dpf", composeFiles: ["docker-compose.yml", "docker-compose.release.yml"] });
-    vi.stubEnv("GHCR_OWNER", "opendigitalproductfactory");
-    mocks.readSelfUpgradeSupport.mockResolvedValue({
-      configuredEnabled: true,
-      supported: true,
-      enabled: true,
-      targetKind: "release-artifact",
-      reason: "enabled",
-      message: null,
-    });
-    mocks.readFile.mockImplementation(async (path: string) => path.endsWith("install-state.json") ? releaseState : "consumer");
     mocks.getDeployedSha.mockResolvedValue(sourceSha);
-    mocks.readLatestReleaseStamp.mockResolvedValue({ ok: true, latest: { tag: "v2.0.0", headSha: sourceSha, status: "verified" } });
+    const configDigest = `sha256:${"a".repeat(64)}`;
+    configureReleaseUpgradeTest({ mocks, installState: releaseState, sourceSha, currentConfigDigest: configDigest, targetConfigDigest: configDigest });
     try {
       const result = await runSelfUpgrade({ triggeredBy: "ops" });
       expect(result).toMatchObject({ skipped: true, reason: "up-to-date", releaseTag: "v2.0.0" });
       expect(mocks.defaultGitRunner).not.toHaveBeenCalled();
       expect(mocks.prepareUpgradeSource).not.toHaveBeenCalled();
       expect(mocks.evaluateHostMemoryGuard).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("hands the frozen release config digest through to promotion", async () => {
+    const sourceSha = "abc1234deadbeef";
+    const targetConfigDigest = `sha256:${"c".repeat(64)}`;
+    configureReleaseUpgradeTest({ mocks, installState: TEST_INSTALL_STATE, sourceSha, currentConfigDigest: `sha256:${"a".repeat(64)}`, targetConfigDigest });
+    try {
+      const result = await runSelfUpgrade({ triggeredBy: "ops" });
+      expect(result).toMatchObject({ ok: true, status: "succeeded" });
+      expect(mocks.runPromoter).toHaveBeenCalledWith(expect.objectContaining({
+        release: {
+          tag: "v2.0.0",
+          ghcrOwner: "opendigitalproductfactory",
+          channelDigest: `sha256:${"b".repeat(64)}`, platformManifestDigest: `sha256:${"c".repeat(64)}`,
+          configDigest: targetConfigDigest, platformOs: "linux", platformArchitecture: "amd64",
+        },
+      }));
     } finally {
       vi.unstubAllEnvs();
     }
@@ -493,12 +492,12 @@ describe("success path", () => {
     expect(mocks.startQuiescence).not.toHaveBeenCalled();
   });
 
-  it("scheduled poll keeps the conservative 'any surface skips' behavior on a soft blocker (BI-F36E7510)", async () => {
-    mocks.captureActiveSessionBlockers.mockResolvedValueOnce({
-      surfaces: [{ surface: "request.recent-tool-execution", kind: "soft" }],
-    });
-    const result = await runSelfUpgrade({ triggeredBy: "cron", scheduled: true });
-    expect(result).toMatchObject({ skipped: true, reason: "activity-in-flight" });
+  it("scheduled poll drains on a soft blocker and skips only on a hard one (BI-A9F04B91)", async () => {
+    mocks.captureActiveSessionBlockers.mockResolvedValueOnce({ surfaces: [{ surface: "request.recent-tool-execution", kind: "soft" }] });
+    expect(await runSelfUpgrade({ triggeredBy: "cron", scheduled: true })).not.toMatchObject({ reason: "activity-in-flight" });
+    expect(mocks.startQuiescence).toHaveBeenCalled();
+    mocks.startQuiescence.mockClear(); mocks.captureActiveSessionBlockers.mockResolvedValueOnce({ surfaces: [{ surface: "build-studio.phase.plan", kind: "hard" }] });
+    expect(await runSelfUpgrade({ triggeredBy: "cron", scheduled: true })).toMatchObject({ skipped: true, reason: "activity-in-flight" });
     expect(mocks.startQuiescence).not.toHaveBeenCalled();
   });
   it("runs the promoter with the host install path, backup, image, and health paths", async () => {
@@ -506,8 +505,8 @@ describe("success path", () => {
     await runSelfUpgrade({ triggeredBy: "ops" });
     expect(mocks.runPromoter).toHaveBeenCalledWith(
       expect.objectContaining({
-        // Promoter mounts daemon-resolved host paths, never portal paths.
         hostInstallPath: "/Users/me/dpf",
+        canonicalInstallPath: "/Users/me/dpf",
         targetSha: "abc1234deadbeef",
         backupPath: "/backups/self-upgrade/SUR-AAAABBBB",
         healthUrl: "http://localhost:3000/api/health",

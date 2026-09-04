@@ -11,6 +11,7 @@ vi.mock("@/lib/actions/mcp-tokens", () => ({
   issueMyTemplateMcpToken: vi.fn(),
   issueMyWriteMcpToken: vi.fn(),
   getMyContributorMcpReadiness: vi.fn(),
+  listActingCoworkerOptions: vi.fn(),
   listAvailableMcpScopes: vi.fn(),
   listMcpTokenTemplates: vi.fn(),
   listMyMcpTokens: vi.fn(),
@@ -420,6 +421,11 @@ describe("McpTokenManager", () => {
         templateId: "employee_finance",
         name: "Finance coworker",
         expiresInDays: 90,
+        // BI-B986A18B: the form always sends the acting-coworker binding.
+        // null is the default ("None — cannot join Work Rooms"), and it must
+        // be sent explicitly rather than omitted, so the issuance path can
+        // never silently fall back to an anonymous token.
+        agentId: null,
         baseUrl: "http://localhost:3000",
       });
     });

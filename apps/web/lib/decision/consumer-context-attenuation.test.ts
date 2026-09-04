@@ -71,7 +71,7 @@ describe("consumerContextWeightMultiplier", () => {
     schema_grounding: 0.5,
   };
 
-  it("is a no-op (1) for any archetype other than route-domain-specific", () => {
+  it("is a no-op (1) for a row that declares no contexts, whatever its archetype", () => {
     expect(
       consumerContextWeightMultiplier({
         consumerArchetype: "universal",
@@ -147,5 +147,68 @@ describe("consumerContextWeightMultiplier", () => {
       dimensionVector: { blast_radius: -0.5 },
     });
     expect(m).toBeCloseTo(ROUTE_DOMAIN_CONTEXTLESS_ATTENUATION, 6);
+  });
+});
+
+// BI-86EF5900 follow-up: the lever used to gate on
+// `consumerArchetype === "route-domain-specific"`, an archetype NO kernel
+// principle page carries (measured: universal 72, ai-coworker-universal 23,
+// specialist 1, route-domain-specific 0 across 96 pages). Every test above
+// passes that archetype explicitly, so the suite was green while the
+// production path returned 1 on its first line for every principle, always.
+// These cases pin the shape the corpus ACTUALLY has.
+describe("consumerContextWeightMultiplier — real corpus shapes", () => {
+  const UI_VECTOR = {
+    long_term_maintainability: 0.9,
+    reusability: 0.7,
+    schema_grounding: 0.5,
+    human_cognitive_load: -0.35,
+    governance_compliance: 0.4,
+  };
+
+  // The live frontmatter of docs/founder-kernel/wiki/principles/no-hardcoded-colors.md:
+  // archetype `universal` (it binds all three populations) AND context `ui`.
+  const NO_HARDCODED_COLORS = {
+    consumerArchetype: "universal",
+    principleConsumerContexts: ["ui"],
+    dimensionVector: UI_VECTOR,
+  };
+
+  it("attenuates a universal-archetype UI commandment for a contextless caller", () => {
+    const m = consumerContextWeightMultiplier({
+      ...NO_HARDCODED_COLORS,
+      callerConsumerContexts: undefined,
+    });
+    expect(m).toBeLessThan(1);
+    expect(m).toBeGreaterThan(0);
+  });
+
+  it("keeps full weight when the caller declares the matching context", () => {
+    expect(
+      consumerContextWeightMultiplier({
+        ...NO_HARDCODED_COLORS,
+        callerConsumerContexts: ["ui"],
+      }),
+    ).toBe(1);
+  });
+
+  it("zeroes a UI commandment for a caller in an unrelated context", () => {
+    expect(
+      consumerContextWeightMultiplier({
+        ...NO_HARDCODED_COLORS,
+        callerConsumerContexts: ["build-studio"],
+      }),
+    ).toBe(0);
+  });
+
+  it("leaves a domain-universal commandment (no declared contexts) at full weight", () => {
+    expect(
+      consumerContextWeightMultiplier({
+        consumerArchetype: "universal",
+        principleConsumerContexts: [],
+        callerConsumerContexts: undefined,
+        dimensionVector: { evidence_density: 0.8, governance_compliance: 0.7 },
+      }),
+    ).toBe(1);
   });
 });

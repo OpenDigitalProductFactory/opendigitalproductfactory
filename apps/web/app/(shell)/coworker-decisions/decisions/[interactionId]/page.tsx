@@ -12,6 +12,20 @@ import { LocalTime } from "@/components/ui/LocalTime";
 import { TIER_LABELS, tierForRow } from "@/lib/wiki/decision-audit";
 import { buildDecisionHelp } from "@/lib/wiki/decision-help";
 import { isWithdrawnHumanOutcome } from "@/lib/quality/decision-residue-staleness";
+import {
+  buildDecisionOriginCopy,
+  resolveDecisionOrigin,
+  type DecisionOriginDb,
+} from "@/lib/decision/decision-origin";
+import { presentProposal } from "@/lib/decision/proposal-presentation";
+import { getOpenProposalForInteraction, type ProposalClient } from "@/lib/decision/resolution-proposal-store";
+import { ProposalCard } from "./proposal-card";
+import {
+  buildOptionConsequences,
+  consequencesByOption,
+  parseScoredOptions,
+  CONSEQUENCE_LABELS,
+} from "@/lib/decision/option-consequences";
 
 export const dynamic = "force-dynamic";
 
@@ -63,6 +77,33 @@ export default async function DecisionRecordPage({ params }: { params: Params })
     },
   });
   if (!row) notFound();
+
+  // Where the decision came from, and what each option would cost. Both
+  // degrade to nothing rather than guessing: an unresolvable origin says so,
+  // and an unscored row keeps the bare option list it has always had.
+  const origin = await resolveDecisionOrigin(prisma as unknown as DecisionOriginDb, row);
+  const originCopy = buildDecisionOriginCopy(origin);
+  const consequences = consequencesByOption(
+    buildOptionConsequences(parseScoredOptions(row.scoredOptions)),
+  );
+  // A drafted resolution, when one exists. Absent for every decision no panel
+  // has looked at, and the page reads exactly as it did before in that case.
+  const proposalRow = await getOpenProposalForInteraction(
+    prisma as unknown as ProposalClient,
+    row.id,
+  );
+  const proposal = proposalRow
+    ? presentProposal({
+      proposalId: proposalRow.proposalId,
+      actionKind: proposalRow.actionKind,
+      status: proposalRow.status,
+      lifecycle: proposalRow.lifecycle,
+      summary: proposalRow.summary,
+      draftPayload: proposalRow.draftPayload,
+      dissent: proposalRow.dissent,
+      confidence: proposalRow.confidence,
+    })
+    : null;
 
   const tier = tierForRow(row);
   const tierLabel = TIER_LABELS[tier];
@@ -134,6 +175,39 @@ export default async function DecisionRecordPage({ params }: { params: Params })
         ) : null}
       </header>
 
+      {/* Where this came from — the work behind the question (BI-6700AF66). */}
+      <section className="mb-6">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--dpf-muted)] mb-2">
+          {originCopy.heading}
+        </h2>
+        {originCopy.unresolved ? (
+          <p className="text-sm text-[var(--dpf-muted)]">{originCopy.unresolved}</p>
+        ) : (
+          <dl className="rounded-lg border border-[var(--dpf-border)] p-3 text-sm">
+            {originCopy.lines.map((line) => (
+              <div key={line.label} className="flex gap-2 py-0.5">
+                <dt className="w-40 shrink-0 text-xs text-[var(--dpf-muted)]">{line.label}</dt>
+                <dd className="min-w-0 text-[var(--dpf-text)]">
+                  {line.href ? (
+                    <Link href={line.href} className="text-[var(--dpf-accent)] hover:underline">
+                      {line.value}
+                    </Link>
+                  ) : (
+                    line.value
+                  )}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        )}
+        {originCopy.basis ? (
+          <p className="mt-1 text-xs text-[var(--dpf-muted)]">{originCopy.basis}</p>
+        ) : null}
+        {originCopy.recurrence ? (
+          <p className="mt-1 text-xs text-[var(--dpf-warning)]">{originCopy.recurrence}</p>
+        ) : null}
+      </section>
+
       {/* Options weighed */}
       <section className="mb-6">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--dpf-muted)] mb-2">
@@ -164,6 +238,33 @@ export default async function DecisionRecordPage({ params }: { params: Params })
                   {typeof description === "string" && description ? (
                     <p className="mt-1 text-xs text-[var(--dpf-muted)]">{description}</p>
                   ) : null}
+                  {(() => {
+                    // Only present when the gate scored real feature vectors
+                    // AND the option separates from the field. Otherwise the
+                    // option renders exactly as it did before.
+                    const c = consequences.get(optionId);
+                    if (!c) return null;
+                    return (
+                      <div className="mt-2 flex flex-col gap-1 text-xs">
+                        {c.strengths.length > 0 ? (
+                          <p className="text-[var(--dpf-muted)]">
+                            <span className="text-[var(--dpf-success)]">
+                              {CONSEQUENCE_LABELS.strengths}
+                            </span>
+                            {`: ${c.strengths.join("; ")}.`}
+                          </p>
+                        ) : null}
+                        {c.costs.length > 0 ? (
+                          <p className="text-[var(--dpf-muted)]">
+                            <span className="text-[var(--dpf-warning)]">
+                              {CONSEQUENCE_LABELS.costs}
+                            </span>
+                            {`: ${c.costs.join("; ")}.`}
+                          </p>
+                        ) : null}
+                      </div>
+                    );
+                  })()}
                 </li>
               );
             })}
@@ -222,6 +323,11 @@ export default async function DecisionRecordPage({ params }: { params: Params })
         <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--dpf-muted)] mb-2">
           Employee review
         </h2>
+        {proposal ? (
+          <div className="mb-3">
+            <ProposalCard proposal={proposal} />
+          </div>
+        ) : null}
         {row.escalationCapture ? (
           <div className="rounded-lg border border-[var(--dpf-border)] p-3 text-sm">
             <p className="text-[var(--dpf-text)]">
@@ -255,6 +361,7 @@ export default async function DecisionRecordPage({ params }: { params: Params })
               resolved: row.humanOutcome !== null,
               contextMissing,
               withdrawn: isWithdrawnHumanOutcome(row.humanOutcome),
+              origin: { interactionId: row.interactionId, domainClass: row.domainClass },
             });
             const needsAction = help.steps.length > 0;
             return (

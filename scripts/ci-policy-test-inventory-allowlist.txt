@@ -21,6 +21,7 @@ scripts/check-merge-queue-churn.test.mjs
 scripts/check-missing-ci-dispatch.test.mjs
 scripts/check-module-size.test.mjs
 scripts/check-no-adhoc-mcp-protocol-versions.test.mjs
+scripts/check-no-ambient-host-tests.test.mjs
 scripts/check-no-governed-surface-without-mcp-tool.test.mjs
 scripts/check-no-hand-rolled-loading.test.mjs
 scripts/check-no-local-action-result.test.mjs
@@ -44,9 +45,12 @@ scripts/check-no-raw-route-error.test.mjs
 scripts/check-no-retired-lib-namespaces.test.mjs
 scripts/check-no-retired-superpowers-skills.test.mjs
 scripts/check-no-substrate-regression.test.mjs
+scripts/check-no-twin-artifact-drift.test.mjs
 scripts/check-no-suitability-object-shorthand.test.mjs
 scripts/check-no-system-user-sentinel.test.mjs
 scripts/check-no-type-reexport-in-use-server.test.mjs
+scripts/check-no-unhonored-grant-growth.test.mjs
+scripts/check-no-unresolved-prometheus-targets.test.mjs
 scripts/check-reporting-composition.test.mjs
 scripts/check-style-drift.test.mjs
 scripts/ci-evidence-receipt-discovery.test.mjs
@@ -79,7 +83,6 @@ scripts/lib/docker-entrypoint-source-volume.test.mjs
 scripts/lib/dockerfile-portal-build.test.mjs
 scripts/lib/git-fetch-shared-safe.test.mjs
 scripts/lib/govern-capability-compose-args.test.mjs
-scripts/lib/lease-supervisor.test.mjs
 scripts/lib/lifecycle-capability-profile-contract.test.mjs
 scripts/lib/load-pinned-guard-typescript.test.mjs
 scripts/lib/local-ci-base-freshness.test.mjs
@@ -92,6 +95,7 @@ scripts/lib/local-ci-pilot-report.test.mjs
 scripts/lib/local-ci-slot-isolation.test.mjs
 scripts/lib/local-ci-slot-manifest.test.mjs
 scripts/lib/local-ci-stage-receipt.test.mjs
+scripts/lib/local-ci-vitest-selection.test.mjs
 scripts/lib/local-ci-vitest-supervisor.test.mjs
 scripts/lib/local-integration-image-retention.test.mjs
 scripts/lib/local-queue-observer.test.mjs
@@ -109,6 +113,7 @@ scripts/lib/transition-signing.test.mjs
 scripts/lifecycle-surface-policy.test.mjs
 scripts/local-ci-bounded-build.test.mjs
 scripts/local-ci-capacity-broker.test.mjs
+scripts/local-ci-host-stage-calibration.test.mjs
 scripts/local-ci-pool-policy.test.mjs
 scripts/local-ci-runner.test.mjs
 scripts/local-ci-slot-cleanup.test.mjs

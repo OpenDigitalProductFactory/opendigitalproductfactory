@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { test } from "node:test";
@@ -14,7 +14,10 @@ import {
   executableOnPath,
   resolveLocalCiPnpmInvocation,
   resetOwnedSlotDatabase,
+  clearStaleStageReceipts,
+  resolveChildExit,
 } from "./local-ci-runner.mjs";
+import { EXIT_CHILD_SIGNAL_DEATH } from "./lib/sandbox-freshness.mjs";
 
 const cli = fileURLToPath(new URL("./local-ci-runner.mjs", import.meta.url));
 
@@ -256,4 +259,75 @@ test("local CI keeps an already-matching pnpm without a shim", () => {
 
   assert.equal(prepared.mode, "host-match");
   assert.equal(prepared.env.PATH, originalPath);
+});
+
+// BI-F22B4EEE. `result.status ?? 1` was the defect: a signal death reports
+// status null, so SIGKILL became exit 1 — indistinguishable from a failing test
+// suite. Observed live after 25,447 tests passed, with no build receipt and no
+// error text anywhere.
+test("resolveChildExit reports a signal death as its own code", () => {
+  assert.equal(resolveChildExit({ status: null, signal: "SIGKILL" }), EXIT_CHILD_SIGNAL_DEATH);
+  assert.equal(resolveChildExit({ status: null, signal: "SIGTERM" }), EXIT_CHILD_SIGNAL_DEATH);
+});
+
+test("resolveChildExit passes an ordinary exit code straight through", () => {
+  assert.equal(resolveChildExit({ status: 0, signal: null }), 0);
+  assert.equal(resolveChildExit({ status: 1, signal: null }), 1);
+  assert.equal(resolveChildExit({ status: 86, signal: null }), 86);
+});
+
+test("resolveChildExit does not claim a signal it did not observe", () => {
+  // Spawn failure: no status and no signal. Still a failure, but reporting it as
+  // a signal death would be inventing evidence.
+  assert.equal(resolveChildExit({ status: null, signal: null }), 1);
+  assert.equal(resolveChildExit({ status: null, signal: null, error: new Error("ENOENT") }), 1);
+});
+
+test("a signal death outranks a status, so a partially-reported kill is not read as a pass", () => {
+  assert.equal(resolveChildExit({ status: 0, signal: "SIGKILL" }), EXIT_CHILD_SIGNAL_DEATH);
+});
+
+// BI-F22B4EEE, second fault. local-integration-ci reads the per-stage receipts
+// back when it assembles evidence, and they were never cleared between runs — so
+// a run could find a previous run's receipts and treat those stages as done.
+// Observed live: a 32-second "gate" that ran only the guard loop and still
+// emitted a verdict, beside receipts from a different tree saying `passed`.
+test("clearStaleStageReceipts removes every per-stage receipt", () => {
+  const removed = [];
+  const cleared = clearStaleStageReceipts("/tmp/meta.json", { rm: (p) => removed.push(p) });
+
+  assert.deepEqual(removed, [
+    "/tmp/meta.json",
+    "/tmp/meta.json.vitest.json",
+    "/tmp/meta.json.typecheck.json",
+    "/tmp/meta.json.build.json",
+  ]);
+  assert.equal(cleared.length, 4);
+});
+
+test("clearStaleStageReceipts is best-effort and never throws", () => {
+  // Failing the gate because a stale receipt could not be deleted would trade
+  // one wrong verdict for another.
+  assert.doesNotThrow(() => clearStaleStageReceipts("/tmp/meta.json", {
+    rm: () => { throw new Error("EPERM"); },
+  }));
+  assert.deepEqual(clearStaleStageReceipts("/tmp/meta.json", {
+    rm: () => { throw new Error("EPERM"); },
+  }), []);
+});
+
+test("clearStaleStageReceipts actually deletes on disk", () => {
+  const dir = mkdtempSync(join(tmpdir(), "dpf-stage-receipts-"));
+  const meta = join(dir, "dpf-local-ci-metadata.json");
+  writeFileSync(meta, JSON.stringify({ candidateSha: "old", execution: { status: "passed" } }));
+  for (const suffix of [".vitest.json", ".typecheck.json", ".build.json"]) {
+    writeFileSync(`${meta}${suffix}`, JSON.stringify({ status: "passed" }));
+  }
+
+  clearStaleStageReceipts(meta);
+
+  assert.equal(existsSync(meta), false, "metadata record must not survive into the next run (BI-F22B4EEE)");
+  for (const suffix of [".vitest.json", ".typecheck.json", ".build.json"]) {
+    assert.equal(existsSync(`${meta}${suffix}`), false, `${suffix} must not survive into the next run`);
+  }
 });

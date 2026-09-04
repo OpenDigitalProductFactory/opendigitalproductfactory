@@ -14,8 +14,53 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileS
 import { dirname, resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
 import { mcpCall } from "./lib/mcp-client.mjs";
+
+// BI-46B03CAE — the lease-queue MCP calls cost more than mcpCall's 10s default.
+//
+// Their latency tracks the number of waiters, not the size of the response: with
+// four branches queued on this box, `list_nonprod_environment_leases` measured
+// 10166ms and SUCCEEDED — 166ms past the client's deadline. The portal was
+// healthy throughout (/api/health ~85ms, 4.5% CPU), so nothing was broken; the
+// gate simply stopped listening to an answer that was on its way.
+//
+// The cost of abandoning it is not one retry. A claim that times out client-side
+// after the server created the queued row leaves a gate that does not own the
+// lease it just made, so its own cleanup refuses with `nonprod_lease_not_owner`
+// (explicitly non-retryable) and the row stays queued. Each failure adds a
+// waiter to a single-slot pool, which makes the next listing slower, which
+// strands the next row. Left alone it converges on a box where no gate can ever
+// claim and every contributor is told the portal timed out.
+//
+// So these calls get real headroom, tunable without patching source. The global
+// default stays at 10s: a health probe should still fail fast.
+const LEASE_QUEUE_TIMEOUT_MS = (() => {
+  const raw = Number(process.env.DPF_GATE_MCP_TIMEOUT_MS);
+  return Number.isFinite(raw) && raw > 0 ? raw : 60_000;
+})();
+
+/** Transport options for a queue call whose latency grows with the queue. */
+export function leaseQueueCallOptions(mcpUrl, bearerToken) {
+  return { mcpUrl, bearerToken, timeoutMs: LEASE_QUEUE_TIMEOUT_MS };
+}
+
+/**
+ * Describe a failed lease-queue call in the terms the operator has to act on.
+ *
+ * "timed out after 60000ms" reads as an unreachable portal and sends people to
+ * check whether the install is up. When a queue call is what timed out, the
+ * portal is usually fine and the queue is merely deep — a different problem
+ * with a different response, so say which one it is (BI-46B03CAE).
+ */
+export function describeLeaseCallFailure(error) {
+  const message = error?.message ?? String(error);
+  if (!/timed out after/.test(message)) return message;
+  return `${message} — the portal may be reachable and merely contended; `
+    + "lease-queue calls slow down as waiters accumulate. Raise DPF_GATE_MCP_TIMEOUT_MS "
+    + "if this box regularly runs several gates at once";
+}
 import { summarizeLocalCiOutput } from "./lib/local-ci-failure-summary.mjs";
-import { classifyGateOutcome } from "./lib/sandbox-freshness.mjs";
+import { classifyGateOutcome, EXIT_CHILD_SIGNAL_DEATH } from "./lib/sandbox-freshness.mjs";
+import { fallbackStatusForUnknown } from "./lib/local-integration-status.mjs";
 import {
   authoritySafetyMarginMs,
   superviseLeaseRun,
@@ -40,9 +85,12 @@ import {
   resolveLocalCiRootClone,
 } from "./lib/local-ci-slot-manifest.mjs";
 import { classifyBaseResilience } from "./lib/local-ci-base-freshness.mjs";
+import { runPreAdmissionDocumentationLane } from "./lib/documentation-evidence-lane.mjs";
 import {
   createLocalCiPassEvidenceValidity,
+  projectReusedPassMetadata,
   readLocalCiGateState,
+  supersedeLosingSlotRecords,
   writeLocalCiGateState,
 } from "./lib/local-ci-gate-state.mjs";
 import {
@@ -62,6 +110,7 @@ import { isEntryModule } from "./lib/entry-module.mjs";
 const THIS_FILE = fileURLToPath(import.meta.url);
 const SCRIPT_DIR = dirname(THIS_FILE);
 const LOCAL_CI_ACTIVE_LEASE_TTL_MS = 2 * 60_000;
+const DEAD_QUEUE_RECONCILIATION_INTERVAL_MS = 60_000;
 
 const HARD_EXECUTION_PRESSURE_REASONS = new Set([
   "host-memory-low",
@@ -121,6 +170,21 @@ async function observeLocalCiHostPressure(input) {
       (manifest) => manifest.schemaVersion === 1,
     ),
   });
+}
+
+/**
+ * BI-5529B5AC: the other slots' state files for this worktree, so a PASS can
+ * retire any losing record they hold for the same branch+SHA.
+ */
+function siblingSlotStateFiles({ currentSlotKey, rootClone, gitCommonDir, candidateGitDir }) {
+  return LOCAL_CI_SLOT_KEYS
+    .filter((slotKey) => slotKey !== currentSlotKey)
+    .map((slotKey) => createLocalCiSlotManifest({
+      slotKey,
+      rootClone,
+      gitCommonDir,
+      candidateGitDir,
+    }).evidence.state);
 }
 
 function retryDelayMs({ attempt, pollSeconds, retryAfterSeconds = 0 }) {
@@ -239,7 +303,15 @@ function parseArgs(argv) {
       case "--remote": options.remote = args.shift() ?? ""; break;
       case "--owner-provider": options.ownerProvider = args.shift() ?? ""; break;
       case "--owner-session-id": options.ownerSessionId = args.shift() ?? ""; break;
-      case "--mcp-url": options.mcpUrl = args.shift() ?? ""; break;
+      case "--mcp-url": {
+        options.mcpUrl = args.shift() ?? "";
+        // --mcp-url is the operator naming the endpoint, the same signal
+        // DPF_MCP_URL carries. Record it there too so mcpCall's loopback
+        // enforcement reads one source of operator intent instead of this
+        // file threading a flag through all nine of its call sites.
+        if (options.mcpUrl) process.env.DPF_MCP_URL = options.mcpUrl;
+        break;
+      }
       case "--lease-wait-seconds": options.leaseWaitSeconds = Number(args.shift()); break;
       case "--poll-seconds": options.pollSeconds = Number(args.shift()); break;
       case "--expires-minutes": options.expiresMinutes = Number(args.shift()); break;
@@ -250,7 +322,7 @@ function parseArgs(argv) {
       case "--help":
       case "-h":
         process.stdout.write(usage());
-        process.exit(0);
+        process.exit(0); // exit-0: --help prints usage; nothing gated and nothing claimed
         break;
       case "--":
         break;
@@ -626,6 +698,36 @@ function quiescenceBlocksWrites(status) {
     && ((status.level && status.level !== "normal") || status.writesRefused === true);
 }
 
+/**
+ * Is anything still holding the local-CI slot?
+ *
+ * Returns `true` when an active `local-integration-ci` lease exists, `false`
+ * when the control plane answers and there is none, and `null` when we could
+ * not find out.
+ *
+ * `null` is NOT `false` on purpose. Every "nothing is running" verdict has to
+ * come from an answer we actually received, because the caller turns it into a
+ * hard stop — and the failure that motivated this (BI-40230C6F) was the portal
+ * going down mid-run, which is exactly when an unreachable control plane must
+ * NOT be read as "the executor is gone".
+ */
+export async function hasActiveLocalCiLease({ mcpUrl, bearerToken, call = mcpCall }) {
+  let response;
+  try {
+    response = await call("list_nonprod_environment_leases", {}, { mcpUrl, bearerToken });
+  } catch {
+    return null;
+  }
+  if (response?.success !== true) return null;
+  const data = responseData(response);
+  // A missing `leases` key is NOT the same claim as `leases: []`. Only the latter
+  // is the control plane saying nothing holds the slot; the former is a payload we
+  // do not understand, and an unreadable answer must not stop the wait.
+  if (!Array.isArray(data?.leases)) return null;
+  return data.leases.some((lease) =>
+    (lease.environmentKey || lease.environment || lease.key) === "local-integration-ci");
+}
+
 async function cancelDeadLocalQueueObservers({
   directory,
   mcpUrl,
@@ -638,11 +740,11 @@ async function cancelDeadLocalQueueObservers({
     response = await mcpCall(
       "list_nonprod_environment_leases",
       {},
-      { mcpUrl, bearerToken },
+      leaseQueueCallOptions(mcpUrl, bearerToken),
     );
   } catch (error) {
     process.stderr.write(
-      `gate-worktree: dead-waiter reconciliation unavailable (${error.message}); queue remains fail-closed\n`,
+      `gate-worktree: dead-waiter reconciliation unavailable (${describeLeaseCallFailure(error)}); queue remains fail-closed\n`,
     );
     return;
   }
@@ -747,6 +849,7 @@ async function cancelDeadLocalQueueObservers({
   }
 }
 
+
 function warnAboutMainFreshness({ gitBin, worktreePath }) {
   if (!gitOrEmpty(gitBin, ["rev-parse", "--verify", "origin/main"], worktreePath)) return;
   const behind = gitOrEmpty(gitBin, ["rev-list", "--count", "HEAD..origin/main"], worktreePath);
@@ -809,6 +912,8 @@ async function main() {
   const gateObserverIdentity = createGateObserverIdentity();
   const baseClaimKey = `local-ci:${ownerSessionId}:${sha}`;
   let claimKey = baseClaimKey;
+  let preAdmissionGateIdentity = null;
+  let gateKey = "";
   const deadline = Date.now() + options.leaseWaitSeconds * 1000;
   const commandSpec = resolveGateCommand({ branch, allowStub, gitBin });
 
@@ -832,11 +937,7 @@ async function main() {
       process.stdout.write("localCiCommand=missing; gate would fail before push/lease\n");
     }
     process.stdout.write("would call claim_nonprod_environment_lease and record_local_integration_result only when a real command or explicit stub is configured\n");
-    process.exit(0);
-  }
-
-  if (!options.finalizeEvidence && !commandSpec && !allowStub) {
-    die("local-CI gate runner is not wired (scripts/local-ci-runner.mjs is missing); refusing to record passing stub evidence. Set DPF_LOCAL_CI_COMMAND to the canonical sandbox command, or use DPF_ALLOW_LOCAL_CI_STUB=1 only in contract tests.");
+    process.exit(0); // exit-0: --dry-run routing probe; changes nothing and records nothing
   }
 
   const bearerToken = process.env.DPF_MCP_BEARER_TOKEN;
@@ -850,13 +951,23 @@ async function main() {
   const rootClone = resolveLocalCiRootClone(gitCommonDir);
   const queueObserverDirectory = process.env.DPF_LOCAL_QUEUE_OBSERVER_DIR
     || resolvePath(gitCommonDir, "dpf-local-ci-queue-observers");
+  let currentSlotKey = process.env.DPF_LOCAL_CI_SLOT_KEY || "slot-0";
   let slotManifest = createLocalCiSlotManifest({
-    slotKey: process.env.DPF_LOCAL_CI_SLOT_KEY || "slot-0",
+    slotKey: currentSlotKey,
     rootClone,
     gitCommonDir,
     candidateGitDir,
   });
   let stateFile = slotManifest.evidence.state;
+  // A PASS for this branch+SHA retires any losing sibling-slot record for the
+  // same branch+SHA (BI-5529B5AC). Called only after a passed, non-pending write.
+  const retireLosingSiblings = () => supersedeLosingSlotRecords({
+    winnerStateFile: stateFile,
+    winnerSlotKey: currentSlotKey,
+    siblingStateFiles: siblingSlotStateFiles({ currentSlotKey, rootClone, gitCommonDir, candidateGitDir }),
+    branch,
+    sha,
+  });
   let metadataFile = slotManifest.evidence.metadata;
   let pendingEvidenceFile = slotManifest.evidence.pending;
   let fullLogFile;
@@ -864,15 +975,16 @@ async function main() {
   let localFencePath = process.env.DPF_LOCAL_SANDBOX_FENCE_PATH
     || slotManifest.fence.path;
 
-  let quiescenceAttempt = 0;
-  for (;;) {
-    const quiescence = await readQuiescenceStatus({
-      mcpUrl: options.mcpUrl,
-      bearerToken,
-    });
-    if (!quiescenceBlocksWrites(quiescence)) break;
+  const quiescence = await readQuiescenceStatus({
+    mcpUrl: options.mcpUrl,
+    bearerToken,
+  });
+  if (quiescenceBlocksWrites(quiescence)) {
     const retryAfterSeconds = Number(quiescence.retryAfterSeconds || 30);
-    if (Date.now() >= deadline) {
+    // A finalize-only invocation may already carry a genuine green gate whose
+    // publication was deferred. Never replace that evidence with a wait
+    // projection merely because the control plane is currently quiescing.
+    if (!options.finalizeEvidence) {
       writeState(stateFile, {
         branch,
         sha,
@@ -885,28 +997,21 @@ async function main() {
         leaseEvents: [],
         quiescence,
       });
-      process.stderr.write(`gate-worktree: portal remained ${quiescence.level || "quiescing"} through the admission deadline.\n`);
-      process.stderr.write("gate-worktree: no expensive local-CI command was run; use get_quiescence_status for drain blockers.\n");
-      process.exit(4);
     }
-    // BI-2C7F51BA Defect 3 (secondary) — back off while the portal drains.
-    //
-    // `retryAfterSeconds` alone pins this at a fixed ~30s forever, and every
-    // poll is itself a ToolExecution row, i.e. the waiter re-arms the very
-    // `request.recent-tool-execution` soft blocker it is waiting on. Excluding
-    // read-only calls from that signal is the primary fix (quiescence.ts);
-    // widening the interval as the drain persists is the defence in depth.
-    // Capped at 8x the server's own retry-after so a cleared drain is still
-    // noticed within a few minutes of the 2h admission budget.
-    const drainBackoff = 2 ** Math.min(quiescenceAttempt, 3);
-    const delayMs = retryDelayMs({
-      attempt: quiescenceAttempt,
-      pollSeconds: options.pollSeconds,
-      retryAfterSeconds: retryAfterSeconds * drainBackoff,
-    });
-    quiescenceAttempt += 1;
-    waiting(`portal is ${quiescence.level || "quiescing"}; retrying governed admission in ${(delayMs / 1000).toFixed(1)}s...`);
-    await sleep(Math.min(delayMs, Math.max(10, deadline - Date.now())));
+    // Quiescence is already a durable, server-owned state. Keeping this local
+    // process alive to poll it creates the very wait traffic and recent-tool
+    // signal that the coordinator is trying to drain. Park once, preserve a
+    // machine-readable resume hint, and let the caller invoke pregate again
+    // after the coordinator's completion event or its normal task wake-up.
+    process.stderr.write(JSON.stringify({
+      status: "waiting",
+      code: "local_ci_quiescence_wait",
+      runId: quiescence.runId ?? quiescence.activeCoordinator?.runId ?? null,
+      level: quiescence.level ?? "quiescing",
+      retryAfterSeconds,
+      resumeMode: "durable-quiescence",
+    }) + "\n");
+    process.exit(75);
   }
 
   if (options.finalizeEvidence) {
@@ -949,8 +1054,9 @@ async function main() {
         leaseEvents: state.leaseEvents ?? [],
         evidencePending: false,
       });
+      retireLosingSiblings();
       process.stdout.write(`finalized existing local-CI evidence: ${state.evidenceRecordId}\n`);
-      process.exit(0);
+      process.exit(0); // exit-0: --finalize-evidence revalidated an already-recorded PASS for this sha
     }
     const pending = JSON.parse(readFileSync(pendingEvidenceFile, "utf8"));
     if (pending.branch !== branch) die(`pending evidence branch mismatch: ${pending.branch} != ${branch}`);
@@ -984,8 +1090,9 @@ async function main() {
       evidencePending: false,
     });
     rmSync(pendingEvidenceFile, { force: true });
+    retireLosingSiblings();
     process.stdout.write(`recorded pending local-CI evidence: ${evidenceId}\n`);
-    process.exit(0);
+    process.exit(0); // exit-0: --finalize-evidence recorded the pending PASS evidence for this sha
   }
 
   warnAboutMainFreshness({ gitBin, worktreePath });
@@ -993,6 +1100,44 @@ async function main() {
   if (options.pushBranch) {
     const push = git(gitBin, ["push", options.remote, branch], worktreePath);
     if (push.status !== 0) die(`push failed: ${push.stderr || push.stdout}`);
+  }
+
+  if (!ownerProvider) {
+    die(
+      "cannot attribute this gate to a client. Pass --owner-provider "
+        + "<build-studio|claude|codex|grok|antigravity|coworker> or set "
+        + "DPF_GATE_OWNER_PROVIDER. (The lease and the evidence record use a "
+        + "closed provider vocabulary, so there is no honest default.)",
+    );
+  }
+
+  if (!options.finalizeEvidence) {
+    const documentationResult = await runPreAdmissionDocumentationLane({
+      branch,
+      sha,
+      worktreePath,
+      gitBin,
+      ownerProvider,
+      ownerSessionId,
+      mcpUrl: options.mcpUrl,
+      bearerToken,
+      stateFile,
+      planFile: resolvePath(candidateGitDir, "dpf-pre-admission-evidence-plan.json"),
+      plannerPath: resolvePath(SCRIPT_DIR, "ci-evidence-plan.mjs"),
+    });
+    if (documentationResult.handled) {
+      process.stdout.write(
+        documentationResult.status === 0
+          ? `documentation evidence passed without heavyweight admission: ${documentationResult.evidenceId}\n`
+          : `documentation evidence failed without heavyweight admission: ${documentationResult.evidenceId}\n`,
+      );
+      process.exit(documentationResult.status);
+    }
+    preAdmissionGateIdentity = documentationResult.gateIdentity ?? null;
+  }
+
+  if (!options.finalizeEvidence && !commandSpec && !allowStub) {
+    die("local-CI gate runner is not wired (scripts/local-ci-runner.mjs is missing); refusing to record passing stub evidence. Set DPF_LOCAL_CI_COMMAND to the canonical sandbox command, or use DPF_ALLOW_LOCAL_CI_STUB=1 only in contract tests.");
   }
 
   const leaseTtlMs = Math.min(
@@ -1046,7 +1191,8 @@ async function main() {
     leaseReleased = true;
     const response = await mcpCall("release_nonprod_environment_lease", {
       leaseId,
-    }, { mcpUrl: options.mcpUrl, bearerToken });
+      ownerSessionId,
+    }, leaseQueueCallOptions(options.mcpUrl, bearerToken));
     if (response?.success !== true) {
       throw new Error(`failed to release local-CI lease: ${JSON.stringify(response)}`);
     }
@@ -1064,28 +1210,26 @@ async function main() {
   // no "unknown" member, so an unresolved provider has no honest value — refuse
   // rather than attribute this run to whichever client is most common. Everything
   // above (--dry-run, the runner-wiring check) stays runnable unattributed.
-  if (!ownerProvider) {
-    die(
-      "cannot attribute this gate to a client. Pass --owner-provider "
-        + "<build-studio|claude|codex|grok|antigravity|coworker> or set "
-        + "DPF_GATE_OWNER_PROVIDER. (The lease and the evidence record use a "
-        + "closed provider vocabulary, so there is no honest default.)",
-    );
-  }
-
   let claimAttempt = 0;
+  let nextQueueReconciliationAt = 0;
   for (;;) {
     if (receivedSignal) {
       await releaseLeaseOnce();
       process.exit(130);
     }
-    await cancelDeadLocalQueueObservers({
-      directory: queueObserverDirectory,
-      mcpUrl: options.mcpUrl,
-      bearerToken,
-      leaseEvents,
-      reportActive: claimAttempt === 0,
-    });
+    // Reconciliation is a shared-host hygiene sweep, not an admission poll.
+    // Run it before the first claim and at a human-scale cadence during long
+    // queue waits; the durable claimKey remains the queue authority in between.
+    if (Date.now() >= nextQueueReconciliationAt) {
+      await cancelDeadLocalQueueObservers({
+        directory: queueObserverDirectory,
+        mcpUrl: options.mcpUrl,
+        bearerToken,
+        leaseEvents,
+        reportActive: claimAttempt === 0,
+      });
+      nextQueueReconciliationAt = Date.now() + DEAD_QUEUE_RECONCILIATION_INTERVAL_MS;
+    }
     expiresAt = new Date(Date.now() + leaseTtlMs).toISOString();
     const hostPressure = await observeLocalCiHostPressure({
       rootClone,
@@ -1100,15 +1244,17 @@ async function main() {
         ownerProvider,
         ownerSessionId,
         claimKey,
+        ...(preAdmissionGateIdentity ? { gateIdentity: preAdmissionGateIdentity } : {}),
         purpose: `Pre-PR local-CI gate for ${branch} @ ${sha}`,
         url,
         ports: [slotManifest.portal.port, slotManifest.postgres.hostPort],
         expiresAt,
+        waitDeadlineAt: new Date(deadline).toISOString(),
         worktreePath,
         branchName: branch,
         slotManifestVersion: slotManifest.schemaVersion,
         hostPressure,
-      }, { mcpUrl: options.mcpUrl, bearerToken });
+      }, leaseQueueCallOptions(options.mcpUrl, bearerToken));
     } catch (error) {
       if (!isTransientMcpError(error) || Date.now() >= deadline) throw error;
       const delayMs = retryDelayMs({ attempt: claimAttempt, pollSeconds: options.pollSeconds });
@@ -1118,10 +1264,91 @@ async function main() {
       continue;
     }
 
-    leaseId = claimResponse?.entityId || claimResponse?.data?.lease?.leaseId || leaseId;
     const admission = claimResponse?.data?.admission;
+    const canonicalLeaseId = claimResponse?.data?.lease?.leaseId || "";
+    gateKey = claimResponse?.data?.gateKey || gateKey;
     admissionPoolPolicy = claimResponse?.data?.poolPolicy ?? admissionPoolPolicy;
-    if (claimResponse?.success === true && admission?.status !== "queued") {
+    if (claimResponse?.success === true && admission?.status === "reused") {
+      const evidenceId = admission.evidenceRecordId || claimResponse.entityId || "";
+      const passed = admission.resultClass === "pass";
+      if (queueObserverPath) {
+        releaseLocalQueueObserver({
+          path: queueObserverPath,
+          token: gateObserverIdentity.token,
+        });
+        queueObserverPath = "";
+      }
+      writeState(stateFile, {
+        branch,
+        sha,
+        gatePassed: passed,
+        leaseId: canonicalLeaseId,
+        evidenceId,
+        status: passed ? "passed" : "failed",
+        expiresAt: claimResponse?.data?.lease?.expiresAt || expiresAt,
+        resilience: null,
+        leaseEvents: [
+          ...leaseEvents,
+          { type: "reused", gateKey, evidenceId, at: new Date().toISOString() },
+        ],
+        evidencePending: false,
+        ...(passed ? { onPassWritten: retireLosingSiblings } : {}),
+      });
+      // BI-C6B2D404: project current HEAD onto the metadata record so
+      // pregate:status does not report STALE against the prior candidateSha.
+      if (passed && metadataFile) {
+        let prior = null;
+        try {
+          prior = JSON.parse(readFileSync(metadataFile, "utf8"));
+        } catch {
+          prior = null;
+        }
+        writeFileSync(
+          metadataFile,
+          `${JSON.stringify(projectReusedPassMetadata(prior, {
+            sha,
+            branch,
+            evidenceId,
+            leaseId: canonicalLeaseId,
+          }), null, 2)}\n`,
+        );
+      }
+      process.stdout.write(`reused canonical local-CI ${admission.resultClass} evidence: ${evidenceId}\n`);
+      process.exit(passed ? 0 : 1);
+    }
+    if (claimResponse?.success === true && admission?.status === "subscribed") {
+      leaseEvents.push({
+        type: "subscribed",
+        at: new Date().toISOString(),
+        gateKey,
+        canonicalLeaseId,
+        executionStatus: admission.executionStatus,
+      });
+      writeState(stateFile, {
+        branch,
+        sha,
+        gatePassed: false,
+        leaseId: canonicalLeaseId,
+        evidenceId: "",
+        status: "subscribed",
+        expiresAt: claimResponse?.data?.lease?.expiresAt || expiresAt,
+        resilience: null,
+        leaseEvents,
+        evidencePending: false,
+        queueObserver: queueObserverState(),
+      });
+      if (Date.now() >= deadline) die("local-CI canonical execution observation timed out");
+      const delayMs = retryDelayMs({ attempt: claimAttempt, pollSeconds: options.pollSeconds });
+      claimAttempt += 1;
+      waiting(`local-CI execution is owned by another caller; observing ${canonicalLeaseId} again in ${(delayMs / 1000).toFixed(1)}s...`);
+      await sleep(Math.min(delayMs, Math.max(10, deadline - Date.now())));
+      continue;
+    }
+    if (
+      claimResponse?.success === true
+      && (admission?.status === "admitted" || !admission?.status)
+    ) {
+      leaseId = canonicalLeaseId || claimResponse.entityId || leaseId;
       const admittedExpiresAt = claimResponse?.data?.lease?.expiresAt;
       if (
         typeof admittedExpiresAt === "string"
@@ -1130,6 +1357,7 @@ async function main() {
         expiresAt = admittedExpiresAt;
       }
       const admittedSlotKey = admission?.slotKey || "slot-0";
+      currentSlotKey = admittedSlotKey;
       slotManifest = createLocalCiSlotManifest({
         slotKey: admittedSlotKey,
         rootClone,
@@ -1173,6 +1401,7 @@ async function main() {
       break;
     }
     if (claimResponse?.success === true && admission?.status === "queued") {
+      leaseId = canonicalLeaseId || claimResponse.entityId || leaseId;
       queuedClaimInterruptedByQuiescence = false;
       leaseEvents.push({
         type: "queued",
@@ -1196,10 +1425,28 @@ async function main() {
         admission: {
           queuePosition: admission.queuePosition ?? null,
           waitAgeMs: admission.waitAgeMs ?? null,
+          resumeMode: admission.resumeMode ?? null,
+          taskRunId: admission.taskRunId ?? null,
           poolPolicy: claimResponse?.data?.poolPolicy ?? null,
           hostPressure,
         },
       });
+      if (admission.resumeMode === "durable-task" && admission.taskRunId) {
+        if (queueObserverPath) {
+          releaseLocalQueueObserver({ path: queueObserverPath, token: gateObserverIdentity.token });
+          queueObserverPath = "";
+        }
+        process.stderr.write(JSON.stringify({
+          status: "queued",
+          code: "local_ci_durable_wait",
+          leaseId,
+          taskRunId: admission.taskRunId,
+          claimKey,
+          queuePosition: admission.queuePosition ?? null,
+          resumeMode: "durable-task",
+        }) + "\n");
+        process.exit(75);
+      }
       if (Date.now() >= deadline) {
         await releaseLeaseOnce();
         die("local-CI admission queue wait timed out");
@@ -1242,6 +1489,42 @@ async function main() {
       });
       claimAttempt += 1;
       waiting(`portal is quiescing; preserving queue intent and retrying in ${(delayMs / 1000).toFixed(1)}s...`);
+      await sleep(Math.min(delayMs, Math.max(10, deadline - Date.now())));
+      continue;
+    }
+    if (
+      claimResponse?.error === "gate_evidence_blocked"
+      && claimResponse?.data?.admission?.reason === "missing-evidence"
+    ) {
+      if (Date.now() >= deadline) {
+        die("canonical local-CI executor ended without publishing evidence before the deadline");
+      }
+      // BI-40230C6F: "finalizing evidence" only means the slot holder has not
+      // published yet. It does NOT mean anything is still running. When the
+      // executor dies — the portal restarting mid-run is enough — the evidence
+      // it owed will never arrive, and this loop used to keep polling a corpse
+      // for the whole deadline. Measured: ~30 minutes of "finalizing evidence"
+      // after the gate had already logged the observer as proven dead.
+      //
+      // That is not merely slow. The pool is structurally ONE slot, so a wedged
+      // wait blocks every session on the host for the full deadline.
+      //
+      // Only an explicit `false` stops the wait: `null` means we could not ask,
+      // and an unreachable control plane is the very condition that kills the
+      // executor, so it must keep waiting rather than fail.
+      const slotHeld = await hasActiveLocalCiLease({
+        mcpUrl: options.mcpUrl,
+        bearerToken,
+      });
+      if (slotHeld === false) {
+        die(
+          "canonical local-CI executor is gone and its evidence will never arrive "
+            + "(no active local-integration-ci lease). Re-run pregate; this is not a verdict on the diff.",
+        );
+      }
+      const delayMs = retryDelayMs({ attempt: claimAttempt, pollSeconds: options.pollSeconds });
+      claimAttempt += 1;
+      waiting(`canonical local-CI execution is finalizing evidence; observing again in ${(delayMs / 1000).toFixed(1)}s...`);
       await sleep(Math.min(delayMs, Math.max(10, deadline - Date.now())));
       continue;
     }
@@ -1318,7 +1601,7 @@ async function main() {
           },
         }
         : {}),
-    }, { mcpUrl: options.mcpUrl, bearerToken });
+    }, leaseQueueCallOptions(options.mcpUrl, bearerToken));
     const renewedExpiresAt = response?.data?.lease?.expiresAt;
     if (
       response?.success === true
@@ -1548,7 +1831,7 @@ async function main() {
     process.stderr.write(`gate-worktree: lease fenced (${supervised.reason}); child process tree terminated\n`);
   }
   if (receivedSignal) {
-    runResult.status = 130;
+    runResult.status = EXIT_CHILD_SIGNAL_DEATH;
     runResult.output = `${runResult.output}\ngate-worktree: received ${receivedSignal}; child process tree terminated\n`;
     process.stderr.write(`gate-worktree: received ${receivedSignal}; child process tree terminated\n`);
   }
@@ -1597,6 +1880,9 @@ async function main() {
   );
 
   const commandLabel = commandSpec ? commandSpec.label : "sandbox checkout/build stub";
+  const evidenceValidity = ["passed", "failed"].includes(outcome.status)
+    ? createLocalCiPassEvidenceValidity()
+    : null;
   let evidenceArgs = {
     provider: ownerProvider,
     externalSessionId: ownerSessionId,
@@ -1605,6 +1891,7 @@ async function main() {
     mode: "single-branch",
     status: outcome.status,
     summary: outcome.summary,
+    ...(gateKey ? { gateKey, leaseId } : {}),
     evidence: {
       bi: "BI-166C59F3",
       resilienceBi: "BI-76551B2D",
@@ -1644,6 +1931,7 @@ async function main() {
       branch,
       sha,
       expiresAt,
+      evidenceValidity,
       pushBeforeLease: options.pushBranch,
       resilience,
       content: contentMetadata,
@@ -1676,9 +1964,22 @@ async function main() {
       message: error instanceof Error ? error.message : String(error),
     };
   }
-  if (evidenceResponse?.success !== true && outcome.status === "blocked_sandbox_drift" && evidenceResponse?.error === "invalid_status") {
-    process.stdout.write("gate-worktree: portal does not know blocked_sandbox_drift yet; recording as failed with sandbox-drift evidence\n");
-    evidenceArgs = { ...evidenceArgs, status: "failed", summary: `[SANDBOX_DRIFT — not product evidence] ${evidenceArgs.summary}` };
+  // BI-C59AC8AF: generalized from the blocked_sandbox_drift-only version. An
+  // installed portal cannot know a status a newer gate emits, and dropping the
+  // write is the worst available outcome: the lease releases terminal with no
+  // evidence, and because the gate key hashes the integration tree, that tree is
+  // then permanently unable to be gated. Record SOMETHING, always — `failed` is
+  // the honest floor and the prefix keeps the real class readable.
+  if (evidenceResponse?.error === "invalid_status" && evidenceResponse?.success !== true) {
+    const fallback = fallbackStatusForUnknown(outcome.status);
+    process.stdout.write(
+      `gate-worktree: portal does not know ${outcome.status} yet; recording as ${fallback.status} with the original class in the summary\n`,
+    );
+    evidenceArgs = {
+      ...evidenceArgs,
+      status: fallback.status,
+      summary: `${fallback.summaryPrefix} ${evidenceArgs.summary}`,
+    };
     evidenceResponse = await mcpCall("record_local_integration_result", evidenceArgs, { mcpUrl: options.mcpUrl, bearerToken });
   }
 
@@ -1758,9 +2059,12 @@ async function main() {
     die(`failed to record local integration evidence: ${JSON.stringify(evidenceResponse)}`);
   }
 
-  const evidenceValidity = outcome.gatePassed
-    ? createLocalCiPassEvidenceValidity()
-    : null;
+  const capturedFailureCount = (failureSummary?.failedTests?.length || 0)
+    + (failureSummary?.failedChecks?.length || 0);
+  const persistedReason = outcome.summary
+    || (capturedFailureCount === 0 && runResult.status
+      ? `no stage failed; child exited ${runResult.status} after the last completed stage`
+      : "");
   writeState(stateFile, {
     branch,
     sha,
@@ -1774,6 +2078,10 @@ async function main() {
     resilience,
     leaseEvents,
     evidencePending: false,
+    failureReason: persistedReason,
+    failureSummary,
+    childExitCode: runResult.status,
+    ...(outcome.gatePassed ? { onPassWritten: retireLosingSiblings } : {}),
   });
 
   // BI-B1065D41 Phase 1: one bounded, stable block closes every run. On a pass
@@ -1795,7 +2103,7 @@ async function main() {
 
   if (outcome.gatePassed) {
     process.stdout.write(`${formatGateSummary({ ...summaryInput, verdictLine: "gate passed" }).join("\n")}\n`);
-    process.exit(0);
+    process.exit(0); // exit-0: gate passed; the PASS record for this sha was written above
   }
   process.stderr.write(
     `${formatGateSummary({ ...summaryInput, verdictLine: "", failureSummary }).join("\n")}\n`,
@@ -1808,6 +2116,11 @@ async function main() {
   if (outcome.status === "blocked_control_plane_starvation") {
     process.stderr.write(`gate-worktree: BLOCKED (control-plane starvation): ${outcome.summary}\n`);
     process.exit(5);
+  }
+  if (outcome.status === "blocked_child_signal_death") {
+    process.stderr.write(`gate-worktree: BLOCKED (child signal death): ${outcome.summary}\n`);
+    process.stderr.write("gate-worktree: this is infrastructure evidence, not a product failure; retry on a quieter host\n");
+    process.exit(EXIT_CHILD_SIGNAL_DEATH);
   }
   die("gate failed");
 }
@@ -1830,6 +2143,10 @@ function writeState(stateFile, {
   recovery = null,
   queueObserver = null,
   admission = null,
+  failureReason = "",
+  failureSummary = null,
+  childExitCode = null,
+  onPassWritten = null,
 }) {
   writeLocalCiGateState(stateFile, {
     branch,
@@ -1849,7 +2166,19 @@ function writeState(stateFile, {
     recovery,
     queueObserver,
     admission,
+    failureReason,
+    failureSummary,
+    childExitCode,
   });
+  // BI-5529B5AC: only a committed, non-pending PASS may retire sibling losers.
+  if (typeof onPassWritten === "function" && gatePassed === true && !evidencePending) {
+    try {
+      onPassWritten();
+    } catch (error) {
+      process.stderr.write(`gate-worktree: could not retire sibling slot records: ${error?.message || error}
+`);
+    }
+  }
 }
 
 // A gate that silently skips main() exits 0 — a false "pass" — so the entry

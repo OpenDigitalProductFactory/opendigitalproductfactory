@@ -274,7 +274,7 @@ export async function saveBuildEvidence(params: Record<string, unknown>, userId:
       }
 
       const { saveBuildArtifactRevision } = await import("@/lib/build/build-artifact-provenance");
-      await saveBuildArtifactRevision({
+      const savedRevision = await saveBuildArtifactRevision({
         buildId,
         field: field as import("@/lib/build/build-artifact-provenance").BuildArtifactField,
         receiptIds: Array.isArray(params.receiptIds)
@@ -285,6 +285,27 @@ export async function saveBuildEvidence(params: Record<string, unknown>, userId:
         threadId: context?.threadId ?? null,
         value: fieldValue,
       });
+      // BI-C5D978E9: record the research the ideate phase actually performed.
+      // The readiness gate blocks ideate->plan on RESEARCH_REQUIRED and nothing
+      // ever recorded it, so every owner-composed feature build stalled with the
+      // research done and unrecorded (live repro FB-EB292B9F). The grant table
+      // marks this lane author-accountable, independent: false — unlike
+      // spec-approval and architecture-review, which still need an independent
+      // reviewer and still block. Fail-safe: saving evidence must never break.
+      if (field === "designDoc") {
+        try {
+          const { recordIdeateResearchReceipt } = await import("@/lib/build/record-ideate-research-receipt");
+          await recordIdeateResearchReceipt({
+            buildId,
+            designDoc: fieldValue,
+            revisionId: savedRevision.revisionId,
+            authorUserId: userId,
+            authorAgentId: context?.agentId ?? null,
+          });
+        } catch {
+          // A missing receipt leaves the build exactly where it already was.
+        }
+      }
       if (field === "designDoc" && updateData.brief) {
         await prisma.featureBuild.update({
           where: { buildId },
@@ -383,19 +404,26 @@ export async function reviewBuildPlan(params: Record<string, unknown>, userId: s
       // architecture reviewer is advisory only — it never enters mergeReviews,
       // it rides along on review.architectureAdvisory and the deliberation
       // `architect` branch so the coworker can fold concerns into the plan.
+      // BI-B3AB7FC9: carry the caller and build into every reviewer call so
+      // the spend meters under a coworker, not agentId "unknown".
+      const attribution = {
+        ...(context?.agentId ? { agentId: context.agentId } : {}),
+        ...(context?.threadId ? { threadId: context.threadId } : {}),
+        buildId,
+      };
       const [r1settled, r2settled, archSettled] = await Promise.allSettled([
-        routeAndCall(messages, "You are a plan reviewer.", "internal"),
+        routeAndCall(messages, "You are a plan reviewer.", "internal", attribution),
         routeAndCall(
           messages,
           "You are an independent plan reviewer. Focus especially on missing tasks, dependency ordering, absent test-first steps, and data seeding gaps.",
           "internal",
-          { budgetClass: "minimize_cost" },
+          { ...attribution, budgetClass: "minimize_cost" },
         ),
         routeAndCall(
           [{ role: "user" as const, content: archPrompt }],
           `You are the ${ENTERPRISE_ARCHITECT_DISPLAY_NAME} (DPF chief-architect lens) reviewing for architectural alignment. Advisory only — surface concerns and concrete plan edits, never block the gate.`,
           "internal",
-          { budgetClass: "minimize_cost" },
+          { ...attribution, budgetClass: "minimize_cost" },
         ),
       ]);
       const r1 = r1settled.status === "fulfilled" ? parseReviewResponse(r1settled.value.content) : null;
@@ -409,6 +437,10 @@ export async function reviewBuildPlan(params: Record<string, unknown>, userId: s
         decision: "fail" as const,
         issues: [{ severity: "critical" as const, description: "Both review agents failed to respond" }],
         summary: "Review could not be completed — retry.",
+        // BI-D33F968A: nobody read the work. `fail` is the safe default, not a
+        // verdict — mark it so a repair loop does not spend rounds "fixing"
+        // something no reviewer looked at.
+        reviewIncomplete: true,
       };
       // Deterministic kind-aware lenience: a chore/fix/docs build must not be
       // blocked by a reviewer's missing-test-first complaint (test-first is a
@@ -513,6 +545,7 @@ export async function reviewBuildPlan(params: Record<string, unknown>, userId: s
             phase: "plan",
             reviewerBranches,
             ...(context?.threadId ? { threadId: context.threadId } : {}),
+            ...(context?.agentId ? { agentId: context.agentId } : {}),
           });
         }
       } catch (err) {

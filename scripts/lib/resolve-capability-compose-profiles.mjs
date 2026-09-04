@@ -41,6 +41,23 @@ export function resolveCapabilityComposeProfiles({ catalog, state, hostPlatform,
     if (!capability) throw new Error(`unknown_compose_profile_alias:${alias}`);
     requested.push(capability);
   }
+  // Retirement, split by CAUSE — the same split the catalog-hash axis needed,
+  // for the same reason: the two look identical in a membership test and are
+  // opposite in meaning.
+  //
+  //   declared retired    the platform's own doing, on its own release. The
+  //                       entry is still in the catalog saying so, and this is
+  //                       what --migrate is for: drop it and restamp. Refusing
+  //                       wedges every install that had it enabled, and the
+  //                       upgrade that would drop it IS the blocked upgrade.
+  //   absent entirely     nothing vouches for this id. Could be a corrupt or
+  //                       hand-edited snapshot, so it still fails closed even
+  //                       under --migrate.
+  //
+  // Without --migrate a declared retirement is still a refusal: the snapshot is
+  // genuinely stale and the caller has not asked to rewrite it (BI-5AA0345E).
+  const retired = new Set(catalog.capabilities.filter((entry) => entry.lifecycle === "retired").map((entry) => entry.capabilityId));
+  const droppedRetired = [];
   const enabled = new Set();
   const visit = (id) => {
     const entry = byId.get(id);
@@ -49,8 +66,19 @@ export function resolveCapabilityComposeProfiles({ catalog, state, hostPlatform,
     for (const dependency of entry.dependencies ?? []) visit(dependency);
     enabled.add(id);
   };
-  for (const id of requested) visit(id);
-  for (const entry of catalog.capabilities) if (entry.activationPolicy === "always") visit(entry.capabilityId);
+  for (const id of requested) {
+    if (retired.has(id)) {
+      if (!migrate) throw new Error("capability_state_stale");
+      if (!droppedRetired.includes(id)) droppedRetired.push(id);
+      continue;
+    }
+    visit(id);
+  }
+  for (const entry of catalog.capabilities) if (entry.activationPolicy === "always" && !retired.has(entry.capabilityId)) visit(entry.capabilityId);
+  // A retired capability reached as a DEPENDENCY of a live one is a catalog
+  // authoring error, not an install's problem — surface it rather than shipping
+  // a projection that silently depends on something the platform withdrew.
+  for (const id of enabled) if (retired.has(id)) throw new Error(`retired_runtime_capability_required:${id}`);
   const enabledRuntimeCapabilities = sortedUnique(enabled);
   const capabilityStateVersion = computeCapabilityStateVersion(catalog.catalogHash, enabledRuntimeCapabilities, catalog.capabilities.map(({ capabilityId }) => capabilityId));
   // Reconciliation, split by CAUSE — because the two look identical in a hash
@@ -97,6 +125,9 @@ export function resolveCapabilityComposeProfiles({ catalog, state, hostPlatform,
   const governedOverlayProfiles = governed.composeProfiles.filter((profile) => !runtimeProfiles.includes(profile));
   return {
     enabledRuntimeCapabilities,
+    // Non-empty only under --migrate, so a caller can report what the platform
+    // withdrew rather than have capabilities disappear from the install silently.
+    droppedRetiredCapabilities: droppedRetired.sort(),
     capabilityCatalogHash: catalog.catalogHash,
     capabilityStateVersion,
     runtimeProfiles,

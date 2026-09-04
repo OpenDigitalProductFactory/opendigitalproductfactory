@@ -220,7 +220,21 @@ guards host-natively — the same check commands CI's Policy Guards jobs run
 (module size, style drift, derived-artifact staleness, doc links, SBOM, plus
 the workspace-dependent prose ratchet, and the commit-range-driven UX-Fit and
 Design Grounding trailer gates), with guard self-tests stripped and
-PR-body-dependent gates (Seed-Fit, Decision Baseline) left to CI. A violation
+PR-body-dependent gates (Seed-Fit, Decision Baseline) left to CI.
+
+**Not every `node --test` is a self-test (BI-7B249AFE).** Some files in the
+guard profiles assert **live repository state** rather than guard logic, so
+stripping one removes the only check on the tree being pushed and the preflight
+reports clean where CI fails deterministically — measured on #4737, where the
+preflight said "52 guards clean" and CI then failed on
+`check-instruction-plane-rule-coverage.test.mjs`. Those commands are marked
+`conformanceTest(...)` in `scripts/lib/ci-policy-guards.mjs` and run host-side.
+The mark is not discretionary: `scripts/check-guard-conformance-marks.mjs`
+detects the shape (a repo root bound from `import.meta.url`, read through) and
+fails when a detected file is unmarked, so a new repository-reading self-test
+cannot quietly rejoin the stripped set. 15 files carry the mark today, costing
+about 11s. Genuine guard unit tests stay stripped — over-marking would turn the
+preflight into the full CI suite. A violation
 aborts in well under a minute **before any lease is claimed**, so a doomed run
 never occupies the contended sandbox slot. A guard this host cannot execute
 (missing isolated or workspace runtime) is reported as
@@ -235,10 +249,37 @@ to CI/the sandbox to enforce. The Repo Guard Loop runner
 guards and exits with a dedicated runner-failure code so a killed spawn never
 prints `N/24 guard(s) FAILED` naming an innocent guard that had, in fact, run.
 Run it standalone with `pnpm run pregate:preflight`
-(`--plan` prints the guard plan without running it). Emergency skip:
+(`--plan` prints the guard plan without running it, scoped to the diff;
+`--scope` prints the classified change scope and the guards it left out). **The preflight honours the change
+scope (BI-8CDA7F95).** It classifies the diff against `origin/main` with the
+same `scripts/ci-change-scope.mjs` classifier `ci.yml` branches on, and on a
+docs-only diff it leaves out only the guards that **declare** `inputs: ["code"]`
+in `scripts/lib/ci-policy-guards.mjs` — guards that read only source, schema,
+compose or package manifests and so cannot be violated by prose. A guard with
+no declaration always runs; an unknown scope (no merge base) runs everything; a
+static test fails any declared guard whose import closure reads docs. CI still
+runs every guard. Emergency skip:
 `DPF_SKIP_PREGATE_PREFLIGHT_REASON="<why>"` — printed on the gate run, and CI
 still enforces every guard. Routing probes (`--dry-run`) and evidence replays
 (`--finalize-evidence`) skip the preflight automatically.
+
+**Documentation evidence lane.** After preflight and before any
+`local-integration-ci` lease claim, the Node gate checks whether the committed
+candidate is an exact documentation-only tree. This lane is deliberately
+fail-closed: `HEAD` must equal the requested SHA, the worktree must be clean,
+the candidate must contain the current `origin/main`, and the authoritative CI
+evidence planner must select `executionLane: documentation` with no full suite.
+Two architecture documents that need the workspace runtime remain excluded.
+If any check is missing, stale, or ambiguous, the gate falls through to the
+normal exhaustive sandbox path.
+
+An eligible documentation tree runs doc-index freshness, link integrity, and
+the complete repository guard loop in the worktree. It records the planner
+digest, candidate tree, commands, output, and result through
+`record_local_integration_result`, then writes the same SHA-bound local gate
+state used by `pregate:status`. Its evidence carries no lease id because it
+never enters the scarce sandbox. A failed documentation check is a failed gate;
+it does not retry by consuming the heavyweight lane.
 
 **Host-native/Node-first entry point (BI-2272D840, BI-52500C0D, BI-4BE30454).** `pregate.mjs`
 routes to `scripts/gate-worktree.mjs` by default on every host. The Node-native
@@ -249,14 +290,15 @@ and delegates to the Node gate; set `DPF_PREGATE_FORCE_SH=1` only for focused
 shell-adapter debugging. Missing native `sh` is therefore classified as
 **sandbox-routable, never a build blocker**.
 
-Either path produces the same evidence shape (manifest version and slot,
-branch/SHA, integration tree, database and Compose identity, production
-artifact, lease id, freshness verdict, toolchain fingerprint, expiry) and
-writes the same
-`.git/dpf-local-ci-gate.json` state file, so the pre-push gate below accepts
-either without caring which one ran. `DPF_PREGATE_FORCE_NODE=1` preserves the
-default. `DPF_PREGATE_FORCE_SH=1` is explicit legacy-shell debugging and still
-requires a working shell.
+The exhaustive Node and compatibility-shell paths produce the same sandbox
+evidence shape (manifest version and slot, branch/SHA, integration tree,
+database and Compose identity, production artifact, lease id, freshness
+verdict, toolchain fingerprint, expiry). The documentation lane produces a
+smaller planner-bound evidence record. All three write the same
+`.git/dpf-local-ci-gate.json` state file, so the pre-push gate accepts a fresh
+pass without caring which eligible lane produced it. `DPF_PREGATE_FORCE_NODE=1`
+preserves the default. `DPF_PREGATE_FORCE_SH=1` is explicit legacy-shell
+debugging and still requires a working shell.
 
 The gate claims a `local-integration-ci` lease (waiting if the sandbox is
 already leased). A canonical waiter refreshes its idempotent claim well inside
@@ -266,7 +308,11 @@ bounds recovery when the supervisor disappears without shortening the maximum
 queue wait. The gate runs the command, releases the runtime slot, records a
 local-integration evidence record with the lease id and `gatePassed`, and
 writes the latest gate result to Git-local state
-(`.git/dpf-local-ci-gate.json`, with a slot suffix for non-default slots). It
+(`.git/dpf-local-ci-gate.json`, with a slot suffix for non-default slots). A
+pass on one slot retires any non-passing sibling-slot record for the same
+branch and SHA as `superseded`, and every reader of that state (`pregate:status`,
+the pre-push hook, `pr:health`, the PreToolUse publish guard) consults all
+slots, so an earlier attempt on another slot cannot shadow a real pass. It
 overwrites stale state with `admitted` and then `running` as soon as it owns the
 sandbox, before the expensive command mutates the runtime. If the child wrapper
 exits before a terminal record is written, `pregate` reads that running state,
@@ -279,6 +325,39 @@ records the failure and retries only inside its last known authority window. A
 separate deadline terminates the child tree before that window expires if no
 successful renewal advances it. MCP requests have their own bounded transport
 deadline, so a hung heartbeat cannot outlive the lease silently.
+
+**Equivalent gate requests are single-flight.** Before admission, the gate
+builds the exact merge-tree evidence plan and fingerprints the host toolchain.
+The server derives one immutable key from repository, integration tree, plan
+digest, toolchain fingerprint, and gate kind; caller session identity is only
+attribution and never part of that key. The first caller owns the queued or
+admitted lease. A later equivalent caller receives `subscribed` and observes
+the canonical execution without renewing, releasing, recording evidence, or
+starting the command. Once the owner links a fresh terminal pass or fail
+receipt, later callers receive `reused` and stop without recomputation.
+Mismatched, inconclusive, or expired evidence remains fail-closed: evidence
+exists and does not fit, which is a real conclusion.
+
+**A run that DIED is not a verdict.** A terminal lease carrying no
+evidence record describes an execution that never reported — the executor was
+killed, or the portal rejected its status write. Since the immutable key hashes
+the integration *tree* rather than the commit, refusing such a claim used to
+brick that tree permanently: a fresh commit of identical content reproduces the
+key and the refusal, and `claimKey` is unique, so the dead row is the tree's only
+route back to the gate. The claim now revives that row and runs again. Nothing is
+reused, so nothing is weakened. Two rules keep it honest: the gate records
+*something* even when the portal rejects its status — an unknown status is
+recorded as `failed` with the real class in the summary — and a parity test
+asserts every status `classifyGateOutcome` can emit is one
+`record_local_integration_result` accepts, from the single closed set in
+`scripts/lib/local-integration-status.mjs`.
+
+The same identity rule coordinates assembled semantic review through the
+existing `TaskRun` carrier: one caller dispatches, concurrent callers subscribe,
+and fresh pass/fail receipts are reused. Durable suspension and notification
+after the current bounded observation window are a separate workflow concern;
+single-flight does not invent a second queue, waiter table, or process authority.
+
 Admission also takes an atomic slot-local owner fence in the shared Git
 directory. A competing claimant for that slot waits while the fence's PID is alive even if
 an older database TTL has elapsed; a dead PID is reaped as an orphan. The
@@ -364,7 +443,7 @@ the reader exists (BI-B1065D41):
 
 | Signal | How it lies |
 | --- | --- |
-| The **exit code** | `pregate …; echo $?; tail …` reports *tail's* status. And a run that gave up while queued exits 0 having gated nothing (BI-2C7F51BA). |
+| The **exit code** | `pregate …; echo $?; tail …` reports *tail's* status. A run that gives up while queued, or reports 0 with no PASS record at HEAD, now exits **7** instead of 0 (the historical exit-0 lie was BI-2C7F51BA) — but a chained/piped reading still surfaces someone else's status, so the record remains the verdict. |
 | The **log tail** | A *tolerated* `GuardRuntimeEnvironmentError` prints `Error:` and a red ✖ ~28,000 lines before a **passing** verdict. A watcher grepping `Error:` fabricates a failure. |
 | **`gate passed`** | True about the run you watched; silent about whether HEAD has moved since. `pregate:status` compares. |
 
@@ -554,9 +633,11 @@ the same no-network Git wrapper and proves the same unexpired SHA-bound record
 is sufficient for later publication.
 
 **Quiescence-aware evidence recovery.** `pnpm run pregate` now preflights
-`get_quiescence_status` before the expensive gate. If the portal is actively
-draining or swapping, the gate exits before claiming the lease or running the
-full local-CI command. If the expensive gate already passed but
+`get_quiescence_status` once before the expensive gate. If the portal is actively
+draining or swapping, the gate records `blocked_quiescence`, emits
+`local_ci_quiescence_wait`, and parks with exit 75 before claiming the lease or
+running the full local-CI command. It does not poll: rerun pregate after the
+server-owned quiescence coordinator completes. If the expensive gate already passed but
 `record_local_integration_result` is refused with `portal_quiescing`, the gate
 writes `.git/dpf-local-ci-pending-evidence.json`, attempts
 `release_nonprod_environment_lease`, and records
@@ -588,10 +669,15 @@ and summary remain the default diagnostic surface.
 gitignored (git-lfs generates it), so the enforced logic ships as the tracked
 [`.githooks/lib/pre-push-chained.sh`](../../.githooks/lib/pre-push-chained.sh)
 — Git LFS first, then [`.githooks/pre-push-gate`](../../.githooks/pre-push-gate)
-— and `postinstall` (`scripts/set-hooks-path.mjs` →
-`scripts/lib/ensure-pre-push-hook.mjs`) converges the local shim to delegate to
-it (a hand-rolled custom hook is never clobbered; the install prints a warning
-instead). The gate refuses a push when the latest local-CI gate record is
+— and convergence rewrites the local shim to delegate to it. Convergence runs
+in two places, both through the same sequencer
+([`scripts/lib/converge-hooks-dir.mjs`](../../scripts/lib/converge-hooks-dir.mjs)):
+`postinstall` (`scripts/set-hooks-path.mjs`) and **every session start**
+([`scripts/hooks/converge-git-hooks.mjs`](../../scripts/hooks/converge-git-hooks.mjs)),
+which also sweeps sibling worktrees. A hand-rolled custom hook is never
+clobbered — convergence reports it and leaves it alone — and a tree missing
+`.githooks/lib/pre-push-chained.sh` is skipped rather than given a shim that
+would exec a missing script and fail every push. The gate refuses a push when the latest local-CI gate record is
 missing, belongs to a different branch/SHA, has `gatePassed=false`, has no
 `expiresAt`, or is past `expiresAt`. Not everything needs a record: docs-only
 diffs vs the configured comparison base, delete/tag-only pushes, detached HEAD,
@@ -600,6 +686,40 @@ installs, `DPF_PREPUSH_BASE_REF=<ref>`
 changes the docs-only comparison base to a local accepted-base ref (default:
 `origin/main`); if that configured ref is missing, the hook requires the normal
 SHA-bound gate record instead of silently falling back.
+
+**Convergence failures are reported, not swallowed.** Until
+2026-08-27 this chain was never active on Windows. `set-hooks-path.mjs`
+resolved its hooks directory with `new URL('../.githooks/', import.meta.url)
+.pathname`, which returns `/D:/repo/.githooks/` on Windows; `path.join` turned
+that into an unopenable `\D:\repo\.githooks\`, every `fs` call threw `ENOENT`,
+and a bare `catch {}` discarded it. `postinstall` exited 0, `.githooks/pre-push`
+stayed the stock git-lfs shim, and **a clean `git push` on Windows meant the
+gate never ran — not that it passed.** The post-checkout uncommitted-work guard
+was dead by the same path. Resolution now goes through `fileURLToPath`
+([`scripts/lib/hooks-dir.mjs`](../../scripts/lib/hooks-dir.mjs)), and a
+convergence that cannot complete prints a warning naming the consequence rather
+than failing silently. If `postinstall` reports `could not converge
+.githooks/pre-push`, the gate is not protecting your pushes — repair it before
+relying on a green push.
+
+**Verify by sweeping, never by spot-checking.** `head -4
+.githooks/pre-push` answers for one tree, and one tree is not the estate: when
+this was measured on 2026-08-26, **68 of 85 worktrees** on a single install
+carried the stock shim and pushed with no gate. Two things made that possible.
+Convergence ran only at `pnpm install`, so any tree not reinstalled since a fix
+kept the dead shim; and it ran the tree's *own* copy of the converger, so a tree
+sitting on a base that predated the fix could never repair itself — the fix
+reached only trees that already had it. Session-start convergence closes both:
+the session that just started is by construction running current code, and it
+repairs its siblings. To check the whole estate at once:
+
+```bash
+for wt in $(git worktree list --porcelain | awk '/^worktree /{print substr($0,10)}'); do grep -q pre-push-chained.sh "$wt/.githooks/pre-push" 2>/dev/null || echo "UNGATED $wt"; done
+```
+
+Treat an ungated tree as a gate that has not run, not as a gate that passed: a
+clean push from an ungated tree is byte-identical to a clean push from a gated
+one, which is why the outage stayed invisible for a week.
 
 The bypass is **recorded, never silent** — the reason is persisted into the
 gate state file and surfaced by `pnpm pr:health` at PR time:
@@ -753,6 +873,33 @@ imports at runtime. If `toBeInTheDocument`-style assertions regress on a future
 bump, restore the pin or extend the workaround. Upstream:
 [testing-library/jest-dom#662](https://github.com/testing-library/jest-dom/issues/662).
 
+## Degenerate-environment fixtures
+
+Modules that probe their environment (does `.git` exist? is `package.json`
+readable? did the remote answer?) must be unit-tested against the world
+production actually is — **partial, stale, absent, empty, plural** — not only
+the healthy fixture. The dominant late-defect escape class is a probe whose
+every test fixture modelled the healthy world: an image-synced partial tree
+passed the availability probe and true citations were "refuted"; a federation
+guard only passed because unit tests reused one link-id fixture; a large diff
+exhausted the default exec buffer; and a transient failure was collapsed to a
+terminal state.
+
+Use the shared, dependency-free fixture kit
+[`apps/web/lib/testing/degenerate-env/`](../../apps/web/lib/testing/degenerate-env/index.ts)
+(importable as `@/lib/testing/degenerate-env`): `partialSourceTree()`,
+`twoInstallIdentities()`, `oversizedPayload(bytes)`,
+`flakySucceedsOnAttempt(n)`, `emptyAndNullRows(shape)` — each named after the
+incident it models. An injected degraded resolver/stub that produces the same
+shapes counts as equivalent.
+
+The conformance registry
+[`probe-conformance.test.ts`](../../apps/web/lib/testing/degenerate-env/probe-conformance.test.ts)
+enumerates the known availability-probe modules and walks `apps/web/lib/**`
+for the probe signature: a new probe module fails the suite until it is either
+mapped to a test file carrying degenerate coverage or given an explicit
+reasoned waiver there.
+
 ## Common drift, and how to stay on-script
 
 These are the failure modes that recur across sessions, clients, and machines.
@@ -766,7 +913,7 @@ Name them so you catch yourself.
 | Reaching for `DPF_SKIP_*` to get past a hook | Bypasses are for verified false positives only | Fix the underlying error; CI gates it anyway |
 | Verifying UX against worktree `next dev` | Not the production-bundled runtime | Use the canonical install or sandbox lease (AGENTS.md §13) |
 | Treating a local green as the merge gate | The binding gate is the CI **Unit Tests** check | Local pass = evidence; CI pass = the gate |
-| Reading a `pregate` exit code as the verdict | A run killed while queued exits 0 without running | `pnpm run pregate:status` — it reads the SHA-bound record and exits 0 only for a PASS at HEAD |
+| Reading a `pregate` exit code as the verdict | A pipeline surfaces the last command's status, not pregate's (an abandoned or uncorroborated run itself now exits 7, not 0) | `pnpm run pregate:status` — it reads the SHA-bound record and exits 0 only for a PASS at HEAD |
 | Piping `pregate` to `head`/`grep` | The verdict is the LAST line, so a truncating reader removes exactly what you wanted (and it used to SIGPIPE-kill the run mid-install) | Let it print its ~30 lines; open the log path it prints for detail |
 | Backgrounding `pregate` (`&` / `run_in_background`) | The harness caps and kills a backgrounded run mid-install | Run it in the FOREGROUND — on timeout the harness migrates it and it continues |
 | Wrapping `pregate` in `timeout` | Cuts it off mid-queue and manufactures a false green | Run it unbounded in the foreground |
@@ -774,6 +921,76 @@ Name them so you catch yourself.
 | Editing the PR body to satisfy a trailer gate, then re-running the job | `PR_BODY` / `PR_LABELS_JSON` come from `github.event.pull_request.*` — the **frozen webhook payload**. A rerun replays that same payload, so the edited body (or a new label) is invisible and the gate fails identically. `ci.yml` is triggered by bare `pull_request`, whose default types exclude `edited`. | Add the trailer, then **push a commit** — only a new `synchronize` event refreshes the payload. Budget for a re-gate: the new SHA makes your local-CI record `STALE`. |
 | Trusting a green test run without naming the tree | Sibling worktrees hold identical paths; shell cwd persists between calls | Check the runner's root banner; reconcile the test count against your file |
 | Adding a `<label>` next to its input and checking it in the browser | It renders, screenshots and inspects correctly while a screen reader announces an *unlabelled* field — every human check passes, so the Label Association Guard is the only thing that sees it | Bind it: `htmlFor={id}` with a matching `id`, or wrap the control inside the label |
+
+### Live Blocker References Guard
+
+`scripts/check-live-blocker-references.mjs` fails a PR whose **changed source**
+cites a **closed** `BI-`/`EP-` id from user-facing text — a message that tells
+the reader a fixed defect is their live blocker.
+
+It is the missing half of Doc Anchor Existence. That guard proves a cited id
+EXISTS; nothing proved it was still OPEN. A coverage tool once spent two days
+instructing every caller to cite an already-shipped blocker, so contributors
+recorded the wrong cause and auditors correctly concluded the block was stale.
+Remediation text is written inline as a literal and then easily missed when the
+referenced work closes.
+
+The scope is deliberately narrow, because a guard that invents a defect is worse
+than one that hides a defect:
+
+- only string literals that also carry citation language (`cite`, `blocked by`,
+  `tracked in`, `see`, `filed as`) — a bare mention is not an instruction;
+- **never a comment.** A closed id recorded as provenance above the code it
+  explains is exactly what you want; flagging it would be noise;
+- never a test file; only changed files under `apps/` and `packages/`;
+- existing pairs are grandfathered in `scripts/live-blocker-baseline.txt`;
+- no token, unreachable endpoint, or ambiguous response ⇒ WARN and pass, naming
+  what was skipped. A runner with no live install can neither fail nor invent.
+
+```bash
+node scripts/check-live-blocker-references.mjs            # check (what CI runs)
+pnpm check:live-blockers                                  # same
+node scripts/check-live-blocker-references.mjs --update   # regenerate the grandfather baseline
+```
+
+Prefer naming the **condition** the reader is hitting over any id: a condition
+does not go stale when the work behind it ships. If an id genuinely belongs in
+the text, repoint it at the live item.
+
+### Agent Principal Convergence Guard
+
+`scripts/check-agent-principal-convergence-wired.mjs` fails a PR that stops the
+seed converging a `Principal` for every agent, or that hoists the convergence
+above an agent seeder.
+
+Every agent needs a Principal, because governed receipts are attributed to one
+and the independence rules are expressed entirely in terms of principals.
+Convergence was applied to `User` rows and not to `Agent` rows, so on a seeded
+install 71 of 76 `AGT-*` agents had no identity — `AGT-WS-REVIEW`, the
+designated independent Change Reviewer, among them.
+
+`resolveReviewerIdentity` falls back to the authenticated human when an agent
+alias misses, which is right on its own terms: an external CLI session label
+carries an agent id and is genuinely a human acting. With no alias it always
+missed, so a coworker that was summoned and did call the writer had its receipt
+attributed to the delegating human — the artifact's author, the one identity
+independence forbids. Every `independent: true` lane was unsatisfiable and the
+refusal advised summoning a coworker, which is what the operator had just done.
+
+No source check can prove the DATA converged; that is the seed's job at run
+time. This guard proves the seed still runs the convergence, still runs it after
+**both** agent seeders — either can introduce an agent with no identity — and
+that the convergence module still writes the `aliasType: "agent"` alias the
+reviewer lookup reads.
+
+```bash
+node scripts/check-agent-principal-convergence-wired.mjs
+node --test scripts/check-agent-principal-convergence-wired.test.mjs
+```
+
+If a summoned reviewer's receipt is refused as non-independent, check whether
+its agent id has a Principal before re-summoning: summoning again cannot fix a
+coworker that has no identity to be attributed to.
 
 ### Label Association Guard (ratchet)
 

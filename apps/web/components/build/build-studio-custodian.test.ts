@@ -106,6 +106,45 @@ function progress(overrides: Partial<BuildProgressVisibility> = {}): BuildProgre
 }
 
 describe("deriveBuildStudioCustodianPrompt", () => {
+  // BI-C35F1FED — live repro FB-05946F96: "Start a new outcome" produced a build
+  // awaiting approval; ten minutes later the quiet detector replaced the
+  // approve-start CTA with "Build Studio may be stuck — review the current step
+  // and resume it if needed", leaving no control that could start the work.
+  it("stays silent while the build is waiting on the owner to approve the start", () => {
+    const build = makeBuild({
+      phase: "ideate",
+      draftApprovedAt: null,
+      // Approval is only managed for a build that came from a backlog row —
+      // which is exactly what "Start a new outcome" creates.
+      originator: {
+        id: "backlog-row-1",
+        itemId: "BI-5C3F3433",
+        title: "Show the animals waiting longest for adoption",
+        status: "in-progress",
+        triageOutcome: "build",
+        effortSize: "medium",
+        proposedOutcome: null,
+        activeBuildId: "build-row-1",
+        resolution: null,
+        abandonReason: null,
+      },
+    });
+    const action = deriveBuildStudioWorkflowAction({ build, governedBacklogEnabled: true });
+    expect(action.kind).toBe("approve-start");
+
+    const prompt = deriveBuildStudioCustodianPrompt({
+      build,
+      action,
+      // Well past the early-phase quiet threshold — the owner simply has not
+      // clicked yet, which is not the platform going quiet.
+      progressVisibility: progress({
+        quietAgent: { quiet: true, minutesQuiet: 45, lastObservableSignalAt: "2026-06-29T11:35:00.000Z" },
+      }),
+    });
+
+    expect(prompt).toBeNull();
+  });
+
   it("surfaces proactive help when UX verification failed and the next click would feel inert", () => {
     const build = makeBuild({ uxVerificationStatus: "failed" });
     const action = deriveBuildStudioWorkflowAction({ build, governedBacklogEnabled: true });

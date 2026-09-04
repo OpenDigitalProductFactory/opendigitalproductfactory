@@ -47,6 +47,15 @@ export function classifyTask(
 
   for (const taskType of TASK_TYPES) {
     let matchCount = 0;
+    if (taskType.id === "onboarding") {
+      const onboardingPattern = /\b(?:setup|onboarding|getting started|configure(?:d|s|ing)?)\b/i;
+      if (onboardingPattern.test(message)) matchCount = 1;
+      else if (conversationContext.length > 0 && onboardingPattern.test(combinedText)) matchCount = 0.5;
+      if (matchCount > 0) {
+        scores.push({ id: taskType.id, matchCount, totalPatterns: taskType.heuristicPatterns.length });
+      }
+      continue;
+    }
     for (const pattern of taskType.heuristicPatterns) {
       if (pattern.test(message)) {
         matchCount++;

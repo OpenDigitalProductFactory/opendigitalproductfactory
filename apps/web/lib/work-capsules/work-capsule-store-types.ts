@@ -28,6 +28,9 @@ export type CapsuleDb = {
   };
   $transaction?<T>(fn: (tx: CapsuleDb) => Promise<T>): Promise<T>;
   $queryRaw?(strings: TemplateStringsArray, ...values: unknown[]): Promise<unknown>;
+  featureBuild?: { findMany(args: unknown): Promise<any[]> };
+  nonProductionEnvironmentLease?: { findMany(args: unknown): Promise<any[]> };
   platformCapability?: { findMany(args: unknown): Promise<any[]> };
   runtimeCapabilityTransition?: { findFirst(args: unknown): Promise<any> };
+  agentToolGrant?: { findMany(args: unknown): Promise<any[]> };
 };

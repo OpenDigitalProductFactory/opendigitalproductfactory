@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import type { InitiativeSubject } from "./types";
 import type { ReadinessProfile } from "./types";
+import { independentReviewerRemedy } from "./reviewer-identity";
 
 export const INITIATIVE_GATE_KEYS = [
   "classification",
@@ -214,7 +215,18 @@ export function validateInitiativeGateReceiptDraft(
     context.reviewerPrincipalId === authorPrincipalId
     || (authorAgentId !== null && context.reviewerAgentId === authorAgentId)
   )) {
-    return reject("reviewer-not-independent", "An artifact author cannot review their own artifact; record this gate from an independent reviewer.");
+    // BI-72F368BC: the old text named the rule and nothing else — not the
+    // author, not the reviewer, and not the one route that exists. On a
+    // single-human-principal install this refusal is the whole reason no
+    // scope baseline and therefore no v2 plan-coverage receipt was reachable,
+    // and the message gave no way to learn that.
+    return reject("reviewer-not-independent", independentReviewerRemedy({
+      gate: draft.gate,
+      grant: context.authoritySnapshot.effectiveAgentGrant,
+      authorPrincipalId,
+      reviewerPrincipalId: context.reviewerPrincipalId,
+      reviewerKind: context.reviewerPrincipalId === authorPrincipalId ? "human" : "coworker",
+    }));
   }
 
   const openFindings = new Set(context.openFindingRefs);

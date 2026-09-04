@@ -194,6 +194,49 @@ describe("deriveBuildStudioWorkflowAction", () => {
     expect(action.disabledReason).toBeNull();
   });
 
+  // BI-04B112CA / BI-97F7F599 — live repro FB-41EA43C5: the design passed review
+  // and the size gate said decompose-required, and the owner was still offered
+  // "Advance to Plan" — the one action the platform had already decided to block.
+  it("offers the split instead of Advance to Plan when the size gate says the design is too big", () => {
+    const action = deriveBuildStudioWorkflowAction({
+      build: makeBuild({
+        phase: "ideate",
+        draftApprovedAt: new Date("2026-04-25T13:00:00Z"),
+        designReview: {
+          decision: "pass",
+          issues: [],
+          sizeAssessment: { decision: "decompose-required" },
+        } as unknown as FeatureBuildRow["designReview"],
+      }),
+      governedBacklogEnabled: true,
+    });
+
+    expect(action.kind).toBe("decompose-now");
+    expect(action.primaryLabel).toBe("Split into smaller builds");
+    expect(action.targetPhase).toBeNull();
+    expect(action.disabledReason).toBeNull();
+    // Plain words, not a size label the owner has to decode.
+    expect(action.title).toMatch(/too big for one build/i);
+  });
+
+  it("still advances to Plan when the design is the right size", () => {
+    const action = deriveBuildStudioWorkflowAction({
+      build: makeBuild({
+        phase: "ideate",
+        draftApprovedAt: new Date("2026-04-25T13:00:00Z"),
+        designReview: {
+          decision: "pass",
+          issues: [],
+          sizeAssessment: { decision: "ok" },
+        } as unknown as FeatureBuildRow["designReview"],
+      }),
+      governedBacklogEnabled: true,
+    });
+
+    expect(action.kind).toBe("advance-phase");
+    expect(action.primaryLabel).toBe("Advance to Plan");
+  });
+
   it("disables Advance to Plan with the gate reason when ideate evidence is incomplete", () => {
     const action = deriveBuildStudioWorkflowAction({
       build: makeBuild({
@@ -1370,5 +1413,44 @@ describe("deriveBuildStudioWorkflowAction — failed inference (BI-F0005EB0)", (
     });
 
     expect(action.kind).not.toBe("retry-inference");
+  });
+});
+
+describe("a stale AI failure must not hide a satisfied advance gate", () => {
+  it("offers Advance to Plan when the design is reviewed, even after an inference failure", () => {
+    // The defect that stalled a real build: brief, design doc and build plan
+    // were all saved and designReview was "pass", but a pending inference
+    // failure pre-empted the advance action. The only offered action was an AI
+    // call that could not run, so the build could not move at all.
+    const action = deriveBuildStudioWorkflowAction({
+      build: makeBuild({
+        phase: "ideate",
+        draftApprovedAt: new Date() as never,
+        designDoc: { problemStatement: "x", proposedApproach: "y" } as never,
+        designReview: { decision: "pass" } as never,
+      }),
+      governedBacklogEnabled: true,
+      progressVisibility: {
+        inferenceFailure: { failed: true, kind: "transient" },
+      } as never,
+    });
+    expect(action.kind).not.toBe("retry-inference");
+    expect(action.targetPhase).toBe("plan");
+  });
+
+  it("still offers Retry the AI call when the gate is NOT satisfied", () => {
+    const action = deriveBuildStudioWorkflowAction({
+      build: makeBuild({
+        phase: "ideate",
+        draftApprovedAt: new Date() as never,
+        designDoc: null,
+        designReview: null,
+      }),
+      governedBacklogEnabled: true,
+      progressVisibility: {
+        inferenceFailure: { failed: true, kind: "transient" },
+      } as never,
+    });
+    expect(action.kind).toBe("retry-inference");
   });
 });

@@ -33,16 +33,45 @@ export type WorkforceCoworker = {
   hitlTier: number;
 };
 
+/**
+ * A live TaskRun that no roster coworker owns (BI-B3AB7FC9): proactive
+ * deliberations, build-phase reviews, system jobs. These are what is actually
+ * on the model runner when "Working now" reads 0, so the view names them
+ * instead of hiding them behind an empty state.
+ */
+export type WorkforcePlatformRun = {
+  taskRunId: string;
+  title: string;
+  status: string;
+  /** TaskRun.source — coworker | build | skill | proactive. */
+  source: string | null;
+  buildId: string | null;
+  routeContext: string | null;
+  startedAt: string;
+  lastHeartbeatAt: string | null;
+};
+
 export type WorkforceActivity = {
   capturedAt: string;
   working: WorkforceCoworker[];
   quiet: WorkforceCoworker[];
+  /** Live runs with no coworker owner, newest first. */
+  platformWork: WorkforcePlatformRun[];
   pulse: {
     workingCount: number;
     totalCount: number;
     actionsToday: number;
+    /** Every TokenUsage row today — attributed or not. */
     tokensToday: number;
     costToday: number;
+    /**
+     * Tokens today whose agentId is not a roster coworker ("unknown", a
+     * retired agent, a system caller). Non-zero means an inference path is
+     * spending without saying who for (BI-B3AB7FC9).
+     */
+    tokensUnattributed: number;
+    costUnattributed: number;
+    platformWorkCount: number;
     quietOverThresholdCount: number;
     /** Coworkers with no human-in-the-loop owner assigned — a governance gap. */
     coworkersWithoutOwnerCount: number;
@@ -81,6 +110,9 @@ type TaskRunRow = {
   currentAgentId: string | null;
   startedAt: Date;
   lastHeartbeatAt: Date | null;
+  source?: string | null;
+  buildId?: string | null;
+  routeContext?: string | null;
 };
 type GroupRow = {
   agentId: string;
@@ -124,7 +156,17 @@ export async function loadWorkforceActivity(
     prisma.taskRun.findMany({
       where: { archivedAt: null, status: { in: [...TASK_LIVE_STATES] } },
       orderBy: { startedAt: "desc" },
-      select: { taskRunId: true, status: true, title: true, currentAgentId: true, startedAt: true, lastHeartbeatAt: true },
+      select: {
+        taskRunId: true,
+        status: true,
+        title: true,
+        currentAgentId: true,
+        startedAt: true,
+        lastHeartbeatAt: true,
+        source: true,
+        buildId: true,
+        routeContext: true,
+      },
     }),
     prisma.toolExecution.groupBy({
       by: ["agentId", "toolName"],
@@ -170,15 +212,30 @@ export async function loadWorkforceActivity(
     }),
   ]);
 
-  // First live task per agent (rows are newest-first).
+  const rosterIds = new Set(agents.map((a) => a.agentId));
+
+  // First live task per agent (rows are newest-first). Live runs that no
+  // roster coworker owns are platform work — listed, never dropped.
   const liveByAgent = new Map<string, TaskRunRow>();
+  const platformWork: WorkforcePlatformRun[] = [];
   for (const run of liveRuns) {
     // Keep the projection fail-closed if an injected adapter or future query
     // returns a non-live row despite the canonical DB filter.
     if (!isLiveStatus(run.status)) continue;
-    if (run.currentAgentId && !liveByAgent.has(run.currentAgentId)) {
-      liveByAgent.set(run.currentAgentId, run);
+    if (run.currentAgentId && rosterIds.has(run.currentAgentId)) {
+      if (!liveByAgent.has(run.currentAgentId)) liveByAgent.set(run.currentAgentId, run);
+      continue;
     }
+    platformWork.push({
+      taskRunId: run.taskRunId,
+      title: run.title ?? "Untitled run",
+      status: run.status,
+      source: run.source ?? null,
+      buildId: run.buildId ?? null,
+      routeContext: run.routeContext ?? null,
+      startedAt: run.startedAt.toISOString(),
+      lastHeartbeatAt: run.lastHeartbeatAt ? run.lastHeartbeatAt.toISOString() : null,
+    });
   }
 
   // toolName counts per agent.
@@ -207,11 +264,26 @@ export async function loadWorkforceActivity(
   const handoffsByAgent = countByActor(handoffRows, "fromAgentId");
   const evidenceByAgent = countByActor(evidenceRows, "recordedByAgentId");
 
+  // Tokens today is the whole ledger. What the roster loop below cannot claim
+  // is reported as unattributed rather than silently dropped — the
+  // reviewDesignDoc fan-out was 30% of a day's spend under agentId "unknown"
+  // while this card said nothing (BI-B3AB7FC9).
+  let tokensToday = 0;
+  let costToday = 0;
+  let tokensUnattributed = 0;
+  let costUnattributed = 0;
+  for (const [agentId, tok] of tokensMap) {
+    tokensToday += tok.tokens;
+    costToday += tok.cost;
+    if (!rosterIds.has(agentId)) {
+      tokensUnattributed += tok.tokens;
+      costUnattributed += tok.cost;
+    }
+  }
+
   const working: WorkforceCoworker[] = [];
   const quiet: WorkforceCoworker[] = [];
   let actionsToday = 0;
-  let tokensToday = 0;
-  let costToday = 0;
   let quietOverThreshold = 0;
   let withoutOwner = 0;
   const quietFloor = new Date(nowMs - QUIET_SIGNAL_DAYS * 86_400_000);
@@ -234,8 +306,6 @@ export async function loadWorkforceActivity(
     const humanSupervisorId = agent.humanSupervisorId ?? null;
 
     actionsToday += didToday.reduce((sum, o) => sum + o.count, 0);
-    tokensToday += tok.tokens;
-    costToday += tok.cost;
     if (!humanSupervisorId) withoutOwner += 1;
 
     const coworker: WorkforceCoworker = {
@@ -270,12 +340,16 @@ export async function loadWorkforceActivity(
     capturedAt: new Date(nowMs).toISOString(),
     working,
     quiet,
+    platformWork,
     pulse: {
       workingCount: working.length,
       totalCount: agents.length,
       actionsToday,
       tokensToday,
       costToday,
+      tokensUnattributed,
+      costUnattributed,
+      platformWorkCount: platformWork.length,
       quietOverThresholdCount: quietOverThreshold,
       coworkersWithoutOwnerCount: withoutOwner,
     },

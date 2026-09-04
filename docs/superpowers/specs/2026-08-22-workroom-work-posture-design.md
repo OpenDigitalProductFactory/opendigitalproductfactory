@@ -84,13 +84,43 @@ Both postures resolve through one precedence order:
 1. Hard policy          residency · sensitivity ceiling · regulated ceiling   (never relaxed)
 2. Room declaration     an explicit choice made when the room was convened
 3. Derived              work shape × archetype stream × temporal band × stakes
-4. Agent                the coworker's own saved posture
+4. Agent                Golden Triangle priority only — never proactivity
 5. Org / activity-family
 6. Platform default     Balanced / balanced — byte-identical to today
 ```
 
 Layer 3 is the new one. Layers 1, 4, 5 and 6 already exist and keep their current
 meaning; layer 2 is new but is a straight reuse of the shape-claim mechanism.
+
+**Operator correction — proactivity is not identity state (2026-08-30).** The earlier
+ladder incorrectly retained the coworker's saved proactivity as an inheritance layer.
+For proactivity, the outcome-specific Workroom is authoritative: every participant
+shares its level, cadence, channel and action boundary. Participant-specific trust,
+qualifications, grants and autonomy envelopes remain safety ceilings and may only narrow
+the room; they never supply or override its proactivity. Unroomed activity uses the
+activity-family/platform default; proactive work without an outcome-specific Workroom is a
+modelling gap, not permission to fall back to identity. This correction does not change the
+separate Golden Triangle priority control.
+
+**Retired under `BI-87C9C91C` (2026-09-01).** The `agent:<agentId>` scope is gone from
+`scopeKeysForInput` in `lib/proactivity/proactivity-resolver.server.ts`, so no production
+resolver reads a per-coworker proactivity override. The controls that wrote one are gone
+with it: the coworker record's setting (replaced by a pointer to the room), the chat
+composer dock's proactivity half (its Golden Triangle priority half is a different axis and
+stays), and the consolidated roster, which is now a read-only projection of what a coworker
+does outside any room. `getCoworkerProactivityPreference`, `getCoworkerProactivityPreferences`
+and `saveCoworkerProactivityPreference` were deleted rather than deprecated — a save path
+whose value nothing reads reports success and changes nothing.
+
+Existing `aiCoworkerProactivity:agent:*` UserFacts are left in place and inert. They are
+deliberately NOT migrated into room declarations: an identity preference cannot be
+reinterpreted as an outcome preference without inventing a choice the owner never made.
+
+Two interactive paths that previously read the coworker's saved level — the coworker turn
+(`lib/actions/agent-coworker.ts`) and the opening briefing (`lib/agent/opening-briefing-loader.ts`)
+— now take the platform default, which is byte-identical to what an agent with no saved
+preference resolved before. Standing work that genuinely has an outcome resolves from the
+room instead, through `lib/work-management/drive-resolution.ts`.
 
 ### 3.2 The safety invariant
 
@@ -211,6 +241,14 @@ declared `propose`.
 
 ## 8. Triggers on scheduled work
 
+⟦runtime: shipped 2026-08-23, `BI-5087F34F`⟧ The record lives on the existing
+`ScheduledAgentTask.taskConfig` JSON under a `trigger` key — migration-free, the same
+discipline the workroom shape and posture claims use on `scopeClaims`. It carries the
+trigger kind (the four sources below, not a fifth taxonomy), the room served, and the
+obligation discharged. `temporalInputForTrigger` feeds the obligation's due date — not the
+cron time — into the band resolver, so the 03:00-tick-for-a-09:00-deadline case now reads
+`pre-deadline`. A task with no trigger recorded behaves exactly as before.
+
 Finding 7: a scheduled job knows *when* it fires and nothing about *why*. The four
 trigger sources are already named in the governed value-stream design (§5.1) — time,
 user request, incoming message, detected need. Scheduled work records:
@@ -224,6 +262,25 @@ The immediate consequence: a job that fires at 03:00 to discharge an obligation 
 09:00 resolves `pre-deadline`, not `out-of-hours`. Today it would resolve neither,
 because the resolver is never asked.
 
+## 8.1 The operator control ⟦runtime: shipped 2026-08-23⟧
+
+Slice D shipped the room's posture as a READ-ONLY section, and the gap that left was
+visible to the founder immediately: every settable control was per-coworker
+(`CoworkerPriorityControl`, `CoworkerPriorityDock`, `CoworkerProactivitySetting`), so the
+room displayed a posture with no way to change it. `WorkroomPosture.tsx` had zero
+interactive elements and no server action existed.
+
+Two altitudes now ship: the room's own settings inside the existing collapsed section
+(kernel consult `DI-D553722A20B6` — inside-existing-section, 8.846, over a separate
+settings section and an admin-page-only control), and a **decreed default for rooms** on
+the priority surface beside the coworker controls.
+
+The default's place in the ladder is the load-bearing decision: **above** the coworker
+ladder, because it is specifically about rooms and they are not; **below** derivation,
+because what the work actually is outranks a blanket preference about rooms. Both write
+paths pass the action boundary through the tighten-only clamp, and the UI says so in
+words — an invariant the operator cannot see is one they will be surprised by.
+
 ## 9. Decomposition
 
 Each slice is independently shippable and independently inert until the next lands.
@@ -236,6 +293,7 @@ Each slice is independently shippable and independently inert until the next lan
 | **D** | Room declaration + room-derived posture — `scopeClaims` reader/writer, shape and archetype derivation, wired at the room-scoped seams. | — |
 | **E** | Verification becomes load-bearing — stake classes, the envelope join, the new named denial reason. | — |
 | **F** | Scheduled-work trigger record — trigger kind, room/shape link, obligation link, posture at fire time. | — |
+| — | **Shipped state ⟦runtime: 2026-08-23⟧.** A, B, C, D, E, F and G have landed; H (the rich provenance surface) has not. `taskClass` is live, verification refuses, the two HITL ladders are one projection, scheduled work records why it exists, and a conformance test covers the whole archetype catalogue. | — |
 | **G** | Archetype conformance — a test asserting every leaf archetype resolves a posture from its own OVSM. | — |
 | **H** | Surface — the posture and its provenance rendered on the room, answering "why is it behaving like this". | D |
 

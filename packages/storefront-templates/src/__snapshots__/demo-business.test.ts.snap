@@ -1709,9 +1709,8 @@ exports[`deriveDemoBusiness > matches the golden digest across all archetypes 1`
     "customers": 6,
     "demand": {
       "byStage": {
-        "deliver": 6,
-        "retain": 7,
-        "settle": 2,
+        "intake-capacity-decision": 13,
+        "placement-custody-transfer": 2,
       },
       "inFlight": 8,
       "primaryQueue": "lapsing",
@@ -1722,7 +1721,7 @@ exports[`deriveDemoBusiness > matches the golden digest across all archetypes 1`
       "bills": 3,
       "hasTaxPeriod": true,
       "invoices": 2,
-      "obligations": 0,
+      "obligations": 2,
       "paidInvoices": 1,
     },
     "resources": 4,

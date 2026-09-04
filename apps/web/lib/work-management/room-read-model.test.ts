@@ -79,6 +79,8 @@ describe("Work Room read model", () => {
           sponsorPrincipalRef: null,
           authoritySummary: "Can act within the approved booking scope",
           sourceRefs: [sourceRef],
+          assignmentSource: "explicit",
+          coordinatorSource: "none",
         },
       ],
       context: {
@@ -99,6 +101,29 @@ describe("Work Room read model", () => {
       purpose: "Coordinate the repair without losing customer context.",
       mode: "finite",
       state: "active",
+      identity: {
+        definition: {
+          definitionId: "workroom-definition:booking",
+          version: 1,
+          sourceKey: "booking",
+          label: "Storefront booking",
+          mode: "finite",
+          decisionScope: "wwwd",
+        },
+        instance: {
+          instanceId: "workroom-instance:booking:BK-100",
+          occurrenceTrace: {
+            caseRef: {
+              caseId: "booking:BK-100",
+              sourceType: "booking",
+              sourceId: "BK-100",
+            },
+            sourceRef,
+            cycleRef: null,
+            executionRefs: [],
+          },
+        },
+      },
       outcome: {
         statement: "Cooling is restored and verified.",
         sourceRefs: [sourceRef],
@@ -111,6 +136,60 @@ describe("Work Room read model", () => {
     });
     expect(room.roomKey).toBe("booking%3ABK-100");
     expect(room.work.sourceRefs).toEqual([sourceRef]);
+    expect(room.processOverseer).toMatchObject({
+      disposition: "not-applicable",
+      processOverseerSource: "derived",
+    });
+  });
+
+  it("projects a declared work shape and its explicit Process Overseer", () => {
+    const room = buildWorkroomView({
+      caseKey: "booking%3ABK-100",
+      detail: caseDetail(),
+      scopeClaims: [{ workShape: "obligation-assurance-watch@1.0.0" }],
+      now: new Date("2026-09-01T12:00:00.000Z"),
+      participants: [{
+        principalRef: "prn-user-1",
+        displayName: "Casey Morgan",
+        kind: "person",
+        roles: ["accountable", "coordinator"],
+        workState: "working",
+        presence: "active",
+        currentWorkSummary: "Keeping the room on shape.",
+        enteredReason: "Explicitly assigned coordinator.",
+        sponsorPrincipalRef: null,
+        authoritySummary: "Can coordinate this room",
+        sourceRefs: [sourceRef],
+        assignmentSource: "explicit",
+        coordinatorSource: "explicit",
+      }],
+    });
+
+    expect(room.processOverseer).toMatchObject({
+      shapeKey: "obligation-assurance-watch",
+      shapeVersion: "1.0.0",
+      processOverseerPrincipalRef: "prn-user-1",
+      processOverseerSource: "explicit",
+      disposition: "continue",
+      nextPermittedStageKey: "sweep",
+      checkedAt: "2026-09-01T12:00:00.000Z",
+    });
+  });
+
+  it("pauses an unresolved declared shape instead of treating it as unshaped", () => {
+    const room = buildWorkroomView({
+      caseKey: "booking%3ABK-100",
+      detail: caseDetail(),
+      scopeClaims: [{ workShape: "obligation-assurance-watch@9.9.9" }],
+      now: new Date("2026-09-01T12:00:00.000Z"),
+    });
+
+    expect(room.processOverseer).toMatchObject({
+      shapeKey: "obligation-assurance-watch",
+      shapeVersion: "9.9.9",
+      disposition: "pause",
+      deviations: [{ code: "work_shape_version_mismatch" }],
+    });
   });
 
   it("derives standing mode only from typed source policy", () => {
@@ -138,6 +217,42 @@ describe("Work Room read model", () => {
     expect(room.mode).toBe("standing");
   });
 
+  it("traces the current cycle and execution carriers without requiring development evidence", () => {
+    const detail = caseDetail();
+    detail.timeline = [{
+      eventId: "capsule:1",
+      label: "Delivery room claimed.",
+      sourceRef: { kind: "work-capsule", id: "WC-100", status: "working" },
+    }];
+    const room = buildWorkroomView({
+      caseKey: "booking%3ABK-100",
+      detail,
+      currentCycle: {
+        cycleKey: "visit-1",
+        carrierKind: "work-item",
+        carrierId: "WI-VISIT-1",
+        trigger: "Customer confirmed the visit.",
+        objective: "Complete the scheduled repair.",
+        accountablePrincipalRef: "prn-user-1",
+        openedAt: "2026-07-30T14:00:00.000Z",
+        expectedReviewAt: null,
+        stopConditions: [],
+        measureSummary: null,
+        status: "open",
+        outcomePacket: null,
+        sourceRefs: [{ kind: "work-item", id: "WI-VISIT-1" }],
+      },
+    });
+
+    expect(room.identity.instance.occurrenceTrace).toMatchObject({
+      cycleRef: { kind: "work-item", id: "WI-VISIT-1", status: "open" },
+      executionRefs: [
+        { kind: "work-capsule", id: "WC-100", status: "working" },
+        { kind: "work-item", id: "WI-VISIT-1" },
+      ],
+    });
+  });
+
   it("defaults unknown sources to finite with low confidence and complete gap reporting", () => {
     const unknownRef: WorkCaseSourceRef = {
       kind: "source",
@@ -161,6 +276,16 @@ describe("Work Room read model", () => {
       confidence: "low",
       incompleteBoundary: true,
       sourceHealth: "partial",
+    });
+    expect(room.identity).toMatchObject({
+      definition: null,
+      instance: {
+        instanceId: "workroom-instance:external-ticket:EXT-1",
+        occurrenceTrace: {
+          sourceRef: unknownRef,
+          cycleRef: null,
+        },
+      },
     });
     expect(room.boundary.gaps).toEqual([
       "purpose",
@@ -200,6 +325,8 @@ describe("Work Room read model", () => {
           sponsorPrincipalRef: null,
           authoritySummary: "Can approve and complete",
           sourceRefs: [sourceRef],
+          assignmentSource: "explicit",
+          coordinatorSource: "none",
         },
       ],
     });

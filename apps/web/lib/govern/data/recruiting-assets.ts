@@ -7,6 +7,7 @@
 // coverage gate requires every new model to be registered or baselined.
 
 import type { DataAssetDefinition } from "./assets";
+import { MILEAGE_ASSETS } from "./mileage-assets";
 import { PAYROLL_ASSETS } from "./payroll-assets";
 
 const CLASSIFICATION = {
@@ -221,4 +222,5 @@ export const RECRUITING_ASSETS: readonly DataAssetDefinition[] = [
     fields: [],
   },
   ...PAYROLL_ASSETS,
+  ...MILEAGE_ASSETS,
 ];

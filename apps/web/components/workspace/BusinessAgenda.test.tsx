@@ -53,6 +53,14 @@ describe("BusinessAgenda", () => {
     expect(html).not.toContain("Last week booking");
   });
 
+  // The empty state used to offer "Add a booking, invoice, or appointment" and
+  // link to the business calendar, which makes none of those three (BI-460BFA84).
+  it("promises only what the calendar it links to can actually do", () => {
+    const html = renderToStaticMarkup(<BusinessAgenda events={[]} />);
+    expect(html).not.toContain("Add a booking, invoice, or appointment");
+    expect(html).toContain("Add something to the calendar");
+  });
+
   it("renders an empty state (no synthesized rows) when there are no business events", () => {
     const html = renderToStaticMarkup(<BusinessAgenda events={[]} now={NOW} />);
 

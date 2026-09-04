@@ -33,6 +33,10 @@ export type TeardownStance = (typeof TEARDOWN_STANCES)[number];
 export const SOURCE_AUTHORITY_STANCES = ["none", "governed-worktree"] as const;
 export type SourceAuthorityStance = (typeof SOURCE_AUTHORITY_STANCES)[number];
 
+/** Whether this instance mirrors the work it owns to same-organization peers. */
+export const WORK_SYNC_STANCES = ["same-organization", "none"] as const;
+export type WorkSyncStance = (typeof WORK_SYNC_STANCES)[number];
+
 /** What this instance may do to a federated peer it is paired with. */
 export const PEER_WRITE_STANCES = ["read-only", "governed-write", "none"] as const;
 export type PeerWriteStance = (typeof PEER_WRITE_STANCES)[number];
@@ -53,12 +57,14 @@ export interface InstanceStanceProfile {
   teardown: TeardownStance;
   sourceAuthority: SourceAuthorityStance;
   peerWrite: PeerWriteStance;
+  workSync: WorkSyncStance;
   pairedProductionInstallationRef?: string;
   rationale: {
     credentials: string;
     teardown: string;
     sourceAuthority: string;
     peerWrite: string;
+    workSync: string;
   };
 }
 
@@ -71,6 +77,19 @@ export interface InstanceStanceProfile {
  */
 export interface InstanceStanceHostFacts {
   sourceCapable: boolean;
+  /**
+   * True when a live same-organization federation link backs the declared peer.
+   * Resolved by `resolveInstallationPairing`; false leaves work sync off, because
+   * a declared name is intent and a link is evidence.
+   */
+  pairingIsEstablished?: boolean;
+  /**
+   * The one federation health sentence (EP-ZERO-CONFIG-FEDERATION §5.7):
+   * "In step …", "Behind by …" or "Broken because …". When present it IS the
+   * work-sync rationale, so the briefing states what is happening, not what
+   * is supposed to happen.
+   */
+  workSyncHealthLine?: string;
 }
 
 function resolveCredentials(
@@ -152,7 +171,44 @@ function resolvePeerWrite(
   return {
     stance: "read-only",
     rationale:
-      `This ${environmentClass} installation is paired with ${pairedRef}, so read from that peer for realistic context but never write to it.`,
+      `This ${environmentClass} installation is paired with ${pairedRef}, so read that peer for realistic context and never mutate a record it owns.`,
+  };
+}
+
+/**
+ * Decide whether this instance mirrors its own work to same-organization peers.
+ *
+ * Mirroring a record this installation is canonical for is NOT a peer write: the
+ * federated record mirror lets only the canonical side mutate, so publishing our
+ * own backlog to an organization peer never touches a record the peer owns. An
+ * install that is created and destroyed repeatedly depends on this — without it
+ * the work it produced dies with it.
+ */
+function resolveWorkSync(
+  pairedRef: string | undefined,
+  pairingIsEstablished: boolean,
+  healthLine?: string,
+): { stance: WorkSyncStance; rationale: string } {
+  if (!pairedRef) {
+    return {
+      stance: "none",
+      rationale: "No paired installation is recorded, so there is nowhere to mirror work.",
+    };
+  }
+  if (!pairingIsEstablished) {
+    // A typed peer name gives nothing to send work to. Reporting
+    // `same-organization` here would tell an agent its work is safe when no link
+    // exists to carry it.
+    return {
+      stance: "none",
+      rationale:
+        `${pairedRef} is declared but no established federation link confirms it, so there is nowhere to mirror work yet.`,
+    };
+  }
+  return {
+    stance: "same-organization",
+    rationale: healthLine
+      ?? `Mirror the backlog this installation owns to ${pairedRef} so the work survives a teardown; only this side may change those records.`,
   };
 }
 
@@ -177,6 +233,11 @@ export function resolveInstanceStance(
     snapshot.environmentClass,
     snapshot.pairedProductionInstallationRef,
   );
+  const workSync = resolveWorkSync(
+    snapshot.pairedProductionInstallationRef,
+    host.pairingIsEstablished ?? false,
+    host.workSyncHealthLine,
+  );
 
   return {
     schemaVersion: 1,
@@ -187,12 +248,14 @@ export function resolveInstanceStance(
     teardown: teardown.stance,
     sourceAuthority: sourceAuthority.stance,
     peerWrite: peerWrite.stance,
+    workSync: workSync.stance,
     pairedProductionInstallationRef: snapshot.pairedProductionInstallationRef,
     rationale: {
       credentials: credentials.rationale,
       teardown: teardown.rationale,
       sourceAuthority: sourceAuthority.rationale,
       peerWrite: peerWrite.rationale,
+      workSync: workSync.rationale,
     },
   };
 }
@@ -203,10 +266,24 @@ export function resolveInstanceStance(
  * Deliberately small. It states the instance's identity and its brakes, and it
  * carries no secrets, no business data, and no tool catalogue.
  */
-export function formatInstanceStanceBriefing(stance: InstanceStanceProfile): string {
-  const lines = [
+export function formatInstanceStanceBriefing(
+  stance: InstanceStanceProfile,
+  /**
+   * Which installation this is, e.g. `Northwind DEV (did_ab12…9f0c)` (BI-C7151B1B).
+   *
+   * Optional because it is composed one layer up, where the estate name and the
+   * device id are readable. When absent the briefing still states the class and
+   * purpose, so an agent is never left with nothing — it just cannot tell two
+   * installs of one organization apart, which is the defect this closes.
+   */
+  installationLabel?: string,
+): string {
+  const lines = installationLabel
+    ? [`INSTALLATION: ${installationLabel}.`]
+    : [];
+  lines.push(
     `INSTALLATION IDENTITY: ${stance.environmentClass} installation, purpose ${stance.primaryPurpose}.`,
-  ];
+  );
   if (stance.pairedProductionInstallationRef) {
     lines.push(`Paired installation: ${stance.pairedProductionInstallationRef}.`);
   }
@@ -214,5 +291,6 @@ export function formatInstanceStanceBriefing(stance: InstanceStanceProfile): str
   lines.push(`Teardown — ${stance.teardown}: ${stance.rationale.teardown}`);
   lines.push(`Source — ${stance.sourceAuthority}: ${stance.rationale.sourceAuthority}`);
   lines.push(`Peer — ${stance.peerWrite}: ${stance.rationale.peerWrite}`);
+  lines.push(`Work sync — ${stance.workSync}: ${stance.rationale.workSync}`);
   return lines.join("\n");
 }

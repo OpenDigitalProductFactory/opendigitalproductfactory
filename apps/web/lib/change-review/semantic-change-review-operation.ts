@@ -76,11 +76,31 @@ function includesRuntimeCode(files: readonly string[]): boolean {
   return files.some((file) => RUNTIME_CODE_PATH.test(file.replaceAll("\\", "/")));
 }
 
-function resolveRisk(input: SemanticChangeReviewOperationInput): SemanticReviewRisk {
+export function resolveSemanticReviewRisk(
+  input: SemanticChangeReviewOperationInput,
+): SemanticReviewRisk {
   if (input.risk) return input.risk;
   if (docsOnly(input.changedFiles)) return "low";
   if (input.artifactType === "code-change" || includesRuntimeCode(input.changedFiles)) return "high";
   return "medium";
+}
+
+export function resolveSemanticReviewCoordination(input: SemanticChangeReviewOperationInput): {
+  identity: SemanticReviewIdentity;
+  risk: SemanticReviewRisk;
+} {
+  const specialistIds = [...new Set([
+    ...input.identity.specialistIds,
+    ...selectSemanticReviewSpecialists(input.changedFiles),
+  ])].sort();
+  const identity: SemanticReviewIdentity = {
+    ...input.identity,
+    policyVersion: input.identity.policyVersion ?? CHANGE_REVIEW_POLICY_VERSION,
+    reviewerVersion: input.identity.reviewerVersion ?? CHANGE_REVIEWER_VERSION,
+    specialistIds,
+  };
+  requireStableIdentity(identity);
+  return { identity, risk: resolveSemanticReviewRisk(input) };
 }
 
 /**
@@ -154,19 +174,7 @@ export async function runSemanticChangeReview(
   input: SemanticChangeReviewOperationInput,
   deps: SemanticChangeReviewOperationDeps,
 ): Promise<SemanticChangeReviewOperationResult> {
-  const specialistIds = [...new Set([
-    ...input.identity.specialistIds,
-    ...selectSemanticReviewSpecialists(input.changedFiles),
-  ])].sort();
-  const identity: SemanticReviewIdentity = {
-    ...input.identity,
-    policyVersion: input.identity.policyVersion ?? CHANGE_REVIEW_POLICY_VERSION,
-    reviewerVersion: input.identity.reviewerVersion ?? CHANGE_REVIEWER_VERSION,
-    specialistIds,
-  };
-  requireStableIdentity(identity);
-
-  const risk = resolveRisk(input);
+  const { identity, risk } = resolveSemanticReviewCoordination(input);
   const activation = decideExternalReviewActivation({
     artifactType: input.artifactType,
     authorSurface: input.authorSurface,

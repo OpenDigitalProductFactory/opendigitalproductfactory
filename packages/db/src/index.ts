@@ -24,6 +24,22 @@ export type {
   CapacityAllocationState,
 } from "../generated/client/client";
 export { WriteGateRequirement } from "../generated/client/client";
+// Worker classification: the legally-consequential axis, distinct from the
+// organisation's EmploymentType label (BI-C61CEEA9). Exported as a value so the
+// app composes from the generated enum instead of re-typing its members.
+export { WorkerClassification } from "../generated/client/client";
+// Decision-resolution proposal vocabulary (BI-3D0FB84B). Exported as values so
+// the app composes from the generated enum instead of re-typing its members.
+export {
+  DecisionProposalAction,
+  DecisionProposalScope,
+  DecisionProposalStatus,
+} from "../generated/client/client";
+export {
+  WorkroomParticipantRole,
+  WorkroomParticipantAssignmentSource,
+  WorkroomRelationKind,
+} from "../generated/client/client";
 export {
   PRINCIPAL_SENSITIVITIES,
   isPrincipalSensitivity,
@@ -33,6 +49,7 @@ export {
 export * from "./healthcare-patient-authority";
 export * from "./healthcare-care-intake";
 export * from "./subject-reference";
+export * from "./agent-principal-convergence";
 
 // Quality-issue lifecycle governance (BI-0B420A1D): the registry is the
 // compile-time contract; the drift sweep is the runtime half.
@@ -255,6 +272,22 @@ export {
   type DemandSchemaVersion,
 } from "./federated-demand-contract";
 export {
+  OPERATIONAL_POSTURE_FIELDS,
+  OPERATIONAL_POSTURE_PROJECTION_TEMPLATE,
+  OPERATIONAL_POSTURE_SCHEMA_VERSIONS,
+  POSTURE_HEALTH_STATUSES,
+  computeOperationalPosturePayloadDigest,
+  validateOperationalPostureV1,
+  type OperationalPostureSchemaVersion,
+  type OperationalPostureV1,
+  type OperationalPostureValidationContext,
+  type PostureHealthRollupV1,
+  type PostureHealthStatus,
+  type PosturePatchSummaryV1,
+  type PostureResourceFootprintV1,
+  type PostureRuntimeSummaryV1,
+} from "./federated-operational-posture-contract";
+export {
   assertNoExcludedEgress,
   isForbiddenField,
   projectEstatePayload,
@@ -326,6 +359,44 @@ export {
   type OrganizationCrosswalk,
 } from "./federated-record-sync";
 export {
+  ENROLLMENT_DECISIONS,
+  MANUAL_APPROVAL_REASONS,
+  evaluateOrganizationEnrollment,
+  type EnrollmentDecision,
+  type EnrollmentEvaluation,
+  type EnrollmentProposal,
+  type ManualApprovalReason,
+  type OrganizationTrustAnchor,
+  type PeerEnrollmentEvidence,
+} from "./organization-federation-enrollment";
+export {
+  PAIRING_MODES,
+  PAIRING_BLOCK_REASONS,
+  decideAutomaticPairing,
+  mayPairWithoutOperator,
+  type AutomaticPairingDecision,
+  type CandidateTransport,
+  type PairingBlockReason,
+  type PairingDecisionReason,
+  type PairingMode,
+} from "./automatic-pairing-decision";
+export {
+  PEER_VERIFICATION_FAILURES,
+  normalizeFingerprint,
+  verifyPeerChainAgainstRoot,
+  type ObservedCertificate,
+  type PeerVerification,
+  type PeerVerificationFailure,
+} from "./peer-certificate-verification";
+export {
+  PAIRING_SOURCES,
+  pairingSupportsWorkSync,
+  resolveInstallationPairing,
+  type PairingLink,
+  type PairingSource,
+  type ResolvedPairing,
+} from "./installation-peer-pairing";
+export {
   syncDigitalProduct,
   syncTaxonomyNode,
   syncPortfolio,
@@ -347,6 +418,7 @@ export {
   DOC_IMPACT_SOURCE_LABEL,
   DOC_PAGE_LABEL,
   docPageKey,
+  countDocPagesInManifest,
   planDocImpactProjection,
   routeKey,
   sourceFileKey,
@@ -354,6 +426,18 @@ export {
   type DocImpactPlan,
 } from "./doc-impact-graph";
 export { projectDocImpactManifest } from "./doc-impact-graph-sync";
+export { rebuildKnowledgeAndPortfolioGraph } from "./knowledge-portfolio-graph-sync";
+// Import-safe by construction (no dotenv, no CLI specifiers) — the same split that
+// keeps a runner out of the Next bundle applies here (BI-FEDFABF6).
+export {
+  classifyProjection,
+  hasProjectionFault,
+  PORTFOLIO_LABELS,
+  reconcileGraphProjections,
+  WIKI_LABEL_PREFIX,
+  type ProjectionReconciliation,
+  type ProjectionStatus,
+} from "./graph-projection-reconcile";
 export {
   readCanonicalPrismaSchema,
   listCanonicalPrismaSchemaFiles,
@@ -520,6 +604,14 @@ export * from "./catalog-enrichment-sweep";
 // under a batching + per-run inference budget cost guardrail. Pure engine; the governed
 // apps/web runner wires the real prisma + a minimize_cost inference fn.
 export * from "./catalog-identity-inference";
+export {
+  buildCommonsFingerprint,
+  isContributableFingerprint,
+  looksLikeIdentifier,
+  assertNoIdentifiers,
+  type CommonsFingerprint,
+  type FingerprintContributionCandidate,
+} from "./fingerprint-commons-contribution";
 // HAM Phase D2 (BI-828998DC, spec §7): read-model correlation of discovered InventoryEntity
 // to managed CustomerConfigurationItem — no authority move, no persistence.
 export * from "./inventory-cci-bridge";
@@ -546,6 +638,7 @@ export * from "./device-catalog";
 export * from "./discovery-fingerprint-store";
 export * from "./installation-operating-intent";
 export * from "./installation-instance-stance";
+export * from "./reference-freshness";
 
 // Contributor-inventory-sync ScheduledJob constants — shared between the
 // seed helper and the apps/web Inngest runner so the heartbeat row's name +

@@ -36,6 +36,7 @@ function maskCredential(cred: {
   secretRef: string | null;
   clientId: string | null;
   clientSecret: string | null;
+  cachedToken?: string | null;
   tokenEndpoint: string | null;
   scope: string | null;
   status: string;
@@ -52,6 +53,9 @@ function maskCredential(cred: {
     status:           cred.status,
     tokenExpiresAt:   cred.tokenExpiresAt?.toISOString() ?? null,
     hasRefreshToken:  cred.refreshToken != null && cred.refreshToken !== "",
+    hasUsableMaterial: Boolean(
+      cred.secretRef || cred.clientSecret || cred.cachedToken || cred.refreshToken,
+    ),
   };
 }
 

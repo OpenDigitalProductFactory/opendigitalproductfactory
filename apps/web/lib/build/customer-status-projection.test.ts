@@ -240,6 +240,88 @@ describe("reconcileBuildStudioCustomerStatus — canonical owner state", () => {
     };
   }
 
+  // BI-CE1AB982 — live repro FB-615DE356 on the Pet Rescue consumer install:
+  // approve_start recorded, ideate_dispatch skipped for want of an eligible
+  // engine, zero BuildDispatchAttempt rows — and the owner panel reported
+  // "Build Studio is working on this change" for 30+ minutes.
+  it("renders a refused-before-start dispatch as blocked, never as working", () => {
+    const status = reconcileBuildStudioCustomerStatus({
+      phase: "ideate",
+      status: base,
+      progress: progress({
+        dispatchBlock: {
+          blocked: true,
+          reason: "Connect, provision, or wait for one allowed Build Studio engine, then retry.",
+          observedAt: "2026-08-12T12:00:00.000Z",
+        },
+      }),
+    });
+
+    expect(status.ownerState).toBe("blocked");
+    expect(status.needsYou).toBe(true);
+    expect(status.worker).not.toMatch(/working on this change/i);
+    expect(status.owner).toBe("platform administrator");
+    expect(status.technicalEvidence).toContain("allowed Build Studio engine");
+  });
+
+  it("clears the refusal once a fresher dispatch proves the pipeline moved on", () => {
+    // deriveDispatchBlock owns the self-clearing rule; an already-cleared signal
+    // must not resurrect the blocked state here.
+    const status = reconcileBuildStudioCustomerStatus({
+      phase: "ideate",
+      status: base,
+      progress: progress({
+        dispatchBlock: { blocked: false, reason: null, observedAt: null },
+      }),
+    });
+
+    expect(status.ownerState).not.toBe("blocked");
+  });
+
+  // Corrects BI-CE1AB982's over-generalisation. ideate and plan never write
+  // BuildDispatchAttempt rows, so "no dispatch rows" says nothing about them —
+  // live repro FB-41EA43C5 reported "No research step has started" on a build
+  // whose ideate had already produced, reviewed, repaired and passed a design.
+  it("does not claim ideate has not started merely because it records no dispatch rows", () => {
+    const status = reconcileBuildStudioCustomerStatus({
+      phase: "ideate",
+      status: base,
+      progress: progress(),
+    });
+
+    expect(status.ownerState).not.toBe("not-started");
+    expect(status.worker).not.toMatch(/no research step has started/i);
+  });
+
+  it("still reports not-started for build, which does record dispatch rows", () => {
+    const status = reconcileBuildStudioCustomerStatus({
+      phase: "build",
+      status: base,
+      progress: progress(),
+    });
+
+    expect(status.ownerState).toBe("not-started");
+    expect(status.worker).toMatch(/no implementation task has started/i);
+  });
+
+  // The case the generalisation was reaching for is still covered — by the
+  // durable refusal signal, not by inferring from absent rows.
+  it("still renders a refused ideate dispatch as blocked", () => {
+    const status = reconcileBuildStudioCustomerStatus({
+      phase: "ideate",
+      status: base,
+      progress: progress({
+        dispatchBlock: {
+          blocked: true,
+          reason: "Connect, provision, or wait for one allowed Build Studio engine, then retry.",
+          observedAt: "2026-08-12T12:00:00.000Z",
+        },
+      }),
+    });
+
+    expect(status.ownerState).toBe("blocked");
+  });
+
   it("shows a real in-flight dispatch with persisted elapsed time and a bounded expectation", () => {
     const status = reconcileBuildStudioCustomerStatus({
       phase: "build",

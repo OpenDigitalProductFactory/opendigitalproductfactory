@@ -11,15 +11,15 @@ import { generatePromotionId } from "@/lib/version-tracking";
 import { getSelfUpgradeConfig, nextMaintenanceWindowStart } from "@/lib/self-upgrade/config";
 import { resolveReleaseBatchStatus } from "@/lib/self-upgrade/release-batch-status";
 import { readSelfUpgradeSupport } from "@/lib/self-upgrade/support";
-import {
-  loadReleaseInstallContext,
-  resolveReleaseUpgradeCandidate,
-} from "@/lib/self-upgrade/release-target";
+import { resolveSelfUpgradeStatusTarget } from "@/lib/self-upgrade/status-target";
 import { computeNextScheduledUpgradeCheckAt } from "@/lib/self-upgrade/next-check";
-import { resolveTargetSha, isShaFresh } from "@/lib/self-upgrade/version";
+import { isShaFresh } from "@/lib/self-upgrade/version";
 import { getDeployedSha } from "@/lib/self-upgrade/completion";
+import { readCurrentContainerConfigDigest } from "@/lib/self-upgrade/runtime-image-identity";
 import { getJobEngineHealth } from "@/lib/queue/job-engine-health";
-import { createRun, failRun, getLatestRun, getLatestSucceededRun } from "@/lib/self-upgrade/run-store";
+import { getLatestRun, getLatestSucceededRun } from "@/lib/self-upgrade/run-store";
+import { admitSelfUpgrade, resolveCurrentSelfUpgradeTarget } from "@/lib/self-upgrade/admission";
+import { selectSelfUpgradeAdmissionTarget } from "@/lib/self-upgrade/target-admission";
 import {
   getCurrentImpactSummaryId,
   loadRunImpactDigest,
@@ -50,10 +50,8 @@ import {
 } from "@/lib/self-upgrade/quiescence";
 import { getCooldownUntil } from "@/lib/self-upgrade/cooldown";
 import { loadPlatformVersion } from "@/lib/platform/version";
-import { inngest } from "@/lib/queue/inngest-client";
 import { readBuildPipelineLimit } from "@/lib/queue/admission";
 import { buildAdmissionSnapshot } from "@/lib/queue/admission-observability";
-import { SELF_UPGRADE_EVENT } from "@/lib/queue/functions/self-upgrade";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 async function requireOpsAccess(): Promise<string> {
@@ -494,6 +492,7 @@ export async function getPromotionWindowStatus(promotionId: string) {
 
 export type SelfUpgradeRunDto = {
   runId: string;
+  recoveryOfRunId: string | null;
   status: string;
   trigger: string | null;       // schema: trigger (was: triggeredBy)
   currentSha: string | null;    // schema: currentSha (was: fromVersion)
@@ -530,6 +529,7 @@ export async function listSelfUpgradeRuns(opts?: {
     take: limit + 1,
     select: {
       runId: true,
+      recoveryOfRunId: true,
       status: true,
       trigger: true,
       currentSha: true,
@@ -588,6 +588,7 @@ export async function getSelfUpgradeStatus() {
     latestSucceededRun,
     platformVersion,
     deployedSha,
+    currentConfigDigest,
     lastCheckedAt,
     quiescence,
     cooldownUntil,
@@ -602,6 +603,7 @@ export async function getSelfUpgradeStatus() {
     getLatestSucceededRun(),
     loadPlatformVersion(),
     getDeployedSha(),
+    readCurrentContainerConfigDigest(),
     getLastCheckedAt(),
     // Live drain activity (what's holding an upgrade) + the post-defer/fail
     // backoff window, so the panel can explain "what's happening" truthfully.
@@ -688,27 +690,13 @@ export async function getSelfUpgradeStatus() {
     checkIntervalHours: config.checkIntervalHours,
     now,
   });
-  let targetSha: string | null = null;
-  if (support.supported && support.targetKind === "release-artifact") {
-    const releaseContext = await loadReleaseInstallContext({
-      hostSourcePath:
-        config.hostSourceMountPath ??
-        process.env.DPF_SELF_UPGRADE_HOST_SOURCE_MOUNT ??
-        "/host-dpf",
-    });
-    if (releaseContext) {
-      const releaseTarget = await resolveReleaseUpgradeCandidate({
-        context: releaseContext,
-        currentSourceSha: deployedSha,
-      }).catch(() => null);
-      targetSha =
-        !releaseTarget || releaseTarget.kind === "no-published-target"
-          ? null
-          : releaseTarget.sourceSha;
-    }
-  } else if (support.supported) {
-    targetSha = await resolveTargetSha(config.channel, config);
-  }
+  const {
+    targetSha,
+    targetTag,
+    availability: targetAvailability,
+    unavailableReason: targetUnavailableReason,
+    releaseFreshness,
+  } = await resolveSelfUpgradeStatusTarget({ support, config, currentConfigDigest });
   // Merge-mode-aware freshness. In upstream/merge mode the deployed stamp is the
   // merge-commit identity, which CONTAINS but never EQUALS the upstream target —
   // so strict deployedSha===targetSha alone reports "Update available" forever,
@@ -719,10 +707,10 @@ export async function getSelfUpgradeStatus() {
   // already equals the target. This is the same signal the §5.0 worker skip-gate
   // (self-upgrade.ts: `lastOk?.targetSha === upstreamSha`) and the impact summary
   // use, so all three surfaces agree.
-  const isFresh = support.supported && targetSha
+  const isFresh = releaseFreshness ?? (support.supported && targetSha
     ? isShaFresh(deployedSha, targetSha) ||
       isShaFresh(latestSucceededRun?.targetSha ?? null, targetSha)
-    : false;
+    : false);
 
   // Release-batch tally for the panel ("N of M merged updates accumulated").
   // No fetch here — display rides the hourly scheduled fetch; a stale-by-
@@ -752,6 +740,10 @@ export async function getSelfUpgradeStatus() {
     deployedSha,
     deployedShaSource: platformVersion.imageVersion?.source ?? "unknown",
     targetSha,
+    targetTag,
+    targetAvailability,
+    targetUnavailableReason,
+    currentConfigDigest,
     isFresh,
     releaseBatch: {
       applicable: support.supported && releaseBatch.applicable,
@@ -782,12 +774,14 @@ export async function getSelfUpgradeStatus() {
   };
 }
 
-export async function triggerSelfUpgrade(opts?: { dryRun?: boolean; force?: boolean }) {
+export async function triggerSelfUpgrade(opts?: {
+  dryRun?: boolean; force?: boolean;
+  targetBinding?: string;
+}) {
   const userId = await requireOpsAccess();
   const triggeredBy = `manual:${userId}`;
   const config = await getSelfUpgradeConfig();
   const support = await readSelfUpgradeSupport(config.enabled);
-
   if (!support.supported) {
     return {
       queued: false,
@@ -795,7 +789,6 @@ export async function triggerSelfUpgrade(opts?: { dryRun?: boolean; force?: bool
       message: support.message,
     } as const;
   }
-
   if (!opts?.dryRun) {
     if (!support.enabled) {
       return { queued: false, reason: "disabled" } as const;
@@ -805,7 +798,6 @@ export async function triggerSelfUpgrade(opts?: { dryRun?: boolean; force?: bool
     // scheduled poll (runSelfUpgrade skips the window for non-scheduled runs).
     // `force` is reserved for bypassing the quiescence drain in an emergency.
   }
-
   const latestRun = await getLatestRun();
   if (latestRun?.status === "running") {
     return { queued: false, reason: "already-running", runId: latestRun.runId } as const;
@@ -813,34 +805,31 @@ export async function triggerSelfUpgrade(opts?: { dryRun?: boolean; force?: bool
   if (latestRun?.status === "queued" || latestRun?.status === "pending") {
     return { queued: false, reason: "already-queued", runId: latestRun.runId } as const;
   }
-
+  if (latestRun?.status === "failed" && !opts?.targetBinding) return { queued: false, reason: "recovery-binding-required", runId: latestRun.runId } as const;
+  const resolvedTarget = await resolveCurrentSelfUpgradeTarget();
+  const selection = selectSelfUpgradeAdmissionTarget({
+    targetBinding: opts?.targetBinding,
+    supportTargetKind: support.targetKind,
+    resolvedTarget,
+  });
+  if (!selection.ok) return { queued: false, reason: selection.error } as const;
+  const target = selection.data;
   // Attach the "What's in this update?" summary the operator just reviewed (if
   // any) so the run records the changes it carried. Best effort — the upgrade
   // proceeds whether or not a summary was generated.
   const impactSummaryId = await getCurrentImpactSummaryId();
-
-  const run = await createRun({
-    triggeredBy,
+  const admission = await admitSelfUpgrade({ triggeredBy, target, recoveryOfRunId: latestRun?.status === "failed" ? latestRun.runId : null,
+    requestedForce: opts?.force === true,
+    dryRun: opts?.dryRun === true,
+    routine: false,
     impactSummaryId,
   });
-
-  try {
-    await inngest.send({
-      name: SELF_UPGRADE_EVENT,
-      data: {
-        runId: run.runId,
-        triggeredBy,
-        ...(opts?.dryRun !== undefined ? { dryRun: opts.dryRun } : {}),
-        ...(opts?.force ? { force: true } : {}),
-      },
-    });
-  } catch (err) {
-    const message = getErrorMessage(err);
-    await failRun(run.runId, `queue-dispatch-failed: ${message}`);
-    return { queued: false, reason: "queue-dispatch-failed", runId: run.runId } as const;
-  }
-
-  return { queued: true, runId: run.runId } as const;
+  if (!admission.admitted) return { queued: false,
+    reason: admission.disposition === "recovery_conflict" ? "recovery-conflict"
+      : admission.disposition === "recovery_refused" ? admission.reason : "already-active",
+    runId: admission.runId } as const;
+  return { queued: true, admitted: true, runId: admission.runId,
+    dispatchStatus: admission.dispatchStatus } as const;
 }
 
 /**

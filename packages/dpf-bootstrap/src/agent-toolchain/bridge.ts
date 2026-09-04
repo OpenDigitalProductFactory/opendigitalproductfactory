@@ -101,6 +101,14 @@ export type ComputeAgentToolchainPlanOptions = {
   repoRoot: string;
   /** Path to `~/.codex/config.toml`. */
   codexConfigPath: string;
+  /**
+   * The platform's canonical worktree base, resolved by the caller through
+   * `scripts/lib/worktree-base.mjs`. Optional so existing callers keep working:
+   * when absent each planner falls back to the behaviour it had before the base
+   * became platform-owned (spec
+   * 2026-09-02-platform-owned-client-configuration-design.md §1).
+   */
+  worktreeBase?: string;
   /** Path to `~/.claude/plugins/installed_plugins.json`. */
   claudePluginsPath: string;
   /** Directory holding the canonical kernel principles (origin: repo). */
@@ -166,6 +174,9 @@ export function computeAgentToolchainPlan(
       options.repoRoot,
       options.codexConfigPath,
       options.mcpEndpoint,
+      // Platform-owned, not planner-owned: the base is resolved once and handed
+      // to each client (spec 2026-09-02-platform-owned-client-configuration §1).
+      options.worktreeBase,
     );
   }
 

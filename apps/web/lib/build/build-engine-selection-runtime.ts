@@ -192,7 +192,13 @@ export async function resolveBuildEngineSelection(
     }];
   });
 
-  const localOnly = localOnlySetting || opts.modelTier === "local";
+  // Only the explicit platform local-only switch is a hard residency boundary.
+  // A `modelTier === "local"` build is sized to PREFER the on-box model (cost),
+  // not to FORBID cloud — so cloud engines stay qualified as fallbacks. Without
+  // this, every trivial-tail build was local-only and starved whenever local-CI
+  // fenced the local model on a single host (BI-8B4359DE). Local is still
+  // preferred by cost ranking when available; sensitivity clearance still gates.
+  const localOnly = localOnlySetting;
   const qualification = qualifyBuildEngineCandidates({
     policy: opts.policy,
     candidates,

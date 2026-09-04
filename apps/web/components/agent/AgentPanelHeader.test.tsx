@@ -43,6 +43,18 @@ describe("AgentPanelHeader", () => {
     expect(screen.queryByText("Edit fields on this page")).toBeNull();
   });
 
+  it("renders a conversational name as primary and the coworker role once as secondary", () => {
+    render(
+      <AgentPanelHeader
+        {...baseProps}
+        presentationIdentity={{ primaryName: "Coolio", roleName: "AI COO" }}
+      />,
+    );
+    expect(screen.getByText("Coolio")).toBeTruthy();
+    expect(screen.getAllByText("AI COO")).toHaveLength(1);
+    expect(screen.queryByText("Coolio · AI COO")).toBeNull();
+  });
+
   it("moves profile, diagnostics, and erase into the overflow menu and points dev work to Build Studio", () => {
     const onOpenClearConfirm = vi.fn();
     render(

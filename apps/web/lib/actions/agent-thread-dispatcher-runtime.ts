@@ -1,3 +1,4 @@
+import { coworkerBriefSpans } from "@/lib/tak/coworker-prompt-provenance";
 import "server-only";
 
 import { prisma } from "@dpf/db";
@@ -293,6 +294,7 @@ export async function runChildThreadExecution(context: ChildRuntimeContext): Pro
     try {
       result = await executeAutonomousAgenticLoop({
         systemPrompt: agentInfo.systemPrompt,
+        systemPromptInstructionSpans: coworkerBriefSpans(agentInfo.systemPrompt),
         chatHistory,
         sensitivity: agentInfo.sensitivity ?? "internal",
         tools,

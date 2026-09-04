@@ -15,7 +15,7 @@ import type {
  * derive, never author — no new fields on ArchetypeDefinition, no prose parsing.
  */
 
-export type OperationalValueStreamStageKey =
+export type StandardOperationalValueStreamStageKey =
   | "attract"
   | "capture"
   | "qualify"
@@ -29,6 +29,9 @@ export type OperationalValueStreamStageKey =
   /** Goods-custody only: the customer's goods arrive, are checked in, and come
    *  to rest in the facility before any outbound work happens. */
   | "receive-store";
+
+/** Leaf profiles use validated slugs, while the shared backbone keeps a closed union. */
+export type OperationalValueStreamStageKey = string;
 
 export type CapacityUnitType =
   | "slot-hours"
@@ -66,6 +69,21 @@ export interface OperationalValueStreamStage {
   capabilityBindings: ArchetypeModule[];
   metricBindings: string[];
   trustGateKeys: string[];
+  streamKey: string;
+  input: string | null;
+  output: string | null;
+  responsibleRole: string | null;
+  handoffToStageKey: string | null;
+}
+
+export interface OperationalValueStreamLane {
+  key: string;
+  label: string;
+  purpose: string;
+  input: string;
+  output: string;
+  responsibleRole: string;
+  stages: OperationalValueStreamStage[];
 }
 
 export interface OperationalValueStream {
@@ -78,12 +96,14 @@ export interface OperationalValueStream {
   demandSignature: DemandSignature;
   trustGates: string[];
   it4itStageBinding: It4ItStage[];
+  streams: OperationalValueStreamLane[];
+  supportingCapabilities: string[];
 }
 
 // ── Stage backbone ───────────────────────────────────────────────────────────
 
 interface StageSpec {
-  key: OperationalValueStreamStageKey;
+  key: StandardOperationalValueStreamStageKey;
   label: string;
   order: number;
 }
@@ -120,7 +140,7 @@ const CROSS_CUT_SPECS: StageSpec[] = [
 // Stage → enabling capability modules (artefact §5). Intersected with the
 // archetype's actual active modules when an activation profile is present so we
 // never claim a capability the archetype did not activate.
-const STAGE_CAPABILITY_MAP: Record<OperationalValueStreamStageKey, ArchetypeModule[]> = {
+const STAGE_CAPABILITY_MAP: Record<StandardOperationalValueStreamStageKey, ArchetypeModule[]> = {
   attract: [],
   capture: [],
   qualify: ["service-operations"],
@@ -133,7 +153,7 @@ const STAGE_CAPABILITY_MAP: Record<OperationalValueStreamStageKey, ArchetypeModu
   "receive-store": ["customer-estate", "service-operations"],
 };
 
-const STAGE_METRIC_MAP: Record<OperationalValueStreamStageKey, string[]> = {
+const STAGE_METRIC_MAP: Record<StandardOperationalValueStreamStageKey, string[]> = {
   attract: ["storefront-published"],
   capture: ["inbox-submissions", "capture-conversion"],
   qualify: ["utilization", "no-show-rate", "lead-time"],
@@ -302,6 +322,55 @@ function resolveLoadBearingStages(
   }
 }
 
+function humanizeSlug(value: string): string {
+  return value
+    .split("-")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+function deriveLeafValueStreams(
+  archetype: ArchetypeDefinition,
+): { streams: OperationalValueStreamLane[]; stages: OperationalValueStreamStage[]; loadBearingStageKeys: string[]; trustGates: string[]; supportingCapabilities: string[] } | null {
+  const profiles = archetype.activationProfile?.processProfile?.valueStreams;
+  if (!profiles || profiles.length === 0) return null;
+
+  const loadBearingStageKeys = profiles.flatMap((stream) => stream.loadBearingStageKeys);
+  const stages = profiles.flatMap((stream, streamIndex) =>
+    stream.stages.map((stage, stageIndex): OperationalValueStreamStage => ({
+      key: stage.key,
+      label: stage.label,
+      order: (streamIndex + 1) * 100 + (stageIndex + 1) * 10,
+      loadBearing: loadBearingStageKeys.includes(stage.key),
+      capabilityBindings: stage.capabilityBindings ?? [],
+      metricBindings: stage.metricBindings ?? [],
+      trustGateKeys: stage.trustGateKeys,
+      streamKey: stream.key,
+      input: stage.input,
+      output: stage.output,
+      responsibleRole: stage.responsibleRole,
+      handoffToStageKey: stage.handoffTo ?? null,
+    })),
+  );
+  const stageByKey = new Map(stages.map((stage) => [stage.key, stage]));
+  const streams = profiles.map((profile): OperationalValueStreamLane => ({
+    key: profile.key,
+    label: profile.label,
+    purpose: profile.purpose,
+    input: profile.input,
+    output: profile.output,
+    responsibleRole: profile.responsibleRole,
+    stages: profile.stages.map((stage) => stageByKey.get(stage.key)!),
+  }));
+  return {
+    streams,
+    stages,
+    loadBearingStageKeys,
+    trustGates: Array.from(new Set(stages.flatMap((stage) => stage.trustGateKeys))),
+    supportingCapabilities: (archetype.activationProfile?.processProfile?.supportingCapabilities ?? []).map(humanizeSlug),
+  };
+}
+
 function resolveTrustGates(a: ArchetypeDefinition, isRental: boolean): string[] {
   const gates: string[] = [];
   const governance = a.activationProfile?.axes?.governance ?? "investor-owned";
@@ -361,6 +430,23 @@ export function deriveOperationalValueStream(archetype: ArchetypeDefinition): Op
     : (CATEGORY_DEFAULT_DEMAND[archetype.category] ?? "steady");
   const it4itStageBinding = resolveIt4itBinding(archetype);
 
+  const leaf = deriveLeafValueStreams(archetype);
+  if (leaf) {
+    return {
+      archetypeId: archetype.archetypeId,
+      archetypeName: archetype.name,
+      category: archetype.category,
+      stages: leaf.stages,
+      streams: leaf.streams,
+      loadBearingStageKeys: leaf.loadBearingStageKeys,
+      capacityUnit,
+      demandSignature,
+      trustGates: leaf.trustGates,
+      supportingCapabilities: leaf.supportingCapabilities,
+      it4itStageBinding,
+    };
+  }
+
   const activeModules = archetype.activationProfile?.modules;
 
   const specs: StageSpec[] = [
@@ -385,6 +471,11 @@ export function deriveOperationalValueStream(archetype: ArchetypeDefinition): Op
       capabilityBindings,
       metricBindings,
       trustGateKeys: spec.key === "trust-compliance" ? trustGates : [],
+      streamKey: "operational-value-stream",
+      input: null,
+      output: null,
+      responsibleRole: null,
+      handoffToStageKey: null,
     };
   });
 
@@ -393,10 +484,22 @@ export function deriveOperationalValueStream(archetype: ArchetypeDefinition): Op
     archetypeName: archetype.name,
     category: archetype.category,
     stages,
+    streams: [
+      {
+        key: "operational-value-stream",
+        label: `${archetype.name} operational value stream`,
+        purpose: `Create and deliver value for ${archetype.name}`,
+        input: "Interest or demand",
+        output: "Delivered value and an accountable relationship",
+        responsibleRole: "Business operator",
+        stages,
+      },
+    ],
     loadBearingStageKeys,
     capacityUnit,
     demandSignature,
     trustGates,
     it4itStageBinding,
+    supportingCapabilities: [],
   };
 }

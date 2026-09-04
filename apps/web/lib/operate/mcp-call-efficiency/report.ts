@@ -10,6 +10,7 @@ import {
   type EfficiencyFinding,
 } from "./analysis";
 import type { AiOpsHandoffResult } from "./aiops-handoff";
+import { isGovernedRefusal } from "./refusal-codes";
 
 export type LoadCallEfficiencyOptions = AnalyzeCallEfficiencyOptions & {
   /** Lookback hours (default 24, max 168). */
@@ -53,12 +54,14 @@ export async function loadCallEfficiencyEvents(
       agentId: true,
       userId: true,
       success: true,
+      result: true,
       executionMode: true,
       durationMs: true,
       createdAt: true,
       routeContext: true,
       apiTokenId: true,
       skillId: true,
+      parameters: true,
     },
     orderBy: { createdAt: "asc" },
     take: Math.min(20_000, Math.max(100, limit)),
@@ -71,12 +74,14 @@ export async function loadCallEfficiencyEvents(
     agentId: r.agentId,
     userId: r.userId,
     success: r.success,
+    governedRefusal: !r.success && isGovernedRefusal(r.result),
     executionMode: r.executionMode,
     durationMs: r.durationMs,
     createdAt: r.createdAt,
     routeContext: r.routeContext,
     apiTokenId: r.apiTokenId,
     skillId: r.skillId,
+    parameters: r.parameters,
   }));
 }
 

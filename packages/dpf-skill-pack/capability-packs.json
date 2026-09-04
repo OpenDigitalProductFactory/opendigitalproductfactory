@@ -16,7 +16,8 @@
       "dpf-retrieve-decision-context",
       "dpf-compare-options",
       "dpf-ux-fit-review",
-      "dpf-capture-kernel-gap"
+      "dpf-capture-kernel-gap",
+      "dpf-writing-skills"
     ]
   },
   {
@@ -48,7 +49,8 @@
       "dpf-local-merge-ci-before-push",
       "dpf-record-decision-outcome",
       "dpf-blast-radius",
-      "dpf-unslop"
+      "dpf-unslop",
+      "dpf-writing-skills"
     ]
   },
   {

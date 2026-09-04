@@ -47,6 +47,47 @@ export function visibleText(html: string): string {
   return decodeEntities(withoutTags).replace(/\s+/g, " ").trim();
 }
 
+/**
+ * Elements that flow INSIDE a phrase rather than starting a new one. Everything
+ * not listed here — headings, cells, list items, buttons, paragraphs, divs,
+ * `<br>` — ends the current utterance.
+ *
+ * `<a>` is inline on purpose: "read the <a>setup guide</a> first" is one
+ * sentence, and treating every anchor as a boundary would shred real body copy.
+ * A nav link still lands in its own utterance because the markup wraps it in a
+ * list item or a div.
+ */
+const INLINE_ELEMENTS = new Set([
+  "a", "abbr", "b", "bdi", "bdo", "cite", "code", "data", "dfn", "em", "i",
+  "kbd", "mark", "q", "rp", "rt", "ruby", "s", "samp", "small", "span",
+  "strong", "sub", "sup", "time", "u", "var", "wbr",
+]);
+
+// A character HTML text can never contain, so splitting on it cannot cut a word.
+const UTTERANCE_BREAK = "\u0000";
+
+const NAMED_TAG_RE = /<\/?([a-zA-Z][a-zA-Z0-9-]*)\b[^>]*>/g;
+
+/**
+ * The surface's visible text split into UTTERANCES — one heading, one table
+ * cell, one button label, one nav item, one paragraph each.
+ *
+ * `visibleText` deliberately flattens all of that into a single space-joined
+ * string, which is right for counting words and wrong for anything that needs
+ * sentence boundaries: a UI carries its boundaries in its ELEMENTS, not in full
+ * stops (BI-0ED0F6B3). Pair this with `analyzeUiReadability`.
+ */
+export function visibleUtterances(html: string): string[] {
+  const marked = String(html).replace(NAMED_TAG_RE, (_m, name: string) =>
+    INLINE_ELEMENTS.has(name.toLowerCase()) ? " " : UTTERANCE_BREAK,
+  );
+  // Comments, doctypes and anything else tag-shaped but unnamed: drop as before.
+  return decodeEntities(marked.replace(/<[^>]*>/g, " "))
+    .split(UTTERANCE_BREAK)
+    .map((part) => part.replace(/\s+/g, " ").trim())
+    .filter((part) => part.length > 0);
+}
+
 /** Visible word count. */
 export function countWords(html: string): number {
   const text = visibleText(html);

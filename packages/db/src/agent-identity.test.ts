@@ -11,7 +11,7 @@ import {
   ENTERPRISE_ARCHITECT_AGENT_ID,
   ENTERPRISE_ARCHITECT_DISPLAY_NAME,
 } from "./agent-identity.js";
-import { COWORKER_AGENT_SEEDS } from "./workforce-seed.js";
+import { COWORKER_AGENT_SEEDS, ONBOARDING_AGENT_GRANTS } from "./workforce-seed.js";
 
 // EP-COWORKER-RT Phase 1 — enforce the canonical coworker naming standard so the
 // "names all over the place" regression (mixed casing, -agent/-specialist suffix muddle,
@@ -20,7 +20,7 @@ import { COWORKER_AGENT_SEEDS } from "./workforce-seed.js";
 
 const registryPath = join(__dirname, "..", "data", "agent_registry.json");
 const registry = JSON.parse(readFileSync(registryPath, "utf8")) as {
-  agents: Array<{ agent_id: string; agent_name: string; tier?: string; displayName?: string; kind?: string }>;
+  agents: Array<{ agent_id: string; agent_name: string; tier?: string; displayName?: string; kind?: string; status?: string }>;
 };
 
 function assertCleanIdentity(displayName: string, kind: string): void {
@@ -76,6 +76,32 @@ describe("every coworker seed resolves to a clean identity", () => {
 });
 
 describe("dual-seed slug → canonical map (BI-74FD6420)", () => {
+  it("canonically homes every workforce coworker", () => {
+    const registryIds = new Set(registry.agents.map((agent) => agent.agent_id));
+
+    for (const coworker of COWORKER_AGENT_SEEDS) {
+      const canonical = COWORKER_SLUG_TO_CANONICAL_AGENT_ID[coworker.slugId];
+      expect(canonical, `${coworker.slugId} is roster-only`).toMatch(/^AGT-/);
+      expect(registryIds.has(canonical), `${coworker.slugId} maps to missing ${canonical}`).toBe(true);
+    }
+  });
+
+  it("projects every active canonical agent onto the workforce roster", () => {
+    const seededSlugs = new Set([
+      ...COWORKER_AGENT_SEEDS.map((coworker) => coworker.slugId),
+      ...Object.keys(ONBOARDING_AGENT_GRANTS),
+    ]);
+    const canonicalToSlug = new Map(
+      Object.entries(COWORKER_SLUG_TO_CANONICAL_AGENT_ID).map(([slug, canonical]) => [canonical, slug]),
+    );
+
+    for (const agent of registry.agents.filter((candidate) => candidate.status === "active")) {
+      const slug = canonicalToSlug.get(agent.agent_id);
+      expect(slug, `${agent.agent_id} is active-registry-only`).toBeTruthy();
+      expect(seededSlugs.has(slug!), `${agent.agent_id} maps to unseeded ${slug}`).toBe(true);
+    }
+  });
+
   it("maps every dual-seed slug observed on the live install to its AGT-* twin", () => {
     expect(resolveCanonicalAgentId("coo")).toBe("AGT-ORCH-000");
     expect(resolveCanonicalAgentId("build-specialist")).toBe("AGT-WS-BUILD");
@@ -84,8 +110,7 @@ describe("dual-seed slug → canonical map (BI-74FD6420)", () => {
     expect(resolveCanonicalAgentId("inventory-specialist")).toBe("AGT-WS-INVENTORY");
     expect(resolveCanonicalAgentId("onboarding-coo")).toBe("AGT-WS-ONBOARD");
     expect(resolveCanonicalAgentId("farm-ranch-steward")).toBe("AGT-WS-FARM-RANCH");
-    // Unmapped seeds pass through unchanged.
-    expect(resolveCanonicalAgentId("storefront-advisor")).toBe("storefront-advisor");
+    expect(resolveCanonicalAgentId("storefront-advisor")).toBe("AGT-WS-STOREFRONT");
     expect(resolveCanonicalAgentId("AGT-ORCH-000")).toBe("AGT-ORCH-000");
   });
 

@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import { prisma } from "@dpf/db";
 import type { Prisma } from "@dpf/db";
+import type { MessageOrigin } from "@/lib/inference/data-screening/types";
 import type { ChatMessage } from "@/lib/ai-inference";
 import { resolveCoworkerReviewPattern } from "@/lib/golden-triangle/coworker-review";
 import { reviewCoworkerDraft } from "@/lib/tak/coworker-inline-review";
@@ -52,6 +53,8 @@ type AgentPromptInfo = {
 
 export type AutonomousWorkRunInput = {
   trigger: AutonomousWorkTrigger;
+  /** Server-derived public identity for idempotent external work. */
+  taskRunId?: string;
   userId: string;
   agentId: string;
   routeContext: string;
@@ -113,7 +116,7 @@ export async function createAutonomousWorkRun(
     await admitRuntimeGuardedWork(tx as never, `task-run:${source}`);
     return tx.taskRun.create({
     data: {
-      taskRunId: createPublicTaskRunId(input.trigger),
+      taskRunId: input.taskRunId ?? createPublicTaskRunId(input.trigger),
       userId: input.userId,
       threadId,
       contextId: threadId,
@@ -198,6 +201,11 @@ export async function resolveAutonomousWorkTools(input: {
    *  it within each priority tier so the attachment cap keeps the tools this
    *  run actually needs (BI-ACE1EBA4). */
   intentQuery?: string;
+  /** Exact tools declared by a governed workflow packet. They remain subject to
+   *  the normal user/agent grant filter above; this only keeps already-authorized
+   *  schemas inside the attachment budget so the model never has to discover a
+   *  known governed writer through the public marketplace. */
+  requiredToolNames?: readonly string[];
 }): Promise<{
   tools: ToolDefinition[];
   toolsForProvider: Array<Record<string, unknown>>;
@@ -236,17 +244,20 @@ export async function resolveAutonomousWorkTools(input: {
       "@/lib/coworker/authorized-surface-coworker-contract"
     );
     const { getAgentToolGrantsAsync } = await import("@/lib/tak/agent-grants");
-    const { resolveLocalServedContextTokens } = await import(
+    const { resolveLocalServingPosture } = await import(
       "@/lib/inference/local-model-context-reconcile"
     );
     const { resolveLocalToolFidelityCeiling } = await import("@/lib/routing/local-tool-fidelity");
 
-    const [roleGrants, localServedContext, measuredToolFidelityCeiling] = await Promise.all([
+    const [roleGrants, localPosture, measuredToolFidelityCeiling] = await Promise.all([
       getAgentToolGrantsAsync(input.agentId),
-      resolveLocalServedContextTokens(),
+      resolveLocalServingPosture(),
       resolveLocalToolFidelityCeiling(),
     ]);
-    const cap = deriveCoworkerToolCap(localServedContext, { measuredToolFidelityCeiling });
+    const cap = deriveCoworkerToolCap(localPosture.servedContextTokens, {
+      measuredToolFidelityCeiling,
+      localPresence: localPosture.presence,
+    });
 
     let routeDomainToolNames: string[] = [];
     if (input.routeContext) {
@@ -261,8 +272,19 @@ export async function resolveAutonomousWorkTools(input: {
     const { attached, deferred } = selectCoworkerToolBudget({
       tools: authorized,
       roleGrants,
-      pageActionNames: new Set(routeDomainToolNames),
-      alwaysIncludeNames: new Set([LOAD_TOOLS_TOOL_NAME, ...AUTHORIZED_SURFACE_TOOL_NAMES]),
+      // BI-95D74DE9 — surface tools and the run's required tools take tier-0
+      // PRIORITY within the cap, not exemption from it. As alwaysIncludeNames
+      // they attached unconditionally, putting a floor of up to 11 under the
+      // surface whatever the cap said, which exceeds what the routing gate will
+      // run once a measured ceiling drops the cap below that. If a cap cannot
+      // fit a run's required tools, the honest signal is a surface too small for
+      // the run — not a surface the gate then refuses outright.
+      pageActionNames: new Set([
+        ...routeDomainToolNames,
+        ...AUTHORIZED_SURFACE_TOOL_NAMES,
+        ...(input.requiredToolNames ?? []).slice(0, 4),
+      ]),
+      alwaysIncludeNames: new Set([LOAD_TOOLS_TOOL_NAME]),
       cap: effectiveCap,
       intentQuery: input.intentQuery,
     });
@@ -270,7 +292,7 @@ export async function resolveAutonomousWorkTools(input: {
     if (deferred.length > 0) {
       console.log(
         `[autonomous-tool-budget] agent=${JSON.stringify(input.agentId)} authorized=${authorized.length} ` +
-          `attached=${tools.length} deferred=${deferred.length} cap=${cap}`,
+          `attached=${tools.length} deferred=${deferred.length} cap=${cap} localPresence=${localPosture.presence}`,
       );
     }
     return {
@@ -293,6 +315,10 @@ export async function resolveAutonomousWorkTools(input: {
 
 export async function executeAutonomousAgenticLoop(input: {
   systemPrompt: string;
+  /** Instruction spans within `systemPrompt`, forwarded to routing (BI-463BE12A). */
+  systemPromptInstructionSpans?: string[];
+  /** What each entry of `chatHistory` is — labels only (BI-40EF7C44). */
+  messageOrigins?: readonly MessageOrigin[];
   chatHistory: ChatMessage[];
   sensitivity: RouteSensitivity;
   tools: ToolDefinition[];
@@ -308,6 +334,8 @@ export async function executeAutonomousAgenticLoop(input: {
   taskType?: string;
   /** EP-27FD96BC · P1 — unified per-turn effort warrant, forwarded to the loop. */
   effortWarrant?: import("@/lib/tak/effort-warrant").EffortWarrant;
+  /** Evidence-first bounded workflow for an immutable initiative review. */
+  terminalToolPolicy?: import("@/lib/tak/terminal-tool-policy").TerminalToolPolicy;
   agentDisplayName?: string;
   buildPhase?: string | null;
   featureBuildId?: string | null;
@@ -365,6 +393,12 @@ export async function executeAutonomousAgenticLoop(input: {
   // craft knowledge. Gate on !== "chat" so chat is never double-injected. Total
   // + fail-open: on any error the original prompt is used unchanged.
   let systemPrompt = input.systemPrompt;
+  // Instruction spans are computed by the CALLER from the persona, before the
+  // groundings below append to the prompt. AUTHORIZED_SURFACE_PROMPT is listed
+  // as INSTRUCTION by the provenance design, but it is appended here — after
+  // the caller computed its spans — so it landed in the data remainder and was
+  // screened as payload (BI-D9D661ED). Collect it and declare it.
+  const groundedInstructionSpans: string[] = [];
   if (input.interactionMode !== "chat") {
     const { groundPromptWithProfessionCorpus, defaultProfessionGroundingDeps } = await import(
       "@/lib/tak/profession-grounding"
@@ -378,6 +412,10 @@ export async function executeAutonomousAgenticLoop(input: {
       },
       defaultProfessionGroundingDeps,
     ).catch(() => ({ systemPrompt, grounded: false }));
+    // The profession corpus is deliberately NOT declared instruction: the
+    // ratified provenance design lists retrieved corpus content as DATA, since
+    // a corpus can carry real values. Only statically-authored platform
+    // instruction is labelled here.
     systemPrompt = grounding.systemPrompt;
   }
 
@@ -408,6 +446,9 @@ export async function executeAutonomousAgenticLoop(input: {
     authorizedToolNames,
   }).catch(() => ({ systemPrompt, grounded: false as const }));
   systemPrompt = surfaceGrounding.systemPrompt;
+  if ("instructionBlock" in surfaceGrounding && surfaceGrounding.instructionBlock) {
+    groundedInstructionSpans.push(surfaceGrounding.instructionBlock);
+  }
   const { isAuthorizedSurfaceGuidanceRequest } = await import(
     "@/lib/coworker/authorized-surface-prompt-grounding"
   );
@@ -430,7 +471,12 @@ export async function executeAutonomousAgenticLoop(input: {
     result = await withInferenceOrigin(inferenceOrigin, () =>
       runAgenticLoop({
         systemPrompt,
+        systemPromptInstructionSpans: [
+          ...(input.systemPromptInstructionSpans ?? []),
+          ...groundedInstructionSpans,
+        ],
         chatHistory: input.chatHistory,
+        messageOrigins: input.messageOrigins,
         sensitivity: input.sensitivity,
         tools: input.tools,
         toolsForProvider,
@@ -443,6 +489,7 @@ export async function executeAutonomousAgenticLoop(input: {
         apiTokenId: input.apiTokenId,
         taskType: input.taskType,
         effortWarrant: input.effortWarrant,
+        terminalToolPolicy: input.terminalToolPolicy,
         agentDisplayName: input.agentDisplayName,
         buildPhase: input.buildPhase,
         featureBuildId: input.featureBuildId,
@@ -586,6 +633,7 @@ export async function executeAutonomousWorkTool(input: {
   threadId: string;
   taskRunId: string;
   apiTokenId?: string | null;
+  tokenScope?: "read" | "write" | "admin";
   externalAccessEnabled?: boolean;
 }): Promise<ToolResult> {
   const { governedExecuteTool } = await import("@/lib/mcp-governed-execute");
@@ -602,6 +650,7 @@ export async function executeAutonomousWorkTool(input: {
       threadId: input.threadId,
       taskRunId: input.taskRunId,
       apiTokenId: input.apiTokenId ?? undefined,
+      tokenScope: input.tokenScope,
       externalAccessEnabled: input.externalAccessEnabled,
     },
   });

@@ -1,0 +1,213 @@
+{
+  "schemaVersion": 1,
+  "bundleId": "dpf-directory-service-identity-absorption",
+  "description": "Operator-invoked recovery input for the DPF Directory Service epic — absorbing identity (employees, agent identities, service accounts, LDAP) rather than federating to an external directory.",
+  "source": {
+    "capturedAt": "2026-08-26T03:57:53.481Z",
+    "repository": "OpenDigitalProductFactory/opendigitalproductfactory",
+    "planPath": "docs/superpowers/plans/2026-08-22-instance-identity-and-purpose.md"
+  },
+  "epic": {
+    "epicId": "EP-24741BBF",
+    "title": "DPF Directory Service: absorb identity instead of federating to someone else's",
+    "description": "DPF must BE the directory for an installation, not merely consume one. Most installations have no Active Directory, so an identity stack that only federates outward leaves them with nothing. This is the absorption principle applied to identity.\r\n\r\nWHY THIS EPIC EXISTS (root cause, verified 2026-08-23):\r\nThe requirement was specified in docs/superpowers/specs/2026-04-22-enterprise-auth-directory-federation-design.md and its plan, which explicitly scoped \"an identity edge for LDAP/OIDC/SAML/SCIM\" plus a bundled identity service. The plan carries 111 unchecked tasks, ZERO checked, and NO backlog coverage - no Backlog item marker, no BI references. Phases 1-2 (auth seams, principal spine) were absorbed into other work; phase 3 (directory protocols) was last and never picked up. Because the plan tracked deliverables in Markdown checkboxes rather than live backlog items, phase 3 was never open in any system anyone queries. scripts/check-plan-backlog-coverage.mjs now guards exactly this failure class (\"Do not use Markdown checkboxes as deferred-work storage\") but postdates the plan.\r\n\r\nWHAT ALREADY EXISTS (reuse, do not rebuild):\r\n- Principal and PrincipalAlias spine (packages/db/prisma/schema/core-identity.prisma)\r\n- EmployeeProfile as the canonical worker (workforce.prisma)\r\n- Agent identity: apps/web/lib/identity/agent-identity-snapshot.ts, aidoc-resolver.ts, authorization-classes.ts, effective-auth-context.ts, principal-linking.ts\r\n- /platform/identity workspace routes and components\r\n- Organization PKI (Step CA) for machine trust\r\n\r\nWHAT IS ABSENT (verified by repository-wide search):\r\n- No LDAP/OIDC/SAML/SCIM surface anywhere. The single ldap string in the codebase is a keyword list in integration-benchmarking.ts.\r\n- No identity edge service. authentik appears zero times in docker-compose.yml.\r\n- No service-account model of any kind.\r\n\r\nSCOPE:\r\nOne directory covering three identity classes on the same spine - human employees, non-human agent identities, and service accounts - exposed over standard directory protocols so existing tools can bind to it, with outward federation remaining optional rather than required.",
+    "status": "open",
+    "scopeKind": "platform",
+    "scopeRationale": "Identity is universal platform substrate: every archetype needs employees, agents, and service accounts authenticated against one directory.",
+    "createdAt": "2026-08-23T01:38:26.410Z"
+  },
+  "items": [
+    {
+      "itemId": "BI-1E0AB1E5",
+      "epicId": "EP-24741BBF",
+      "title": "Retire the uncovered 2026-04-22 enterprise auth plan into governed backlog items",
+      "body": "docs/superpowers/plans/2026-04-22-enterprise-auth-directory-federation.md holds 111 unchecked tasks, zero checked, and no backlog coverage. Parts of it silently landed (principal spine, /platform/identity); the directory protocol phase never did, and nothing surfaced it as outstanding.\r\n\r\nAudit the plan against what actually shipped, move every still-relevant deliverable into this epic as live backlog items, and mark the plan superseded so it stops reading as an active plan. Cite scripts/check-plan-backlog-coverage.mjs as the guard that now prevents this class of loss.",
+      "status": "retired",
+      "type": "portfolio",
+      "workType": "chore",
+      "source": "user-request",
+      "scopeKind": "unknown",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-1e0ab1e5-cmt7zeljf0fc101mg5qm4r3qo",
+          "kind": "evidence",
+          "summary": "PR #4575 audited and superseded the uncovered 2026-04-22 directory plan",
+          "recordedAt": "2026-08-25T01:23:48.747Z",
+          "payload": {
+            "url": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/4575",
+            "body": "Merged commit 5830df67b0 added the active Directory Service identity-absorption design and phased implementation plan. It explicitly audits the predecessor's 111 unchecked tasks, records what already exists, identifies the genuinely absent protocol listener, supersedes the 2026-04-22 stance, and moves remaining work into independently shippable governed backlog phases. The plan cites the backlog-coverage guard and states deferred work lives in backlog items, not Markdown checkboxes.",
+            "evidenceKind": "source_verified",
+            "toolExecutionId": null
+          }
+        },
+        {
+          "recoveryKey": "bi-1e0ab1e5-cmt7zepmu0fc501mgrebunh1u",
+          "kind": "status_change",
+          "summary": "Retired BI-1E0AB1E5 as discard",
+          "recordedAt": "2026-08-25T01:23:54.054Z",
+          "payload": {
+            "to": "retired",
+            "from": "open",
+            "reason": "Delivered and source-verified against the merged design and plan.",
+            "outcome": "discard",
+            "rationale": "The requested outcome is already delivered by merged PR #4575 / commit 5830df67b0: the uncovered plan was audited, superseded, and replaced with an active design plus phased governed backlog coverage. Keeping this recovery item open would duplicate completed coordination work.",
+            "duplicateOfId": null
+          }
+        }
+      ],
+      "effortSize": "medium",
+      "triageOutcome": "discard",
+      "createdAt": "2026-08-23T01:38:56.912Z"
+    },
+    {
+      "itemId": "BI-59C8828F",
+      "epicId": "EP-24741BBF",
+      "title": "Model service accounts as a first-class identity class on the Principal spine",
+      "body": "DPF has no service-account model of any kind (verified: no ServiceAccount in any Prisma schema or lib/identity module). Employees and agent identities exist; the third class an install needs - a non-human, non-agent credential owned by a system or integration - does not.\r\n\r\nAdd service accounts as a Principal subtype reusing PrincipalAlias, not a parallel identity table (AGENTS.md principal-convergence rule). Must carry: owning employee or team, purpose, credential rotation state, and an explicit expiry. A service account with no accountable owner must be refusable.\r\n\r\nDepends on nothing; unblocks the directory projection.",
+      "status": "deferred",
+      "type": "portfolio",
+      "workType": "feature",
+      "source": "user-request",
+      "scopeKind": "unknown",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-59c8828f-cmt7zf2k80fck01mg9bvrvf3v",
+          "kind": "status_change",
+          "summary": "Retired BI-59C8828F as defer",
+          "recordedAt": "2026-08-25T01:24:10.808Z",
+          "payload": {
+            "to": "deferred",
+            "from": "open",
+            "reason": "The merged architecture verified that Principal(kind=\"service\") and deterministic service identities already exist; the remaining work is convergence into a shared sponsored platform primitive, not a new identity class.",
+            "outcome": "defer",
+            "deferral": {
+              "reason": "The merged architecture verified that Principal(kind=\"service\") and deterministic service identities already exist; the remaining work is convergence into a shared sponsored platform primitive, not a new identity class.",
+              "trigger": "Resume after reinstall under the active Directory Service plan Phase 1: pin existing grammar, require sponsor-on-create, move the helper to the shared identity module, repoint consumers, and repair orphan evidence.",
+              "reviewAt": "2026-09-22T20:00:00.000Z"
+            },
+            "rationale": "Valid Directory Service implementation demand preserved by merged PR #4575's active architecture and phased plan. The approved evidence → primitive → projection → protocol → authentication sequence must remain independently shippable.",
+            "duplicateOfId": null
+          }
+        }
+      ],
+      "effortSize": "medium",
+      "triageOutcome": "defer",
+      "createdAt": "2026-08-23T01:38:56.825Z"
+    },
+    {
+      "itemId": "BI-5B1772E5",
+      "epicId": "EP-24741BBF",
+      "title": "Project employees, agent identities, and service accounts into one directory tree",
+      "body": "The three identity classes live in separate models today. A directory needs one coherent tree with stable distinguished names.\r\n\r\nDefine the projection from Principal/PrincipalAlias/EmployeeProfile/agent identity/service account into directory entries: DN scheme, object classes, group membership derived from employee hierarchy and role, and what is deliberately NOT published (secrets, business context, internal ids).\r\n\r\nThe projection is derived and fingerprinted, never a second writable identity truth.",
+      "status": "deferred",
+      "type": "portfolio",
+      "workType": "feature",
+      "source": "user-request",
+      "scopeKind": "unknown",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-5b1772e5-cmt7zf2p10fcn01mgwfp2gk06",
+          "kind": "status_change",
+          "summary": "Retired BI-5B1772E5 as defer",
+          "recordedAt": "2026-08-25T01:24:10.981Z",
+          "payload": {
+            "to": "deferred",
+            "from": "open",
+            "reason": "The merged design maps this demand to the Directory Service projection contract: one Principal spine projected to people, agent, and service entries, roles/groups, typed DN aliases, and an explicit attribute allowlist.",
+            "outcome": "defer",
+            "deferral": {
+              "reason": "The merged design maps this demand to the Directory Service projection contract: one Principal spine projected to people, agent, and service entries, roles/groups, typed DN aliases, and an explicit attribute allowlist.",
+              "trigger": "Resume after the Phase 1 shared service-account primitive is green; fund Phase 2 projection extraction with DN derivation, fingerprinting, withheld-attribute security tests, compatibility, and admin-page convergence.",
+              "reviewAt": "2026-09-22T20:00:00.000Z"
+            },
+            "rationale": "Valid Directory Service implementation demand preserved by merged PR #4575's active architecture and phased plan. The approved evidence → primitive → projection → protocol → authentication sequence must remain independently shippable.",
+            "duplicateOfId": null
+          }
+        }
+      ],
+      "effortSize": "medium",
+      "triageOutcome": "defer",
+      "createdAt": "2026-08-23T01:38:56.864Z"
+    },
+    {
+      "itemId": "BI-8B61BCAA",
+      "epicId": "EP-24741BBF",
+      "title": "Bind DPF login to its own directory before offering outward federation",
+      "body": "Auth today is tokens and mTLS (apps/web/lib/auth: mcp-api-token, employee-scoped-token, edge-node-mtls, federation-link-token). There is no OIDC/SAML/SCIM anywhere.\r\n\r\nMake the installation's own directory the authentication authority for people, so one login works across the instances in an organization. Outward federation to Entra/Okta/etc stays OPTIONAL - the platform must be complete without it.\r\n\r\nThis is the auth-scope requirement: a development companion and its production peer on the same network should share one identity scope without copying credentials between them.",
+      "status": "deferred",
+      "type": "portfolio",
+      "workType": "feature",
+      "source": "user-request",
+      "scopeKind": "unknown",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-8b61bcaa-cmt7zf2vy0fct01mgv2usobwv",
+          "kind": "status_change",
+          "summary": "Retired BI-8B61BCAA as defer",
+          "recordedAt": "2026-08-25T01:24:11.230Z",
+          "payload": {
+            "to": "deferred",
+            "from": "open",
+            "reason": "Binding DPF login to the Principal directory changes the authentication root and is deliberately late in the approved sequence because it has the highest blast radius.",
+            "outcome": "defer",
+            "deferral": {
+              "reason": "Binding DPF login to the Principal directory changes the authentication root and is deliberately late in the approved sequence because it has the highest blast radius.",
+              "trigger": "Resume after the projection contract and protocol surface are stable; fund Phase 4 with compatibility migration from User-rooted login, session/role/password-reset tests, recovery access, rollback, and security review.",
+              "reviewAt": "2026-09-22T20:00:00.000Z"
+            },
+            "rationale": "Valid Directory Service implementation demand preserved by merged PR #4575's active architecture and phased plan. The approved evidence → primitive → projection → protocol → authentication sequence must remain independently shippable.",
+            "duplicateOfId": null
+          }
+        }
+      ],
+      "effortSize": "medium",
+      "triageOutcome": "defer",
+      "createdAt": "2026-08-23T01:38:56.897Z"
+    },
+    {
+      "itemId": "BI-F584A125",
+      "epicId": "EP-24741BBF",
+      "title": "Serve LDAP so existing tools can bind to a DPF installation",
+      "body": "No LDAP surface exists. This is the item that makes DPF usable as the directory for an install that has no Active Directory - the 99% case.\r\n\r\nServe the projected tree over LDAP (bind, search, group membership) with TLS from the existing organization PKI. Read paths first; writes only where the directory is genuinely canonical.\r\n\r\nThe 2026-04-22 plan proposed authentik as a bundled identity edge. Re-evaluate: bundling a second identity service versus serving the projection directly. Whichever is chosen must not create a parallel identity truth.",
+      "status": "deferred",
+      "type": "portfolio",
+      "workType": "feature",
+      "source": "user-request",
+      "scopeKind": "unknown",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-f584a125-cmt7zf2sl0fcq01mg3hvjn4g2",
+          "kind": "status_change",
+          "summary": "Retired BI-F584A125 as defer",
+          "recordedAt": "2026-08-25T01:24:11.109Z",
+          "payload": {
+            "to": "deferred",
+            "from": "open",
+            "reason": "LDAP is the only genuinely net-new capability in the merged Directory Service design and must consume the read-only Phase 2 projection rather than create another identity store.",
+            "outcome": "defer",
+            "deferral": {
+              "reason": "LDAP is the only genuinely net-new capability in the merged Directory Service design and must consume the read-only Phase 2 projection rather than create another identity store.",
+              "trigger": "Resume after Phase 2 projection and security review are green; fund Phase 3 as an isolated TLS bind/search/group surface with read-only enforcement, protocol conformance, packaging, upgrade, and rollback tests.",
+              "reviewAt": "2026-09-22T20:00:00.000Z"
+            },
+            "rationale": "Valid Directory Service implementation demand preserved by merged PR #4575's active architecture and phased plan. The approved evidence → primitive → projection → protocol → authentication sequence must remain independently shippable.",
+            "duplicateOfId": null
+          }
+        }
+      ],
+      "effortSize": "medium",
+      "triageOutcome": "defer",
+      "createdAt": "2026-08-23T01:38:56.881Z"
+    }
+  ]
+}

@@ -156,7 +156,22 @@ jobs:
             tag_suffix: linux-arm64
 
     steps:
+      # lfs: true is load-bearing, not hygiene. This job supplies the image build
+      # context, and `.dockerignore` deliberately admits
+      # docs/Reference/IT4IT_Functional_Criteria_Taxonomy.xlsx so Dockerfile can
+      # COPY it. Without an LFS fetch, checkout leaves that path as a 130-byte
+      # pointer stub, the COPY bakes the stub in, and every install's
+      # eaReferenceModels seed step dies on "invalid zip data" with the IT4IT and
+      # BIAN reference models never importing (BI-FEE26C36). The Dockerfile
+      # asserts materialization, so removing this input fails the build rather
+      # than shipping a broken release.
       - uses: actions/checkout@v7
+        with:
+          lfs: true
+
+      - name: Bind promoter image to its release contract
+        id: promoter-contract
+        run: echo "digest=$(sha256sum promoter-contract.json | cut -d ' ' -f1)" >> "$GITHUB_OUTPUT"
 
       # CodeQL actions/unpinned-tag #101-#103: 3rd-party actions pinned to
       # immutable commit SHAs (with version trailing comment) so a compromised
@@ -195,7 +210,11 @@ jobs:
           # Harmless for images whose Dockerfile ignores DPF_VERSION.
           build-args: |
             DPF_VERSION=${{ github.sha }}
-            DPF_PLATFORM_VERSION=${{ github.ref_name }}
+            DPF_PLATFORM_VERSION=${{ needs.gate.outputs.tag }}
+            DPF_PROMOTER_SOURCE_SHA=${{ github.sha }}
+            DPF_PROMOTER_RELEASE_TAG=${{ needs.gate.outputs.tag }}
+            DPF_PROMOTER_RELEASE_OWNER=${{ steps.owner.outputs.value }}
+            DPF_PROMOTER_CONTRACT_DIGEST=sha256:${{ steps.promoter-contract.outputs.digest }}
           # Same identity, in the OCI-standard place. /app/.dpf-image-version is inside
           # the filesystem, so reading it costs a `docker create` + `docker cp`; a label
           # is readable straight from the manifest. `latest` sat 1851 commits behind main
@@ -204,7 +223,7 @@ jobs:
           # portal self-reports, the label is what tooling inspects.
           labels: |
             org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.version=${{ github.ref_name }}
+            org.opencontainers.image.version=${{ needs.gate.outputs.tag }}
           # Push by digest only — the merge job assembles the named
           # tag manifest list. `type=image,name=...,push-by-digest=true`
           # uploads the layers under the digest with no human tag.

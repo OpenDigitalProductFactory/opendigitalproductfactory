@@ -19,8 +19,10 @@ import {
 } from "@/lib/crm/account-value-stream";
 import { canAdvance, getStage, type LifecycleGrammar, type LifecyclePoint } from "@/lib/lifecycle-grammar";
 import {
+  BOOKKEEPING_ROOM_GRAMMAR,
   CUSTOMER_ACCOUNT_GRAMMAR,
   OPPORTUNITY_GRAMMAR,
+  resolveBookkeepingRoomPoint,
   resolveCustomerAccountPoint,
   resolveOpportunityPoint,
 } from "@/lib/lifecycle-grammars";
@@ -29,7 +31,8 @@ import type { OperationalValueStreamStageKey } from "@dpf/storefront-templates";
 /** The room subject descriptor the loader builds from the subject's stored row. */
 export type WorkroomStructureSubject =
   | { kind: "opportunity"; stage: string }
-  | { kind: "customer-account"; status: string };
+  | { kind: "customer-account"; status: string }
+  | { kind: "bookkeeping-period"; status: string };
 
 export interface WorkroomValueStream {
   stage: OperationalValueStreamStageKey;
@@ -105,6 +108,14 @@ export function resolveWorkroomStructure(subject: WorkroomStructureSubject | nul
         lifecycle: buildLifecycle(CUSTOMER_ACCOUNT_GRAMMAR, resolveCustomerAccountPoint(subject.status)),
       };
     }
+    case "bookkeeping-period": {
+      // The books loop is an internal operate-the-business lifecycle, not a customer OVSM stage —
+      // so it carries a lifecycle but no customer value stream (like platform-development subjects).
+      return {
+        valueStream: null,
+        lifecycle: buildLifecycle(BOOKKEEPING_ROOM_GRAMMAR, resolveBookkeepingRoomPoint(subject.status)),
+      };
+    }
     default:
       return null;
   }
@@ -120,6 +131,7 @@ export function workroomStructureSubjectFor(input: {
   sourceType: string;
   opportunityStage?: string | null;
   accountStatus?: string | null;
+  bookkeepingPeriodStatus?: string | null;
 }): WorkroomStructureSubject | null {
   if (input.sourceType === "opportunity" && input.opportunityStage) {
     return { kind: "opportunity", stage: input.opportunityStage };
@@ -132,6 +144,9 @@ export function workroomStructureSubjectFor(input: {
     input.accountStatus
   ) {
     return { kind: "customer-account", status: input.accountStatus };
+  }
+  if (input.sourceType === "bookkeeping-period" && input.bookkeepingPeriodStatus) {
+    return { kind: "bookkeeping-period", status: input.bookkeepingPeriodStatus };
   }
   return null;
 }

@@ -36,9 +36,23 @@ export type ConsequentialToolClassification = {
 export const ALIGNMENT_CONSEQUENTIAL_TOOL_NAMES = [
   "create_digital_product",
   "create_marketing_campaign",
+  // Banking books loop (BI-DE27D34E, S-FIN): setting up a real account and
+  // importing a statement move money-of-record, so they route the governance
+  // gate for owner approval. Categorization/matching are ordinary, reversible
+  // mutations and intentionally stay off this list.
+  "create_bank_account",
+  "import_bank_statement",
 ] as const;
 const EXPLICIT = new Set<string>(ALIGNMENT_CONSEQUENTIAL_TOOL_NAMES);
-const PRECONDITION = new Set(["transition_employee_status"]);
+/**
+ * Name-keyed precondition list (like ALIGNMENT_CONSEQUENTIAL_TOOL_NAMES, it
+ * predates the declared consequence axis). Exported so the name-set
+ * referential-integrity test (lib/mcp/name-set-referential-integrity.test.ts)
+ * can prove every name resolves to a live catalog tool — a name that resolves
+ * to nothing gates nothing (BI-47629B5B).
+ */
+export const PRECONDITION_TOOL_NAMES = ["transition_employee_status"] as const;
+const PRECONDITION = new Set<string>(PRECONDITION_TOOL_NAMES);
 
 /** Alignment applies to what leaves the business, not to internal platform ops. */
 function alignmentRequiredFor(toolName: string, consequence: ToolConsequence | undefined): boolean {
@@ -49,10 +63,11 @@ export function collaborationShapeForTool(
   toolName: string,
   consequence?: ToolConsequence,
 ): WorkroomShapeKey | null {
-  if (["create_digital_product", "create_marketing_campaign"].includes(toolName)) {
-    return "specialist-alignment";
-  }
-  if (toolName === "transition_employee_status") return "change-consequential";
+  // Single-source: these are the same name-keyed legacy lists declared above
+  // (EXPLICIT / PRECONDITION), not a third hand-maintained copy — so the
+  // referential-integrity test over those exports covers this function too.
+  if (EXPLICIT.has(toolName)) return "specialist-alignment";
+  if (PRECONDITION.has(toolName)) return "change-consequential";
   if (consequence === "outward") return "outward-review";
   if (consequence === "irreversible") return "change-consequential";
   return null;

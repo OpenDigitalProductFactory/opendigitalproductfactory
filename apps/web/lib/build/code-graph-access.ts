@@ -28,6 +28,9 @@ export type CodeGraphFreshness = {
   indexedFileCount: number;
   lastError: string | null;
   relationshipCounts?: Record<BenchmarkRelationship, number>;
+  /** Rows actually present in the graph for this key (BI-86EF5900). null = uninspected/unreadable. */
+  nodeCount?: number | null;
+  edgeCount?: number | null;
   warnings: string[];
   summary: string;
   trust?: TrustAssessment;
@@ -87,35 +90,58 @@ function toCount(value: unknown): number {
 
 async function inspectStructuralRelationshipHealth(graphKey: string): Promise<{
   counts: Record<BenchmarkRelationship, number>;
+  /**
+   * Rows actually present in the graph (BI-86EF5900). `indexedFileCount` reads
+   * CodeGraphFileHash — a DIFFERENT table — so it cannot fall when the graph
+   * empties. Measured live 2026-08-23: 4406 file hashes, 0 nodes, 0 edges,
+   * status "ready". These are the counts that can.
+   */
+  nodeCount: number | null;
+  edgeCount: number | null;
   warnings: string[];
 }> {
   const counts = Object.fromEntries(
     BENCHMARK_REQUIRED_RELATIONSHIPS.map((relationship) => [relationship, 0]),
   ) as Record<BenchmarkRelationship, number>;
 
+  let nodeCount: number | null = null;
+  let edgeCount: number | null = null;
+
   try {
+    // ONE raw call: benchmark relationship counts AND total population, so the
+    // file keeps a single raw-SQL site and one round trip.
     const rows = (await prisma.$queryRawUnsafe(
       [
-        "SELECT rel_type AS relationship, count(*)::int AS count",
+        "SELECT 'rel' AS kind, rel_type AS label, count(*)::int AS count",
         "  FROM graph_edge",
         " WHERE props->>'graphKey' = $1 AND rel_type = ANY($2::text[])",
         " GROUP BY rel_type",
+        " UNION ALL",
+        "SELECT 'pop', 'nodes', (SELECT count(*)::int FROM graph_node WHERE props->>'graphKey' = $1)",
+        " UNION ALL",
+        "SELECT 'pop', 'edges', (SELECT count(*)::int FROM graph_edge WHERE props->>'graphKey' = $1)",
       ].join("\n"),
       graphKey,
       [...BENCHMARK_REQUIRED_RELATIONSHIPS],
-    )) as Array<{ relationship?: unknown; count?: unknown }>;
+    )) as Array<{ kind?: unknown; label?: unknown; count?: unknown }>;
+
     for (const row of rows) {
-      const relationship = row.relationship;
-      if (
-        typeof relationship === "string" &&
-        BENCHMARK_REQUIRED_RELATIONSHIPS.includes(relationship as BenchmarkRelationship)
-      ) {
-        counts[relationship as BenchmarkRelationship] = toCount(row.count);
+      const label = row.label;
+      if (typeof label !== "string") continue;
+      if (row.kind === "pop") {
+        if (label === "nodes") nodeCount = toCount(row.count);
+        if (label === "edges") edgeCount = toCount(row.count);
+        continue;
+      }
+      if (BENCHMARK_REQUIRED_RELATIONSHIPS.includes(label as BenchmarkRelationship)) {
+        counts[label as BenchmarkRelationship] = toCount(row.count);
       }
     }
   } catch (error) {
     return {
       counts,
+      nodeCount: null,
+      edgeCount: null,
       warnings: [
         `Could not inspect code graph relationship health: ${
           error instanceof Error ? error.message : "unknown error"
@@ -125,13 +151,23 @@ async function inspectStructuralRelationshipHealth(graphKey: string): Promise<{
   }
 
   const missing = BENCHMARK_REQUIRED_RELATIONSHIPS.filter((relationship) => counts[relationship] === 0);
-  return {
-    counts,
-    warnings:
-      missing.length > 0
-        ? [`Code graph structural relationships are missing: ${missing.join(", ")}.`]
-        : [],
-  };
+  const warnings: string[] = [];
+  if (nodeCount === 0) {
+    warnings.push(
+      "Code graph holds ZERO nodes for this graphKey — the projection is empty, not merely " +
+        "stale. Every query returns nothing regardless of what exists in the tree; an empty " +
+        "result is NO EVIDENCE of absence.",
+    );
+  } else if (edgeCount === 0) {
+    warnings.push(
+      "Code graph holds nodes but ZERO edges — a file index, not a graph. It cannot answer " +
+        "what-uses-this questions.",
+    );
+  }
+  if (missing.length > 0) {
+    warnings.push(`Code graph structural relationships are missing: ${missing.join(", ")}.`);
+  }
+  return { counts, nodeCount, edgeCount, warnings };
 }
 
 export async function getCodeGraphFreshness(
@@ -202,6 +238,7 @@ export async function getCodeGraphFreshness(
     // BI-6CFC5429: let freshness see WHICH ref was indexed, not just when.
     lastIndexedBranch: state.lastIndexedBranch,
     ...(relationshipHealth ? { relationshipCounts: relationshipHealth.counts } : {}),
+    ...(relationshipHealth ? { nodeCount: relationshipHealth.nodeCount, edgeCount: relationshipHealth.edgeCount } : {}),
     asOf: options.now,
   });
 
@@ -216,6 +253,7 @@ export async function getCodeGraphFreshness(
     indexedFileCount: state.indexedFileCount,
     lastError: state.lastError,
     ...(relationshipHealth ? { relationshipCounts: relationshipHealth.counts } : {}),
+    ...(relationshipHealth ? { nodeCount: relationshipHealth.nodeCount, edgeCount: relationshipHealth.edgeCount } : {}),
     warnings,
     summary,
     trust,

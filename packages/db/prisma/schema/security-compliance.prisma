@@ -42,7 +42,7 @@ model LicenseRequirementReference {
   lastResearchedAt    DateTime?
   lastVerifiedAt      DateTime?
   confidence          String    @default("medium")
-  staleAfterDays      Int       @default(180)
+  staleAfterDays      Int       @default(90)
   tags                String[]  @default([])
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
@@ -731,6 +731,35 @@ model DataPolicyException {
   @@index([organizationId, status])
   @@index([expiresAt])
   @@index([remediationItemId])
+}
+
+/// Break-glass: an operator's INFORMED acceptance of the risk of letting a
+/// provider serve a data sensitivity its account is NOT verified-safe for.
+/// Deliberately distinct from a data-policy attestation (which asserts the
+/// account IS protected). Honored by the routing fence as a separate signal;
+/// it never widens ModelProvider.sensitivityClearance. (BI-4512E7D2)
+model ProviderClearanceOverride {
+  id                    String        @id @default(cuid())
+  organizationId        String
+  providerId            String
+  acceptedSensitivities Json          @default("[]")
+  status                String        @default("active") // active | revoked | expired
+  rationale             String
+  acknowledgedRisk      String
+  approverRef           String?
+  acknowledgedAt        DateTime      @default(now())
+  expiresAt             DateTime
+  revokedAt             DateTime?
+  revokedByRef          String?
+  provenance            Json
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+  organization          Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  provider              ModelProvider @relation(fields: [providerId], references: [providerId], onDelete: Cascade)
+
+  @@index([organizationId, providerId, status])
+  @@index([providerId])
+  @@index([expiresAt])
 }
 
 model RequirementCompletion {

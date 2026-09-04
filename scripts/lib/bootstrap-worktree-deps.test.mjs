@@ -2,6 +2,9 @@
 // Node built-in test runner (no node_modules needed): node --test
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   classifyReadiness,
   readinessReason,
@@ -13,6 +16,7 @@ import {
   bootstrapWorktreeDeps,
   resolvePinnedPnpmInvocation,
   classifyIgnoredBuilds,
+  policyDeniedBuilds,
   dependencyPolicyReviewKey,
 } from "./bootstrap-worktree-deps.mjs";
 
@@ -52,6 +56,91 @@ test("ignored-build readiness fails closed when pnpm reports an unclassified scr
     ok: false,
     packages: ["sharp@1.2.3"],
   });
+});
+
+test("ignored-build parser ignores the Explicitly-ignored section and hint lines (BI @scarf gate)", () => {
+  // The real multi-section `pnpm ignored-builds` output once a build is
+  // classified into pnpm.ignoredBuiltDependencies. Nothing is unclassified, so
+  // the gate must pass — the naive parser used to flag the section header and
+  // the package under it, jamming every push from the worktree.
+  const classified = [
+    "Automatically ignored builds during installation:",
+    "  None",
+    "",
+    "Explicitly ignored package builds (via pnpm.ignoredBuiltDependencies):",
+    "  @scarf/scarf",
+  ].join("\n");
+  assert.deepEqual(classifyIgnoredBuilds(classified), { ok: true, packages: [] });
+
+  // Before classification: the build sits under "Automatically ignored" and pnpm
+  // appends advisory "hint:" lines. Flag the package, never the hints.
+  const unclassified = [
+    "Automatically ignored builds during installation:",
+    "  @scarf/scarf",
+    "hint: To allow the execution of build scripts, add its name to \"pnpm.onlyBuiltDependencies\".",
+    "hint: If you don't want to build a package, add it to the \"pnpm.ignoredBuiltDependencies\" list.",
+  ].join("\n");
+  assert.deepEqual(classifyIgnoredBuilds(unclassified), { ok: false, packages: ["@scarf/scarf"] });
+});
+
+test("a build denied by allowBuilds policy is classified, not unclassified (BI-6945BEEF)", () => {
+  // pnpm reports an `allowBuilds: false` package under "Automatically ignored"
+  // — it is absent from the allowlist, which reads identically to a package
+  // nobody has decided about. That is the whole defect: puppeteer, protobufjs
+  // and unrs-resolver each carry a deliberate `false`, yet every worktree
+  // created off main was stuck SOURCE-ONLY and unpushable with no way to
+  // converge, because this parser could not see the decision.
+  const stdout = [
+    "Automatically ignored builds during installation:",
+    "  puppeteer",
+    "  unrs-resolver",
+    "  protobufjs",
+  ].join("\n");
+
+  assert.deepEqual(classifyIgnoredBuilds(stdout), {
+    ok: false,
+    packages: ["puppeteer", "unrs-resolver", "protobufjs"],
+  });
+
+  const denied = new Set(["puppeteer", "unrs-resolver", "protobufjs"]);
+  assert.deepEqual(classifyIgnoredBuilds(stdout, denied), { ok: true, packages: [] });
+
+  // A package with no recorded decision is still flagged even when siblings are
+  // decided — the gate must not go blanket-permissive.
+  assert.deepEqual(
+    classifyIgnoredBuilds(`${stdout}\n  brand-new-dep`, denied),
+    { ok: false, packages: ["brand-new-dep"] },
+  );
+});
+
+test("policyDeniedBuilds reads only explicit `false` entries, and fails safe", () => {
+  const workspace = [
+    "packages:",
+    '  - "apps/*"',
+    "allowBuilds:",
+    "  esbuild: true",
+    "  puppeteer: false",
+    "  '@scarf/scarf': false",
+    "packageExtensions:",
+  ].join("\n");
+
+  const denied = policyDeniedBuilds("/irrelevant", {
+    readFileSync: () => workspace,
+  });
+  assert.deepEqual([...denied].sort(), ["@scarf/scarf", "puppeteer"]);
+  assert.equal(denied.has("esbuild"), false, "an allowed build is not a denial");
+
+  // Unreadable or malformed workspace file → empty set, so the gate stays
+  // STRICT. Failing open here would let an undecided build through silently.
+  assert.equal(
+    policyDeniedBuilds("/irrelevant", {
+      readFileSync: () => {
+        throw new Error("ENOENT");
+      },
+    }).size,
+    0,
+  );
+  assert.equal(policyDeniedBuilds("/irrelevant", { readFileSync: () => "packages: []" }).size, 0);
 });
 
 test("compile-ready ONLY when deps resolved AND the cheap gate passes", () => {
@@ -248,4 +337,68 @@ test("bootstrapWorktreeDeps reports a managed install launch failure instead of 
     stdout: "",
     stderr: "",
   });
+});
+
+// ── BI-705AE7E3: a PARTIAL node_modules must not skip the install forever ────
+//
+// The install used to be gated on `!existsSync(node_modules)`, while this
+// module's own header says presence is not enough ("a partial/stale install is
+// not ready"). A worktree seeded with a partial tree therefore skipped the
+// install permanently: re-running the documented remedy was a no-op and there
+// was no force flag. That is not cosmetic — pregate refuses to claim a lease
+// for a source-only worktree, so such a tree could never run the mandatory
+// build gate, and every push from it needed a recorded override.
+//
+// Observed 2026-08-26 on a freshly created worktree: 71 entries under
+// node_modules, no .pnpm, no .bin, permanently source-only; a healthy sibling
+// had 1133 entries and reported compile-ready.
+
+/** Record every command the bootstrapper would run. */
+function recordingExecute(calls) {
+  return (cmd, args) => {
+    calls.push([cmd, ...(args ?? [])].join(" "));
+    // Satisfy the pnpm version probe; anything else "succeeds" silently.
+    return { ok: true, stdout: "10.33.2", stderr: "", status: 0 };
+  };
+}
+
+test("a PARTIAL node_modules on disk still triggers the managed install", () => {
+  // Uses a REAL directory, because that is the only thing that discriminates:
+  // the old guard was `!existsSync(node_modules)` on the real filesystem, so a
+  // non-existent path would have installed under both versions. This tree has a
+  // node_modules that EXISTS but is partial (no .pnpm, no .bin) — exactly the
+  // observed shape. Old behaviour: install skipped, tree stuck source-only
+  // forever. New behaviour: readiness is measured, so the install runs.
+  const sandbox = mkdtempSync(join(tmpdir(), "dpf-partial-wt-"));
+  try {
+    mkdirSync(join(sandbox, "node_modules", "some-package"), { recursive: true });
+    const calls = [];
+    bootstrapWorktreeDeps(sandbox, { execute: recordingExecute(calls) });
+    assert.ok(
+      calls.some((c) => c.includes("install")),
+      `a partial node_modules must not skip the install; commands were: ${JSON.stringify(calls)}`,
+    );
+  } finally {
+    rmSync(sandbox, { recursive: true, force: true });
+  }
+});
+
+test("--force reinstalls even when the probe already reports compile-ready", () => {
+  const calls = [];
+  // Force short-circuits the readiness check entirely, so the install runs
+  // whatever the probe says.
+  bootstrapWorktreeDeps("/wt/anything", { force: true, execute: recordingExecute(calls) });
+  assert.ok(calls.some((c) => c.includes("install")), "force must always attempt the install");
+});
+
+test("the install decision is driven by measured readiness, not by existsSync", () => {
+  // The regression asserted at the source: gating on the bare existence of
+  // node_modules is what made a partial tree permanently unbootstrappable.
+  const source = readFileSync(new URL("./bootstrap-worktree-deps.mjs", import.meta.url), "utf8");
+  const body = source.slice(source.indexOf("export function bootstrapWorktreeDeps"));
+  const offending = body
+    .split(/\r?\n/)
+    .filter((line) => !line.trimStart().startsWith("//") && !line.trimStart().startsWith("*"))
+    .filter((line) => /if\s*\(\s*!exists\s*\(/.test(line));
+  assert.deepEqual(offending, [], "bootstrapWorktreeDeps must gate its install on probeWorktreeReadiness, not existsSync");
 });

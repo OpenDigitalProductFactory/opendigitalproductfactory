@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "bundleId": "capture-ep-build-d41730",
+  "description": "Backlog captured from this installation on 2026-08-26T03:02:44.748Z.",
+  "source": {
+    "capturedAt": "2026-08-26T03:57:53.481Z",
+    "repository": "OpenDigitalProductFactory/opendigitalproductfactory",
+    "planPath": "docs/superpowers/plans/2026-08-22-instance-identity-and-purpose.md"
+  },
+  "epic": {
+    "epicId": "EP-BUILD-D41730",
+    "title": "Fence-fix proof: add a one-line JSDoc to an internal util",
+    "description": "Temporary Build Studio fence-fix probe that added one JSDoc comment to an internal utility; retained for audit and backlog recovery.",
+    "status": "open",
+    "scopeKind": "unknown",
+    "createdAt": "2026-08-23T10:30:05.873Z"
+  },
+  "items": [
+    {
+      "itemId": "BI-3D4BB499",
+      "epicId": "EP-BUILD-D41730",
+      "title": "Fence-fix proof: add a one-line JSDoc to an internal util",
+      "body": "Trivial doc change to prove build ideate preempts the local-CI fence and completes on local (BI-8B4359DE fence-exemption fix).",
+      "status": "retired",
+      "type": "portfolio",
+      "workType": "chore",
+      "source": "user-request",
+      "scopeKind": "unknown",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-3d4bb499-cmt6pb39t087v01mxic0ncq0a",
+          "kind": "status_change",
+          "summary": "Retired BI-3D4BB499 as discard",
+          "recordedAt": "2026-08-24T03:53:22.769Z",
+          "payload": {
+            "to": "retired",
+            "from": "in-progress",
+            "reason": "Superseded test probe after the underlying robustness fix merged.",
+            "outcome": "discard",
+            "rationale": "This one-line JSDoc task was a fence-fix proof, not product work. PR #4568 merged the underlying robustness repair and made the probe obsolete.",
+            "duplicateOfId": null
+          }
+        }
+      ],
+      "effortSize": "small",
+      "triageOutcome": "discard",
+      "createdAt": "2026-08-23T10:30:02.376Z"
+    }
+  ]
+}

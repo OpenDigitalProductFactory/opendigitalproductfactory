@@ -44,6 +44,18 @@ relabel — a `WorkRoom` view layer over `WorkCase` already existed, and the rec
 and the room are one concept rather than two. Governed by `EP-WORK-CONVERGENCE`
 (umbrella `BI-D2D190BF`).
 
+A branch has exactly ONE durable workroom identity, and it is keyed on
+`(repositoryFullName, headBranch)`. That is why `create_workroom` and
+`plan_workroom_worktree` always stamp a repository — a workroom born without one
+cannot be matched by that key, so the next `claim_backlog_item_for_work` on the
+same branch forks a SECOND live capsule instead of late-binding, leaving the
+objective and scope claims on one row and the backlog item on the other, with
+both calls reporting success (BI-F83CF689). Adopting a branch that already
+carries a live repo-less workroom binds the repository to it; a live workroom
+bound to a different backlog item refuses with `branch_occupied` rather than
+forking. If you ever see two non-archived workrooms on one branch, that is the
+defect, not a supported shape.
+
 ⟦runtime: the MCP tools are now named `create_workroom`, `claim_workroom_scope`,
 `heartbeat_workroom` and so on; the legacy `*_capsule_*` names remain callable but
 unadvertised for the alias window. The Prisma field vocabulary (`workCapsuleId`,

@@ -21,8 +21,17 @@ import {
   type WorkroomPostureContext,
 } from "./room-posture";
 import { readWorkroomPostureClaim } from "./workroom-posture-claim";
+import { getWorkShape, readWorkShapeDefinitionContract } from "./work-shapes";
+import { readWorkShapeClaim, resolveWorkShapeClaim } from "./workroom-shape-claim";
+import {
+  evaluateWorkroomShapeConformance,
+  projectUnresolvedWorkroomShapeConformance,
+  projectUnshapedWorkroomConformance,
+  type WorkroomCoordinatorEligibility,
+} from "./workroom-shape-conformance";
 import {
   getWorkCaseSourceEntry,
+  getWorkroomDefinitionIdentity,
   type WorkCaseSourceRegistryEntry,
 } from "./source-registry";
 import type {
@@ -71,6 +80,22 @@ export interface BuildWorkroomViewInput {
   scopeClaims?: unknown;
   /** The instant the view is built. Passed in so the build stays deterministic. */
   now?: Date;
+  /** Optional observed execution state supplied by a lifecycle/drive loader. */
+  processOverseerObservation?: {
+    currentStageKey?: string | null;
+    proposedStageKey?: string | null;
+    receipts?: readonly { stageKey: string; kind: string }[];
+    budgetUsage?: readonly { kind: string; used: number }[];
+    stopConditionHits?: readonly string[];
+    reviewDue?: boolean;
+    proposedGrants?: readonly string[];
+    coordinatorHasProcessCoordinationAuthority?: boolean;
+    independentEvaluatorPrincipalRef?: string | null;
+    independentApproverPrincipalRef?: string | null;
+    closing?: boolean;
+    unresolvedDeviationCount?: number;
+    coordinatorEligibility?: WorkroomCoordinatorEligibility | null;
+  };
 }
 
 function primarySourceRef(detail: WorkCaseDetail): WorkCaseSourceRef {
@@ -126,6 +151,15 @@ function projectionConfidence(
   return "high";
 }
 
+function cycleRef(cycle: WorkroomCycleView | null): WorkCaseSourceRef | null {
+  if (!cycle) return null;
+  return {
+    kind: cycle.carrierKind,
+    id: cycle.carrierId,
+    status: cycle.status,
+  };
+}
+
 export function buildWorkroomView(
   input: BuildWorkroomViewInput,
 ): WorkroomView {
@@ -171,10 +205,78 @@ export function buildWorkroomView(
       .map((event) => event.sourceRef)
       .filter((ref) => ref.kind === "work-capsule"),
   );
+  const currentCycle = input.currentCycle ?? null;
+  const currentCycleRef = cycleRef(currentCycle);
+  const executionRefs = dedupeRoomSourceRefs([
+    ...activeCapsuleRefs,
+    ...(currentCycle?.sourceRefs ?? []).filter(
+      (ref) =>
+        ref.kind === "work-item"
+        || ref.kind === "work-capsule"
+        || ref.kind === "task-run",
+    ),
+  ]);
+  const caseRef = caseRefForDetail(input.detail);
+  const now = input.now ?? new Date(0);
+  const declaredShape = readWorkShapeClaim(input.scopeClaims);
+  const resolvedShape = resolveWorkShapeClaim(input.scopeClaims);
+  const observation = input.processOverseerObservation;
+  const processOverseer = !declaredShape
+    ? projectUnshapedWorkroomConformance({
+        roomKey: caseRef.caseId,
+        collaborationShape: input.shapeKey ?? null,
+        participants,
+        checkedAt: now,
+      })
+    : !resolvedShape
+      ? projectUnresolvedWorkroomShapeConformance({
+          roomKey: caseRef.caseId,
+          collaborationShape: input.shapeKey ?? null,
+          participants,
+          shapeKey: declaredShape.key,
+          shapeVersion: declaredShape.version,
+          registeredVersion: getWorkShape(declaredShape.key)?.version ?? null,
+          checkedAt: now,
+        })
+      : evaluateWorkroomShapeConformance({
+          roomKey: caseRef.caseId,
+          definition: readWorkShapeDefinitionContract(resolvedShape),
+          collaborationShape: input.shapeKey ?? resolvedShape.collaborationShape,
+          participants,
+          currentStageKey: observation?.currentStageKey ?? null,
+          proposedStageKey: observation?.proposedStageKey
+            ?? resolvedShape.stages[0]?.key
+            ?? null,
+          receipts: observation?.receipts ?? [],
+          budgetUsage: observation?.budgetUsage ?? [],
+          stopConditionHits: observation?.stopConditionHits ?? [],
+          reviewDue: observation?.reviewDue ?? false,
+          proposedGrants: observation?.proposedGrants,
+          coordinatorHasProcessCoordinationAuthority:
+            observation?.coordinatorHasProcessCoordinationAuthority ?? true,
+          independentEvaluatorPrincipalRef: observation?.independentEvaluatorPrincipalRef,
+          independentApproverPrincipalRef: observation?.independentApproverPrincipalRef,
+          closing: observation?.closing,
+          unresolvedDeviationCount: observation?.unresolvedDeviationCount,
+          coordinatorEligibility: observation?.coordinatorEligibility,
+          checkedAt: now,
+        });
 
   return {
     roomKey: input.caseKey,
-    caseRef: caseRefForDetail(input.detail),
+    caseRef,
+    identity: {
+      definition: getWorkroomDefinitionIdentity(caseRef.sourceType),
+      instance: {
+        instanceId: `workroom-instance:${caseRef.caseId}`,
+        occurrenceTrace: {
+          caseRef,
+          sourceRef: primarySourceRef(input.detail),
+          cycleRef: currentCycleRef,
+          executionRefs,
+        },
+      },
+    },
     title: input.detail.summary.title,
     purpose: boundary.purpose,
     mode,
@@ -186,7 +288,7 @@ export function buildWorkroomView(
       sourceRefs: boundary.sourceRefs,
     },
     boundary,
-    currentCycle: input.currentCycle ?? null,
+    currentCycle,
     completedCycles: [...(input.completedCycles ?? [])],
     participants,
     activity: normalizeWorkroomActivities(input.activities ?? []),
@@ -204,6 +306,7 @@ export function buildWorkroomView(
     },
     context,
     posture,
+    processOverseer,
     receipts: [...(input.receipts ?? [])],
     sourceRefs,
     structure: input.structure ?? null,

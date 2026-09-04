@@ -3,25 +3,66 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   prisma: {
     workroom: { findUnique: vi.fn() },
-    externalEvidenceRecord: { findFirst: vi.fn() },
+    externalEvidenceRecord: { findFirst: vi.fn(), findUnique: vi.fn() },
+    taskRun: {
+      findMany: vi.fn(),
+      findUnique: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+    },
   },
   recordExternalEvidence: vi.fn(),
   recordWorkCapsuleEvidence: vi.fn(),
+  dispatchRoutedSemanticReview: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({ prisma: mocks.prisma }));
 vi.mock("@/lib/actions/external-evidence", () => ({ recordExternalEvidence: mocks.recordExternalEvidence }));
-vi.mock("@/lib/change-review/routed-semantic-review", () => ({ dispatchRoutedSemanticReview: vi.fn() }));
+vi.mock("@/lib/change-review/routed-semantic-review", () => ({
+  dispatchRoutedSemanticReview: mocks.dispatchRoutedSemanticReview,
+}));
 vi.mock("@/lib/work-capsules/work-capsule-store", () => ({ recordWorkCapsuleEvidence: mocks.recordWorkCapsuleEvidence }));
 
 import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 import { changeReviewPack } from "./change-review-pack";
 
+const taskRows: Array<Record<string, unknown>> = [];
+
 describe("change-review MCP pack", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    taskRows.length = 0;
     mocks.prisma.workroom.findUnique.mockResolvedValue({ id: "capsule-row-1" });
+    mocks.prisma.externalEvidenceRecord.findFirst.mockResolvedValue(null);
+    mocks.prisma.externalEvidenceRecord.findUnique.mockResolvedValue(null);
     mocks.recordExternalEvidence.mockResolvedValue({ id: "outcome-evidence-1" });
+    mocks.dispatchRoutedSemanticReview.mockResolvedValue({
+      decision: "pass",
+      issues: [],
+      summary: "The exact change passes semantic review.",
+    });
+    mocks.prisma.taskRun.findMany.mockImplementation(async ({ where }) =>
+      taskRows.filter((row) => row.repeatedPatternKey === where.repeatedPatternKey));
+    mocks.prisma.taskRun.findUnique.mockImplementation(async ({ where }) =>
+      taskRows.find((row) => row.taskRunId === where.taskRunId) ?? null);
+    mocks.prisma.taskRun.create.mockImplementation(async ({ data }) => {
+      if (taskRows.some((row) => row.taskRunId === data.taskRunId)) {
+        throw Object.assign(new Error("duplicate TaskRun"), { code: "P2002" });
+      }
+      const row = {
+        ...data,
+        progressPayload: null,
+        createdAt: new Date(),
+      };
+      taskRows.push(row);
+      return row;
+    });
+    mocks.prisma.taskRun.update.mockImplementation(async ({ where, data }) => {
+      const row = taskRows.find((candidate) => candidate.taskRunId === where.taskRunId);
+      if (!row) throw new Error("missing TaskRun");
+      Object.assign(row, data);
+      return row;
+    });
   });
 
   it("exposes native review and outcome-correlation operations", () => {
@@ -66,6 +107,33 @@ describe("change-review MCP pack", () => {
       "artifact",
       "verificationEvidence",
     ]));
+  });
+
+  it("dispatches one semantic review and subscribes a concurrent equivalent caller", async () => {
+    const input = {
+      capsuleId: "WC-SINGLE-FLIGHT",
+      authorSurface: "codex-desktop",
+      artifactType: "code-change",
+      title: "Immutable gate coordination",
+      artifact: "diff --git a/file.ts b/file.ts",
+      verificationEvidence: "Focused tests passed.",
+      changedFiles: ["apps/web/lib/file.ts"],
+      baseTreeHash: "a".repeat(40),
+      headTreeHash: "b".repeat(40),
+      diffDigest: "c".repeat(64),
+    };
+
+    const [left, right] = await Promise.all([
+      changeReviewPack.handlers.review_semantic_change!(input, "user-1", { agentId: "codex" }),
+      changeReviewPack.handlers.review_semantic_change!(input, "user-1", { agentId: "codex" }),
+    ]);
+
+    expect([left.data?.disposition, right.data?.disposition].sort())
+      .toEqual(["admitted", "subscribed"]);
+    expect(mocks.dispatchRoutedSemanticReview).toHaveBeenCalledOnce();
+    expect(mocks.recordExternalEvidence).toHaveBeenCalledOnce();
+    expect(taskRows).toHaveLength(1);
+    expect(taskRows[0]).toMatchObject({ status: "completed" });
   });
 
   it("records infrastructure-inconclusive correlation without semantic quality counts", async () => {

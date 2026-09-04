@@ -56,7 +56,8 @@
       "profiles": [],
       "ports": [
         "3000:3000",
-        "1455:3000"
+        "1455:3000",
+        "${DPF_LDAP_BIND_ADDRESS:-127.0.0.1}:${DPF_LDAP_PORT:-636}:${DPF_LDAP_PORT:-636}"
       ],
       "volumes": [
         "/var/run/docker.sock:/var/run/docker.sock",
@@ -65,7 +66,9 @@
         "browser_evidence:/evidence:ro",
         "${DPF_BACKUPS_HOST_PATH:-${DPF_HOST_INSTALL_PATH:-.}/backups}:/backups",
         "${DPF_HOST_INSTALL_PATH:-.}:/host-dpf",
-        "${DPF_STATE_DIR:-${HOME}/.dpf}:/dpf-state:ro"
+        "${DPF_WORKTREE_BASE:-${DPF_HOST_INSTALL_PATH:-.}-worktrees}:/host-worktrees",
+        "${DPF_STATE_DIR:-${HOME}/.dpf}:/dpf-state:ro",
+        "${DPF_STATE_DIR:-${HOME}/.dpf}/federation:/dpf-federation"
       ],
       "dependsOn": [
         "portal-init"

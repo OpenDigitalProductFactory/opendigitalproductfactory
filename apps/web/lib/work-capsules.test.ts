@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  WORK_CAPSULE_WORKROOM_SHAPES,
   WORK_CAPSULE_ACTIVITY_KINDS,
   WORK_CAPSULE_DECISION_SCOPES,
   WORK_CAPSULE_EVIDENCE_KINDS,
@@ -124,6 +125,8 @@ describe("layer-scoped capsule metadata", () => {
 
   it("normalizes empty scope input to nullable fields and empty relationship arrays", () => {
     expect(normalizeWorkCapsuleScopeInput(undefined)).toEqual({
+      workroomShape: null,
+      workShape: null,
       decisionScope: null,
       portfolioRole: null,
       servedPersona: null,
@@ -150,6 +153,8 @@ describe("layer-scoped capsule metadata", () => {
       servesPortfolioRoles: ["productsAndServicesSold", "manufactureAndDeliver"],
       dependsOnPortfolioRoles: ["foundational"],
     })).toEqual({
+      workroomShape: null,
+      workShape: null,
       decisionScope: "wwwd",
       portfolioRole: "productsAndServicesSold",
       servedPersona: "customer",
@@ -256,5 +261,30 @@ describe("isRootClonePath", () => {
 
   it("respects the DPF_RELEASE_WORKTREE_PATH override when supplied", () => {
     expect(isRootClonePath("/srv/release", "linux", "/home/x", "/srv/release")).toBe(true);
+  });
+});
+
+// EP-WORK-POSTURE (BI-8C54B216) — the collaboration shape is part of the scope
+// a room is convened with.
+describe("workroom shape on the convene path", () => {
+  it("accepts every declared shape key", () => {
+    for (const shape of WORK_CAPSULE_WORKROOM_SHAPES) {
+      expect(normalizeWorkCapsuleScopeInput({ workroomShape: shape }).workroomShape).toBe(shape);
+    }
+  });
+
+  it("treats absent, null and empty as no shape rather than an error", () => {
+    expect(normalizeWorkCapsuleScopeInput({}).workroomShape).toBeNull();
+    expect(normalizeWorkCapsuleScopeInput({ workroomShape: null }).workroomShape).toBeNull();
+    expect(normalizeWorkCapsuleScopeInput({ workroomShape: "" }).workroomShape).toBeNull();
+  });
+
+  it("REJECTS an unknown shape rather than silently dropping it", () => {
+    // Dropping it would convene the room with no shape while the caller
+    // believed it had one — the posture would then run on a shape nobody set.
+    expect(() => normalizeWorkCapsuleScopeInput({ workroomShape: "not-a-shape" })).toThrow(
+      /workroomShape must be one of/,
+    );
+    expect(() => normalizeWorkCapsuleScopeInput({ workroomShape: 42 })).toThrow();
   });
 });

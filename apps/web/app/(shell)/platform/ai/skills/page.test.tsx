@@ -33,6 +33,7 @@ vi.mock("@/lib/actions/skills-observatory", () => ({
   getLatestSkillCuratorReport: vi.fn().mockResolvedValue(null),
   getSkillLifecycleState: vi.fn().mockResolvedValue(null),
   getSkillSeedWarnings: vi.fn().mockResolvedValue([]),
+  getPendingSkillProposals: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock("@/components/platform/SkillProposalsPanel", () => ({
@@ -137,6 +138,12 @@ describe("PlatformAiSkillsPage", () => {
       revisions: [],
       seedDrift: {
         inSync: true,
+        seedStatus: "in-sync",
+        repoAvailable: true,
+        candidatePaths: [
+          "skills/build/build-page.skill.md",
+          "packages/dpf-skill-pack/skills/build-page/SKILL.md",
+        ],
         dbBody: "v0",
         seedBody: "v0",
         seedPath: "skills/build/build-page.skill.md",

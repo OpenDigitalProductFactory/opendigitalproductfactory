@@ -1,6 +1,7 @@
 "use client"
 
-import { useCallback, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
+import type { VoicePlaybackState } from "@/lib/voice-synthesis/service-status"
 
 // Minimal valid silent WAV (44-byte header, zero samples). Used to unlock the
 // AudioContext within the user-gesture call stack so scheduled playback is not
@@ -15,12 +16,17 @@ export interface VoiceSynthSettings {
   temperature?: number
 }
 
+export interface VoiceSynthOptions {
+  purpose?: "coworker" | "preview"
+}
+
 export interface VoiceSynthHook {
   synthesize: (text: string, voiceProfileId?: string, settings?: VoiceSynthSettings) => Promise<void>
   isPlaying: boolean
   isSynthesizing: boolean
-  /** false when synthesis cannot run until service/configuration changes */
   available: boolean
+  checking: boolean
+  readinessState: VoicePlaybackState | "checking"
   unavailableReason: string | null
   lastErrorCode: string | null
   stop: () => void
@@ -29,12 +35,12 @@ export interface VoiceSynthHook {
 function getUnavailableReason(code: string | undefined): string | null {
   switch (code) {
     case "tts_unavailable":
-      return "Text-to-speech service is not running."
+      return "Text-to-speech is unavailable."
     case "reference_missing":
-      return "Reference voice sample is missing. Replace or re-register the voice sample."
+      return "Reference voice sample is missing. Replace it."
     case "no_voice_profile":
     case "voice_profile_not_ready":
-      return "No ready voice profile is available."
+      return "No ready voice profile."
     default:
       return null
   }
@@ -75,10 +81,12 @@ function parseNextChunk(buf: Uint8Array<ArrayBuffer>): { wav: ArrayBuffer; rest:
  * Autoplay unlock: AudioContext.resume() is called synchronously within the
  * user-gesture call stack before any await, satisfying Safari/Chrome policy.
  */
-export function useVoiceSynth(): VoiceSynthHook {
+export function useVoiceSynth(options: VoiceSynthOptions = {}): VoiceSynthHook {
   const [isSynthesizing, setIsSynthesizing] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
-  const [available, setAvailable] = useState(true)
+  const [available, setAvailable] = useState(false)
+  const [checking, setChecking] = useState(true)
+  const [readinessState, setReadinessState] = useState("checking" as VoicePlaybackState | "checking")
   const [unavailableReason, setUnavailableReason] = useState<string | null>(null)
   const [lastErrorCode, setLastErrorCode] = useState<string | null>(null)
 
@@ -90,6 +98,28 @@ export function useVoiceSynth(): VoiceSynthHook {
   const nextStartRef = useRef<number>(0)
   // AbortController for the current fetch stream.
   const abortRef = useRef<AbortController | null>(null)
+
+  useEffect(() => {
+    const controller = new AbortController()
+    const statusUrl = options.purpose === "preview"
+      ? "/api/voice/service-status?purpose=preview"
+      : "/api/voice/service-status"
+    void fetch(statusUrl, { signal: controller.signal })
+      .then(async (response) => response.ok ? response.json() : Promise.reject())
+      .then((status: { available: boolean; state: VoicePlaybackState; reason: string | null }) => {
+        setAvailable(status.available)
+        setReadinessState(status.state)
+        setUnavailableReason(status.reason)
+      })
+      .catch((error) => {
+        if (error instanceof Error && error.name === "AbortError") return
+        setAvailable(false)
+        setReadinessState("service_unavailable")
+        setUnavailableReason(getUnavailableReason("tts_unavailable"))
+      })
+      .finally(() => setChecking(false))
+    return () => controller.abort()
+  }, [options.purpose])
 
   const stop = useCallback(() => {
     // Cancel the in-flight fetch.
@@ -155,6 +185,7 @@ export function useVoiceSynth(): VoiceSynthHook {
           setLastErrorCode(code ?? null)
           if (reason) {
             setAvailable(false)
+            setReadinessState(code === "no_voice_profile" || code === "voice_profile_not_ready" ? "profile_missing" : "service_unavailable")
             setUnavailableReason(reason)
           }
           console.warn("[useVoiceSynth] stream synthesis failed", res.status, json)
@@ -162,6 +193,7 @@ export function useVoiceSynth(): VoiceSynthHook {
         }
 
         setAvailable(true)
+        setReadinessState("ready")
         setUnavailableReason(null)
         setLastErrorCode(null)
 
@@ -246,5 +278,5 @@ export function useVoiceSynth(): VoiceSynthHook {
     [stop],
   )
 
-  return { synthesize, isPlaying, isSynthesizing, available, unavailableReason, lastErrorCode, stop }
+  return { synthesize, isPlaying, isSynthesizing, available, checking, readinessState, unavailableReason, lastErrorCode, stop }
 }

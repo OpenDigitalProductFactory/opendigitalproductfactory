@@ -176,27 +176,24 @@ export function BuildStudioWorkflowActionCard({
     setError(null);
     setLastOutcome(null);
     try {
+      // BI-8C6AA60E / BI-CE1AB982: an expected operational refusal ("no releasable
+      // source changes", "no engine can run this") comes back as a value, because a
+      // thrown Error is stripped to a production digest and the operator needs the cause.
+      let refusal: { ok: boolean; message?: string; error?: string } | null = null;
       if (action.kind === "approve-start") {
-        await approveBuildStart(build.buildId);
+        refusal = await approveBuildStart(build.buildId);
       } else if (action.kind === "record-acceptance") {
         await recordBuildAcceptance(build.buildId);
       } else if (action.kind === "run-review-verification") {
         await runBuildReviewVerification(build.buildId);
       } else if (action.kind === "advance-phase" && action.targetPhase) {
-        // BI-8C6AA60E: "no releasable source changes" is an expected operational
-        // state, returned as a value so the operator reads the real message
-        // instead of a stripped production digest.
-        const outcome = await advanceBuildPhase(build.buildId, action.targetPhase);
-        if (!outcome.ok) {
-          setError(outcome.message);
-          return;
-        }
+        refusal = await advanceBuildPhase(build.buildId, action.targetPhase);
       } else if (action.kind === "retry-inference") {
         // BI-F0005EB0 — the AI call errored. Re-drive the failed coworker turn
         // (the same recovery the user does by re-prompting today) by opening the
         // coworker panel with a retry message. The server-side bounded auto-retry
         // handles transient failures before we ever get here.
-        openCoworkerPanel(action.coworkerPrompt);
+        openCoworkerPanel(action.coworkerPrompt, action.message);
       } else if (action.kind === "retry-build") {
         await retryBuildExecution(build.buildId);
       } else if (action.kind === "reset-build") {
@@ -224,6 +221,7 @@ export function BuildStudioWorkflowActionCard({
           }),
         );
       }
+      if (refusal && !refusal.ok) return setError(refusal.error ?? refusal.message ?? "That could not be completed.");
 
       window.dispatchEvent(
         new CustomEvent("build-progress-update", {
@@ -245,14 +243,18 @@ export function BuildStudioWorkflowActionCard({
   }
 
   function handleCoworkerAction() {
-    openCoworkerPanel(action.coworkerPrompt);
+    openCoworkerPanel(action.coworkerPrompt, action.message);
   }
 
-  function openCoworkerPanel(prompt: string) {
+  /** Nudge the coworker on the owner's behalf. `prompt` stays machine-precise;
+   *  `display` is what the owner sees — otherwise internal tool names land in
+   *  their own transcript as if they had typed them. */
+  function openCoworkerPanel(prompt: string, display?: string) {
     document.dispatchEvent(
       new CustomEvent("open-agent-panel", {
         detail: {
           autoMessage: prompt,
+          displayMessage: display,
           targetBuildId: build.buildId,
         },
       }),
@@ -264,7 +266,7 @@ export function BuildStudioWorkflowActionCard({
       await handlePrimaryAction();
       return;
     }
-    openCoworkerPanel(prompt.coworkerPrompt);
+    openCoworkerPanel(prompt.coworkerPrompt, prompt.recommendedAction);
   }
 
   async function handleDecisionCapture(capture: DecisionGateCaptureDraft) {

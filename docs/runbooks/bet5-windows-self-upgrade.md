@@ -47,9 +47,13 @@ bootstrap, use **Ops → Self-Upgrade → Upgrade now** for later releases.
 
 The consumer path:
 
-- resolves the next target only from a verified published release and the canonical install state;
-- pulls the portal and promoter for that exact tag and verifies the portal OCI revision and baked
-  source-content identity before swapping;
+- resolves the verification-gated GHCR channel (`latest` unless
+  `DPF_IMAGE_CHANNEL_TAG` overrides it), verifies its OCI manifests/config, and freezes the one
+  immutable release tag that identifies the same bytes;
+- compares the running portal container's config digest with the candidate config digest, rather
+  than treating a recorded tag or GitHub release run as byte identity;
+- pulls the portal and promoter for that exact immutable tag and verifies the expected portal
+  config digest, OCI revision, and baked source-content identity before swapping;
 - verifies `SHA256SUMS`, replaces only installer-managed lifecycle files, and preserves operator-owned
   files and environment settings;
 - commits the release tag and install identity only after migration, health, SHA, and content checks
@@ -58,7 +62,23 @@ The consumer path:
 
 If the Upgrade Center reports that install identity is unverified, re-run the current consumer
 installer once to converge the canonical state; do not create a Git checkout beside the install.
-`self-upgrade.no-target` is safe and non-mutating: it means no newer verified release was available.
+If it reports that update status is unavailable, inspect the technical reason and registry access;
+the page intentionally hides **Upgrade now** and queues nothing until it can prove a candidate.
+A current state also has no upgrade action because the running config digest already equals the
+verified channel candidate. Both states are safe and non-mutating.
+
+### Ordinary restart after a consumer upgrade
+
+Release promotion writes the verified tag and managed assets to the canonical install directory,
+not to the temporary candidate workspace. On Windows, `dpf-start.ps1` then reads the consumer
+install's recorded `imageTag` before Compose interpolation. That immutable recorded tag overrides a
+contradictory process or root `.env` value such as `latest`, so an ordinary restart cannot silently
+replace the deployed release with older cached bytes.
+
+The start command stops before Docker mutation if a known consumer install has a missing, mutable,
+malformed, or wrong-install-path release identity. Repair that state with the governed consumer
+installer or Upgrade Center; do not edit `.env` or install-state by hand. Contributor/source installs
+retain their existing local-image behavior.
 
 ## Preconditions — capture current state first
 

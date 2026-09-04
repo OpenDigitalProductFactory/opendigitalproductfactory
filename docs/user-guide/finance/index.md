@@ -8,6 +8,19 @@ order: 1
 
 The Finance area handles your organization's core financial operations: billing customers, managing supplier relationships, and processing purchases. It is not a full accounting system, but covers the transactional layer that connects to your products and services.
 
+For a **Pet Rescue** or **Animal Shelter**, the overview is titled **Funding &
+stewardship**. It emphasizes donations, grants, sponsorship pledges, overdue
+commitments, animal-care bills, and cash available for care. **Record
+contribution** is the primary entry point, with donation, grant, sponsorship,
+and other contribution contexts. The underlying finance records, controls, and
+permissions remain canonical; the archetype changes the operator vocabulary,
+not the accounting truth. Foreground totals therefore count **contributions**
+and **commitments**, and recent records identify the **supporter or funder**;
+the internal invoice record type remains available only as accounting detail.
+The setup prompt and Finance Specialist summary use the same funding,
+stewardship, cash-position, and reporting language instead of assuming a
+commercial invoicing or tax-remittance workflow.
+
 ```mermaid
 flowchart TB
     event["Confirm the external business event"] --> source["Create the right source record<br/>Invoice, purchase order and bill, or expense claim"]
@@ -53,6 +66,7 @@ purchase order and bill for a payable, or a claim for an employee expense.
 - Record incoming bills and match them to purchase orders
 - Raise purchase orders and track their fulfillment status
 - Review outstanding payables and receivables at a glance
+- Sort your captured drives and see what the business owes you for them
 - Monitor AI providers as finance-owned suppliers, including draft contracts, open setup work items, and linked billing/usage pages
 - Review committed AI spend and setup gaps from the dedicated `/finance/spend/ai` workspace
 
@@ -146,6 +160,39 @@ It is a **draft for you to review**. Nothing is sent to anyone, no action is tak
 
 A payment run (`/finance/payment-runs`) **records the selected approved bills as paid in DPF** and writes a matching outbound payment. It is **not a draft** and does **not** initiate a real bank transfer — pay your suppliers through your bank as usual, then use a payment run to keep your books settled. The action is labelled **"Record as Paid"** to make this explicit.
 
+## Mileage
+
+If you drive for work, the mobile app can record your drives so you do not keep a
+paper log. Drives show up at `/finance/mileage`.
+
+**Turn it on first.** The app asks before it records anything. Nothing is captured
+until you agree, and you can turn it off at any time. Personal drives stay yours —
+only the ones you mark business are ever claimed.
+
+**Sort each drive.** Every drive is business, personal, or commute. Tap once to
+choose. You can change your mind until the drive is claimed.
+
+**What you are owed.** A drive is priced at the rate in force on the day you drove
+it, not today's rate. A drive that has not been priced yet says so, rather than
+showing zero — no amount yet is not the same as nothing owed.
+
+**Driving abroad.** Your phone knows which country it is in, so you are never asked
+to pick one. If your company has set a rate for the country you drove in, that rate
+is used. If it has not, you are paid at your own country's rate — the country on
+your employee record. A drive that crosses a border is paid at the rate for the
+country you set off from.
+
+If your phone could not work out the country — no signal, or you did not give it
+permission — you are still paid, at your own country's rate. You never lose a
+drive over it.
+
+**Getting paid.** Someone with finance permission turns a month of business drives
+into an expense claim. That claim can be paid on its own or added to your pay as a
+reimbursement, which is not taxed because it repays money you already spent.
+
+Mileage appears in the mobile app only on installs that use it. A business whose
+staff do not drive to customers will not see it.
+
 ## Reporting And Close Boundaries
 
 Current profit-and-loss and finance-period summaries are cash-basis: paid
@@ -164,6 +211,7 @@ authoritative accounting close and retain its reviewer evidence separately.
 - `/finance/invoices` and `/finance/payments` — customer billing and recorded receipts
 - `/finance/suppliers`, `/finance/purchase-orders`, and `/finance/bills` — supplier commitments and payables
 - `/finance/expense-claims` and `/finance/my-expenses` — reviewer and employee expense workflows
+- `/finance/mileage` — your own captured drives, sorted business or personal
 - `/finance/banking` — statement import, rules, and reconciliation
 - `/finance/reports` and `/finance/close` — reporting and close-readiness
 - `/finance/spend` — spend hub for suppliers, bills, expenses, and AI spend summary

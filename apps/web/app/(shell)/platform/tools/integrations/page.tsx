@@ -1,4 +1,6 @@
 import { prisma } from "@dpf/db";
+import { resolveNextSteps } from "@/lib/backlog/next-step-pointer";
+import { IntegrationCoverageDisclosure } from "@/components/integrations/IntegrationCoverageDisclosure";
 import { PlatformSummaryCard } from "@/components/platform/PlatformSummaryCard";
 import { getMatrixByOrg } from "@/lib/actions/integration-coverage";
 import {
@@ -14,6 +16,9 @@ import {
 export default async function EnterpriseIntegrationsPage() {
   const org = await prisma.organization.findFirst({ select: { id: true } });
   const dbCoverageMatrix = org ? await getMatrixByOrg(org.id) : [];
+  const coverageNextSteps = await resolveNextSteps(
+    INTEGRATION_COVERAGE_MATRIX.map((row) => row.nextStep),
+  );
 
   const [configuredIntegrations, errorStates] = await Promise.all([
     prisma.integrationCredential.count({
@@ -28,6 +33,7 @@ export default async function EnterpriseIntegrationsPage() {
             "google",
             "facebook",
             "mailchimp",
+            "wordpress",
           ],
         },
         status: "connected",
@@ -45,6 +51,7 @@ export default async function EnterpriseIntegrationsPage() {
             "google",
             "facebook",
             "mailchimp",
+            "wordpress",
           ],
         },
         status: "error",
@@ -57,7 +64,7 @@ export default async function EnterpriseIntegrationsPage() {
       <div>
         <h1 className="text-xl font-bold text-[var(--dpf-text)]">Native Integrations</h1>
         <p className="mt-0.5 text-sm text-[var(--dpf-muted)]">
-          Native, first-class business integrations with customer-supplied credentials and platform-managed governance.
+          Business integrations with customer-supplied credentials and platform-managed governance.
         </p>
       </div>
 
@@ -192,10 +199,21 @@ export default async function EnterpriseIntegrationsPage() {
             { label: "Model", value: "Native" },
           ]}
         />
+        <PlatformSummaryCard
+          title="WordPress (self-hosted)"
+          description="Projects approved DPF content into a customer-owned WordPress site. WordPress retains hosting, themes, URLs, and public delivery; DPF does not provide a public site or CDN."
+          href="/platform/tools/integrations/wordpress"
+          accent="var(--dpf-accent)"
+          metrics={[
+            { label: "Category", value: "Customer-owned website" },
+            { label: "Model", value: "External channel" },
+          ]}
+        />
       </div>
 
-      <section className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-5">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+      <IntegrationCoverageDisclosure>
+        <div>
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--dpf-muted)]">
               Employee Work Coverage
@@ -231,7 +249,7 @@ export default async function EnterpriseIntegrationsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--dpf-border)]">
-              {INTEGRATION_COVERAGE_MATRIX.map((row) => (
+              {INTEGRATION_COVERAGE_MATRIX.map((row, rowIndex) => (
                 <tr key={row.id} className="align-top">
                   <td className="py-4 pr-4">
                     <p className="font-medium text-[var(--dpf-text)]">{row.productName}</p>
@@ -289,7 +307,9 @@ export default async function EnterpriseIntegrationsPage() {
                   </td>
                   <td className="py-4 pl-4">
                     <div className="max-w-[220px] space-y-1">
-                      <p className="font-mono text-xs font-medium text-[var(--dpf-text)]">{row.nextBacklogItemId}</p>
+                      <p className="font-mono text-xs font-medium text-[var(--dpf-text)]">
+                        {coverageNextSteps[rowIndex].label}
+                      </p>
                       <p className="text-xs text-[var(--dpf-muted)]">{row.notes}</p>
                     </div>
                   </td>
@@ -297,8 +317,9 @@ export default async function EnterpriseIntegrationsPage() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
-      </section>
+      </IntegrationCoverageDisclosure>
 
       <section className="space-y-3">
         <div>

@@ -155,16 +155,25 @@ function Write-DPFImageIdentity {
     }
 }
 
-function Import-DPFComposeChain {
+# Returns the compose-chain module PATH for the caller to dot-source itself.
+#
+# It deliberately does NOT dot-source here. Dot-sourcing inside a function scopes
+# every definition to that function, so the caller never sees them: the module
+# defines three interdependent helpers (Test-DPFEnvFlag, Add-DPFComposeFile,
+# Get-DPFComposeArgs) and all three vanish when this returns. Callers must write
+#
+#     . (Resolve-DPFComposeChainModule -InstallDir $Dir)
+#
+# which is the same script-scope pattern the already-working call sites use.
+function Resolve-DPFComposeChainModule {
     param([Parameter(Mandatory)][string]$InstallDir)
-    if (Get-Command Get-DPFComposeArgs -ErrorAction SilentlyContinue) { return }
     $candidates = @(
         (Join-Path $InstallDir "scripts\installer\lib\compose-chain.ps1"),
         (Join-Path $PSScriptRoot "scripts\installer\lib\compose-chain.ps1")
     )
     $module = $candidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
     if (-not $module) { throw "compose_chain_helper_missing" }
-    . $module
+    return $module
 }
 
 function Get-Progress {
@@ -630,6 +639,10 @@ if (-not (Test-Path -LiteralPath $stateLib)) { $stateLib = Join-Path $DPF_DIR "i
 if (-not (Test-Path -LiteralPath $stateLib)) { throw "capability_state_helper_missing" }
 . $stateLib
 $includeEdge = Resolve-DpfEdgeEnabled -InstallDir $DPF_DIR
+$consumerReleaseTag = Resolve-DpfConsumerReleaseImageTag -InstallDir $DPF_DIR
+if ($consumerReleaseTag) {
+    Write-Host "Using recorded consumer release tag $consumerReleaseTag" -ForegroundColor Cyan
+}
 $capabilityProjection = Resolve-DpfCapabilityComposeProfiles -InstallDir $DPF_DIR
 $env:COMPOSE_PROFILES = (@($capabilityProjection.composeProfiles) -join ',')
 
@@ -725,7 +738,7 @@ function Invoke-DPFEdgeNodeConvergence {
 
     $edgeModule = Resolve-DPFNativeEdgeModulePath -InstallDir $InstallDir
     . $edgeModule
-    Import-DPFComposeChain -InstallDir $InstallDir
+    . (Resolve-DPFComposeChainModule -InstallDir $InstallDir)
     $edgeComposeArgs = Get-DPFComposeArgs -InstallDir $InstallDir -IncludeEdge:$false
 
     Write-Action "Converging this installation's Edge Node..."
@@ -780,7 +793,7 @@ function Invoke-DPFEdgeNodeConvergence {
         Write-OK "Existing Edge enrollment found; preserving its machine identity"
     }
     if (Install-DPFNativeEdgeNode -InstallDir $InstallDir -BootstrapToken $edgeToken -Version $Version) {
-        Import-DPFComposeChain -InstallDir $InstallDir
+        . (Resolve-DPFComposeChainModule -InstallDir $InstallDir)
         $legacyComposeArgs = Get-DPFComposeArgs -InstallDir $InstallDir -IncludeEdge:$true
         docker compose @legacyComposeArgs stop edge-node 2>&1 | Out-Null
         return $true
@@ -1452,48 +1465,29 @@ if (-not (Test-StepDone "hardware")) {
     if ($gpuName) { $hwSummary += ", $gpuName ($gpuVRAM_GB GB VRAM)" }
     Write-OK $hwSummary
 
-    # Select the largest model that fits the GPU's VRAM WITH HEADROOM for the
-    # context window + embedder. Mirrors the canonical headroom-aware logic in
-    # apps/web/lib/inference/local-model-policy.ts (LOCAL_MODEL_TIERS) -- PowerShell
-    # cannot import TS, so keep this in sync. The Providers UX over-commit guard
-    # (same module) catches any drift.
-    #
-    # Thresholds = model weights + ~5 GB headroom (measured: a 30B at a 24k build
-    # context uses ~20.7 GB on a 24 GB card). Pinned quant tags (never bare
-    # :latest) for reproducible sizes.
-    #
-    # A 24 GB card lands on Qwen3.8-27B (17.66 GiB measured + headroom = 23). That
-    # model is DENSE, so it is ~4x slower per turn than the MoE tiers around it --
-    # a deliberate trade for thoroughness over time-to-answer.
-    #
-    # Qwen3.8 is pulled from HuggingFace (hf.co/...), not the curated ai/ namespace,
-    # because ai/qwen3.8 publishes only the 2.4T "Max". docker model pull accepts
-    # both sources; the runtime name it registers under differs (see the sh
-    # installer's normalization note).
-    if ($gpuVRAM_GB -ge 53) {
-        $selectedModel = "ai/qwen3-coder-next"
-        $modelReason = "Qwen3-Coder-Next 80B (MoE) -- top agentic coder, fits your $gpuVRAM_GB GB VRAM with headroom"
-    } elseif ($gpuVRAM_GB -ge 23) {
-        $selectedModel = "hf.co/ggml-org/Qwen3.8-27B-GGUF:Q4_K_M"
-        # Known-good content digest for this tier. Mirrors LocalModelTier.expectedDigest
-        # and SELECTION_TIERS in scripts/detect-hardware-host.ts -- keep in sync.
-        $expectedDigest = "sha256:66c4f325bc71350f07fb2da4f92455553c7bbc8af5d7ee2095fbeac79b9e66c9"
-        $modelReason = "Qwen3.8 27B (dense, vision) -- most thorough local model, fits your $gpuVRAM_GB GB VRAM with headroom"
-    } elseif ($gpuVRAM_GB -ge 21) {
-        $selectedModel = "ai/qwen3-coder"
-        $modelReason = "Qwen3-Coder 30B (MoE) -- serves chat + code, fits your $gpuVRAM_GB GB VRAM with headroom"
-    } elseif ($gpuVRAM_GB -ge 17) {
-        $selectedModel = "ai/qwen3:14B-Q6_K"
-        $modelReason = "Qwen3 14B -- top local tool calling (F1 0.97), fits your $gpuVRAM_GB GB VRAM"
-    } elseif ($gpuVRAM_GB -ge 11) {
-        $selectedModel = "ai/qwen3:8B-Q4_K_M"
-        $modelReason = "Qwen3 8B -- matches cloud Haiku tool calling (F1 0.93), fits your $gpuVRAM_GB GB VRAM"
-    } elseif ($gpuVRAM_GB -ge 8) {
-        $selectedModel = "ai/qwen3:4B-UD-Q4_K_XL"
-        $modelReason = "Qwen3 4B -- lightweight, fits your $gpuVRAM_GB GB VRAM"
+    # Select from the same data-only policy used by the web runtime and the
+    # cross-platform host detector. This removes the hand-maintained PowerShell
+    # ladder that previously drifted from the runtime policy.
+    $modelPolicyPath = Join-Path $DPF_DIR "scripts\installer\local-model-policy.json"
+    if (-not (Test-Path -LiteralPath $modelPolicyPath)) {
+        throw "Local model policy missing: $modelPolicyPath"
+    }
+    $modelPolicy = Get-Content -LiteralPath $modelPolicyPath -Raw | ConvertFrom-Json
+    $modelHeadroomGB = [double]$modelPolicy.modelHeadroomGb
+    $selectedTier = $modelPolicy.tiers |
+        Where-Object { ([double]$_.weightsGb + $modelHeadroomGB) -le $gpuVRAM_GB } |
+        Select-Object -First 1
+    if (-not $selectedTier) {
+        $selectedTier = $modelPolicy.tiers | Select-Object -Last 1
+    }
+    if (-not $selectedTier) {
+        throw "Local model policy has no selection tiers: $modelPolicyPath"
+    }
+    $selectedModel = [string]$selectedTier.model
+    if ($gpuVRAM_GB -gt 0) {
+        $modelReason = "$($selectedTier.label) -- fits your $gpuVRAM_GB GB VRAM with $modelHeadroomGB GB headroom"
     } else {
-        $selectedModel = "ai/qwen3:4B-UD-Q4_K_XL"
-        $modelReason = "Qwen3 4B -- lightweight, runs on your hardware (CPU / low VRAM)"
+        $modelReason = "$($selectedTier.label) -- lightweight fallback for CPU or undetected VRAM"
     }
     Write-Action "Selected AI model: $selectedModel ($modelReason)"
     Write-Action "Models are managed by Docker Model Runner (built into Docker Desktop)."
@@ -1746,7 +1740,7 @@ if (-not (Test-StepDone "started")) {
     }
     $capabilityProjection = Resolve-DpfCapabilityComposeProfiles -InstallDir $DPF_DIR
     $env:COMPOSE_PROFILES = (@($capabilityProjection.composeProfiles) -join ',')
-    Import-DPFComposeChain -InstallDir $DPF_DIR
+    . (Resolve-DPFComposeChainModule -InstallDir $DPF_DIR)
     $coreComposeArgs = Get-DPFComposeArgs -InstallDir $DPF_DIR -IncludeEdge:$false -IncludeRelease:($InstallMode -eq "consumer")
     $recordedComposeFiles = @()
     for ($i = 0; $i -lt $coreComposeArgs.Count; $i++) {
@@ -2109,26 +2103,8 @@ if (-not (Test-StepDone "model")) {
     # references match exactly what the model-runner serves (prevents "model not found"
     # in inference.model-manager even when pull was executed).
     #
-    # HuggingFace sources normalize differently from the ai/ catalog. Verified on-box
-    # 2026-08-16: pulling hf.co/ggml-org/Qwen3.8-27B-GGUF:Q4_K_M lists as
-    # huggingface.co/ggml-org/qwen3.8-27b-gguf:Q4_K_M -- host rewritten to its long
-    # form, repo path lowercased, quant tag case PRESERVED. Stripping ai/ alone is a
-    # no-op on those refs, so the post-pull presence check below could never match and
-    # the installer would warn "pull reported success but not listed" on every run.
     $pullName = $selectedModel
-    if ($pullName -match '^(hf\.co|huggingface\.co)/') {
-        if ($pullName -match '^(.*):([^:/]+)$') {
-            $hfPath = $Matches[1]
-            $hfTag  = $Matches[2]
-        } else {
-            $hfPath = $pullName
-            $hfTag  = ''
-        }
-        $hfPath = ($hfPath -replace '^hf\.co/','huggingface.co/').ToLowerInvariant()
-        if ($hfTag) { $runtimeModel = "${hfPath}:${hfTag}" } else { $runtimeModel = $hfPath }
-    } else {
-        $runtimeModel = $pullName -replace '^ai/',''
-    }
+    $runtimeModel = $pullName -replace '^ai/',''
     # Expected size upfront (manifest only) so user with known bandwidth can estimate duration.
     $sizeMB = 0
     try {
@@ -2155,31 +2131,6 @@ if (-not (Test-StepDone "model")) {
     } catch {}
     if ($isPresent) {
         $selectedModel = $runtimeModel
-        # Integrity check: a HuggingFace ref names a FILE, not an immutable
-        # revision, and `docker model pull` takes no flags, so nothing pins bytes
-        # at pull time. Model weights are a control-plane input, so a silent
-        # substitution is a behavioural compromise. DETECTION only -- warn
-        # loudly, never fail the install. (BI-73E9A282.)
-        if ($expectedDigest) {
-            $actualDigest = $null
-            try {
-                $inspected = docker model inspect $runtimeModel 2>$null | ConvertFrom-Json -ErrorAction SilentlyContinue
-                if ($inspected) { $actualDigest = $inspected.id }
-            } catch {}
-            if (-not $actualDigest) {
-                Write-Warn "Could not read the model digest to verify it; continuing."
-            } elseif ($actualDigest -eq $expectedDigest) {
-                Write-OK "Model integrity verified (digest matches the pinned value)"
-            } else {
-                Write-Warn "MODEL DIGEST MISMATCH for $runtimeModel"
-                Write-Warn "  expected: $expectedDigest"
-                Write-Warn "  actual:   $actualDigest"
-                Write-Warn "  The upstream model was republished, or the download differs from"
-                Write-Warn "  what this release pinned. The model still works, but its behaviour"
-                Write-Warn "  is no longer the version this install was tested against. Treat as"
-                Write-Warn "  a security event and re-run the tool evaluation before relying on it."
-            }
-        }
         # Persist the accurate runtime name for compose env + portal-init host_profile
         $selectedModel | Set-Content "$DPF_DIR\.selected-model" -ErrorAction SilentlyContinue
         $hpPath = "$DPF_DIR\.host-profile.json"

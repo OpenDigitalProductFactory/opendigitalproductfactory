@@ -13,7 +13,8 @@
  *  - Hard constraints (residency, tier floor, latency ceiling) clamp the posture
  *    and are recorded as adjustments; residency is never relaxed.
  *  - Fail-closed is a first-class output (state "blocked" | "defer"), not a throw.
- *  - `verificationDepth` is emitted but inert until a verify step exists.
+ *  - `verificationDepth` is emitted for the shared verification gate and may be
+ *    tightened by a hard policy floor; it is never relaxed.
  */
 import type { QualityTier } from "../routing/quality-tiers";
 import type {
@@ -26,8 +27,19 @@ import type {
   PostureOverride,
 } from "./types";
 
-export const GOLDEN_TRIANGLE_COMPILER_VERSION = "0.1.0";
+export const GOLDEN_TRIANGLE_COMPILER_VERSION = "0.3.0";
 export const GOLDEN_TRIANGLE_PRESET_VERSION = "presets@1";
+
+const VERIFICATION_RANK = { none: 0, shallow: 1, deep: 2 } as const;
+
+function maxVerificationDepth(
+  current: OrchestrationBudget["verificationDepth"],
+  floor: NonNullable<OrchestrationBudget["verificationDepth"]>,
+): NonNullable<OrchestrationBudget["verificationDepth"]> {
+  return current && VERIFICATION_RANK[current] >= VERIFICATION_RANK[floor]
+    ? current
+    : floor;
+}
 
 const TIER_RANK: Record<QualityTier, number> = { basic: 0, adequate: 1, strong: 2, frontier: 3 };
 
@@ -147,6 +159,72 @@ function basePolicyFor(p: GoldenTrianglePreference): BasePolicy {
   return cloneBase(PRESET_POLICIES[p.preset]);
 }
 
+/**
+ * EP-WORK-POSTURE (BI-B32E8C32) — `taskClass` stops being a dead input.
+ *
+ * It has been a REQUIRED field on CompileInput since Slice 1, threaded through
+ * every caller, and never read: compiling with different task classes returned
+ * byte-identical policy, and every live caller passed the literal
+ * "conversation". The "what kind of work is this" slot the design called for
+ * already existed and did nothing.
+ *
+ * The carrier is the room's collaboration shape (design §4), so this table is
+ * keyed by the same vocabulary as WORKROOM_SHAPE_KEYS rather than a second one.
+ * Every entry can only TIGHTEN — raise a tier floor, deepen verification — so a
+ * task class can never buy a cheaper or less-checked run than the posture asked
+ * for. An unrecognised class contributes nothing, which keeps the default
+ * "conversation" byte-identical to flag-off.
+ */
+const TASK_CLASS_FLOORS: Record<string, { minimumTier?: QualityTier; verificationDepth?: OrchestrationBudget["verificationDepth"] }> = {
+  // The action leaves the business under its own name.
+  "outward-review": { minimumTier: "strong", verificationDepth: "deep" },
+  // An accountable approver signs off on prepared evidence.
+  "approval-sign-off": { minimumTier: "strong", verificationDepth: "shallow" },
+  // A consequential change confirmed before execution.
+  "change-consequential": { minimumTier: "strong" },
+};
+
+function applyTaskClassFloor(
+  taskClass: string,
+  posture: PostureOverride,
+  budget: OrchestrationBudget,
+  adjustments: PolicyAdjustment[],
+): void {
+  const floor = TASK_CLASS_FLOORS[taskClass];
+  if (!floor) return;
+
+  if (floor.minimumTier) {
+    const raised = posture.minimumTier
+      ? maxTier(posture.minimumTier, floor.minimumTier)
+      : floor.minimumTier;
+    if (raised !== posture.minimumTier) {
+      adjustments.push({
+        field: "minimumTier",
+        from: posture.minimumTier,
+        to: raised,
+        reasonCode: "task_class_tier_floor",
+        reason: `Minimum tier raised to ${raised} by the kind of work (${taskClass}).`,
+      });
+      posture.minimumTier = raised;
+    }
+  }
+
+  if (floor.verificationDepth) {
+    const current = budget.verificationDepth;
+    const deeper = maxVerificationDepth(current, floor.verificationDepth);
+    if (deeper !== current) {
+      adjustments.push({
+        field: "verificationDepth",
+        from: current,
+        to: deeper,
+        reasonCode: "task_class_verification_floor",
+        reason: `Verification deepened to ${deeper} by the kind of work (${taskClass}).`,
+      });
+      budget.verificationDepth = deeper;
+    }
+  }
+}
+
 function buildExplanation(
   preset: GoldenTrianglePreset,
   posture: PostureOverride,
@@ -179,6 +257,10 @@ export function compileGoldenTrianglePolicy(input: CompileInput): DecodedPolicy 
   const adjustments: PolicyAdjustment[] = [];
   let state: DecodedPolicy["state"] = "ok";
 
+  // BI-B32E8C32: the kind of work raises floors before any hard clamp applies,
+  // so a policy clamp still wins over it — the precedence the design states.
+  applyTaskClassFloor(input.taskClass, posture, budget, adjustments);
+
   // ── Hard constraint: residency (never relaxed) ──
   if (policyConstraints?.residency && posture.residencyPolicy !== policyConstraints.residency) {
     adjustments.push({
@@ -205,6 +287,23 @@ export function compileGoldenTrianglePolicy(input: CompileInput): DecodedPolicy 
         reason: `Minimum tier raised to ${raised} by the task/agent floor.`,
       });
       posture.minimumTier = raised;
+    }
+  }
+
+  // ── Floor: verification depth (stake policy cannot be relaxed by posture) ──
+  if (policyConstraints?.verificationDepthFloor) {
+    const floor = policyConstraints.verificationDepthFloor;
+    const current = budget.verificationDepth;
+    const deeper = maxVerificationDepth(current, floor);
+    if (deeper !== current) {
+      adjustments.push({
+        field: "verificationDepth",
+        from: current,
+        to: deeper,
+        reasonCode: "verification_depth_floor",
+        reason: `Verification deepened to ${deeper} by the policy floor.`,
+      });
+      budget.verificationDepth = deeper;
     }
   }
 

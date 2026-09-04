@@ -65,3 +65,21 @@ regexes = [
 paths = [
   '''^docs/testing/''',
 ]
+
+[[allowlists]]
+targetRules = ["generic-api-key"]
+description = "Backlog recovery bundle recoveryKey values are <itemId>-<activityId> idempotency handles, not credentials. The activity id is a database CUID and is deliberately part of the key: buildBacklogRecoveryBundle derives it from stable identifiers rather than array position so re-import does not duplicate activities. The bundle parser constrains the field to a lowercase semantic key."
+condition = "AND"
+regexTarget = "line"
+regexes = [
+  '''"recoveryKey"\s*:\s*"[a-z0-9][a-z0-9-]{2,79}"''',
+]
+paths = [
+  '''^packages/db/recovery/backlog/''',
+]
+
+[[allowlists]]
+description = "Test-only PKI fixtures for the federation membership-proof tests: a throwaway organization CA, a member leaf and a stranger leaf with their PKCS8 keys. Generated once with openssl, never used by any install (EP-ZERO-CONFIG-FEDERATION §5.6)."
+paths = [
+  '''(^|/)apps/web/lib/federation/membership-fixtures\.ts$''',
+]

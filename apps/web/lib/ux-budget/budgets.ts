@@ -180,49 +180,37 @@ export const UX_BUDGETS: Record<UxShell, UxBudget> = {
   },
 };
 
-// ── Audience-aware reading tier (BI-1DE6F69E) ────────────────────────────────
+// ── Audience-aware reading tier: WITHDRAWN (BI-1DE6F69E → BI-0ED0F6B3) ──────
 //
-// The shell table above sets one reading tier per SHELL. That conflated two
-// different questions — what kind of surface this is, and who reads it — and the
-// result contradicted the platform's own readability policy
-// (`packages/validators/src/readability.ts`), which states: marketing/external and
-// business copy -> high school; reseller/partner -> college; architecture and
-// standards -> uncapped, "precision over simplicity".
+// This table used to re-tier `admin` and `builder` to `college` (grade 13). Its
+// justification, measured on 2026-07-31, was that EVERY /admin route failed the
+// high-school cap — /admin/archetypes 57.9, /admin/business-models 29.4,
+// /admin/data-stewardship 18.6, /admin 15.4, /admin/cockpit 12.5 — and that the
+// first NET-NEW admin route, /admin/graph-explorer, blocked at 11.0 despite being
+// the plainest admin surface in the family. A bar that only the newest route must
+// clear, and that the plainest surface cannot, is measuring the wrong thing.
 //
-// Measured consequence, from the route-budget report on 2026-07-31: EVERY /admin
-// route failed `reading-level` against the high-school cap of 9 — /admin/archetypes
-// 57.9, /admin/business-models 29.4, /admin/data-stewardship 18.6, /admin 15.4,
-// down to /admin/cockpit 12.5. They passed only because a pre-existing route gets
-// the finding as advisory, so the bar was never actually enforced anywhere. The
-// first NET-NEW admin route (/admin/graph-explorer, BI-89A149A9) measured 11.0 —
-// the lowest grade of any admin surface — and blocked, because a net-new route
-// loses the exemption. A bar that only the newest route must clear, and that the
-// plainest surface in the family cannot, is measuring the wrong thing.
+// It was. Those numbers were produced by counting full stops, not difficulty
+// (BI-0ED0F6B3): the grade was computed over the whole page flattened to one
+// string, so a screen of unpunctuated labels collapsed into a single enormous
+// "sentence". With the measure corrected, every route in that justification passes
+// at grade 9 — /admin/graph-explorer 3.4, /admin/cockpit 6.4, /admin 8.2,
+// /admin/data-stewardship 6.5, /admin/business-models 8.4 — and the sole net-new
+// route in the confirming sweep measures 8.5.
 //
-// The cause is structural, not editorial: the grade is computed over the whole
-// rendered page including shared shell chrome, and operator vocabulary an admin
-// surface cannot avoid — "Infrastructure", "Architecture", "Configuration",
-// "Diagnostics" — is polysyllabic by nature, which Flesch–Kincaid punishes
-// regardless of sentence craft.
+// The premise having been withdrawn, so is the exception. Every audience is held
+// to its shell's tier, which is what the hide-complexity-from-layman-users
+// doctrine asked for in the first place. 53 of 99 formerly-college routes still
+// read above 9 on genuine operator vocabulary; those are now visible advisory
+// findings on pre-existing routes rather than a bar quietly lowered to meet them.
 //
-// So the tier now resolves from the route's AUDIENCE as well as its shell.
-// Deliberately `college` (grade 13) rather than `uncapped`: uncapped would remove
-// the check entirely, and nine of the twelve admin routes above still fail at 13.
-// That debt stays visible as advisory findings rather than being papered over —
-// this re-tiers the bar to the honest audience, it does not delete it.
+// Evidence: sweep runs 32625564367 (before) and 32661659842 (after).
+// Decision ledger: DI-710B4860812F.
 
-/**
- * Reading tier by route audience, where it differs from the shell default.
- *
- * `admin` and `builder` are operator/architecture surfaces in the sense the
- * readability policy means. Every other audience — `owner`, `worker`, `customer`,
- * `public`, `auth-setup` — keeps the shell default, because the platform's
- * hide-complexity-from-layman-users doctrine applies to them in full.
- */
-export const AUDIENCE_READING_LEVELS: Partial<Record<RouteAudience, ReadingLevel>> = {
-  admin: "college",
-  builder: "college",
-};
+/** Reading tier by route audience. Empty: no audience currently overrides its
+ *  shell's tier. Kept as the seam, so a future exception is a data change with a
+ *  measured justification rather than a rewrite of `readingLevelFor`. */
+export const AUDIENCE_READING_LEVELS: Partial<Record<RouteAudience, ReadingLevel>> = {};
 
 /** Permissiveness order. Later entries tolerate a higher grade. */
 const READING_LEVEL_ORDER: readonly ReadingLevel[] = ["high-school", "college", "uncapped"];

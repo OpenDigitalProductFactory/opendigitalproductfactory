@@ -16,14 +16,19 @@
 // CI checker must never need a database. The policy vocabulary (ReadingLevel, the
 // grade caps) is shared; only the DB-backed override resolution stays at runtime.
 
-import { analyzeReadability, withinReadingLevel, type ReadingLevel } from "@dpf/validators";
+import { analyzeUiReadability, withinReadingLevel, type ReadingLevel } from "@dpf/validators";
 import {
   countSmallControls,
   countWords,
-  visibleText,
+  visibleUtterances,
   OWNER_FIRST_NEXT_ACTION_ATTR,
 } from "../owner-first/ux-audit";
-import { countDisclosureRegions, defaultVisibleHtml, leadBandHtml } from "./scope";
+import {
+  countDisclosureRegions,
+  defaultVisibleHtml,
+  leadBandHtml,
+  routeContentHtml,
+} from "./scope";
 
 /** Marks the one control a surface most wants the owner to press. */
 export const PRIMARY_ACTION_ATTR = "data-dpf-primary-action";
@@ -93,7 +98,11 @@ export type UxBudgetMetrics = {
    * catches a 0→1 transition on a pre-existing route.
    */
   buriedPrimaryAction: number;
-  /** Flesch–Kincaid grade of the default-visible prose. */
+/**
+   * Flesch–Kincaid grade of the route's own default-visible copy, measured one
+   * UI utterance at a time (BI-0ED0F6B3). Scored over `<main>` where the shell
+   * marks one, so the number describes this page rather than the shared chrome.
+   */
   readingGradeLevel: number;
 };
 
@@ -108,7 +117,7 @@ function hasMarkedPrimaryAction(html: string): boolean {
 export function measureUxBudget(html: string): UxBudgetMetrics {
   const visible = defaultVisibleHtml(html);
   const lead = leadBandHtml(html);
-  const prose = visibleText(visible);
+  const utterances = visibleUtterances(routeContentHtml(visible));
   // Compare the FULL DOM against the visible scope: a marker present in one but not
   // the other means the primary action exists yet the owner cannot see it on arrival.
   const buried = hasMarkedPrimaryAction(html) && !hasMarkedPrimaryAction(visible);
@@ -124,7 +133,8 @@ export function measureUxBudget(html: string): UxBudgetMetrics {
     hasNextActionMarker: visible.includes(OWNER_FIRST_NEXT_ACTION_ATTR),
     buriedPrimaryAction: buried ? 1 : 0,
     // An empty surface has no prose to grade; report 0 rather than a fabricated score.
-    readingGradeLevel: prose.length === 0 ? 0 : analyzeReadability(prose).gradeLevel,
+    readingGradeLevel:
+      utterances.length === 0 ? 0 : analyzeUiReadability(utterances).gradeLevel,
   };
 }
 

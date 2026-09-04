@@ -1,0 +1,80 @@
+# owner: platform-architecture
+# expiry: 2026-11-16
+# Unhonored-grant ratchet baseline (BI-6FD78522). Registry grant keys no tool
+# implementation honors — aspirational scope a coworker cannot exercise.
+# Shrink-only: keys leave by being honored (a tool requires them) or removed
+# from agent_registry.json, never by expanding this baseline.
+# First content line = pinned count; remaining lines = the known keys.
+# Regenerate (after a genuine shrink): node scripts/check-no-unhonored-grant-growth.mjs --update
+71
+acceptance_package_write
+adr_create
+architecture_guardrail_read
+architecture_write
+audit_report_create
+budget_read
+catalog_publish
+change_event_emit
+chargeback_write
+clip_route
+constraint_validate
+consumer_onboard
+contract_read
+contract_write
+conway_validate
+credential_scan
+criteria_read
+dependency_audit
+dependency_graph_read
+entitlement_provision
+escalation_trigger
+evidence_artifact_create
+evidence_chain_read
+evidence_chain_validate
+financial_read
+finding_create
+gap_analysis_create
+gap_analysis_read
+guardrail_validate
+incident_create
+incident_read
+incident_write
+integration_test_create
+investment_proposal_create
+license_check
+order_create
+order_write
+pbi_status_write
+portfolio_backlog_read
+portfolio_backlog_write
+prod_status_write
+product_instance_write
+rationalization_report_create
+regulatory_compliance_check
+resource_reservation_read
+resource_reservation_write
+retention_record_write
+risk_score_create
+roadmap_create
+role_registry_read
+rollback_plan_create
+runbook_execute
+sbom_read
+sbom_write
+schedule_write
+scope_agreement_create
+scoring_model_read
+service_offer_read
+service_offer_write
+sla_compliance_write
+strategy_read
+strategy_write
+subscription_read
+subscription_write
+supply_chain_verify
+tool_evaluation_read
+tool_evaluation_write
+tool_verdict_create
+trust_boundary_map
+violation_report_create
+vulnerability_scan

@@ -1,10 +1,4 @@
-/**
- * EP-INF-004: Fallback behavior tests — model-level degradation, auto-recovery,
- * rate tracking in the callWithFallbackChain dispatch loop.
- */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
-// ── Mocks (must be declared before imports) ──────────────────────────────────
 
 vi.mock("@dpf/db", () => ({
   prisma: {
@@ -27,6 +21,11 @@ vi.mock("@/lib/ai-inference", () => {
       public readonly providerId: string,
       public readonly statusCode?: number,
       public readonly headers?: Record<string, string>,
+      public readonly rawBody?: string,
+      public readonly capacity?: unknown,
+      // Mirrors the real signature. Omitting it silently dropped the flag and
+      // made a fall-through test look like a fix that had not worked.
+      public readonly localPoolExhausted?: boolean,
     ) {
       super(message);
     }
@@ -50,9 +49,13 @@ vi.mock("./rate-recovery", () => ({
   scheduleRecovery: vi.fn(),
 }));
 
-// BI-OPT-ROUTING-CACHE: fallback.ts busts the request-scoped routing-loader
-// cache when it degrades a model / cools an endpoint. Mock the loader so we can
-// assert the bust is wired without exercising the real DB-backed loaders.
+// The local-fallback gate derives its ceiling from the MEASURED tool-fidelity
+// evidence, the same input the attachment budget uses (BI-A8BFEFCE). Default to
+// unmeasured so existing expectations keep the fail-safe cliff of 15.
+vi.mock("./local-tool-fidelity", () => ({
+  resolveLocalToolFidelityCeiling: vi.fn(async () => null),
+}));
+
 vi.mock("./loader", () => ({
   invalidateRoutingLoaderCache: vi.fn(),
 }));
@@ -61,8 +64,6 @@ vi.mock("@/lib/ai-provider-internals", () => ({
   autoDiscoverAndProfile: vi.fn(),
 }));
 
-// fallback.ts dynamically imports refreshOAuthToken to self-heal a lapsed OAuth
-// token on an auth error before disabling the provider.
 vi.mock("@/lib/provider-oauth", () => ({
   refreshOAuthToken: vi.fn(),
 }));
@@ -71,9 +72,8 @@ vi.mock("./route-outcome", () => ({
   recordRouteOutcome: vi.fn(() => Promise.resolve()),
 }));
 
-// ── Imports (after mocks) ────────────────────────────────────────────────────
-
 import { buildFallbackPlan, callWithFallbackChain } from "./fallback";
+import { ProviderReconciliationRequiredError } from "@/lib/inference/provider-reconciliation";
 import { prisma } from "@dpf/db";
 import { callProvider, InferenceError } from "@/lib/ai-inference";
 import {
@@ -90,8 +90,6 @@ import { recordRouteOutcome } from "./route-outcome";
 import { refreshOAuthToken } from "@/lib/provider-oauth";
 import type { RouteDecision } from "./types";
 import type { SensitivityLevel } from "./types";
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
 
 const makeDecision = (providerId: string, modelId: string): RouteDecision => ({
   selectedEndpoint: providerId,
@@ -136,8 +134,8 @@ it("keeps restricted OpenRouter obligations load-bearing when OpenRouter is a fa
       executionAdapter: "chat",
       maxTokens: 1024,
       providerSettings: {},
-      toolPolicy: {},
-      responsePolicy: {},
+      toolPolicy: { toolChoice: "required" },
+      responsePolicy: { terminalWriterToolName: "record_initiative_evidence" },
       openRouterObligations: {
         requireProviderAllowlist: true,
         requireProviderBlocklist: true,
@@ -155,13 +153,14 @@ it("keeps restricted OpenRouter obligations load-bearing when OpenRouter is a fa
       },
     },
   );
+  expect(plan.toolPolicy.toolChoice).toBe("required");
+  expect(plan.responsePolicy.terminalWriterToolName).toBe("record_initiative_evidence");
   expect(plan.openRouterPolicy).toMatchObject({
     posture: "restricted",
     providerSettings: { only: ["anthropic"], allow_fallbacks: false, zdr: true },
     requireUnderlyingProviderEvidence: true,
   });
 });
-
 const mockPrisma = prisma as unknown as {
   modelProvider: {
     findUnique: ReturnType<typeof vi.fn>;
@@ -171,7 +170,6 @@ const mockPrisma = prisma as unknown as {
     updateMany: ReturnType<typeof vi.fn>;
   };
 };
-
 const mockCallProvider = callProvider as ReturnType<typeof vi.fn>;
 const mockRecordRequest = recordRequest as ReturnType<typeof vi.fn>;
 const mockLearnFromRateLimitResponse = learnFromRateLimitResponse as ReturnType<typeof vi.fn>;
@@ -184,19 +182,15 @@ const mockClearEndpointUnavailable = clearEndpointUnavailable as ReturnType<type
 const mockInvalidateRoutingLoaderCache = invalidateRoutingLoaderCache as ReturnType<typeof vi.fn>;
 const mockRefreshOAuthToken = refreshOAuthToken as ReturnType<typeof vi.fn>;
 
-// ── Setup ────────────────────────────────────────────────────────────────────
-
 beforeEach(() => {
   vi.useFakeTimers();
   vi.clearAllMocks();
 
-  // Default: provider lookup returns a valid provider
   mockPrisma.modelProvider.findUnique.mockResolvedValue({
     providerId: "test-provider",
     name: "Test Provider",
   });
 
-  // Default: prisma writes succeed
   mockPrisma.modelProfile.updateMany.mockResolvedValue({ count: 1 });
   mockPrisma.modelProvider.update.mockResolvedValue({});
   mockAutoDiscoverAndProfile.mockResolvedValue({
@@ -205,10 +199,7 @@ beforeEach(() => {
   });
   mockRecordRouteOutcome.mockResolvedValue(undefined);
 
-  // Default: extractRetryAfterMs returns undefined (fallback to 60s)
   mockExtractRetryAfterMs.mockReturnValue(undefined);
-
-  // Default: OAuth token refresh succeeds
   mockRefreshOAuthToken.mockResolvedValue({ token: "fresh-token" });
 });
 
@@ -216,11 +207,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-// ── Tests ────────────────────────────────────────────────────────────────────
-
 describe("callWithFallbackChain — EP-INF-004 error handling", () => {
-  // ── Success path ─────────────────────────────────────────────────────────
-
   describe("successful call", () => {
     it("records request with token count on success", async () => {
       mockCallProvider.mockResolvedValue({
@@ -477,8 +464,6 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
     });
   });
 
-  // ── model_not_found ──────────────────────────────────────────────────────
-
   describe("model_not_found", () => {
     function throwModelNotFound() {
       const err = new InferenceError(
@@ -537,6 +522,32 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
       ).rejects.toThrow();
 
       expect(mockAutoDiscoverAndProfile).toHaveBeenCalledWith("prov1");
+    });
+
+    it("awaits reconciliation before requesting one fresh route", async () => {
+      let finishReconciliation!: () => void;
+      mockAutoDiscoverAndProfile.mockReturnValue(
+        new Promise((resolve) => {
+          finishReconciliation = () => resolve({ discovered: 1, profiled: 1 });
+        }),
+      );
+      throwModelNotFound();
+
+      const pending = callWithFallbackChain(
+        makeDecision("prov1", "model1"),
+        [{ role: "user", content: "hi" }],
+        "system",
+      );
+      let settled = false;
+      void pending.then(
+        () => { settled = true; },
+        () => { settled = true; },
+      );
+      await vi.waitFor(() => expect(mockAutoDiscoverAndProfile).toHaveBeenCalledWith("prov1"));
+      expect(settled).toBe(false);
+
+      finishReconciliation();
+      await expect(pending).rejects.toBeInstanceOf(ProviderReconciliationRequiredError);
     });
   });
 
@@ -1051,6 +1062,38 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
       expect(mockCallProvider).toHaveBeenCalledTimes(1);
     });
 
+    it("admits a surface the measured fidelity ceiling covers (BI-A8BFEFCE)", async () => {
+      // The attachment budget will attach up to a MEASURED ceiling. Before this
+      // gate shared that derivation it pinned the raw cliff of 15, so a budgeted
+      // 30-tool surface was refused for exceeding a limit nothing else applied —
+      // and with the cloud provider rate-limited the turn executed no tools.
+      const { resolveLocalToolFidelityCeiling } = await import("./local-tool-fidelity");
+      vi.mocked(resolveLocalToolFidelityCeiling).mockResolvedValueOnce(30);
+
+      mockPrisma.modelProvider.findUnique
+        .mockResolvedValueOnce({ providerId: "prov1", name: "Prov1" })
+        .mockResolvedValueOnce({ providerId: "local", name: "Local" });
+
+      const pinnedErr = new InferenceError("preferred down", "auth", "prov1", 401);
+      const localErr = new InferenceError("local also down", "auth", "local", 401);
+      mockCallProvider
+        .mockRejectedValueOnce(pinnedErr)
+        .mockRejectedValueOnce(localErr);
+
+      const pending = callWithFallbackChain(
+        makeChainWithLocalFallback(),
+        [{ role: "user", content: "hi" }],
+        "system",
+        manyTools(30), // past the raw cliff, within the measured ceiling
+      );
+      const rejection = expect(pending).rejects.toThrow("All endpoints failed");
+      await vi.runAllTimersAsync();
+      await rejection;
+
+      // Local was tried rather than skipped on a count the model has proven.
+      expect(mockCallProvider).toHaveBeenCalledTimes(2);
+    });
+
     it("keeps local fallback when tools.length is within threshold", async () => {
       mockPrisma.modelProvider.findUnique
         .mockResolvedValueOnce({ providerId: "prov1", name: "Prov1" })
@@ -1135,5 +1178,121 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
       expect(result.content).toBe("ok");
       expect(mockCallProvider).toHaveBeenCalledTimes(1);
     });
+  });
+});
+
+// ── local pool exhaustion must fall through, not wait ────────────────────────
+
+describe("callWithFallbackChain — local pool exhaustion (BI-52C6FE5A)", () => {
+  const PINNED_WAIT_LOG = /Rate limited on pinned provider/;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    mockCallProvider.mockReset();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function poolExhausted() {
+    // EP-COST pool check shape: refused locally, before the call left process.
+    return new InferenceError(
+      "codex-cli pool exhausted — resets in ~30s (EP-COST pool check)",
+      "rate_limit",
+      "codex",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      true,
+    );
+  }
+
+  function twoEndpointDecision(): RouteDecision {
+    return {
+      ...makeDecision("codex", "gpt-5.4"),
+      selectedEndpoint: "codex-ep",
+      selectedModelId: "gpt-5.4",
+      fallbackChain: ["gemini-ep"],
+      candidates: [
+        makeCandidate("codex-ep", "codex", "gpt-5.4"),
+        makeCandidate("gemini-ep", "gemini", "gemini-3-pro"),
+      ],
+    };
+  }
+
+  // Spec: routing-resilience-and-failure-observability-spec.md 4.1a
+  it("does not sleep on the pinned endpoint; it falls through to the next provider", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    mockCallProvider
+      .mockRejectedValueOnce(poolExhausted())
+      .mockResolvedValueOnce({ content: "reviewed", providerId: "gemini", modelId: "gemini-3-pro" });
+
+    const pending = callWithFallbackChain(
+      twoEndpointDecision(),
+      [{ role: "user", content: "review" }],
+      "system",
+      [],
+    );
+    await vi.runAllTimersAsync();
+
+    await expect(pending).resolves.toMatchObject({ content: "reviewed" });
+    // Regression: the chain slept 30s on a locally-saturated pool while a
+    // healthy provider sat at index 1, burning the caller's whole budget.
+    expect(log.mock.calls.flat().join(" ")).not.toMatch(PINNED_WAIT_LOG);
+    expect(mockCallProvider).toHaveBeenCalledTimes(2);
+    log.mockRestore();
+  });
+
+  it("still waits when the saturated pool is the ONLY provider", async () => {
+    // Fleet safety: where the saturated pool IS the whole chain, the wait is
+    // the only recovery. Skipping it unconditionally would turn a 30s delay
+    // into an immediate hard failure on every single-provider install.
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    mockCallProvider
+      .mockRejectedValueOnce(poolExhausted())
+      .mockResolvedValueOnce({ content: "recovered", providerId: "codex", modelId: "gpt-5.4" });
+
+    const soleProvider: RouteDecision = {
+      ...makeDecision("codex", "gpt-5.4"),
+      selectedEndpoint: "codex-ep",
+      selectedModelId: "gpt-5.4",
+      fallbackChain: [],
+      candidates: [makeCandidate("codex-ep", "codex", "gpt-5.4")],
+    };
+
+    const pending = callWithFallbackChain(
+      soleProvider,
+      [{ role: "user", content: "review" }],
+      "system",
+      [],
+    );
+    await vi.runAllTimersAsync();
+
+    await expect(pending).resolves.toMatchObject({ content: "recovered" });
+    expect(log.mock.calls.flat().join(" ")).toMatch(PINNED_WAIT_LOG);
+    log.mockRestore();
+  });
+
+  it("still waits and retries on a genuine upstream 429", async () => {
+    // Correct for an upstream 429: the provider was asked and may answer on
+    // retry. Only the local pool refusal is exempt; this must not regress.
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    mockCallProvider
+      .mockRejectedValueOnce(new InferenceError("Rate limited", "rate_limit", "codex", 429, { "retry-after": "30" }))
+      .mockResolvedValueOnce({ content: "ok", providerId: "codex", modelId: "gpt-5.4" });
+
+    const pending = callWithFallbackChain(
+      twoEndpointDecision(),
+      [{ role: "user", content: "review" }],
+      "system",
+      [],
+    );
+    await vi.runAllTimersAsync();
+
+    await expect(pending).resolves.toMatchObject({ content: "ok" });
+    expect(log.mock.calls.flat().join(" ")).toMatch(PINNED_WAIT_LOG);
+    log.mockRestore();
   });
 });

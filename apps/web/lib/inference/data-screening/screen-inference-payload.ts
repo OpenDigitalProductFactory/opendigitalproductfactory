@@ -6,7 +6,8 @@ import type {
 import type { RequestContract } from "@/lib/routing/request-contract";
 import type { ActivityContract } from "@/lib/routing/activity-contract";
 import { isLocalProviderId } from "@/lib/routing/provider-locality";
-import { classifyInferencePayload } from "./classify-payload";
+import { classifyInferencePayload, isVocabularyOnlyEvidence } from "./classify-payload";
+import type { MessageOrigin } from "./types";
 import { evaluateInferenceDispatchPolicy } from "./evaluate-inference-policy";
 import type {
   GovernedPayloadHint,
@@ -28,7 +29,7 @@ function dedupeMatchProvenance(
 ): InferenceMatchProvenance[] {
   const seen = new Map<string, InferenceMatchProvenance>();
   for (const row of rows) {
-    const key = `${row.dataClass}|${row.path}|${row.reason}|${row.confidence}`;
+    const key = `${row.dataClass}|${row.path}|${row.reason}|${row.confidence}|${row.origin ?? ""}`;
     if (!seen.has(key)) seen.set(key, row);
   }
   return [...seen.values()].sort((a, b) =>
@@ -48,6 +49,10 @@ export type ScreenInferencePayloadInput = {
   organizationId?: string | null;
   messages: ChatMessage[];
   systemPrompt: string;
+  /** Platform-authored instruction spans within `systemPrompt` (BI-463BE12A). */
+  systemPromptInstructionSpans?: string[];
+  /** Positional labels for `messages` — what each one IS, never its content. */
+  messageOrigins?: readonly MessageOrigin[];
   tools?: Array<Record<string, unknown>>;
   taskType?: string;
   routeContext?: ScreenRouteContextInput;
@@ -85,6 +90,8 @@ export function screenInferencePayload(
   const classification = classifyInferencePayload({
     messages: input.messages,
     systemPrompt: input.systemPrompt,
+    systemPromptInstructionSpans: input.systemPromptInstructionSpans,
+    messageOrigins: input.messageOrigins,
     tools: input.tools,
     taskType: input.taskType,
     governedData,
@@ -121,9 +128,21 @@ export function screenInferencePayload(
       : classification.overallSensitivity;
   const sensitivity = strongestSensitivity(originalSensitivity, routedPayloadSensitivity);
   const maskRequired = policy.obligations.some((obligation) => obligation.kind === "mask");
+  // A mask obligation clamps the turn local so nothing leaves unredacted. That
+  // is right whenever there is something to redact — and a no-op when the only
+  // evidence is corroboration-gated vocabulary, because a domain was named and
+  // no value was found. Clamping then protects nothing and makes a coworker
+  // unreachable for its own subject: asking for help with payroll measured
+  // confidential, attached a mask with nothing to mask, and fenced the turn
+  // (BI-67CAF494, RouteDecisionLog screen_2781e0797c3307ed).
+  //
+  // Narrow by construction. One precise match, any declared governed hint, or a
+  // deny/review effect and the clamp stands.
+  const maskHasNothingToRedact =
+    maskRequired && isVocabularyOnlyEvidence(classification.matches, input.governedData);
   const routeEffect = policy.effect === "deny" ||
     policy.effect === "review" ||
-    (maskRequired && !prior)
+    (maskRequired && !prior && !maskHasNothingToRedact)
     ? "local-only"
     : "allow";
   const residencyPolicy = routeEffect === "local-only"
@@ -187,6 +206,10 @@ export function screenInferencePayload(
           path: match.path,
           reason: match.reason,
           confidence: match.confidence,
+          // A label saying WHAT the message was, so `messages[0].content` stops
+          // being ambiguous between a real turn and a block the coworker path
+          // prepended. Still no values (BI-40EF7C44).
+          ...(match.origin ? { origin: match.origin } : {}),
         })),
       ),
       // The declared route label is a floor (strongestSensitivity above), so a

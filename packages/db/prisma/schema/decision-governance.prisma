@@ -169,6 +169,7 @@ model DeliberationRun {
   taskRun              TaskRun                @relation(fields: [taskRunId], references: [id], onDelete: Cascade)
   pattern              DeliberationPattern    @relation(fields: [patternId], references: [id])
   outcome              DeliberationOutcome?
+  resolutionProposals  DecisionResolutionProposal[]
   issueSets            DeliberationIssueSet[]
   claims               ClaimRecord[]
   evidenceBundles      EvidenceBundle[]
@@ -301,6 +302,7 @@ model DecisionPerspectiveProfile {
   fallbackInteractions      DecisionInteraction[]               @relation("DecisionInteractionFallbackProfile")
   voiceProfile              VoiceProfile?
   weightAdjustmentProposals WeightAdjustmentProposal[]
+  resolutionProposals       DecisionResolutionProposal[]
 
   @@index([kind, status])
   @@index([ownerOrganizationId])
@@ -346,14 +348,20 @@ model PerspectiveMaterial {
   confidenceWeight Float                              @default(0.5)
   reviewStatus     String                             @default("draft")
   promotionState   String                             @default("candidate")
+  // Who released this row from the high-stakes review hold, and when
+  // (BI-5F3BFD13). Null for material that was never held.
+  reviewedByUserId String?
+  reviewedAt       DateTime?
   summary          String?                            @db.Text
   createdAt        DateTime                           @default(now())
   updatedAt        DateTime                           @updatedAt
   profile          DecisionPerspectiveProfile         @relation(fields: [profileId], references: [profileId], onDelete: Cascade)
   profileVersion   DecisionPerspectiveProfileVersion? @relation(fields: [profileVersionId], references: [versionId], onDelete: SetNull)
+  reviewedByUser   User?                              @relation(fields: [reviewedByUserId], references: [id], onDelete: SetNull)
 
   @@index([profileId, freshness])
   @@index([profileId, reviewStatus, promotionState])
+  @@index([reviewedByUserId])
   @@index([profileId, domainClass])
   @@index([profileVersionId])
   @@index([domainClass])
@@ -433,6 +441,7 @@ model DecisionInteraction {
   triggeredByUser         User?                             @relation("DecisionInteractionTriggeredByUser", fields: [triggeredByUserId], references: [id], onDelete: SetNull)
   escalationCapture       EscalationCapture?
   deferralCapture         DeferralCapture?
+  resolutionProposals     DecisionResolutionProposal[]
   voiceOutput             DecisionInteractionVoiceOutput?
   evidenceReverifications EvidenceReVerification[]
 
@@ -704,4 +713,106 @@ model DecisionInteractionVoiceOutput {
   interaction     DecisionInteraction @relation(fields: [interactionId], references: [id], onDelete: Cascade)
 
   @@index([voiceProfileId])
+}
+
+// Closed sets for DecisionResolutionProposal (BI-3D0FB84B, AGENTS.md §8). Real
+// enums rather than TEXT behind a CHECK: the table is new, so there are no
+// legacy rows whose values could drift, and widening any of these axes should
+// cost a migration and a deliberate look at every switch that reads them.
+enum DecisionProposalScope {
+  interaction
+  gap_cluster @map("gap-cluster")
+}
+
+enum DecisionProposalAction {
+  answer_gap       @map("answer-gap")
+  adopt_option     @map("adopt-option")
+  adjust_weight    @map("adjust-weight")
+  amend_stance     @map("amend-stance")
+  release_material @map("release-material")
+  no_change        @map("no-change")
+}
+
+// What the HUMAN ruled. Whether the row is still live is a separate axis and
+// belongs to the canonical `lifecycle` convention, not to this enum: a
+// superseded draft and a rejected one are not the same fact, and conflating
+// them would make "did anyone decide this?" unanswerable.
+enum DecisionProposalStatus {
+  proposed
+  accepted
+  amended
+  rejected
+}
+
+// A resolution an owner can rule on (BI-3D0FB84B, EP-0AF96937).
+//
+// WHY A NEW MODEL. Every resolution path the platform has starts from a blank
+// field, and a panel verdict has nowhere to live with a lifecycle:
+//   - DeliberationOutcome is a synthesis SNAPSHOT — no status, no ruling, no
+//     supersession, and one row per run rather than per thing-to-decide.
+//   - WeightAdjustmentProposal covers exactly one actionKind (an axis weight).
+//   - AgentActionProposal governs whether a tool may EXECUTE, not what doctrine
+//     should say.
+// This model is the missing middle: a drafted resolution, bound either to one
+// decision or to a cluster of unanswered ones, that a human accepts, amends or
+// rejects. Accepting never mutates doctrine directly — every actionKind writes
+// through an existing path, and corpus changes still land as draft.
+//
+// `interactionId` references DecisionInteraction.id (the row id), matching the
+// naming EscalationCapture and DeferralCapture already use on this spine.
+model DecisionResolutionProposal {
+  id                String                     @id @default(cuid())
+  proposalId        String                     @unique
+  // "interaction" — one specific decision; "gap-cluster" — every unanswered
+  // decision in a domain, which is the unit the review queue already groups by.
+  scopeKind         DecisionProposalScope
+  interactionId     String?
+  domainClass       String?
+  profileId         String
+  actionKind        DecisionProposalAction
+  // The artifact itself, shaped per actionKind (answer text, option id, axis
+  // delta, page slug + body). Never applied from here — see the store.
+  draftPayload      Json                       @default("{}")
+  summary           String                     @db.Text
+  // [{ optionId, text }] — what each option costs, as the panel stated it.
+  consequences      Json                       @default("[]")
+  // [{ role, position, because }] — who disagreed and why. An empty panel
+  // roster records as empty; a MISSING dissent field is a contract failure
+  // upstream and blocks the proposal from being written at all.
+  dissent           Json                       @default("[]")
+  confidence        Float?
+  deliberationRunId String?
+  status            DecisionProposalStatus     @default(proposed)
+  // Row liveness, the ONE not-active convention (BI-C357FA5A). A draft the
+  // corpus moved under, or whose decision was settled elsewhere, leaves
+  // `active` here while `status` still records that nobody ever ruled on it.
+  lifecycle         RecordLifecycle            @default(active)
+  lifecycleAt       DateTime?
+  lifecycleReason   String?
+  ruledByUserId     String?
+  ruledAt           DateTime?
+  rulingNote        String?                    @db.Text
+  // What the human actually accepted when they edited the draft first. The
+  // delta between draftPayload and this is the only honest measure of whether
+  // the drafting is worth its cost.
+  acceptedPayload   Json?
+  // Successor pointer for a supersede chain: a declared self-relation with a
+  // leading index, never a bare *Id column.
+  replacedByProposalId String?
+  createdAt         DateTime                   @default(now())
+  updatedAt         DateTime                   @updatedAt
+  interaction       DecisionInteraction?       @relation(fields: [interactionId], references: [id], onDelete: Cascade)
+  profile           DecisionPerspectiveProfile @relation(fields: [profileId], references: [profileId], onDelete: Cascade)
+  ruledByUser       User?                      @relation(fields: [ruledByUserId], references: [id], onDelete: SetNull)
+  deliberationRun   DeliberationRun?           @relation(fields: [deliberationRunId], references: [id], onDelete: SetNull)
+  replacedBy        DecisionResolutionProposal?  @relation("ProposalSupersession", fields: [replacedByProposalId], references: [id], onDelete: SetNull)
+  replaces          DecisionResolutionProposal[] @relation("ProposalSupersession")
+
+  @@index([status, createdAt])
+  @@index([lifecycle, status, createdAt])
+  @@index([profileId, domainClass, status])
+  @@index([interactionId])
+  @@index([deliberationRunId])
+  @@index([ruledByUserId])
+  @@index([replacedByProposalId])
 }

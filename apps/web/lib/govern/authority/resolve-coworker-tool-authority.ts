@@ -7,6 +7,10 @@ import { findApprovedAuthorityEnvelope } from "@/lib/coworker/authority-approval
 import { loadEffectiveAuthContext } from "@/lib/identity/load-effective-auth-context";
 import type { GovernedExecuteContext } from "@/lib/mcp-governed-execute";
 import { getGrantedCapabilities } from "@/lib/permissions";
+import {
+  parseInitiativeReviewBinding,
+  validateInitiativeReviewAuthorityScope,
+} from "@/lib/mcp-task-review-contract";
 
 import {
   buildCoworkerApprovalBinding,
@@ -17,6 +21,12 @@ import {
 import type { CoworkerAuthorityInputResolver } from "./coworker-tool-authority-gate";
 
 type AuthorityDb = {
+  backlogItem: {
+    findUnique(args: unknown): Promise<{
+      itemId: string;
+      organizationId: string | null;
+    } | null>;
+  };
   agent: {
     findFirst(args: unknown): Promise<{
       id: string;
@@ -42,6 +52,8 @@ type AuthorityDb = {
     findUnique(args: unknown): Promise<{
       taskRunId: string;
       parentTaskRunId: string | null;
+      authorityScope: unknown;
+      a2aMetadata: unknown;
     } | null>;
   };
 };
@@ -56,6 +68,7 @@ export function deriveCoworkerAuthoritySubject(
   const candidates: Array<
     [keyof Record<string, unknown>, CoworkerAuthoritySubject["kind"]]
   > = [
+    ["itemId", "backlog-item"],
     ["employeeId", "employee"],
     ["accountId", "account"],
     ["contactId", "contact"],
@@ -68,6 +81,102 @@ export function deriveCoworkerAuthoritySubject(
     if (id) return { kind, id };
   }
   return { kind: "platform", id: "dpf" };
+}
+
+type InitiativeAuthorityDb = Pick<AuthorityDb, "backlogItem">;
+
+type InitiativeReviewTask = {
+  taskRunId: string;
+  parentTaskRunId: string | null;
+  authorityScope: unknown;
+  a2aMetadata: unknown;
+};
+
+function objectRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+/** Return the server-bound initiative only for a fully validated external MCP
+ * review. Once binding metadata is present, every mismatch fails closed rather
+ * than falling back to model-visible writer arguments. */
+export function resolveBoundInitiativeReviewItem(
+  task: InitiativeReviewTask | null,
+  executingToolName: string,
+): string | null {
+  if (!task) return null;
+  const metadata = objectRecord(task.a2aMetadata);
+  if (!metadata || metadata["initiativeReviewBinding"] === undefined) return null;
+  const sourceRef = objectRecord(metadata["sourceRef"]);
+  if (
+    metadata["trigger"] !== "external-mcp"
+    || (sourceRef?.["kind"] !== "mcp-token" && sourceRef?.["kind"] !== "mcp-session")
+  ) {
+    throw new Error("Initiative review authority requires an external MCP TaskRun.");
+  }
+  const binding = parseInitiativeReviewBinding(metadata["initiativeReviewBinding"]);
+  if (!binding) {
+    throw new Error("The external TaskRun has an invalid immutable initiative review binding.");
+  }
+  if (binding.writerToolName !== executingToolName) {
+    if (
+      executingToolName === "read_source_at_version"
+      || executingToolName === "search_source_at_version"
+    ) return null;
+    throw new Error("The immutable initiative review writer tool does not match the executing tool.");
+  }
+  const authorityScope = Array.isArray(task.authorityScope)
+    ? task.authorityScope.filter((entry): entry is string => typeof entry === "string")
+    : [];
+  const scopeError = validateInitiativeReviewAuthorityScope(binding, authorityScope);
+  if (scopeError) {
+    const required = authorityScope.includes(`tool:${binding.writerToolName}`)
+      ? `backlog-item:${binding.itemId}`
+      : `tool:${binding.writerToolName}`;
+    throw new Error(`The external TaskRun is missing exact authority scope ${required}.`);
+  }
+  return binding.itemId;
+}
+
+/** Resolve initiative subject and organization from the canonical item. Caller
+ * organization fields are ignored; authenticated context can only narrow. */
+export async function resolveInitiativeAuthorityContext(input: {
+  params: Record<string, unknown>;
+  trustedBoundItemId?: string | null;
+  authenticatedOrganizationId?: string | null;
+  db: InitiativeAuthorityDb;
+}): Promise<{
+  subject: CoworkerAuthoritySubject;
+  organizationId: string | null;
+}> {
+  const subject: CoworkerAuthoritySubject = input.trustedBoundItemId
+    ? { kind: "backlog-item", id: input.trustedBoundItemId }
+    : deriveCoworkerAuthoritySubject(input.params);
+  if (subject.kind !== "backlog-item") {
+    return {
+      subject,
+      organizationId: input.authenticatedOrganizationId ?? null,
+    };
+  }
+  const item = await input.db.backlogItem.findUnique({
+    where: { itemId: subject.id },
+    select: { itemId: true, organizationId: true },
+  });
+  if (!item) throw new Error("The governed backlog item does not exist.");
+  if (!item.organizationId) {
+    return { subject, organizationId: "platform" };
+  }
+  if (!input.authenticatedOrganizationId && !input.trustedBoundItemId) {
+    throw new Error("Backlog-item authority requires an authenticated organization context.");
+  }
+  if (
+    input.authenticatedOrganizationId
+    && input.authenticatedOrganizationId !== item.organizationId
+  ) {
+    throw new Error("The governed backlog item does not match the authenticated organization.");
+  }
+  return { subject, organizationId: item.organizationId };
 }
 
 export function deriveCoworkerApprovalPolicy(input: {
@@ -113,8 +222,7 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
       throw new Error("Coworker authority resolution requires an agent identity.");
     }
 
-    const [agent, delegation, task] = await Promise.all([
-      db.agent.findFirst({
+    const agentPromise = db.agent.findFirst({
         where: {
           OR: [
             { id: actingAgentId },
@@ -133,8 +241,8 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
             select: { hitlPolicy: true, updatedAt: true },
           },
         },
-      }),
-      execution.context?.delegationChainId
+      });
+    const delegationPromise = execution.context?.delegationChainId
         ? db.delegationChain.findFirst({
             where: { chainId: execution.context.delegationChainId },
             orderBy: { depth: "desc" },
@@ -146,13 +254,31 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
               authorityScope: true,
             },
           })
-        : Promise.resolve(null),
-      execution.context?.taskRunId
-        ? db.taskRun.findUnique({
+        : Promise.resolve(null);
+    const task = execution.context?.taskRunId
+        ? await db.taskRun.findUnique({
             where: { taskRunId: execution.context.taskRunId },
-            select: { taskRunId: true, parentTaskRunId: true },
+            select: {
+              taskRunId: true,
+              parentTaskRunId: true,
+              authorityScope: true,
+              a2aMetadata: true,
+            },
           })
-        : Promise.resolve(null),
+        : null;
+    const trustedBoundItemId = resolveBoundInitiativeReviewItem(
+      task,
+      execution.toolName,
+    );
+    const [agent, delegation, initiativeAuthority] = await Promise.all([
+      agentPromise,
+      delegationPromise,
+      resolveInitiativeAuthorityContext({
+        params: execution.rawParams,
+        trustedBoundItemId,
+        authenticatedOrganizationId: execution.context?.organizationId,
+        db,
+      }),
     ]);
     if (!agent) {
       throw new Error("The executing coworker identity is not active.");
@@ -193,6 +319,7 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
 
     const input: CoworkerAuthorityInput = {
       authContext: effectiveAuth,
+      organizationId: initiativeAuthority.organizationId,
       action: {
         toolName: execution.toolName,
         requiredCapability: tool.requiredCapability,
@@ -204,7 +331,7 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
         approvalPolicy,
         requiresDelegationChain: Boolean(execution.context?.delegationChainId),
       },
-      subject: deriveCoworkerAuthoritySubject(execution.rawParams),
+      subject: initiativeAuthority.subject,
       delegation: delegation
         ? {
             chainId: delegation.chainId,

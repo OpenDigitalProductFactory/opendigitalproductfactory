@@ -10,11 +10,11 @@ import { redirect } from "next/navigation";
 
 import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
-import { getCoworkerProactivityPreferences } from "@/lib/actions/proactivity";
 import {
   deriveProactivityRoster,
   type ProactivityRosterAgent,
 } from "@/lib/proactivity/proactivity-roster";
+import { collapseDualSeedDuplicates } from "@/lib/coworker-record/selectable-coworker";
 import { ProactivityRosterList } from "@/components/proactivity/ProactivityRosterList";
 
 export const dynamic = "force-dynamic";
@@ -39,14 +39,15 @@ export default async function CoworkerProactivityPage() {
       portfolio: { select: { slug: true } },
     },
   });
-  const roster: ProactivityRosterAgent[] = agents.map((agent) => ({
+  // One coworker seeded under both its slug and its canonical AGT-* id is ONE
+  // coworker, not two proactivity settings to reconcile (BI-74FD6420).
+  const roster: ProactivityRosterAgent[] = collapseDualSeedDuplicates(agents).map((agent) => ({
     agentId: agent.agentId,
     displayName: agent.displayName || agent.name,
     role: agent.role ?? agent.kind,
     portfolioSlug: agent.portfolio?.slug ?? null,
   }));
-  const overrides = await getCoworkerProactivityPreferences(roster.map((r) => r.agentId));
-  const rows = deriveProactivityRoster(roster, overrides);
+  const rows = deriveProactivityRoster(roster);
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-6">

@@ -16,7 +16,7 @@ Never infer a BAA, DPA, zero-retention term, regional entitlement, administrativ
 
 1. Open **Platform → AI Operations → Providers & Routing** and select the configured provider.
 2. Confirm the connected account type and execution channel are correct.
-3. Review **Provider trust evidence**. It shows every evaluated claim's status, age, expiry, and next action.
+3. Review **Provider trust evidence**. The summary separates a saved account declaration from evidence needed only for sensitive or restricted work. It shows the number of restricted-work limitations plus every evaluated claim's status, age, expiry, consequence, and next action.
 4. For missing evidence, obtain and review evidence for this exact account or tenant.
 5. For expired evidence, renew or replace it. Do not extend the date without a current source.
 6. For rejected evidence, resolve the review finding before enabling restricted work.
@@ -25,6 +25,8 @@ Never infer a BAA, DPA, zero-retention term, regional entitlement, administrativ
 9. Reassess the intended workload. Public marketing work and regulated records are separate decisions; a failed restricted-work claim should not be turned into a provider-wide guess.
 
 Operator declarations made on the provider page are evidence-backed for 90 days, remain weaker than reviewed contract evidence, and never become a BAA, DPA, or enterprise entitlement by themselves.
+
+The provider page can update declaration-backed claims such as enabled processing regions. It cannot capture a DPA or other reviewed supplier evidence. When that workflow is unavailable, the page says so directly and keeps restricted work blocked until platform governance links the current evidence; a generic provider-health alarm is not used for that condition.
 
 ## Receipt privacy check
 

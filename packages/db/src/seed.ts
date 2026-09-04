@@ -7,6 +7,7 @@ import { Prisma } from "../generated/client/client";
 import { parseRoleId, parseAgentTier, parseAgentType, parseAgentPortfolioSlug } from "./seed-helpers.js";
 import { resolveAgentIdentity } from "./agent-identity.js";
 import { resolvePrincipalSensitivityClearance } from "./principal-sensitivity.js";
+import { convergeAgentPrincipals, type AgentPrincipalDb } from "./agent-principal-convergence.js";
 import { upsertCoworkerAgentTolerant } from "./coworker-agent-upsert.js";
 import { loadFingerprintCatalogIntoDb, defaultCatalogPath } from "./discovery-fingerprint-catalog-loader.js";
 import { loadOuiRegistryIntoDb, defaultOuiRegistryPath } from "./mac-oui-loader.js";
@@ -75,6 +76,7 @@ import { seedDeliberationPatterns } from "./seed-deliberation.js";
 import { seedStallThresholds } from "./seed-stall-thresholds.js";
 import { ensureDiscoveryTriageScheduledTask } from "./seed-discovery-triage.js";
 import { ensureDataModelMirrorScheduledTask } from "./seed-data-model-mirror.js";
+import { ensureBookkeepingCycleScheduledTask } from "./seed-bookkeeping-cycle.js";
 import { ensureSysmlProjectionScheduledTask } from "./seed-sysml-projection.js";
 import { ensureSelfOptimizationSweepScheduledTask } from "./seed-self-optimization-sweep.js";
 import { ensureHiveScoutScheduledTask } from "./seed-hive-scout.js";
@@ -103,6 +105,11 @@ import {
 } from "./provider-connection.js";
 import { seedIntegrationCoverage } from "../scripts/seed-integration-coverage.js";
 import { seedAbsorptionPosture } from "./seed-absorption-posture.js";
+import {
+  loadPlatformSbomFromRepository,
+  persistPlatformSbom,
+  type PlatformSbomClient,
+} from "./platform-sbom-seed.js";
 import * as crypto from "crypto";
 import bcrypt from "bcryptjs";
 
@@ -205,6 +212,18 @@ async function loadRevokedGrantSet(): Promise<Set<string>> {
     select: { agentId: true, grantKey: true },
   });
   return new Set(rows.map((r) => `${r.agentId}:${r.grantKey}`));
+}
+
+async function seedAgentPrincipals(): Promise<void> {
+  const { converged, examined } = await convergeAgentPrincipals(
+    prisma as unknown as AgentPrincipalDb,
+    () => `PRN-${crypto.randomUUID()}`,
+  );
+  if (converged.length === 0) {
+    console.log(`  Agent principals converged: ${examined} agent(s), none missing`);
+    return;
+  }
+  console.log(`  + ${converged.length} agent Principal(s) of ${examined}: ${converged.slice(0, 8).join(", ")}${converged.length > 8 ? ", …" : ""}`);
 }
 
 async function seedAgents(): Promise<void> {
@@ -612,6 +631,21 @@ async function seedDpfSelfRegistration(): Promise<void> {
   });
 
   console.log("Seeded DPF Portal digital product (foundational/platform_services)");
+}
+
+async function seedPlatformSbom(): Promise<void> {
+  const repositoryRoot = join(__dirname, "..", "..", "..");
+  const input = await loadPlatformSbomFromRepository({
+    repositoryRoot,
+    generatedAt: new Date(),
+    gitRef: process.env.GITHUB_SHA ?? process.env.GIT_COMMIT ?? "installed-runtime",
+  });
+  const result = await persistPlatformSbom(prisma as unknown as PlatformSbomClient, input);
+  console.log(
+    `Seeded platform SBOM ${result.documentId}: ` +
+      `${result.componentCount} components, ${result.occurrenceCount} occurrences, ` +
+      `${result.supersededDocumentCount} superseded document(s)`,
+  );
 }
 
 // Epic/backlog seeding removed — managed separately via backup/restore process.
@@ -2490,6 +2524,11 @@ async function main(): Promise<void> {
   await step("businessModels", () => seedBusinessModels());
   await step("agents", () => seedAgents());
   await step("coworkerAgents", () => seedCoworkerAgents());
+  // BI-53C26E60: §11 Principal convergence applies to agents too, and has to
+  // run after BOTH agent seeders — the AGT-* roster and the slug-id coworker
+  // rows — because either can introduce an agent with no identity. Without it
+  // every `independent: true` review lane attributes to the delegating human.
+  await step("agentPrincipals", () => seedAgentPrincipals());
   // EP-AI-WORKFORCE-001: Seed unified agent lifecycle data
   await step("coworkerSkills", () => seedCoworkerSkills());
   await step("agentPromptContexts", () => seedAgentPromptContexts());
@@ -2511,6 +2550,7 @@ async function main(): Promise<void> {
   await step("eaSysmlCada", () => seedEaSysmlCada());
   await step("eaSysmlDataAuthority", () => seedEaSysmlDataAuthority());
   await step("dpfSelfRegistration", () => seedDpfSelfRegistration());
+  await step("platformSbom", () => seedPlatformSbom());
   await step("coworkerServiceCatalog", () => seedCoworkerServiceCatalog(prisma));
   await step("platformCapabilityPortfolio", () => projectPlatformCapabilities());
   // BI-8F9EDD6C: project AI coworkers as Workforce DigitalProducts under
@@ -2524,6 +2564,7 @@ async function main(): Promise<void> {
   await step("defaultAdminUser", () => seedDefaultAdminUser());
   await step("discoveryTriageScheduledTask", () => ensureDiscoveryTriageScheduledTask(prisma));
   await step("dataModelMirrorScheduledTask", () => ensureDataModelMirrorScheduledTask(prisma));
+  await step("bookkeepingCycleScheduledTask", () => ensureBookkeepingCycleScheduledTask(prisma));
   await step("sysmlProjectionScheduledTask", () => ensureSysmlProjectionScheduledTask(prisma));
   await step("selfOptimizationSweepScheduledTask", () => ensureSelfOptimizationSweepScheduledTask(prisma));
   await step("hiveScoutScheduledTask", () => ensureHiveScoutScheduledTask(prisma));

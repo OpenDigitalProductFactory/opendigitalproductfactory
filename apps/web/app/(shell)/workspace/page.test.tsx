@@ -37,10 +37,33 @@ describe("workspace tile derivation", () => {
     expect(typeof loadPlatformWorkspaceHomeData).toBe("function");
   });
 
-  it("mounts installation-purpose confirmation in Workspace behind platform authority", () => {
+  // BI-7626A660 inverted this pair. The panel used to open the workspace home
+  // and cost roughly the top third of the first viewport; it now lives at
+  // /ops/installation and the arrival-time signal is the header badge.
+  it("no longer opens the workspace home with the installation identity panel", () => {
     const source = readFileSync(new URL("./page.tsx", import.meta.url), "utf8");
 
-    expect(source).toContain("<InstallationPurposePanel");
+    expect(source).not.toContain("<InstallationIdentityPanel");
+    expect(source).not.toContain("loadInstallationIdentityView");
+  });
+
+  it("keeps the identity panel behind the same platform authority on its new route", () => {
+    const source = readFileSync(
+      new URL("../ops/installation/page.tsx", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("<InstallationIdentityPanel");
     expect(source).toContain('"manage_platform"');
+  });
+
+  it("feeds the identity panel from the composed view, not a raw intent read", () => {
+    const source = readFileSync(
+      new URL("../ops/installation/page.tsx", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("loadInstallationIdentityView");
+    expect(source).not.toContain("loadInstallationOperatingIntent");
   });
 });

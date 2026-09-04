@@ -61,6 +61,10 @@ scripts/spec-status-frontmatter-baseline.txt merge=union
 scripts/instruction-plane-baseline.txt merge=union
 scripts/instruction-plane-rule-baseline.txt merge=union
 
+# CI test-inventory allowlist — line-oriented; concurrent guard PRs each append
+# their own self-test and should never conflict on adjacent lines.
+scripts/ci-policy-test-inventory-allowlist.txt merge=union
+
 # Archetype completeness ratchet baseline — concurrent PRs that each re-run
 # --update must not conflict; union-merge and let --update re-dedupe/sort.
 scripts/archetype-completeness-baseline.txt merge=union
@@ -71,6 +75,10 @@ scripts/archetype-completeness-baseline.txt merge=union
 # rather than collide on a shared line. --update re-dedupes and re-sorts.
 scripts/stewardship-scope-baseline.txt merge=union
 scripts/stewardship-exemptions.txt merge=union
+
+# Ambient-host-state test ratchet baseline (BI-95A83B47) — line-oriented pairs;
+# min-wins on duplicates, so union merges never loosen the ratchet.
+scripts/ambient-host-test-baseline.txt merge=union
 
 # The tool-pack registry is one-pack-per-line precisely so concurrent PRs that
 # each add a pack merge with the built-in union driver instead of colliding on

@@ -1,30 +1,18 @@
 import type { InitiativeArtifactRef, InitiativeGateKey } from "@/lib/backlog/initiative-readiness";
+import { prisma } from "@dpf/db";
 import {
+  RESEARCH_DEFINITIONS,
+  READINESS_PROFILES,
   recordInitiativeGateReceipt,
   recordInitiativeObjectiveMappingProposal,
   recordInitiativeSpecApproval,
 } from "@/lib/backlog/initiative-readiness";
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import {
+  INITIATIVE_READINESS_LANES as LANES,
+  type InitiativeReadinessLane as Lane,
+} from "@/lib/tak/initiative-readiness-tool-grants";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
-
-type Lane = {
-  capability: NonNullable<ToolDefinition["requiredCapability"]>;
-  grant: string;
-  gates: readonly InitiativeGateKey[];
-  independent: boolean;
-};
-
-const LANES: Record<string, Lane> = {
-  record_initiative_evidence: { capability: "manage_backlog", grant: "initiative_evidence_write", gates: ["classification", "research", "dependency-disposition"], independent: false },
-  record_initiative_design_review: { capability: "manage_backlog", grant: "initiative_design_review", gates: ["design-spec", "spec-approval", "plan-review"], independent: true },
-  record_initiative_architecture_review: { capability: "manage_ea_model", grant: "initiative_architecture_review", gates: ["architecture-review"], independent: true },
-  record_initiative_data_review: { capability: "manage_ea_model", grant: "initiative_data_review", gates: ["data-review"], independent: true },
-  record_initiative_ux_review: { capability: "manage_backlog", grant: "initiative_ux_review", gates: ["ux-fit-review"], independent: true },
-  record_initiative_security_review: { capability: "manage_compliance", grant: "initiative_security_review", gates: ["security-review"], independent: true },
-  record_initiative_compliance_review: { capability: "manage_compliance", grant: "initiative_compliance_review", gates: ["compliance-review"], independent: true },
-  record_initiative_domain_review: { capability: "manage_backlog", grant: "initiative_domain_review", gates: ["domain-review"], independent: true },
-  record_initiative_archetype_review: { capability: "manage_taxonomy", grant: "initiative_archetype_review", gates: ["archetype-provisioning", "archetype-completeness"], independent: true },
-};
 
 const artifactRefSchema = {
   type: "object",
@@ -97,9 +85,26 @@ function inputSchemaFor(name: string, lane: Lane): ToolDefinition["inputSchema"]
   };
 }
 
+/**
+ * BI-3AE38A1F: the `research` lane existed and nothing said what satisfies it.
+ * An author who had genuinely verified a defect — confirmed it on a named ref,
+ * proved it with a failing-then-passing test, ruled out candidate causes by
+ * running them — had no way to know that record was what the gate wanted, and
+ * discovered the bar only by being refused. State it on the tool that records
+ * it, per profile, so the requirement is legible before the work starts.
+ */
+function gateGuidance(lane: Lane): string {
+  if (!lane.gates.includes("research")) return "";
+  const shapes = READINESS_PROFILES
+    .map((profile) => [profile, RESEARCH_DEFINITIONS[profile]] as const)
+    .filter((entry): entry is [typeof entry[0], NonNullable<typeof entry[1]>] => entry[1] !== null)
+    .map(([profile, definition]) => `${profile}: ${definition.summary} (${definition.satisfiedBy.join("; ")})`);
+  return ` What satisfies the research gate depends on the item's profile — ${shapes.join(" | ")}.`;
+}
+
 function definitionBase(lane: Lane): Omit<ToolDefinition, "name" | "inputSchema"> {
   return {
-    description: `Record authenticated initiative evidence for only these gate lanes: ${lane.gates.join(", ")}. Artifact identity, digest, subject, author, reviewer, and authority are server resolved.`,
+    description: `Record authenticated initiative evidence for only these gate lanes: ${lane.gates.join(", ")}. Artifact identity, digest, subject, author, reviewer, and authority are server resolved.${gateGuidance(lane)}`,
     requiredCapability: lane.capability,
     executionMode: "immediate",
     sideEffect: true,
@@ -186,8 +191,83 @@ function parseObjectiveMappings(value: unknown): Array<{ objectiveId: string; ev
   return mappings;
 }
 
+async function resolveExternalInitiativeReviewBinding(
+  actionKey: string,
+  taskRunId: string | undefined,
+): Promise<{
+  itemId: string;
+  gate: string;
+  expectedCurrentBaselineId?: string | null;
+  artifactRef: InitiativeArtifactRef;
+} | null> {
+  if (!taskRunId) return null;
+  const run = await prisma.taskRun.findUnique({
+    where: { taskRunId },
+    select: { a2aMetadata: true },
+  });
+  const metadata = run?.a2aMetadata;
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+  const record = metadata as Record<string, unknown>;
+  if (record["trigger"] !== "external-mcp") return null;
+  const rawBinding = record["initiativeReviewBinding"];
+  if (!rawBinding || typeof rawBinding !== "object" || Array.isArray(rawBinding)) return null;
+  const binding = rawBinding as Record<string, unknown>;
+  if (binding["writerToolName"] !== actionKey) return null;
+  const itemId = typeof binding["itemId"] === "string" ? binding["itemId"].trim() : "";
+  const gate = typeof binding["gate"] === "string" ? binding["gate"].trim() : "";
+  const rawArtifact = binding["artifactRef"];
+  const expectedCurrentBaselineId = binding["expectedCurrentBaselineId"];
+  if (!itemId.startsWith("BI-") || !gate || !rawArtifact || typeof rawArtifact !== "object" || Array.isArray(rawArtifact)) {
+    return null;
+  }
+  const artifact = rawArtifact as Record<string, unknown>;
+  if (
+    artifact["kind"] !== "repo-blob-at-commit"
+    || typeof artifact["repositoryFullName"] !== "string"
+    || typeof artifact["commitSha"] !== "string"
+    || typeof artifact["path"] !== "string"
+    || typeof artifact["providerBlobId"] !== "string"
+    || (expectedCurrentBaselineId !== undefined
+      && expectedCurrentBaselineId !== null
+      && typeof expectedCurrentBaselineId !== "string")
+  ) return null;
+  return {
+    itemId,
+    gate,
+    ...(expectedCurrentBaselineId !== undefined
+      ? { expectedCurrentBaselineId: expectedCurrentBaselineId as string | null }
+      : {}),
+    artifactRef: {
+      kind: "repo-blob-at-commit",
+      repositoryFullName: artifact["repositoryFullName"],
+      commitSha: artifact["commitSha"],
+      path: artifact["path"],
+      providerBlobId: artifact["providerBlobId"],
+    },
+  };
+}
+
 function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
   return async (params, userId, context): Promise<ToolResult> => {
+    const binding = await resolveExternalInitiativeReviewBinding(actionKey, context?.taskRunId);
+    if (binding) {
+      params = {
+        ...params,
+        itemId: binding.itemId,
+        gate: binding.gate,
+        artifactRef: binding.artifactRef,
+        ...(Object.prototype.hasOwnProperty.call(binding, "expectedCurrentBaselineId")
+          ? { expectedCurrentBaselineId: binding.expectedCurrentBaselineId }
+          : {}),
+        ...(actionKey === "record_initiative_evidence" && binding.gate === "research"
+          ? {
+              findings: [],
+              resolvedFindingRefs: [],
+              reason: `Independent reviewer ${context?.agentId ?? "unknown"} recorded ${String(params.decision ?? "unknown")} for the immutable research artifact bound to TaskRun ${context?.taskRunId ?? "unknown"}.`,
+            }
+          : {}),
+      };
+    }
     const operation = params.operation ?? "gate-receipt";
     if (actionKey === "record_initiative_evidence" && operation === "objective-mapping") {
       const mappings = parseObjectiveMappings(params.objectiveMappings);
@@ -294,9 +374,22 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
   };
 }
 
+// `LANES` is the single registry for disclosure, receipt validation AND recovery
+// routing, so it deliberately carries lanes this pack does not own as tools —
+// `record_plan_backlog_coverage` is routed here for the implementation-planner
+// role but is IMPLEMENTED by decomposition-pack with a different schema
+// (`decision: decomposed|atomic` + `deliverables`, not `gate` + `decision: pass`).
+// Deriving handlers from every lane registered a second handler under that name
+// and shadowed the real one, so the documented schema was rejected with
+// `gate-not-authorized` and no plan coverage could be recorded (BI-17CBD21F).
+// Bind handlers to the names this pack actually defines; the lane stays in
+// `LANES` so `readinessLaneForRole` still resolves its recovery route.
+const OWNED_TOOL_NAMES = definitions.map((definition) => definition.name);
+const ownedLanes = Object.entries(LANES).filter(([name]) => OWNED_TOOL_NAMES.includes(name));
+
 export const initiativeReadinessPack: ToolPack = {
   packId: "initiative-readiness",
   definitions,
-  handlers: Object.fromEntries(Object.entries(LANES).map(([name, lane]) => [name, handlerFor(name, lane)])),
-  grants: Object.fromEntries(Object.entries(LANES).map(([name, lane]) => [name, [lane.grant]])),
+  handlers: Object.fromEntries(ownedLanes.map(([name, lane]) => [name, handlerFor(name, lane)])),
+  grants: Object.fromEntries(ownedLanes.map(([name, lane]) => [name, [lane.grant]])),
 };

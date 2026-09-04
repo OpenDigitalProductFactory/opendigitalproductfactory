@@ -1,6 +1,6 @@
 ---
 name: dpf-compare-options
-description: "Use in the DPF codebase after decision context is gathered and 2-4 options need WWMD/kernel scoring. Maps options to principle dimensions, calls principle_decide, and returns a human-readable recommendation with audit detail preserved."
+description: "Use when DPF decision context is gathered and two to four options need WWMD/kernel scoring."
 disable-model-invocation: false
 user-invocable: true
 allowed-tools: mcp__dpf__principle_decide mcp__dpf__wiki_query

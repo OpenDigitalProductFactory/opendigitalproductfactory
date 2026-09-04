@@ -301,6 +301,47 @@ describe("cliAdapter", () => {
     expect(systemWrite!.content).toContain("create_backlog_item");
   });
 
+  // BI-35FAE2DB: `claude` discovers CLAUDE.md (which imports the whole
+  // AGENTS.md rulebook), project settings and hooks by walking UP from its
+  // working directory. Running headless inference in /workspace turned every
+  // single-shot call into an agentic session that answered a "respond with
+  // ONLY a JSON object" prompt with session meta-commentary, which the review
+  // parser cannot read — Build Studio design review reported "Both review
+  // agents failed to respond" for 332 rounds because of it.
+  it("runs the CLI from a neutral directory, never the project workspace", async () => {
+    mockGetProviderBearerToken.mockResolvedValue({ token: "sk-ant-oat01-test-token" });
+    const cliOutput = JSON.stringify({ result: "OK", usage: {} });
+    mockSpawn.mockReturnValue(createMockProcess(cliOutput));
+
+    await cliAdapter.execute(makeRequest());
+
+    const decodedScript = sandboxWriteFor("cli-run-")!.content;
+
+    // The regression itself: never cd into the project tree.
+    expect(decodedScript).not.toContain("cd /workspace");
+    // An empty per-run directory, created before use so `cd` cannot fail.
+    expect(decodedScript).toMatch(/mkdir -p \/tmp\/cli-cwd-/);
+    expect(decodedScript).toMatch(/cd \/tmp\/cli-cwd-/);
+    // Order matters: mkdir must precede cd.
+    expect(decodedScript.indexOf("mkdir -p /tmp/cli-cwd-"))
+      .toBeLessThan(decodedScript.indexOf("cd /tmp/cli-cwd-"));
+  });
+
+  it("removes the neutral working directory when the call is cleaned up", async () => {
+    mockGetProviderBearerToken.mockResolvedValue({ token: "sk-ant-oat01-test-token" });
+    const cliOutput = JSON.stringify({ result: "OK", usage: {} });
+    mockSpawn.mockReturnValue(createMockProcess(cliOutput));
+
+    await cliAdapter.execute(makeRequest());
+
+    const cleanup = mockExecAsync.mock.calls
+      .map((c) => String(c[0]))
+      .find((cmd) => /rmdir \/tmp\/cli-cwd-/.test(cmd));
+    expect(cleanup).toBeDefined();
+    // Cleanup must never fail the call — the dir may already be gone.
+    expect(cleanup).toContain("|| true");
+  });
+
   it("handles CLI process error with auth failure classification", async () => {
     mockGetProviderBearerToken.mockResolvedValue({
       token: "sk-ant-oat01-test-token",

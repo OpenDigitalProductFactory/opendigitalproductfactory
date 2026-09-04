@@ -1,0 +1,79 @@
+{
+  "version": "1",
+  "accountableOwner": "data-architect",
+  "affectedCopies": [
+    "DecisionResolutionProposal, a new table holding one drafted resolution per thing-being-decided",
+    "DecisionInteraction, which gains a back-relation to the drafts written against it (cascade on delete)",
+    "DecisionPerspectiveProfile, which gains a back-relation to the drafts written against its doctrine",
+    "DeliberationRun, which gains a back-relation to the proposals a panel produced",
+    "User, which gains a back-relation to the proposals a person has ruled on"
+  ],
+  "migration": {
+    "name": "20260823210000_add_decision_resolution_proposal",
+    "backfill": "None, and none is possible: the table is new and nothing before this change drafted a resolution, so an empty table is the honest starting state. Three enum types are created with it (DecisionProposalScope, DecisionProposalAction, DecisionProposalStatus) rather than TEXT columns, because the table has no legacy rows whose values could drift and widening any of those axes should cost a migration. Every foreign key is created VALID: the table is empty when the constraints are added, so there is no orphan population to validate and NOT VALID would leave permanently unvalidated constraints guarding a provably empty set. onDelete CASCADE for the decision and the profile a proposal belongs to (a draft answer to a deleted decision is evidence of nothing); SET NULL for the panel run, the ruling user, and the successor pointer, so deleting any of those loses attribution but never the ruling. Rollback is source-only: dropping the table loses drafted and ruled proposals, but no doctrine — every accepted proposal has already written through to the corpus, the escalation record, or the weight-proposal ledger, which are its durable effects.",
+    "reversible": true
+  },
+  "tests": [
+    "apps/web/lib/decision/resolution-proposal-store.test.ts",
+    "apps/web/lib/decision/resolution-write-through.test.ts",
+    "apps/web/lib/decision/proposal-presentation.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:decision-resolution-proposal",
+      "prismaModel": "DecisionResolutionProposal",
+      "lifecycleDisposition": "A proposal is drafted (status=proposed, lifecycle=active), then either ruled by a human (accepted | amended | rejected, terminal and never re-opened) or retired as a row when its decision is settled elsewhere (lifecycle leaves active while status still reads proposed, because nobody ruled on it). The two axes are deliberately separate: collapsing them would make 'did a human decide this?' unanswerable after the fact. Rows are never aged out on a clock — the stewardship disposition is domain-lifecycle-managed, and rows cascade with the decision they belong to. A ruled row is kept deliberately: the draft-versus-accepted delta is the only record of whether the drafting was worth its cost, and a rejection reason is doctrine too.",
+      "fields": [
+        {
+          "fieldId": "data:decision-resolution-proposal#draftPayload",
+          "resolution": "governed",
+          "reason": "The drafted artifact itself — the answer text, the option id, the axis delta, the page body. It is what the owner is being asked to approve, so it is the substance of the record rather than metadata about it.",
+          "provenance": "BI-3D0FB84B; docs/superpowers/specs/2026-08-23-decision-concierge-design.md §4.4",
+          "flags": ["business-content"],
+          "fieldPolicy": "Internal. May restate the organization's own business judgement, so it is shown on the operator decision surface, never emitted to the hive or a federated peer. Applying it is never automatic: only an accepted proposal writes, and only through the existing path for its action kind."
+        },
+        {
+          "fieldId": "data:decision-resolution-proposal#acceptedPayload",
+          "resolution": "governed",
+          "reason": "What the human actually accepted when they edited the draft first. Retained specifically so the delta from draftPayload can be measured; without it there is no honest signal about whether the drafting helps.",
+          "provenance": "BI-3D0FB84B; DI-C992EBD1A356",
+          "flags": ["business-content"],
+          "fieldPolicy": "Internal. Written once, at ruling time, and never edited afterwards."
+        },
+        {
+          "fieldId": "data:decision-resolution-proposal#dissent",
+          "resolution": "governed",
+          "reason": "Which coworkers disagreed and on what. An empty list records a panel that agreed; the field is required at write time precisely so 'nobody dissented' and 'nobody was asked' cannot read the same on the card.",
+          "provenance": "BI-3D0FB84B; docs/superpowers/specs/2026-08-23-decision-concierge-design.md §4.3",
+          "flags": [],
+          "fieldPolicy": "Internal. Shown to the owner alongside the recommendation it qualifies, never separated from it."
+        },
+        {
+          "fieldId": "data:decision-resolution-proposal#ruledByUserId",
+          "resolution": "governed",
+          "reason": "The person accountable for the ruling. A proposal only ever becomes authoritative because a human accepted it, so the record of who did that is the point rather than incidental.",
+          "provenance": "BI-3D0FB84B",
+          "flags": ["sensitive"],
+          "fieldPolicy": "Internal. Holds a User id, so it is personal data by reference: shown on the operator surface, never in coworker-facing retrieval and never emitted to a peer. onDelete SetNull — deleting a user must not delete the ruling they made."
+        },
+        {
+          "fieldId": "data:decision-resolution-proposal#rulingNote",
+          "resolution": "governed",
+          "reason": "Why a proposal was rejected, kept so the same suggestion does not come back and so the reasoning survives the person who gave it.",
+          "provenance": "BI-3D0FB84B",
+          "flags": ["business-content"],
+          "fieldPolicy": "Internal. Operator-authored free text; never emitted to the hive."
+        },
+        {
+          "fieldId": "data:decision-resolution-proposal#lifecycle",
+          "resolution": "governed",
+          "reason": "Whether the row is still live, on the canonical RecordLifecycle convention (BI-C357FA5A) rather than a sixth spelling of 'not active'. Distinct from status, which records what the human ruled.",
+          "provenance": "BI-3D0FB84B; docs/architecture/data-model-stewardship-runbook.md §Record lifecycle convention",
+          "flags": [],
+          "fieldPolicy": "Internal. Set by the platform, not operator-editable; a retired row is excluded from every open-proposal read."
+        }
+      ]
+    }
+  ]
+}

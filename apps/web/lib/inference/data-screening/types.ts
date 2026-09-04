@@ -31,7 +31,27 @@ export type InferencePayloadMatch = {
   path: string;
   reason: string;
   confidence: "deterministic" | "inferred" | "governed";
+  /** Where the matched message came from. Absent for non-message probes. */
+  origin?: MessageOrigin;
 };
+
+/**
+ * What a message in the payload IS, as a label — never its content.
+ *
+ * A receipt can already say a match landed at `messages[0].content`, which is
+ * useless for deciding what to do about it: index 0 may be a real user turn, or
+ * a platform-generated block the coworker path prepended. Those imply opposite
+ * fixes, and `rawPayloadStored` is false by design, so the payload cannot be
+ * read back to tell them apart (BI-40EF7C44).
+ *
+ * A label is safe to persist where the content is not. `turn` is the default:
+ * anything the caller does not label is treated as a real turn, so an unlabelled
+ * path reads exactly as it did before this existed.
+ */
+export type MessageOrigin =
+  | "turn"
+  | "thread-checkpoint"
+  | "user-briefing";
 
 export type InferencePayloadReceipt = {
   screenId: string;
@@ -119,6 +139,8 @@ export type InferenceMatchProvenance = {
   /** The rule that fired, e.g. "contact-detail" or "employee-record-text". */
   reason: string;
   confidence: InferencePayloadMatch["confidence"];
+  /** What the matched message was, when the match came from one. A label, never a value. */
+  origin?: MessageOrigin;
 };
 
 export type InferenceDataScreenResult = {
@@ -142,6 +164,26 @@ export type GovernedPayloadHint = {
 export type InferencePayloadClassificationInput = {
   messages: ChatMessage[];
   systemPrompt: string;
+  /**
+   * Exact text spans of the system prompt that are platform-authored
+   * INSTRUCTION rather than the turn's data (BI-463BE12A / BI-9C14CB5D).
+   *
+   * Supplied by whoever knows the provenance — the prompt assembler for its own
+   * static blocks, the calling surface for the coworker persona. Everything not
+   * named here is classified as data, so an assembly path that supplies nothing
+   * behaves exactly as it did before this existed, and text appended after
+   * assembly is data by default. Fail-closed by construction.
+   */
+  systemPromptInstructionSpans?: string[];
+  /**
+   * What each entry of `messages` is, positionally (BI-40EF7C44).
+   *
+   * Labels only — this never carries content and never changes classification.
+   * It exists so a receipt can say WHICH message a match came from when the
+   * payload itself cannot be stored. Short or absent arrays are fine: any index
+   * without a label is `turn`.
+   */
+  messageOrigins?: readonly MessageOrigin[];
   tools?: Array<Record<string, unknown>>;
   taskType?: string;
   governedData?: GovernedPayloadHint[];
@@ -150,6 +192,17 @@ export type InferencePayloadClassificationInput = {
 export type InferencePayloadClassification = {
   overallSensitivity: InferencePayloadSensitivity;
   dataClasses: InferenceDataClass[];
+  /**
+   * The subset of `dataClasses` evidenced somewhere OTHER than platform-authored
+   * instruction — the turn's messages, tool-call arguments, tool results, or an
+   * explicit governed hint (BI-463BE12A).
+   *
+   * `dataClasses` stays complete so the receipt reports everything detected and
+   * the classification remains auditable. The PDP evaluates THIS set, because an
+   * export decision should turn on what is being sent, not on a job description
+   * that happens to name the domain.
+   */
+  dataEvidencedClasses: InferenceDataClass[];
   matches: InferencePayloadMatch[];
   receipt: InferencePayloadReceipt;
 };

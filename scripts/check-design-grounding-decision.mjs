@@ -10,6 +10,7 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fetchOriginMainSharedSafe } from "./lib/git-fetch-shared-safe.mjs";
+import { requireChangedFiles } from "./lib/git-changed-files.mjs";
 
 export const DESIGN_GROUNDING_RE = /(?:^|\n)\s*(?:#{1,6}\s*)?Design[ -]Grounding(?:-Decision)?:/i;
 export const DESIGN_GROUNDING_HEADING_RE = /(?:^|\n)\s*#{1,6}\s+Design grounding\b/i;
@@ -179,11 +180,7 @@ function main() {
   // BI-1ADD56FC: never write .git/shallow into a full shared clone.
   fetchOriginMainSharedSafe((args) => git(...args));
 
-  const changedFiles = git("diff", "--name-only", `${base}...HEAD`)
-    .split("\n")
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .map(assertSafePath);
+  const changedFiles = requireChangedFiles(base, "design-grounding-gate").map(assertSafePath);
 
   const commits = git("log", `${base}..HEAD`, "--format=%B");
   const prBody = process.env.PR_BODY || "";

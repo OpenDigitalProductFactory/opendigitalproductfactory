@@ -129,7 +129,7 @@ export default async function ProvidersPage() {
       category: p.category,
       serviceKind: p.serviceKind ?? null,
       authMethod: p.authMethod,
-      hasCredential: !!pw.credential,
+      hasCredential: pw.credential?.hasUsableMaterial ?? false,
       credentialExpired,
       discoveredModelCount: summary?.totalModels ?? 0,
       cliPoolExhausted: pool?.isExhausted ?? false,

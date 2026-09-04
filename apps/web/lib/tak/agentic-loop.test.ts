@@ -7,7 +7,6 @@ import {
   buildRepeatedQuestionNudge,
   buildRepeatedToolStopMessage,
   buildRuntimeLimitToolLoopMessage,
-  buildMaxIterationsExhaustedMessage,
   detectToolRefusedDespiteAvailability,
   phaseRequiresToolCall,
   detectUnsavedEvidence,
@@ -279,71 +278,6 @@ describe("buildRuntimeLimitToolLoopMessage (BI-0C19AFDD)", () => {
 // configured provider is active but wasn't eligible" (banner) and "My usual AI
 // was unavailable" (this message). The message branched on the `downgraded`
 // boolean, which conflated a dispatch failure with pre-dispatch ineligibility.
-describe("buildMaxIterationsExhaustedMessage (BI-F4D3B9E9d)", () => {
-  const anyTools = [{ name: "query_backlog", result: { ok: true } as never }];
-
-  it("says 'unavailable' only when a dispatch actually failed", () => {
-    const msg = buildMaxIterationsExhaustedMessage({
-      downgradeReason: "provider-unavailable",
-      executedTools: anyTools,
-    });
-    expect(msg).toContain("My usual AI was unavailable");
-    expect(msg).toContain("query_backlog");
-  });
-
-  it("never claims 'unavailable' when the provider was merely ineligible", () => {
-    const msg = buildMaxIterationsExhaustedMessage({
-      downgradeReason: "not-eligible",
-      executedTools: anyTools,
-    });
-    // The exact contradiction with the downgrade banner.
-    expect(msg).not.toContain("was unavailable");
-    expect(msg).toContain("wasn't a fit for this particular request");
-  });
-
-  it("does not tell an owner to connect a provider they already have connected", () => {
-    const msg = buildMaxIterationsExhaustedMessage({
-      downgradeReason: "not-eligible",
-      executedTools: anyTools,
-    });
-    // Old copy: "Connecting a stronger provider (Claude, Gemini, or OpenAI)…"
-    expect(msg).not.toMatch(/connecting a stronger provider/i);
-    expect(msg).toMatch(/shorter request/i);
-  });
-
-  it("points at restoring the failed provider when one genuinely failed", () => {
-    const msg = buildMaxIterationsExhaustedMessage({
-      downgradeReason: "provider-unavailable",
-      executedTools: anyTools,
-    });
-    expect(msg).toContain("Platform > AI > Providers");
-  });
-
-  it("adds no downgrade lead at all on a healthy-provider exhaustion", () => {
-    const msg = buildMaxIterationsExhaustedMessage({
-      downgradeReason: null,
-      executedTools: anyTools,
-    });
-    expect(msg).not.toMatch(/my usual ai/i);
-    expect(msg).toMatch(/^I made several attempts/);
-    expect(msg).toMatch(/smaller piece/i);
-  });
-
-  it("falls back to a generic work note when no tools ran", () => {
-    const msg = buildMaxIterationsExhaustedMessage({
-      downgradeReason: null,
-      executedTools: [],
-    });
-    expect(msg).toContain("I worked through several attempts");
-  });
-
-  it("always names the safety limit rather than an opaque failure", () => {
-    for (const downgradeReason of ["provider-unavailable", "not-eligible", null] as const) {
-      const msg = buildMaxIterationsExhaustedMessage({ downgradeReason, executedTools: anyTools });
-      expect(msg).toContain("safety limit");
-    }
-  });
-});
 
 describe("buildToolSessionHintMessage — review-fail veto + tool-error notes in the messages tail", () => {
   // BI-56804810: these notes now ride in a per-turn user message (not tool
@@ -637,6 +571,56 @@ describe("runAgenticLoop", () => {
     threadId: "thread-1",
   };
 
+  // BI-8B8731EE. On a governed reviewer route the loop used to rewrite EVERY
+  // routeAndCall throw as `terminal-writer-missing`, discarding the
+  // classification it had just computed. A local-CI capacity reservation —
+  // which clears itself in ~195s — was therefore reported as the writer failing
+  // its contract, and `preInferenceResourceWait` downstream could never see the
+  // `capacity` kind it keys on.
+  it.each([
+    ["Local provider dispatch deferred: local-ci-queued-capacity-reservation", "capacity"],
+    ["Provider is overloaded, status: 529", "busy"],
+  ])("keeps a resource deferral classified (%s) instead of blaming the writer", async (message, expectedKind) => {
+    const mockRoute = vi.mocked(routeAndCall);
+    const deferral = new Error(message);
+    deferral.name = expectedKind === "capacity" ? "LocalProviderCapacityDeferredError" : "Error";
+    mockRoute.mockRejectedValue(deferral);
+
+    const result = await runAgenticLoop({
+      ...baseParams,
+      terminalToolPolicy: {
+        writerToolName: "record_initiative_evidence",
+        readerToolNames: ["read_source_at_version"],
+        minimumSuccessfulReaderCalls: 1,
+        maximumReaderCalls: 3,
+      },
+    });
+
+    expect(result.failure?.kind).toBe(expectedKind);
+    expect(result.failure?.kind).not.toBe("terminal-writer-missing");
+    expect(result.content).not.toContain("could not be dispatched");
+  });
+
+  it("still blames the writer when the route fails for a reason it cannot classify", async () => {
+    // The unclassified path is unchanged: without a known cause there is nothing
+    // truer to say than that the receipt was not recorded.
+    const mockRoute = vi.mocked(routeAndCall);
+    mockRoute.mockRejectedValue(new Error("something entirely unexpected"));
+
+    const result = await runAgenticLoop({
+      ...baseParams,
+      terminalToolPolicy: {
+        writerToolName: "record_initiative_evidence",
+        readerToolNames: ["read_source_at_version"],
+        minimumSuccessfulReaderCalls: 1,
+        maximumReaderCalls: 3,
+      },
+    });
+
+    expect(result.failure?.kind).toBe("terminal-writer-missing");
+    expect(result.content).toContain("record_initiative_evidence");
+  });
+
   it("points to the real provider surface when no tool-capable endpoint is active", async () => {
     const mockRoute = vi.mocked(routeAndCall);
     mockRoute.mockRejectedValueOnce(new Error(
@@ -649,7 +633,6 @@ describe("runAgenticLoop", () => {
       agentId: "admin-assistant",
     });
 
-    // Genuine config gap → name the REAL surface, not the old "Model Assignment".
     expect(result.content).toContain("No AI model that supports tools is active");
     expect(result.content).toContain("Providers & Routing");
     expect(result.content).not.toContain("Model Assignment");
@@ -766,7 +749,7 @@ describe("runAgenticLoop", () => {
     expect(result.modelId).toBe("unknown");
   });
 
-  it("treats a generic all-endpoints-failed as a transient retry, not a config error", async () => {
+  it("types a rate-limited all-endpoints failure as busy", async () => {
     const mockRoute = vi.mocked(routeAndCall);
     mockRoute.mockRejectedValueOnce(new Error(
       'All endpoints failed for conversation. Attempts: [{"endpointId":"anthropic-sub","error":"429 rate limited"}]',
@@ -778,8 +761,9 @@ describe("runAgenticLoop", () => {
       agentId: "admin-assistant",
     });
 
-    expect(result.content).toContain("try again in about 30 seconds");
+    expect(result.content).toMatch(/Nothing is misconfigured/); // BI-33F1EA72 hand-off
     expect(result.content).not.toContain("Model Assignment");
+    expect(result.failure?.kind).toBe("busy");
   });
 
   it("does not accept a max_tokens-truncated response as a complete answer — continues generation (BI-1D144CC1)", async () => {

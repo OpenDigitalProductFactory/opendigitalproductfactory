@@ -8,7 +8,7 @@ import { prisma } from "./client";
 describe("healthcare care intake Prisma substrate", () => {
   it("keeps packet identity subject-aware and generic evidence joins patient-optional", () => {
     const schema = readFileSync(
-      resolve(process.cwd(), "prisma/schema/verticals-care.prisma"),
+      resolve(__dirname, "../prisma/schema/verticals-care.prisma"),
       "utf8",
     );
     const packet = schema.slice(

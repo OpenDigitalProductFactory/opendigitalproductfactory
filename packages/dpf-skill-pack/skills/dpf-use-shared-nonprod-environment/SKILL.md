@@ -1,6 +1,6 @@
 ---
 name: dpf-use-shared-nonprod-environment
-description: "Use in the DPF codebase before preview or UX verification when a thread needs a nonproduction environment. Prefers the governed shared localhost environments and lease workflow over unmanaged per-thread servers."
+description: "Use before DPF preview or UX verification when a thread needs a nonproduction environment."
 disable-model-invocation: false
 user-invocable: true
 allowed-tools: mcp__dpf__list_nonprod_environment_leases mcp__dpf__claim_nonprod_environment_lease mcp__dpf__release_nonprod_environment_lease
@@ -50,14 +50,26 @@ If no shared environment is available and the canonical local install is the rig
 4. If the result is `queued`, do not touch the runtime. Re-observe the same
    claim with bounded backoff; reusing `claimKey` preserves FIFO position.
 5. Only an `admitted` result authorizes verification against the provided URL.
-6. Release an admitted lease when verification is complete or blocked. Release
-   a queued lease to cancel the request when the task stops waiting.
+6. Release by `leaseId` — the exact id the claim returned (`NPEL-…`). Release an
+   admitted lease when verification is complete or blocked, and release a queued
+   lease to cancel the request when the task stops waiting.
+   - `environmentKey` does NOT release anything. It names the environment, not
+     your claim on it, and the release call rejects it: `missing_required`,
+     `retryable: false`. Keep the `leaseId` from step 3; if you no longer have
+     it, list the leases and read it back.
+   - `claimKey` (step 3) is not the `leaseId` either. It preserves FIFO position
+     across re-observations; only the returned `leaseId` releases.
 
 ## Guardrails
 
 - Do not start a thread-owned preview server when a shared environment is available.
 - A successful queued response is not runtime ownership; only `admitted` is.
 - Do not hold a lease after the thread is complete, blocked, or handed off.
+- `nonprod_lease_not_owner` on release means the lease is someone else's, or it
+  is a durable queue task that outlives your process. It is not a transient
+  error and re-calling cannot fix it (`retryable: false`) — list the leases and
+  leave it alone. Blind-retrying it is how a healthy queued run gets reported as
+  a failure.
 - Do not show lease IDs or raw tool names in the default UI. Show "Shared environment ready", "in use", or "blocked."
 - Don't treat this skill as optional when runtime-bound verification is needed in a thread worktree — it IS the runtime path; the worktree is not.
 

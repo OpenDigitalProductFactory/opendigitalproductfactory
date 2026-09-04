@@ -17,7 +17,7 @@
  *
  * See docs/superpowers/specs/2026-05-19-build-studio-stall-detection.md §5.6, §6.1.
  */
-import { prisma } from "@dpf/db";
+import { prisma, type Prisma } from "@dpf/db";
 import { TASK_LIVE_STATES } from "@/lib/tak/task-states";
 import { resolveThresholdForTaskRun } from "./threshold-lookup";
 
@@ -52,6 +52,44 @@ export async function markTaskRunWorking(taskRunId: string): Promise<void> {
   await prisma.taskRun.update({
     where: { taskRunId },
     data: { status: "working", lastHeartbeatAt: new Date() },
+  });
+}
+
+/**
+ * Reserve one exact TaskRun generation for work. The compare-and-set
+ * and first heartbeat share one write so the watchdog can never observe a new
+ * working state without liveness evidence.
+ */
+export async function reserveTaskRunGenerationWorking(input: {
+  taskRunId: string;
+  expectedStatus: string;
+  updatedAt: Date;
+  progressPayload: Prisma.InputJsonValue;
+}): Promise<boolean> {
+  const result = await prisma.taskRun.updateMany({
+    where: {
+      taskRunId: input.taskRunId,
+      status: input.expectedStatus,
+      updatedAt: input.updatedAt,
+    },
+    data: {
+      status: "working",
+      lastHeartbeatAt: new Date(),
+      completedAt: null,
+      progressPayload: input.progressPayload,
+    },
+  });
+  return result.count === 1;
+}
+
+export async function reserveSubmittedTaskRunWorking(input: {
+  taskRunId: string;
+  updatedAt: Date;
+  progressPayload: Prisma.InputJsonValue;
+}): Promise<boolean> {
+  return reserveTaskRunGenerationWorking({
+    ...input,
+    expectedStatus: "submitted",
   });
 }
 

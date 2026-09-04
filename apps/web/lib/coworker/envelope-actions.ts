@@ -111,6 +111,14 @@ export async function approveEnvelope(
     where: { id: envelopeId },
     data: { status: "approved" },
   });
+  // Approving does NOT resume the waiting task here, and must not. The task
+  // stays `input-required` until the caller replays its immutable packet;
+  // resumeApprovedRemoteTask (mcp-task-submit.ts) then finds this approved,
+  // unexpired envelope and re-executes with the original arguments, reserving
+  // the run with a CAS on `status: "input-required"`. Marking the task working
+  // at approval time makes that CAS unmatchable and the approval unusable —
+  // #4796 did exactly that and was reverted. If an approval appears not to take
+  // effect, check the envelope's `expiresAt` first: the window is 15 minutes.
   return { ok: true, envelope: updated as EnvelopeRow };
 }
 

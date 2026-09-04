@@ -1,3 +1,4 @@
+import { requirementEvidenceLane, requirementNextAction } from "./readiness-guidance";
 import type {
   InitiativeReadinessDecision,
   InitiativeReadinessFacts,
@@ -7,7 +8,7 @@ import type {
   ReadinessTarget,
 } from "./types";
 
-export const INITIATIVE_READINESS_POLICY_VERSION = "initiative-readiness.v1";
+export const INITIATIVE_READINESS_POLICY_VERSION = "initiative-readiness.v2";
 
 type Requirement = {
   code: ReadinessCode;
@@ -36,32 +37,51 @@ function designRequirements(facts: InitiativeReadinessFacts): Requirement[] {
 
 function planRequirements(facts: InitiativeReadinessFacts): Requirement[] {
   const specialist = facts.specialistReviews;
-  return [
-    ...designRequirements(facts),
-    requirement("CANONICAL_DESIGN_REQUIRED", facts.canonicalDesign, "design-checklist-reviewer"),
+  const common = designRequirements(facts);
+  if (facts.profile === "doc-only") return common;
+
+  const fix = [
+    ...common,
     requirement("RESEARCH_REQUIRED", facts.research, "design-author"),
+  ];
+  if (facts.profile === "fix") return fix;
+
+  const feature = [
+    ...fix,
+    requirement("CANONICAL_DESIGN_REQUIRED", facts.canonicalDesign, "design-checklist-reviewer"),
     requirement("SPEC_APPROVAL_REQUIRED", facts.specApproval, "design-checklist-reviewer", "REVIEW_FAILED"),
     requirement("REVIEW_REQUIRED", specialist.architecture, "architecture-reviewer", "REVIEW_FAILED", true),
+    requirement("OBJECTIVE_BASELINE_REQUIRED", facts.objectiveBaseline, "design-checklist-reviewer"),
+    requirement("ARTIFACT_AUTHOR_REQUIRED", facts.artifactAuthor, "artifact-resolver"),
+  ];
+  if (facts.profile === "feature") return feature;
+
+  return [
+    ...feature,
     requirement("REVIEW_REQUIRED", specialist.data, "data-reviewer", "REVIEW_FAILED", true),
     requirement("REVIEW_REQUIRED", specialist.ux, "ux-reviewer", "REVIEW_FAILED", true),
     requirement("REVIEW_REQUIRED", specialist.security, "security-reviewer", "REVIEW_FAILED", true),
     requirement("REVIEW_REQUIRED", specialist.compliance, "compliance-reviewer", "REVIEW_FAILED", true),
     requirement("REVIEW_REQUIRED", specialist.domain, "domain-reviewer", "REVIEW_FAILED", true),
-    requirement("OBJECTIVE_BASELINE_REQUIRED", facts.objectiveBaseline, "design-checklist-reviewer"),
-    requirement("ARTIFACT_AUTHOR_REQUIRED", facts.artifactAuthor, "artifact-resolver"),
   ];
 }
 
 function implementationRequirements(facts: InitiativeReadinessFacts): Requirement[] {
-  const requirements = [
-    ...planRequirements(facts),
-    requirement("PLAN_REQUIRED", facts.plan, "implementation-planner"),
-    requirement("PLAN_REVIEW_REQUIRED", facts.planReview, "plan-reviewer", "REVIEW_FAILED"),
-    requirement("PLAN_COVERAGE_REQUIRED", facts.planCoverage, "portfolio-management"),
-    requirement("TRACEABILITY_INCOMPLETE", facts.traceability ?? facts.planCoverage, "portfolio-management"),
-    requirement("DEPENDENCY_UNRESOLVED", facts.dependencies, "portfolio-management", undefined, true),
-    requirement("CAPSULE_IDENTITY_MISMATCH", facts.capsuleIdentity, "delivery-coordinator"),
-  ];
+  const requirements = [...planRequirements(facts)];
+  if (facts.profile !== "doc-only") {
+    requirements.push(
+      requirement("PLAN_REQUIRED", facts.plan, "implementation-planner"),
+      requirement("DEPENDENCY_UNRESOLVED", facts.dependencies, "portfolio-management", undefined, true),
+      requirement("CAPSULE_IDENTITY_MISMATCH", facts.capsuleIdentity, "delivery-coordinator"),
+    );
+  }
+  if (["feature", "cross-domain", "archetype"].includes(facts.profile)) {
+    requirements.push(
+      requirement("PLAN_REVIEW_REQUIRED", facts.planReview, "plan-reviewer", "REVIEW_FAILED"),
+      requirement("PLAN_COVERAGE_REQUIRED", facts.planCoverage, "portfolio-management"),
+      requirement("TRACEABILITY_INCOMPLETE", facts.traceability ?? facts.planCoverage, "portfolio-management"),
+    );
+  }
   if (facts.profile === "archetype") {
     const provisioningStates = Object.values(facts.archetypeProvisioning);
     const provisioningState: ReadinessEvidenceState = provisioningStates.some((state) => state === "fail")
@@ -101,17 +121,36 @@ function requirementsFor(facts: InitiativeReadinessFacts, target: ReadinessTarge
   return completionRequirements(facts);
 }
 
+/**
+ * BI-28E8CB88: a requirement result used to carry only a state and a code. That
+ * is enough to decide the verdict and not enough to act on: `missing` with an
+ * empty ref list reads as "you supplied nothing" to an author who supplied
+ * exactly what was asked for, in the lane nothing reads. Every result now says
+ * which lane its evidence is in and names the door for THIS profile
+ * (BI-3AE38A1F). The verdict arithmetic above is untouched — nothing here can
+ * turn an unmet requirement into a satisfied one.
+ */
 function result(
   facts: InitiativeReadinessFacts,
   code: ReadinessCode,
   state: ReadinessEvidenceState | "blocked",
   accountableRole: string,
 ): ReadinessRequirementResult {
+  const unreadEvidenceRefs = state === "pass" ? [] : facts.unreadEvidenceRefs?.[code] ?? [];
   return {
     code,
     state,
     accountableRole,
     evidenceRefs: facts.evidenceRefs?.[code] ?? [],
+    evidenceLane: requirementEvidenceLane({ state, unreadEvidenceRefs }),
+    unreadEvidenceRefs,
+    nextAction: requirementNextAction({
+      code,
+      profile: facts.profile,
+      state,
+      unreadEvidenceRefs,
+      reasons: facts.requirementReasons?.[code],
+    }),
   };
 }
 

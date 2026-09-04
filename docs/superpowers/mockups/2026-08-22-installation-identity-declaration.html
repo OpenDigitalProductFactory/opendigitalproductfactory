@@ -1,0 +1,351 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Installation Identity Declaration — Workspace Panel Prototype</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --dpf-bg: oklch(0.965 0.012 92);
+        --dpf-surface-1: oklch(0.995 0.004 95);
+        --dpf-surface-2: oklch(0.955 0.012 94);
+        --dpf-text: oklch(0.205 0.025 250);
+        --dpf-muted: oklch(0.445 0.028 246);
+        --dpf-border: oklch(0.835 0.018 92);
+        --dpf-accent: oklch(0.47 0.12 212);
+        --dpf-on-accent: oklch(0.995 0.004 95);
+        --dpf-success: oklch(0.49 0.12 145);
+        --dpf-warning: oklch(0.64 0.14 78);
+        --dpf-error: oklch(0.53 0.16 28);
+        --dpf-info: oklch(0.52 0.1 265);
+        --radius: 8px;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0; background: var(--dpf-bg); color: var(--dpf-text);
+        font-family: Inter, ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+        line-height: 1.5; font-size: 14px;
+      }
+      .page { max-width: 880px; margin: 0 auto; padding: 24px 16px 72px; }
+      h1 { font-size: 20px; margin: 0 0 4px; }
+      h2 { font-size: 16px; margin: 0; font-weight: 600; }
+      h3 { font-size: 13px; margin: 0 0 8px; font-weight: 600; }
+      .lede { color: var(--dpf-muted); margin: 0 0 28px; }
+      .state-label {
+        margin: 36px 0 10px; font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
+        text-transform: uppercase; color: var(--dpf-muted);
+      }
+      .panel {
+        border: 1px solid var(--dpf-border); background: var(--dpf-surface-1);
+        border-radius: var(--radius); padding: 16px 20px;
+      }
+      .panel-head { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
+      .badge {
+        display: inline-flex; align-items: center; gap: 6px; border: 1px solid;
+        border-radius: 999px; padding: 2px 9px; font-size: 11px; font-weight: 600;
+        white-space: nowrap;
+      }
+      .badge.ok { color: var(--dpf-success); border-color: var(--dpf-success); }
+      .badge.warn { color: var(--dpf-warning); border-color: var(--dpf-warning); }
+      .badge.info { color: var(--dpf-info); border-color: var(--dpf-info); }
+      .badge.stop { color: var(--dpf-error); border-color: var(--dpf-error); }
+      .badge.mute { color: var(--dpf-muted); border-color: var(--dpf-border); }
+      .lead { font-size: 15px; margin: 10px 0 2px; }
+      .sub { color: var(--dpf-muted); margin: 0 0 4px; }
+      .stances { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 8px; }
+      .stances li {
+        display: grid; grid-template-columns: 150px auto; gap: 4px 12px;
+        border: 1px solid var(--dpf-border); background: var(--dpf-surface-2);
+        border-radius: var(--radius); padding: 10px 12px;
+      }
+      .stances .name { font-weight: 600; }
+      .stances .why { grid-column: 1 / -1; color: var(--dpf-muted); font-size: 13px; }
+      @media (max-width: 560px) {
+        .stances li { grid-template-columns: 1fr; }
+      }
+      details.disclose {
+        margin-top: 16px; border: 1px solid var(--dpf-border);
+        border-radius: var(--radius); background: var(--dpf-surface-1);
+      }
+      details.disclose > summary {
+        cursor: pointer; padding: 10px 12px; font-weight: 600; list-style: none;
+        display: flex; justify-content: space-between; align-items: center;
+      }
+      details.disclose > summary::after { content: "\25BE"; color: var(--dpf-muted); }
+      details.disclose[open] > summary { border-bottom: 1px solid var(--dpf-border); }
+      .disclose-body { padding: 14px 12px; }
+      .fields { display: grid; gap: 12px; grid-template-columns: 1fr 1fr; }
+      @media (max-width: 560px) { .fields { grid-template-columns: 1fr; } }
+      label.field { display: block; }
+      label.field > span { display: block; font-size: 12px; font-weight: 600; margin-bottom: 4px; }
+      select, input[type="text"] {
+        width: 100%; border: 1px solid var(--dpf-border); border-radius: 6px;
+        background: var(--dpf-surface-1); color: var(--dpf-text);
+        padding: 8px 10px; font: inherit; font-size: 13px;
+      }
+      .hint { color: var(--dpf-muted); font-size: 12px; margin: 4px 0 0; }
+      .btnrow { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+      button {
+        font: inherit; font-size: 13px; font-weight: 600; border-radius: 6px;
+        padding: 8px 14px; cursor: pointer; border: 1px solid transparent;
+      }
+      .primary { background: var(--dpf-accent); color: var(--dpf-on-accent); }
+      .secondary { background: var(--dpf-surface-2); color: var(--dpf-text); border-color: var(--dpf-border); }
+      .notice { border-left: 4px solid; border-radius: 6px; padding: 10px 12px; margin-top: 14px; }
+      .notice.warn { border-left-color: var(--dpf-warning); background: color-mix(in srgb, var(--dpf-warning) 12%, transparent); }
+      .notice.info { border-left-color: var(--dpf-info); background: color-mix(in srgb, var(--dpf-info) 12%, transparent); }
+      .notice p { margin: 0; }
+      .notice p + p { margin-top: 6px; }
+      .impact { margin-top: 14px; border: 1px solid var(--dpf-border); border-radius: var(--radius); padding: 14px 12px; background: var(--dpf-surface-2); }
+      table { width: 100%; border-collapse: collapse; font-size: 13px; }
+      th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--dpf-border); vertical-align: top; }
+      th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--dpf-muted); font-weight: 700; }
+      tr:last-child td { border-bottom: 0; }
+      .arrow { color: var(--dpf-muted); }
+      .tightens { color: var(--dpf-success); font-weight: 600; }
+      .loosens { color: var(--dpf-warning); font-weight: 600; }
+      .note { color: var(--dpf-muted); font-size: 12px; }
+      .rules { border: 1px solid var(--dpf-border); border-radius: var(--radius); background: var(--dpf-surface-1); padding: 14px 18px; margin-top: 36px; }
+      .rules ol { margin: 8px 0 0; padding-left: 20px; }
+      .rules li { margin-bottom: 6px; }
+      code { background: var(--dpf-surface-2); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <h1>Installation identity — workspace panel</h1>
+      <p class="lede">
+        Prototype for the panel that replaces <code>InstallationPurposePanel</code> on <code>/workspace</code>.
+        Three states, one panel. No new route. Detail sits behind a disclosure.
+      </p>
+
+      <!-- ===================== STATE A ===================== -->
+      <p class="state-label">State A &mdash; declared identity, read view (the normal arrival)</p>
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>What this installation is</h2>
+            <p class="sub">Its identity decides what your AI coworkers may do here.</p>
+          </div>
+          <span class="badge ok">Confirmed</span>
+        </div>
+
+        <p class="lead"><strong>A development installation.</strong> Its job is to safely improve another DPF.</p>
+        <p class="sub">Paired with <code>dpf-prod-acme</code>. The installer set the environment.</p>
+
+        <h3 style="margin-top:18px">What agents may do here</h3>
+        <ul class="stances">
+          <li>
+            <span class="name">Credentials</span>
+            <span><span class="badge info">Local test keys allowed</span></span>
+            <span class="why">This is a development installation, so local test credentials may be generated and rotated without an operator hand-off.</span>
+          </li>
+          <li>
+            <span class="name">Teardown</span>
+            <span><span class="badge warn">Capture work first</span></span>
+            <span class="why">This development installation holds work that exists nowhere else, so capture a durable backlog bundle before any teardown.</span>
+          </li>
+          <li>
+            <span class="name">Source changes</span>
+            <span><span class="badge info">Governed worktree</span></span>
+            <span class="why">A Git checkout is present, so source changes belong in a governed worktree behind the usual review gates.</span>
+          </li>
+          <li>
+            <span class="name">Paired installation</span>
+            <span><span class="badge stop">Read only</span></span>
+            <span class="why">This development installation is paired with dpf-prod-acme, so read from that peer for realistic context but never write to it.</span>
+          </li>
+        </ul>
+
+        <p class="note" style="margin-top:12px">
+          A stance is a brake, never a permission. Access still comes from roles, grants, and approved links.
+        </p>
+
+        <details class="disclose">
+          <summary>Change what this installation is</summary>
+          <div class="disclose-body">
+            <div class="fields">
+              <label class="field">
+                <span>Its main job</span>
+                <select>
+                  <option selected>Safely improve another DPF</option>
+                  <option>Run our organization</option>
+                  <option>Operate DPF for customers</option>
+                  <option>Grow DPF in a market or region</option>
+                  <option>Join the DPF community</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Environment</span>
+                <select><option selected>Development</option><option>Test</option><option>Production</option></select>
+                <p class="hint">The installer set this to <strong>development</strong>. That value wins here.</p>
+              </label>
+              <label class="field" style="grid-column:1/-1">
+                <span>Paired installation</span>
+                <input type="text" value="dpf-prod-acme">
+                <p class="hint">Name the production install this one learns from. Leave it empty if there is none.</p>
+              </label>
+            </div>
+            <div class="btnrow">
+              <button class="primary">Show me the impact</button>
+            </div>
+            <p class="note" style="margin-top:10px">Nothing is saved until you see the impact and confirm it.</p>
+          </div>
+        </details>
+      </section>
+
+      <!-- ===================== STATE B ===================== -->
+      <p class="state-label">State B &mdash; impact preview for a material change (development to production)</p>
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>What this installation is</h2>
+            <p class="sub">Its identity decides what your AI coworkers may do here.</p>
+          </div>
+          <span class="badge ok">Confirmed</span>
+        </div>
+        <p class="lead"><strong>A development installation.</strong> Its job is to safely improve another DPF.</p>
+
+        <details class="disclose" open>
+          <summary>Change what this installation is</summary>
+          <div class="disclose-body">
+            <div class="fields">
+              <label class="field">
+                <span>Its main job</span>
+                <select><option selected>Run our organization</option></select>
+              </label>
+              <label class="field">
+                <span>Environment</span>
+                <select><option selected>Production</option></select>
+                <p class="hint">No installer value is set, so your choice is the one in force.</p>
+              </label>
+              <label class="field" style="grid-column:1/-1">
+                <span>Paired installation</span>
+                <input type="text" value="">
+              </label>
+            </div>
+
+            <div class="impact">
+              <h3>What you are changing</h3>
+              <table>
+                <thead><tr><th>Field</th><th>Now</th><th>After</th></tr></thead>
+                <tbody>
+                  <tr><td>Its main job</td><td>Safely improve another DPF</td><td>Run our organization</td></tr>
+                  <tr><td>Environment</td><td>Development</td><td>Production</td></tr>
+                  <tr><td>Paired installation</td><td>dpf-prod-acme</td><td>None</td></tr>
+                </tbody>
+              </table>
+
+              <h3 style="margin-top:16px">What agents may do after this</h3>
+              <table>
+                <thead><tr><th>Stance</th><th>Change</th><th>Effect</th></tr></thead>
+                <tbody>
+                  <tr>
+                    <td>Credentials</td>
+                    <td>Local test keys allowed <span class="arrow">&rarr;</span> Operator only</td>
+                    <td class="tightens">Tighter</td>
+                  </tr>
+                  <tr>
+                    <td>Teardown</td>
+                    <td>Capture work first <span class="arrow">&rarr;</span> Never</td>
+                    <td class="tightens">Tighter</td>
+                  </tr>
+                  <tr>
+                    <td>Source changes</td>
+                    <td>Governed worktree</td>
+                    <td class="note">No change</td>
+                  </tr>
+                  <tr>
+                    <td>Paired installation</td>
+                    <td>Read only <span class="arrow">&rarr;</span> No peer</td>
+                    <td class="note">No peer left to read</td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <div class="notice info">
+                <p><strong>Two evidence notes go stale.</strong></p>
+                <p>The host-detection note and the pairing note no longer describe this install. They stay in the record as history.</p>
+              </div>
+
+              <div class="notice warn">
+                <p><strong>This install becomes the business of record.</strong> It may then make funding decisions your other installs cannot.</p>
+              </div>
+            </div>
+
+            <div class="btnrow">
+              <button class="primary">Yes, this is what it is</button>
+              <button class="secondary">Leave it as it is</button>
+            </div>
+          </div>
+        </details>
+      </section>
+
+      <!-- ===================== STATE C ===================== -->
+      <p class="state-label">State C &mdash; nothing declared yet, and a shadowed portal choice</p>
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>What this installation is</h2>
+            <p class="sub">Its identity decides what your AI coworkers may do here.</p>
+          </div>
+          <span class="badge warn">Needs review</span>
+        </div>
+
+        <p class="lead"><strong>Treated as a production installation.</strong> Nobody has said what this one is.</p>
+        <p class="sub">Until someone declares it, DPF assumes the safest answer.</p>
+
+        <ul class="stances">
+          <li>
+            <span class="name">Credentials</span>
+            <span><span class="badge stop">Operator only</span></span>
+            <span class="why">This is a production installation, so credentials are entered by the operator and never handled by an agent.</span>
+          </li>
+          <li>
+            <span class="name">Teardown</span>
+            <span><span class="badge stop">Never</span></span>
+            <span class="why">This is a production installation, so teardown is never an agent action.</span>
+          </li>
+          <li>
+            <span class="name">Source changes</span>
+            <span><span class="badge mute">Not here</span></span>
+            <span class="why">This directory holds installed runtime assets and no source, so edit platform source in a separate checkout and never treat these files as source.</span>
+          </li>
+          <li>
+            <span class="name">Paired installation</span>
+            <span><span class="badge mute">No peer</span></span>
+            <span class="why">No paired installation is recorded, so there is no peer to read or write.</span>
+          </li>
+        </ul>
+
+        <div class="notice warn">
+          <p><strong>Your saved choice is not the one in force.</strong></p>
+          <p>You saved <strong>development</strong> here. The installer wrote <strong>production</strong>, and the installer wins.</p>
+          <p>Run the installer again with <code>--environment-class development</code> to change the value in force.</p>
+        </div>
+
+        <details class="disclose">
+          <summary>Change what this installation is</summary>
+          <div class="disclose-body">
+            <p class="note">Same three fields as State A.</p>
+          </div>
+        </details>
+      </section>
+
+      <!-- ===================== RULES ===================== -->
+      <section class="rules">
+        <h2>Rules this prototype encodes</h2>
+        <ol>
+          <li><strong>The authority split holds.</strong> The installer owns the host environment fact. The portal writes semantic intent to <code>installation.operating-intent.v1</code> and a lower-ranked environment projection to <code>installation.environment-class.v1</code>. The portal never writes installer state.</li>
+          <li><strong>Precedence is shown, not hidden.</strong> Process override, then installer state, then the portal declaration, then the default. When a higher tier wins, the panel says so and names the flag that would change it.</li>
+          <li><strong>Undeclared means production.</strong> The cautious default is stated in plain words, never as a blank field.</li>
+          <li><strong>A material change needs a preview.</strong> A changed environment, job, or pairing shows the field diff, the stance diff, and the stale evidence before anything is written.</li>
+          <li><strong>No silent re-confirm.</strong> A material change saved without the preview is refused. Stored <code>confirmation.status</code> reaches <code>confirmed</code> only when the operator confirms the preview they saw.</li>
+          <li><strong>A stance is a brake.</strong> The panel never presents a stance as a grant, and the read view says so.</li>
+          <li><strong>Detail is deferred.</strong> The read view is a lead sentence plus four rationales. The form and the impact tables live behind one disclosure.</li>
+        </ol>
+      </section>
+    </div>
+  </body>
+</html>

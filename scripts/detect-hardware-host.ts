@@ -35,8 +35,6 @@ type HostProfile = {
   ram: { totalGB: number };
   gpu: { name: string; vramGB: number | null } | null;
   selectedModel: string;
-  /** Known-good digest for selectedModel, when it is pinned. Null otherwise. */
-  expectedDigest: string | null;
   detectedAt: string;
   notes?: string[];
 };
@@ -168,12 +166,9 @@ function detectLinux(): HostProfile {
   };
 }
 
-// Model selection MIRRORS the canonical headroom-aware logic in
-// apps/web/lib/inference/local-model-policy.ts (LOCAL_MODEL_TIERS +
-// recommendGenerationModelForHost). This script runs via tsx in the @dpf/db
-// context and cannot import the apps/web module, so the tiers + constants are
-// duplicated here — KEEP IN SYNC. The Providers UX over-commit guard (same
-// module) catches any drift.
+// Model selection reads the same data-only policy as the web runtime and the
+// PowerShell installer. Keeping the policy free of runtime imports lets every
+// install surface share the ordered tiers without a generated mirror.
 //
 // Qwen3 — NOT Gemma — the platform tiers Qwen3 as `strong + Tool Use` while
 // Gemma tiers as `adequate`, and default coworkers require `minimumTier:
@@ -185,62 +180,46 @@ function detectLinux(): HostProfile {
 // (unified Apple Silicon shares it with the OS; CPU-only leaves even more aside).
 // Headroom reserves room for the context window + embedder so a recommended
 // model never fills the whole card and then over-commit the moment it runs.
-//   24 GB discrete  → Qwen3.8-27B (dense)          128 GB unified → ai/qwen3-coder-next (80B MoE)
-//   12 GB discrete  → ai/qwen3:8B                  32 GB unified → Qwen3.8-27B (dense)
+//   24 GB discrete  → ai/qwen3-coder               128 GB unified → ai/qwen3-coder-next (80B MoE)
+//   12 GB discrete  → ai/qwen3:8B                  32 GB unified → ai/qwen3-coder
 //    8 GB discrete  → ai/qwen3:4B                  16 GB unified → ai/qwen3:8B
-//
-// Qwen3.8-27B is DENSE, so it is markedly slower per turn than the MoE tiers it
-// sits between (~4x measured against the 30B-A3B coder). Selected anyway: the
-// operator criterion for the local tier is thoroughness over time-to-answer.
 // Tags for the ai/ Docker Model Runner namespace are case-sensitive.
-const MODEL_HEADROOM_GB = 5;            // context KV + embedder + overhead (measured on RTX 4090)
-const UNIFIED_USABLE_FRACTION = 0.75;   // Apple Silicon GPU share of unified RAM
-const CPU_USABLE_FRACTION = 0.5;
-// `expectedDigest` mirrors LocalModelTier.expectedDigest: set for any tier
-// sourced outside the curated `ai/` namespace, where the upstream reference is
-// mutable and `docker model pull` offers no revision pin (BI-73E9A282).
-const SELECTION_TIERS: { model: string; weightsGb: number; expectedDigest?: string }[] = [
-  { model: "ai/qwen3-coder-next", weightsGb: 48 },          // big unified (Apple 128 GB) / 64 GB+ discrete
-  {
-    model: "hf.co/ggml-org/Qwen3.8-27B-GGUF:Q4_K_M",
-    weightsGb: 18,                                          // dense 27B; replaces the 35B-A3B tier
-    expectedDigest: "sha256:66c4f325bc71350f07fb2da4f92455553c7bbc8af5d7ee2095fbeac79b9e66c9",
-  },
-  { model: "ai/qwen3-coder", weightsGb: 16 },               // 24 GB-card sweet spot (measured ~20.7 GB @ 24k ctx)
-  { model: "ai/qwen3:14B-Q6_K", weightsGb: 12 },
-  { model: "ai/qwen3:8B-Q4_K_M", weightsGb: 6 },
-  { model: "ai/qwen3:4B-UD-Q4_K_XL", weightsGb: 3 },
-];
+const modelPolicy = JSON.parse(
+  fs.readFileSync(new URL("./installer/local-model-policy.json", import.meta.url), "utf8"),
+) as {
+  modelHeadroomGb: number;
+  unifiedUsableFraction: number;
+  cpuUsableFraction: number;
+  tiers: Array<{ model: string; weightsGb: number }>;
+};
 
-/** Spread-able { selectedModel, expectedDigest } so a profile picks once. */
 function selectedFields(p: {
   architecture: Architecture;
   totalGB: number;
   gpu: HostProfile["gpu"];
-}): { selectedModel: string; expectedDigest: string | null } {
-  const picked = selectModel(p);
-  return { selectedModel: picked.model, expectedDigest: picked.expectedDigest };
+}): { selectedModel: string } {
+  return { selectedModel: selectModel(p) };
 }
 
 function selectModel(p: {
   architecture: Architecture;
   totalGB: number;
   gpu: HostProfile["gpu"];
-}): { model: string; expectedDigest: string | null } {
+}): string {
   let budgetGb: number;
   if (p.architecture === "discrete" && p.gpu && typeof p.gpu.vramGB === "number") {
     budgetGb = p.gpu.vramGB;
   } else if (p.architecture === "unified") {
-    budgetGb = p.totalGB * UNIFIED_USABLE_FRACTION;
+    budgetGb = p.totalGB * modelPolicy.unifiedUsableFraction;
   } else {
-    budgetGb = p.totalGB * CPU_USABLE_FRACTION;
+    budgetGb = p.totalGB * modelPolicy.cpuUsableFraction;
   }
-  for (const tier of SELECTION_TIERS) {
-    if (tier.weightsGb + MODEL_HEADROOM_GB <= budgetGb) {
-      return { model: tier.model, expectedDigest: tier.expectedDigest ?? null };
+  for (const tier of modelPolicy.tiers) {
+    if (tier.weightsGb + modelPolicy.modelHeadroomGb <= budgetGb) {
+      return tier.model;
     }
   }
-  return { model: "ai/qwen3:4B-UD-Q4_K_XL", expectedDigest: null };
+  return modelPolicy.tiers.at(-1)?.model ?? "ai/qwen3:4B-UD-Q4_K_XL";
 }
 
 function main(): void {

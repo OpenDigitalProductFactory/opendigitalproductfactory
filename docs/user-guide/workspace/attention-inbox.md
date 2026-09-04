@@ -37,17 +37,19 @@ Folding "a human must decide this now" into the backlog is a category error: the
 - **Approvals** — bills and expense claims awaiting sign-off, outbound messages pending review, and regulatory submissions with a filing deadline.
 - **Business judgment** — a coworker cannot continue safely without your choice.
 - **Bounded coworker proposals** — a coworker recommends taking more initiative within a stated limit; you can accept it, keep the current level, or ask for a narrower limit.
+- **Coworker actions held for your approval** — a coworker was told to stop and ask before taking a specific action. The card names the coworker, the exact action, the reason given, the job it belongs to, and the time you have to answer. When the action is a review of a saved file, it also names the file, the exact saved version, and the check being answered, so you can see precisely what you are approving. Only you can answer your own; nobody else sees it.
 - **Friday review** — low-urgency research and improvement suggestions are grouped together instead of interrupting the daily inbox.
 
 ## What You Can Do
 
 - **Review the business decision** using the plain action on the card. In Simple view, builder-only links never appear as the main owner action — and neither does a placeholder button in their place.
 - **Accept, keep, or narrow a proactivity boundary** without leaving the workspace.
+- **Approve or decline a held coworker action** on the card. Once the answer is saved, or the time runs out, the buttons go away and the record stays readable. Pressing twice, or reloading and pressing again, cannot answer it twice.
 - **Open Technical detail** when a builder or specialist needs the full source record.
 - **Clear or snooze the Friday review** as one batch, or review an item individually.
 - Ask your [digital coworker](../getting-started/ai-coworker.md) for a briefing on what is in the inbox and why.
 
-Deadline-bearing items show a plain tag such as **Due today** or **Due in 3 days**. Impact tags use words such as **Costs money**, **Goes public**, and **Reversible**.
+Deadline-bearing items show a plain tag such as **Due in 10 minutes**, **Due in 6 hours**, or **Due in 3 days** — always in the largest unit that is still accurate, so a short window is never dressed up as a long one. A window that has closed reads **Past due**. Impact tags use words such as **Costs money**, **Goes public**, and **Reversible**.
 
 ---
 

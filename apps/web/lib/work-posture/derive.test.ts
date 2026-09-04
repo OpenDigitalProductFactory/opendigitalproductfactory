@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   activityKindBiasFor,
+  deriveStakesBias,
   deriveStreamBiases,
   deriveTemporalBias,
   modeBiasFor,
@@ -107,5 +108,21 @@ describe("stream derivation", () => {
 
   it("treats an empty trustGates list as no trust gate", () => {
     expect(deriveStreamBiases({ trustGates: [] })).toEqual([]);
+  });
+});
+
+describe("build-rightsizing stakes derivation", () => {
+  it("keeps absent and inert rightsizing facts byte-compatible", () => {
+    expect(deriveStakesBias(null)).toBeNull();
+    expect(deriveStakesBias({ qualityFirst: false, deliverableSensitivity: "low" })).toBeNull();
+  });
+
+  it("requires shallow verification for quality-first or elevated work", () => {
+    expect(deriveStakesBias({ qualityFirst: true })?.verificationDepth).toBe("shallow");
+    expect(deriveStakesBias({ deliverableSensitivity: "elevated" })?.verificationDepth).toBe("shallow");
+  });
+
+  it("requires deep verification for high-sensitivity work", () => {
+    expect(deriveStakesBias({ deliverableSensitivity: "high" })?.verificationDepth).toBe("deep");
   });
 });

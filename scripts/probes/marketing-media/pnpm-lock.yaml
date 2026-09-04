@@ -13,8 +13,8 @@ importers:
   .:
     dependencies:
       '@puppeteer/browsers':
-        specifier: 3.2.0
-        version: 3.2.0
+        specifier: 3.2.1
+        version: 3.2.1
       ffmpeg-static:
         specifier: 5.3.0
         version: 5.3.0
@@ -25,8 +25,8 @@ importers:
         specifier: 3.15.0
         version: 3.15.0
       hyperframes:
-        specifier: 0.7.111
-        version: 0.7.111
+        specifier: 0.8.8
+        version: 0.8.8
 
 packages:
 
@@ -401,19 +401,6 @@ packages:
   '@protobufjs/utf8@1.1.2':
     resolution: {integrity: sha512-b1UQwcEZ4yCnMCD8DAL1VlbvBJE9/IX4FTIp7BG1xYpf29SLazLSrqUkj4w7Y5y7cCVP6E5tcqqcI0xemPkHug==}
 
-  '@puppeteer/browsers@3.2.0':
-    resolution: {integrity: sha512-LlBrE8oqGfU7b1Nk2d5Q1SbuPhZxTj0cJEMDPEws28OjNMELlflekmPPuf4FnK03x0ZRjKaYwJElUcKK4kyqJA==}
-    engines: {node: '>=22.12.0'}
-    hasBin: true
-    peerDependencies:
-      proxy-agent: '>=8.0.1'
-      yauzl: ^2.10.0 || ^3.4.0
-    peerDependenciesMeta:
-      proxy-agent:
-        optional: true
-      yauzl:
-        optional: true
-
   '@puppeteer/browsers@3.2.1':
     resolution: {integrity: sha512-KDz+3qDRdBAlRlMjmKyj6dEs33YHTk/xRHEENSXq6TNnhgoU15ruSHtEBeVF6OZ9tBDY55Se4P0nFMNsipzU9A==}
     engines: {node: '>=22.12.0'}
@@ -663,8 +650,8 @@ packages:
   has-property-descriptors@1.0.2:
     resolution: {integrity: sha512-55JNKuIW+vq4Ke1BjOTjM2YctQIvCT7GFzHwmfZPGo5wnrgkid0YQtnAleFSqumZm4az3n2BS+erby5ipJdgrg==}
 
-  hono@4.13.3:
-    resolution: {integrity: sha512-r8AO2mYHoLxSHkgafNeC/BXyb2vWRxD3jem4Ts+ptav8oTG5FIRifAjuJEmZI4bSvvc2ns0GxmIYiZnHqN3mMw==}
+  hono@4.13.4:
+    resolution: {integrity: sha512-AGEwKIyRMHRv1t8Wjwa3LHxQ61X5CqrdFT+4BRNTpqS5aJNnpl5WLjADb7vFlJzI/8uK7T5QLVApCMQKNa3LgQ==}
     engines: {node: '>=16.9.0'}
 
   http-response-object@3.0.2:
@@ -678,8 +665,8 @@ packages:
     resolution: {integrity: sha512-vK9P5/iUfdl95AI+JVyUuIcVtd4ofvtrOr3HNtM2yxC9bnMbEdp3x01OhQNnjb8IJYi38VlTE3mBXwcfvywuSw==}
     engines: {node: '>= 14'}
 
-  hyperframes@0.7.111:
-    resolution: {integrity: sha512-/rvKQU3bTpEcpVUikb+0NYTqmsgMEMX1zBHZHI+B6sbrVRYwCrMuH8Z349HEVdYd+I84gULElMgVgH8amElgXg==}
+  hyperframes@0.8.8:
+    resolution: {integrity: sha512-lGntmkWpbCtc1gjnHqFDI+SsqGSEKEWGKCI4uuYsK/loNm72sZEey/romuryn1ZxH48KYyfnnJ9N47hq3+eyKA==}
     engines: {node: '>=22'}
     hasBin: true
 
@@ -1051,9 +1038,9 @@ snapshots:
       - utf-8-validate
     optional: true
 
-  '@hono/node-server@2.1.1(hono@4.13.3)':
+  '@hono/node-server@2.1.1(hono@4.13.4)':
     dependencies:
-      hono: 4.13.3
+      hono: 4.13.4
 
   '@img/colour@1.1.0': {}
 
@@ -1193,11 +1180,6 @@ snapshots:
 
   '@protobufjs/utf8@1.1.2':
     optional: true
-
-  '@puppeteer/browsers@3.2.0':
-    dependencies:
-      modern-tar: 0.8.4
-      yargs: 18.1.0
 
   '@puppeteer/browsers@3.2.1':
     dependencies:
@@ -1466,7 +1448,7 @@ snapshots:
     dependencies:
       es-define-property: 1.0.1
 
-  hono@4.13.3: {}
+  hono@4.13.4: {}
 
   http-response-object@3.0.2:
     dependencies:
@@ -1487,10 +1469,10 @@ snapshots:
       - supports-color
     optional: true
 
-  hyperframes@0.7.111:
+  hyperframes@0.8.8:
     dependencies:
-      '@hono/node-server': 2.1.1(hono@4.13.3)
-      '@puppeteer/browsers': 3.2.0
+      '@hono/node-server': 2.1.1(hono@4.13.4)
+      '@puppeteer/browsers': 3.2.1
       adm-zip: 0.6.0
       citty: 0.2.2
       compare-versions: 6.1.1
@@ -1498,7 +1480,7 @@ snapshots:
       esbuild: 0.25.12
       fontkit: 2.0.4
       giget: 3.3.1
-      hono: 4.13.3
+      hono: 4.13.4
       ignore: 5.3.2
       onnxruntime-node: 1.21.1
       open: 10.2.0

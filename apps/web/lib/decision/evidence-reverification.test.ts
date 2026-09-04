@@ -19,6 +19,7 @@ import {
   type SourceAccess,
 } from "./evidence-reverification";
 import { citationsToSources, type AdmissibleCitation } from "./evidence-grounding";
+import { partialSourceTree } from "@/lib/testing/degenerate-env";
 import { createRepoLocatorResolver } from "./locator-resolver";
 import type { LocatorResolver } from "./evidence-reverifier";
 
@@ -215,9 +216,9 @@ describe("reverifyDecisionEvidence", () => {
   // and the pass reported "degraded" — i.e. accused honest evidence of being
   // fabricated. Absence in a tree of unknown revision proves nothing.
   it("does NOT degrade a citation missing from a tree of unknown revision", async () => {
-    const repoRoot = await mkdtemp(join(tmpdir(), "dpf-unanchored-"));
-    // Exactly the live shape: a plausible root, no .git, and the cited file absent.
-    await writeFile(join(repoRoot, "package.json"), "{}", "utf8");
+    // Exactly the live shape: a plausible root, no .git, and the cited file absent
+    // (the shared degenerate-environment fixture — BI-927D64C0 M4).
+    const { root: repoRoot } = partialSourceTree({ withGit: false, withFile: false });
 
     const lookup = await reverifyDecisionEvidence({
       db: dbWith([citation()]),

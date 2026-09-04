@@ -106,6 +106,16 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="mileage"
+        options={{
+          title: "Mileage",
+          href: hiddenHref("mileage"),
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="car" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="customers"
         options={{
           title: "Customers",

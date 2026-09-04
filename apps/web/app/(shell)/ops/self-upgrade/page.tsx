@@ -17,6 +17,7 @@ import { NAV_MODE_COOKIE, resolveNavModeFromCookie, isSimpleNavMode } from "@/li
 import { SelfUpgradeLiveProvider } from "@/components/ops/SelfUpgradeLiveProvider";
 import type { SelfUpgradeStatusSnapshot } from "@/lib/self-upgrade/status-snapshot";
 import { UNKNOWN_SELF_UPGRADE_SUPPORT } from "@/lib/self-upgrade/support";
+import { createSelfUpgradeTargetBinding } from "@/lib/self-upgrade/target-binding";
 
 export default async function SelfUpgradePage() {
   // BI-D43EB266: Self-Upgrade is the single operator entry point for "update
@@ -34,7 +35,7 @@ export default async function SelfUpgradePage() {
   const runs = runsResult?.runs ?? [];
   const nextCursor = runsResult?.nextCursor ?? null;
 
-  const initialImpactSummary = status?.targetSha
+  const initialImpactSummary = status?.targetSha && status.support.targetKind === "git-source"
     ? await loadPersistedImpactSummary(status.targetSha).catch(() => null)
     : null;
 
@@ -44,7 +45,7 @@ export default async function SelfUpgradePage() {
   // deployed id is a local merge commit that can never equal the upstream
   // target. The running end resolves from the upstream LINEAGE marker (not
   // deployedSha) so its subject actually carries a `(#N)`.
-  const mergePoints = status?.targetSha
+  const mergePoints = status?.targetSha && status.support.targetKind === "git-source"
     ? await (async () => {
         const [config, runningSha] = await Promise.all([
           getSelfUpgradeConfig().catch(() => null),
@@ -75,6 +76,10 @@ export default async function SelfUpgradePage() {
     deployedSha: null,
     deployedShaSource: "unknown",
     targetSha: null,
+    targetTag: null,
+    targetAvailability: "unavailable" as const,
+    targetUnavailableReason: "status-unavailable",
+    currentConfigDigest: null,
     isFresh: true,
     releaseBatch: {
       applicable: false,
@@ -145,6 +150,9 @@ export default async function SelfUpgradePage() {
       support: effectiveStatus.support,
       isFresh: effectiveStatus.isFresh,
       targetSha: effectiveStatus.targetSha,
+      targetTag: effectiveStatus.targetTag,
+      targetAvailability: effectiveStatus.targetAvailability,
+      targetUnavailableReason: effectiveStatus.targetUnavailableReason,
       deployedSha: effectiveStatus.deployedSha,
       nextWindowStart: effectiveStatus.nextWindowStart,
       blackoutUntil: effectiveStatus.blackoutUntil,
@@ -179,6 +187,38 @@ export default async function SelfUpgradePage() {
     cooldownUntil: effectiveStatus.cooldownUntil,
     jobEngine: effectiveStatus.jobEngine,
   };
+  // Single source of truth for "is there something to install": the summary's
+  // own updatePending, derived from support/target/freshness rather than from
+  // its run-state machine. This used to re-derive the failed case here
+  // (`state === "failed" && targetAvailability === "resolved" && !isFresh`),
+  // which enabled the button correctly but left the card above it still
+  // claiming "You're current" — the workaround was applied to the action and
+  // never pushed back into the summary it contradicted.
+  const updateActionState = ownerSummary.state === "unavailable"
+    ? "unavailable"
+    : ownerSummary.updatePending
+      ? "update-available"
+      : "no-update";
+  let targetBinding: string | null = null;
+  if (
+    effectiveStatus.support.targetKind === "release-artifact" &&
+    effectiveStatus.targetAvailability === "resolved" &&
+    effectiveStatus.targetSha &&
+    effectiveStatus.targetTag
+  ) {
+    try {
+      targetBinding = createSelfUpgradeTargetBinding({
+        targetKind: "release-artifact",
+        targetSha: effectiveStatus.targetSha,
+        targetTag: effectiveStatus.targetTag,
+      });
+    } catch {
+      // Missing server signing material must fail closed without taking down
+      // the operator status surface. With no binding, a later action may use
+      // only a freshly resolved server target; source-free fallback is denied.
+      targetBinding = null;
+    }
+  }
 
   return (
     <SelfUpgradeLiveProvider initialSnapshot={initialLiveSnapshot}>
@@ -198,6 +238,7 @@ export default async function SelfUpgradePage() {
           primaryAction={
             <SelfUpgradeTriggerControl
               enabled={clientProps.enabled}
+              actionState={updateActionState}
               unavailableReason={
                 clientProps.support.supported ? null : clientProps.support.message
               }
@@ -205,6 +246,7 @@ export default async function SelfUpgradePage() {
               latestRun={clientProps.latestRun}
               quiescence={clientProps.quiescence}
               jobEngine={clientProps.jobEngine}
+              targetBinding={targetBinding}
             />
           }
         />

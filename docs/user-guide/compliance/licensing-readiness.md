@@ -40,37 +40,43 @@ The licensing readiness workspace is authoritative for the platform's tracked po
 **What it does.** The licensing specialist investigates likely authority layers
 for a location and activity, summarizes the evidence it can see, persists factual
 findings against the record, and opens readiness issues for what it cannot
-resolve. It asks for the next useful piece of context when your business posture
-is unclear.
+resolve. Separately, the daily obligation assurance watch reads licence
+requirement staleness and renewal cadence and raises a finding when one falls
+inside the 30-day horizon.
 
-**When it runs.** The specialist itself runs only when you ask it. One thing now
-runs on its own: the **obligation assurance watch**, daily at 05:40 UTC, reads
-each requirement reference's freshness budget (its `stale after` days, 180 by
-default) against when it was last verified, and raises a finding when the
-evidence is about to go stale or already has. A reference that has never been
-verified is reported immediately, because its budget is already spent. The
-renewal cadence hint on the record is carried into the finding so you know what
-the renewal rhythm is meant to be.
+**When it runs.** The watch runs daily at 05:40 UTC. The specialist itself works
+when you ask it, or on its Proactivity cadence when it has findings to review.
 
-Permit expiry dates, fee due dates, and staff credential expiries are still only
-recorded and shown. The watch covers requirement-reference freshness; it does
-**not** yet read those three, so an expiring permit still does not raise itself.
+**How it stays current.** Only for dates you have recorded. Requirement
+references carry a last-researched date and a confidence, and the underlying
+requirement can change without the record moving — the watch will tell you a
+renewal is near, not that the rule behind it was rewritten. Re-verify with the
+issuing authority before relying on a recorded requirement.
 
-**How it stays current.** Only its own freshness is watched, not the requirement.
-The watch tells you that a reference has passed its budget; it cannot tell you
-whether the authority changed the rule. Re-verify against the issuing authority
-before relying on a recorded requirement, and record the verification so the
-budget resets and the finding closes.
+**How long a requirement stays good for.** No acquired requirement may go more
+than **90 days** without being confirmed against its issuing authority. A
+reference may be re-checked sooner where the authority moves faster; it can
+never be given longer, and a stored value asking for longer is clamped to 90.
 
-**What it will not do.** The coworker does not grant permission to operate, does
-not renew a licence, does not pay a fee, and does not convert a likely lead into
-a confirmed requirement. Resolving a readiness issue asserts that the question was
-answered by a person; it is not a determination the coworker makes.
+Past that limit — or where a reference has never been confirmed at all — the
+requirement is treated as unconfirmed rather than as current. Being unconfirmed
+does not mean the requirement is wrong; it means nobody has checked recently
+enough for the platform to stand behind it, and you should confirm with the
+authority before acting on it.
 
-**What you must do.** Own the renewal calendar yourself, open the official source
-rather than accepting a search result or an AI summary, and re-open readiness
-questions whenever you add a location, service, regulated activity, or credentialed
-member of staff.
+Note that the requirements shipped with a new install have been researched but
+not confirmed for your jurisdiction. They are starting points for your own
+verification, not a finished licensing position.
+
+**What it will not do.** It does not grant permission to operate, renew a
+licence, pay a fee, or convert a likely lead into a confirmed requirement.
+Resolving a readiness issue asserts that a person answered the question; it is
+not a determination the coworker makes.
+
+**What you must do.** Open the official source rather than accepting a search
+result or an AI summary, decide each finding yourself, and re-open readiness
+questions whenever you add a location, service, regulated activity, or
+credentialed member of staff.
 
 ## Decisions And Consequences
 

@@ -5,6 +5,7 @@ import { assessArchetypeFit } from "@/lib/marketing/archetype-fit";
 import { ApprovalQueueReview } from "./ApprovalQueueReview";
 import { ArchetypeFitBadge } from "./ArchetypeFitNotice";
 import { PublishLinkedInButton } from "./PublishLinkedInButton";
+import { PublishWordPressButton } from "./PublishWordPressButton";
 import { PublishEmailButton } from "./PublishEmailButton";
 
 type Props = {
@@ -39,6 +40,10 @@ function isLinkedInChannel(channelId: string): boolean {
 
 function isEmailChannel(channelId: string): boolean {
   return channelId === "email" || channelId === "email-postmark";
+}
+
+function isWordPressChannel(channelId: string): boolean {
+  return channelId === "wordpress" || channelId === "wordpress-self-hosted";
 }
 
 function classificationLabel(value: InboundMessageRow["classification"]): string {
@@ -115,6 +120,8 @@ export function ApprovalQueuePanel({
     connectedChannels.includes("linkedin-personal-social") ||
     connectedChannels.includes("linkedin");
   const emailConnected = connectedChannels.includes("email-postmark");
+  const wordpressConnected =
+    connectedChannels.includes("wordpress-self-hosted") || connectedChannels.includes("wordpress");
 
   return (
     <div className="space-y-6">
@@ -203,6 +210,13 @@ export function ApprovalQueuePanel({
                       draftId={draft.draftId}
                       channelConnected={linkedInConnected}
                       channelId="linkedin-personal-social"
+                      fitBlocked={assessArchetypeFit({ text: draft.body, category }).blocked}
+                      artifactTitle={draft.assetTaskTitle}
+                    />
+                  ) : isWordPressChannel(draft.channelId) ? (
+                    <PublishWordPressButton
+                      draftId={draft.draftId}
+                      channelConnected={wordpressConnected}
                       fitBlocked={assessArchetypeFit({ text: draft.body, category }).blocked}
                       artifactTitle={draft.assetTaskTitle}
                     />

@@ -5,6 +5,7 @@ import type { AgentInfo } from "@/lib/agent-coworker-types";
 import type { UserContext } from "@/lib/permissions";
 import { AgentSkillsDropdown } from "./AgentSkillsDropdown";
 import { SHELL_TAP_TARGET_CLASS } from "@/lib/shell/shell-action-contract";
+import type { CoworkerPresentationIdentity } from "@/lib/coworker-presentation/coo-name";
 
 function formatSensitivityLabel(value: AgentInfo["sensitivity"]): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
@@ -41,6 +42,7 @@ type Props = {
    * carried across a navigation.
    */
   routeContextLabel?: string;
+  presentationIdentity?: CoworkerPresentationIdentity;
 };
 
 /** A single action row inside the overflow menu. */
@@ -112,6 +114,7 @@ export function AgentPanelHeader({
   marketingSkillRules,
   isDocked = false,
   routeContextLabel,
+  presentationIdentity,
 }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -160,7 +163,7 @@ export function AgentPanelHeader({
               whiteSpace: "nowrap",
             }}
           >
-            {agent.agentName}
+            {presentationIdentity?.primaryName ?? agent.agentName}
           </span>
           <AgentSkillsDropdown
             skills={agent.skills}
@@ -173,6 +176,11 @@ export function AgentPanelHeader({
           />
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: 12, minWidth: 0 }}>
+          {presentationIdentity?.roleName && (
+            <span style={{ fontSize: 10, color: "var(--dpf-muted)", flex: "0 0 auto" }}>
+              {presentationIdentity.roleName}
+            </span>
+          )}
           {routeContextLabel && (
             <span
               data-testid="panel-route-context"

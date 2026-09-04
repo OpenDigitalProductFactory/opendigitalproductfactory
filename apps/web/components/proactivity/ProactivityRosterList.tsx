@@ -1,64 +1,34 @@
 "use client";
 
-// Consolidated owner-facing proactivity roster (BI-65D622EA). Reuses the shared
-// ProactivityLevelControl and the existing saveCoworkerProactivityPreference
-// write path — this is the aggregated confirm/adjust surface, not a new engine.
+// Owner-facing proactivity roster (BI-65D622EA), now READ-ONLY.
 //
-// BI-20716EA4: each row owns its OWN useSaveState instance (keyed by
-// `key={row.agentId}`, so a row never leaks status across agents) instead of a
-// single fire-and-forget `.catch(() => {})` — a failed save now snaps the
-// control back to the last confirmed level and shows Retry/Revert next to
-// that exact row.
+// BI-87C9C91C moved proactivity ownership from the coworker to the
+// outcome-specific Workroom, so this surface no longer writes. It answers one
+// question — what each coworker does when it is working outside any room — and
+// offers no control, because a control here would set a property that no longer
+// exists on a coworker.
 
-import { useMemo } from "react";
-
-import { ProactivityLevelControl } from "@/components/proactivity/ProactivityLevelControl";
-import { SaveStateIndicator } from "@/components/ui/SaveStateIndicator";
-import { saveCoworkerProactivityPreference } from "@/lib/actions/proactivity";
-import { useSaveState } from "@/lib/shared/use-save-state";
-import type { ProactivityLevel } from "@/lib/proactivity/proactivity-types";
+import { getProactivityLevelCopy } from "@/lib/proactivity/proactivity-copy";
 import {
   groupRosterByArea,
   type ProactivityRosterRow,
 } from "@/lib/proactivity/proactivity-roster";
 
-type RowState = { level: ProactivityLevel; isOverride: boolean };
-
+// BI-87C9C91C — this row used to SET a proactivity level on a coworker. That
+// ownership moved to the outcome-specific Workroom, so the row is now a
+// read-only projection: what this coworker does when it is working outside any
+// room. It is kept rather than deleted because "what happens with no room" is a
+// real question, and answering it is not the same as offering to change it.
 function ProactivityRosterRowControl({ row }: { row: ProactivityRosterRow }) {
-  // `useSaveState`'s `value` must be referentially stable across renders when
-  // unchanged (see the hook's doc comment) — a fresh object literal here would
-  // re-trigger its resync effect on every render.
-  const value = useMemo<RowState>(
-    () => ({ level: row.level, isOverride: row.isOverride }),
-    [row.level, row.isOverride],
-  );
-  const save = useSaveState<RowState>({
-    value,
-    onSave: (next) => saveCoworkerProactivityPreference(row.agentId, next.level),
-    failureMessage: "Couldn't save this proactivity level. Try again.",
-  });
-
   return (
     <li className="flex items-center justify-between gap-4 px-4 py-3">
       <div className="min-w-0">
         <p className="truncate text-sm font-medium text-[var(--dpf-text)]">{row.displayName}</p>
-        <p className="truncate text-xs text-[var(--dpf-muted)]">
-          {row.role}
-          {" · "}
-          {save.value.isOverride ? "You set this" : "From your industry"}
-        </p>
-        <SaveStateIndicator
-          compact
-          status={save.status}
-          error={save.error}
-          onRetry={save.retry}
-          onRevert={save.revert}
-        />
+        <p className="truncate text-xs text-[var(--dpf-muted)]">{row.role}</p>
       </div>
-      <ProactivityLevelControl
-        value={save.value.level}
-        onChange={(next) => save.change({ level: next, isOverride: true })}
-      />
+      <p className="shrink-0 text-xs text-[var(--dpf-muted)]">
+        {getProactivityLevelCopy(row.level).label}
+      </p>
     </li>
   );
 }
@@ -66,7 +36,7 @@ function ProactivityRosterRowControl({ row }: { row: ProactivityRosterRow }) {
 export function ProactivityRosterList({ rows }: { rows: ProactivityRosterRow[] }) {
   if (rows.length === 0) {
     return (
-      <p className="text-sm text-[var(--dpf-muted)]">No coworkers to configure yet.</p>
+      <p className="text-sm text-[var(--dpf-muted)]">No coworkers yet.</p>
     );
   }
 

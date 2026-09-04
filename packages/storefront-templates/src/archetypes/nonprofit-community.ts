@@ -7,15 +7,42 @@ const CONTACT_FIELDS = [
   { name: "notes", label: "Message", type: "textarea" as const, required: false },
 ];
 
-const DONATION_FORM_FIELDS = [
-  { name: "name", label: "Full name", type: "text" as const, required: true },
-  { name: "email", label: "Email", type: "email" as const, required: true },
-  { name: "donationAmount", label: "Donation amount", type: "select" as const, required: true, options: ["£5", "£10", "£25", "£50", "£100", "Other"] },
-  { name: "customAmount", label: "Custom amount (£)", type: "text" as const, required: false, placeholder: "e.g. 30" },
-  { name: "campaignId", label: "Campaign", type: "text" as const, required: false },
-  { name: "isAnonymous", label: "Make donation anonymous?", type: "select" as const, required: false, options: ["No", "Yes"] },
-  { name: "notes", label: "Message", type: "textarea" as const, required: false },
-];
+// `formSchema` is the archetype's CONTACT form, and for most of these
+// organizations it is the only way a stranger reaches them at all. It carried a
+// donation form until 2026-08-27, so a found-pet report, a surrender request and
+// an offer to volunteer were each refused without a donation amount
+// (BI-7F851119). Donations have their own route and their own form
+// (`/s/[slug]/donate`), which is where a donation question belongs.
+
+// Who does an animal-welfare day, and where (BI-A30152B6, requirements §5b of
+// docs/architecture/archetypes/pet-rescue-operating-model.md).
+//
+// Running the rescue for a day found the platform's answers were an office
+// business's answers. A shelter's largest labour pool is volunteers, unpaid and
+// shift-based; foster carers are a second unpaid class who house animals
+// off-site. Neither is full-time, part-time or contractor. And "where do you
+// work" is a ward, a cat room, isolation, the surgery, a foster home or an
+// offsite adoption event — headquarters / hybrid / remote does not describe
+// anywhere an animal lives.
+//
+// `classification` is set only where the label states the legal axis outright.
+// A foster carer houses an animal unpaid on the shelter's behalf, which §5b
+// records as the second unpaid class; anything an operator pays differently is
+// theirs to record, not the seed's to guess.
+const ANIMAL_WELFARE_WORKFORCE_PROFILE = {
+  employmentTypes: [
+    { employmentTypeId: "emp-foster-carer", name: "Foster carer", classification: "volunteer" as const },
+  ],
+  workLocations: [
+    { locationId: "loc-dog-ward", name: "Dog ward", locationType: "ward" },
+    { locationId: "loc-cat-room", name: "Cat room", locationType: "ward" },
+    { locationId: "loc-isolation", name: "Isolation", locationType: "ward" },
+    { locationId: "loc-intake", name: "Intake", locationType: "ward" },
+    { locationId: "loc-surgery", name: "Surgery", locationType: "clinical" },
+    { locationId: "loc-foster-home", name: "Foster home", locationType: "offsite-host" },
+    { locationId: "loc-adoption-event", name: "Offsite adoption event", locationType: "offsite-event" },
+  ],
+};
 
 const ANIMAL_WELFARE_ACTIVATION_PROFILE = {
   profileType: "standard",
@@ -31,6 +58,203 @@ const ANIMAL_WELFARE_ACTIVATION_PROFILE = {
     resourceKinds: [
       { kindSlug: "kennel", capacityUnit: "animals", maxCapacity: 100 },
     ],
+    supportingCapabilities: [
+      "fundraising",
+      "volunteer-coordination",
+      "supplies",
+      "compliance",
+      "reporting",
+    ],
+    valueStreams: [
+      {
+        key: "intake-safe-placement",
+        label: "Intake and safe placement",
+        purpose: "Bring a stray, surrendered, or transferred animal into the rescue safely and place it within real capacity.",
+        input: "Stray report, surrender request, or partner handoff",
+        output: "Identified and triaged animal in an appropriate kennel or foster placement",
+        responsibleRole: "Intake coordinator",
+        loadBearingStageKeys: ["intake-capacity-decision", "intake-quarantine-placement"],
+        stages: [
+          {
+            key: "intake-report-handoff",
+            label: "Report, retrieval, or handoff",
+            input: "Stray report, surrender request, or partner handoff",
+            output: "Accepted intake case and safe retrieval or transfer plan",
+            responsibleRole: "Intake coordinator",
+            trustGateKeys: ["intake-authority-and-safeguarding"],
+            metricBindings: ["intake-requests", "retrieval-lead-time"],
+          },
+          {
+            key: "intake-identify-triage",
+            label: "Identify and triage",
+            input: "Animal and intake case",
+            output: "Identity, immediate welfare needs, and quarantine requirements",
+            responsibleRole: "Animal care lead",
+            trustGateKeys: ["immediate-welfare-triage"],
+            metricBindings: ["intake-triage-time"],
+          },
+          {
+            key: "intake-capacity-decision",
+            label: "Make the capacity decision",
+            input: "Triage result and live kennel and foster occupancy",
+            output: "Admit, partner-transfer, or safe waitlist decision",
+            responsibleRole: "Intake coordinator",
+            trustGateKeys: ["safe-capacity-decision"],
+            metricBindings: ["kennel-occupancy", "foster-occupancy", "capacity-referrals"],
+          },
+          {
+            key: "intake-quarantine-placement",
+            label: "Quarantine and place",
+            input: "Admitted animal and quarantine requirements",
+            output: "Recorded kennel or foster placement with isolation controls",
+            responsibleRole: "Foster and kennel coordinator",
+            trustGateKeys: ["quarantine-and-placement-safety"],
+            handoffTo: "welfare-daily-care",
+            metricBindings: ["quarantine-occupancy", "placement-moves"],
+          },
+        ],
+      },
+      {
+        key: "health-welfare",
+        label: "Health and welfare",
+        purpose: "Maintain each animal's daily welfare, treat medical needs, and decide when placement is responsible.",
+        input: "Animal in kennel or foster care with an intake assessment",
+        output: "Healthy or managed animal with an evidenced adoption-readiness decision",
+        responsibleRole: "Animal care lead",
+        loadBearingStageKeys: ["welfare-daily-care", "welfare-adoption-readiness"],
+        stages: [
+          {
+            key: "welfare-daily-care",
+            label: "Deliver daily care",
+            input: "Placed animal and care requirements",
+            output: "Current feeding, medication, behaviour, and welfare record",
+            responsibleRole: "Animal care team",
+            trustGateKeys: [],
+            metricBindings: ["care-plan-completion", "medication-adherence"],
+          },
+          {
+            key: "welfare-medical-treatment",
+            label: "Assess and treat health needs",
+            input: "Triage findings, symptoms, or scheduled veterinary need",
+            output: "Veterinary assessment, treatment, and recovery plan",
+            responsibleRole: "Veterinary coordinator",
+            trustGateKeys: ["veterinary-approval"],
+            metricBindings: ["open-medical-cases", "treatment-wait-time"],
+          },
+          {
+            key: "welfare-rehabilitation-moves",
+            label: "Rehabilitate and coordinate moves",
+            input: "Care plan, behaviour plan, and current placement capacity",
+            output: "Updated rehabilitation plan and safe kennel or foster placement",
+            responsibleRole: "Foster and kennel coordinator",
+            trustGateKeys: ["safe-care-transfer"],
+            metricBindings: ["rehabilitation-progress", "placement-moves"],
+          },
+          {
+            key: "welfare-exception",
+            label: "Resolve welfare exceptions",
+            input: "Missed care, deteriorating health, behaviour risk, or placement breakdown",
+            output: "Stabilised animal and evidenced escalation or revised plan",
+            responsibleRole: "Duty manager",
+            trustGateKeys: ["welfare-escalation"],
+            metricBindings: ["open-welfare-exceptions", "exception-response-time"],
+          },
+          {
+            key: "welfare-adoption-readiness",
+            label: "Decide adoption readiness",
+            input: "Medical, behaviour, welfare, and legal evidence",
+            output: "Approved, deferred, or specialist-placement decision",
+            responsibleRole: "Adoption lead",
+            trustGateKeys: ["adoption-readiness-approval"],
+            handoffTo: "placement-promotion",
+            metricBindings: ["animals-adoption-ready", "care-to-ready-time"],
+          },
+        ],
+      },
+      {
+        key: "adoption-placement",
+        label: "Adoption and placement",
+        purpose: "Match an adoption-ready animal to a suitable home, transfer custody safely, and support or reverse the placement when needed.",
+        input: "Animal approved for adoption or specialist placement",
+        output: "Stable placement, or an evidenced return and re-entry into care",
+        responsibleRole: "Adoption lead",
+        loadBearingStageKeys: ["placement-match-reservation", "placement-custody-transfer"],
+        stages: [
+          {
+            key: "placement-promotion",
+            label: "Promote the animal",
+            input: "Adoption-ready animal profile",
+            output: "Accurate public profile and suitable applicant interest",
+            responsibleRole: "Adoption coordinator",
+            trustGateKeys: ["safe-public-disclosure"],
+            metricBindings: ["active-animal-profiles", "qualified-interest"],
+          },
+          {
+            key: "placement-application-screening",
+            label: "Screen the application",
+            input: "Adoption application and household information",
+            output: "Eligible application with risks and needs recorded",
+            responsibleRole: "Adoption coordinator",
+            trustGateKeys: ["eligibility-and-safeguarding"],
+            metricBindings: ["applications-in-screening", "screening-lead-time"],
+          },
+          {
+            key: "placement-meet-home-check",
+            label: "Meet and check the home",
+            input: "Eligible applicant and candidate animal",
+            output: "Meet-and-greet evidence and any landlord or home check",
+            responsibleRole: "Adoption coordinator",
+            trustGateKeys: ["home-and-landlord-check"],
+            metricBindings: ["meet-and-greets", "home-checks-open"],
+          },
+          {
+            key: "placement-match-reservation",
+            label: "Match and reserve",
+            input: "Animal needs and approved household evidence",
+            output: "Approved match with a time-bounded reservation",
+            responsibleRole: "Adoption lead",
+            trustGateKeys: ["match-approval"],
+            metricBindings: ["approved-matches", "reservation-age"],
+          },
+          {
+            key: "placement-custody-transfer",
+            label: "Transfer custody",
+            input: "Approved match, agreement, identity, and care handover",
+            output: "Signed custody transfer and post-adoption support plan",
+            responsibleRole: "Adoption lead",
+            trustGateKeys: ["custody-transfer-approval"],
+            metricBindings: ["completed-adoptions"],
+          },
+          {
+            key: "placement-follow-up",
+            label: "Follow up after adoption",
+            input: "Placed animal and scheduled follow-up plan",
+            output: "Placement outcome, support actions, and early risk signals",
+            responsibleRole: "Post-adoption coordinator",
+            trustGateKeys: [],
+            metricBindings: ["follow-ups-due", "placement-stability"],
+          },
+          {
+            key: "placement-return-reentry",
+            label: "Return and re-enter care",
+            input: "Failed placement, surrender-back request, or safeguarding concern",
+            output: "Safe custody return and reopened intake and welfare plan",
+            responsibleRole: "Post-adoption coordinator",
+            trustGateKeys: ["return-and-reentry-safety"],
+            handoffTo: "intake-identify-triage",
+            metricBindings: ["returns", "return-response-time"],
+          },
+        ],
+      },
+    ],
+  },
+} satisfies ActivationProfile;
+
+const ANIMAL_SHELTER_ACTIVATION_PROFILE = {
+  ...ANIMAL_WELFARE_ACTIVATION_PROFILE,
+  processProfile: {
+    ...ANIMAL_WELFARE_ACTIVATION_PROFILE.processProfile,
+    valueStreams: undefined,
   },
 } satisfies ActivationProfile;
 
@@ -55,8 +279,9 @@ export const nonprofitCommunityArchetypes: ArchetypeDefinition[] = [
       { type: "donate", title: "Make a Donation", sortOrder: 4 },
       { type: "contact", title: "Get in Touch", sortOrder: 5 },
     ],
-    formSchema: DONATION_FORM_FIELDS,
+    formSchema: CONTACT_FIELDS,
     activationProfile: ANIMAL_WELFARE_ACTIVATION_PROFILE,
+    workforceProfile: ANIMAL_WELFARE_WORKFORCE_PROFILE,
   },
   {
     archetypeId: "animal-shelter",
@@ -78,8 +303,9 @@ export const nonprofitCommunityArchetypes: ArchetypeDefinition[] = [
       { type: "donate", title: "Donate Now", sortOrder: 4 },
       { type: "contact", title: "Contact Us", sortOrder: 5 },
     ],
-    formSchema: DONATION_FORM_FIELDS,
-    activationProfile: ANIMAL_WELFARE_ACTIVATION_PROFILE,
+    formSchema: CONTACT_FIELDS,
+    activationProfile: ANIMAL_SHELTER_ACTIVATION_PROFILE,
+    workforceProfile: ANIMAL_WELFARE_WORKFORCE_PROFILE,
   },
   {
     archetypeId: "community-shelter",
@@ -100,7 +326,7 @@ export const nonprofitCommunityArchetypes: ArchetypeDefinition[] = [
       { type: "donate", title: "Donate", sortOrder: 3 },
       { type: "contact", title: "Get Involved", sortOrder: 4 },
     ],
-    formSchema: DONATION_FORM_FIELDS,
+    formSchema: CONTACT_FIELDS,
   },
   {
     archetypeId: "charity",
@@ -122,7 +348,7 @@ export const nonprofitCommunityArchetypes: ArchetypeDefinition[] = [
       { type: "donate", title: "Donate Now", sortOrder: 3 },
       { type: "contact", title: "Get in Touch", sortOrder: 4 },
     ],
-    formSchema: DONATION_FORM_FIELDS,
+    formSchema: CONTACT_FIELDS,
   },
   {
     archetypeId: "sports-club",
@@ -321,7 +547,7 @@ export const nonprofitCommunityArchetypes: ArchetypeDefinition[] = [
       { type: "donate", title: "Donate", sortOrder: 3 },
       { type: "contact", title: "Contact Us", sortOrder: 4 },
     ],
-    formSchema: DONATION_FORM_FIELDS,
+    formSchema: CONTACT_FIELDS,
     activationProfile: {
       profileType: "standard",
       modules: ["service-operations", "lifecycle-signals"],

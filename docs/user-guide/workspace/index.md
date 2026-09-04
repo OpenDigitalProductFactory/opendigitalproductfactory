@@ -77,6 +77,30 @@ operational grammar, not live hotel data. Live assignment, housekeeping, and
 maintenance commands remain unavailable until the business's durable room
 provider is connected.
 
+## The ward, for a shelter
+
+An animal rescue opens **Operations > Ward** to answer the two questions a
+shelter asks all day: where an animal is, and how much room is left.
+
+- The board states **occupied of total** and **free** before anything else, then
+  draws the units grouped by your own ward names. A free run is an outline you
+  can see rather than a number you have to work out.
+- **List** shows the same units as a table when you want the area and state per
+  row. It carries every unit the map does.
+- A unit held out of service — a deep clean, a repair — shows its reason and is
+  **not** counted as free.
+- If the shelter is holding animals with no kennel recorded, the board names
+  them and says the free count covers only the animals it can place.
+
+Two states are deliberately different. A shelter that has recorded **no
+housing** sees "No housing recorded yet" and no free count at all, because
+having told the system about no kennels is not the same as having no room. A
+shelter whose units are all full sees a free count of zero.
+
+The same figures appear on the Operations home as **Animals in care** and
+**Kennels**, so the number you quote in a capacity conversation is the number
+the board is drawing.
+
 ## Confirming an operational suggestion
 
 An AI coworker can suggest an assignment, but the suggestion is not a completed
@@ -93,6 +117,36 @@ business action until the durable operations provider confirms it.
   provider connected. The platform deliberately does not pretend the suggestion
   was applied.
 - A rejected or failed command leaves the business state unchanged.
+
+## Which installation you are on
+
+Operations no longer opens with a panel describing this installation. The
+arrival signal is now a short badge beside the logo, for example
+**NORTHWIND DEV**, naming the company that operates this installation and the
+job it does.
+
+A production installation shows no badge. Production is the unmarked default, so
+a badge always means "this is not production" — which is the one fact that stops
+you acting on the wrong installation. If the platform cannot work out what this
+installation is, it shows no badge rather than guessing.
+
+Select the badge to open [what this installation is](../operations/index.md#what-this-installation-is),
+where the full detail and the controls live.
+
+## Correcting the identity
+
+Open **Change what this installation is** to set its main job, its environment,
+and the production installation it is paired with.
+
+Choose **Show me the impact** first. The preview lists the fields you are
+changing, what each stance becomes, any brake that gets looser, and the evidence
+that stops describing this install. Nothing is saved until you confirm that
+preview, and editing a field afterwards asks you to look again.
+
+The installer owns the environment for this host. If the installer already set
+one, your choice here is recorded but the installer's value stays in force, the
+panel says so, and the record is marked **Needs review** until the two agree.
+Re-run the installer with `--environment-class` to change the value in force.
 
 ## Key Concepts
 
@@ -112,4 +166,6 @@ business action until the durable operations provider confirms it.
 - Open [Managed Documents](documents.md) to review document state, versions, and references
 - Open [My Work and Workrooms](work-rooms.md) to see the outcome, accountable participants, current attention, activity, and next action for active company work. Room access is checked before internal context loads; participant details explain each person or AI coworker's role, current work, authority, and sponsorship. Connected communication channels link back to the same canonical room and cannot treat message delivery as completed work. Each room also states the pace it works at — how persistently the coworker follows up, whether it asks before acting, and why — which quietens outside your operating hours without ever changing what the coworker is allowed to do.
 - Use your digital coworker to get a personalized briefing on what needs your attention
+- Select the installation badge beside the logo to open [what this installation is](../operations/index.md#what-this-installation-is) and correct it
 - Open the ["Needs you" inbox](attention-inbox.md) to review plain-language decision cards, weekly batches, and the full technical record when needed
+- Approve or decline a coworker action that is held waiting on you, with the exact record and the time left shown on the card

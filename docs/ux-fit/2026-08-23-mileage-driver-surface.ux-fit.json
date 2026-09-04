@@ -1,0 +1,26 @@
+{
+  "version": "1",
+  "decidedOption": "list-with-inline-classification",
+  "decisionInteractionId": "DI-3C44A1F12CAC",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/finance/mileage/page.tsx",
+      "apps/web/app/(shell)/finance/mileage/MileageTripsTable.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "decisionInteractionId": "DI-3C44A1F12CAC",
+    "consideredOptions": [
+      "list-with-inline-classification",
+      "swipe-card-queue",
+      "summary-with-drilldown"
+    ]
+  },
+  "rationale": {
+    "list-with-inline-classification": "CHOSEN. Kernel composite 10.561, margin 1.752, high confidence, verdict proceed. One list of every captured drive with the three classification choices on the drive's own row. Highest of the three on Ground New Work In Existing Platform (0.507) and Single Source of Truth (0.606) because it composes the finance table pattern already used by My Expenses rather than introducing a bespoke surface, and highest on Research and Use Standards (0.750). A driver sees the whole month at once, so a misclassified drive is visible next to its neighbours instead of buried in a queue already passed.",
+    "swipe-card-queue": "REJECTED. Kernel composite 7.679 — lowest of the three. The MileIQ-style one-card-at-a-time queue scores best on raw cognitive load per decision, but worst on reusability (0.3) and long-term maintainability: it is an interaction pattern present nowhere else in the portal, so it carries its own bugs and its own learning cost forever. It also scores lowest on legibility of consequence (0.45) because a driver cannot see the month they are building, and a drive swiped past is hard to revisit. Notably it scores WORST on Ground New Work In Existing Platform (0.354).",
+    "summary-with-drilldown": "REJECTED. Kernel composite 8.809. A monthly summary with a drill-down reads well but puts a navigation hop between the driver and the only act they perform. It scores NEGATIVE (-0.125) on 'Do the work; don't task the operator with what an agent can do' and negative (-0.013) on 'Never ask the user to run commands' — the extra hop is work handed back to the person. Two surfaces to keep coherent for one job also costs maintainability against a single list."
+  },
+  "notes": "EP-MILEAGE-ABSORB. This route exists because the mileage substrate, rules and pricing all merged with NO route and NO write path — Trip rows could be written by nothing and read by nobody. The page is deliberately read-plus-classify only: raising a claim is a finance-capability act performed by monetiseMileageAction, not by the driver. A drive already carrying an expenseItemId renders its classification as settled text with no control, because a drive that priced a reimbursement is accounting evidence and must not silently diverge from the claim. An unpriced drive shows an explicit placeholder rather than a zero amount, so 'not yet priced' is never read as 'nothing owed'. Markup uses --dpf-* tokens only, with no hardcoded colour. The measured-sweep path was not used: it needs the served DOM on the Contributor preview, and this change was verified through the ratified page-purpose contract plus the ux-budget registry test rather than a live sweep."
+}

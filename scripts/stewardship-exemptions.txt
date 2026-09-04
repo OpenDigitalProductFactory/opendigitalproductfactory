@@ -51,6 +51,12 @@ WorkLocation         reference-data  # HR work-location lookup.
 # A row's meaningful lifecycle (when it stops being live evidence a human
 # should still look at) is owned by an explicit domain action, not by age.
 
+DecisionResolutionProposal  domain-lifecycle-managed  # BI-3D0FB84B. A drafted
+  # resolution moves proposed -> accepted/amended/rejected/superseded/expired by a
+  # human ruling or by its decision being settled elsewhere; it is never aged out on
+  # a clock. Rows cascade with the DecisionInteraction they belong to, and a ruled
+  # row is kept deliberately — the draft-versus-accepted delta is the only record of
+  # whether the drafting was worth its cost, and a rejection is doctrine too.
 WeightAdjustmentProposal  domain-lifecycle-managed  # BI-D88DFEEA. status transitions from
   # proposed to ruled/rejected only via an explicit human ruling
   # (ruleWeightAdjustmentProposal); a ruled/rejected row is retained
@@ -106,6 +112,8 @@ StockItem  domain-lifecycle-managed  # Operator-maintained supply master: retire
 StorefrontItemComponent  domain-lifecycle-managed  # Recipe lines follow their sellable item and stock item via cascade; an age sweep would silently delete a live product's composition.
 IncumbentCoverageAssessment  domain-lifecycle-managed  # Per-customer coverage verdicts (BI-548060D5); re-assessment supersedes the prior row, never time-aged.
 JobRequisition  domain-lifecycle-managed  # Requisitions close/fill through their own status lifecycle (open→closed/filled), not a time-based sweep (BI-F3AEBF68).
+WorkroomParticipant  domain-lifecycle-managed  # Roster rows cascade with their Workroom and are archived by membership lifecycle; a time sweep would drop a live room's Process Overseer.
+WorkroomRelation  domain-lifecycle-managed  # Relation rows cascade with their Workrooms; a time sweep would drop a live contains/depends-on edge.
 RequisitionOpening  domain-lifecycle-managed  # Headcount slots follow their parent requisition via cascade; never independently aged.
 JobPosting  domain-lifecycle-managed  # Postings are unpublished/closed by requisition lifecycle and cascade; not age-swept.
 PipelineStage  domain-lifecycle-managed  # Stage definitions follow their requisition via cascade; not independently aged.
@@ -121,3 +129,12 @@ FederationIntroductionCandidate  derived-projection  # Reconciled from a trusted
 ExternalChannelProjection  derived-projection  # Rebuilt or explicitly retired from canonical DPF source plus external-channel evidence; age alone cannot decide whether a live source-to-remote binding is still authoritative.
 PayComponentLine  domain-lifecycle-managed  # Payslip money lines (BI-EAC670F1); cascade-deleted with their parent Payslip and retained for as long as payroll/tax law requires that payslip. A purge window here would gut historical pay records.
 EmployeeDeductionElection  domain-lifecycle-managed  # Standing deduction instructions (BI-EAC670F1); effective-dated and retired via RecordLifecycle so a closed run still explains what it deducted and why.
+Vehicle  domain-lifecycle-managed  # Fleet/driver vehicles (BI-6D98AD8A); leave service via the RecordLifecycle convention so historical trips keep resolving their vehicle. Age alone must not delete a vehicle a prior reimbursement cites.
+Trip  domain-lifecycle-managed  # Captured drives (BI-6D98AD8A); a trip that priced a reimbursement is accounting evidence and must survive as a row. Geometry minimisation is bounded by DriverLocationConsent.retentionDays and is enforced by a dedicated field-level job, NOT by row purge — a purge window here would delete claimed expense evidence.
+TripClassificationRule  domain-lifecycle-managed  # Auto-classification rules (BI-6D98AD8A); retired via RecordLifecycle and retained so a historical trip can still explain which rule classified it.
+DriverLocationConsent  domain-lifecycle-managed  # Consent grants and revocations (BI-6D98AD8A); the consent history IS the audit evidence for lawful capture. Revocation stops capture and must never delete the record that consent once existed.
+MileageRatePlan  reference-data  # Org reimbursement rate plans (BI-E17E0034); superseded by a newer plan, never time-aged.
+MileageRate  reference-data  # Effective-dated reimbursement rates (BI-E17E0034); a trip prices at the rate in force on its own date, so purging an expired rate would make historical reimbursements unreproducible.
+TaxObligationPeriodComponent  domain-lifecycle-managed  # Component totals of a tax obligation period (BI-947F8703); owned by and cascade-deleted with their period, and a component of a FILED return is accounting evidence that must survive as a row. A purge window here would delete the figures a filed return was built from.
+TaxDepositSchedule  domain-lifecycle-managed  # Effective-dated deposit cadence determinations (BI-947F8703); superseded by a later determination, never time-aged. Purging an expired schedule would destroy the evidence for why a past deposit was timed the way it was, which is exactly what a late-deposit penalty dispute turns on.
+OAuthClient  domain-lifecycle-managed  # Registered MCP OAuth clients (BI-E4DFDCB0); retired by explicit revocation, which also revokes every token it holds. Age is the wrong axis: a client_credentials client used nightly by CI and a browser client used twice a year are equally live, and purging either by age would break a working connection with no operator action. Revocation is the lifecycle, and the row must survive it so the admin list and the consent audit trail can still name what was revoked.

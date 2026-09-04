@@ -333,6 +333,15 @@
     "apps/web/app/(shell)/delivery/page.tsx": [
       "docs/architecture/delivery-ia.md"
     ],
+    "apps/web/app/(shell)/platform/ai/assignments/page.tsx": [
+      "docs/user-guide/ai-workforce/priority-and-outcomes.md"
+    ],
+    "apps/web/app/(shell)/platform/ai/priority/outcomes/page.tsx": [
+      "docs/user-guide/ai-workforce/priority-and-outcomes.md"
+    ],
+    "apps/web/app/(shell)/platform/ai/providers/[providerId]/page.tsx": [
+      "docs/user-guide/ai-workforce/connecting-providers.md"
+    ],
     "apps/web/app/(shell)/platform/ai/providers/page.tsx": [
       "docs/user-guide/ai-workforce/connecting-providers.md"
     ],
@@ -348,6 +357,9 @@
     "apps/web/app/api/mcp/v1/route.ts": [
       "docs/architecture/ai-agent-meta-model.md",
       "docs/architecture/mcp-tool-authorization-runbook.md"
+    ],
+    "apps/web/app/api/platform/ai/local-models/status/route.ts": [
+      "docs/architecture/background-operation-observation-contract.md"
     ],
     "apps/web/app/api/v1/auth/provider-oauth/callback/route.ts": [
       "docs/user-guide/ai-workforce/provider-developer-notes.md"
@@ -420,6 +432,9 @@
     ],
     "apps/web/components/platform/AgentCardSupervisorPanel.tsx": [
       "docs/architecture/agent-standards-dpf-conformance.md"
+    ],
+    "apps/web/components/platform/OllamaManagement.tsx": [
+      "docs/architecture/background-operation-observation-contract.md"
     ],
     "apps/web/components/platform/ProviderSuitabilityGuide.tsx": [
       "docs/user-guide/ai-workforce/connecting-providers.md"
@@ -541,6 +556,9 @@
     "apps/web/lib/backlog.ts": [
       "docs/architecture/contributor-procedure-runbook.md",
       "docs/professions/data-architect/wiki/strongly-typed-string-enums.md"
+    ],
+    "apps/web/lib/backlog/deferral-contract.ts": [
+      "docs/architecture/backlog-and-planning-runbook.md"
     ],
     "apps/web/lib/build-pipeline.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
@@ -680,11 +698,24 @@
     "apps/web/lib/gear-interface/otel-exporter.ts": [
       "docs/architecture/2026-08-09-portal-architecture-hardening-findings.md"
     ],
+    "apps/web/lib/golden-triangle/calibrate.ts": [
+      "docs/user-guide/ai-workforce/priority-and-outcomes.md"
+    ],
     "apps/web/lib/golden-triangle/compile.ts": [
-      "docs/design/golden-triangle-vector-reference.md"
+      "docs/design/golden-triangle-vector-reference.md",
+      "docs/user-guide/ai-workforce/priority-and-outcomes.md"
+    ],
+    "apps/web/lib/golden-triangle/receipt.ts": [
+      "docs/user-guide/ai-workforce/priority-and-outcomes.md"
+    ],
+    "apps/web/lib/golden-triangle/telemetry-receipts.ts": [
+      "docs/user-guide/ai-workforce/priority-and-outcomes.md"
     ],
     "apps/web/lib/govern/auth-redirect.ts": [
       "docs/install/platform-support-watchlist.md"
+    ],
+    "apps/web/lib/govern/auth.ts": [
+      "docs/security/tool-evaluations/2026-08-23-authentik.md"
     ],
     "apps/web/lib/govern/data/field-classification.ts": [
       "docs/architecture/backlog-and-planning-runbook.md"
@@ -726,6 +757,9 @@
     "apps/web/lib/inference/jit-retrieval-discipline.test.ts": [
       "docs/architecture/context-engineering-standards.md"
     ],
+    "apps/web/lib/inference/local-model-operations.ts": [
+      "docs/architecture/background-operation-observation-contract.md"
+    ],
     "apps/web/lib/inference/local-only.ts": [
       "docs/strategy/2026-09-cada-architects-forum-deck.md"
     ],
@@ -758,7 +792,8 @@
     ],
     "apps/web/lib/mcp-governed-execute.ts": [
       "docs/architecture/ai-agent-meta-model.md",
-      "docs/architecture/mcp-tool-surface-ergonomics-audit.md"
+      "docs/architecture/mcp-tool-surface-ergonomics-audit.md",
+      "docs/user-guide/ai-workforce/how-governed-work-runs.md"
     ],
     "apps/web/lib/mcp/load-tools.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md"
@@ -812,6 +847,14 @@
       "docs/architecture/section-navigation.md",
       "docs/maintenance/staleness-report.md"
     ],
+    "apps/web/lib/nonprod/host-resource-policy.ts": [
+      "docs/architecture/dpf-patterns.md",
+      "docs/user-guide/contributing/agent-dev-environments.md"
+    ],
+    "apps/web/lib/nonprod/host-resource-profiles.json": [
+      "docs/architecture/dpf-patterns.md",
+      "docs/user-guide/contributing/agent-dev-environments.md"
+    ],
     "apps/web/lib/operate/db-continuity.ts": [
       "docs/architecture/delivery-surfaces-runbook.md"
     ],
@@ -835,6 +878,9 @@
       "docs/architecture/operations-hot-path.md"
     ],
     "apps/web/lib/platform-runtime/capability-service-projection.ts": [
+      "docs/architecture/capability-driven-runtime-profiles.md"
+    ],
+    "apps/web/lib/platform-runtime/capability-state-divergence.ts": [
       "docs/architecture/capability-driven-runtime-profiles.md"
     ],
     "apps/web/lib/platform-runtime/operational-state.ts": [
@@ -886,6 +932,9 @@
     ],
     "apps/web/lib/queue/functions/wiki-lint.ts": [
       "docs/founder-kernel/SCHEMA.md"
+    ],
+    "apps/web/lib/queue/functions/workroom-drive.ts": [
+      "docs/architecture/work-shapes-and-the-decision-gate.md"
     ],
     "apps/web/lib/queue/inngest-client.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
@@ -991,6 +1040,9 @@
     "apps/web/lib/shell/shell-action-contract.ts": [
       "docs/platform-usability-standards.md"
     ],
+    "apps/web/lib/skills/skill-relevance.ts": [
+      "docs/architecture/skill-surfaces-runbook.md"
+    ],
     "apps/web/lib/storefront/archetype-reset.ts": [
       "docs/testing/findings/run-1-swap-findings.md"
     ],
@@ -1021,6 +1073,9 @@
     ],
     "apps/web/lib/tak/compaction-digest.ts": [
       "docs/architecture/context-engineering-standards.md"
+    ],
+    "apps/web/lib/tak/consequential-tool-policy.ts": [
+      "docs/user-guide/ai-workforce/how-governed-work-runs.md"
     ],
     "apps/web/lib/tak/context-arbitrator.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md"
@@ -1058,10 +1113,19 @@
       "docs/architecture/agent-standards-dpf-conformance.md",
       "docs/architecture/context-engineering-standards.md"
     ],
+    "apps/web/lib/testing/degenerate-env/index.ts": [
+      "docs/testing/pre-pr-gate.md"
+    ],
+    "apps/web/lib/testing/degenerate-env/probe-conformance.test.ts": [
+      "docs/testing/pre-pr-gate.md"
+    ],
     "apps/web/lib/tool-description-hygiene.test.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md",
       "docs/architecture/context-engineering-standards.md",
       "docs/architecture/mcp-tool-authorization-runbook.md"
+    ],
+    "apps/web/lib/ux-budget/budgets.ts": [
+      "docs/platform-usability-standards.md"
     ],
     "apps/web/lib/ux-budget/measure.ts": [
       "docs/platform-usability-standards.md"
@@ -1076,7 +1140,8 @@
       "docs/architecture/work-shapes-and-the-decision-gate.md"
     ],
     "apps/web/lib/work-management/autonomy-envelope.ts": [
-      "docs/architecture/work-shapes-and-the-decision-gate.md"
+      "docs/architecture/work-shapes-and-the-decision-gate.md",
+      "docs/user-guide/ai-workforce/how-governed-work-runs.md"
     ],
     "apps/web/lib/work-management/room-channel-continuity.ts": [
       "docs/user-guide/workspace/work-rooms.md"
@@ -1091,9 +1156,17 @@
       "docs/user-guide/workspace/work-rooms.md"
     ],
     "apps/web/lib/work-management/room-posture.ts": [
-      "docs/architecture/work-shapes-and-the-decision-gate.md"
+      "docs/architecture/work-shapes-and-the-decision-gate.md",
+      "docs/user-guide/ai-workforce/how-governed-work-runs.md"
+    ],
+    "apps/web/lib/work-management/room-shapes.ts": [
+      "docs/architecture/work-shapes-and-the-decision-gate.md",
+      "docs/user-guide/ai-workforce/how-governed-work-runs.md"
     ],
     "apps/web/lib/work-management/room-types.ts": [
+      "docs/architecture/work-shapes-and-the-decision-gate.md"
+    ],
+    "apps/web/lib/work-management/work-shapes.ts": [
       "docs/architecture/work-shapes-and-the-decision-gate.md"
     ],
     "apps/web/lib/work-management/work-unit.ts": [
@@ -1104,6 +1177,12 @@
     ],
     "apps/web/lib/work-management/workspace-room-access.ts": [
       "docs/user-guide/workspace/work-rooms.md"
+    ],
+    "apps/web/lib/work-posture/derive.ts": [
+      "docs/user-guide/ai-workforce/how-governed-work-runs.md"
+    ],
+    "apps/web/lib/work-posture/temporal-band.ts": [
+      "docs/user-guide/ai-workforce/how-governed-work-runs.md"
     ],
     "apps/web/lib/workbooks/backlog-adapter-mapping.ts": [
       "docs/architecture/backlog-archetype-scope.md"
@@ -1189,6 +1268,9 @@
     "docs/testing/ci-observation-baseline.json": [
       "docs/testing/ci-evidence.md"
     ],
+    "dpf-start.ps1": [
+      "docs/runbooks/bet5-windows-self-upgrade.md"
+    ],
     "e2e/fixtures/evidence.ts": [
       "docs/architecture/agent-client-capability-parity.md"
     ],
@@ -1209,7 +1291,8 @@
     ],
     "packages/db/prisma/schema/build-delivery.prisma": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
-      "docs/architecture/dpf-patterns.md"
+      "docs/architecture/dpf-patterns.md",
+      "docs/user-guide/contributing/agent-dev-environments.md"
     ],
     "packages/db/prisma/schema/resource-scheduling.prisma": [
       "docs/architecture/data-model-stewardship-runbook.md"
@@ -1229,6 +1312,9 @@
     "packages/db/scripts/index-integrity-guard.mjs": [
       "docs/professions/data-architect/wiki/index-and-collation-integrity.md",
       "docs/runbooks/2026-07-20-collation-drift-index-corruption.md"
+    ],
+    "packages/db/scripts/schema-regression-guard.mjs": [
+      "docs/architecture/tax-period-component-migration.md"
     ],
     "packages/db/scripts/seed-cada-regulation.ts": [
       "docs/strategy/2026-09-cada-architects-forum-deck.md"
@@ -1287,6 +1373,9 @@
     "packages/db/src/hive-scout-config.ts": [
       "docs/specs/device-identification-and-portfolio-placement-spec.md"
     ],
+    "packages/db/src/mandated-skills.ts": [
+      "docs/architecture/skill-surfaces-runbook.md"
+    ],
     "packages/db/src/migrations/exact-key-repair.ts": [
       "docs/professions/data-architect/wiki/dedupe-migration-means-the-constraint-is-wrong.md",
       "docs/runbooks/2026-07-20-collation-drift-index-corruption.md"
@@ -1301,6 +1390,9 @@
       "docs/architecture/operational-precedent-corpus.md"
     ],
     "packages/db/src/profession-local-axes.ts": [
+      "docs/architecture/decision-vectors.md"
+    ],
+    "packages/db/src/profession-material-promotion.ts": [
       "docs/architecture/decision-vectors.md"
     ],
     "packages/db/src/provider-compliance-source-registry.ts": [
@@ -1370,6 +1462,9 @@
     "packages/dpf-skill-pack/hooks/tool-economy-precheck.mjs": [
       "docs/architecture/context-engineering-standards.md"
     ],
+    "packages/dpf-skill-pack/hooks/workroom-claim-guard.mjs": [
+      "docs/architecture/delivery-surfaces-runbook.md"
+    ],
     "packages/dpf-skill-pack/hooks/worktree-create.mjs": [
       "docs/architecture/delivery-surfaces-runbook.md"
     ],
@@ -1435,6 +1530,9 @@
     "scripts/backup-postgres.sh": [
       "docs/operations/disaster-recovery.md"
     ],
+    "scripts/bind-worktree-cli.mjs": [
+      "docs/architecture/delivery-surfaces-runbook.md"
+    ],
     "scripts/build-docs-staleness.mjs": [
       "docs/maintenance/README.md",
       "docs/maintenance/staleness-report.md"
@@ -1455,12 +1553,18 @@
     "scripts/check-agent-capability-integrity.mjs": [
       "docs/architecture/2026-08-20-governed-autonomy-architecture.md"
     ],
+    "scripts/check-agent-principal-convergence-wired.mjs": [
+      "docs/testing/pre-pr-gate.md"
+    ],
     "scripts/check-application-boundaries.mjs": [
       "docs/architecture/2026-08-16-simplify-and-strengthen-architecture-pass.md",
       "docs/architecture/application-boundaries.md"
     ],
     "scripts/check-build-namespace.mjs": [
       "docs/architecture/build-studio-namespace.md"
+    ],
+    "scripts/check-build-script-policy.mjs": [
+      "docs/architecture/build-gate-runbook.md"
     ],
     "scripts/check-build-studio-surface-budget.mjs": [
       "docs/architecture/build-studio-namespace.md"
@@ -1487,6 +1591,9 @@
     "scripts/check-docs-impact.mjs": [
       "docs/architecture/enforced-ci-gates.md"
     ],
+    "scripts/check-guard-conformance-marks.mjs": [
+      "docs/testing/pre-pr-gate.md"
+    ],
     "scripts/check-guards.mjs": [
       "docs/architecture/theme-aware-styling-runbook.md",
       "docs/testing/pre-pr-gate.md"
@@ -1498,6 +1605,9 @@
       "docs/architecture/context-engineering-standards.md"
     ],
     "scripts/check-label-association.mjs": [
+      "docs/testing/pre-pr-gate.md"
+    ],
+    "scripts/check-live-blocker-references.mjs": [
       "docs/testing/pre-pr-gate.md"
     ],
     "scripts/check-mcp-tool-pack.mjs": [
@@ -1542,6 +1652,9 @@
     "scripts/check-no-provider-local-connector-lifecycle.mjs": [
       "docs/architecture/unified-connector-kernel.md"
     ],
+    "scripts/check-no-unattributable-deferral.mjs": [
+      "docs/architecture/backlog-and-planning-runbook.md"
+    ],
     "scripts/check-override-comments.mjs": [
       "docs/architecture/contributor-procedure-runbook.md"
     ],
@@ -1572,6 +1685,9 @@
     "scripts/check-ux-fit-decision.mjs": [
       "docs/architecture/theme-aware-styling-runbook.md",
       "docs/design/golden-triangle-design.md"
+    ],
+    "scripts/ci-change-scope.mjs": [
+      "docs/testing/pre-pr-gate.md"
     ],
     "scripts/ci-evidence-plan.mjs": [
       "docs/testing/ci-evidence.md"
@@ -1606,6 +1722,7 @@
       "docs/testing/archetype-audit-plan.md"
     ],
     "scripts/gate-worktree.mjs": [
+      "docs/architecture/context-engineering-standards.md",
       "docs/testing/pre-pr-gate.md"
     ],
     "scripts/gate-worktree.sh": [
@@ -1621,9 +1738,17 @@
       "docs/testing/archetype-exercise-harness.md",
       "docs/testing/archetype-exercise-playbook.md"
     ],
+    "scripts/hooks/converge-git-hooks.mjs": [
+      "docs/testing/pre-pr-gate.md"
+    ],
     "scripts/hooks/run-hook.mjs": [
       "docs/install/platform-support-watchlist.md",
       "docs/operations/session-transcript-recovery.md"
+    ],
+    "scripts/host-resource-runner.mjs": [
+      "docs/architecture/dpf-patterns.md",
+      "docs/operations/local-ci-sandbox-slots.md",
+      "docs/user-guide/contributing/agent-dev-environments.md"
     ],
     "scripts/install-worktree-janitor-schedule.sh": [
       "docs/install/worktree-janitor-schedule.md"
@@ -1640,6 +1765,7 @@
       "docs/install/edge-node-multi-host.md"
     ],
     "scripts/lib/bootstrap-worktree-deps.mjs": [
+      "docs/architecture/build-gate-runbook.md",
       "docs/architecture/mcp-tool-authorization-runbook.md"
     ],
     "scripts/lib/ci-policy-guards.mjs": [
@@ -1650,20 +1776,23 @@
     "scripts/lib/compose-safety.mjs": [
       "docs/architecture/delivery-surfaces-runbook.md"
     ],
+    "scripts/lib/converge-hooks-dir.mjs": [
+      "docs/testing/pre-pr-gate.md"
+    ],
     "scripts/lib/dco-signoff.mjs": [
       "docs/architecture/build-gate-runbook.md"
     ],
     "scripts/lib/dockerfile-portal-build.test.mjs": [
       "docs/install/platform-support-watchlist.md"
     ],
-    "scripts/lib/ensure-pre-push-hook.mjs": [
-      "docs/testing/pre-pr-gate.md"
-    ],
     "scripts/lib/entry-module.mjs": [
       "docs/install/platform-support-watchlist.md"
     ],
     "scripts/lib/gate-context.mjs": [
       "docs/testing/pr-health.md"
+    ],
+    "scripts/lib/hooks-dir.mjs": [
+      "docs/testing/pre-pr-gate.md"
     ],
     "scripts/lib/junction-safe-worktree-remove.mjs": [
       "docs/architecture/delivery-surfaces-runbook.md"
@@ -1674,6 +1803,12 @@
     ],
     "scripts/lib/local-integration-ci.mjs": [
       "docs/testing/pre-pr-gate.md"
+    ],
+    "scripts/lib/local-integration-status.mjs": [
+      "docs/testing/pre-pr-gate.md"
+    ],
+    "scripts/lib/mcp-client.mjs": [
+      "docs/architecture/mcp-tool-authorization-runbook.md"
     ],
     "scripts/lib/published-doc-roots.mjs": [
       "docs/architecture/enforced-ci-gates.md"
@@ -1691,6 +1826,10 @@
     ],
     "scripts/mcp-tool-pack-baseline.json": [
       "docs/architecture/mcp-tool-packs.md"
+    ],
+    "scripts/measure-capability-completeness.mjs": [
+      "docs/architecture/2026-08-20-recurring-obligation-work-shape-and-doc-robustness.md",
+      "docs/architecture/work-shapes-and-the-decision-gate.md"
     ],
     "scripts/measure-doc-staleness-coverage.mjs": [
       "docs/maintenance/staleness-coverage.md"
@@ -1728,7 +1867,13 @@
       "docs/architecture/build-gate-runbook.md",
       "docs/founder-kernel/wiki/principles/dco-sign-off-required.md"
     ],
+    "scripts/pre-push-gate-slot-contract.test.mjs": [
+      "docs/architecture/build-gate-runbook.md"
+    ],
     "scripts/pregate-preflight.mjs": [
+      "docs/architecture/build-gate-runbook.md"
+    ],
+    "scripts/pregate-status.mjs": [
       "docs/architecture/build-gate-runbook.md"
     ],
     "scripts/probes/marketing-media/local-render-receipt.json": [
@@ -2117,7 +2262,8 @@
       "docker-compose.pki.yml",
       "packages/db/src/regulation-applicability.ts",
       "packages/db/src/seed-software-horizontal-compliance.ts",
-      "scripts/check-doc-links.mjs"
+      "scripts/check-doc-links.mjs",
+      "scripts/measure-capability-completeness.mjs"
     ],
     "docs/architecture/agent-client-capability-parity.md": [
       "apps/web/lib/build/unified-wip-query.ts",
@@ -2185,17 +2331,22 @@
       "scripts/gen-architecture-counts.mjs"
     ],
     "docs/architecture/background-operation-observation-contract.md": [
+      "apps/web/app/api/platform/ai/local-models/status/route.ts",
       "apps/web/components/ops/SelfUpgradeLiveProvider.tsx",
+      "apps/web/components/platform/OllamaManagement.tsx",
       "apps/web/components/platform/SystemEventProvider.tsx",
       "apps/web/lib/architecture/background-operation-observation-contract.test.ts",
       "apps/web/lib/hooks/useBackgroundOperationObserver.ts",
       "apps/web/lib/hooks/useResilientEventSource.ts",
+      "apps/web/lib/inference/local-model-operations.ts",
       "apps/web/lib/self-upgrade/status-snapshot.ts",
       "apps/web/lib/tak/agent-event-bus.ts"
     ],
     "docs/architecture/backlog-and-planning-runbook.md": [
+      "apps/web/lib/backlog/deferral-contract.ts",
       "apps/web/lib/govern/data/field-classification.ts",
-      "packages/db/src/table-classification.ts"
+      "packages/db/src/table-classification.ts",
+      "scripts/check-no-unattributable-deferral.mjs"
     ],
     "docs/architecture/backlog-archetype-scope.md": [
       "apps/web/app/api/v1/ops/backlog/route.ts",
@@ -2215,9 +2366,13 @@
       "apps/web/lib/build/coding-agent.ts",
       "apps/web/lib/queue/functions/build-review-verification.ts",
       "pnpm-lock.yaml",
+      "scripts/check-build-script-policy.mjs",
+      "scripts/lib/bootstrap-worktree-deps.mjs",
       "scripts/lib/dco-signoff.mjs",
       "scripts/pre-push-dco-check.mjs",
-      "scripts/pregate-preflight.mjs"
+      "scripts/pre-push-gate-slot-contract.test.mjs",
+      "scripts/pregate-preflight.mjs",
+      "scripts/pregate-status.mjs"
     ],
     "docs/architecture/build-studio-namespace.md": [
       "apps/web/lib/build/build-plan-paths.ts",
@@ -2232,6 +2387,7 @@
     ],
     "docs/architecture/capability-driven-runtime-profiles.md": [
       "apps/web/lib/platform-runtime/capability-service-projection.ts",
+      "apps/web/lib/platform-runtime/capability-state-divergence.ts",
       "apps/web/lib/platform-runtime/operational-state.ts",
       "packages/db/data/platform-runtime-capabilities.json",
       "scripts/capability-service-catalog.generated.json",
@@ -2253,6 +2409,7 @@
       "apps/web/lib/tool-description-hygiene.test.ts",
       "packages/dpf-skill-pack/hooks/tool-economy-precheck.mjs",
       "scripts/check-instruction-plane-size.mjs",
+      "scripts/gate-worktree.mjs",
       "scripts/lib/ci-policy-guards.mjs"
     ],
     "docs/architecture/contributor-procedure-runbook.md": [
@@ -2281,7 +2438,8 @@
     "docs/architecture/decision-vectors.md": [
       "apps/web/lib/decision-perspective/material.ts",
       "packages/db/src/dimension-scope.ts",
-      "packages/db/src/profession-local-axes.ts"
+      "packages/db/src/profession-local-axes.ts",
+      "packages/db/src/profession-material-promotion.ts"
     ],
     "docs/architecture/delivery-ia.md": [
       "apps/web/app/(shell)/delivery/page.tsx",
@@ -2291,7 +2449,9 @@
       "apps/web/lib/build/unified-wip.ts",
       "apps/web/lib/build/wip-cap.ts",
       "apps/web/lib/operate/db-continuity.ts",
+      "packages/dpf-skill-pack/hooks/workroom-claim-guard.mjs",
       "packages/dpf-skill-pack/hooks/worktree-create.mjs",
+      "scripts/bind-worktree-cli.mjs",
       "scripts/lib/compose-safety.mjs",
       "scripts/lib/junction-safe-worktree-remove.mjs",
       "scripts/new-dev-worktree.sh"
@@ -2311,8 +2471,11 @@
       "scripts/sbom/scan-dependencies.mjs"
     ],
     "docs/architecture/dpf-patterns.md": [
+      "apps/web/lib/nonprod/host-resource-policy.ts",
+      "apps/web/lib/nonprod/host-resource-profiles.json",
       "packages/db/prisma/schema/build-delivery.prisma",
-      "packages/db/prisma/schema/work-coordination.prisma"
+      "packages/db/prisma/schema/work-coordination.prisma",
+      "scripts/host-resource-runner.mjs"
     ],
     "docs/architecture/enforced-ci-gates.md": [
       "apps/web/lib/docs-route-map.ts",
@@ -2352,7 +2515,8 @@
       "apps/web/lib/tak/tool-result-budget.ts",
       "apps/web/lib/tool-description-hygiene.test.ts",
       "scripts/check-no-adhoc-mcp-protocol-versions.mjs",
-      "scripts/lib/bootstrap-worktree-deps.mjs"
+      "scripts/lib/bootstrap-worktree-deps.mjs",
+      "scripts/lib/mcp-client.mjs"
     ],
     "docs/architecture/mcp-tool-packs.md": [
       "apps/web/lib/mcp/packs/deliberation-siem-pack.ts",
@@ -2414,8 +2578,13 @@
     ],
     "docs/architecture/skill-surfaces-runbook.md": [
       "apps/web/lib/decision/dimension-catalog.ts",
+      "apps/web/lib/skills/skill-relevance.ts",
+      "packages/db/src/mandated-skills.ts",
       "packages/db/src/seed-skills.ts",
       "packages/dpf-skill-pack/hooks/process-spine-health-check.mjs"
+    ],
+    "docs/architecture/tax-period-component-migration.md": [
+      "packages/db/scripts/schema-regression-guard.mjs"
     ],
     "docs/architecture/theme-aware-styling-runbook.md": [
       "apps/web/components/storefront-admin/ItemsManager.tsx",
@@ -2442,11 +2611,15 @@
     ],
     "docs/architecture/work-shapes-and-the-decision-gate.md": [
       "apps/web/lib/mcp/packs/profession-decision-pack.ts",
+      "apps/web/lib/queue/functions/workroom-drive.ts",
       "apps/web/lib/tak/decision-routing-governance-hook.ts",
       "apps/web/lib/work-capsules.ts",
       "apps/web/lib/work-management/autonomy-envelope.ts",
       "apps/web/lib/work-management/room-posture.ts",
-      "apps/web/lib/work-management/room-types.ts"
+      "apps/web/lib/work-management/room-shapes.ts",
+      "apps/web/lib/work-management/room-types.ts",
+      "apps/web/lib/work-management/work-shapes.ts",
+      "scripts/measure-capability-completeness.mjs"
     ],
     "docs/architecture/workroom-vocabulary-boundary.md": [
       "scripts/check-prose-lint.ts"
@@ -2633,6 +2806,7 @@
     ],
     "docs/operations/local-ci-sandbox-slots.md": [
       "scripts/check-host-port-range.test.mjs",
+      "scripts/host-resource-runner.mjs",
       "scripts/lib/local-ci-slot-manifest.mjs",
       "scripts/local-ci-pilot-report.mjs"
     ],
@@ -2689,6 +2863,7 @@
       "apps/web/lib/shell/shell-action-contract.ts",
       "apps/web/lib/tak/escalation-ladder.ts",
       "apps/web/lib/tak/prompt-assembler.ts",
+      "apps/web/lib/ux-budget/budgets.ts",
       "apps/web/lib/ux-budget/measure.ts",
       "apps/web/lib/workforce/oversight-copy.ts",
       "packages/validators/src/readability.ts",
@@ -2725,6 +2900,7 @@
     ],
     "docs/runbooks/bet5-windows-self-upgrade.md": [
       "apps/web/lib/self-upgrade/host-memory-preflight.ts",
+      "dpf-start.ps1",
       "scripts/promote.sh"
     ],
     "docs/security/2026-05-24-shift-left-rollout.md": [
@@ -2750,6 +2926,9 @@
     ],
     "docs/security/tool-evaluations/2026-08-01-marketing-media-stack.md": [
       "scripts/probes/marketing-media/local-render-receipt.json"
+    ],
+    "docs/security/tool-evaluations/2026-08-23-authentik.md": [
+      "apps/web/lib/govern/auth.ts"
     ],
     "docs/specs/device-identification-and-portfolio-placement-spec.md": [
       "apps/web/lib/queue/functions/hive-scout-ingest.ts",
@@ -2847,17 +3026,26 @@
       ".github/workflows/ci.yml",
       ".github/workflows/codeql.yml",
       ".github/workflows/policy-guards-recheck.yml",
+      "apps/web/lib/testing/degenerate-env/index.ts",
+      "apps/web/lib/testing/degenerate-env/probe-conformance.test.ts",
       "docker-compose.local-ci.yml",
       "packages/dpf-skill-pack/hooks/pregate-evidence-guard.mjs",
+      "scripts/check-agent-principal-convergence-wired.mjs",
+      "scripts/check-guard-conformance-marks.mjs",
       "scripts/check-guards.mjs",
       "scripts/check-label-association.mjs",
+      "scripts/check-live-blocker-references.mjs",
       "scripts/check-mobile-jest-pin.mjs",
+      "scripts/ci-change-scope.mjs",
       "scripts/ci-policy-guards.test.mjs",
       "scripts/gate-worktree.mjs",
       "scripts/gate-worktree.sh",
+      "scripts/hooks/converge-git-hooks.mjs",
       "scripts/lib/ci-policy-guards.mjs",
-      "scripts/lib/ensure-pre-push-hook.mjs",
+      "scripts/lib/converge-hooks-dir.mjs",
+      "scripts/lib/hooks-dir.mjs",
       "scripts/lib/local-integration-ci.mjs",
+      "scripts/lib/local-integration-status.mjs",
       "scripts/local-ci-runner.mjs",
       "scripts/pr-health.mjs",
       "scripts/set-hooks-path.mjs",
@@ -2869,6 +3057,7 @@
       "apps/web/lib/build/sandbox/sandbox.ts"
     ],
     "docs/user-guide/ai-workforce/connecting-providers.md": [
+      "apps/web/app/(shell)/platform/ai/providers/[providerId]/page.tsx",
       "apps/web/app/(shell)/platform/ai/providers/page.tsx",
       "apps/web/components/platform/ProviderSuitabilityGuide.tsx",
       "apps/web/lib/ai-inference.ts"
@@ -2882,8 +3071,25 @@
       "apps/web/lib/founder-review/queue.ts",
       "apps/web/lib/tak/route-context.ts"
     ],
+    "docs/user-guide/ai-workforce/how-governed-work-runs.md": [
+      "apps/web/lib/mcp-governed-execute.ts",
+      "apps/web/lib/tak/consequential-tool-policy.ts",
+      "apps/web/lib/work-management/autonomy-envelope.ts",
+      "apps/web/lib/work-management/room-posture.ts",
+      "apps/web/lib/work-management/room-shapes.ts",
+      "apps/web/lib/work-posture/derive.ts",
+      "apps/web/lib/work-posture/temporal-band.ts"
+    ],
     "docs/user-guide/ai-workforce/model-routing-lifecycle.md": [
       "docker-entrypoint.sh"
+    ],
+    "docs/user-guide/ai-workforce/priority-and-outcomes.md": [
+      "apps/web/app/(shell)/platform/ai/assignments/page.tsx",
+      "apps/web/app/(shell)/platform/ai/priority/outcomes/page.tsx",
+      "apps/web/lib/golden-triangle/calibrate.ts",
+      "apps/web/lib/golden-triangle/compile.ts",
+      "apps/web/lib/golden-triangle/receipt.ts",
+      "apps/web/lib/golden-triangle/telemetry-receipts.ts"
     ],
     "docs/user-guide/ai-workforce/provider-codex.md": [
       "docker-entrypoint.sh"
@@ -2904,8 +3110,12 @@
       "apps/web/lib/build/build-orchestrator.ts"
     ],
     "docs/user-guide/contributing/agent-dev-environments.md": [
+      "apps/web/lib/nonprod/host-resource-policy.ts",
+      "apps/web/lib/nonprod/host-resource-profiles.json",
+      "packages/db/prisma/schema/build-delivery.prisma",
       "scripts/dpf-bootstrap-agent-toolchain.ps1",
-      "scripts/dpf-bootstrap-agent-toolchain.sh"
+      "scripts/dpf-bootstrap-agent-toolchain.sh",
+      "scripts/host-resource-runner.mjs"
     ],
     "docs/user-guide/contributing/dev-container.md": [
       "packages/db/scripts/dev-preview-migrate-deploy.mjs"

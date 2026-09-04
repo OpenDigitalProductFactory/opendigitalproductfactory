@@ -119,6 +119,9 @@ single-tree mode — the current default and fully back-compat.
 7. **Workspace dependencies** — `pnpm install`.
 8. **Host hardware profile** — runs `scripts/detect-hardware-host.ts`
    (reads `/proc/cpuinfo`, `nproc`, `free -b`, `nvidia-smi` if present).
+   Model selection reads the shared `scripts/installer/local-model-policy.json`
+   policy. A 24 GB discrete GPU selects the curated `ai/qwen3-coder` tier;
+   fresh installs do not auto-provision mutable third-party model references.
 9. **`.env` generation** — only on first install; existing `.env` is
    preserved.
 10. **`docker compose up -d`** on the Linux overlay (which adds the
@@ -390,6 +393,14 @@ kernel, your specific Docker version, with your specific user setup.
    # Then attach ~/.dpf/doctor-<timestamp>.tar.gz to the issue.
    # Secrets are redacted automatically.
    ```
+
+   > **If you attached a doctor bundle before 2026-08-28, rotate your secrets.**
+   > Until then the bundle's `compose-rendered.yml` was written straight from
+   > `docker compose config`, which expands every environment variable, so that
+   > file carried live values for `AUTH_SECRET`, `CREDENTIAL_ENCRYPTION_KEY`,
+   > `ADMIN_PASSWORD` and `INNGEST_SIGNING_KEY`. Rotate each of them in `.env`
+   > and restart the stack. `CREDENTIAL_ENCRYPTION_KEY` decrypts stored
+   > credentials, so re-enter any provider secrets after rotating it.
 
 We especially want reports from:
 

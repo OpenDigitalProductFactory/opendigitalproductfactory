@@ -22,7 +22,14 @@ CMD ["/usr/local/bin/dev-portal-entrypoint.sh"]
 FROM base AS deps
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
 COPY patches/ ./patches/
+# set-hooks-path runs as the root postinstall during `pnpm install` below, and
+# it imports resolveHooksDir from scripts/lib/hooks-dir.mjs (BI-5CBDC146). The
+# lib must land with it or the postinstall throws ERR_MODULE_NOT_FOUND and the
+# whole image build fails.
 COPY scripts/set-hooks-path.mjs ./scripts/
+COPY scripts/lib/hooks-dir.mjs ./scripts/lib/
+COPY scripts/sbom/generate-platform-sbom.mjs ./scripts/sbom/
+COPY .github/workflows/publish-image.yml ./.github/workflows/
 COPY apps/web/package.json ./apps/web/
 COPY packages/db/package.json ./packages/db/
 COPY packages/db/prisma/schema ./packages/db/prisma/schema
@@ -56,11 +63,16 @@ FROM deps AS build
 # Copy source EXCLUDING pnpm-lock.yaml (preserve the deps stage lockfile which has no expo entries)
 COPY pnpm-workspace.yaml tsconfig.base.json .gitignore ./
 COPY scripts/set-hooks-path.mjs ./scripts/
+COPY scripts/lib/hooks-dir.mjs ./scripts/lib/
 COPY scripts/capability-service-catalog.generated.json ./scripts/
 COPY scripts/lib/capability-service-projection.mjs ./scripts/lib/
 COPY scripts/lib/capability-state-hash.mjs ./scripts/lib/
 COPY scripts/lib/transition-signing.mjs ./scripts/lib/
+# The local-CI status set is shared by the gate scripts and the MCP evidence
+# handler, so the build stage needs it too (BI-C59AC8AF).
+COPY scripts/lib/local-integration-status.mjs ./scripts/lib/
 COPY scripts/installer/resolve-host-identity.mjs ./scripts/installer/
+COPY scripts/installer/local-model-policy.json ./scripts/installer/
 COPY apps/web/ ./apps/web/
 COPY packages/ ./packages/
 COPY docs/professions/ ./docs/professions/
@@ -103,6 +115,7 @@ COPY scripts/lib/capability-state-hash.mjs ./scripts/lib/
 COPY scripts/lib/capability-service-projection.mjs ./scripts/lib/
 COPY scripts/lib/transition-signing.mjs ./scripts/lib/
 COPY scripts/installer/resolve-host-identity.mjs ./scripts/installer/
+COPY scripts/installer/local-model-policy.json ./scripts/installer/
 COPY scripts/capability-service-catalog.generated.json ./scripts/
 COPY scripts/installer/validate-install-state.mjs ./scripts/installer/
 COPY scripts/installer/install-state-transaction.mjs ./scripts/installer/
@@ -145,7 +158,12 @@ COPY scripts/lib/module-size-scope.mjs ./scripts/lib/
 COPY scripts/lib/ci-policy-guards.mjs ./scripts/lib/
 COPY scripts/lib/host-command-invocation.mjs ./scripts/lib/
 COPY scripts/lib/git-fetch-shared-safe.mjs ./scripts/lib/
+# check-design-grounding-decision and check-data-impact import the shared
+# unresolvable-diff helper; without this COPY the init image dies at
+# ERR_MODULE_NOT_FOUND (BI-20599979).
+COPY scripts/lib/git-changed-files.mjs ./scripts/lib/
 COPY scripts/lib/entry-module.mjs ./scripts/lib/
+COPY scripts/lib/local-integration-status.mjs ./scripts/lib/
 COPY scripts/module-size-baseline.txt ./scripts/
 COPY scripts/prose-lint-baseline.json ./scripts/
 COPY scripts/style-drift-baseline.json ./scripts/
@@ -183,6 +201,40 @@ COPY config/ ./config/
 # seed-ea-reference-models.ts. The rest of docs/Reference/ is large
 # binary content not needed in the image.
 COPY docs/Reference/IT4IT_Functional_Criteria_Taxonomy.xlsx ./docs/Reference/
+# The BIAN Service Landscape, read at seed time on a banking install.
+COPY docs/Reference/bian/bian-v14-service-landscape.json ./docs/Reference/bian/
+# The workbook is tracked in Git LFS, so a checkout without `lfs: true` copies a
+# ~130-byte pointer stub here instead of the real file. That shipped: every
+# consumer install's eaReferenceModels seed step failed with "invalid zip data"
+# and the IT4IT and BIAN reference models never imported (BI-FEE26C36).
+#
+# seed-ea-reference-models.ts already asserts a non-zero row count for exactly
+# this case, but that guard runs AFTER the workbook read and the xlsx parser
+# throws on a stub first — a guard placed after a read cannot cover a read that
+# throws. The assertion has to sit where the bytes enter the artifact.
+#
+# Fail the PUBLISH, never the install: a release that cannot seed its reference
+# models must not become :latest. An .xlsx is a zip, so real content starts "PK".
+RUN head -c 2 docs/Reference/IT4IT_Functional_Criteria_Taxonomy.xlsx | grep -q '^PK' || { \
+      echo "ERROR: docs/Reference/IT4IT_Functional_Criteria_Taxonomy.xlsx is not a zip archive."; \
+      echo "It is almost certainly an unmaterialized Git LFS pointer. Check out with lfs: true"; \
+      echo "(or run 'git lfs pull') before building this image."; \
+      head -c 64 docs/Reference/IT4IT_Functional_Criteria_Taxonomy.xlsx; \
+      exit 1; \
+    }
+# Same rule for the BIAN landscape: assert the bytes where they enter the
+# artifact. This one is plain JSON (not LFS), and it was simply absent from the
+# image for its whole life — seedBianReferenceModel caught the read error and
+# returned, so a banking install imported zero Service Domains and the seed's
+# own row-count guard fired into a non-fatal catch. A missing or truncated file
+# must fail the build, not the bank.
+RUN head -c 1 docs/Reference/bian/bian-v14-service-landscape.json | grep -q '{' || { \
+      echo "ERROR: docs/Reference/bian/bian-v14-service-landscape.json is not a JSON object."; \
+      echo "seed-ea-reference-models.ts reads this at seed time on a banking install;"; \
+      echo "a missing or truncated file imports zero BIAN Service Domains."; \
+      head -c 64 docs/Reference/bian/bian-v14-service-landscape.json; \
+      exit 1; \
+    }
 RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @dpf/db exec prisma generate
 # Generate capability snapshot from mcp-tools.ts (runs at build time; output bundled into runner)
@@ -195,6 +247,7 @@ RUN mkdir -p /dpf-release-assets/scripts/lib /dpf-release-assets/scripts/install
     cp scripts/bootstrap-organization-pki.ps1 /dpf-release-assets/scripts/ && \
     cp scripts/lib/resolve-capability-compose-profiles.mjs scripts/lib/govern-capability-compose-args.mjs scripts/lib/capability-state-hash.mjs /dpf-release-assets/scripts/lib/ && \
     cp scripts/capability-service-catalog.generated.json /dpf-release-assets/scripts/ && \
+    cp scripts/installer/local-model-policy.json /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/validate-install-state.mjs /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/install-state-transaction.mjs scripts/installer/install-release-assets.mjs scripts/installer/install-state-lock-contract.json /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/install-state-schema-registry.mjs /dpf-release-assets/scripts/installer/ && \
@@ -223,7 +276,18 @@ WORKDIR /app
 # nmap powers the fast path of the arp_scan discovery collector. Without it the
 # collector falls back to a 254-host ping sweep; with it a /24 scans in seconds.
 # (See packages/db/src/discovery-collectors/arp-scan.ts — BI-4CA890B7.)
-RUN apk add --no-cache docker-cli docker-cli-buildx docker-cli-compose postgresql16-client git curl nmap
+#
+# git-lfs is load-bearing on the git-source install shape, not hygiene. This
+# stage runs the self-upgrade source preparation (lib/self-upgrade/prepare-source.ts),
+# which clones the host install clone into .upgrade-workspace and hands that
+# tree to the promoter as its build context. `git` alone smudges LFS-tracked
+# paths to ~130-byte pointer stubs, so the promoter build then dies on the
+# zip-magic assertion this Dockerfile makes over the IT4IT workbook — failing
+# every upgrade on this shape, permanently (BI-FEE26C36 follow-on). The
+# publish path materializes LFS via `actions/checkout` with `lfs: true`; this
+# is the same guarantee for the path that has no GitHub Actions runner.
+# Dockerfile.sandbox installs it for the same class of reason.
+RUN apk add --no-cache docker-cli docker-cli-buildx docker-cli-compose postgresql16-client git git-lfs curl nmap
 ENV NODE_ENV=production
 ENV HOSTNAME=0.0.0.0
 ENV PORT=3000
@@ -247,6 +311,7 @@ COPY --from=init /app/pnpm-workspace.yaml /app/pnpm-lock.yaml /app/package.json 
 # runtime install fails the same way the image build did (SUR-8AB3353C).
 COPY --from=init /app/patches ./patches
 COPY --from=init /app/scripts ./scripts
+COPY --from=init /app/.github ./.github
 # Checked-in registries read by the packaged gate-context generator. Preserve
 # their repository-relative paths because the generator is also the CLI source
 # of truth and deliberately has no portal-only path branch.

@@ -1,6 +1,6 @@
 ---
 name: dpf-worktree-per-session
-description: "Use when starting, entering, auditing, or managing a concurrent DPF coding session that touches the working tree. Each thread gets its own git worktree (not a shared clone), seeded MCP config, isolated COMPOSE_PROJECT_NAME, and an explicit compile-ready vs source-only verification-readiness classification so agents do not claim unrun local gates."
+description: "Use when starting, entering, auditing, or managing a concurrent DPF coding session that touches the working tree."
 
 # Agent Skills standard fields (Surface A — Claude Code)
 disable-model-invocation: true
@@ -93,20 +93,22 @@ For normal feature/fix work: commit from the worktree, then route runtime-bound 
 
    If the connector is healthy but a named DPF tool is absent from the attached set, use `load_tools` with an exact `names` entry or natural-language `query`. Notification-aware/generic clients then honor `notifications/tools/list_changed` or re-fetch `tools/list`. Codex must receive the full authorized catalogue at initial connection through its bootstrapped `?tier=full` URL because its HTTP requests do not reliably identify the client and its top-level registry does not refresh mid-turn: inspect `ALL_TOOLS` inside `functions.exec` and invoke a present governed call through `tools.mcp__dpf__<tool_name>(arguments)`. If a fresh task still omits the tool, confirm the configured URL contains `tier=full` and re-run bootstrap/restart the client before classifying it. If `load_tools` succeeds but the qualified tool remains absent from `ALL_TOOLS`, stop and diagnose the Codex connector/session snapshot; do not claim it is callable, install another plugin, use raw JSON-RPC, or bypass MCP authority.
 
-5. **Verify compose isolation.** Before running any `docker compose` command in the worktree:
+5. **Claim the BI once, with the complete identity.** After the fresh session sees the DPF connector, call `mcp__dpf__claim_backlog_item_for_work` exactly once with the BI id, repository, topic branch, dedicated worktree path, provider, session reference, and explicit `workIntent` (`design`, `review`, `plan`, or `implementation`). The branch and worktree are the durable coordination key; do not omit `sessionRef` or intent and then retry with a different shape. A successful claim is a coordination signal, not proof of readiness. If the server returns `branch_occupied`, `insufficient_token_scope`, or another refusal, preserve that exact response and stop or request a governed handoff—never claim the same BI from a second worktree or churn session identities.
+
+6. **Verify compose isolation.** Before running any `docker compose` command in the worktree:
    ```
    grep COMPOSE_PROJECT_NAME .env
    ```
    The output should be `COMPOSE_PROJECT_NAME=dpf-<slug>`, NOT `dpf`. Compose commands from a worktree without isolation will collide with the root `dpf` stack — at best wasting cycles, at worst stomping on the root install's containers and volumes.
 
-6. **Confirm worktree health.**
+7. **Confirm worktree health.**
    ```
    git status --short --branch
    git rev-parse --abbrev-ref HEAD     # should show your topic branch
    git log origin/main..HEAD --oneline  # should be empty (no commits yet)
    ```
 
-7. **Classify verification readiness.** Run the probe — do **not** hand-check with `test -d node_modules`:
+8. **Classify verification readiness.** Run the probe — do **not** hand-check with `test -d node_modules`:
    ```
    node scripts/lib/bootstrap-worktree-deps.mjs . --classify-only
    ```

@@ -14,15 +14,8 @@ import type { CoworkerAuthorityInput } from "./govern/authority/coworker-authori
 import type { ToolResult } from "./mcp-tools";
 import { registerCoworkerAuthorityCases } from "./mcp-governed-execute-authority.cases";
 type AuditRow = Record<string, unknown>;
-function captureAudit(rows: AuditRow[]) {
-  return async (data: AuditRow) => {
-    rows.push(data);
-  };
-}
-const NORMAL_USER = {
-  platformRole: "ceo",
-  isSuperuser: true,
-};
+function captureAudit(rows: AuditRow[]) { return async (data: AuditRow) => { rows.push(data); }; }
+const NORMAL_USER = { platformRole: "ceo", isSuperuser: true };
 type ExecuteFn = (
   toolName: string,
   params: Record<string, unknown>,
@@ -112,6 +105,8 @@ function applyAuthorityOverrides(
     authorityApprovalEnvelopeCreate: approvalEnvelopeCreate,
     authorityApprovalTaskResume: approvalTaskResume,
     authorityApprovalEnvelopeFinalize: approvalEnvelopeFinalize,
+    policyAuthorityProjectionAttempt: async () => ({ outcome: "not-authorized" }),
+    policyAuthorityEnvelopeReserve: async () => true,
     ...overrides,
   });
 }
@@ -145,6 +140,8 @@ beforeEach(() => {
     authorityApprovalEnvelopeCreate: approvalEnvelopeCreate,
     authorityApprovalTaskResume: approvalTaskResume,
     authorityApprovalEnvelopeFinalize: approvalEnvelopeFinalize,
+    policyAuthorityProjectionAttempt: async () => ({ outcome: "not-authorized" }),
+    policyAuthorityEnvelopeReserve: async () => true,
   });
 });
 
@@ -160,6 +157,8 @@ afterEach(() => {
     authorityApprovalEnvelopeCreate: null,
     authorityApprovalTaskResume: null,
     authorityApprovalEnvelopeFinalize: null,
+    policyAuthorityProjectionAttempt: null,
+    policyAuthorityEnvelopeReserve: null,
   });
 });
 

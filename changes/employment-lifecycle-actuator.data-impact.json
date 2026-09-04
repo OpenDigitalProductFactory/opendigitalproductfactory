@@ -1,0 +1,43 @@
+{
+  "version": "1",
+  "accountableOwner": "Mark Bodman (markdbodman@gmail.com)",
+  "summary": "EP-862820FD, D6 (BI-D78DC392). Migration 20260829063000_add_application_referrer records WHO referred a candidate, distinct from RecruitingSource.type, which only records the CATEGORY an application arrived through. This is new information about two people at once: the candidate (who vouched for them) and the referring worker (that they made a referral, which may earn them money and which bars them from deciding on it). It is therefore governed rather than inherited. The column is nullable with no backfill, because inferring a referrer from RecruitingSource.type would invent a relationship carrying a bonus entitlement and an approval exclusion. The structural separation from scoring is the guarantee the whole design rests on: the referral holds exactly one foreign key, to EmployeeProfile, and adverse-impact monitoring reaches ProtectedMonitoringObservation only through its opaque evaluationRef. Referral pipelines reproduce the existing shape of a workforce, which is precisely the adverse impact that rail exists to measure, so this relationship must never become a scoring input.",
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "Application",
+      "lifecycleDisposition": "retain-for-employment-record-lifetime-then-statutory-retention",
+      "fields": [
+        {
+          "name": "referredByEmployeeProfileId",
+          "resolution": "governed",
+          "reason": "Identifies a named worker as the referrer of a named candidate. It is an attribute of a data subject with two direct consequences: it bars that worker from the approval chain for this application, and it can entitle them to a payment. A wrong value either silently admits a conflicted approver or pays the wrong person, and neither is visible from the application record alone.",
+          "provenance": "Set by an operator or a referral intake surface when the referral is recorded. Never inferred from RecruitingSource.type: a category is not a person, and the migration backfills nothing.",
+          "flags": [
+            "subject"
+          ],
+          "fieldPolicy": {
+            "basis": "employment-contract-and-legitimate-interest",
+            "access": "Readable by recruiting operators and the workforce-administration role. Not exposed to the candidate, and not exposed on public or storefront surfaces — a candidate learning who did or did not refer them is not a disclosure this collects consent for.",
+            "retention": "Bound to the parent application; retained and disposed with it, through any statutory retention that follows a hiring decision.",
+            "obligations": "Must never be used as an input to any automated scoring, ranking or selection decision, and must never share a foreign key with a scoring model. Adverse-impact monitoring may count it only through the opaque evaluationRef on ProtectedMonitoringObservation, and only where a consent basis is recorded. The referrer is excluded from approving their own referral as a skip reason in the existing approval chain walk."
+          }
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "WorkLocation",
+      "lifecycleDisposition": "retain-for-organization-lifetime",
+      "fields": [
+        {
+          "name": "jurisdictionSlug",
+          "resolution": "not-applicable",
+          "reason": "An attribute of an organisational location, not of a data subject. It records which employment jurisdiction governs work done at that place — the same organisational scope BusinessContext.employsIn already declares at company level, narrowed to one site. No worker's personal data is read to populate it.",
+          "provenance": "Set by an operator configuring a work location. Never inferred from the location's Address, its timezone, or the organisation's first employsIn entry. The migration writes no value; every existing row is left NULL and reads as the typed unresolved reason 'location-without-jurisdiction'.",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}

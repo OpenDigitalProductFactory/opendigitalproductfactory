@@ -1,6 +1,6 @@
 ---
 name: dpf-retrieve-decision-context
-description: "Use before a WWMD/kernel OR a WWWD/business decision when the agent needs context. Queries DPF MCP and local repo state — and, for business decisions, the organization's own mission + WWWD corpus (org-overlay stance/principle pages) — before options are scored."
+description: "Use before a WWMD/kernel or WWWD/business decision when the agent still needs context."
 disable-model-invocation: false
 user-invocable: true
 allowed-tools: mcp__dpf__wiki_query mcp__dpf__search_specs_and_plans mcp__dpf__list_backlog_items mcp__dpf__list_epics Bash(rg *)

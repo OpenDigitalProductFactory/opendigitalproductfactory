@@ -1,6 +1,6 @@
 ---
 name: dpf-sysml-architecture-substrate
-description: "Use when DPF platform work needs SysML v2 systems-architecture reasoning: internal EA substrate, requirements/constraints, interfaces/ports, allocations, verification cases, data architecture authority, AI agent/tool authority, Build Studio planning, current-state architecture catch-up, or external Codex/Claude/Grok planning handoff. Applies to architect-facing EA work, not normal end-user UX."
+description: "Use when DPF platform work needs SysML v2 systems-architecture reasoning — EA substrate, requirements, interfaces, allocations, verification cases, or architect-facing planning handoff."
 
 # Agent Skills standard fields (Surface A - Claude Code / Codex / Grok)
 disable-model-invocation: false
@@ -40,7 +40,7 @@ normal-user feature.
 2. `docs/superpowers/specs/2026-06-14-sysml-architecture-substrate-design.md`
 3. `docs/superpowers/specs/2026-06-14-design-implementation-parity-engine-design.md`
 4. `docs/superpowers/specs/2026-06-06-data-architecture-self-maintenance-design.md`
-5. `packages/db/prisma/schema.prisma` around the EA models
+5. `packages/db/prisma/schema/ea-architecture.prisma` (the schema is split across `packages/db/prisma/schema/*.prisma`; there is no monolithic `schema.prisma`)
 6. Relevant Build Studio/design spec or implementation plan under review
 
 ## Modeling Stance

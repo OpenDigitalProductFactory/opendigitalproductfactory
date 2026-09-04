@@ -14,6 +14,12 @@ vi.mock("@dpf/db", () => ({ prisma: mockPrisma }));
 vi.mock("@/lib/ai-inference", () => ({ callProvider: mockCallProvider }));
 vi.mock("@/lib/prompt-assembler", () => ({
   assembleSystemPrompt: vi.fn().mockResolvedValue("system"),
+  // Enumerated so this mock does not break the day this path assembles with
+  // provenance — a factory mock fails on the first unlisted export.
+  assembleSystemPromptWithProvenance: vi.fn().mockResolvedValue({
+    text: "system",
+    instructionSpans: [],
+  }),
 }));
 vi.mock("@/lib/orchestrator-evaluator", () => ({
   evaluateResponseForTest: vi.fn().mockResolvedValue(null),

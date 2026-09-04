@@ -71,11 +71,14 @@ export function pausedAiToAttentionItem(row: TaskRunRow): AttentionItem {
     id: `paused-ai:${row.taskRunId}`,
     source: "paused-ai",
     title: row.title,
+    // Thirty-four of these rendered the identical body, because the generic
+    // fallback was the whole story and the run's own title was thrown away
+    // (BI-79E207B9). The run names itself; say which one this is.
     context:
       readSummary(row.progressPayload) ??
       (authRequired
-        ? "A coworker is blocked on a missing credential or authority."
-        : "A coworker paused and needs your input to continue."),
+        ? `${row.title} — blocked on a missing credential or authority.`
+        : `${row.title} — paused, and needs your input to continue.`),
     decisionClass: { scorability: "unscorable" },
     riskClass: risk,
     triage: {

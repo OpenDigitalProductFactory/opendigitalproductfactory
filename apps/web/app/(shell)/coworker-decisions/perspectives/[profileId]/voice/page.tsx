@@ -2,7 +2,7 @@
 // Route: /coworker-decisions/perspectives/[profileId]/voice
 //
 // Surfaces consent capture, reference audio upload, and enable/disable
-// toggle for WWMD/WWTD decision perspective personas.
+// toggle for WWMD/WWWD decision perspective personas.
 // Provider: Chatterbox self-hosted TTS (zero-shot cloning, no training job).
 // Components: VoiceProfileSetup (client), VoiceConsentForm.
 // Spec: docs/superpowers/specs/2026-05-21-chatterbox-tts-self-hosted.md

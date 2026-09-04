@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   analyzeGeneratedProse,
   classifyGeneratedProse,
+  LONG_SENTENCE_RATIO_BASELINE,
 } from "./generated-prose";
 
 describe("analyzeGeneratedProse", () => {
@@ -47,13 +48,26 @@ describe("analyzeGeneratedProse", () => {
     expect(analyzeGeneratedProse("A ROBUST, Cutting-Edge result.").puffery).toBe(2);
   });
 
-  it("reports long sentences but keeps them out of the tell count", () => {
-    // A long sentence can be the right sentence — surfaced, never scored.
+  it("keeps long sentences out of the TELL count but lets them set the zone", () => {
+    // BI-41F15FD7, corrected against the corpus. Long sentences are not word-list
+    // tells, but sentence length is the readability problem this corpus actually
+    // has: 64% of real messages contain one, and 19.2% of all sentences are long.
     const long = `${"word ".repeat(40)}end.`;
     const reading = analyzeGeneratedProse(long);
 
     expect(reading.longSentences).toBe(1);
     expect(reading.tells).toBe(0);
+    expect(reading.longSentenceRatio).toBe(1);
+    expect(reading.zone).toBe("noticeable");
+  });
+
+  it("does not flag prose at or under the measured p90 long-sentence ratio", () => {
+    // Baseline is p90, not the median, on purpose: at the median half the corpus
+    // would flag every day, which is a number nobody reads.
+    const short = "Short one. Another short one. A third short one.";
+    const reading = analyzeGeneratedProse(short);
+
+    expect(reading.longSentenceRatio).toBeLessThanOrEqual(LONG_SENTENCE_RATIO_BASELINE);
     expect(reading.zone).toBe("clean");
   });
 
@@ -81,5 +95,13 @@ describe("classifyGeneratedProse", () => {
   it("never divides by zero on empty text", () => {
     expect(classifyGeneratedProse(0, 0)).toBe("clean");
     expect(classifyGeneratedProse(2, 0)).toBe("slop");
+  });
+
+  it("treats the two signals independently", () => {
+    // A word-list tell is rare and specific; a high long-sentence ratio is
+    // common and diffuse. Either can raise the zone on its own.
+    expect(classifyGeneratedProse(0, 10, 0.9)).toBe("noticeable");
+    expect(classifyGeneratedProse(1, 10, 0)).toBe("noticeable");
+    expect(classifyGeneratedProse(0, 10, 0.1)).toBe("clean");
   });
 });

@@ -28,12 +28,13 @@ Do not use this for one-off help; use the most relevant existing skill instead. 
 | Route context | PAGE DATA | Current route, coworker, category, and likely assignment |
 | Skill seed path | packages/db/src/seed-skills.ts | Supported frontmatter fields and assignment behavior |
 | DPF rules | AGENTS.md | Skills belong to coworkers, not routes; prompts live in seeded files |
+| Cost model | dpf-writing-skills (dpf-platform pack) | What an assignment and a description actually cost |
 
 ## Steps
 
 1. Ask what repeatable action the skill should perform if the user has not already said it.
 2. Search existing skills for overlap before creating a new one.
-3. Generate a unique kebab-case `name`, clear description, category, assignment, task type, trigger pattern, allowed tools, and risk band.
+3. Generate a unique kebab-case `name`, description, category, assignment, task type, trigger pattern, allowed tools, and risk band. Two rules carry most of the weight: the description's only job is to make the right coworker load the skill, so fill it with the words a caller would use and put explanation in the body; and every coworker in `assignTo` spends one of that coworker's twelve per-turn skill slots, so assign to the roles that will actually invoke it. Never use `["*"]` to avoid choosing — it charges all 31 coworkers.
 4. Confirm the definition when the action could affect data, permissions, or workflow authority.
 5. Create the `.skill.md` file with read-first sources, steps, output template, guidelines, and example.
 6. Name any route-context or seed follow-up required for the skill to appear in the UI.
@@ -54,6 +55,8 @@ Do not use this for one-off help; use the most relevant existing skill instead. 
 - Keep one skill to one repeatable procedure.
 - Include a routing boundary in the body: "Do not use this for X; use Y instead."
 - Do not grant tools casually; list only tools needed for the skill.
+- Keep a coworker-plane skill short and declarative — around 2 KB. These run on coworkers that may be on a local model, where a long multi-phase procedure is followed partially rather than refused.
+- For a dev-agent pack skill, or any change to an existing skill's description or assignment, use `dpf-writing-skills` first: those touch a frozen byte budget and a per-turn cap that CI enforces.
 
 ## Example
 

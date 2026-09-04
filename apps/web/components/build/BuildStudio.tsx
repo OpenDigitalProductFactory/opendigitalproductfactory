@@ -338,8 +338,8 @@ export function BuildStudio({
     && isValidSandboxPort(drivingBuild.sandboxPort)
       ? `http://localhost:${drivingBuild.sandboxPort}`
       : null;
-  const ownerStateIsTerminal = ownerStatus?.ownerState === "complete"
-    || ownerStatus?.ownerState === "failed";
+  // Only COMPLETE suppresses the action band — "failed" covers `abandoned`, and both have a recovery action.
+  const ownerStateIsTerminal = ownerStatus?.ownerState === "complete";
   const workflowAction = activeBuild && !ownerStateIsTerminal
     ? deriveBuildStudioWorkflowAction({
       build: activeBuild,
@@ -397,21 +397,31 @@ export function BuildStudio({
     setBomSummary(nextBomSummary);
     setAssuranceFindings(nextFindings);
   }, []);
-  const selectBuildById = useCallback(async (buildId: string) => {
+  /** Select a build; false when it could not be opened. A just-started build is
+   *  not yet in the server-rendered rows, and a silent lookup failure used to
+   *  leave the owner's new work invisible (ideate builds are off-rail unless
+   *  selected). Callers must surface a false. */
+  const selectBuildById = useCallback(async (buildId: string): Promise<boolean> => {
     const existing = buildRows.find((build) => build.buildId === buildId);
     if (existing) {
       setActiveBuild(existing);
       setActiveCustomerStatus(customerStatuses[existing.id] ?? null);
       setSidebarOpen(true);
-      return;
+      return true;
     }
 
-    const fresh = await getFeatureBuild(buildId);
-    if (fresh) {
-      setActiveBuild(fresh);
-      setActiveCustomerStatus(customerStatuses[fresh.id] ?? null);
-      setSidebarOpen(true);
+    // Bounded retry — the row is usually readable a tick or two after creation.
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const fresh = await getFeatureBuild(buildId);
+      if (fresh) {
+        setActiveBuild(fresh);
+        setActiveCustomerStatus(customerStatuses[fresh.id] ?? null);
+        setSidebarOpen(true);
+        return true;
+      }
+      if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 250));
     }
+    return false;
   }, [buildRows, customerStatuses]);
   const debouncedRefetch = useCallback(async () => {
     if (!activeBuild) return;
@@ -669,7 +679,14 @@ export function BuildStudio({
         return;
       }
       setPendingIntake(null);
-      await selectBuildById(result.buildId);
+      const selected = await selectBuildById(result.buildId);
+      if (!selected) {
+        // The build exists — say so rather than leaving the owner on someone
+        // else's build wondering where theirs went.
+        setCreateError(
+          "Your build was started, but this page could not open it. Refresh to see it in your build list.",
+        );
+      }
       router.refresh();
       document.dispatchEvent(new CustomEvent("open-agent-panel", {
         detail: {
@@ -924,7 +941,8 @@ export function BuildStudio({
                         assessment={activeBuild.designReview?.sizeAssessment ?? null}
                         initialCandidates={activeBuild.designReview?.decompositionCandidates?.latest ?? []}
                         existingOverride={activeBuild.designReview?.decompositionOverride ?? null}
-                        planOscillationEntry
+                        // BI-04B112CA: decompose-now has two entry points now.
+                        planOscillationEntry={activeBuild.phase === "plan"}
                       />
                     )}
                     {workflowAction.kind === "amend-parent-design" && (
@@ -938,6 +956,7 @@ export function BuildStudio({
                       problemStatement={activeBuild.designDoc?.problemStatement ?? null}
                       proposedApproach={activeBuild.designDoc?.proposedApproach ?? null}
                       fallbackIntent={activeBuild.description}
+                      buildTitle={activeBuild.title}
                       custody={autonomousCustody}
                     />
                   </div>
@@ -1519,7 +1538,7 @@ function FleetRailZone({
   governedBacklogEnabled: boolean;
   isDevEnvironment: boolean;
   onSelectBuild: (build: FeatureBuildRow) => void;
-  onSelectBuildById: (buildId: string) => void | Promise<void>;
+  onSelectBuildById: (buildId: string) => void | Promise<unknown>;
   onDeleteBuild: (build: FeatureBuildRow) => void;
   onOpenQueueDrawer: () => void;
 }) {

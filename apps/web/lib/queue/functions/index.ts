@@ -62,6 +62,10 @@ import {
   dataRetentionSweepRequested,
 } from "./data-retention-sweep";
 import {
+  regulatoryMonitorScanScheduled,
+  regulatoryMonitorScanRequested,
+} from "./regulatory-monitor-scan";
+import {
   qualityIssueDriftSweepScheduled,
   qualityIssueDriftSweepRequested,
 } from "./quality-issue-drift-sweep";
@@ -100,6 +104,10 @@ import {
   obligationAssuranceWatchRunNow,
 } from "./obligation-assurance-watch";
 import {
+  workroomDriveScheduled,
+  workroomDriveRunNow,
+} from "./workroom-drive";
+import {
   embeddingCoverageReconcileScheduled,
   embeddingCoverageReconcileRunNow,
 } from "./embedding-coverage-reconcile";
@@ -117,6 +125,12 @@ import {
   dataControlOperationRecoveryScheduled,
 } from "./data-control-operation";
 import { indexIntegritySweep } from "./index-integrity-sweep";
+import { localModelInstall } from "./local-model-install";
+import { nonprodCapacityAvailable, nonprodLeaseWaitReconciliation } from "./nonprod-lease-wait";
+import {
+  mcpTaskRunDispatchReconciliation,
+  mcpTaskRunExecute,
+} from "./mcp-task-run-execute";
 
 export const scheduledFunctions = [
   prometheusPoll,
@@ -155,6 +169,7 @@ export const scheduledFunctions = [
   worktreeJanitor, // BI-42FA7DD8: host worktree Tier-A fleet backstop; daily 05:40
   sandboxBuildGc, // BI-8BD61C30: BS sandbox .builds worktree + aged build/* branch GC (flag DPF_SANDBOX_BUILD_GC_ENABLED), daily 05:50
   dataRetentionSweepScheduled, // EP-DATA-RETENTION: daily DB purge of aged logs/telemetry/chat, 04:00
+  regulatoryMonitorScanScheduled, // BI-DA37A602: weekly regulatory rescan so the compliance surface self-heals instead of aging into a false green, Mon 06:00
 
   qualityIssueDriftSweepScheduled, // BI-0B420A1D: runtime governance — self-heal recovery/orphan backstop + detect per-type open-count drift vs registry budgets, daily 05:00
 
@@ -175,6 +190,7 @@ export const scheduledFunctions = [
   embeddingCoverageReconcileScheduled, // BI-ED117C82: re-embeds published pages a boot hook could not reach; retries every 2h so a silent corpus gap self-heals
   businessJourneyWatchdogScheduled, // BI-E105303D / EP-PROACTIVE-OPS: exercises the install's critical business journeys against the running system, Mon/Wed/Fri 06:00
   obligationAssuranceWatchScheduled, // TAK §8.11: deadline-horizon sweep over recorded obligations, control reviews, and licence expiries, daily 05:40
+  workroomDriveScheduled, // BI-FCD639D9: standing Workroom drive — wake, lease, dispatch, attention, stop, every 15m
   canonicalImprovementDigest, // BI-8996BBBB: weekly [reference-doc] proposal digest -> canonical-source chore BI
   memoryConsolidationNightly, // BI-907C4327: EP-8C706944 P2 autoDream — nightly batch-dedupe + expire coworker notes / user facts, 04:20
   semanticMemoryReconcileScheduled, // BI-DG-001: EP-DATA-GOVERNANCE — nightly orphan reconciliation of the semantic-memory derived copy, 05:10 (after retention sweep)
@@ -183,9 +199,12 @@ export const scheduledFunctions = [
   dataControlOperationRecoveryScheduled, // BI-DG-014: durable cross-store data mutation recovery and reconciliation
   indexIntegritySweep, // BI-D9C20A97: daily live-database btree/collation integrity sweep
   postmarkCallbackDispatchSweep,
+  nonprodLeaseWaitReconciliation,
+  mcpTaskRunDispatchReconciliation,
 ];
 
 export const eventFunctions = [
+  localModelInstall,
   rateRecovery,
   mcpCatalogSync,
   codeGraphReconcileEvent,
@@ -209,6 +228,7 @@ export const eventFunctions = [
   selfUpgradeManual,
   quiescenceRun,
   dataRetentionSweepRequested, // EP-DATA-RETENTION: operator "run now" / dry-run
+  regulatoryMonitorScanRequested, // BI-DA37A602: operator "run now" off-cadence regulatory rescan
   qualityIssueDriftSweepRequested, // BI-0B420A1D: operator "run now" for the quality-issue drift sweep
 
   inngestRetentionSweepRequested, // BI-0AB96FE7: operator "run now" / dry-run for the Inngest retention sweep
@@ -219,10 +239,13 @@ export const eventFunctions = [
   embeddingCoverageReconcileRunNow, // BI-ED117C82: operator/agent "run now" embedding-coverage reconcile
   businessJourneyWatchdogRunNow, // BI-E105303D: operator "run now" business-journey watchdog sweep
   obligationAssuranceWatchRunNow, // TAK §8.11: operator "run now" obligation assurance watch
+  workroomDriveRunNow, // BI-FCD639D9: operator "run now" standing Workroom drive
   semanticMemoryReconcileRequested, // BI-DG-001: operator "run now" semantic-memory orphan reconciliation
   postmarkCallbackDispatchRequested,
   workPatternExperimentRun,
   dataControlOperationRecoveryRequested,
+  nonprodCapacityAvailable,
+  mcpTaskRunExecute,
 ];
 
 export const allFunctions = [...scheduledFunctions, ...eventFunctions];

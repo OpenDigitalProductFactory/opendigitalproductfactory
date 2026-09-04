@@ -6,6 +6,9 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
+import { computeCapabilityStateVersion } from "./capability-state-hash.mjs";
+import { resolveCapabilityComposeProfiles } from "./resolve-capability-compose-profiles.mjs";
+
 const root = new URL("../../", import.meta.url);
 const adapter = new URL("./resolve-capability-compose-profiles.mjs", import.meta.url);
 const catalog = JSON.parse(await readFile(new URL("../capability-service-catalog.generated.json", import.meta.url), "utf8"));
@@ -213,4 +216,70 @@ test("lifecycle scripts consume the adapter instead of carrying runtime service 
   assert.match(promote, /sandbox-refresh-optional-inactive/);
   const compose = await readFile(new URL("../../scripts/installer/lib/compose.sh", import.meta.url), "utf8");
   assert.match(compose, /--compose-profiles/);
+});
+
+test("a declared retirement migrates; an undeclared id still fails closed (BI-5AA0345E)", async () => {
+  const catalog = JSON.parse(await readFile(new URL("../capability-service-catalog.generated.json", import.meta.url), "utf8"));
+  const enabled = catalog.capabilities.map(({ capabilityId }) => capabilityId);
+  const ids = [...enabled];
+  const state = {
+    schemaVersion: 2,
+    enabledRuntimeCapabilities: enabled,
+    capabilityCatalogHash: catalog.catalogHash,
+    capabilityStateVersion: computeCapabilityStateVersion(catalog.catalogHash, enabled, ids),
+  };
+  // A future release that RETIRES one capability: the entry stays, marked.
+  const retiredCatalog = {
+    ...catalog,
+    catalogHash: "9".repeat(64),
+    capabilities: catalog.capabilities.map((entry) =>
+      entry.capabilityId === "runtime:local-speech" ? { ...entry, lifecycle: "retired" } : entry),
+  };
+
+  // Under --migrate the platform's own withdrawal is migrated, not refused —
+  // refusing wedges every install that had it enabled, and the upgrade that
+  // would drop it IS the blocked upgrade.
+  const migrated = resolveCapabilityComposeProfiles({ catalog: retiredCatalog, state, hostPlatform: "linux", migrate: true });
+  assert.ok(!migrated.enabledRuntimeCapabilities.includes("runtime:local-speech"));
+  assert.deepEqual(migrated.droppedRetiredCapabilities, ["runtime:local-speech"]);
+  assert.equal(migrated.capabilityCatalogHash, retiredCatalog.catalogHash);
+
+  // Without --migrate the snapshot is genuinely stale and the caller has not
+  // asked to rewrite it.
+  assert.throws(
+    () => resolveCapabilityComposeProfiles({ catalog: retiredCatalog, state, hostPlatform: "linux" }),
+    /capability_state_stale/,
+  );
+
+  // An id nothing in the catalog vouches for still fails closed EVEN under
+  // migrate — that is the tampering case retirement must not be confused with.
+  const bogus = { ...state, enabledRuntimeCapabilities: [...enabled, "runtime:never-existed"] };
+  assert.throws(
+    () => resolveCapabilityComposeProfiles({ catalog: retiredCatalog, state: bogus, hostPlatform: "linux", migrate: true }),
+    /unknown_runtime_capability:runtime:never-existed/,
+  );
+});
+
+test("a retired capability still required by a live one is a catalog authoring error", async () => {
+  const catalog = JSON.parse(await readFile(new URL("../capability-service-catalog.generated.json", import.meta.url), "utf8"));
+  // runtime:core is a dependency of others; retiring it must surface loudly
+  // rather than yield a projection that depends on something withdrawn.
+  const broken = {
+    ...catalog,
+    catalogHash: "8".repeat(64),
+    capabilities: catalog.capabilities.map((entry) =>
+      entry.capabilityId === "runtime:core" ? { ...entry, lifecycle: "retired" } : entry),
+  };
+  const enabled = ["runtime:build"];
+  assert.throws(
+    () => resolveCapabilityComposeProfiles({
+      catalog: broken,
+      state: { schemaVersion: 2, enabledRuntimeCapabilities: enabled,
+        capabilityCatalogHash: broken.catalogHash,
+        capabilityStateVersion: computeCapabilityStateVersion(broken.catalogHash, enabled, catalog.capabilities.map((c) => c.capabilityId)) },
+      hostPlatform: "linux",
+      migrate: true,
+    }),
+    /retired_runtime_capability_required:runtime:core/,
+  );
 });

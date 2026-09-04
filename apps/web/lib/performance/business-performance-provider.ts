@@ -7,6 +7,7 @@ import {
   resolvePerformanceOrganizationContext,
   type PerformanceOrganizationContextDataSource,
 } from "./performance-organization-context";
+import { archetypeHasPerformanceMetrics } from "./performance-metric-support";
 
 export interface UnconfiguredBusinessPerformance {
   status: "not-configured";
@@ -14,6 +15,13 @@ export interface UnconfiguredBusinessPerformance {
   asOf: null;
   metricValues: readonly [];
   source: "business-performance-read-model";
+  /**
+   * Whether a snapshot could ever appear here. `true` (default) means the data
+   * is simply pending — the honest "not computed yet" case. `false` means the
+   * metrics engine has no source loader for this install's archetype, so the
+   * surface will never populate and the copy must not imply otherwise.
+   */
+  applicable: boolean;
 }
 
 export interface PersistedMetricRow {
@@ -108,13 +116,17 @@ export interface BusinessPerformanceDataSource
   };
 }
 
-function unconfigured(reason: string): UnconfiguredBusinessPerformance {
+function unconfigured(
+  reason: string,
+  opts: { applicable?: boolean } = {},
+): UnconfiguredBusinessPerformance {
   return {
     status: "not-configured",
     reason,
     asOf: null,
     metricValues: [],
     source: "business-performance-read-model",
+    applicable: opts.applicable ?? true,
   };
 }
 
@@ -271,6 +283,16 @@ export function createBusinessPerformanceProvider(
     async load(input) {
       const context = await resolvePerformanceOrganizationContext(db, input.userId);
       if (context.status === "unconfigured") return unconfigured(context.reason);
+
+      // The metrics engine only has a source loader for some archetypes. On an
+      // install whose archetype has none, no snapshot will ever be produced, so
+      // say that plainly instead of implying a pending computation. BI-F359E1E9.
+      if (!archetypeHasPerformanceMetrics(context.archetypeId)) {
+        return unconfigured(
+          "Performance snapshots are not available for this business type yet — the metrics engine currently covers hospitality operations.",
+          { applicable: false },
+        );
+      }
 
       const rows = await db.businessMetricRollup.findMany({
         where: { organizationId: context.organizationId },

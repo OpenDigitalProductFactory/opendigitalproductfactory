@@ -23,6 +23,10 @@ import {
 } from "@/lib/backlog/execution-evidence";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import {
+  isLocalIntegrationStatus,
+  LOCAL_INTEGRATION_STATUSES,
+} from "../../../../../scripts/lib/local-integration-status.mjs";
+import {
   isNonprodOwnerProvider,
   NONPROD_OWNER_PROVIDERS,
 } from "@/lib/nonprod/nonprod-owner-provider";
@@ -77,8 +81,10 @@ const definitions: ToolDefinition[] = [
         taskRunId: { type: "string" },
         candidateBranch: { type: "string" },
         mode: { type: "string", enum: ["single-branch", "sibling-set", "post-merge-main"] },
-        status: { type: "string", enum: ["passed", "failed", "conflict", "blocked_sandbox_drift", "blocked_control_plane_starvation"] },
+        status: { type: "string", enum: [...LOCAL_INTEGRATION_STATUSES] },
         summary: { type: "string" },
+        gateKey: { type: "string", description: "Server-derived immutable gate key returned at admission." },
+        leaseId: { type: "string", description: "Canonical executor lease id returned at admission." },
         evidence: { type: "object" },
       },
       required: ["provider", "externalSessionId", "routeContext", "candidateBranch", "mode", "status", "summary", "evidence"],
@@ -233,7 +239,7 @@ async function recordLocalIntegrationResultHandler(
   if (!["single-branch", "sibling-set", "post-merge-main"].includes(mode)) {
     return { success: false, error: "invalid_mode", message: `Unsupported local integration mode: ${mode}` };
   }
-  if (!["passed", "failed", "conflict", "blocked_sandbox_drift", "blocked_control_plane_starvation"].includes(status)) {
+  if (!isLocalIntegrationStatus(status)) {
     return { success: false, error: "invalid_status", message: `Unsupported local integration status: ${status}` };
   }
 
@@ -248,6 +254,8 @@ async function recordLocalIntegrationResultHandler(
     mode: mode as "single-branch" | "sibling-set" | "post-merge-main",
     status: status as "passed" | "failed" | "conflict" | "blocked_sandbox_drift" | "blocked_control_plane_starvation",
     summary,
+    gateKey: stringValue("gateKey") || undefined,
+    leaseId: stringValue("leaseId") || undefined,
     evidence: evidence as import("@dpf/db").Prisma.InputJsonValue,
   });
   return {

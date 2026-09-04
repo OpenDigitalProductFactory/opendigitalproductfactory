@@ -144,9 +144,13 @@ export function classifyToolSurfaceOverload(
   // false-positive this fixes. Evidence-before-diagnosis.
   if (proxyOverload) return null;
 
+  // Caution is an early threshold, not proof of harm. File work only after a
+  // real attached surface also shows degraded selection; otherwise the signal
+  // stays telemetry and does not create low-evidence backlog churn.
   const cautionIsActionable =
     assessment.zone === "caution" &&
-    (isNearLocalCliff(assessment.toolCount) || windowKnown);
+    (isNearLocalCliff(assessment.toolCount) || windowKnown) &&
+    selectionIsDegraded(selection);
 
   if (!cautionIsActionable) return null;
 

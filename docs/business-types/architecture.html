@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Archetype projection architecture — Open Digital Product Factory</title>
+<meta name="description" content="How the public business-type guide projects DPF's canonical archetype and operational value-stream definitions, with automated drift checks."/>
+<link rel="stylesheet" href="/assets/css/business.css"/>
+</head>
+<body id="top">
+<header class="topbar"><div class="wrap topbar-inner">
+    <a class="topbar-brand" href="/"><img src="/assets/logos/OpenDigitalProductFactory.png" alt="" width="934" height="688"/>Open Digital Product Factory</a>
+    <nav class="topbar-nav" aria-label="Primary">
+      <a href="/business-types/">All business types</a>
+      <a href="/business-types/partners.html">Partners &amp; builders</a>
+      <a href="/business-types/architecture.html">Architecture</a>
+      <a href="/#install">Install</a>
+    </nav>
+  </div></header>
+<section class="hero"><div class="wrap">
+  <p class="eyebrow"><span class="dot"></span>Architecture path</p>
+  <h1>How archetype definitions become public pages</h1>
+  <p class="tagline">The public guide is a read model over the platform’s canonical archetype registry. It does not maintain another value-stream definition.</p>
+  <p class="lede">This path is for architects, standards reviewers, and contributors who need the source, projection, and conformance contract.</p>
+  <div class="cta-row">
+    <a class="btn primary" href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/tree/main/packages/storefront-templates/src">Inspect canonical source</a>
+    <a class="btn" href="/business-types/">See the public projection</a>
+  </div>
+</div></section>
+<main class="wrap">
+  <section aria-label="Projection architecture">
+    <p class="section-eyebrow">Single source of truth</p>
+    <h2>Definition → derivation → public read model</h2>
+    <div class="pipeline">
+      <div class="pipe-stage src"><span class="pk">CANONICAL SOURCE</span><span class="pl">ArchetypeDefinition</span><code>packages/storefront-templates/src</code></div>
+      <div class="pipe-arrow" aria-hidden="true"></div>
+      <div class="pipe-stage"><span class="pk">PURE DERIVATION</span><span class="pl">Operational value stream</span><code>deriveOperationalValueStream</code></div>
+      <div class="pipe-arrow" aria-hidden="true"></div>
+      <div class="pipe-out">
+        <div class="o">Internal architecture<span>governed model projection</span></div>
+        <div class="o">Public leaf pages<span>operator-readable projection</span></div>
+        <div class="o">Conformance check<span>regenerate and compare</span></div>
+      </div>
+    </div>
+  </section>
+  <section aria-label="Conformance contract">
+    <div class="twocol">
+      <div>
+        <p class="section-eyebrow">Drift prevention</p>
+        <h2>Generated pages are checked</h2>
+        <p>The generator resolves every published leaf against <code>ALL_ARCHETYPES</code>, calls the canonical operational-value-stream derivation, and fails in <code>--check</code> mode when committed HTML differs.</p>
+      </div>
+      <div>
+        <p class="section-eyebrow">Deliberate boundary</p>
+        <h2>Category copy is only shared context</h2>
+        <p>Category pages may explain common concerns. They do not define one category-wide process. Exact stages, constraints, and modules appear only on canonical leaf projections.</p>
+      </div>
+    </div>
+  </section>
+  <section aria-label="Current evidence">
+    <div class="evidence-note">
+      <span class="badge">Current evidence</span>
+      <h2>86 published leaf profiles resolve to source</h2>
+      <p>The committed artifacts are generated from <code>packages/storefront-templates/src</code>. Broader platform architecture and standards remain in the <a href="/architecture/platform-overview">architecture documentation</a>.</p>
+    </div>
+  </section>
+  <section id="standards" aria-label="DPF as a reference implementation">
+    <p class="section-eyebrow">For architects &amp; standards reviewers</p>
+    <h2>DPF as a reference implementation</h2>
+    <p class="sub">DPF is a working prototype for two proposed standards — <strong>not</strong> a claim of full present-day conformance. <strong>TAK</strong> governs <em>what an agent may do</em>; <strong>GAID</strong> governs <em>who the agent is and what evidence follows its actions</em>. Here is what is real today, what is partial, and what is still proposed — the gaps are mapped, not hidden.</p>
+    <div class="std-frame">
+      <div class="std-def"><h4><span class="k">TAK</span> — Trusted AI Kernel</h4><p>The runtime-governance harness: authority mediation, tool-execution gating, human-in-the-loop, memory limits, and audit/evidence — enforced as an agent operates.</p></div>
+      <div class="std-def"><h4><span class="k">GAID</span> — Global AI Agent Identification &amp; Governance</h4><p>Who an agent is, the claims it carries, and how its actions are identified and traced — identity documents, badges, authorization classes, and action receipts.</p></div>
+    </div>
+    <div class="std-cols">
+      <div class="std-col now"><h3><span class="dot"></span>Implemented now</h3><ul><li><b>Route-scoped AI coworkers</b> — each route gets a purpose-built coworker with its own tools and vocabulary</li><li><b>Tool authority = grant ∩ user capability</b> — every tool exposure filtered by user authority, mode, and external-access posture</li><li><b>Proposal-mode gated actions</b> — consequential actions break the loop and return an approval payload instead of executing</li><li><b>Tool-execution audit logging</b> — every call written to <code>ToolExecution</code> — agent, user, tool, params, result, route, duration, audit class</li><li><b>Archetype-driven UX &amp; vocabulary</b> — storefront, scheduling, finance and compliance defaults generated from one archetype</li><li><b>Internal agent registry</b> — stable identifiers, model bindings, supervisors, delegates, grants, HITL defaults</li></ul></div>
+      <div class="std-col partial"><h3><span class="dot"></span>Partially implemented</h3><ul><li><b>TAK runtime transparency</b> — an Authority &amp; Audit workspace with a supervisor-ready Agent Card snapshot</li><li><b>Agent Card / AIDoc projection</b> — the registry approximates an AIDoc — not yet signed or resolvable</li><li><b>Stable internal agent identity</b> — platform-local today, not yet canonical GAID identifiers</li><li><b>HITL tier metadata</b> — carried per agent, not yet one uniform runtime policy engine</li><li><b>Delegation &amp; authority modeling</b> — supervisor &amp; delegation recorded, not yet a receipt-backed chain</li><li><b>Chain-of-custody trace</b> — agent, user, route and tool recorded; not yet end-to-end across boundaries</li></ul></div>
+      <div class="std-col planned"><h3><span class="dot"></span>Planned / proposed</h3><ul><li><b>Signed / tamper-evident receipts</b> — cryptographically verifiable receipts for consequential actions</li><li><b>GAID public/private namespaces</b> — explicit private vs externally-accredited public identity scopes</li><li><b>Public verifier metadata</b> — published A2A Agent Cards and external receipt-status endpoints</li><li><b>External certificates &amp; status</b> — issuer validation and public status services for exposed agents</li><li><b>Capability &amp; governance badges</b> — evidence-backed assurance levels</li><li><b>Repeatable conformance suites</b> — automated TAK &amp; GAID test packs preserved as evidence</li></ul></div>
+    </div>
+    <p class="std-note muted" style="margin-top:14px;">Grounded in the platform’s own first-pass assessment: <a href="/architecture/agent-standards-dpf-conformance">TAK / GAID conformance assessment</a> · <a href="/architecture/trusted-ai-kernel">TAK</a> · <a href="/architecture/GAID">GAID</a> · <a href="/architecture/2026-04-18-trusted-ai-agent-governance-white-paper">governance white paper</a>. DPF is the proving ground where these ideas are exercised in real workflows.</p>
+  </section>
+  <aside class="secondary-paths" aria-label="Other audiences">
+    <p><strong>Not running this organization?</strong></p>
+    <a href="/business-types/partners.html">For resellers, builders, and delivery partners →</a>
+    <a href="/business-types/architecture.html">For architects and standards reviewers →</a>
+  </aside>
+</main>
+<footer class="site"><div class="wrap">
+    <p>Open Digital Product Factory · <a href="/">Home</a> · <a href="/business-types/">All business types</a> · <a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory">GitHub repository</a></p>
+    <p class="muted" style="margin:6px 0 0; font-size:13px;">Running an organization? Start with its business type. <a href="/business-types/partners.html">Partners and builders</a> and <a href="/business-types/architecture.html">architecture reviewers</a> have separate paths.</p>
+  </div></footer>
+<a class="back-top" href="#top" aria-label="Back to top">↑ Top</a>
+</body>
+</html>

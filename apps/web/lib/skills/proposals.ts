@@ -20,6 +20,9 @@ function makeRevisionId(): string {
   return `${REVISION_ID_PREFIX}-${randomUUID().slice(0, 8).toUpperCase()}`;
 }
 
+import { writeSkillSeed, type SkillSeedWriteResult } from "./seed-writeback";
+import { emitSeedPullRequest, type SeedPullRequestResult } from "./seed-pull-request";
+
 export type SubmitSkillImprovementProposalInput = {
   /** SkillDefinition.skillId (business id). */
   skillId: string;
@@ -93,6 +96,9 @@ export async function submitSkillImprovementProposal(
 }
 
 export type ApproveSkillImprovementProposalInput = {
+  /** DCO identity for the emitted seed PR; publishBranchCommit requires it. */
+  reviewerName?: string;
+  reviewerEmail?: string;
   proposalId: string;
   reviewerId: string;
   /** Optional override of the approval reason recorded on the revision. */
@@ -100,6 +106,20 @@ export type ApproveSkillImprovementProposalInput = {
 };
 
 export type ApproveSkillImprovementProposalResult = {
+  /**
+   * Whether the approved body reached the SEED FILE — the authoritative copy
+   * (DI-36D36FEBF4BA). Only `status: "written"` means the approval is durable;
+   * anything else will be reverted by the next reseed, and callers MUST say so
+   * rather than reporting a bare success.
+   */
+  propagation: SkillSeedWriteResult;
+  /**
+   * Whether the approved body was published as a reviewable pull request
+   * against the seed file (BI-5798BBA3 phase 2b, DI-36D36FEBF4BA). On a
+   * production install this — not the local file write — is what makes an
+   * approval durable, because DPF_REPO_ROOT there is the deployment clone.
+   */
+  seedPullRequest: SeedPullRequestResult;
   proposalId: string;
   skillId: string;
   snapshotRevisionId: string;
@@ -117,7 +137,7 @@ export type ApproveSkillImprovementProposalResult = {
 export async function approveSkillImprovementProposal(
   input: ApproveSkillImprovementProposalInput,
 ): Promise<ApproveSkillImprovementProposalResult> {
-  return prisma.$transaction(async (tx) => {
+  const applied = await prisma.$transaction(async (tx) => {
     const proposal = await tx.improvementProposal.findUnique({
       where: { proposalId: input.proposalId },
     });
@@ -148,7 +168,7 @@ export async function approveSkillImprovementProposal(
 
     const skill = await tx.skillDefinition.findUnique({
       where: { skillId: proposal.targetSkillId },
-      select: { skillId: true, skillMdContent: true },
+      select: { skillId: true, category: true, skillMdContent: true },
     });
     if (!skill) {
       throw new Error(
@@ -209,11 +229,67 @@ export async function approveSkillImprovementProposal(
     return {
       proposalId: proposal.proposalId,
       skillId: skill.skillId,
+      category: skill.category,
+      approvedContent: proposedContent,
+      previousContent: skill.skillMdContent,
       snapshotRevisionId,
       appliedRevisionId,
       newVersion: appliedVersion,
     };
   });
+
+  // POST-COMMIT, deliberately. The approval is already durable in the DB; a
+  // filesystem failure here must be reported, never allowed to unwind it.
+  // Writing the seed is what stops the next reseed reverting the approval
+  // (BI-5798BBA3), because the seed file is the authoritative copy.
+  const propagation = writeSkillSeed(
+    applied.category,
+    applied.skillId,
+    applied.approvedContent,
+  );
+
+  // Then publish it for review. This runs over the GitHub API and touches no
+  // working tree, so it is safe on a production install where DPF_REPO_ROOT is
+  // the deployment clone. Also best-effort: a GitHub failure is reported, never
+  // allowed to unwind an approval that already committed.
+  const seedPullRequest = await emitSeedPullRequest({
+    skillId: applied.skillId,
+    seedPath: propagation.path ?? seedPathFor(applied.category, applied.skillId),
+    before: applied.previousContent,
+    after: applied.approvedContent,
+    proposalId: applied.proposalId,
+    reviewerName: input.reviewerName ?? "DPF Platform",
+    reviewerEmail: input.reviewerEmail ?? "noreply@dpf.local",
+    ...(await resolveRepoCoordinates()),
+  });
+
+  return {
+    proposalId: applied.proposalId,
+    skillId: applied.skillId,
+    snapshotRevisionId: applied.snapshotRevisionId,
+    appliedRevisionId: applied.appliedRevisionId,
+    newVersion: applied.newVersion,
+    propagation,
+    seedPullRequest,
+  };
+}
+
+/** The seed path to name when no file was found on disk to write. */
+function seedPathFor(category: string, skillId: string): string {
+  return `packages/dpf-skill-pack/skills/${skillId}/SKILL.md` || category;
+}
+
+/** Owner/repo from the git remote, so the PR targets this platform's own repo. */
+async function resolveRepoCoordinates(): Promise<{ repoOwner: string | null; repoRepo: string | null }> {
+  try {
+    const { getRemoteUrl } = await import("@/lib/git-utils");
+    const remoteUrl = await getRemoteUrl();
+    const match = remoteUrl?.match(/github\.com[/:]([^/]+)\/([^/.]+)/);
+    if (match) return { repoOwner: match[1]!, repoRepo: match[2]! };
+  } catch {
+    // git may not be available; the caller reports no-repo rather than throwing.
+  }
+  return { repoOwner: null, repoRepo: null };
 }
 
 export type RejectSkillImprovementProposalInput = {

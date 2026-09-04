@@ -109,6 +109,19 @@ services:
       # default + the volume mount below.
       DPF_EDGE_STATE_DIR: /var/lib/dpf-edge-node
 
+      # Federation-candidate scan (BI-105966A1). On by default; set
+      # DPF_FEDERATION_SCAN=0 to stay unfindable.
+      #
+      # DPF_FEDERATION_SCAN_HOSTS matters on Docker Desktop: the container sees
+      # only Docker's own network, so its ARP cache never shows the LAN and the
+      # scan has nothing to probe. Name the hosts explicitly there (the Mode 4
+      # native binary is the real answer; see the deployment matrix). On the
+      # linux-host-network profile the ARP cache is the LAN and this can stay
+      # empty.
+      DPF_FEDERATION_SCAN: ${DPF_FEDERATION_SCAN:-}
+      DPF_FEDERATION_SCAN_HOSTS: ${DPF_FEDERATION_SCAN_HOSTS:-}
+      DPF_FEDERATION_SCAN_ENDPOINTS: ${DPF_FEDERATION_SCAN_ENDPOINTS:-}
+
     volumes:
       # State (node token, intervals, capabilities). Survives
       # restarts; rebuilds preserve enrollment.
@@ -179,6 +192,19 @@ services:
       DPF_EDGE_NODE_NAME: ${DPF_EDGE_NODE_NAME:-edge-node-host-1}
       DPF_INSTALL_MODE: ${DPF_INSTALL_MODE:-container-host}
       DPF_EDGE_STATE_DIR: /var/lib/dpf-edge-node
+
+      # Federation-candidate scan (BI-105966A1). On by default; set
+      # DPF_FEDERATION_SCAN=0 to stay unfindable.
+      #
+      # DPF_FEDERATION_SCAN_HOSTS matters on Docker Desktop: the container sees
+      # only Docker's own network, so its ARP cache never shows the LAN and the
+      # scan has nothing to probe. Name the hosts explicitly there (the Mode 4
+      # native binary is the real answer; see the deployment matrix). On the
+      # linux-host-network profile the ARP cache is the LAN and this can stay
+      # empty.
+      DPF_FEDERATION_SCAN: ${DPF_FEDERATION_SCAN:-}
+      DPF_FEDERATION_SCAN_HOSTS: ${DPF_FEDERATION_SCAN_HOSTS:-}
+      DPF_FEDERATION_SCAN_ENDPOINTS: ${DPF_FEDERATION_SCAN_ENDPOINTS:-}
     volumes:
       - edge_node_state_host:/var/lib/dpf-edge-node
 

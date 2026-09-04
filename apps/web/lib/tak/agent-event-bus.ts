@@ -23,6 +23,14 @@ export type SystemSelfUpgradeEvent = {
   observedAt: string;
 };
 
+export type SystemLocalModelEvent = {
+  type: "system:local-model";
+  operationId: string;
+  modelReference: string;
+  status: "running" | "completed" | "failed";
+  observedAt: string;
+};
+
 export type AgentEvent =
   // Attention Surface (EP-ATTENTION-SURFACE, BI-094A124F): a new pending-human
   // item appeared. Broadcast system-wide so the "Needs you" inbox refreshes live.
@@ -140,7 +148,8 @@ export type AgentEvent =
   // distinguishes them) and is also consumed by suspended Inngest
   // functions waiting on platform.quiescence-cleared. Spec §7.1.
   | SystemQuiescenceEvent
-  | SystemSelfUpgradeEvent;
+  | SystemSelfUpgradeEvent
+  | SystemLocalModelEvent;
 
 type Handler = (event: AgentEvent) => void;
 

@@ -419,6 +419,7 @@
     "DecisionInteractionVoiceOutput.voiceProfileId",
     "DecisionPerspectiveProfile.profileId",
     "DecisionPerspectiveProfileVersion.versionId",
+    "DecisionResolutionProposal.proposalId",
     "DecisionShadowLedger.agentId",
     "DecisionShadowLedger.decisionInteractionId",
     "DecisionShadowLedger.envelopeId",

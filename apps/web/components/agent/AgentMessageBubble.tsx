@@ -110,16 +110,73 @@ function extractManagedDocumentIds(content: string): string[] {
 export const PROVIDER_ROUTING_ROUTE = AI_PROVIDER_CONNECTIONS_ROUTE;
 
 /**
- * True when an assistant message steers the operator to reconnect or activate an
- * AI provider. Every provider-config failure branch (describeToolRouteFailure in
+ * True when a message steers the operator to reconnect or activate an AI
+ * provider. Every provider-config failure branch (describeToolRouteFailure in
  * agentic-loop.ts, and the credential-gap messages in agent-coworker.ts) names
  * the "Providers & Routing" surface. BI-282C39D5: rather than make the user hunt
  * the menu, render a one-click chip straight to it — hand the fix, don't just
- * describe it. Benign on the rare false positive: the chip only links to a page
- * the message already names. Assistant-only; user text is never scanned.
+ * describe it. Assistant messages retain the established chip treatment;
+ * terminal system messages link the words already present in their copy so a
+ * recovery action does not duplicate first-viewport prose. User text is never
+ * scanned.
  */
 export function referencesProviderRoutingSurface(content: string): boolean {
   return /Providers\s*&\s*Routing/i.test(content);
+}
+
+export function referencesTerminalProviderRecovery(content: string): boolean {
+  if (!referencesProviderRoutingSurface(content)) return false;
+  return /^(?:The selected AI model is no longer available|No AI model (?:can handle|that supports tools is active)|No AI provider credentials are configured|No AI provider is available to handle|I couldn't get an answer from any AI model)/i
+    .test(content.trim());
+}
+
+function ProviderRoutingCta() {
+  return (
+    <div style={{ marginTop: 8 }}>
+      <Link
+        href={PROVIDER_ROUTING_ROUTE}
+        data-testid="agent-provider-reconnect-cta"
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 6,
+          border: "1px solid color-mix(in srgb, var(--dpf-accent) 45%, transparent)",
+          background: "color-mix(in srgb, var(--dpf-accent) 14%, transparent)",
+          borderRadius: 999,
+          color: "var(--dpf-accent)",
+          fontSize: 11,
+          fontWeight: 600,
+          lineHeight: 1,
+          padding: "6px 10px",
+          textDecoration: "none",
+        }}
+      >
+        <PlugZap size={12} aria-hidden="true" />
+        Open Providers &amp; Routing
+      </Link>
+    </div>
+  );
+}
+
+function ProviderRoutingInlineRecovery({ content }: { content: string }): ReactNode {
+  const match = /Providers\s*&\s*Routing/i.exec(content);
+  if (!match || match.index === undefined) return content;
+  const before = content.slice(0, match.index);
+  const after = content.slice(match.index + match[0].length);
+
+  return (
+    <>
+      {before}
+      <Link
+        href={PROVIDER_ROUTING_ROUTE}
+        data-testid="agent-provider-reconnect-cta"
+        style={{ color: "var(--dpf-accent)", fontWeight: 600 }}
+      >
+        {match[0]}
+      </Link>
+      {after}
+    </>
+  );
 }
 
 function formatProposalParams(
@@ -358,7 +415,9 @@ export function AgentMessageBubble({
           fontStyle: "italic",
         }}
       >
-        {message.content}
+        {referencesTerminalProviderRecovery(message.content)
+          ? <ProviderRoutingInlineRecovery content={message.content} />
+          : message.content}
       </div>
     );
   }
@@ -575,6 +634,7 @@ export function AgentMessageBubble({
       data-testid="agent-message"
       data-message-role={isUser ? "user" : "assistant"}
       data-message-error={isAssistantError ? "true" : undefined}
+      aria-label={!isUser && agentName ? `Message from ${agentName}` : undefined}
       style={{
         display: "flex",
         flexDirection: "column",
@@ -665,31 +725,7 @@ export function AgentMessageBubble({
                 ))}
               </div>
             )}
-            {referencesProviderRoutingSurface(message.content) && (
-              <div style={{ marginTop: 8 }}>
-                <Link
-                  href={PROVIDER_ROUTING_ROUTE}
-                  data-testid="agent-provider-reconnect-cta"
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 6,
-                    border: "1px solid color-mix(in srgb, var(--dpf-accent) 45%, transparent)",
-                    background: "color-mix(in srgb, var(--dpf-accent) 14%, transparent)",
-                    borderRadius: 999,
-                    color: "var(--dpf-accent)",
-                    fontSize: 11,
-                    fontWeight: 600,
-                    lineHeight: 1,
-                    padding: "6px 10px",
-                    textDecoration: "none",
-                  }}
-                >
-                  <PlugZap size={12} aria-hidden="true" />
-                  Open Providers &amp; Routing
-                </Link>
-              </div>
-            )}
+            {referencesProviderRoutingSurface(message.content) && <ProviderRoutingCta />}
           </div>
         )}
         {message.attachments && message.attachments.length > 0 && (

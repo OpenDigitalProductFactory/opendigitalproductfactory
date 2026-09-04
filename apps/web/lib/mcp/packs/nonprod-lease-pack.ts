@@ -13,6 +13,8 @@
 
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
 import type { LocalCiHostPressure } from "@/lib/nonprod/local-ci-pool-policy";
+import type { HostResourceLeaseEvidence } from "@/lib/nonprod/environment-lease-pool-policy";
+import { HEAVY_RESOURCE_CLASSES, isHeavyResourceClass } from "@/lib/nonprod/host-resource-policy";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
@@ -35,6 +37,26 @@ function positivePorts(value: unknown): number[] {
       .map((entry) => typeof entry === "number" ? entry : Number(entry))
       .filter((entry) => Number.isInteger(entry) && entry > 0)
     : [];
+}
+
+function positiveNumber(value: unknown): number | undefined {
+  const number = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(number) && number > 0 ? number : undefined;
+}
+
+function nonnegativeNumber(value: unknown): number | undefined {
+  const number = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(number) && number >= 0 ? number : undefined;
+}
+
+function toolSafeLease(lease: Record<string, unknown>): Record<string, unknown> {
+  const { ownerProcessIdentity: _sensitiveProcessIdentity, ...visibleLease } = lease;
+  return {
+    ...visibleLease,
+    expectedMemoryBytes: typeof lease.expectedMemoryBytes === "bigint"
+      ? Number(lease.expectedMemoryBytes)
+      : lease.expectedMemoryBytes,
+  };
 }
 
 function normalizedSlotBinding(value: unknown): {
@@ -141,21 +163,43 @@ const definitions: ToolDefinition[] = [
       "Request admission to a governed shared nonproduction environment for preview, UX verification, or local integration. " +
       "Reusing claimKey returns the same durable queue entry (idempotent wait). " +
       "Do not claim in a tight loop without a stable claimKey. " +
-      "When queued, wait and renew with the returned leaseId — do not open a second claim for the same session purpose.",
+      "When queued, terminate the polling runner and resume from the returned TaskRun — do not renew or open a second claim.",
     inputSchema: {
       type: "object",
       properties: {
-        environmentKey: { type: "string", enum: ["active-candidate", "local-integration-ci"] },
+        environmentKey: { type: "string", enum: ["active-candidate", "local-integration-ci", "host-heavy-resource"] },
         ownerProvider: {
           type: "string",
           enum: ["build-studio", "claude", "codex", "grok", "antigravity", "coworker"],
         },
         ownerSessionId: { type: "string" },
         claimKey: { type: "string", description: "Stable idempotency key reused while waiting for admission." },
+        gateIdentity: {
+          type: "object",
+          description: "Immutable local-CI identity components. The server derives the claim key and ignores caller claimKey.",
+          properties: {
+            repository: { type: "string" },
+            integrationTreeSha: { type: "string" },
+            evidencePlanDigest: { type: "string" },
+            toolchainFingerprint: { type: "string" },
+            gateKind: { type: "string", enum: ["local-integration-ci"] },
+          },
+          required: [
+            "repository",
+            "integrationTreeSha",
+            "evidencePlanDigest",
+            "toolchainFingerprint",
+            "gateKind",
+          ],
+        },
         purpose: { type: "string" },
         url: { type: "string" },
         ports: { type: "array", items: { type: "number" } },
         expiresAt: { type: "string", description: "ISO timestamp when the lease expires" },
+        waitDeadlineAt: {
+          type: "string",
+          description: "Optional ISO deadline for a server-owned durable wait. Defaults to expiresAt. Queued clients should stop polling and resume from the returned TaskRun.",
+        },
         worktreePath: { type: "string" },
         branchName: { type: "string" },
         buildId: { type: "string" },
@@ -170,8 +214,23 @@ const definitions: ToolDefinition[] = [
           ...hostPressureSchema,
           description: "Recent fail-closed host observation used only to decide whether slot-1 may admit.",
         },
+        resourceClass: { type: "string", enum: [...HEAVY_RESOURCE_CLASSES] },
+        expectedMemoryBytes: { type: "number" },
+        ownerProcessId: { type: "number" },
+        ownerProcessIdentity: { type: "string" },
+        hostResource: {
+          type: "object",
+          description: "Host memory and resident-inference evidence for host-heavy-resource admission.",
+          properties: {
+            totalMemoryBytes: { type: "number" },
+            availableMemoryBytes: { type: "number" },
+            inferenceResident: { type: "boolean" },
+            ungovernedProcesses: { type: "array", items: { type: "object" } },
+          },
+          required: ["totalMemoryBytes", "availableMemoryBytes", "inferenceResident"],
+        },
       },
-      required: ["environmentKey", "ownerProvider", "ownerSessionId", "purpose", "url", "ports", "expiresAt"],
+      required: ["environmentKey", "ownerProvider", "ownerSessionId", "purpose", "expiresAt"],
     },
     requiredCapability: "view_platform",
     executionMode: "immediate",
@@ -191,6 +250,10 @@ const definitions: ToolDefinition[] = [
         leaseId: {
           type: "string",
           description: "Lease id from claim_nonprod_environment_lease (e.g. NPEL-…), not the environmentKey.",
+        },
+        ownerSessionId: {
+          type: "string",
+          description: "Owning session identity; required by immutable gate leases.",
         },
       },
       required: ["leaseId"],
@@ -253,7 +316,10 @@ async function listNonprodEnvironmentLeases(): Promise<ToolResult> {
   return {
     success: true,
     message: `Found ${leases.length} admitted and ${queued.length} queued nonproduction environment lease(s).`,
-    data: { leases, queued },
+    data: {
+      leases: leases.map((lease) => toolSafeLease(lease as Record<string, unknown>)),
+      queued: queued.map((lease) => toolSafeLease(lease as Record<string, unknown>)),
+    },
   };
 }
 
@@ -284,7 +350,10 @@ async function lookupChangeOriginHandler(params: Record<string, unknown>): Promi
   return { success: true, message, data: result };
 }
 
-async function claimNonprodEnvironmentLeaseHandler(params: Record<string, unknown>): Promise<ToolResult> {
+async function claimNonprodEnvironmentLeaseHandler(
+  params: Record<string, unknown>,
+  userId: string,
+): Promise<ToolResult> {
   const { claimNonprodEnvironmentLease } = await import("@/lib/nonprod/environment-lease");
   const stringValue = stringValueFor(params);
   const environmentKey = stringValue("environmentKey");
@@ -299,10 +368,11 @@ async function claimNonprodEnvironmentLeaseHandler(params: Record<string, unknow
     ["ownerProvider", ownerProvider],
     ["ownerSessionId", ownerSessionId],
     ["purpose", purpose],
-    ["url", url],
     ["expiresAt", expiresAtText],
   ].filter(([, value]) => !value).map(([key]) => key);
-  if (ports.length === 0) missing.push("ports");
+  const hostResourceClaim = environmentKey === "host-heavy-resource";
+  if (!hostResourceClaim && !url) missing.push("url");
+  if (!hostResourceClaim && ports.length === 0) missing.push("ports");
   if (missing.length > 0) {
     return {
       success: false,
@@ -310,7 +380,7 @@ async function claimNonprodEnvironmentLeaseHandler(params: Record<string, unknow
       message: `Missing required nonproduction lease field(s): ${missing.join(", ")}`,
     };
   }
-  if (!["active-candidate", "local-integration-ci"].includes(environmentKey)) {
+  if (!["active-candidate", "local-integration-ci", "host-heavy-resource"].includes(environmentKey)) {
     return { success: false, error: "invalid_environment_key", message: `Unsupported environmentKey: ${environmentKey}` };
   }
   const { NONPROD_OWNER_PROVIDERS } = await import("@/lib/nonprod/environment-lease");
@@ -320,6 +390,15 @@ async function claimNonprodEnvironmentLeaseHandler(params: Record<string, unknow
   const expiresAt = new Date(expiresAtText);
   if (Number.isNaN(expiresAt.getTime())) {
     return { success: false, error: "invalid_expires_at", message: "expiresAt must be a valid ISO timestamp" };
+  }
+  const waitDeadlineText = stringValue("waitDeadlineAt") || expiresAtText;
+  const waitDeadlineAt = new Date(waitDeadlineText);
+  if (Number.isNaN(waitDeadlineAt.getTime())) {
+    return {
+      success: false,
+      error: "invalid_wait_deadline",
+      message: "waitDeadlineAt must be a future ISO timestamp when supplied",
+    };
   }
   const slotManifestVersion = params["slotManifestVersion"];
   if (
@@ -341,13 +420,86 @@ async function claimNonprodEnvironmentLeaseHandler(params: Record<string, unknow
     };
   }
 
+  const resourceClass = stringValue("resourceClass");
+  const expectedMemoryBytes = positiveNumber(params["expectedMemoryBytes"]);
+  const ownerProcessId = positiveNumber(params["ownerProcessId"]);
+  const ownerProcessIdentity = stringValue("ownerProcessIdentity");
+  const hostResourceValue = objectValue(params["hostResource"]);
+  let hostResource: HostResourceLeaseEvidence | undefined;
+  if (hostResourceClaim) {
+    const totalMemoryBytes = positiveNumber(hostResourceValue?.totalMemoryBytes);
+    const availableMemoryBytes = nonnegativeNumber(hostResourceValue?.availableMemoryBytes);
+    const inferenceResident = hostResourceValue?.inferenceResident;
+    if (
+      !isHeavyResourceClass(resourceClass)
+      || !expectedMemoryBytes
+      || !ownerProcessId
+      || !ownerProcessIdentity
+      || !totalMemoryBytes
+      || availableMemoryBytes === undefined
+      || typeof inferenceResident !== "boolean"
+    ) {
+      return {
+        success: false,
+        error: "invalid_host_resource_contract",
+        message: "host-heavy-resource requires a declared resource class, positive memory/PID values, process identity, and measurable host evidence.",
+      };
+    }
+    hostResource = {
+      totalMemoryBytes,
+      availableMemoryBytes,
+      inferenceResident,
+      ungovernedProcesses: Array.isArray(hostResourceValue?.ungovernedProcesses)
+        ? hostResourceValue.ungovernedProcesses as HostResourceLeaseEvidence["ungovernedProcesses"]
+        : undefined,
+    };
+  } else if (
+    params["resourceClass"] !== undefined
+    || params["hostResource"] !== undefined
+    || params["ownerProcessIdentity"] !== undefined
+  ) {
+    return {
+      success: false,
+      error: "invalid_host_resource_contract",
+      message: "Host resource fields are valid only for host-heavy-resource claims.",
+    };
+  }
+
+  const gateIdentityValue = objectValue(params["gateIdentity"]);
+  let gateKey: string | undefined;
+  if (params["gateIdentity"] !== undefined) {
+    if (!gateIdentityValue || environmentKey !== "local-integration-ci") {
+      return {
+        success: false,
+        error: "invalid_gate_identity",
+        message: "gateIdentity is valid only for local-integration-ci claims.",
+      };
+    }
+    try {
+      const { deriveGateKey } = await import("@/lib/gates/gate-run-identity");
+      gateKey = deriveGateKey({
+        repository: String(gateIdentityValue.repository ?? ""),
+        integrationTreeSha: String(gateIdentityValue.integrationTreeSha ?? ""),
+        evidencePlanDigest: String(gateIdentityValue.evidencePlanDigest ?? ""),
+        toolchainFingerprint: String(gateIdentityValue.toolchainFingerprint ?? ""),
+        gateKind: gateIdentityValue.gateKind as "local-integration-ci",
+      });
+    } catch (error) {
+      return {
+        success: false,
+        error: "invalid_gate_identity",
+        message: getErrorMessage(error),
+      };
+    }
+  }
+
   const result = await claimNonprodEnvironmentLease({
-    environmentKey: environmentKey as "active-candidate" | "local-integration-ci",
+    environmentKey: environmentKey as "active-candidate" | "local-integration-ci" | "host-heavy-resource",
     ownerProvider: ownerProvider as (typeof NONPROD_OWNER_PROVIDERS)[number],
     ownerSessionId,
-    claimKey: stringValue("claimKey") || undefined,
+    claimKey: gateKey ? `gate:${gateKey}` : stringValue("claimKey") || undefined,
     purpose,
-    url,
+    url: url || "host://localhost",
     ports,
     expiresAt,
     worktreePath: stringValue("worktreePath") || undefined,
@@ -357,44 +509,127 @@ async function claimNonprodEnvironmentLeaseHandler(params: Record<string, unknow
     cleanupCommand: stringValue("cleanupCommand") || undefined,
     slotManifestVersion: slotManifestVersion as 1 | undefined,
     hostPressure: hostPressure as LocalCiHostPressure | undefined,
+    resourceClass: isHeavyResourceClass(resourceClass) ? resourceClass : undefined,
+    expectedMemoryBytes,
+    ownerProcessId,
+    ownerProcessIdentity: ownerProcessIdentity || undefined,
+    hostResource,
   });
+  const toolLease = toolSafeLease(result.lease as unknown as Record<string, unknown>);
+  if (result.status === "reused") {
+    return {
+      success: true,
+      entityId: result.evidenceRecordId,
+      message: `Reused terminal local-CI evidence ${result.evidenceRecordId}.`,
+      data: {
+        lease: toolLease,
+        admission: {
+          status: "reused",
+          evidenceRecordId: result.evidenceRecordId,
+          resultClass: result.resultClass,
+        },
+        poolPolicy: result.poolPolicy,
+        gateKey,
+      },
+    };
+  }
+  if (result.status === "blocked") {
+    return {
+      success: false,
+      entityId: result.lease.leaseId,
+      error: "gate_evidence_blocked",
+      message: `Canonical local-CI evidence cannot be reused (${result.reason}).`,
+      data: {
+        lease: toolLease,
+        admission: { status: "blocked", reason: result.reason },
+        poolPolicy: result.poolPolicy,
+        gateKey,
+      },
+    };
+  }
   if (result.status === "terminal") {
+    if (result.lease.taskRunId) {
+      const { settleNonprodLeaseWait } = await import("@/lib/nonprod/durable-wait");
+      await settleNonprodLeaseWait({
+        db: (await import("@dpf/db")).prisma,
+        taskRunId: result.lease.taskRunId,
+        leaseId: result.lease.leaseId,
+        state: "terminal",
+      });
+    }
     return {
       success: false,
       entityId: result.lease.leaseId,
       error: "lease_terminal",
       message: `Nonproduction lease request is already ${result.reason}; create a new claimKey to request admission again.`,
-      data: { lease: result.lease, reason: result.reason, poolPolicy: result.poolPolicy },
+      data: { lease: toolLease, reason: result.reason, poolPolicy: result.poolPolicy, gateKey },
+    };
+  }
+  if (result.status === "subscribed") {
+    return {
+      success: true,
+      entityId: result.lease.leaseId,
+      message: `Subscribed to canonical nonproduction environment lease ${result.lease.leaseId}.`,
+      data: {
+        lease: toolLease,
+        admission: {
+          status: "subscribed",
+          executionStatus: result.executionStatus,
+        },
+        poolPolicy: result.poolPolicy,
+        gateKey,
+      },
     };
   }
   if (result.status === "queued") {
+    const { checkpointNonprodLeaseWait } = await import("@/lib/nonprod/durable-wait");
+    const durableWait = await checkpointNonprodLeaseWait({
+      db: (await import("@dpf/db")).prisma,
+      userId,
+      lease: result.lease,
+      queuePosition: result.queuePosition,
+      waitDeadlineAt,
+    });
     return {
       success: true,
       entityId: result.lease.leaseId,
       message: `Queued nonproduction environment lease ${result.lease.leaseId} at position ${result.queuePosition}.`,
       data: {
-        lease: result.lease,
+        lease: toolLease,
         admission: {
           status: "queued",
           queuePosition: result.queuePosition,
           waitAgeMs: result.waitAgeMs,
+          resumeMode: "durable-task",
+          taskRunId: durableWait.taskRunId,
         },
         poolPolicy: result.poolPolicy,
+        gateKey,
       },
     };
+  }
+  if (result.lease.taskRunId) {
+    const { settleNonprodLeaseWait } = await import("@/lib/nonprod/durable-wait");
+    await settleNonprodLeaseWait({
+      db: (await import("@dpf/db")).prisma,
+      taskRunId: result.lease.taskRunId,
+      leaseId: result.lease.leaseId,
+      state: "admitted",
+    });
   }
   return {
     success: true,
     entityId: result.lease.leaseId,
     message: `Admitted nonproduction environment lease ${result.lease.leaseId} to ${result.slotKey}.`,
     data: {
-      lease: result.lease,
+      lease: toolLease,
       admission: {
         status: "admitted",
         slotKey: result.slotKey,
         waitAgeMs: result.waitAgeMs,
       },
       poolPolicy: result.poolPolicy,
+      gateKey,
     },
   };
 }
@@ -402,6 +637,9 @@ async function claimNonprodEnvironmentLeaseHandler(params: Record<string, unknow
 async function releaseNonprodEnvironmentLeaseHandler(params: Record<string, unknown>): Promise<ToolResult> {
   const { releaseNonprodEnvironmentLease } = await import("@/lib/nonprod/environment-lease");
   const leaseId = typeof params["leaseId"] === "string" ? params["leaseId"].trim() : "";
+  const ownerSessionId = typeof params["ownerSessionId"] === "string"
+    ? params["ownerSessionId"].trim()
+    : "";
   if (!leaseId) {
     return {
       success: false,
@@ -414,14 +652,17 @@ async function releaseNonprodEnvironmentLeaseHandler(params: Record<string, unkn
     };
   }
   try {
-    const lease = await releaseNonprodEnvironmentLease({ leaseId });
+    const lease = await releaseNonprodEnvironmentLease({
+      leaseId,
+      ...(ownerSessionId ? { ownerSessionId } : {}),
+    });
     return {
       success: true,
       entityId: lease.leaseId,
       message: lease.status === "cancelled"
         ? `Cancelled queued nonproduction environment lease ${lease.leaseId}.`
         : `Released nonproduction environment lease ${lease.leaseId}.`,
-      data: { lease },
+      data: { lease: toolSafeLease(lease as unknown as Record<string, unknown>) },
     };
   } catch (error) {
     const detail = getErrorMessage(error);
@@ -494,14 +735,17 @@ async function renewNonprodEnvironmentLeaseHandler(params: Record<string, unknow
     success: true,
     entityId: result.lease.leaseId,
     message: `Renewed nonproduction environment lease ${result.lease.leaseId}.`,
-    data: { lease: result.lease, poolPolicy: result.poolPolicy },
+    data: {
+      lease: toolSafeLease(result.lease as unknown as Record<string, unknown>),
+      poolPolicy: result.poolPolicy,
+    },
   };
 }
 
 const handlers: Record<string, ToolPackHandler> = {
   list_nonprod_environment_leases: () => listNonprodEnvironmentLeases(),
   lookup_change_origin: (params) => lookupChangeOriginHandler(params),
-  claim_nonprod_environment_lease: (params) => claimNonprodEnvironmentLeaseHandler(params),
+  claim_nonprod_environment_lease: (params, userId) => claimNonprodEnvironmentLeaseHandler(params, userId),
   release_nonprod_environment_lease: (params) => releaseNonprodEnvironmentLeaseHandler(params),
   renew_nonprod_environment_lease: (params) => renewNonprodEnvironmentLeaseHandler(params),
 };

@@ -1,0 +1,19 @@
+{
+  "version": "1",
+  "decidedOption": "guided-attestation-and-loud",
+  "decisionInteractionId": "DI-5C13155815D2",
+  "scope": {
+    "files": [
+      "apps/web/components/workspace-home/CloudProviderUnclearedNotice.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "guided-attestation-and-loud",
+      "loud-only",
+      "grant-internal-on-connection"
+    ],
+    "note": "A fresh install grants a newly connected cloud provider sensitivityClearance ['public'], and no route is ever public \u2014 ROUTE_SENSITIVITY floors at internal. The provider is therefore active, healthy and eligible for nothing, while the workspace home reported it as cloud AI present and dropped the local-only notice. The three options were put to the operator, who chose guided attestation plus visibility. The kernel scored the same set independently and reached the same option (composite 9.668, margin 1.422, high confidence, no commandment conflict). grant-internal-on-connection scored 4.787, opposed by 'Outbound and irreversible actions require explicit go' and 'Least privilege, deny by default'. This change delivers the visibility half: the workspace notice and the attention lane. The guided setup step is tracked on BI-575F0046. Worth recording against that step: the core principle 'Zero-Click Provider Setup' scores AGAINST both chosen options and for the rejected one, so the attestation step has to be genuinely quick or it trades one defect for another."
+  }
+}

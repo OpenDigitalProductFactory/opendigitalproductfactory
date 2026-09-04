@@ -1,0 +1,42 @@
+{
+  "version": "1",
+  "accountableOwner": "data-architect",
+  "affectedCopies": [
+    "PerspectiveMaterial rows held by the high-stakes review hold (reviewStatus draft / promotionState candidate), which gain a recorded approver once released",
+    "User, which gains a back-relation to the profession material a person has approved"
+  ],
+  "migration": {
+    "name": "20260823041254_add_perspective_material_review_attribution + 20260823045500_declare_perspective_material_reviewer_relation",
+    "backfill": "None, deliberately. Both columns are nullable and additive: a NULL reviewedByUserId means the row never went through the high-stakes hold, which is true of every row predating this change, and inventing an approver for them would be a fabricated audit trail. The second migration declares the foreign key and its index; it carries a data-safe attestation because every reviewedByUserId is NULL when it runs on every install — the column is created by the immediately-prior migration with no backfill, and its only writer (approveHeldProfessionMaterial, reached from the /coworker-decisions/review approval surface) ships in this same release and cannot have executed before deploy. An FK never checks NULLs, so there is no orphan population to validate and NOT VALID was rejected as strictly worse: it would leave a permanently unvalidated constraint guarding a provably empty set. Rollback is source-only; dropping the columns loses approval attribution but no doctrine, since reviewStatus/promotionState carry the released state itself."
+  },
+  "tests": [
+    "apps/web/lib/decision-perspective/held-material-store.test.ts",
+    "packages/db/src/profession-material-promotion.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:perspective-material#review-attribution",
+      "prismaModel": "PerspectiveMaterial",
+      "lifecycleDisposition": "PerspectiveMaterial remains the authoritative decision-material store; no row is created, deleted, or re-keyed. The change is additive attribution on an existing lifecycle that already had the states (draft/candidate held, approved/promoted gate-live) but recorded nothing about who moved a row between them. The release write is scoped by the held state itself, so it is idempotent and cannot pull an approved row backwards — the same non-downgrade invariant profession-material-promotion.ts holds on the write side.",
+      "fields": [
+        {
+          "fieldId": "data:perspective-material#reviewedByUserId",
+          "resolution": "governed",
+          "reason": "Identifies the human who released craft doctrine from the high-stakes review hold. The hold exists precisely because a person must take responsibility for that material governing decisions, so the record of who did it is the point of the hold rather than incidental metadata.",
+          "provenance": "BI-5F3BFD13; DI-7FDC2C36E71C; docs/architecture/decision-vectors.md §5.3",
+          "flags": ["sensitive"],
+          "fieldPolicy": "Internal. Holds a User id, so it is personal data by reference: exposed only on the operator review surface behind manage_platform, never in coworker-facing retrieval, never in the MCP wiki/decision read path, and never emitted to the hive or a federated peer. onDelete SetNull — deleting a user must never delete the doctrine they approved, so the approval record survives with an unattributed reviewer rather than the material vanishing or the delete being blocked."
+        },
+        {
+          "fieldId": "data:perspective-material#reviewedAt",
+          "resolution": "governed",
+          "reason": "Timestamps the release so an audit can distinguish material a human approved from material that was gate-live from seed. Without it the approved+promoted state is indistinguishable between the two paths.",
+          "provenance": "BI-5F3BFD13; docs/architecture/decision-vectors.md §5.3",
+          "flags": [],
+          "fieldPolicy": "Internal. Set only by approveHeldProfessionMaterial; never operator-editable."
+        }
+      ]
+    }
+  ]
+}

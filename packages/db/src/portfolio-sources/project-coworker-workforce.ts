@@ -20,6 +20,7 @@
 // (the DOC-1996319D "DigitalProduct first" reassociation rule).
 
 import { prisma } from "../client";
+import { COWORKER_SLUG_TO_CANONICAL_AGENT_ID } from "../agent-identity";
 import {
   projectPortfolioEntries,
   type ProjectPortfolioClient,
@@ -111,7 +112,7 @@ export async function projectCoworkerWorkforce(
 ): Promise<ProjectCoworkerWorkforceResult> {
   const db = input.db ?? (prisma as unknown as ProjectCoworkerWorkforceClient);
 
-  const agents = (await db.agent.findMany({
+  const agentsRaw = (await db.agent.findMany({
     where: { archived: false },
     orderBy: { name: "asc" },
     select: {
@@ -125,6 +126,16 @@ export async function projectCoworkerWorkforce(
       portfolioId: true,
     },
   })) as CoworkerAgentRow[];
+
+  // One coworker seeded under BOTH its slug and its canonical AGT-* id is ONE
+  // coworker — and productId is keyed on agentId, so projecting both mints TWO
+  // DigitalProducts with the same name for the same peer. That is worse than the
+  // display duplicates fixed elsewhere in this branch: it creates duplicate ROWS
+  // that then surface anywhere active products are listed (BI-74FD6420).
+  const agents = agentsRaw.filter((a) => {
+    const canonical = COWORKER_SLUG_TO_CANONICAL_AGENT_ID[a.agentId];
+    return !(canonical && canonical !== a.agentId && agentsRaw.some((o) => o.agentId === canonical));
+  });
 
   if (agents.length === 0) return { ...EMPTY };
 

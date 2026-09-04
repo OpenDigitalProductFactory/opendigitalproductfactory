@@ -18,6 +18,7 @@ function ev(
     routeContext: null,
     apiTokenId: "tok-1",
     skillId: null,
+    parameters: null,
     ...partial,
   };
 }
@@ -111,6 +112,9 @@ describe("analyzeCallEfficiency (BI-A08EBAEC)", () => {
     expect(report.findings.some(
       (finding) => finding.kind === "high_volume" && finding.toolName === "edge.heartbeat",
     )).toBe(false);
+    expect(report.findings.some(
+      (finding) => finding.kind === "thrash" && finding.toolName === "edge.heartbeat",
+    )).toBe(false);
     expect(report.ledgerSufficiency.note).toContain("contractual machine cadence");
   });
 
@@ -132,10 +136,158 @@ describe("analyzeCallEfficiency (BI-A08EBAEC)", () => {
     )).toBe(true);
   });
 
+  it("uses ownerSessionId when external JSON-RPC rows have no thread attribution", () => {
+    const start = Date.parse("2026-08-03T12:00:00.000Z");
+    const events = Array.from({ length: 10 }, (_, i) => ev({
+      id: `claim-${i}`,
+      toolName: "claim_nonprod_environment_lease",
+      threadId: "",
+      agentId: "unknown",
+      parameters: { ownerSessionId: "gate-session-a" },
+      createdAt: new Date(start + i * 1_000),
+    }));
+
+    const report = analyzeCallEfficiency(events, { thrashThreshold: 8 });
+    const thrash = report.findings.find((finding) => finding.kind === "thrash");
+    expect(thrash?.evidence.correlationId).toBe("owner-session:gate-session-a");
+  });
+
+  it("does not turn unattributed aggregate read traffic into a polling finding", () => {
+    const start = Date.parse("2026-08-03T12:00:00.000Z");
+    const events = Array.from({ length: 30 }, (_, i) => ev({
+      id: `read-${i}`,
+      toolName: "get_backlog_item",
+      threadId: "",
+      agentId: "unknown",
+      parameters: {},
+      createdAt: new Date(start + i * 1_000),
+    }));
+
+    const report = analyzeCallEfficiency(events, { highVolumeFloor: 25 });
+    expect(report.findings.some(
+      (finding) => finding.kind === "high_volume" && finding.toolName === "get_backlog_item",
+    )).toBe(false);
+    expect(report.ledgerSufficiency.note).toContain("unattributed aggregate");
+  });
+
+  it("suppresses healthy per-session lease renewal cadence", () => {
+    const start = Date.parse("2026-08-03T12:00:00.000Z");
+    const events: CallEfficiencyEvent[] = [];
+    for (const [session, offset] of [["gate-a", 0], ["gate-b", 5_000]] as const) {
+      for (let i = 0; i < 30; i++) {
+        events.push(ev({
+          id: `${session}-${i}`,
+          toolName: "renew_nonprod_environment_lease",
+          threadId: "",
+          agentId: "unknown",
+          parameters: { ownerSessionId: session },
+          createdAt: new Date(start + offset + i * 40_000),
+        }));
+      }
+    }
+
+    const report = analyzeCallEfficiency(events, { highVolumeFloor: 25 });
+    expect(report.findings.some(
+      (finding) => finding.kind === "high_volume"
+        && finding.toolName === "renew_nonprod_environment_lease",
+    )).toBe(false);
+    expect(report.findings.some(
+      (finding) => finding.kind === "thrash"
+        && finding.toolName === "renew_nonprod_environment_lease",
+    )).toBe(false);
+    expect(report.ledgerSufficiency.note).toContain("contractual machine cadence");
+  });
+
   it("reports insufficient ledger when volume is tiny", () => {
     const report = analyzeCallEfficiency([
       ev({ id: "a", toolName: "ping" }),
     ]);
     expect(report.ledgerSufficiency.usable).toBe(false);
+  });
+});
+
+// A governed refusal is not a tool failure. ToolExecution.success is false for
+// both a broken tool and a gate correctly saying no, and counting them together
+// filed `fix_instructions` findings against working gates. Measured live over
+// seven days: ~4,900 of ~5,700 failures were governed refusals.
+describe("governed refusals are not tool failures", () => {
+  it("does not raise high_failure for a gate that declines most calls", () => {
+    // The live shape: record_plan_backlog_coverage at 91% "failure", every one a
+    // readiness refusal. The tool is working; the work was not ready.
+    const events = Array.from({ length: 40 }, (_, i) =>
+      ev({
+        id: `r-${i}`,
+        toolName: "record_plan_backlog_coverage",
+        success: false,
+        governedRefusal: true,
+        createdAt: new Date(`2026-08-03T12:${String(i).padStart(2, "0")}:00.000Z`),
+      }),
+    );
+
+    const report = analyzeCallEfficiency(events);
+
+    expect(report.findings.filter((f) => f.kind === "high_failure")).toEqual([]);
+    const tool = report.topTools.find((t) => t.toolName === "record_plan_backlog_coverage");
+    expect(tool?.refusalCount).toBe(40);
+    expect(tool?.failCount).toBe(0);
+    // Nothing answerable failed, so the tool reads as reliable rather than 9%.
+    expect(tool?.successRate).toBe(1);
+  });
+
+  it("still raises high_failure for real faults mixed in with refusals", () => {
+    // The guard must not become a blanket excuse: refusals are excluded from the
+    // denominator, so genuine faults show a HIGHER rate, not a hidden one.
+    const events = [
+      ...Array.from({ length: 30 }, (_, i) =>
+        ev({ id: `ref-${i}`, toolName: "some_gate", success: false, governedRefusal: true })),
+      ...Array.from({ length: 8 }, (_, i) =>
+        ev({ id: `bad-${i}`, toolName: "some_gate", success: false })),
+      ...Array.from({ length: 2 }, (_, i) =>
+        ev({ id: `ok-${i}`, toolName: "some_gate", success: true })),
+    ];
+
+    const report = analyzeCallEfficiency(events);
+    const finding = report.findings.find((f) => f.kind === "high_failure");
+
+    expect(finding).toBeDefined();
+    // 8 failures out of 10 answerable calls, not 38 out of 40.
+    expect(finding?.title).toContain("80%");
+    expect(finding?.detail).toContain("8/10 answerable calls failed");
+    expect(finding?.detail).toContain("30 further call(s) were governed refusals");
+  });
+
+  it("an unknown error code is still counted as a failure", () => {
+    // The classification is deliberately conservative — a gap in the refusal list
+    // must never silently excuse a broken tool.
+    const events = Array.from({ length: 12 }, (_, i) =>
+      ev({ id: `u-${i}`, toolName: "mystery_tool", success: false }));
+
+    const report = analyzeCallEfficiency(events);
+
+    expect(report.findings.some((f) => f.kind === "high_failure")).toBe(true);
+    expect(report.topTools.find((t) => t.toolName === "mystery_tool")?.failCount).toBe(12);
+  });
+
+  it("names the caller's loop when a retry storm is retrying refusals", () => {
+    // The live case: 4,504 gate_evidence_blocked refusals re-claimed in one day,
+    // filed as "Fix tool errors or agent instructions" — which would have sent
+    // someone to rewrite guidance for a tool that was behaving correctly.
+    const events = Array.from({ length: 30 }, (_, i) =>
+      ev({
+        id: `s-${i}`,
+        toolName: "claim_nonprod_environment_lease",
+        success: false,
+        governedRefusal: true,
+        createdAt: new Date(Date.parse("2026-08-03T12:00:00.000Z") + i * 1000),
+      }),
+    );
+
+    const report = analyzeCallEfficiency(events);
+    const storm = report.findings.find((f) => f.kind === "retry_storm");
+
+    expect(storm).toBeDefined();
+    expect(storm?.detail).toContain("GOVERNED REFUSAL");
+    expect(storm?.detail).toContain("Fix the caller's retry loop");
+    expect(storm?.detail).not.toContain("Fix tool errors or agent instructions");
   });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { projectBacklogItemReadiness } from "./entry-adapter";
+import { projectBacklogItemReadiness, projectBacklogItemReadinessSummary } from "./entry-adapter";
 
 const item = {
   id: "row-1",
@@ -101,7 +101,102 @@ function readyActivities() {
   ];
 }
 
+function terminalFixture(payloadOverride: Record<string, unknown> = {}) {
+  const decision = projectBacklogItemReadiness({
+    item,
+    activities: readyActivities(),
+    target: "completion",
+    transitionObject: {
+      kind: "work-capsule",
+      id: "WC-COMPLETE",
+      expectedVersion: "ready",
+      targetState: "complete",
+    },
+    authorization: "pass",
+    capsuleIdentity: "pass",
+    completion: {
+      deliveryEvidence: "pass",
+      acceptanceEvidence: "pass",
+      objectiveReconciliation: "pass",
+    },
+    evaluatedAt: "2026-08-22T08:00:00.000Z",
+  }).decision;
+  return {
+    decision,
+    activity: {
+      id: "activity-terminal",
+      kind: "initiative_readiness_decision",
+      gateKey: null,
+      recordedAt: new Date("2026-08-22T08:01:00.000Z"),
+      payload: {
+        schemaVersion: 1,
+        ...decision,
+        enforcementState: "enforced",
+        factsDigest: "sha256:facts",
+        authorityDecisionId: "DI-TERMINAL",
+        authoritySnapshot: {
+          decision: "allow",
+          effectiveHumanCapability: "manage_backlog",
+          effectiveAgentGrant: "update_work_capsule_status",
+          tokenScope: "organization",
+          organizationId: "platform",
+          actionKey: "complete_work_capsule",
+          policyVersion: "coworker-authority.v1",
+        },
+        ...payloadOverride,
+      },
+    },
+  };
+}
+
 describe("projectBacklogItemReadiness", () => {
+  it("preserves the enforced allowed completion decision for a done item", () => {
+    const fixture = terminalFixture();
+    const summary = projectBacklogItemReadinessSummary({
+      item: { ...item, status: "done" },
+      activities: [fixture.activity],
+      hasSpec: true,
+      hasPlan: true,
+      evaluatedAt: "2026-08-23T00:00:00.000Z",
+    });
+
+    expect(summary.decisions.completion).toEqual(fixture.decision);
+    expect(summary.decisions.completion.verdict).toBe("allowed");
+  });
+
+  it.each([
+    ["wrong subject", { subject: { kind: "backlog-item", id: "BI-OTHER" } }],
+    ["wrong target", { target: "implementation" }],
+    ["wrong transition target", { transitionObject: { kind: "work-capsule", id: "WC-COMPLETE", expectedVersion: "ready", targetState: "working" } }],
+    ["non-allowed verdict", { verdict: "input-required" }],
+    ["unenforced payload", { enforcementState: "shadow" }],
+    ["malformed payload", { decisionId: null }],
+  ])("ignores a terminal decision with %s", (_label, override) => {
+    const fixture = terminalFixture(override);
+    const summary = projectBacklogItemReadinessSummary({
+      item: { ...item, status: "done" },
+      activities: [fixture.activity],
+      hasSpec: true,
+      hasPlan: true,
+      evaluatedAt: "2026-08-23T00:00:00.000Z",
+    });
+
+    expect(summary.decisions.completion.verdict).toBe("input-required");
+  });
+
+  it("does not reuse a terminal completion decision for a nonterminal item", () => {
+    const fixture = terminalFixture();
+    const summary = projectBacklogItemReadinessSummary({
+      item: { ...item, status: "in-progress" },
+      activities: [fixture.activity],
+      hasSpec: true,
+      hasPlan: true,
+      evaluatedAt: "2026-08-23T00:00:00.000Z",
+    });
+
+    expect(summary.decisions.completion.verdict).toBe("input-required");
+  });
+
   it("allows completion only when terminal facts reconcile against live evidence", () => {
     const projected = projectBacklogItemReadiness({
       item,
@@ -145,7 +240,7 @@ describe("projectBacklogItemReadiness", () => {
     });
 
     expect(projection.governed).toBe(true);
-    expect(projection.decision).toMatchObject({ verdict: "allowed", profile: "cross-domain" });
+    expect(projection.decision).toMatchObject({ verdict: "allowed", profile: "feature" });
   });
 
   it("fails closed for an implementation claim with only textual spec and plan hints", () => {

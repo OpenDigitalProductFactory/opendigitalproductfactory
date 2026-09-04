@@ -87,8 +87,14 @@ export function evaluateInferenceDispatchPolicy(
 ): InferencePolicyEvaluation {
   const classifiedDataClasses = [...input.classification.dataClasses];
   const hasGovernedHints = Boolean(input.governedData?.length);
+  // The PDP gates GOVERNED DATA leaving the install, so it is summoned by what
+  // the turn actually carries — not by a class detected only in the coworker's
+  // job description (BI-463BE12A). Running it on instruction-derived classes
+  // reached the deny-by-default arm (`no-policy-high-risk`) with no governed
+  // data anywhere in the payload, which clamped every such turn to local-only.
+  // `classifiedDataClasses` still reports the full set on the receipt.
   const needsPdp =
-    classifiedDataClasses.length > 0 ||
+    policyRelevantClasses(input.classification).length > 0 ||
     hasGovernedHints ||
     input.classification.overallSensitivity === "confidential" ||
     input.classification.overallSensitivity === "restricted";
@@ -107,12 +113,20 @@ export function evaluateInferenceDispatchPolicy(
     };
   }
 
+  // The receipt keeps every detected class (classifiedDataClasses, above), but
+  // the vertical packs load from the DATA-evidenced set (BI-463BE12A). Loading a
+  // pack for a class seen only in the coworker's job description attaches that
+  // pack's mask obligation to the turn, and a mask obligation clamps routeEffect
+  // to local-only in screen-inference-payload — a third exclusion path, separate
+  // from sensitivity clearance and from the per-class export decision, and the
+  // one that survived fixing the other two.
+  const policyRelevant = policyRelevantClasses(input.classification);
   const policyPackVersions = input.policies
     ? []
-    : policyPackVersionsForClasses(classifiedDataClasses);
+    : policyPackVersionsForClasses(policyRelevant);
   const policies = input.policies ?? [
     ...DATA_EXECUTABLE_POLICIES,
-    ...verticalSensitiveDataPoliciesForClasses(classifiedDataClasses),
+    ...verticalSensitiveDataPoliciesForClasses(policyRelevant),
   ];
   const decisions = buildPolicyContexts(input).map((ctx) =>
     evaluateDataPolicy(ctx, policies)
@@ -156,13 +170,32 @@ export function evaluateInferenceDispatchPolicy(
   };
 }
 
+/**
+ * The classes an export decision may rest on (BI-463BE12A).
+ *
+ * Falls back to the full set when the classifier predates the split, so an
+ * older cached classification still fails closed rather than opening up.
+ */
+function policyRelevantClasses(
+  classification: InferencePolicyEvaluationInput["classification"],
+): InferenceDataClass[] {
+  return classification.dataEvidencedClasses ?? classification.dataClasses;
+}
+
 function buildPolicyContexts(
   input: InferencePolicyEvaluationInput,
 ): PolicyEvaluationContext[] {
-  if (input.classification.dataClasses.length === 0) {
+  // Deliberately the DATA-evidenced set, not every detected class. A COO's
+  // system prompt names payroll because that is the job; letting that alone
+  // produce an `export` denial clamps residencyPolicy to local_only, which
+  // excludes every cloud endpoint at pipeline-v2 regardless of the sensitivity
+  // the screener settled on. Sensitivity and residency are two independent
+  // exclusions and both have to stop turning on instructional vocabulary.
+  const relevant = policyRelevantClasses(input.classification);
+  if (relevant.length === 0) {
     return [buildPolicyContext(input)];
   }
-  return uniqueSorted(input.classification.dataClasses).map((dataClass) => {
+  return uniqueSorted(relevant).map((dataClass) => {
     const pack = getVerticalSensitiveDataPolicyPack(dataClass);
     const binding = dataClass === "unknown-governed-data"
       ? pack
@@ -210,7 +243,7 @@ function buildPolicyContext(
       sensitivity: override?.sensitivity ?? input.classification.overallSensitivity,
       categories: override?.categories
         ? [...override.categories]
-        : categoriesForClasses(input.classification.dataClasses),
+        : categoriesForClasses(policyRelevantClasses(input.classification)),
     },
     environmentKnown: input.environmentKnown ?? true,
     assetVersion: input.assetVersion ?? DEFAULT_VERSION,

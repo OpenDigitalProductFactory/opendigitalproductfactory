@@ -28,5 +28,13 @@ docs/Reference/
 # IT4IT functional criteria workbook is needed at seed time; the rest of
 # docs/Reference/ is large binary content we intentionally exclude.
 !docs/Reference/IT4IT_Functional_Criteria_Taxonomy.xlsx
+# The BIAN Service Landscape is read at seed time too, on a BANKING install
+# (seed-ea-reference-models.ts gates the import on the install's archetype).
+# It was excluded, so seedBianReferenceModel's readFileSync always threw, was
+# swallowed by its own catch, and the model imported zero elements on every
+# install including the banking ones it exists for. 81 KB of JSON, not the
+# large binary content this block is aimed at.
+!docs/Reference/bian/
+!docs/Reference/bian/bian-v14-service-landscape.json
 docs/architecture/
 apps/mobile/

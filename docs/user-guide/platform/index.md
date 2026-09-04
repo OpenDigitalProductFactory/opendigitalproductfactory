@@ -32,6 +32,7 @@ Use the Platform area to supervise AI operations, Edge Nodes, integrations, iden
 - [Edge Nodes](edge-nodes.md) - Edge Node enrollment, trust, freshness, and host-level runbook links.
 - [Tools and Integrations](tools-and-integrations.md) - tool catalog, native integrations, MCP surfaces, and service posture.
 - [Address Validation Providers](address-validation-providers.md) - Smarty vs Mapbox choice, one-active-provider rule, and setup checks.
+- [WordPress (self-hosted)](wordpress-self-hosted.md) - connect a customer-owned WordPress site, publish approved drafts, and understand the DPF/WordPress ownership boundary.
 
 ## Connections
 

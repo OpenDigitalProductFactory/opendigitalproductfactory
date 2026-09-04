@@ -17,6 +17,7 @@ import {
   type PostureHardPolicy,
   type ResolvedWorkPosture,
   type RoomPostureDeclaration,
+  type WorkStakesInput,
 } from "@/lib/work-posture";
 import type { ProactivityPlan } from "@/lib/proactivity/proactivity-types";
 import type { GoldenTrianglePreference } from "@/lib/golden-triangle";
@@ -47,6 +48,22 @@ export interface WorkroomPostureContext {
   hardPolicy?: PostureHardPolicy | null;
   /** The activity family, when the room's subject maps to one. */
   activityFamily?: string | null;
+  /**
+   * The platform's decreed default for rooms, when one is set. Sits below
+   * derivation and above the coworker ladder (workroom-posture-defaults.ts).
+   */
+  workroomDefault?: RoomPostureDeclaration | null;
+  /**
+   * Identity the operator control needs to WRITE back. Null when the room is not
+   * editable from this surface — the control is not rendered rather than
+   * rendered inert.
+   */
+  editable?: {
+    roomRowId: string;
+    caseKey: string;
+    declaredShape: string | null;
+    hasDeclaration: boolean;
+  } | null;
 }
 
 /** The room facts the posture derives from — all already on the WorkroomView. */
@@ -57,10 +74,19 @@ export interface WorkroomPostureFacts {
   cycleActive: boolean;
   /** The room's own time boundary, when it has one. */
   dueAt: string | null;
+  /** Existing Build Studio rightsizing facts, when this room fronts a build. */
+  stakes?: WorkStakesInput | null;
   declaration: RoomPostureDeclaration | null;
 }
 
 export interface WorkroomPostureView extends ResolvedWorkPosture {
+  /** Carried through so the room surface can render a settable control. */
+  editable?: {
+    roomRowId: string;
+    caseKey: string;
+    declaredShape: string | null;
+    hasDeclaration: boolean;
+  } | null;
   /**
    * True when the room's posture is the inherited one unchanged — nothing about
    * this room's shape, stream or clock asked for anything different. Surfaces
@@ -92,12 +118,14 @@ export function resolveWorkroomPosture(
     inherited: context.inherited,
     hardPolicy: context.hardPolicy ?? null,
     declaration: facts.declaration,
+    workroomDefault: context.workroomDefault ?? null,
     shape: {
       shapeKey: facts.shapeKey,
       activityKind: facts.activityKind,
       mode: facts.mode,
       cycleActive: facts.cycleActive,
     },
+    stakes: facts.stakes ?? null,
     stream: context.stream ?? null,
     temporal: {
       now,
@@ -109,5 +137,8 @@ export function resolveWorkroomPosture(
     },
   });
 
-  return resolved;
+  // Carry the editable identity through so the room surface can render a control
+  // that WRITES, not just a section that reads. Absent identity means the control
+  // is not rendered at all rather than rendered dead.
+  return { ...resolved, editable: context.editable ?? null };
 }

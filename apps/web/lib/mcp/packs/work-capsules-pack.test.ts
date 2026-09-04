@@ -11,6 +11,11 @@ const mockPrisma = {
   workroomActivity: {
     create: vi.fn(),
   },
+  // adopt_worktree resolves a supplied backlogItemId before binding it, so an
+  // unknown id is refused rather than silently dropped (BI-D526F72C).
+  backlogItem: {
+    findFirst: vi.fn(),
+  },
 };
 
 vi.mock("@dpf/db", () => ({
@@ -263,10 +268,65 @@ describe("work capsule MCP tools", () => {
     expect(result.entityId).toBe("WC-ADOPT");
   });
 
+  it("adopt_worktree records sessionRef as the workroom executorRef", async () => {
+    // Without this the guard can prove a live claim COVERS the branch but not
+    // that it is THIS session's, which is weaker than AGENTS.md 12 states.
+    // claim_backlog_item_for_work already required sessionRef for exactly this
+    // reason; adopt_worktree simply omitted it, so every worktree adopted
+    // through it stored executorRef: null.
+    mockPrisma.workroom.findFirst.mockResolvedValue(null);
+    mockPrisma.workroom.create.mockResolvedValue({ id: "row-1", capsuleId: "WC-SESSION" });
+    mockPrisma.workroomActivity.create.mockResolvedValue({ id: "activity-1" });
+
+    const { executeTool } = await import("@/lib/mcp-tools");
+    const result = await executeTool("adopt_worktree", {
+      title: "Adopt with session identity",
+      objective: "Record which session holds the claim.",
+      repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+      headBranch: "fix/session-identity",
+      worktreePath: "D:/DPF-worktrees/session-identity",
+      executorKind: "claude-desktop",
+      sessionRef: "session-abc123",
+    }, "user-1", { agentId: "claude" });
+
+    expect(result.success).toBe(true);
+    expect(mockPrisma.workroom.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ executorRef: "session-abc123" }) }),
+    );
+  });
+
+  it("adopt_worktree without sessionRef still succeeds, storing a null executorRef", async () => {
+    // Optional, not required: making it required would break every existing
+    // caller and refuse claims outright, which is worse than an unattributed
+    // claim. The gap is recorded rather than forced.
+    mockPrisma.workroom.findFirst.mockResolvedValue(null);
+    mockPrisma.workroom.create.mockResolvedValue({ id: "row-1", capsuleId: "WC-NOSESSION" });
+    mockPrisma.workroomActivity.create.mockResolvedValue({ id: "activity-1" });
+
+    const { executeTool } = await import("@/lib/mcp-tools");
+    const result = await executeTool("adopt_worktree", {
+      title: "Adopt without session identity",
+      objective: "Legacy caller path.",
+      repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+      headBranch: "fix/no-session",
+      worktreePath: "D:/DPF-worktrees/no-session",
+    }, "user-1", { agentId: "claude" });
+
+    expect(result.success).toBe(true);
+    expect(mockPrisma.workroom.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ executorRef: null }) }),
+    );
+  });
+
   it("adopt_worktree persists scope metadata", async () => {
     mockPrisma.workroom.findFirst.mockResolvedValue(null);
-    mockPrisma.workroom.create.mockResolvedValue({ id: "row-1", capsuleId: "WC-ADOPTSCOPE" });
+    mockPrisma.workroom.create.mockResolvedValue({
+      id: "row-1",
+      capsuleId: "WC-ADOPTSCOPE",
+      backlogItemId: "BI-5F70A7DA",
+    });
     mockPrisma.workroomActivity.create.mockResolvedValue({ id: "activity-1" });
+    mockPrisma.backlogItem.findFirst.mockResolvedValue({ itemId: "BI-5F70A7DA" });
 
     const { executeTool } = await import("@/lib/mcp-tools");
     const result = await executeTool("adopt_worktree", {
@@ -323,9 +383,99 @@ describe("work capsule MCP tools", () => {
         backlogItemId: "BI-OTHER",
       },
     });
-    expect(result.message).toMatch(/Resume that capsule.*or use a different branch/i);
+    expect(result.message).toMatch(/Resume BI-OTHER on that capsule, or use a different branch/i);
     expect(mockPrisma.workroom.create).not.toHaveBeenCalled();
     expect(mockPrisma.workroom.update).not.toHaveBeenCalled();
+  });
+
+  // BI-D526F72C: the schema advertised no `backlogItemId`, so the argument every
+  // caller reached for was dropped and the capsule came back with
+  // backlogItemId: null while reporting success.
+  describe("adopt_worktree binds the backlog item it was given", () => {
+    it("declares backlogItemId in its input schema", async () => {
+      const { workCapsulesPack } = await import("./work-capsules-pack");
+      const adopt = workCapsulesPack.definitions.find((tool) => tool.name === "adopt_worktree");
+      expect(adopt?.inputSchema.properties).toHaveProperty("backlogItemId");
+    });
+
+    it("binds the item and reads the binding back", async () => {
+      mockPrisma.workroom.findFirst.mockResolvedValue(null);
+      mockPrisma.backlogItem.findFirst.mockResolvedValue({ itemId: "BI-47ACE2C7" });
+      mockPrisma.workroom.create.mockResolvedValue({
+        id: "row-1",
+        capsuleId: "WC-BOUND",
+        backlogItemId: "BI-47ACE2C7",
+      });
+      mockPrisma.workroomActivity.create.mockResolvedValue({ id: "activity-1" });
+
+      const { executeTool } = await import("@/lib/mcp-tools");
+      const result = await executeTool("adopt_worktree", {
+        title: "Adopt the impl branch",
+        objective: "Deliver the routing fix.",
+        repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+        headBranch: "fix/prompt-only-semantic-review-routing-impl",
+        worktreePath: "D:/DPF-worktrees/psr-impl",
+        backlogItemId: "BI-47ACE2C7",
+      }, "user-1", { agentId: "claude" });
+
+      expect(result.success).toBe(true);
+      expect(result.data?.capsule).toMatchObject({ backlogItemId: "BI-47ACE2C7" });
+      expect(mockPrisma.workroom.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ backlogItemId: "BI-47ACE2C7" }) }),
+      );
+    });
+
+    it("refuses an unknown item rather than adopting unbound", async () => {
+      // Adopting anyway is what produced WC-8DB317F7: a capsule that occupied
+      // the branch and could be neither claimed nor released.
+      mockPrisma.backlogItem.findFirst.mockResolvedValue(null);
+
+      const { executeTool } = await import("@/lib/mcp-tools");
+      const result = await executeTool("adopt_worktree", {
+        title: "Adopt with a typo'd id",
+        objective: "Deliver something.",
+        repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+        headBranch: "fix/typo",
+        worktreePath: "D:/DPF-worktrees/typo",
+        backlogItemId: "BI-NOPE",
+      }, "user-1", { agentId: "claude" });
+
+      expect(result).toMatchObject({ success: false, error: "unknown_backlog_item" });
+      expect(mockPrisma.workroom.create).not.toHaveBeenCalled();
+    });
+
+    it("reports a mismatch rather than success when the branch bound something else", async () => {
+      // A live capsule on the branch with no item is reused and late-bound; the
+      // readback is what proves the binding actually landed.
+      mockPrisma.backlogItem.findFirst.mockResolvedValue({ itemId: "BI-47ACE2C7" });
+      mockPrisma.workroom.findFirst.mockResolvedValue({
+        id: "row-1",
+        capsuleId: "WC-DRIFT",
+        status: "ready",
+        backlogItemId: null,
+        executorRef: null,
+        headBranch: "fix/drift",
+        repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+      });
+      mockPrisma.workroom.update.mockResolvedValue({
+        id: "row-1",
+        capsuleId: "WC-DRIFT",
+        backlogItemId: null,
+      });
+      mockPrisma.workroomActivity.create.mockResolvedValue({ id: "activity-1" });
+
+      const { executeTool } = await import("@/lib/mcp-tools");
+      const result = await executeTool("adopt_worktree", {
+        title: "Adopt drifted branch",
+        objective: "Deliver the fix.",
+        repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+        headBranch: "fix/drift",
+        worktreePath: "D:/DPF-worktrees/drift",
+        backlogItemId: "BI-47ACE2C7",
+      }, "user-1", { agentId: "claude" });
+
+      expect(result).toMatchObject({ success: false, error: "backlog_item_not_bound" });
+    });
   });
 
   it("plan_workroom_worktree persists the planned workspace", async () => {

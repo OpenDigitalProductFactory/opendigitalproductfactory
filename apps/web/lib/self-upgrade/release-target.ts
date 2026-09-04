@@ -1,14 +1,16 @@
 import {
-  readLatestReleaseStamp,
-  type ReleaseStampStatus,
-  type ReleaseRunsResult,
-} from "@/lib/release-health/release-runs-reader";
+  readRegistryReleaseCandidate,
+  type RegistryReleaseCandidate,
+  type RegistryReleaseFailureReason,
+  type RegistryReleaseReadResult,
+} from "./registry-release";
 import type { UpgradeSourceMode } from "./config";
 import { readFile } from "node:fs/promises";
 
 export type ReleaseInstallContext = Readonly<{
   installMode: "consumer" | "customer";
   imageTag: string;
+  channelTag: string;
   installPath: string;
   composeFiles: string[];
   ghcrOwner: string;
@@ -59,6 +61,9 @@ export function parseReleaseInstallContext(input: ReleaseStateInput): ReleaseIns
   const installMode = releaseMode(state.installMode) ?? releaseMode(input.markerMode);
   if (!installMode) return null;
   const imageTag = nonEmpty(state.imageTag) ?? nonEmpty(input.env.DPF_IMAGE_TAG);
+  // The installed immutable tag is rollback identity, not the discovery channel.
+  // promote.sh persists each successful immutable tag, while `latest` keeps moving.
+  const channelTag = nonEmpty(input.env.DPF_IMAGE_CHANNEL_TAG) ?? "latest";
   const installPath = nonEmpty(state.installPath) ?? nonEmpty(input.env.DPF_HOST_INSTALL_PATH);
   const ghcrOwner = nonEmpty(input.env.GHCR_OWNER);
   const recordedFiles = composeFiles(state.composeFiles, input.env.DPF_SELF_UPGRADE_COMPOSE_FILES);
@@ -66,7 +71,7 @@ export function parseReleaseInstallContext(input: ReleaseStateInput): ReleaseIns
     ? recordedFiles
     : ["docker-compose.yml", "docker-compose.release.yml"];
   if (!imageTag || !installPath || !ghcrOwner || files.length === 0) return null;
-  return Object.freeze({ installMode, imageTag, installPath, composeFiles: files, ghcrOwner });
+  return Object.freeze({ installMode, imageTag, channelTag, installPath, composeFiles: files, ghcrOwner });
 }
 
 export async function loadReleaseInstallContext(input: {
@@ -99,48 +104,85 @@ export function resolveUpgradeStrategy(
   return sourceMode === "upstream" && release ? "release" : "source";
 }
 
-type LatestRelease = {
-  tag: string;
-  headSha: string | null;
-  status: ReleaseStampStatus;
-};
-
 export type ReleaseTargetResult =
-  | { kind: "target"; tag: string; sourceSha: string }
-  | { kind: "up-to-date"; tag: string; sourceSha: string }
-  | { kind: "no-published-target"; reason: ReleaseStampStatus | "missing" | "source-sha-missing" };
+  | { kind: "target"; tag: string; sourceSha: string; channelDigest: string; platformManifestDigest: string; configDigest: string; platformOs: "linux"; platformArchitecture: string }
+  | { kind: "up-to-date"; tag: string; sourceSha: string; channelDigest: string; platformManifestDigest: string; configDigest: string; platformOs: "linux"; platformArchitecture: string }
+  | {
+      kind: "no-published-target";
+      reason: RegistryReleaseFailureReason | "current-image-identity-missing";
+      /** Optional condition detail, e.g. the HTTP status behind `registry-unavailable`. */
+      detail?: string;
+    };
 
 export function resolveReleaseTarget(input: {
-  currentImageTag: string;
-  currentSourceSha: string | null;
-  latest: LatestRelease | null;
+  currentConfigDigest: string | null;
+  candidate: RegistryReleaseCandidate | null;
+  unavailableReason?: RegistryReleaseFailureReason;
+  unavailableDetail?: string;
 }): ReleaseTargetResult {
-  if (!input.latest) return { kind: "no-published-target", reason: "missing" };
-  if (input.latest.status !== "verified") {
-    return { kind: "no-published-target", reason: input.latest.status };
+  if (!input.candidate) {
+    return {
+      kind: "no-published-target",
+      reason: input.unavailableReason ?? "registry-unavailable",
+      ...(input.unavailableDetail ? { detail: input.unavailableDetail } : {}),
+    };
   }
-  if (!input.latest.headSha || !/^[a-f0-9]{40}$/i.test(input.latest.headSha)) {
-    return { kind: "no-published-target", reason: "source-sha-missing" };
+  if (!input.currentConfigDigest) {
+    return { kind: "no-published-target", reason: "current-image-identity-missing" };
   }
-  const candidate = { tag: input.latest.tag, sourceSha: input.latest.headSha };
-  if (
-    input.currentImageTag === candidate.tag ||
-    input.currentSourceSha?.toLowerCase() === candidate.sourceSha.toLowerCase()
-  ) {
-    return { kind: "up-to-date", ...candidate };
+  // Docker's `.Image` field is an immutable content identity, but its stratum
+  // varies by image store: classic stores expose the config digest, while the
+  // containerd store can expose the platform manifest or multi-arch index.
+  // Registry discovery verifies and freezes all three identities, so matching
+  // any one of them proves that the running bytes are the published candidate.
+  const currentDigest = input.currentConfigDigest.toLowerCase();
+  const candidateDigests = [
+    input.candidate.configDigest,
+    input.candidate.platformManifestDigest,
+    input.candidate.channelDigest,
+  ];
+  if (candidateDigests.some((digest) => digest.toLowerCase() === currentDigest)) {
+    return {
+      kind: "up-to-date",
+      tag: input.candidate.tag,
+      sourceSha: input.candidate.sourceSha,
+      channelDigest: input.candidate.channelDigest,
+      platformManifestDigest: input.candidate.platformManifestDigest,
+      configDigest: input.candidate.configDigest,
+      platformOs: input.candidate.platformOs,
+      platformArchitecture: input.candidate.platformArchitecture,
+    };
   }
-  return { kind: "target", ...candidate };
+  return {
+    kind: "target",
+    tag: input.candidate.tag,
+    sourceSha: input.candidate.sourceSha,
+    channelDigest: input.candidate.channelDigest,
+    platformManifestDigest: input.candidate.platformManifestDigest,
+    configDigest: input.candidate.configDigest,
+    platformOs: input.candidate.platformOs,
+    platformArchitecture: input.candidate.platformArchitecture,
+  };
 }
 
 export async function resolveReleaseUpgradeCandidate(
-  input: { context: ReleaseInstallContext; currentSourceSha: string | null },
-  readLatest: () => Promise<ReleaseRunsResult> = readLatestReleaseStamp,
+  input: {
+    context: ReleaseInstallContext;
+    currentConfigDigest: string | null;
+  },
+  readCandidate: (input: {
+    owner: string;
+    channelTag: string;
+  }) => Promise<RegistryReleaseReadResult> = readRegistryReleaseCandidate,
 ): Promise<ReleaseTargetResult> {
-  const releases = await readLatest();
-  if (!releases.ok) return { kind: "no-published-target", reason: "missing" };
+  const release = await readCandidate({
+    owner: input.context.ghcrOwner,
+    channelTag: input.context.channelTag,
+  });
   return resolveReleaseTarget({
-    currentImageTag: input.context.imageTag,
-    currentSourceSha: input.currentSourceSha,
-    latest: releases.latest,
+    currentConfigDigest: input.currentConfigDigest,
+    candidate: release.ok ? release.candidate : null,
+    unavailableReason: release.ok ? undefined : release.reason,
+    unavailableDetail: release.ok ? undefined : release.detail,
   });
 }

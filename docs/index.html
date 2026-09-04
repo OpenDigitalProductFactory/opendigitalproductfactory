@@ -550,6 +550,27 @@
     font-size: 0.84rem;
   }
 
+  .workroom-block {
+    margin-top: 34px;
+    padding-top: 30px;
+    border-top: 1px solid var(--border);
+  }
+
+  .workroom-block .section-intro {
+    margin-bottom: 22px;
+  }
+
+  .workroom-title {
+    margin: 4px 0 12px;
+    font-size: 1.35rem;
+    line-height: 1.3;
+    color: var(--text);
+  }
+
+  .workroom-block .note {
+    margin-top: 18px;
+  }
+
   .capability-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -828,13 +849,13 @@
 
   .install-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 12px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
   }
 
   .install-card {
     display: flex;
-    min-height: 210px;
+    min-height: 360px;
     flex-direction: column;
     padding: 22px;
     border: 1px solid var(--border);
@@ -844,7 +865,6 @@
 
   .status-badge {
     align-self: flex-start;
-    margin-bottom: auto;
     padding: 4px 8px;
     border: 1px solid var(--border-strong);
     border-radius: 999px;
@@ -860,12 +880,51 @@
   }
 
   .install-card h3 {
-    margin-top: 28px;
+    margin-top: 24px;
   }
 
   .install-card p {
     color: var(--muted);
     font-size: 0.84rem;
+  }
+
+  .install-profiles {
+    display: grid;
+    gap: 12px;
+    margin: 18px 0 22px;
+  }
+
+  .install-profile {
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+  }
+
+  .install-profile strong,
+  .install-profile span {
+    display: block;
+  }
+
+  .install-profile strong {
+    margin-bottom: 4px;
+    font-size: 0.78rem;
+  }
+
+  .install-profile span {
+    color: var(--muted);
+    font-size: 0.82rem;
+    line-height: 1.55;
+  }
+
+  .install-secondary {
+    margin-top: 14px;
+  }
+
+  .install-card.compact {
+    min-height: 180px;
+  }
+
+  .install-card.compact h3 {
+    margin-top: 20px;
   }
 
   .install-card a {
@@ -1327,6 +1386,62 @@
       </figcaption>
     </figure>
 
+    <div class="workroom-block">
+      <p class="eyebrow">Where the work actually happens</p>
+      <h3 class="workroom-title">Work runs in Workrooms, and a Workroom knows what kind of work it is.</h3>
+      <p class="section-intro">
+        A Workroom is a focused place where authorized people and AI coworkers coordinate toward
+        one named outcome. It is not an open chat channel. It carries a purpose, an outcome, an
+        accountable owner, an authority level, a sensitivity ceiling, measures, and a rule for
+        when it closes. Conversation alone never completes one &mdash; closing a room produces an
+        outcome packet built from decisions, artifacts, receipts, evidence, and the work left
+        unresolved, each remaining item with an explicit disposition.
+      </p>
+
+      <div class="card-grid">
+        <article class="card">
+          <span class="label">Shape</span>
+          <h3>The room bounds what may happen</h3>
+          <p>
+            A room is convened with a collaboration shape &mdash; specialist alignment, approval
+            sign-off, outward review, consequential change, escalation, or craft stewardship. The
+            shape decides which roles must be present before the room may act, and whether
+            sensitive work requires stronger authentication. A missing approver is a stated gap,
+            not a silent pass.
+          </p>
+        </article>
+        <article class="card">
+          <span class="label">Posture</span>
+          <h3>The work sets the pace, not the job title</h3>
+          <p>
+            How hard and how fast a coworker pushes is derived from the shape of the work, what
+            the business does, and the clock &mdash; read from the operating hours you already
+            configured. The same coworker behaves differently drafting a note on a Saturday and
+            releasing a payroll run on its due date.
+          </p>
+        </article>
+        <article class="card">
+          <span class="label">Mode</span>
+          <h3>Finite work closes; standing work cycles</h3>
+          <p>
+            A finite room closes when its bounded outcome is satisfied. A standing room supports
+            recurring work, and each cycle carries its own objective, measures, stop conditions,
+            and structured outcome &mdash; so an idle standing room reads as healthy rather than
+            as finished.
+          </p>
+        </article>
+      </div>
+
+      <p class="note">
+        The rule that makes this predictable: <strong>a derivation may tighten, and may never
+        widen.</strong> A room can make a coworker more careful or more urgent than its own
+        setting. It can never make one act more freely than its authority allows. Closing time
+        changes how loudly a coworker follows up; it never changes what a coworker may do &mdash;
+        and security incidents, platform health, and a late field appointment are never quietened
+        at all.
+      </p>
+    </div>
+
     <div class="capability-grid" aria-label="Core operating capabilities">
       <div class="capability">
         <strong>Customers and demand</strong>
@@ -1494,7 +1609,85 @@
           <strong>Judgment is inspectable</strong>
           <span>Principles, company knowledge, and professional sources support explainable decisions.</span>
         </div>
+        <div class="principle">
+          <strong>Three corpora, not one opinion</strong>
+          <span>Platform doctrine, your organization&rsquo;s own authored stances, and the profession&rsquo;s recorded craft stay separate &mdash; scored, cited, and logged. Your business decisions never inherit platform judgment as authority.</span>
+        </div>
+        <div class="principle">
+          <strong>The corpus grows as you decide</strong>
+          <span>Your organization&rsquo;s stances are authored by your organization. A decision made once becomes context the next one is judged against.</span>
+        </div>
       </div>
+    </div>
+
+    <div class="workroom-block">
+      <p class="eyebrow">What the gate actually checks</p>
+      <h3 class="workroom-title">A recommendation is not a permission.</h3>
+      <p class="section-intro">
+        Consulting a corpus produces a recommendation. Permission is decided separately, when the
+        coworker reaches for a tool. Every governed tool call is classified from the tool&rsquo;s
+        own declared consequence &mdash; on the central execution path, so the classification
+        covers every call rather than a hand-maintained list of names.
+      </p>
+
+      <div class="capability-grid" aria-label="How a governed tool call is judged">
+        <div class="capability">
+          <strong>Three consequence classes</strong>
+          <p>
+            A call reads only, changes internal state, or is consequential &mdash; it spends money,
+            reaches a third party, changes who may act, or destroys state.
+          </p>
+        </div>
+        <div class="capability">
+          <strong>Two independent checks</strong>
+          <p>
+            The authority intersection (coworker grant <em>and</em> the acting user&rsquo;s
+            capability, default deny) and the autonomy envelope, which decides whether a human
+            turn is required at all.
+          </p>
+        </div>
+        <div class="capability">
+          <strong>The stricter one wins</strong>
+          <p>
+            A pace setting cannot buy autonomy the envelope would deny, and an autonomous envelope
+            cannot act on work whose shape said it must be proposed.
+          </p>
+        </div>
+        <div class="capability">
+          <strong>Denials are named</strong>
+          <p>
+            A missing decision, a missing envelope, a tripped stop condition, a missing
+            verification receipt &mdash; a refusal tells you what to fix, rather than failing
+            generically.
+          </p>
+        </div>
+        <div class="capability">
+          <strong>Corpus coverage is an autonomy input</strong>
+          <p>
+            A thin professional corpus does not produce a bad recommendation. It produces an
+            escalation. A coworker with nothing recorded to reason from keeps asking you, correctly.
+          </p>
+        </div>
+        <div class="capability">
+          <strong>Floors nothing crosses</strong>
+          <p>
+            Money leaving the business and anything that goes public always come to a person, at
+            every setting. Regulated work carries a verification requirement no posture can trade
+            away.
+          </p>
+        </div>
+      </div>
+
+      <p class="note">
+        <strong>Priority is tunable, and what ran is reviewable.</strong> Operators express intent
+        in plain terms &mdash; lean toward quality, cost, or speed &mdash; and the platform compiles
+        that into explicit policy adjustments against the routing contracts that already exist. It
+        feeds routing as defaults, so an explicit setting and the local-only sovereignty switch
+        still win; it fails open, and a balanced posture makes no adjustments at all. The outcomes
+        view then compares what the posture asked for against what actually ran, and distinguishes
+        an infrastructure failover from a deliberate trade-off &mdash; one is a fault to fix, the
+        other is the system doing what you asked.
+      </p>
     </div>
 
     <div class="standards-family" aria-labelledby="standards-family-title">
@@ -1552,6 +1745,10 @@
       <a href="/architecture/agent-standards-family">Standards family map</a>
       <a href="/architecture/agent-standards-contribution-roadmap">Standards contribution roadmap</a>
       <a href="/architecture/agent-standards-dpf-conformance">Standards conformance</a>
+      <a href="/user-guide/ai-workforce/how-governed-work-runs">How governed work runs, end to end</a>
+      <a href="/user-guide/workspace/work-rooms">Workrooms guide</a>
+      <a href="/user-guide/ai-workforce/decision-perspective">Decision perspective (WWMD / WWWD / WSID)</a>
+      <a href="/user-guide/ai-workforce/coworker-proactivity">Coworker proactivity</a>
       <a href="/user-guide/platform/identity-and-access">Identity and access guide</a>
       <a href="/user-guide/compliance/">Compliance guide</a>
       <a href="/user-guide/ai-workforce/">AI workforce guide</a>
@@ -1590,6 +1787,7 @@
         <ul>
           <li>The native mobile companion is a documented direction, not a generally available application.</li>
           <li>Native Linux and cloud single-VM installers remain early access pending broader real-host evidence.</li>
+          <li>A Cloudflare-fronted managed option is in architecture research; it keeps one isolated DPF installation per customer and is not a pooled SaaS claim.</li>
           <li>Build Studio continues to improve reliability, right-sized workflow, and autonomous phase handoff.</li>
           <li>Public and federated agent identity profiles remain a standards and interoperability journey.</li>
           <li>TAK-JSI defines the job-qualification direction; DPF does not yet operate the full assessment, credential, surveillance, and revalidation lifecycle.</li>
@@ -1604,46 +1802,74 @@
 
   <section id="install">
     <p class="eyebrow">Deployment choices</p>
-    <h2>Pick the host that matches your evidence tolerance.</h2>
+    <h2>Choose a machine for the way you will run DPF.</h2>
     <p class="section-intro">
-      Windows and Apple Silicon macOS are generally available. Native Linux and cloud
-      single-VM paths are available for early adopters and need broader host verification
-      before graduation. Each path preserves the same canonical platform contracts.
+      Windows and Apple Silicon macOS are the two tested customer targets. Provider-assisted
+      operations use approved external AI and need no dedicated GPU. Local-first operations
+      keep primary AI inference on the host and need more model memory.
     </p>
 
     <div class="install-grid">
-      <article class="install-card">
+      <article class="install-card" data-install-target="windows">
         <span class="status-badge">Generally available</span>
         <h3>Windows 10 / 11</h3>
-        <p>Guided PowerShell installer for a local Docker Desktop deployment.</p>
-        <a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory#quick-install">Windows install steps &rarr;</a>
+        <p>Guided PowerShell installer for Docker Desktop with the WSL2 backend.</p>
+        <div class="install-profiles">
+          <div class="install-profile">
+            <strong>Provider-assisted operations</strong>
+            <span>32 GB system RAM · 1 TB NVMe SSD · no dedicated GPU required</span>
+          </div>
+          <div class="install-profile">
+            <strong>Local-first operations</strong>
+            <span>64 GB system RAM · 2 TB NVMe SSD · 24 GB GPU memory supported; 32 GB recommended for a new purchase</span>
+          </div>
+        </div>
+        <a href="/install/windows/">Windows hardware and install guide &rarr;</a>
       </article>
-      <article class="install-card">
+      <article class="install-card" data-install-target="macos">
         <span class="status-badge">Generally available</span>
         <h3>macOS Apple Silicon</h3>
-        <p>Native shell installer for supported Apple Silicon hosts.</p>
-        <a href="/install/macos">macOS install guide &rarr;</a>
+        <p>Native shell installer with one shared memory pool for the CPU and GPU.</p>
+        <div class="install-profiles">
+          <div class="install-profile">
+            <strong>Provider-assisted operations</strong>
+            <span>32 GB unified memory · 1 TB SSD · no separate GPU required</span>
+          </div>
+          <div class="install-profile">
+            <strong>Local-first operations</strong>
+            <span>64 GB unified memory practical · 128 GB for larger models or combined operations and development · 2 TB SSD</span>
+          </div>
+        </div>
+        <a href="/install/macos/">macOS hardware and install guide &rarr;</a>
       </article>
-      <article class="install-card">
+    </div>
+
+    <div class="install-grid install-secondary">
+      <article class="install-card compact">
         <span class="status-badge early">Early access</span>
         <h3>Native Linux</h3>
-        <p>Docker-based native host path for contributors and pilot operators.</p>
-        <a href="/install/linux">Linux install guide &rarr;</a>
+        <p>Docker-based host path for contributors and pilot operators. Validate the exact GPU backend before buying hardware.</p>
+        <a href="/install/linux/">Linux install guide &rarr;</a>
       </article>
-      <article class="install-card">
+      <article class="install-card compact">
         <span class="status-badge early">Early access</span>
         <h3>Cloud single VM</h3>
         <p>Single-tenant VM deployment patterns for AWS, Google Cloud, and Azure.</p>
-        <a href="/install/cloud-single-vm">Cloud install guide &rarr;</a>
+        <a href="/install/cloud-single-vm/">Cloud install guide &rarr;</a>
+      </article>
+      <article class="install-card compact">
+        <span class="status-badge early">Research</span>
+        <h3>Managed cloud</h3>
+        <p>One isolated DPF cell per customer, with Cloudflare evaluated as a replaceable edge and routing provider.</p>
+        <a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/superpowers/specs/2026-08-29-cloudflare-fronted-managed-deployment-design.md">Read the managed-cloud design &rarr;</a>
       </article>
     </div>
 
     <div class="note">
-      <strong>Ready-to-go or customizable?</strong> Choose ready-to-go when you want packaged
-      platform images. Choose customizable when you expect serious source work from an editor
-      or external agent client. Build Studio is available in both modes; it is not the only
-      supported development path. Hardware and model-download time vary, so use the platform
-      guide for current requirements rather than relying on a copied number here.
+      <strong>Operations and development are different workloads.</strong> Customer operations
+      do not need coding-workstation capacity or Build Studio. Choose customizable only when the
+      host will also do serious source work, builds, tests, or local coding-model evaluation.
+      Compare current Windows and Mac machines in the <a href="/install/hardware/">complete hardware guide</a>.
     </div>
   </section>
 
@@ -1667,10 +1893,10 @@
         <strong>User guide</strong>
         <span>Setup, daily work, coworkers, compliance, and platform administration.</span>
       </a>
-      <a class="doc-path" href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/tree/main/docs/install">
+      <a class="doc-path" href="/install/hardware/">
         <span class="doc-kind">Install</span>
-        <strong>Deployment guides</strong>
-        <span>Host-specific prerequisites, setup, verification, and recovery.</span>
+        <strong>Hardware and installation</strong>
+        <span>Compare the two AI deployment models, current Windows and Mac machines, and the guide for each tested host.</span>
       </a>
       <a class="doc-path" href="/architecture/platform-overview">
         <span class="doc-kind">Understand</span>
@@ -1720,9 +1946,33 @@
       <details>
         <summary>Are coworkers allowed to take actions without asking?</summary>
         <p>
-          It depends on the user&rsquo;s authority, the coworker&rsquo;s grants, the tool, risk policy,
-          and configured human-in-the-loop tier. High-impact work has approval floors; unsupported
-          and denied actions must remain explicit.
+          It depends on the user&rsquo;s authority, the coworker&rsquo;s grants, the tool&rsquo;s
+          declared consequence, risk policy, and the autonomy envelope on the work. High-impact work
+          has approval floors; unsupported and denied actions must remain explicit. Two floors hold
+          everywhere: money leaving the business and anything that goes public always come to a
+          person. Pace settings change how persistently a coworker follows up, never what it is
+          allowed to do.
+        </p>
+      </details>
+      <details>
+        <summary>Why is a coworker behaving differently in one room than another?</summary>
+        <p>
+          Because pace is resolved from the work, not from the coworker&rsquo;s job title. The shape of
+          the room, what your business does, and the clock all feed it &mdash; so the same coworker is
+          more urgent on an escalation than on standing curation, and quieter when the business is
+          closed. Each room&rsquo;s <em>Pace and priority</em> panel names the layer that decided and
+          why. A room can only make a coworker more careful or more urgent; it can never widen what
+          the coworker may do.
+        </p>
+      </details>
+      <details>
+        <summary>Where do I see what the coworkers actually decided?</summary>
+        <p>
+          Every governed outcome writes a receipt &mdash; who acted, what they did, why, under whose
+          authority, and what resulted. The Coworker Decision Engine shows the decisions and the open
+          reviews waiting on you; the proactivity roster shows every coworker&rsquo;s current level;
+          the priority outcomes view compares what was asked for against what actually ran. Where the
+          audit trail has nothing to say, these surfaces say so rather than guessing.
         </p>
       </details>
       <details>

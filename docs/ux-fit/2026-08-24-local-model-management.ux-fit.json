@@ -1,0 +1,25 @@
+{
+  "version": "1",
+  "decidedOption": "durable-in-product-controls",
+  "decisionInteractionId": "DI-86DAA675B23D",
+  "scope": {
+    "files": [
+      "apps/web/components/platform/OllamaManagement.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "decisionInteractionId": "DI-86DAA675B23D",
+    "consideredOptions": [
+      "durable-in-product-controls",
+      "request-bound-controls",
+      "command-copy-workflow"
+    ]
+  },
+  "rationale": {
+    "durable-in-product-controls": "CHOSEN. Kernel composite 10.321, margin 4.534, high confidence, verdict proceed. Direct Install and Remove controls use the local runtime's native API. Installs run as durable concurrency-one work with persisted progress, bounded failures, explicit removal consequences, and routing reconciliation. This keeps the operator in one governed surface and leaves evidence when a long download outlives a browser request.",
+    "request-bound-controls": "REJECTED. Kernel composite 5.787. It removes terminal work but binds long model downloads to a browser request, weakens progress evidence, and makes recovery depend on request lifetime. It is quicker to implement, but materially less maintainable and less observable.",
+    "command-copy-workflow": "REJECTED. Kernel composite -0.433. Copyable shell commands require the operator to leave DPF, understand a terminal, run the right command, return, and refresh. That directly conflicts with the commandment not to ask users to run commands and creates the highest operator effort and cognitive load of the three options."
+  },
+  "notes": "BI-1FFDF4B1. Platform > AI provider detail remains the canonical home; no new route or navigation layer is added. The local runtime inventory is the source of truth for model names, byte sizes, parameter counts, quantization, and context length. Installed and catalog-only states are distinct. The page shows honest empty, unavailable, active, failed, and permission states. Removing the Nomic embedding model requires confirmation that semantic search and memory will stop. The screen contains no copy button and no terminal, PowerShell, or docker-model instruction. Existing DPF tokens and shared controls are reused; no new visual primitive or hardcoded color is introduced."
+}

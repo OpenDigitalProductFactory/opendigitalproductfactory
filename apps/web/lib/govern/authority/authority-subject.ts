@@ -8,6 +8,7 @@ export type AuthoritySubject =
   | { kind: "partner-account"; id: string }
   | { kind: "principal"; id: string }
   | { kind: "team"; id: string }
+  | { kind: "backlog-item"; id: string }
   | { kind: "platform"; id: string };
 
 function canAccessCustomerScope(
@@ -26,6 +27,7 @@ function canAccessCustomerScope(
 export function canAccessAuthoritySubject(
   context: EffectiveAuthContext,
   subject: AuthoritySubject | null | undefined,
+  governedOrganizationId?: string | null,
 ): boolean {
   if (!subject || subject.kind === "platform") return true;
   switch (subject.kind) {
@@ -53,5 +55,10 @@ export function canAccessAuthoritySubject(
       return context.principalId === subject.id;
     case "team":
       return context.teamIds.includes(subject.id);
+    case "backlog-item":
+      // Record access is capability-gated by the governed tool. Initiative
+      // organization authority is resolved independently from the canonical
+      // BacklogItem before the authorization decision is written.
+      return Boolean(governedOrganizationId);
   }
 }

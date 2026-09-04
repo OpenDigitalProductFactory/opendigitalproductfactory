@@ -41,6 +41,9 @@ function fullyStaffedRoom(scopeClaims: unknown = []): WorkroomShapeGateRoom {
     id: "room-row-1",
     capsuleId: "WC-TEST0001",
     scopeClaims,
+    verificationEvidence: [
+      { status: "passed", completedAt: "2026-08-30T12:00:00.000Z" },
+    ],
     participants: [
       { principalRef: "PRN-OWNER", roles: ["accountable"] },
       { principalRef: "PRN-SPEC", roles: ["specialist"] },
@@ -208,5 +211,211 @@ describe("workroom shape governance hook", () => {
     expect(await hook.onPreToolUse?.(event({ workroomId: "WC-TEST0001" }))).toEqual({
       decision: "allow",
     });
+  });
+});
+
+// EP-WORK-POSTURE (BI-06C41FDC) — the room's posture GOVERNS the turn.
+//
+// Before this, the hook computed `decisionMode` and only put it in the shadow
+// verdict; it never affected the decision. A room could say "advise only" and a
+// consequential tool call would proceed anyway. These tests are the difference
+// between a recorded intention and an enforced one.
+describe("posture governs the turn", () => {
+  const ADVISE_CLAIM = [
+    { workroomPosture: { actionBoundary: "advise" }, recordedAt: "2026-08-23T00:00:00.000Z" },
+  ];
+
+  it("DENIES a consequential call in an advise-only room, under enforce", async () => {
+    const { hook } = makeHook({
+      mode: "enforce",
+      loadRoom: vi.fn().mockResolvedValue(fullyStaffedRoom(ADVISE_CLAIM)),
+    });
+    const decision = await hook.onPreToolUse!(event({ workroomId: "room-row-1" }));
+    expect(decision).toBeDefined();
+    expect(decision!.decision).toBe("deny");
+    expect(decision!.reason).toMatch(/advise-only/i);
+    // Named for the operator, not a generic refusal.
+    expect(decision!.reason).toMatch(/BI-06C41FDC/);
+  });
+
+  it("still ALLOWS in shadow mode — the gate mode remains authoritative", async () => {
+    const { hook } = makeHook({
+      mode: "shadow",
+      loadRoom: vi.fn().mockResolvedValue(fullyStaffedRoom(ADVISE_CLAIM)),
+    });
+    const decision = await hook.onPreToolUse!(event({ workroomId: "room-row-1" }));
+    expect(decision).toBeDefined();
+    expect(decision!.decision).toBe("allow");
+  });
+
+  it("records WHICH ladder constrained the turn", async () => {
+    const { hook, deps } = makeHook({
+      mode: "shadow",
+      loadRoom: vi.fn().mockResolvedValue(fullyStaffedRoom(ADVISE_CLAIM)),
+    });
+    await hook.onPreToolUse!(event({ workroomId: "room-row-1" }));
+    const verdict = (deps.recordShadow as ReturnType<typeof vi.fn>).mock.calls[0][0].verdict;
+    expect(verdict.postureActionBoundary).toBe("advise");
+    expect(verdict.autonomyConstrainedBy).toBe("posture");
+    expect(verdict.decisionMode).toBe("shadow-only");
+  });
+
+  it("a room with no declared posture falls back to the shape's own boundary", async () => {
+    // change-consequential carries `propose`, so a consequential call in a room
+    // bound against it is never silently autonomous even with nothing declared.
+    const { hook, deps } = makeHook({
+      mode: "shadow",
+      resolveAutonomyLevel: () => "autopilot",
+      loadRoom: vi.fn().mockResolvedValue(
+        fullyStaffedRoom([
+          { workroomShape: "change-consequential", recordedAt: "2026-08-23T00:00:00.000Z" },
+        ]),
+      ),
+    });
+    await hook.onPreToolUse!(event({ workroomId: "room-row-1" }));
+    const verdict = (deps.recordShadow as ReturnType<typeof vi.fn>).mock.calls[0][0].verdict;
+    expect(verdict.shapeSource).toBe("room-claim");
+    expect(verdict.postureActionBoundary).toBe("propose");
+    // The envelope alone would have allowed autonomous action; the shape capped it.
+    expect(verdict.decisionMode).toBe("propose-for-approval");
+    expect(verdict.autonomyConstrainedBy).toBe("posture");
+  });
+
+  it("a shape that carries no boundary leaves the envelope alone", async () => {
+    // specialist-alignment routes a corpus check to a qualified specialist. That
+    // says nothing about authority, so it must NOT silently restrict the turn —
+    // deriving a boundary from every shape would be inventing constraint.
+    const { hook, deps } = makeHook({
+      mode: "shadow",
+      resolveAutonomyLevel: () => "autopilot",
+      loadRoom: vi.fn().mockResolvedValue(
+        fullyStaffedRoom([
+          { workroomShape: "specialist-alignment", recordedAt: "2026-08-23T00:00:00.000Z" },
+        ]),
+      ),
+    });
+    await hook.onPreToolUse!(event({ workroomId: "room-row-1" }));
+    const verdict = (deps.recordShadow as ReturnType<typeof vi.fn>).mock.calls[0][0].verdict;
+    expect(verdict.postureActionBoundary).toBeNull();
+    expect(verdict.autonomyConstrainedBy).toBe("envelope");
+    expect(verdict.decisionMode).toBe("autonomous-action");
+  });
+
+  it("a room-less call records no posture rather than inventing one", async () => {
+    const { hook, deps } = makeHook({ mode: "shadow" });
+    await hook.onPreToolUse!(event({}));
+    const verdict = (deps.recordShadow as ReturnType<typeof vi.fn>).mock.calls[0][0].verdict;
+    expect(verdict.postureActionBoundary).toBeNull();
+    expect(verdict.autonomyConstrainedBy).toBe("envelope");
+  });
+
+  it("never widens: a preauthorized room cannot lift a propose-level envelope", async () => {
+    const { hook, deps } = makeHook({
+      mode: "shadow",
+      resolveAutonomyLevel: () => "propose",
+      loadRoom: vi.fn().mockResolvedValue(
+        fullyStaffedRoom([
+          {
+            workroomPosture: { actionBoundary: "preauthorized" },
+            recordedAt: "2026-08-23T00:00:00.000Z",
+          },
+        ]),
+      ),
+    });
+    await hook.onPreToolUse!(event({ workroomId: "room-row-1" }));
+    const verdict = (deps.recordShadow as ReturnType<typeof vi.fn>).mock.calls[0][0].verdict;
+    expect(verdict.decisionMode).toBe("propose-for-approval");
+  });
+
+  it("applies one room boundary to every participant, while participant envelopes may narrow", async () => {
+    const room = fullyStaffedRoom(ADVISE_CLAIM);
+    const resolveAutonomyLevel = vi.fn((turn: ToolLifecycleEvent) =>
+      turn.context?.agentId === "agent-autopilot" ? "autopilot" : "shadow",
+    );
+    const { hook, deps } = makeHook({
+      mode: "shadow",
+      loadRoom: vi.fn().mockResolvedValue(room),
+      resolveAutonomyLevel,
+    });
+
+    await hook.onPreToolUse!(
+      event({ workroomId: "room-row-1", agentId: "agent-autopilot" }),
+    );
+    await hook.onPreToolUse!(
+      event({ workroomId: "room-row-1", agentId: "agent-shadow" }),
+    );
+
+    const verdicts = (deps.recordShadow as ReturnType<typeof vi.fn>).mock.calls.map(
+      ([record]) => record.verdict,
+    );
+    expect(verdicts.map((verdict) => verdict.postureActionBoundary)).toEqual([
+      "advise",
+      "advise",
+    ]);
+    expect(verdicts.map((verdict) => verdict.decisionMode)).toEqual([
+      "shadow-only",
+      "shadow-only",
+    ]);
+  });
+});
+
+describe("verification governs consequential stake work", () => {
+  it("denies by name in enforce mode when an outward action has no passing receipt", async () => {
+    const room = { ...fullyStaffedRoom(), verificationEvidence: [] };
+    const { hook, deps } = makeHook({
+      mode: "enforce",
+      loadRoom: vi.fn().mockResolvedValue(room),
+    });
+
+    const decision = await hook.onPreToolUse!(event({ workroomId: "room-row-1" }));
+
+    expect(decision).toMatchObject({ decision: "deny" });
+    expect(decision?.reason).toContain("missing_verification_evidence");
+    expect(deps.recordShadow).toHaveBeenCalledWith(
+      expect.objectContaining({
+        verdict: expect.objectContaining({
+          verificationRequired: true,
+          verificationSatisfied: false,
+          postureVerificationDepth: null,
+        }),
+      }),
+    );
+  });
+
+  it("allows the same outward action when the room has a passing receipt", async () => {
+    const { hook } = makeHook({ mode: "enforce" });
+    expect(await hook.onPreToolUse!(event({ workroomId: "room-row-1" }))).toEqual({
+      decision: "allow",
+    });
+  });
+
+  it("keeps shadow mode audit-only even when verification is missing", async () => {
+    const room = { ...fullyStaffedRoom(), verificationEvidence: [] };
+    const { hook } = makeHook({
+      mode: "shadow",
+      loadRoom: vi.fn().mockResolvedValue(room),
+    });
+    expect(await hook.onPreToolUse!(event({ workroomId: "room-row-1" }))).toMatchObject({
+      decision: "allow",
+    });
+  });
+
+  it("does not add a verification requirement to a legacy consequential tool with no stake consequence", async () => {
+    const room = { ...fullyStaffedRoom(), verificationEvidence: [] };
+    const { hook, deps } = makeHook({
+      mode: "enforce",
+      findTool: vi.fn().mockReturnValue({ sideEffect: true, consequence: undefined }),
+      loadRoom: vi.fn().mockResolvedValue(room),
+    });
+    expect(
+      await hook.onPreToolUse!(
+        event({ workroomId: "room-row-1", toolName: "transition_employee_status" }),
+      ),
+    ).toEqual({ decision: "allow" });
+    expect(deps.recordShadow).toHaveBeenCalledWith(
+      expect.objectContaining({
+        verdict: expect.objectContaining({ verificationRequired: false }),
+      }),
+    );
   });
 });

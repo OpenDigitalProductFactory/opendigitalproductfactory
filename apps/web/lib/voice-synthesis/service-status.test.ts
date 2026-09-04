@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("@dpf/db", () => ({
-  prisma: { voiceProfile: { count: vi.fn(async () => 0) } },
+  prisma: { voiceProfile: { count: vi.fn(async () => 0), findMany: vi.fn(async () => []) } },
 }))
 
 import { prisma } from "@dpf/db"
@@ -9,6 +9,7 @@ import {
   resolveTtsServiceUp,
   isVoiceNarrationEnabled,
   refreshVoiceTtsMetrics,
+  resolveVoicePlaybackCapability,
 } from "./service-status"
 import { voiceTtsUp, voiceTtsEnabled } from "@/lib/metrics"
 
@@ -24,6 +25,7 @@ describe("voice service-status helper", () => {
     // DPF_TTS_URL intentionally unset so the route's `?? default` applies.
     vi.stubEnv("TTS_PROVIDER", "chatterbox")
     vi.mocked(prisma.voiceProfile.count).mockResolvedValue(0 as never)
+    vi.mocked(prisma.voiceProfile.findMany).mockResolvedValue([] as never)
   })
 
   it("reports up when the chatterbox /health is healthy", async () => {
@@ -110,5 +112,18 @@ describe("voice service-status helper", () => {
     await refreshVoiceTtsMetrics()
     expect(await gaugeValue(voiceTtsUp)).toBe(0)
     expect(await gaugeValue(voiceTtsEnabled)).toBe(0)
+  })
+
+  it("distinguishes missing, preference-off, and service-unavailable playback", async () => {
+    global.fetch = vi.fn(async () => new Response(JSON.stringify({ model_loaded: true }), { status: 200 })) as typeof fetch
+    expect((await resolveVoicePlaybackCapability()).state).toBe("profile_missing")
+
+    vi.mocked(prisma.voiceProfile.findMany).mockResolvedValue([{ profile: { voiceEnabled: false } }] as never)
+    expect((await resolveVoicePlaybackCapability()).state).toBe("preference_disabled")
+    expect((await resolveVoicePlaybackCapability({ purpose: "preview" })).state).toBe("ready")
+
+    vi.mocked(prisma.voiceProfile.findMany).mockResolvedValue([{ profile: { voiceEnabled: true } }] as never)
+    global.fetch = vi.fn(async () => { throw new Error("down") }) as typeof fetch
+    expect((await resolveVoicePlaybackCapability()).state).toBe("service_unavailable")
   })
 })

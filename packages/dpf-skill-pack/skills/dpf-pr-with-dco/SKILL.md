@@ -1,6 +1,6 @@
 ---
 name: dpf-pr-with-dco
-description: "Use when ready to open a DPF pull request. Encodes the full DPF PR contract, including a fresh independent semantic-review receipt for the stable local commit before pregate/first publication, DCO, overlap sweep, exact-tree local CI, and a regular non-draft ready PR."
+description: "Use when ready to open a DPF pull request."
 
 # Agent Skills standard fields (Surface A — Claude Code)
 disable-model-invocation: false
@@ -169,7 +169,7 @@ DPF's PR contract is strict and non-negotiable: **every change lands via PR**, *
 - **Never skip `-s`.** `git commit --no-verify` skips the local typecheck hook, but the DCO trailer is the bot's hard gate — there's no way to skip and merge.
 - **Never open a PR as a "draft handoff" or "early visibility marker."** Pushed branches do that job; PRs mean ready to merge per AGENTS.md §4.
 - **Never create GitHub draft PRs for DPF delivery.** Do not pass `--draft`, do not use a connector setting that creates drafts, and verify `isDraft=false` after creation.
-- **Never bundle unrelated changes in one PR.** One concern per branch, one concern per PR. If your branch accidentally accumulated two concerns, split before opening.
+- **Scope each PR to one clean revert.** Batch related work — every extra PR is another serialized gate run on a contended slot. Split only when a reviewer could not attribute the diff, when a revert would force a choice between two things you want independently revertible, or when one half is risky and the other is not.
 - **Never force-push to main.** And never force-push to a topic branch that's under review without telling the reviewer.
 - **Never use `git add -A` / `git add .` in a worktree where concurrent sessions exist.** Use explicit paths.
 

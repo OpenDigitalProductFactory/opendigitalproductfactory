@@ -40,12 +40,12 @@ DPF's design lineage references two Open Group publications under different sour
   conceptual lineage, not a formal standard.
 - **Digital Product Portfolio Management in the Digital Enterprise (G252, 2025)**: Mark identifies
   the paper as design lineage, but this candidate does not use a contributor-credit locator from the
-  restricted guide. The compiled guide is excluded as a generative-AI source under the FPAW
+  restricted guide. The compiled guide is excluded as a generative-AI source under the PAAW
   decision, so DPF uses Mark's separately supplied direct statements and public bibliographic
   metadata rather than the guide's protected expression.
 
 The governing distinction is documented in the
-[FPAW source-use policy](docs/architecture/four-portfolio-archetype-ai-workforce-operating-standard.md#1311-source-use-decisions-and-contributor-origin-material): contributor credit proves provenance,
+[PAAW source-use policy](docs/architecture/four-portfolio-archetype-ai-workforce-operating-standard.md#1311-source-use-decisions-and-contributor-origin-material): contributor credit proves provenance,
 while each separable contribution and each use still needs its own rights basis. It does not imply
 that DPF, The Open Group, or any employer adopted or endorsed the other party's work.
 
@@ -163,14 +163,14 @@ exceptions remain tracked. This inventory describes repository state; it does no
 | Tracked artifact or family | Current posture |
 |---|---|
 | `DigitaProductPortfolioManagement.pdf` and `digital_product_portfolio_mgmt.txt` | G252 compiled material; excluded from AI use and flagged for removal/quarantine or source-specific permission |
-| `Shift to Digital Product.pdf` and `shift_to_digital_product.txt` | W205 third-party material with a retained-notice permission, but continued tracked-copy redistribution still awaits the independent acceptance required by FPAW §13.1.1 (`GAP-SOURCE-005`); not Apache-only content |
+| `Shift to Digital Product.pdf` and `shift_to_digital_product.txt` | W205 third-party material with a retained-notice permission, but continued tracked-copy redistribution still awaits the independent acceptance required by PAAW §13.1.1 (`GAP-SOURCE-005`); not Apache-only content |
 | `4_portfolio_Reworked_V2_Definitions_IT4IT.xlsx` and `4_portfolio_Reworked_V3_Definitions_IT4IT.xlsx` | mixed-origin research workbooks; rights and per-cell provenance undetermined |
-| `IT4IT_Functional_Criteria_Taxonomy.xlsx` | rights/provenance undetermined; current seeding and image distribution are an FPAW conformance gap |
+| `IT4IT_Functional_Criteria_Taxonomy.xlsx` | rights/provenance undetermined; current seeding and image distribution are an PAAW conformance gap |
 | `BIAN_CSDM_Integration_v76-US-English - FINAL.pdf` and `Value-Delivery-Chain-1.jpg` | legacy third-party research artifacts; rights review pending |
 
 Content is covered by Apache License 2.0 only where DPF holds the necessary rights or an applicable
 grant says so. Third-party artifacts retain their own terms and are not relicensed merely by being
-tracked. See [LICENSE](LICENSE), [NOTICE](NOTICE), and the FPAW source register.
+tracked. See [LICENSE](LICENSE), [NOTICE](NOTICE), and the PAAW source register.
 
 ---
 

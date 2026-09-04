@@ -83,6 +83,25 @@ export const DERIVED_ARTIFACTS = [
     check: ["node", "scripts/gen-doc-impact.mjs", "--check"],
   },
   {
+    id: "public-archetype-pages",
+    description: "Operator-first public archetype pages projected from canonical storefront definitions",
+    sourceGlobs: [
+      "docs/business-types/_content.mjs",
+      "docs/business-types/_generate.mjs",
+      "docs/business-types/_readability.mjs",
+      "packages/storefront-templates/src/archetypes/**",
+      "packages/storefront-templates/src/operational-value-stream.ts",
+      "packages/storefront-templates/src/types.ts",
+    ],
+    artifactPaths: [
+      "docs/business-types/*.html",
+      "docs/business-types/archetypes/**",
+      "docs/business-types/_readability-report.md",
+    ],
+    generate: ["pnpm", "docs:business-types"],
+    check: ["pnpm", "docs:business-types:check"],
+  },
+  {
     id: "doc-diagrams",
     description: "Rendered Mermaid diagram SVGs + manifest",
     sourceGlobs: ["docs/user-guide/**/*.md", "docs/architecture/**/*.md"],

@@ -95,6 +95,11 @@ describe("registry helpers", () => {
     expect(isHighStakesProfession(["finance"])).toBe(true);
     expect(isHighStakesProfession(["data-security", "compliance"])).toBe(true);
     expect(isHighStakesProfession(["engineering-flow"])).toBe(false);
+    // The trigger is finance/compliance specifically, NOT "sounds sensitive".
+    // data-architect carries data-security and is deliberately NOT held, so an
+    // adjacent-sounding slug must not start withholding its material
+    // (BI-5F3BFD13).
+    expect(isHighStakesProfession(["data-model", "data-security"])).toBe(false);
   });
 
   it("tier ladder matches the stance ladder shape (derived is the B rung)", () => {

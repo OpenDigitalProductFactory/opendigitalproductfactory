@@ -1,0 +1,73 @@
+{
+  "version": "1",
+  "accountableOwner": "developer-platform",
+  "affectedCopies": [
+    "Tax obligation period tiles at /finance/settings/tax",
+    "Tax filing packet workpaper notes",
+    "Tax remittance workspace period listing",
+    "Prisma-to-EA current-state data-model mirror"
+  ],
+  "migration": {
+    "name": "20260826054627_normalize_tax_period_components_and_deposit_schedule",
+    "backfill": "Every existing TaxObligationPeriod.salesTaxAmount and inputTaxAmount is INSERTed as a sales_output / sales_input component row BEFORE the columns are dropped, so no filed or draft period loses its figures. Recorded zeros are carried rather than collapsed: a stored zero on an existing period is a stated fact ('nothing was charged'), unlike an absent row, and dropping it would silently reinterpret history. netTaxAmount is untouched, so no period's bottom line moves. TaxDepositSchedule is created empty — a cadence is a determination against a published threshold, and seeding one would fabricate the evidence a filing relies on."
+  },
+  "tests": [
+    "apps/web/lib/finance/tax-period-components.test.ts",
+    "apps/web/lib/hr/payroll-tax-persistence.test.ts",
+    "apps/web/lib/hr/deposit-schedule.test.ts",
+    "apps/web/lib/finance/tax-remittance-core.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:tax-obligation-period#component-normalization",
+      "prismaModel": "TaxObligationPeriodComponent",
+      "lifecycleDisposition": "Components are owned by their period and cascade-delete with it. They are replaced wholesale on each accrual run rather than merged, so a corrected run cannot leave a stale component asserting a liability the current facts no longer support.",
+      "fields": [
+        {
+          "fieldId": "data:tax-obligation-period-component#componentKind",
+          "resolution": "governed",
+          "reason": "Names which family of tax the total belongs to, so one period shape serves sales and payroll without either family's columns burdening the other (DI-31F2D7D10E25).",
+          "provenance": "Closed Prisma enum TaxPeriodComponentKind; a new tax family widens it by migration, never by string literal.",
+          "flags": []
+        },
+        {
+          "fieldId": "data:tax-obligation-period-component#amount",
+          "resolution": "governed",
+          "reason": "The component total that rolls into the period's net. Replaces the dropped salesTaxAmount and inputTaxAmount columns as the single home for a per-family figure.",
+          "provenance": "Derived from TaxLiabilityEntry drafts for sales tax, and from the payroll tax emitter's per-side summary for payroll. Rounded to cents at the write boundary.",
+          "flags": ["financial"]
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:tax-deposit-schedule#cadence-determination",
+      "prismaModel": "TaxDepositSchedule",
+      "lifecycleDisposition": "Effective-dated and never edited in place: a determination made for one lookback year stays readable after the next replaces it, because it is the evidence for why a past deposit was timed as it was. Carries RecordLifecycle for withdrawal without deletion.",
+      "fields": [
+        {
+          "fieldId": "data:tax-deposit-schedule#cadence",
+          "resolution": "governed",
+          "reason": "How often a determined deposit obligation falls due. Depositing on the wrong cadence produces late-deposit penalties even when every amount is correct.",
+          "provenance": "Determined by lookback against a published threshold; closed Prisma enum TaxDepositCadence.",
+          "flags": []
+        },
+        {
+          "fieldId": "data:tax-deposit-schedule#lookbackThreshold",
+          "resolution": "governed",
+          "reason": "The published figure the determination was made against, recorded rather than printed into source so it can be cited and superseded.",
+          "provenance": "Operator-supplied from the authority's publication, paired with sourceUrl. Never a constant in code (BI-4EB27955).",
+          "flags": ["financial"]
+        },
+        {
+          "fieldId": "data:tax-deposit-schedule#sourceUrl",
+          "resolution": "governed",
+          "reason": "Without it the determination is unciteable, and an uncited figure must never drive a filing.",
+          "provenance": "Operator-supplied authority publication URL.",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}

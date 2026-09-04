@@ -1,21 +1,21 @@
 {
   "generator": "apps/web/scripts/build-route-audience.ts",
-  "pageRouteCount": 354,
+  "pageRouteCount": 361,
   "summary": {
     "byAudience": {
-      "admin": 147,
+      "admin": 151,
       "auth-setup": 10,
       "builder": 3,
       "customer": 11,
-      "owner": 160,
+      "owner": 163,
       "public": 21,
       "worker": 2
     },
     "byDestinationKind": {
-      "advanced-diagnostic": 101,
-      "detail": 170,
-      "legacy-internal": 29,
-      "section-home": 33,
+      "advanced-diagnostic": 103,
+      "detail": 171,
+      "legacy-internal": 34,
+      "section-home": 32,
       "settings-config": 12,
       "workflow-step": 9
     },
@@ -587,7 +587,7 @@
     {
       "routePath": "/customer-login",
       "audience": "auth-setup",
-      "destinationKind": "section-home",
+      "destinationKind": "legacy-internal",
       "confidence": "high",
       "source": "heuristic"
     },
@@ -760,6 +760,13 @@
       "source": "heuristic"
     },
     {
+      "routePath": "/ea/workrooms",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
       "routePath": "/employee",
       "audience": "owner",
       "destinationKind": "section-home",
@@ -917,6 +924,13 @@
       "routePath": "/finance/invoices/new",
       "audience": "owner",
       "destinationKind": "workflow-step",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/finance/mileage",
+      "audience": "owner",
+      "destinationKind": "detail",
       "confidence": "high",
       "source": "heuristic"
     },
@@ -1238,7 +1252,7 @@
     {
       "routePath": "/ops/health",
       "audience": "admin",
-      "destinationKind": "advanced-diagnostic",
+      "destinationKind": "legacy-internal",
       "confidence": "high",
       "source": "heuristic"
     },
@@ -1246,6 +1260,13 @@
       "routePath": "/ops/improvements",
       "audience": "admin",
       "destinationKind": "legacy-internal",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/ops/installation",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
       "confidence": "high",
       "source": "heuristic"
     },
@@ -1287,12 +1308,19 @@
     {
       "routePath": "/ops/stack-currency",
       "audience": "admin",
-      "destinationKind": "advanced-diagnostic",
+      "destinationKind": "legacy-internal",
       "confidence": "high",
       "source": "heuristic"
     },
     {
       "routePath": "/ops/teardown",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/ops/workrooms",
       "audience": "admin",
       "destinationKind": "advanced-diagnostic",
       "confidence": "high",
@@ -1707,7 +1735,7 @@
     {
       "routePath": "/platform/services/[serverId]",
       "audience": "admin",
-      "destinationKind": "detail",
+      "destinationKind": "legacy-internal",
       "confidence": "high",
       "source": "heuristic"
     },
@@ -1867,6 +1895,13 @@
     },
     {
       "routePath": "/platform/tools/integrations/whatsapp-business",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/tools/integrations/wordpress",
       "audience": "admin",
       "destinationKind": "advanced-diagnostic",
       "confidence": "high",
@@ -2085,7 +2120,7 @@
     {
       "routePath": "/portfolio/product/[id]/supply-chain",
       "audience": "owner",
-      "destinationKind": "detail",
+      "destinationKind": "legacy-internal",
       "confidence": "high",
       "source": "heuristic"
     },
@@ -2287,6 +2322,13 @@
     },
     {
       "routePath": "/storefront/animals",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/storefront/animals/waiting",
       "audience": "owner",
       "destinationKind": "detail",
       "confidence": "high",
@@ -2501,6 +2543,13 @@
       "destinationKind": "detail",
       "confidence": "high",
       "source": "override"
+    },
+    {
+      "routePath": "/workspace/ward",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
     }
   ]
 }

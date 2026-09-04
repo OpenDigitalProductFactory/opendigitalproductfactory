@@ -22,6 +22,8 @@ relatedCode:
 
 A Workroom is not an unbounded chat channel. It has a work boundary: purpose, outcome, scope, accountability, authority, sensitivity, measures, timing, and a closure rule. The platform keeps the underlying governed Work Case and its evidence; the room presents that structure in language suited to doing the work.
 
+From **Platform > Workrooms**, select a room ID to open this same canonical Workroom. Rooms tied to backlog work open that backlog case; rooms without a backlog item open their Work Capsule case, so the inventory never leads to a dead route.
+
 ## What You See First
 
 The top of a Workroom answers four questions:
@@ -31,7 +33,16 @@ The top of a Workroom answers four questions:
 3. Who is accountable and who is participating?
 4. What is the next action?
 
-Source identifiers, integration status, and projection confidence remain available under **Room details**. They do not displace the outcome or the people doing the work.
+Below that header, **Room definition** names the reusable room pattern and its version.
+**This room** identifies whether you are seeing one occurrence, a standing stream, or its
+active cycle. **Overview** is the default and keeps the room boundary and shape in view.
+Open **Details** for cycles, activity, participants, context, evidence, receipts, and
+technical references. A business room does not need a repository, worktree, or pull
+request; those appear only when development work actually produces them.
+
+Source identifiers, integration status, and projection confidence remain available under
+**Room details** inside **Details**. They do not displace the outcome or the people doing
+the work.
 
 ## Activity and Participants
 
@@ -55,7 +66,22 @@ Across rooms, you can see **where each AI coworker is engaged**—which active r
 
 An authorized coworker can also open a relevant product surface from the room's work type, resources, or task intent—even when no browser page is rendered. These silent/headless surfaces use the same semantic fields, validation, and governed actions as the human browser or mobile view. Room membership still does not expand authority: the surface catalog and every action apply the human role, coworker grants, room/work context, token scope, and approval rules together.
 
-Open **Participants** to see why each person or coworker is in the room, what they are working on, their authority summary, and an AI coworker's accountable sponsor. Coworkers created by the active thread's governed lineage appear automatically; the room does not provide an unrestricted coworker picker.
+Open **Details**, then **Participants**, to see why each person or coworker is in the room,
+what they are working on, their authority summary, and an AI coworker's accountable
+sponsor. Coworkers created by the active thread's governed lineage appear automatically;
+the room does not provide an unrestricted coworker picker.
+
+Open **Details**, then **Process Overseer**, to see whether the room is following its declared
+activity shape. The panel names the coordinator, whether that assignment was explicit or derived,
+the current and next expected stage, the latest conformance result, any intervention reason, and a
+stable reconciliation reference. A derived coordinator is shown as compatibility-only: it helps
+older rooms remain understandable but is not treated as proof that active oversight is configured.
+
+For a shaped room, missing role, evidence, stage, budget, stop-condition, or authority information
+pauses the affected lifecycle transition before work is persisted. An AI coordinator must also have
+the required job-specific qualification and delegated authority. When either is unknown, the room
+asks for attention instead of assuming eligibility. Rooms without a declared activity shape keep
+their legacy behavior and the panel reports oversight as not applicable.
 
 ## Access and Other Channels
 
@@ -121,6 +147,74 @@ because those problems get worse while nobody is looking.
 
 If a room has nothing of its own to say about pace, it says so — "Running on defaults" —
 rather than implying a decision nobody made.
+
+### Changing it
+
+Open **Pace and priority** and the settings are there, under what the room is currently
+doing. Three choices, in the order that matters:
+
+1. **What kind of work is this?** — the shape. This decides what may happen in the room at
+   all, so it is the one worth getting right.
+2. **How hard should it push?** — quiet, follows up, or pushes.
+3. **May it act without asking?** — advises only, asks first, or acts alone.
+
+Anything you set here applies to everyone working in that room, and you can clear it again
+to go back to following the work.
+
+One rule is worth knowing before you use the third setting: **stricter always applies.**
+Choosing a looser option cannot give a coworker more freedom than its own permissions
+already allow. If a coworker is only permitted to propose, setting the room to "acts alone"
+leaves it proposing. The room can restrain a coworker; it cannot promote one.
+
+### Setting a default for every room
+
+Most businesses want one answer for most rooms. Under **Priority & Models** in the AI
+section, *How work rooms behave* sets the default: how hard rooms push, and whether they
+may act without asking.
+
+It is deliberately separate from the per-coworker settings on the same page, because a room
+and a coworker are different questions. "How does this coworker behave" and "how does work
+in a room behave" have different answers, and the room default only governs work happening
+in a room.
+
+The order of precedence, strongest first:
+
+1. A policy floor — regulated work, for instance — which nothing overrides.
+2. What the room itself declares.
+3. What the work actually is: its shape, the business it serves, and the clock.
+4. **Your default for rooms.**
+5. The coworker's own settings, then the organisation's, then the platform's.
+
+Your default sits below what the work is on purpose. A blanket preference about rooms
+should not overrule the shape of the job in front of you.
+
+## Giving a Room Its Shape
+
+A room can be opened **with a shape** — a short statement of how decisions inside it are
+meant to route. The shape is what sets the room's pace and priority, so it is the single
+most useful thing to get right when the room is created.
+
+| Shape | Use it when |
+| --- | --- |
+| **Specialist alignment** | a qualified specialist should check the work before the accountable person sees it |
+| **Approval sign-off** | someone prepares the evidence and an accountable person signs it off |
+| **Outward review** | the result leaves the business under its own name, so it is reviewed and verified first |
+| **Change, consequential** | a change is confirmed before it takes effect |
+| **Escalation** | something is blocked and needs the accountable owner to unblock it |
+| **Craft stewardship** | ongoing background curation by people who know the craft |
+
+Setting the shape changes how the room behaves. An **escalation** room pushes harder,
+because someone is waiting. An **outward review** room verifies before anything leaves. A
+**craft stewardship** room stays quiet, because it is background work.
+
+If a room is not given a shape, the platform will work one out where the room says enough
+about itself — a standing profession room is craft stewardship, a readiness check is an
+approval sign-off. Where the room does not say enough, it stays **unshaped** and simply
+runs on defaults. It will not invent a shape, because a made-up shape would change how the
+room behaves for reasons nobody chose.
+
+Most rooms created before this existed are unshaped. Giving them a shape is worthwhile for
+any room where pace or verification actually matters.
 
 ## Incomplete or Unavailable Rooms
 

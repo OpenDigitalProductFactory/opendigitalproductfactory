@@ -1,0 +1,1610 @@
+{
+  "schemaVersion": 1,
+  "bundleId": "external-website-channels-cms-interoperability",
+  "description": "Operator-invoked recovery input for the external website channels and CMS interoperability epic (WordPress projection).",
+  "source": {
+    "capturedAt": "2026-08-26T03:57:53.481Z",
+    "repository": "OpenDigitalProductFactory/opendigitalproductfactory",
+    "planPath": "docs/superpowers/plans/2026-08-21-wordpress-channel-projection.md"
+  },
+  "epic": {
+    "epicId": "EP-31C5A6C8",
+    "title": "External Website Channels and CMS Interoperability",
+    "description": "Make DPF the canonical governed business/content operating layer while projecting approved content and structured business facts to externally hosted website/CMS channels. WordPress is the first provider; the architecture remains provider-neutral and does not bundle hosting, public URL, CDN, theme, or plugin-runtime operations.",
+    "status": "open",
+    "scopeKind": "platform",
+    "scopeRationale": "Cross-archetype platform connector, publication, authority, security, and UX substrate; individual organizations opt in to provider connections.",
+    "createdAt": "2026-08-22T04:05:04.075Z"
+  },
+  "items": [
+    {
+      "itemId": "BI-237A7FBE",
+      "epicId": "EP-31C5A6C8",
+      "title": "Reconcile merged WordPress delivery through independent initiative-readiness receipts",
+      "body": "## Problem\r\n\r\nThe WordPress channel implementation is merged and verified, but BI-8D98C5E6, BI-28185C18, umbrella BI-F50B1E46, Workroom WC-38FD13D8, and epic EP-31C5A6C8 cannot reach terminal status. They were created and delivered before `initiative-readiness.v1` terminal enforcement, so their existing repository design, plan, review, delivery, and acceptance evidence is not represented by the authenticated receipt lanes now required. Decision IRD-D8392C6E9448 is the canonical blocker. The delivering development identity has no `record_initiative_*` grants, and an existing independent reviewer task explicitly declined the unrelated scope expansion.\r\n\r\n## Scope\r\n\r\nIn scope:\r\n\r\n- Dispatch or authorize the accountable independent reviewer identities for the design-checklist, architecture, data, UX, security, compliance, domain, plan, portfolio-traceability, and acceptance lanes.\r\n- Resolve the immutable repository artifacts at merge commit `2b3ea261f841df1f68fcfe6720bda546044aaf92`:\r\n  - `docs/superpowers/specs/2026-08-21-wordpress-channel-projection-design.md`\r\n  - `docs/superpowers/plans/2026-08-21-wordpress-channel-projection.md`\r\n- Record honest research, canonical baseline/spec approval, independent review, plan-review/coverage, objective mapping, acceptance, and objective-reconciliation receipts against BI-8D98C5E6, BI-28185C18, and BI-F50B1E46.\r\n- Re-evaluate readiness and transition those three BIs, WC-38FD13D8, and EP-31C5A6C8 to their legal terminal states.\r\n\r\nOut of scope:\r\n\r\n- Changing the merged WordPress product implementation.\r\n- Weakening or bypassing `initiative-readiness.v1`.\r\n- Proxy-writing, self-reviewing, or fabricating independent receipts.\r\n- Reclaiming the released WordPress source paths or nonproduction environments unless a reviewer finds a real product defect requiring new work.\r\n\r\n## Acceptance criteria\r\n\r\n- Every required receipt is attributable to an authorized, independent role and references the correct immutable WordPress artifact.\r\n- IRD-D8392C6E9448 is superseded by an allowed completion verdict, or any substantive finding is filed as new governed work without mislabeling the delivered initiative complete.\r\n- BI-8D98C5E6, BI-28185C18, and BI-F50B1E46 transition to `done` with server-resolved evidence.\r\n- WC-38FD13D8 transitions to `complete` with zero scope claims.\r\n- EP-31C5A6C8 transitions to `done` after child reconciliation.\r\n- The recovery records PR #4478 merge `2b3ea261f841`, exact-tree evidence `cmt575xos031w01rmgbxkx8mj`, and final acceptance verification `RV-WORDPRESS-UX-4478`.\r\n\r\n## Dependencies and evidence\r\n\r\n- Blocks terminal closure of BI-8D98C5E6, BI-28185C18, BI-F50B1E46, WC-38FD13D8, and EP-31C5A6C8.\r\n- Canonical blocker: IRD-D8392C6E9448.\r\n- Delivery/evidence carrier: WC-38FD13D8, with zero remaining scope claims.\r\n- Related but not duplicate: BI-812AC0D8 owns recovery UX; BI-0996913C owns external plan-baseline remediation. This item owns the concrete WordPress reconciliation using already-existing substrate.",
+      "status": "deferred",
+      "type": "product",
+      "workType": "chore",
+      "source": "automated-detection",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-237a7fbe-cmt7zjk3g0fg001mgm5x4isi8",
+          "kind": "status_change",
+          "summary": "Retired BI-237A7FBE as defer",
+          "recordedAt": "2026-08-25T01:27:40.156Z",
+          "payload": {
+            "to": "deferred",
+            "from": "open",
+            "reason": "External terminal reconciliation depends on an independently authorized reviewer and the threadless binding repair; neither can be fabricated or bypassed in this drain.",
+            "outcome": "defer",
+            "deferral": {
+              "reason": "External terminal reconciliation depends on an independently authorized reviewer and the threadless binding repair; neither can be fabricated or bypassed in this drain.",
+              "trigger": "When PR #4644 is merged and deployed and a tool-capable independent reviewer route is available, replay the immutable PR #4478 spec/plan reviews, record the missing readiness receipts, then complete WC-38FD13D8 and EP-31C5A6C8.",
+              "reviewAt": "2026-08-27T20:00:00.000Z"
+            },
+            "rationale": "The WordPress product work and its three BIs are delivered and terminal, but the legacy Workroom/Epic recovery still cannot be completed lawfully. A fresh v2 transition retry produced IRD-95CD2B1E9098 / CAPSULE_IDENTITY_MISMATCH with the authenticated reviewer lanes absent. Independent coworker attempts executed zero tools, and PR #4644 is the in-flight repair for threadless initiative review binding.",
+            "duplicateOfId": null
+          }
+        }
+      ],
+      "triageOutcome": "defer",
+      "scopeRationale": "One-time governed reconciliation of the WordPress channel initiative after delivery preceded initiative-readiness enforcement; no product code or new governance substrate is required.",
+      "createdAt": "2026-08-23T03:11:15.052Z"
+    },
+    {
+      "itemId": "BI-28185C18",
+      "epicId": "EP-31C5A6C8",
+      "title": "Publish WordPress interoperability architecture, claims, runbook, and adoption evidence",
+      "body": "Parent BI-F50B1E46. Complete the operator/admin guide, connection/revocation/recovery runbook, supported-capability matrix, product-positioning claims, EA/SysML interfaces/allocations/verification cases, and adoption/quality measurement. Allowed claim: DPF operates behind an existing WordPress site and can publish governed content. Prohibit full CMS/hosting/plugin/two-way-sync claims. Acceptance: docs are linked/indexed; architecture parity is green; runbook covers 401/403/404/429/5xx, drift, queued actions, and disconnect; telemetry reports connection/publication/drift/recovery without content/secret labels; first reference-install exercise has receipts. Depends on executable slices for final evidence, but documentation skeleton and claim guardrails may ship earlier. Reserve ~20% for consolidating duplicate connector/publication documentation.",
+      "status": "retired",
+      "type": "product",
+      "workType": "doc",
+      "source": "user-request",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-28185c18-cmt6r0h740f3p01mx08o1wsrx",
+          "kind": "initiative_readiness_decision",
+          "summary": "completion readiness: input-required",
+          "recordedAt": "2026-08-24T04:41:06.832Z",
+          "payload": {
+            "unmet": [
+              {
+                "code": "CANONICAL_DESIGN_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-checklist-reviewer"
+              },
+              {
+                "code": "RESEARCH_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-author"
+              },
+              {
+                "code": "SPEC_APPROVAL_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-checklist-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "architecture-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "data-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "ux-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "security-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "compliance-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "domain-reviewer"
+              },
+              {
+                "code": "OBJECTIVE_BASELINE_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-checklist-reviewer"
+              },
+              {
+                "code": "ARTIFACT_AUTHOR_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "artifact-resolver"
+              },
+              {
+                "code": "PLAN_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "implementation-planner"
+              },
+              {
+                "code": "PLAN_REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "plan-reviewer"
+              },
+              {
+                "code": "PLAN_COVERAGE_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              },
+              {
+                "code": "TRACEABILITY_INCOMPLETE",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              },
+              {
+                "code": "DELIVERY_EVIDENCE_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "delivery-coordinator"
+              },
+              {
+                "code": "ACCEPTANCE_EVIDENCE_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "acceptance-reviewer"
+              },
+              {
+                "code": "OBJECTIVE_RECONCILIATION_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "acceptance-reviewer"
+              }
+            ],
+            "target": "completion",
+            "profile": "cross-domain",
+            "subject": {
+              "id": "BI-28185C18",
+              "kind": "backlog-item"
+            },
+            "verdict": "input-required",
+            "blockers": [],
+            "satisfied": [
+              {
+                "code": "CLASSIFICATION_REQUIRED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "product-owner"
+              },
+              {
+                "code": "AUTHORIZATION_DENIED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "platform-governance"
+              },
+              {
+                "code": "DEPENDENCY_UNRESOLVED",
+                "state": "not-applicable",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              },
+              {
+                "code": "CAPSULE_IDENTITY_MISMATCH",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "delivery-coordinator"
+              }
+            ],
+            "decisionId": "IRD-451DCFF41E0F",
+            "evaluatedAt": "2026-08-24T04:41:06.824Z",
+            "factsDigest": "sha256:f3a3e7fe8bf3948e77fa8d9d81c0f3551f4227ce51fa140d03e68a406800c123",
+            "stableCodes": [
+              "CANONICAL_DESIGN_REQUIRED",
+              "RESEARCH_REQUIRED",
+              "SPEC_APPROVAL_REQUIRED",
+              "REVIEW_REQUIRED",
+              "REVIEW_REQUIRED",
+              "REVIEW_REQUIRED",
+              "REVIEW_REQUIRED",
+              "REVIEW_REQUIRED",
+              "REVIEW_REQUIRED",
+              "OBJECTIVE_BASELINE_REQUIRED",
+              "ARTIFACT_AUTHOR_REQUIRED",
+              "PLAN_REQUIRED",
+              "PLAN_REVIEW_REQUIRED",
+              "PLAN_COVERAGE_REQUIRED",
+              "TRACEABILITY_INCOMPLETE",
+              "DELIVERY_EVIDENCE_REQUIRED",
+              "ACCEPTANCE_EVIDENCE_REQUIRED",
+              "OBJECTIVE_RECONCILIATION_REQUIRED"
+            ],
+            "policyVersion": "initiative-readiness.v1",
+            "schemaVersion": 1,
+            "enforcementState": "enforced",
+            "transitionObject": {
+              "id": "cmt3v28da0haw01pegmlvnkkz",
+              "kind": "backlog-item",
+              "targetState": "done",
+              "expectedVersion": "open"
+            },
+            "authoritySnapshot": {
+              "decision": "allow",
+              "actionKey": "update_backlog_item_status",
+              "policyVersion": "coworker-authority.v1",
+              "organizationId": "platform",
+              "effectiveAgentGrant": "backlog_write",
+              "effectiveHumanCapability": "manage_backlog"
+            },
+            "authorityDecisionId": "DI-49E7D506EA8C"
+          }
+        },
+        {
+          "recoveryKey": "bi-28185c18-cmt7xv4bx0e6601mg4bwwb2ed",
+          "kind": "evidence",
+          "summary": "PR #4478 merged the WordPress architecture, operator/admin guide, runbook, capability claims, EA route contract, and adoption evidence.",
+          "recordedAt": "2026-08-25T00:40:40.365Z",
+          "payload": {
+            "url": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/4478",
+            "body": "PR #4478 merged the WordPress architecture, operator/admin guide, runbook, capability claims, EA route contract, and adoption evidence.",
+            "evidenceKind": "source_verified",
+            "toolExecutionId": null
+          }
+        },
+        {
+          "recoveryKey": "bi-28185c18-cmt7xv4ct0e6801mgv0usp6xz",
+          "kind": "evidence",
+          "summary": "Exact-tree evidence cmt575xos031w01rmgbxkx8mj and final acceptance RV-WORDPRESS-UX-4478 cover the documented WordPress delivery.",
+          "recordedAt": "2026-08-25T00:40:40.397Z",
+          "payload": {
+            "url": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/4478",
+            "body": "Exact-tree evidence cmt575xos031w01rmgbxkx8mj and final acceptance RV-WORDPRESS-UX-4478 cover the documented WordPress delivery.",
+            "evidenceKind": "test_pass",
+            "toolExecutionId": null
+          }
+        },
+        {
+          "recoveryKey": "bi-28185c18-cmt7xvaz60e6k01mgxvr2ncxh",
+          "kind": "status_change",
+          "summary": "Retired BI-28185C18 as discard",
+          "recordedAt": "2026-08-25T00:40:48.978Z",
+          "payload": {
+            "to": "retired",
+            "from": "open",
+            "reason": "Merged source and regression evidence are attached to the BI activity timeline.",
+            "outcome": "discard",
+            "rationale": "Delivered by merged PR #4478 with exact-tree and acceptance evidence; retaining the recovered documentation slice open duplicates completed delivery.",
+            "duplicateOfId": null
+          }
+        }
+      ],
+      "effortSize": "medium",
+      "triageOutcome": "discard",
+      "scopeRationale": "Provider-neutral DPF website-channel substrate with WordPress as the first implementation.",
+      "createdAt": "2026-08-22T04:11:08.638Z"
+    },
+    {
+      "itemId": "BI-8D98C5E6",
+      "epicId": "EP-31C5A6C8",
+      "title": "Deliver the WordPress connection, health, preview, and drift UX",
+      "body": "Parent BI-F50B1E46. Add WordPress to the existing /platform/tools/integrations family and one provider detail route; add contextual Publish to website actions only in eligible Marketing/Storefront surfaces. First viewport shows site, status, supported actions, authority sentence, and exactly one next action. Connection form asks URL/username/Application Password, checks before save, then previews capabilities and draft-vs-live policy. Acceptance: shared form/report-kit/token primitives; no new global nav/dashboard/KPIs; credentials never redisplayed; fresh/permission/REST/credential/drift/disconnected states each have one honest recovery; preview+confirmation for writes; desktop/narrow browser task, accessibility, route budgets, style/theme scans, and measured ux-fit manifest. Depends on connector and first publication path. Reserve ~20% to extract/converge repeated integration connection-state UI.",
+      "status": "retired",
+      "type": "product",
+      "workType": "feature",
+      "source": "user-request",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-8d98c5e6-cmt6r0h610f3m01mx6bc01m9i",
+          "kind": "initiative_readiness_decision",
+          "summary": "completion readiness: input-required",
+          "recordedAt": "2026-08-24T04:41:06.793Z",
+          "payload": {
+            "unmet": [
+              {
+                "code": "CANONICAL_DESIGN_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-checklist-reviewer"
+              },
+              {
+                "code": "RESEARCH_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-author"
+              },
+              {
+                "code": "SPEC_APPROVAL_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-checklist-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "architecture-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "data-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "ux-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "security-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "compliance-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "domain-reviewer"
+              },
+              {
+                "code": "OBJECTIVE_BASELINE_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-checklist-reviewer"
+              },
+              {
+                "code": "ARTIFACT_AUTHOR_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "artifact-resolver"
+              },
+              {
+                "code": "PLAN_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "implementation-planner"
+              },
+              {
+                "code": "PLAN_REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "plan-reviewer"
+              },
+              {
+                "code": "PLAN_COVERAGE_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              },
+              {
+                "code": "TRACEABILITY_INCOMPLETE",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              },
+              {
+                "code": "DELIVERY_EVIDENCE_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "delivery-coordinator"
+              },
+              {
+                "code": "ACCEPTANCE_EVIDENCE_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "acceptance-reviewer"
+              },
+              {
+                "code": "OBJECTIVE_RECONCILIATION_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "acceptance-reviewer"
+              }
+            ],
+            "target": "completion",
+            "profile": "cross-domain",
+            "subject": {
+              "id": "BI-8D98C5E6",
+              "kind": "backlog-item"
+            },
+            "verdict": "input-required",
+            "blockers": [],
+            "satisfied": [
+              {
+                "code": "CLASSIFICATION_REQUIRED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "product-owner"
+              },
+              {
+                "code": "AUTHORIZATION_DENIED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "platform-governance"
+              },
+              {
+                "code": "DEPENDENCY_UNRESOLVED",
+                "state": "not-applicable",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              },
+              {
+                "code": "CAPSULE_IDENTITY_MISMATCH",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "delivery-coordinator"
+              }
+            ],
+            "decisionId": "IRD-CE7F806F4B94",
+            "evaluatedAt": "2026-08-24T04:41:06.782Z",
+            "factsDigest": "sha256:3c5e1ef4ccd29516a4b07cd129940de4b3b47436261e3088de4b96d37daf6c4a",
+            "stableCodes": [
+              "CANONICAL_DESIGN_REQUIRED",
+              "RESEARCH_REQUIRED",
+              "SPEC_APPROVAL_REQUIRED",
+              "REVIEW_REQUIRED",
+              "REVIEW_REQUIRED",
+              "REVIEW_REQUIRED",
+              "REVIEW_REQUIRED",
+              "REVIEW_REQUIRED",
+              "REVIEW_REQUIRED",
+              "OBJECTIVE_BASELINE_REQUIRED",
+              "ARTIFACT_AUTHOR_REQUIRED",
+              "PLAN_REQUIRED",
+              "PLAN_REVIEW_REQUIRED",
+              "PLAN_COVERAGE_REQUIRED",
+              "TRACEABILITY_INCOMPLETE",
+              "DELIVERY_EVIDENCE_REQUIRED",
+              "ACCEPTANCE_EVIDENCE_REQUIRED",
+              "OBJECTIVE_RECONCILIATION_REQUIRED"
+            ],
+            "policyVersion": "initiative-readiness.v1",
+            "schemaVersion": 1,
+            "enforcementState": "enforced",
+            "transitionObject": {
+              "id": "cmt3v289w0hau01peaz6me8cu",
+              "kind": "backlog-item",
+              "targetState": "done",
+              "expectedVersion": "open"
+            },
+            "authoritySnapshot": {
+              "decision": "allow",
+              "actionKey": "update_backlog_item_status",
+              "policyVersion": "coworker-authority.v1",
+              "organizationId": "platform",
+              "effectiveAgentGrant": "backlog_write",
+              "effectiveHumanCapability": "manage_backlog"
+            },
+            "authorityDecisionId": "DI-AEB49F6D86F0"
+          }
+        },
+        {
+          "recoveryKey": "bi-8d98c5e6-cmt7xv4dn0e6a01mg7ug39egi",
+          "kind": "evidence",
+          "summary": "PR #4478 merged the WordPress integration catalog, provider detail, connection, health, preview, publication, drift, and recovery UX.",
+          "recordedAt": "2026-08-25T00:40:40.427Z",
+          "payload": {
+            "url": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/4478",
+            "body": "PR #4478 merged the WordPress integration catalog, provider detail, connection, health, preview, publication, drift, and recovery UX.",
+            "evidenceKind": "source_verified",
+            "toolExecutionId": null
+          }
+        },
+        {
+          "recoveryKey": "bi-8d98c5e6-cmt7xv4ei0e6c01mg0ko0wczn",
+          "kind": "evidence",
+          "summary": "Exact-tree evidence cmt575xos031w01rmgbxkx8mj and final acceptance RV-WORDPRESS-UX-4478 cover desktop/narrow UX, accessibility, route budgets, themes, and guarded writes.",
+          "recordedAt": "2026-08-25T00:40:40.458Z",
+          "payload": {
+            "url": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/4478",
+            "body": "Exact-tree evidence cmt575xos031w01rmgbxkx8mj and final acceptance RV-WORDPRESS-UX-4478 cover desktop/narrow UX, accessibility, route budgets, themes, and guarded writes.",
+            "evidenceKind": "test_pass",
+            "toolExecutionId": null
+          }
+        },
+        {
+          "recoveryKey": "bi-8d98c5e6-cmt7xvb5o0e6q01mgikhuogu7",
+          "kind": "status_change",
+          "summary": "Retired BI-8D98C5E6 as discard",
+          "recordedAt": "2026-08-25T00:40:49.212Z",
+          "payload": {
+            "to": "retired",
+            "from": "open",
+            "reason": "Merged source and regression evidence are attached to the BI activity timeline.",
+            "outcome": "discard",
+            "rationale": "Delivered by merged PR #4478 with exact-tree and acceptance evidence; retaining the recovered UX slice open duplicates completed delivery.",
+            "duplicateOfId": null
+          }
+        },
+        {
+          "recoveryKey": "bi-8d98c5e6-cmt7xwmh50e7k01mgw0shgk86",
+          "kind": "initiative_readiness_decision",
+          "summary": "completion readiness: denied",
+          "recordedAt": "2026-08-25T00:41:50.537Z",
+          "payload": {
+            "unmet": [
+              {
+                "code": "RESEARCH_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-author"
+              },
+              {
+                "code": "CANONICAL_DESIGN_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-checklist-reviewer"
+              },
+              {
+                "code": "SPEC_APPROVAL_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-checklist-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "architecture-reviewer"
+              },
+              {
+                "code": "OBJECTIVE_BASELINE_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-checklist-reviewer"
+              },
+              {
+                "code": "ARTIFACT_AUTHOR_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "artifact-resolver"
+              },
+              {
+                "code": "PLAN_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "implementation-planner"
+              },
+              {
+                "code": "PLAN_REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "plan-reviewer"
+              },
+              {
+                "code": "PLAN_COVERAGE_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              },
+              {
+                "code": "TRACEABILITY_INCOMPLETE",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              },
+              {
+                "code": "ACCEPTANCE_EVIDENCE_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "acceptance-reviewer"
+              },
+              {
+                "code": "OBJECTIVE_RECONCILIATION_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "acceptance-reviewer"
+              }
+            ],
+            "target": "completion",
+            "profile": "feature",
+            "subject": {
+              "id": "BI-8D98C5E6",
+              "kind": "backlog-item"
+            },
+            "verdict": "denied",
+            "blockers": [
+              {
+                "code": "CAPSULE_IDENTITY_MISMATCH",
+                "state": "fail",
+                "evidenceRefs": [],
+                "accountableRole": "delivery-coordinator"
+              }
+            ],
+            "satisfied": [
+              {
+                "code": "CLASSIFICATION_REQUIRED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "product-owner"
+              },
+              {
+                "code": "AUTHORIZATION_DENIED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "platform-governance"
+              },
+              {
+                "code": "DEPENDENCY_UNRESOLVED",
+                "state": "not-applicable",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              },
+              {
+                "code": "DELIVERY_EVIDENCE_REQUIRED",
+                "state": "pass",
+                "evidenceRefs": [
+                  "cmt58123f03m901rm23f3yp8x"
+                ],
+                "accountableRole": "delivery-coordinator"
+              }
+            ],
+            "decisionId": "IRD-7F15142B86D8",
+            "evaluatedAt": "2026-08-25T00:41:50.506Z",
+            "factsDigest": "sha256:a6e85306808fa03a23fe5a17fbad4992dfad581d842cf5c0a979d3069ecb7be3",
+            "stableCodes": [
+              "CAPSULE_IDENTITY_MISMATCH",
+              "RESEARCH_REQUIRED",
+              "CANONICAL_DESIGN_REQUIRED",
+              "SPEC_APPROVAL_REQUIRED",
+              "REVIEW_REQUIRED",
+              "OBJECTIVE_BASELINE_REQUIRED",
+              "ARTIFACT_AUTHOR_REQUIRED",
+              "PLAN_REQUIRED",
+              "PLAN_REVIEW_REQUIRED",
+              "PLAN_COVERAGE_REQUIRED",
+              "TRACEABILITY_INCOMPLETE",
+              "ACCEPTANCE_EVIDENCE_REQUIRED",
+              "OBJECTIVE_RECONCILIATION_REQUIRED"
+            ],
+            "policyVersion": "initiative-readiness.v2",
+            "schemaVersion": 1,
+            "enforcementState": "enforced",
+            "transitionObject": {
+              "id": "cmt4282hh01mr01pkfsk4ay1b",
+              "kind": "work-capsule",
+              "targetState": "complete",
+              "expectedVersion": "blocked"
+            },
+            "authoritySnapshot": {
+              "decision": "allow",
+              "actionKey": "complete_work_capsule",
+              "policyVersion": "coworker-authority.v1",
+              "organizationId": "platform",
+              "effectiveAgentGrant": "update_work_capsule_status",
+              "effectiveHumanCapability": "manage_backlog"
+            },
+            "authorityDecisionId": "DI-8183E55525E5"
+          }
+        },
+        {
+          "recoveryKey": "bi-8d98c5e6-cmt7ziz980ffi01mg5a7op3kf",
+          "kind": "initiative_readiness_decision",
+          "summary": "completion readiness: denied",
+          "recordedAt": "2026-08-25T01:27:13.148Z",
+          "payload": {
+            "unmet": [
+              {
+                "code": "RESEARCH_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-author"
+              },
+              {
+                "code": "CANONICAL_DESIGN_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-checklist-reviewer"
+              },
+              {
+                "code": "SPEC_APPROVAL_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-checklist-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "architecture-reviewer"
+              },
+              {
+                "code": "OBJECTIVE_BASELINE_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-checklist-reviewer"
+              },
+              {
+                "code": "ARTIFACT_AUTHOR_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "artifact-resolver"
+              },
+              {
+                "code": "PLAN_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "implementation-planner"
+              },
+              {
+                "code": "PLAN_REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "plan-reviewer"
+              },
+              {
+                "code": "PLAN_COVERAGE_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              },
+              {
+                "code": "TRACEABILITY_INCOMPLETE",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              },
+              {
+                "code": "ACCEPTANCE_EVIDENCE_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "acceptance-reviewer"
+              },
+              {
+                "code": "OBJECTIVE_RECONCILIATION_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "acceptance-reviewer"
+              }
+            ],
+            "target": "completion",
+            "profile": "feature",
+            "subject": {
+              "id": "BI-8D98C5E6",
+              "kind": "backlog-item"
+            },
+            "verdict": "denied",
+            "blockers": [
+              {
+                "code": "CAPSULE_IDENTITY_MISMATCH",
+                "state": "fail",
+                "evidenceRefs": [],
+                "accountableRole": "delivery-coordinator"
+              }
+            ],
+            "satisfied": [
+              {
+                "code": "CLASSIFICATION_REQUIRED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "product-owner"
+              },
+              {
+                "code": "AUTHORIZATION_DENIED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "platform-governance"
+              },
+              {
+                "code": "DEPENDENCY_UNRESOLVED",
+                "state": "not-applicable",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              },
+              {
+                "code": "DELIVERY_EVIDENCE_REQUIRED",
+                "state": "pass",
+                "evidenceRefs": [
+                  "cmt58123f03m901rm23f3yp8x"
+                ],
+                "accountableRole": "delivery-coordinator"
+              }
+            ],
+            "decisionId": "IRD-95CD2B1E9098",
+            "evaluatedAt": "2026-08-25T01:27:13.134Z",
+            "factsDigest": "sha256:c3a419c86283b362090bd3b3f833e3816d82fd8d7f7997624004528c5025a0e3",
+            "stableCodes": [
+              "CAPSULE_IDENTITY_MISMATCH",
+              "RESEARCH_REQUIRED",
+              "CANONICAL_DESIGN_REQUIRED",
+              "SPEC_APPROVAL_REQUIRED",
+              "REVIEW_REQUIRED",
+              "OBJECTIVE_BASELINE_REQUIRED",
+              "ARTIFACT_AUTHOR_REQUIRED",
+              "PLAN_REQUIRED",
+              "PLAN_REVIEW_REQUIRED",
+              "PLAN_COVERAGE_REQUIRED",
+              "TRACEABILITY_INCOMPLETE",
+              "ACCEPTANCE_EVIDENCE_REQUIRED",
+              "OBJECTIVE_RECONCILIATION_REQUIRED"
+            ],
+            "policyVersion": "initiative-readiness.v2",
+            "schemaVersion": 1,
+            "enforcementState": "enforced",
+            "transitionObject": {
+              "id": "cmt4282hh01mr01pkfsk4ay1b",
+              "kind": "work-capsule",
+              "targetState": "complete",
+              "expectedVersion": "blocked"
+            },
+            "authoritySnapshot": {
+              "decision": "allow",
+              "actionKey": "complete_work_capsule",
+              "policyVersion": "coworker-authority.v1",
+              "organizationId": "platform",
+              "effectiveAgentGrant": "update_work_capsule_status",
+              "effectiveHumanCapability": "manage_backlog"
+            },
+            "authorityDecisionId": "DI-48F9F32EDDD2"
+          }
+        }
+      ],
+      "effortSize": "large",
+      "triageOutcome": "discard",
+      "scopeRationale": "Provider-neutral DPF website-channel substrate with WordPress as the first implementation.",
+      "createdAt": "2026-08-22T04:11:08.516Z"
+    },
+    {
+      "itemId": "BI-A45D744A",
+      "epicId": "EP-31C5A6C8",
+      "title": "Repair WordPress operator health and publication routing regressions",
+      "body": "Problem: PR #4478 shipped WordPress operator UX with three uncovered behavioral inconsistencies: failed health probes remain visually connected, successful probes do not refresh stored capabilities, and legacy channelId `wordpress` is recognized by the UI but cannot reach the publication adapter. The initial credential-persisting action is also mislabeled as a connection check.\r\n\r\nScope:\r\n- Derive degraded setup state from the persisted latest probe result.\r\n- Refresh bounded WordPress safe capability projection after a successful health probe while preserving the public-publication policy.\r\n- Normalize the legacy `wordpress` outbound channel alias through the canonical `wordpress-self-hosted` adapter.\r\n- Label the first credential action as connecting, not merely checking.\r\n- Add regression tests first and refresh measured UX-fit evidence if the UI-impact gate requires it.\r\n\r\nOut of scope:\r\n- New WordPress capabilities, public hosting/CDN, schema changes, or new navigation.\r\n- Initiative-readiness receipt reconciliation tracked separately by BI-237A7FBE.\r\n\r\nAcceptance criteria:\r\n- A failed probe renders a degraded/needs-attention state after refresh.\r\n- A successful probe persists current site and capability fields without resetting publication policy.\r\n- Both `wordpress` and `wordpress-self-hosted` drafts route through the canonical adapter.\r\n- The initial submit action says `Connect WordPress`; the connected-state probe remains `Check connection`.\r\n- Focused tests, typecheck, production build, and governed route verification pass.\r\n\r\nRelated: PR #4478; BI-8D98C5E6; BI-237A7FBE.",
+      "status": "open",
+      "type": "product",
+      "workType": "bug",
+      "source": "user-request",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-a45d744a-cmt7h1242003r01mg56k1bwou",
+          "kind": "initiative_readiness_decision",
+          "summary": "implementation readiness: input-required",
+          "recordedAt": "2026-08-24T16:49:23.954Z",
+          "payload": {
+            "unmet": [
+              {
+                "code": "RESEARCH_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-author"
+              },
+              {
+                "code": "PLAN_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "implementation-planner"
+              }
+            ],
+            "target": "implementation",
+            "profile": "fix",
+            "subject": {
+              "id": "BI-A45D744A",
+              "kind": "backlog-item"
+            },
+            "verdict": "input-required",
+            "blockers": [],
+            "authority": {
+              "actionKey": "claim_backlog_item_for_work",
+              "enforcementState": "enforced"
+            },
+            "satisfied": [
+              {
+                "code": "CLASSIFICATION_REQUIRED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "product-owner"
+              },
+              {
+                "code": "AUTHORIZATION_DENIED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "platform-governance"
+              },
+              {
+                "code": "DEPENDENCY_UNRESOLVED",
+                "state": "not-applicable",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              },
+              {
+                "code": "CAPSULE_IDENTITY_MISMATCH",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "delivery-coordinator"
+              }
+            ],
+            "decisionId": "IRD-D83377F50D8C",
+            "workIntent": "implementation",
+            "evaluatedAt": "2026-08-24T16:49:23.944Z",
+            "factsDigest": "da6530659f1e0bf79d04f6b1123dc4c0e2fb9cf88369cdc4c6b396727086f9b9",
+            "stableCodes": {
+              "unmet": [
+                "RESEARCH_REQUIRED",
+                "PLAN_REQUIRED"
+              ],
+              "blockers": [],
+              "satisfied": [
+                "CLASSIFICATION_REQUIRED",
+                "AUTHORIZATION_DENIED",
+                "DEPENDENCY_UNRESOLVED",
+                "CAPSULE_IDENTITY_MISMATCH"
+              ]
+            },
+            "policyVersion": "initiative-readiness.v2",
+            "schemaVersion": 1,
+            "transitionObject": {
+              "id": "OpenDigitalProductFactory/opendigitalproductfactory#fix/wordpress-operator-regressions",
+              "kind": "work-capsule",
+              "targetState": "implementation",
+              "expectedVersion": "claim.v1"
+            }
+          }
+        },
+        {
+          "recoveryKey": "bi-a45d744a-cmt7h2d8v004f01mgdryad7rj",
+          "kind": "initiative_readiness_decision",
+          "summary": "design readiness: denied",
+          "recordedAt": "2026-08-24T16:50:25.039Z",
+          "payload": {
+            "unmet": [],
+            "target": "design",
+            "profile": "fix",
+            "subject": {
+              "id": "BI-A45D744A",
+              "kind": "backlog-item"
+            },
+            "verdict": "denied",
+            "blockers": [
+              {
+                "code": "CAPSULE_IDENTITY_MISMATCH",
+                "state": "fail",
+                "evidenceRefs": [],
+                "accountableRole": "delivery-coordinator"
+              }
+            ],
+            "authority": {
+              "actionKey": "claim_backlog_item_for_work",
+              "enforcementState": "enforced"
+            },
+            "satisfied": [
+              {
+                "code": "CLASSIFICATION_REQUIRED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "product-owner"
+              },
+              {
+                "code": "AUTHORIZATION_DENIED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "platform-governance"
+              }
+            ],
+            "decisionId": "IRD-12C1B3995F8C",
+            "workIntent": "design",
+            "evaluatedAt": "2026-08-24T16:50:25.025Z",
+            "factsDigest": "2b646238265e86d9603e0860d3e2ad95427afe30836bbef999824e996afcf56d",
+            "stableCodes": {
+              "unmet": [],
+              "blockers": [
+                "CAPSULE_IDENTITY_MISMATCH"
+              ],
+              "satisfied": [
+                "CLASSIFICATION_REQUIRED",
+                "AUTHORIZATION_DENIED"
+              ]
+            },
+            "policyVersion": "initiative-readiness.v2",
+            "schemaVersion": 1,
+            "transitionObject": {
+              "id": "OpenDigitalProductFactory/opendigitalproductfactory#fix/wordpress-operator-regressions",
+              "kind": "work-capsule",
+              "targetState": "design",
+              "expectedVersion": "claim.v1"
+            }
+          }
+        },
+        {
+          "recoveryKey": "bi-a45d744a-cmt7h2pg7004p01mgmzukk8gz",
+          "kind": "initiative_readiness_decision",
+          "summary": "design readiness: allowed",
+          "recordedAt": "2026-08-24T16:50:40.855Z",
+          "payload": {
+            "unmet": [],
+            "target": "design",
+            "profile": "fix",
+            "subject": {
+              "id": "BI-A45D744A",
+              "kind": "backlog-item"
+            },
+            "verdict": "allowed",
+            "blockers": [],
+            "authority": {
+              "actionKey": "claim_backlog_item_for_work",
+              "enforcementState": "enforced"
+            },
+            "satisfied": [
+              {
+                "code": "CLASSIFICATION_REQUIRED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "product-owner"
+              },
+              {
+                "code": "AUTHORIZATION_DENIED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "platform-governance"
+              }
+            ],
+            "decisionId": "IRD-644685F2D6FF",
+            "workIntent": "design",
+            "evaluatedAt": "2026-08-24T16:50:40.847Z",
+            "factsDigest": "f722abce42b8d98ce1b11d59ac620a8c2aad92e870030825a59fc803e9160131",
+            "stableCodes": {
+              "unmet": [],
+              "blockers": [],
+              "satisfied": [
+                "CLASSIFICATION_REQUIRED",
+                "AUTHORIZATION_DENIED"
+              ]
+            },
+            "policyVersion": "initiative-readiness.v2",
+            "schemaVersion": 1,
+            "transitionObject": {
+              "id": "OpenDigitalProductFactory/opendigitalproductfactory#fix/wordpress-operator-regressions",
+              "kind": "work-capsule",
+              "targetState": "design",
+              "expectedVersion": "claim.v1"
+            }
+          }
+        },
+        {
+          "recoveryKey": "bi-a45d744a-cmt7h4o94006a01mg3jthum4t",
+          "kind": "initiative_readiness_decision",
+          "summary": "implementation readiness: input-required",
+          "recordedAt": "2026-08-24T16:52:12.616Z",
+          "payload": {
+            "unmet": [
+              {
+                "code": "RESEARCH_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-author"
+              },
+              {
+                "code": "PLAN_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "implementation-planner"
+              }
+            ],
+            "target": "implementation",
+            "profile": "fix",
+            "subject": {
+              "id": "BI-A45D744A",
+              "kind": "backlog-item"
+            },
+            "verdict": "input-required",
+            "blockers": [],
+            "authority": {
+              "actionKey": "claim_backlog_item_for_work",
+              "enforcementState": "enforced"
+            },
+            "satisfied": [
+              {
+                "code": "CLASSIFICATION_REQUIRED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "product-owner"
+              },
+              {
+                "code": "AUTHORIZATION_DENIED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "platform-governance"
+              },
+              {
+                "code": "DEPENDENCY_UNRESOLVED",
+                "state": "not-applicable",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              },
+              {
+                "code": "CAPSULE_IDENTITY_MISMATCH",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "delivery-coordinator"
+              }
+            ],
+            "decisionId": "IRD-37BDE7E53DE0",
+            "workIntent": "implementation",
+            "evaluatedAt": "2026-08-24T16:52:12.611Z",
+            "factsDigest": "da6530659f1e0bf79d04f6b1123dc4c0e2fb9cf88369cdc4c6b396727086f9b9",
+            "stableCodes": {
+              "unmet": [
+                "RESEARCH_REQUIRED",
+                "PLAN_REQUIRED"
+              ],
+              "blockers": [],
+              "satisfied": [
+                "CLASSIFICATION_REQUIRED",
+                "AUTHORIZATION_DENIED",
+                "DEPENDENCY_UNRESOLVED",
+                "CAPSULE_IDENTITY_MISMATCH"
+              ]
+            },
+            "policyVersion": "initiative-readiness.v2",
+            "schemaVersion": 1,
+            "transitionObject": {
+              "id": "OpenDigitalProductFactory/opendigitalproductfactory#fix/wordpress-operator-regressions",
+              "kind": "work-capsule",
+              "targetState": "implementation",
+              "expectedVersion": "claim.v1"
+            }
+          }
+        },
+        {
+          "recoveryKey": "bi-a45d744a-cmt7h95rz008x01mgi2s9f3ce",
+          "kind": "initiative_readiness_decision",
+          "summary": "design readiness: allowed",
+          "recordedAt": "2026-08-24T16:55:41.951Z",
+          "payload": {
+            "unmet": [],
+            "target": "design",
+            "profile": "fix",
+            "subject": {
+              "id": "BI-A45D744A",
+              "kind": "backlog-item"
+            },
+            "verdict": "allowed",
+            "blockers": [],
+            "authority": {
+              "actionKey": "claim_backlog_item_for_work",
+              "enforcementState": "enforced"
+            },
+            "satisfied": [
+              {
+                "code": "CLASSIFICATION_REQUIRED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "product-owner"
+              },
+              {
+                "code": "AUTHORIZATION_DENIED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "platform-governance"
+              }
+            ],
+            "decisionId": "IRD-7A910D07A37C",
+            "workIntent": "design",
+            "evaluatedAt": "2026-08-24T16:55:41.935Z",
+            "factsDigest": "4f05ebb0e6dbbc69cc4709daac65227fd1b53166c24ea9d10c12cadb4268c29b",
+            "stableCodes": {
+              "unmet": [],
+              "blockers": [],
+              "satisfied": [
+                "CLASSIFICATION_REQUIRED",
+                "AUTHORIZATION_DENIED"
+              ]
+            },
+            "policyVersion": "initiative-readiness.v2",
+            "schemaVersion": 1,
+            "transitionObject": {
+              "id": "OpenDigitalProductFactory/opendigitalproductfactory#fix/wordpress-operator-regressions-recovery",
+              "kind": "work-capsule",
+              "targetState": "design",
+              "expectedVersion": "claim.v1"
+            }
+          }
+        },
+        {
+          "recoveryKey": "bi-a45d744a-cmt7h9opf009g01mg7ytgg74x",
+          "kind": "initiative_readiness_decision",
+          "summary": "implementation readiness: input-required",
+          "recordedAt": "2026-08-24T16:56:06.483Z",
+          "payload": {
+            "unmet": [
+              {
+                "code": "RESEARCH_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-author"
+              },
+              {
+                "code": "PLAN_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "implementation-planner"
+              }
+            ],
+            "target": "implementation",
+            "profile": "fix",
+            "subject": {
+              "id": "BI-A45D744A",
+              "kind": "backlog-item"
+            },
+            "verdict": "input-required",
+            "blockers": [],
+            "authority": {
+              "actionKey": "claim_backlog_item_for_work",
+              "enforcementState": "enforced"
+            },
+            "satisfied": [
+              {
+                "code": "CLASSIFICATION_REQUIRED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "product-owner"
+              },
+              {
+                "code": "AUTHORIZATION_DENIED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "platform-governance"
+              },
+              {
+                "code": "DEPENDENCY_UNRESOLVED",
+                "state": "not-applicable",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              },
+              {
+                "code": "CAPSULE_IDENTITY_MISMATCH",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "delivery-coordinator"
+              }
+            ],
+            "decisionId": "IRD-431011E2BA0C",
+            "workIntent": "implementation",
+            "evaluatedAt": "2026-08-24T16:56:06.477Z",
+            "factsDigest": "822b6392645c0fdc4cd2d68e03895f60643202ddcd104db36221de94da353aa3",
+            "stableCodes": {
+              "unmet": [
+                "RESEARCH_REQUIRED",
+                "PLAN_REQUIRED"
+              ],
+              "blockers": [],
+              "satisfied": [
+                "CLASSIFICATION_REQUIRED",
+                "AUTHORIZATION_DENIED",
+                "DEPENDENCY_UNRESOLVED",
+                "CAPSULE_IDENTITY_MISMATCH"
+              ]
+            },
+            "policyVersion": "initiative-readiness.v2",
+            "schemaVersion": 1,
+            "transitionObject": {
+              "id": "OpenDigitalProductFactory/opendigitalproductfactory#fix/wordpress-operator-regressions-recovery",
+              "kind": "work-capsule",
+              "targetState": "implementation",
+              "expectedVersion": "claim.v1"
+            }
+          }
+        },
+        {
+          "recoveryKey": "bi-a45d744a-cmt7haljp009q01mg4qcmagq9",
+          "kind": "initiative_readiness_decision",
+          "summary": "implementation readiness: input-required",
+          "recordedAt": "2026-08-24T16:56:49.045Z",
+          "payload": {
+            "unmet": [
+              {
+                "code": "RESEARCH_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-author"
+              },
+              {
+                "code": "PLAN_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "implementation-planner"
+              }
+            ],
+            "target": "implementation",
+            "profile": "fix",
+            "subject": {
+              "id": "BI-A45D744A",
+              "kind": "backlog-item"
+            },
+            "verdict": "input-required",
+            "blockers": [],
+            "authority": {
+              "actionKey": "claim_backlog_item_for_work",
+              "enforcementState": "enforced"
+            },
+            "satisfied": [
+              {
+                "code": "CLASSIFICATION_REQUIRED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "product-owner"
+              },
+              {
+                "code": "AUTHORIZATION_DENIED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "platform-governance"
+              },
+              {
+                "code": "DEPENDENCY_UNRESOLVED",
+                "state": "not-applicable",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              },
+              {
+                "code": "CAPSULE_IDENTITY_MISMATCH",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "delivery-coordinator"
+              }
+            ],
+            "decisionId": "IRD-0FF0ACF2709B",
+            "workIntent": "implementation",
+            "evaluatedAt": "2026-08-24T16:56:49.039Z",
+            "factsDigest": "822b6392645c0fdc4cd2d68e03895f60643202ddcd104db36221de94da353aa3",
+            "stableCodes": {
+              "unmet": [
+                "RESEARCH_REQUIRED",
+                "PLAN_REQUIRED"
+              ],
+              "blockers": [],
+              "satisfied": [
+                "CLASSIFICATION_REQUIRED",
+                "AUTHORIZATION_DENIED",
+                "DEPENDENCY_UNRESOLVED",
+                "CAPSULE_IDENTITY_MISMATCH"
+              ]
+            },
+            "policyVersion": "initiative-readiness.v2",
+            "schemaVersion": 1,
+            "transitionObject": {
+              "id": "OpenDigitalProductFactory/opendigitalproductfactory#fix/wordpress-operator-regressions-recovery",
+              "kind": "work-capsule",
+              "targetState": "implementation",
+              "expectedVersion": "claim.v1"
+            }
+          }
+        },
+        {
+          "recoveryKey": "bi-a45d744a-cmt7i20x608ay01mg89c86ply",
+          "kind": "initiative_readiness_decision",
+          "summary": "implementation readiness: input-required",
+          "recordedAt": "2026-08-24T17:18:08.682Z",
+          "payload": {
+            "unmet": [
+              {
+                "code": "RESEARCH_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-author"
+              },
+              {
+                "code": "PLAN_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "implementation-planner"
+              }
+            ],
+            "target": "implementation",
+            "profile": "fix",
+            "subject": {
+              "id": "BI-A45D744A",
+              "kind": "backlog-item"
+            },
+            "verdict": "input-required",
+            "blockers": [],
+            "authority": {
+              "actionKey": "claim_backlog_item_for_work",
+              "enforcementState": "enforced"
+            },
+            "satisfied": [
+              {
+                "code": "CLASSIFICATION_REQUIRED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "product-owner"
+              },
+              {
+                "code": "AUTHORIZATION_DENIED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "platform-governance"
+              },
+              {
+                "code": "DEPENDENCY_UNRESOLVED",
+                "state": "not-applicable",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              },
+              {
+                "code": "CAPSULE_IDENTITY_MISMATCH",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "delivery-coordinator"
+              }
+            ],
+            "decisionId": "IRD-A61B2B55DDBB",
+            "workIntent": "implementation",
+            "evaluatedAt": "2026-08-24T17:18:08.633Z",
+            "factsDigest": "822b6392645c0fdc4cd2d68e03895f60643202ddcd104db36221de94da353aa3",
+            "stableCodes": {
+              "unmet": [
+                "RESEARCH_REQUIRED",
+                "PLAN_REQUIRED"
+              ],
+              "blockers": [],
+              "satisfied": [
+                "CLASSIFICATION_REQUIRED",
+                "AUTHORIZATION_DENIED",
+                "DEPENDENCY_UNRESOLVED",
+                "CAPSULE_IDENTITY_MISMATCH"
+              ]
+            },
+            "policyVersion": "initiative-readiness.v2",
+            "schemaVersion": 1,
+            "transitionObject": {
+              "id": "OpenDigitalProductFactory/opendigitalproductfactory#fix/wordpress-operator-regressions-recovery",
+              "kind": "work-capsule",
+              "targetState": "implementation",
+              "expectedVersion": "claim.v1"
+            }
+          }
+        },
+        {
+          "recoveryKey": "bi-a45d744a-cmt9bt46x00kn01qv2z1oo6pm",
+          "kind": "initiative_readiness_decision",
+          "summary": "design readiness: allowed",
+          "recordedAt": "2026-08-25T23:58:47.673Z",
+          "payload": {
+            "unmet": [],
+            "target": "design",
+            "profile": "fix",
+            "subject": {
+              "id": "BI-A45D744A",
+              "kind": "backlog-item"
+            },
+            "verdict": "allowed",
+            "blockers": [],
+            "authority": {
+              "actionKey": "claim_backlog_item_for_work",
+              "enforcementState": "enforced"
+            },
+            "satisfied": [
+              {
+                "code": "CLASSIFICATION_REQUIRED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "product-owner"
+              },
+              {
+                "code": "AUTHORIZATION_DENIED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "platform-governance"
+              }
+            ],
+            "decisionId": "IRD-0D4EDF8EAF22",
+            "workIntent": "design",
+            "evaluatedAt": "2026-08-25T23:58:47.662Z",
+            "factsDigest": "4f05ebb0e6dbbc69cc4709daac65227fd1b53166c24ea9d10c12cadb4268c29b",
+            "stableCodes": {
+              "unmet": [],
+              "blockers": [],
+              "satisfied": [
+                "CLASSIFICATION_REQUIRED",
+                "AUTHORIZATION_DENIED"
+              ]
+            },
+            "policyVersion": "initiative-readiness.v2",
+            "schemaVersion": 1,
+            "transitionObject": {
+              "id": "OpenDigitalProductFactory/opendigitalproductfactory#fix/wordpress-operator-regressions-recovery",
+              "kind": "work-capsule",
+              "targetState": "design",
+              "expectedVersion": "claim.v1"
+            }
+          }
+        }
+      ],
+      "effortSize": "small",
+      "triageOutcome": "build",
+      "scopeRationale": "Provider-neutral external-channel behavior with WordPress as the affected implementation.",
+      "createdAt": "2026-08-23T03:25:31.788Z"
+    },
+    {
+      "itemId": "BI-F50B1E46",
+      "epicId": "EP-31C5A6C8",
+      "title": "Deliver governed WordPress channel projection without making DPF a public CMS host",
+      "body": "## Problem\r\nMany adopting organizations already run WordPress. DPF currently has no governed way to discover that site, assess which WordPress capabilities are absorbed versus retained, import inventory/read-only context, or project approved DPF content and structured business facts into it.\r\n\r\n## Outcome\r\nDeliver WordPress as the first external website channel on DPF's unified connector and outbound-publication substrate. DPF remains canonical for business facts, content intent, approval, audit, and scheduling. WordPress remains canonical for public presentation: themes, blocks/layout, permalink/SEO settings, hosting, CDN, and plugin-rendered behavior.\r\n\r\n## Architectural guardrails\r\n- No bundled WordPress/PHP/database runtime, public DPF URL, CDN, theme engine, or general-purpose CMS data model.\r\n- Start one-way: DPF -> WordPress for approved publication; authenticated polling for discovery/drift. Webhooks and a thin WordPress plugin are optional later increments.\r\n- Reuse IntegrationCredential custody, connector definitions/checkpoints/audit, OutboundDraft/Approval/ScheduledOutboundAction/OutboundPublication, media storage, and owning domain records.\r\n- Resolve incumbent posture by normalized provider identity plus integration category/capability; never arbitrary provider-name-only findFirst.\r\n- Per-resource authority and conflict behavior are explicit. No silent two-way merge and no WordPress content overwriting DPF operational truth.\r\n- User-supplied site URLs require SSRF/DNS-rebinding defenses, HTTPS, bounded redirects, content sanitization, least privilege, safe errors, and auditable external writes.\r\n- Reserve approximately 20% of every implementation slice for convergence/refactoring and invariant coverage.\r\n\r\n## Initial scope\r\n1. Provider/category identity and absorption-posture correctness.\r\n2. WordPress REST discovery, health, auth, bounded incremental read.\r\n3. Approved posts/pages/media publication with idempotent external identity mapping.\r\n4. Structured storefront/catalog projection with preview, drift, and authority rules.\r\n5. Setup/health/publication UX in the existing Integrations route family plus contextual Marketing/Storefront actions.\r\n6. EA/parity evidence, positioning claims, operational docs, and adoption measurement.\r\n\r\n## Acceptance\r\nA founder/operator can connect a supported HTTPS WordPress site with a dedicated application password, see a truthful capability/authority preview, publish an approved DPF item as a WordPress draft or scheduled/public post, see its external URL and audit receipt, detect later external modification without silent overwrite, and disconnect/revoke credentials. Fresh install/unavailable/permission/plugin-conflict states provide one honest recovery action. Tests prove idempotency, approval enforcement, pagination/cursors, SSRF controls, sanitization, authority, and no duplicate publication.",
+      "status": "retired",
+      "type": "portfolio",
+      "workType": "feature",
+      "source": "user-request",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-f50b1e46-cmt7xwduz0e7401mgfp1rt1yd",
+          "kind": "evidence",
+          "summary": "WordPress umbrella delivered by merged backend PR #4450 and operator-experience PR #4478.",
+          "recordedAt": "2026-08-25T00:41:39.371Z",
+          "payload": {
+            "url": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/4478",
+            "body": "The connector backend, publication path, integration UX, governed preview/write controls, documentation, runbook, architecture parity, and claims all exist on main.",
+            "evidenceKind": "source_verified",
+            "toolExecutionId": null
+          }
+        },
+        {
+          "recoveryKey": "bi-f50b1e46-cmt7xwdvv0e7601mg61uao379",
+          "kind": "evidence",
+          "summary": "WordPress umbrella has exact-tree, protected-queue, hosted UX, and final acceptance evidence.",
+          "recordedAt": "2026-08-25T00:41:39.403Z",
+          "payload": {
+            "url": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/4478",
+            "body": "Exact-tree evidence cmt575xos031w01rmgbxkx8mj, 38/38 PR checks, 19/19 merge-group checks, and final acceptance RV-WORDPRESS-UX-4478 passed.",
+            "evidenceKind": "test_pass",
+            "toolExecutionId": null
+          }
+        },
+        {
+          "recoveryKey": "bi-f50b1e46-cmt7xwhjx0e7f01mgsi3vnppj",
+          "kind": "status_change",
+          "summary": "Retired BI-F50B1E46 as discard",
+          "recordedAt": "2026-08-25T00:41:44.157Z",
+          "payload": {
+            "to": "retired",
+            "from": "open",
+            "reason": "Delivery evidence cmt7xwduz0e7401mgfp1rt1yd and cmt7xwdvv0e7601mg61uao379.",
+            "outcome": "discard",
+            "rationale": "The recovered WordPress umbrella is fully delivered by merged PRs #4450 and #4478 with exact-tree and final acceptance evidence; its active state duplicated completed delivery.",
+            "duplicateOfId": null
+          }
+        }
+      ],
+      "effortSize": "xlarge",
+      "triageOutcome": "discard",
+      "scopeRationale": "Provider-neutral platform channel projection with WordPress as first provider; reused by every archetype.",
+      "createdAt": "2026-08-22T04:05:24.562Z"
+    }
+  ]
+}

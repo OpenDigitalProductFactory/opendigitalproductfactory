@@ -31,6 +31,26 @@ matter. It does not weaken a boundary. Clinical information receives the
 clinical boundary even when it appears in a legal, home-service, or other
 workflow.
 
+## What counts as sensitive detail, and what does not
+
+DPF looks for sensitive detail in what a coworker is actually being sent: your
+messages, the results of the tools it runs, page data, attachments, recalled
+knowledge and the coworker's own memory of prior work.
+
+It does **not** treat a coworker's job description as sensitive detail. A COO's
+description says it approves payroll runs; a finance controller's mentions
+invoices; an HR director's mentions salaries. Those words describe the job, not
+a person's pay. Treating them as sensitive detail used to confine those
+coworkers to the on-box model permanently, which left them slower and less
+capable at the work they were hired for, with no gain in protection — no salary
+was ever in the request.
+
+The distinction is drawn where the prompt is put together, so it is decided by
+the part of DPF that knows which text is the coworker's brief and which is your
+business's data. Anything DPF is not certain is a brief counts as your data. A
+real salary, invoice number or bank detail is treated as sensitive detail
+wherever it appears — including in a briefing DPF assembled for the coworker.
+
 ## Possible outcomes
 
 DPF combines all detected packs and uses the strongest outcome:

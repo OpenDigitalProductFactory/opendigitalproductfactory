@@ -113,6 +113,21 @@ describe("Authorized Surface runtime", () => {
     });
     expect(opened).toMatchObject({ ok: false, code: "surface_not_authorized" });
   });
+
+  it("a no-match open returns a self-describing failure that does not imply emptiness (BI-E72BA4CD)", async () => {
+    const { runtime } = makeRuntime();
+    const opened = await runtime.open({
+      context,
+      selector: { surfaceId: "no-such-surface-xyz" },
+    });
+    expect(opened).toMatchObject({ ok: false, code: "surface_not_found" });
+    const msg = (opened as { message: string }).message.toLowerCase();
+    // The failure must explicitly disclaim emptiness so a weak model can't turn
+    // a tool/authorization gap into a false "this node is empty" answer.
+    expect(msg).toContain("empty");
+    expect(msg).toContain("could not be loaded");
+    expect(msg).toMatch(/not .*empty/);
+  });
   it("opens headlessly, projects the same semantic graph, and never returns secret values", async () => {
     const { runtime } = makeRuntime();
     const opened = await runtime.open({ context, selector: { taskIntent: "configure network discovery" } });

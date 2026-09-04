@@ -25,10 +25,15 @@ export function buildInitialRouteContext(input: {
     budgetClass: posture?.routeContext.budgetClass ?? options?.budgetClass,
     allowedProviders: options?.allowedProviders,
     deniedProviders: options?.deniedProviders,
+    // `modelTier` is a cost/quality TIER preference (trivial work is sized to the
+    // on-box "local" tier), NOT a data-residency boundary — conflating the two
+    // pinned every trivial-tail build to the local model, which is fenced by
+    // local-CI capacity reservation on a single host, so those builds could never
+    // fall back to a connected cloud engine and failed at ideate under load
+    // (BI-8B4359DE). Only the explicit platform switch enforces hard local-only;
+    // sensitivity clearance still independently protects sensitive data.
     residencyPolicy:
-      options?.modelTier === "local" || input.localOnlyInference
-        ? "local_only"
-        : options?.residencyPolicy,
+      input.localOnlyInference ? "local_only" : options?.residencyPolicy,
     requiredModelClass: options?.requiredModelClass,
   };
 }

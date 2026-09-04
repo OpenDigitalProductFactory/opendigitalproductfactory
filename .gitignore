@@ -54,6 +54,10 @@ apps/mobile/coverage/
 .claude/settings.local.json
 .claude/autonomous-e2e-progress.md
 .claude/worktrees/
+# Browser-pane / preview launch config — machine-local ports and URLs, same
+# family as settings.local.json above. Never tracked; without this line it
+# shows as untracked work in every session's end-of-session guard.
+.claude/launch.json
 
 # Local verification and handoff artifacts
 output/
@@ -123,3 +127,9 @@ dev/null/
 # it never dirties the tree (which would muddy the janitor's dirty signal and block
 # a worktree's own Tier-A SessionEnd reap).
 .dpf-session-heartbeat.json
+
+# Sandbox build worktrees. Build Studio creates .builds/<buildId>/ inside the
+# sandbox source tree and its GC removes them again, so tracking this path makes
+# routine build activity leave the tree "dirty" — which the source-currency
+# guard then treats as a reason to pause EVERY build (BI-101C107C).
+.builds/

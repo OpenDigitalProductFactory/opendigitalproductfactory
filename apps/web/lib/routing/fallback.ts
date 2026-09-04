@@ -3,7 +3,8 @@
  * and fallback chain. Replaces callWithFailover's dispatch loop.
  */
 import { callProvider, InferenceError } from "@/lib/ai-inference";
-import { LOCAL_TOOL_SELECTION_CLIFF } from "@/lib/tak/context-economy-metrics";
+import { resolveLocalToolCeiling } from "./local-tool-ceiling";
+import { resolveLocalToolFidelityCeiling } from "./local-tool-fidelity";
 import type { ChatMessage } from "@/lib/ai-inference";
 import { prisma } from "@dpf/db";
 import type { RouteDecision } from "./types";
@@ -27,6 +28,7 @@ import { invalidateRoutingLoaderCache } from "./loader";
 import { recordRouteOutcome } from "./route-outcome";
 import { autoDiscoverAndProfile } from "@/lib/ai-provider-internals";
 import {
+  ProviderReconciliationRequiredError,
   shouldDegradeModelForInterfaceDrift,
   shouldReconcileProviderAfterError,
 } from "@/lib/inference/provider-reconciliation";
@@ -249,6 +251,7 @@ export async function callWithFallbackChain(
   });
 
   const attempts: Array<{ endpointId: string; error: string }> = [];
+  const reconciledProviders = new Set<string>();
   const capacityDeferrals: LocalProviderCapacityDeferredError[] = [];
   let rateLimitRetried = false;
   let overloadRetried = false;
@@ -263,26 +266,48 @@ export async function callWithFallbackChain(
   // handle ~10-15 tools before tool-selection accuracy collapses. When the
   // caller hands us a large tool surface (Build Studio threads expose 26-36
   // phase-filtered tools), routing local as a fallback turns the agentic loop
-  // into a 200-iteration spin. Skip local fallbacks above the threshold; the
+  // into a 200-iteration spin. Skip local fallbacks above the ceiling; the
   // selected primary endpoint is still tried regardless. See FB-71FB3A53
-  // thread, 2026-05-22. The threshold IS the shared selection cliff — the
-  // coworker-tool-budget caps its total attachment to the same constant, so a
-  // budgeted surface is never disqualified here by an off-by-essentials gap.
-  const LOCAL_FALLBACK_MAX_TOOLS = LOCAL_TOOL_SELECTION_CLIFF;
-  const skipLocalFallback = (tools?.length ?? 0) > LOCAL_FALLBACK_MAX_TOOLS;
+  // thread, 2026-05-22.
+  //
+  // The ceiling comes from `resolveLocalToolCeiling`, the SAME function the
+  // coworker attachment budget uses (BI-A8BFEFCE). This file previously pinned
+  // the raw cliff and asserted the budget matched it; it did not. The budget
+  // honours a MEASURED fidelity ceiling, so once the eval harness measures a
+  // local model above 15 the budget would attach more tools than this gate would
+  // agree to run — the surface would be refused for exceeding a limit nothing
+  // else applied. Sharing the derivation makes that class of drift impossible.
+  //
+  // Resolved LAZILY and memoised: the measured ceiling is a DB read, and it is
+  // only needed when a local fallback entry is actually reached with tools
+  // attached, which is rare. The hot path pays nothing.
+  const attachedToolCount = tools?.length ?? 0;
+  let cachedLocalToolCeiling: number | null = null;
+  const resolveLocalFallbackCeiling = async (): Promise<number> => {
+    if (cachedLocalToolCeiling === null) {
+      const measured = await resolveLocalToolFidelityCeiling().catch(() => null);
+      cachedLocalToolCeiling = resolveLocalToolCeiling(measured);
+    }
+    return cachedLocalToolCeiling;
+  };
 
   for (let i = 0; i < chain.length; i++) {
     const entry = chain[i]!;
 
-    if (skipLocalFallback && i > 0 && entry.providerId === "local") {
-      console.log(
-        `[callWithFallbackChain] Skipping local fallback (${tools?.length ?? 0} tools > ${LOCAL_FALLBACK_MAX_TOOLS} threshold for small local models)`,
-      );
-      attempts.push({
-        endpointId: entry.providerId,
-        error: `skipped local fallback: ${tools?.length ?? 0} tools exceeds threshold for small local models`,
-      });
-      continue;
+    if (i > 0 && entry.providerId === "local" && attachedToolCount > 0) {
+      const localToolCeiling = await resolveLocalFallbackCeiling();
+      if (attachedToolCount > localToolCeiling) {
+        console.log(
+          `[callWithFallbackChain] Skipping local fallback (${attachedToolCount} tools > ${localToolCeiling} threshold for small local models)`,
+        );
+        // Message shape is parsed by inference-dead-ends.ts to report the exact
+        // count back to the operator — keep "<n> tools exceeds threshold".
+        attempts.push({
+          endpointId: entry.providerId,
+          error: `skipped local fallback: ${attachedToolCount} tools exceeds threshold for small local models`,
+        });
+        continue;
+      }
     }
 
     // Backoff between fallback attempts to avoid cascading rate limits.
@@ -411,7 +436,23 @@ export async function callWithFallbackChain(
           // to an incompatible provider. Max 2 retries with backoff.
           const retryMs = extractRetryAfterMs(e.headers) ?? 30_000;
           const isSelectedEndpoint = i === 0;
-          if (isSelectedEndpoint && !rateLimitRetried) {
+          // A LOCAL pool check that refused before the call left the process is
+          // not an upstream 429: nothing was asked of the provider, and the
+          // reset is wall-clock, so waiting here cannot make it answer sooner.
+          // The pool check throws precisely to cause fallback, and honouring
+          // the wait defeated it — the review lane spent its whole 300s budget
+          // sleeping on a saturated codex pool while a healthy provider sat at
+          // index 1, and every governed review ended `missing-terminal-writer`
+          // with the model never bound (BI-52C6FE5A).
+          //
+          // Skipping the wait is only correct when somewhere else can serve the
+          // call. On a single-provider install the saturated pool IS the whole
+          // chain, and the wait is the only recovery there is — dropping it
+          // there would turn a 30s delay into an immediate hard failure. So the
+          // skip is conditional on an untried entry actually existing.
+          const hasUntriedAlternative = i < chain.length - 1;
+          const skipWaitForLocalPool = e.localPoolExhausted === true && hasUntriedAlternative;
+          if (isSelectedEndpoint && !rateLimitRetried && !skipWaitForLocalPool) {
             rateLimitRetried = true;
             const waitMs = Math.min(retryMs, 60_000);
             console.log(`[callWithFallbackChain] Rate limited on pinned provider ${entry.providerId}. Waiting ${waitMs / 1000}s before retry...`);
@@ -509,7 +550,9 @@ export async function callWithFallbackChain(
             );
 
           if (shouldReconcileProviderAfterError(e.code, e.message)) {
-            autoDiscoverAndProfile(entry.providerId).catch((err) =>
+            await autoDiscoverAndProfile(entry.providerId).then(() => {
+              reconciledProviders.add(entry.providerId);
+            }).catch((err) =>
               console.error(
                 `[callWithFallbackChain] failed to reconcile ${entry.providerId} after model_not_found:`,
                 err,
@@ -628,6 +671,10 @@ export async function callWithFallbackChain(
 
   if (capacityDeferrals.length === chain.length) {
     throw capacityDeferrals.at(-1)!;
+  }
+
+  if (reconciledProviders.size > 0) {
+    throw new ProviderReconciliationRequiredError(reconciledProviders, attempts);
   }
 
   throw new Error(

@@ -16,6 +16,7 @@
  *   pnpm --filter web ux:sweep                     # measure + ratchet (exit 1 on regression)
  *   pnpm --filter web ux:sweep -- --update-baseline # freeze current as the new baseline
  *   pnpm --filter web ux:sweep -- --base-url http://localhost:3000
+ *   pnpm --filter web ux:sweep -- --routes /customer/marketing,/platform/tools/integrations
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -30,6 +31,7 @@ import {
 import AxeBuilder from "@axe-core/playwright";
 
 import { measureUxBudget } from "../lib/ux-budget/measure";
+import { confirmBlockingRoutes } from "./ux-sweep-reproducibility";
 import {
   evaluateSweep,
   formatSweepReport,
@@ -40,6 +42,7 @@ import {
 } from "../lib/ux-budget/ratchet";
 import type { UxShell } from "../lib/ux-budget/budgets";
 import type { RouteAudience } from "../lib/navigation/route-audience";
+import { loadRouteParams, resolveSweepPath } from "./ux-sweep-route-params";
 import type {
   ExemptCheck,
   RouteSweepExclusionReason,
@@ -63,6 +66,7 @@ function repoRoot(): string {
 
 const ROOT = repoRoot();
 const SHELLS_REL = "apps/web/lib/ux-budget/route-shells.generated.json";
+
 const BASELINE_REL = "apps/web/lib/ux-budget/route-budget-baseline.json";
 const REPORT_REL = "apps/web/lib/ux-budget/route-budget-report.json";
 const EXECUTION_REL =
@@ -108,6 +112,21 @@ type MeasuredRoute = {
 function arg(name: string, fallback: string): string {
   const i = process.argv.indexOf(`--${name}`);
   return i !== -1 && process.argv[i + 1] ? process.argv[i + 1] : fallback;
+}
+
+export function selectSweepRows(inventory: ShellRow[], rawSelector: string): ShellRow[] {
+  const eligible = inventory.filter((row) => row.sweepEligible);
+  const requested = [...new Set(rawSelector.split(",").map((route) => route.trim()).filter(Boolean))];
+  if (requested.length === 0) return eligible;
+
+  const eligiblePaths = new Set(eligible.map((row) => row.routePath));
+  const unresolved = requested.filter((routePath) => !eligiblePaths.has(routePath)).sort();
+  if (unresolved.length > 0) {
+    throw new Error(`unknown or ineligible route selector(s): ${unresolved.join(", ")}`);
+  }
+
+  const selected = new Set(requested);
+  return eligible.filter((row) => selected.has(row.routePath));
 }
 
 /**
@@ -379,13 +398,15 @@ async function measureRoute(
   page: Page,
   row: ShellRow,
   baseUrl: string,
+  routeParams: Readonly<Record<string, string>> = {},
 ): Promise<MeasuredRoute> {
+  const targetPath = resolveSweepPath(row.routePath, routeParams);
   const phases = {} as RoutePhaseTimings;
   let phaseStartedAt = performance.now();
 
   // NOT networkidle: this portal holds long-lived connections (activity streams,
   // polling), so networkidle never settles and every route would time out.
-  const response = await page.goto(`${baseUrl}${row.routePath}`, {
+  const response = await page.goto(`${baseUrl}${targetPath}`, {
     waitUntil: "domcontentloaded",
     timeout: 30_000,
   });
@@ -402,7 +423,7 @@ async function measureRoute(
     throw new Error(`http ${response.status()}`);
   }
   const landed = new URL(page.url()).pathname.replace(/\/$/, "") || "/";
-  const wanted = row.routePath.replace(/\/$/, "") || "/";
+  const wanted = targetPath.replace(/\/$/, "") || "/";
   if (landed !== wanted) {
     throw new Error(`redirected to ${landed}`);
   }
@@ -517,6 +538,7 @@ export function executionOutcome(
   status: "measured" | "failed";
   durationMs: number;
   phases?: RoutePhaseTimings;
+  axeViolations?: number;
   reason?: string;
 } {
   return outcome.status === "measured"
@@ -525,6 +547,7 @@ export function executionOutcome(
         status: outcome.status,
         durationMs: outcome.durationMs,
         phases: outcome.value.phases,
+        axeViolations: outcome.value.measurement.axeViolations,
       }
     : {
         routePath: outcome.routePath,
@@ -540,12 +563,14 @@ async function main(): Promise<void> {
   const workerCount = parseSweepWorkerCount(
     arg("workers", process.env.UX_SWEEP_WORKERS ?? "2"),
   );
+  const routeSelector = arg("routes", process.env.UX_SWEEP_ROUTES ?? "");
   const updateBaseline = process.argv.includes("--update-baseline");
 
   const inventory = (
     JSON.parse(readFileSync(join(ROOT, SHELLS_REL), "utf8")) as { routes: ShellRow[] }
   ).routes;
-  const rows = inventory.filter((row) => row.sweepEligible);
+  const rows = selectSweepRows(inventory, routeSelector);
+  const routeParams = loadRouteParams(ROOT);
   const excluded = inventory
     .filter((row) => !row.sweepEligible)
     .map((row) => ({
@@ -557,6 +582,8 @@ async function main(): Promise<void> {
   let browser: Browser | undefined;
   let contexts: BrowserContext[] = [];
   let routeRun: RouteWorkResult<MeasuredRoute> | undefined;
+  /** Routes whose blocking verdict did not reproduce on a second measurement (BI-69FE5504). */
+  let notReproducible: string[] = [];
   if (!existsSync(statePath)) {
     console.error(
       `[ux-sweep] WARNING: no storage state at ${storageState} — authenticated route measurement will fail.`,
@@ -580,13 +607,39 @@ async function main(): Promise<void> {
       async (row, workerIndex) =>
         withIsolatedSweepPage(contexts[workerIndex], async (page) => {
           try {
-            return await measureRoute(page, row, baseUrl);
+            return await measureRoute(page, row, baseUrl, routeParams);
           } catch (error) {
             await captureFailureScreenshot(page, row.routePath);
             throw error;
           }
         }),
     );
+    // A blocking verdict must be attributable to a real defect: some routes
+    // render from state the sweep does not pin, so a delta can be noise. Only
+    // block if it reproduces (BI-69FE5504 — see findNotReproducibleBlocking).
+    if (!updateBaseline && routeRun) {
+      const firstPass = routeRun.outcomes.flatMap((o) => (o.status === "measured" ? [o.value.measurement] : []));
+      const provisional = evaluateSweep(firstPass, loadBaseline(join(ROOT, BASELINE_REL)));
+      notReproducible = await confirmBlockingRoutes({
+        rows,
+        firstPassBlocking: provisional.blocked ? provisional.verdicts.filter((v) => !v.ok).map((v) => v.routePath) : [],
+        onConfirmStart: (count) =>
+          console.error(`[ux-sweep] confirming ${count} blocking route(s) with a second measurement (BI-69FE5504)`),
+        remeasure: async (confirmRows) => {
+          const run = await runBoundedRouteWork(
+            [...confirmRows],
+            Math.min(workerCount, confirmRows.length),
+            async (row, workerIndex) =>
+              withIsolatedSweepPage(contexts[workerIndex], async (page) => measureRoute(page, row, baseUrl, routeParams)),
+          );
+          const measured = run.outcomes.flatMap((o) => (o.status === "measured" ? [o.value.measurement] : []));
+          return {
+            blocking: evaluateSweep(measured, loadBaseline(join(ROOT, BASELINE_REL))).verdicts.filter((v) => !v.ok).map((v) => v.routePath),
+            unmeasured: run.outcomes.filter((o) => o.status !== "measured").map((o) => o.routePath),
+          };
+        },
+      });
+    }
   } finally {
     await Promise.all(contexts.map((context) => context.close().catch(() => {})));
     await browser?.close();
@@ -608,6 +661,9 @@ async function main(): Promise<void> {
       excluded,
     },
     accounting: routeRun.accounting,
+    // Recorded so an unreliable gate cannot hide: these routes produced a
+    // blocking verdict that did not survive a second measurement (BI-69FE5504).
+    notReproducibleBlockingRoutes: notReproducible,
     routes: routeRun.outcomes.map(executionOutcome),
   };
   const executionPath = join(ROOT, EXECUTION_REL);
@@ -691,14 +747,27 @@ async function main(): Promise<void> {
   writeFileSync(join(ROOT, REPORT_REL), `${JSON.stringify(sweep, null, 2)}\n`, "utf8");
   console.error(formatSweepReport(sweep));
 
-  if (sweep.blocked) {
+  if (notReproducible.length > 0) {
+    console.error(
+      `\n[ux-sweep] NOT REPRODUCIBLE — ${notReproducible.length} route(s) produced a blocking verdict that did not survive a second measurement:`,
+    );
+    for (const routePath of notReproducible) console.error(`  - ${routePath}`);
+    console.error(
+      "These are NOT blocking this run, because a gate must attribute its refusal to a real defect (BI-69FE5504).\n" +
+        "They ARE a defect in their own right: the route renders from state the sweep does not pin, so its measurement\n" +
+        "is not a measurement. Fix the route's fixture determinism rather than re-running until it passes.",
+    );
+  }
+  const blockedRoutes = sweep.verdicts.filter((v) => !v.ok && !notReproducible.includes(v.routePath));
+
+  if (sweep.blocked && blockedRoutes.length > 0) {
     console.error(
       "\n[ux-sweep] BLOCKED — a route regressed against its frozen baseline, or a net-new route exceeded its shell budget.",
     );
     // BI-26DA1AEB residual: structureChanged failures used to strand authors who
     // did not know the sanctioned re-freeze path exists (workflow_dispatch +
     // update_baseline artifact, not a silent CI commit).
-    if (sweep.verdicts.some((v) => !v.ok && v.structureChanged)) {
+    if (blockedRoutes.some((v) => v.structureChanged)) {
       console.error(
         "\n[ux-sweep] structureChanged recovery (BI-26DA1AEB):\n" +
           "  1. gh workflow run ux-route-sweep.yml --ref <branch> -f update_baseline=true\n" +

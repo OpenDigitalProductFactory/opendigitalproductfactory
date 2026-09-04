@@ -104,9 +104,62 @@ function addWorktree(root, target, branch) {
   return target;
 }
 
+
+// ── bind-at-birth (BI-0B292D84 layer 1) ──────────────────────────────────────
+
+/**
+ * Claim a Workroom for the branch this hook just created.
+ *
+ * TWO CONSTRAINTS SHAPE THIS.
+ *
+ * 1. STDOUT IS THE RETURN VALUE. Claude Code reads the created path from this
+ *    hook's stdout, so binding output goes to stderr only. A stray stdout write
+ *    here does not make a noisy log, it corrupts the worktree path.
+ *
+ * 2. THE IMPORT MUST BE DYNAMIC AND GUARDED. The plugin ships without the
+ *    repo's scripts/ tree, so a static import of ../../../scripts/lib would
+ *    resolve at module load, throw ERR_MODULE_NOT_FOUND, and take worktree
+ *    creation down with it — the same failure that broke the image build in
+ *    BI-9B490215. Absent lib means binding is skipped and said out loud, not a
+ *    dead hook.
+ *
+ * Binding NEVER blocks worktree creation. A tree that could not be bound is
+ * still a usable tree; it is just one the claim guard will flag.
+ */
+async function bindAtBirth({ mainRoot, worktreePath, branch }) {
+  let bind;
+  try {
+    ({ bindWorktreeToWorkroom: bind } = await import(`${new URL("../../../scripts/lib/workroom-bind.mjs", import.meta.url)}`));
+  } catch {
+    process.stderr.write("[worktree-create] workroom binding unavailable (scripts/lib not present in this install) — claim a Workroom manually with adopt_worktree.\n");
+    return;
+  }
+  try {
+    const gitDir = git(mainRoot, ["-C", worktreePath, "rev-parse", "--path-format=absolute", "--git-dir"], { allowFail: true })
+      ?? git(worktreePath, ["rev-parse", "--path-format=absolute", "--git-dir"], { allowFail: true });
+    const headSha = git(worktreePath, ["rev-parse", "HEAD"], { allowFail: true });
+    const remote = git(mainRoot, ["config", "--get", "remote.origin.url"], { allowFail: true }) ?? "";
+    const m = remote.match(/[:/]([^/:]+\/[^/]+?)(?:\.git)?$/);
+    const result = await bind({
+      branch,
+      worktreePath,
+      gitDir,
+      repositoryFullName: m ? m[1] : "OpenDigitalProductFactory/opendigitalproductfactory",
+      headSha,
+    });
+    if (result.status === "bound") {
+      process.stderr.write(`[worktree-create] Workroom claimed for ${branch}: ${result.capsuleId}\n`);
+    } else {
+      process.stderr.write(`[worktree-create] NOT bound to a Workroom (${result.status}: ${result.reason}) — AGENTS.md 12 still requires a claim; call adopt_worktree before you work.\n`);
+    }
+  } catch (err) {
+    process.stderr.write(`[worktree-create] workroom binding failed: ${err?.message ?? err}\n`);
+  }
+}
+
 // ── runtime entry ────────────────────────────────────────────────────────────
 
-function main() {
+async function main() {
   let payload;
   try {
     const raw = readFileSync(0, "utf8");
@@ -125,6 +178,9 @@ function main() {
     const plan = planWorktree({ mainRoot, worktreeName });
     if (!plan) throw new Error(`cannot plan a worktree for name=${JSON.stringify(worktreeName)} root=${mainRoot}`);
     const created = addWorktree(mainRoot, plan.target, plan.branch);
+    // Bind BEFORE returning the path: the claim is part of creating the
+    // worktree, not a follow-up someone remembers. Bounded and fail-soft.
+    await bindAtBirth({ mainRoot, worktreePath: created, branch: plan.branch });
     process.stdout.write(created);
     process.exit(0);
   } catch (err) {

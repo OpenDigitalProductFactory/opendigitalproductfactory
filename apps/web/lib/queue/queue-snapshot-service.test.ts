@@ -53,6 +53,16 @@ describe("assessQueueHealth", () => {
     expect(a.health).toBe("at-risk");
     expect(a.reasons.length).toBeGreaterThanOrEqual(2);
   });
+  it("is at-risk when backlog has no completions", () => {
+    const a = assessQueueHealth(view({ depth: 3, arrivals: 3, throughput: 0 }));
+    expect(a.health).toBe("at-risk");
+    expect(a.reasons).toContain("no completions with backlog");
+  });
+  it("watches a queue whose p95 wait exceeds the explicit progress SLO", () => {
+    const a = assessQueueHealth(view({ depth: 2, throughput: 2, waitP95Ms: 7_200_000 }));
+    expect(a.health).toBe("watch");
+    expect(a.reasons.join(" ")).toContain("p95 wait");
+  });
 });
 
 describe("readQueueSnapshots", () => {

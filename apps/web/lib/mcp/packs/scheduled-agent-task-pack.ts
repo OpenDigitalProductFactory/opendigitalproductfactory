@@ -13,10 +13,20 @@
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import { SCHEDULED_AGENT_TASK_KINDS } from "@/lib/operate/scheduled-jobs/agent-task-kind";
+import {
+  isScheduledWorkTriggerKind,
+  SCHEDULED_WORK_TRIGGER_KINDS,
+  withScheduledWorkTrigger,
+  type ScheduledWorkTriggerKind,
+} from "@/lib/scheduling/scheduled-work-trigger";
 
 const definitions: ToolDefinition[] = [
   {
     name: "create_scheduled_agent_task",
+    // changes identity or authority → consult-gated (TAK §8.4.1). Kept terse:
+    // the coverage measure only sees a 3000-char window from `name:` (BI-99F4B22C).
+    sideEffect: true,
+    consequence: "authority",
     description: "Create a recurring agent task that runs in the coordination plane (TaskRun/thread/tools/evidence) on a 5-field UTC cron. Owned by the calling user; the supported way for an agent to schedule recurring work instead of a client-local cron.",
     inputSchema: {
       type: "object",
@@ -38,14 +48,29 @@ const definitions: ToolDefinition[] = [
           type: "object",
           description: "Versioned typed configuration for taskKind. Product-management playbooks require a previewed permissions digest.",
         },
+        trigger: {
+          type: "object",
+          description: "WHY this job exists, so immediacy is judgeable at fire time (BI-5087F34F). Recorded either way — omit it and the job records kind 'time'. Supply workroomId to have the room's posture govern this job's pace at fire time.",
+          properties: {
+            kind: { type: "string", enum: [...SCHEDULED_WORK_TRIGGER_KINDS], description: "Trigger source." },
+            workroomId: { type: "string", description: "Room this job serves, if any." },
+            obligation: {
+              type: "object",
+              description: "Obligation discharged, if any.",
+              properties: {
+                dueAt: { type: "string", description: "ISO-8601 due instant." },
+                label: { type: "string", description: "Optional label." },
+              },
+              required: ["dueAt"],
+            },
+          },
+          required: ["kind"],
+        },
       },
       required: ["agentId", "title", "prompt", "schedule"],
     },
     requiredCapability: "view_operations",
     executionMode: "immediate",
-    sideEffect: true,
-    // changes identity or authority → consult-gated (TAK §8.4.1).
-    consequence: "authority",
   },
   {
     name: "list_scheduled_agent_tasks",
@@ -128,6 +153,52 @@ async function createScheduledAgentTaskHandler(
   userId: string,
 ): Promise<ToolResult> {
   const { scheduleAgentTaskFor } = await import("@/lib/operate/scheduled-jobs/agent-task-core");
+
+  // BI-5087F34F — merge the trigger record into taskConfig, preserving any
+  // typed kind config already supplied.
+  const baseTaskConfig =
+    params.taskConfig && typeof params.taskConfig === "object" && !Array.isArray(params.taskConfig)
+      ? (params.taskConfig as Record<string, unknown>)
+      : null;
+  const triggerParam =
+    params.trigger && typeof params.trigger === "object" && !Array.isArray(params.trigger)
+      ? (params.trigger as Record<string, unknown>)
+      : null;
+  if (triggerParam && !isScheduledWorkTriggerKind(triggerParam.kind)) {
+    return {
+      success: false,
+      error: "invalid_trigger_kind",
+      message: `trigger.kind must be one of: ${SCHEDULED_WORK_TRIGGER_KINDS.join(", ")}.`,
+    };
+  }
+  const obligationParam =
+    triggerParam?.obligation
+    && typeof triggerParam.obligation === "object"
+    && !Array.isArray(triggerParam.obligation)
+      ? (triggerParam.obligation as Record<string, unknown>)
+      : null;
+  // BI-5087F34F set out to record WHY a job exists, not just when. Recording it
+  // only when a caller opted in left most tasks with no answer: of 53 live tasks
+  // 13 carried a trigger, and none of the 12 ACTIVE ones did. An optional
+  // provenance record is one most callers never supply.
+  //
+  // So the record is now unconditional. "time" is the honest default for a job
+  // created on a cron with no stated cause — it is what a scheduled job IS, not
+  // a guess about intent. A caller that knows better still supplies its own kind,
+  // the room it serves, and the obligation it races; nothing about that path
+  // changes. What changes is that "why does this job exist" now always has an
+  // answer, which is what the posture ladder reads at fire time.
+  const taskConfig = withScheduledWorkTrigger(baseTaskConfig, {
+    kind: (triggerParam?.kind as ScheduledWorkTriggerKind | undefined) ?? "time",
+    workroomId: typeof triggerParam?.workroomId === "string" ? triggerParam.workroomId : null,
+    obligation:
+      typeof obligationParam?.dueAt === "string"
+        ? {
+            dueAt: obligationParam.dueAt,
+            label: typeof obligationParam.label === "string" ? obligationParam.label : null,
+          }
+        : null,
+  });
   const result = await scheduleAgentTaskFor(userId, {
     agentId: String(params.agentId ?? ""),
     title: String(params.title ?? ""),
@@ -145,16 +216,13 @@ async function createScheduledAgentTaskHandler(
       ? { businessProductId: params.businessProductId }
       : {}),
     ...(typeof params.taskKind === "string"
-      ? {
-          taskKind: params.taskKind as (typeof SCHEDULED_AGENT_TASK_KINDS)[number],
-          taskConfig:
-            params.taskConfig &&
-            typeof params.taskConfig === "object" &&
-            !Array.isArray(params.taskConfig)
-              ? (params.taskConfig as Record<string, unknown>)
-              : null,
-        }
+      ? { taskKind: params.taskKind as (typeof SCHEDULED_AGENT_TASK_KINDS)[number] }
       : {}),
+    // BI-5087F34F: taskConfig now carries the trigger record as well as the
+    // typed kind config. It was previously written ONLY when taskKind was set,
+    // which would have made the trigger unrecordable for exactly the ordinary
+    // jobs that most need to say why they exist.
+    ...(taskConfig !== null ? { taskConfig } : {}),
   });
   return result.success
     ? { success: true, entityId: result.taskId, message: `Scheduled agent task ${result.taskId} created${result.note ? ` (${result.note})` : ""}.` }

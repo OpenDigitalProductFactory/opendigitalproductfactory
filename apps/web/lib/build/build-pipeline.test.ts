@@ -2,7 +2,7 @@
 // Tests for pure state machine functions in the build pipeline.
 
 import { describe, it, expect } from "vitest";
-import { getResumeStep, shouldRetry, nextStep, buildFailedState } from "./build-pipeline";
+import { getResumeStep, shouldRetry, nextStep, buildFailedState, executeStep } from "./build-pipeline";
 import type { BuildExecutionState } from "./build-exec-types";
 
 describe("getResumeStep", () => {
@@ -86,5 +86,47 @@ describe("buildFailedState", () => {
     // completedAt must be gone -- contradictory state was the FB-78E967D4 root
     expect(result.completedAt).toBeUndefined();
     expect(result.containerId).toBe("sb-1");
+  });
+});
+
+describe("diff capture cannot silently succeed (BI-79176815)", () => {
+  const noop = () => {};
+
+  // The capture step used to open with `if (!state.containerId) return state;`.
+  // A build whose container had been reaped therefore advanced to "complete"
+  // with diffPatch, diffSummary and gitCommitHashes all empty and NOTHING
+  // logged — indistinguishable from a build that legitimately changed nothing.
+  // Observed live: Build Studio committed a real change to its build branch and
+  // the FeatureBuild row recorded none of it.
+  const stateWithoutContainer = {
+    step: "tests_run",
+    retryCount: 0,
+  } as unknown as BuildExecutionState;
+
+  it("fails the capture step instead of completing with an empty result", async () => {
+    await expect(
+      executeStep("tests_run", "FB-TEST", stateWithoutContainer, noop),
+    ).rejects.toThrow(/no sandbox container/i);
+  });
+
+  it("names the build, so the failure is actionable from the log alone", async () => {
+    await expect(
+      executeStep("tests_run", "FB-TEST", stateWithoutContainer, noop),
+    ).rejects.toThrow(/FB-TEST/);
+  });
+
+  it("says the work may still exist rather than implying it was lost", async () => {
+    // The owner-facing distinction that matters: "we could not record this"
+    // is not the same claim as "nothing changed".
+    await expect(
+      executeStep("tests_run", "FB-TEST", stateWithoutContainer, noop),
+    ).rejects.toThrow(/cannot be recorded/i);
+  });
+
+  it("leaves other steps alone", async () => {
+    const state = { step: "done", retryCount: 0 } as unknown as BuildExecutionState;
+    await expect(
+      executeStep("default" as never, "FB-TEST", state, noop),
+    ).resolves.toBe(state);
   });
 });

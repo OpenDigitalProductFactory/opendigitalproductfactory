@@ -11,6 +11,7 @@ import { complianceEndpoints } from "./endpoints/compliance";
 import { notificationsEndpoints } from "./endpoints/notifications";
 import { dynamicEndpoints } from "./endpoints/dynamic";
 import { uploadEndpoints } from "./endpoints/upload";
+import { mileageEndpoints } from "./endpoints/mileage";
 import { workItemsEndpoints } from "./endpoints/work-items";
 import { financeEndpoints } from "./endpoints/finance";
 import { directoryEndpoints } from "./endpoints/directory";
@@ -31,6 +32,7 @@ export function createApiClient(config: ApiClientConfig) {
     notifications: notificationsEndpoints(client),
     dynamic: dynamicEndpoints(client),
     upload: uploadEndpoints(client),
+    mileage: mileageEndpoints(client),
     workItems: workItemsEndpoints(client),
     finance: financeEndpoints(client),
     directory: directoryEndpoints(client),

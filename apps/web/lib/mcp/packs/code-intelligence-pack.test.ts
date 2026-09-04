@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const specPlan = vi.hoisted(() => ({ searchSpecsAndPlans: vi.fn() }));
+const specPlan = vi.hoisted(() => ({ searchSpecsAndPlans: vi.fn(), specPlanCorpusCaveat: vi.fn(() => null) }));
 vi.mock("@/lib/backlog/spec-plan-search", () => specPlan);
 
 const codeGraphAccess = vi.hoisted(() => ({ getCodeGraphFreshness: vi.fn() }));
@@ -82,9 +82,15 @@ describe("code-intelligence pack — registration", () => {
   });
 });
 
+const CORPUS_AVAILABLE = { available: true, root: "/repo", searchedPaths: ["docs/superpowers/specs", "docs/superpowers/plans"], missingPaths: [], fileCount: 2, reason: "Searched 2 markdown file(s)." };
+const CORPUS_ABSENT = { available: false, root: "/app", searchedPaths: ["docs/superpowers/specs", "docs/superpowers/plans"], missingPaths: ["docs/superpowers/specs", "docs/superpowers/plans"], fileCount: 0, reason: "No spec/plan corpus on this install." };
+
 describe("code-intelligence pack — handler behavior (delegation preserved)", () => {
   it("search_specs_and_plans forwards the query and reports match count", async () => {
-    specPlan.searchSpecsAndPlans.mockResolvedValue([{ path: "a" }, { path: "b" }]);
+    specPlan.searchSpecsAndPlans.mockResolvedValue({
+      corpus: CORPUS_AVAILABLE,
+      results: [{ path: "a" }, { path: "b" }],
+    });
     const res = await codeIntelligencePack.handlers.search_specs_and_plans(
       { query: "governance", kind: "spec", matches: 5, itemId: "BI-1", epicId: "EP-1" },
       "u1",
@@ -105,6 +111,26 @@ describe("code-intelligence pack — handler behavior (delegation preserved)", (
     expect(res.success).toBe(false);
     expect(res.error).toBe("missing_query");
     expect(specPlan.searchSpecsAndPlans).not.toHaveBeenCalled();
+  });
+
+  // BI-10C34BE1: an install without docs/superpowers answered every query with
+  // an empty success, which reads as "no prior design exists" and defeats the
+  // pre-filing overlap check.
+  it("search_specs_and_plans fails loudly when the corpus is absent instead of returning an empty success", async () => {
+    specPlan.searchSpecsAndPlans.mockResolvedValue({ corpus: CORPUS_ABSENT, results: [] });
+    const res = await codeIntelligencePack.handlers.search_specs_and_plans({ query: "tunnel" }, "u1");
+    expect(res.success).toBe(false);
+    expect(res.error).toBe("spec_plan_corpus_unavailable");
+    expect(res.message).toContain("NOT EVIDENCE");
+    expect((res.data as { corpusAvailable: boolean }).corpusAvailable).toBe(false);
+  });
+
+  it("search_specs_and_plans reports a real no-match as a trustworthy empty success", async () => {
+    specPlan.searchSpecsAndPlans.mockResolvedValue({ corpus: CORPUS_AVAILABLE, results: [] });
+    const res = await codeIntelligencePack.handlers.search_specs_and_plans({ query: "tunnel" }, "u1");
+    expect(res.success).toBe(true);
+    expect(res.message).toContain("Found 0 match(es).");
+    expect((res.data as { corpusAvailable: boolean }).corpusAvailable).toBe(true);
   });
 
   it("get_code_graph_freshness returns the summary when there is no trust vector", async () => {

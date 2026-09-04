@@ -15,7 +15,7 @@
 
 import { StatusBadge } from "@/components/ui/report-kit";
 import type { Intent } from "@/components/ui/report-kit/statusColors";
-import { clampStatement, toProseStatement } from "@/lib/build/owner-change-view";
+import { summaryCopyFor } from "@/lib/build/owner-change-view";
 import type { AutonomousBuildCustodyView } from "@/lib/build/autonomous-build-custody";
 
 type Props = {
@@ -28,28 +28,16 @@ type Props = {
   fallbackIntent?: string | null;
   /** Plain-language autonomous custody state; provenance stays collapsed. */
   custody?: AutonomousBuildCustodyView | null;
+  /** The build title, so this band can stay silent when its only content would
+   *  repeat the heading the operator already read one card above. */
+  buildTitle?: string | null;
 };
 
 const OPERATOR_SUMMARY_LIMIT = 260;
 const OPERATOR_APPROACH_LIMIT = 170;
 
-function normalizeCopy(value: string): string {
-  return value.replace(/\s+/g, " ").trim();
-}
-
-/**
- * This band is handed the originating backlog item's description, which for a
- * promoted BI is the whole markdown body. It previously only collapsed
- * whitespace, so "## Problem" and "> **...**" rendered literally on the canvas
- * — the same wall the Outcome slot showed, one card lower. Both now share the
- * one stripper.
- */
-function compactCopy(value: string, maxLength: number): string {
-  return clampStatement(normalizeCopy(toProseStatement(value)), maxLength);
-}
-
 function isTechnicalPlanCopy(value: string): boolean {
-  const normalized = normalizeCopy(value);
+  const normalized = value.replace(/\s+/g, " ").trim();
   if (normalized.length > OPERATOR_APPROACH_LIMIT) return true;
   return /\b(Data Model|ModelProvider|BuildEngine|API Route|server-side|tool-use|CLI-backed|opencode|schema|migration)\b/i.test(normalized);
 }
@@ -59,17 +47,24 @@ export function BuildSolutionSummaryBand({
   proposedApproach,
   fallbackIntent,
   custody,
+  buildTitle,
 }: Props) {
   const problem = problemStatement?.trim() || null;
   const approach = proposedApproach?.trim() || null;
   const fallback = fallbackIntent?.trim() || null;
   const primaryCopy = problem ?? fallback;
-  const operatorProblem = primaryCopy ? compactCopy(primaryCopy, OPERATOR_SUMMARY_LIMIT) : null;
+  const operatorProblem = summaryCopyFor(primaryCopy, buildTitle, OPERATOR_SUMMARY_LIMIT);
   const showApproach = approach != null && !isTechnicalPlanCopy(approach);
-  const operatorApproach = showApproach ? compactCopy(approach, OPERATOR_APPROACH_LIMIT) : null;
+  const operatorApproach = showApproach ? summaryCopyFor(approach, null, OPERATOR_APPROACH_LIMIT) : null;
 
-  // Nothing to say yet → render nothing (the caller also gates, but stay safe).
-  if (!problem && !approach && !fallback && !custody) return null;
+  // Nothing to say → render nothing. This is checked against what will ACTUALLY
+  // be rendered, not against the raw inputs: once the de-duplication above
+  // suppresses copy that merely repeats the heading, a band with raw inputs but
+  // no surviving content would otherwise draw an empty titled card — a heading
+  // with nothing under it, which costs attention and returns none.
+  const hasRenderableContent =
+    operatorProblem != null || operatorApproach != null || approach != null || custody != null;
+  if (!hasRenderableContent) return null;
   const custodyIntent: Intent =
     custody?.state === "complete"
       ? "success"

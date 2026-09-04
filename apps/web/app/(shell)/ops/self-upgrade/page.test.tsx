@@ -26,6 +26,10 @@ vi.mock("@/lib/self-upgrade/config", () => ({
   getSelfUpgradeConfig: vi.fn().mockResolvedValue({ hostSourceMountPath: "/host/dpf" }),
 }));
 
+vi.mock("@/lib/self-upgrade/target-binding", () => ({
+  createSelfUpgradeTargetBinding: vi.fn().mockReturnValue("server-signed-target"),
+}));
+
 vi.mock("@/lib/self-upgrade/merge-point", () => ({
   resolveUpgradeMergePoints: vi.fn().mockResolvedValue({
     running: {
@@ -102,8 +106,12 @@ vi.mock("@/components/ops/SelfUpgradeLiveProvider", () => ({
 // page-level tests can assert the trigger control is co-located INSIDE the
 // card, not merely passed as a prop nobody renders.
 vi.mock("@/components/ops/OwnerReleaseCard", () => ({
-  OwnerReleaseCard: (props: { summary: { state: string }; primaryAction?: React.ReactNode }) => (
-    <div data-testid="owner-release-card" data-release-state={props.summary.state}>
+  OwnerReleaseCard: (props: { summary: { state: string; availableVersion: string | null }; primaryAction?: React.ReactNode }) => (
+    <div
+      data-testid="owner-release-card"
+      data-release-state={props.summary.state}
+      data-available-version={props.summary.availableVersion ?? ""}
+    >
       {props.primaryAction}
     </div>
   ),
@@ -114,11 +122,13 @@ vi.mock("@/components/ops/OwnerReleaseCard", () => ({
 // co-located with the release card), not the trigger's own behavior (covered
 // in SelfUpgradeTriggerControl.test.tsx).
 vi.mock("@/components/ops/SelfUpgradeTriggerControl", () => ({
-  default: (props: { enabled: boolean; channel: string }) => (
+  default: (props: { enabled: boolean; channel: string; actionState: string; targetBinding?: string | null }) => (
     <div
       data-testid="self-upgrade-trigger-control"
       data-enabled={String(props.enabled)}
       data-channel={props.channel}
+      data-action-state={props.actionState}
+      data-target-binding={props.targetBinding ?? ""}
     />
   ),
 }));
@@ -176,6 +186,10 @@ const baseStatus = {
   deployedSha: null,
   deployedShaSource: "unknown" as const,
   targetSha: null,
+  targetTag: null,
+  targetAvailability: "unavailable" as const,
+  targetUnavailableReason: "no-target",
+  currentConfigDigest: null,
   isFresh: false,
   releaseBatch: {
     applicable: true,
@@ -265,6 +279,7 @@ describe("SelfUpgradePage", () => {
   it("passes history runs and cursor to SelfUpgradeClient", async () => {
     const run: SelfUpgradeRunDto = {
       runId: "run-1",
+      recoveryOfRunId: null,
       status: "succeeded",
       trigger: null,
       currentSha: "abc123",
@@ -368,12 +383,40 @@ describe("SelfUpgradePage", () => {
     expect(html).toContain('data-running-pr=""');
   });
 
+  it("uses release identity directly without Git merge-point resolution", async () => {
+    vi.mocked(getSelfUpgradeStatus).mockResolvedValue({
+      ...baseStatus,
+      enabled: true,
+      support: {
+        configuredEnabled: true,
+        supported: true,
+        enabled: true,
+        targetKind: "release-artifact",
+        reason: "enabled",
+        message: null,
+      },
+      isFresh: false,
+      targetSha: "b".repeat(40),
+      targetTag: "v2026.08.24",
+      targetAvailability: "resolved",
+      targetUnavailableReason: null,
+    } as never);
+    vi.mocked(listSelfUpgradeRuns).mockResolvedValue({ runs: [], nextCursor: null });
+
+    const html = renderToStaticMarkup(await SelfUpgradePage());
+
+    expect(resolveUpgradeMergePoints).not.toHaveBeenCalled();
+    expect(html).toContain('data-available-version="v2026.08.24"');
+    expect(html).toContain('data-target-binding="server-signed-target"');
+  });
+
   it("loads only the persisted impact summary during render when an update is available", async () => {
     vi.mocked(getSelfUpgradeStatus).mockResolvedValue({
       ...baseStatus,
       enabled: true,
       isFresh: false,
       targetSha: "b".repeat(40),
+      targetAvailability: "resolved",
     });
     vi.mocked(listSelfUpgradeRuns).mockResolvedValue({ runs: [], nextCursor: null });
 
@@ -390,6 +433,7 @@ describe("SelfUpgradePage", () => {
       enabled: true,
       isFresh: true,
       targetSha: "b".repeat(40),
+      targetAvailability: "resolved",
     });
     vi.mocked(listSelfUpgradeRuns).mockResolvedValue({ runs: [], nextCursor: null });
 
@@ -405,6 +449,7 @@ describe("SelfUpgradePage", () => {
       enabled: true,
       isFresh: false,
       targetSha: "b".repeat(40),
+      targetAvailability: "resolved",
     });
     vi.mocked(listSelfUpgradeRuns).mockResolvedValue({ runs: [], nextCursor: null });
 
@@ -413,6 +458,7 @@ describe("SelfUpgradePage", () => {
     // Owner card first, derived state exposed.
     expect(html).toContain('data-testid="owner-release-card"');
     expect(html).toContain('data-release-state="update-available"');
+    expect(html).toContain('data-action-state="update-available"');
     // Technical controls preserved, now under an Advanced disclosure.
     expect(html).toContain('data-component="self-upgrade-advanced-toggle"');
     expect(html).toContain('data-testid="self-upgrade-client"');
@@ -420,6 +466,30 @@ describe("SelfUpgradePage", () => {
     expect(html.indexOf('data-testid="owner-release-card"')).toBeLessThan(
       html.indexOf('data-component="self-upgrade-advanced-toggle"'),
     );
+  });
+
+  it("keeps retry available after a failed attempt when the release is still newer", async () => {
+    vi.mocked(getSelfUpgradeStatus).mockResolvedValue({
+      ...baseStatus,
+      enabled: true,
+      isFresh: false,
+      targetSha: "b".repeat(40),
+      targetAvailability: "resolved",
+      targetUnavailableReason: null,
+      latestRun: {
+        runId: "SUR-retry",
+        status: "failed",
+        reason: "health-check-failed",
+        targetSha: "b".repeat(40),
+        completionEvidence: null,
+      },
+    } as never);
+    vi.mocked(listSelfUpgradeRuns).mockResolvedValue({ runs: [], nextCursor: null });
+
+    const html = renderToStaticMarkup(await SelfUpgradePage());
+
+    expect(html).toContain('data-release-state="failed"');
+    expect(html).toContain('data-action-state="update-available"');
   });
 
   it("co-locates the primary trigger with the release status card, reachable on arrival in BOTH nav modes (BI-D77BF495)", async () => {

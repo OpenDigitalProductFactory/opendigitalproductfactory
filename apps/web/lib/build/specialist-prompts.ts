@@ -280,12 +280,25 @@ export const SPECIALIST_TOOLS: Record<SpecialistRole, string[]> = {
  * Build the full system prompt for a specialist.
  * Composes: role prompt + task description + build context + prior results.
  */
-export async function buildSpecialistPrompt(params: {
+type SpecialistPromptParams = {
   role: SpecialistRole;
   taskDescription: string;
   buildContext: string;
   priorResults?: string;
-}): Promise<string> {
+};
+
+/**
+ * The specialist prompt plus the span of it that is platform-authored
+ * INSTRUCTION (BI-CE93E314).
+ *
+ * Only the role prompt qualifies. `buildContext`, `taskDescription` and
+ * `priorResults` are build state and another specialist's output — the turn's
+ * DATA — and are deliberately absent, so the inference screener still escalates
+ * on a real value found in any of them.
+ */
+export async function buildSpecialistPromptWithProvenance(
+  params: SpecialistPromptParams,
+): Promise<{ text: string; instructionSpans: string[] }> {
   const hardcoded = SPECIALIST_PROMPTS[params.role];
   const specialistPrompt = withCoworkerInteractionContract(await loadPrompt("specialist", params.role, hardcoded));
   const parts = [specialistPrompt];
@@ -300,5 +313,9 @@ export async function buildSpecialistPrompt(params: {
     parts.push(`\n--- Results from Prior Specialists ---\n${params.priorResults}`);
   }
 
-  return parts.join("\n\n");
+  return { text: parts.join("\n\n"), instructionSpans: [specialistPrompt] };
+}
+
+export async function buildSpecialistPrompt(params: SpecialistPromptParams): Promise<string> {
+  return (await buildSpecialistPromptWithProvenance(params)).text;
 }

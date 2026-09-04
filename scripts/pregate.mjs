@@ -37,11 +37,44 @@ import {
   installBrokenPipeTolerance,
   isVerboseGateConsole,
 } from "./lib/pregate-console.mjs";
+import { collectSlotVerdicts, resolveWorktreeContext } from "./pregate-status.mjs";
+import { reconcileSlots } from "./lib/pregate-status.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
 
 const THIS_FILE = fileURLToPath(import.meta.url);
 const SCRIPT_DIR = dirname(THIS_FILE);
 export const WINDOWS_WRAPPER_TERMINATED_STATUS = 4294967295;
+
+// BI-A9CF0D69 (plan §3 M5): the wrapper's exit 0 must MEAN "gated and passed".
+// Historically a run that gave up while queued could surface exit 0 having
+// gated nothing (BI-2C7F51BA), and pregate:status existed to compensate. The
+// compensation stays (a SHA-bound record beats any exit code), but the wrapper
+// no longer tells the lie: an abandoned admission window, or a zero exit the
+// slot records cannot corroborate as PASS-at-HEAD, exits this distinct code.
+export const ABANDONED_OR_UNRECORDED_EXIT_CODE = 7;
+
+// Invocations that legitimately exit 0 without writing a PASS record: routing
+// probes and evidence replays change nothing about the tree and are exempt
+// from record corroboration — the same closed set shouldRunPreflight() exempts.
+export function isRecordExemptInvocation(args) {
+  return (
+    args.includes("--dry-run")
+    || args.includes("--finalize-evidence")
+    || args.includes("--help")
+    || args.includes("-h")
+  );
+}
+
+// Pure exit-code policy so the honesty rules are unit-testable without a gate:
+// timedOut (admission window elapsed, nothing gated) and status-0-without-a-
+// corroborating-PASS both map to ABANDONED_OR_UNRECORDED_EXIT_CODE; a genuine
+// failure keeps its own status; exempt invocations pass a zero through.
+export function resolveWrapperExitCode({ status, timedOut, recordExempt, verdictAtHead }) {
+  if (timedOut) return ABANDONED_OR_UNRECORDED_EXIT_CODE;
+  if (status !== 0) return status ?? 1;
+  if (recordExempt) return 0;
+  return verdictAtHead === "PASS" ? 0 : ABANDONED_OR_UNRECORDED_EXIT_CODE;
+}
 const DEFAULT_LEASE_WAIT_SECONDS = 7200;
 
 // Host-side guard parity preflight (BI-D35433FB): run the deterministic CI
@@ -276,13 +309,27 @@ export async function recoverInterruptedGateState({
     ...(Array.isArray(state.leaseEvents) ? state.leaseEvents : []),
     recoveryEvent,
   ];
+  // BI-D088D06D: the wrapper exiting before a terminal state is infrastructure
+  // — a killed process, a host under pressure, a lost control plane. It is NOT
+  // a grade on the diff, and it never graded the diff: the run died before it
+  // could. Writing "failed" here made pregate:status report FAIL, which reads as
+  // "your code is bad", permanently consumed that SHA's verdict, and forced an
+  // amend to a fresh SHA. Measured 2026-09-02: 4 of 5 gated branches needed more
+  // than one lease attempt.
+  //
+  // The queued path already recovers (it rewrites status "queued" and preserves
+  // the lease). The running path cannot preserve the lease — the slot must be
+  // freed for the next claimant — but it must still tell the truth about cause.
+  // `blocked_*` is the vocabulary pregate-status already classifies as
+  // INCONCLUSIVE, so this needs no reader change and inherits the honest
+  // headline the blocked statuses already earn.
   writeStateImpl(stateFile, {
     branch,
     sha,
     gatePassed: false,
     leaseId: state.leaseId,
     evidenceId: "",
-    status: "failed",
+    status: "blocked_wrapper_exited",
     expiresAt: state.expiresAt || "",
     resilience: state.resilience ?? null,
     leaseEvents,
@@ -465,6 +512,14 @@ export async function reviveInterruptedQueuedGate({
   return { revived: false, reason: "no-queued-state" };
 }
 
+/**
+ * `gate-worktree.mjs` exits with this when authoritative control-plane state
+ * parks the gate without running CI. Waiting is not failure and must never be
+ * recovered as an interrupted execution.
+ */
+export const EXIT_DURABLE_CONTROL_PLANE_WAIT = 75;
+export const EXIT_DURABLE_QUEUE_WAIT = EXIT_DURABLE_CONTROL_PLANE_WAIT;
+
 export async function recoverInterruptedGate({
   args = [],
   result,
@@ -477,6 +532,24 @@ export async function recoverInterruptedGate({
   const status = result?.status ?? 1;
   if (status === 0 || args.includes("--dry-run") || args.includes("--finalize-evidence")) {
     return { recovered: false, reason: "not-a-recoverable-invocation" };
+  }
+  // BI-465B3D60. Exit 75 is the gate telling us it QUEUED, not that it broke:
+  // gate-worktree.mjs exits 75 after printing {status:"queued", code:
+  // "local_ci_durable_wait", resumeMode:"durable-task"} because the lease is a
+  // durable task that outlives this process and resumes on the next invocation.
+  //
+  // Recovery fired on any non-zero status, so it treated that as an interrupted
+  // run, tried to release a lease this process does not own
+  // (nonprod_lease_not_owner, retryable:false), and stamped the state `failed`.
+  // `pregate:status` then reported "status failed with NO recorded reason" for a
+  // lease that was queued, healthy and heartbeating — the exact category error
+  // this item was filed for ("losing a slot is not the same verdict as failing a
+  // gate"), reintroduced downstream of the classifier that already handles 75.
+  //
+  // Reproduced on a five-deep queue, unpiped and with no concurrent reader, on
+  // three consecutive invocations while the position advanced 3 -> 2.
+  if (status === EXIT_DURABLE_CONTROL_PLANE_WAIT) {
+    return { recovered: false, reason: "durable-control-plane-wait" };
   }
   let context;
   try {
@@ -622,12 +695,47 @@ async function main() {
   }
 
   const useShell = shouldUseShell();
-  const { result } = await runGateWithQueuedRevival({ args, useShell });
+  const { result, timedOut } = await runGateWithQueuedRevival({ args, useShell });
   if (result?.error) {
     process.stderr.write(`pregate: failed to launch gate: ${result.error.message}\n`);
     process.exit(1);
   }
-  process.exit(result?.status ?? 1);
+  const recordExempt = isRecordExemptInvocation(args);
+  const exitCode = resolveWrapperExitCode({
+    status: result?.status ?? 1,
+    timedOut: Boolean(timedOut),
+    recordExempt,
+    verdictAtHead: (result?.status ?? 1) === 0 && !recordExempt && !timedOut
+      ? readReconciledVerdictAtHead()
+      : "",
+  });
+  if (exitCode === ABANDONED_OR_UNRECORDED_EXIT_CODE) {
+    process.stderr.write(
+      timedOut
+        ? `pregate: admission window elapsed without gating — exiting ${ABANDONED_OR_UNRECORDED_EXIT_CODE}, not 0; nothing was verified (BI-A9CF0D69).\n`
+        : `pregate: gate reported 0 but no PASS record exists for current HEAD — treating as did-not-run and exiting ${ABANDONED_OR_UNRECORDED_EXIT_CODE} (BI-A9CF0D69). Read the verdict with: pnpm run pregate:status\n`,
+    );
+  }
+  process.exit(exitCode);
+}
+
+// Read the same SHA-bound slot records pregate:status reads, reduced to the
+// reconciled verdict for current HEAD. Failure to read is "", never "PASS" —
+// corroboration must fail closed or the honesty rule re-opens the exit-0 hole.
+export function readReconciledVerdictAtHead({
+  resolveContextImpl = resolveWorktreeContext,
+  collectVerdictsImpl = collectSlotVerdicts,
+  reconcileImpl = reconcileSlots,
+} = {}) {
+  try {
+    const context = resolveContextImpl();
+    if (!context) return "";
+    const slots = collectVerdictsImpl(context);
+    if (slots.length === 0) return "";
+    return reconcileImpl(slots)?.verdict ?? "";
+  } catch {
+    return "";
+  }
 }
 
 // Guard against side effects on import (e.g. from tests importing routing

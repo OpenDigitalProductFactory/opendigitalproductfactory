@@ -21,9 +21,11 @@ import {
   loadEndpointManifests,
   loadPolicyRules,
   loadOverrides,
+  invalidateRoutingLoaderCache,
   persistRouteDecision,
   persistFailedRouteDecision,
 } from "@/lib/routing/loader";
+import { withProviderReconciliationRetry } from "@/lib/inference/provider-reconciliation";
 import { routeEndpointV2 } from "@/lib/routing/pipeline-v2";
 import {
   ACTIVITY_HARNESS_CONFIDENCE_OVERRIDE_ACTION,
@@ -37,8 +39,9 @@ import {
   buildEffectiveRequestContract,
   buildInitialRouteContext,
 } from "@/lib/inference/route-contract-builder";
-import { logTokenUsage } from "@/lib/ai-inference";
+import { persistRoutedTokenUsage, routedContextKey } from "./routed-token-usage";
 import type { RouteAndCallOptions } from "./routed-inference-options";
+import { applyCallerExecutionPlanOverrides } from "./routed-inference-plan-overrides";
 import {
   applyObservedRouterEvidence,
   attachProviderSuitabilityReceipt,
@@ -57,7 +60,7 @@ import { soleCapabilityFloorFailure } from "@/lib/inference/routing-exclusion-at
 import { createRoutingTraceId } from "@/lib/routing/routing-trace";
 import { AI_ROUTING_ARCHITECTURE_VERSION } from "@/lib/routing/routing-architecture-version";
 import type { EndpointPreferences } from "@/lib/routing/preference-finalization";
-import { buildLocalFallbackBanner, extractLocalFallbackFacts } from "./downgrade-explanation";
+import { describeLocalFallback, type DowngradeCause } from "./downgrade-explanation";
 export type { RouteAndCallOptions } from "./routed-inference-options";
 // ─── Result type ────────────────────────────────────────────────────────────
 /** Unified inference result — flat token fields, V2 metadata included. */
@@ -78,6 +81,7 @@ export interface RoutedInferenceResult {
    * assert both at once. See ./downgrade-explanation.ts (BI-F4D3B9E9d).
    */
   downgradeReason: "provider-unavailable" | "not-eligible" | null;
+  downgradeCause?: DowngradeCause | null;
   /** True when tools were stripped due to capability degradation (local model). */
   toolsStripped: boolean;
   /**
@@ -196,6 +200,8 @@ async function prepareRoute(
   const { screenInput, screen, rehydrationHandle } = createRoutedInferenceScreen({
     messages,
     systemPrompt,
+    systemPromptInstructionSpans: options?.systemPromptInstructionSpans,
+    messageOrigins: options?.messageOrigins,
     tools: options?.tools,
     taskType,
     routeContext: initialRouteContext,
@@ -352,12 +358,8 @@ export async function previewRoute(
 /**
  * Route and execute an LLM inference call through the V2 pipeline.
  *
- * This is the sole entry point for inference after EP-INF-009b.
- * It replaces `callWithFailover` by running:
- *   1. Contract inference (from task type + messages)
- *   2. Endpoint manifest loading
- *   3. V2 routing (capability filter, cost-per-success ranking, recipes)
- *   4. Fallback chain dispatch
+ * This is the sole inference entry point after EP-INF-009b: contract,
+ * manifests, V2 routing, then fallback dispatch.
  *
  * Throws `NoEligibleEndpointsError` if no endpoints qualify — no silent
  * degradation to a different routing mechanism.
@@ -367,6 +369,18 @@ export async function routeAndCall(
   systemPrompt: string,
   sensitivity: RouteSensitivity = "internal",
   options?: RouteAndCallOptions,
+): Promise<RoutedInferenceResult> {
+  return withProviderReconciliationRetry(
+    () => routeAndCallAttempt(messages, systemPrompt, sensitivity, options),
+    invalidateRoutingLoaderCache,
+  );
+}
+
+async function routeAndCallAttempt(
+  messages: ChatMessage[],
+  systemPrompt: string,
+  sensitivity: RouteSensitivity,
+  options: RouteAndCallOptions | undefined,
 ): Promise<RoutedInferenceResult> {
   // 1-3. Contract inference, routing-data load, and V2 endpoint selection —
   // shared with previewRoute() via prepareRoute() so a model-selection
@@ -388,15 +402,12 @@ export async function routeAndCall(
   // through callWithFallbackChain into every adapter in the fallback chain.
   // Caller-set effort wins; otherwise the resolved posture's effort applies
   // (EP-GOLDEN-TRIANGLE Slice 3). Balanced/no posture leaves effort untouched.
-  const effort = options?.effort ?? prepared.posture?.effort;
-  if (effort && decision.executionPlan) {
-    decision.executionPlan = {
-      ...decision.executionPlan,
-      providerSettings: {
-        ...decision.executionPlan.providerSettings,
-        effort,
-      },
-    };
+  if (decision.executionPlan) {
+    decision.executionPlan = applyCallerExecutionPlanOverrides(decision.executionPlan, {
+      effort: options?.effort ?? prepared.posture?.effort,
+      toolChoice: options?.toolChoice,
+      terminalWriterToolName: options?.terminalWriterToolName,
+    });
   }
 
   // BI-F4D3B9E9(c): persist the failed route decision BEFORE throwing so the
@@ -631,15 +642,12 @@ export async function routeAndCall(
       };
     }
 
-    // Adapter didn't return operation ID — treat as sync result.
-    // Phase J (BI-28858D2F follow-up / cost-ledger): every dispatch persists
-    // a TokenUsage row regardless of which adapter served it. The CLI
-    // subprocess paths (claude-cli, codex-cli) previously bypassed this.
+    // Every adapter dispatch persists TokenUsage (BI-28858D2F).
     void persistRoutedTokenUsage({
       traceId,
       agentId: options?.agentId ?? "unknown",
       providerId: result.providerId,
-      contextKey: options?.threadId ?? options?.taskType ?? "routed-call",
+      contextKey: routedContextKey(options),
       inputTokens: result.tokenUsage?.inputTokens ?? 0,
       outputTokens: result.tokenUsage?.outputTokens ?? 0,
       inferenceMs: result.inferenceMs,
@@ -679,16 +687,8 @@ export async function routeAndCall(
 
   // 5c. Local-fallback signal.
   //
-  // The fallback chain sets downgraded=true when i>0 (we skipped the winner
-  // due to failure). That covers the "preferred provider rate-limited, fell
-  // to local" case. But when the pipeline's STAGE-5b tier sort lands on
-  // bundled because all user_configured endpoints were already excluded
-  // (status=unconfigured/disabled, hard-constraint violations, etc.), i=0
-  // and downgraded stays false — so the user has no signal that the turn
-  // ran on the local model. Patch that gap here so the observability is
-  // correct regardless of whether we fell through at ranking or runtime.
-  // `decision.selectedEndpoint` is a string id — look up the corresponding
-  // manifest to read its tier. `manifests` is already in scope.
+  // Runtime fallback marks i>0 as downgraded. Ranking can select bundled at
+  // i=0 after excluding configured endpoints, so detect that case here.
   const selectedManifest = decision.selectedEndpoint
     ? manifests.find((m) => m.id === decision.selectedEndpoint)
     : null;
@@ -703,15 +703,16 @@ export async function routeAndCall(
   // "is active" — wrong whenever a stronger provider is disabled and a weaker one
   // is not. Both facts are already in scope, so ./downgrade-explanation.ts reads
   // them instead of guessing.
-  const localFallbackBanner = fellToLocal
-    ? buildLocalFallbackBanner(
-      extractLocalFallbackFacts({
-        manifests,
-        candidates: decision.candidates,
-        sensitivity: decision.sensitivity,
-      }),
-    )
+  const localFallback = fellToLocal
+    ? describeLocalFallback({
+      manifests,
+      candidates: decision.candidates,
+      sensitivity: decision.sensitivity,
+      matchProvenance: decision.inferenceDataScreenReceipt?.matchProvenance,
+      messageCount: messages.length,
+    })
     : null;
+  const localFallbackBanner = localFallback?.banner ?? null;
 
   // 6. Persist TokenUsage row for the cost ledger (Phase J).
   // Fire-and-forget because metering must not block the response. A loud log
@@ -721,7 +722,7 @@ export async function routeAndCall(
     traceId,
     agentId: options?.agentId ?? "unknown",
     providerId: result.providerId,
-    contextKey: options?.threadId ?? options?.taskType ?? "routed-call",
+    contextKey: routedContextKey(options),
     inputTokens: result.tokenUsage?.inputTokens ?? 0,
     outputTokens: result.tokenUsage?.outputTokens ?? 0,
     inferenceMs: result.inferenceMs,
@@ -743,6 +744,7 @@ export async function routeAndCall(
       : fellToLocal
         ? "not-eligible"
         : null,
+    downgradeCause: localFallback?.cause ?? null,
     toolsStripped,
     truncated: result.truncated ?? false,
     routeDecision: decision,
@@ -752,46 +754,3 @@ export async function routeAndCall(
   };
 }
 
-// ─── Phase J: routed-call token usage persistence ──────────────────────────
-//
-// Every routed inference call must produce a `TokenUsage` row regardless of
-// which adapter served it. Before this fix, only the direct HTTP path
-// (`callProvider` in `ai-inference.ts`) wrote metering — the CLI subprocess
-// adapters (claude-cli, codex-cli) silently bypassed it. The result was a
-// $0 cost tally for ~100% of subscription-served traffic on a typical install.
-//
-// This wrapper is the *convenience* enforcement; the durable enforcement is
-// the OutcomeEvent-bus detector "outcome event without metering row" listed
-// in the routing-architecture spec §10.2. That bus check makes new dispatch
-// paths (future adapters) loud about forgetting to meter; this wrapper makes
-// it easy to satisfy by default.
-//
-// Errors are logged but never thrown — metering must never block the response.
-async function persistRoutedTokenUsage(input: {
-  traceId?: string | null;
-  agentId: string;
-  providerId: string;
-  contextKey: string;
-  inputTokens: number;
-  outputTokens: number;
-  // BI-105E8A1E: carry the adapter's measured latency so logTokenUsage's
-  // `compute` cost model can fire — it is the cost signal for a fully-local
-  // install, and was previously dropped here, leaving inferenceMs ~99% empty.
-  inferenceMs?: number;
-}): Promise<void> {
-  // Skip rows with zero tokens both ways. A successful call always reports at
-  // least the input prompt tokens; zero/zero usually means the adapter
-  // returned an error or stub. The audit row would be misleading.
-  if (input.inputTokens === 0 && input.outputTokens === 0) {
-    return;
-  }
-  try {
-    await logTokenUsage(input);
-  } catch (err) {
-    console.error(
-      `[routed-inference] token usage persistence failed: provider=${input.providerId} ` +
-      `agent=${input.agentId} in=${input.inputTokens} out=${input.outputTokens}`,
-      err,
-    );
-  }
-}

@@ -2,7 +2,7 @@
 // TDD RED → GREEN tests for the composable system prompt assembler.
 
 import { describe, expect, it, vi } from "vitest";
-import { assembleSystemPrompt } from "./prompt-assembler";
+import { assembleSystemPrompt, assembleSystemPromptWithProvenance } from "./prompt-assembler";
 import type { PromptInput } from "./prompt-assembler";
 
 vi.mock("./prompt-loader", () => ({
@@ -559,5 +559,77 @@ describe("assembleSystemPrompt", () => {
     // initiative sits after authority and before the sensitivity block
     expect(assertive.indexOf("INITIATIVE — HIGH")).toBeGreaterThan(assertive.indexOf("authorized to"));
     expect(assertive.indexOf("INITIATIVE — HIGH")).toBeLessThan(assertive.indexOf("classified"));
+  });
+});
+
+// BI-463BE12A / BI-9C14CB5D. The assembler declares which of its own blocks are
+// platform-authored instruction. Anything it does not declare is classified as
+// the turn's data by the inference screener, so under-declaring is safe and
+// over-declaring is an egress hole — these tests pin both directions.
+describe("assembleSystemPromptWithProvenance declares instruction, never data", () => {
+  const base = {
+    hrRole: "owner",
+    grantedCapabilities: ["read"],
+    deniedCapabilities: [],
+    mode: "act" as const,
+    sensitivity: "internal" as const,
+    domainContext: "You are the COO. You approve payroll runs.",
+    domainTools: [],
+    routeData: null,
+    attachmentContext: null,
+  };
+
+  it("declares its static contract blocks", async () => {
+    const assembled = await assembleSystemPromptWithProvenance(base);
+
+    expect(assembled.instructionSpans.length).toBeGreaterThan(0);
+    for (const span of assembled.instructionSpans) {
+      expect(assembled.text).toContain(span);
+    }
+  });
+
+  it("does NOT declare retrieved context as instruction", async () => {
+    const assembled = await assembleSystemPromptWithProvenance({
+      ...base,
+      wikiContext: "WIKI: Dana Whitfield earns 125000.",
+      workingNotes: "NOTES: invoice 88213 is overdue.",
+      professionContext: "CORPUS: payroll practice.",
+      routeData: "PAGE: salary 125000",
+      attachmentContext: "ATTACHMENT: payroll register",
+      extraSections: ["EXTRA: bank account 021000021"],
+    });
+
+    const declared = assembled.instructionSpans.join("\n");
+    for (const leak of ["WIKI:", "NOTES:", "CORPUS:", "PAGE:", "ATTACHMENT:", "EXTRA:"]) {
+      expect(declared).not.toContain(leak);
+    }
+  });
+
+  it("does NOT declare the caller's domainContext on its own initiative", async () => {
+    // domainContext arrives as one string that may concatenate the persona with
+    // retrieved knowledge and semantic memory. Only the caller can split it, so
+    // the assembler must wait to be told rather than guess.
+    const assembled = await assembleSystemPromptWithProvenance(base);
+
+    expect(assembled.instructionSpans.join("\n")).not.toContain("You approve payroll runs");
+  });
+
+  it("passes through spans the caller declares", async () => {
+    const persona = "You are the COO. You approve payroll runs.";
+    const assembled = await assembleSystemPromptWithProvenance({
+      ...base,
+      instructionSpans: [persona],
+    });
+
+    expect(assembled.instructionSpans).toContain(persona);
+  });
+
+  it("keeps assembleSystemPrompt returning the same text", async () => {
+    const [text, assembled] = await Promise.all([
+      assembleSystemPrompt(base),
+      assembleSystemPromptWithProvenance(base),
+    ]);
+
+    expect(text).toBe(assembled.text);
   });
 });

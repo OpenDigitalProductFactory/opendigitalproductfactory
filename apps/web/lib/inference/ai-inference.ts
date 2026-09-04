@@ -144,6 +144,17 @@ export class InferenceError extends Error {
     public readonly headers?: Record<string, string>,
     public readonly rawBody?: string,
     public readonly capacity?: ProviderCapacityClassification,
+    /**
+     * True when a LOCAL pool check refused the call before it left the process,
+     * because the pool is known-saturated until a known reset time.
+     *
+     * This is not an upstream 429. Nothing was asked of the provider, and
+     * waiting on this endpoint cannot make it answer sooner — the reset is
+     * wall-clock. The fallback chain uses this to skip its wait-and-retry and
+     * move to the next provider immediately, which is what the pool check was
+     * always trying to cause (BI-52C6FE5A).
+     */
+    public readonly localPoolExhausted?: boolean,
   ) {
     super(message);
     this.name = "InferenceError";
@@ -551,6 +562,27 @@ export async function callProvider(
   const isCliAdapter =
     selector !== null &&
     (selector.kind === "claude-code-cli" || selector.kind === "codex-cli");
+  const soleToolFunction = tools?.length === 1 ? tools[0]?.["function"] : undefined;
+  const soleToolName = soleToolFunction && typeof soleToolFunction === "object" && !Array.isArray(soleToolFunction)
+    ? (soleToolFunction as Record<string, unknown>)["name"]
+    : undefined;
+  const callerGuardsSoleTerminalWriter = Boolean(
+    mcpSession
+    && typeof soleToolName === "string"
+    && effectivePlan.responsePolicy.terminalWriterToolName === soleToolName,
+  );
+  if (effectivePlan.toolPolicy.toolChoice === "required" && isCliAdapter && !callerGuardsSoleTerminalWriter) {
+    throw new InferenceError(
+      `Execution adapter ${selector?.kind ?? String(executionAdapterRaw)} cannot enforce required tool choice.`,
+      "provider_error",
+      providerId,
+    );
+  }
+  if (effectivePlan.toolPolicy.toolChoice === "required" && isCliAdapter) {
+    console.info(
+      `[ai-inference] Delegating exact terminal-writer completion enforcement to the caller policy for ${String(soleToolName)}.`,
+    );
+  }
 
   // EP-COST Phase 4: consult CliPoolStatus before dispatching a CLI-backed call.
   // If the pool is known-exhausted (resetAt is in the future), throw rate_limit
@@ -565,6 +597,11 @@ export async function callProvider(
         `${cliAdapterType} pool exhausted — resets in ~${waitSecs}s (EP-COST pool check)`,
         "rate_limit",
         providerId,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        true, // localPoolExhausted — fall through, do not wait on this endpoint
       );
     }
   }

@@ -1,10 +1,19 @@
 // Next.js instrumentation hook — runs once on server startup.
 // See: https://nextjs.org/docs/app/building-your-application/optimizing/instrumentation
 
-import { envFlagEnabled } from "@/lib/runtime/env-flags";
+import {
+  areOptionalStartupTasksEnabled,
+  isInngestSelfSyncOnBootEnabled,
+  isStartupModelRevalidationEnabled,
+} from "@/lib/runtime/env-flags";
 import { isMeasurementRuntime, settleBootSync } from "@/lib/runtime/measurement-runtime";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { sweepOrphanedPromoterContainers } from "@/lib/self-upgrade/promoter-sweep";
+import { reconcileSelfUpgradeAdmissions } from "@/lib/self-upgrade/admission";
+import {
+  resolveInngestSelfRegistrationEndpoint,
+  syncInngestSelfRegistration,
+} from "@/lib/queue/inngest-self-registration";
 /**
  * Logs a deprecation notice when HIVE_CONTRIBUTION_TOKEN is set in the
  * environment. Exported so the instrumentation module's startup behavior
@@ -22,24 +31,6 @@ export function warnIfLegacyHiveTokenEnvSet(
       "Support for this env var will be removed 60 days after the next release.",
   );
   return true;
-}
-
-export function isStartupModelRevalidationEnabled(
-  env: Record<string, string | undefined> = process.env,
-): boolean {
-  return envFlagEnabled(env, "DPF_STARTUP_MODEL_REVALIDATION_ENABLED");
-}
-
-export function isInngestSelfSyncOnBootEnabled(
-  env: Record<string, string | undefined> = process.env,
-): boolean {
-  return envFlagEnabled(env, "DPF_INNGEST_SELF_SYNC_ON_BOOT_ENABLED");
-}
-
-export function areOptionalStartupTasksEnabled(
-  env: Record<string, string | undefined> = process.env,
-): boolean {
-  return envFlagEnabled(env, "DPF_OPTIONAL_STARTUP_TASKS_ENABLED");
 }
 
 export function scheduleInitialCodeGraphBootstrap(input: {
@@ -391,7 +382,8 @@ export async function recoverContradictoryBuildExecStatesOnBoot(
 export async function advanceStrandedBuildToReview(buildId: string): Promise<boolean> {
   if (process.env.NEXT_RUNTIME && process.env.NEXT_RUNTIME !== "nodejs") return false;
   const { prisma } = await import("@dpf/db");
-  const { checkPhaseGate, canTransitionPhase } = await import("@/lib/feature-build-types");
+  const { canTransitionPhase } = await import("@/lib/feature-build-types");
+  const { checkBuildPhaseGate } = await import("@/lib/work-posture/verification-depth-gate");
 
   const build = await prisma.featureBuild.findUnique({ where: { buildId } });
   if (!build || build.phase !== "build" || !canTransitionPhase("build", "review")) {
@@ -417,8 +409,15 @@ export async function advanceStrandedBuildToReview(buildId: string): Promise<boo
     // Fall back to the raw verificationOut, exactly like the orchestrator.
   }
 
-  const gate = checkPhaseGate("build", "review", {
-    verificationOut: verificationForGate as typeof build.verificationOut,
+  const gate = await checkBuildPhaseGate({
+    buildId,
+    from: "build",
+    to: "review",
+    evidence: {
+      kind: build.kind,
+      processSize: ((build.plan as Record<string, unknown> | null)?.processSize as string | undefined) ?? "medium",
+      verificationOut: verificationForGate as typeof build.verificationOut,
+    },
   });
   if (!gate.allowed) return false;
 
@@ -983,6 +982,14 @@ export async function register() {
       }
     }
 
+    // Graph-mirror projections with no indexer of their own (BI-FEDFABF6). Boot is
+    // the trigger because it follows migrations, self-upgrade and first start of a
+    // new install. Skipped under measurement runtime like the self-heal block below;
+    // refreshGraphProjections never throws and logs its own failures.
+    if (!measurementRuntime) {
+      void import("@/lib/graph/refresh-projections").then((m) => m.refreshGraphProjections());
+    }
+
     // Operational self-heal maintenance (voice continuity, stuck-run
     // reconciles, watchdog intervals, model-context re-assertion). Skipped
     // wholesale under measurement runtime: an ephemeral sweep portal has no
@@ -1006,10 +1013,8 @@ export async function register() {
       // ("portal_quiescing") forever. Must run before reconciliation.
       void resetStuckQuiescenceLevelOnBoot();
 
-      // Close the loop on any self-upgrade run whose orchestrator died mid-swap
-      // (a real upgrade recreates this very container). Records succeeded when we
-      // came up on the target SHA; fails orphans so triggers aren't blocked.
-      void reconcileSelfUpgradeRunsOnBoot();
+      void reconcileSelfUpgradeAdmissions().catch((error) => console.error("[self-upgrade] admission reconcile failed", error));
+      void reconcileSelfUpgradeRunsOnBoot(); void import("@/lib/federation/boot-reconcile").then((m) => m.reconcileFederationDurableStateOnBoot()).catch((error) => console.error("[federation] durable-state reconcile failed", error));
 
       // Periodic safety net — cron-independent (the boot reconcile above and the
       // Inngest cron can BOTH miss this). If a swap's orchestrator dies while the
@@ -1020,6 +1025,7 @@ export async function register() {
       // Staleness-guarded so a legitimately in-flight upgrade is never touched.
       setInterval(
         () => {
+          void reconcileSelfUpgradeAdmissions().catch((error) => console.error("[self-upgrade] admission reconcile failed", error));
           void reconcileSelfUpgradeRunsOnBoot(console, { staleAfterMs: 30 * 60 * 1000 });
           // Backstop: force-remove any promoter container orphaned by a portal
           // restart that killed runPromoter's own timeout timer (BI-3EC7FDB0).
@@ -1116,17 +1122,17 @@ export async function register() {
       await backfillOrgWwwdOnBoot();
     });
 
+    // The active archetype's worker classes + work locations, for an install that
+    // completed setup before the archetype declared them (BI-A30152B6). The WWWD
+    // backfill above runs the same chain only when a corpus is MISSING, so a
+    // healthy install short-circuits it and nothing else self-heals the rows.
+    void import("@/lib/onboarding/seed-archetype-workforce").then(({ backfillArchetypeWorkforceOnBoot }) => backfillArchetypeWorkforceOnBoot());
     void import("@/lib/onboarding/backfill-commercial-catalog-on-boot").then(({ backfillCommercialCatalogOnBoot }) => backfillCommercialCatalogOnBoot());
 
-    // Self-heal discovery attribution (BI-BAF38ED3) for any install whose estate
-    // was discovered before the fingerprint layer was wired into every ingestion
-    // path — those InventoryEntity rows were mis-binned by the coarse
-    // `host -> /servers` heuristic with no resolved identity. Re-runs the
-    // fingerprint layer over the persisted rows; idempotent and cheap once
-    // healed (diff-only writes), non-fatal, and fire-and-forget so it never
-    // delays boot.
-    void import("@/lib/onboarding/backfill-discovery-attribution-on-boot").then(
-      ({ backfillDiscoveryAttributionOnBoot }) => backfillDiscoveryAttributionOnBoot(),
+    // Discovery estate self-heal (BI-BAF38ED3 attribution + BI-B19C41B8 phantom
+    // products) — idempotent, cheap once healed, non-fatal, fire-and-forget.
+    void import("@/lib/onboarding/discovery-on-boot-self-heal").then(
+      ({ runDiscoveryOnBootSelfHeal }) => runDiscoveryOnBootSelfHeal(),
     );
     // Build Studio engine reliability (spec §3.1 engine-first / FB-78E967D4).
     // These are correctness reconcilers, not optional maintenance — skipped
@@ -1196,39 +1202,30 @@ export async function register() {
     // register/refresh the app with the Inngest server. Runs after a small
     // delay to give Next.js time to bind the HTTP listener.
     if (process.env.INNGEST_BASE_URL && isInngestSelfSyncOnBootEnabled()) {
-      const appUrl = process.env.APP_URL ?? "http://localhost:3000";
+      const endpoint = resolveInngestSelfRegistrationEndpoint(process.env);
       setTimeout(async () => {
         let lastErr: unknown = null;
         for (let i = 0; i < 6; i++) {
-          try {
-            const res = await fetch(`${appUrl}/api/inngest`, { method: "PUT" });
-            if (res.ok) {
-              const body = await res.json().catch(() => ({}));
-              console.log(`[inngest-sync] Registered with Inngest server: ${JSON.stringify(body)}`);
-              const { recordInngestRegistration } = await import(
-                "@/lib/queue/job-engine-health"
-              );
-              await recordInngestRegistration(true);
-              return;
+          const { recordInngestRegistration } = await import("@/lib/queue/job-engine-health");
+          const result = await syncInngestSelfRegistration({
+            endpoint,
+            fetchRegistration: fetch,
+            recordRegistration: recordInngestRegistration,
+            reconcileAdmissions: reconcileSelfUpgradeAdmissions,
+          });
+          if (result.ok) {
+            console.log(`[inngest-sync] Registered with Inngest server: HTTP ${result.data.status}`);
+            if (result.data.reconciliationError) {
+              console.error(`[self-upgrade] admission reconcile failed: ${result.data.reconciliationError}`);
             }
-            lastErr = `HTTP ${res.status}`;
-          } catch (err) {
-            lastErr = getErrorMessage(err);
+            return;
           }
+          lastErr = result.error;
           await new Promise((r) => setTimeout(r, 2_000));
         }
         console.error(
           `[inngest-sync] Failed to register with Inngest server after 6 attempts: ${String(lastErr)}. ` +
           `Background jobs (brand extract, evals, etc.) will not dispatch until this succeeds.`,
-        );
-        // Persist the failure so the ops UI surfaces a dead job engine — the
-        // missing signal that let the 2026-06-14 outage hide for 4 days.
-        const { recordInngestRegistration } = await import(
-          "@/lib/queue/job-engine-health"
-        );
-        await recordInngestRegistration(
-          false,
-          `Inngest registration failed after 6 attempts: ${String(lastErr)}`,
         );
       }, 3_000);
     } else if (process.env.INNGEST_BASE_URL) {
@@ -1240,24 +1237,21 @@ export async function register() {
     // or Inngest later restarts and forgets its registration (the 2026-06-14
     // outage needed a reboot to re-register). Also keeps ops.jobEngine fresh.
     if (process.env.INNGEST_BASE_URL && isInngestSelfSyncOnBootEnabled()) {
-      const appUrl = process.env.APP_URL ?? "http://localhost:3000";
+      const endpoint = resolveInngestSelfRegistrationEndpoint(process.env);
       setInterval(
         () => {
           void (async () => {
             const { recordInngestRegistration, runInngestExecutorWatchdog } = await import(
               "@/lib/queue/job-engine-health"
             );
-            try {
-              const res = await fetch(`${appUrl}/api/inngest`, { method: "PUT" });
-              await recordInngestRegistration(
-                res.ok,
-                res.ok ? null : `Inngest re-sync failed: HTTP ${res.status}`,
-              );
-            } catch (err) {
-              await recordInngestRegistration(
-                false,
-                `Inngest re-sync failed: ${getErrorMessage(err)}`,
-              );
+            const result = await syncInngestSelfRegistration({
+              endpoint,
+              fetchRegistration: fetch,
+              recordRegistration: recordInngestRegistration,
+              reconcileAdmissions: reconcileSelfUpgradeAdmissions,
+            });
+            if (result.ok && result.data.reconciliationError) {
+              console.error(`[self-upgrade] admission reconcile failed: ${result.data.reconciliationError}`);
             }
             void runInngestExecutorWatchdog().then((r) => r.status === "degraded" && console.warn(`[inngest-watchdog] ${r.detail ?? "executor degraded"}`));
           })();
@@ -1464,6 +1458,9 @@ export async function register() {
     // silent plaintext storage (data-at-rest vulnerability).
     // Dev mode short-circuits immediately; zero overhead outside production.
     // See docs/superpowers/specs/2026-04-24-github-auth-2fa-readiness-design.md
+    // Serve the directory (EP-24741BBF · BI-A91004A7) — off unless DPF_LDAP_ENABLED.
+    await (await import("@/lib/directory/ldap/runtime")).startLdapListener();
+
     // Wiki embedding coverage self-heal — deferred, non-blocking (BI-ED117C82).
     const { scheduleWikiEmbeddingReconcile } = await import("@/lib/wiki/embedding-reconciliation");
     scheduleWikiEmbeddingReconcile();

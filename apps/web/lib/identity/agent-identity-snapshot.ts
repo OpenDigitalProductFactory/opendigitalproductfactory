@@ -1,4 +1,5 @@
 import { prisma } from "@dpf/db";
+import { collapseDualSeedDuplicates } from "@/lib/coworker-record/selectable-coworker";
 
 import {
   projectInternalAIDoc,
@@ -43,7 +44,7 @@ export type AgentIdentitySnapshotSummary = {
 export async function listAgentIdentitySnapshots(
   db: SnapshotDb = prisma,
 ): Promise<AgentIdentitySnapshot[]> {
-  const agents = await db.agent.findMany({
+  const agentsRaw = await db.agent.findMany({
     orderBy: { name: "asc" },
     select: {
       id: true,
@@ -83,6 +84,8 @@ export async function listAgentIdentitySnapshots(
       },
     },
   });
+
+  const agents = collapseDualSeedDuplicates(agentsRaw);
 
   const [aliases, modelConfigs, memoryFacts] = await Promise.all([
     db.principalAlias.findMany({

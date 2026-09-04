@@ -46,7 +46,10 @@ function profileFromScopeKind(value: string | null | undefined): ReadinessProfil
   if (["archetype", "archetype-category", "archetype-leaf", "multi-archetype"].includes(normalized ?? "")) {
     return "archetype";
   }
-  if (["common", "platform", "cross-domain"].includes(normalized ?? "")) return "cross-domain";
+  // Ownership is not a risk signal. Platform/common work derives its profile
+  // from the work type unless explicit or recorded cross-domain evidence wins.
+  if (["common", "platform"].includes(normalized ?? "")) return null;
+  if (normalized === "cross-domain") return "cross-domain";
   return profileFromString(value);
 }
 

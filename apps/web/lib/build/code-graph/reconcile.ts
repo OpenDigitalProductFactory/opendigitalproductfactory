@@ -6,10 +6,11 @@ import {
   getCurrentBranch,
   getCurrentHeadSha,
   getGitRoot,
-  isGitRepo,
+  inspectGitRoot,
   isWorkspaceDirty,
   listTrackedFiles,
 } from "./git-snapshot";
+import { resolveIndexSource } from "./default-branch-source";
 import {
   clearCodeGraph,
   ensureCodeGraphNeo4jSchema,
@@ -98,7 +99,42 @@ export async function reconcileCodeGraph(input: ReconcileCodeGraphInput): Promis
   // git repository. Running git commands in a non-git directory hangs until
   // the timeout fires (SIGTERM), marking the code graph as failed on every
   // scheduled run. Skip gracefully instead.
-  if (!(await isGitRepo(gitRoot))) {
+  // ABSENT is a legitimate skip; REFUSED is a fault that must not be silent.
+  //
+  // BI-86EF5900: these were the same branch. The portal container runs as a
+  // different uid than the checkout it mounts, so git answered every command
+  // with "fatal: detected dubious ownership in repository at
+  // '/sandbox-workspace'". That threw, isGitRepo returned false, and this guard
+  // turned it into a no-op — on EVERY scheduled run, for a day, with no record
+  // anywhere. The graph emptied and kept reporting "ready" for 4406 files
+  // because nothing ever wrote a failure. Skipping silently is exactly how an
+  // instrument dies without anyone noticing.
+  const rootStatus = await inspectGitRoot(gitRoot);
+  if (rootStatus.kind === "refused") {
+    await markCodeGraphFailed(graphKey, {
+      workspaceRoot: gitRoot,
+      // Index state is not read until after this guard, so there is no prior
+      // sha to carry here — the point of the record is the refusal itself.
+      previousHeadSha: null,
+      branch: null,
+      workspaceDirty: false,
+      observedAt,
+      error: new Error(
+        `Git refused to read the workspace at ${gitRoot}, so the code graph could not be ` +
+          `indexed. This is NOT an absent repository — the repository is there and git ` +
+          `declined. Detail: ${rootStatus.detail}`,
+      ),
+    });
+    return {
+      mode: "noop",
+      graphKey,
+      headSha: null,
+      branch: null,
+      workspaceDirty: false,
+      changedFiles: [],
+    };
+  }
+  if (rootStatus.kind === "absent") {
     return {
       mode: "noop",
       graphKey,
@@ -127,16 +163,34 @@ export async function reconcileCodeGraph(input: ReconcileCodeGraphInput): Promis
     };
   }
 
+  // The graph must describe the MERGE TARGET, not whatever this host checkout
+  // is parked on (BI-86EF5900 acceptance 1). resolveIndexSource pins a
+  // dedicated worktree at the default branch and returns its path; on failure
+  // it returns the host root with a warning, so a default-branch problem
+  // degrades to the previous behaviour rather than to no graph at all.
+  const indexSource = await resolveIndexSource(gitRoot);
+  const readRoot = indexSource.root;
+  if (indexSource.warning) {
+    // Say WHY we fell back. The branch recorded below already makes an
+    // off-default index visible in the trust vector, but "which branch" is not
+    // "why not the default one", and losing the reason is how a degraded
+    // instrument becomes an unexplained one.
+    console.warn(`[code-graph] ${indexSource.warning}`);
+  }
+
   try {
     [state, headSha, branch, workspaceDirty] = await Promise.all([
       findCodeGraphIndexState(graphKey),
-      getCurrentHeadSha(gitRoot),
-      getCurrentBranch(gitRoot),
-      isWorkspaceDirty(gitRoot),
+      indexSource.sha ? Promise.resolve(indexSource.sha) : getCurrentHeadSha(readRoot),
+      indexSource.branch ? Promise.resolve(indexSource.branch) : getCurrentBranch(readRoot),
+      // A pinned default-branch worktree is checked out by us and is never
+      // "dirty" in the sense the caller cares about — that flag is about
+      // someone's uncommitted edits in the host tree.
+      indexSource.usedDefaultBranch ? Promise.resolve(false) : isWorkspaceDirty(readRoot),
     ]);
 
     await markCodeGraphIndexing(graphKey, {
-      workspaceRoot: gitRoot,
+      workspaceRoot: readRoot,
       headSha,
       branch,
       previousHeadSha: state?.lastIndexedHeadSha ?? null,
@@ -148,7 +202,7 @@ export async function reconcileCodeGraph(input: ReconcileCodeGraphInput): Promis
     let diffFailed = false;
     if (state?.lastIndexedHeadSha && headSha && state.lastIndexedHeadSha !== headSha && !input.forceFull) {
       try {
-        changedFiles = await getChangedFiles(gitRoot, state.lastIndexedHeadSha, headSha);
+        changedFiles = await getChangedFiles(readRoot, state.lastIndexedHeadSha, headSha);
       } catch {
         diffFailed = true;
       }
@@ -165,21 +219,21 @@ export async function reconcileCodeGraph(input: ReconcileCodeGraphInput): Promis
     });
 
     const files = orderCodeGraphFilesForProjection(
-      plan.mode === "full" ? await listTrackedFiles(gitRoot) : plan.changedFiles,
+      plan.mode === "full" ? await listTrackedFiles(readRoot) : plan.changedFiles,
     );
     await ensureCodeGraphNeo4jSchema();
     if (plan.mode === "full") {
       await clearCodeGraph(graphKey);
       await clearCodeGraphFileHashes(graphKey);
-      await syncTrackedFilesFull(graphKey, gitRoot, files);
+      await syncTrackedFilesFull(graphKey, readRoot, files);
     } else {
       for (const filePath of files) {
-        await syncTrackedFile(graphKey, gitRoot, filePath);
+        await syncTrackedFile(graphKey, readRoot, filePath);
       }
     }
     const indexedFileCount = await countCodeGraphFileHashes(graphKey);
     await markCodeGraphReady(graphKey, {
-      workspaceRoot: gitRoot,
+      workspaceRoot: readRoot,
       headSha,
       branch,
       workspaceDirty,

@@ -1,3 +1,12 @@
+---
+status: active
+---
+
+BI-37719AAB's governed decision is owned by
+[2026-09-01-codex-subscription-model-eligibility-design.md](./2026-09-01-codex-subscription-model-eligibility-design.md).
+Section 13 below remains supporting routing detail, not a second approval
+artifact.
+
 # CLI Execution Adapter — Routing Design Spec
 
 | Field | Value |
@@ -686,7 +695,97 @@ Reserved through every preceding phase. Specific deliverables:
 4. Unify CLI session ID generation across `claude-dispatch.ts`, `codex-dispatch.ts`, and the new substrate adapters.
 5. Cost / quota / outcome ledger consolidation (`AdapterRunTelemetry` is canonical; `ToolExecution.duration_ms` etc. cross-reference it).
 
-## 13. Open Risks
+## 13. BI-37719AAB integrity patch — account-aware Codex model eligibility
+
+The live Codex CLI rejected `gpt-5.3-codex` with HTTP 400 when the `codex`
+provider used ChatGPT OAuth, while the same authenticated CLI accepted
+`gpt-5.4`. The existing adapter then matched the word `rate` inside
+`degrade performance` and recorded a false pool-wide rate limit. This combines
+two distinct faults: selection admitted a model the connected account could not
+run, and failure classification used an unbounded substring.
+
+### Research and reproduction record
+
+The defect is named against pre-fix ref
+`e7f618eae0b7481f37101654826cc8aad2a4a2d2`:
+
+- `apps/web/lib/routing/codex-cli-adapter.ts:355` used
+  `stderr.includes("rate") || stderr.includes("429")`; the observed HTTP 400
+  includes `degrade performance`, so the first expression is true without a
+  capacity failure.
+- `apps/web/lib/routing/loader.ts:166-193` admitted every active profile whose
+  provider had a configured credential, and `profileToManifest` at lines
+  208-233 had no account/model compatibility field.
+- `apps/web/lib/routing/types.ts:75-82` consequently had no manifest carrier for
+  an account-specific hard exclusion.
+
+The live reproduction used one healthy ChatGPT-authenticated Codex credential:
+`codex login status` reported logged in with ChatGPT,
+`codex exec -m gpt-5.3-codex` returned HTTP 400 unsupported-account-model, and
+the same prompt immediately returned `OK` with `codex exec -m gpt-5.4`.
+`CliPoolStatus` then contained a false 60-second Codex rate-limit record.
+
+The TDD red run added the exact stderr and eligibility contracts before
+production code. The focused command over the four new/affected suites reported
+10 failures and 88 passes: missing `looksLikeCliRateLimit`, missing eligibility
+module, no manifest exclusion, and no V2 hard-filter exclusion. After the
+production change, the focused five-suite run reported 127/127 passes. The
+graph-expanded run reported 323/323, and the exact-tree merged gate at candidate
+`4c5aa639d50bfd7e482bd9cef247a2c2246f65e0` reported 3,541 passing tests plus a
+successful production build.
+
+Candidate causes ruled out by execution:
+
+- **Expired or invalid auth:** ruled out because login status was healthy and
+  `gpt-5.4` succeeded with the same credential and prompt.
+- **Real capacity exhaustion:** ruled out because the response was HTTP 400,
+  not 429, and the supported sibling succeeded immediately.
+- **Provider-wide outage or local-runtime failure:** ruled out because only the
+  account/model pair changed between failure and success; no local provider was
+  involved.
+- **Catalog-wide model invalidity:** ruled out because official OpenAI API docs
+  list `gpt-5.3-codex`; the incompatibility is specifically the ChatGPT-account
+  Codex transport, so API-key eligibility must remain intact.
+
+Official OpenAI documentation establishes that both
+[`gpt-5.3-codex`](https://developers.openai.com/api/docs/models/gpt-5.3-codex)
+and [`gpt-5.4`](https://developers.openai.com/api/docs/models/gpt-5.4) are API
+models, but does not establish identical availability through a ChatGPT-account
+Codex CLI session. Therefore the account-specific compatibility rule is grounded
+in the live CLI response, while the API-key path remains governed by the API
+catalog.
+
+The fix uses the existing endpoint-manifest and exclusion-trace substrate:
+
+1. The manifest loader computes a hard `eligibilityExclusionReason` for
+   `(provider=codex, auth=oauth2_authorization_code, model=gpt-5.3-codex)`.
+2. The routing hard filter preserves that endpoint as an excluded candidate,
+   making the reason available to dry-run previews, route decisions, and Runtime
+   Health instead of silently deleting it from the candidate set.
+3. A supported sibling such as `gpt-5.4` remains eligible and can win before
+   dispatch. Codex API-key connections remain eligible for `gpt-5.3-codex`.
+4. The adapter classifies capacity only from explicit 429, Too Many Requests,
+   rate-limit, quota-limit, weekly-limit, or usage-limit signatures. Ordinary
+   prose containing `rate` is a provider error and never mutates pool capacity.
+5. Runtime-health exclusion bucketing gives account/model incompatibility a
+   distinct explanation and corrective action.
+
+Acceptance is proven by unit tests for the exact observed stderr, genuine 429
+and weekly-limit payloads, OAuth-versus-API-key model eligibility, hard-filter
+trace preservation, and owner-facing exclusion attribution. No schema migration
+or seed/catalog deletion is required.
+
+### Acceptance mapping
+
+| Backlog acceptance target | Design/implementation contract | Executable proof |
+| --- | --- | --- |
+| ChatGPT-authenticated Codex never selects `gpt-5.3-codex` when unsupported | OAuth account/model policy writes `eligibilityExclusionReason` into the manifest and V2 treats it as a hard exclusion | `codex-subscription-model-eligibility.test.ts`; `loader.test.ts`; `codex-subscription-model-routing.test.ts` |
+| `degrade performance` cannot trip rate limiting | Only explicit HTTP throttle/quota/usage signatures classify capacity | Exact live stderr case in `codex-cli-adapter.test.ts` |
+| Genuine 429 still records capacity | `looksLikeCliRateLimit` retains 429, Too Many Requests, weekly, usage, and quota signatures; the existing record path is unchanged | Genuine 429 and weekly-limit cases in `codex-cli-adapter.test.ts` |
+| `gpt-5.4` wins without local detour | Unsupported sibling remains in the excluded trace; supported user-configured sibling remains rankable ahead of bundled endpoints | Three-candidate decision in `codex-subscription-model-routing.test.ts` |
+| Runtime Health explains the rejected model and action | New `account-model-eligibility` bucket maps the router reason to model-assignment remediation | `routing-exclusion-buckets.test.ts` plus existing phase/runtime-health consumers |
+
+## 14. Open Risks
 
 1. **Codex schema instability.** The schema-drift detector + version pin is the mitigation. If drift is constant, Codex CLI is operationally untenable for the panel and we keep it Build-Studio-only.
 2. **Sandbox pool exhaustion.** Per-thread sessions pin sandbox slots. With pool size 3 and TTL 60 min, ≥3 active threads block new claims. Mitigation: pool size scales with active-thread count; ephemeral fallback when pool saturated.
@@ -696,7 +795,7 @@ Reserved through every preceding phase. Specific deliverables:
 6. **Race-mode cost amplification.** A race against three adapters costs ~3×. Mitigation: race requires explicit opt-in env flag and per-route-plan opt-in; never default.
 7. **Acceptance signal lag.** `userAccepted` may take days for asynchronous threads. Outcome scoring runs over rolling 7-day windows to absorb this lag.
 
-## 14. Telemetry & Observability
+## 15. Telemetry & Observability
 
 `AdapterRunTelemetry` is the canonical run ledger. Operator dashboards read from it:
 
@@ -719,7 +818,7 @@ adapter_health = healthy
 
 `adapter.degraded` events surface in the panel as a banner; the route planner deprioritizes degraded adapters until 5 consecutive healthy runs clear the flag.
 
-## 15. Migration & Backwards Compatibility
+## 16. Migration & Backwards Compatibility
 
 - Existing coworker threads have `cliSessionId = null`. They keep working through the HTTP adapter exactly as today.
 - The hard-coded check at [ai-inference.ts:353](../../../apps/web/lib/ai-inference.ts#L353) is replaced by registry resolution that, in absence of an explicit `executionAdapter`, defaults to the prior provider-id-driven choice. No silent behavior change.
@@ -727,7 +826,7 @@ adapter_health = healthy
 - Build Studio dispatch is unchanged. Convergence happens only when Phase H has run and only as an explicit follow-up.
 - Receipts spec landing first lets §7 mint full provenance receipts. If receipts spec slips, §7 still mints `ToolExecution` rows and the receipt linkage is added in a follow-up patch.
 
-## 16. References
+## 17. References
 
 - [Coworker Substrate Status Review](../audits/2026-04-29-cli-substrate-status-review.md) — the audit this spec promotes
 - [Codex JSONL probe evidence](../audits/evidence/2026-04-29-codex-cli-jsonl-probe.md) — empirical event taxonomy

@@ -88,7 +88,7 @@ export async function runBuildPipeline(params: {
   // stay blocked at the PR #850 gate forever because the orchestration loop
   // immediately breaks when state.step === "complete".
   let effectiveExistingState = existingState;
-  if (existingState?.step === "complete" && existingState.containerId) {
+  if (existingState?.step === "complete") {
     const { prisma } = await import("@dpf/db");
     const fbRow = await prisma.featureBuild.findUnique({
       where: { buildId },
@@ -96,18 +96,31 @@ export async function runBuildPipeline(params: {
     });
     const hasNoCapture = !fbRow?.diffPatch || fbRow.diffPatch.length === 0;
     if (hasNoCapture) {
-      console.log(
-        `[build-pipeline] self-heal: ${JSON.stringify(buildId)} is "complete" but has empty diffPatch — rewinding to re-run stepComplete capture`,
-      );
-      // Rewind to "code_generated". getResumeStep then advances to "tests_run",
-      // and the orchestration loop dispatches stepComplete (which is the
-      // diff/commit capture step) without re-running stepRunTests or any
-      // earlier sandbox setup. The capture is idempotent.
-      effectiveExistingState = {
-        ...existingState,
-        step: "code_generated",
-        retryCount: 0,
-      };
+      if (!existingState.containerId) {
+        // BI-79176815: detection must not depend on the container, or the one
+        // case that needs healing is the one case that cannot be detected.
+        console.warn(
+          `[build-pipeline] ${JSON.stringify(buildId)} is "complete" with an empty diffPatch and has NO sandbox container — its changes cannot be recovered by rewinding. The work may still exist on its build branch.`,
+        );
+      } else {
+        console.log(
+          `[build-pipeline] self-heal: ${JSON.stringify(buildId)} is "complete" but has empty diffPatch — rewinding to re-run stepComplete capture`,
+        );
+      }
+      // Rewind to "code_generated" ONLY when a container still exists.
+      // getResumeStep then advances to "tests_run" and the loop dispatches
+      // stepComplete (the diff/commit capture step) without re-running
+      // stepRunTests or earlier sandbox setup. The capture is idempotent.
+      // Without a container the rewind cannot capture anything and would only
+      // drive stepComplete into its throw, so leave the state alone and let
+      // the warning above stand as the record.
+      if (existingState.containerId) {
+        effectiveExistingState = {
+          ...existingState,
+          step: "code_generated",
+          retryCount: 0,
+        };
+      }
     }
   }
 
@@ -451,7 +464,10 @@ async function stepGenerateCode(
     designSystem,
     gateContext,
   });
-  const systemPrompt = `You are an AI coworker building a feature in the sandbox.\n${buildContext}`;
+  // BI-CE93E314: the lead sentence is the brief; buildContext is build state,
+  // i.e. the turn's DATA, and stays undeclared.
+  const buildLead = "You are an AI coworker building a feature in the sandbox.";
+  const systemPrompt = `${buildLead}\n${buildContext}`;
 
   // Get sandbox tools — scoped to build phase only.
   // Filtering by buildPhases: ["build"] gives the agent the file-editing surface
@@ -596,6 +612,7 @@ async function stepGenerateCode(
   // Run the agentic loop — this gives us iterative tool use with the full
   // read-edit-test-fix workflow instead of single-shot code generation
   const result = await runAgenticLoop({
+    systemPromptInstructionSpans: [buildLead],
     chatHistory: [{ role: "user", content: userMessage }],
     systemPrompt,
     sensitivity: "development", // code clearance; payload screening still applies
@@ -701,7 +718,23 @@ async function stepComplete(
   // would mark itself "complete" with a 5-commit branch in the sandbox but
   // diffPatch=NULL and gitCommitHashes=[] in the DB — and PR #850's gate
   // would then reject the build for "no releasable source changes."
-  if (!state.containerId) return state;
+  // No container means the diff CANNOT be captured. Returning state unchanged
+  // here advanced the build to "complete" with diffPatch/diffSummary/
+  // gitCommitHashes all empty and NOTHING logged (BI-79176815) — so a build
+  // that really did change code was indistinguishable from one that changed
+  // nothing, and the owner-facing review surface had no evidence to show.
+  //
+  // Throw instead, matching stepCreateSandbox above ("Sandbox container is not
+  // running"): the orchestration loop's retry/recovery path then sees a failed
+  // step rather than a silent success. Every other best-effort branch in this
+  // function warns; this one used to be the only one that said nothing at all.
+  if (!state.containerId) {
+    throw new Error(
+      `Cannot capture the build diff: no sandbox container for ${buildId}. `
+      + "The work may exist on the build branch but cannot be recorded, so this "
+      + "step fails rather than completing the build with an empty result.",
+    );
+  }
 
   const { prisma } = await import("@dpf/db");
   const { extractDiff, execInSandbox, listSandboxCommitsAheadOfBase } = await import(

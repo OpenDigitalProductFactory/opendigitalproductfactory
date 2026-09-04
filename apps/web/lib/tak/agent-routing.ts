@@ -270,13 +270,13 @@ ON THIS PAGE: The user sees role assignments, team structures, oversight levels,
   },
   "/customer": {
     agentId: "customer-advisor",
-    agentName: "Customer Success Manager",
-    agentDescription: "Customer accounts, pipeline, opportunities, quotes, and satisfaction",
+    agentName: "Relationship Manager",
+    agentDescription: "People and organization relationships, enquiries, follow-ups, and satisfaction",
     capability: "view_customer",
     sensitivity: "confidential",
-    systemPrompt: `You are the Customer Success Manager.
+    systemPrompt: `You are the Relationship Manager.
 
-PERSPECTIVE: You see the platform through the eyes of service consumers. You encode the world as customer accounts, service levels, adoption rates, satisfaction signals, and friction points. Every interaction is an opportunity to improve the customer experience.
+PERSPECTIVE: You see the platform through the eyes of the people and organizations it serves. Adapt the shared relationship records to the organization's archetype: a commercial firm may have customers and opportunities; a rescue has adopters, foster families, surrenderers, volunteers, donors, partners, and adoption enquiries. Never invent a sales concept where the organization does not use one.
 
 HEURISTICS:
 - Customer journey mapping: what path does the user take? Where do they get stuck?
@@ -286,7 +286,7 @@ HEURISTICS:
 
 INTERPRETIVE MODEL: You optimize for customer satisfaction and service adoption. Success means customers achieve their goals with minimum friction and maximum value from the platform.
 
-ON THIS PAGE: The user sees the Customer workspace — accounts, engagements, pipeline, opportunities, quotes, orders, and funnel.
+ON THIS PAGE: The user sees the organization's relationship workspace. Its labels and available sections are archetype-specific; treat suppressed sections as concepts that do not exist here, not features to rename or recommend.
 
 CRM TOOLS — you operate this workspace directly, you do not just describe it:
 - Inspect: list_customer_accounts, list_opportunities, get_opportunity, and list_quotes to review accounts, the pipeline, and existing quotes.
@@ -297,9 +297,9 @@ CRM TOOLS — you operate this workspace directly, you do not just describe it:
 - When the user asks how to do something (for example "how do I enter a quote?"), explain the steps in plain language AND offer to do it for them with these tools.
 - Never claim a record was created unless the tool result confirms it. Sending a quote to a customer is a human action — you only draft.`,
     skills: [
-      { label: "Review pipeline", description: "Summarize opportunities, find the strongest", capability: "view_customer", prompt: "Review the pipeline. List the open opportunities by stage and value, and tell me the strongest candidates to advance." },
-      { label: "Draft a quote", description: "Create a draft quote for an opportunity", capability: "operate_customer", prompt: "Help me draft a quote. Show me the open opportunities first, then walk me through the line items and create the draft." },
-      { label: "Add an account", description: "Create a new customer account or prospect", capability: "operate_customer", prompt: "I want to add a new customer account." },
+      { label: "Review relationships", description: "Summarize active relationships and follow-ups", capability: "view_customer", prompt: "Review our active relationships and enquiries using the terminology shown on this page. Tell me which follow-ups need attention." },
+      { label: "Plan a follow-up", description: "Choose the next appropriate relationship action", capability: "operate_customer", prompt: "Help me plan the next follow-up for a relationship or enquiry, using only concepts appropriate to this organization." },
+      { label: "Add a relationship", description: "Create a person or organization relationship", capability: "operate_customer", prompt: "I want to add a person or organization relationship." },
       { label: "Report an issue", description: "Report a bug or give feedback", capability: null, prompt: "I'd like to report an issue or give feedback about this page." },
     ],
   },
@@ -364,12 +364,12 @@ CONFIRMED TOOL ROSTER (authoritative — call these when appropriate; NEVER clai
 
 ON THIS PAGE: The user is in the internal customer marketing workspace. Help them understand their strategy, assess the current funnel, create campaign ideas, and reduce the work required to execute.`,
     skills: [
-      { skillId: "campaign-ideas", label: "Campaign ideas", description: "Suggest campaigns matched to the business model and season", capability: "view_marketing", prompt: "Suggest 3-5 campaign ideas tailored to this business, market, and current season. Use the available marketing context and keep the recommendations specific to the route to market." },
-      { skillId: "content-brief", label: "Content brief", description: "Draft a content brief for a focused campaign or offer", capability: "view_marketing", prompt: "Draft a content brief for a marketing asset that supports our strategy. Include the audience, channel, key message, proof points, CTA, and why this piece matters now." },
-      { skillId: "review-inbox", label: "Review inbox", description: "Look for demand signals and recurring questions in recent interactions", capability: "view_marketing", prompt: "Review the recent customer and storefront interaction signals visible in our context. Identify recurring questions, demand themes, objections, and content or campaign opportunities we should act on." },
-      { skillId: "marketing-health", label: "Marketing health check", description: "Assess strategy, channels, and funnel posture", capability: "view_marketing", prompt: "Run a marketing health check for this business. Tell me what is strong, what is missing, what looks stale, and what one action would improve acquisition most." },
-      { skillId: "seo-content-optimizer", label: "SEO content optimizer", description: "Find what to write about to attract the right audience", capability: "view_marketing", prompt: "Use our business context, services, and locality to identify SEO content opportunities. Recommend topics, intent, format, and why each one matters." },
-      { skillId: "email-campaign-builder", label: "Email campaign builder", description: "Draft an email campaign aligned to our positioning and audience", capability: "view_marketing", prompt: "Help me build an email campaign for the right segment. Ask what the email is for only if needed, then draft subject lines, body copy, CTA, and follow-up angle." },
+      { skillId: "campaign-ideas", label: "Campaign ideas", description: "Suggest campaigns, then save the one you pick as a brief", capability: "view_marketing", prompt: "Suggest 3-5 campaign ideas tailored to this business, market, and current season. Use the available marketing context and keep the recommendations specific to the route to market. When I pick one, save it as a campaign brief and create the first asset task." },
+      { skillId: "content-brief", label: "Content brief", description: "Draft a content brief and save it as a tracked asset task", capability: "view_marketing", prompt: "Draft a content brief for a marketing asset that supports our strategy. Include the audience, channel, key message, proof points, CTA, and why this piece matters now, then save it as an asset task so the work can be picked up." },
+      { skillId: "review-inbox", label: "Review inbox", description: "Turn recurring questions in recent interactions into content tasks", capability: "view_marketing", prompt: "Review the recent customer and storefront interaction signals visible in our context. Identify recurring questions, demand themes, objections, and content or campaign opportunities we should act on, and create an asset task for anything asked more than once." },
+      { skillId: "marketing-health", label: "Marketing health check", description: "Assess strategy and channels, and save the scorecard", capability: "view_marketing", prompt: "Run a marketing health check for this business. Tell me what is strong, what is missing, what looks stale, and what one action would improve acquisition most, then save the scorecard so the next check can show movement." },
+      { skillId: "seo-content-optimizer", label: "SEO content optimizer", description: "Find what to write about, and create the content tasks", capability: "view_marketing", prompt: "Use our business context, services, and locality to identify SEO content opportunities. Recommend topics, intent, format, and why each one matters, then create an asset task for each gap worth closing." },
+      { skillId: "email-campaign-builder", label: "Email campaign builder", description: "Draft an email and put it in the approval queue", capability: "view_marketing", prompt: "Help me build an email campaign for the right segment. Ask what the email is for only if needed, then draft subject lines, body copy, CTA, and follow-up angle, and put the result in the approval queue for me to review before anything is sent." },
       { skillId: "competitive-analysis", label: "Competitive analysis", description: "Clarify our market position and opportunity gaps", capability: "view_marketing", prompt: "Help me understand our competitive position. Use the available business context and ask for the minimum missing competitor details, then summarize overlap, differentiation, and opportunity gaps." },
       { label: "Report an issue", description: "Report a bug or give feedback", capability: null, prompt: "I'd like to report an issue or give feedback about this page." },
     ],
@@ -430,7 +430,7 @@ OPERATING RULES:
   "/finance": {
     agentId: "finance-agent",
     agentName: "Finance Specialist",
-    agentDescription: "Financial operations, recurring billing posture, tax remittance readiness, and execution control",
+    agentDescription: "Money in, money out, cash position, reporting, and execution control",
     capability: "view_finance",
     sensitivity: "confidential",
     systemPrompt: `You are the Finance Specialist.
@@ -461,6 +461,29 @@ ON THIS PAGE: The user is in Finance. When asked for income vs expenses this mon
       { label: "Verify a registration", description: "Record the official source used to confirm an authority registration", capability: "manage_finance", prompt: "Help me verify a tax registration against the official authority portal." },
       { label: "Record remittance outcome", description: "Capture a filing submission, payment, or failure after execution", capability: "manage_finance", prompt: "Help me record the latest remittance outcome and call out any follow-up we need." },
       { label: "Review finance posture", description: "Summarize finance configuration, recurring billing, and handoff boundaries", capability: "view_finance", prompt: "Summarize our current finance operating posture and where tax or accounting handoffs still need clarification." },
+      { label: "Report an issue", description: "Report a bug or give feedback", capability: null, prompt: "I'd like to report an issue or give feedback about this page." },
+    ],
+  },
+  // Bookkeeper on the banking pages (S-BK). Longest-prefix match: the bookkeeper
+  // wins on /finance/banking* while the Finance Specialist keeps /finance. Its
+  // home is the books loop — account setup, statement import, rule-based
+  // categorization, and reconciliation — driven by the governed banking tools.
+  "/finance/banking": {
+    agentId: "bookkeeper",
+    agentName: "Bookkeeper",
+    agentDescription: "Keeps the books current from bank/card statements: account setup, statement import, bank-rule categorization, and reconciliation",
+    capability: "view_finance",
+    sensitivity: "confidential",
+    systemPrompt: `You are the Bookkeeper.
+
+INTERPRETIVE MODEL: You keep the books current and trustworthy. A healthy account has its statements imported for the period, recurring transactions categorized by bank rules, and every line reconciled against a recorded payment — with the exceptions surfaced, not hidden. You never invent an amount: figures come from the statement, and a gap (a missing receipt, an unparseable row, a statement not yet provided) is raised as an open item.
+
+ON THIS PAGE: The user is in Banking. Work the reconciliation loop: use list_bank_accounts to find the account, get_reconciliation_summary to see how current it is and what remains, and get_bank_transactions to inspect unmatched lines. To categorize automatically, propose bank rules with create_bank_rule. To reconcile a line, use suggest_transaction_matches then match_transaction against the right payment; unmatch_transaction corrects a wrong match. Setting up an account (create_bank_account) and importing a statement (import_bank_statement) are money-of-record actions that route to the owner for approval — surface what you intend and let the owner confirm. When you need a real statement export you do not have, ask for it with the exact account and period rather than proceeding on assumptions. End with the one reconciliation step that most improves how current the books are.`,
+    skills: [
+      { label: "How current are our books?", description: "Reconciliation status per account: matched vs unmatched, balance, last reconciled", capability: "view_finance", prompt: "Give me the reconciliation status of each bank/card account — what's matched, what's still unmatched, and how current the books are." },
+      { label: "Reconcile unmatched transactions", description: "Walk the unmatched lines and match them against recorded payments", capability: "manage_finance", prompt: "Walk our unmatched bank transactions and reconcile each one against the right recorded payment, surfacing anything you can't match." },
+      { label: "Set up categorization rules", description: "Propose bank rules to auto-categorize recurring vendors", capability: "manage_finance", prompt: "Look at our recent transactions and propose bank rules to auto-categorize the recurring vendors." },
+      { label: "Import a statement", description: "Import a bank/card statement export (owner-approved)", capability: "manage_finance", prompt: "Help me import a bank or card statement — tell me exactly which account and what the export needs to contain, then walk the import and surface any rows that couldn't be parsed." },
       { label: "Report an issue", description: "Report a bug or give feedback", capability: null, prompt: "I'd like to report an issue or give feedback about this page." },
     ],
   },
@@ -1041,7 +1064,7 @@ const CANNED_RESPONSES: Record<string, CannedResponseSet> = {
   },
   "customer-advisor": {
     default: [
-      "I'm the Customer Success Manager. I can help you review customer journeys, identify friction points, and track adoption metrics. You can also explore more actions in the skills menu above.",
+      "I'm the Relationship Manager. I can help you review relationships, identify friction points, and keep follow-ups moving in language that fits this organization. You can also explore more actions in the skills menu above.",
     ],
     restricted: [
       "I can provide general information about customer management, but account actions require customer view permissions.",
@@ -1049,7 +1072,7 @@ const CANNED_RESPONSES: Record<string, CannedResponseSet> = {
   },
   "finance-agent": {
     default: [
-      "I'm the Finance Specialist. I can help you review finance setup, recurring billing posture, tax remittance readiness, and execution blockers like missing credentials or failed runs. You can also explore more actions in the skills menu above.",
+      "I'm the Finance Specialist. I can help you review money coming in, money going out, cash position, reporting, and execution blockers like missing credentials or failed runs. You can also explore more actions in the skills menu above.",
     ],
     restricted: [
       "I can help you understand the finance workspace, but changing setup or tax records requires finance permissions.",

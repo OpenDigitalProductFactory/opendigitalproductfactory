@@ -44,7 +44,29 @@ export type DecisionHelpInput = {
    * asked, so telling the reader "a human already answered this" would be false.
    */
   withdrawn?: boolean;
+  /**
+   * Identity of the row this help is for. When present, every link back to
+   * Review & adjust carries it, so following the advice lands ON the finding
+   * with the question already in hand instead of on an empty form
+   * (BI-6700AF66).
+   */
+  origin?: { interactionId?: string; domainClass?: string };
 };
+
+/** Review & adjust, focused on this row's finding when the row is identified. */
+export function reviewHref(origin?: DecisionHelpInput["origin"]): string {
+  const params = new URLSearchParams();
+  if (origin?.domainClass) params.set("focus", origin.domainClass);
+  if (origin?.interactionId) params.set("from", origin.interactionId);
+  const query = params.toString();
+  if (!query) return "/coworker-decisions/review";
+  // The fragment lands the reader ON the finding; the query is what pre-opens
+  // its answer box with the question already stated.
+  const fragment = origin?.domainClass
+    ? `#finding-${encodeURIComponent(origin.domainClass)}`
+    : "";
+  return `/coworker-decisions/review?${query}${fragment}`;
+}
 
 /** The tier's playbook, named the way the rest of the surface names it. */
 function tierPlaybook(tier: DecisionAuditTierOrOther): string {
@@ -94,14 +116,14 @@ function unresolvedSteps(input: DecisionHelpInput): DecisionHelpStep[] {
     steps.push({
       label:
         "Answer it once on Review & adjust — your answer is captured as draft business doctrine your AI reuses, and the whole cluster of similar questions clears.",
-      href: "/coworker-decisions/review",
+      href: reviewHref(input.origin),
     });
     return steps;
   }
   steps.push({
     label:
       "Check Review & adjust — it rolls rows like this into a short list of themes instead of making you work the log line by line.",
-    href: "/coworker-decisions/review",
+    href: reviewHref(input.origin),
   });
   steps.push(
     input.tier === "wsid"

@@ -281,10 +281,13 @@ case "$rc" in
        info "No prior install state; dry-run leaves $(dpf_state_path) unchanged"
      else
        info "No prior install state; initializing $(dpf_state_path)"
-       dpf_state_init "$DPF_INSTALLER_VERSION" "$REPO_ROOT"
+       # Bare calls here abort the whole install with a naked exit 1 under
+       # `set -euo pipefail`, saying nothing about which stage died. Same
+       # `fail ... (see message above)` idiom the validation arm below uses.
+       dpf_state_init "$DPF_INSTALLER_VERSION" "$REPO_ROOT"          || fail "Could not initialize install state at $(dpf_state_path) (see message above)"
      fi ;;
   3) warn "Install state is from an older installer; running forward migration"
-     dpf_state_migrate ;;
+     dpf_state_migrate        || fail "Install state forward migration failed at $(dpf_state_path) (see message above)" ;;
   *) fail "Install state validation failed (see message above)" ;;
 esac
 
@@ -556,9 +559,6 @@ fi
 if DPF_HOST_PROFILE_JSON="$(pnpm --filter @dpf/db exec -- tsx "$REPO_ROOT/scripts/detect-hardware-host.ts" 2>/dev/null)"; then
   export DPF_HOST_PROFILE="$DPF_HOST_PROFILE_JSON"
   DPF_SELECTED_MODEL="$(printf '%s' "$DPF_HOST_PROFILE_JSON" | sed -nE 's/.*"selectedModel"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p')"
-  # Known-good content digest for the selected model, when the tier pins one.
-  # Empty for curated ai/ tiers (Docker Hub already pins bytes to a tag).
-  DPF_EXPECTED_DIGEST="$(printf '%s' "$DPF_HOST_PROFILE_JSON" | sed -nE 's/.*"expectedDigest"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p')"
   if [ -n "$DPF_SELECTED_MODEL" ]; then
     ok "Hardware profile detected — selected AI model (pull form): $DPF_SELECTED_MODEL"
     info "  (Will register under short form for runtime references; normalized after pull.)"
@@ -568,38 +568,6 @@ if DPF_HOST_PROFILE_JSON="$(pnpm --filter @dpf/db exec -- tsx "$REPO_ROOT/script
 else
   warn "Host hardware detection failed (non-fatal); portal-init will skip the profile step."
 fi
-
-# Compare the pulled model's content digest against the tier's pinned value.
-# WHY: a HuggingFace reference names a FILE, not an immutable revision, and
-# `docker model pull` takes no flags, so nothing pins bytes at pull time. Model
-# weights are a control-plane input -- they decide tool-calling behaviour -- so a
-# silent substitution is a behavioural compromise, not just a data one.
-# This is DETECTION, not prevention: warn loudly, never fail the install. A
-# legitimate republish should prompt re-evaluation, not brick a new machine.
-# (BI-73E9A282.)
-verify_model_digest() {
-  _vmd_runtime="$1"
-  _vmd_expected="$2"
-  [ -n "$_vmd_expected" ] || return 0
-  _vmd_actual="$(docker model inspect "$_vmd_runtime" 2>/dev/null \
-    | sed -nE 's/.*"id"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' | head -1)"
-  if [ -z "$_vmd_actual" ]; then
-    warn "Could not read the model digest to verify it; continuing."
-    return 0
-  fi
-  if [ "$_vmd_actual" = "$_vmd_expected" ]; then
-    ok "Model integrity verified (digest matches the pinned value)"
-    return 0
-  fi
-  warn "MODEL DIGEST MISMATCH for $_vmd_runtime"
-  warn "  expected: $_vmd_expected"
-  warn "  actual:   $_vmd_actual"
-  warn "  The upstream model was republished, or the download differs from what"
-  warn "  this release pinned. The model still works, but its behaviour is no"
-  warn "  longer the version this install was tested against. Treat this as a"
-  warn "  security event and re-run the tool evaluation before relying on it."
-  return 0
-}
 
 # 8b. Set up Docker Model Runner and pull the selected chat model.
 #     Mirrors install-dpf.ps1 §Step 7 (lines 1895-1985). Docker Model
@@ -652,35 +620,11 @@ if [ "$DPF_PLATFORM" = "darwin" ] && command -v docker >/dev/null 2>&1; then
       # calls use the exact string the model-runner knows. This prevents the
       # "failed to get model: model not found" seen in inference.model-manager
       # logs even when the pull command itself was issued.
-      #
-      # HuggingFace sources normalize differently from the `ai/` catalog. Verified
-      # on-box 2026-08-16: pulling `hf.co/ggml-org/Qwen3.8-27B-GGUF:Q4_K_M` lists as
-      # `huggingface.co/ggml-org/qwen3.8-27b-gguf:Q4_K_M` — the host is rewritten to
-      # its long form, the repo path is lowercased, and the quant tag KEEPS its case.
-      # Stripping `ai/` alone leaves the pull form unchanged for these, so the
-      # already-on-disk check never matches and the model re-downloads every run.
       _pull_name="$DPF_SELECTED_MODEL"
-      case "$_pull_name" in
-        hf.co/*|huggingface.co/*)
-          case "$_pull_name" in
-            *:*) _hf_tag="${_pull_name##*:}"; _hf_path="${_pull_name%:*}" ;;
-            *)   _hf_tag=""; _hf_path="$_pull_name" ;;
-          esac
-          _hf_path="$(printf '%s' "$_hf_path" | sed 's|^hf\.co/|huggingface.co/|' | tr '[:upper:]' '[:lower:]')"
-          if [ -n "$_hf_tag" ]; then
-            _runtime_model="${_hf_path}:${_hf_tag}"
-          else
-            _runtime_model="$_hf_path"
-          fi
-          ;;
-        *)
-          _runtime_model="$(printf '%s' "$_pull_name" | sed 's|^ai/||')"
-          ;;
-      esac
+      _runtime_model="$(printf '%s' "$_pull_name" | sed 's|^ai/||')"
       if docker model list 2>/dev/null | awk 'NR>1{print $1}' | grep -Fxq "$_runtime_model"; then
         ok "Model $_runtime_model already on disk"
         DPF_SELECTED_MODEL="$_runtime_model"
-        verify_model_digest "$_runtime_model" "${DPF_EXPECTED_DIGEST:-}"
       else
         # Print expected size upfront (user request for time estimation given
         # internet speed). Uses cheap manifest inspect (no blob download).
@@ -712,7 +656,6 @@ except Exception:
         if docker model list 2>/dev/null | awk 'NR>1{print $1}' | grep -Fxq "$_runtime_model"; then
           ok "AI Coworker model ready: $_runtime_model"
           DPF_SELECTED_MODEL="$_runtime_model"
-          verify_model_digest "$_runtime_model" "${DPF_EXPECTED_DIGEST:-}"
         else
           warn "Model pull may have failed. You can retry later: docker model pull $_pull_name"
         fi
@@ -769,8 +712,12 @@ if [ ! -f .env ]; then
     printf 'DPF_STATE_DIR=%s/.dpf\n' "$HOME" >> .env
   fi
   ok ".env created with generated secrets"
-  info "  Admin password: $ADMIN_PW_VAL"
-  info "  (Stored in .env; change before any non-local deployment)"
+  # Never print the generated password. The install log is the first thing an
+  # operator pastes into a public install-verification issue, and the issue
+  # template asks for exactly that paste -- so echoing the value here publishes
+  # it. Point at .env instead, matching the final summary below (#1767).
+  info "  Admin password: see ADMIN_PASSWORD in .env"
+  info "  (Change it before any non-local deployment)"
 else
   ok ".env already exists; preserving operator edits"
   # Even on an existing .env, ensure DPF_BACKUPS_HOST_PATH is set — operators

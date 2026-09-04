@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Late-defect detection hardening — make the common escape classes findable in the dev loop
 
 **Status:** plan · 2026-08-16
@@ -76,7 +80,7 @@ Substrate verified first (the platform is denser than it looks): guards auto-dis
 | M3 | BI-788EC51A | C | Twin-artifact set-parity: sh↔ps1 behavior markers, build↔merge matrices compared as sets | the "half the chain" fixes (#4369, #4371), distinct from BI-B2839E89 (runner-level Windows CI) |
 | M4 | BI-927D64C0 | B | Degenerate-environment fixture kit (partial tree/no-.git, absent/stale artifact, empty/null rows, two-installs-independent-ids, oversized input, transient-then-success) + enumerated probe-module conformance, with a completeness check on the enumeration itself | red/green fixture convention; the evidence-reverifier's injected-resolver pattern; `check-test-clock-bombs` already owns the time case |
 | M5 | BI-A9CF0D69 | D | Abandoned-while-queued pregate exits a distinct non-zero code (exit 0 ⇒ gated and passed, always); zero-work "Completed" requires declared zero-legality, count in the success line | the four existing did-not-run levels; `docs/testing/pre-pr-gate.md:346` documents the current lie |
-| M6 | BI-6FD78522 | wiring | Declared-but-inert: every registered tool granted-or-marked; produce/consume contract pairs asserted (locator↔re-verifier, stance↔embedder); unhonored-grant count becomes a shrink-only ratchet | `check-capability-consumers.mjs` (the exact shape, already shipped for capabilities), `audit-coworker-tool-grants.ts` (verdict today is a report, not a gate) |
+| M6 | BI-6FD78522 | wiring | Declared-but-inert: every registered tool granted-or-marked; produce/consume contract pairs asserted (locator↔re-verifier, stance↔embedder); unhonored-grant count becomes a shrink-only ratchet. **Landed 2026-08-22** (tool half): `apps/web/lib/tak/tool-reachability.conformance.test.ts` (every PLATFORM_TOOLS tool reachable by ≥1 registry agent or on the reasoned shrink-only exemption list in `tool-reachability-exemptions.ts` — 20 tools baselined) + `scripts/check-no-unhonored-grant-growth.mjs` (unhonored-grant-key ratchet, baseline `scripts/unhonored-grant-baseline.txt`, 71 keys pinned) | `check-capability-consumers.mjs` (the exact shape, already shipped for capabilities), `audit-coworker-tool-grants.ts` (verdict today is a report, not a gate) |
 | M7 | BI-95A83B47 | non-hermetic | Ambient-host markers in unit tests (raw DB, live memory probe) fail with a pointer to the injection seam; shrink-only baseline | `check-test-clock-bombs.mjs` idiom |
 
 Deliberately **not** mechanised: cross-boundary contract drift (provider semantics change under you; a pinned conformance fixture rots into class A — this is a checklist line instead), packaging paths (the escapes of Aug 12–16 each shipped their own targeted guard — `check-release-asset-contract`, `check-docker-patch-context`, `check-edge-node-image-bom` — extend those on the next escape rather than pre-building generality), platform runners (that is BI-B2839E89, already filed and open).

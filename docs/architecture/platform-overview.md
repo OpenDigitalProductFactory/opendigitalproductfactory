@@ -14,7 +14,7 @@ relatedCode:
 
 # Platform Overview
 
-> **Which overview wins (BI-79BCE3F2):** this page is the **canonical living overview** for runtime topology, deployment models, the sandbox/build workflow, and data architecture. [`orientation.md`](orientation.md) is the entry-point index and defers to this page for depth; where the two disagree, this page wins and orientation carries the bug.
+> **Which overview wins:** this page is the **canonical living overview** for runtime topology, deployment models, the sandbox/build workflow, and data architecture. [`orientation.md`](orientation.md) is the entry-point index and defers to this page for depth; where the two disagree, this page wins and orientation carries the bug.
 
 > **Scope:** this document describes the **current GA runtime** — the Single VM substrate served via Docker Desktop on Windows. Multi-platform (macOS Apple Silicon, native Linux), customer-cloud (AWS / GCP / Azure), Managed Kubernetes, and TAPPaaS deployment shapes are documented under the deployment doctrine at [`docs/superpowers/specs/2026-05-09-deployment-contracts.md`](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/superpowers/specs/2026-05-09-deployment-contracts.md). Implementation status for each is tracked in the [umbrella branch plan](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/superpowers/plans/2026-05-09-deployment-architecture-and-rollout.md).
 
@@ -403,7 +403,9 @@ flowchart TB
 
 ### Monitoring Stack Topology
 
-The **headless** monitoring stack (Prometheus, Loki, Alloy, and the metric exporters) runs as part of the default Docker Compose stack — these feed the platform's native UI and alert pipeline. The Grafana **UI** is opt-in (`--profile observability-ui`), since the platform renders its own context-aware dashboards and delivers alerts via the Inngest poll-bridge rather than through Grafana.
+The monitoring stack (Prometheus, Loki, Alloy, Grafana, and the metric exporters) is **capability-activated, not default**: every one of them sits behind the `runtime-deep-observability` Compose profile and starts only when the `runtime:deep-observability` capability is enabled. An installation that has not enabled it collects nothing, and the metric-backed surfaces have no source. Grafana is a further step again — the platform renders its own context-aware dashboards and delivers alerts via the Inngest poll-bridge rather than through Grafana, so the Grafana UI is for power users.
+
+⟦runtime: this paragraph previously claimed the headless stack "runs as part of the default Docker Compose stack". That was false against the Compose file and it made a real drift harder to spot — BI-5ACBAC50 found a live install whose capability state read `runtime:deep-observability: active` while no collector existed. Verify against `docker-compose.yml` profiles before restating it.⟧
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#1e293b', 'primaryTextColor': '#f8fafc', 'primaryBorderColor': '#334155', 'lineColor': '#64748b', 'secondaryColor': '#0f172a', 'tertiaryColor': '#1e293b', 'fontSize': '14px' }}}%%
@@ -637,30 +639,20 @@ Co-locating the mirror with its source removed one failure mode outright. The pr
 
 ## Hardware Guidance
 
-The platform supports a broad range of hardware, but the user experience changes significantly depending on whether the goal is simple evaluation, day-to-day local AI, or sandbox-heavy self-building workflows.
+Hardware follows the deployment and workload boundary rather than one universal
+minimum. Provider-assisted customer operations need approximately 8–12 modern
+CPU cores, 32 GB RAM, and a 1 TB NVMe SSD, with no discrete GPU requirement.
+Local-first operations should use 64 GB system RAM and either 24 GB discrete
+VRAM as a supported floor, 32 GB discrete VRAM for a new Windows purchase, or
+64–128 GB Apple unified memory. Contributor development is a separate profile:
+128 GB memory, 32 GB VRAM or 128 GB unified memory, and a 4 TB NVMe SSD.
 
-### Practical Tiers
-
-| Tier | CPU | RAM | Storage | GPU | Best for |
-|------|-----|-----|---------|-----|----------|
-| Minimum viable local run | Modern 4 cores | 16 GB | 50-100 GB SSD | None required | Evaluation, administration, and external-provider-first usage |
-| Recommended for serious use | 8+ cores | 32 GB | 100-200 GB NVMe SSD | Optional, 8-12 GB VRAM recommended | Small-team use, local-first AI, and moderate sandbox iteration |
-| Best for self-building / sandbox-heavy use | 12+ cores | 64 GB+ | 200+ GB NVMe SSD | 16 GB+ VRAM recommended | Frequent sandbox launches, heavier local models, and tighter iterative workflows |
-
-### Current Local Model Auto-Selection
-
-The installer uses detected RAM and VRAM to choose a default local model automatically via Docker Model Runner:
-
-| Hardware signal | Default model |
-|----------------|---------------|
-| GPU with 16 GB+ VRAM | `qwen3:32b` |
-| GPU with 8-16 GB VRAM | `qwen3:14b` |
-| GPU with 4-8 GB VRAM | `qwen3:8b` |
-| CPU-only with 16 GB+ RAM | `qwen3:8b` |
-| CPU-only with 8-16 GB RAM | `qwen3:1.7b` |
-| Constrained systems below that | `qwen3:0.6b` |
-
-These defaults are meant to keep installation practical. They are not the only models the platform can use, and they do not replace the broader multi-provider routing strategy for remote models.
+The dated, buyer-facing [DPF hardware guide](../install/hardware.md) owns the
+current machine shortlist, unified-versus-discrete memory explanation, context
+planning, and manufacturer links. The runtime's host-aware model policy remains
+the source of truth for the model selected on a particular installation; a
+copied model-name table in architecture documentation would drift as the policy
+and qualified tool-use models evolve.
 
 ## Summary
 

@@ -12,6 +12,8 @@ import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { GoldenTrianglePriorityPanel } from "@/components/golden-triangle/GoldenTrianglePriorityPanel";
 import { getGoldenTrianglePosture } from "@/lib/golden-triangle/persistence";
+import { WorkroomDefaultControl } from "@/components/golden-triangle/WorkroomDefaultControl";
+import { getWorkroomPostureDefault } from "@/lib/work-management/workroom-posture-defaults";
 import { BindingBootstrapPanel } from "@/components/platform/authority/BindingBootstrapPanel";
 import { BootstrapBindingsButton } from "@/components/platform/authority/BootstrapBindingsButton";
 import { BindingDetailDrawer } from "@/components/platform/authority/BindingDetailDrawer";
@@ -142,6 +144,7 @@ export default async function AssignmentsPage({ searchParams }: Props) {
   // EP-GOLDEN-TRIANGLE: the everyday Cost/Quality/Time platform default, seeded
   // into the priority panel embedded at the top of this surface. Fail-open.
   const platformPosture = await getGoldenTrianglePosture({ kind: "platform" }).catch(() => null);
+  const workroomDefault = await getWorkroomPostureDefault();
 
   // Build provider name lookup
   const providerNames: Record<string, string> = {};
@@ -260,6 +263,16 @@ export default async function AssignmentsPage({ searchParams }: Props) {
           </Link>
         </div>
         <GoldenTrianglePriorityPanel initial={platformPosture ?? undefined} />
+      </section>
+
+      {/* EP-WORK-POSTURE — how ROOMS behave, which the coworker controls above
+          do not answer. A room and a coworker are different questions, and only
+          the first was settable until now. */}
+      <section className="space-y-3">
+        <WorkroomDefaultControl
+          currentPace={workroomDefault?.proactivityLevel ?? null}
+          currentAuthority={workroomDefault?.actionBoundary ?? null}
+        />
       </section>
 
       {/* Advanced guardrails — the hard per-coworker floor / pinned model. */}

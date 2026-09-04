@@ -220,14 +220,47 @@ describe("buildPromoterCommand", () => {
   it("launches release promotion with a narrowly writable install and immutable release identity", () => {
     const { args } = buildPromoterCommand({
       ...BASE,
-      release: { tag: "v2026.08.23", ghcrOwner: "opendigitalproductfactory" },
+      canonicalInstallPath: "/Users/me/canonical-dpf",
+      release: {
+        tag: "v2026.08.23",
+        ghcrOwner: "opendigitalproductfactory",
+        channelDigest: `sha256:${"a".repeat(64)}`,
+        platformManifestDigest: `sha256:${"b".repeat(64)}`,
+        configDigest: `sha256:${"c".repeat(64)}`,
+        platformOs: "linux",
+        platformArchitecture: "amd64",
+      },
     });
-    expect(args).toContain("/Users/me/dpf:/host-source");
-    expect(args).not.toContain("/Users/me/dpf:/host-source:ro");
+    expect(args).toContain("/Users/me/dpf:/host-source:ro");
+    expect(args).toContain("/Users/me/canonical-dpf:/canonical-install");
+    expect(args).toContain("PROMOTE_INSTALL_ROOT=/canonical-install");
     expect(args).toContain("DPF_PROMOTION_MODE=release");
     expect(args).toContain("DPF_RELEASE_TAG=v2026.08.23");
+    expect(args).toContain(`DPF_RELEASE_CONFIG_DIGEST=sha256:${"c".repeat(64)}`);
+    expect(args).toContain(`DPF_RELEASE_CHANNEL_DIGEST=sha256:${"a".repeat(64)}`);
+    expect(args).toContain(`DPF_RELEASE_PLATFORM_MANIFEST_DIGEST=sha256:${"b".repeat(64)}`);
+    expect(args).toContain("DPF_RELEASE_PLATFORM_OS=linux");
+    expect(args).toContain("DPF_RELEASE_PLATFORM_ARCHITECTURE=amd64");
     expect(args).toContain("GHCR_OWNER=opendigitalproductfactory");
     expect(args).toContain("PROMOTE_TARGET_SHA=abc1234");
+  });
+
+  it("keeps legacy release callers on the writable source mount when no canonical root is supplied", () => {
+    const release = {
+      tag: "v2026.08.23", ghcrOwner: "opendigitalproductfactory",
+      channelDigest: `sha256:${"a".repeat(64)}`, platformManifestDigest: `sha256:${"b".repeat(64)}`,
+      configDigest: `sha256:${"c".repeat(64)}`, platformOs: "linux", platformArchitecture: "amd64",
+    } as const;
+    const { args } = buildPromoterCommand({ ...BASE, release });
+    expect(args).toContain("/Users/me/dpf:/host-source");
+    expect(args).not.toContain("PROMOTE_INSTALL_ROOT=/canonical-install");
+    const sameRoot = buildPromoterCommand({ ...BASE, canonicalInstallPath: BASE.hostInstallPath, release }).args;
+    expect(sameRoot).toContain("PROMOTE_INSTALL_ROOT=/host-source");
+    expect(sameRoot).not.toContain("/Users/me/dpf:/canonical-install");
+  });
+
+  it("rejects an unsafe canonical install root before launching Docker", () => {
+    expect(() => buildPromoterCommand({ ...BASE, canonicalInstallPath: "../dpf" })).toThrow("invalid_canonical_install_path");
   });
 
   it("reserves host transition authority without requiring an apply envelope", () => {
@@ -429,7 +462,7 @@ describe("promoter launch idempotency (SUR-E2BF265E)", () => {
 
 describe("runtime transition promoter entrypoint", () => {
   it("recognizes the mode and fails closed without protocol secret material", async () => {
-    const script = resolve(process.cwd(), "../../scripts/promote.sh");
+    const script = resolve(__dirname, "../../../../scripts/promote.sh");
     const stateDir = await mkdtemp(join(tmpdir(), "dpf-promoter-test-"));
     try {
       vi.stubEnv("DPF_PROMOTER_STATE_DIR", stateDir);

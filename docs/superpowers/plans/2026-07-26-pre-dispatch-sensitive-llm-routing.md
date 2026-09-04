@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Pre-Dispatch Sensitive LLM Routing Implementation Plan
 
 > **For agentic workers:** REQUIRED: Use the DPF-native `dpf-tdd`, `dpf-local-merge-ci-before-push`, and `dpf-pr-with-dco` skills plus the per-BI completion gate. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -433,3 +437,32 @@ The implementation is not complete until:
 - Should token maps use an existing encrypted artifact store or require a narrow new model/table? Verify existing protected-data substrate before proposing schema.
 - Which human-in-loop surface should own review decisions that originate in nested agent call chains: work item activity, coworker chat, queue branch, or all three via a common decision envelope?
 - Which provider setup route is canonical after the cognitive-load cleanup? Verify current route ownership before editing UI.
+
+## Amendment, 2026-08-23 — instruction provenance (BI-463BE12A, `DI-BF2FEDA18D81`)
+
+The screener classified the assembled **system prompt** as payload, so a coworker
+whose job description names payroll, invoices or salaries was routed at
+`restricted` on every turn — which hard-denies every external provider. Measured
+over seven days on the live install: coo 36/36, market-research-analyst 50/50,
+admin-assistant 38/38, hr-specialist 33/33 and finance-agent 7/7, against 0/45
+for platform-engineer. Five coworkers had never once reached a cloud provider.
+
+Four independent channels turned out to clamp such a turn to local-only —
+sensitivity clearance, the per-class export decision, the vertical policy packs,
+and a mask obligation that clamps `residencyPolicy`. Narrowing the sensitivity
+rule alone closes one of them.
+
+The fix declares instruction provenance at the source: the prompt assembler and
+the calling surface name the exact spans that are platform- or operator-authored
+instruction, and **everything unlabelled is data**. Sensitivity, the PDP
+summoning rule, the policy contexts and the vertical packs all key off the
+data-evidenced set; the receipt continues to report every detected class.
+
+Full design, the four-channel analysis, and the measured before/after:
+[`2026-08-23-prompt-provenance-in-inference-screening.md`](2026-08-23-prompt-provenance-in-inference-screening.md).
+
+`DI-0A58373E26D0` (2026-07-31) is not reopened. It rejected granting an external
+provider `restricted` clearance, which remains rejected for the same two
+commandments — "Outbound and irreversible actions require explicit go" and "Least
+privilege, deny by default". Only the provenance question was revisited, on live
+measurement that decision did not have.

@@ -20,6 +20,7 @@ import { ensureAgentPrincipalIdentity, syncUserPrincipal } from "@/lib/identity/
 import { getCoworkerRoomEngagement } from "@/lib/work-management/coworker-room-engagement.server";
 import { heartbeatAgentWorkItemPresence } from "@/lib/work-management/room-agent-presence.server";
 import { postWorkItemComment, type PostCommentDb } from "@/lib/work-management/post-work-item-comment";
+import { persistExplicitWorkroomAssignmentsForWorkItem } from "@/lib/work-management/room-participant-assignment.server";
 import { appendRoomPolicyParticipant } from "@/lib/work-management/room-policy";
 import type { WorkroomParticipantRole } from "@/lib/work-management/room-types";
 import { resolveAgentRoomAccess } from "@/lib/work-management/room-agent-access.server";
@@ -244,6 +245,12 @@ async function inviteRoomParticipantHandler(
     canAct,
   });
   await prisma.workItem.update({ where: { id: item.id }, data: { evidence: newEvidence as never } });
+  await persistExplicitWorkroomAssignmentsForWorkItem({
+    workItemId: item.id,
+    principalRef: inviteePrincipalId,
+    roles,
+    enteredReason: "Invited into the room",
+  });
 
   const commentDb: PostCommentDb = {
     workItemMessage: { create: (args) => prisma.workItemMessage.create(args as never) },

@@ -1,7 +1,9 @@
 // apps/web/lib/agentic-loop.ts
 // Agentic execution loop: LLM calls tools iteratively until it responds with text only.
 // This is the core behavioral difference between a chatbot and an agent.
-import { routeAndCall, type RoutedInferenceResult } from "@/lib/routed-inference";
+import { routeAndCall, type RouteAndCallOptions, type RoutedInferenceResult } from "@/lib/routed-inference";
+import type { DowngradeCause } from "@/lib/inference/downgrade-explanation";
+import type { MessageOrigin } from "@/lib/inference/data-screening/types";
 import {
   detectRepeatedToolCall,
   detectApproachingRepeatedToolCall,
@@ -11,7 +13,8 @@ import {
 import { isRedundantReaskQuestion } from "@/lib/tak/conversation-intent";
 import { PLATFORM_TOOLS, toolsToOpenAIFormat, type ToolDefinition, type ToolResult } from "@/lib/mcp-tools";
 import { createAuthorizedSurfaceTurnGovernance } from "@/lib/coworker/authorized-surface-execution-context";
-import { LOAD_TOOLS_TOOL_NAME, selectLoadableTools } from "@/lib/tak/tool-intent";
+import { LOAD_TOOLS_TOOL_NAME } from "@/lib/tak/tool-intent";
+import { DynamicToolSurface } from "@/lib/tak/dynamic-tool-surface";
 import {
   classifyEvidenceRequirement,
   resolveEvidenceRecovery,
@@ -51,19 +54,23 @@ import { applyEscalationLadderGuard, buildHumanHandoff } from "./escalation-ladd
 import { logGeneratedProse } from "../prose/generated-prose"; // BI-41F15FD7
 import { assessToolSurface, computeToolSelectionAccuracy, contextEconomyTurnMetricFields } from "./context-economy-metrics";
 import { summarizeDroppedMessages } from "./compaction-digest";
-import { describeContextCapacityFailure } from "./context-capacity-failure";
 import {
   detectToolRefusedDespiteAvailability,
   appendToolRefusedRecoveryMessages,
   classifyToolRefusedIssue,
 } from "./tool-refused-recovery";
+import {
+  applyTerminalToolSurface,
+  buildTerminalToolReminder,
+  normalizeTerminalToolArguments,
+  resolveTerminalTextExit,
+  resolveTerminalToolCall,
+  selectTerminalToolSurface,
+  type TerminalToolPolicy,
+} from "./terminal-tool-policy";
 // Re-export for importers (certification-oracles, tests) that pull from agentic-loop.
 export { detectToolRefusedDespiteAvailability } from "./tool-refused-recovery";
 
-// Safety ceiling — NOT a behavioral limit. The loop terminates when the model
-// responds with text only (no tool calls), matching the Anthropic API pattern
-// where the loop runs until stop_reason === "end_turn". This limit only prevents
-// runaway loops. The model decides when it's done.
 // Safety ceiling — the loop exits naturally when the model responds with text-only
 // (no tool calls). This limit only catches true infinite loops from bugs.
 // The actual guardrails are: sandbox circuit breaker, repetition detector, duration
@@ -102,119 +109,10 @@ const COMPLETION_CLAIM_PATTERN =
 export const HARD_COMPLETION_CLAIM_PATTERN =
   /\bI(?:'ve| have| just)?\s*(?:have\s+)?(?:saved|created|published|posted|sent|scheduled|recorded|queued|logged|added|drafted and saved|placed)\b|\b(?:saved|published|posted|sent|scheduled|queued|added|recorded)\s+(?:it|that|your|the)\b|\b(?:is|are|has been|have been)\s+(?:now\s+)?(?:live|saved|published|sent|scheduled|posted|queued|recorded)\b|in\s+(?:your\s+)?approval\s+queue|\b(?:prospect\s+)?account\s+created\b|\bACCT-[A-Z0-9]{4,}\b/i;
 
-/**
- * Build a plain-language, non-technical explanation when an agent turn fails
- * because routing could not complete a tool-using call (BI-23E0714C).
- *
- * The old behavior lumped every tool-route failure into one message that told
- * the operator to "Configure an active model that supports tools in
- * Platform > AI > Model Assignment" — which is wrong and a dead end whenever a
- * tool-capable provider IS already configured (the common case). This classifier
- * distinguishes the real situations so we never send a non-technical operator to
- * fix config that is already correct:
- *
- *  - REQUEST_TOO_LARGE  → context overflow; start a new thread.
- *  - No credential for ANY non-local provider → permanent config gap; point to setup.
- *    MUST be checked before the threshold branch: a threshold skip layered on top of
- *    a credential gap matches the threshold pattern but the real fix is "connect a
- *    provider", not "wait for a rate-limit to clear" (BI-AUDIT-003).
- *  - local bypassed for tool count + paid providers transiently down → rate-limit;
- *    nothing is misconfigured.
- *  - genuinely no tool-capable endpoint active → point to the REAL surface.
- *  - other endpoint failures → transient; retry shortly.
- */
-export function describeToolRouteFailure(
-  errorMessage: string,
-  toolCount: number,
-): string {
-  const msg = errorMessage ?? "";
-
-  if (msg.startsWith("REQUEST_TOO_LARGE:")) {
-    return "Your conversation is too long for this AI provider. Please start a new thread to continue.";
-  }
-
-  // Local runner rejected the request because prompt + tool schemas exceed the
-  // model's served context window (e.g. Docker Model Runner HTTP 400
-  // exceed_context_size_error). This is DETERMINISTIC, not a transient rate-limit,
-  // so the "try again shortly" branches below would mislead — and a fresh thread
-  // alone won't help if the tool surface itself is too big. Point at the real
-  // levers (shorter input / fewer active tools / larger-context model).
-  if (/exceed_context_size|exceeds the available context size/i.test(msg)) {
-    return (
-      "That request was too large for the active AI model's context window — usually too many " +
-      "tools active at once, or a long conversation. Try a shorter message or start a new thread. " +
-      "If it keeps happening, this coworker has more tools active than the local model can hold and needs right-sizing."
-    );
-  }
-
-  // Permanent configuration gap: a non-local provider is in the chain but has no
-  // credential row. This is NOT transient — the operator must connect a provider.
-  // Check this BEFORE the threshold branch: when codex has no credential AND local
-  // is threshold-blocked, the threshold pattern matches but the user needs to
-  // configure a provider, not wait for a rate-limit.
-  if (/No credential for/i.test(msg)) {
-    return (
-      "No AI provider credentials are configured for this feature. " +
-      "Open Platform › AI Operations › Providers & Routing, connect a cloud provider " +
-      "(Claude, OpenAI, Google, or similar), then try again."
-    );
-  }
-
-  // Most common real cause: the bundled local model was bypassed because this
-  // coworker exposes more tools than a small local model can reliably handle,
-  // and no paid provider was available to take the work. This is NOT a
-  // misconfiguration, so do not point the operator at a settings page.
-  if (/exceeds threshold|skipped local fallback/i.test(msg)) {
-    // Prefer the exact count the router reported ("58 tools exceeds threshold");
-    // fall back to the tool count we were handed.
-    const reported = msg.match(/(\d+)\s+tools?\s+exceeds threshold/i);
-    const count = reported ? Number(reported[1]) : toolCount;
-    const tools = count > 0 ? `${count} of them` : "many";
-    return (
-      "Your paid AI providers (such as Claude or GPT) are briefly unavailable right now — " +
-      "usually a short rate-limit that clears within a minute — and this coworker uses too many " +
-      `tools (${tools}) for the bundled local model to run on its own. Nothing is misconfigured. ` +
-      "Please wait a moment and try again."
-    );
-  }
-
-  // Genuine config gap: routing found no active model that supports tools at all.
-  if (/No eligible endpoints/i.test(msg) && /toolUse/i.test(msg)) {
-    return (
-      "No AI model that supports tools is active right now. Open Platform > AI > " +
-      "Providers & Routing to activate a tool-capable provider, then try again."
-    );
-  }
-
-  const contextCapacityFailure = describeContextCapacityFailure(msg);
-  if (contextCapacityFailure) return contextCapacityFailure;
-
-  // Config/capacity gap: routing eliminated EVERY candidate (e.g. the cloud
-  // provider's sign-in expired AND the bundled local model's context window is
-  // too small for this coworker's larger requests). This reaches here as a plain
-  // "No eligible endpoints for task type '…'" with no `toolUse` token, so the
-  // branch above misses it and — before this fix — it fell through to the generic
-  // "temporarily unavailable, try again in 30 seconds" below. That is a LIE for a
-  if (/No eligible endpoints/i.test(msg)) {
-    return (
-      "No AI model can handle this request right now. No eligible model met this " +
-      "turn's routing requirements. The cause can be provider availability, data-policy " +
-      "or residency limits, capability requirements, or context size — not necessarily " +
-      "a disconnected provider. Open Platform > AI Operations > Providers & Routing " +
-      "to review the active route and provider status."
-    );
-  }
-
-  // Endpoints exist but all transiently failed (rate-limit / overload / network).
-  if (/All endpoints failed/i.test(msg)) {
-    return (
-      "The AI providers are momentarily busy (usually rate-limited or overloaded). " +
-      "Please try again in about 30 seconds — no setup change is needed."
-    );
-  }
-
-  return "The AI provider is temporarily unavailable. Please try again in about 30 seconds.";
-}
+// The dead-end classifier and its copy live in ./inference-dead-ends (BI-A89E4827).
+import { describeToolRouteFailure, describeToolRouteFailureOutcome, type InferenceDeadEndOutcome } from "./inference-dead-ends";
+import { usesGovernedReviewTools } from "./governed-review-tools";
+export { describeToolRouteFailure };
 
 // Narration patterns: agent describes code or announces intent instead of calling tools.
 // Includes preamble narration ("Let me check", "I need to fix") and intent announcements
@@ -636,45 +534,8 @@ export function buildRuntimeLimitToolLoopMessage(executedTools: ExecutedTool[]):
   ].join(" ");
 }
 
-/**
- * Plain-English message for when the loop hits MAX_ITERATIONS without
- * producing a text-only response. Replaces the prior generic "I ran into
- * a limit while working on this. Try breaking your request into smaller
- * steps." which obscured the actual cause (usually: preferred provider
- * unavailable → fallback model overwhelmed by the tool surface). Respects
- * IDENTITY_BLOCK rule #5 — no provider/model/tool internals exposed.
- *
- * BI-F4D3B9E9(d): this branched on `downgraded`, which conflated "a dispatch
- * failed" with "nothing was eligible" — so it printed "My usual AI was
- * unavailable" directly beneath a banner that had just said "your configured
- * provider is active but wasn't eligible". One of the two was always wrong.
- * It now branches on the routed `downgradeReason` so both statements describe
- * the same cause, and it no longer tells an owner to connect a provider they
- * already have connected.
- */
-export function buildMaxIterationsExhaustedMessage(params: {
-  downgradeReason: "provider-unavailable" | "not-eligible" | null;
-  executedTools: ExecutedTool[];
-}): string {
-  const toolSummary = summarizeExecutedToolNames(params.executedTools);
-  const downgradeLead = params.downgradeReason === "provider-unavailable"
-    ? "My usual AI was unavailable, so I worked through a backup that wasn't able to keep up. "
-    : params.downgradeReason === "not-eligible"
-      ? "My usual AI wasn't a fit for this particular request, so I worked through a backup that wasn't able to keep up. "
-      : "";
-  const workNote = toolSummary
-    ? `I made several attempts (${toolSummary}) but couldn't complete a final answer before hitting my safety limit.`
-    : "I worked through several attempts but couldn't complete a final answer before hitting my safety limit.";
-  // Honest copy (G2, 2026-05-23): no false re-route promises. Point at the fix
-  // that matches the actual cause — an owner whose providers are all connected
-  // and merely ineligible must not be told to connect one (BI-F4D3B9E9(d)).
-  const suggestion = params.downgradeReason === "provider-unavailable"
-    ? "Reconnecting or restoring that provider at Platform > AI > Providers unlocks the work I'm built for. Otherwise, try a narrower question."
-    : params.downgradeReason === "not-eligible"
-      ? "A shorter request usually routes back to the stronger model. The note above says what ruled it out."
-      : "Try the same question again, or break it into a smaller piece.";
-  return `${downgradeLead}${workNote} ${suggestion}`;
-}
+import { buildMaxIterationsExhaustedMessage } from "./max-iterations-message";
+export { buildMaxIterationsExhaustedMessage };
 
 // Pattern: response is a short clarifying question asking for a required field.
 // System prompt rule 13 allows ONE round of "I need X and Y" before acting.
@@ -903,6 +764,7 @@ export type AgenticResult = {
   executedTools: ExecutedTool[];
   /** If a proposal tool was called, return it for approval card rendering */
   proposal: { name: string; arguments: Record<string, unknown>; content: string } | null;
+  failure?: InferenceDeadEndOutcome;
   /**
    * BI-2AC48661: the execution plan as it stood when the loop returned, when
    * `enableExecutionPlan` was set. Null when planning was off or the model
@@ -1149,6 +1011,10 @@ export type RunAgenticLoopParams = {
 
   chatHistory: ChatMessage[];
   systemPrompt: string;
+  /** Instruction spans in `systemPrompt`; see RouteAndCallOptions (BI-463BE12A). */
+  systemPromptInstructionSpans?: string[];
+  /** What each `chatHistory` entry is — labels only (BI-40EF7C44). */
+  messageOrigins?: readonly MessageOrigin[];
   sensitivity: import("@/lib/agent-sensitivity").RouteSensitivity;
   tools: ToolDefinition[];
   toolsForProvider: Array<Record<string, unknown>> | undefined;
@@ -1271,6 +1137,8 @@ export type RunAgenticLoopParams = {
    * caller is byte-for-byte unchanged until it opts in.
    */
   enableExecutionPlan?: boolean;
+  /** Bounded evidence-reader surface with a reserved governed writer step. */
+  terminalToolPolicy?: TerminalToolPolicy;
 
 };
 
@@ -1301,6 +1169,8 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
   const {
     chatHistory,
     systemPrompt,
+    systemPromptInstructionSpans,
+    messageOrigins,
     sensitivity,
     tools,
     toolsForProvider,
@@ -1389,8 +1259,10 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
   }
 
   // Build routeAndCall options once (reused every iteration)
-  const routeOptions = {
+  const routeOptions: RouteAndCallOptions = {
     ...(toolsForProvider ? { tools: toolsForProvider } : {}),
+    ...(systemPromptInstructionSpans?.length ? { systemPromptInstructionSpans } : {}),
+    ...(messageOrigins?.length ? { messageOrigins } : {}),
     taskType: turnRoute.taskType,
     ...effectiveConfig,
     ...(requireTools ? { requireTools: true } : {}),
@@ -1429,14 +1301,14 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       ...planProviderTools,
     ];
   }
+  const terminalProviderTools = [...((routeOptions.tools as Array<Record<string, unknown>> | undefined) ?? [])];
 
   // EP-COWORKER-INTERACTIVITY (BI-6A745E3C): on-demand tool attachment. The chat
   // coworker path right-sizes the attached tool set and hands the remaining
   // authorized tools here as a deferred pool; the model pulls them back via the
   // load_tools meta-tool (intercepted below, like the plan tools). Empty for
   // autonomous/build callers, so their behavior is byte-for-byte unchanged.
-  const deferredPool: ToolDefinition[] = [...(params.deferredTools ?? [])];
-  const loadedToolDefs: ToolDefinition[] = [];
+  const dynamicToolSurface = new DynamicToolSurface({ active: tools, deferred: params.deferredTools });
 
   // Append the current plan as an ephemeral reminder to the messages handed to
   // the model. NOT stored in `messages`, so it is regenerated from live plan
@@ -1481,21 +1353,34 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     message: latestUserText(messages),
   });
   let evidenceRecoveryNudges = 0;
+  let terminalToolNudges = 0;
+  let terminalToolSurfaceOverride: string[] | null = null;
+  const completeResult = (
+    content: string,
+    source: Pick<RoutedInferenceResult, "providerId" | "modelId" | "downgraded" | "downgradeMessage"> | null = lastResult,
+    extra: Partial<Pick<AgenticResult, "failure" | "executionPlan">> = {},
+  ): AgenticResult => ({
+    content,
+    providerId: source?.providerId ?? "",
+    modelId: source?.modelId ?? "",
+    downgraded: source?.downgraded ?? false,
+    downgradeMessage: source?.downgradeMessage ?? null,
+    totalInputTokens,
+    totalOutputTokens,
+    executedTools,
+    proposal: null,
+    ...extra,
+  });
+  const terminalFailure = (message: string, source = lastResult): AgenticResult =>
+    completeResult(message, source, { failure: { kind: "terminal-writer-missing", message } });
   let bestPreNudgeContent = ""; // Preserve best text from before nudge
   const startTime = Date.now();
   let inferenceCallCount = 0;
   let ctxPeakTokens = 0; // Peak assembled context (est. tokens) this turn — dumb-zone gauge.
   let resolvedMaxContextTokens: number | null = null; // BI-9679EB1A: learned from the first dispatch; sizes compaction + the gauge to the real window.
   let sandboxUnavailableCount = 0; // Circuit breaker: stop trying sandbox tools if unavailable
-  // Grant-starvation circuit breaker: an agent whose profile lacks the grants
-  // for the tools it was handed keeps emitting tool calls that all return
-  // `forbidden_grant`. Without this, the loop burns the full MAX_ITERATIONS /
-  // MAX_DURATION with executedTools=0 (observed 2026-07-06: build-architect on
-  // a build-pipeline thread spun ~500s, iter=200, zero tools executed). The
-  // repetition detector doesn't fire because the model keeps trying DIFFERENT
-  // forbidden tools; the nudge cap (1) is spent after the first iteration. We
-  // count consecutive forbidden_grant rejections and reset on ANY tool success,
-  // so a legitimately mixed grant surface (some tools allowed) never trips it.
+  // Stop grant-starved agents before they burn the full turn trying different
+  // forbidden tools. Reset on any success so mixed grant surfaces remain valid.
   let forbiddenGrantStreak = 0;
   const forbiddenGrantTools = new Set<string>(); // names seen rejected, for the blocked message
   let previousResponseId: string | undefined; // Responses API conversation chaining
@@ -1560,8 +1445,16 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         `toolBudgetTarget=${effortWarrant.toolBudgetTarget} signals=${effortWarrant.signals.join(",")}`,
     );
   }
-
   for (let iteration = 0; iteration < iterationCeiling; iteration++) {
+    if (params.terminalToolPolicy) {
+      routeOptions.tools = terminalToolSurfaceOverride
+        ? selectTerminalToolSurface(terminalProviderTools, terminalToolSurfaceOverride)
+        : applyTerminalToolSurface(params.terminalToolPolicy, executedTools, terminalProviderTools);
+      const writerOnlySurface = routeOptions.tools.length === 1
+        && selectTerminalToolSurface(routeOptions.tools, [params.terminalToolPolicy.writerToolName]).length === 1;
+      routeOptions.toolChoice = writerOnlySurface ? "required" : undefined;
+      routeOptions.terminalWriterToolName = writerOnlySurface ? params.terminalToolPolicy.writerToolName : undefined;
+    }
     // EP-ASYNC-COWORKER-001: Check cancellation flag at each iteration boundary
     if (agentEventBus.isCancelled(threadId)) {
       agentEventBus.clearCancel(threadId);
@@ -1592,17 +1485,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     // and surface the error so the user can start a sandbox rather than spinning expensively.
     if (sandboxUnavailableCount >= 2) {
       console.warn(`[agentic-loop] sandbox unavailable after ${sandboxUnavailableCount} attempts. Aborting loop.`);
-      return {
-        content: "The sandbox is not available — no slots are free. Please ensure the sandbox container is running (check Docker Desktop), then try again.",
-        providerId: lastResult?.providerId ?? "",
-        modelId: lastResult?.modelId ?? "",
-        downgraded: lastResult?.downgraded ?? false,
-        downgradeMessage: lastResult?.downgradeMessage ?? null,
-        totalInputTokens,
-        totalOutputTokens,
-        executedTools,
-        proposal: null,
-      };
+      return completeResult("The sandbox is not available — no slots are free. Please ensure the sandbox container is running (check Docker Desktop), then try again.");
     }
 
     // Grant-starvation circuit breaker — after 3 consecutive forbidden_grant
@@ -1618,20 +1501,11 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         `[agentic-loop] grant-starved: ${forbiddenGrantStreak} consecutive forbidden_grant rejections. ` +
         `agent=${JSON.stringify(agentId)} route=${JSON.stringify(routeContext)} tools=${JSON.stringify(blockedTools)}. Aborting loop.`,
       );
-      return {
-        content:
+      return completeResult(
           `Blocked — hard stop, not a retry situation. This agent's profile lacks the grant(s) required for ` +
           `the tools it needs: ${blockedTools.join(", ")}. Every attempt was rejected with \`forbidden_grant\`. ` +
           `A platform operator needs to grant \`${agentId}\` access to these tools (or hand the work to a peer that already holds them) before it can proceed.`,
-        providerId: lastResult?.providerId ?? "",
-        modelId: lastResult?.modelId ?? "",
-        downgraded: lastResult?.downgraded ?? false,
-        downgradeMessage: lastResult?.downgradeMessage ?? null,
-        totalInputTokens,
-        totalOutputTokens,
-        executedTools,
-        proposal: null,
-      };
+      );
     }
 
     // Time ceiling — phase-aware duration limits.
@@ -1652,10 +1526,14 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       t.name === "reviewBuildPlan" || (t.name === "saveBuildEvidence" &&
         (t.args as Record<string, unknown> | undefined)?.field === "buildPlan")
     );
+    // BI-3907AF35: a governed initiative review is review-phase work too. It
+    // reads an artifact at an immutable version and writes a structured
+    // receipt; on the 120s conversation baseline the reviewer ran out of budget
+    // after four reads and never reached its writer (FB-EB292B9F).
     const hasReviewTools = executedTools.some(t =>
       t.name === "run_ux_test" || t.name === "evaluate_page" ||
       t.name === "check_deployment_windows"
-    );
+    ) || usesGovernedReviewTools(executedTools);
     const hasShipTools = executedTools.some(t =>
       t.name === "deploy_feature" || t.name === "execute_promotion" ||
       t.name === "register_digital_product_from_build" || t.name === "schedule_promotion"
@@ -1693,17 +1571,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           : ` on a text answer. Exiting early with diagnostic.`) +
         ` agent=${JSON.stringify(agentId)} route=${JSON.stringify(routeContext)}`,
       );
-      return {
-        content: bestPreNudgeContent || buildLocalToolCallFailureMessage(lastResult),
-        providerId: lastResult.providerId,
-        modelId: lastResult.modelId,
-        downgraded: lastResult.downgraded,
-        downgradeMessage: lastResult.downgradeMessage,
-        totalInputTokens,
-        totalOutputTokens,
-        executedTools,
-        proposal: null,
-      };
+      return completeResult(bestPreNudgeContent || buildLocalToolCallFailureMessage(lastResult), lastResult);
     }
 
     // Repetition detector (runtime-issues). BI-PIR-2fc2106c: no-progress hard-stops
@@ -1718,10 +1586,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         repeated, routeContext: routeContext ?? null, userId,
         agentId: agentId ?? null, threadId: threadId ?? null, taskRunId: taskRunId ?? null,
       });
-      return {
-        content, providerId: "", modelId: "", downgraded: false, downgradeMessage: null,
-        totalInputTokens, totalOutputTokens, executedTools, proposal: null,
-      };
+      return completeResult(content, null);
     }
     const approaching = detectApproachingRepeatedToolCall({ executedTools });
     if (approaching && !noProgressNudgedSigs.has(approaching.signature)) {
@@ -1762,9 +1627,12 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     // tools→system prefix — instead of mutating tool descriptions, so the
     // Anthropic prompt-cache prefix stays byte-identical turn-over-turn even
     // after a tool fails or is review-vetoed. See buildToolSessionHintMessage.
-    const toolSessionHint = buildToolSessionHintMessage(executedTools);
-    const messagesForCall = toolSessionHint
-      ? [...assembledMessages, { role: "user" as const, content: toolSessionHint }]
+    const toolHints = [
+      buildToolSessionHintMessage(executedTools),
+      params.terminalToolPolicy ? buildTerminalToolReminder(params.terminalToolPolicy, executedTools) : null,
+    ].filter((hint): hint is string => Boolean(hint));
+    const messagesForCall = toolHints.length
+      ? [...assembledMessages, { role: "user" as const, content: toolHints.join("\n\n") }]
       : assembledMessages;
     let result: RoutedInferenceResult;
     try {
@@ -1794,10 +1662,39 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       }
     } catch (routeErr) {
       const msg = routeErr instanceof Error ? routeErr.message : String(routeErr);
+      const failure = describeToolRouteFailureOutcome(msg, routeOptions.tools?.length ?? 0, routeErr);
       console.warn(`[agentic-loop] routeAndCall threw: ${msg}`);
       logTurnSummary("unknown", "unknown");
+      if (params.terminalToolPolicy) {
+        // BI-8B8731EE. A THROW from routeAndCall means the model never ran, so
+        // this is not the reviewer declining its writer contract.
+        //
+        // `failure` above already classifies why. When that classification is a
+        // RESOURCE wait — the host is busy, or governed local CI holds the
+        // inference capacity — say so, because the platform already knows what
+        // to do with it: `preInferenceResourceWait` projects a `provider-capacity`
+        // wait that resumes on the same TaskRun. Rewriting it to
+        // `terminal-writer-missing` made that handling unreachable for every
+        // governed reviewer route and reported a reservation that clears itself
+        // in ~195s as a failure of the writer contract.
+        //
+        // Measured cost of the substitution: five dispatches spent auditing
+        // grants, autonomy tiers and tool surfaces that were correct throughout.
+        // Only PRE-INFERENCE, mirroring `preInferenceResourceWait`'s own
+        // contract. Once a reader has run, the turn is no longer "nothing
+        // happened yet": the resumable writer wait below is the better state,
+        // because the read work is banked and only the receipt is outstanding.
+        // Diverting that to a resource wait would fail the run instead.
+        if ((failure.kind === "capacity" || failure.kind === "busy") && executedTools.length === 0) {
+          return completeResult(failure.message, null, { failure });
+        }
+        const message = routeOptions.toolChoice === "required"
+          ? `The required governed writer ${params.terminalToolPolicy.writerToolName} could not be dispatched. The same TaskRun remains resumable. No receipt was created.`
+          : `The governed review route failed before ${params.terminalToolPolicy.writerToolName} could be recorded. The same TaskRun remains resumable. No receipt was created.`;
+        return terminalFailure(message, null);
+      }
       return {
-        content: describeToolRouteFailure(msg, routeOptions.tools?.length ?? 0),
+        content: failure.message,
         providerId: "unknown",
         modelId: "unknown",
         downgraded: false,
@@ -1806,6 +1703,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         totalOutputTokens,
         executedTools,
         proposal: null,
+        failure,
       };
     }
     // Track response ID for conversation chaining (Responses API)
@@ -1852,6 +1750,23 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         `toolCalls=0 contentLen=${trimmed.length} nudges=${continuationNudges} ` +
         `executedTools=${executedTools.length} content=${JSON.stringify(trimmed.slice(0, 200))}`,
       );
+
+      if (params.terminalToolPolicy) {
+        const exit = resolveTerminalTextExit(params.terminalToolPolicy, executedTools, terminalToolNudges);
+        if (exit.kind === "complete") {
+          logTurnSummary(result.providerId, result.modelId);
+          return completeResult(result.content, result);
+        }
+        if (exit.kind === "nudge") {
+          terminalToolNudges++;
+          terminalToolSurfaceOverride = exit.allowedToolNames;
+          messages = [...messages, { role: "assistant", content: result.content }, { role: "user", content: exit.message }];
+          continue;
+        }
+        if (exit.kind === "input-required") {
+          return terminalFailure(exit.message, result);
+        }
+      }
 
       // BI-1D144CC1: truncation stop. The provider cut generation off at the
       // output-token ceiling (stop_reason=max_tokens / finish_reason=length /
@@ -1988,17 +1903,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       // Don't nudge — break immediately with a clear error.
       if (trimmed.length === 0 && executedTools.length === 0) {
         console.warn(`[agentic-loop] Empty response from ${result.providerId}/${result.modelId} on iteration ${iteration}. Model may not support tool use. Breaking.`);
-        return {
-          content: `The model (${result.modelId}) returned an empty response and did not use any tools. This typically means it does not support the tool format required for this task. Try a different model or provider.`,
-          providerId: result.providerId,
-          modelId: result.modelId,
-          downgraded: result.downgraded,
-          downgradeMessage: result.downgradeMessage,
-          totalInputTokens,
-          totalOutputTokens,
-          executedTools,
-          proposal: null,
-        };
+        return completeResult(`The model (${result.modelId}) returned an empty response and did not use any tools. This typically means it does not support the tool format required for this task. Try a different model or provider.`, result);
       }
 
       // Evidence-integrity gate (INV-1). When this turn's answer depends on live
@@ -2027,18 +1932,11 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           continue;
         }
         if (recovery.kind === "refuse") {
-          console.warn(`[agentic-loop] evidence-required turn unverifiable; could-not-verify (INV-1/5). route=${JSON.stringify(routeContext)}`);
-          return {
-            content: recovery.message,
-            providerId: result.providerId,
-            modelId: result.modelId,
-            downgraded: result.downgraded,
-            downgradeMessage: result.downgradeMessage,
-            totalInputTokens,
-            totalOutputTokens,
-            executedTools,
-            proposal: null,
-          };
+          // BI-0C0669B5: log the WITHHELD length so a turn whose reasoning was
+          // quarantined is greppable, and so the extractor's zero can be
+          // compared against what the model actually produced.
+          console.warn(`[agentic-loop] evidence-required turn unverifiable; could-not-verify (INV-1/5). route=${JSON.stringify(routeContext)} withheldChars=${recovery.withheldContent.trim().length}`);
+          return completeResult(recovery.message, result);
         }
       }
 
@@ -2125,17 +2023,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           console.warn(
             "[agentic-loop] fabrication signal on a downgraded conversational turn — keeping the backup answer (infra failover, not fabrication).",
           );
-          return {
-            content: trimmed,
-            providerId: result.providerId,
-            modelId: result.modelId,
-            downgraded: result.downgraded,
-            downgradeMessage: result.downgradeMessage,
-            totalInputTokens,
-            totalOutputTokens,
-            executedTools,
-            proposal: null,
-          };
+          return completeResult(trimmed, result);
         }
 
         // Conversational coworker routes (e.g. the marketing strategist): the
@@ -2181,17 +2069,10 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           const base = makesHardCompletionClaim
             ? `${trimmed}\n\n${buildUnsavedAdviceNote(routeContext)}`
             : trimmed;
-          return {
-            content: applyEscalationLadderGuard(applyBacklogCreateClaimGuard(base, executedTools), executedTools),
-            providerId: result.providerId,
-            modelId: result.modelId,
-            downgraded: result.downgraded,
-            downgradeMessage: result.downgradeMessage,
-            totalInputTokens,
-            totalOutputTokens,
-            executedTools,
-            proposal: null,
-          };
+          return completeResult(
+            applyEscalationLadderGuard(applyBacklogCreateClaimGuard(base, executedTools), executedTools),
+            result,
+          );
         }
 
         // BI-PIR-cc091267 — a build-route fabrication signal (completion claim
@@ -2292,17 +2173,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           console.warn(
             `[agentic-loop] local model produced text-only response for tool-backed turn; returning diagnostic instead of issuing a second nudge. agent=${JSON.stringify(agentId)} route=${JSON.stringify(routeContext)}`,
           );
-          return {
-            content: buildLocalToolCallFailureMessage(result),
-            providerId: result.providerId,
-            modelId: result.modelId,
-            downgraded: result.downgraded,
-            downgradeMessage: result.downgradeMessage,
-            totalInputTokens,
-            totalOutputTokens,
-            executedTools,
-            proposal: null,
-          };
+          return completeResult(buildLocalToolCallFailureMessage(result), result);
         }
 
         if (shouldNudgeNow) {
@@ -2370,17 +2241,10 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         console.warn(`[agentic-loop] frustration detected (${frustrationCount}/3): ${trimmed.slice(0, 100)}`);
         if (frustrationCount >= 3) {
           // 3 strikes — break and be honest with the user
-          return {
-            content: trimmed + "\n\nI've been struggling with this. Let me be direct about what's not working so you can help me get unstuck.",
-            providerId: result.providerId,
-            modelId: result.modelId,
-            downgraded: result.downgraded,
-            downgradeMessage: result.downgradeMessage,
-            totalInputTokens,
-            totalOutputTokens,
-            executedTools,
-            proposal: null,
-          };
+          return completeResult(
+            trimmed + "\n\nI've been struggling with this. Let me be direct about what's not working so you can help me get unstuck.",
+            result,
+          );
         }
         // Phase-aware nudge: suggest tools specific to what the agent should be doing
         const phaseTools = getPhaseSpecificNudge(executedTools);
@@ -2425,18 +2289,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       // BI-41F15FD7 — observability only; content is returned unchanged.
       logGeneratedProse(finalContent, { threadId, modelId: result.modelId }, sanitizeForLog);
       logTurnSummary(result.providerId, result.modelId);
-      return {
-        content: finalContent,
-        providerId: result.providerId,
-        modelId: result.modelId,
-        downgraded: result.downgraded,
-        downgradeMessage: result.downgradeMessage,
-        totalInputTokens,
-        totalOutputTokens,
-        executedTools,
-        proposal: null,
-        executionPlan,
-      };
+      return completeResult(finalContent, result, { executionPlan });
     }
 
     // Collect all immediate tool results for this iteration
@@ -2445,7 +2298,22 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       toolResult: ToolResult;
     }> = [];
 
-    for (const tc of result.toolCalls) {
+    for (const providerToolCall of result.toolCalls) {
+      let tc = providerToolCall;
+      if (params.terminalToolPolicy) {
+        const normalized = normalizeTerminalToolArguments(
+          params.terminalToolPolicy,
+          tc.name,
+          tc.arguments,
+        );
+        if (normalized.kind === "refuse") {
+          executedTools.push({ name: tc.name, args: tc.arguments, result: normalized.result });
+          iterationResults.push({ tc, toolResult: normalized.result });
+          continue;
+        }
+        tc = { ...tc, arguments: normalized.arguments };
+      }
+
       // BI-2AC48661: plan tools are loop-intrinsic. Intercept them here — they
       // mutate loop state and return a synthetic result; they never reach
       // governedExecuteTool, take no capability grant, and write no audit row.
@@ -2482,55 +2350,47 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       // governedExecuteTool (EP-COWORKER-INTERACTIVITY, BI-6A745E3C).
       if (tc.name === LOAD_TOOLS_TOOL_NAME) {
         const req = (tc.arguments ?? {}) as { names?: string[]; query?: string };
-        const toLoad = selectLoadableTools(deferredPool, req);
-        for (const t of toLoad) {
-          const idx = deferredPool.findIndex((d) => d.name === t.name);
-          if (idx >= 0) deferredPool.splice(idx, 1);
-          loadedToolDefs.push(t);
-        }
-        if (toLoad.length > 0) {
-          // Reassign provider tools so the NEXT iteration advertises the newly
-          // loaded schemas (mirrors the plan-tool append above).
-          routeOptions.tools = [
-            ...((routeOptions.tools as Array<Record<string, unknown>> | undefined) ?? []),
-            ...toolsToOpenAIFormat(toLoad),
-          ];
-        }
-        const loadedNames = toLoad.map((t) => t.name);
+        const change = dynamicToolSurface.load(req);
+        routeOptions.tools = toolsToOpenAIFormat(change.active);
+        const loadedNames = change.loaded.map((t) => t.name);
         console.log(
-          `[agentic-tool] LOAD_TOOLS iter=${iteration} loaded=${loadedNames.length} ` +
-          `remaining=${deferredPool.length} names=${JSON.stringify(loadedNames)}`,
+          `[agentic-tool] LOAD_TOOLS iter=${iteration} initial=${dynamicToolSurface.initialCount} ` +
+          `loaded=${JSON.stringify(loadedNames)} displaced=${JSON.stringify(change.displaced.map((t) => t.name))} ` +
+          `unattached=${JSON.stringify(change.unattached.map((t) => t.name))} reason=${change.unattached.length ? "ceiling" : "none"} ` +
+          `final=${change.active.length} ceiling=${dynamicToolSurface.ceiling} remaining=${dynamicToolSurface.deferredCount}`,
         );
         iterationResults.push({
           tc,
           toolResult: {
             success: true,
             message:
-              toLoad.length > 0
-                ? `Loaded ${toLoad.length} tool(s): ${loadedNames.join(", ")}. Call them on your next step.`
+              loadedNames.length > 0
+                ? `Loaded ${loadedNames.length} tool(s): ${loadedNames.join(", ")}. Call them on your next step.`
                 : "No deferred tools matched. Use search_tool_marketplace to discover tools, or proceed with your current set.",
           },
         });
         continue;
       }
 
-      let toolDef =
-        tools.find((t) => t.name === tc.name) ?? loadedToolDefs.find((t) => t.name === tc.name);
+      if (params.terminalToolPolicy) {
+        const disposition = resolveTerminalToolCall(params.terminalToolPolicy, executedTools, tc.name);
+        if (disposition.kind === "refuse") {
+          iterationResults.push({ tc, toolResult: disposition.result });
+          continue;
+        }
+      }
+
+      let toolDef = dynamicToolSurface.definition(tc.name);
 
       // Authority-preserving on-demand attach: if the model calls an authorized
       // tool that was deferred (not in this turn's attached set), promote it from
       // the deferred pool and execute it now. Deferral caps per-turn COST without
       // ever removing CAPABILITY — whether or not the model first called load_tools.
-      if (!toolDef) {
-        const idx = deferredPool.findIndex((d) => d.name === tc.name);
-        if (idx >= 0) {
-          const [promoted] = deferredPool.splice(idx, 1);
-          loadedToolDefs.push(promoted);
-          routeOptions.tools = [
-            ...((routeOptions.tools as Array<Record<string, unknown>> | undefined) ?? []),
-            ...toolsToOpenAIFormat([promoted]),
-          ];
-          toolDef = promoted;
+      if (dynamicToolSurface.isDeferred(tc.name)) {
+        const change = dynamicToolSurface.promote(tc.name);
+        if (change.loaded.length > 0) {
+          routeOptions.tools = toolsToOpenAIFormat(change.active);
+          toolDef = change.loaded[0];
           console.log(`[agentic-tool] AUTO_LOAD iter=${iteration} tool=${tc.name} (deferred → attached on direct call)`);
         }
       }
@@ -2709,6 +2569,9 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       }
 
       executedTools.push({ name: tc.name, args: tc.arguments, result: toolResult });
+      if (toolResult.success && params.terminalToolPolicy?.readerToolNames.includes(tc.name)) {
+        terminalToolSurfaceOverride = null;
+      }
       iterationResults.push({ tc, toolResult });
       onProgress?.({ type: "tool:complete", tool: tc.name, success: toolResult.success });
 
@@ -2723,7 +2586,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       {
         role: "assistant" as const,
         content: result.content,
-        toolCalls: result.toolCalls,
+        toolCalls: iterationResults.map(({ tc }) => tc),
       },
       ...iterationResults.map(({ tc, toolResult }) => ({
         role: "tool" as const,
@@ -2747,6 +2610,12 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     `executedTools=${executedTools.length}. ` +
     `This may indicate the model needs more room or is stuck in a loop.`,
   );
+  if (params.terminalToolPolicy) {
+    const terminalExit = resolveTerminalTextExit(params.terminalToolPolicy, executedTools, Math.max(1, terminalToolNudges));
+    if (terminalExit.kind === "input-required") {
+      return terminalFailure(terminalExit.message);
+    }
+  }
   const fallbackContent = lastResult?.content?.trim() ?? "";
   const fallbackIsRawToolUse = fallbackContent.length > 0 && extractToolCalls(fallbackContent).length > 0;
   const fallbackIsFabricated = detectFabrication(
@@ -2764,6 +2633,9 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     // that predate the field fall back to the unavailable reading only when they
     // actually reported a downgrade.
     downgradeReason: lastResult?.downgradeReason ?? (downgraded ? "provider-unavailable" : null),
+    // The same binding cause the banner named, so the advice below it addresses
+    // the constraint the owner was actually told about (BI-FB184D69).
+    cause: lastResult?.downgradeCause ?? null,
     executedTools,
   });
   return {

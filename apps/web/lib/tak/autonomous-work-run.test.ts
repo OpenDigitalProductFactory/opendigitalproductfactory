@@ -37,7 +37,10 @@ vi.mock("@/lib/tak/agent-grants", async (importOriginal) => ({
   getAgentToolGrantsAsync: vi.fn(async () => []),
 }));
 vi.mock("@/lib/inference/local-model-context-reconcile", () => ({
-  resolveLocalServedContextTokens: vi.fn(async () => 24_576),
+  resolveLocalServingPosture: vi.fn(async () => ({
+    servedContextTokens: 24_576,
+    presence: "present" as const,
+  })),
 }));
 vi.mock("@/lib/routing/local-tool-fidelity", () => ({
   resolveLocalToolFidelityCeiling: vi.fn(async () => null),
@@ -83,6 +86,37 @@ describe("resolveAutonomousWorkTools — attachment budget (BI-CAP-F2D39F8F)", (
     expect(result.toolsForProvider.length).toBe(result.tools.length);
   });
 
+  it("keeps the cliff cap when the local probe could not read a window (BI-A8BFEFCE)", async () => {
+    // The reported incident, at the level it actually happened: AGT-WS-REVIEW
+    // budgeted `authorized=86 attached=48 cap=48` because the DMR probe failed
+    // and the null window read as a cloud-only turn. 48 is precisely the surface
+    // callWithFallbackChain refuses to run locally, so with codex rate-limited
+    // the review turn executed zero tools and produced no approval evidence.
+    const ctx = await import("@/lib/inference/local-model-context-reconcile");
+    vi.mocked(ctx.resolveLocalServingPosture).mockResolvedValueOnce({
+      servedContextTokens: null,
+      presence: "unknown",
+    });
+
+    const tools = await import("@/lib/mcp-tools");
+    const surface = Array.from({ length: 86 }, (_, i) => fakeTool(`tool_${i}`));
+    vi.mocked(tools.getAvailableTools).mockResolvedValue(surface as never);
+
+    const { resolveAutonomousWorkTools } = await import("./autonomous-work-run");
+    const result = await resolveAutonomousWorkTools({
+      userContext,
+      agentId: "storefront-advisor",
+      mode: "act",
+    });
+
+    // Stays inside what the routing gate will actually run locally.
+    expect(result.tools.length).toBeLessThanOrEqual(15);
+    expect(result.tools.length).toBeLessThan(48);
+    expect(result.tools.some((t) => t.name === "load_tools")).toBe(true);
+    // Authority is untouched — the long tail is deferred, not revoked.
+    expect(result.deferredTools.length).toBe(86 - (result.tools.length - 1));
+  });
+
   it("attaches everything (no load_tools) when the surface already fits", async () => {
     const tools = await import("@/lib/mcp-tools");
     const surface = Array.from({ length: 8 }, (_, i) => fakeTool(`tool_${i}`));
@@ -105,7 +139,7 @@ describe("resolveAutonomousWorkTools — attachment budget (BI-CAP-F2D39F8F)", (
     const surface = Array.from({ length: 40 }, (_, i) => fakeTool(`tool_${i}`));
     vi.mocked(tools.getAvailableTools).mockResolvedValue(surface as never);
     const ctx = await import("@/lib/inference/local-model-context-reconcile");
-    vi.mocked(ctx.resolveLocalServedContextTokens).mockRejectedValueOnce(new Error("probe down"));
+    vi.mocked(ctx.resolveLocalServingPosture).mockRejectedValueOnce(new Error("probe down"));
 
     const { resolveAutonomousWorkTools } = await import("./autonomous-work-run");
     const result = await resolveAutonomousWorkTools({
@@ -116,6 +150,35 @@ describe("resolveAutonomousWorkTools — attachment budget (BI-CAP-F2D39F8F)", (
 
     expect(result.tools).toHaveLength(40);
     expect(result.deferredTools).toHaveLength(0);
+  });
+
+  it("force-attaches authorized tools named by an exact external workflow packet", async () => {
+    const tools = await import("@/lib/mcp-tools");
+    const surface = [
+      ...Array.from({ length: 18 }, (_, i) => fakeTool(`filler_${i}`)),
+      fakeTool("search_tool_marketplace"),
+      fakeTool("read_source_at_version"),
+      { ...fakeTool("record_initiative_evidence"), sideEffect: true },
+    ];
+    vi.mocked(tools.getAvailableTools).mockResolvedValue(surface as never);
+
+    const { resolveAutonomousWorkTools } = await import("./autonomous-work-run");
+    const result = await resolveAutonomousWorkTools({
+      userContext,
+      agentId: "AGT-WS-BUILD",
+      mode: "act",
+      routeContext: "/build/work/WC-7FF8A505",
+      requiredToolNames: ["read_source_at_version", "record_initiative_evidence"],
+    });
+
+    expect(result.tools.map((tool) => tool.name)).toEqual(expect.arrayContaining([
+      "read_source_at_version",
+      "record_initiative_evidence",
+    ]));
+    expect(result.deferredTools.map((tool) => tool.name)).not.toEqual(expect.arrayContaining([
+      "read_source_at_version",
+      "record_initiative_evidence",
+    ]));
   });
 });
 
@@ -199,6 +262,33 @@ describe("createAutonomousWorkRun", () => {
       },
     });
     expect(String(arg?.data?.taskRunId)).toMatch(/^TR-SCHED-/);
+  });
+
+  it("uses a server-derived public identity for idempotent external work", async () => {
+    const { prisma } = await import("@dpf/db");
+    vi.mocked(prisma.taskRun.create).mockResolvedValue({
+      id: "tr_internal_external",
+      taskRunId: "TR-MCP-A1B2C3D4E5F6",
+      contextId: "thread-external",
+    } as never);
+    const { createAutonomousWorkRun } = await import("./autonomous-work-run");
+
+    await createAutonomousWorkRun({
+      trigger: "external-mcp",
+      taskRunId: "TR-MCP-A1B2C3D4E5F6",
+      userId: "user-1",
+      agentId: "AGT-WS-REVIEW",
+      routeContext: "/platform/build",
+      title: "Independent review",
+      objective: "Review immutable design.",
+      prompt: "Review immutable design.",
+      threadId: "thread-external",
+    });
+
+    expect(vi.mocked(prisma.taskRun.create).mock.calls[0]?.[0]?.data).toMatchObject({
+      taskRunId: "TR-MCP-A1B2C3D4E5F6",
+      initiatingAgentId: "AGT-WS-REVIEW",
+    });
   });
 
   it("creates capacity-continuity TaskRuns with capacity metadata and no tool execution", async () => {
@@ -476,6 +566,35 @@ describe("createAutonomousWorkRun", () => {
         agentId: "inventory-specialist",
         threadId: "thread-1",
       }),
+    );
+  });
+
+  it("forwards a terminal tool policy into the agentic loop unchanged", async () => {
+    const agentic = await import("@/lib/tak/agentic-loop");
+    vi.mocked(agentic.runAgenticLoop).mockResolvedValue({ content: "Done.", executedTools: [] } as never);
+    const { executeAutonomousAgenticLoop } = await import("./autonomous-work-run");
+    const terminalToolPolicy = {
+      writerToolName: "record_initiative_evidence",
+      readerToolNames: ["read_source_at_version", "search_source_at_version"],
+      minimumSuccessfulReaderCalls: 1,
+      maximumReaderCalls: 6,
+    } as const;
+
+    await executeAutonomousAgenticLoop({
+      systemPrompt: "Review the immutable artifact.",
+      chatHistory: [{ role: "user", content: "Review it." }],
+      sensitivity: "internal",
+      tools: [],
+      toolsForProvider: [],
+      userId: "user-1",
+      routeContext: "/build/work/WC-1",
+      agentId: "AGT-WS-BUILD",
+      threadId: "thread-1",
+      terminalToolPolicy,
+    });
+
+    expect(agentic.runAgenticLoop).toHaveBeenCalledWith(
+      expect.objectContaining({ terminalToolPolicy }),
     );
   });
 

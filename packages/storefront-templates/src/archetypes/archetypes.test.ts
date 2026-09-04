@@ -23,7 +23,7 @@ describe("archetype catalog", () => {
     });
 
     for (const archetype of [petRescue, animalShelter]) {
-      expect(archetype?.activationProfile?.processProfile).toEqual({
+      expect(archetype?.activationProfile?.processProfile).toMatchObject({
         catalogModes: ["donation", "unpriced"],
         subjectTypes: ["animal"],
         housesSubjects: true,
@@ -33,6 +33,9 @@ describe("archetype catalog", () => {
         ],
       });
     }
+
+    expect(petRescue?.activationProfile?.processProfile?.valueStreams).toHaveLength(3);
+    expect(animalShelter?.activationProfile?.processProfile?.valueStreams).toBeUndefined();
   });
 
   it("has at least 30 archetypes", () => {
@@ -518,5 +521,44 @@ describe("archetype catalog", () => {
     const kit = ALL_ARCHETYPES.find((a) => a.archetypeId === "production-equipment-rental");
     expect(kit?.category).toBe("asset-rental");
     expect(kit?.activationProfile?.axes?.provisioning).toBe("reservation-and-return");
+  });
+});
+
+// A storefront's `formSchema` is its contact form, and for most archetypes it is
+// the only way a stranger can reach the business at all. Five nonprofit
+// archetypes were seeded with a donation form in that slot, so a found-pet
+// report, a surrender request and an offer to volunteer were all refused without
+// a donation amount (BI-7F851119).
+describe("archetype contact forms", () => {
+  const DONATION_FIELD_NAMES = ["donationAmount", "customAmount", "campaignId", "isAnonymous"];
+
+  it("never require a donation to accept a message", () => {
+    for (const archetype of ALL_ARCHETYPES) {
+      const gated = archetype.formSchema
+        .filter((field) => field.required && DONATION_FIELD_NAMES.includes(field.name))
+        .map((field) => field.name);
+      expect(gated, `${archetype.archetypeId} gates its inbound channel behind a donation`).toEqual([]);
+    }
+  });
+
+  it("ask a donation question only where a donation is the point", () => {
+    for (const archetype of ALL_ARCHETYPES) {
+      const donationFields = archetype.formSchema
+        .filter((field) => DONATION_FIELD_NAMES.includes(field.name))
+        .map((field) => field.name);
+      expect(
+        donationFields,
+        `${archetype.archetypeId} asks about a donation on its contact form; donations have their own route`,
+      ).toEqual([]);
+    }
+  });
+
+  it("always offer a way to reach the sender back", () => {
+    for (const archetype of ALL_ARCHETYPES) {
+      const contactable = archetype.formSchema.some((field) =>
+        ["email", "phone"].includes(field.name),
+      );
+      expect(contactable, `${archetype.archetypeId} has no email or phone field`).toBe(true);
+    }
   });
 });

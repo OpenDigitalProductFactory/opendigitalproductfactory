@@ -26,6 +26,15 @@ service because provider configuration remains live state. Previously disabled
 ADP and development capabilities are not enabled by migration. This is the
 compatibility set, rather than every optional service.
 
+A capability the platform has **retired** is migrated off rather than refused.
+The catalog still carries the entry, marked retired, so a governed upgrade drops
+it from `enabledRuntimeCapabilities`, restamps the snapshot, and reports it as a
+dropped capability — an operator sees the withdrawal instead of an install that
+silently stops upgrading. A capability id the catalog does not carry at all is
+still an unknown capability and still fails closed, because nothing vouches for
+it. See [Retiring a capability](../architecture/capability-driven-runtime-profiles.md)
+for the two-phase contract this depends on.
+
 A newly initialized state is different from a previous-release state: its
 explicit empty capability selection migrates to the dependency-required core
 closure only. Optional runtime profiles remain inactive until enabled through
@@ -227,6 +236,32 @@ Per EP-1FABA22D (BI-A9F60372), `install-state.json` (v2 schema) captures the can
 - **`bootstrapIntent`** — Pre-DB envelope recorded by the installer before runtime database availability. On portal runtime boot, `absorbBootstrapIntent` idempotently ingests this envelope into `PlatformConfig` under key `installation.operating-intent.v1` with `status: "suggested"` and marks `absorbedAt`.
 - **Purpose Confirmation Invariant** — Expressing operating purpose (`operate-organization`, `evolve-dpf`, `deliver-managed-services`, `grow-channel`, `participate-community`) configures platform productivity and compiles work; it **never grants identity, trust, authority, qualification, or permission**.
 
+### Naming the installation, and overriding what it is
+
+Two facts describe an installation: the **environment class** (production /
+development / test) and the **estate name** — the company or team that OPERATES
+it, which is not the business it runs for. An IT services company running
+installations for twenty customers is one estate and twenty organizations.
+
+Both resolve through the same precedence chain, highest first:
+
+```
+process override  ->  installer state  ->  portal declaration  ->  default / unset
+```
+
+The process overrides are `DPF_ENVIRONMENT_CLASS` and `DPF_ESTATE_NAME`. Set
+either in the install's `.env`; both are declared on the portal service with an
+empty default, so an unset variable leaves the tier silent and the next
+authority answers (BI-10BF6206 — before that they were absent from the portal's
+environment allow-list, which meant the documented top tier could never be set on
+a consumer install).
+
+The estate name is a label, not an authorization input: it changes what the
+header badge and connected AI coworkers CALL this installation, never what they
+may do on it. A non-production installation shows a badge beside the logo
+(`ACME DEV`); production shows none, so a badge always means "this is not
+production".
+
 ## Diagnostics
 
 ### `--show-substrate` flag
@@ -260,3 +295,18 @@ For the avoidance of doubt, the installer:
 - Planning library: [`packages/dpf-bootstrap/README.md`](../../packages/dpf-bootstrap/README.md)
 - State schema: [`scripts/installer/install-state.schema.json`](../../scripts/installer/install-state.schema.json)
 - Backlog: BI-A9F60372 (EP-1FABA22D), BI-4B17051B (EP-INSTALL-HARDENING-2026-05-23)
+
+## Mapping a network from another machine
+
+Installing DPF does not start an edge node — a small host-resident agent that
+maps a network and reports back. Mapping a network is a deliberate choice, made
+at setup or later under **Platform → Edge Nodes**.
+
+You want one when the network you care about is not the one your portal sits on:
+a branch office, a customer site, a shop floor. Businesses with several
+locations run one per location, and IT service companies run one per customer
+per site, so each estate stays separate.
+
+Start with the [edge node deployment topology guide](../edge-node/deployment-topology.md),
+which covers where a node can run and how it connects. For many nodes at once,
+see [fleet operations](../edge-node/fleet-operations.md).

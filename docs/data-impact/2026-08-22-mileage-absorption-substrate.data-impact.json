@@ -1,0 +1,79 @@
+{
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "affectedCopies": [
+    "Trip is the single source of truth for a captured drive; no other model stores drive geometry or distance.",
+    "MileageRate is the single source of truth for reimbursement pricing; ExpenseItem stores the resulting money, never the rate logic.",
+    "ExpenseClaim / ExpenseItem remain the canonical reimbursement spine — mileage monetises ONTO them rather than opening a parallel reimbursement path.",
+    "DriverLocationConsent is the single source of truth for whether background capture is permitted for a driver; capture code must read it, never infer consent.",
+    "No existing row is copied, rewritten, or deleted by this change."
+  ],
+  "migration": {
+    "name": "20260822100000_add_mileage_absorption_substrate",
+    "backfill": "None required. The migration is purely additive — new enums, tables, indexes and foreign keys only; no existing column is altered or dropped, so it applies cleanly against any existing data state. Rollback is a drop of the new tables and enums; no existing data depends on them."
+  },
+  "tests": [
+    "packages/db/src/mileage-absorption-substrate.test.ts",
+    "packages/db/scripts/migration-safety-guard.mjs",
+    "scripts/check-no-new-closed-set-strings.mjs",
+    "scripts/check-fk-index-coverage.mjs",
+    "scripts/check-no-new-notactive-conventions.mjs"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:mileage#trip",
+      "prismaModel": "Trip",
+      "lifecycleDisposition": "Trip carries precise personal location data and is therefore consent-gated: a row may only be created for a driver holding a granted DriverLocationConsent. DriverLocationConsent.retentionDays DECLARES the geometry retention bound; the field-level minimisation job that enforces it is a named follow-up and is NOT shipped in this substrate change. The row itself is never row-purged — a trip that priced a reimbursement is accounting evidence — so the disposition is domain-lifecycle-managed and minimisation must clear geometry columns rather than delete rows. Rows leave service through the RecordLifecycle convention (lifecycle/lifecycleAt/lifecycleReason), never by silent deletion, so a reimbursement already claimed stays auditable after the underlying geometry is aged out.",
+      "fields": [
+        {
+          "fieldId": "data:mileage#trip-geometry",
+          "resolution": "governed",
+          "reason": "startLatitude/startLongitude/endLatitude/endLongitude are precise personal location data about an identified employee. They exist to compute distance and to evaluate commute-exclusion against WorkLocation coordinates, and for no other purpose. Trips classified personal must not expose geometry beyond the device — only distance is required off-device.",
+          "provenance": "BI-6D98AD8A; EP-MILEAGE-ABSORB; DI-87A27C692B16"
+        },
+        {
+          "fieldId": "data:mileage#trip-reimbursable-amount",
+          "resolution": "governed",
+          "reason": "reimbursableAmount is derived from distanceMeters and the MileageRate in force on startedAt. It is never edited in place independently of its rate, so a reimbursement can always be re-derived and audited against the rate that priced it.",
+          "provenance": "BI-E17E0034; IRS-compliant mileage log requirement"
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:mileage#driver-location-consent",
+      "prismaModel": "DriverLocationConsent",
+      "lifecycleDisposition": "Consent records are retained after revocation rather than deleted — the history of who consented, when, under which policy version, and when they revoked is itself the audit evidence. Revocation stops capture; it does not erase the record that consent once existed.",
+      "fields": [
+        {
+          "fieldId": "data:mileage#consent-state",
+          "resolution": "governed",
+          "reason": "consentStatus and grantedAt/revokedAt are the enforcement input for background location capture. policyVersion pins which disclosure the driver actually agreed to, so a changed policy requires fresh consent rather than inheriting the old grant.",
+          "provenance": "BI-6D98AD8A privacy gate; EP-MILEAGE-ABSORB"
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:mileage#vehicle",
+      "prismaModel": "Vehicle",
+      "lifecycleDisposition": "Vehicles leave service through the RecordLifecycle convention so historical trips keep resolving their vehicle. A company-owned vehicle points at its FixedAsset row so depreciation and mileage share one asset identity rather than duplicating it.",
+      "fields": []
+    },
+    {
+      "kind": "model",
+      "assetId": "data:mileage#rate-plan",
+      "prismaModel": "MileageRate",
+      "lifecycleDisposition": "Rates are effective-dated and never edited in place: a rate change closes the current row via effectiveTo and opens a new row. This keeps every already-priced trip reproducible at the rate in force on the day it was driven.",
+      "fields": []
+    },
+    {
+      "kind": "model",
+      "assetId": "data:mileage#classification-rule",
+      "prismaModel": "TripClassificationRule",
+      "lifecycleDisposition": "Rules leave service through the RecordLifecycle convention. Trips retain classificationRuleId after a rule is retired so an operator can always see which rule classified a historical trip.",
+      "fields": []
+    }
+  ]
+}

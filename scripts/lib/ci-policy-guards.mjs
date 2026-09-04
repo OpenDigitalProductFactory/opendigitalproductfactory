@@ -1,12 +1,30 @@
 import { spawnSync } from "node:child_process";
 import { resolveHostCommandInvocation } from "./host-command-invocation.mjs";
 
-function guard(legacyJobId, name, commands) {
+/**
+ * A policy guard entry.
+ *
+ * `options.inputs` (BI-8CDA7F95) DECLARES what class of change can violate the
+ * guard, so the host-side preflight can honour the change scope the cloud
+ * already trusts (scripts/ci-change-scope.mjs): a guard declared
+ * `inputs: ["code"]` reads only source, schema, compose or package manifests,
+ * and a docs-only diff (every changed path classified `docs` by
+ * config/ci-evidence-policy.json) cannot violate it. A guard with NO
+ * declaration always runs — an undeclared scope is never a reason to skip,
+ * because a wrong skip is a false green (the class BI-7B249AFE paid for).
+ * Declare `code` only after reading the guard's own enumeration of inputs;
+ * scripts/pregate-preflight.test.mjs statically checks that a declared guard's
+ * import closure references no docs/markdown inputs.
+ */
+function guard(legacyJobId, name, commands, options = {}) {
   return {
     id: legacyJobId,
     legacyJobId,
     name,
     commands,
+    inputs: Array.isArray(options.inputs) && options.inputs.length > 0
+      ? Object.freeze([...options.inputs])
+      : null,
   };
 }
 
@@ -14,13 +32,38 @@ const node = (...args) => ["node", args];
 const git = (...args) => ["git", args];
 const pnpm = (...args) => ["pnpm", args];
 
+/**
+ * A `node --test` command that asserts LIVE REPOSITORY STATE rather than guard
+ * logic — a CONFORMANCE ASSERTION, not a self-test (BI-7B249AFE).
+ *
+ * The host-side preflight strips `node --test` commands because a guard's unit
+ * tests prove the guard and CI runs them anyway. That reasoning does not reach a
+ * test whose assertion is about the repository: stripping it removes the only
+ * check on that tree, so the preflight reports clean where CI fails
+ * deterministically. Marking the command keeps it in the host-side plan.
+ *
+ * The mark is not a matter of taste. `scripts/check-guard-conformance-marks.mjs`
+ * detects the shape statically and fails when a detected file is unmarked, so a
+ * new repository-reading self-test cannot quietly rejoin the stripped set.
+ */
+const conformanceTest = (...args) => ["node", ["--test", ...args], { conformance: true }];
+
 export const LOCAL_READINESS_PROFILE_NAMES = Object.freeze([
   "source",
   "workspace",
   "pull-request",
 ]);
 
-export function isPolicyGuardSelfTest([command, args]) {
+/** A guard command explicitly marked as a conformance assertion over repo state. */
+export function isPolicyGuardConformanceCommand(command) {
+  return Array.isArray(command) && command[2]?.conformance === true;
+}
+
+export function isPolicyGuardSelfTest([command, args, options]) {
+  // A conformance assertion is written with `node --test` but is not a self-test:
+  // it reads the repository, so the host is the only place its answer is about
+  // the tree being pushed. Never strip it (BI-7B249AFE).
+  if (options?.conformance === true) return false;
   return command === "node" && args[0] === "--test"
     || command === "pnpm" && args[0] === "run" && args[1]?.endsWith(":test");
 }
@@ -37,12 +80,48 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
   source: Object.freeze([
     guard("repo-guard-loop", "Repo Guard Loop", [
       node("--test", "scripts/check-guards.test.mjs"),
+      // BI-3B6DC1DC: the TaskRun working-write guard now scopes by model, so its
+      // own behaviour is under test rather than trusted.
+      node("--test", "scripts/check-no-bare-working-write.test.mjs"),
+      node("--test", "scripts/host-resource-runner.test.mjs"),
       node("scripts/check-guards.mjs"),
       node("--test", "scripts/check-capability-compose-profiles.test.mjs"),
       node("scripts/check-capability-compose-profiles.mjs"),
+      // BI-334CB7DE: doc-diagram fence extraction must stay line-ending
+      // invariant. A CRLF working copy re-hashed every fence in a page and
+      // demanded a re-render no diagram needed — invisible in `git diff`
+      // because git normalises on commit, so only a test pins it.
+      node("--test", "scripts/render-doc-diagrams.test.mjs"),
+    ]),
+    // BI-40230C6F: the gate must stop waiting on an executor that is gone, and must
+    // NOT read an unreachable control plane as proof of death. Registered here rather
+    // than added to ci-policy-test-inventory-allowlist.txt, where it would never run.
+    guard("gate-executor-liveness", "Gate Executor Liveness", [
+      node("--test", "scripts/gate-worktree-executor-liveness.test.mjs"),
+      // BI-46B03CAE: the lease-queue calls cost more than mcpCall's 10s default,
+      // and abandoning one that was about to succeed strands a lease the gate
+      // then cannot release — each failure deepening a single-slot queue until
+      // no gate on the box can claim. Registered here for the same reason as the
+      // liveness test above: in ci-policy-test-inventory-allowlist.txt it would
+      // never run.
+      node("--test", "scripts/gate-worktree-lease-timeout.test.mjs"),
+      // BI-24D5D7C2: the control-plane watchdog aborts a 13-minute build after
+      // two consecutive probe failures, and an inner mcpCall deadline was
+      // classified as "request-failed" — an operator reads that as a broken
+      // endpoint and hunts a connection fault that never happened.
+      node("--test", "scripts/local-ci-control-plane-probe.test.mjs"),
     ]),
     guard("host-port-range-guard", "Host Port Range Guard", [
       node("--test", "scripts/check-host-port-range.test.mjs"),
+    ]),
+    // BI-7B249AFE: the preflight strips `node --test` commands, which silently
+    // removed the ONLY check for guards whose ".test.mjs" reads the repository
+    // rather than the guard. #4558 fixed one instance by hand and the class
+    // recurred on #4737. This guard closes it: it detects the shape and refuses
+    // an unmarked one, so the next such test cannot rejoin the stripped set.
+    guard("guard-conformance-marks", "Guard Conformance Marks", [
+      node("--test", "scripts/check-guard-conformance-marks.test.mjs"),
+      node("scripts/check-guard-conformance-marks.mjs"),
     ]),
     guard("shell-guard-shim-contract", "Shell Guard Shim Contract", [
       node("--test", "scripts/check-shell-guard-shim-contract.test.mjs"),
@@ -52,12 +131,13 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/safety/shell-guard-stale-cache.test.mjs"),
     ]),
     guard("release-compose-pins", "Release Compose Pins", [
-      node("--test", "scripts/check-release-compose-pins.test.mjs"),
-    ]),
+      conformanceTest("scripts/check-release-compose-pins.test.mjs"),
+    ], { inputs: ["code"] }),
     guard("release-asset-contract", "Release Asset Contract", [
       // The consumer install has no git checkout: whatever the installer copies
       // out of the install dir must ship in the image's /dpf-release-assets.
-      node("--test", "scripts/check-release-asset-contract.test.mjs"),
+      conformanceTest("scripts/check-release-asset-contract.test.mjs"),
+      node("--test", "scripts/installer/local-model-policy-contract.test.mjs"),
     ]),
     guard("db-commandment-coverage", "DB Commandment Coverage", [
       // The never-wipe-db commandment guarded two spellings and allowed three
@@ -71,38 +151,44 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // docs/install/windows.md documented `install-dpf.ps1 -Help`, which had no
       // -Help parameter -- a simple param() block ignored it and ran a full
       // unattended install. Asserts documented installer flags actually exist.
-      node("--test", "scripts/check-installer-help-contract.test.mjs"),
+      conformanceTest("scripts/check-installer-help-contract.test.mjs"),
     ]),
     guard("installer-skip-visibility", "Installer Skip Visibility", [
       // A guarded install step that skips in silence reads as success, and is
       // then recorded as done by Save-Progress. Optional-script guards must say so.
-      node("--test", "scripts/check-installer-skip-visibility.test.mjs"),
-    ]),
+      conformanceTest("scripts/check-installer-skip-visibility.test.mjs"),
+    ], { inputs: ["code"] }),
     guard("installer-state-contract", "Installer State Contract", [
       // Drives real bash: install-dpf.sh runs under `set -euo pipefail`, and the
       // failure mode here is shell exit-status semantics, not source text.
       node(
         "--test",
         "scripts/installer/lib/state-cleanup-temps.test.mjs",
+        "scripts/installer/lib/state-lock-timeout.test.mjs",
+        "scripts/installer/lib/doctor-redaction.test.mjs",
         "scripts/installer/install-release-assets.test.mjs",
       ),
     ]),
     guard("fresh-install-reliability", "Fresh Install Reliability", [
+      conformanceTest("scripts/installer/powershell-compose-chain.test.mjs"),
       node(
         "--test",
         "scripts/installer-image-identity.test.mjs",
-        "scripts/installer/powershell-compose-chain.test.mjs",
         "scripts/salvage-sweep.test.mjs",
       ),
-    ]),
+    ], { inputs: ["code"] }),
     guard("governed-teardown-guard", "Governed Teardown Contract", [
       node("--test", "scripts/check-governed-teardown-contract.test.mjs", "scripts/governed-teardown.test.mjs"),
       node("scripts/check-governed-teardown-contract.mjs"),
-    ]),
+    ], { inputs: ["code"] }),
     guard("published-image-freshness", "Published Image Freshness", [
       // Decision logic only — the live registry check needs Docker and runs on a
       // schedule (.github/workflows/published-image-freshness.yml).
-      node("--test", "scripts/lib/published-image-freshness.test.mjs"),
+      node(
+        "--test",
+        "scripts/lib/published-image-freshness.test.mjs",
+        "scripts/publish-image-release-identity.test.mjs",
+      ),
     ]),
     guard("docs-link-integrity", "Docs Link Integrity", [
       node("scripts/gen-doc-index.mjs", "--check"),
@@ -127,7 +213,6 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "--test",
         "scripts/pr-health.test.mjs",
         "scripts/check-ci-build-cache.test.mjs",
-        "scripts/lib/dev-preview-migrate-converge.test.mjs",
         "scripts/dev-postgres-pgvector-contract.test.mjs",
         "scripts/lib/ci-observation.test.mjs",
         "scripts/ci-observation.test.mjs",
@@ -140,69 +225,115 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/ci-build-artifact-discovery.test.mjs",
         "scripts/lib/ci-build-artifact.test.mjs",
         "scripts/lib/ci-evidence-plan.test.mjs",
+        "scripts/lib/documentation-evidence-lane.test.mjs",
         "scripts/ci-policy-guards.test.mjs",
         "scripts/lib/host-command-invocation.test.mjs",
+        "packages/dpf-skill-pack/hooks/claim-work-guidance.test.mjs",
+        "packages/dpf-skill-pack/hooks/plan-coverage-guidance.test.mjs",
         // BI-812C676D: every covered-root *.test.mjs must appear here or on the
         // deliberate allowlist — otherwise CI stays green while the test never runs.
         "scripts/lib/ci-policy-test-inventory.test.mjs",
         "scripts/lib/git-shallow-preflight.test.mjs",
+        "scripts/lib/ensure-compile-ready.test.mjs",
         "scripts/pregate-preflight.test.mjs",
         "scripts/gate-context.test.mjs",
-        "scripts/lib/gate-context-runtime-contract.test.mjs",
         "scripts/pre-push-dco-check.test.mjs",
+      ),
+      // Split out of the command above because these three read the real
+      // repository — the compose files, the Dockerfile, the pregate scripts —
+      // and assert on what they find. Stripping them host-side is exactly the
+      // false green BI-7B249AFE describes.
+      conformanceTest(
+        "scripts/lib/dev-preview-migrate-converge.test.mjs",
+        "scripts/pregate-exit-honesty.test.mjs",
+        "scripts/pre-push-gate-slot-contract.test.mjs",
+        "scripts/lib/gate-context-runtime-contract.test.mjs",
+        "packages/dpf-skill-pack/hooks/code-intelligence-guidance.test.mjs",
       ),
       node("scripts/check-ci-policy-test-inventory.mjs"),
     ]),
     guard("mobile-jest-pin-guard", "Mobile Jest Pin Guard", [
       node("scripts/check-mobile-jest-pin.mjs"),
-    ]),
+    ], { inputs: ["code"] }),
     guard("diagram-dependency-pin-guard", "Diagram Dependency Pin Guard", [
       node("scripts/check-diagram-dependency-pins.mjs"),
-    ]),
+    ], { inputs: ["code"] }),
     guard("override-provenance-guard", "Workspace Supply-Chain Policy", [
       node("scripts/check-override-comments.mjs"),
-      node("--test", "scripts/check-override-comments.test.mjs"),
+      conformanceTest("scripts/check-override-comments.test.mjs"),
       node("scripts/check-build-script-policy.mjs"),
-      node("--test", "scripts/check-build-script-policy.test.mjs"),
+      conformanceTest("scripts/check-build-script-policy.test.mjs"),
       node("--test", "scripts/check-root-script-runtime.test.mjs"),
       // A `patchedDependencies` entry whose patch file never reaches the Docker
       // build context fails `pnpm install` with ENOENT and breaks every image
       // build (SUR-8AB3353C, regression from #4321).
       node("scripts/check-docker-patch-context.mjs"),
       node("--test", "scripts/check-docker-patch-context.test.mjs"),
+      // Same failure family, different input: the Dockerfile copies scripts by
+      // name, so extracting a helper out of one silently drops it from the image
+      // and `pnpm install` dies on ERR_MODULE_NOT_FOUND in postinstall
+      // (BI-9B490215). `next build` and PR CI cannot see it — no PR check builds
+      // the image — so it reaches main green and breaks the release chain.
+      node("scripts/check-dockerfile-copied-script-imports.mjs"),
+      node("--test", "scripts/check-dockerfile-copied-script-imports.test.mjs"),
+      // AGENTS.md §11 Principal convergence covered Users but not agents, so a
+      // seeded install left 71 of 76 AGT-* agents with no identity. Every
+      // `independent: true` readiness lane then attributed its receipt to the
+      // delegating human — the artifact author — and could never pass
+      // (BI-53C26E60). Nothing at source level can prove the DATA converged;
+      // this guards that the seed still runs the convergence, after every
+      // agent seeder.
+      node("scripts/check-agent-principal-convergence-wired.mjs"),
+      node("--test", "scripts/check-agent-principal-convergence-wired.test.mjs"),
     ]),
     guard("bundle-boundary-guard", "Bundle Boundary Guard", [
+      node("--test", "scripts/check-bundle-boundaries.test.mjs"),
       node("scripts/check-bundle-boundaries.mjs"),
     ]),
     guard("application-boundary-guard", "Application Boundary Guard", [
       node("--test", "scripts/check-application-boundaries.test.mjs"),
       node("scripts/check-application-boundaries.mjs"),
-    ]),
+    ], { inputs: ["code"] }),
     guard("label-association-guard", "Label Association Guard", [
       // A <label> bound to nothing renders, screenshots and inspects correctly
       // while a screen reader announces an unlabelled field — every human check
       // passes. Ratchet: blocks NET-NEW orphans, retightens as surfaces migrate.
       node("scripts/check-label-association.mjs"),
-    ]),
+    ], { inputs: ["code"] }),
     guard("style-drift-guard", "Style Drift Guard", [
       node("scripts/check-style-drift.mjs"),
     ]),
     guard("reporting-composition-guard", "Reporting Composition Guard", [
       node("scripts/check-reporting-composition.mjs"),
     ]),
+    guard("platform-composition-single-home", "Platform Composition Single-Home Guard", [
+      node("--test", "scripts/check-platform-composition-single-home.test.mjs"),
+      node("scripts/check-platform-composition-single-home.mjs"),
+    ], { inputs: ["code"] }),
     guard("compose-env-contract-guard", "Compose Env Contract Guard", [
       node("scripts/check-compose-env-contract.mjs"),
-    ]),
+    ], { inputs: ["code"] }),
     guard("compose-resource-budgets-guard", "Compose Resource Budgets Guard", [
       node("--test", "scripts/check-compose-resource-budgets.test.mjs"),
       node("scripts/check-compose-resource-budgets.mjs"),
-    ]),
+    ], { inputs: ["code"] }),
     guard("n-minus-one-caller-honesty", "N-1 Caller Honesty", [
       node("--test", "scripts/check-n-minus-one-caller-honesty.test.mjs"),
       node("scripts/check-n-minus-one-caller-honesty.mjs"),
-    ]),
+    ], { inputs: ["code"] }),
     guard("module-size-guard", "Module Size Guard", [
       node("scripts/check-module-size.mjs"),
+    ], { inputs: ["code"] }),
+    // BI-2624B7EA: an EmploymentEvent written outside its canonical writer is a
+    // log entry, which is the exact state EP-862820FD exists to remove. The
+    // actuator shipped inert once and half-wired once; this closes the class.
+    guard("employment-event-writers", "Employment Event Writers", [
+      node("scripts/check-employment-event-writers.mjs"),
+    ]),
+    // BI-9252B9EA / BI-C61CEEA9: a governed column the actuator refuses to
+    // default, that no operator can set, is a dead end dressed as a control.
+    guard("actuator-inputs-writable", "Actuator Inputs Writable", [
+      node("scripts/check-actuator-inputs-writable.mjs"),
     ]),
     // BI-640B011D: schema FK budgets (declared FKs without a leading index +
     // bare unbacked *Id columns) may only shrink against the owned baseline.
@@ -225,13 +356,24 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("build-studio-surface-guard", "Build Studio Surface Guard", [
       node("--test", "scripts/check-build-studio-surface-budget.test.mjs"),
       node("scripts/check-build-studio-surface-budget.mjs"),
-    ]),
+    ], { inputs: ["code"] }),
     // BI-3F17B16B: an EP-/BI- id cited in a CHANGED doc must exist in the live
     // backlog (diff-scoped; grandfather baseline; degrades to warn-pass when no
     // live install is reachable). Closes the unbacked-doc-anchor pattern (P3).
     guard("doc-anchor-existence", "Doc Anchor Existence", [
       node("--test", "scripts/check-doc-anchor-existence.test.mjs"),
+      // Spawns each remaining CLI against a missing BASE_SHA on the live tree,
+      // so the host-side preflight must not strip it (BI-20599979).
+      conformanceTest("scripts/lib/git-changed-files.test.mjs"),
       node("scripts/check-doc-anchor-existence.mjs"),
+    ]),
+    // BI-38A353B2: doc-anchor-existence proves a cited id EXISTS; nothing
+    // proved it was still OPEN. A closed id cited from user-facing runtime
+    // text names a fixed defect as a live blocker. Same diff scope, same
+    // grandfather baseline, same warn-pass degradation.
+    guard("live-blocker-references", "Live Blocker References", [
+      node("--test", "scripts/check-live-blocker-references.test.mjs"),
+      node("scripts/check-live-blocker-references.mjs"),
     ]),
     // BI-79BCE3F2: ONE status/supersession frontmatter convention across
     // docs/superpowers/{specs,plans} — new/changed files must carry
@@ -245,7 +387,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("retention-enrollment-guard", "Retention Enrollment Guard", [
       node("--test", "scripts/check-retention-enrollment.test.mjs"),
       node("scripts/check-retention-enrollment.mjs"),
-    ]),
+    ], { inputs: ["code"] }),
     // Diff-scoped by design: repo-wide, the pattern matches 255 fixtures across 125
     // files, nearly all legitimate (far-future sentinels, deliberately-expired rows).
     // Gating on that would need a 125-file baseline — the silent allowlist this is
@@ -253,20 +395,20 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("test-clock-bomb-guard", "Test Clock Bomb Guard", [
       node("--test", "scripts/check-test-clock-bombs.test.mjs"),
       node("scripts/check-test-clock-bombs.mjs"),
-    ]),
+    ], { inputs: ["code"] }),
     guard("work-unit-conformance-guard", "WorkUnit Conformance Guard", [
       node("--test", "scripts/check-work-unit-conformance.test.mjs"),
       node("scripts/check-work-unit-conformance.mjs"),
-    ]),
+    ], { inputs: ["code"] }),
     guard("instruction-plane-guard", "Instruction Plane Guard", [
-      node("--test", "scripts/check-instruction-plane-size.test.mjs"),
+      conformanceTest("scripts/check-instruction-plane-size.test.mjs"),
       node("scripts/check-instruction-plane-size.mjs"),
     ]),
     // The size ratchet's twin: bytes measure the cut, this measures what the cut LOST.
     // A byte gate scores deleting a commandment identically to relocating it, so Phase 1
     // needs both or "58% smaller" is unfalsifiable (BI-0020D511 §12f).
     guard("instruction-plane-rule-coverage", "Instruction Plane Rule Coverage", [
-      node("--test", "scripts/check-instruction-plane-rule-coverage.test.mjs"),
+      conformanceTest("scripts/check-instruction-plane-rule-coverage.test.mjs"),
       node("scripts/check-instruction-plane-rule-coverage.mjs"),
     ]),
     // Plane-3 sibling of the instruction-plane guard, deliberately a SOFTER shape: it
@@ -274,13 +416,13 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("context-economy-guard", "Context Economy Guard", [
       node("--test", "scripts/check-context-economy.test.mjs"),
       node("scripts/check-context-economy.mjs"),
-    ]),
+    ], { inputs: ["code"] }),
     // Plane 4 — the standing TOOL registry, same soft shape and reusing plane 3's claim
     // review. Dispatch-time caps are governed elsewhere; this is the part that accretes.
     guard("tool-surface-guard", "Tool Surface Guard", [
       node("--test", "scripts/check-tool-surface.test.mjs"),
       node("scripts/check-tool-surface.mjs"),
-    ]),
+    ], { inputs: ["code"] }),
     guard("archetype-completeness-guard", "Archetype Completeness Guard", [
       node("--test", "scripts/check-archetype-completeness.test.mjs"),
       node("scripts/check-archetype-completeness.mjs"),
@@ -288,7 +430,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("stewardship-scope-guard", "Stewardship Scope Guard", [
       node("--test", "scripts/check-stewardship-scope.test.mjs"),
       node("scripts/check-stewardship-scope.mjs"),
-    ]),
+    ], { inputs: ["code"] }),
     guard("capability-consumer-guard", "Capability Consumer Guard", [
       node("--test", "scripts/check-capability-consumers.test.mjs"),
       node("scripts/check-capability-consumers.mjs"),
@@ -298,7 +440,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     // the A2A cohort may never be grandfathered; "public" claims must agree with
     // the proxy's path-segmentation allowlist.
     guard("endpoint-classification-guard", "Endpoint Classification Guard", [
-      node("--test", "scripts/check-endpoint-classification.test.mjs"),
+      conformanceTest("scripts/check-endpoint-classification.test.mjs"),
       node("scripts/check-endpoint-classification.mjs"),
     ]),
     guard("finding-substrate-guard", "Finding Substrate Guard", [
@@ -312,14 +454,21 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     // platform no longer runs. Complements the doc-impact graph, whose
     // `relatedCode:` edges only protect pages someone remembered to annotate.
     guard("retired-substrate-guard", "Retired Substrate Guard", [
-      node("--test", "scripts/check-retired-substrate.test.mjs"),
+      conformanceTest("scripts/check-retired-substrate.test.mjs"),
       node("scripts/check-retired-substrate.mjs"),
     ]),
     guard("mcp-tool-pack-guard", "MCP Tool Pack Guard", [
       node("scripts/check-mcp-tool-pack.mjs"),
-    ]),
+    ], { inputs: ["code"] }),
     guard("package-boundary-guard", "Package Boundary Guard", [
       node("scripts/check-package-boundaries.mjs"),
+    ]),
+    // BI-96033E25 — a vitest test must resolve repo paths from __dirname, not
+    // process.cwd(), or `vitest run --root <pkg>` reads outside the repo and
+    // fails as a misleading missing file.
+    guard("test-cwd-independence-guard", "Test Cwd Independence Guard", [
+      node("--test", "scripts/check-test-cwd-independence.test.mjs"),
+      node("scripts/check-test-cwd-independence.mjs"),
     ]),
     guard("build-studio-namespace-guard", "Build Studio Namespace Guard", [
       node("scripts/check-build-namespace.mjs"),
@@ -337,6 +486,24 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/check-doc-reference-integrity.test.mjs"),
       node("scripts/check-doc-reference-integrity.mjs"),
     ]),
+    // BI-5BF97BAA: the integrations and finance surfaces rendered a "what
+    // happens next" backlog id that resolved to nothing — hardcoded strings that
+    // outlived the backlog reset. The backlog is resettable; source is not. The
+    // resolve check itself needs a database and so lives in a DB-gated test; this
+    // enforces the structural half, which is what CI can actually run.
+    guard("rendered-backlog-pointers", "Rendered Backlog Pointers", [
+      node("--test", "scripts/check-rendered-backlog-pointers.test.mjs"),
+      node("scripts/check-rendered-backlog-pointers.mjs"),
+    ], { inputs: ["code"] }),
+    // An item written to "deferred" with no reason, trigger, review date or owner
+    // is not parked, it is gone: nothing fires, nothing comes due, nobody owns
+    // it. Seven items sat in exactly that state — including BI-F0715C9C — and a
+    // full cleanup was undone within two days, because the rows were the symptom
+    // and the write path was the cause (BI-9DA5F179).
+    guard("unattributable-deferral", "Unattributable Deferral", [
+      node("--test", "scripts/check-no-unattributable-deferral.test.mjs"),
+      node("scripts/check-no-unattributable-deferral.mjs"),
+    ], { inputs: ["code"] }),
     guard("janitor-tests", "Janitor Tests", [
       node(
         "--test",
@@ -348,6 +515,13 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // Worktree lifecycle hygiene (plan 2026-08-11): the reaping classifier
         // (now with the liveness + abandoned-merge verdicts), the session
         // heartbeat liveness signal, and the root-clone fast-forward remedy.
+        // BI-0B2F0546: the platform's single answer to where its development
+        // surfaces work. A wrong base points the reaper at the wrong directory,
+        // so resolution order and provenance are pinned.
+        "scripts/lib/worktree-base.test.mjs",
+        // BI-541156EE: one worktree base, or none. Seven were found on a single
+        // host, all from the same formula handed different roots.
+        "scripts/check-single-worktree-base.test.mjs",
         "scripts/lib/worktree-janitor-core.test.mjs",
         "scripts/worktree-janitor.test.mjs",
         "scripts/lib/worktree-session-heartbeat.test.mjs",
@@ -357,11 +531,37 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/root-clone-refresh.test.mjs",
         "scripts/lib/compose-safety.test.mjs",
         "scripts/lib/local-integration-ci.test.mjs",
+        // BI-ECAE03F7: the supervisor that fences a long gate run was
+        // allowlisted OUT of CI, so nothing enforced its behaviour while it
+        // destroyed run after run. The allowlist is shrink-only and its own
+        // header prefers inventory listing; this is that move.
+        "scripts/lib/lease-supervisor.test.mjs",
         "scripts/lib/local-convergence-lock.test.mjs",
         "scripts/lib/sandbox-freshness.test.mjs",
         "scripts/sandbox-freshness-preflight.test.mjs",
         "scripts/release/re-resolve-stt-digest.test.mjs",
+        // BI-BBD60CF8: the re-pin SCRIPT was always correct and always
+        // green; the workflow driving it aborted on the script's own
+        // drift exit code, so the watch failed on every drift day and
+        // never once completed a re-pin (#4823 fixed the wiring). This
+        // guards the wiring, which is the part nothing tested.
+        "scripts/stt-digest-watch-workflow.test.mjs",
         "scripts/lib/ensure-pre-push-hook.test.mjs",
+        // BI-5CBDC146: hook directories must resolve through fileURLToPath.
+        // URL.pathname yields "/D:/..." on Windows, so the shim never
+        // converged and a clean push meant the gate never ran. Linux CI cannot
+        // reproduce it — these guards are the only thing that catches it.
+        "scripts/lib/hooks-dir.test.mjs",
+        // BI-9B490215: the root postinstall must keep ZERO static local imports.
+        // The Docker deps stage copies only set-hooks-path.mjs, so a static
+        // ./lib import throws ERR_MODULE_NOT_FOUND and breaks the image build,
+        // and with it the release / self-upgrade chain for every install.
+        "scripts/set-hooks-path.no-static-imports.test.mjs",
+        // BI-0B292D84 layer 1+4: a worktree is bound to a Workroom when it is
+        // created, and the branches that predate that are reconciled. Binding
+        // coverage was stuck at 65% for as long as the rule relied on memory.
+        "scripts/lib/workroom-bind.test.mjs",
+        "scripts/reconcile-workroom-bindings.test.mjs",
         "scripts/lib/agent-identity.test.mjs",
         "tests/release/local-ci-gate-contract.test.mjs",
         "tests/release/pregate-node-gate-contract.test.mjs",
@@ -376,6 +576,13 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // guard that misses makes the gate exit 0 silently (false pass).
         "scripts/lib/entry-module.test.mjs",
       ),
+      // BI-3727106F: the gate must converge at SESSION START and sweep sibling
+      // worktrees. Convergence used to run only in postinstall, and only from
+      // the tree's own copy — so a tree on a stale base could never repair
+      // itself (68 of 85 worktrees were ungated when this was measured). It
+      // reads the repository's own hook files, so it is a conformance assertion
+      // and must not be stripped from the host-side preflight (BI-7B249AFE).
+      conformanceTest("scripts/hooks/converge-git-hooks.test.mjs"),
       node("scripts/runtime-artifact-janitor.mjs", "--help"),
     ]),
   ]),
@@ -426,10 +633,11 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // detection is tested, because an over-reporting checklist claims work
         // is done when it is not.
         "scripts/measure-doc-cadence-coverage.test.mjs",
-        // Same rule for the capability measure: the report is advisory, but its
-        // parsing and scoring are tested here because a mis-parsed registry
-        // under-reports gaps, and an under-reported gap reads as an all-clear.
+        // Capability completeness is a blocking ratchet. Test both the scanner
+        // and the floor/gap-growth enforcement before running the guard so a
+        // broken gate cannot manufacture its own all-clear.
         "scripts/measure-capability-completeness.test.mjs",
+        "scripts/check-agent-capability-integrity.test.mjs",
         // Archetype obligation coverage: same rule again, plus a lockstep check
         // that this measure classifies a frequency exactly as the runtime sweep
         // does — a report that disagrees with the ledger it reports on is worse
@@ -461,6 +669,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       ),
       node("--test", "packages/dpf-skill-pack/hooks/root-clone-guard.test.mjs"),
       node("--test", "packages/dpf-skill-pack/hooks/compose-guard.test.mjs"),
+      node("--test", "packages/dpf-skill-pack/hooks/portal-image-guard.test.mjs"),
       node("--test", "packages/dpf-skill-pack/hooks/worktree-create.test.mjs"),
       // BI-B1065D41 / BI-1C1483C6: the sixth PreToolUse guard and the
       // SessionStart readiness banner. Both are hand-added here for the same
@@ -479,6 +688,14 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "--test",
         "packages/dpf-skill-pack/hooks/plugin-hooks-wired.test.mjs",
       ),
+      // BI-0B292D84: AGENTS.md 12 requires a Workroom claim before work on
+      // every surface. It was prose - 30 of 79 live worktree branches carried
+      // no WorkCapsule binding when measured 2026-08-26. Hand-enumerated like
+      // every entry here: unlisted = never run.
+      node(
+        "--test",
+        "packages/dpf-skill-pack/hooks/workroom-claim-guard.test.mjs",
+      ),
       node(
         "--test",
         "packages/dpf-skill-pack/hooks/uncommitted-work-guard.test.mjs",
@@ -486,6 +703,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node(
         "--test",
         "packages/dpf-skill-pack/hooks/shared-clone-occupancy.test.mjs",
+      ),
+      node(
+        "--test",
+        "scripts/lib/dev-portal-lease-claim-key.test.mjs",
       ),
       node(
         "--test",
@@ -497,6 +718,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "packages/dpf-skill-pack/hooks/mcp-catalog-profile.test.mjs",
         "packages/dpf-skill-pack/hooks/surface-manifest-paths.test.mjs",
       ),
+      node("--test", "scripts/check-spec-plan-doc.test.mjs"),
       node("scripts/check-spec-plan-doc.mjs"),
       node("scripts/check-plan-backlog-coverage.mjs"),
     ]),

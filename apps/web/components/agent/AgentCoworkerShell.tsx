@@ -16,7 +16,8 @@ import { AgentCoworkerPanel } from "./AgentCoworkerPanel";
 import type { ThreadLoadState } from "./composer-state";
 import type { ProviderReviewPacket } from "@/lib/routing/provider-suitability/provider-review-packet";
 import {
-  shouldDispatchAutoMessageImmediately,
+  planAutoMessage,
+  queuedAutoMessageIsForThread,
   shouldSuppressAutoMessage,
 } from "./agent-auto-message";
 import {
@@ -57,6 +58,7 @@ type PendingSupportSession = {
 
 type OpenAgentPanelDetail = {
   autoMessage?: string;
+  displayMessage?: string;
   welcomeMessage?: string;
   targetBuildId?: string;
   routeContext?: string;
@@ -166,6 +168,7 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker, cooConvers
   const threadAutoRetryUsedRef = useRef(false);
   const prevThreadContextRef = useRef<string | null>(null);
   const [pendingAutoMessage, setPendingAutoMessage] = useState<string | null>(null);
+  const [pendingAutoMessageDisplay, setPendingAutoMessageDisplay] = useState<string | null>(null);
   const [pendingProviderConsultation, setPendingProviderConsultation] =
     useState<PendingProviderConsultation | null>(null);
   const providerConsultationInFlightRef = useRef<string | null>(null);
@@ -342,14 +345,13 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker, cooConvers
 
       // Release a queued auto-message targeted at THIS build now that its
       // thread is loaded. Draining inside the load callback avoids the race
-      // where a separate effect fires with activeBuildId already updated
-      // but threadId still holding the previous build's id, which would
-      // submit the message to the wrong thread.
+      // where a separate effect fires with activeBuildId already updated but
+      // threadId still holding the previous build's id.
       const queued = queuedAutoMessageRef.current;
-      const expectedBuildId = activeBuildId && pathname === "/build" ? activeBuildId : null;
-      const matchesRouteContext = !queued?.routeContext || queued.routeContext === threadContext;
-      if (queued && snapshot.threadId && queued.targetBuildId === expectedBuildId && matchesRouteContext) {
-        setPendingAutoMessage(queued.message);
+      if (queuedAutoMessageIsForThread({
+        queued, threadId: snapshot.threadId, activeBuildId, pathname, threadContext,
+      })) {
+        setPendingAutoMessage(queued!.message);
         setQueuedAutoMessage(null);
       }
     })().catch((error) => {
@@ -363,6 +365,18 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker, cooConvers
       if (autoRetryTimer !== undefined) window.clearTimeout(autoRetryTimer);
     };
   }, [threadContext, threadLoadRetryToken]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The drain above runs inside the thread-load callback, so a message queued
+  // while sitting on an ALREADY-loaded thread stranded forever — which is what
+  // made the retry action discard every click with no feedback.
+  useEffect(() => {
+    if (threadLoadState !== "ready") return;
+    if (!queuedAutoMessageIsForThread({
+      queued: queuedAutoMessage, threadId, activeBuildId, pathname, threadContext,
+    })) return;
+    setPendingAutoMessage(queuedAutoMessage!.message);
+    setQueuedAutoMessage(null);
+  }, [queuedAutoMessage, threadId, threadLoadState, activeBuildId, pathname, threadContext]);
 
   useEffect(() => {
     if (
@@ -494,6 +508,7 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker, cooConvers
       savePanelOpen(userKey, true);
 
       if (detail?.autoMessage) {
+        setPendingAutoMessageDisplay(detail.displayMessage ?? null);
         const signature = `${detail.autoMessage}::${detail.targetBuildId ?? ""}`;
         const now = Date.now();
         if (shouldSuppressAutoMessage({
@@ -513,34 +528,14 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker, cooConvers
           });
           return;
         }
-        // If the event targets a specific build, queue the message until the
-        // Shell's threadContext advances to that build. Otherwise submit
-        // immediately (legacy behaviour — route-level auto-messages, e.g.
-        // the onboarding COO introducing each setup step, don't have a
-        // targetBuildId and must fire right away).
-        const routeSwitchRequested =
-          Boolean(requestedRouteContext) && requestedRouteContext !== threadContext;
-        if (routeSwitchRequested) {
-          setQueuedAutoMessage({
-            message: detail.autoMessage,
-            targetBuildId: detail.targetBuildId ?? null,
-            routeContext: requestedRouteContext,
-          });
-        } else if (shouldDispatchAutoMessageImmediately({
+        const plan = planAutoMessage({
+          message: detail.autoMessage,
           targetBuildId: detail.targetBuildId ?? null,
-          activeBuildId,
-          threadId,
-        })) {
-          setPendingAutoMessage(detail.autoMessage);
-        } else if (detail.targetBuildId) {
-          setQueuedAutoMessage({
-            message: detail.autoMessage,
-            targetBuildId: detail.targetBuildId,
-            routeContext: null,
-          });
-        } else {
-          setPendingAutoMessage(detail.autoMessage);
-        }
+          requestedRouteContext: requestedRouteContext ?? null,
+          threadContext, activeBuildId, threadId,
+        });
+        if (plan.send) setPendingAutoMessage(plan.message);
+        else setQueuedAutoMessage(plan);
       }
       // welcomeMessage: inject a pre-written assistant message without LLM call
       if (detail?.welcomeMessage) {
@@ -765,7 +760,11 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker, cooConvers
             onClose={handleClose}
             onDragStart={handleDragStart}
             pendingAutoMessage={pendingAutoMessage}
-            onAutoMessageConsumed={() => setPendingAutoMessage(null)}
+            pendingAutoMessageDisplay={pendingAutoMessageDisplay}
+            onAutoMessageConsumed={() => {
+              setPendingAutoMessage(null);
+              setPendingAutoMessageDisplay(null);
+            }}
             onConversationCleared={() => setInitialMessages([])}
             routeContextOverride={guidedRouteContext ?? undefined}
             isDocked={usesFixedFrame}

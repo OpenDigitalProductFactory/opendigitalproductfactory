@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { evaluatePrHealth } from "./pr-health.mjs";
+import { evaluatePrHealth, selectLocalCiStateRecord } from "./pr-health.mjs";
 
 const okMeta = { number: 1, title: "x", state: "OPEN", mergeable: "MERGEABLE", mergeStateStatus: "CLEAN", isDraft: false };
 const pass = (name) => ({ name, bucket: "pass" });
@@ -170,6 +170,12 @@ test("classifyLocalCiOverride accepts closed codes and rejects free text (BI-563
 
 test("isDocsOnlyFileSet — docs/memory/*.md only counts, empty set does not", () => {
   assert.equal(isDocsOnlyFileSet([{ path: "docs/a.md" }, { path: "AGENTS.md" }, { path: "memory/x.md" }]), true);
+  assert.equal(isDocsOnlyFileSet([
+    { path: "docs/architecture/a.md" },
+    { path: "apps/web/lib/docs/doc-index.generated.json" },
+  ]), true);
+  assert.equal(isDocsOnlyFileSet([{ path: "apps/web/lib/docs/doc-index.generated.json" }]), false);
+  assert.equal(isDocsOnlyFileSet([{ path: "apps/web/lib/docs/doc-link-resolver.mjs" }]), false);
   assert.equal(isDocsOnlyFileSet([{ path: "docs/a.md" }, { path: "apps/web/lib/x.ts" }]), false);
   assert.equal(isDocsOnlyFileSet([]), false);
   assert.equal(isDocsOnlyFileSet(undefined), false);
@@ -314,4 +320,96 @@ test("localCi: docs-only PR needs no gate, ready", () => {
 test("localCi omitted (null) leaves legacy behavior untouched", () => {
   const r = evalPr({ meta: okMeta, checks: [pass("Typecheck")], threads: [], localCi: null });
   assert.equal(r.ready, true);
+});
+
+// AGENTS.md §3 — PRs land against main. ci.yml is `pull_request: branches: [main]`,
+// so a feature-branch base silently skips the whole heavy suite while still
+// reporting CLEAN. #4483 sat like that with 4 checks instead of ~34.
+test("blocks a PR whose base is not main, even when every check it ran passed", () => {
+  const r = evaluatePrHealth({
+    meta: { ...okMeta, baseRefName: "feat/some-other-branch" },
+    checks: [pass("DCO"), pass("classify"), pass("acceptance")],
+    threads: [],
+  });
+  assert.equal(r.ready, false);
+  const text = r.blockers.join(" | ");
+  assert.match(text, /base is feat\/some-other-branch, not main/);
+  assert.match(text, /Green here does NOT mean verified/);
+});
+
+test("a main-based PR is not blocked by the base check", () => {
+  const r = evaluatePrHealth({
+    meta: { ...okMeta, baseRefName: "main" },
+    checks: [pass("Typecheck"), pass("Production Build")],
+    threads: [],
+  });
+  assert.equal(r.ready, true);
+  assert.deepEqual(r.blockers, []);
+});
+
+test("absent baseRefName does not invent a blocker", () => {
+  // Older callers and fixtures omit the field; missing evidence is not a failure.
+  const r = evaluatePrHealth({ meta: okMeta, checks: [pass("Typecheck")], threads: [] });
+  assert.equal(r.ready, true);
+});
+
+// BI-5529B5AC: pr:health used to read ONE hard-coded state file (slot-0). Gate
+// state is written per slot, so it now chooses across every slot record for
+// the worktree: a PASS bound to HEAD on any slot wins; failing that, a recorded
+// override for HEAD; failing that, whatever slot-0 says (legacy behaviour).
+const HEAD_SHA = "abc123def456abc123def456abc123def456abc1";
+const future = new Date(Date.now() + 3600_000).toISOString();
+
+test("selectLocalCiStateRecord: a slot-1 PASS for HEAD beats a stale slot-0 override", () => {
+  const picked = selectLocalCiStateRecord({
+    headSha: HEAD_SHA,
+    records: [
+      { slotKey: "slot-0", state: { branch: "feat/x", sha: HEAD_SHA, gatePassed: false, skipped: true, skipReason: "operator-emergency: hook could not see slot-1" } },
+      { slotKey: "slot-1", state: { branch: "feat/x", sha: HEAD_SHA, gatePassed: true, status: "passed", expiresAt: future } },
+    ],
+  });
+  assert.equal(picked.slotKey, "slot-1");
+  assert.equal(picked.state.gatePassed, true);
+});
+
+test("selectLocalCiStateRecord: an expired PASS does not win; the recorded override for HEAD is next", () => {
+  const picked = selectLocalCiStateRecord({
+    headSha: HEAD_SHA,
+    records: [
+      { slotKey: "slot-0", state: { branch: "feat/x", sha: HEAD_SHA, gatePassed: false, skipped: true, skipReason: "docs-adjacent: only" } },
+      { slotKey: "slot-1", state: { branch: "feat/x", sha: HEAD_SHA, gatePassed: true, status: "passed", expiresAt: "2020-01-01T00:00:00.000Z" } },
+    ],
+  });
+  assert.equal(picked.slotKey, "slot-0");
+  assert.equal(picked.state.skipped, true);
+});
+
+test("selectLocalCiStateRecord: with nothing bound to HEAD, slot-0 is reported as before", () => {
+  const picked = selectLocalCiStateRecord({
+    headSha: HEAD_SHA,
+    records: [
+      { slotKey: "slot-0", state: { branch: "feat/x", sha: "older000", gatePassed: true } },
+      { slotKey: "slot-1", state: { branch: "feat/x", sha: "older111", gatePassed: false } },
+    ],
+  });
+  assert.equal(picked.slotKey, "slot-0");
+  assert.equal(selectLocalCiStateRecord({ headSha: HEAD_SHA, records: [] }), null);
+});
+
+test("evaluatePrHealth: a slot-1 PASS for head is a note and READY (end to end through selection)", () => {
+  const stateRecord = selectLocalCiStateRecord({
+    headSha: HEAD_SHA,
+    records: [
+      { slotKey: "slot-0", state: { branch: "feat/x", sha: HEAD_SHA, gatePassed: false, status: "queued" } },
+      { slotKey: "slot-1", state: { branch: "feat/x", sha: HEAD_SHA, gatePassed: true, status: "passed", expiresAt: future } },
+    ],
+  }).state;
+  const r = evaluatePrHealth({
+    meta: okMeta,
+    checks: [pass("Typecheck")],
+    threads: [],
+    localCi: { headSha: HEAD_SHA, docsOnly: false, attestation: null, stateRecord },
+  });
+  assert.equal(r.ready, true);
+  assert.match(r.notes.join("\n"), /local-CI sandbox gate passed/);
 });

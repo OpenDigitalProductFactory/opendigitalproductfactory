@@ -74,7 +74,12 @@ export const AUTOMATED_AREAS = {
 /** Lexical signals per contract element. Presence-only — see the header note. */
 const SIGNALS = {
   acts: [
-    /\bthe (?:coworker|specialist|agent) (?:will|does|runs|reviews|checks|drafts|files|proposes|monitors)\b/i,
+    // Verb list widened after a real miss: a page that said "the licensing
+    // specialist investigates ..." scored 0 for `acts` while plainly stating
+    // what it does. The SUBJECT requirement is kept — the verb must attach to
+    // the coworker — so widening the verbs cannot make this fire on generic
+    // prose the way the boundary signal once did.
+    /\bthe (?:coworker|specialist|agent|watch|sweep) (?:will|does|runs|reviews|checks|drafts|files|proposes|monitors|investigates|summarizes|persists|opens|raises|sweeps|reads)\b/i,
     /\bwhat (?:the|your) (?:coworker|ai coworker|specialist) does\b/i,
     /\bon your behalf\b/i,
   ],

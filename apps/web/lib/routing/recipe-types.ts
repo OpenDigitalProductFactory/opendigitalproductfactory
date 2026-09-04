@@ -70,6 +70,8 @@ export interface RoutedExecutionPlan {
   responsePolicy: {
     strictSchema?: boolean;
     stream?: boolean;
+    /** Sole writer whose eventual execution is fail-closed by the caller's terminal-tool policy. */
+    terminalWriterToolName?: string;
   };
   harness?: RoutedHarnessPlan;
 }

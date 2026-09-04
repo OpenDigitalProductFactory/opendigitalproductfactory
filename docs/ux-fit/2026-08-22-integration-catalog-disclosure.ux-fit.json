@@ -1,0 +1,25 @@
+{
+  "version": "1",
+  "decidedOption": "controlled-progressive-disclosure-for-secondary-employee-coverage",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/platform/tools/integrations/page.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "sweep-measurement",
+    "baselineComparison": "improved",
+    "measured": {
+      "/platform/tools/integrations": {
+        "defaultVisibleWords": 846,
+        "leadBandWords": 0,
+        "primaryActions": 1,
+        "visibleFields": 0,
+        "maxChoicesPerControl": 0,
+        "subLegibleControls": 0,
+        "buriedPrimaryAction": 0,
+        "axeViolations": 2
+      }
+    }
+  }
+}

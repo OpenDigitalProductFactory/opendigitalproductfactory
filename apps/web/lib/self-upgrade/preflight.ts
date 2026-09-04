@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
-import type { ReadinessOwner } from "./promoter";
+import type { ReadinessOwner, VerifiedReleaseIdentity } from "./promoter";
 import { signTransitionPayload } from "@/lib/platform-runtime/transition-protocol";
 import { verifyInstallStateMigrationEnvelope } from "../../../../scripts/lib/transition-signing.mjs";
 import { resolveSelfUpgradeHostIdentity, type SelfUpgradeHostIdentity } from "./config";
@@ -45,6 +45,8 @@ export async function runCandidatePreflight(params: {
   promoterImage?: string;
   /** Published immutable release promoter; bypasses source compilation. */
   candidatePromoterReference?: string;
+  /** Verified release identity carried into candidate readiness. */
+  release?: VerifiedReleaseIdentity;
   callerProtocolVersion?: number;
   sourcePath: string;
   hostInstallPath: string;
@@ -105,6 +107,7 @@ export async function runCandidatePreflight(params: {
       containerName: `dpf-promoter-readiness-${params.runId}`,
       artifact,
       hostIdentity: params.hostIdentity,
+      release: params.release,
     });
     let failures: ReadinessFailure[] = [];
     let report: Record<string, unknown> = {};

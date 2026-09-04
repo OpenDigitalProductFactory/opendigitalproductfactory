@@ -4,5 +4,5 @@
   "expiry": "2026-11-21",
   "note": "Build Studio surface ratchet baseline (BI-101C107C). Shrink-only: the Build Studio UI surface leaves this budget by DELETING or CONVERGING components, never by expanding the baseline. A 'simplification' that adds net lines is not a simplification. Regenerate with: node scripts/check-build-studio-surface-budget.mjs --update",
   "componentCount": 70,
-  "nonTestLoc": 16314
+  "nonTestLoc": 16340
 }

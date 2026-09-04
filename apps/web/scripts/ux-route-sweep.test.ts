@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 
+import { resolveSweepPath } from "./ux-sweep-route-params";
+
 import {
   BROWSER_EVALUATION_RUNTIME,
   DOM_SETTLE_EXPRESSION,
   captureAccessibilityStructure,
   executionOutcome,
   findDroppedBaselineRoutes,
+  selectSweepRows,
   uxSweepAxeOptions,
   waitForRouteDomToSettle,
   withIsolatedSweepPage,
@@ -26,6 +29,33 @@ describe("axe result collection", () => {
       },
       resultTypes: ["violations"],
     });
+  });
+});
+
+describe("targeted route selection", () => {
+  const inventory = [
+    { routePath: "/alpha", sweepEligible: true },
+    { routePath: "/beta", sweepEligible: false },
+    { routePath: "/gamma", sweepEligible: true },
+  ] as never;
+
+  it("keeps the full eligible inventory when no selector is supplied", () => {
+    expect(selectSweepRows(inventory, "").map((row) => row.routePath)).toEqual([
+      "/alpha",
+      "/gamma",
+    ]);
+  });
+
+  it("selects an explicit comma-separated changed-route set in inventory order", () => {
+    expect(
+      selectSweepRows(inventory, "/gamma,/alpha").map((row) => row.routePath),
+    ).toEqual(["/alpha", "/gamma"]);
+  });
+
+  it("rejects unknown or ineligible routes instead of silently producing partial evidence", () => {
+    expect(() => selectSweepRows(inventory, "/alpha,/missing,/beta")).toThrow(
+      "unknown or ineligible route selector(s): /beta, /missing",
+    );
   });
 });
 
@@ -83,7 +113,7 @@ describe("route phase evidence", () => {
         durationMs: 151,
         value: {
           phases,
-          measurement: {} as never,
+          measurement: { axeViolations: 2 } as never,
         },
       }),
     ).toEqual({
@@ -91,6 +121,7 @@ describe("route phase evidence", () => {
       status: "measured",
       durationMs: 151,
       phases,
+      axeViolations: 2,
     });
   });
 });
@@ -323,5 +354,47 @@ describe("route sweep coordination", () => {
     expect(parseSweepWorkerCount("4")).toBe(4);
     expect(() => parseSweepWorkerCount("3")).toThrow(/supported values are 1, 2, or 4/i);
     expect(() => parseSweepWorkerCount("many")).toThrow(/supported values are 1, 2, or 4/i);
+  });
+});
+
+
+// BI-DE67A3EC — the sweep could only measure routes with no dynamic segment, so
+// 87 routes (53 owner-facing) were unmeasurable: every DETAIL surface, which is
+// where a word or field budget matters most. A gate that measures only list
+// pages reports a green it has not earned.
+describe("resolveSweepPath (BI-DE67A3EC)", () => {
+  it("returns a static route unchanged", () => {
+    expect(resolveSweepPath("/workspace/inbox", {})).toBe("/workspace/inbox");
+    // Params present but irrelevant must not perturb a static route.
+    expect(resolveSweepPath("/workspace/inbox", { "/a/[b]": "/a/1" })).toBe("/workspace/inbox");
+  });
+
+  it("substitutes the path the fixture minted for a dynamic route", () => {
+    expect(
+      resolveSweepPath("/workspace/cases/[caseKey]", {
+        "/workspace/cases/[caseKey]": "/workspace/cases/ux-sweep%3Aux-sweep-case",
+      }),
+    ).toBe("/workspace/cases/ux-sweep%3Aux-sweep-case");
+  });
+
+  // The load-bearing half. Navigating the literal "[caseKey]" would 404 — or
+  // worse, match a catch-all — and freeze a measurement for a page that does not
+  // exist. An unresolvable route must stop the run, not become a number.
+  it("throws rather than navigating an unresolved dynamic route", () => {
+    expect(() => resolveSweepPath("/workspace/cases/[caseKey]", {})).toThrow(
+      /sweep-eligible but the fixture published no path/,
+    );
+  });
+
+  it("names the route and both remedies in the failure", () => {
+    let message = "";
+    try {
+      resolveSweepPath("/ops/thing/[id]", {});
+    } catch (err) {
+      message = (err as Error).message;
+    }
+    expect(message).toContain("/ops/thing/[id]");
+    expect(message).toContain("ux:sweep-fixture");
+    expect(message).toContain("SWEEP_RESOLVABLE_DYNAMIC_ROUTES");
   });
 });

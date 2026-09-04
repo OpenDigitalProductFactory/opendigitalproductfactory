@@ -100,6 +100,7 @@ const definitions: ToolDefinition[] = [
         backlogItemId: { type: "string", description: "Optional BI-* to bind the captured Work Capsule to, even without a build (closes the direct-agent binding gap)" },
         worktreePath: { type: "string", description: "Optional local worktree path — when given with branchName the capsule also records the work location" },
         branchName: { type: "string", description: "Optional branch (head) for this work — pairs with worktreePath to bind location" },
+        repositoryFullName: { type: "string", description: "Canonical repository owner/name for provider verification" },
         buildId: { type: "string", description: "Optional FB-* build id" },
         taskRunId: { type: "string", description: "Optional TaskRun id" },
         routeContext: { type: "string", description: "Route context where the work belongs, usually /build" },
@@ -234,15 +235,17 @@ const savePhaseHandoff: ToolPackHandler = async (params, userId, context) => {
   // passes happyPathState (intake anchors) so the gate's intake check
   // evaluates against the real build state rather than default-null.
   try {
-    const { checkPhaseGate, canTransitionPhase, normalizeHappyPathState } = await import("@/lib/feature-build-types");
+    const { canTransitionPhase, normalizeHappyPathState } = await import("@/lib/feature-build-types");
+    const { checkBuildPhaseGate } = await import("@/lib/work-posture/verification-depth-gate");
     if (canTransitionPhase(latestBuild.phase as import("@/lib/feature-build-types").BuildPhase, toPhase as import("@/lib/feature-build-types").BuildPhase)) {
       const plan = (latestBuild.plan as Record<string, unknown> | null) ?? {};
       const happyPathState = normalizeHappyPathState(plan.happyPathState);
       const handoffBrief = latestBuild.brief as { acceptanceCriteria?: string[]; fixContext?: import("@/lib/feature-build-types").FixContext } | null;
-      const gate = checkPhaseGate(
-        latestBuild.phase as import("@/lib/feature-build-types").BuildPhase,
-        toPhase as import("@/lib/feature-build-types").BuildPhase,
-        {
+      const gate = await checkBuildPhaseGate({
+        buildId,
+        from: latestBuild.phase as import("@/lib/feature-build-types").BuildPhase,
+        to: toPhase as import("@/lib/feature-build-types").BuildPhase,
+        evidence: {
           kind: latestBuild.kind,
           // Right-sizing matrix: persisted on plan.processSize at promote time.
           processSize: (plan.processSize as string | undefined) ?? "medium",
@@ -255,7 +258,7 @@ const savePhaseHandoff: ToolPackHandler = async (params, userId, context) => {
           acceptanceCriteria: handoffBrief?.acceptanceCriteria ?? [],
           happyPathState,
         },
-      );
+      });
       // Record the gate outcome on the handoff (the gate that allowed —
       // or blocked — advancement). Best-effort; never fail the handoff.
       await prisma.phaseHandoff
@@ -373,6 +376,7 @@ const recordExternalDevelopmentEvidence: ToolPackHandler = async (params, userId
     unresolvedQuestions: stringArray("unresolvedQuestions"),
     skillIds: stringArray("skillIds"),
   };
+  const publishedCommits = details.commits.filter((commit) => /^[a-f0-9]{40}$/i.test(commit));
   const evidence = await recordExternalEvidence({
     actorUserId: userId,
     routeContext,
@@ -404,6 +408,8 @@ const recordExternalDevelopmentEvidence: ToolPackHandler = async (params, userId
       backlogItemId: stringValue("backlogItemId") || null,
       worktreePath: stringValue("worktreePath") || null,
       branchName: stringValue("branchName") || null,
+      repositoryFullName: stringValue("repositoryFullName") || null,
+      publishedCommitSha: publishedCommits.length === 1 ? publishedCommits[0] : null,
     });
   } catch (captureError) {
     console.warn(

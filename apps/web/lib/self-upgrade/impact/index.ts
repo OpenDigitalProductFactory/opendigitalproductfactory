@@ -139,7 +139,7 @@ export async function summarizeUpgradeImpact(
       ok: false,
       reason: "no-target",
       detail:
-        "Could not resolve the upstream target SHA. Confirm the host clone has a fresh fetch of the configured remote/branch.",
+        "Could not resolve the upstream target SHA: the configured remote did not answer and the host clone has no local ref for the branch.",
     };
   }
   if (currentLineageSha === targetSha) {

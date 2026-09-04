@@ -16,6 +16,11 @@ The EA Modeler is a canvas-based tool for building and maintaining your organiza
 - **Views and Viewpoints** — A viewpoint defines which elements and relationships are relevant for a particular audience. A view is a specific diagram built from that viewpoint.
 - **Reference Models** — Prebuilt architecture patterns (e.g., cloud-native application, integration hub) that can be adapted and incorporated into your own models.
 - **Value Streams** — End-to-end sequences of activities that deliver value to a customer or stakeholder. Modelled in the business layer and traceable to the products and capabilities that enable them.
+- **Workroom Definitions** — Reusable collaboration patterns attached to value streams. Each definition names its portfolio, shape, participants, queues, human triggers, linked process view, and associated running instances.
+
+## Workroom Definitions
+
+Open **Architecture > Workrooms** (`/ea/workrooms`) to review collaboration from the definition perspective. The page keeps all four portfolios visible, groups each Value Stream Team under its owning portfolio, and links the reusable shape to its process view and operational instances. Define or refine the underlying Value Stream Team when participants, queues, or approval triggers need to change; use **Operations > Workrooms** to inspect activity created from those definitions.
 
 ## What You Can Do
 

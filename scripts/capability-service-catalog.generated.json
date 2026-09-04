@@ -221,6 +221,7 @@
             "windows"
           ],
           "ports": [
+            "${DPF_LDAP_BIND_ADDRESS:-127.0.0.1}:${DPF_LDAP_PORT:-636}:${DPF_LDAP_PORT:-636}",
             "1455:3000",
             "3000:3000"
           ],
@@ -230,7 +231,9 @@
           "volumes": [
             "${DPF_BACKUPS_HOST_PATH:-${DPF_HOST_INSTALL_PATH:-.}/backups}:/backups",
             "${DPF_HOST_INSTALL_PATH:-.}:/host-dpf",
+            "${DPF_STATE_DIR:-${HOME}/.dpf}/federation:/dpf-federation",
             "${DPF_STATE_DIR:-${HOME}/.dpf}:/dpf-state:ro",
+            "${DPF_WORKTREE_BASE:-${DPF_HOST_INSTALL_PATH:-.}-worktrees}:/host-worktrees",
             "/var/run/docker.sock:/var/run/docker.sock",
             "browser_evidence:/evidence:ro",
             "dpf-source-code:/workspace",
@@ -1165,7 +1168,7 @@
       ]
     }
   ],
-  "catalogHash": "c83c56c0e3602293ee01abd1d5f068380d23de3244b4d2a05b06f26a12ce3cb9",
+  "catalogHash": "fb667ab5b744b7ce7c0c59ff674be592d1df36cb441faee4692b4689e0b83144",
   "catalogVersion": 1,
   "substrateManifestVersion": 2
 }

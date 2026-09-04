@@ -4,7 +4,7 @@
   "license": "Apache-2.0",
   "packageManager": "pnpm@10.33.2",
   "scripts": {
-    "dev": "pnpm --filter web dev",
+    "dev": "node scripts/host-resource-runner.mjs --class preview -- pnpm --filter web dev",
     "measure:obligation-cadence": "node scripts/measure-obligation-cadence-coverage.mjs",
     "measure:obligation-cadence:check": "node scripts/check-obligation-cadence-coverage.mjs",
     "measure:doc-cadence": "node scripts/measure-doc-cadence-coverage.mjs",
@@ -12,7 +12,7 @@
     "measure:capability-completeness": "node scripts/measure-capability-completeness.mjs",
     "measure:capability-completeness:check": "node scripts/measure-capability-completeness.mjs --check",
     "check:agent-capability-integrity": "node scripts/check-agent-capability-integrity.mjs",
-    "dev:web": "pnpm --filter web dev",
+    "dev:web": "node scripts/host-resource-runner.mjs --class preview -- pnpm --filter web dev",
     "dev:portal": "sh scripts/dev-portal-lease.sh refresh",
     "contributor:preview": "sh scripts/dev-portal-lease.sh refresh",
     "dev:prod-runtime": "docker compose up -d portal",
@@ -23,11 +23,11 @@
     "dco:check": "node scripts/pre-push-dco-check.mjs",
     "review:semantic-gate": "node scripts/semantic-review-gate.mjs",
     "gate:context": "node scripts/gate-context.mjs",
-    "build": "pnpm --filter web build",
-    "test": "pnpm -r --if-present --workspace-concurrency=1 --no-bail test",
+    "build": "node scripts/host-resource-runner.mjs --class next-build -- pnpm --filter web build",
+    "test": "node scripts/host-resource-runner.mjs --class vitest -- pnpm -r --if-present --workspace-concurrency=1 --no-bail test",
     "test:e2e": "playwright test",
     "test:e2e:demo": "playwright test -c playwright-demo.config.ts",
-    "typecheck": "pnpm -r --if-present typecheck",
+    "typecheck": "node scripts/host-resource-runner.mjs --class typescript -- pnpm -r --if-present typecheck",
     "db:generate": "pnpm --filter @dpf/db generate",
     "db:migrate": "pnpm --filter @dpf/db migrate",
     "db:seed": "pnpm --filter @dpf/db seed",
@@ -43,6 +43,7 @@
     "audit:stale-overrides": "node scripts/audit-stale-overrides.mjs",
     "regen:lockfile": "node scripts/regen-lockfile.mjs",
     "check:reporting-composition": "node scripts/check-reporting-composition.mjs",
+    "check:platform-composition-home": "node --test scripts/check-platform-composition-single-home.test.mjs && node scripts/check-platform-composition-single-home.mjs",
     "check:prose-lint": "tsx scripts/check-prose-lint.ts",
     "check:prose-lint:test": "tsx --test scripts/check-prose-lint.test.ts",
     "check:fpaw-standard": "tsx scripts/check-fpaw-standard.ts",
@@ -55,6 +56,7 @@
     "check:retention-enrollment": "node scripts/check-retention-enrollment.mjs",
     "check:closed-set-strings": "node scripts/check-no-new-closed-set-strings.mjs",
     "check:doc-anchors": "node scripts/check-doc-anchor-existence.mjs",
+    "check:live-blockers": "node scripts/check-live-blocker-references.mjs",
     "check:baseline-budgets": "node scripts/check-no-expired-baseline-budgets.mjs",
     "check:spec-status": "node scripts/check-spec-status-frontmatter.mjs",
     "check:data-impact": "node scripts/check-data-impact.mjs",
@@ -79,7 +81,10 @@
     "candidates": "node scripts/sbom/internalization-candidates.mjs",
     "check:singletons": "node scripts/sbom/check-singleton-safety.mjs",
     "docs:index": "node scripts/gen-doc-index.mjs",
+    "docs:business-types": "tsx scripts/generate-business-type-pages.ts",
     "docs:index:check": "node scripts/gen-doc-index.mjs --check",
+    "docs:business-types:check": "tsx scripts/generate-business-type-pages.ts --check",
+    "docs:business-types:test": "tsx --test docs/business-types/_generate.test.mts",
     "route:sync": "pnpm --filter web build:route-manifest && pnpm --filter web build:route-shells && pnpm --filter web build:route-audience && node scripts/gen-doc-index.mjs",
     "route:sync:check": "pnpm --filter web check:route-manifest && pnpm --filter web build:route-shells -- --check && pnpm --filter web build:route-audience -- --check && node scripts/gen-doc-index.mjs --check",
     "docs:links": "node scripts/check-doc-links.mjs",
@@ -110,6 +115,14 @@
   "engines": {
     "node": ">=20",
     "pnpm": ">=9"
+  },
+  "pnpm": {
+    "ignoredBuiltDependencies": [
+      "@scarf/scarf",
+      "protobufjs",
+      "puppeteer",
+      "unrs-resolver"
+    ]
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",

@@ -1,5 +1,6 @@
 import { scoreTrustVector } from "@/lib/trust-vector/score";
 import type { TrustAssessment, TrustDimensionInput } from "@/lib/trust-vector/types";
+import { OFF_DEFAULT_BRANCH_FRESHNESS_CAP, isOffDefaultBranch } from "@/lib/trust-vector/default-branch";
 
 type CodeGraphFreshnessTrustInput = {
   graphKey: string;
@@ -11,6 +12,14 @@ type CodeGraphFreshnessTrustInput = {
   lastError: string | null;
   relationshipCounts?: Record<string, number>;
   /**
+   * Rows actually present in the graph (BI-86EF5900). `indexedFileCount` reads
+   * CodeGraphFileHash, a different table, so it stays high while the graph is
+   * empty — measured live: 4406 "indexed files", 0 nodes, 0 edges, status
+   * "ready". These are the counts that can actually fall to zero.
+   */
+  nodeCount?: number | null;
+  edgeCount?: number | null;
+  /**
    * Branch the index was built from (BI-6CFC5429). Freshness previously scored
    * only how recently the INDEXER RAN, not how old the CONTENT it indexed was —
    * so re-indexing a 10-week-old branch every hour scored a permanent 1.0/high.
@@ -21,21 +30,10 @@ type CodeGraphFreshnessTrustInput = {
 };
 
 /**
- * Branch names that mean "the tree everyone builds against". Anything else is a
- * side branch: it may be perfectly current, but it is not what the default
- * branch says, so the graph cannot claim unqualified freshness.
+ * Off-default-branch vocabulary now lives in ../default-branch so the
+ * committed-source adapter scores a side branch identically (SSoT).
  */
-const DEFAULT_BRANCH_NAMES = new Set(["main", "master", "HEAD"]);
-
-/** Recency alone cannot score above this when the graph indexed a side branch. */
-const OFF_DEFAULT_BRANCH_FRESHNESS_CAP = 0.4;
-
-function indexedOffDefaultBranch(branch: string | null | undefined): boolean {
-  if (typeof branch !== "string") return false;
-  const trimmed = branch.trim();
-  if (trimmed.length === 0) return false;
-  return !DEFAULT_BRANCH_NAMES.has(trimmed);
-}
+const indexedOffDefaultBranch = isOffDefaultBranch;
 
 type CodeGraphCoverageTrustInput = {
   graphKey: string;
@@ -72,6 +70,9 @@ export function buildCodeGraphFreshnessTrust(
 
   if (input.relationshipCounts) {
     dimensions.push(buildStructuralHealthDimension(input.relationshipCounts));
+  }
+  if (input.nodeCount !== undefined) {
+    dimensions.push(buildPopulationDimension(input.nodeCount, input.edgeCount ?? null));
   }
 
   return scoreTrustVector({
@@ -297,4 +298,62 @@ function toDate(value: Date | string | null | undefined): Date | null {
   if (!value) return null;
   const date = value instanceof Date ? value : new Date(value);
   return Number.isNaN(date.getTime()) ? null : date;
+}
+
+/**
+ * Coverage scored from what the graph actually HOLDS, not from how many files a
+ * bookkeeping table remembers. An empty projection scores 0 here, which drags
+ * the composite down and flips the action to `qualify` — so a graph that is
+ * "ready" for 4406 files but holds nothing can no longer present as healthy.
+ */
+function buildPopulationDimension(
+  nodeCount: number | null,
+  edgeCount: number | null,
+): TrustDimensionInput {
+  if (nodeCount === null) {
+    return {
+      key: "coverageCompleteness",
+      label: "Graph population",
+      score: null,
+      weight: 2,
+      rationale: "Graph population could not be inspected, so coverage is unknown.",
+      evidenceRefs: [],
+    };
+  }
+  if (nodeCount === 0) {
+    return {
+      key: "coverageCompleteness",
+      label: "Graph population",
+      score: 0,
+      weight: 2,
+      rationale:
+        "Graph holds 0 nodes for this key — the projection is EMPTY, not stale. " +
+        "Any empty result is no evidence of absence.",
+      evidenceRefs: [
+        { kind: "prisma-row", label: "graph_node", ref: "graph_node", sourceTable: "graph_node" },
+      ],
+    };
+  }
+  if (edgeCount === 0) {
+    return {
+      key: "coverageCompleteness",
+      label: "Graph population",
+      score: 0.35,
+      weight: 2,
+      rationale:
+        `Graph holds ${nodeCount} node(s) but 0 edges — a file index, not a graph. ` +
+        "Relationship questions cannot be answered.",
+      evidenceRefs: [
+        { kind: "prisma-row", label: "graph_edge", ref: "graph_edge", sourceTable: "graph_edge" },
+      ],
+    };
+  }
+  return {
+    key: "coverageCompleteness",
+    label: "Graph population",
+    score: 1,
+    weight: 2,
+    rationale: `Graph holds ${nodeCount} node(s) and ${edgeCount} edge(s).`,
+    evidenceRefs: [],
+  };
 }

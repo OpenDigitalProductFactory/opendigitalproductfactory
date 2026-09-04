@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { shouldShowPinnedEngineMissingWarning } from "@/components/platform/build-studio-config-form-model";
+import {
+  describeBuildEngineSelection,
+  shouldShowPinnedEngineMissingWarning,
+} from "@/components/platform/build-studio-config-form-model";
 import { BUILD_STUDIO_CONFIG_ROUTE_COPY } from "@/components/platform/build-studio-route-copy";
 
 describe("Build Studio runtime route copy", () => {
@@ -12,6 +15,30 @@ describe("Build Studio runtime route copy", () => {
 });
 
 describe("Build Studio engine readiness projection", () => {
+  it("projects variable router diagnostics into stable owner-facing readiness", () => {
+    expect(describeBuildEngineSelection({
+      status: "selected",
+      policy: { mode: "auto", pinnedEngine: null },
+      selected: null,
+      reason: "No eligible endpoints for task type 'code-gen' with sensitivity 'development'. 0 endpoint(s) excluded.",
+      rejected: [],
+      fallbackChain: [],
+      fallbackDisabled: false,
+      action: null,
+    })).toBe("Ready under current routing and policy.");
+
+    expect(describeBuildEngineSelection({
+      status: "blocked",
+      policy: { mode: "auto", pinnedEngine: null },
+      selected: null,
+      reason: "Internal routing diagnostic with provider identifiers.",
+      rejected: [],
+      fallbackChain: [],
+      fallbackDisabled: false,
+      action: "Connect a provider.",
+    })).toBe("No engine currently meets readiness and policy.");
+  });
+
   it("does not describe a legacy engine choice as selected while Auto chose another engine", () => {
     expect(shouldShowPinnedEngineMissingWarning({
       enginePolicy: "auto",

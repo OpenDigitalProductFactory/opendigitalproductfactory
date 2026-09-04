@@ -45,6 +45,9 @@ describe("Hive Scout seed helper", () => {
     expect(prompt).toContain("daily");
     expect(prompt).toContain("run_hive_scout_ingest");
     expect(prompt).toContain("external catalog");
+    expect(prompt).toContain(
+      "If the call fails, do not call run_hive_scout_ingest again with the same arguments.",
+    );
   });
 
   it("directs the market-aperture pass toward design challenges, not digests (BI-B8E4317D)", () => {
@@ -105,6 +108,45 @@ describe("Hive Scout seed helper", () => {
     expect(skill.allowedTools).toContain("run_hive_scout_ingest");
     expect(prompt).toContain("name: external-catalog-scout");
     expect(prompt).toContain("run_hive_scout_ingest");
+    expect(readFileSync(skillPath, "utf8")).toContain(
+      "If the call fails, do not call `run_hive_scout_ingest` again with the same arguments.",
+    );
+    expect(prompt).toContain(
+      "If the call fails, do not call `run_hive_scout_ingest` again with the same arguments.",
+    );
+  });
+
+  it("keeps the inventory persona aliases on the same no-repeat tool policy", () => {
+    const routePersonaDirectory = join(
+      __dirname,
+      "..",
+      "..",
+      "..",
+      "prompts",
+      "route-persona",
+    );
+    const noRepeatRule =
+      "Never call `search_knowledge` again with the same query and filters after its result has been returned or the call has failed.";
+
+    const inventoryPrompt = readFileSync(
+      join(routePersonaDirectory, "inventory-specialist.prompt.md"),
+      "utf8",
+    );
+    const estatePrompt = readFileSync(
+      join(routePersonaDirectory, "estate-specialist.prompt.md"),
+      "utf8",
+    );
+
+    expect(inventoryPrompt).toContain(noRepeatRule);
+    expect(estatePrompt).toContain(noRepeatRule);
+    expect(
+      estatePrompt
+        .replace("name: estate-specialist", "name: inventory-specialist")
+        .replace(
+          "<!-- This file is intentionally a near-duplicate of inventory-specialist.prompt.md. Both names alias to agent_id AGT-WS-INVENTORY. Keep them in sync until the prompt loader supports aliasing natively. -->\n\n",
+          "",
+        ),
+    ).toBe(inventoryPrompt);
   });
 
   it("ships the seeded Hive Scout ambiguity-reviewer prompt", () => {

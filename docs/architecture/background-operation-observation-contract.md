@@ -82,11 +82,21 @@ the browser free to navigate immediately.
 | Durable system event types | `apps/web/lib/tak/agent-event-bus.ts` |
 | Self-upgrade domain projection | `apps/web/lib/self-upgrade/status-snapshot.ts` |
 | Self-upgrade page state | `apps/web/components/ops/SelfUpgradeLiveProvider.tsx` |
+| Local-model operation ledger | `apps/web/lib/inference/local-model-operations.ts` |
+| Local-model status projection | `apps/web/app/api/platform/ai/local-models/status/route.ts` |
+| Local-model page observer | `apps/web/components/platform/OllamaManagement.tsx` |
 | Structural regression guard | `apps/web/lib/architecture/background-operation-observation-contract.test.ts` |
 
 Feature providers should be page- or workflow-scoped; connection ownership is shell-scoped. This
 separation prevents every feature from inventing transport lifecycle while avoiding a monolithic
 global store of unrelated domain state.
+
+Local model installs are a concrete instance of this contract. The initiating action first writes
+a deterministic `ScheduledJob` receipt and dispatches a concurrency-one queue event. The worker
+persists progress before broadcasting `system:local-model`; the event invalidates the provider
+page's narrow authenticated projection and is never treated as installed-model authority. Removing
+a model remains request-bound because deletion is short, but it still reconciles the routing
+projection before returning its bounded outcome.
 
 ## Failure semantics
 

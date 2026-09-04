@@ -7,6 +7,7 @@ import { OwnerFirstSummaryBand } from "@/components/owner-first/OwnerFirstSummar
 import { OwnerFirstDisclosure } from "@/components/owner-first/OwnerFirstDisclosure";
 import { loadOwnerFirstContext } from "@/lib/owner-first/context";
 import { buildCustomerOwnerSummary } from "@/lib/owner-first/domain-summary";
+import { resolveCustomerSurface } from "@/lib/owner-first/archetype-surface";
 import { isSimpleNavMode, NAV_MODE_COOKIE, resolveNavModeFromCookie } from "@/lib/navigation/nav-mode";
 import { NewCustomerButton } from "@/components/customer/NewCustomerButton";
 import { DuplicateAccountsPanel } from "@/components/customer/DuplicateAccountsPanel";
@@ -194,7 +195,7 @@ export default async function CustomerPage({
   const simple = isSimpleNavMode(
     resolveNavModeFromCookie((await cookies()).get(NAV_MODE_COOKIE)?.value),
   );
-  const [{ vocab }, pendingReservations, newInquiries, pendingOrders] = await Promise.all([
+  const [{ vocab, archetypeId }, pendingReservations, newInquiries, pendingOrders] = await Promise.all([
     loadOwnerFirstContext(),
     prisma.storefrontBooking.count({ where: { status: "pending" } }),
     prisma.storefrontInquiry.count({ where: { status: "new" } }),
@@ -214,14 +215,15 @@ export default async function CustomerPage({
     },
     vocab,
   );
+  const customerSurface = resolveCustomerSurface(archetypeId, []);
 
   return (
     <div>
       <div className="mb-6 flex items-start justify-between">
         <div>
-          <h1 className="text-xl font-bold text-[var(--dpf-text)]">Customer</h1>
+          <h1 className="text-xl font-bold text-[var(--dpf-text)]">{customerSurface.title}</h1>
           <p className="text-sm text-[var(--dpf-muted)] mt-0.5">
-            {accounts.length} account{accounts.length !== 1 ? "s" : ""}
+            {accounts.length} {customerSurface.accountCountLabel}
             {attentionCount > 0 && (
               <>
                 {" · "}
@@ -232,7 +234,7 @@ export default async function CustomerPage({
             )}
           </p>
         </div>
-        <NewCustomerButton />
+        <NewCustomerButton copy={customerSurface.newEntry} />
       </div>
 
       {/* Owner-first: what guest work needs you today, before the CRM. */}
@@ -245,8 +247,8 @@ export default async function CustomerPage({
           never strands that navigation. */}
       {(!simple || view) && (
         <OwnerFirstDisclosure
-          summary="All CRM detail"
-          hint="Revenue, accounts, and pipeline"
+          summary={customerSurface.detailSummary}
+          hint={customerSurface.detailHint}
           defaultOpen={Boolean(view)}
         >
           <RevenueCockpit summary={revenueSummary} />

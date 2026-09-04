@@ -53,11 +53,13 @@ estimated:
 
 | Assertion | Requirement | DPF status |
 |---|---|---|
-| `TAK-003` | Undeclared consequential tool defaults to `proposal` | **Fail** — an undeclared side-effecting tool is still ordinary by default. Flipping that default moves 120 tools behind the gate in one step and is deliberately its own change |
-| `TAK-020` | Every side-effecting tool carries a consequence class | **Fail, materially narrowed** — 54 of 174 (31%), up from 0. The assertion requires *every* side-effecting tool plus an unclassified-means-consequential default, so it does not pass until `TAK-003` does |
+| `TAK-003` | Undeclared consequential tool defaults to `proposal` | **Fail** — an undeclared side-effecting tool is still ordinary by default. Flipping that default moves 122 tools behind the gate in one step and is deliberately its own change |
+| `TAK-020` | Every side-effecting tool carries a consequence class | **Fail, materially narrowed** — 56 of 178 (31%), up from 0. The assertion requires *every* side-effecting tool plus an unclassified-means-consequential default, so it does not pass until `TAK-003` does |
 | `TAK-021` | Gating derived, not an enumerated allowlist | **Pass** — `deriveConsequentialToolNames` computes the gated set from `ToolDefinition.consequence`; `CONSEQUENTIAL_DECISION_TOOLS` survives only as a unioned transitional seed, and a CI ratchet fails the build if the composition root stops installing the derived resolver |
 | `TAK-022` | Gate coverage reportable | **Pass** — `summary.consequentialGate` reports coverage, the split by consequence class, and whether the runtime resolver is installed; rise-only floor in `scripts/agent-capability-baseline.json` |
 | — | Skill/service reference integrity | **Pass** — enforced by `scripts/check-agent-capability-integrity.mjs` in CI |
+| — | New-agent capability completeness | **Pass** — every newly declared identity must meet the seven current plane ceilings (3/3/3/2/3/3/2); existing per-plane gap counts are shrink-only in the same CI guard, and shrink-only is now *enforced* rather than declared: a plane whose open-gap count falls below its recorded maximum fails until the baseline is tightened, because unclaimed headroom is precisely how a closed gap reopens without the gate noticing. The same rule applies per identity — a grandfathered agent that has since reached every floor must lose its exemption, or a later regression would be skipped rather than caught. Both are improvement-class findings and are suppressed under `--update`, which exists to resolve them: refusing to run the remedy because the condition it remedies is present deadlocks the ratchet. Growth still refuses `--update`. Note also that the measure reads a fixed list of shape-source files (`SHAPE_SOURCE_FILES`) because a static scanner cannot call `listWorkShapes()`; a guard fails when a work-management file declares an accountable agent and is not listed, after `standing-operations-shapes.ts` went unread and reported seven bounded agents as having no work shape |
+| — | Profession corpus reachability | **Pass** — all 86 measured identities reach `evaluate_profession_decision`; the scanner consumes both workforce-seed and canonical-registry grant sources, and corpus gaps are ratcheted at zero |
 | `TAK-023` | Autonomy bounded by coverage | **Fail** — not enforced; §7 states the rule, admission criterion A4 is its machine form |
 | `TAK-024` | Activity shapes bounded | **Pass for declared shapes** — `work-shapes.ts` registers a named, versioned shape with stages, an accountable principal each, governed-decision advances, stop conditions including the failure exit, and a review point; `validateWorkShape` enforces those as a conformance test. One shape is declared, so the assertion holds where it applies and says nothing about activity not yet bound |
 | `TAK-025` | Triggers declared; dead intent detected | **Partial** — the §8.11.1 vocabulary is a closed set and every shape declares from it; the six dead cadence columns now have a reader (`deadline-horizon-sweep.ts`). A general scan for *unread* recorded intentions does not exist, so dead intent is still found by hand |
@@ -72,7 +74,7 @@ read as controls in force acquired the reader that makes them so.
 
 `TAK-020` is worth being precise about, because a 31% figure invites being read
 as a pass in progress. It is not: the assertion's own criterion is that an
-*unclassified* tool is treated as consequential. Until that default flips, 120
+*unclassified* tool is treated as consequential. Until that default flips, 122
 side-effecting tools remain ordinary by omission, and the honest status is Fail
 with a much smaller remainder.
 
@@ -128,7 +130,7 @@ adjustment feed on, so wherever that gate does not reach, the loop cannot close.
 |---|---|---|
 | 1 · Commandment veto | `mcp-tools.ts` runtime kernel gate | **Every** MCP tool dispatch |
 | 2 · Autonomy boundary | `agent-task-scheduler.ts` + `propose-interception.ts` | **Scheduled/autonomous runs only** — not interactive chat |
-| 3 · Consequence gate | `decision-routing-governance-hook.ts` | **2 of 174** side-effecting tools |
+| 3 · Consequence gate | `decision-routing-governance-hook.ts` | **56 of 178** side-effecting tools |
 | 4 · Graduated transition | `graduated-autonomy.ts` | **Build Studio phase transitions only** |
 
 Plane 1 is broad but produces no decision record — it is a veto, not a decision.
@@ -287,7 +289,7 @@ unnoticed.
 > **Autonomy may not be widened ahead of gate coverage.**
 >
 > Raising a coworker to `assertive`/`act` removes terms 1 and 2 of the autonomy
-> equation and leaves only the consequence gate. While that gate covers 2 of 174
+> equation and leaves only the consequence gate. While that gate covers 56 of 178
 > side-effecting tools, raising Proactivity widens the blast radius of the other
 > 167 — each of which executes with no kernel consultation and leaves no decision
 > record for review or adjustment to act on.
@@ -315,8 +317,8 @@ item without a status claim.
 | 9 | Graduated transition gate | **Built, Build Studio only** | `graduated-autonomy.ts` | BI-D996C238 | — |
 | 10 | Workroom governance anchor | **Built** | `CoworkerActionEnvelope` + autonomy gate | BI-E0BFFF77 (done) | — |
 | 11 | Cycle boundary: trigger, stop conditions, review point | **Built** | `StoredCycleBoundary` | — | — |
-| 12 | **Consequence classification on tools** — TAK §8.1, `TAK-020` | **Partial (54/174)** | `ToolConsequence` gained `authority`; every tool that moves money, reaches a third party, changes identity/authority, or destroys state now declares a class | **BI-B54D5B65** (P1) | `summary.consequentialGate.coveragePct` = 31 |
-| 12a | **Default for an unclassified side-effecting tool** — TAK §8.1, `TAK-003` | **Missing** | still ordinary by omission for 120 tools; deliberately deferred to its own change | BI-B54D5B65 | `summary.consequentialGate.ungated` |
+| 12 | **Consequence classification on tools** — TAK §8.1, `TAK-020` | **Partial (56/178)** | `ToolConsequence` gained `authority`; every tool that moves money, reaches a third party, changes identity/authority, or destroys state now declares a class | **BI-B54D5B65** (P1) | `summary.consequentialGate.coveragePct` = 31 |
+| 12a | **Default for an unclassified side-effecting tool** — TAK §8.1, `TAK-003` | **Missing** | still ordinary by omission for 122 tools; deliberately deferred to its own change | BI-B54D5B65 | `summary.consequentialGate.ungated` |
 | 13 | **Derived consequential set + CI check** — TAK §8.4.1, `TAK-021` | **Built** | `consequential-tool-coverage.ts` derives from `consequence`, seed unioned; rise-only floor + resolver-install check in `check-agent-capability-integrity.mjs` | BI-B54D5B65 | `gateClassified` |
 | 14 | **Action-outcome feedback** — TAK §13.3, `TAK-026`/`TAK-027` | **Missing** | no edge to `ToolExecution`; no observed outcome | **BI-23BF8131** | — |
 | 15 | Durable consult ledger | **Partial** | per-process in-memory map | **BI-AF7CE2BC** | — |

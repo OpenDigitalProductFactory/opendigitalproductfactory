@@ -133,4 +133,44 @@ describe("ensureExternalSessionCapsule work-start signal (BI-5FDBF786)", () => {
     expect(mockCreate).not.toHaveBeenCalled();
     expect(mockRecord).not.toHaveBeenCalled();
   });
+
+  it("provider-verifies a published commit before synchronizing the adopted Workroom head", async () => {
+    const sha = "a".repeat(40);
+    const resolvePublishedHead = vi.fn().mockResolvedValue(sha);
+    await ensureExternalSessionCapsule({
+      db,
+      externalSessionId: "sess-published",
+      provider: "codex",
+      actor,
+      backlogItemId: "BI-F0715C9C",
+      worktreePath: "/tmp/wt",
+      branchName: "fix/initiative-readiness-bootstrap",
+      repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+      publishedCommitSha: sha,
+      resolvePublishedHead,
+    });
+
+    expect(resolvePublishedHead).toHaveBeenCalledWith(expect.objectContaining({
+      branchName: "fix/initiative-readiness-bootstrap",
+      expectedCommitSha: sha,
+    }));
+    expect(mockAdopt).toHaveBeenCalledWith(expect.objectContaining({
+      input: expect.objectContaining({ headSha: sha }),
+    }));
+  });
+
+  it("does not mutate Workroom identity when provider verification mismatches", async () => {
+    await expect(ensureExternalSessionCapsule({
+      db,
+      externalSessionId: "sess-mismatch",
+      provider: "codex",
+      actor,
+      worktreePath: "/tmp/wt",
+      branchName: "fix/x",
+      publishedCommitSha: "a".repeat(40),
+      resolvePublishedHead: vi.fn().mockResolvedValue(null),
+    })).rejects.toThrow("did not verify");
+    expect(mockAdopt).not.toHaveBeenCalled();
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
 });

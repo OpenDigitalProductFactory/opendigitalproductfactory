@@ -2,7 +2,12 @@ import type { BuildStudioCustomerStatus } from "@/lib/build/customer-status-proj
 import { ownerStateBadgeLabel } from "@/lib/build/owner-status-reconciliation";
 import type { BuildPhase } from "@/lib/feature-build-types";
 import { deriveBuildActivityStory } from "./build-studio-operator-view";
-import { fallbackNow, fallbackNext } from "@/lib/build/owner-change-view";
+import {
+  fallbackNow,
+  fallbackNext,
+  outcomeDetailFor,
+  toOwnerHeading,
+} from "@/lib/build/owner-change-view";
 import type { BuildAttention } from "@/lib/build/build-attention";
 
 const OWNER_STATE_BADGE = {
@@ -39,8 +44,11 @@ export function BuildOperatorOverview({
    *  needed" about a build the rail is flagging. */
   attention?: BuildAttention | null;
 }) {
-  const ownerTitle = ownerSafeBuildText(title);
-  const ownerOutcome = outcome ? ownerSafeBuildText(outcome) : outcome;
+  const ownerTitle = toOwnerHeading(ownerSafeBuildText(title));
+  const ownerOutcome = outcomeDetailFor(
+    title,
+    outcome ? ownerSafeBuildText(outcome) : outcome,
+  );
   const activityPhase = status?.ownerState === "complete"
     ? "complete"
     : status?.ownerState === "failed"

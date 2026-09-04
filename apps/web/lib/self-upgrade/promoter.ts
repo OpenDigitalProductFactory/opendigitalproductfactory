@@ -89,9 +89,21 @@ export async function runPromoterReadiness(
   });
 }
 
+export type VerifiedReleaseIdentity = {
+  tag: string;
+  ghcrOwner: string;
+  channelDigest: string;
+  platformManifestDigest: string;
+  configDigest: string;
+  platformOs: "linux";
+  platformArchitecture: string;
+};
+
 export type PromoterParams = {
-  /** HOST path of the install tree; bind-mounted into the promoter. */
+  /** HOST path of the source/build carrier; bind-mounted into the promoter. */
   hostInstallPath: string;
+  /** HOST path of the canonical consumer install root that owns durable release identity. */
+  canonicalInstallPath?: string;
   /** Git SHA to promote to. */
   targetSha: string;
   /** In-container path the promoter writes its pre-swap backup to. */
@@ -152,7 +164,7 @@ export type PromoterParams = {
   /** Exact portal-verified carrier retained for orchestration identity/audit. */
   installStateMigrationHandoff?: InstallStateMigrationHandoff;
   /** Verified registry release promoted without a source checkout/build. */
-  release?: { tag: string; ghcrOwner: string };
+  release?: VerifiedReleaseIdentity;
 };
 
 export type PromoterResult = {
@@ -167,6 +179,8 @@ const RUNTIME_TRANSITION_ENVELOPE = /^[A-Za-z0-9_-]{16,65536}$/;
 const RUNTIME_HOST_PATH_SEGMENT = /^[A-Za-z0-9._ -]+$/;
 const RELEASE_TAG = /^v\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?$/;
 const REGISTRY_OWNER = /^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,253}[A-Za-z0-9])?$/;
+const IMAGE_CONFIG_DIGEST = /^sha256:[a-f0-9]{64}$/;
+const RELEASE_PLATFORM_ARCHITECTURE = /^(?:amd64|arm64)$/;
 
 function isSafeRuntimeHostPath(value: string): boolean {
   if (value.length < 2 || value.length > 1024 || /[\0\r\n]/.test(value)) return false;
@@ -202,7 +216,16 @@ function validateRuntimeTransitionCommandInputs(params: PromoterParams): void {
   }
   if (params.installStateMigrationEnvelope && !RUNTIME_TRANSITION_ENVELOPE.test(params.installStateMigrationEnvelope)) throw new Error("invalid_install_state_migration_envelope");
   if (params.installStateMigrationSignature && !RUNTIME_TRANSITION_TOKEN.test(params.installStateMigrationSignature)) throw new Error("invalid_install_state_migration_signature");
-  if (params.release && (!RELEASE_TAG.test(params.release.tag) || !REGISTRY_OWNER.test(params.release.ghcrOwner))) {
+  if (params.canonicalInstallPath && !isSafeRuntimeHostPath(params.canonicalInstallPath)) throw new Error("invalid_canonical_install_path");
+  if (params.release && (
+    !RELEASE_TAG.test(params.release.tag) ||
+    !REGISTRY_OWNER.test(params.release.ghcrOwner) ||
+    !IMAGE_CONFIG_DIGEST.test(params.release.channelDigest) ||
+    !IMAGE_CONFIG_DIGEST.test(params.release.platformManifestDigest) ||
+    !IMAGE_CONFIG_DIGEST.test(params.release.configDigest) ||
+    params.release.platformOs !== "linux" ||
+    !RELEASE_PLATFORM_ARCHITECTURE.test(params.release.platformArchitecture)
+  )) {
     throw new Error("invalid_release_identity");
   }
 }
@@ -212,23 +235,17 @@ function validateRuntimeTransitionCommandInputs(params: PromoterParams): void {
  * container. Separated from runPromoter so it can be unit-tested without
  * spawning a process. Returns the command and argv exactly as spawned.
  */
-export function buildPromoterCommand(
-  params: PromoterParams,
-): { command: string; args: string[] } {
+export function buildPromoterCommand(params: PromoterParams): { command: string; args: string[] } {
   validateRuntimeTransitionCommandInputs(params);
-  const image =
-    params.promoterImage && params.promoterImage.length > 0
-      ? params.promoterImage
-      : DEFAULT_PROMOTER_IMAGE;
+  const image = params.promoterImage && params.promoterImage.length > 0 ? params.promoterImage : DEFAULT_PROMOTER_IMAGE;
 
   // The promoter runs in its own container, so the portal's "localhost" health
   // URL is unreachable (that loopback is the promoter's own). Rewrite it to
   // host.docker.internal so curl hits the portal's published host port — the
   // new portal that the promoter just recreated.
-  const healthUrl = params.healthUrl.replace(
-    /\/\/(localhost|127\.0\.0\.1)(?=[:/]|$)/,
-    "//host.docker.internal",
-  );
+  const healthUrl = params.healthUrl.replace(/\/\/(localhost|127\.0\.0\.1)(?=[:/]|$)/, "//host.docker.internal");
+  const hasCanonicalInstall = params.release && params.canonicalInstallPath;
+  const distinctCanonicalInstall = hasCanonicalInstall && params.canonicalInstallPath !== params.hostInstallPath;
 
   const args = [
     "run",
@@ -252,8 +269,10 @@ export function buildPromoterCommand(
     "/var/run/docker.sock:/var/run/docker.sock",
     // Host source tree (read-only): build context + backup source.
     "-v",
-    `${params.hostInstallPath}:${PROMOTER_CONTAINER_SOURCE}${params.release ? "" : ":ro"}`,
+    `${params.hostInstallPath}:${PROMOTER_CONTAINER_SOURCE}${params.release && !distinctCanonicalInstall ? "" : ":ro"}`,
   );
+
+  if (distinctCanonicalInstall) args.push("-v", `${params.canonicalInstallPath}:/canonical-install`);
 
   if (params.backupHostPath && params.backupHostPath.length > 0) {
     args.push("-v", `${params.backupHostPath}:/backups`);
@@ -283,11 +302,22 @@ export function buildPromoterCommand(
   );
 
   if (params.release) {
+    if (hasCanonicalInstall) args.push("-e", `PROMOTE_INSTALL_ROOT=${distinctCanonicalInstall ? "/canonical-install" : PROMOTER_CONTAINER_SOURCE}`);
     args.push(
       "-e",
       "DPF_PROMOTION_MODE=release",
       "-e",
       `DPF_RELEASE_TAG=${params.release.tag}`,
+      "-e",
+      `DPF_RELEASE_CHANNEL_DIGEST=${params.release.channelDigest}`,
+      "-e",
+      `DPF_RELEASE_PLATFORM_MANIFEST_DIGEST=${params.release.platformManifestDigest}`,
+      "-e",
+      `DPF_RELEASE_CONFIG_DIGEST=${params.release.configDigest}`,
+      "-e",
+      `DPF_RELEASE_PLATFORM_OS=${params.release.platformOs}`,
+      "-e",
+      `DPF_RELEASE_PLATFORM_ARCHITECTURE=${params.release.platformArchitecture}`,
       "-e",
       `GHCR_OWNER=${params.release.ghcrOwner}`,
     );

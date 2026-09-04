@@ -224,6 +224,34 @@ export const kernelGateDecisionsTotal = new Counter({
 // ─── Postgres Daily Backup (Slice 1) ───────────────────────────────────────
 // Spec: docs/superpowers/specs/2026-05-17-postgres-daily-backup-design.md §8
 
+// ─── Coworker action approvals (BI-78D3CF1E) ───────────────────────────────
+//
+// A CoworkerActionEnvelope is a coworker asking a named human to approve one
+// side-effecting call. It carries a 15-minute expiry, and an envelope nobody
+// answers simply lapses: no alert, no error, no trace anywhere an operator
+// looks. Seven lapsed unactioned on the founder's install before an approval
+// surface even existed, and the only way to learn that was to read the table.
+//
+// A consent request that can vanish silently needs a number attached to it.
+// The counter says how often it has happened; the gauge says whether it is
+// happening now.
+
+// Both are GAUGES, not counters. These are observed periodically rather than
+// emitted once per transition, and a counter incremented on every observation
+// would multiply by however often anyone happens to look.
+
+export const coworkerEnvelopesAwaitingDecision = new Gauge({
+  name: "dpf_coworker_envelopes_awaiting_decision",
+  help: "Coworker action envelopes proposed and still inside their window — a coworker is blocked on a person right now.",
+  registers: [metricsRegistry],
+});
+
+export const coworkerEnvelopesExpiredUnactioned = new Gauge({
+  name: "dpf_coworker_envelopes_expired_unactioned",
+  help: "Coworker action envelopes whose window closed with no human decision. These still read status=proposed, so a naive proposed-count hides them.",
+  registers: [metricsRegistry],
+});
+
 export const postgresBackupRunsTotal = new Counter({
   name: "dpf_postgres_backup_runs_total",
   help: "Postgres backup runs by status and trigger",
@@ -507,5 +535,14 @@ export const queueArrivalsTotal = new Counter({
   name: "dpf_queue_arrivals_total",
   help: "Items entering a queue (enqueued transitions) — demand/arrival rate.",
   labelNames: ["queue_key"] as const,
+  registers: [metricsRegistry],
+});
+
+// Immutable gate single-flight. Keep labels bounded: exact keys and executor
+// ids stay in structured evidence rather than the time-series index.
+export const gateRunDispositionsTotal = new Counter({
+  name: "dpf_gate_run_dispositions_total",
+  help: "Immutable gate claims by gate kind, coordination disposition, and terminal result class.",
+  labelNames: ["gate_kind", "disposition", "result_class"] as const,
   registers: [metricsRegistry],
 });

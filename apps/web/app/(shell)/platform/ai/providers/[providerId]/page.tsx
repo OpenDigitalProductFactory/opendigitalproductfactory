@@ -21,8 +21,11 @@ import { getAiProviderFinanceDetail } from "@/lib/finance/ai-provider-finance";
 import { buildProviderCostView } from "@/lib/inference/ai-provider-cost-view";
 import { ProviderAccountPostureForm } from "@/components/platform/ProviderAccountPostureForm";
 import { ProviderTrustEvidencePanel } from "@/components/platform/ProviderTrustEvidencePanel";
-import { resolveProviderTrustEvidence, type ProviderTrustClaimKey } from "@/lib/routing/provider-suitability/evidence";
-import { connectionPosture } from "@/lib/routing/provider-suitability/provider-onboarding-data";
+import { PROVIDER_TRUST_CLAIM_KEYS, resolveProviderTrustEvidence, type ProviderTrustClaimKey } from "@/lib/routing/provider-suitability/evidence";
+import { connectionPosture, loadBusinessSuitabilityContext, providerCatalogFacts } from "@/lib/routing/provider-suitability/provider-onboarding-data";
+import { resolveProviderTrustFacts } from "@/lib/routing/provider-suitability/provider-trust";
+import { projectProviderConnectionReview } from "@/lib/routing/provider-suitability/provider-connection-review";
+import { shouldShowProviderAccountPosture } from "@/components/platform/local-models/provider-detail-policy";
 
 type Props = { params: Promise<{ providerId: string }> };
 
@@ -57,7 +60,7 @@ export default async function ProviderDetailPage({ params }: Props) {
       await getProviderBearerToken(providerId).catch(() => null);
     }
   }
-  const [pw, models, profiles, allProviders, perfData, routingProfiles, routeDecisions, recipes, modelClassCounts, financeDetail, tokenSpend, providerConnection] = await Promise.all([
+  const [pw, models, profiles, allProviders, perfData, routingProfiles, routeDecisions, recipes, modelClassCounts, financeDetail, tokenSpend, providerConnection, businessSuitabilityContext] = await Promise.all([
     getProviderById(providerId),
     getDiscoveredModels(providerId),
     getModelProfiles(providerId),
@@ -72,10 +75,12 @@ export default async function ProviderDetailPage({ params }: Props) {
     prisma.aiProviderConnection.findUnique({
       where: { connectionId: `provider-default-${providerId}` },
       include: {
+        provider: { select: { providerId: true, category: true, endpointType: true, catalogEntry: true } },
         trustEvidence: true,
         supplierContract: { select: { contractId: true, status: true, startDate: true, endDate: true } },
       },
     }),
+    loadBusinessSuitabilityContext(),
   ]);
   if (!pw) notFound();
   const costView = buildProviderCostView({
@@ -83,15 +88,42 @@ export default async function ProviderDetailPage({ params }: Props) {
     financeProfile: financeDetail,
     internalUsage: tokenSpend.find((row) => row.providerId === providerId) ?? null,
   });
-  const requiredEvidenceClaims: ProviderTrustClaimKey[] = providerId === "openrouter"
-    ? ["no-training", "enabled-regions", "zero-retention", "regional-processing", "approved-underlying-providers", "dpa-on-file"]
-    : ["no-training", "enabled-regions", "dpa-on-file"];
+  const factsResolution = providerConnection
+    ? resolveProviderTrustEvidence({
+      connection: connectionPosture(providerConnection),
+      evidenceConnectionId: providerConnection.id,
+      records: providerConnection.trustEvidence,
+      requiredClaims: [...PROVIDER_TRUST_CLAIM_KEYS],
+      supplierContract: providerConnection.supplierContract ?? undefined,
+      now,
+    })
+    : null;
+  const connectionReview = providerConnection && factsResolution
+    ? projectProviderConnectionReview({
+      businessProfile: businessSuitabilityContext.businessProfile,
+      businessContextConfigured: businessSuitabilityContext.businessContextConfigured,
+      handlesCardPayments: businessSuitabilityContext.handlesCardPayments,
+      facts: resolveProviderTrustFacts({
+        catalog: providerCatalogFacts(providerConnection.provider),
+        connection: factsResolution.posture,
+      }),
+    })
+    : null;
+  const existingEvidenceClaimKeys = providerConnection?.trustEvidence.flatMap((record) =>
+    record.claimKey && PROVIDER_TRUST_CLAIM_KEYS.includes(record.claimKey as ProviderTrustClaimKey)
+      ? [record.claimKey as ProviderTrustClaimKey]
+      : [],
+  ) ?? [];
+  const displayedClaimKeys = [...new Set([
+    ...(connectionReview?.requiredClaimKeys ?? []),
+    ...existingEvidenceClaimKeys,
+  ])];
   const trustEvidenceResolution = providerConnection
     ? resolveProviderTrustEvidence({
       connection: connectionPosture(providerConnection),
       evidenceConnectionId: providerConnection.id,
       records: providerConnection.trustEvidence,
-      requiredClaims: requiredEvidenceClaims,
+      requiredClaims: displayedClaimKeys,
       supplierContract: providerConnection.supplierContract ?? undefined,
       now,
     })
@@ -102,6 +134,7 @@ export default async function ProviderDetailPage({ params }: Props) {
   const session = await auth();
   const user = session?.user;
   const canWrite = !!user && can({ platformRole: user.platformRole, isSuperuser: user.isSuperuser }, "manage_provider_connections");
+  const showPosture = shouldShowProviderAccountPosture(providerId, pw.provider.endpointType);
 
   // Fetch hardware info for local providers via Neo4j InfraCI.
   // Wrapped in try/catch — Neo4j is best-effort; a graph error must never crash the page.
@@ -187,11 +220,12 @@ export default async function ProviderDetailPage({ params }: Props) {
 
       {pw.provider.endpointType === "service" ? (
         <McpServiceDetail provider={pw.provider} connectionStatus={providerConnection?.status ?? null} />
-      ) : (
+      ) : showPosture ? (
         <>
           <ProviderAccountPostureForm
             providerId={providerId}
             canWrite={canWrite}
+            requiredRegions={connectionReview?.requiredRegions ?? []}
             initial={providerConnection ? {
               accountClass: providerConnection.accountClass,
               noTraining: providerConnection.entitlements && typeof providerConnection.entitlements === "object" && !Array.isArray(providerConnection.entitlements)
@@ -221,9 +255,20 @@ export default async function ProviderDetailPage({ params }: Props) {
           />
           {trustEvidenceResolution && (
             <ProviderTrustEvidencePanel
+              accountDeclarationSaved={Boolean(
+                providerConnection?.lastReviewedAt
+                && providerConnection.entitlements
+                && typeof providerConnection.entitlements === "object"
+                && !Array.isArray(providerConnection.entitlements)
+                && ("noTraining" in providerConnection.entitlements || "enabledRegions" in providerConnection.entitlements)
+              )}
               evidenceStatus={trustEvidenceResolution.posture.evidenceStatus}
               lastReviewedAt={trustEvidenceResolution.posture.lastReviewedAt}
               claims={trustEvidenceResolution.claims}
+              requiredClaimKeys={connectionReview?.requiredClaimKeys ?? []}
+              scopeHeadline={connectionReview?.headline}
+              scopeSummary={connectionReview?.summary}
+              actions={connectionReview?.actions ?? []}
             />
           )}
           {/* BI-87D93A71 (Minimum): surface OAuth callback port mismatch
@@ -254,7 +299,7 @@ export default async function ProviderDetailPage({ params }: Props) {
           {/* Execution Recipes */}
           <RecipePanel recipes={recipes} />
         </>
-      )}
+      ) : null}
 
       <EndpointPerformancePanel
         endpointId={providerId}
@@ -276,7 +321,7 @@ function McpServiceDetail({ provider, connectionStatus }: { provider: import("@/
 
   return (
     <div style={{ background: "var(--dpf-surface-1)", border: "1px solid var(--dpf-border)", borderRadius: 8, padding: 20 }}>
-      <h2 style={{ fontSize: 14, fontWeight: 600, color: "var(--dpf-text)", marginBottom: 16 }}>MCP Service Configuration</h2>
+      <h2 style={{ fontSize: 14, fontWeight: 600, color: "var(--dpf-text)", marginBottom: 16 }}>MCP service</h2>
 
       {isPluginManaged && (
         <div style={{
@@ -295,7 +340,7 @@ function McpServiceDetail({ provider, connectionStatus }: { provider: import("@/
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
         <div>
-          <div style={{ fontSize: 10, color: "var(--dpf-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Endpoint Type</div>
+          <div style={{ fontSize: 10, color: "var(--dpf-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Endpoint</div>
           <div style={{ fontSize: 13, color: "var(--dpf-text)" }}>{provider.endpointType}</div>
         </div>
         <div>
@@ -322,11 +367,11 @@ function McpServiceDetail({ provider, connectionStatus }: { provider: import("@/
           )}
         </div>
         <div>
-          <div style={{ fontSize: 10, color: "var(--dpf-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Capability Tier</div>
+          <div style={{ fontSize: 10, color: "var(--dpf-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Capability</div>
           <div style={{ fontSize: 13, color: "var(--dpf-text)" }}>{provider.capabilityTier ?? "basic"}</div>
         </div>
         <div>
-          <div style={{ fontSize: 10, color: "var(--dpf-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Routing Cost Band</div>
+          <div style={{ fontSize: 10, color: "var(--dpf-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Cost</div>
           <div style={{ fontSize: 13, color: "var(--dpf-text)" }}>{provider.costBand || "unspecified"}</div>
         </div>
       </div>

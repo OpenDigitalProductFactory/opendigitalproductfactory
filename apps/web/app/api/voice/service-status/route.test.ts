@@ -8,12 +8,13 @@ vi.mock("@/lib/auth", () => ({
 // (for isVoiceNarrationEnabled). The route itself never queries it, so a thin
 // mock keeps this test hermetic.
 vi.mock("@dpf/db", () => ({
-  prisma: { voiceProfile: { count: vi.fn(async () => 0) } },
+  prisma: { voiceProfile: { count: vi.fn(async () => 0), findMany: vi.fn(async () => [{ profile: { voiceEnabled: true } }]) } },
 }))
 
 // Keep defaultProvider real (env-driven) so the route resolves the probe URL
 // exactly as production does.
 import { auth } from "@/lib/auth"
+import { prisma } from "@dpf/db"
 import { GET } from "./route"
 
 describe("GET /api/voice/service-status", () => {
@@ -21,6 +22,7 @@ describe("GET /api/voice/service-status", () => {
     vi.restoreAllMocks()
     vi.unstubAllEnvs()
     vi.mocked(auth).mockResolvedValue({ user: { id: "user-1" } } as never)
+    vi.mocked(prisma.voiceProfile.findMany).mockResolvedValue([{ profile: { voiceEnabled: true } }] as never)
     // DPF_TTS_URL intentionally left unset so the route's `?? default` applies;
     // the mlx test below stubs it explicitly. (Stubbing "" would defeat `??`.)
     vi.stubEnv("TTS_PROVIDER", "chatterbox")
@@ -41,12 +43,22 @@ describe("GET /api/voice/service-status", () => {
     const body = await res.json()
 
     expect(res.status).toBe(200)
-    expect(body).toEqual({ available: true, provider: "chatterbox", reason: null })
+    expect(body).toEqual({ available: true, state: "ready", provider: "chatterbox", reason: null })
     // Probes the default Docker-network sidecar address.
     expect(global.fetch).toHaveBeenCalledWith(
       "http://dpf-tts:8000/health",
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     )
+  })
+
+  it("forwards preview purpose without requiring narration preference", async () => {
+    vi.mocked(prisma.voiceProfile.findMany).mockResolvedValue([{ profile: { voiceEnabled: false } }] as never)
+    global.fetch = vi.fn(async () =>
+      new Response(JSON.stringify({ status: "healthy", model_loaded: true }), { status: 200 }),
+    ) as typeof fetch
+
+    const res = await GET(new Request("http://localhost/api/voice/service-status?purpose=preview"))
+    expect(await res.json()).toMatchObject({ available: true, state: "ready" })
   })
 
   it("reports unavailable when the sidecar is unreachable", async () => {
@@ -59,6 +71,7 @@ describe("GET /api/voice/service-status", () => {
 
     expect(res.status).toBe(200)
     expect(body.available).toBe(false)
+    expect(body.state).toBe("service_unavailable")
     expect(body.reason).toMatch(/not running/i)
   })
 
@@ -81,7 +94,7 @@ describe("GET /api/voice/service-status", () => {
     const res = await GET()
     const body = await res.json()
 
-    expect(body).toEqual({ available: true, provider: "cartesia", reason: null })
+    expect(body).toEqual({ available: true, state: "ready", provider: "cartesia", reason: null })
     expect(global.fetch).not.toHaveBeenCalled()
   })
 

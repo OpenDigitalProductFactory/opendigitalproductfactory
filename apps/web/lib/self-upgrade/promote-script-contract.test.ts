@@ -118,7 +118,15 @@ const CONTRACT_TEST_TIMEOUT_MS = 40_000;
 /** @deprecated alias kept for readiness describe block readability */
 const READINESS_SCRIPT_TIMEOUT_MS = CONTRACT_TEST_TIMEOUT_MS;
 
-function runScript(env: Record<string, string | undefined>, extraArgs: string[] = [], stateOverrides: Record<string, unknown> = {}) {
+function runScript(
+  env: Record<string, string | undefined>,
+  extraArgs: string[] = [],
+  stateOverrides: Record<string, unknown> = {},
+  options: {
+    recoveryPathMode?: "canonical-missing-parent" | "outside-recovery-root";
+    sourceProfileAdapter?: boolean;
+  } = {},
+) {
   const marker = basename(env.PROMOTE_SOURCE ?? "source").replace(/[^A-Za-z0-9-]/g, "-");
   const root = mkdtempSync(join(tmpdir(), `dpf-promote-contract-${marker}-`));
   try {
@@ -126,7 +134,9 @@ function runScript(env: Record<string, string | undefined>, extraArgs: string[] 
     const stateDir = join(root, "state");
     mkdirSync(join(source, "scripts", "lib"), { recursive: true });
     mkdirSync(stateDir, { recursive: true });
-    copyFileSync(join(REPO_ROOT, "scripts", "lib", "resolve-capability-compose-profiles.mjs"), join(source, "scripts", "lib", "resolve-capability-compose-profiles.mjs"));
+    if (options.sourceProfileAdapter !== false) {
+      copyFileSync(join(REPO_ROOT, "scripts", "lib", "resolve-capability-compose-profiles.mjs"), join(source, "scripts", "lib", "resolve-capability-compose-profiles.mjs"));
+    }
     copyFileSync(join(REPO_ROOT, "scripts", "lib", "govern-capability-compose-args.mjs"), join(source, "scripts", "lib", "govern-capability-compose-args.mjs"));
     copyFileSync(join(REPO_ROOT, "scripts", "lib", "capability-state-hash.mjs"), join(source, "scripts", "lib", "capability-state-hash.mjs"));
     copyFileSync(join(REPO_ROOT, "scripts", "capability-service-catalog.generated.json"), join(source, "scripts", "capability-service-catalog.generated.json"));
@@ -138,7 +148,20 @@ function runScript(env: Record<string, string | undefined>, extraArgs: string[] 
 
     const mapped = { ...env };
     if (mapped.PROMOTE_SOURCE !== undefined) mapped.PROMOTE_SOURCE = resolveBashPath(source);
-    if (mapped.PROMOTE_BACKUP_PATH !== undefined) mapped.PROMOTE_BACKUP_PATH = resolveBashPath(join(root, basename(mapped.PROMOTE_BACKUP_PATH)));
+    if (mapped.PROMOTE_BACKUP_PATH !== undefined) {
+      if (options.recoveryPathMode) {
+        const recoveryRoot = join(root, "backups");
+        mkdirSync(recoveryRoot, { recursive: true });
+        mapped.DPF_PROMOTER_RECOVERY_ROOT = resolveBashPath(recoveryRoot);
+        mapped.PROMOTE_BACKUP_PATH = resolveBashPath(join(
+          options.recoveryPathMode === "canonical-missing-parent" ? recoveryRoot : root,
+          "self-upgrade",
+          "SUR-contract",
+        ));
+      } else {
+        mapped.PROMOTE_BACKUP_PATH = resolveBashPath(join(root, basename(mapped.PROMOTE_BACKUP_PATH)));
+      }
+    }
     const envSource: Record<string, string | undefined> = { NODE_ENV: process.env.NODE_ENV ?? "test", DPF_PROMOTER_STATE_DIR: resolveBashPath(stateDir), ...mapped };
     const envAssignments = Object.entries(envSource).flatMap(([key, value]) => value === undefined ? [] : [`${key}=${quoteForBash(value)}`]);
     const command = ["env", "-i", 'PATH="$PATH"', ...envAssignments, "bash", quoteForBash(SCRIPT), "--self-upgrade", ...extraArgs.map(quoteForBash)].join(" ");
@@ -166,6 +189,47 @@ function assertChildDidNotTimeOut(result: ReturnType<typeof spawnSync>, label: s
 // — demanding it from the caller wedges every pre-existing install, because the upgrade that
 // teaches the caller to send it IS the blocked upgrade.
 describe.skipIf(!BASH_AVAILABLE)("promote.sh --readiness host identity", () => {
+  it("projects release-artifact capability state from the immutable promoter when the consumer install has no source adapter", () => {
+    const result = runScript(
+      { ...BASE_ENV, DPF_PROMOTION_MODE: "release" },
+      ["--readiness"],
+      { platform: "linux", arch: "amd64" },
+      { sourceProfileAdapter: false },
+    );
+    expect(result.stdout).not.toContain("capability_projection_failed");
+  }, READINESS_SCRIPT_TIMEOUT_MS);
+
+  it("still fails closed when source-backed readiness has no candidate source adapter", () => {
+    const result = runScript(
+      BASE_ENV,
+      ["--readiness"],
+      { platform: "linux", arch: "amd64" },
+      { sourceProfileAdapter: false },
+    );
+    expect(result.stdout).toContain("capability_projection_failed");
+    expect(result.stdout).toContain("candidate source has no profile adapter");
+  }, READINESS_SCRIPT_TIMEOUT_MS);
+
+  it("accepts a run-specific recovery path whose canonical mounted root exists", () => {
+    const result = runScript(
+      BASE_ENV,
+      ["--readiness"],
+      { platform: "linux", arch: "amd64" },
+      { recoveryPathMode: "canonical-missing-parent" },
+    );
+    expect(result.stdout).not.toContain("recovery_parent_unavailable");
+  }, READINESS_SCRIPT_TIMEOUT_MS);
+
+  it("still rejects a missing recovery parent outside the canonical mounted root", () => {
+    const result = runScript(
+      BASE_ENV,
+      ["--readiness"],
+      { platform: "linux", arch: "amd64" },
+      { recoveryPathMode: "outside-recovery-root" },
+    );
+    expect(result.stdout).toContain("recovery_parent_unavailable");
+  }, READINESS_SCRIPT_TIMEOUT_MS);
+
   it("resolves installer-owned identity when the N-1 caller sends no DPF_HOST_* env", () => {
     const result = runScript(BASE_ENV, ["--readiness"], { platform: "linux", arch: "amd64" });
     expect(result.stdout).toContain('"stage":"preflight"');

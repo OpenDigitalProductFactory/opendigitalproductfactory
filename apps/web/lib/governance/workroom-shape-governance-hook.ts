@@ -43,6 +43,14 @@ import type {
   WorkroomParticipantView,
 } from "@/lib/work-management/room-types";
 import type { WorkroomAccessLevel } from "@/lib/work-management/room-participation";
+import {
+  hasPassingVerificationEvidence,
+  joinAutonomy,
+  resolveVerificationRequirement,
+  type VerificationEvidence,
+} from "@/lib/work-management/hitl-join";
+import { readWorkroomPostureClaim } from "@/lib/work-management/workroom-posture-claim";
+import { shapeBiasFor } from "@/lib/work-posture";
 import { readWorkroomShapeClaim } from "@/lib/work-management/workroom-shape-claim";
 
 export type WorkroomShapeGateMode = "enforce" | "shadow" | "off";
@@ -72,6 +80,8 @@ export type WorkroomShapeGateRoom = {
     principalRef: string;
     roles: readonly WorkroomParticipantRole[];
   }>;
+  /** Canonical receipts already related to this Workroom. */
+  verificationEvidence?: readonly VerificationEvidence[];
 };
 
 export type WorkroomShapeVerdict = {
@@ -88,7 +98,21 @@ export type WorkroomShapeVerdict = {
   gaps: readonly string[];
   authorityLadderLevel: WorkroomAccessLevel | null;
   stepUpRequired: boolean;
+  /** The decision mode AFTER joining the room's posture — what actually governs. */
   decisionMode: WorkCaseAutonomyDecisionMode;
+  /**
+   * EP-WORK-POSTURE (BI-06C41FDC). Which ladder set `decisionMode`. Before this,
+   * the hook computed a decision mode and only RECORDED it — it never affected
+   * the decision. Recording which ladder won is how an operator can tell a room
+   * constraint from a trust constraint.
+   */
+  autonomyConstrainedBy: "envelope" | "posture" | "both-agree";
+  /** The action boundary the room's posture contributed, if any. */
+  postureActionBoundary: string | null;
+  /** The shared room posture value also rendered by the posture surface. */
+  postureVerificationDepth: string | null;
+  verificationRequired: boolean;
+  verificationSatisfied: boolean;
 };
 
 export type WorkroomShapeShadowRecord = {
@@ -145,6 +169,8 @@ function toParticipantViews(
     sponsorPrincipalRef: null,
     authoritySummary: "Participates within assigned room authority",
     sourceRefs: [],
+    assignmentSource: "explicit",
+    coordinatorSource: participant.roles.includes("coordinator") ? "explicit" : "none",
   }));
 }
 
@@ -235,6 +261,11 @@ export function createWorkroomShapeGovernanceHook(
             authorityLadderLevel: null,
             stepUpRequired: false,
             decisionMode,
+            autonomyConstrainedBy: "envelope",
+            postureActionBoundary: null,
+            postureVerificationDepth: null,
+            verificationRequired: false,
+            verificationSatisfied: true,
           });
           return { decision: "allow" };
         }
@@ -250,6 +281,30 @@ export function createWorkroomShapeGovernanceHook(
           participants: shapeParticipants(room),
           sensitivityCeiling: room.sensitivityCeiling ?? null,
         });
+        // EP-WORK-POSTURE (BI-06C41FDC): the room's posture now GOVERNS this
+        // turn instead of being computed and discarded. A posture the room
+        // DECLARED wins; otherwise the shape it is bound against implies one.
+        // Both are read synchronously from data the hook already holds — no I/O
+        // is added to a PreToolUse path.
+        const declaredPosture = readWorkroomPostureClaim(room.scopeClaims);
+        const shapeBias = shapeBiasFor(shape);
+        const postureActionBoundary =
+          declaredPosture?.actionBoundary
+          ?? shapeBias?.actionBoundary
+          ?? null;
+        const joined = joinAutonomy(decisionMode, postureActionBoundary);
+        const postureVerificationDepth = shapeBias?.verificationDepth ?? null;
+        const verificationRequirement = resolveVerificationRequirement({
+          // A declared tool consequence is the executable projection of the
+          // existing outbound/floor risk class; legacy name-only policies do
+          // not acquire a new verification obligation.
+          risk: tool.consequence ? "outbound-or-floor" : null,
+          verificationDepth: postureVerificationDepth,
+        });
+        const verificationSatisfied =
+          !verificationRequirement.required
+          || hasPassingVerificationEvidence(room.verificationEvidence);
+
         const verdict: WorkroomShapeVerdict = {
           mode,
           toolName: event.toolName,
@@ -261,7 +316,12 @@ export function createWorkroomShapeGovernanceHook(
           gaps: binding.gaps,
           authorityLadderLevel: binding.authorityLadderLevel,
           stepUpRequired: binding.stepUpRequired,
-          decisionMode,
+          decisionMode: joined.decisionMode,
+          autonomyConstrainedBy: joined.constrainedBy,
+          postureActionBoundary,
+          postureVerificationDepth,
+          verificationRequired: verificationRequirement.required,
+          verificationSatisfied,
         };
         await record(verdict);
 
@@ -273,6 +333,22 @@ export function createWorkroomShapeGovernanceHook(
               : `workroom-shape: shadow — ${shape} envelope gaps: ${gapSummary(binding.gaps)} (audit-only)`,
           };
         }
+        // A room whose posture is advise-only joins to shadow-only: the action is
+        // recorded, never taken. Denying is the only honest response to a
+        // consequential call in that room — allowing it would take an action the
+        // room explicitly said should only be advised on.
+        if (joined.decisionMode === "shadow-only") {
+          return {
+            decision: "deny",
+            reason:
+              `Workroom posture gate (BI-06C41FDC): this consequential call is bound to room `
+              + `${room.capsuleId ?? room.id}, whose posture is advise-only, so the action is `
+              + `recorded rather than taken. ${joined.reason} `
+              + "Change the room's posture, or raise the request with its accountable owner. "
+              + "Operator override: DPF_WORKROOM_GATE_MODE=shadow (audit-only) or off.",
+          };
+        }
+
         if (!binding.allowed) {
           return {
             decision: "deny",
@@ -281,6 +357,17 @@ export function createWorkroomShapeGovernanceHook(
               + `whose ${shape} shape requires participants the room has not admitted: ${gapSummary(binding.gaps)}. `
               + "Admit the missing roles (or correct the room's declared shape claim) and retry. "
               + "Operator override: DPF_WORKROOM_GATE_MODE=shadow (audit-only) or off.",
+          };
+        }
+        if (!verificationSatisfied) {
+          return {
+            decision: "deny",
+            reason:
+              `Workroom verification gate (BI-13ED1BE1): missing_verification_evidence — `
+              + `${event.toolName} is consequential stake work in room ${room.capsuleId ?? room.id} `
+              + "and requires a passing verification receipt before the action may close. "
+              + `${verificationRequirement.reason} `
+              + "Record the verification against this Workroom and retry.",
           };
         }
         return { decision: "allow" };

@@ -581,8 +581,8 @@ Prefer 3NF until a measured read-path needs denormalization.`;
 describe("founder-kernel principle frontmatter", () => {
   it("assigns a consumer archetype to every authored principle page", () => {
     const principleDir = resolve(
-      process.cwd(),
-      "../../docs/founder-kernel/wiki/principles",
+      __dirname,
+      "../../../docs/founder-kernel/wiki/principles",
     );
     const missing: string[] = [];
 
@@ -608,7 +608,7 @@ describe("founder-kernel principle frontmatter", () => {
     // DB). This sweep is the cheap CI-time equivalent, so an author learns at
     // PR time instead of at deploy time. Covers both corpora: the founder
     // kernel and every profession corpus under docs/professions/*/wiki/.
-    const repoRoot = resolve(process.cwd(), "../..");
+    const repoRoot = resolve(__dirname, "../../..");
 
     const walk = (dir: string): string[] => {
       if (!existsSync(dir)) return [];
@@ -661,8 +661,8 @@ describe("founder-kernel principle: remove-avoidable-failure-opportunities", () 
   // pins structural intent (valid keys + the two researched signs), NOT exact
   // magnitudes — recalibrating a weight must not break the build.
   const principlePath = resolve(
-    process.cwd(),
-    "../../docs/founder-kernel/wiki/principles/remove-avoidable-failure-opportunities.md",
+    __dirname,
+    "../../../docs/founder-kernel/wiki/principles/remove-avoidable-failure-opportunities.md",
   );
 
   it("seeds as a core principle with a valid, registry-backed dimensionVector", () => {
@@ -716,8 +716,8 @@ describe("founder-kernel principle dimension-vector sign convention", () => {
   // Audit: docs/superpowers/audits/2026-06-14-principle-dimension-sign-audit.md
   it("never assigns a positive weight to a cost dimension", () => {
     const principleDir = resolve(
-      process.cwd(),
-      "../../docs/founder-kernel/wiki/principles",
+      __dirname,
+      "../../../docs/founder-kernel/wiki/principles",
     );
     const offenders: string[] = [];
 

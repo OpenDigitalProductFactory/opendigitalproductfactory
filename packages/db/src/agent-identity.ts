@@ -96,6 +96,36 @@ export const COWORKER_SLUG_TO_CANONICAL_AGENT_ID: Readonly<Record<string, string
   // guard (dual-seed-coverage) now fails the build on any future uncovered pair.
   "ux-design-critic": "AGT-906",
   "farm-ranch-steward": "AGT-WS-FARM-RANCH",
+  // BI-620EBA53: the compliance coworker was roster-only, so it inherited no
+  // canonical record — and therefore no escalation target, which is what the
+  // Governance plane needs to reach level 3.
+  "compliance-officer": "AGT-WS-COMPLIANCE",
+  // EP-32B0E693: workforce-seeded coworkers are canonical identities, not a
+  // second namespace. These mirrors preserve the slug rows required by legacy
+  // FK consumers while collapsing the roster onto the AGT-* registry.
+  "data-architect": "AGT-WS-DATA-ARCHITECT",
+  "data-steward": "AGT-WS-DATA-STEWARD",
+  dispatcher: "AGT-WS-DISPATCHER",
+  "integration-engineer": "AGT-WS-INTEGRATION",
+  "legal-operations-counsel": "AGT-WS-LEGAL",
+  "security-engineer": "AGT-WS-SECURITY",
+  "storefront-advisor": "AGT-WS-STOREFRONT",
+  "finance-controller": "AGT-WS-FINANCE",
+  "market-research-analyst": "AGT-WS-MARKET-RESEARCH",
+  "doc-specialist": "AGT-WS-DOC",
+  // Already-active registry identities are staffed by definition. The
+  // workforce seed projects that existing state; it does not activate a
+  // declared-only role or widen authority.
+  "licensing-specialist": "AGT-905",
+  "ux-accessibility-agent": "AGT-903",
+  "soc-triage-analyst": "AGT-SOC-TRIAGE",
+  "soc-investigator": "AGT-SOC-INVESTIGATOR",
+  "soc-threat-hunter": "AGT-SOC-HUNTER",
+  "soc-incident-commander": "AGT-SOC-IR-LEAD",
+  "external-claude-code": "AGT-EXT-CLAUDE",
+  "external-codex": "AGT-EXT-CODEX",
+  "external-grok": "AGT-EXT-GROK",
+  bookkeeper: "AGT-907",
 };
 
 /** Reverse map: canonical AGT-* → preferred slug handle. */

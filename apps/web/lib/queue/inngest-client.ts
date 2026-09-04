@@ -4,6 +4,20 @@ export const inngest = new Inngest({ id: "dpf-platform" });
 
 // Event payload types for type-safe event sending
 
+export interface NonprodCapacityAvailableEvent {
+  name: "nonprod/capacity.available";
+  data: {
+    eventId: string;
+    taskRunId: string;
+    leaseId: string;
+    claimKey: string | null;
+    environmentKey: string;
+    ownerSessionId: string;
+    candidateKey: string | null;
+    occurredAt: string;
+  };
+}
+
 /** BI-8A58C65A: execute an approved research proposal (enqueued from the
  *  approval seam; handled by research-execute.ts). */
 export interface ResearchExecuteRunEvent {
@@ -194,6 +208,16 @@ export interface PortalSelfUpgradeRequestedEvent {
 export interface OpsInngestRetentionRequestedEvent {
   name: "ops/inngest-retention.requested";
   data: { dryRun?: boolean };
+}
+
+export interface LocalModelInstallEvent {
+  name: "inference/local-model.install";
+  data: {
+    jobId: string;
+    attempt: number;
+    modelReference: string;
+    requestedByUserId: string;
+  };
 }
 
 // ─── Activity Quiescence Protocol events (BI-QUIESCE-002) ────────────────

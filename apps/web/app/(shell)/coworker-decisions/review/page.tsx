@@ -26,7 +26,14 @@ import {
 import { GapAnswerForm } from "./gap-answer-form";
 import { WeightProposalForm } from "./weight-proposal-form";
 import { listOpenWeightAdjustmentProposals } from "@/lib/decision-perspective/weight-proposal-store";
+import { listHeldProfessionMaterial } from "@/lib/decision-perspective/held-material-store";
+import { HeldMaterialList } from "./held-material-list";
 import { clusterDecisionReviewRowsSemantic } from "@/lib/decision/review-clustering";
+import {
+  presentProposalQueue,
+  PROPOSAL_LABELS,
+  PROPOSAL_QUEUE_COPY,
+} from "@/lib/decision/proposal-presentation";
 
 export const dynamic = "force-dynamic";
 
@@ -96,7 +103,15 @@ function toGapClusters(
   }));
 }
 
-export default async function DecisionReviewPage() {
+/** Arrives from a decision record's "answer it once" step (BI-6700AF66). */
+type ReviewSearchParams = Promise<{ focus?: string; from?: string }>;
+
+export default async function DecisionReviewPage({
+  searchParams,
+}: {
+  searchParams?: ReviewSearchParams;
+}) {
+  const { focus: focusDomainClass = null } = (await searchParams) ?? {};
   const [
     conflictRows,
     unresolvedRows,
@@ -105,6 +120,8 @@ export default async function DecisionReviewPage() {
     openOrgRows,
     principleRows,
     weightProposalRows,
+    heldMaterialFamilies,
+    openProposalRows,
   ] = await Promise.all([
       prisma.decisionInteraction.findMany({
         where: {
@@ -185,6 +202,23 @@ export default async function DecisionReviewPage() {
         },
       }),
       listOpenWeightAdjustmentProposals(prisma),
+      listHeldProfessionMaterial(prisma),
+      // Drafted resolutions still waiting on a ruling (BI-3D0FB84B). These are
+      // the rows where the work is already done and only the owner's word is
+      // missing, so they lead the queue.
+      prisma.decisionResolutionProposal.findMany({
+        where: { status: "proposed", lifecycle: "active" },
+        orderBy: { createdAt: "desc" },
+        take: 25,
+        select: {
+          proposalId: true,
+          summary: true,
+          status: true,
+          lifecycle: true,
+          dissent: true,
+          interaction: { select: { interactionId: true } },
+        },
+      }),
     ]);
 
   // Re-score the canonical decisions against the current corpus and surface any
@@ -265,6 +299,50 @@ export default async function DecisionReviewPage() {
         </p>
       </header>
 
+      {(() => {
+        const queue = presentProposalQueue(
+          openProposalRows.map((row) => ({
+            proposalId: row.proposalId,
+            summary: row.summary,
+            status: row.status,
+            dissent: row.dissent,
+            interactionSemanticId: row.interaction?.interactionId ?? null,
+          })),
+        );
+        if (queue.length === 0) return null;
+        return (
+          <section className="mb-6">
+            <h2 className="text-sm font-semibold text-[var(--dpf-text)]">
+              {PROPOSAL_QUEUE_COPY.heading}
+            </h2>
+            <p className="mt-0.5 text-xs text-[var(--dpf-muted)]">{PROPOSAL_QUEUE_COPY.intro}</p>
+            <ul className="mt-2 flex flex-col gap-2">
+              {queue.map((row) => (
+                <li
+                  key={row.proposalId}
+                  className="flex items-center gap-3 rounded-md border border-[var(--dpf-accent)] bg-[var(--dpf-surface-1)] p-3"
+                >
+                  <span className="min-w-0 flex-1 text-sm text-[var(--dpf-text)]">{row.summary}</span>
+                  {row.contested ? (
+                    <span className="shrink-0 text-xs text-[var(--dpf-warning)]">
+                      {PROPOSAL_LABELS.dissentHeading}
+                    </span>
+                  ) : null}
+                  <Link
+                    href={row.href}
+                    className="shrink-0 rounded-md border border-[var(--dpf-border)] px-2.5 py-1 text-xs text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)]"
+                  >
+                    {PROPOSAL_QUEUE_COPY.action} →
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        );
+      })()}
+
+      <HeldMaterialList families={heldMaterialFamilies} />
+
       <OrgDecisionCaptureList decisions={openOrgDecisions} />
 
       {findings.length === 0 ? (
@@ -280,6 +358,7 @@ export default async function DecisionReviewPage() {
           {findings.map((f) => (
             <li
               key={f.id}
+              id={f.answer ? `finding-${f.answer.domainClass}` : undefined}
               className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3"
               style={{ borderLeftWidth: "3px", borderLeftColor: CLASS_ACCENT[f.findingClass] }}
             >
@@ -315,6 +394,7 @@ export default async function DecisionReviewPage() {
                 <GapAnswerForm
                   domainClass={f.answer.domainClass}
                   question={f.answer.question}
+                  autoOpen={f.answer.domainClass === focusDomainClass}
                 />
               )}
               {f.weightProposal && (

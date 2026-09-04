@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const SOURCE_ROOT = join(process.cwd());
+const SOURCE_ROOT = join(__dirname, "..", "..");
 const CONTRACT_EXCEPTION = "background-observation-contract-exception BI-B8F44BF7";
 const RATCHETED_BASELINE = ["components/ops/PromotionsClient.tsx"];
 

@@ -64,32 +64,18 @@ export function findGrantDivergences(
 export const KNOWN_GRANT_DIVERGENCES: readonly string[] = [
   "admin-assistant",
   "build-specialist",
-  "compliance-officer",
+  // compliance-officer RESOLVED: it was roster-only, so its runtime grants had no
+  // canonical record to agree with. Giving it AGT-WS-COMPLIANCE (BI-620EBA53)
+  // reconciled the sources, so it leaves this list rather than being re-pinned —
+  // the ratchet shrinking is the point.
   "coo",
-  "data-architect",
-  "data-steward",
-  "dispatcher",
-  "doc-specialist",
   "ea-architect",
   "external-catalog-scout",
-  "finance-controller",
   // hr-specialist was reconciled (BI-3CDEC5F0): the seed and agent_registry now
   // carry the identical grant set, so it is no longer a tracked divergence.
   "inventory-specialist",
-  "legal-operations-counsel",
-  // market-research-analyst (BI-6D10EB1F) is a seed-defined coworker: its runtime
-  // grants live in HARDCODED_COWORKER_GRANTS (the durable source), and the JSON
-  // agent_registry mirror intentionally does not carry a duplicate entry.
-  "market-research-analyst",
   "marketing-specialist",
   "ops-coordinator",
   "platform-engineer",
   "portfolio-advisor",
-  // security-engineer / integration-engineer (BI-CC44E74F, EP-413F2602) are
-  // seed-defined coworkers established via the factory door: their runtime
-  // grants live in HARDCODED_COWORKER_GRANTS (the durable source), and the JSON
-  // agent_registry mirror intentionally does not carry a duplicate entry.
-  "security-engineer",
-  "integration-engineer",
-  "storefront-advisor",
 ];

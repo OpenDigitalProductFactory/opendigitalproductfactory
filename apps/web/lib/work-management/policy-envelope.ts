@@ -15,6 +15,10 @@ import {
   getWorkCaseSourceEntry,
   type WorkCaseReceiptKind,
 } from "./source-registry";
+import {
+  hasPassingVerificationEvidence,
+  type VerificationEvidence,
+} from "./hitl-join";
 
 export type WorkCaseAutonomyMode = "autonomous" | "supervised" | "observed";
 
@@ -26,6 +30,13 @@ export interface WorkCasePolicyEnvelope {
     kind: WorkCaseReceiptKind;
   };
   sensitivityCeiling?: "low" | "medium" | "high" | "critical";
+  /**
+   * EP-WORK-POSTURE (BI-13ED1BE1). True when this turn must show verification
+   * evidence before a consequential action may close — set by
+   * resolveWorkCaseAutonomyEnvelope from the kernel-floor risk class or the
+   * room posture's verification depth.
+   */
+  requiresVerification?: boolean;
 }
 
 export interface WorkCaseStopCondition {
@@ -47,6 +58,12 @@ export interface WorkCasePolicyInput {
   decisionInteractionId?: string | null;
   stopConditions?: readonly WorkCaseStopCondition[];
   observedEvent?: boolean;
+  /**
+   * EP-WORK-POSTURE (BI-13ED1BE1). Verification recorded on the case. Consulted
+   * only when the envelope requires verification; a turn that needs it and has
+   * none is DENIED by name rather than allowed to close on a promise.
+   */
+  verificationEvidence?: readonly VerificationEvidence[] | null;
 }
 
 export type WorkCasePolicyDenialReason =
@@ -59,7 +76,8 @@ export type WorkCasePolicyDenialReason =
   | "stop_condition_tripped"
   | "missing_decision_interaction"
   | "missing_coworker_envelope"
-  | "coworker_envelope_not_approved";
+  | "coworker_envelope_not_approved"
+  | "missing_verification_evidence";
 
 export type WorkCasePolicyDecision =
   | {
@@ -131,6 +149,20 @@ export function evaluateWorkCasePolicy(
       "stop_condition_tripped",
       trippedStop.reason ?? `Stop condition '${trippedStop.stopId}' is tripped.`,
     );
+  }
+
+  // The check that makes verificationDepth load-bearing. Until this existed the
+  // compiler emitted a depth, the UI rendered a "Deep verification" chip, and
+  // nothing stopped the action closing unverified — a promise the system did
+  // not keep. Scoped to consequential actions: reading and non-consequential
+  // transitions are unaffected.
+  if (action.consequential && input.envelope.requiresVerification) {
+    if (!hasPassingVerificationEvidence(input.verificationEvidence)) {
+      return deny(
+        "missing_verification_evidence",
+        `Work Case action '${action.action}' requires verification evidence before it can close.`,
+      );
+    }
   }
 
   if (action.requiresDecisionInteraction && !input.decisionInteractionId?.trim()) {

@@ -101,6 +101,8 @@ export type CredentialRow = {
   status: string;
   tokenExpiresAt: string | null;
   hasRefreshToken: boolean;
+  /** Whether the row contains material that can authenticate a dispatch. */
+  hasUsableMaterial: boolean;
 };
 
 export type ProviderWithCredential = {

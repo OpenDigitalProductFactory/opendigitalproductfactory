@@ -28,11 +28,15 @@ import { cliSaturationPercent } from "./cli-concurrency";
 import { usesCodexCli, usesCliAdapter } from "./provider-utils";
 import { isLocalProviderId } from "./provider-locality";
 import { satisfiesMinimumCapabilities } from "./agent-capability-types";
+import {
+  endpointClearsSensitivity,
+  endpointGenuinelyClearsSensitivity,
+} from "./sensitivity-clearance";
 import { QUALITY_TIERS, type QualityTier } from "./quality-tiers";
 import {
   estimateSuccessProbability,
   rankByCostPerSuccess,
-  satisfiesMinimumDimensions,
+  firstUnmetDimension,
 } from "./cost-ranking";
 import { selectRecipeWithExploration } from "./champion-challenger";
 import {
@@ -88,16 +92,11 @@ function getProviderConstraintExclusionReason(
  * internal business data — run Build Studio code-gen. An endpoint with no
  * clearance at all is never eligible.
  */
-export function endpointClearsSensitivity(
-  ep: EndpointManifest,
-  sensitivity: RequestContract["sensitivity"],
-): boolean {
-  if (ep.sensitivityClearance.includes(sensitivity)) return true;
-  if (sensitivity === "development" && ep.sensitivityClearance.includes("public")) {
-    return true;
-  }
-  return false;
-}
+// The data-sensitivity fence predicates live in ./sensitivity-clearance (extracted
+// so the break-glass override's second path did not push this module over its size
+// ceiling; imported above for internal use). Re-exported so existing importers of
+// pipeline-v2 are unaffected. (BI-4512E7D2)
+export { endpointClearsSensitivity, endpointGenuinelyClearsSensitivity };
 
 export function getExclusionReasonV2(
   ep: EndpointManifest,
@@ -107,6 +106,11 @@ export function getExclusionReasonV2(
   // accidental overlap cannot broaden eligibility.
   const providerConstraintReason = getProviderConstraintExclusionReason(ep, contract);
   if (providerConstraintReason) return providerConstraintReason;
+
+  // Account/transport compatibility is a hard platform fact, not a score.
+  // Preserve the endpoint in the excluded trace so runtime-health previews
+  // explain the incompatibility while a supported sibling model can win.
+  if (ep.eligibilityExclusionReason) return ep.eligibilityExclusionReason;
 
   // EP-AGENT-CAP-002: Agent capability floor — hard filter, non-negotiable.
   // Must run BEFORE status/graceful-degradation checks so a tool-incapable
@@ -118,8 +122,12 @@ export function getExclusionReasonV2(
     }
   }
 
-  if (!satisfiesMinimumDimensions(ep, contract.minimumDimensions)) {
-    return "Minimum quality dimensions not met";
+  // BI-16A1B4A3: name the dimension and the gap. The leading phrase is load
+  // bearing — routing-exclusion-buckets classifies on it — so the detail is
+  // appended rather than replacing it.
+  const unmet = firstUnmetDimension(ep, contract.minimumDimensions);
+  if (unmet) {
+    return `Minimum quality dimensions not met (${unmet.dimension} ${unmet.actual} < ${unmet.minimum})`;
   }
 
   // Status check — only active and degraded pass
@@ -236,6 +244,12 @@ export function getExclusionReasonV2(
 interface HardFilterResultV2 {
   eligible: EndpointManifest[];
   excluded: CandidateTrace[];
+  /**
+   * BI-16A1B4A3 — true when no endpoint met the tier floor and below-floor
+   * endpoints were kept so the turn could still run. Never silent: the caller
+   * records it on the decision.
+   */
+  qualityFloorRelaxed: boolean;
 }
 
 function filterHardV2(
@@ -250,12 +264,63 @@ function filterHardV2(
 ): HardFilterResultV2 {
   const eligible: EndpointManifest[] = [];
   const excluded: CandidateTrace[] = [];
+  let qualityFloorRelaxed = false;
+
+  // ── Tier quality floor — SOFT exclusion (BI-16A1B4A3) ────────────────────
+  // Founder ruling 2026-08-26: the platform must never be unrunnable. The
+  // bundled local model has to work when nothing else is available, even on
+  // modest hardware.
+  //
+  // The floor used to be a HARD gate, and on a live install it excluded EVERY
+  // endpoint: all of them cleared codegen and reasoning and failed only
+  // toolFidelity — best on the box 82 against a frontier floor of 85, and the
+  // highest-scoring endpoint's 80 had never actually been measured. A tier
+  // preference silently became a total outage.
+  //
+  // So it takes the same contract the runtime circuit breaker and the capacity
+  // snapshot already use: drop below-floor endpoints ONLY while an at-floor peer
+  // remains. When nothing meets the floor, the turn proceeds against the best
+  // available rather than failing.
+  //
+  // This is a QUALITY preference, never a safety gate. Sensitivity clearance,
+  // agent capability floors, model class, status and context window stay hard —
+  // they are evaluated below and are not relaxed by this.
+  const hardContract: RequestContract = { ...contract, minimumDimensions: undefined };
+  const belowFloor: Array<{ ep: EndpointManifest; reason: string }> = [];
 
   for (const ep of endpoints) {
-    const reason = getExclusionReasonV2(ep, contract);
+    const reason = getExclusionReasonV2(ep, hardContract);
     if (reason === null) {
+      const unmet = firstUnmetDimension(ep, contract.minimumDimensions);
+      if (unmet) {
+        belowFloor.push({
+          ep,
+          reason: `Minimum quality dimensions not met (${unmet.dimension} ${unmet.actual} < ${unmet.minimum})`,
+        });
+        continue;
+      }
       eligible.push(ep);
     } else {
+      excluded.push({
+        endpointId: ep.id,
+        providerId: ep.providerId,
+        modelId: ep.modelId,
+        endpointName: ep.name,
+        fitnessScore: 0,
+        dimensionScores: {},
+        costPerOutputMToken: ep.costPerOutputMToken,
+        excluded: true,
+        excludedReason: reason,
+      });
+    }
+  }
+
+  // Apply the soft floor: keep below-floor endpoints only when no peer met it.
+  if (eligible.length === 0 && belowFloor.length > 0) {
+    qualityFloorRelaxed = true;
+    for (const { ep } of belowFloor) eligible.push(ep);
+  } else {
+    for (const { ep, reason } of belowFloor) {
       excluded.push({
         endpointId: ep.id,
         providerId: ep.providerId,
@@ -340,10 +405,10 @@ function filterHardV2(
         excludedReason: reason,
       });
     }
-    return { eligible: cap.eligible, excluded };
+    return { eligible: cap.eligible, excluded, qualityFloorRelaxed };
   }
 
-  return { eligible: afterRuntime, excluded };
+  return { eligible: afterRuntime, excluded, qualityFloorRelaxed };
 }
 
 // ── Full pipeline: routeEndpointV2 ──────────────────────────────────────────
@@ -483,10 +548,19 @@ export async function routeEndpointV2(
       `excluded=${allCandidates.length}`,
     );
     for (const line of allExcludedReasons) console.warn(`[routing]   ✗ ${line}`);
+    // When an active, capable provider was dropped PURELY on sensitivity clearance
+    // (gate 7 in getExclusionReasonV2 returns its reason only after status,
+    // capability and quality gates have passed), the empty set is a data-governance
+    // block, not an outage. Surface that so the coworker-facing copy names the real
+    // lever (clear a business account / provision a local model) instead of sending
+    // the operator to re-check already-connected providers. (BI-431524DF)
+    const clearanceBlocked = allExcludedReasons.some((r) =>
+      /Sensitivity clearance missing/i.test(r),
+    );
     return {
       selectedEndpoint: null,
       selectedModelId: null,
-      reason: `No eligible endpoints for task type '${contract.taskType}' with sensitivity '${sensitivity}'. ${allCandidates.length} endpoint(s) excluded.`,
+      reason: `No eligible endpoints for task type '${contract.taskType}' with sensitivity '${sensitivity}'. ${allCandidates.length} endpoint(s) excluded.${clearanceBlocked ? ` No connected provider is cleared for '${sensitivity}' data.` : ""}`,
       fitnessScore: 0,
       fallbackChain: [],
       candidates: allCandidates,
@@ -676,12 +750,17 @@ export async function routeEndpointV2(
     ? ` Preferences: ${preferenceSelection.resolution.applied.length} applied, ` +
       `${preferenceSelection.resolution.unavailable.length} unavailable.`
     : "";
+  // BI-16A1B4A3: a relaxed floor must never be silent — the owner is getting a
+  // below-floor model and is entitled to know that is what happened.
+  const degradedReason = hardResult.qualityFloorRelaxed
+    ? " No endpoint met the quality floor for this work, so it ran on the best available rather than not running."
+    : "";
   const reason =
     `Selected ${winner.endpoint.name} (${winner.endpoint.providerId}) for task type '${contract.taskType}' ` +
     `with rankScore ${winner.rankScore.toFixed(1)}. ` +
     `Budget: ${contract.budgetClass}, reasoning depth: ${contract.reasoningDepth}. ` +
     `${allCandidates.length} endpoint(s) excluded; ` +
-    `${ranked.length} candidate(s) ranked.${preferenceReason}`;
+    `${ranked.length} candidate(s) ranked.${preferenceReason}${degradedReason}`;
 
   return {
     selectedEndpoint: winner.endpoint.id,

@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "compact-scan-cards",
+  "decisionInteractionId": "DI-D38B45BE5D6B",
+  "scope": {
+    "files": [
+      "apps/web/components/ops/workrooms/WorkroomInventory.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "compact-scan-cards",
+      "inline-hints",
+      "expandable-help"
+    ]
+  }
+}

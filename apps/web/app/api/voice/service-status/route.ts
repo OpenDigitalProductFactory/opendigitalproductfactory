@@ -7,26 +7,18 @@
 
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { resolveTtsServiceUp } from "@/lib/voice-synthesis/service-status"
+import { resolveVoicePlaybackCapability, type VoicePlaybackCapability } from "@/lib/voice-synthesis/service-status"
 
 export const dynamic = "force-dynamic"
 
-interface ServiceStatus {
-  available: boolean
-  provider: string
-  reason: string | null
-}
-
-export async function GET(): Promise<NextResponse<ServiceStatus | { error: string }>> {
+export async function GET(request?: Request): Promise<NextResponse<VoicePlaybackCapability | { error: string }>> {
   const session = await auth()
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  const status = await resolveTtsServiceUp()
-  return NextResponse.json({
-    available: status.up,
-    provider: status.provider,
-    reason: status.reason,
-  })
+  const purpose = request && new URL(request.url).searchParams.get("purpose") === "preview"
+    ? "preview"
+    : "coworker"
+  return NextResponse.json(await resolveVoicePlaybackCapability({ purpose }))
 }
