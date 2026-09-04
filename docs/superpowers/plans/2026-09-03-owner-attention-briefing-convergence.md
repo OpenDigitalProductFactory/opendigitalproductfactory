@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Owner-attention briefing convergence plan
 
 | Field | Value |
