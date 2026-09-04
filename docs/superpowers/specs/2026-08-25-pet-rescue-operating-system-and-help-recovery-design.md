@@ -684,7 +684,7 @@ for later replay. If connectivity is lost, the UI preserves only non-sensitive
 in-memory input, shows that the write was not accepted, and requires an explicit
 retry after reauthentication. It never renders optimistic completion. Because
 the standing Pet Rescue operating model calls for signal-tolerant rounds, offline
-capture and conflict resolution remain a named follow-up requirement and a
+capture and conflict resolution remain follow-up `BI-D664DE6F` and a
 production-rollout risk, not an implied capability of this scope.
 
 ## 12. Delivery slices and acceptance trace
