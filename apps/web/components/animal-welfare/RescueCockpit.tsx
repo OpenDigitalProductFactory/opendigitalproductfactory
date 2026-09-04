@@ -40,7 +40,7 @@ function SourceStatus({ source, timeZone }: { source: SourceState<unknown>; time
         label={sourceLabel(source)}
         uppercase={false}
       />
-      <time dateTime={source.asOf} className="text-[10px] text-[var(--dpf-muted)]">
+      <time dateTime={source.asOf} className="text-dpf-caption text-[var(--dpf-muted)]">
         As of {formatInstant(source.asOf, { timeZone })}
       </time>
     </span>
