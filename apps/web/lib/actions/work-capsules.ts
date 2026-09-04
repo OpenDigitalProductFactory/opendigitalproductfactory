@@ -21,8 +21,8 @@ import {
   planCapsuleWorkspace,
   type CapsuleDb,
 } from "@/lib/work-capsules/work-capsule-store";
-import { presentCapsuleRow } from "@/lib/work-capsules/work-capsule-presenter";
 import { loadCapsuleLivenessInventory } from "@/lib/work-capsules/liveness-inventory";
+import { loadDeliveryTaskHubPage } from "@/lib/work-capsules/delivery-task-hub-store";
 
 async function requireCapability(capability: "view_platform" | "manage_backlog"): Promise<string> {
   const session = await auth();
@@ -94,16 +94,19 @@ async function loadAdoptableRows(repoRoot: string, adoptedBranches: Set<string>)
 export async function getWorkControlData() {
   await requireBuildAccess();
 
-  const inventory = await loadCapsuleLivenessInventory(prisma, {
-    where: {
-      OR: [
-        { source: { in: ["build-studio", "external-adoption", "git-promotion"] } },
-        { repositoryFullName: { not: null } },
-        { headBranch: { not: null } },
-      ],
-    },
-    take: 100,
-  });
+  const [inventory, deliveryHub] = await Promise.all([
+    loadCapsuleLivenessInventory(prisma, {
+      where: {
+        OR: [
+          { source: { in: ["build-studio", "external-adoption", "git-promotion"] } },
+          { repositoryFullName: { not: null } },
+          { headBranch: { not: null } },
+        ],
+      },
+      take: 100,
+    }),
+    loadDeliveryTaskHubPage(prisma),
+  ]);
   const capsules = inventory.capsulesAll;
 
   const adoptedBranches = new Set(
@@ -112,16 +115,7 @@ export async function getWorkControlData() {
   const adoptable = await loadAdoptableRows(resolveRepoRoot(), adoptedBranches);
 
   return {
-    capsules: capsules.filter((row) => row.isLive).map((row) =>
-      presentCapsuleRow(row as never, new Date(), {
-        liveness: row.liveness as never,
-        isLive: Boolean(row.isLive),
-        isReapable: Boolean(row.isReapable),
-        disposition: (row.disposition ?? null) as never,
-        reason: String(row.livenessReason),
-        trueLivenessAt: row.trueLivenessAt ? new Date(String(row.trueLivenessAt)) : null,
-      }),
-    ),
+    deliveryHub,
     livenessSummary: inventory.livenessSummary,
     adoptable,
   };

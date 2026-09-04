@@ -1,0 +1,43 @@
+{
+  "version": "1",
+  "decidedOption": "workroom-event-hub",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/build/work/[capsuleId]/page.tsx",
+      "apps/web/app/(shell)/build/work/page.tsx",
+      "apps/web/components/build/work-control/DeliveryTaskHub.tsx",
+      "apps/web/components/build/work-control/WorkControlPanel.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "sweep-measurement",
+    "baselineComparison": "improved",
+    "measurementScope": "DeliveryTaskHub arrival state with five active rows in one group; two cards visible and three behind the native disclosure",
+    "measured": {
+      "/build/work": {
+        "defaultVisibleWords": 106,
+        "leadBandWords": 14,
+        "primaryActions": 1,
+        "visibleFields": 0,
+        "maxChoicesPerControl": 0,
+        "subLegibleControls": 0,
+        "buriedPrimaryAction": 0,
+        "axeViolations": 0
+      }
+    },
+    "verification": {
+      "responsive": "single-column cards with lg two-column enhancement; no table or horizontal overflow dependency",
+      "themes": "all foreground, surface, border, accent, warning, success, and focus states use DPF theme tokens",
+      "keyboard": "native details disclosure and links/buttons retain keyboard semantics, visible focus rings, and 44px minimum targets",
+      "states": [
+        "empty",
+        "connecting",
+        "reconnecting-with-confirmed-rows",
+        "partial",
+        "error-with-confirmed-rows",
+        "older-page-loading"
+      ],
+      "test": "apps/web/components/build/work-control/DeliveryTaskHub.test.tsx"
+    }
+  }
+}

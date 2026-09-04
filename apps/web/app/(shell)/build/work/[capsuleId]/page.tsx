@@ -43,16 +43,22 @@ export default async function CapsuleDetailPage({
 
   return (
     <section className="space-y-4 px-4 py-4">
-      <header className="space-y-1">
+      <header id="result" className="scroll-mt-20 space-y-1">
         <h1 className="text-xl font-bold text-[var(--dpf-text)]">{capsule.title}</h1>
         <div className="font-mono text-xs text-[var(--dpf-muted)]">{capsule.capsuleId}</div>
       </header>
-      <PortalContextStrip envelope={portalContext} />
-      <AgentSessionFeedLive
-        capsuleId={capsule.capsuleId}
-        initialEntries={presentAgentSession(capsule.activities).map(serializeAgentSessionEntry)}
-      />
-      <WorkCapsuleLaunchPanel steps={steps} />
+      <div id="review" className="scroll-mt-20">
+        <PortalContextStrip envelope={portalContext} />
+      </div>
+      <div id="activity" className="scroll-mt-20">
+        <AgentSessionFeedLive
+          capsuleId={capsule.capsuleId}
+          initialEntries={presentAgentSession(capsule.activities).map(serializeAgentSessionEntry)}
+        />
+      </div>
+      <div id="handoff" className="scroll-mt-20">
+        <WorkCapsuleLaunchPanel steps={steps} />
+      </div>
     </section>
   );
 }
