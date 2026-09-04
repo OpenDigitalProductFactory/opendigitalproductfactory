@@ -373,6 +373,23 @@ async function handleTasksLifecycle(
   if (!tasksLifecycleEnabled()) {
     return jsonRpcError(id, JSONRPC_METHOD_NOT_FOUND, `unknown method: ${method}`);
   }
+  if (
+    method === "tasks/cancel"
+    && !tokenScopeSatisfies(normalizeTokenScope(token), "write")
+  ) {
+    return jsonRpcError(
+      id,
+      JSONRPC_INVALID_REQUEST,
+      "insufficient_scope: tasks/cancel requires a write-scoped MCP token",
+      {
+        error: "insufficient_token_scope",
+        method,
+        requiredScope: "write",
+        tokenScope: normalizeTokenScope(token),
+      },
+      403,
+    );
+  }
   let result: TaskLifecycleResult;
   switch (method) {
     case "tasks/get":

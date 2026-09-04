@@ -2,6 +2,9 @@ import type { ChatMessage } from "./ai-inference";
 import type { RouteDecision } from "@/lib/routing/types";
 import type { RouteAndCallOptions } from "./routed-inference-options";
 import { admitPrismaDurableAsyncOperation } from "./async-operation-runtime";
+import type { ScreenInferencePayloadInput } from "./data-screening/screen-inference-payload";
+import { createDurableDispatchScreenEvidence } from "./durable-dispatch-screen";
+import { getLocalOnlyInferenceFresh } from "./local-only";
 
 const DEFAULT_EXPIRY_MS = 15 * 60 * 1_000;
 const MAX_EXPIRY_MS = 24 * 60 * 60 * 1_000;
@@ -31,6 +34,7 @@ export async function admitRoutedAsyncOperation(input: {
   messages: ChatMessage[];
   systemPrompt: string;
   tools?: Array<Record<string, unknown>>;
+  screeningInput: ScreenInferencePayloadInput;
   options: RouteAndCallOptions | undefined;
   traceId: string;
   now?: Date;
@@ -53,6 +57,15 @@ export async function admitRoutedAsyncOperation(input: {
   if (!screenedRequestDigest || !/^[a-f0-9]{64}$/u.test(screenedRequestDigest)) {
     throw new Error("ASYNC_OPERATION_SCREENING_RECEIPT_REQUIRED");
   }
+  const dispatchScreen = createDurableDispatchScreenEvidence({
+    decision: input.decision,
+    screeningInput: input.screeningInput,
+    messages: input.messages,
+    systemPrompt: input.systemPrompt,
+    tools: input.tools,
+    providerId: plan.providerId,
+    localOnlyInference: await getLocalOnlyInferenceFresh(),
+  });
 
   const admitted = await admitPrismaDurableAsyncOperation({
     providerId: plan.providerId,
@@ -65,6 +78,7 @@ export async function admitRoutedAsyncOperation(input: {
       systemPrompt: input.systemPrompt,
       ...(input.tools === undefined ? {} : { tools: input.tools }),
       executionPlan: plan,
+      dispatchScreen,
       ...(input.options?.previousResponseId
         ? { previousResponseId: input.options.previousResponseId }
         : {}),
@@ -79,6 +93,7 @@ export async function admitRoutedAsyncOperation(input: {
     expiresAt: expiryAt(input.now ?? new Date(), input.options?.maxDurationMs),
     request: authority.request,
     actor: authority.actor,
+    deferInitialWake: authority.deferInitialWake,
   });
 
   return {
