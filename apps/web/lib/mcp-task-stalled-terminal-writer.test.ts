@@ -125,7 +125,9 @@ function existingRun(
     progressPayload: { terminalWriterWait },
     a2aMetadata: {
       requestDigest: remoteTaskRequestDigest(params),
+      requestDigestVersion: 2,
       idempotencyKey: params.idempotencyKey,
+      requestedThreadId: null,
       initiativeReviewBinding: params.initiativeReviewBinding,
     },
     ...overrides,
