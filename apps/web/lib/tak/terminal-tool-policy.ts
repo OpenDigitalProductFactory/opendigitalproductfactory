@@ -261,7 +261,6 @@ export function summarizeTerminalToolProgress(
       && (suppliedStartLine === undefined || suppliedStartLine === 1);
     if (startsAtBeginning) {
       attemptActive = true;
-      expectedStartLine = startLine;
       expectedTotalLines = totalLines;
       paginationInvalid = false;
     } else if (!attemptActive
