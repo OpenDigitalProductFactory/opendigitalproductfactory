@@ -68,7 +68,7 @@ The transcript's headline and detailed cohort have different denominators. DPF m
 
 - Anthropic describes Fable 5.1 as a long-horizon reasoning/agentic model with a 1M context window, 128K maximum output, adaptive thinking, high default effort, and $10/$50 per million input/output tokens. It recommends starting at high effort and testing other levels on the customer's own evals: <https://platform.claude.com/docs/en/models/fable-5-1/overview>.
 - Anthropic's model-specific prompt guide explicitly covers rendered progress updates, batching independent tools, append-only histories, preserving compaction state, clear completion criteria, scope discipline, targeted edits, and keeping the lead agent productive while subagents run: <https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5-1>.
-- T3 Code is public source, but it is an evolving product rather than a standard: <https://github.com/pingdotgg/t3code>. Issue 3753 documents demand for moving a thread into a worktree: <https://github.com/pingdotgg/t3code/issues/3753>.
+- T3 Code is public source, but it is an evolving product rather than a standard: <https://github.com/pingdotgg/t3code>. Issue 3753 documents demand for moving a thread into a worktree: <https://github.com/pingdotgg/t3code/issues/3753>. The source-pinned second-pass review and design delta are recorded in [`2026-09-04-t3-code-source-delta-review.md`](2026-09-04-t3-code-source-delta-review.md).
 
 ### 3.3 Sponsors: useful patterns, not procurement decisions
 
@@ -132,6 +132,13 @@ The delivery rail is a read model over Workroom, WorkItem/WorkCase, TaskRun, bui
 
 Worker sessions roll up under the Workroom. Provider, model/profile, installation, role, progress, and result are attributable, but private reasoning is not persisted. Raw tool events and receipts remain expandable audit detail.
 
+Workroom identity is stable while its execution binding is replaceable. Branch,
+head SHA, worktree path, installation, executor, provider session, and resume cursor
+are binding facts, not alternate identities. Any operation that changes those facts
+must compare the complete prior binding, durably record intent, perform the external
+Git/runtime step, verify the observed result, and either finalize or compensate. A
+database transaction cannot make a filesystem or provider transition atomic.
+
 ## 7. Build Studio UI contract
 
 Build Studio becomes the operator's delivery cockpit through three lenses backed by the same projection:
@@ -154,6 +161,8 @@ Only actionable items: open, specific, evidenced, owned, executable, and verifia
 - Keep the primary action on arrival; move technical evidence behind the appropriate disclosure construct.
 - Keep confirmed content visible during refresh and mark it stale/partial when some providers fail.
 - Support `loading`, `ready`, `empty`, `stale`, `partial`, and `failed` per source. A provider outage never renders an empty success state.
+- Keep list order stable while work is active; signal status and unseen completion without moving rows under the operator's pointer. Attention may reorder only on a durable priority change.
+- A compact Workroom shell may stay live in a list; full timeline, VCS, PR, and worker detail subscriptions are visibility- and selection-scoped, coalesced, bounded, and cancelled when no consumer needs them.
 - Meet keyboard, focus, screen-reader, 44px target, reduced-motion, contrast, light/dark, responsive, and route-budget requirements.
 - A campaign view adds dependency status, ready leaves, active/waiting/blocked/merged counts, constrained lane, and next bottleneck. It does not become a graph explorer by default; the DAG is secondary detail.
 
@@ -161,7 +170,7 @@ Only actionable items: open, specific, evidenced, owned, executable, and verifia
 
 PR creation is a midpoint. A durable controller owns the tail until one of `verified-delivered`, `deliberately-deferred`, or `blocked-with-owner` is recorded.
 
-1. Link PR to Workroom from the creation result and branch identity; reconcile provider events without a second polling service.
+1. Link PR to Workroom from the creation result when available. Also run a targeted discovery reconciliation after a turn that may have opened a PR outside the controller. Branch is a discovery hint only: settlement requires repository, PR number, current head ref, and head SHA to agree, so a historical or base-branch PR cannot close unrelated work. Reconcile provider events without a second polling service.
 2. Bind checks and semantic review to the immutable head SHA/gate key. A new head supersedes pending older attempts while preserving their receipts as history.
 3. Normalize actionable findings by provider/id/head. Every current blocking finding must be fixed, answered with evidence, deliberately rejected under policy, or rendered stale.
 4. Request the smallest repair that satisfies the finding. Prevent adjacent scope growth unless it becomes a separate BI.
@@ -180,7 +189,7 @@ The unit is a verified delivery slice and campaign, not an output token or commi
 | Quality | first-pass protected-check rate, blocking findings/kLOC, regression/reopen, acceptance pass, evidence completeness |
 | Rework | post-open commits, repeated gates/reviews, scope changes, takeovers, failed attempts |
 | Attention | human questions, approvals, interventions, merge clicks, time requiring attention |
-| Economy | tokens/cost by provider where available, tool calls, non-progress calls, cache use, tokens per verified result |
+| Economy | incremental uncached input, cached input, cache creation, output and reasoning tokens by provider where available; API-equivalent cost and actual billed spend kept distinct; tool calls, non-progress calls, cache savings, and tokens/cost per verified result |
 | Capacity | installation/lane utilization, RAM pressure, admission failures, wait time, protected-cloud time |
 | Breadth | files/packages/surfaces changed, shown as cohort context rather than a target |
 
@@ -211,6 +220,15 @@ credential, audit, lifecycle, and data-residency policy.
 
 Worktrees remain local and isolated. Git branch/SHA and the Workroom evidence packet are the handoff boundary; no shared writable network folder is required. If an installation fails, its active writer is fenced, the durable task remains waiting/paused, and an authorized takeover may adopt the remote branch into a new local worktree after the liveness/grace rules permit it.
 
+Client reconnection, server restart, provider restart, provider-instance switch, and
+installation takeover are different transitions. Each reports what survived:
+Workroom/timeline history, Git state, provider-native context, active process, and
+resume cursor. Continuation is attempted only when the target provider declares a
+compatible continuation identity and the cursor is verified; otherwise the operator
+sees an explicit context downgrade and the new executor receives the bounded handoff
+packet. A missing worktree or dead process cannot remain `Working` merely because a
+TaskRun or provider session still carries an active identifier.
+
 Cloud execution remains mandatory where protected repository policy requires it and available as fallback when local evidence is inconclusive or capacity is unavailable. Vendor runners are evaluated only after the local scorecard shows protected-cloud time is the limiting stage.
 
 ## 11. Model and prompt execution profiles
@@ -240,9 +258,13 @@ Profiles promote through the delivery scorecard: task success and verified outco
 
 - A stale or conflicting projection fails the affected transition with one owner and recovery action.
 - Provider events are advisory; durable platform records and protected provider checks remain authoritative.
+- Workspace, branch, worktree, process, TaskRun, provider session, and PR liveness are reconciled independently. Contradictions become typed failure states; no one stale `active` flag may prevent repair or reaping indefinitely.
+- Destructive worktree/archive/delete actions first fence writers, verify ownership and current binding, then clean up idempotently. Missing resources count as an already-applied cleanup, while a partially applied create/move/delete enters compensating recovery with an orphan inventory entry.
 - Every claim, reassignment, finding disposition, retry, gate reuse, merge decision, and override is auditable.
 - Access to repository, logs, prompts, and evidence follows existing principal/organization boundaries. The scorecard never stores private reasoning.
 - Queries are cursor/time bounded and indexed. Default Build Studio pages do not fetch every PR provider or full activity history.
+- Event replay uses monotonic cursors with a bounded replay window and snapshot fallback. Coalescing is permitted only for replaceable progress updates with a stable identity; lifecycle boundaries, approvals, failures, ownership changes, and terminal evidence are never coalesced away.
+- Context-window occupancy, provider cumulative usage, incremental attributable usage, API-equivalent price, subscription allocation, and invoiced spend are separate facts. Parent history inherited by a child is not charged again to that child or campaign.
 - Backpressure applies per constrained lane and campaign/portfolio WIP. More clients do not create more executable capacity by themselves.
 - A failed peer installation degrades to local single-install operation; a failed cloud provider cannot turn required protected evidence into pass.
 
@@ -305,6 +327,10 @@ blast-radius report and migration/rollback plan for its own bounded seam before 
 
 No new epic is required. `EP-ABB3AC9D` owns the throughput investment; `EP-WORK-CONVERGENCE` owns the canonical projection and UX; `EP-056D2A5E` owns safe local capacity. The spec path and these responsibilities are recorded on all three.
 
+The T3 source delta adds acceptance detail to the existing BIs and creates no new BI.
+The exact reconciliation is in
+[`2026-09-04-t3-code-source-delta-review.md`](2026-09-04-t3-code-source-delta-review.md).
+
 ## 14. Investment order
 
 | Order | Investment | Why now | Exit signal |
@@ -326,6 +352,7 @@ This design is complete when:
 - the local two-install decision, Workroom delivery rail, campaign loop, PR convergence, scorecard, prompt profiles, 20% refactoring lane, UI, security, failure, and scale contracts are explicit;
 - existing epics/BIs carry the delta and every uncovered deliverable has one live BI;
 - architecture review confirms the design is actionable, and later implementation plans map their deliverable graphs to these live BIs before code begins.
+- the T3 source delta's binding-saga, liveness, PR-identity, continuation, event-pressure, and attributable-cost amendments are included in the relevant existing BI acceptance contracts.
 
 ## 16. Architecture review (advisory)
 

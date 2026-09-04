@@ -661,6 +661,10 @@ describe("recordPlanBacklogCoverage", () => {
     expect(error).toContain("record_initiative_design_review");
     expect(error).toContain("spec-approval");
     expect(error).toContain("independent");
+    expect(error).toContain("claim_backlog_item_for_work");
+    expect(error).toContain("workIntent=`implementation`");
+    expect(error).toContain("recovery.reviewerRoutes");
+    expect(error).toContain("request_coworker");
     // The remediation must not hand the caller a backlog id to cite: the id
     // goes stale the moment it closes, the condition never does.
     expect(error).not.toMatch(/\b(?:BI|EP)-[0-9A-F]{8}\b/);
