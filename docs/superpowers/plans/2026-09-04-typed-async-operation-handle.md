@@ -15,7 +15,14 @@ status: draft
 4. Persist a truthful zero-token start audit row, the existing platform `AsyncInferenceOp`, and fallback downgrade provenance before the background return.
 5. Run focused and adjacent inference/routing tests, web typecheck, source guards, DCO, and all protected PR checks. Record an unavailable local capacity gate as inconclusive; never infer a PASS from it.
 
-## Atomic coverage
+## Backlog coverage
+
+- Decision: atomic
+- Parent: `BI-2B619BC9`
+- Rationale: The typed provider handle, current provider protocol, accepted-start persistence, and fallback provenance share one compatibility boundary; no phase is safe or independently useful without the others.
+- Typed asynchronous provider-operation handle through inference fallback -> `BI-2B619BC9`
+- Dependencies: none
+- Receipt: `cmtmuvg2c0b6n01pbdzk075ae`
 
 This plan atomically covers BI-2B619BC9 only. It restores the existing provider-start tracking boundary but deliberately does not claim the durable digest, CAS lease, worker/reconciliation, cursor-read, or notification outcomes owned by BI-801313EB and BI-05D7A0DC.
 
