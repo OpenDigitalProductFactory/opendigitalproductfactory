@@ -122,3 +122,14 @@ This phase was added after the repaired live reader completed five exact immutab
 4. Permit one identical request replay to reserve the exact waiting TaskRun through `status + updatedAt` compare-and-set and rerun with the same thread, token authority, request digest, tool grants, and immutable artifact binding.
 5. If that bounded continuation also omits the writer, retain `input-required` and refuse a third execution attempt. A real writer proposal still follows the existing separately approved envelope path.
 6. Prove the focused policy/loop/submission tests, impacted loop tests, typecheck, size/source guards, exact-tree CI, protected PR, canonical release, and live same-TaskRun behavior before issuing a fresh BI-42 review identity.
+
+## Phase 9 — Require complete immutable traversal before disposition
+
+This phase implements the accepted `2026-09-04-initiative-review-complete-pagination-amendment.md` after BI-7111AF0C reproduced a reviewer treating page 1 of 6 as complete evidence.
+
+1. Add RED policy tests for partial `hasMore=true` reads, cursor continuation, a contiguous terminal page, a premature writer, gaps, identity conflicts, and exhausted pagination.
+2. Carry only bounded pagination/identity metadata from successful immutable-reader results into terminal progress; do not expose source bytes or weaken persisted audit redaction.
+3. Keep the bound reader available and withhold/refuse the writer until an ordered attempt begins at the artifact start and reaches `hasMore=false`.
+4. Preserve search as exploration only; it cannot establish complete-artifact review for initiative gates.
+5. Add an agent-loop fixture proving a six-page artifact reaches the last page before exactly the writer is exposed, while incomplete traversal creates no receipt.
+6. Run the focused terminal-policy/loop/submission suites, typecheck, preflight, fresh semantic review, exact-tree local CI, and the normal DCO/protected-merge path.
