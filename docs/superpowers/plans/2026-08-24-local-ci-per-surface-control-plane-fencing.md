@@ -25,15 +25,25 @@ the production application; the explicit retry reused cached build output and
 reproduced the two MCP misses. Evidence receipts are
 `cmt8di8830odw01mgdrnl3u7j` and `cmt8dohy80oky01mg5lj0p5hm`.
 
+Three later exact-tree runs for the pet-rescue housing candidate reproduced the
+same boundary on current `main`: `cmtmk2rts01x001pb9og9cncq`,
+`cmtmkfhjh02s301pbxnk86mtc`, and `cmtmkvqo2000e01pby30wcre0`. The most complete
+run passed guards, typecheck, affected tests, and production compilation before
+two 15-second portal misses during OCI layer export. Docker and PostgreSQL
+remained healthy, and the portal recovered after the fence. Another run
+recorded bounded portal and MCP request misses in the same export phase. These
+receipts make the repair apply symmetrically to the two HTTP-backed request
+surfaces while retaining stricter process-local infrastructure boundaries.
+
 ## Required behavior
 
 - Keep the strict preflight invariant: all four surfaces must be healthy before build work starts.
 - Track consecutive misses independently for portal, MCP, Docker, and PostgreSQL during the build watchdog.
 - Reset only the counter for a surface that recovers.
-- Keep portal, Docker, and PostgreSQL fail-closed at two consecutive misses.
-- Give the authenticated MCP probe a three-miss build-watchdog boundary, so
-  two bounded request misses under OCI handoff can recover while a third still
-  fences sustained degradation.
+- Keep Docker and PostgreSQL fail-closed at two consecutive misses.
+- Give both portal and authenticated MCP probes a three-miss build-watchdog
+  boundary, so two bounded request misses under OCI handoff can recover while a
+  third still fences sustained degradation.
 - Treat an absent probe as unhealthy and preserve the existing fail-closed exit classification.
 - Report both the per-surface counters and effective limits so the evidence is
   actionable.
@@ -47,8 +57,9 @@ reproduced the two MCP misses. Evidence receipts are
 3. Add a failing regression proving a recovered surface resets only its own counter while another surface retains its consecutive history.
 4. Preserve and run the strict all-surface preflight cases, including missing-probe behavior.
 5. Replace the shared scalar with bounded per-surface state and include the tripping surface names in the terminal result.
-6. Add a regression that two consecutive MCP request misses recover at the
-   default boundary, and a counterexample that the third miss fences.
+6. Add regressions that two consecutive portal and MCP request misses recover
+   at their default boundaries, with counterexamples that each third miss
+   fences.
 7. Run the focused watchdog/bounded-build suite, pregate, and governed
    exact-tree local CI before publication.
 
