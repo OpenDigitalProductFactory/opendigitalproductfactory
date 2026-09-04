@@ -8,6 +8,8 @@ status: review-ready
 **Epic:** EP-413F2602  
 **Umbrella:** `docs/superpowers/specs/2026-08-30-security-authentication-hardening-successors-design.md` §8
 
+This BI-scoped artifact explicitly supersedes the umbrella's §8 as the review and implementation baseline. The umbrella text remains an historical summary during this branch because initiative artifact discovery requires exactly one changed design document; a later documentation reconciliation may replace it with a pointer after this baseline lands.
+
 ## Problem and boundary
 
 Workforce password login verifies its credential and then calls `authorizePrincipalForSession`; customer password and Google/Apple paths currently return a `CustomerContact`-rooted session without the same Principal decision. Signup also creates the account/contact first and runs `syncCustomerPrincipal` as best-effort afterward. The defect is authorization-before-identity asymmetry at the session boundary, not a missing identity model.
