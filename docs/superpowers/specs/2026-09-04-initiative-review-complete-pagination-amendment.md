@@ -10,7 +10,7 @@ status: active
 
 ## Observed recurrence
 
-On commit `96c7d40719d9d89d2aa33f1afd66678226fdf3c4`, two Qwen3.8 27B design-spec runs for BI-7111AF0C read only lines 1–58 of 311, then recorded FAIL solely because the rest was unread. Each page returned `hasMore=true`, but terminal policy classified one successful read as complete and nudged the writer. This is substrate behavior, not a design finding.
+On commit `96c7d40719d9d89d2aa33f1afd66678226fdf3c4`, two Qwen3.8 27B design-spec runs for BI-7111AF0C read only lines 1–58 of 311, then recorded FAIL solely because the rest was unread. Each page returned `hasMore=true`, but policy treated one read as complete and nudged the writer. This is a substrate defect.
 
 ## Decision
 
@@ -22,7 +22,7 @@ Keep the existing exact commit/path/blob binding, 3,200-character page ceiling, 
 - Evidence is complete only when an exact ordered attempt starts at the beginning and ends with `hasMore=false`, or deterministic hydration produces it.
 - Failed, conflicting, duplicated, replayed, or non-progressing pages never bridge a gap. Six incomplete calls stop input-required with no receipt.
 - Search remains available for exploration, but cannot by itself prove complete-artifact review for design-spec, spec-approval, architecture-review, or plan-review gates.
-- Non-initiative and non-bound tool loops remain unchanged.
+- Other tool loops remain unchanged.
 
 No schema or receipt change. `ToolExecution` remains the audit source; source bytes stay bounded and redacted.
 
