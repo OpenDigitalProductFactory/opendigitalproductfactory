@@ -1,12 +1,15 @@
 # Local-CI Builder Lifecycle Recovery Implementation Plan
 
-- **Status:** awaiting independent spec approval and plan-coverage receipt
+- **Status:** independent spec approval complete; plan-coverage receipt pending
 - **Date:** 2026-08-24
 - **Backlog item:** `BI-B131F357`
 - **Architecture:** `docs/superpowers/specs/2026-08-24-local-ci-builder-lifecycle-recovery-design.md`
 - **WWMD decision:** `DI-308054F94780` (`bounded-transition`)
 - **Workroom:** `WC-DD1EF64C`
-- **Backlog coverage receipt:** none written yet
+- **Spec-approval receipt:** `initiative-cb7780d2-bcaf-4d85-afbe-0eb6c41d3a17`
+- **Scope baseline:** `baseline-6d23cd68-5db5-4ac4-91f0-ac20c6b71389`
+- **Backlog coverage receipt:** recorded in the live backlog after this immutable
+  plan revision is committed
 
 ## Backlog coverage
 
@@ -19,7 +22,7 @@
 - Immutable plan attempted: commit
   `544830a220adbda0570da17e391dabd0d429b1fc`, provider blob
   `5c1b7349c2848f6676ea8e4e075105b6526bb144`
-- Receipt: **not written**
+- Receipt: pending the immutable commit containing this traceability correction
 - Prior observed blocker: `BI-91AF30A5` — the first external-client attempt did
   not invoke the documented independent reviewer-coworker path
 
@@ -32,11 +35,24 @@ the baseline writer is not reachable from an MCP session.
 
 The error prescribed citing `BI-B9403248`, but live `get_backlog_item` returned
 `not_found` for that ID. That remains defect evidence, not a receipt. The
-documented paved road is now being followed: the independently identified
-reviewer coworker reviews the immutable design, records spec approval, and
-thereby creates the scope baseline. No failed call, Markdown marker, or absent
+documented paved road was followed: the independently identified reviewer
+coworker reviewed the immutable design, recorded spec approval, and thereby
+created the scope baseline. No failed call, Markdown marker, or absent
 blocker ID is represented as a coverage receipt, and source implementation does
 not start until a valid receipt is written and revalidated.
+
+The independent Change Reviewer recorded spec-approval receipt
+`initiative-cb7780d2-bcaf-4d85-afbe-0eb6c41d3a17`, which atomically created
+scope baseline `baseline-6d23cd68-5db5-4ac4-91f0-ac20c6b71389` for the approved
+design. The atomic deliverable traces to every baseline objective and acceptance
+statement:
+
+- Requirements: `OBJ-LCBLR-001`, `OBJ-LCBLR-002`, `OBJ-LCBLR-003`,
+  `OBJ-LCBLR-004`
+- Contract: `local-ci-builder-lifecycle.mjs`
+- Flow: `Move builder discovery ahead of expensive verification`
+- Verification: `AC-LCBLR-001`, `AC-LCBLR-002`, `AC-LCBLR-003`,
+  `AC-LCBLR-004`, `AC-LCBLR-005`, `AC-LCBLR-006`, `AC-LCBLR-007`
 
 ## Outcome
 
