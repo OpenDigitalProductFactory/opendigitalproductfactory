@@ -458,6 +458,33 @@ numeric tier is only a default and cannot add a human proxy gate to the exact
 review boundary. Unbound calls, ordinary side effects, and the downstream
 principal-level author/reviewer collision check remain unchanged.
 
+### 2026-09-04 live-acceptance amendment: preserve token scope through execution
+
+After the tier-policy repair shipped, governed self-upgrade
+`SUR-071C4319` installed release
+`v2026.09.04-initiative-canonical-discovery-transport.1`. The installed image
+served byte identity `c9a729fe3a562a263d648de1474c2a28f6fd3328`, which is a
+descendant of release target `90c65d227b3b42cd688235147115d2d88fdc7a9b`.
+The external Workroom then created fresh independent reviewer TaskRun
+`TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-703AB1AD13D8` with the exact
+subject, writer, and immutable design locator. Dispatch required no approval.
+
+That TaskRun exposed the next bounded transport defect. The autonomous loop
+received the submitting token id but not its server-resolved capability. Its
+writer therefore reached the receipt repository with a reviewer and an allow
+decision, but with `tokenScope=null`, and failed closed with
+`AUTHORIZATION_DENIED`. Retrying model arguments cannot repair server-owned
+authentication context.
+
+The architecture decision is to carry the already-authenticated token
+capability alongside the token id from `executeRemoteTaskAttempt`, through the
+shared autonomous execution seam, into `governedExecuteTool`. The capability is
+never accepted from model output or coworker request arguments. Direct portal
+and non-MCP autonomous runs continue to omit it, while replay and terminal
+writer recovery retain their existing explicit token projection. This keeps
+the receipt repository's three-part requirement intact: independent reviewer,
+recorded authority decision, and authenticated write/admin token scope.
+
 ## Acceptance criteria traceability
 
 | BI acceptance criterion | Design coverage |

@@ -61,6 +61,10 @@ import { createRoutingTraceId } from "@/lib/routing/routing-trace";
 import { AI_ROUTING_ARCHITECTURE_VERSION } from "@/lib/routing/routing-architecture-version";
 import type { EndpointPreferences } from "@/lib/routing/preference-finalization";
 import { describeLocalFallback, type DowngradeCause } from "./downgrade-explanation";
+import {
+  admitRoutedAsyncOperation,
+  routeUsesDurableAsyncAdapter,
+} from "./async-operation-routed-admission";
 export type { RouteAndCallOptions } from "./routed-inference-options";
 // ─── Result type ────────────────────────────────────────────────────────────
 /** Unified inference result — flat token fields, V2 metadata included. */
@@ -596,7 +600,51 @@ async function routeAndCallAttempt(
   }
 
   // 5. Dispatch — background (async) or foreground (sync)
+  // An async adapter performs a side-effecting provider start. It may only be
+  // reached through the durable background admission/worker path, where the
+  // provider handle cannot be discarded by a foreground response boundary.
+  if (routeUsesDurableAsyncAdapter(decision)
+    && options?.interactionMode !== "background") {
+    throw new Error("ASYNC_OPERATION_BACKGROUND_REQUIRED");
+  }
   if (options?.interactionMode === "background") {
+    if (routeUsesDurableAsyncAdapter(decision)) {
+      const admitted = await admitRoutedAsyncOperation({
+        decision,
+        messages,
+        systemPrompt,
+        tools: toolsStripped ? undefined : dispatchScreenInput.tools,
+        options,
+        traceId,
+      });
+      await persistRoutedTokenUsage({
+        traceId,
+        agentId: options.agentId ?? "unknown",
+        providerId: admitted.providerId,
+        contextKey: routedContextKey(options),
+        inputTokens: 0,
+        outputTokens: 0,
+        inferenceMs: 0,
+        recordZeroUsage: true,
+        requirePersistence: true,
+      });
+      return {
+        providerId: admitted.providerId,
+        modelId: admitted.modelId,
+        content: "",
+        toolCalls: [],
+        inputTokens: 0,
+        outputTokens: 0,
+        downgraded: false,
+        downgradeMessage: null,
+        downgradeReason: null,
+        toolsStripped,
+        routeDecision: decision,
+        asyncOperationId: admitted.operationId,
+        ...routedRehydrationHandle(prepared.rehydrationHandle),
+      };
+    }
+
     // EP-INF-009d: Start async operation, return immediately
     const result = await callWithFallbackChain(
       decision,
@@ -610,53 +658,6 @@ async function routeAndCallAttempt(
       dispatchScreenInput,
     );
     applyObservedRouterEvidence(decision, result.routingEvidence, routeDecisionLogId);
-
-    // A provider operation handle is distinct from the durable platform id
-    // returned below. The typed boundary prevents fallback projection from
-    // silently dropping the provider handle (the former `raw` path did).
-    if (result.asyncOperation?.status === "accepted") {
-      // The provider has already accepted real work. Establish the durable
-      // lifecycle record before anything else can fail, then settle the
-      // dispatch audit before exposing acceptance to the caller.
-      const { createAsyncOperation } = await import("@/lib/async-inference");
-      const asyncOpId = await createAsyncOperation({
-        providerId: result.providerId,
-        modelId: result.modelId,
-        operationId: result.asyncOperation.providerOperationId,
-        contractFamily: contract.contractFamily,
-        requestContext: { taskType, sensitivity, messages: messages.length },
-        threadId: options?.threadId,
-        maxDurationMs: options?.maxDurationMs,
-      });
-      await persistRoutedTokenUsage({
-        traceId,
-        agentId: options?.agentId ?? "unknown",
-        providerId: result.providerId,
-        contextKey: routedContextKey(options),
-        inputTokens: result.tokenUsage?.inputTokens ?? 0,
-        outputTokens: result.tokenUsage?.outputTokens ?? 0,
-        inferenceMs: result.inferenceMs,
-        recordZeroUsage: true,
-        requirePersistence: true,
-      });
-
-      return {
-        providerId: result.providerId,
-        modelId: result.modelId,
-        content: "",
-        toolCalls: [],
-        inputTokens: 0,
-        outputTokens: 0,
-        downgraded: result.downgraded,
-        downgradeMessage: result.downgradeMessage,
-        downgradeReason: result.downgradeReason
-          ?? (result.downgraded ? "provider-unavailable" : null),
-        toolsStripped,
-        routeDecision: decision,
-        asyncOperationId: asyncOpId,
-        ...routedRehydrationHandle(prepared.rehydrationHandle),
-      };
-    }
 
     // Every adapter dispatch persists TokenUsage (BI-28858D2F).
     void persistRoutedTokenUsage({

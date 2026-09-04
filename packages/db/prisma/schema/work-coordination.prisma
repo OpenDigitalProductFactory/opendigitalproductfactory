@@ -410,6 +410,7 @@ model Workroom {
   participants            WorkroomParticipant[]    @relation("WorkroomParticipants")
   outgoingRelations       WorkroomRelation[]       @relation("WorkroomRelationFrom")
   incomingRelations       WorkroomRelation[]       @relation("WorkroomRelationTo")
+  asyncInferenceOps       AsyncInferenceOp[]        @relation("WorkroomAsyncInferenceOperations")
 
   @@index([status, updatedAt])
   @@index([backlogItemId])

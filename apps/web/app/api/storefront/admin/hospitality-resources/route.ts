@@ -12,6 +12,7 @@ import {
   isAdminResourceCapacityValid,
   resolveAdminResourceProfile,
 } from "@/lib/resource-scheduling/admin-resource-profile";
+import { upsertCanonicalResourceDraft } from "@/lib/resource-scheduling/admin-resource-repository";
 import {
   cloneSourceRef,
   fromHospitalityResource,
@@ -339,11 +340,7 @@ export async function POST(request: NextRequest) {
       ...draft,
       attributes: draft.attributes as Prisma.InputJsonValue,
     };
-    await transaction.resource.upsert({
-      where: { sourceRef: draft.sourceRef },
-      create: canonicalData,
-      update: canonicalData,
-    });
+    await upsertCanonicalResourceDraft(transaction.resource, canonicalData);
     const {
       organizationId: _organizationId,
       storefrontId: _storefrontId,
