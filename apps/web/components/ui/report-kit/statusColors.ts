@@ -56,6 +56,18 @@ export function intentStyle(intent: Intent): IntentStyle {
  * (e.g. complaints) so each gets its own namespace.
  */
 export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
+  // Durable provider operations. start_indeterminate is deliberately warning:
+  // the provider POST may have crossed, so the platform reconciles rather
+  // than presenting it as pending or repeating the side effect.
+  asyncInferenceOperation: {
+    pending: "neutral",
+    start_indeterminate: "warning",
+    running: "info",
+    completed: "success",
+    failed: "danger",
+    cancelled: "neutral",
+    expired: "warning",
+  },
   // Edge operational health and operator-governed trust are deliberately
   // separate axes. Both Edge Nodes and Connections consume these semantics.
   edgeHealth: {

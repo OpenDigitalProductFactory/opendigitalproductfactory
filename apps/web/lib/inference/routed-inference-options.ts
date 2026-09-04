@@ -2,6 +2,10 @@ import type { ActivityContract } from "@/lib/routing/activity-contract";
 import type { ModelClass } from "@/lib/routing/model-card-types";
 import type { RequestContract } from "@/lib/routing/request-contract";
 import type { RouteDecisionActor } from "@/lib/routing/route-decision-attribution";
+import type {
+  AsyncOperationAuthorityActor,
+  AsyncOperationAuthorityRequest,
+} from "./async-operation-authority";
 
 /** Caller-owned constraints and preferences for canonical routing plus dispatch. */
 export interface RouteAndCallOptions {
@@ -58,6 +62,14 @@ export interface RouteAndCallOptions {
   minimumDimensions?: Record<string, number>;
   requiredModelClass?: ModelClass;
   interactionMode?: "sync" | "background";
+  /**
+   * Semantic authority for a durable async route. The server resolves this to
+   * the exact TaskRun/Workroom row; callers cannot pass an internal scope key.
+   */
+  durableAsyncOperation?: {
+    request: AsyncOperationAuthorityRequest;
+    actor: AsyncOperationAuthorityActor;
+  };
   threadId?: string;
   maxDurationMs?: number;
   persistDecision?: boolean;

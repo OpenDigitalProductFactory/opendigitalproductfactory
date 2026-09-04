@@ -1,0 +1,37 @@
+{
+  "version": "1",
+  "decidedOption": "closed-durable-lifecycle-status-with-shared-progress",
+  "scope": {
+    "files": [
+      "apps/web/components/platform/AsyncOperationsTable.tsx",
+      "apps/web/components/ui/report-kit/statusColors.ts"
+    ]
+  },
+  "evidence": {
+    "kind": "sweep-measurement",
+    "baselineComparison": "held",
+    "measured": {
+      "/platform/audit/operations": {
+        "defaultVisibleWords": 122,
+        "leadBandWords": 0,
+        "primaryActions": 1,
+        "visibleFields": 0,
+        "maxChoicesPerControl": 0,
+        "subLegibleControls": 0,
+        "buriedPrimaryAction": 0,
+        "axeViolations": 2
+      }
+    },
+    "fitDecision": "fits-with-guardrails",
+    "owningArea": "Platform",
+    "routeFamily": "/platform/audit/operations",
+    "primaryPersona": "platform operator reconciling long-running inference without guessing lifecycle state",
+    "navigationLayer": "existing operation audit table",
+    "reuseConvergence": "reuses StatusBadge, ProgressBar, report-kit lifecycle colors, and theme tokens; no new component family",
+    "sourceTruth": "strictly parsed AsyncInferenceOperationStatus values from the durable operation ledger",
+    "emptyFailureBehavior": "the existing empty state is preserved; every persisted lifecycle state has an explicit label and an invalid state fails before rendering",
+    "aiBoundary": "the surface reports durable provider lifecycle state and never infers completion or success from prose",
+    "accessibility": "status has a textual label and progress uses the shared named progressbar rather than color alone",
+    "responsive": "the existing horizontally scrollable table remains usable without introducing fixed-width status content"
+  }
+}

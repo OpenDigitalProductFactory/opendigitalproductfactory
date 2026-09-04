@@ -302,6 +302,7 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   PushDeviceRegistration: "confidential",
   ExternalEvidenceRecord: "confidential",
   AsyncInferenceOp: "confidential",
+  AsyncInferenceOperationTransition: "confidential",
   // Connection posture can reference the restricted ModelProvider catalog and
   // credential/contract records. Copying it without those parents creates an
   // invalid preview and exposes organization-specific provider governance.
