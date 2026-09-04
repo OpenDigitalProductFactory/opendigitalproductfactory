@@ -1,5 +1,6 @@
 import { createRequire } from "node:module";
 import { dirname, basename, isAbsolute, join, posix, relative, resolve, win32 } from "node:path";
+import { resolveWorktreeBase } from "./worktree-base.mjs";
 
 const require = createRequire(import.meta.url);
 const SLOT_RESOURCE_MANIFEST = require(
@@ -108,7 +109,9 @@ export function createLocalCiSlotManifest(input) {
       `rootClone must match the canonical Git common-dir root: ${canonicalRootClone}`,
     );
   }
-  const worktreeBase = join(dirname(rootClone), `${basename(rootClone)}-worktrees`);
+  // The platform owns this answer; this module no longer derives its own
+  // (spec 2026-09-02-platform-owned-client-configuration-design §1).
+  const { base: worktreeBase } = resolveWorktreeBase({ rootClone, env: process.env });
   const workspace = resources.ordinal === 0
     ? join(worktreeBase, ".local-ci-runner")
     : join(worktreeBase, `.local-ci-runner-${slotKey}`);

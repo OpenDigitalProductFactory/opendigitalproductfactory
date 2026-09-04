@@ -34,7 +34,7 @@ vi.mock("@/lib/credential-crypto", () => ({
   decryptSecret: mocks.decryptSecret,
 }));
 
-import { parseRepoFromUrl, readGithubPullRequests } from "./github-rest-reader";
+import { parseRepoFromUrl, readGithubPullRequests, resolveGithubToken } from "./github-rest-reader";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -245,3 +245,55 @@ function makeRawPr(n: number) {
     mergeable_state: "CLEAN",
   };
 }
+
+
+// BI-69BBC446. resolveGithubToken read exactly one credential row,
+// "github-pr-sync", which nothing in the product writes — the Contributor MCP
+// card its comment named does not exist. So it returned null on every install,
+// callers fell back to unauthenticated requests, and against a private repo
+// those fail. That killed repository provenance, and with it plan-coverage
+// receipts, spec-approval baselines and independent design review — while an
+// active "hive-contribution" credential sat one row away.
+describe("resolveGithubToken credential chain", () => {
+  function prismaWith(rows: Record<string, { secretRef: string; status: string } | null>) {
+    return {
+      credentialEntry: {
+        findUnique: vi.fn(async ({ where }: { where: { providerId: string } }) =>
+          rows[where.providerId] ?? null),
+      },
+    } as never;
+  }
+
+  it("prefers the dedicated github-pr-sync credential when one exists", async () => {
+    const token = await resolveGithubToken(prismaWith({
+      "github-pr-sync": { secretRef: "dedicated-token", status: "active" },
+      "hive-contribution": { secretRef: "hive-token", status: "active" },
+    }));
+    expect(token).toBe("dedicated-token");
+  });
+
+  it("falls back to hive-contribution when github-pr-sync is absent", async () => {
+    const token = await resolveGithubToken(prismaWith({
+      "hive-contribution": { secretRef: "hive-token", status: "active" },
+    }));
+    expect(token).toBe("hive-token");
+  });
+
+  it("falls back to git-backup when neither of the first two is active", async () => {
+    const token = await resolveGithubToken(prismaWith({
+      "hive-contribution": { secretRef: "stale", status: "revoked" },
+      "git-backup": { secretRef: "backup-token", status: "active" },
+    }));
+    expect(token).toBe("backup-token");
+  });
+
+  it("returns null when the store genuinely holds nothing usable", async () => {
+    const previous = process.env.GITHUB_TOKEN;
+    delete process.env.GITHUB_TOKEN;
+    try {
+      expect(await resolveGithubToken(prismaWith({}))).toBeNull();
+    } finally {
+      if (previous !== undefined) process.env.GITHUB_TOKEN = previous;
+    }
+  });
+});

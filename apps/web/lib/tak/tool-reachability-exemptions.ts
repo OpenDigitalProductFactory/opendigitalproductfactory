@@ -58,21 +58,16 @@ export const TOOL_REACHABILITY_EXEMPTIONS: Readonly<Record<string, string>> = {
   workbook_update_cells:
     "SEALED: requires workbook_write, held by no registry agent — write authority deferred with the workbook persona.",
 
-  // ── Storefront / inventory reads ─────────────────────────────────────────
-  list_storefront_activity:
-    "SEALED: requires storefront_read, held by no registry agent — storefront vertical shipped tools before a granted owning coworker.",
-  list_stock_coverage:
-    "SEALED: requires stock_read, held by no registry agent — same storefront-vertical grant gap.",
-
   // ── Screen driving ───────────────────────────────────────────────────────
   screen_set_input:
     "SEALED: requires coworker_screen_fill, held by no registry agent — screen-fill is deliberately ungranted until the screen-drive trust tier assigns it (the read/drive grants are similarly scoped).",
 
   // ── Internal / runtime-invoked ───────────────────────────────────────────
-  run_tool_script:
-    "SEALED: requires tool_script_exec, held by no registry agent — script execution is a high-blast-radius authority; granting it is a deliberate act for the build-engine epic.",
   get_fleet_readiness:
     "NO ENTRY: absent from TOOL_TO_GRANTS entirely (deny-by-default) — fleet-readiness is read by platform surfaces, not coworkers; needs an owning-epic decision on whether to expose it.",
   record_surface_readiness:
     "NO ENTRY: absent from TOOL_TO_GRANTS entirely (deny-by-default) — surface-readiness recording is runtime-internal today; exposing it to coworkers is an owning-epic decision.",
+  // The 12 banking books-loop tools (S-FIN, BI-DE27D34E) left this list when the
+  // Bookkeeper coworker (BI-7D50DC56, S-BK) landed holding banking_read/banking_write
+  // in agent_registry.json — they are reachable now, so the ratchet shrinks.
 };

@@ -121,6 +121,22 @@ Result is `{ recommendation, confidence, perPrincipleLedger, ... }`. Persist the
 
 ---
 
+### 1.6 Host-heavy work uses durable resource leases, not waiting processes
+
+**What.** TypeScript compilation, Vitest, Next builds, Docker builds, previews, local inference, and semantic review compete for the same finite host memory. Each heavyweight invocation declares a closed `resourceClass` and expected memory floor, then claims the singleton `host-heavy-resource` lane through `NonProductionEnvironmentLease`. The lease is durable coordination state; the Node process is only the current executor.
+
+**When to use.** Any host-local command whose memory floor is large enough to destabilize concurrent development work. The canonical profiles live in [`host-resource-profiles.json`](../../apps/web/lib/nonprod/host-resource-profiles.json), the admission decision in [`host-resource-policy.ts`](../../apps/web/lib/nonprod/host-resource-policy.ts), and command supervision in [`host-resource-runner.mjs`](../../scripts/host-resource-runner.mjs).
+
+**Execution contract.** Cheap guards bypass admission. Heavy commands fail closed when host memory cannot be measured, preserve a host reserve plus the resident inference reserve, and serialize inference. A denied invocation records bounded queue diagnostics and exits with code 75; it does not leave a waiting Node process alive. The caller may retry or, once durable wait/resume is available, suspend and wake from a lease event. Only the process identified by the lease's PID plus operating-system process-start identity is supervised. Stray processes are evidence, never kill targets.
+
+**When NOT to use.** Do not add a second resource queue or scheduler. Do not hold a thread or shell open while waiting for admission. Do not kill a process merely because its command resembles a known tool. Do not promote a queued claim using stale memory evidence after another lease releases.
+
+**Why this exists.** Process-count limits alone cannot protect a 64 GiB developer host when inference is already resident. Durable, memory-aware admission turns invisible RAM contention into explicit capacity state and prevents dozens of idle waiters from consuming memory and tokens around one bottleneck.
+
+**Kernel:** [`verify-substrate-before-proposing-new`](../founder-kernel/wiki/principles/verify-substrate-before-proposing-new.md), [`evidence-before-diagnosis`](../founder-kernel/wiki/principles/evidence-before-diagnosis.md), [`single-source-of-truth`](../founder-kernel/wiki/principles/single-source-of-truth.md).
+
+---
+
 ## §2. DPF anti-patterns — defaults the kernel forbids
 
 Models reach for these because they look like reasonable defaults from training data. In DPF they are wrong, and the kernel says so.

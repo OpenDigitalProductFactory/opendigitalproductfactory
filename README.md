@@ -256,6 +256,7 @@ The deployment architecture keeps Windows, macOS, native Linux, customer-cloud, 
 
 - [Deployment Contracts](docs/superpowers/specs/2026-05-09-deployment-contracts.md) — 10 canonical contracts every deployment target wraps (release artifacts, runtime config, lifecycle, identity, edge, build execution, observability, secrets, LLM / agent routing, client / API surfaces)
 - [Cloud Deployment Design](docs/superpowers/specs/2026-05-09-cloud-deployment-design.md) — substrates (Single VM, Managed container service, Managed Kubernetes) and packaging targets
+- [Cloudflare-fronted Managed Deployment Design](docs/superpowers/specs/2026-08-29-cloudflare-fronted-managed-deployment-design.md) — research-stage managed delivery using one isolated DPF cell per customer and a replaceable Cloudflare edge adapter
 - [DPF Edge Node](docs/superpowers/specs/2026-05-09-dpf-edge-node-design.md) — host-resident trust + connectivity for discovery, MCP / A2A gateway, identity brokering
 - [Edge Node Deployment Matrix](docs/superpowers/specs/2026-05-20-edge-node-deployment-matrix.md) — Mode 1 container vs. Mode 4 native binary per host substrate, with the verified-2026-05-20 Docker Desktop finding
 - [Build Execution Provider](docs/superpowers/specs/2026-05-09-build-execution-provider-design.md) — sandbox lifecycle abstraction so Build Studio runs on substrates beyond local Docker

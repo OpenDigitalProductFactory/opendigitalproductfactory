@@ -6,6 +6,16 @@ import { BoundedTextTail } from "./bounded-text-tail.mjs";
 const DEFAULT_SAMPLE_INTERVAL_MS = 5_000;
 const MAX_HOST_SAMPLES = 120;
 
+function errorEvidence(error) {
+  return error
+    ? {
+        name: error.name ?? "Error",
+        code: error.code ?? null,
+        message: error.message ?? String(error),
+      }
+    : null;
+}
+
 export function descendantProcesses(rootPid, {
   platform = process.platform,
   spawnSyncImpl = spawnSync,
@@ -72,6 +82,48 @@ export function hostProcessSample(childPid) {
   };
 }
 
+export function terminateProcessTree(rootPid, {
+  platform = process.platform,
+  force = false,
+  spawnSyncImpl = spawnSync,
+  killImpl = process.kill,
+} = {}) {
+  if (!Number.isInteger(Number(rootPid)) || Number(rootPid) <= 0) {
+    return { ok: false, force, error: { name: "Error", code: "invalid-pid", message: "A positive child PID is required" } };
+  }
+
+  if (platform === "win32") {
+    const args = ["/PID", String(rootPid), "/T", ...(force ? ["/F"] : [])];
+    try {
+      const result = spawnSyncImpl("taskkill.exe", args, {
+        encoding: "utf8",
+        timeout: 10_000,
+        windowsHide: true,
+      });
+      return {
+        ok: result.status === 0,
+        force,
+        command: "taskkill.exe",
+        args,
+        status: result.status ?? null,
+        signal: result.signal ?? null,
+        error: errorEvidence(result.error),
+      };
+    } catch (error) {
+      return { ok: false, force, command: "taskkill.exe", args, error: errorEvidence(error) };
+    }
+  }
+
+  const signal = force ? "SIGKILL" : "SIGTERM";
+  const groupPid = -Number(rootPid);
+  try {
+    killImpl(groupPid, signal);
+    return { ok: true, force, signal, groupPid };
+  } catch (error) {
+    return { ok: false, force, signal, groupPid, error: errorEvidence(error) };
+  }
+}
+
 export function createObservedProcessRunner({
   spawnImpl = spawn,
   sampleHost = hostProcessSample,
@@ -80,16 +132,41 @@ export function createObservedProcessRunner({
   sampleIntervalMs = DEFAULT_SAMPLE_INTERVAL_MS,
   outputTailBytes = 64 * 1024,
   onProgress = () => {},
+  maxDurationMs = null,
+  terminationGraceMs = 10_000,
+  closeGraceMs = 10_000,
+  terminateProcessTreeImpl = terminateProcessTree,
+  setTimeoutImpl = setTimeout,
+  clearTimeoutImpl = clearTimeout,
+  now = () => new Date().toISOString(),
+  platform = process.platform,
 } = {}) {
   return function runObservedProcess({ command, args, env = process.env, observation = {} }) {
     return new Promise((resolveAttempt) => {
       const output = new BoundedTextTail(outputTailBytes);
       const hostSamples = [];
-      const startedAt = new Date().toISOString();
+      const startedAt = now();
+      const boundedDurationMs = Number.isInteger(maxDurationMs) && maxDurationMs > 0
+        ? maxDurationMs
+        : null;
+      const deadlineAt = boundedDurationMs === null
+        ? null
+        : new Date(Date.parse(startedAt) + boundedDurationMs).toISOString();
       let spawnError = null;
+      let settled = false;
+      let deadlineExceeded = false;
+      let stopAttemptedAt = null;
+      let stopResult = null;
+      let forceAttemptedAt = null;
+      let forceResult = null;
+      let closeTimedOutAt = null;
+      let deadlineTimer = null;
+      let forceTimer = null;
+      let closeTimer = null;
       const child = spawnImpl(command, args, {
         env,
-        shell: process.platform === "win32",
+        shell: platform === "win32",
+        detached: platform !== "win32" && boundedDurationMs !== null,
         stdio: ["ignore", "pipe", "pipe"],
         windowsHide: true,
       });
@@ -110,6 +187,43 @@ export function createObservedProcessRunner({
       const sampler = setInterval(sample, sampleIntervalMs);
       sampler.unref();
 
+      const finish = (status, signal, { closeTimedOut = false } = {}) => {
+        if (settled) return;
+        settled = true;
+        clearInterval(sampler);
+        clearTimeoutImpl(deadlineTimer);
+        clearTimeoutImpl(forceTimer);
+        clearTimeoutImpl(closeTimer);
+        sample();
+        resolveAttempt({
+          ...observation,
+          status,
+          signal,
+          error: spawnError,
+          outputTail: output.toString(),
+          childPid: child.pid ?? null,
+          hostSamples,
+          startedAt,
+          completedAt: now(),
+          maxDurationMs: boundedDurationMs,
+          deadlineAt,
+          deadlineExceeded,
+          stopAttemptedAt,
+          stopResult,
+          forceAttemptedAt,
+          forceResult,
+          closeTimedOutAt,
+          closeTimedOut,
+        });
+      };
+      const stopTree = (force) => {
+        try {
+          return terminateProcessTreeImpl(child.pid, { force });
+        } catch (error) {
+          return { ok: false, force, error: errorEvidence(error) };
+        }
+      };
+
       child.stdout.on("data", (chunk) => {
         output.append(chunk);
         stdout.write(chunk);
@@ -122,20 +236,50 @@ export function createObservedProcessRunner({
         spawnError = error;
       });
       child.once("close", (status, signal) => {
-        clearInterval(sampler);
-        sample();
-        resolveAttempt({
-          ...observation,
-          status,
-          signal,
-          error: spawnError,
-          outputTail: output.toString(),
-          childPid: child.pid ?? null,
-          hostSamples,
-          startedAt,
-          completedAt: new Date().toISOString(),
-        });
+        finish(status, signal);
       });
+
+      if (boundedDurationMs !== null) {
+        deadlineTimer = setTimeoutImpl(() => {
+          if (settled) return;
+          deadlineExceeded = true;
+          sample();
+          stopAttemptedAt = now();
+          stopResult = stopTree(false);
+          onProgress({
+            ...observation,
+            childPid: child.pid ?? null,
+            deadlineExceeded,
+            maxDurationMs: boundedDurationMs,
+            deadlineAt,
+            stopAttemptedAt,
+            stopResult,
+            outputTail: output.toString(),
+          });
+          forceTimer = setTimeoutImpl(() => {
+            if (settled) return;
+            forceAttemptedAt = now();
+            forceResult = stopTree(true);
+            onProgress({
+              ...observation,
+              childPid: child.pid ?? null,
+              deadlineExceeded,
+              maxDurationMs: boundedDurationMs,
+              deadlineAt,
+              stopAttemptedAt,
+              stopResult,
+              forceAttemptedAt,
+              forceResult,
+              outputTail: output.toString(),
+            });
+            closeTimer = setTimeoutImpl(() => {
+              if (settled) return;
+              closeTimedOutAt = now();
+              finish(null, null, { closeTimedOut: true });
+            }, closeGraceMs);
+          }, terminationGraceMs);
+        }, boundedDurationMs);
+      }
     });
   };
 }

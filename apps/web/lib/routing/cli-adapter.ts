@@ -304,6 +304,41 @@ function isProviderOverloadMessage(text: string): boolean {
   return /\b529\b|overloaded/i.test(text);
 }
 
+/**
+ * The CLI's own usage-limit banner (BI-QUOTA-DEAD-END).
+ *
+ * Claude CLI prints "You've hit your weekly limit · resets 4pm (UTC)" on
+ * stdout when a subscription quota is exhausted. The adapter classified auth
+ * errors and overload but had no branch for quota, so this fell through and
+ * became the assistant's reply verbatim. Measured on the live install: 23
+ * occurrences — 21 where the banner WAS the entire reply (a dead end with no
+ * routing signal, so failover never fired) and 2 where it was prepended to a
+ * genuine answer, corrupting a good reply.
+ *
+ * Deliberately narrow. It matches the banner's own shape rather than the word
+ * "limit", which appears in ordinary prose ("the weekly limit on spend is…").
+ */
+const CLI_QUOTA_BANNER = /(?:you(?:'|’)?ve\s+)?hit\s+your\s+(?:weekly|daily|monthly|usage)\s+limit/i;
+
+export function isCliQuotaBanner(text: string): boolean {
+  return CLI_QUOTA_BANNER.test(text);
+}
+
+/**
+ * Remove a leading quota banner so a genuine reply behind it survives.
+ *
+ * All 23 observed occurrences started with the banner; it is a prefix the CLI
+ * emits before whatever else it was going to say. Stripping only a LEADING
+ * match keeps the function from mangling a reply that legitimately discusses
+ * usage limits further down.
+ */
+export function stripLeadingQuotaBanner(text: string): string {
+  const firstBreak = text.search(/\n|(?<=\))\s/);
+  const head = firstBreak === -1 ? text : text.slice(0, firstBreak);
+  if (!CLI_QUOTA_BANNER.test(head)) return text;
+  return text.slice(head.length).trimStart();
+}
+
 // ─── CLI Adapter ────────────────────────────────────────────────────────────
 
 export const cliAdapter: ExecutionAdapterHandler = {
@@ -437,6 +472,9 @@ export const cliAdapter: ExecutionAdapterHandler = {
     const tokenFile = `/tmp/cli-token-${slug}.txt`;
     const mcpConfigFile = `/tmp/cli-mcp-${slug}.json`;
     const runnerScript = `/tmp/cli-run-${slug}.sh`;
+    // BI-35FAE2DB: empty, per-run cwd so the CLI discovers no project
+    // CLAUDE.md / settings / hooks above it.
+    const cliWorkingDir = `/tmp/cli-cwd-${slug}`;
     // Records the in-container claude PID so a timeout can reap the actual
     // process inside the sandbox (BI-F36E7510). proc.kill() below only reaches
     // the local `docker exec` client, not the containerized process.
@@ -527,9 +565,20 @@ export const cliAdapter: ExecutionAdapterHandler = {
       // replace the sh, leaving the cmdline as bare `claude -p ...` with no
       // unique handle and no way to signal it from the host. stdout/stderr are
       // inherited by the background child, so capture is unchanged.
+      // BI-35FAE2DB: headless inference runs from a NEUTRAL directory, never
+      // the project workspace. `claude` discovers CLAUDE.md (which imports the
+      // whole AGENTS.md rulebook), settings and hooks by walking UP from cwd,
+      // so `cd /workspace` turned every single-shot call into an agentic
+      // session that answered "respond with ONLY a JSON object" with session
+      // meta-commentary — unparseable, and the reason design review reported
+      // "Both review agents failed to respond" for 332 rounds. Nothing is lost
+      // by leaving: every native filesystem tool is already disallowed here
+      // (CLAUDE_CODE_NATIVE_TOOLS_FLAG_VALUE), so that context could never be
+      // acted on, only paid for. Measurements are in the BI and commit message.
       const script = [
         "#!/bin/sh",
-        "cd /workspace",
+        `mkdir -p ${cliWorkingDir}`,
+        `cd ${cliWorkingDir}`,
         authExportLine,
         `SYSPROMPT=$(cat ${systemFile})`,
         `claude ${bareFlag}-p - --dangerously-skip-permissions ${mcpFlags}--disallowedTools "${CLAUDE_CODE_NATIVE_TOOLS_FLAG_VALUE}" --output-format json --model ${cliModel} --system-prompt "$SYSPROMPT" < ${promptFile} &`,
@@ -675,6 +724,23 @@ export const cliAdapter: ExecutionAdapterHandler = {
         );
       }
 
+      // Quota exhaustion (BI-QUOTA-DEAD-END). Raised as rate_limit so routing
+      // can exclude this provider and fail over, exactly as it does for auth
+      // and overload above. Without this branch the banner became the reply.
+      if (parsed.toolCalls.length === 0 && isCliQuotaBanner(parsed.text)) {
+        throw new InferenceError(
+          `Claude CLI usage limit reached (from stdout): ${parsed.text.slice(0, 200)}`,
+          "rate_limit",
+          providerId,
+        );
+      }
+
+      // A banner in FRONT of a real answer is a different failure: the reply is
+      // good and the prefix is noise. Strip it rather than discarding the turn.
+      if (parsed.toolCalls.length > 0 || parsed.text.length >= 600) {
+        parsed.text = stripLeadingQuotaBanner(parsed.text);
+      }
+
       // ── Durable tool-call extraction trace (mirrors codex-cli-adapter) ──
       // See note there. Kept on until tool dispatch is 100% reliable.
       //
@@ -721,7 +787,7 @@ export const cliAdapter: ExecutionAdapterHandler = {
       // so a leaked sandbox shell can't dump the bearer from disk after the
       // call returns.
       execAsync(
-        `docker exec ${SANDBOX_CONTAINER} sh -c "rm -f ${promptFile} ${systemFile} ${tokenFile} ${mcpConfigFile} ${runnerScript} ${pidFile}"`,
+        `docker exec ${SANDBOX_CONTAINER} sh -c "rm -f ${promptFile} ${systemFile} ${tokenFile} ${mcpConfigFile} ${runnerScript} ${pidFile}; rmdir ${cliWorkingDir} 2>/dev/null || true"`,
         { timeout: 5_000 },
       ).catch(() => {});
     }

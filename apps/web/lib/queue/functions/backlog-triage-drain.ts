@@ -1,4 +1,5 @@
 import { cron } from "inngest";
+import { FEDERATED_WORK_ORIGIN_MARKER_SQL_PREFIX } from "@dpf/db/federated-work-contract";
 import { inngest } from "../inngest-client";
 import { gateAtEntry } from "../quiescence-gates";
 
@@ -37,7 +38,13 @@ export const backlogTriageDrain = inngest.createFunction(
     const items = await step.run("fetch-triaging-items", async () => {
       const { prisma } = await import("@dpf/db");
       return prisma.backlogItem.findMany({
-        where: { status: "triaging" },
+        where: {
+          status: "triaging",
+          // A work-sync mirror is triaged by the installation that owns it;
+          // triaging the copy here would fork the record (BI-FF8A57EF). A row
+          // with no body is owned: NOT-contains alone is NULL for a NULL column.
+          OR: [{ body: null }, { NOT: { body: { contains: FEDERATED_WORK_ORIGIN_MARKER_SQL_PREFIX } } }],
+        },
         orderBy: { createdAt: "asc" },
         take: MAX_PER_RUN,
         select: {

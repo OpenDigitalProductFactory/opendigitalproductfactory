@@ -1,6 +1,6 @@
 // node --test — convergence contract for the gitignored pre-push shim (BI-C74F4DE9).
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { accessSync, constants, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -11,6 +11,19 @@ const LFS_STOCK = `#!/bin/sh
 command -v git-lfs >/dev/null 2>&1 || { printf >&2 "\\n%s\\n\\n" "This repository is configured for Git LFS but 'git-lfs' was not found on your path."; exit 2; }
 git lfs pre-push "$@"
 `;
+
+// NTFS has no POSIX execute bit: fs.chmodSync(0o755) leaves mode 0o666 and
+// `mode & 0o111` is always 0, so asserting exec bits failed on every Windows
+// clone (BI-5CBDC146). Git for Windows runs hooks through `sh` and does not
+// consult the bit, so the meaningful cross-platform assertion is that the shim
+// exists and is readable — with the exec bit still enforced where it exists.
+function assertExecutable(path) {
+  if (process.platform === "win32") {
+    accessSync(path, constants.R_OK);
+    return;
+  }
+  assert.ok(statSync(path).mode & 0o111, "shim must be executable");
+}
 
 test("classifyPrePushShim recognizes all four states", () => {
   assert.equal(classifyPrePushShim(null), "missing");
@@ -24,7 +37,7 @@ test("ensurePrePushHook writes the delegating shim when missing, executable", ()
   const result = ensurePrePushHook(dir);
   assert.deepEqual(result, { action: "written", was: "missing" });
   assert.equal(readFileSync(join(dir, "pre-push"), "utf8"), DELEGATING_SHIM);
-  assert.ok(statSync(join(dir, "pre-push")).mode & 0o111, "shim must be executable");
+  assertExecutable(join(dir, "pre-push"));
 });
 
 test("ensurePrePushHook replaces the stock git-lfs shim", () => {

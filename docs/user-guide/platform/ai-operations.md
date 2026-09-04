@@ -98,10 +98,24 @@ in, and they need different responses:
   it before a coworker turn degrades rather than after.
 - **"Your configured providers stayed available, but …"** — everything is
   connected and healthy; this particular request was ruled out of the stronger
-  route. The note names the actual reason (for example the request was longer
-  than the model's context window, or it needed a capability that model does not
-  offer). A shorter request, or a new thread, usually routes back to the stronger
-  model.
+  route. The note names the **one** reason that actually held the turn back, not
+  every reason in play: if several providers were ruled out for different
+  reasons, the note names the binding one and says how many others there were.
+  What to do depends on which reason you are given, and only some of them are
+  about the request itself:
+
+  - **"longer than its context window"** — a shorter request, or a new thread,
+    routes back to the stronger model.
+  - **"it had reached its rate limit"** — the same question in a few minutes
+    reaches it.
+  - **"data policy required this work to stay on this machine"** or **"it isn't
+    cleared for this data sensitivity"** — this is a data-handling rule, not a
+    size limit. Rewording or shortening will not change it, and retrying costs
+    you the wait for nothing. Ask the same thing somewhere that does not carry
+    confidential data, or change what the page in question is classified as.
+  - **"needed a capability it doesn't offer"** or **"its model isn't the class
+    this work requires"** — the stronger model is not offered for this kind of
+    work, whatever length you send.
 
 The two are mutually exclusive: a single reply never tells you a provider is both
 available and switched off. If a coworker also reports hitting its safety limit,
@@ -115,3 +129,12 @@ the wording of that message matches the same cause.
 - assignment changes that solve one route but weaken another
 - capacity work that produces token spend without durable evidence, backlog movement, or reviewable output
 - capability needs without submitter context, route context, or a clear backlog follow-up
+
+## Defaults for work rooms
+
+Priority & Models also carries the default for **work rooms** — how hard rooms push and
+whether they may act without asking. It is listed separately from the per-coworker controls
+because it governs work happening in a room rather than one coworker's own behaviour.
+
+A room can override it, and what the work actually is overrides both. See
+[Priority and outcomes](../ai-workforce/priority-and-outcomes.md).

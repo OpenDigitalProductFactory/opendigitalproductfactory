@@ -1,6 +1,6 @@
 ---
 name: dpf-blast-radius
-description: "Use before shipping a DPF change to find what it breaks somewhere else — a refactor, a renamed field, a contract/schema/enum edit, a shared helper, or a diff you do not trust. Traces callers, dependents and tests through the code graph, then proves the load-bearing facts by running code."
+description: "Use before shipping a DPF change to find what it breaks elsewhere — a refactor, renamed field, contract/schema/enum edit, shared helper, or a diff you do not trust."
 disable-model-invocation: false
 user-invocable: true
 allowed-tools: Bash(git diff *) Bash(git log *) Grep Glob Read mcp__dpf__explain_blast_radius mcp__dpf__trace_code_surface mcp__dpf__search_code_graph mcp__dpf__find_related_tests
@@ -48,7 +48,7 @@ enforces:
 
 2. **Verify the graph indexes the tree you are changing.** Before trusting any graph answer, confirm what it is reading. The portal's code search has previously answered from a stale checkout rather than the working tree (BI-6CFC5429), and a graph answering about the wrong tree returns confident, complete, wrong results. If you cannot establish which tree it indexed, treat the graph as a hint generator and let `Grep` be the authority.
 
-3. **Fan out on each symbol.** `mcp__dpf__explain_blast_radius` and `mcp__dpf__trace_code_surface` for the structural reach; `mcp__dpf__search_code_graph` for callers; `mcp__dpf__find_related_tests` for the tests that already cover it. Then `Grep` the raw string anyway — the graph misses dynamic references, string-keyed lookups, generated code, and anything in a language it does not parse.
+3. **Fan out on each symbol.** `mcp__dpf__explain_blast_radius` and `mcp__dpf__trace_code_surface` for the structural reach; `mcp__dpf__search_code_graph` for callers; `mcp__dpf__find_related_tests` for the tests that already cover it. If any code-graph call returns `Code graph unavailable`, an unavailable graph, or low-trust/qualify advice, stop after that single attempt and record it as unavailable/unrun; use a bounded `Grep`/`Glob` sweep and explicit test discovery instead. Do not turn a missing graph into repeated failing calls. Then `Grep` the raw string anyway — the graph misses dynamic references, string-keyed lookups, generated code, and anything in a language it does not parse.
 
 4. **Sweep the places the graph cannot see.** Each of these has broken a DPF change before and none of them are call edges:
    - seed data and registries under `packages/db/data/` and `skills/`

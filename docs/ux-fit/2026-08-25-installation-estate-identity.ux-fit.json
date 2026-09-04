@@ -1,0 +1,36 @@
+{
+  "version": "1",
+  "decidedOption": "move the installation identity panel off the workspace home to /ops/installation, replace it on arrival with a few-word header badge rendered only on a non-production installation, and add the estate-name field to the new route as an answerable field rather than a fourth item behind the impact-preview disclosure",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/ops/installation/page.tsx",
+      "apps/web/components/shell/Header.tsx",
+      "apps/web/components/workspace/EstateNameField.tsx"
+    ]
+  },
+  "notes": {
+    "measurementScope": "Two surfaces move in opposite directions. /workspace LOSES the whole identity panel, so its arrival state can only improve; /ops/installation is the new home and is measured as the composition the route actually renders (panel + estate-name field), not the panel alone. Both routes carry sweepEligible false via wall-clock-collection in route-purpose.generated.json, so neither has a row in route-budget-baseline.json and the rendered sweep never measures them. baselineComparison is 'new-route' in that gate's sense — absent from the committed baseline.",
+    "howMeasured": "apps/web/components/workspace/InstallationIdentityPanel.uxbudget.test.tsx renders both the panel alone and the /ops/installation composition in jsdom and runs lib/ux-budget's measureUxBudget on the resulting DOM, the same code the sweep runs. Both are audited with auditUxBudget at routeStatus 'net-new', so the absolute text budgets are blocking rather than advisory. The console lines '[ux-budget]' and '[ux-budget /ops/installation]' in that test's output are the source of every number below; re-measuring is one command, not a reconstruction.",
+    "workspaceDelta": "apps/web/app/(shell)/workspace/page.tsx is deliberately NOT in scope.files: this PR only REMOVES the panel from that route, which adds no control and can only reduce its arrival cost, and the gate correctly refuses an over-broad manifest as evidence. Recorded here because the removal is the point: the panel measured 181 default-visible words as the FIRST element of /workspace, and the workspace arrival state now sheds all 181 before the operator reaches the cockpit. That is the defect the founder reported.",
+    "headerBadge": "The replacement arrival signal is a badge of at most three words (estate + role, e.g. NORTHWIND DEV) on the header line, and it renders ONLY when the installation is not production. Production is the unmarked default, so the badge costs a production operator nothing and cannot mislabel a production box: formatInstallationBadge returns null for production and only production, and loadInstallationBadge degrades toward the cautious class on any read failure.",
+    "estateFieldPlacement": "visibleFields goes 0 -> 1. The estate name is deliberately answerable on arrival rather than placed behind the impact-preview disclosure that guards purpose, environment class and pairing. Those three move the stances an AI coworker is held to and must show what they loosen before saving; a label does not, and wrapping a label in a consequence preview is how a meaningful confirmation stops being read.",
+    "axeCaveat": "axe-core against the jsdom render with color-contrast disabled, because that rule needs real layout and would report 'incomplete' rather than a pass. Token and theme contrast stay covered by the style-drift and primitive-adoption guards. The badge uses --dpf-warning and is asserted free of hardcoded hex and gray utilities in Header.badge.test.tsx.",
+    "reading": "readingGradeLevel 6.2 on the composed route, against a cap of 9. It IMPROVED from the panel's own 6.6 while the copy became more natural: the rewrite replaced self-declarative fragments ('A development installation. Its job: ...') with full clauses ('This installation is set up for development work. Its job is to ...'). Flesch-Kincaid counts syllables per word as heavily as words per sentence, so plain verbs pay for themselves — which is the evidence behind BI-06005FE0."
+  },
+  "evidence": {
+    "kind": "sweep-measurement",
+    "baselineComparison": "new-route",
+    "measured": {
+      "/ops/installation": {
+        "defaultVisibleWords": 243,
+        "leadBandWords": 40,
+        "primaryActions": 0,
+        "visibleFields": 1,
+        "maxChoicesPerControl": 0,
+        "subLegibleControls": 0,
+        "buriedPrimaryAction": 0,
+        "axeViolations": 0
+      }
+    }
+  }
+}

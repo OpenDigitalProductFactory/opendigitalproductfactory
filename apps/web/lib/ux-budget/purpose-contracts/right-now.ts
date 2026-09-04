@@ -29,7 +29,7 @@ export const RIGHT_NOW_PURPOSE_CONTRACTS: PurposeContractModule = [
         expectedPath: ["/platform/ai/overview", "/platform/ai/right-now"],
       },
       contentRoles: {
-        defaultVisibleKeys: ["workforce-pulse", "working-now-list", "quiet-list"],
+        defaultVisibleKeys: ["workforce-pulse", "working-now-list", "platform-work-list", "quiet-list"],
         deferredRegions: [
           {
             key: "coworker-manage",

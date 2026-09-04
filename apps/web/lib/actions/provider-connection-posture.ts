@@ -21,7 +21,7 @@ export async function updateProviderConnectionPosture(input: {
   providerId: string;
   accountClass: (typeof PROVIDER_ACCOUNT_CLASSES)[number];
   noTraining: boolean | null;
-  enabledRegions: string[];
+  enabledRegions?: string[];
   zeroRetention?: boolean | null;
   regionalProcessing?: boolean | null;
   approvedUnderlyingProviderSlugs?: string[];
@@ -41,7 +41,9 @@ export async function updateProviderConnectionPosture(input: {
     : {};
   const reviewedAt = new Date();
   const expiresAt = new Date(reviewedAt.getTime() + 90 * 86_400_000);
-  const enabledRegions = [...new Set(input.enabledRegions.map((region) => region.trim().toLowerCase()).filter(Boolean))].sort();
+  const enabledRegions = input.enabledRegions == null
+    ? undefined
+    : [...new Set(input.enabledRegions.map((region) => region.trim().toLowerCase()).filter(Boolean))].sort();
   const approvedUnderlyingProviderSlugs = [...new Set(
     (input.approvedUnderlyingProviderSlugs ?? [])
       .map((slug) => slug.trim().toLowerCase())
@@ -56,10 +58,10 @@ export async function updateProviderConnectionPosture(input: {
       entitlements: {
         ...existingEntitlements,
         noTraining: input.noTraining,
-        enabledRegions,
+        ...(enabledRegions === undefined ? {} : { enabledRegions }),
+        ...(input.regionalProcessing === undefined ? {} : { regionalProcessing: input.regionalProcessing }),
         ...(input.providerId === "openrouter" ? {
           zeroRetention: input.zeroRetention ?? null,
-          regionalProcessing: input.regionalProcessing ?? null,
           approvedUnderlyingProviderSlugs,
         } : {}),
       },
@@ -83,12 +85,12 @@ export async function updateProviderConnectionPosture(input: {
     });
   const evidenceWrites = [
     recordDeclaration("no-training", input.noTraining, "Connected-account no-training declaration"),
-    recordDeclaration("enabled-regions", enabledRegions, "Connected-account enabled-region declaration"),
+    ...(enabledRegions === undefined ? [] : [recordDeclaration("enabled-regions", enabledRegions, "Connected-account enabled-region declaration")]),
+    ...(input.regionalProcessing === undefined ? [] : [recordDeclaration("regional-processing", input.regionalProcessing, "Connected-account regional-processing declaration")]),
   ];
   if (input.providerId === "openrouter") {
     evidenceWrites.push(
       recordDeclaration("zero-retention", input.zeroRetention, "Connected-account zero-retention declaration"),
-      recordDeclaration("regional-processing", input.regionalProcessing, "Connected-account regional-processing declaration"),
       recordDeclaration("approved-underlying-providers", approvedUnderlyingProviderSlugs, "Connected-account router-provider declaration"),
     );
   }

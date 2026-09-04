@@ -4,6 +4,8 @@ import { resolveDemandPolicy } from "@/lib/demand/policy";
 import { DemandBoard } from "@/components/ops/DemandBoard";
 import { OpsTabNav } from "@/components/ops/OpsTabNav";
 import { NetworkDemandPanel } from "@/components/ops/NetworkDemandPanel";
+import { WorkSyncPanel } from "@/components/ops/WorkSyncPanel";
+import { getWorkSyncLinks } from "@/lib/federation/work-sync-read-model";
 import { getDemandShareContext, getNetworkDemandItems } from "@/lib/federation/demand-read-model";
 import { FounderSharedPortfolioPanel } from "@/components/ops/FounderSharedPortfolioPanel";
 import { getFounderSharedPortfolio } from "@/lib/federation/founder-portfolio";
@@ -21,11 +23,12 @@ export default async function DemandPage({
   }>;
 }) {
   const scope = (await searchParams) ?? {};
-  const [items, networkItems, shareContext, founderPortfolio, policyConfig] = await Promise.all([
+  const [items, networkItems, shareContext, founderPortfolio, workSyncLinks, policyConfig] = await Promise.all([
     getDemandItems(scope),
     getNetworkDemandItems(),
     getDemandShareContext(),
     getFounderSharedPortfolio(),
+    getWorkSyncLinks(),
     prisma.platformDevConfig.findUnique({
       where: { id: "singleton" },
       select: { demandFramework: true, demandBucketTargets: true },
@@ -55,6 +58,7 @@ export default async function DemandPage({
           clusters={JSON.parse(JSON.stringify(founderPortfolio.clusters))}
         />
       ) : null}
+      <WorkSyncPanel links={JSON.parse(JSON.stringify(workSyncLinks))} />
       <NetworkDemandPanel
         items={JSON.parse(JSON.stringify(networkItems))}
         shareContext={JSON.parse(JSON.stringify(shareContext))}

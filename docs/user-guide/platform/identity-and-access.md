@@ -17,10 +17,31 @@ order: 4
 
 ## Read The Identity Model
 
-DPF uses one principal spine to connect a person, AI coworker, or future
-service identity to aliases, groups, route access, and governed authority.
-Upstream directories can supply identity facts, but DPF retains local control
-over platform roles, route bundles, coworker associations, and tool execution.
+DPF uses one principal spine to connect a person, AI coworker, or service
+identity to aliases, groups, route access, and governed authority. Upstream
+directories can supply identity facts, but DPF retains local control over
+platform roles, route bundles, coworker associations, and tool execution.
+
+**Your install is the directory.** People, AI coworkers and service accounts are
+published as one tree that ordinary directory tools can read over a secure
+connection, so existing software can look up who works here without a separate
+identity product. The tree is built from the principal spine and is read-only:
+you change identity in DPF, and the directory follows. Its address is derived
+from your organization, so it reads as your namespace rather than a generic one.
+
+**Serving it is a choice you make.** The directory is off until you turn it on,
+because an install should not start answering an identity protocol just because
+it was upgraded. **Platform → Identity → Directory** tells you which of three
+things is true: it is serving, it is not served, or it was turned on and failed
+to start — with the reason. Turning it on needs your organization's own CA,
+because the connection is secured with your certificate and there is no
+self-signed fallback. See [serving the directory](../../install/serve-the-directory.md).
+
+**Two consequences worth knowing.** Disabling a principal now ends its ability to
+sign in immediately, rather than waiting for a sync — authority and sign-in can
+no longer drift apart. And people sign in with a password, while AI coworkers and
+service accounts identify with a certificate from your organization's own
+authority: they have no password to steal, guess or leak.
 
 ```mermaid
 flowchart LR

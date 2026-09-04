@@ -3,18 +3,18 @@
   "selectionCliff": 15,
   "entries": {
     "registry.toolDefinitions": {
-      "value": 393,
-      "reason": "Adds describe_committed_model (BI-F9CAF214): a READ-ONLY door onto the committed Prisma schema that needs no Build Studio build and no sandbox, so an external CLI surface (Claude Code, Codex, Grok) can inspect the data model at all — today describe_model returns \"No active build.\" to every one of them, leaving the platform unable to answer questions about its own schema from outside a build. It earns a permanent place because it is the only governed path to the schema for the surfaces that do most of the work, and because it never answers anonymously: every result names the tree, branch and sha it read and carries a trust vector that scores an off-default branch down, so a stale checkout is visible rather than silent. Kept separate from describe_model per kernel decision DI-7A4DFF0A1809, which scored a separate tool above an in-tool fallback on legibility_of_consequence — a single tool that silently switches trees is the ambiguity behind BI-6CFC5429 and BI-86EF5900. Adds nothing to the ACTING surface: read-only, idempotent, file_read grant.",
-      "recordedAt": "2026-08-23"
+      "value": 406,
+      "reason": "issue_ux_verification_sign_in (BI-9369DEB5): a fully automated installation is verified by agents with no person present, and most pages are session-gated. No existing tool can put the platform's own browser behind a session; this one mints a one-time link for the seeded automation persona so an agent can judge layout, type, colour and overrun in a real browser without typing a password or asking the operator.",
+      "recordedAt": "2026-09-03"
     },
     "registry.packFiles": {
-      "value": 97,
-      "reason": "Adds committed-schema-source.ts to the model-provider pack's file set — the reader that resolves the split schema (packages/db/prisma/schema/*.prisma) with explicit tree provenance and a trust vector. Kept as its own module rather than inlined into model-provider-pack.ts so the provenance contract is testable without a build, and so the module-size cap on the pack file is not spent on it.",
-      "recordedAt": "2026-08-23"
+      "value": 99,
+      "reason": "New ux-verification-pack.ts: browser-verification sign-in is a delivery-surface concern distinct from self-upgrade, sandbox and admin packs, and a single-tool pack keeps the grant (sandbox_execute) and capability (manage_platform) visible next to the tool they govern.",
+      "recordedAt": "2026-09-03"
     },
     "tier.coreToolNames": {
       "value": 30,
-      "reason": "Promotes find_coworker into the lean core tier so peer CLIs without client-side ToolSearch (Grok, Codex) can discover the coworker roster to route A2A handoffs — same rationale that keeps principle_decide/wiki_query core. Discovery-only; execution still gates on grants. BI-5FB59BC6.",
+      "reason": "Promotes find_coworker into the lean core tier so peer CLIs without client-side ToolSearch (Grok, Codex) can discover the coworker roster to route A2A handoffs \u2014 same rationale that keeps principle_decide/wiki_query core. Discovery-only; execution still gates on grants. BI-5FB59BC6.",
       "recordedAt": "2026-08-08"
     },
     "dispatch.maxAttachedTools": {

@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 import { describe, expect, it, vi } from "vitest";
 
-import { resolveRepositoryArtifact } from "./repository-artifact";
+import { readRepositoryProviderBlob, resolveRepositoryArtifact } from "./repository-artifact";
 
 const bytes = Buffer.from("canonical plan bytes\n", "utf8");
 const locator = {
@@ -74,6 +74,139 @@ function providerFetch(signOff = "Signed-off-by: Author <author@example.com>") {
 }
 
 describe("resolveRepositoryArtifact", () => {
+  it("retries one transient blob transport failure inside the same provider read", async () => {
+    const fetchImpl = vi.fn()
+      .mockRejectedValueOnce(new Error("token=must-not-leak"))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        type: "file",
+        sha: locator.providerBlobId,
+        encoding: "base64",
+        content: bytes.toString("base64"),
+      }), { status: 200 }));
+
+    await expect(readRepositoryProviderBlob({
+      repositoryFullName: locator.repositoryFullName,
+      commitSha: locator.commitSha,
+      path: locator.path,
+      expectedBlobId: locator.providerBlobId,
+      db: db() as never,
+      fetchImpl: fetchImpl as typeof fetch,
+    })).resolves.toEqual({ ok: true, data: bytes });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([408, 429, 500, 502, 503, 504])("retries retryable blob HTTP %i once", async (status) => {
+    const transient = vi.fn()
+      .mockResolvedValueOnce(new Response("temporarily unavailable", { status }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        type: "file",
+        sha: locator.providerBlobId,
+        encoding: "base64",
+        content: bytes.toString("base64"),
+      }), { status: 200 }));
+    await expect(readRepositoryProviderBlob({
+      repositoryFullName: locator.repositoryFullName,
+      commitSha: locator.commitSha,
+      path: locator.path,
+      expectedBlobId: locator.providerBlobId,
+      db: db() as never,
+      fetchImpl: transient as typeof fetch,
+    })).resolves.toEqual({ ok: true, data: bytes });
+    expect(transient).toHaveBeenCalledTimes(2);
+  });
+
+  it("refuses a permanent blob status immediately without exposing its body", async () => {
+    const permanent = vi.fn(async () => new Response("secret provider body", { status: 404 }));
+    const result = await readRepositoryProviderBlob({
+      repositoryFullName: locator.repositoryFullName,
+      commitSha: locator.commitSha,
+      path: locator.path,
+      expectedBlobId: locator.providerBlobId,
+      db: db() as never,
+      fetchImpl: permanent as typeof fetch,
+    });
+    expect(result).toMatchObject({ ok: false, code: "IMMUTABLE_SOURCE_UNAVAILABLE" });
+    if (!("error" in result)) throw new Error("expected an error result");
+    expect(result.error).toContain("HTTP 404");
+    expect(result.error).toContain("1 attempt");
+    expect(result.error).not.toContain("secret provider body");
+    expect(permanent).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not retry an unreadable successful blob response", async () => {
+    const fetchImpl = vi.fn(async () => new Response("not-json", { status: 200 }));
+    const result = await readRepositoryProviderBlob({
+      repositoryFullName: locator.repositoryFullName,
+      commitSha: locator.commitSha,
+      path: locator.path,
+      expectedBlobId: locator.providerBlobId,
+      db: db() as never,
+      fetchImpl: fetchImpl as typeof fetch,
+    });
+
+    expect(result).toMatchObject({ ok: false, code: "IMMUTABLE_SOURCE_UNAVAILABLE" });
+    if (!("error" in result)) throw new Error("expected an error result");
+    expect(result.error).toContain("unreadable");
+    expect(result.error).toContain("1 attempt");
+    expect(result.error).not.toContain("not-json");
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("reads a bounded exact blob from the configured canonical repository without a local git object", async () => {
+    const fetchImpl = providerFetch();
+    const result = await readRepositoryProviderBlob({
+      repositoryFullName: locator.repositoryFullName,
+      commitSha: locator.commitSha,
+      path: locator.path,
+      expectedBlobId: locator.providerBlobId,
+      db: db() as never,
+      fetchImpl: fetchImpl as typeof fetch,
+    });
+
+    expect(result).toEqual({ ok: true, data: bytes });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(fetchImpl).toHaveBeenCalledWith(
+      expect.stringContaining(`/contents/docs/superpowers/plans/test.md?ref=${locator.commitSha}`),
+      expect.objectContaining({ cache: "no-store" }),
+    );
+  });
+
+  it("rejects a provider response whose blob identity or size exceeds the immutable contract", async () => {
+    const mismatch = vi.fn(async () => new Response(JSON.stringify({
+      type: "file",
+      sha: "c".repeat(40),
+      size: bytes.length,
+      encoding: "base64",
+      content: bytes.toString("base64"),
+    }), { status: 200 }));
+    await expect(readRepositoryProviderBlob({
+      repositoryFullName: locator.repositoryFullName,
+      commitSha: locator.commitSha,
+      path: locator.path,
+      expectedBlobId: locator.providerBlobId,
+      db: db() as never,
+      fetchImpl: mismatch as typeof fetch,
+    })).resolves.toMatchObject({ ok: false, code: "IMMUTABLE_BLOB_MISMATCH" });
+    expect(mismatch).toHaveBeenCalledTimes(1);
+
+    const oversized = vi.fn(async () => new Response(JSON.stringify({
+      type: "file",
+      sha: locator.providerBlobId,
+      size: 1_048_577,
+      encoding: "base64",
+      content: bytes.toString("base64"),
+    }), { status: 200 }));
+    await expect(readRepositoryProviderBlob({
+      repositoryFullName: locator.repositoryFullName,
+      commitSha: locator.commitSha,
+      path: locator.path,
+      expectedBlobId: locator.providerBlobId,
+      db: db() as never,
+      fetchImpl: oversized as typeof fetch,
+    })).resolves.toMatchObject({ ok: false, code: "IMMUTABLE_SOURCE_TOO_LARGE" });
+    expect(oversized).toHaveBeenCalledTimes(1);
+  });
+
   it("derives bytes and SHA-256 from the exact provider blob bound to one subject capsule", async () => {
     const fetchImpl = providerFetch();
 
@@ -95,6 +228,92 @@ describe("resolveRepositoryArtifact", () => {
     });
     expect(fetchImpl).toHaveBeenCalledWith(expect.stringContaining(`/commits/${locator.commitSha}`), expect.any(Object));
     expect(fetchImpl).toHaveBeenCalledWith(expect.stringContaining(`/contents/docs/superpowers/plans/test.md?ref=${locator.commitSha}`), expect.objectContaining({ cache: "no-store" }));
+  });
+
+  it("retries transient commit provenance failures without creating another resolver invocation", async () => {
+    const fetchImpl = vi.fn()
+      .mockRejectedValueOnce(new Error("Authorization: Bearer must-not-leak"))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        commit: { message: "docs: canonical\n\nSigned-off-by: Author <author@example.com>" },
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        type: "file",
+        sha: locator.providerBlobId,
+        encoding: "base64",
+        content: bytes.toString("base64"),
+      }), { status: 200 }));
+
+    await expect(resolveRepositoryArtifact({
+      locator,
+      subject: { kind: "backlog-item", id: "BI-TEST" },
+      db: db() as never,
+      fetchImpl: fetchImpl as typeof fetch,
+    })).resolves.toMatchObject({ ok: true, artifact: { authorPrincipalId: "principal-author" } });
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+  });
+
+  it("retries one retryable commit status and bounds terminal transport attempts", async () => {
+    const retryable = vi.fn()
+      .mockResolvedValueOnce(new Response("provider overloaded", { status: 503 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        commit: { message: "docs: canonical\n\nSigned-off-by: Author <author@example.com>" },
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        type: "file",
+        sha: locator.providerBlobId,
+        encoding: "base64",
+        content: bytes.toString("base64"),
+      }), { status: 200 }));
+    await expect(resolveRepositoryArtifact({
+      locator,
+      subject: { kind: "backlog-item", id: "BI-TEST" },
+      db: db() as never,
+      fetchImpl: retryable as typeof fetch,
+    })).resolves.toMatchObject({ ok: true });
+    expect(retryable).toHaveBeenCalledTimes(3);
+
+    const transport = vi.fn(async () => { throw new Error("credential must-not-leak"); });
+    const result = await resolveRepositoryArtifact({
+      locator,
+      subject: { kind: "backlog-item", id: "BI-TEST" },
+      db: db() as never,
+      fetchImpl: transport as typeof fetch,
+    });
+    expect(result).toMatchObject({ ok: false, code: "CANONICAL_DESIGN_REQUIRED" });
+    if (!("error" in result)) throw new Error("expected an error result");
+    expect(result.error).toContain("transport");
+    expect(result.error).toContain("2 attempts");
+    expect(result.error).not.toContain("credential must-not-leak");
+    expect(transport).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not retry permanent or unreadable commit provenance responses", async () => {
+    const permanent = vi.fn(async () => new Response("private details", { status: 403 }));
+    const permanentResult = await resolveRepositoryArtifact({
+      locator,
+      subject: { kind: "backlog-item", id: "BI-TEST" },
+      db: db() as never,
+      fetchImpl: permanent as typeof fetch,
+    });
+    expect(permanentResult).toMatchObject({ ok: false, code: "CANONICAL_DESIGN_REQUIRED" });
+    if (!("error" in permanentResult)) throw new Error("expected an error result");
+    expect(permanentResult.error).toContain("HTTP 403");
+    expect(permanentResult.error).toContain("1 attempt");
+    expect(permanentResult.error).not.toContain("private details");
+    expect(permanent).toHaveBeenCalledTimes(1);
+
+    const unreadable = vi.fn(async () => new Response("not-json", { status: 200 }));
+    const unreadableResult = await resolveRepositoryArtifact({
+      locator,
+      subject: { kind: "backlog-item", id: "BI-TEST" },
+      db: db() as never,
+      fetchImpl: unreadable as typeof fetch,
+    });
+    expect(unreadableResult).toMatchObject({ ok: false, code: "ARTIFACT_AUTHOR_REQUIRED" });
+    if (!("error" in unreadableResult)) throw new Error("expected an error result");
+    expect(unreadableResult.error).toContain("unreadable");
+    expect(unreadableResult.error).toContain("1 attempt");
+    expect(unreadable).toHaveBeenCalledTimes(1);
   });
 
   // BI-B9403248: the external-session shape — a human principal records every
@@ -178,6 +397,7 @@ describe("resolveRepositoryArtifact", () => {
     expect(result).toMatchObject({ ok: false, code: "ARTIFACT_AUTHOR_REQUIRED" });
     if (!("error" in result)) throw new Error("expected an error result");
     expect(result.error).toContain("Signed-off-by");
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
   it("names the stale head and the remedy when no capsule head matches the plan commit", async () => {

@@ -220,11 +220,86 @@ export function selectDisabledConnectedProviders(
  * requires active/degraded, this one requires disabled — but they share an item
  * id, so dedupe by id keeps one row per provider if that ever stops holding.
  */
+/** A cloud provider that is active but cleared for nothing any turn uses. */
+export type UnclearedCloudProvider = {
+  providerId: string;
+  name: string;
+  detectedAtIso: string;
+};
+
+/**
+ * Pure projection: an ACTIVE cloud provider whose clearance does not include
+ * `internal` → it can serve no real turn (BI-575F0046).
+ *
+ * This is the state a fresh install lands in and the one no source detected.
+ * `deriveActivationClearance` grants a newly connected cloud account `["public"]`
+ * until its trust evidence is reviewed, and no route is ever `public` —
+ * ROUTE_SENSITIVITY floors at `internal`. So the provider is listed, healthy,
+ * authenticated and eligible for nothing, and the workspace home stops showing
+ * the local-only notice precisely because a provider now exists.
+ *
+ * Distinct from the expired-credential and disabled-provider lanes: nothing has
+ * failed here. Reconnecting would not help, so the copy must not suggest it.
+ */
+export function selectUnclearedCloudProviders(
+  rows: ReadonlyArray<{
+    provider: {
+      providerId: string;
+      name: string;
+      status: string;
+      endpointType?: string | null;
+      sensitivityClearance?: readonly string[] | null;
+    };
+  }>,
+  now: Date = new Date(),
+): UnclearedCloudProvider[] {
+  const items: UnclearedCloudProvider[] = [];
+  for (const row of rows) {
+    const p = row.provider;
+    if ((p.endpointType ?? "").toLowerCase() === "service") continue; // not a routing target
+    if (p.providerId === "local" || p.providerId === "ollama") continue; // never leaves the box
+    if (p.status !== "active") continue;
+    if ((p.sensitivityClearance ?? []).includes("internal")) continue;
+
+    items.push({ providerId: p.providerId, name: p.name, detectedAtIso: now.toISOString() });
+  }
+  return items;
+}
+
+export function unclearedCloudProviderToAttentionItem(
+  provider: UnclearedCloudProvider,
+): AttentionItem {
+  const href = `/platform/ai/providers/${encodeURIComponent(provider.providerId)}`;
+  return {
+    id: `provider-uncleared:${provider.providerId}`,
+    source: "provider-credential",
+    title: `${provider.name} is connected but not yet doing any work`,
+    context:
+      `Signing in proved the connection works. It has not yet recorded how that account handles ` +
+      `your business data, so your team keeps working on the built-in local AI instead. ` +
+      `Confirming that takes about a minute and puts ${provider.name} to work on everyday tasks.`,
+    decisionClass: { scorability: "unscorable" },
+    riskClass: "bounded-write",
+    triage: {
+      timeToAct: "none",
+      residueReason: "coverage-gap",
+      blastRadius: provider.name,
+      decideEffort: "review",
+      irreversible: false,
+    },
+    createdAtIso: provider.detectedAtIso,
+    actions: [{ kind: "open-in-context", label: "Confirm data handling", href }],
+    deepLink: href,
+    audience: { operator: true },
+  };
+}
+
 export async function loadProviderCredentialItems(): Promise<AttentionItem[]> {
   const rows = await getProviders();
   const items = [
     ...selectExpiredCredentialProviders(rows).map(expiredCredentialToAttentionItem),
     ...selectDisabledConnectedProviders(rows).map(disabledConnectedProviderToAttentionItem),
+    ...selectUnclearedCloudProviders(rows).map(unclearedCloudProviderToAttentionItem),
   ];
   return [...new Map(items.map((item) => [item.id, item])).values()];
 }

@@ -50,6 +50,10 @@ export async function provisionServiceAccount(
     siteKey: input.siteKey,
     accountKey: input.accountKey,
     displayName: input.displayName,
+    // The human who performed the attended bootstrap is the accountable owner
+    // of the resulting non-human identity (BI-3181909E). Without it the shared
+    // primitive refuses to mint the account.
+    accountableOwnerUserId: input.delegatingUserId,
   });
 
   const credentialId = await saveBrowserSessionCredential({

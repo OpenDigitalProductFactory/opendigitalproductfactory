@@ -44,6 +44,11 @@ export function ShapeViewToggle({
   mode: WorkroomViewMode;
   onChange: (next: WorkroomViewMode) => void;
 }) {
+  const labels: Record<WorkroomViewMode, string> = {
+    shape: "Overview",
+    detail: "Details",
+  };
+
   return (
     <div
       role="group"
@@ -56,13 +61,13 @@ export function ShapeViewToggle({
           type="button"
           onClick={() => onChange(value)}
           aria-pressed={mode === value}
-          className={`min-h-9 rounded-md px-3 text-sm capitalize focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)] ${
+          className={`min-h-9 rounded-md px-3 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)] ${
             mode === value
               ? "bg-[var(--dpf-surface-2)] font-medium text-[var(--dpf-text)]"
               : "text-[var(--dpf-muted)]"
           }`}
         >
-          {value}
+          {labels[value]}
         </button>
       ))}
     </div>

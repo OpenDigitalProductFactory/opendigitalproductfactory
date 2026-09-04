@@ -127,6 +127,20 @@ export interface DocImpactPlan {
   edges: PlannedEdge[];
 }
 
+/**
+ * How many DocPage nodes this manifest SHOULD produce — the source-of-truth count
+ * for the doc-impact reconciliation invariant (BI-A73954F7).
+ *
+ * Derived from `planDocImpactProjection` rather than counted off the manifest's
+ * `docToRoutes`/`docToCode` maps on purpose: the projection reads only the FORWARD
+ * maps, so a hand-rolled count off the inverse maps could disagree with what the
+ * projection actually writes and would report phantom drift. The invariant and the
+ * projection must share one derivation or the check becomes its own bug source.
+ */
+export function countDocPagesInManifest(manifest: DocImpactManifest): number {
+  return planDocImpactProjection(manifest).nodes.filter((n) => n.label === DOC_PAGE_LABEL).length;
+}
+
 /** Last path segment without a `.md` extension — a readable name in graph views. */
 function displayName(docPath: string): string {
   const base = docPath.slice(docPath.lastIndexOf("/") + 1);

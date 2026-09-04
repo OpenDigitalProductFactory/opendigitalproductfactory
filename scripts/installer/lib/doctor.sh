@@ -57,6 +57,33 @@ _dpf_doctor_redact() {
   sed -E 's/((SECRET|PASSWORD|TOKEN|KEY|AUTH)[A-Z_]*)(=|: )(.*)$/\1\3***REDACTED***/Ig'
 }
 
+# Redact secret VALUES wherever they appear, not only on their own key's line.
+#
+# Key-name redaction alone cannot see a secret embedded in another value. The
+# common case is the password inside a connection string --
+# DATABASE_URL=postgres://dpf:<password>@host -- whose key name matches none of
+# the secret patterns above. Seeded from .env, which is what
+# `docker compose config` interpolates from, so the values found here are
+# exactly the ones the rendered output can contain.
+#
+# Values shorter than 8 characters are skipped: redacting "1", "true" or "dev"
+# would corrupt the bundle for no gain. Passthrough when there is no readable
+# env file or nothing to redact. Bash 3.2 baseline.
+_dpf_doctor_redact_values() {
+  local env_file="${1:-.env}"
+  [ -r "$env_file" ] || { cat; return 0; }
+  local script
+  script="$(
+    grep -Ei '^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*(SECRET|PASSWORD|TOKEN|KEY|AUTH|PW)[A-Za-z0-9_]*=' "$env_file" 2>/dev/null \
+      | sed -e 's/^[^=]*=//' -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'\$//" \
+      | awk 'length($0) >= 8' \
+      | sort -u \
+      | sed -e 's/[][\.*^$\/]/\\&/g' -e 's|^|s/|' -e 's|$|/***REDACTED***/g|'
+  )"
+  [ -n "$script" ] || { cat; return 0; }
+  sed "$script"
+}
+
 # Common ports DPF binds. Used by the conflict scan.
 _DPF_DOCTOR_PORTS="3000 3001 3002 3035 5432 8080 8500 8600 8700 9090 9100 9182 9187 11434 1455"
 

@@ -1,5 +1,7 @@
 // The Attention Surface — projector output types (EP-ATTENTION-SURFACE, BI-D39484E7 + BI-61B9EB88).
 // Spec: docs/superpowers/specs/2026-06-23-human-attention-surface-design.md §4.1, §4.4.
+
+import type { EnvelopeDecisionSummary } from "./coworker-envelope-decision";
 //
 // `AttentionItem` is a READ-MODEL projection, NOT a persisted entity. Each queue's
 // truth stays in its owning model (single-source-of-truth); the inbox projects over
@@ -28,7 +30,9 @@ export type AttentionSource =
   | "hospitality-capacity" // blocked, quarantined, over-capacity, or idle Food & Hospitality capacity
   | "storefront-inquiry" // a new public StorefrontInquiry awaiting the owner's first response (BI-348766E5)
   | "business-journey" // PortfolioQualityIssue issueType=journey_failure — a critical business journey failed its watchdog run (BI-E105303D)
-  | "compliance-source-freshness"; // governed AI-provider compliance evidence lapsing or lapsed (BI-68D44727)
+  | "compliance-source-freshness" // governed AI-provider compliance evidence lapsing or lapsed (BI-68D44727)
+  | "coworker-envelope" // CoworkerActionEnvelope status=proposed, bound to the reading user (BI-7CB2CCDE)
+  | "skill-proposal"; // ImprovementProposal category=skill, status=proposed — a skill change awaiting review (BI-2F9EE2E9)
 
 /** Risk vocabulary aligned with the paused-work plan (a2aMetadata.riskClass). */
 export type AttentionRiskClass = "read" | "bounded-write" | "high-risk" | "unknown";
@@ -142,6 +146,53 @@ export type AttentionAuthor = {
   trustLevel?: string;
 };
 
+/** The immutable artifact a governed reviewer was bound to, when the envelope's
+ * TaskRun carries one. Read from `TaskRun.a2aMetadata.initiativeReviewBinding`
+ * via the canonical parser — the envelope row itself deliberately stores only the
+ * approval binding, never raw tool arguments. Flattened for rendering; the
+ * nested locator stays canonical in `InitiativeReviewBinding`. */
+export type AttentionEnvelopeReviewBinding = {
+  /** Readiness gate the receipt would satisfy, e.g. "research". */
+  gate: string;
+  /** The backlog item under review — the review SUBJECT. */
+  itemId: string;
+  repositoryFullName: string;
+  commitSha: string;
+  path: string;
+  /** Provider blob id — the bytes the reviewer was allowed to read. */
+  providerBlobId: string;
+};
+
+/** A proposed CoworkerActionEnvelope, projected for the delegating user who must
+ * decide it (BI-7CB2CCDE). Present ONLY on `coworker-envelope` items: an
+ * AgentActionProposal item never carries one, so no surface can hand a proposal
+ * id to the envelope state machine.
+ *
+ * Read-model only — `CoworkerActionEnvelope` stays canonical. */
+export type AttentionEnvelopeApproval = {
+  envelopeId: string;
+  /** Agent.agentId of the coworker that proposed the action. */
+  coworkerAgentId: string;
+  /** The only user who may decide this envelope. */
+  delegatingUserId: string;
+  manifestActionId: string;
+  rationale: string;
+  /** Raw stored status. Kept as-is so an unrecognised value renders honestly
+   *  rather than being coerced into a known one. */
+  status: string;
+  taskRunId: string | null;
+  expiresAtIso: string | null;
+  /** True only while the envelope is `proposed` AND unexpired at the projected
+   *  moment. False hides every decision control. */
+  actionable: boolean;
+  reviewBinding?: AttentionEnvelopeReviewBinding;
+  /** Decision-first owner summary (BI-F95B0795). Always present; unknown shapes fail closed. */
+  decision: EnvelopeDecisionSummary;
+  /** The authenticated envelope state-machine routes (lib/coworker/envelope-routes). */
+  approveHref: string;
+  declineHref: string;
+};
+
 export type AttentionItem = {
   /** Stable per source row, e.g. "escalation:PIR-…", "ai-decision:DI-…". */
   id: string;
@@ -174,4 +225,26 @@ export type AttentionItem = {
   /** Honest attribution when an AI coworker produced this item (BI-AB12B3D3).
    * Absent for items with no single AI author (e.g. a bill awaiting approval). */
   author?: AttentionAuthor;
+  /** The governed coworker action awaiting this reader's decision. Set only by
+   * the `coworker-envelope` source (BI-7CB2CCDE). */
+  envelope?: AttentionEnvelopeApproval;
 };
+
+/**
+ * Blast-radius strings that name nothing concrete (BI-79E207B9).
+ *
+ * A source that cannot say what is actually blocked writes one of these. They
+ * read as vague in owner copy, and they are the evidence that a decision has no
+ * owner-facing consequence yet — so both the copy layer and the routing layer
+ * read this one set rather than each keeping its own list.
+ */
+export const GENERIC_BLAST_RADIUS: ReadonlySet<string> = new Set([
+  "a coworker task",
+  "a coworker waiting on approval",
+]);
+
+/** True when an item names no concrete consequence. Pure. */
+export function namesNoConcreteConsequence(blastRadius: string | null | undefined): boolean {
+  const value = (blastRadius ?? "").trim().toLowerCase();
+  return value.length === 0 || GENERIC_BLAST_RADIUS.has(value);
+}

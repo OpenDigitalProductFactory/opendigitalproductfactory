@@ -8,6 +8,19 @@ order: 1
 
 The Finance area handles your organization's core financial operations: billing customers, managing supplier relationships, and processing purchases. It is not a full accounting system, but covers the transactional layer that connects to your products and services.
 
+For a **Pet Rescue** or **Animal Shelter**, the overview is titled **Funding &
+stewardship**. It emphasizes donations, grants, sponsorship pledges, overdue
+commitments, animal-care bills, and cash available for care. **Record
+contribution** is the primary entry point, with donation, grant, sponsorship,
+and other contribution contexts. The underlying finance records, controls, and
+permissions remain canonical; the archetype changes the operator vocabulary,
+not the accounting truth. Foreground totals therefore count **contributions**
+and **commitments**, and recent records identify the **supporter or funder**;
+the internal invoice record type remains available only as accounting detail.
+The setup prompt and Finance Specialist summary use the same funding,
+stewardship, cash-position, and reporting language instead of assuming a
+commercial invoicing or tax-remittance workflow.
+
 ```mermaid
 flowchart TB
     event["Confirm the external business event"] --> source["Create the right source record<br/>Invoice, purchase order and bill, or expense claim"]
@@ -162,6 +175,16 @@ choose. You can change your mind until the drive is claimed.
 **What you are owed.** A drive is priced at the rate in force on the day you drove
 it, not today's rate. A drive that has not been priced yet says so, rather than
 showing zero — no amount yet is not the same as nothing owed.
+
+**Driving abroad.** Your phone knows which country it is in, so you are never asked
+to pick one. If your company has set a rate for the country you drove in, that rate
+is used. If it has not, you are paid at your own country's rate — the country on
+your employee record. A drive that crosses a border is paid at the rate for the
+country you set off from.
+
+If your phone could not work out the country — no signal, or you did not give it
+permission — you are still paid, at your own country's rate. You never lose a
+drive over it.
 
 **Getting paid.** Someone with finance permission turns a month of business drives
 into an expense claim. That claim can be paid on its own or added to your pay as a

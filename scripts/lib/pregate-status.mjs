@@ -30,14 +30,33 @@
 //
 // Pure aside from injected readers, so the verdict logic unit-tests without a
 // gate run or a filesystem.
+//
+// BI-51353470: a record whose status is queued/cancelled never ran — that is
+// INCONCLUSIVE, not FAIL. A metadata candidateSha that is not HEAD is STALE
+// in the headline, not FAIL with a buried metadata line.
 
 /** Terminal verdicts, ordered worst-to-best for slot reconciliation. */
 export const PREGATE_VERDICTS = Object.freeze([
   "NO-RECORD",
+  "INCONCLUSIVE",
   "FAIL",
   "STALE",
   "PENDING",
   "PASS",
+]);
+
+/** Statuses that mean the gate was never admitted / never finished. Not FAIL. */
+const UNFINISHED_GATE_STATUSES = new Set(["queued", "cancelled"]);
+
+/**
+ * BI-8392DA16 / BI-2AB94B5A. A `blocked_*` status is infrastructure evidence —
+ * the child was killed, the sandbox drifted, or the control plane starved.
+ * FAIL is a claim about the diff. These must never share a headline.
+ */
+const BLOCKED_GATE_STATUSES = new Set([
+  "blocked_sandbox_drift",
+  "blocked_control_plane_starvation",
+  "blocked_child_signal_death",
 ]);
 
 function rank(verdict) {
@@ -79,8 +98,20 @@ function rank(verdict) {
  */
 function describeFailure(state, metadata) {
   const status = state?.status || "unknown";
-  const stated = state?.failureReason || state?.error || metadata?.execution?.failedCommand;
+  // Never quote a metadata record that does not describe THIS run. The gate state
+  // is written by the wrapper and is always current; the metadata is written by
+  // the sandbox run and a failing run may never rewrite it. Serving the previous
+  // run's failedCommand as this run's cause is worse than admitting the cause was
+  // not recorded — a confident wrong answer is acted on, an honest absence is
+  // re-run. The gate state's own fields stay usable either way.
+  const metadataIsForThisRun = !metadataDescribesAnotherRun(state, metadata);
+  const stated = state?.failureReason
+    || state?.error
+    || (metadataIsForThisRun ? metadata?.execution?.failedCommand : null);
   if (stated) return `gate record status ${status} — ${typeof stated === "string" ? stated : "see the gate record"}`;
+  if (!metadataIsForThisRun) {
+    return `gate record status ${status} with NO recorded reason for THIS run — the metadata file on disk describes a previous run, so it is not evidence about this one. Re-run pregate; do not treat this as a verdict on the diff.`;
+  }
 
   const events = Array.isArray(state?.leaseEvents) ? state.leaseEvents : [];
   const started = events.some((e) => e?.type === "started");
@@ -105,8 +136,27 @@ function describeFailure(state, metadata) {
  * gave it away.
  *
  * Presence of the file was always checked. Freshness never was.
+ *
+ * The SHA comparison alone was not enough (BI-465B3D60, second recurrence).
+ * Re-running the gate on an UNCHANGED commit produces runs whose candidateSha is
+ * identical by construction, so the SHAs match and this returns false while the
+ * metadata still describes a previous run. Observed live: four runs on
+ * efeb0a5a6845, three recorded failed and one passed, and the failing verdicts
+ * quoted a failedCommand from a metadata file 53 minutes older than the gate
+ * record. That sent the reader chasing a cause the run's own artifacts had
+ * already falsified.
+ *
+ * The lease is per-run, so it is the identity that actually separates two runs
+ * on one commit. Prefer it; fall back to the SHA when either side predates the
+ * stamp (an older metadata file has no runLeaseId, and an ungoverned run has no
+ * lease at all) so this never reports a false mismatch on a record that simply
+ * cannot answer.
  */
 function metadataDescribesAnotherRun(state, metadata) {
+  const boundLease = String(state?.leaseId || "");
+  const metadataLease = String(metadata?.runLeaseId || "");
+  if (boundLease && metadataLease) return boundLease !== metadataLease;
+
   const boundSha = String(state?.sha || "");
   const candidateSha = String(metadata?.candidateSha || "");
   if (!boundSha || !candidateSha) return false;
@@ -156,6 +206,45 @@ export function classifySlotRecord({ state, metadata, headSha, headBranch = "", 
   }
 
   if (state.gatePassed !== true) {
+    // BI-51353470: a metadata candidateSha that is not HEAD is STALE in the
+    // headline, not FAIL with a buried metadata line. Observed: FAIL quoting
+    // a previous run's vitest command while gated claimed the current HEAD.
+    if (candidateSha && headSha && candidateSha !== headSha) {
+      return {
+        ...base,
+        verdict: "STALE",
+        reason: `metadata record gated ${candidateSha.slice(0, 12)}, not HEAD ${headSha.slice(0, 12)} — re-run pregate`,
+        staleness: "metadata-mismatch",
+      };
+    }
+    const status = String(state.status || "");
+    // BI-5529B5AC: another slot PASSED this branch+SHA and the gate rewrote this
+    // losing record to say so. Bookkeeping, not a verdict on the diff.
+    if (status === "superseded" || state.supersededBy) {
+      const winner = state.supersededBy?.slotKey || "another slot";
+      return {
+        ...base,
+        verdict: "INCONCLUSIVE",
+        reason: `gate record superseded — ${winner} passed this SHA; this slot's ${state.supersededStatus || "prior"} record is not a verdict`,
+      };
+    }
+    if (UNFINISHED_GATE_STATUSES.has(status)) {
+      return {
+        ...base,
+        verdict: "INCONCLUSIVE",
+        reason: `gate record status ${status} — the gate did not run. This is not a failure of the diff. Re-run pregate.`,
+      };
+    }
+    if (BLOCKED_GATE_STATUSES.has(status) || status.startsWith("blocked_")) {
+      const stated = state?.failureReason || state?.error || "";
+      return {
+        ...base,
+        verdict: "INCONCLUSIVE",
+        reason: stated
+          ? `gate record status ${status} — infrastructure, not a product verdict. ${stated}`
+          : `gate record status ${status} — infrastructure, not a product verdict. The run was blocked before it could grade the diff. Re-run when the host is quieter; do not treat this as a failure of the code.`,
+      };
+    }
     return {
       ...base,
       verdict: "FAIL",

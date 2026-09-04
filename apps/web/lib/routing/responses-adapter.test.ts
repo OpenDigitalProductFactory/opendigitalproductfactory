@@ -163,6 +163,22 @@ describe("responsesAdapter", () => {
     expect(result.usage).toEqual({ inputTokens: 10, outputTokens: 5 });
   });
 
+  it("requires a tool call when the caller-owned plan requires one", async () => {
+    stubFetchOk({
+      output: [{ type: "function_call", call_id: "writer-1", name: "record_review", arguments: "{}" }],
+      usage: { input_tokens: 10, output_tokens: 5 },
+    });
+
+    await responsesAdapter.execute(makeRequest({
+      plan: makePlan({ toolPolicy: { toolChoice: "required" } }),
+      tools: [{ type: "function", function: { name: "record_review", parameters: {} } }],
+    }));
+
+    const sentBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(sentBody.tool_choice).toBe("required");
+    expect(sentBody.tools).toEqual([{ type: "function", name: "record_review", parameters: {} }]);
+  });
+
   it("uses the ChatGPT backend responses path for codex OAuth providers", async () => {
     stubFetchText([
       'data: {"type":"response.completed","response":{"output":[{"type":"message","content":[{"type":"output_text","text":"OAuth OK."}]}],"usage":{"input_tokens":4,"output_tokens":2}}}',

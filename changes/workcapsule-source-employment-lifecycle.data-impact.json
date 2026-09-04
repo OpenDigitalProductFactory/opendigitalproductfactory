@@ -1,0 +1,21 @@
+{
+  "version": "1",
+  "accountableOwner": "Mark Bodman (markdbodman@gmail.com)",
+  "summary": "BI-2624B7EA. Migration 20260902040000_workcapsule_source_employment_lifecycle widens the WorkCapsule_source_closed_set CHECK constraint to admit the three employment lifecycle definition keys (worker-onboarding, worker-change, worker-offboarding) that BI-28EFA338 registered and the actuator spawns. NO new information is collected and no field is added, removed or repurposed: the source column already exists and already holds a closed set of provenance labels; only the set of values the database permits changes, from six to nine. The new set is a strict superset of the old one, so no existing row can violate it, there is nothing to backfill, and no data subject is affected. The constraint is recreated NOT VALID to match its existing state — it was already NOT VALID because legacy rows predate the closed set, and validating it here would scan historical values this migration is not chartered to clean. Filed as a manifest rather than an exception because the change is genuinely to a persistent surface and should be declared, not waived.",
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "WorkCapsule",
+      "lifecycleDisposition": "retain-for-organization-lifetime",
+      "fields": [
+        {
+          "name": "source",
+          "resolution": "not-applicable",
+          "reason": "Operational provenance of a coordination record — which kind of work opened this Workroom. It is not an attribute of any data subject and collects nothing about a person. The column is unchanged; only the set of values the database permits widens, so that business instances the platform already registers can actually be created. Three of the newly permitted values coordinate workers, but the value itself names the DEFINITION, not the worker: the worker is referenced through the existing employeeProfileId in workspaceState, whose governance is unchanged by this migration.",
+          "provenance": "Set by the platform when a Workroom is opened, from the closed WORK_CAPSULE_SOURCES set in apps/web/lib/work-capsules.ts. Never operator free-text, and never derived from a person's data.",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}

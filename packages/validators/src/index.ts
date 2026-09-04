@@ -4,6 +4,7 @@ export * from "./crm";
 export * from "./customer";
 export * from "./dynamic";
 export * from "./edge";
+export * from "./federation-discovery";
 export * from "./field-dispatch";
 export * from "./field-dispatch-notifications";
 export * from "./field-dispatch-warranty";

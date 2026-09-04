@@ -1,6 +1,8 @@
 import type { InitiativeArtifactRef, InitiativeGateKey } from "@/lib/backlog/initiative-readiness";
 import { prisma } from "@dpf/db";
 import {
+  RESEARCH_DEFINITIONS,
+  READINESS_PROFILES,
   recordInitiativeGateReceipt,
   recordInitiativeObjectiveMappingProposal,
   recordInitiativeSpecApproval,
@@ -83,9 +85,26 @@ function inputSchemaFor(name: string, lane: Lane): ToolDefinition["inputSchema"]
   };
 }
 
+/**
+ * BI-3AE38A1F: the `research` lane existed and nothing said what satisfies it.
+ * An author who had genuinely verified a defect — confirmed it on a named ref,
+ * proved it with a failing-then-passing test, ruled out candidate causes by
+ * running them — had no way to know that record was what the gate wanted, and
+ * discovered the bar only by being refused. State it on the tool that records
+ * it, per profile, so the requirement is legible before the work starts.
+ */
+function gateGuidance(lane: Lane): string {
+  if (!lane.gates.includes("research")) return "";
+  const shapes = READINESS_PROFILES
+    .map((profile) => [profile, RESEARCH_DEFINITIONS[profile]] as const)
+    .filter((entry): entry is [typeof entry[0], NonNullable<typeof entry[1]>] => entry[1] !== null)
+    .map(([profile, definition]) => `${profile}: ${definition.summary} (${definition.satisfiedBy.join("; ")})`);
+  return ` What satisfies the research gate depends on the item's profile — ${shapes.join(" | ")}.`;
+}
+
 function definitionBase(lane: Lane): Omit<ToolDefinition, "name" | "inputSchema"> {
   return {
-    description: `Record authenticated initiative evidence for only these gate lanes: ${lane.gates.join(", ")}. Artifact identity, digest, subject, author, reviewer, and authority are server resolved.`,
+    description: `Record authenticated initiative evidence for only these gate lanes: ${lane.gates.join(", ")}. Artifact identity, digest, subject, author, reviewer, and authority are server resolved.${gateGuidance(lane)}`,
     requiredCapability: lane.capability,
     executionMode: "immediate",
     sideEffect: true,
@@ -355,9 +374,22 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
   };
 }
 
+// `LANES` is the single registry for disclosure, receipt validation AND recovery
+// routing, so it deliberately carries lanes this pack does not own as tools —
+// `record_plan_backlog_coverage` is routed here for the implementation-planner
+// role but is IMPLEMENTED by decomposition-pack with a different schema
+// (`decision: decomposed|atomic` + `deliverables`, not `gate` + `decision: pass`).
+// Deriving handlers from every lane registered a second handler under that name
+// and shadowed the real one, so the documented schema was rejected with
+// `gate-not-authorized` and no plan coverage could be recorded (BI-17CBD21F).
+// Bind handlers to the names this pack actually defines; the lane stays in
+// `LANES` so `readinessLaneForRole` still resolves its recovery route.
+const OWNED_TOOL_NAMES = definitions.map((definition) => definition.name);
+const ownedLanes = Object.entries(LANES).filter(([name]) => OWNED_TOOL_NAMES.includes(name));
+
 export const initiativeReadinessPack: ToolPack = {
   packId: "initiative-readiness",
   definitions,
-  handlers: Object.fromEntries(Object.entries(LANES).map(([name, lane]) => [name, handlerFor(name, lane)])),
-  grants: Object.fromEntries(Object.entries(LANES).map(([name, lane]) => [name, [lane.grant]])),
+  handlers: Object.fromEntries(ownedLanes.map(([name, lane]) => [name, handlerFor(name, lane)])),
+  grants: Object.fromEntries(ownedLanes.map(([name, lane]) => [name, [lane.grant]])),
 };

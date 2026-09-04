@@ -341,4 +341,20 @@ describe("selectStrongestReadinessProfile", () => {
   ] as const)("maps canonical scopeKind %s to %s", (scopeKind, expected) => {
     expect(deriveAuthoritativeReadinessProfile({ type: "feature", scopeKind })).toBe(expected);
   });
+
+  it.each([
+    ["bug", "fix"],
+    ["feature", "feature"],
+    ["chore", "fix"],
+    ["doc", "doc-only"],
+    ["tool", "feature"],
+    ["skill", "feature"],
+    ["refactor", "feature"],
+  ] as const)("maps closed backlog workType %s to readiness profile %s", (workType, expected) => {
+    expect(deriveAuthoritativeReadinessProfile({ workType })).toBe(expected);
+  });
+
+  it("keeps unknown work types unclassified", () => {
+    expect(deriveAuthoritativeReadinessProfile({ workType: "unknown-work" })).toBeNull();
+  });
 });

@@ -2,6 +2,11 @@
 
 import { prisma } from "@dpf/db";
 import { normalizeLocalityName } from "@dpf/db/location-normalize";
+import {
+  isProfessionJurisdiction,
+  PROFESSION_JURISDICTIONS,
+} from "@dpf/db/wiki-taxonomy";
+import { WorkerClassification } from "@dpf/db";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import {
@@ -140,7 +145,7 @@ export async function toggleCountryStatus(id: string): Promise<WorkforceActionRe
   await prisma.country.update({ where: { id }, data: { status: newStatus } });
 
   revalidateAdminPaths();
-  return { ok: true, message: `Country "${country.name}" is now ${newStatus}.` };
+  return refDataOk(`Country "${country.name}" is now ${newStatus}.`);
 }
 
 // ─── Update Region ───────────────────────────────────────────────────────────
@@ -170,7 +175,7 @@ export async function updateRegion(
   await prisma.region.update({ where: { id }, data: updateData });
 
   revalidateAdminPaths();
-  return { ok: true, message: "Region updated." };
+  return refDataOk("Region updated.");
 }
 
 // ─── Toggle Region Status ────────────────────────────────────────────────────
@@ -186,7 +191,7 @@ export async function toggleRegionStatus(id: string): Promise<WorkforceActionRes
   await prisma.region.update({ where: { id }, data: { status: newStatus } });
 
   revalidateAdminPaths();
-  return { ok: true, message: `Region "${region.name}" is now ${newStatus}.` };
+  return refDataOk(`Region "${region.name}" is now ${newStatus}.`);
 }
 
 // ─── Update City ─────────────────────────────────────────────────────────────
@@ -212,7 +217,7 @@ export async function updateCity(
   }
 
   revalidateAdminPaths();
-  return { ok: true, message: "City updated." };
+  return refDataOk("City updated.");
 }
 
 // ─── Toggle City Status ──────────────────────────────────────────────────────
@@ -228,7 +233,7 @@ export async function toggleCityStatus(id: string): Promise<WorkforceActionResul
   await prisma.city.update({ where: { id }, data: { status: newStatus } });
 
   revalidateAdminPaths();
-  return { ok: true, message: `City "${city.name}" is now ${newStatus}.` };
+  return refDataOk(`City "${city.name}" is now ${newStatus}.`);
 }
 
 // ─── Link Work Location Address ──────────────────────────────────────────────
@@ -276,7 +281,7 @@ export async function linkWorkLocationAddress(
   });
 
   revalidateAdminPaths();
-  return { ok: true, message: "Address linked to work location." };
+  return refDataOk("Address linked to work location.");
 }
 
 // ─── Unlink Work Location Address ────────────────────────────────────────────
@@ -309,7 +314,119 @@ export async function unlinkWorkLocationAddress(
   });
 
   revalidateAdminPaths();
-  return { ok: true, message: "Address unlinked and soft-deleted." };
+  return refDataOk("Address unlinked and soft-deleted.");
+}
+
+/**
+ * Success for this module's `WorkforceActionResult` contract.
+ *
+ * The canonical `ok()` in @/lib/shared/action-result builds `{ ok, data }`; this
+ * family predates it and returns `{ ok, message }`, which every caller narrows
+ * on. Until that migration happens, one constructor here beats nine inline
+ * literals — and it ratchets the One-ActionResult count down rather than up.
+ */
+function refDataOk(message: string): WorkforceActionResult {
+  return { ok: true, message };
+}
+
+// ─── Work Location Employment Jurisdiction (BI-9252B9EA) ─────────────────────
+
+/**
+ * Set which employment jurisdiction governs work done at a location.
+ *
+ * Without this, `WorkLocation.jurisdictionSlug` had no write path anywhere in
+ * the product: the co-employment control told operators to "set the jurisdiction
+ * on that location", and there was nowhere to do it. Every employment event
+ * therefore resolved to operator work permanently, and the actuator could never
+ * open a room on any install.
+ *
+ * The value is validated against the closed PROFESSION_JURISDICTIONS vocabulary
+ * rather than trusted, because an unrecognised slug reaching the policy spine is
+ * the one case the resolver cannot answer safely.
+ */
+export async function setWorkLocationJurisdiction(
+  locationId: string,
+  jurisdictionSlug: string | null,
+): Promise<WorkforceActionResult> {
+  const denied = await requireAdminCapability();
+  if (denied) return denied;
+
+  const trimmed = jurisdictionSlug?.trim() || null;
+  if (trimmed !== null && !isProfessionJurisdiction(trimmed)) {
+    return {
+      ok: false,
+      message: `"${trimmed}" is not a jurisdiction this platform knows. Choose one of: ${PROFESSION_JURISDICTIONS.join(", ")}.`,
+    };
+  }
+
+  const location = await prisma.workLocation.findUnique({
+    where: { id: locationId },
+    select: { id: true, name: true },
+  });
+  if (!location) return { ok: false, message: "Work location not found." };
+
+  await prisma.workLocation.update({
+    where: { id: locationId },
+    data: { jurisdictionSlug: trimmed },
+  });
+
+  revalidateAdminPaths();
+  return refDataOk(
+    trimmed
+      ? `${location.name} is now governed by ${trimmed} employment rules.`
+      : `${location.name} no longer declares an employment jurisdiction. Workers there will not be actioned until one is set.`,
+  );
+}
+
+// ─── Employment Type Classification (BI-C61CEEA9) ────────────────────────────
+
+/**
+ * Set the legal classification behind an organisation's own employment-type
+ * label.
+ *
+ * `EmploymentType.name` is free text an organisation types in — "Full-time",
+ * "Casual", "Advisor". The classification is the legal axis behind it, and
+ * `resolveClassification` reads exactly this column. Like the jurisdiction
+ * column, it shipped with no write path: D1's migration deliberately refused to
+ * map ambiguous labels such as a bare "Contractor" (direct and agency differ on
+ * who the employer is, which is where co-employment sits), and left them NULL as
+ * operator work — with nowhere for the operator to do that work.
+ *
+ * The platform never DERIVES a classification. This records the human's call.
+ */
+export async function setEmploymentTypeClassification(
+  employmentTypeId: string,
+  classification: string | null,
+): Promise<WorkforceActionResult> {
+  const denied = await requireAdminCapability();
+  if (denied) return denied;
+
+  const trimmed = classification?.trim() || null;
+  const valid = Object.values(WorkerClassification) as string[];
+  if (trimmed !== null && !valid.includes(trimmed)) {
+    return {
+      ok: false,
+      message: `"${trimmed}" is not a worker classification. Choose one of: ${valid.join(", ")}.`,
+    };
+  }
+
+  const employmentType = await prisma.employmentType.findUnique({
+    where: { id: employmentTypeId },
+    select: { id: true, name: true },
+  });
+  if (!employmentType) return { ok: false, message: "Employment type not found." };
+
+  await prisma.employmentType.update({
+    where: { id: employmentTypeId },
+    data: { classification: trimmed as never },
+  });
+
+  revalidateAdminPaths();
+  return refDataOk(
+    trimmed
+      ? `"${employmentType.name}" is now classified as ${trimmed}.`
+      : `"${employmentType.name}" no longer declares a classification. Workers on it will not be actioned until one is set.`,
+  );
 }
 
 // ─── Reference-data merge (MDM-5, spec §7 step 5) ────────────────────────────
@@ -386,7 +503,7 @@ export async function mergeCity(
   });
 
   revalidateAdminPaths();
-  return { ok: true, message: `City "${loser.name}" merged and superseded.` };
+  return refDataOk(`City "${loser.name}" merged and superseded.`);
 }
 
 // ─── Preview / Merge Region ──────────────────────────────────────────────────

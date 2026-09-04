@@ -1,6 +1,6 @@
 ---
 name: dpf-verify-substrate-first
-description: "Use when working in the DPF codebase and tempted to propose a new substrate concept (table, type, enum value, capability, epic, MCP tool, agent role). The DPF architecture is denser than first reads suggest; the most common reflex of 'we'll need a new X' is wrong because X already exists. This skill walks the substrate-verification grep + live-backlog + main-branch sweep before the new-X claim is recorded."
+description: "Use when tempted to propose a new DPF substrate concept — a table, type, enum value, capability, epic, MCP tool, or agent role."
 
 # Agent Skills standard fields (Surface A — Claude Code)
 disable-model-invocation: false
@@ -56,7 +56,7 @@ This skill carries forward the substrate-sweep discipline added by [PR #1104](ht
 | Type unions / enums | `apps/web/lib/`, `packages/db/src/` | Some "new states" are already values in existing string-union types (per AGENTS.md §3) |
 | Live backlog | `mcp__dpf__list_epics`, `mcp__dpf__list_backlog_items`, `mcp__dpf__query_backlog` | Active epics + open BIs may already cover the work |
 | Main-branch history | `git log origin/main --oneline -- <topic-path>` | Worktrees can be 100+ PRs behind; verify the spec's "not implemented" claim against `origin/main` |
-| Specs and plans | `docs/superpowers/specs/`, `docs/superpowers/plans/` | An approved design may already exist |
+| Specs and plans | `mcp__dpf__search_specs_and_plans`, or `docs/superpowers/specs/` and `docs/superpowers/plans/` directly | An approved design may already exist. The tool fails with `spec_plan_corpus_unavailable` on installs that ship no `docs/superpowers` tree (consumer and runtime-host images exclude it); that is not a no-match, so sweep a source checkout before concluding nothing exists |
 | Canonical UI primitives | `apps/web/lib/canonical-primitives.ts`, `apps/web/components/ui/report-kit/README.md`; `read_codebase_manifest().canonicalPrimitives`; `analyze_reusability` surfaces matches | Reporting/data-display UI (status badges, tables, KPI cards, filters, charts) is a solved palette — compose `report-kit`, don't hand-roll (principle `compose-report-kit-for-reporting-ux`) |
 
 ## Enforces
@@ -126,8 +126,11 @@ Before recording any "X does not exist" conclusion:
 2. **Prove the instrument is live.** For the code graph, call `mcp__dpf__get_code_graph_freshness` and read `trust.tier` / `trust.action`. A `low` tier or a `qualify` action means an empty result is NO EVIDENCE.
 3. **Prove you swept the merge target.** A worktree can be 100+ PRs behind. `git grep ... origin/main` answers the question that actually matters.
 4. **Say which sweep produced the null.** Report "not found on `origin/main` in `packages/db/prisma/schema/`" — never a bare "does not exist". The cite is what lets a reviewer catch a bad sweep.
+5. **Prove your filter did not eat the hits.** If the sweep excluded anything — `grep -v`, `--exclude`, a suppression pattern chosen to cut noise — re-run it with NO exclusions and state the raw count. A filtered-to-zero result is indistinguishable from a real absence, and it reads as *more* rigorous than a plain grep because it cites a methodology.
 
 Worked failure (BI-FA950F74): an agent grepped `packages/db/prisma/schema.prisma`, a path deleted by the schema split, got silence, and reported `PayRun` and `Payslip` as missing. Both were already on `main`. The sweep was clean; the conclusion was false.
+
+Worked failure (BI-5798BBA3): a brief recorded "Nothing in the repo queries `/engines/_configure` — confirmed by grep across apps, packages, scripts, docs; every hit is `not_configured` or `user_configured`." The path was right and the grep matched 95 times. The exclusion added to cut those two tokens removed every true hit along with them. Six source files queried the endpoint, including a boot-and-interval reconcile that already did the work the brief went on to recommend building. One `grep -rc` with no exclusions would have caught it.
 
 ## Output template
 

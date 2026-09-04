@@ -360,6 +360,23 @@ export const EXIT_SANDBOX_DRIFT = 3;
 export const EXIT_SANDBOX_NOT_READY = 4;
 export const EXIT_CONTROL_PLANE_STARVATION = 5;
 export const EXIT_VITEST_RUNNER_TERMINATION = 86;
+/**
+ * The local-CI child was killed by a SIGNAL rather than exiting (BI-F22B4EEE).
+ *
+ * `spawnSync` reports a signal death as `status: null`, and the runner used to
+ * collapse that with `result.status ?? 1` — producing exit 1, which is
+ * indistinguishable from a genuine product failure. Observed live: the child
+ * died at the vitest -> production-build boundary after 25,447 tests passed,
+ * leaving no build receipt, no error text, and a gate record that said
+ * "local-CI lease gate failed." with no reason. The box was carrying one active
+ * and nine queued gate claims at the time, and the build stage runs with a
+ * 16 GB heap allowance — an OOM kill, reported as a product verdict.
+ *
+ * 87 rather than the conventional 128+signal: the runner is reporting THAT a
+ * signal occurred, and the signal name travels in the evidence, so a single
+ * code keeps the classifier's shape.
+ */
+export const EXIT_CHILD_SIGNAL_DEATH = 87;
 
 export function exitCodeForVerdict(verdict) {
   if (verdict === "green") return EXIT_GREEN;
@@ -395,6 +412,28 @@ export function classifyGateOutcome({ freshnessVerdict, gateExitCode }) {
       gatePassed: false,
       productEvidence: false,
       summary: "local-CI gate blocked: the shared portal/MCP/Docker/PostgreSQL control-plane degraded during the build. This is infrastructure evidence, NOT a product build failure.",
+    };
+  }
+  if (gateExitCode === EXIT_CHILD_SIGNAL_DEATH || gateExitCode === 130 || gateExitCode === 143) {
+    // 130/143 are the conventional 128+SIGINT/SIGTERM codes the wrapper used
+    // to stamp when the PARENT received the signal (BI-8392DA16). Those are
+    // the same infrastructure death as EXIT_CHILD_SIGNAL_DEATH — not a
+    // product failure.
+    return {
+      status: "blocked_child_signal_death",
+      gatePassed: false,
+      productEvidence: false,
+      summary: "local-CI gate could not produce a verdict: the build child was killed by a signal rather than exiting. This is infrastructure evidence, NOT a product build failure — most often the host running out of memory under concurrent gate load. Re-run when the box is quieter; check the recorded signal and host pressure before treating any of it as a code defect.",
+    };
+  }
+  if (gateExitCode === 75) {
+    // BI-465B3D60: lease fencing (expiry / quiescence) used to fall through
+    // to product `failed` with no reason.
+    return {
+      status: "blocked_control_plane_starvation",
+      gatePassed: false,
+      productEvidence: false,
+      summary: "local-CI gate blocked: the lease was fenced (expired or quiesced) before the run finished. This is infrastructure evidence, NOT a product build failure. Re-run when the slot is free.",
     };
   }
   if (gateExitCode === EXIT_VITEST_RUNNER_TERMINATION) {

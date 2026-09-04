@@ -65,9 +65,28 @@ function inferRuleLevel(input: ProactivityResolverInput): ProactivityLevel {
   return resolveProactivityPlan(input).resolvedLevel;
 }
 
+/**
+ * BI-87C9C91C — proactivity is owned by the outcome-specific Workroom, never by
+ * a coworker identity.
+ *
+ * The `agent:<agentId>` scope used to sit FIRST here, so a saved per-coworker
+ * preference outranked both the route context and the activity family. That made
+ * "how persistently is this outcome pursued" a property of WHO was staffed to it:
+ * swapping the coworker in a room role changed the room's drive, which is the
+ * ownership boundary this item exists to restore.
+ *
+ * The scope is not merely deprioritized — it is GONE. A legacy
+ * `proactivity-override:agent:<id>` UserFact no longer matches any key this
+ * builds, so it is inert without a migration. That is deliberate: an identity
+ * preference cannot be reinterpreted as an outcome preference, so inferring a
+ * room's posture from one would be fabricating a choice nobody made.
+ *
+ * What remains is the unroomed default ladder — route context, then activity
+ * family — byte-identical to what an agent-less caller resolved before. A room's
+ * own declaration is layered by `resolveWorkPosture`, not here.
+ */
 function scopeKeysForInput(input: ProactivityResolverInput): string[] {
   const keys: string[] = [];
-  if (input.agentId) keys.push(`agent:${input.agentId}`);
   if (input.routeContext) keys.push(`route-context:${input.routeContext}`);
   keys.push(`activity-family:${input.activityFamily}`);
   return keys;

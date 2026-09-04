@@ -112,8 +112,14 @@ export function MediaUploader({
     [items, ownerType, ownerId, role],
   );
 
+  const [pendingRemove, setPendingRemove] = useState<string | null>(null);
+
   const remove = useCallback(async (attachmentId: string) => {
-    await fetch(`/api/storefront/admin/media/${attachmentId}`, { method: "DELETE" });
+    setPendingRemove(null);
+    const res = await fetch(`/api/storefront/admin/media/${attachmentId}`, {
+      method: "DELETE",
+    }).catch(() => null);
+    if (!res?.ok) return;
     setItems((prev) => prev.filter((i) => i.attachmentId !== attachmentId));
   }, []);
 
@@ -203,8 +209,19 @@ export function MediaUploader({
                   className={btnClass} style={btnStyle} aria-label="Move left">←</button>
                 <button type="button" onClick={() => void move(index, 1)} disabled={index === items.length - 1}
                   className={btnClass} style={btnStyle} aria-label="Move right">→</button>
-                <button type="button" onClick={() => void remove(item.attachmentId)}
-                  className="border border-[var(--dpf-border)] bg-transparent text-[var(--dpf-error)]" style={btnStyle} aria-label="Remove">✕</button>
+                {pendingRemove === item.attachmentId ? (
+                  <>
+                    <button type="button" onClick={() => void remove(item.attachmentId)}
+                      className="border border-[var(--dpf-error)] bg-transparent text-[var(--dpf-error)]"
+                      style={destructiveBtnStyle} aria-label="Remove this photo for good">Remove</button>
+                    <button type="button" onClick={() => setPendingRemove(null)}
+                      className={btnClass} style={destructiveBtnStyle} aria-label="Keep this photo">Keep</button>
+                  </>
+                ) : (
+                  <button type="button" onClick={() => setPendingRemove(item.attachmentId)}
+                    className="border border-[var(--dpf-border)] bg-transparent text-[var(--dpf-error)]"
+                    style={destructiveBtnStyle} aria-label="Remove">✕</button>
+                )}
               </div>
             </div>
           ))}
@@ -244,6 +261,17 @@ export function MediaUploader({
 const btnStyle: React.CSSProperties = {
   fontSize: 12,
   padding: "2px 6px",
+  borderRadius: 4,
+  cursor: "pointer",
+};
+
+/** Removing a photograph is destructive and is done one-handed on the tablet a
+ *  kennel technician carries. It measured 24x24 and deleted on one press
+ *  (BI-56BB6038). Same 44px target the animal's own Delete uses. */
+const destructiveBtnStyle: React.CSSProperties = {
+  minHeight: 44,
+  minWidth: 44,
+  fontSize: 12,
   borderRadius: 4,
   cursor: "pointer",
 };

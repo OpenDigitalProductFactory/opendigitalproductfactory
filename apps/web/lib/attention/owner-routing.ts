@@ -1,4 +1,5 @@
 import type { ProactivityLevel } from "@/lib/proactivity/proactivity-types";
+import { namesNoConcreteConsequence } from "./types";
 import type { AttentionItem, AttentionSource } from "./types";
 
 export type OwnerAttentionLane = "needs-you-now" | "weekly-digest" | "custodian";
@@ -45,6 +46,17 @@ export function classifyOwnerAttentionLane(
     // reservation so a waiting lead is never batched into a digest (BI-A36CF68D).
     return decision("needs-you-now", "A customer is waiting on a reply.", true, appliedLevel);
   }
+  if (item.source === "coworker-envelope") {
+    // A governed coworker is HELD until this employee decides, and the approval
+    // window is minutes wide. Batching it into a digest guarantees it expires
+    // unanswered, so it is hard-floored like a waiting guest (BI-7CB2CCDE).
+    return decision(
+      "needs-you-now",
+      "A coworker cannot act until you decide, and the window closes soon.",
+      true,
+      appliedLevel,
+    );
+  }
   if (item.source === "paused-ai" && item.triage.residueReason === "needs-credential") {
     return decision("custodian", "A credential is technical access work, not owner judgment.", false, appliedLevel);
   }
@@ -76,6 +88,22 @@ export function classifyOwnerAttentionLane(
       );
     }
     return decision("needs-you-now", "This still needs your judgment.", false, appliedLevel);
+  }
+  // A source that cannot say what is actually blocked has not established that
+  // this is the owner's decision. Running a rescue for a day found 34 of 40
+  // cards in the owner's inbox were paused platform task runs — spec approvals
+  // and research gates against backlog items — every one of them carrying the
+  // placeholder "a coworker task" and the platform's own advice to keep it with
+  // the specialist (BI-79E207B9). Nothing of the rescue's was waiting on any of
+  // them. This runs after the hard floors above, so money, a waiting guest, a
+  // waiting customer and a closing approval window still reach the owner.
+  if (namesNoConcreteConsequence(item.triage.blastRadius)) {
+    return decision(
+      "custodian",
+      "Nothing of yours is waiting on this — the specialist owns it.",
+      false,
+      appliedLevel,
+    );
   }
   if (item.triage.decideEffort === "judgment") {
     return decision("needs-you-now", "This still needs your judgment.", false, appliedLevel);

@@ -18,6 +18,8 @@
 
 /** Coarse cause families, each with a distinct owner-facing remedy. */
 export type RoutingExclusionBucket =
+  /** The connected account cannot use this specific model on this transport. */
+  | "account-model-eligibility"
   /** Provider allow/deny list — on this platform, almost always a connection that is switched off. */
   | "connection-excluded"
   /** The endpoint is not cleared for this data class. */
@@ -65,6 +67,9 @@ export function stripEndpointPrefix(reason: string): string {
  */
 export function bucketExclusionReason(reason: string): RoutingExclusionBucket {
   const text = stripEndpointPrefix(reason).toLowerCase();
+  if (text.includes("not supported when codex uses a chatgpt account")) {
+    return "account-model-eligibility";
+  }
   if (text.includes("request allowlist") || text.includes("request denylist")) {
     return "connection-excluded";
   }
@@ -86,6 +91,7 @@ export function bucketExclusionReason(reason: string): RoutingExclusionBucket {
  * naming the actionable one first is the whole point.
  */
 const TIE_BREAK_ORDER: RoutingExclusionBucket[] = [
+  "account-model-eligibility",
   "connection-excluded",
   "sensitivity-clearance",
   "capability-floor",
@@ -147,6 +153,14 @@ export function explainExclusion(
   const dataClass = context.sensitivity ? `"${context.sensitivity}"` : "this data class";
 
   switch (bucketed.bucket) {
+    case "account-model-eligibility":
+      return {
+        message:
+          `${bucketed.count} of ${bucketed.total} endpoints use a model that the connected ChatGPT account cannot run through Codex.`,
+        remediation:
+          "Select a ChatGPT-subscription-supported Codex model such as gpt-5.4, or use an API-key Codex connection for models that require API access.",
+        href: "/platform/ai/model-assignment",
+      };
     case "connection-excluded":
       return {
         message:

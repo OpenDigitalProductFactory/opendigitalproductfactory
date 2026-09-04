@@ -145,17 +145,19 @@ test("FAIL when the record exists for this SHA but did not pass", () => {
   assert.equal(exitCodeForVerdict(r.verdict), 1);
 });
 
-test("a run that gave up while queued reads FAIL, not PASS", () => {
-  // BI-2C7F51BA Defect 3: that path exits 0 having gated nothing. The record is
-  // what makes the silent exit-0 detectable.
+test("a run that gave up while queued reads INCONCLUSIVE, not PASS (BI-8392DA16)", () => {
+  // BI-2C7F51BA Defect 3: that path used to exit 0 having gated nothing. The
+  // record is what makes the silent exit-0 detectable. A `blocked_*` status
+  // is infrastructure, not a product FAIL — same class as SIGTERM.
   const r = classifySlotRecord({
     state: passingState({ gatePassed: false, status: "blocked_quiescence", evidenceRecordId: "" }),
     metadata: null,
     headSha: HEAD,
     now: NOW,
   });
-  assert.equal(r.verdict, "FAIL");
+  assert.equal(r.verdict, "INCONCLUSIVE");
   assert.match(r.reason, /blocked_quiescence/);
+  assert.match(r.reason, /infrastructure, not a product verdict/i);
 });
 
 test("PENDING when the gate passed but evidence publication is unfinished", () => {
@@ -252,15 +254,16 @@ test("a started-then-released run with no failing command is a retry, not a verd
 });
 
 test("flags a metadata file that describes a different run", () => {
-  // The trap this closes: failing runs never rewrote the metadata, so it kept
-  // reporting the PREVIOUS run's success. Reading it after a failure yields a
-  // confident, wrong "it passed" — only the file mtime gave it away.
+  // Failing runs never rewrote the metadata, so it kept reporting the PREVIOUS
+  // run. BI-465B3D60 flagged that as buried staleness; BI-51353470 promotes it
+  // to STALE in the headline so the reader is not told the current HEAD failed.
   const out = classifySlotRecord({
     state: failingRecord(),
     metadata: { candidateSha: "oldersha", execution: { status: "passed", exitCode: 0 } },
     ...atHead,
   });
-  assert.equal(out.staleness, "metadata-describes-another-run");
+  assert.equal(out.verdict, "STALE");
+  assert.equal(out.staleness, "metadata-mismatch");
 });
 
 test("does not flag the metadata when it describes this run", () => {
@@ -270,4 +273,257 @@ test("does not flag the metadata when it describes this run", () => {
     ...atHead,
   });
   assert.equal(out.staleness, "");
+});
+
+// BI-465B3D60, second recurrence. Four gate runs on ONE unchanged commit
+// (efeb0a5a6845 live): three recorded failed, one passed. Because every run had
+// the same candidateSha, the SHA comparison could not tell them apart, and the
+// failing verdicts quoted a failedCommand from a metadata file 53 minutes stale.
+// The lease is the per-run identity that separates them.
+const LEASE_THIS_RUN = "NPEL-D4D8BCC247";
+const LEASE_PRIOR_RUN = "NPEL-098CE6A455";
+
+test("a re-run on the SAME sha does not inherit the previous run's failedCommand", () => {
+  const out = classifySlotRecord({
+    state: {
+      sha: HEAD, branch: "feat/x", status: "failed", gatePassed: false,
+      leaseId: LEASE_THIS_RUN,
+      leaseEvents: [{ type: "started" }],
+    },
+    metadata: {
+      candidateSha: HEAD, // identical — this is the case the SHA check cannot see
+      runLeaseId: LEASE_PRIOR_RUN,
+      execution: { failedCommand: "node scripts/sandbox-freshness-preflight.mjs --converge" },
+    },
+    headSha: HEAD,
+    headBranch: "feat/x",
+    now: NOW,
+  });
+
+  assert.equal(out.verdict, "FAIL");
+  assert.equal(out.staleness, "metadata-describes-another-run");
+  assert.ok(
+    !out.reason.includes("sandbox-freshness-preflight"),
+    `must not quote the previous run's command; got: ${out.reason}`,
+  );
+  assert.match(out.reason, /previous run/);
+  assert.match(out.reason, /not.*verdict on the diff/);
+});
+
+test("a failedCommand from THIS run is still reported", () => {
+  const out = classifySlotRecord({
+    state: {
+      sha: HEAD, branch: "feat/x", status: "failed", gatePassed: false,
+      leaseId: LEASE_THIS_RUN,
+    },
+    metadata: {
+      candidateSha: HEAD,
+      runLeaseId: LEASE_THIS_RUN,
+      execution: { failedCommand: "pnpm --filter web build" },
+    },
+    headSha: HEAD,
+    headBranch: "feat/x",
+    now: NOW,
+  });
+
+  assert.equal(out.verdict, "FAIL");
+  assert.equal(out.staleness, "");
+  assert.match(out.reason, /pnpm --filter web build/);
+});
+
+test("an unstamped metadata record falls back to the sha check rather than crying mismatch", () => {
+  // Metadata written before runLeaseId existed, or by an ungoverned run. It has
+  // no lease to compare, so a lease-only rule would report every such record as
+  // another run's and suppress a cause that is in fact this run's.
+  const out = classifySlotRecord({
+    state: {
+      sha: HEAD, branch: "feat/x", status: "failed", gatePassed: false,
+      leaseId: LEASE_THIS_RUN,
+    },
+    metadata: { candidateSha: HEAD, execution: { failedCommand: "pnpm --filter web build" } },
+    headSha: HEAD,
+    headBranch: "feat/x",
+    now: NOW,
+  });
+
+  assert.equal(out.staleness, "");
+  assert.match(out.reason, /pnpm --filter web build/);
+});
+
+test("the state's own failureReason outranks metadata either way", () => {
+  const out = classifySlotRecord({
+    state: {
+      sha: HEAD, branch: "feat/x", status: "failed", gatePassed: false,
+      leaseId: LEASE_THIS_RUN, failureReason: "typecheck failed",
+    },
+    metadata: { candidateSha: HEAD, runLeaseId: LEASE_PRIOR_RUN, execution: { failedCommand: "stale" } },
+    headSha: HEAD,
+    headBranch: "feat/x",
+    now: NOW,
+  });
+
+  assert.match(out.reason, /typecheck failed/);
+});
+
+// BI-51353470: a record whose status is queued/cancelled never ran. FAIL is a
+// claim about the diff; INCONCLUSIVE is "this is not a verdict".
+// BI-D088D06D. The writer half of the same injustice. `pregate.mjs` recovers a
+// wrapper that exited before a terminal state; that run never graded the diff.
+// It used to write status "failed", which landed here as FAIL and consumed the
+// SHA's verdict, forcing an amend. It now writes `blocked_wrapper_exited`, and
+// this asserts the round trip actually reads as infrastructure.
+test("a wrapper that exited before grading reads INCONCLUSIVE, not FAIL (BI-D088D06D)", () => {
+  const r = classifySlotRecord({
+    state: passingState({
+      gatePassed: false,
+      status: "blocked_wrapper_exited",
+      evidenceRecordId: "",
+      recovery: { reason: "gate-wrapper-exited-before-terminal-state" },
+    }),
+    metadata: null,
+    headSha: HEAD,
+    now: NOW,
+  });
+  assert.equal(r.verdict, "INCONCLUSIVE");
+  assert.notEqual(r.verdict, "FAIL");
+  assert.match(r.reason, /infrastructure/i);
+});
+
+test("a queued record that never ran is INCONCLUSIVE, not FAIL (BI-51353470)", () => {
+  const r = classifySlotRecord({
+    state: passingState({ gatePassed: false, status: "queued", evidenceRecordId: "" }),
+    metadata: { candidateSha: HEAD },
+    headSha: HEAD,
+    headBranch: "claude/topic",
+    now: NOW,
+  });
+  assert.equal(r.verdict, "INCONCLUSIVE");
+  assert.match(r.reason, /did not run|never ran|not a failure of the diff/i);
+  assert.doesNotMatch(r.reason, /local-ci-vitest-runner/);
+  assert.equal(exitCodeForVerdict(r.verdict), 1, "inconclusive is not a green light to push");
+});
+
+test("a SIGTERM-killed / blocked_child_signal_death record is INCONCLUSIVE, not FAIL (BI-8392DA16, BI-2AB94B5A)", () => {
+  const r = classifySlotRecord({
+    state: passingState({
+      gatePassed: false,
+      status: "blocked_child_signal_death",
+      evidenceRecordId: "",
+      failureReason: "the build child was killed by SIGTERM",
+    }),
+    metadata: { candidateSha: HEAD },
+    headSha: HEAD,
+    headBranch: "claude/topic",
+    now: NOW,
+  });
+  assert.equal(r.verdict, "INCONCLUSIVE");
+  assert.match(r.reason, /infrastructure, not a product verdict/i);
+  assert.match(r.reason, /SIGTERM/);
+  assert.doesNotMatch(r.reason, /this SHA has not passed/);
+});
+
+test("blocked_sandbox_drift is INCONCLUSIVE, not FAIL (BI-2AB94B5A)", () => {
+  const r = classifySlotRecord({
+    state: passingState({ gatePassed: false, status: "blocked_sandbox_drift", evidenceRecordId: "" }),
+    metadata: { candidateSha: HEAD },
+    headSha: HEAD,
+    now: NOW,
+  });
+  assert.equal(r.verdict, "INCONCLUSIVE");
+  assert.match(r.reason, /infrastructure, not a product verdict/i);
+});
+
+test("a cancelled record is INCONCLUSIVE, not FAIL (BI-51353470)", () => {
+  const r = classifySlotRecord({
+    state: passingState({ gatePassed: false, status: "cancelled", evidenceRecordId: "" }),
+    metadata: { candidateSha: HEAD },
+    headSha: HEAD,
+    now: NOW,
+  });
+  assert.equal(r.verdict, "INCONCLUSIVE");
+});
+
+test("a candidateSha/HEAD mismatch on an unfinished record is STALE in the headline (BI-51353470)", () => {
+  // Observed: FAIL with gated=HEAD @ 0m and metadata candidateSha of a previous
+  // commit, quoting that earlier run's vitest command as the reason.
+  const r = classifySlotRecord({
+    state: {
+      branch: "fix/build-studio-hide-the-guts",
+      sha: HEAD,
+      gatePassed: false,
+      status: "queued",
+      recordedAt: "2026-08-04T12:00:00.000Z",
+    },
+    metadata: {
+      candidateSha: OLD,
+      execution: { failedCommand: "node scripts/local-ci-vitest-runner.mjs" },
+    },
+    headSha: HEAD,
+    headBranch: "fix/build-studio-hide-the-guts",
+    now: NOW,
+  });
+  assert.equal(r.verdict, "STALE");
+  assert.equal(r.staleness, "metadata-mismatch");
+  assert.match(r.reason, /bbbbbbbbbbbb/);
+  assert.match(r.reason, /aaaaaaaaaaaa/);
+  assert.ok(
+    !r.reason.includes("local-ci-vitest-runner"),
+    `must not quote the previous run's command; got: ${r.reason}`,
+  );
+  const lines = formatStatusReport(r, {
+    headBranch: "fix/build-studio-hide-the-guts",
+    headSha: HEAD,
+    now: NOW,
+  });
+  assert.equal(lines[0], "local-CI gate: STALE");
+});
+
+// BI-5529B5AC: once another slot PASSES the same branch+SHA, the losing
+// record is rewritten as `superseded`. That is not a verdict on the diff — it
+// is bookkeeping — so it must read as INCONCLUSIVE and name the winner, never
+// as FAIL.
+test("a superseded slot record is INCONCLUSIVE and names the winning slot", () => {
+  const result = classifySlotRecord({
+    state: {
+      branch: "feat/x",
+      sha: HEAD,
+      gatePassed: false,
+      status: "superseded",
+      supersededStatus: "queued",
+      supersededBy: { slotKey: "slot-1", at: "2026-09-03T01:00:00.000Z" },
+    },
+    metadata: null,
+    headSha: HEAD,
+    headBranch: "feat/x",
+    now: NOW,
+  });
+  assert.equal(result.verdict, "INCONCLUSIVE");
+  assert.match(result.reason, /superseded/);
+  assert.match(result.reason, /slot-1/);
+});
+
+test("reconciliation still prefers the PASS over a superseded sibling", () => {
+  const passed = {
+    slotKey: "slot-1",
+    ...classifySlotRecord({
+      state: { branch: "feat/x", sha: HEAD, gatePassed: true, status: "passed", expiresAt: "2026-08-04T13:00:00.000Z" },
+      metadata: { candidateSha: HEAD },
+      headSha: HEAD,
+      headBranch: "feat/x",
+      now: NOW,
+    }),
+  };
+  const superseded = {
+    slotKey: "slot-0",
+    ...classifySlotRecord({
+      state: { branch: "feat/x", sha: HEAD, gatePassed: false, status: "superseded", supersededBy: { slotKey: "slot-1" } },
+      metadata: null,
+      headSha: HEAD,
+      headBranch: "feat/x",
+      now: NOW,
+    }),
+  };
+  const result = reconcileSlots([superseded, passed]);
+  assert.equal(result.verdict, "PASS");
+  assert.equal(result.slot, "slot-1");
 });

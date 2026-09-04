@@ -1,6 +1,7 @@
 import type { ActiveViewer } from "./work-item-presence";
 import { deriveRoomCoordinator } from "./room-coordinator";
 import type {
+  WorkroomParticipantAssignmentSource,
   WorkroomParticipantRole,
   WorkroomParticipantView,
 } from "./room-types";
@@ -96,11 +97,12 @@ export type WorkroomParticipantAssignment = {
   sponsorPrincipalRef: string | null;
   sponsorDisplayName?: string | null;
   authoritySummary: string;
+  assignmentSource: Exclude<WorkroomParticipantAssignmentSource, "conversation">;
 };
 
 export type WorkroomConversationParticipant = Omit<
   WorkroomParticipantView,
-  "kind" | "presence" | "sourceRefs"
+  "kind" | "presence" | "sourceRefs" | "assignmentSource" | "coordinatorSource"
 > & {
   sourceRef: WorkroomParticipantView["sourceRefs"][number];
 };
@@ -116,11 +118,12 @@ export function projectWorkroomParticipants(input: {
   for (const assignment of input.assignments) {
     const existing = projected.get(assignment.principalRef);
     const currentWorkSummary = assignment.currentWorkSummary ?? existing?.currentWorkSummary ?? null;
+    const roles = existing
+      ? [...new Set([...existing.roles, ...assignment.roles])]
+      : assignment.roles;
     projected.set(assignment.principalRef, {
       ...assignment,
-      roles: existing
-        ? [...new Set([...existing.roles, ...assignment.roles])]
-        : assignment.roles,
+      roles,
       currentWorkSummary,
       enteredReason: assignment.enteredReason ?? existing?.enteredReason ?? null,
       sponsorPrincipalRef: assignment.sponsorPrincipalRef ?? existing?.sponsorPrincipalRef ?? null,
@@ -131,18 +134,21 @@ export function projectWorkroomParticipants(input: {
         ...(existing?.sourceRefs ?? []),
         { kind: "evidence", id: assignment.principalRef, sourceType: "principal" },
       ],
+      assignmentSource: assignment.assignmentSource,
+      coordinatorSource: roles.includes("coordinator") ? "explicit" : "none",
     });
   }
 
   for (const participant of input.conversationParticipants) {
     const existing = projected.get(participant.principalRef);
+    const roles = existing
+      ? [...new Set([...existing.roles, ...participant.roles])]
+      : participant.roles;
     projected.set(participant.principalRef, {
       principalRef: participant.principalRef,
       displayName: participant.displayName,
       kind: "agent",
-      roles: existing
-        ? [...new Set([...existing.roles, ...participant.roles])]
-        : participant.roles,
+      roles,
       workState: participant.workState,
       presence: active.has(participant.principalRef) ? "active" : "unknown",
       currentWorkSummary: participant.currentWorkSummary,
@@ -154,6 +160,8 @@ export function projectWorkroomParticipants(input: {
         ...(existing?.sourceRefs ?? []),
         participant.sourceRef,
       ],
+      assignmentSource: existing?.assignmentSource ?? "conversation",
+      coordinatorSource: existing?.coordinatorSource ?? "none",
     });
   }
 

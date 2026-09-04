@@ -22,7 +22,7 @@
 import type { ToolDefinition } from "@/lib/mcp-tools";
 import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 import { CORE_MCP_TOOL_NAMES } from "@/lib/mcp/tool-tier";
-import { LOCAL_TOOL_SELECTION_CLIFF } from "@/lib/tak/context-economy-metrics";
+import { resolveLocalToolCeiling, type LocalPresence } from "@/lib/routing/local-tool-ceiling";
 import {
   LOAD_TOOLS_TOOL_NAME,
   scoreToolIntentRelevance,
@@ -59,7 +59,13 @@ export const TOOL_SCHEMA_TOKEN_ESTIMATE = 330;
 export const COWORKER_NON_TOOL_RESERVE_TOKENS = 12_000;
 
 /** Never attach fewer than this — below it a coworker is too crippled to be
- *  useful, and the agentic loop's overflow handling covers the pathological case. */
+ *  useful, and the agentic loop's overflow handling covers the pathological case.
+ *
+ *  Scope of the floor (BI-8634F0BE): it bounds the WINDOW-FIT term only. A
+ *  MEASURED tool-fidelity ceiling below this value wins, and the cap follows the
+ *  measurement. Attaching more than a model has proven it can select from is not
+ *  a kindness — `callWithFallbackChain` refuses the surface outright, so the
+ *  coworker gets nothing instead of a small working set. */
 export const MIN_COWORKER_ATTACHED_TOOLS = 12;
 
 /**
@@ -84,6 +90,15 @@ export interface CoworkerToolCapOptions {
    * window-fit or the 48 hard ceiling.
    */
   measuredToolFidelityCeiling?: number | null;
+  /**
+   * Whether a local generation model is in the serving path (BI-A8BFEFCE).
+   *
+   * Supply this from `resolveLocalServingPosture`. Only `absent` lifts the cap
+   * to the full 48; `present` and `unknown` both bind to the selection ceiling.
+   * Omitted → derived from `servedContextTokens` for backward compatibility,
+   * which cannot tell an absent model from an unread one.
+   */
+  localPresence?: LocalPresence;
 }
 
 /**
@@ -105,55 +120,115 @@ export interface CoworkerToolCapOptions {
  *
  * `servedContextTokens` is the LOCAL model's served context (from the DMR truth);
  * it binds even when a cloud provider is preferred, because the cloud→local
- * FALLBACK is exactly where these cliffs bite. `null`/unknown = NO local model in
- * the serving path (a pure cloud turn) → the full 48, unaffected by the cliff.
+ * FALLBACK is exactly where these cliffs bite.
  *
- * This function is the SINGLE SOURCE of the coworker tool-count policy (INV-6):
- * the cliff constant lives in `context-economy-metrics.ts` and is consumed here.
+ * PRESENCE, not the window, decides whether the cliff applies (BI-A8BFEFCE).
+ * A null window used to mean "pure cloud turn → the full 48", but the probe that
+ * produces it returns null for an unread local model too. On a flaky probe that
+ * lifted the surface to 48 — the one value the routing layer refuses to run
+ * locally — so a transient read failure silently deleted the install's only
+ * fallback, and a cloud rate-limit on top of it produced a turn that executed
+ * nothing. Now only `localPresence: "absent"` lifts the cap; `unknown` fails safe.
+ *
+ * This function is the SINGLE SOURCE of the coworker tool-count policy (INV-6),
+ * deriving its local ceiling from `resolveLocalToolCeiling` — the same function
+ * the routing-layer fallback gate uses, so the two cannot disagree.
  *
  *   131_072 (local, unmeasured) → 15   131_072 + measured 40 → 40   24_576 → 15   16_000 → 12   null (cloud) → 48
+ *   null + presence "unknown" → 15     null + presence "present" → 15
  */
 export function deriveCoworkerToolCap(
   servedContextTokens: number | null | undefined,
   opts?: CoworkerToolCapOptions,
 ): number {
+  const hasWindow = typeof servedContextTokens === "number" && servedContextTokens > 0;
+  // Legacy callers report presence only through the window, which cannot tell an
+  // absent model from an unread one. Explicit presence always wins.
+  const presence: LocalPresence = opts?.localPresence ?? (hasWindow ? "present" : "absent");
+
   // No local model in the serving path → cloud turn, no cliff, full ceiling.
-  if (!servedContextTokens || servedContextTokens <= 0) return MAX_COWORKER_ATTACHED_TOOLS;
-  const toolBudgetTokens = servedContextTokens - COWORKER_NON_TOOL_RESERVE_TOKENS;
-  const fitted = Math.floor(toolBudgetTokens / TOOL_SCHEMA_TOKEN_ESTIMATE);
+  if (presence === "absent") return MAX_COWORKER_ATTACHED_TOOLS;
+
   // Fail-safe: a local model is cliff-prone by CLASS. Only measured fidelity
   // evidence lifts the ceiling above the selection cliff; a bigger window never
   // does (that was the BI-B5C358B1 defect — capacity mistaken for fidelity).
-  const measured = opts?.measuredToolFidelityCeiling;
-  const selectionCeiling =
-    measured && measured > 0 ? measured : LOCAL_TOOL_SELECTION_CLIFF;
-  const ceiling = Math.min(MAX_COWORKER_ATTACHED_TOOLS, selectionCeiling);
-  return Math.max(MIN_COWORKER_ATTACHED_TOOLS, Math.min(ceiling, fitted));
+  const ceiling = Math.min(
+    MAX_COWORKER_ATTACHED_TOOLS,
+    resolveLocalToolCeiling(opts?.measuredToolFidelityCeiling),
+  );
+
+  // Window-fit needs a real window. When the probe could not read one, the
+  // selection ceiling alone binds — an unknown window must never WIDEN the
+  // surface, which is the whole defect this branch exists to prevent.
+  if (!hasWindow) return ceiling;
+
+  // The MIN floor applies to the WINDOW-FIT term only, never on top of the
+  // ceiling (BI-8634F0BE). Written as `max(MIN, min(ceiling, fitted))` the floor
+  // came last and overrode the ceiling, so a measured fidelity below 12 attached
+  // 12 tools while the routing gate refused anything above the measured value —
+  // reinstating the exact BI-A8BFEFCE failure by a different route. The floor
+  // exists to stop window arithmetic shrinking a coworker into uselessness on a
+  // small context; it was never evidence about what the model can select from.
+  const toolBudgetTokens = servedContextTokens! - COWORKER_NON_TOOL_RESERVE_TOKENS;
+  const fitted = Math.floor(toolBudgetTokens / TOOL_SCHEMA_TOKEN_ESTIMATE);
+  return Math.min(ceiling, Math.max(MIN_COWORKER_ATTACHED_TOOLS, fitted));
 }
 
 /**
  * Max skills to ENUMERATE in the coworker system-prompt catalog on a cliff-prone
  * small local window. The tool cap (above) sizes tool schemas to the window, but
  * the skills catalog ("- skillId: label - description" per skill) is the largest
- * UNCAPPED non-tool block: a heavy coworker (build/platform hold 36-38 skills ≈
- * ~4k tokens) can push the assembled prompt past a small local window even after
- * the tool cap. Bound it to the same selection-cliff the tool cap uses — a small
- * local model can't usefully choose from dozens of skills either — and rely on
- * per-turn re-ranking (rankSkillsByRelevance orders to the current message) to
- * surface others when a later turn is about them.
+ * UNCAPPED non-tool block, and it is heavier than this comment used to claim.
+ * Measured on the live install (2026-08-26, `SkillAssignment` joined to
+ * `SkillDefinition` on skillId, enabled + active only): platform-engineer holds
+ * 45 skills ≈ 15,281 chars ≈ 3.8k tokens, build-specialist 43 ≈ 3.5k, and EIGHT
+ * agents sit above this cap. That block can push the assembled prompt past a
+ * small local window even after the tool cap. Bound it to the same
+ * selection-cliff the tool cap uses — a small local model can't usefully choose
+ * from dozens of skills either — and rely on per-turn re-ranking
+ * (rankSkillsByRelevance orders to the current message) to surface others when a
+ * later turn is about them.
  */
 export const SKILL_CATALOG_CLIFF_CAP = 15;
 
 /**
  * Max skills to list in the coworker prompt, sized to the LOCAL served context —
- * the symmetric partner to deriveCoworkerToolCap. A cliff-prone small local window
- * (<= ACCURACY_CLIFF_PRONE_MAX_CONTEXT) enumerates only the most relevant skills;
- * a capable/unknown window (null or > cliff) is uncapped (Infinity) so cloud and
- * large-window installs are byte-identical.
+ * the symmetric partner to deriveCoworkerToolCap.
+ *
+ * PRESENCE gates it; the WINDOW then decides (BI-DBEEC15B). Note the axis differs
+ * from the tool cap deliberately: the tool cap binds on presence alone because
+ * tool-SELECTION accuracy is a property of the model class, whereas this is a
+ * question of context FIT. So a local model with a genuinely large window still
+ * gets an uncapped catalog, exactly as before.
+ *
+ * What changed is the unread case. This used to return Infinity for a null
+ * window, but that null carries two different facts — no local model, and a
+ * probe that could not read one (see `LocalPresence`). Only the first justifies
+ * uncapping. A failed probe on an install that does have a small local model
+ * used to enumerate the whole catalog, compounding with the tool-surface
+ * widening that BI-A8BFEFCE fixed: on a 24,576-token window that was ~11k extra
+ * tokens of tool schemas plus ~2.5k of catalog, from one unread value.
+ *
+ *   null + "absent" → Infinity   null + "unknown"/"present" → 15
+ *   24_576 → 15   131_072 → Infinity   null (no presence given) → Infinity
  */
-export function deriveSkillCatalogCap(servedContextTokens: number | null | undefined): number {
-  if (!servedContextTokens || servedContextTokens <= 0) return Number.POSITIVE_INFINITY;
-  return servedContextTokens <= ACCURACY_CLIFF_PRONE_MAX_CONTEXT
+export function deriveSkillCatalogCap(
+  servedContextTokens: number | null | undefined,
+  opts?: { localPresence?: LocalPresence },
+): number {
+  const hasWindow = typeof servedContextTokens === "number" && servedContextTokens > 0;
+  // Legacy callers report presence only through the window, which cannot tell an
+  // absent model from an unread one. Explicit presence always wins.
+  const presence: LocalPresence = opts?.localPresence ?? (hasWindow ? "present" : "absent");
+
+  // No local model in the serving path → cloud turn, nothing to fit inside.
+  if (presence === "absent") return Number.POSITIVE_INFINITY;
+
+  // Local IS in the path but its window is unreadable. Fail safe to the cliff
+  // cap: an unknown window must never be treated as a large one.
+  if (!hasWindow) return SKILL_CATALOG_CLIFF_CAP;
+
+  return servedContextTokens! <= ACCURACY_CLIFF_PRONE_MAX_CONTEXT
     ? SKILL_CATALOG_CLIFF_CAP
     : Number.POSITIVE_INFINITY;
 }
@@ -288,6 +363,17 @@ export function selectCoworkerToolBudget(params: {
   // pass past it; with the real cap floor (12) route domain tools always fit.
   // The always-include set (load_tools — the escape hatch that reaches every
   // deferred tool) attaches unconditionally and counts toward the cap.
+  //
+  // `alwaysIncludeNames` therefore holds EXACTLY ONE name (BI-95D74DE9). The six
+  // AUTHORIZED_SURFACE_TOOL_NAMES were added to it later and took the cap
+  // exemption with them, putting a floor of 6 (+load_tools) under every attached
+  // surface regardless of cap. That was masked while MIN_COWORKER_ATTACHED_TOOLS
+  // floored the cap at 12; once BI-8634F0BE let a measured ceiling drop the cap
+  // below 7, the surface exceeded what callWithFallbackChain will run locally and
+  // local left the fallback chain — the BI-A8BFEFCE failure one layer down.
+  // Route-scoped and surface tools belong in `pageActionNames`: same tier-0
+  // ranking, no exemption. Only load_tools may outrank the bound, because
+  // dropping it would strand every deferred tool with no way back.
   let attachedCount = 0;
   for (const entry of ranked) {
     if (always.has(entry.t.name)) {

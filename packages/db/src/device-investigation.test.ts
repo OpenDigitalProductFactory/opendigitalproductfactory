@@ -46,6 +46,20 @@ describe("investigateUnidentifiedDevice — auto-resolve cases (draft rule autho
     expect(result.draftRule?.taxonomyNodeId).toBe("foundational/building_management/security_and_surveillance");
   });
 
+  it("attaches a privacy-scrubbed commons contribution for a known device — no MAC/IP (BI-57C27DE1)", async () => {
+    const obs = buildDeviceFingerprintObservation({ attributes: { vendor: "Hikvision Digital Technology", mac: "00:11:22:33:44:55" } })!;
+    const result = await investigateUnidentifiedDevice(obs);
+    expect(result.commonsContribution).toEqual({ vendor: "hikvision digital technology", deviceClass: "ip_camera" });
+    // the contributed payload must never carry the MAC or any identifier
+    expect(JSON.stringify(result.commonsContribution)).not.toMatch(/00:11:22|192\.168/);
+  });
+
+  it("contributes NOTHING to the commons for an unresolved/proprietary device (kept local)", async () => {
+    const obs = buildDeviceFingerprintObservation({ attributes: { vendor: "Totally Unknown Vendor Ltd", mac: "aa:bb:cc:dd:ee:ff" } })!;
+    const result = await investigateUnidentifiedDevice(obs);
+    expect(result.commonsContribution ?? null).toBeNull();
+  });
+
   it("auto-resolves an observed printer signal into client compute without inventing an exact model", async () => {
     const obs = buildDeviceFingerprintObservation({
       name: "Printer",

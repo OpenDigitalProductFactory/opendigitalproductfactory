@@ -105,17 +105,27 @@ export function resolveUpgradeStrategy(
 }
 
 export type ReleaseTargetResult =
-  | { kind: "target"; tag: string; sourceSha: string; channelDigest: string; configDigest: string }
-  | { kind: "up-to-date"; tag: string; sourceSha: string; channelDigest: string; configDigest: string }
-  | { kind: "no-published-target"; reason: RegistryReleaseFailureReason | "current-image-identity-missing" };
+  | { kind: "target"; tag: string; sourceSha: string; channelDigest: string; platformManifestDigest: string; configDigest: string; platformOs: "linux"; platformArchitecture: string }
+  | { kind: "up-to-date"; tag: string; sourceSha: string; channelDigest: string; platformManifestDigest: string; configDigest: string; platformOs: "linux"; platformArchitecture: string }
+  | {
+      kind: "no-published-target";
+      reason: RegistryReleaseFailureReason | "current-image-identity-missing";
+      /** Optional condition detail, e.g. the HTTP status behind `registry-unavailable`. */
+      detail?: string;
+    };
 
 export function resolveReleaseTarget(input: {
   currentConfigDigest: string | null;
   candidate: RegistryReleaseCandidate | null;
   unavailableReason?: RegistryReleaseFailureReason;
+  unavailableDetail?: string;
 }): ReleaseTargetResult {
   if (!input.candidate) {
-    return { kind: "no-published-target", reason: input.unavailableReason ?? "registry-unavailable" };
+    return {
+      kind: "no-published-target",
+      reason: input.unavailableReason ?? "registry-unavailable",
+      ...(input.unavailableDetail ? { detail: input.unavailableDetail } : {}),
+    };
   }
   if (!input.currentConfigDigest) {
     return { kind: "no-published-target", reason: "current-image-identity-missing" };
@@ -137,7 +147,10 @@ export function resolveReleaseTarget(input: {
       tag: input.candidate.tag,
       sourceSha: input.candidate.sourceSha,
       channelDigest: input.candidate.channelDigest,
+      platformManifestDigest: input.candidate.platformManifestDigest,
       configDigest: input.candidate.configDigest,
+      platformOs: input.candidate.platformOs,
+      platformArchitecture: input.candidate.platformArchitecture,
     };
   }
   return {
@@ -145,7 +158,10 @@ export function resolveReleaseTarget(input: {
     tag: input.candidate.tag,
     sourceSha: input.candidate.sourceSha,
     channelDigest: input.candidate.channelDigest,
+    platformManifestDigest: input.candidate.platformManifestDigest,
     configDigest: input.candidate.configDigest,
+    platformOs: input.candidate.platformOs,
+    platformArchitecture: input.candidate.platformArchitecture,
   };
 }
 
@@ -167,5 +183,6 @@ export async function resolveReleaseUpgradeCandidate(
     currentConfigDigest: input.currentConfigDigest,
     candidate: release.ok ? release.candidate : null,
     unavailableReason: release.ok ? undefined : release.reason,
+    unavailableDetail: release.ok ? undefined : release.detail,
   });
 }

@@ -1,3 +1,5 @@
+"use client";
+
 import {
   Activity,
   FileCheck2,
@@ -24,6 +26,11 @@ import { WorkroomCycles } from "./WorkroomCycles";
 import { WorkroomShapeSection } from "./WorkroomShapeSection";
 import { WorkroomParticipants } from "./WorkroomParticipants";
 import { WorkroomPosture } from "./WorkroomPosture";
+import { WorkroomProcessOverseer } from "./WorkroomProcessOverseer";
+import {
+  useWorkroomViewMode,
+  type WorkroomViewMode,
+} from "./ShapeViewToggle";
 
 type Props = {
   detail: WorkspaceWorkCaseDetailView;
@@ -96,6 +103,8 @@ function ContextPanels({ room }: { room: WorkroomView }) {
   return (
     <div className="space-y-3">
       <WorkroomParticipants room={room} />
+
+      <WorkroomProcessOverseer room={room} />
 
       <section aria-label="Work" className="rounded-xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
         <details>
@@ -175,6 +184,18 @@ function RoomDetails({ detail, room }: Props) {
           <p className="mt-1 font-medium text-[var(--dpf-text)]">{detail.summary.a2aStatus}</p>
         </div>
         <div>
+          <p className="text-xs text-[var(--dpf-muted)]">Definition</p>
+          <p className="mt-1 break-all font-medium text-[var(--dpf-text)]">
+            {room.identity.definition?.definitionId ?? "Unresolved"}
+          </p>
+        </div>
+        <div>
+          <p className="text-xs text-[var(--dpf-muted)]">Occurrence</p>
+          <p className="mt-1 break-all font-medium text-[var(--dpf-text)]">
+            {room.identity.instance.instanceId}
+          </p>
+        </div>
+        <div>
           <p className="text-xs text-[var(--dpf-muted)]">Projection</p>
           <p className="mt-1 font-medium text-[var(--dpf-text)]">
             {roomLabel(room.projection.confidence)} confidence · {roomLabel(room.projection.sourceHealth)}
@@ -196,14 +217,9 @@ function RoomDetails({ detail, room }: Props) {
   );
 }
 
-export function WorkroomBody({ detail, room }: Props) {
+function WorkroomDetailsContent({ detail, room }: Props) {
   return (
     <>
-      <BoundaryNotice room={room} />
-
-      {/* BI-23DB08BB: the room's shape, before the prose that details it. */}
-      <WorkroomShapeSection graph={projectRoomShape(room)} />
-
       <WorkroomCycles room={room} />
 
       <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.65fr)_minmax(18rem,0.75fr)]">
@@ -265,5 +281,44 @@ export function WorkroomBody({ detail, room }: Props) {
         </section>
       ) : null}
     </>
+  );
+}
+
+export function WorkroomBodyContent({
+  detail,
+  room,
+  mode,
+  onModeChange,
+}: Props & {
+  mode: WorkroomViewMode;
+  onModeChange: (next: WorkroomViewMode) => void;
+}) {
+  return (
+    <>
+      <BoundaryNotice room={room} />
+
+      <WorkroomShapeSection
+        graph={projectRoomShape(room)}
+        room={room}
+        mode={mode}
+        onModeChange={onModeChange}
+      />
+
+      {mode === "detail" ? (
+        <WorkroomDetailsContent detail={detail} room={room} />
+      ) : null}
+    </>
+  );
+}
+
+export function WorkroomBody({ detail, room }: Props) {
+  const [mode, setMode] = useWorkroomViewMode();
+  return (
+    <WorkroomBodyContent
+      detail={detail}
+      room={room}
+      mode={mode}
+      onModeChange={setMode}
+    />
   );
 }

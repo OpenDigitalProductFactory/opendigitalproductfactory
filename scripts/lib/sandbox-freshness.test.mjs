@@ -4,7 +4,14 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { test } from "node:test";
 import {
+  fallbackStatusForUnknown,
+  isLocalIntegrationStatus,
+} from "./local-integration-status.mjs";
+import {
   CRITICAL_PACKAGES,
+  EXIT_CHILD_SIGNAL_DEATH,
+  EXIT_VITEST_RUNNER_TERMINATION,
+  EXIT_CONTROL_PLANE_STARVATION,
   EXIT_GREEN,
   EXIT_SANDBOX_DRIFT,
   EXIT_SANDBOX_NOT_READY,
@@ -364,4 +371,95 @@ test("classifyGateOutcome distinguishes repeated Vitest runner termination from 
   assert.equal(outcome.gatePassed, false);
   assert.equal(outcome.productEvidence, false);
   assert.match(outcome.summary, /runner evidence, NOT a product test failure/);
+});
+
+// BI-F22B4EEE. A child killed by a signal is infrastructure evidence, not a
+// product build failure. Before this, `result.status ?? 1` collapsed SIGKILL
+// into exit 1 and the gate recorded "local-CI lease gate failed." — a product
+// verdict for a host that ran out of memory.
+test("a signal-killed child is blocked, not failed", () => {
+  const outcome = classifyGateOutcome({ freshnessVerdict: "green", gateExitCode: EXIT_CHILD_SIGNAL_DEATH });
+
+  assert.equal(outcome.status, "blocked_child_signal_death");
+  assert.equal(outcome.gatePassed, false);
+  assert.equal(outcome.productEvidence, false, "a signal death must never count as product evidence");
+  assert.match(outcome.summary, /NOT a product build failure/);
+});
+
+test("a parent SIGTERM (exit 130) is blocked, not a product FAIL (BI-8392DA16)", () => {
+  const outcome = classifyGateOutcome({ freshnessVerdict: "green", gateExitCode: 130 });
+  assert.equal(outcome.status, "blocked_child_signal_death");
+  assert.equal(outcome.productEvidence, false);
+});
+
+test("a fenced lease (exit 75) is blocked, not a product FAIL (BI-465B3D60)", () => {
+  const outcome = classifyGateOutcome({ freshnessVerdict: "green", gateExitCode: 75 });
+  assert.equal(outcome.status, "blocked_control_plane_starvation");
+  assert.equal(outcome.productEvidence, false);
+  assert.match(outcome.summary, /fenced/i);
+});
+
+test("the signal-death code does not collide with the other blocked codes", () => {
+  const codes = new Set([
+    EXIT_GREEN,
+    EXIT_SANDBOX_DRIFT,
+    EXIT_SANDBOX_NOT_READY,
+    EXIT_CHILD_SIGNAL_DEATH,
+  ]);
+  assert.equal(codes.size, 4, "each outcome needs its own exit code to stay distinguishable");
+});
+
+test("an ordinary non-zero exit is still a product failure", () => {
+  // The point of the change is to separate the two, not to make every failure
+  // look like infrastructure.
+  const outcome = classifyGateOutcome({ freshnessVerdict: "green", gateExitCode: 1 });
+
+  assert.equal(outcome.status, "failed");
+  assert.equal(outcome.productEvidence, true);
+});
+
+// BI-C59AC8AF. The producer and the recorder are one closed set or they drift:
+// #4703 added blocked_child_signal_death to classifyGateOutcome alone, the
+// recorder rejected it as invalid_status, the write was dropped, and the tree it
+// ran on could never be gated again. This asserts the direction that actually
+// bricks things — every status the gate can PRODUCE must be recordable.
+test("every status classifyGateOutcome can emit is one the recorder accepts", () => {
+  const exitCodes = [
+    0,
+    1,
+    EXIT_SANDBOX_DRIFT,
+    EXIT_SANDBOX_NOT_READY,
+    EXIT_CONTROL_PLANE_STARVATION,
+    EXIT_VITEST_RUNNER_TERMINATION,
+    EXIT_CHILD_SIGNAL_DEATH,
+    75,
+    130,
+    143,
+  ];
+  const verdicts = [null, "green", "drifted", "sandbox_not_ready"];
+
+  const produced = new Set();
+  for (const gateExitCode of exitCodes) {
+    for (const freshnessVerdict of verdicts) {
+      produced.add(classifyGateOutcome({ freshnessVerdict, gateExitCode }).status);
+    }
+  }
+
+  assert.ok(produced.size > 0, "expected classifyGateOutcome to produce statuses");
+  for (const status of produced) {
+    assert.ok(
+      isLocalIntegrationStatus(status),
+      `classifyGateOutcome emits "${status}", which record_local_integration_result rejects. `
+      + "Add it to LOCAL_INTEGRATION_STATUSES in scripts/lib/local-integration-status.mjs.",
+    );
+  }
+});
+
+test("a status the recorder does not know still records rather than dropping the write", () => {
+  const fallback = fallbackStatusForUnknown("blocked_something_new");
+
+  assert.equal(fallback.status, "failed");
+  assert.ok(isLocalIntegrationStatus(fallback.status));
+  assert.match(fallback.summaryPrefix, /BLOCKED_SOMETHING_NEW/);
+  assert.match(fallback.summaryPrefix, /not product evidence/);
 });

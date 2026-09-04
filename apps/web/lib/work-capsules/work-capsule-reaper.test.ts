@@ -14,6 +14,7 @@ const { prismaMock } = vi.hoisted(() => ({
 vi.mock("@dpf/db", () => ({ prisma: prismaMock }));
 
 import {
+  annotateDeliveredSignals,
   reconcileTerminalCapsuleBacklogs,
   reapStaleWorkCapsules,
   planTerminalBacklogReconciliation,
@@ -121,6 +122,7 @@ function capsule(overrides: Record<string, unknown> = {}) {
     pullRequestUrl: null,
     pullRequestNumber: null,
     headBranch: null,
+    headSha: null,
     worktreePath: null,
     featureBuildId: null,
     ...overrides,
@@ -152,6 +154,68 @@ describe("selectReapCandidates", () => {
     expect(picked).not.toContain("WC-PR");
     expect(picked).not.toContain("WC-DONE");
     expect(picked).not.toContain("WC-NEW");
+  });
+
+  it("tags each candidate's disposition: merged → delivered, dead+unmerged → abandoned", () => {
+    const rows = [
+      capsule({ capsuleId: "WC-DEAD", executorKind: "codex-desktop", leaseExpiresAt: new Date("2026-08-01T00:00:00.000Z") }),
+      capsule({
+        capsuleId: "WC-MERGED",
+        executorKind: "grok-cli",
+        leaseExpiresAt: new Date("2026-08-01T00:00:00.000Z"),
+        deliveredSignal: { merged: true }, // caller-computed from local git reachability
+      }),
+    ];
+    const picked = selectReapCandidates(rows, new Map(), NOW);
+    const byId = Object.fromEntries(picked.map((c) => [c.capsuleId, c]));
+    expect(byId["WC-DEAD"].disposition).toBe("abandoned");
+    expect(byId["WC-DEAD"].liveness).toBe("lease-expired");
+    expect(byId["WC-MERGED"].disposition).toBe("delivered");
+    expect(byId["WC-MERGED"].liveness).toBe("delivered");
+  });
+
+  it("does NOT select a token-PAUSED room (lease expired within the resume grace)", () => {
+    const rows = [
+      // Lease expired 1h ago — inside the 24h grace ⇒ paused, must be left alone.
+      capsule({ capsuleId: "WC-PAUSED", executorKind: "grok-cli", leaseExpiresAt: new Date("2026-08-05T14:00:00.000Z") }),
+    ];
+    expect(selectReapCandidates(rows, new Map(), NOW)).toHaveLength(0);
+  });
+});
+
+describe("annotateDeliveredSignals (procedural, local git — no LLM, no GitHub API)", () => {
+  it("sets deliveredSignal from injected reachability for rows with a headSha", async () => {
+    const rows = [
+      capsule({ capsuleId: "WC-MERGED", headSha: "aaa", headBranch: "feat/x" }),
+      capsule({ capsuleId: "WC-OPEN", headSha: "bbb", headBranch: "feat/y" }),
+      capsule({ capsuleId: "WC-NOSHA", headSha: null }),
+    ] as any[];
+    await annotateDeliveredSignals(rows, {
+      repoRoot: "/repo",
+      hasTrunk: async () => true,
+      reachable: async (_root, sha) => (sha === "aaa" ? true : false),
+    });
+    expect(rows[0].deliveredSignal).toEqual({ merged: true });
+    expect(rows[1].deliveredSignal).toEqual({ merged: false });
+    expect(rows[2].deliveredSignal).toBeUndefined(); // no sha → never probed
+  });
+
+  it("SHORT-CIRCUITS on a repo-less runtime (no local trunk) — leaves every signal null", async () => {
+    const rows = [capsule({ capsuleId: "WC-MERGED", headSha: "aaa" })] as any[];
+    const reachable = vi.fn();
+    await annotateDeliveredSignals(rows, { repoRoot: "/repo", hasTrunk: async () => false, reachable });
+    expect(reachable).not.toHaveBeenCalled();
+    expect(rows[0].deliveredSignal).toBeUndefined();
+  });
+
+  it("leaves a row null when reachability is indeterminate (sha not fetched locally)", async () => {
+    const rows = [capsule({ capsuleId: "WC-UNKNOWN", headSha: "ccc" })] as any[];
+    await annotateDeliveredSignals(rows, {
+      repoRoot: "/repo",
+      hasTrunk: async () => true,
+      reachable: async () => null, // git can't decide
+    });
+    expect(rows[0].deliveredSignal).toBeUndefined();
   });
 });
 
@@ -216,6 +280,33 @@ describe("reapStaleWorkCapsules", () => {
     // The live capsule is never touched.
     expect(db.workroom.update).not.toHaveBeenCalledWith(
       expect.objectContaining({ where: { capsuleId: "WC-LIVE" } }),
+    );
+  });
+
+  it("ARCHIVES a delivered (merged) room instead of abandoning it", async () => {
+    // Pre-set deliveredSignal with NO headSha so annotateDeliveredSignals leaves
+    // it intact (nothing to probe) — isolates the disposition→status branch.
+    db.workroom.findMany.mockResolvedValueOnce([
+      capsule({
+        capsuleId: "WC-MERGED",
+        executorKind: "grok-cli",
+        leaseExpiresAt: new Date("2026-08-01T00:00:00.000Z"), // dead lease, but merged wins
+        deliveredSignal: { merged: true },
+      }),
+    ]);
+    db.featureBuild.findMany.mockResolvedValueOnce([]);
+    db.workroom.findUnique.mockResolvedValue({ id: "row-merged", capsuleId: "WC-MERGED", workspaceState: {} });
+    db.workroom.update.mockResolvedValue({ id: "row-merged", capsuleId: "WC-MERGED" });
+
+    const result = await reapStaleWorkCapsules({ db: db as unknown as CapsuleDb, now: NOW, dryRun: false });
+
+    expect(result.reaped).toBe(1);
+    expect(result.candidates[0]!.disposition).toBe("delivered");
+    expect(db.workroom.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { capsuleId: "WC-MERGED" },
+        data: expect.objectContaining({ status: "archived" }), // NOT abandoned
+      }),
     );
   });
 

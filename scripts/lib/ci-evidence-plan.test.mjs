@@ -115,6 +115,7 @@ describe("createEvidencePlan", () => {
     assert.equal(plan.scope.docsOnly, true);
     assert.equal(plan.scope.heavy, false);
     assert.equal(plan.fullSuite, false);
+    assert.equal(plan.executionLane, "documentation");
     assert.equal(plan.uxMode, "none");
     assert.deepEqual(plan.escalations, []);
   });
@@ -211,6 +212,7 @@ describe("createEvidencePlan", () => {
     ]);
     assert.equal(plan.graph.trusted, true);
     assert.equal(plan.fullSuite, false);
+    assert.equal(plan.executionLane, "affected");
   });
 
   it("accepts a different commit alias when graph advice matches the exact tree", () => {
@@ -249,6 +251,7 @@ describe("createEvidencePlan", () => {
       }));
 
       assert.equal(plan.fullSuite, true);
+      assert.equal(plan.executionLane, "exhaustive");
       assert.ok(escalationCodes(plan).includes(code));
     });
   }

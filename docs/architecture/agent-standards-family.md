@@ -25,7 +25,7 @@ sequencing, readiness gates, contribution packages, and go/no-go criteria.
 ### Enterprise operating-model bridge
 
 The
-[Four-Portfolio Archetype and AI Workforce Operating Standard](four-portfolio-archetype-ai-workforce-operating-standard.md)
+[Portfolio Aligned Agent and Workforce Operating Standard](four-portfolio-archetype-ai-workforce-operating-standard.md)
 is an adjacent enterprise standard, not a fourth member of the agent-assurance family. It owns where
 AI coworkers sit in the four portfolios, how business Products and industry value streams relate to
 DigitalProducts, how human/AI work is allocated, and how the resulting trace and gaps are assessed.
@@ -55,7 +55,7 @@ No document widens another document's authority:
 | Concept | Relationship to the standards family |
 |---|---|
 | AI Coworker | DPF's managed dual-aspect concept: a DigitalProduct owns lifecycle, release, component, and deployment truth; BusinessProductOffering owns commercial terms, OperationalServiceOffering owns service commitments, and CoworkerOffer/CoworkerEngagement own coworker-service terms and acceptance. An AgentSubject/Performer carries a `GAID`, operating profile, job qualifications, assignments, and runtime authority under `TAK` |
-| Four-Portfolio Archetype and AI Workforce Operating Standard | Owns enterprise portfolio, Product, industry-flow, work-allocation, human/AI composition, conformance, and gap semantics around the agent-assurance family |
+| Portfolio Aligned Agent and Workforce Operating Standard | Owns enterprise portfolio, Product, industry-flow, work-allocation, human/AI composition, conformance, and gap semantics around the agent-assurance family |
 | WSID | Owns profession and craft doctrine: the knowledge, techniques, evidence practices, and decision axes a job requires |
 | JSI | Composes job requirements, WSID material, data/tool/model constraints, evaluations, and outcome evidence into a qualification lifecycle |
 | Proactivity | Expresses how readily a coworker should initiate or continue work; it cannot widen authority, qualification, or a regulatory/data ceiling |
@@ -71,7 +71,7 @@ Normative requirements belong in exactly one standard:
 - identity and claim-envelope controls go in `GAID`
 - job qualification controls go in `TAK-JSI`
 - enterprise portfolio, Product/value-flow, work-allocation, and dual-aspect controls go in the
-  [Four-Portfolio Archetype and AI Workforce Operating Standard](four-portfolio-archetype-ai-workforce-operating-standard.md)
+  [Portfolio Aligned Agent and Workforce Operating Standard](four-portfolio-archetype-ai-workforce-operating-standard.md)
 
 White papers, conformance rubrics, diagrams, DPF assessments, and generated Word files are derived
 companions. They may summarize the standards but must link back to the canonical normative source.

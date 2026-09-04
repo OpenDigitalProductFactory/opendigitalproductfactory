@@ -21,7 +21,7 @@ import {
 } from "./task-dependency-graph";
 import { normalizeBuildPlanPaths } from "./build-plan-paths";
 import {
-  buildSpecialistPrompt,
+  buildSpecialistPromptWithProvenance,
   SPECIALIST_AGENT_IDS,
   SPECIALIST_MODEL_REQS,
   SPECIALIST_TOOLS,
@@ -426,6 +426,9 @@ export type BuildReviewDeliberationInput = {
   /** Optional thread id — progress events from the deliberation layer fan
    *  out through the agent event bus for this thread. */
   threadId?: string;
+  /** Coworker that asked for the review — stamped on the bootstrapped
+   *  TaskRun so Right Now can place the run (BI-B3AB7FC9). */
+  agentId?: string;
   /** Opt-in to the debate pattern for this invocation. Omit for default
    *  peer review. */
   explicitPattern?: DeliberationPatternChoice;
@@ -451,7 +454,7 @@ export type BuildReviewDeliberationResult = {
 export async function runBuildReviewDeliberation(
   input: BuildReviewDeliberationInput,
 ): Promise<BuildReviewDeliberationResult> {
-  const { userId, buildId, phase, reviewerBranches, taskRunId, threadId, strategyProfile } = input;
+  const { userId, buildId, phase, reviewerBranches, taskRunId, threadId, agentId, strategyProfile } = input;
 
   const patternSlug: DeliberationPatternChoice =
     input.explicitPattern ?? defaultDeliberationPatternForPhase(phase);
@@ -476,6 +479,7 @@ export async function runBuildReviewDeliberation(
     patternSlug,
     taskRunId,
     threadId,
+    agentId,
     buildId,
     artifactType,
     strategyProfile: strategyProfile ?? "balanced",
@@ -942,7 +946,7 @@ async function dispatchSpecialist(params: {
   const scopedTools = allTools.filter(t => allowedToolNames.has(t.name));
   const toolsForProvider = toolsToOpenAIFormat(scopedTools);
 
-  const baseSystemPrompt = await buildSpecialistPrompt({
+  const base = await buildSpecialistPromptWithProvenance({
     role,
     taskDescription: `Task: ${task.title}\n\nFiles to work on:\n${(task.files ?? []).map(f => `- ${f.path} (${f.action}): ${f.purpose}`).join("\n") || "See task description for details."}`,
     buildContext,
@@ -950,7 +954,9 @@ async function dispatchSpecialist(params: {
   });
   // A1 (BI-C654F960) Phase 2a: govern the inline path — append the real
   // specialist Agent's corpus (BI-B31072B8). Flag-gated default-off (no-op).
-  const { prompt: systemPrompt } = await appendGovernedSpecialistCorpus(baseSystemPrompt, { role, agentId, query: task.title });
+  // BI-CE93E314: the appended corpus is retrieved DATA, so the declared spans
+  // stay exactly the role prompt from buildSpecialistPromptWithProvenance.
+  const { prompt: systemPrompt } = await appendGovernedSpecialistCorpus(base.text, { role, agentId, query: task.title });
 
   let lastResult: AgenticResult | null = null;
   let retries = 0;
@@ -963,6 +969,7 @@ async function dispatchSpecialist(params: {
     lastResult = await runAgenticLoop({
       chatHistory: [{ role: "user", content: taskPrompt }],
       systemPrompt,
+      systemPromptInstructionSpans: base.instructionSpans,
       sensitivity: "development", // code clearance; payload screening still applies
       tools: scopedTools,
       toolsForProvider,
@@ -1676,7 +1683,8 @@ export async function runBuildOrchestrator(params: {
   // NOTE: Cannot call advanceBuildPhase (server action) here because auth()
   // has no HTTP request context inside the agentic loop. Direct DB update instead.
   try {
-    const { checkPhaseGate, canTransitionPhase } = await import("@/lib/feature-build-types");
+    const { canTransitionPhase } = await import("@/lib/feature-build-types");
+    const { checkBuildPhaseGate } = await import("@/lib/work-posture/verification-depth-gate");
     const updatedBuild = await prisma.featureBuild.findUnique({ where: { buildId } });
     // The synthetic QA task (taskIndex === -1, "Full verification: tests +
     // typecheck") is dispatched to the model, which runs the full suite via
@@ -1714,8 +1722,15 @@ export async function runBuildOrchestrator(params: {
       } catch (scopeErr) {
         console.warn("[orchestrator] scoped verification for gate failed; using raw verificationOut:", (scopeErr as Error)?.message);
       }
-      const gate = checkPhaseGate("build", "review", {
-        verificationOut: verificationForGate as typeof updatedBuild.verificationOut,
+      const gate = await checkBuildPhaseGate({
+        buildId,
+        from: "build",
+        to: "review",
+        evidence: {
+          kind: updatedBuild.kind,
+          processSize: ((updatedBuild.plan as Record<string, unknown> | null)?.processSize as string | undefined) ?? "medium",
+          verificationOut: verificationForGate as typeof updatedBuild.verificationOut,
+        },
       });
       if (gate.allowed) {
         await prisma.featureBuild.update({ where: { buildId }, data: { phase: "review" } });

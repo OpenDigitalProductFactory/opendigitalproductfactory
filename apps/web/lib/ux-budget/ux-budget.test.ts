@@ -490,7 +490,25 @@ describe("generated route-shell registry", () => {
     // preview is deterministic and carries an explicit page-purpose contract.
     // 201 -> 202: /finance/mileage is a net-new driver-facing route (EP-MILEAGE-ABSORB)
     // — the surface that makes the mileage substrate reachable.
-    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(204);
+    // 205 -> 206: /workspace/cases/[caseKey] is the FIRST dynamic route the sweep
+    // can measure (BI-DE67A3EC). Every "[param]" route was excluded outright
+    // because nothing minted an id; the fixture now mints a deterministic work
+    // case and publishes its path, so a detail surface is measurable at last.
+    // Eligibility for a dynamic route is earned by that minting, not asserted —
+    // an eligible-but-unresolved route fails the run rather than measuring a 404.
+    // 206 -> 207: /workspace/ward (BI-F91D0685) — the ward board reads housing and
+    // occupancy from route-owned read models with no wall-clock or live-orchestration
+    // state, so its rendered output is stable and it carries a ratified page-purpose
+    // contract.
+    // 206 -> 207: /storefront/animals/waiting (BI-899D7F00) — the adoption waiting
+    // list, read-only over AdoptableAnimal.publishedAt. The first storefront route to
+    // be measurable: the sweep fixture now provisions one pet-rescue storefront with
+    // listed animals, which is the honest fixture context the storefront-setup-required
+    // exclusions were waiting for. Its siblings keep their exclusion until each gets its own.
+    // 207 -> 206: /storefront/setup joins setup-phase-only in the same PR — once the
+    // fixture provisions a storefront the wizard navigates away and cannot be measured.
+    // Net: 206 base + /workspace/ward + /storefront/animals/waiting - /storefront/setup = 207.
+    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(207);
     // 110 -> 113: the three exclusions above. Product Direction then adds seven
     // explicitly classified dynamic routes, bringing the combined total to 120.
     // 120 -> 121: /platform/ai/operations-map.
@@ -500,11 +518,11 @@ describe("generated route-shell registry", () => {
     // 360 detail page is a dynamic ([agentId]) route the generator auto-excludes with
     // reason "dynamic-fixture-required": the sweep cannot render it without a per-coworker
     // fixture, so it is not measured (not a live-state exclusion, a fixture one).
-    // 123 -> 124: /ops/stack-currency (BI-6328BCA6) joins the wall-clock exclusions — it
-    // renders currency relative to `now` (approaching-eol window, daysUntilEol).
-    // 124 -> 125: /ops/teardown reads a host evidence collection that a detached
-    // lifecycle runner can update concurrently with the sweep.
-    expect(registry.routes.filter((route) => !route.sweepEligible)).toHaveLength(125);
+    // Redirect-only routes are omitted from the page registry. Parameterized redirect
+    // detection removed five compatibility shims from this count in BI-7D2C4F02.
+    // 120 -> 119: the mirror of the eligibility gain above — /workspace/cases/[caseKey]
+    // left the excluded set when the fixture began minting its id.
+    expect(registry.routes.filter((route) => !route.sweepEligible)).toHaveLength(120);
   });
 
   it("keeps contextual sweep exclusions explicit, valid, and non-stale", () => {

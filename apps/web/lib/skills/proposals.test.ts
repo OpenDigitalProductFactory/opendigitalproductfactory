@@ -1,10 +1,34 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+// The approval now writes the seed file post-commit (BI-5798BBA3). Mock `fs` so
+// the unit tests exercise that path without touching a real checkout.
+const { existsSyncMock, writeFileSyncMock } = vi.hoisted(() => ({
+  existsSyncMock: vi.fn((_path?: unknown) => false),
+  writeFileSyncMock: vi.fn(),
+}));
+
+// PR emission is an external effect with its own test file
+// (seed-pull-request.test.ts); these tests are about proposal semantics.
+vi.mock("./seed-pull-request", () => ({
+  emitSeedPullRequest: vi.fn(async () => ({
+    status: "no-token",
+    prUrl: null,
+    branchName: null,
+    reason: "stubbed in unit tests",
+  })),
+}));
+
+vi.mock("fs", () => ({
+  existsSync: existsSyncMock,
+  writeFileSync: writeFileSyncMock,
+  readFileSync: vi.fn(),
+}));
+
 // In-memory state for the mock transaction so atomicity can be exercised
 // without a live database. Each test resets it via the beforeEach hook.
 const state = vi.hoisted(() => {
   return {
-    skills: new Map<string, { skillId: string; skillMdContent: string }>(),
+    skills: new Map<string, { skillId: string; category: string; skillMdContent: string }>(),
     proposals: new Map<string, Record<string, unknown>>(),
     revisions: new Map<string, Record<string, unknown>>(),
     revisionRows: [] as Array<Record<string, unknown>>,
@@ -151,6 +175,7 @@ beforeEach(() => {
   state.failOnNthCreateRevision = null;
   state.createRevisionCallCount = 0;
   state.skills.set("build-page", {
+    category: "build",
     skillId: "build-page",
     skillMdContent: "v0 body — original",
   });
@@ -462,5 +487,70 @@ describe("listSkillRevisions / listSkillProposals", () => {
     const out = await listSkillProposals("build-page");
     expect(out).toHaveLength(1);
     expect(out[0]?.proposedContent).toBe("v1");
+  });
+});
+
+describe("approveSkillImprovementProposal — seed propagation (BI-5798BBA3)", () => {
+  it("reports propagation when the seed file was written", async () => {
+    process.env.DPF_REPO_ROOT = "/repo";
+    const seed = "/repo/skills/build/build-page.skill.md";
+    existsSyncMock.mockImplementation((p: unknown) => {
+      const n = String(p).replace(/\\/g, "/");
+      return n === "/repo" || n === seed;
+    });
+
+    const { proposalId } = await submitSkillImprovementProposal({
+      skillId: "build-page",
+      proposedContent: "v1 body — proposed",
+      title: "t",
+      description: "d",
+      submittedById: "user-1",
+      agentId: "AGT-1",
+      routeContext: "/r",
+    });
+
+    const result = await approveSkillImprovementProposal({
+      proposalId,
+      reviewerId: "reviewer-1",
+    });
+
+    expect(result.propagation.status).toBe("written");
+    expect(result.propagation.path?.replace(/\\/g, "/")).toBe(seed);
+    expect(writeFileSyncMock).toHaveBeenCalled();
+    const [, body] = writeFileSyncMock.mock.calls[0];
+    expect(body).toBe("v1 body — proposed");
+    existsSyncMock.mockImplementation(() => false);
+    writeFileSyncMock.mockReset();
+  });
+
+  it("still commits the approval when the seed cannot be written, and says so", async () => {
+    process.env.DPF_REPO_ROOT = "/repo";
+    // Repo present, but this skill has no seed file in either corpus.
+    existsSyncMock.mockImplementation(
+      (p: unknown) => String(p).replace(/\\/g, "/") === "/repo",
+    );
+
+    const { proposalId } = await submitSkillImprovementProposal({
+      skillId: "build-page",
+      proposedContent: "v1 body — proposed",
+      title: "t",
+      description: "d",
+      submittedById: "user-1",
+      agentId: "AGT-1",
+      routeContext: "/r",
+    });
+
+    const result = await approveSkillImprovementProposal({
+      proposalId,
+      reviewerId: "reviewer-1",
+    });
+
+    // The DB half is durable regardless of the filesystem outcome.
+    expect(result.newVersion).toBeGreaterThan(0);
+    expect(state.skills.get("build-page")?.skillMdContent).toBe("v1 body — proposed");
+    // ...and the caller is told the approval did NOT reach what ships.
+    expect(result.propagation.status).toBe("no-seed-file");
+    expect(writeFileSyncMock).not.toHaveBeenCalled();
+    existsSyncMock.mockImplementation(() => false);
   });
 });

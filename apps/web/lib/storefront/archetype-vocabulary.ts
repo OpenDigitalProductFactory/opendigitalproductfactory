@@ -59,6 +59,16 @@ const VOCABULARY: Record<string, ArchetypeVocabulary> = {
     portalLabel: "Storefront", stakeholderLabel: "Customers",
     teamLabel: "Team", inboxLabel: "Inbox", agentName: "Marketing Specialist",
   },
+  // BI-35753C53: DPF's own archetype is software-platform. Without an entry it fell to
+  // DEFAULT_VOCABULARY and the storefront rendered "Items & items". A software platform
+  // sells products on a storefront; the labels reuse existing vocabulary terms so no new
+  // hardcoded-term collisions (e.g. "Platform") are introduced into the platform UI.
+  "software-platform": {
+    itemsLabel: "Products", singleItemLabel: "Product", addButtonLabel: "Add product",
+    categoryLabel: "Category", priceLabel: "Price",
+    portalLabel: "Storefront", stakeholderLabel: "Customers",
+    teamLabel: "Team", inboxLabel: "Inbox", agentName: "Marketing Specialist",
+  },
   "healthcare-wellness": {
     itemsLabel: "Services", singleItemLabel: "Service", addButtonLabel: "Add service",
     categoryLabel: "Department", priceLabel: "Fee",

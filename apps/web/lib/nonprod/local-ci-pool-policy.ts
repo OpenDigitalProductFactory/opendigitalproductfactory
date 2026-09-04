@@ -2,6 +2,13 @@ import pilotGuardrails from "./local-ci-pilot-guardrails.json" with {
   type: "json",
 };
 import { isRecord as isRecordRuntime } from "../shared/is-record.mjs";
+// Type-only: erased at compile time, so this module keeps a runtime import
+// graph of relative .mjs/.json alone and stays loadable by the raw-Node script
+// tests in scripts/local-ci-pool-policy.test.mjs.
+import type {
+  InstallationEnvironmentClass,
+  InstallationOperatingPurpose,
+} from "@dpf/db/installation-operating-intent";
 import localCiSlotResources from "./local-ci-slot-resources.json" with {
   type: "json",
 };
@@ -14,6 +21,10 @@ export const LOCAL_CI_MAX_CAPACITY = 2;
 export type LocalCiPoolPolicySource =
   | "default"
   | "platform-config"
+  // Capacity derived from the installation's own declared environment class and
+  // operating intent when no explicit config row exists (BI-D908DA0A). Ranks
+  // below `platform-config` so an operator's row always wins.
+  | "installation-profile"
   | "test-env"
   | "break-glass-env";
 
@@ -56,6 +67,103 @@ export type ResolvedLocalCiPoolPolicy = {
   rollbackReason: string | null;
   config: LocalCiPoolConfig | null;
 };
+
+/**
+ * Capacity derived from what the installation declares itself to be
+ * (BI-D908DA0A).
+ *
+ * The pool shipped with a contraction path and no activation path: the only
+ * writer of `local_ci.sandbox_pool` is the circuit breaker, which moves capacity
+ * from 2 down to 1. Nothing ever created the row, so every installation ran at
+ * the compatibility singleton — measured 2026-08-29 as a p90 queue wait of
+ * 1053s at 45% utilisation. Adding a "seed the row" switch would keep the
+ * defect: a consumer never finds it, and a development host must hand-author
+ * JSON to get capacity its hardware already supports.
+ *
+ * Capacity is a property of THIS installation, and the installation already
+ * declares the two facts that decide it. A `development` install whose declared
+ * job is `evolve-dpf` runs many gates a day; everything else — every consumer,
+ * every production install, and anything undeclared — keeps the singleton.
+ * `UNDECLARED_ENVIRONMENT_CLASS` is `production`, so silence resolves to the
+ * conservative answer.
+ *
+ * This decides only what to REQUEST. Host headroom, the pilot guardrails and the
+ * circuit breaker all still clamp it downstream and can only reduce it.
+ */
+export const LOCAL_CI_DEVELOPMENT_PURPOSES: readonly InstallationOperatingPurpose[] =
+  Object.freeze(["evolve-dpf"]);
+
+export type LocalCiInstallationProfile = {
+  environmentClass: InstallationEnvironmentClass;
+  primaryPurpose: InstallationOperatingPurpose;
+  secondaryPurposes?: readonly InstallationOperatingPurpose[];
+};
+
+export type DerivedLocalCiCapacity = {
+  requestedCapacity: 1 | 2;
+  /** Why this capacity was chosen. Surfaced to the operator, never swallowed. */
+  reason: string;
+};
+
+/**
+ * Returns null when the installation has not declared enough to decide, so the
+ * caller keeps the compatibility singleton rather than inventing a default from
+ * silence.
+ */
+export function deriveLocalCiCapacityFromInstallation(
+  profile: LocalCiInstallationProfile | null | undefined,
+): DerivedLocalCiCapacity | null {
+  if (!profile) return null;
+  if (profile.environmentClass !== "development") {
+    return {
+      requestedCapacity: 1,
+      reason: `installation-environment-class-${profile.environmentClass}`,
+    };
+  }
+  const purposes = [
+    profile.primaryPurpose,
+    ...(profile.secondaryPurposes ?? []),
+  ];
+  if (!purposes.some((p) => LOCAL_CI_DEVELOPMENT_PURPOSES.includes(p))) {
+    return {
+      requestedCapacity: 1,
+      reason: `installation-purpose-${profile.primaryPurpose}`,
+    };
+  }
+  return {
+    requestedCapacity: 2,
+    reason: "installation-development-platform-build",
+  };
+}
+
+/**
+ * The config a derived capacity runs under.
+ *
+ * An explicit row supplies its own ceilings and rollback thresholds. A derived
+ * capacity has none, so it borrows the pilot guardrails — the same maxima
+ * `localCiPoolConfigError` enforces on a hand-authored row, so a derived config
+ * can never be looser than one an operator is allowed to write.
+ */
+export function derivedLocalCiPoolConfig(
+  requestedCapacity: 1 | 2,
+): LocalCiPoolConfig {
+  return {
+    version: 1,
+    requestedCapacity,
+    ceilings: {
+      minAvailableMemoryBytes: 4 * 1024 ** 3,
+      maxSustainedCpuPercent: 85,
+      minDiskFreeBytes: 50 * 1024 ** 3,
+    },
+    rollback: {
+      maxServiceDurationRegressionPercent:
+        pilotGuardrails.maximumMedianServiceDurationRegressionPercent,
+      maxInfrastructureFailureRatePercent:
+        pilotGuardrails.maximumInfrastructureFailureRatePercent,
+      evidenceMismatchTolerance: 0,
+    },
+  };
+}
 
 export function localCiBuildHeadroomCapacity(input: {
   dockerAvailableMemoryBytes: number;
@@ -114,6 +222,31 @@ export function localCiBuilderAdmissionReserveBytes(input: {
     return input.hardCeilingBytes;
   }
   return Math.min(input.hardCeilingBytes, input.calibratedReserveBytes);
+}
+
+/**
+ * Host-stage admission reserve, calibrated the way the builder's already was
+ * (BI-E58B57EC).
+ *
+ * `hostStagePolicy.memoryBytes` was a flat 8 GiB with no calibration block,
+ * while the builder's had been measured down from a 16 GiB ceiling to a 10 GiB
+ * reserve against an 8 GiB observed high-water. Measured 2026-08-29: peak
+ * combined node working set on the Windows host during the heaviest host-side
+ * stage was 2.27 GiB over idle baseline — a 3.5x over-reservation.
+ *
+ * That single uncalibrated number was the whole reason a second slot could not
+ * admit on a 63.7 GiB host: `floor((16.9 - 4) / 8)` is 1.
+ *
+ * Same shape as {@link localCiBuilderAdmissionReserveBytes}: the ceiling stays
+ * the hard runtime limit, admission reserves the calibrated figure, and missing
+ * or invalid calibration falls back to the ceiling so incomplete evidence can
+ * never make admission looser.
+ */
+export function localCiHostStageAdmissionReserveBytes(input: {
+  hardCeilingBytes: number;
+  calibratedReserveBytes: number;
+}): number {
+  return localCiBuilderAdmissionReserveBytes(input);
 }
 
 /**
@@ -338,24 +471,49 @@ export function resolveLocalCiPoolPolicy(input: {
   reserveAdmissionHeadroom?: boolean;
   env?: PolicyEnv;
   now?: Date;
+  /**
+   * What this installation has declared itself to be. Consulted only when no
+   * valid config row exists, so an operator's explicit row always wins.
+   */
+  installation?: LocalCiInstallationProfile | null;
 }): ResolvedLocalCiPoolPolicy {
   const manifestCapacity = Number.isFinite(input.manifestSlotCount)
     && input.manifestSlotCount >= LOCAL_CI_MIN_CAPACITY
     ? Math.min(LOCAL_CI_MAX_CAPACITY, Math.floor(input.manifestSlotCount))
     : LOCAL_CI_MIN_CAPACITY;
   const configError = localCiPoolConfigError(input.configValue);
-  if (configError) {
+
+  // No usable row. Before falling back to the compatibility singleton, ask what
+  // the installation says it is (BI-D908DA0A). A development install whose
+  // declared job is evolving the platform gets the capacity its host can carry;
+  // a consumer or production install, or one that has not declared itself, keeps
+  // the singleton. Host headroom still clamps whatever comes back.
+  const derived = configError
+    ? deriveLocalCiCapacityFromInstallation(input.installation)
+    : null;
+  if (configError && !derived) {
     return singleton({
       source: "default",
       manifestCapacity,
       reason: configError,
     });
   }
+  if (configError && derived && derived.requestedCapacity === 1) {
+    return singleton({
+      source: "installation-profile",
+      requestedCapacity: 1,
+      manifestCapacity,
+      reason: derived.reason,
+    });
+  }
 
-  const config = normalizeConfig(input.configValue);
+  const config = derived
+    ? normalizeConfig(derivedLocalCiPoolConfig(derived.requestedCapacity))
+    : normalizeConfig(input.configValue);
   const override = authorizedCapacityOverride(input.env);
   const requestedCapacity = override?.capacity ?? config.requestedCapacity;
-  const source: LocalCiPoolPolicySource = override?.source ?? "platform-config";
+  const source: LocalCiPoolPolicySource = override?.source
+    ?? (derived ? "installation-profile" : "platform-config");
 
   const rollbackReason = hostRollbackReason(
     input.host,
@@ -398,7 +556,11 @@ export function resolveLocalCiPoolPolicy(input: {
     const hostStageCapacity = localCiHostStageHeadroomCapacity({
       availableMemoryBytes: input.host.availableMemoryBytes ?? Number.NaN,
       minAvailableMemoryBytes: config.ceilings.minAvailableMemoryBytes,
-      hostStageMemoryBytes: localCiSlotResources.hostStagePolicy.memoryBytes,
+      hostStageMemoryBytes: localCiHostStageAdmissionReserveBytes({
+        hardCeilingBytes: localCiSlotResources.hostStagePolicy.memoryBytes,
+        calibratedReserveBytes:
+          localCiSlotResources.hostStagePolicy.admissionReserveBytes,
+      }),
       manifestCapacity,
     });
     if (hostStageCapacity === 0) {

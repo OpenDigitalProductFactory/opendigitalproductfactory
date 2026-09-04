@@ -3,6 +3,7 @@ import { ensureCapsuleWorkItemAnchorNonFatal } from "@/lib/work-capsules/capsule
 import { computeChangeImpactContract } from "@/lib/build/gate-context-bridge";
 import type { ToolResult } from "@/lib/mcp-tools";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { resolveTerminalInitiativeRecovery } from "@/lib/backlog/initiative-readiness/terminal-recovery";
 import {
   WORK_CAPSULE_ACTIVITY_KINDS,
   WORK_CAPSULE_BRANCH_TAXONOMIES,
@@ -30,6 +31,8 @@ import {
   type WorkCapsuleEvidenceKind,
   type WorkCapsuleScopeInput,
 } from "@/lib/work-capsules";
+import type { BacklogBindingReader } from "./adopt-backlog-binding";
+import { adoptWorktree } from "./adopt-worktree-handler";
 import {
   adoptWorktreeCapsule,
   claimWorkCapsuleScope,
@@ -50,6 +53,8 @@ import { listLocalBranches } from "./git-scanner";
 import { ensureExternalSessionCapsule } from "./external-session-capture";
 import { branchOccupiedResult, invalidScopeResult } from "./mcp-result-errors";
 import { claimBacklogItemForWork } from "./claim-backlog-item-handler";
+import { createWorkroomBoundToBacklogItem } from "./create-workroom-binding";
+import { workCapsuleActor as actor } from "./handler-actor";
 type ToolContext = {
   routeContext?: string;
   agentId?: string;
@@ -74,26 +79,6 @@ export function workCapsuleToolEnums() {
   };
 }
 
-async function actor(userId: string, context: ToolContext) {
-  const { ensureAgentPrincipalIdentity, syncUserPrincipal } = await import("@/lib/identity/principal-linking");
-  const agentId = context?.agentId ?? null;
-  let principalId: string | null = null;
-
-  try {
-    if (agentId) {
-      const synced = await ensureAgentPrincipalIdentity(agentId);
-      principalId = synced?.id ?? null;
-    } else {
-      const synced = await syncUserPrincipal(userId);
-      principalId = synced?.id ?? null;
-    }
-  } catch {
-    principalId = null;
-  }
-
-  return { userId, agentId, principalId };
-}
-
 function stringParam(params: Record<string, unknown>, key: string): string | null {
   const value = params[key];
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
@@ -105,8 +90,14 @@ function numberParam(params: Record<string, unknown>, key: string): number | nul
 }
 
 function parseScopeInput(params: Record<string, unknown>): WorkCapsuleScopeInput {
+  // Every key the tool schema advertises under scopeProperties must appear here.
+  // This function picks fields explicitly, so a field added to the schema and to
+  // the normalizer but not to this list is accepted by the caller, dropped here,
+  // and answered `success: true` — the same defect `backlogItemId` had on
+  // adopt_worktree. scope-input-parity.test.ts is what keeps the two in step.
   return {
     workroomShape: params.workroomShape,
+    workShape: params.workShape,
     decisionScope: params.decisionScope,
     portfolioRole: params.portfolioRole,
     servedPersona: params.servedPersona,
@@ -266,66 +257,14 @@ export async function adoptWorktreeTool(
   userId: string,
   context: ToolContext,
 ): Promise<ToolResult> {
-  const title = stringParam(params, "title");
-  const objective = stringParam(params, "objective");
-  const repositoryFullName = stringParam(params, "repositoryFullName");
-  const headBranch = stringParam(params, "headBranch");
-  const worktreePath = stringParam(params, "worktreePath");
-  const executorKind = stringParam(params, "executorKind");
-
-  if (!title || !objective || !repositoryFullName || !headBranch || !worktreePath) {
-    return {
-      success: false,
-      error: "invalid_input",
-      message: "title, objective, repositoryFullName, headBranch, and worktreePath are required.",
-    };
-  }
-  if (executorKind && !isWorkCapsuleExecutorKind(executorKind)) {
-    return {
-      success: false,
-      error: "invalid_executorKind",
-      message: `executorKind must be one of: ${WORK_CAPSULE_EXECUTOR_KINDS.join(", ")}.`,
-    };
-  }
-  const validatedExecutorKind = executorKind && isWorkCapsuleExecutorKind(executorKind)
-    ? executorKind
-    : null;
-  try {
-    normalizeWorkCapsuleScopeInput(parseScopeInput(params));
-  } catch (error) {
-    return invalidScopeResult(error);
-  }
-
-  let capsule;
-  try {
-    capsule = await adoptWorktreeCapsule({
-      db: workCapsuleDb(),
-      input: {
-        title,
-        objective,
-        repositoryFullName,
-        headBranch,
-        worktreePath,
-        baseBranch: stringParam(params, "baseBranch") ?? null,
-        baseSha: stringParam(params, "baseSha") ?? null,
-        headSha: stringParam(params, "headSha") ?? null,
-        executorKind: validatedExecutorKind,
-        scope: parseScopeInput(params),
-      },
-      actor: await actor(userId, context),
-    });
-  } catch (error) {
-    const occupied = branchOccupiedResult(error);
-    if (occupied) return occupied;
-    throw error;
-  }
-  await ensureCapsuleWorkItemAnchorNonFatal(capsule, "adopted");
-  return {
-    success: true,
-    entityId: capsule.capsuleId,
-    message: `Adopted ${headBranch} as Work Capsule ${capsule.capsuleId}.`,
-    data: { capsule },
-  };
+  return adoptWorktree({
+    params,
+    userId,
+    context,
+    db: workCapsuleDb(),
+    bindingReader: prisma as unknown as BacklogBindingReader,
+    resolveActor: actor,
+  });
 }
 
 export async function claimBacklogItemForWorkTool(
@@ -425,11 +364,12 @@ export async function updateWorkCapsuleStatusTool(
     });
   } catch (error) {
     if (error instanceof WorkCapsuleCompletionDeniedError) {
+      const recovery = await resolveTerminalInitiativeRecovery({ decision: error.result.decision, currentAgentId: context?.agentId ?? null, refusedWorkroomId: capsuleId });
       return {
         success: false,
         error: "initiative_not_ready",
         message: `Work Capsule completion is blocked by ${error.result.code}.`,
-        data: { code: error.result.code, readiness: error.result.decision },
+        data: { code: error.result.code, readiness: error.result.decision, recovery },
       };
     }
     throw error;
@@ -552,18 +492,23 @@ export async function createWorkCapsuleTool(
     return invalidScopeResult(error);
   }
 
-  const capsule = await createWorkCapsule({
-    db: workCapsuleDb(),
-    input: {
-      title,
-      objective,
-      source,
-      idempotencyKey,
-      executorKind: validatedExecutorKind, repositoryFullName: stringParam(params, "repositoryFullName"),
-      scope: parseScopeInput(params),
-    },
-    actor: await actor(userId, context),
+  // BI-CB3AEBBF: bind the named backlog item onto the column subject lookups
+  // read, not just onto outcomeAnchor. See create-workroom-binding.ts.
+  const resolvedActor = await actor(userId, context);
+  const bound = await createWorkroomBoundToBacklogItem({
+    db: workCapsuleDb() as unknown as BacklogBindingReader, params, title,
+    create: (backlogItemId) => createWorkCapsule({
+      db: workCapsuleDb(),
+      input: {
+        title, objective, source, idempotencyKey, backlogItemId,
+        executorKind: validatedExecutorKind, repositoryFullName: stringParam(params, "repositoryFullName"),
+        scope: parseScopeInput(params),
+      },
+      actor: resolvedActor,
+    }),
   });
+  if (!bound.created) return bound.refusal;
+  const capsule = bound.capsule;
   await ensureCapsuleWorkItemAnchorNonFatal(capsule, "created");
   return {
     success: true,
@@ -844,3 +789,11 @@ export async function recordAgentActivityTool(
     data: { capsule: renewedCapsule },
   };
 }
+
+/**
+ * Test-only surface. `parseScopeInput` is internal, but the schema/handler
+ * parity guard has to call the real function — a test that re-implements the
+ * pick list is exactly the test that would have passed while workShape was
+ * being dropped.
+ */
+export const __testing__ = { parseScopeInput };

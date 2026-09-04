@@ -41,6 +41,7 @@ Keep the physical record current whenever a unit changes yard bay, facility posi
 - Recover generated content after removing a service line — restore it, or remove the retained items and sections permanently
 - For medical and dental practices, review active patient-intake readiness from **Portal → Intake** and identify packets that need attention before a visit
 - For rental businesses, maintain physical placement and readiness in **Storefront → Units**, then work the single most important live exception from **Business → Rental**
+- For animal rescues, open the **Waiting list** from **Storefront → Animals** to see every animal listed for adoption, longest wait first, with the days each has waited — the page for picking who goes in the newsletter
 
 ## Related
 

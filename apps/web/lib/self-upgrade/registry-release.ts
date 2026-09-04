@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { Agent, fetch as undiciFetch } from "undici";
 import { ok, type ActionSuccess } from "@/lib/shared/action-result";
 
 const DEFAULT_REGISTRY_ORIGIN = "https://ghcr.io";
@@ -28,6 +29,8 @@ export type RegistryReleaseCandidate = Readonly<{
   channelDigest: string;
   platformManifestDigest: string;
   configDigest: string;
+  platformOs: "linux";
+  platformArchitecture: string;
 }>;
 
 export type RegistryReleaseFailureReason =
@@ -54,7 +57,7 @@ export type RegistryReleaseFailureReason =
 
 export type RegistryReleaseReadResult =
   | (ActionSuccess & { candidate: RegistryReleaseCandidate })
-  | { ok: false; reason: RegistryReleaseFailureReason };
+  | { ok: false; reason: RegistryReleaseFailureReason; detail?: string };
 
 type ManifestDescriptor = {
   mediaType?: unknown;
@@ -78,10 +81,37 @@ type RegistryConfig = {
   config?: { Labels?: Record<string, unknown> };
 };
 
+type RegistryTransport = Readonly<{
+  fetch: typeof fetch;
+  close(): Promise<void>;
+}>;
+
+type RegistryTransportFactory = () => RegistryTransport;
+
 class RegistryReadError extends Error {
-  constructor(readonly reason: RegistryReleaseFailureReason) {
-    super(reason);
+  // `registry-unavailable` is raised from three different non-OK responses and
+  // is also the bounded-fallback reason, so the bare reason cannot say whether
+  // the registry rate-limited us, 5xx'd, or refused the token. `detail` carries
+  // the HTTP status so a log line names the actual condition (BI-52C6FE5A).
+  constructor(
+    readonly reason: RegistryReleaseFailureReason,
+    readonly detail?: string,
+  ) {
+    super(detail ? `${reason} (${detail})` : reason);
   }
+}
+
+function createRegistryTransport(): RegistryTransport {
+  const dispatcher = new Agent();
+  const isolatedFetch = ((input: Parameters<typeof fetch>[0], init?: RequestInit) =>
+    undiciFetch(
+      input as Parameters<typeof undiciFetch>[0],
+      { ...init, dispatcher } as Parameters<typeof undiciFetch>[1],
+    ) as unknown as Promise<Response>) as typeof fetch;
+  return {
+    fetch: isolatedFetch,
+    close: () => dispatcher.close(),
+  };
 }
 
 function sha256(body: Uint8Array): string {
@@ -183,6 +213,7 @@ export async function readRegistryReleaseCandidate(input: {
   repository?: string;
   registryOrigin?: string;
   fetchImpl?: typeof fetch;
+  transportFactory?: RegistryTransportFactory;
 }): Promise<RegistryReleaseReadResult> {
   const repository = input.repository ?? DEFAULT_REPOSITORY;
   const origin = input.registryOrigin ?? DEFAULT_REGISTRY_ORIGIN;
@@ -190,10 +221,9 @@ export async function readRegistryReleaseCandidate(input: {
     return { ok: false, reason: "registry-identity-invalid" };
   }
 
-  try {
+  async function readCandidate(fetchImpl: typeof fetch): Promise<RegistryReleaseReadResult> {
     const originUrl = new URL(origin);
     if (originUrl.protocol !== "https:") throw new RegistryReadError("registry-identity-invalid");
-    const fetchImpl = input.fetchImpl ?? fetch;
     const imageName = `${input.owner.toLowerCase()}/${repository}`;
     let bearer: string | null = null;
 
@@ -253,7 +283,7 @@ export async function readRegistryReleaseCandidate(input: {
         `/v2/${imageName}/manifests/${encodeURIComponent(reference)}`,
         MANIFEST_ACCEPT,
       );
-      if (!response.ok) throw new RegistryReadError("registry-unavailable");
+      if (!response.ok) throw new RegistryReadError("registry-unavailable", `HTTP ${response.status}`);
       const body = await readBounded(response, MAX_MANIFEST_BYTES);
       const digest = verifiedDigest(
         response,
@@ -319,7 +349,7 @@ export async function readRegistryReleaseCandidate(input: {
     }
 
     const configResponse = await blob(configDigest);
-    if (!configResponse.ok) throw new RegistryReadError("registry-unavailable");
+    if (!configResponse.ok) throw new RegistryReadError("registry-unavailable", `HTTP ${configResponse.status}`);
     const configBody = await readBounded(configResponse, MAX_CONFIG_BYTES);
     verifiedDigest(
       configResponse,
@@ -356,7 +386,7 @@ export async function readRegistryReleaseCandidate(input: {
       if (immutableDigest !== channel.digest) throw new RegistryReadError("immutable-tag-mismatch");
     } else {
       const tagsResponse = await request(`/v2/${imageName}/tags/list?n=${MAX_LEGACY_TAGS}`);
-      if (!tagsResponse.ok) throw new RegistryReadError("registry-unavailable");
+      if (!tagsResponse.ok) throw new RegistryReadError("registry-unavailable", `HTTP ${tagsResponse.status}`);
       const tagsBody = parseJson(
         await readBounded(tagsResponse, MAX_TAG_LIST_BYTES),
         "channel-manifest-invalid",
@@ -388,12 +418,48 @@ export async function readRegistryReleaseCandidate(input: {
         channelDigest: channel.digest,
         platformManifestDigest,
         configDigest,
+        platformOs: "linux",
+        platformArchitecture: architecture,
       }),
     };
-  } catch (error) {
-    return {
-      ok: false,
-      reason: error instanceof RegistryReadError ? error.reason : "registry-unavailable",
-    };
   }
+
+  // Next patches the process-global fetch used by server components. A failed
+  // connection during container startup can leave that long-lived transport
+  // returning timeouts even after Docker egress is healthy. Use an isolated,
+  // explicitly closed Undici dispatcher for each complete registry read, and
+  // replace it once after a transport exception. Injected fetchImpl callers
+  // keep their single-attempt deterministic contract.
+  const transportFactory = input.transportFactory
+    ?? (input.fetchImpl
+      ? () => ({ fetch: input.fetchImpl as typeof fetch, close: async () => undefined })
+      : createRegistryTransport);
+  const maxAttempts = input.fetchImpl && !input.transportFactory ? 1 : 2;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    let transport: RegistryTransport | null = null;
+    try {
+      transport = transportFactory();
+      return await readCandidate(transport.fetch);
+    } catch (error) {
+      if (error instanceof RegistryReadError || attempt === maxAttempts) {
+        return {
+          ok: false,
+          reason: error instanceof RegistryReadError ? error.reason : "registry-unavailable",
+          ...(error instanceof RegistryReadError && error.detail ? { detail: error.detail } : {}),
+        };
+      }
+    } finally {
+      if (transport) {
+        try {
+          await transport.close();
+        } catch {
+          // The dispatcher is never reused. Cleanup cannot invalidate registry
+          // bytes whose digest and immutable identity were already verified.
+        }
+      }
+    }
+  }
+
+  return { ok: false, reason: "registry-unavailable" };
 }

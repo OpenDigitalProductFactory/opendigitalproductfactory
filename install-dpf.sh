@@ -281,10 +281,13 @@ case "$rc" in
        info "No prior install state; dry-run leaves $(dpf_state_path) unchanged"
      else
        info "No prior install state; initializing $(dpf_state_path)"
-       dpf_state_init "$DPF_INSTALLER_VERSION" "$REPO_ROOT"
+       # Bare calls here abort the whole install with a naked exit 1 under
+       # `set -euo pipefail`, saying nothing about which stage died. Same
+       # `fail ... (see message above)` idiom the validation arm below uses.
+       dpf_state_init "$DPF_INSTALLER_VERSION" "$REPO_ROOT"          || fail "Could not initialize install state at $(dpf_state_path) (see message above)"
      fi ;;
   3) warn "Install state is from an older installer; running forward migration"
-     dpf_state_migrate ;;
+     dpf_state_migrate        || fail "Install state forward migration failed at $(dpf_state_path) (see message above)" ;;
   *) fail "Install state validation failed (see message above)" ;;
 esac
 
@@ -709,8 +712,12 @@ if [ ! -f .env ]; then
     printf 'DPF_STATE_DIR=%s/.dpf\n' "$HOME" >> .env
   fi
   ok ".env created with generated secrets"
-  info "  Admin password: $ADMIN_PW_VAL"
-  info "  (Stored in .env; change before any non-local deployment)"
+  # Never print the generated password. The install log is the first thing an
+  # operator pastes into a public install-verification issue, and the issue
+  # template asks for exactly that paste -- so echoing the value here publishes
+  # it. Point at .env instead, matching the final summary below (#1767).
+  info "  Admin password: see ADMIN_PASSWORD in .env"
+  info "  (Change it before any non-local deployment)"
 else
   ok ".env already exists; preserving operator edits"
   # Even on an existing .env, ensure DPF_BACKUPS_HOST_PATH is set — operators

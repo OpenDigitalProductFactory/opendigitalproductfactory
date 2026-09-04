@@ -24,6 +24,18 @@ const view = (over: Partial<WorkroomView> = {}): WorkroomView => ({
   purpose: null,
   mode: "finite",
   state: "active",
+  identity: {
+    definition: null,
+    instance: {
+      instanceId: "workroom-instance:booking:BK-1",
+      occurrenceTrace: {
+        caseRef: { caseId: "booking:BK-1", sourceType: "booking", sourceId: "BK-1" },
+        sourceRef: { kind: "source", id: "BK-1", sourceType: "booking" },
+        cycleRef: null,
+        executionRefs: [],
+      },
+    },
+  },
   outcome: { statement: null, packet: null, health: null },
   boundary: { gaps: [] },
   currentCycle: null,

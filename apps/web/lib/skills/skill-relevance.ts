@@ -13,6 +13,19 @@
 // composite 8.21 vs 6.73 / 6.22, high confidence.
 //
 // Pure — no I/O, cheap token overlap (no embedding call on the hot path).
+//
+// BI-43920DD1 · a MANDATED skill is pinned, not ranked. `MANDATED_DECISION_SKILL_IDS`
+// carry `assignTo: ["*"]` under BI-5E8E231E so every persona inherits the WWMD/WWWD
+// decision stack — but they used to contest the same twelve slots as everything else,
+// so a turn whose vocabulary didn't match them dropped the very skills the mandate
+// guarantees. Measured on the live install (1,175 real turns replayed through this
+// function): 61.4% of turns dropped at least one, and `dpf-decision-via-kernel` alone
+// was dropped on 57.3%. The mandate was asserted at seed time and unenforceable here.
+// Kernel ruling DI-E68BCB1767BD — pin over raising the cap (a per-turn token tax on
+// every coworker, worst on the local models with the weakest context retention) or
+// narrowing the mandate — composite 12.999, margin 8.647, high confidence, proceed.
+
+import { MANDATED_DECISION_SKILL_IDS } from "@dpf/db/mandated-skills";
 
 export interface RankableSkill {
   skillId: string;
@@ -72,9 +85,17 @@ export function scoreSkillRelevance(
 /**
  * Rank the eligible skills for a turn. When the set is at or below `cap`, it is
  * returned unchanged (byte-for-byte today's behavior — the regression guard). When
- * larger, only the top-`cap` by relevance are kept, most-relevant first; ties keep
- * the caller's original order (priority-desc), so a wholly-irrelevant turn still
- * yields a stable priority-ordered top-`cap`.
+ * larger, every mandated skill present keeps its slot regardless of relevance, and
+ * only the remaining slots are contested: the top of the rest by relevance, ties
+ * keeping the caller's original order (priority-desc), so a wholly-irrelevant turn
+ * still yields a stable priority-ordered result.
+ *
+ * A mandated skill is returned in the caller's order ahead of the ranked remainder —
+ * the decision stack reads as a stack, not scattered through the relevance list.
+ * Total output is still `cap`; pinning spends slots rather than adding them, so no
+ * coworker's per-turn budget grows (the whole reason raising the cap was rejected).
+ * Should the mandated set ever exceed `cap` on its own, the mandate wins and the
+ * output is the mandated skills alone.
  */
 export function rankSkillsByRelevance<T extends RankableSkill>(
   skills: T[],
@@ -82,10 +103,20 @@ export function rankSkillsByRelevance<T extends RankableSkill>(
   cap: number = DEFAULT_SKILL_SUMMARY_CAP,
 ): T[] {
   if (skills.length <= cap) return skills;
+
+  const pinned: T[] = [];
+  const contestable: T[] = [];
+  for (const skill of skills) {
+    (MANDATED_DECISION_SKILL_IDS.includes(skill.skillId) ? pinned : contestable).push(skill);
+  }
+  if (pinned.length >= cap) return pinned.slice(0, cap);
+
   const queryTokens = new Set(tokenize(query));
-  return skills
+  const ranked = contestable
     .map((skill, index) => ({ skill, index, score: scoreSkillRelevance(skill, queryTokens, query) }))
     .sort((a, b) => b.score - a.score || a.index - b.index)
-    .slice(0, cap)
+    .slice(0, cap - pinned.length)
     .map((entry) => entry.skill);
+
+  return [...pinned, ...ranked];
 }

@@ -64,21 +64,37 @@ export function OwnerReleaseCard({
           value={<span className="text-base font-semibold">{summary.currentVersion}</span>}
           intent="neutral"
         />
+        {/*
+          "You're current" is a POSITIVE CLAIM and must be rendered only when
+          the summary actually says the install is up to date — never as the
+          fallback for a missing label. It used to be exactly that fallback,
+          and because availableVersion was gated on
+          `state === "update-available"`, a run that was merely running or
+          failed collapsed it to null: the card then told the operator they
+          were current, in success green, directly above an enabled "Upgrade
+          now" button for the update it was denying existed.
+
+          Read updatePending, which is derived from the facts (support, target
+          resolution, freshness) rather than from the run state machine, so a
+          pending update stays visible while a run is in flight or after one
+          fails. The label carries the state; the value carries the identity.
+        */}
         <StatCard
-          label="Update ready"
+          label={summary.availableVersionLabel}
           value={
             <span className="text-base font-semibold">
-              {summary.availableVersion ??
-                (summary.state === "unavailable"
-                  ? "Not available on this install"
-                  : "You're current")}
+              {summary.state === "unavailable"
+                ? "Not available on this install"
+                : summary.updatePending
+                  ? summary.availableVersion ?? "Latest build"
+                  : "You're current"}
             </span>
           }
           intent={
-            summary.state === "update-available"
-              ? TONE_INTENT.info
-              : summary.state === "unavailable"
-                ? TONE_INTENT.warning
+            summary.state === "unavailable"
+              ? TONE_INTENT.warning
+              : summary.updatePending
+                ? TONE_INTENT.info
                 : "success"
           }
         />

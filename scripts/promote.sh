@@ -24,6 +24,23 @@ _promoter_dir="${DPF_PROMOTER_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # may consume identity baked into the candidate image. Explicit source callers
 # and source installs never enter this path.
 _candidate_release_error=""
+_resolve_immutable_release_config_digest() {
+  local _immutable_ref="$1"
+  local _platform_os="$2"
+  local _platform_architecture="$3"
+  local _raw_manifest=""
+  local _platform_manifest_digest=""
+  local _repository="${_immutable_ref%@*}"
+
+  _raw_manifest="$(docker buildx imagetools inspect "$_immutable_ref" --raw)" || return 1
+  if printf '%s' "$_raw_manifest" | node -e 'const raw=require("node:fs").readFileSync(0,"utf8"); const value=JSON.parse(raw); const digest=value?.config?.digest; if(!/^sha256:[a-f0-9]{64}$/.test(digest??"")) process.exit(2); process.stdout.write(digest)'; then
+    return 0
+  fi
+  _platform_manifest_digest="$(printf '%s' "$_raw_manifest" | node -e 'const fs=require("node:fs"); const value=JSON.parse(fs.readFileSync(0,"utf8")); const matches=(value.manifests??[]).filter((entry)=>entry?.platform?.os===process.argv[1]&&entry?.platform?.architecture===process.argv[2]&&/^sha256:[a-f0-9]{64}$/.test(entry?.digest??"")); if(matches.length!==1) process.exit(2); process.stdout.write(matches[0].digest)' "$_platform_os" "$_platform_architecture")" || return 1
+  _raw_manifest="$(docker buildx imagetools inspect "${_repository}@${_platform_manifest_digest}" --raw)" || return 1
+  printf '%s' "$_raw_manifest" | node -e 'const raw=require("node:fs").readFileSync(0,"utf8"); const value=JSON.parse(raw); const digest=value?.config?.digest; if(!/^sha256:[a-f0-9]{64}$/.test(digest??"")) process.exit(2); process.stdout.write(digest)'
+}
+
 _resolve_candidate_release_bootstrap() {
   _candidate_release_error=""
 
@@ -256,14 +273,28 @@ _missing=()
 [[ -n "${PROMOTE_HEALTH_URL:-}"  ]] || _missing+=(PROMOTE_HEALTH_URL)
 
 _release_mode=0
+_release_identity_mode="legacy-no-config"
 if [[ "${DPF_PROMOTION_MODE:-source}" == "release" ]]; then
   _release_mode=1
+  [[ -n "${PROMOTE_INSTALL_ROOT:-}" ]] || _missing+=(PROMOTE_INSTALL_ROOT)
   [[ "${DPF_RELEASE_TAG:-}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-+][A-Za-z0-9.-]+)?$ ]] || _missing+=(DPF_RELEASE_TAG)
   # Portals released before the registry-authoritative upgrade contract do not
   # send a config digest. Keep that one-hop bootstrap path working; repaired
   # callers always send the digest and remain bound to it below.
   if [[ -n "${DPF_RELEASE_CONFIG_DIGEST:-}" && ! "${DPF_RELEASE_CONFIG_DIGEST}" =~ ^sha256:[a-f0-9]{64}$ ]]; then
     _missing+=(DPF_RELEASE_CONFIG_DIGEST)
+  fi
+  if [[ -n "${DPF_RELEASE_CONFIG_DIGEST:-}" ]]; then
+    _release_identity_mode="config-only"
+  fi
+  if [[ -n "${DPF_RELEASE_CHANNEL_DIGEST:-}" || -n "${DPF_RELEASE_PLATFORM_MANIFEST_DIGEST:-}" ||
+        -n "${DPF_RELEASE_PLATFORM_OS:-}" || -n "${DPF_RELEASE_PLATFORM_ARCHITECTURE:-}" ]]; then
+    _release_identity_mode="full"
+    [[ "${DPF_RELEASE_CONFIG_DIGEST:-}" =~ ^sha256:[a-f0-9]{64}$ ]] || _missing+=(DPF_RELEASE_CONFIG_DIGEST)
+    [[ "${DPF_RELEASE_CHANNEL_DIGEST:-}" =~ ^sha256:[a-f0-9]{64}$ ]] || _missing+=(DPF_RELEASE_CHANNEL_DIGEST)
+    [[ "${DPF_RELEASE_PLATFORM_MANIFEST_DIGEST:-}" =~ ^sha256:[a-f0-9]{64}$ ]] || _missing+=(DPF_RELEASE_PLATFORM_MANIFEST_DIGEST)
+    [[ "${DPF_RELEASE_PLATFORM_OS:-}" == "linux" ]] || _missing+=(DPF_RELEASE_PLATFORM_OS)
+    [[ "${DPF_RELEASE_PLATFORM_ARCHITECTURE:-}" =~ ^(amd64|arm64)$ ]] || _missing+=(DPF_RELEASE_PLATFORM_ARCHITECTURE)
   fi
   [[ "${GHCR_OWNER:-}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,254}$ ]] || _missing+=(GHCR_OWNER)
 fi
@@ -297,17 +328,68 @@ _candidate_portal=""
 if [[ $_release_mode -eq 1 && $_dry_run -eq 0 ]]; then
   _candidate_portal="ghcr.io/${GHCR_OWNER}/dpf-portal:${DPF_RELEASE_TAG}"
   docker pull "$_candidate_portal" >/dev/null
-  _candidate_config_digest="$(docker image inspect "$_candidate_portal" --format '{{.Id}}' | tr -d '[:space:]')"
-  [[ "$_candidate_config_digest" =~ ^sha256:[a-f0-9]{64}$ ]] || {
-    printf 'error: release portal returned invalid config digest %s\n' "${_candidate_config_digest:-missing}" >&2
-    exit 1
-  }
-  [[ -z "${DPF_RELEASE_CONFIG_DIGEST:-}" || "$_candidate_config_digest" == "$DPF_RELEASE_CONFIG_DIGEST" ]] || {
-    printf 'error: release portal config digest %s does not match resolved candidate %s\n' "${_candidate_config_digest:-missing}" "$DPF_RELEASE_CONFIG_DIGEST" >&2
+  _candidate_engine_digest="$(docker image inspect "$_candidate_portal" --format '{{.Id}}' | tr -d '[:space:]')"
+  [[ "$_candidate_engine_digest" =~ ^sha256:[a-f0-9]{64}$ ]] || {
+    printf 'error: release portal returned invalid engine digest %s\n' "${_candidate_engine_digest:-missing}" >&2
     exit 1
   }
   if [[ -z "${DPF_RELEASE_CONFIG_DIGEST:-}" ]]; then
-    printf 'step=release-identity mode=legacy-bootstrap config-digest=%s\n' "$_candidate_config_digest"
+    printf 'step=release-identity mode=legacy-bootstrap engine-digest=%s\n' "$_candidate_engine_digest"
+  fi
+  _candidate_platform_os="$(docker image inspect "$_candidate_portal" --format '{{.Os}}' | tr -d '[:space:]')"
+  _candidate_platform_architecture="$(docker image inspect "$_candidate_portal" --format '{{.Architecture}}' | tr -d '[:space:]')"
+  if [[ "$_release_identity_mode" == "full" &&
+        ( "$_candidate_platform_os" != "$DPF_RELEASE_PLATFORM_OS" || "$_candidate_platform_architecture" != "$DPF_RELEASE_PLATFORM_ARCHITECTURE" ) ]]; then
+    printf 'error: release portal platform %s/%s does not match resolved candidate %s/%s\n' \
+      "${_candidate_platform_os:-missing}" "${_candidate_platform_architecture:-missing}" "$DPF_RELEASE_PLATFORM_OS" "$DPF_RELEASE_PLATFORM_ARCHITECTURE" >&2
+    exit 1
+  fi
+  if [[ "$_release_identity_mode" == "full" &&
+        "$_candidate_engine_digest" != "$DPF_RELEASE_CONFIG_DIGEST" &&
+        "$_candidate_engine_digest" != "$DPF_RELEASE_PLATFORM_MANIFEST_DIGEST" &&
+        "$_candidate_engine_digest" != "$DPF_RELEASE_CHANNEL_DIGEST" ]]; then
+    printf 'error: release portal engine digest %s does not match resolved config/platform/channel identities %s %s %s\n' \
+      "${_candidate_engine_digest:-missing}" "$DPF_RELEASE_CONFIG_DIGEST" "$DPF_RELEASE_PLATFORM_MANIFEST_DIGEST" "$DPF_RELEASE_CHANNEL_DIGEST" >&2
+    exit 1
+  fi
+  if [[ "$_release_identity_mode" == "full" && "$_candidate_engine_digest" != "$DPF_RELEASE_CONFIG_DIGEST" ]]; then
+    _candidate_repository="ghcr.io/${GHCR_OWNER}/dpf-portal"
+    _candidate_immutable_ref="${_candidate_repository}@${_candidate_engine_digest}"
+    _candidate_resolved_config_digest="$(_resolve_immutable_release_config_digest "$_candidate_immutable_ref" "$_candidate_platform_os" "$_candidate_platform_architecture")" || {
+      printf 'error: release portal engine digest %s could not resolve the frozen %s/%s config\n' \
+        "$_candidate_engine_digest" "$DPF_RELEASE_PLATFORM_OS" "$DPF_RELEASE_PLATFORM_ARCHITECTURE" >&2
+      exit 1
+    }
+    [[ "$_candidate_resolved_config_digest" == "$DPF_RELEASE_CONFIG_DIGEST" ]] || {
+      printf 'error: release portal resolved config digest %s does not match frozen release config %s\n' \
+        "$_candidate_resolved_config_digest" "$DPF_RELEASE_CONFIG_DIGEST" >&2
+      exit 1
+    }
+  fi
+  if [[ "$_release_identity_mode" == "config-only" && "$_candidate_engine_digest" != "$DPF_RELEASE_CONFIG_DIGEST" ]]; then
+    [[ "$_candidate_platform_os" == "linux" && "$_candidate_platform_architecture" =~ ^(amd64|arm64)$ ]] || {
+      printf 'error: release portal legacy platform %s/%s is unsupported\n' "${_candidate_platform_os:-missing}" "${_candidate_platform_architecture:-missing}" >&2
+      exit 1
+    }
+    _candidate_repository="ghcr.io/${GHCR_OWNER}/dpf-portal"
+    _candidate_immutable_ref="${_candidate_repository}@${_candidate_engine_digest}"
+    _candidate_repo_digests="$(docker image inspect "$_candidate_portal" --format '{{range .RepoDigests}}{{println .}}{{end}}' | tr -d '\r')"
+    grep -Fxq "$_candidate_immutable_ref" <<<"$_candidate_repo_digests" || {
+      printf 'error: release portal engine digest %s is not a pulled repository digest for %s\n' "$_candidate_engine_digest" "$_candidate_repository" >&2
+      exit 1
+    }
+    _candidate_resolved_config_digest="$(_resolve_immutable_release_config_digest "$_candidate_immutable_ref" "$_candidate_platform_os" "$_candidate_platform_architecture")" || {
+      printf 'error: release portal engine digest %s could not resolve an immutable %s/%s config\n' "$_candidate_engine_digest" "$_candidate_platform_os" "$_candidate_platform_architecture" >&2
+      exit 1
+    }
+    [[ "$_candidate_resolved_config_digest" == "$DPF_RELEASE_CONFIG_DIGEST" ]] || {
+      printf 'error: release portal resolved config digest %s does not match legacy caller %s\n' "$_candidate_resolved_config_digest" "$DPF_RELEASE_CONFIG_DIGEST" >&2
+      exit 1
+    }
+  fi
+  if [[ "$_release_identity_mode" == "config-only" ]]; then
+    printf 'step=release-identity mode=config-only engine-digest=%s config-digest=%s platform=%s/%s\n' \
+      "$_candidate_engine_digest" "$DPF_RELEASE_CONFIG_DIGEST" "$_candidate_platform_os" "$_candidate_platform_architecture"
   fi
   _candidate_revision="$(docker image inspect "$_candidate_portal" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' | tr -d '[:space:]')"
   [[ "$_candidate_revision" == "$PROMOTE_TARGET_SHA" ]] || {
@@ -816,9 +898,13 @@ fi
 # compose is rerun against the restored old tag to put the portal back too.
 emit_step release-identity-commit
 if [[ $_release_mode -eq 1 && $_dry_run -eq 0 ]]; then
+  [[ -d "$PROMOTE_INSTALL_ROOT" && -w "$PROMOTE_INSTALL_ROOT" ]] || {
+    printf 'error: canonical install root %s is not a writable directory\n' "${PROMOTE_INSTALL_ROOT:-<unset>}" >&2
+    exit 1
+  }
   if ! node "$_promoter_dir/installer/install-release-assets.mjs" \
     --source "$_release_assets" \
-    --install "$PROMOTE_SOURCE" \
+    --install "$PROMOTE_INSTALL_ROOT" \
     --state "$_install_state" \
     --tag "$DPF_RELEASE_TAG" \
     --owner "$GHCR_OWNER" \

@@ -5,12 +5,7 @@ import {
   type LocalCiPoolConfig,
 } from "./local-ci-pool-policy";
 
-type LocalCiGateStatus =
-  | "passed"
-  | "failed"
-  | "conflict"
-  | "blocked_sandbox_drift"
-  | "blocked_control_plane_starvation";
+import type { LocalIntegrationStatus as LocalCiGateStatus } from "../../../../scripts/lib/local-integration-status.mjs";
 
 export type PlatformConfigCircuitBreakerStore = {
   findUnique: (args: {
@@ -49,7 +44,14 @@ function shouldContract(
   status: LocalCiGateStatus,
   evidence: unknown,
 ): boolean {
-  if (status === "blocked_control_plane_starvation") return true;
+  // Both blocked classes are the same physical signal — the host could not
+  // sustain the run. Starvation is observed by the watchdog; a signal death is
+  // the same pressure arriving as a kill instead (BI-C59AC8AF). Contracting to
+  // one slot is the reversible response to either.
+  if (
+    status === "blocked_control_plane_starvation"
+    || status === "blocked_child_signal_death"
+  ) return true;
   return status !== "passed" && evidenceSlotKey(evidence) === "slot-1";
 }
 

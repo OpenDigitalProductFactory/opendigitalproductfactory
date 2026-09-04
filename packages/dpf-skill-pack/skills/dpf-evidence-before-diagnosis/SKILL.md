@@ -1,6 +1,6 @@
 ---
 name: dpf-evidence-before-diagnosis
-description: "Use when working in the DPF codebase and tempted to claim a cause for an observed symptom. Before naming the cause, query the live DB / status fields / log streams / runtime state for evidence — don't read a log line and assume its suggested cause without verification. Composes with dpf-systematic-debugging as the predecessor evidence-gathering step. Encodes the evidence-before-diagnosis kernel principle plus the structural-verification-is-not-functional commandment."
+description: "Use when about to claim a cause for a DPF symptom without having checked the live DB, status fields, logs, or runtime state."
 
 # Agent Skills standard fields (Surface A — Claude Code)
 disable-model-invocation: false

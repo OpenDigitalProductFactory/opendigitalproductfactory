@@ -3,7 +3,7 @@
 // One canonical health verdict for the platform. The read side of health is
 // scattered across six surfaces, each with its own status vocabulary:
 //   - workspace/command-center.ts        (metric tiles)
-//   - operate/scheduled-jobs/core.ts     (deriveHealth → "ok"|"error"|"never")
+//   - operate/scheduled-jobs/work-model.ts (deriveHealth → ok|error|overdue|never|spent)
 //   - operate/dependency-health.ts       (boolean probes: neo4j / model-runner / stt)
 //   - operate/health-probe-bridge.ts     (container/service probe metrics)
 //   - observability/alert-sources.ts     (alert feed)

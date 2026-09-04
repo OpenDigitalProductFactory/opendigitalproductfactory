@@ -10,7 +10,7 @@ status: binding
 | Epic | `EP-MSP-FEDERATION` (enrollment), `EP-1FABA22D` (instance stance) |
 | Surface | `@dpf/db` federation contracts, federated record sync, instance stance |
 | Owners | Federation, installation lifecycle |
-| Related | `2026-08-22-installation-identity-and-agent-stance-design.md`; federated record sync (B3/B5); organization join package (`BI-A8399604`) |
+| Related | `2026-08-22-installation-identity-and-agent-stance-design.md`; federated record sync (B3/B5); the organization join package contract in `packages/db/src/organization-join-action.ts` |
 
 ## 1. Decision
 
@@ -120,6 +120,308 @@ its paired peer. That conflated two different things:
 second. Without this separation the identity work shipped on 2026-08-22 would
 have forbidden the very sync this design depends on.
 
+### 5.4 Composing discovery with the trust decision
+
+Discovery, enrolment, and the trust decision all existed separately; nothing
+joined them, so every discovered peer routed through a SAS session in which a
+person compares a short code. `decideAutomaticPairing` is that missing step. It
+returns `auto-enroll`, `operator-confirmation`, or `blocked`.
+
+`nearby-candidates` already anticipated this: its `AutomaticPairingReadiness`
+names what *blocks* automatic pairing (`tls-validation-required`,
+`blocked-insecure-transport`). Nothing consumed it.
+
+Two orderings carry the safety:
+
+1. **Transport is evaluated before trust, and is absolute.** A peer advertised
+   over plain HTTP is `blocked` outright — an unverifiable channel cannot carry a
+   verifiable identity, however well-formed the certificate claims are. This holds
+   even when organization trust would otherwise pass.
+2. **HTTPS is not proof.** A candidate discovered over HTTPS but not yet
+   chain-validated routes to the operator. `tls-validation-required` is a to-do,
+   not a result; treating it as a result would be the vulnerability this design
+   exists to avoid.
+
+Only a chain-validated same-organization peer reaches `auto-enroll`. Every other
+outcome falls back to the confirmation flow that exists today, so a gap in
+evidence costs a human confirmation rather than an unearned trust decision.
+
+`mayPairWithoutOperator` is a named predicate rather than a `!== "blocked"` test,
+so a caller cannot skip the pairing code by treating `operator-confirmation` as a
+pass.
+
+### 5.5 Resolving the organization trust anchor
+
+Both the enrolment decision and the pairing decision need two facts: the root
+this installation pins, and the organization it belongs to. Importing a join
+package already establishes them, but the `organization.join.import` evidence
+blob deliberately records only a **truncated 12-character fingerprint prefix**.
+
+A prefix is not an identity. `resolveOrganizationTrustAnchor` therefore decrypts
+the stored package and parses the **full 64-character fingerprint**, using the
+same parser the import path used — so a package that would be rejected on import
+cannot be accepted here. Expiry is surfaced from that parser rather than
+re-checked, because the parser owns the rule and a second check could only
+disagree with the authority.
+
+Every unreadable path fails closed to *no anchor*: no join import, an
+undecryptable package (a rotated key returns null rather than throwing), an
+unparseable or expired one, or an installation with no organization. That default
+is what keeps the rest honest — a null fingerprint makes
+`evaluateOrganizationEnrollment` return `organization-trust-not-configured`, so a
+decrypt failure costs a human confirmation instead of widening trust.
+
+Decryption is injected, so the resolver never imports the credential store and a
+failure is a value rather than a thrown error.
+
+### 5.6 Verifying the peer against the pinned root
+
+§5.4 will only auto-enrol a peer whose chain was *actually* validated against the
+organization root. Nothing produced that fact: discovery reports
+`tls-validation-required`, which is a to-do, and no peer-certificate inspection
+existed anywhere in the codebase.
+
+`verifyPeerChainAgainstRoot` is the evaluation half, and it is pure — the caller
+supplies the chain it observed. Keeping it pure means the security rule is
+testable without a TLS server, and a network adapter cannot quietly change what
+"verified" means.
+
+Two details carry real weight:
+
+- **Fingerprint forms must be normalised.** Node reports `AA:BB:CC:…`; a join
+  package records 64 bare hex characters. Comparing those directly would never
+  match, so both collapse to lowercase hex, and anything that is not exactly 64
+  hex characters is rejected rather than compared loosely.
+- **Validity is checked across the whole chain**, not just the leaf. An expired
+  intermediate breaks the chain as surely as an expired leaf.
+
+Verification requires a positive match against the pinned fingerprint. There is
+no path where an absent, malformed, or unmatched value yields `verified: true`.
+
+### 5.7 Observing the chain
+
+`verifyPeerChainAgainstRoot` is pure and needs a chain to judge. The observer
+opens a TLS connection, walks the presented chain leaf-to-root, and hands it over.
+Nothing else. Keeping observation apart from the rule means a change to the
+network path cannot alter what "verified" means.
+
+**Certificate validation stays on.** An organization CA is a private root the
+public trust store does not contain, so the organization root is supplied as the
+only acceptable `ca` and Node performs real chain validation against it. That is
+narrower than the public trust store, not looser.
+
+An earlier draft disabled validation and compared the root fingerprint by hand.
+CodeQL flagged it (`js/disabling-certificate-validation`) and was **right**: a
+fingerprint match proves a certificate with that fingerprint appeared in the
+chain, not that the leaf was signed by it. Only the TLS stack checks the
+signature chain. The fingerprint comparison in §5.6 remains, but as defence in
+depth on top of real validation rather than instead of it.
+
+If the organization root is not readable, observation fails closed rather than
+falling back to a weaker check.
+
+Three hardening details:
+
+- **Cycle and depth bounds.** A peer that presents a cyclic issuer graph must not
+  hold the walk open; the walk tracks seen certificates and caps depth.
+- **SNI omits IP addresses.** RFC 6066 forbids an IP in server-name indication, so
+  a LAN peer discovered by address is connected to without it.
+- **It never throws.** Every failure — unparseable endpoint, plain HTTP, timeout,
+  refused connection — is an unobserved result, which leaves the decision at
+  `operator-confirmation`. An unreachable peer costs a human confirmation, never
+  an assumption.
+
+### 5.8 Composing the evidence, and the open attribution question
+
+`resolveCandidatePairingMode` gathers the anchor (§5.5), the observed chain
+(§5.7), the verification (§5.6), and the decision (§5.4) for one candidate, and
+returns the mode **together with the evidence that produced it** — so a caller
+records *why* a peer was or was not eligible, not merely the verdict. A peer whose
+transport already disqualifies it is never dialled.
+
+**What remains, and why it is not guessed here.** Bypassing the pairing code means
+approving a `FederationPairingSession` without a human, but
+`approveIncomingNearbyPairing` takes a required `approverPrincipalId`. Supplying a
+person's principal for a decision no person made would falsify the audit trail,
+and the whole point of this design is that trust is *derived from evidence* rather
+than asserted.
+
+So the remaining slice is an attribution decision, not wiring:
+
+- attribute an automated enrolment to a governed non-human identity (GAID already
+  models non-human actors), or
+- record approval provenance as `organization-trust` on the session, distinct
+  from principal approval, so the audit trail states plainly that no person
+  approved it and which evidence did.
+
+Either is defensible; inventing one silently is not. Until it is settled, the
+resolved mode and its evidence are computed and recorded, and the code comparison
+still stands.
+
+### 5.9 Confirming on organization trust, and who the record says did it
+
+The SAS code authenticates a peer this installation has no prior relationship
+with: two people read six digits off two screens and agree. That is the right
+ceremony between strangers, and it adds nothing once the organization CA has
+already authenticated the peer — a validated chain is a stronger statement than a
+six-digit comparison, from the same authority that issued the peer its identity.
+
+**Attribution was never an open question.** A federated peer is already
+`Principal(kind="federated-peer")` with `FederationLink` as its side table, per
+AGENTS.md §11 — the same shape `EdgeNode` uses. The peer HAS an identity; the
+link carries it in `principalId`. This is the ordinary mTLS/SPIFFE model, where
+the credential is the identity and the CA authorised it at issuance rather than a
+person authorising each pair.
+
+`approvedByPrincipalId` answers a different question — which PERSON on this side
+clicked approve. For an evidence-derived confirmation the honest answer is that
+none did, and the field stays null. Writing a person there would make the audit
+trail assert something untrue.
+
+What is recorded instead, on the session's `sasState`:
+
+- `confirmationProvenance: "organization-trust"`
+- the evidence — presented root fingerprint, that the chain verified, the peer
+  organization ref, and when it was decided
+
+So the record states plainly that a machine confirmed it, on what basis, and that
+no person was involved. The verdict is checked by its exact `auto-enroll` value
+rather than by ruling out `blocked`, so an `operator-confirmation` verdict can
+never fall through. A peer that refuses the confirmation leaves the session
+pending for a human, exactly as before.
+
+### 5.10 The pairing path acts on the verdict
+
+With §5.9 in place the last connection is made: after the pairing session is
+created, the action confirms it on organization trust when the verdict earns it.
+The verdict now carries its evidence through, because a provenance marker without
+the evidence that justified it is a weaker record than the ceremony it replaces.
+
+Everything short of `auto-enroll` leaves the code comparison exactly as it was,
+and a peer that refuses the confirmation does too. The entry point stays gated by
+`assertManagePlatform`: this changes which CEREMONY a pairing requires, not who
+may start one.
+
+That closes the loop. An installation that has joined an organization can now
+discover an organization peer on the LAN, validate its chain against the pinned
+root, and pair with it without anyone comparing six digits — which is what makes
+an install created and destroyed thousands of times workable.
+
+### 5.11 The producer: something to find, and something looking
+
+Everything above is complete and none of it can run, because nothing produces a
+nearby candidate. `recordNearbyFederationCandidates` has exactly one caller, the
+Edge Node submission route, and the Edge Node that actually deploys
+(`services/edge-node`) never calls it — it submits discovery runs, heartbeats,
+metrics and adapter polls, and the word `federation` does not appear in it. The
+DNS-SD advertiser and browser live only in `services/edge-node-go`.
+
+Measured on 2026-08-28 against the running install: the Edge Node was enrolled and
+trusted, had recorded 2228 `DiscoveredItem` rows across 399 hosts, and had found
+zero DPF peers. `FederationLink`: 0 rows. `FederationPairingSession`: 0 rows ever.
+General host discovery and federation peer discovery are separate paths, and only
+the first was implemented.
+
+A candidate needs two halves. Both were missing, and both are supplied here.
+
+**The advertisement rides HTTP, not multicast.** The deployment matrix already
+settles this: on Docker Desktop for Windows and macOS a container cannot reach the
+host LAN at all, `network_mode: host` included, so a multicast advertiser in the
+portal container would be unreachable on the host classes DPF ships to. The
+portal published port is reachable by construction — it is how anyone uses the
+install. So an install advertises at `/.well-known/dpf-federation.json`, beside the
+`dpf-instance.json` descriptor that already answers the same question for the
+mobile app.
+
+The field set is the DNS-SD TXT allow-list unchanged — `protocol`, `install`,
+`caps`, `pair` — plus the `organization` §5.4 needs, which the estate-identity
+contract already sanctions publishing in a discovery record. No hostname, no
+device id, no organization id, no capability list. `install` is a rotating
+window-scoped HMAC under the installation-local projection secret, on the same
+fifteen-minute window as the Go advertiser, so an observer cannot follow one
+install across a day and cannot mint an id for an install it does not run. The
+schema is strict: an unexpected key is refused rather than ignored, because the
+field set IS the privacy boundary, and a peer with more to say has to say it under
+a new `protocol`.
+
+Advertising is on by default, with `DPF_FEDERATION_ADVERTISE=0` to opt out. An
+install that cannot be found cannot be paired with, and the unattended lifecycle
+in §6 has nobody to switch it on. An install that does not advertise answers 404,
+indistinguishable from one that cannot.
+
+**The scanner is a fourth Edge Node loop.** It probes its segment for that
+descriptor and submits what it finds. It runs beside the sweep loop rather than
+inside it because the Authority expires a candidate after two minutes while the
+sweep runs every five — a candidate produced by the sweep would be absent from the
+nearby list more often than present.
+
+Three properties carry the safety:
+
+- **One scope rule, not two.** `isFederationScopedEndpoint` moved to
+  `@dpf/validators`, so the scanner refuses to DIAL exactly what the Authority
+  refuses to accept. A scanner that could be pointed at a routable address would
+  be a request-forgery primitive wearing a discovery hat, and a scanner whose
+  scope merely differed would post batches the route rejects wholesale, losing the
+  good candidates in them.
+- **The endpoint is the origin the scanner dialled**, never a value the peer
+  chose. A descriptor able to nominate its own address would let one host enrol a
+  candidate for another.
+- **Probe-time certificate validation is off, and this is not the §5.7 mistake.**
+  That one turned a fingerprint comparison into a claim of verification. Here
+  nothing is claimed: a peer certificate is issued by a private organization CA
+  that a fresh Edge Node has no copy of, so validating at probe time would find
+  only the peers already trusted. An HTTPS candidate is recorded
+  `tls-validation-required`, and the Authority then opens its OWN connection with
+  the pinned root as the only acceptable issuer. The verification path is
+  unchanged and is still the only thing that can produce `certificateVerified`.
+
+The scanner also asks the Authority it is enrolled against for its own advertised
+id, so it never reports its own install as a peer. That read deliberately does not
+go through the candidate contract: the enrolled Authority URL is routinely
+something no candidate could ever be — `http://portal:3000` inside compose — and
+going through the contract returned null, silently disabling self-exclusion in
+exactly the deployment the Edge Node ships in.
+
+Where the ARP cache cannot see the segment — Docker Desktop again —
+`DPF_FEDERATION_SCAN_HOSTS` names the hosts to probe. A pass that hits its target
+ceiling reports how many origins it left out, because a silent cap reads as
+covering everything.
+
+### 5.11 Work sync is a pull (amendment, 2026-09-02, BI-FF8A57EF)
+
+§5.2 declared `backlog-item` and `epic` as federated record types and left the
+transport to "the existing mirror". Nothing was ever built on that: no producer
+wrote those types, and `dispatchDueDemand` filtered to the three demand types.
+Meanwhile the demand lane carried the same items the other way — as *demand*
+a person must adopt one by one — and five days of measurement on a paired
+development/production pair showed 327 healthy outbound envelopes and **zero**
+inbound rows, a state the receiving side could not even see.
+
+The transport for work is therefore a **pull**, run by the receiving side on the
+five-minute federation cadence:
+
+- `GET /api/v1/federation/work` (private-mesh) serves the caller's trusted
+  same-organization link a paged, share-safe view of this installation's whole
+  backlog — every status, minus the `confidential` / `restricted` tiers and minus
+  rows that are themselves mirrors — plus its epics.
+- The puller materialises each page as real `BacklogItem` / `Epic` rows carrying
+  the origin's semantic ids (`BI-*`, `EP-*`) and a standalone
+  `[origin:federatedWork:<installationId>:<id>]` marker line, and records
+  provenance in `FederatedRecordMirror` (`recordType` `backlog-item` / `epic`,
+  `canonicalSide` `peer`).
+- Only the origin mutates (invariant 6): every cycle the origin's copy overwrites
+  the mirror, a record that disappears at the origin is retired locally, and a
+  locally owned row that shares an id is left alone and recorded as a conflict.
+- Mirrors never re-project — not as work, not as demand — and the triage drain
+  does not touch them, so nothing echoes and nothing forks.
+
+Why pull rather than the outbox: a development companion must converge on
+production's truth regardless of production's outbox, retry clock or re-heal cap,
+and the receiving side must be able to *say* it is behind. A pull reports its
+own failure ("peer does not serve work sync yet"); a push that never arrives
+reports nothing. The demand lane is unchanged and still carries deliberate,
+per-item sharing across organization boundaries.
+
 ## 6. Lifecycle at scale
 
 The unattended cycle this enables:
@@ -139,8 +441,14 @@ the identity design remains the backstop for an install with **no** peer.
 - No change to cross-organization enrolment.
 - No new sync engine, transport, or trust root.
 - No subnet-based or trust-on-first-use joining.
-- Discovery itself is out of scope here; this design covers what happens once a
-  peer is proposed.
+- No mDNS/DNS-SD change. The Go Edge Node keeps its advertiser and browser;
+  §5.11 adds an HTTP advertisement beside them because the host classes DPF
+  ships to cannot carry multicast out of a container.
+- No new trust decision. §5.11 produces the input §5.4-§5.10 already consume, and
+  changes nothing about what verified means.
+- Composing discovery with the trust decision (§5.4), trust-anchor resolution
+  (§5.5), peer chain verification (§5.6), the chain observer (§5.7) and the
+  pairing path (§5.9/§5.10) are all shipped, not deferred.
 
 ## 8. Acceptance criteria
 
@@ -149,10 +457,28 @@ the identity design remains the backstop for an install with **no** peer.
    auto-enrol.
 2. Every other combination returns `manual-approval` with a closed reason.
 3. Unrecognised presets and roles refuse rather than defaulting open.
-4. `backlog-item` and `epic` are federated record types and reconcile through the
-   existing mirror.
+4. `backlog-item` and `epic` are federated record types; a trusted
+   same-organization peer's items and epics appear as read-only rows in this
+   installation's backlog within one cadence, and vice versa (§5.11).
 5. A development install paired with an organization peer resolves
    `workSync: same-organization` while `peerWrite` stays `read-only`.
+6. A plain-HTTP candidate is `blocked` regardless of organization trust; an
+   HTTPS-but-unvalidated candidate routes to `operator-confirmation`; only a
+   chain-validated same-organization peer reaches `auto-enroll`.
+7. The trust anchor resolves the full fingerprint from the stored package, and
+   every unreadable path yields a null anchor rather than a partial match.
+8. Peer verification matches fingerprints across colon-separated and bare hex
+   forms, rejects an expired certificate anywhere in the chain, and never reports
+   verified without a positive match against the pinned root.
+9. An install advertises the closed field set at
+   `/.well-known/dpf-federation.json`, rotating its public id per window,
+   omitting the organization when it has never been named, and answering 404
+   when an operator turned advertising off.
+10. The shipping Edge Node probes its segment, refuses to dial an origin outside
+    it, never reports the install it is enrolled against, and submits what it
+    found to `/api/v1/edge/federation-candidates`.
+11. A candidate the scanner produced from a peer holding an organization-CA
+    certificate reaches `auto-enroll` through the unchanged §5.6/§5.7 path.
 
 ## 9. Decision record
 

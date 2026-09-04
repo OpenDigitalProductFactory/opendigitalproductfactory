@@ -26,6 +26,42 @@ export function detectScheduledRunInferenceFailure(input: {
   return classifyInferenceFailure(input.content);
 }
 
+/** Baseline reproduction: explicit governed mutations are not yet terminal requirements. */
+export function detectScheduledRequiredToolFailure(input: {
+  prompt: string;
+  authorizedTools: Array<{ name: string; sideEffect?: boolean }>;
+  executedTools: Array<{
+    name: string;
+    result?: { success?: boolean; data?: { proposalId?: string; status?: string } };
+  }>;
+}): string | null {
+  const prompt = input.prompt.toLowerCase();
+  for (const tool of input.authorizedTools) {
+    if (!tool.sideEffect || !prompt.includes(tool.name.toLowerCase())) continue;
+    const succeeded = input.executedTools.some(
+      (execution) =>
+        execution.name === tool.name &&
+        execution.result?.success === true &&
+        execution.result.data?.status !== "proposed",
+    );
+    if (!succeeded) return `required governed tool ${tool.name} executed zero times`;
+  }
+  return null;
+}
+
+export function detectScheduledRunFailure(input: {
+  prompt: string;
+  authorizedTools: Array<{ name: string; sideEffect?: boolean }>;
+  executedTools: Array<{
+    name: string;
+    result?: { success?: boolean; data?: { proposalId?: string; status?: string } };
+  }>;
+  content: string | null | undefined;
+}): string | null {
+  return detectScheduledRequiredToolFailure(input) ??
+    detectScheduledRunInferenceFailure({ executedToolCount: input.executedTools.length, content: input.content });
+}
+
 export async function createTaskRunForScheduledTask(input: {
   taskId: string;
   ownerUserId: string;

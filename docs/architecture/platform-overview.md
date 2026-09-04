@@ -403,7 +403,9 @@ flowchart TB
 
 ### Monitoring Stack Topology
 
-The **headless** monitoring stack (Prometheus, Loki, Alloy, and the metric exporters) runs as part of the default Docker Compose stack — these feed the platform's native UI and alert pipeline. The Grafana **UI** is opt-in (`--profile observability-ui`), since the platform renders its own context-aware dashboards and delivers alerts via the Inngest poll-bridge rather than through Grafana.
+The monitoring stack (Prometheus, Loki, Alloy, Grafana, and the metric exporters) is **capability-activated, not default**: every one of them sits behind the `runtime-deep-observability` Compose profile and starts only when the `runtime:deep-observability` capability is enabled. An installation that has not enabled it collects nothing, and the metric-backed surfaces have no source. Grafana is a further step again — the platform renders its own context-aware dashboards and delivers alerts via the Inngest poll-bridge rather than through Grafana, so the Grafana UI is for power users.
+
+⟦runtime: this paragraph previously claimed the headless stack "runs as part of the default Docker Compose stack". That was false against the Compose file and it made a real drift harder to spot — BI-5ACBAC50 found a live install whose capability state read `runtime:deep-observability: active` while no collector existed. Verify against `docker-compose.yml` profiles before restating it.⟧
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#1e293b', 'primaryTextColor': '#f8fafc', 'primaryBorderColor': '#334155', 'lineColor': '#64748b', 'secondaryColor': '#0f172a', 'tertiaryColor': '#1e293b', 'fontSize': '14px' }}}%%

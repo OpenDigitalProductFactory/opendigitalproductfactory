@@ -1,0 +1,25 @@
+{
+  "version": "1",
+  "decidedOption": "own-card-own-endpoints-on-the-existing-inbox",
+  "scope": {
+    "files": [
+      "apps/web/components/attention/CoworkerEnvelopeApproval.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "own-card-own-endpoints-on-the-existing-inbox",
+      "reuse-coworker-proposal-actions",
+      "dedicated-envelope-route"
+    ],
+    "decisionInteractionId": "DI-F3A40C33D927"
+  },
+  "rationale": {
+    "own-card-own-endpoints-on-the-existing-inbox": "CHOSEN. A proposed CoworkerActionEnvelope becomes an eleventh attention source and renders its own card in the lane the owner already reads. The two added controls sit in the card's existing action slot, so no route, navigation layer, or disclosure concept is introduced. The card shows the coworker, the requested action, the rationale, the bound task, the immutable review binding and the expiry BEFORE the buttons, because an employee cannot honestly approve a commit-bound reviewer action without seeing which commit, path and blob it is bound to. Approve and Decline post only to /api/agent/envelope/:id/approve and /deny, the authenticated state-machine routes that already enforce the delegating-user rule. Controls are absent, not merely disabled, once the envelope is resolved or expired; the record stays readable so hiding a control never hides evidence.",
+    "reuse-coworker-proposal-actions": "REJECTED. CoworkerProposalActions settles an AgentActionProposal through the proposal server actions. Pointing it at an envelope id would route an envelope decision through the wrong record class and the wrong state machine, which is the defect BI-7CB2CCDE reports rather than a fix for it. It also carries no expiry, no delegating-user binding, and nowhere to show the immutable review binding.",
+    "dedicated-envelope-route": "REJECTED. A separate approvals route adds a destination the owner has no reason to visit and splits 'what needs you now' across two pages. The inbox is already the single place the owner looks, and the envelope is exactly the kind of item it exists to surface."
+  },
+  "notes": "Net new user-facing controls: two buttons (Approve action, Decline), rendered only while the envelope is proposed and unexpired. No new route, no new navigation entry, no new disclosure. Copy uses the shared --dpf-* tokens and the generated type scale; style-drift and prose-lint both pass, with only the new file added to the prose baseline.",
+  "decisionInteractionId": "DI-F3A40C33D927"
+}

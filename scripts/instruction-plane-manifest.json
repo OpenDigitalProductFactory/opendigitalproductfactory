@@ -34,7 +34,10 @@
   ],
   "perSectionCharBudget": 6000,
   "maxLineChars": 800,
-  "maxExtractedItemChars": 700,
+  "_maxExtractedItemCharsComment": "Per-skill budget for the serialised name+description BYTES the harness injects every session. Recalibrated 700 -> 300 by BI-58F6755A (model-era curation, DI-F844365B0DCC contingency marker). 700 permitted ~90-word descriptions that TAUGHT the skill; the body already teaches, on invoke. A description routes and nothing else. 300 leaves headroom above the widest legitimate trigger net (dpf-ux-fit-review, 257b) while forbidding a return to teaching descriptions.",
+  "maxExtractedItemChars": 300,
+  "_extractedItemStrictComment": "Makes the per-description budget a HARD failure without waiting on structuralStrict, which stays false until the Phase 1 AGENTS.md split lands. Skill descriptions are already separate files, so their budget is not blocked by that split. Without this the aggregate ratchet alone would let one description balloon while others shrink. BI-58F6755A.",
+  "extractedItemStrict": true,
   "_maxDescriptionCharsComment": "HARD platform limit, not a DPF budget: the Agent Skills API rejects a SKILL.md `description` over 1024 characters. Distinct from maxExtractedItemChars, which budgets the serialised name+description BYTES the harness injects. This one always errors (never advisory) because exceeding it is an install-time validation failure. Do not raise it — it is not ours to set.",
   "maxDescriptionChars": 1024,
   "structuralStrict": false

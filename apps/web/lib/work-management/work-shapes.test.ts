@@ -8,6 +8,7 @@ import {
   getWorkShape,
   listWorkShapes,
   projectWorkShapeCycleBoundary,
+  readWorkShapeDefinitionContract,
   validateWorkShape,
   type WorkShapeDefinition,
 } from "./work-shapes";
@@ -28,6 +29,17 @@ describe("the §8.11 conformance rules", () => {
     };
     expect(validateWorkShape(noFailureExit)).toContain(
       `${base.key}: no failure exit — only a successful one`,
+    );
+  });
+
+  it("rejects a shape that can start itself and has no budget stop", () => {
+    const base = getWorkShape(OBLIGATION_ASSURANCE_WATCH_SHAPE_KEY)!;
+    const noBudgetStop: WorkShapeDefinition = {
+      ...base,
+      stopConditions: base.stopConditions.filter((stop) => stop.kind !== "budget"),
+    };
+    expect(validateWorkShape(noBudgetStop)).toContain(
+      `${base.key}: no budget stop — a self-starting shape without a spend ceiling is unbounded`,
     );
   });
 
@@ -96,5 +108,28 @@ describe("projection onto the existing room-cycle substrate", () => {
     // Review point is carried as a real date, not left implicit.
     expect(parsed!.expectedReviewAt).toBe("2026-09-20T00:00:00.000Z");
     expect(parsed!.stopConditions.some((stop) => stop.startsWith("failure:"))).toBe(true);
+  });
+});
+
+describe("the definition-level trigger/grant/measure contract (BI-EFFD97B4)", () => {
+  it("exposes typed grants, measures, and budgets on the canonical shape — not a second table", () => {
+    const shape = getWorkShape(OBLIGATION_ASSURANCE_WATCH_SHAPE_KEY)!;
+    const contract = readWorkShapeDefinitionContract(shape);
+    expect(contract.key).toBe(shape.key);
+    expect(contract.version).toBe(shape.version);
+    expect(contract.triggers.length).toBeGreaterThan(0);
+    expect(contract.grants).toEqual(expect.arrayContaining(["tool:read"]));
+    expect(contract.measures.some((measure) => measure.key === "findings-raised")).toBe(true);
+    expect(contract.budgets.some((budget) => budget.kind === "findings-per-run" && budget.limit === 200)).toBe(true);
+    expect(contract.reviewPoint.everyDays).toBe(30);
+    expect(contract.stopConditions.some((stop) => stop.kind === "budget")).toBe(true);
+  });
+
+  it("does not smuggle a dispatcher, scheduler, or roster onto the definition contract", () => {
+    const shape = getWorkShape(OBLIGATION_ASSURANCE_WATCH_SHAPE_KEY)!;
+    const contract = readWorkShapeDefinitionContract(shape);
+    expect(contract).not.toHaveProperty("dispatch");
+    expect(contract).not.toHaveProperty("schedule");
+    expect(contract).not.toHaveProperty("participants");
   });
 });

@@ -1,4 +1,18 @@
+---
+status: superseded
+---
+
 # Purpose-Aware Installation to Ecosystem Productivity — Implementation Plan
+
+> **Superseded (2026-09-01).** This 2026-08-08 umbrella plan was formally
+> decomposed ("seven live mappings", per the coverage receipt below) into the
+> more specific, currently-authoritative specs it spawned — the
+> installation-identity, installation-estate-identity, external-agent-operating-contract,
+> consumer-install-rulebook, and zero-touch-federation designs under
+> `docs/superpowers/`. Consult those for current design. Its coordination
+> anchors (`EP-1FABA22D` and its BIs) are no longer in the live backlog;
+> recovery is tracked by `BI-99250643`. Kept for history — original wording
+> below is unchanged.
 
 - **Date:** 2026-08-08
 - **Status:** planned; implementation not started

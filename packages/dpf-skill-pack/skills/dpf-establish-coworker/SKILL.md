@@ -1,6 +1,6 @@
 ---
 name: dpf-establish-coworker
-description: "Use when creating a NEW AI coworker on the DPF platform, from any dev surface (Claude/Codex session, Build Studio, MCP client) — or when a coworker idea is floated and needs the paved road. Walks the enforced lifecycle: establish a draft through the establish_coworker factory door, complete the code-side definition checklist the CI conformance gate enforces, earn a behavioral certification from the nightly golden-journey sweep, then promote to production. A coworker created any other way ships incomplete and unsummonable; this skill is the single paved road that makes it robust by construction."
+description: "Use when creating a new AI coworker on the DPF platform, or when a coworker idea is floated and needs the paved road."
 
 # Agent Skills standard fields (Surface A — Claude Code)
 disable-model-invocation: true

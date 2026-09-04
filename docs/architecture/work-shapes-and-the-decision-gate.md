@@ -1,6 +1,6 @@
 # Work shapes and the decision gate
 
-**Backlog item:** `BI-C8C4031C`
+**Scope:** canonical Workroom shape and decision-gate architecture
 **Epic:** `EP-WORK-CONVERGENCE`
 **Status:** Current
 
@@ -61,10 +61,45 @@ each owned by a different part of the substrate. A room picks one value on each.
 | **Collaboration shape** — how a gate inside it routes | `specialist-alignment`, `approval-sign-off`, `outward-review`, `change-consequential`, `escalation`, `craft-stewardship` | `WORKROOM_SHAPE_KEYS` in `apps/web/lib/work-management/room-shapes.ts` |
 
 The first three are live code. The fourth **is now a registry with a write path**
-⟦runtime: `BI-8C54B216`, 2026-08-23⟧: `WORKROOM_SHAPE_KEYS` in
+⟦runtime: 2026-08-23⟧: `WORKROOM_SHAPE_KEYS` in
 `apps/web/lib/work-management/room-shapes.ts` is the enum, and a room is convened with a
 shape by passing `workroomShape` to `create_workroom` or `adopt_worktree`. It persists as a
 `scopeClaims` entry — no migration — and is read back by `readWorkroomShapeClaim`.
+
+### The activity shape is a second, separate claim ⟦runtime: 2026-09-02, `BI-A967717A`⟧
+
+Do not confuse the two shapes a room can carry. **`workroomShape`** (above) says *who must be
+in the room* for one consequential act. **`workShape`** says *what makes the room act at all*:
+which triggers wake it, which stages it moves through, who answers for each, and what stops it.
+
+A standing room declares its activity shape by passing `workShape` to `create_workroom` as a
+`key@version` reference — for example `dependency-advisory-watch@1.0.0`, from the registry in
+`apps/web/lib/work-management/work-shapes.ts` and its standing set in
+`standing-operations-shapes.ts`. Like the collaboration shape, it persists as a `scopeClaims`
+entry with no migration, and is read back by `readWorkShapeClaim` / `resolveWorkShapeClaim`.
+
+**This claim is what makes a room wake.** The standing-Workroom drive
+(`apps/web/lib/queue/functions/workroom-drive.ts`, every 15 minutes) selects non-terminal,
+unarchived rooms **that carry a work-shape claim**, ordered, and bounded by
+`STANDING_ROOM_SCAN_LIMIT`.
+
+The filter is part of the query rather than a pass over the results, and the distinction is
+load-bearing ⟦runtime: corrected 2026-09-02⟧. The first implementation capped
+the row read at 200 and filtered for the claim afterwards in JavaScript, so the cap bounded
+*every* room instead of the candidates. On an install with 276 non-terminal rooms and one
+shaped room, the drive reported `scanned: 0` on every tick for seven hours: registered,
+connected, executing in 47ms, and reading the wrong set of rows. Nothing errored, which is
+why it took a direct row count to see. The ordering matters for the same reason — without it,
+which rooms fall inside the cap is whatever the query planner returned, so a room could be
+scanned on one tick and invisible on the next without changing at all. A room without it is inert
+by construction, however assertive its posture. A malformed reference is refused at
+normalization rather than stored, because a claim that can never resolve would leave the room
+looking declared and behaving inert — the exact failure this contract exists to end.
+
+The drive never executes a stage whose accountable principal is a `role:` or `person:`
+reference, and never executes a `governed-decision` advance, at any posture. Those become
+attention for the named principal. Sending outward, moving money, rotating a credential,
+merging a change, and changing authority are declared that way in every standing shape.
 
 A room that never declared one gets a **derived** shape from what it already is
 (`derive-workroom-shape.ts`): a standing WSID room is craft stewardship by definition,
@@ -81,6 +116,59 @@ was **declared or derived**, and expect most older rooms to have neither.
 
 Finite and standing rooms are explained for end users in
 [Work Rooms](../user-guide/workspace/work-rooms.md).
+
+### The coordinator is the Workroom Process Overseer
+
+Every collaboration shape includes `coordinator`. DPF does not need a second orchestrator-agent
+type: the canonical coordinator is the human-facing **Process Overseer** for both finite and
+standing rooms. The accountable participant owns the outcome; the coordinator owns conformance to
+the room's declared shape. Executors do the work, reviewers or evaluators assess it, and approvers
+authorize consequential transitions. Those responsibilities are not synonyms.
+
+The runtime now carries this role as an executable conformance projection, not only as roster
+vocabulary. `room-coordinator.ts` selects or derives a coordinator for the read model;
+`workroom-shape-conformance.ts` compares declared shape, stage, evidence, role separation,
+budgets, stop conditions, and coordinator eligibility with observed state. A derived coordinator
+remains useful for legacy visibility, but it is marked compatibility-only and does not make a
+shaped room execution-qualified. The enforced contract is:
+
+1. **Convene:** require exactly one explicit current coordinator and validate the collaboration
+   shape, WorkShapeDefinition/version, persisted roster, posture, authority, trigger, measures,
+   review point, budgets, and stop conditions.
+2. **Before a transition:** compute a deterministic shape-conformance result. Refuse or pause work
+   when the expected stage, required participant, prerequisite evidence, authority binding, budget,
+   or review obligation is not satisfied.
+3. **After a transition:** append the stage receipt, compare observed state with the declared
+   transition, and route the next permitted stage, verification, repair, escalation, or close.
+4. **Reconcile:** run the same idempotent projection on events for finite rooms and on a bounded
+   delta cadence for standing rooms. Do not continuously poll every room.
+5. **Close:** require the outcome packet to carry the last conformance result and dispositions for
+   every unresolved deviation.
+
+The controller must not silently invent an occupant, skip a gate, widen authority, or retry until a
+proxy metric passes. A mismatch produces an attributable receipt and attention item for the
+coordinator and accountable owner. The coordinator may be a person or an AI coworker. An AI
+coordinator requires job-specific qualification for process oversight plus explicit TAK authority;
+it cannot also serve as the independent evaluator or approver where the shape requires separation.
+
+The same projection guards cycle opening, cycle completion, and carry-over persistence before any
+mutation. Standing-room runs persist the full projection and its stable reconciliation key so the
+next drive and the operator read the same evidence. Missing or unresolvable evidence pauses a
+shaped room; the runtime does not infer conformance from the absence of an error. AI coordinators
+must have eligible JSI qualification and TAK authority inputs, and an unknown input fails closed.
+
+The Workroom surface makes this control legible in **Details → Process Overseer**: coordinator
+identity, explicit versus derived assignment, conformance status, current and expected next stage,
+unresolved deviations, last check, intervention reason, and reconciliation key. Presence remains
+separate from membership. Unshaped legacy rooms are reported as not applicable rather than being
+silently upgraded to executable oversight.
+
+Definition and occurrence identity are not a fifth shape axis. The Work Case source
+registry owns a stable, versioned room-definition projection. The Work Case owns the room
+instance, with its primary source, current cycle, and active execution carriers forming
+the occurrence trace. This keeps the same definition useful for business-only and
+development rooms: repository, worktree, pull-request, token, and CI records are optional
+execution evidence, never prerequisites for room identity.
 
 ## The gate: which scope decides
 
@@ -126,7 +214,7 @@ this coworker takes the turn or hands it to a human. That projection lives in
 | `supervised-action` | acts, with a supervising human in the loop |
 | `autonomous-action` | **the sole mode that permits acting without a human turn** |
 
-**The two ladders are now one projection** ⟦runtime: `BI-13ED1BE1` / `BI-06C41FDC`, 2026-08-23⟧.
+**The two ladders are now one projection** ⟦runtime: 2026-08-23⟧.
 The decision mode above and the proactivity `actionBoundary` (`advise` · `propose` ·
 `preauthorized`) used to decide the same question separately and never meet, so a
 `preauthorized` posture could imply autonomy the envelope would deny and vice versa.
@@ -147,6 +235,29 @@ The trust level feeding this is already risk-capped before it arrives, and
 `when-supervised`, per the action descriptor in `action-registry.ts`. Denials come back
 as named reasons from `policy-envelope.ts` — including `missing_decision_interaction`,
 `missing_coworker_envelope`, and `stop_condition_tripped` — not as a generic refusal.
+
+
+### Where the declared shapes live ⟦runtime: 2026-09-02⟧
+
+The shape registry spans three modules, merged into `ALL_SHAPES` at runtime:
+
+| module | holds |
+|---|---|
+| `work-shapes.ts` | the contract — types, validation, cycle projection — and the anchor compliance shape |
+| `standing-operations-shapes.ts` | the standing operations a BUSINESS runs |
+| `coworker-standing-shapes.ts` | the standing work the platform's own coworkers run |
+
+A static reader must consult all three. The capability measure read only the first
+for a period and reported seven fully-bounded agents as having no declared work
+shape at all — an unbounded coworker is what that reads as, so the under-report was
+the more dangerous direction. `SHAPE_SOURCE_FILES` in
+`scripts/measure-capability-completeness.mjs` is now the explicit list, guarded by a
+test that fails when a work-management file names an accountable agent and is not on
+it.
+
+Every shape in the coworker module ends in a `governed-decision` taken by a human
+`role:`, never by the coworker that prepared the work. A shape whose advances are
+all `status-change` declares an unbounded coworker in the shape of a bounded one.
 
 ## What is actually enforced today
 
@@ -202,12 +313,38 @@ The unresolved-work list is the load-bearing part of an outcome packet: a shape 
 with silent remainders is how work escapes the room. Naming the remainder with a
 disposition is what keeps the next cycle honest.
 
+## Setting the posture, and the default for rooms
+
+⟦runtime: shipped 2026-08-23⟧ Both write paths are operator-facing, which they were not
+when the posture first shipped: `WorkroomPosture.tsx` displayed a pace and priority with
+zero interactive elements and no server action behind it, while every settable control was
+per-coworker.
+
+- **Per room** — shape, pace and action boundary, inside the room's existing collapsed
+  section (`WorkroomPostureControl`, actions in `lib/actions/workroom-posture.ts`). The
+  shape claim REPLACES any prior entry rather than appending, because
+  `readWorkroomShapeClaim` returns the first valid declaration and a stale entry would win.
+- **Decreed default for rooms** — `WorkroomDefaultControl` on the priority surface, stored
+  migration-free under `autonomyPolicy.workroomPostureDefault`
+  (`workroom-posture-defaults.ts`).
+
+Ladder position for the default: **above** the coworker ladder, because it is specifically
+about rooms and they are not; **below** derivation, because what the work actually is
+outranks a blanket preference about rooms. Both paths run the action boundary through the
+tighten-only clamp, so neither control can widen authority — and the UI states that, since
+an invariant the operator cannot see is one they will be surprised by.
+
 ## Known gaps
 
 Stated plainly so nobody plans against a capability that is not there:
 
 - **The consultation ledger is in-memory and per-process.** A decision consulted in one
   process is not visible to another; only the receipt it writes survives the turn.
+- **Coordinator is not yet an executable conformance controller.** The role and selection helper
+  exist, and every collaboration shape includes it, but a persisted explicit assignment and a
+  transition-level conformance result are not yet enforced across every convene, dispatch, receipt,
+  review, and close path. `BI-3913EB49` owns that implementation; `BI-4CB2EF76` and
+  `BI-EFFD97B4` provide the persisted roster and definition contracts it consumes.
 - **The decision-gate stage cannot be attributed to a coworker.** The decision record does
   not identify which coworker acted, so the shape view leaves that stage empty rather than
   attributing another coworker's decision on a guess.
@@ -215,25 +352,26 @@ Stated plainly so nobody plans against a capability that is not there:
   `classifyConsequentialTool` runs on the governed execution path, so every governed tool
   call is classified. The workroom-shape hook
   (`lib/governance/workroom-shape-governance-hook.ts`) governs consequential calls bound to
-  a room, and as of `BI-06C41FDC` its computed decision mode actually decides the turn
+  a room, and its computed decision mode actually decides the turn
   rather than only being recorded in the shadow verdict. The full interceptor over every
-  consequential call, room-bound or not, remains EP-1C37C089.
+  consequential call, room-bound or not, remains the platform-wide decision gate.
 
 Three gaps listed here previously have closed; they are recorded so a reader returning to
 this page does not plan against a stale limitation:
 
-- **Collaboration shape is a registry** ⟦runtime: `BI-8C54B216`, 2026-08-23⟧ —
+- **Collaboration shape is a registry** ⟦runtime: 2026-08-23⟧ —
   `WORKROOM_SHAPE_KEYS` is the enum, `bindWorkroomShape` is the binding, and a room's shape
   is queryable through `readWorkroomShapeClaim`. Six shapes, not five: `craft-stewardship`
   joined the five originally specified.
 - **Classification is no longer a hand-listed pair** — the legacy name-keyed list survives
   only for tools that predate the declared `ToolDefinition.consequence` axis, and a
   conformance test now asserts every name in it resolves to a real tool.
-- **The shape view is rendered** ⟦runtime: `BI-C7E2E924`⟧ — `WorkroomShapeSection` on the
-  room and `CoworkerShapePanel` on the coworker record draw the same picture, behind the
-  same Shape / Detail toggle.
+- **The shape view is rendered** — `WorkroomShapeSection` on the
+  room and `CoworkerShapePanel` on the coworker record draw the same picture. The room now
+  presents that picture in the default **Overview** and defers cycles, activity, evidence,
+  receipts, and technical references to **Details**.
 
-**Shape now also sets posture** ⟦runtime: added 2026-08-22, `BI-4F468192`⟧. The same four
+**Shape now also sets posture** ⟦runtime: added 2026-08-22⟧. The same four
 axes feed the room's *posture* — how persistently the coworker follows up and how it trades
 cost against quality against time — through `resolveWorkroomPosture`
 (`apps/web/lib/work-management/room-posture.ts`), layered over the existing proactivity and

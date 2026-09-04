@@ -40,6 +40,11 @@ describe("stripEndpointPrefix", () => {
 });
 
 describe("bucketExclusionReason", () => {
+  it("recognises ChatGPT account/model incompatibility", () => {
+    expect(bucketExclusionReason(
+      "ep-codex: Model 'gpt-5.3-codex' is not supported when Codex uses a ChatGPT account",
+    )).toBe("account-model-eligibility");
+  });
   it.each([
     [ALLOWLIST, "connection-excluded"],
     [CLEARANCE, "sensitivity-clearance"],

@@ -9,8 +9,31 @@ import type {
 import type { ReceiptEnvelope } from "./receipt-envelope";
 import type { WorkroomStructure } from "./room-structure";
 import type { WorkroomPostureView } from "./room-posture";
+import type { WorkroomShapeConformance } from "./workroom-shape-conformance";
 
 export type WorkroomMode = "finite" | "standing";
+
+export interface WorkroomDefinitionIdentity {
+  definitionId: string;
+  version: number;
+  sourceKey: string;
+  label: string;
+  mode: WorkroomMode;
+  decisionScope: "wwmd" | "wwwd" | "wsid";
+}
+
+export interface WorkroomIdentityView {
+  definition: WorkroomDefinitionIdentity | null;
+  instance: {
+    instanceId: string;
+    occurrenceTrace: {
+      caseRef: WorkCaseRef;
+      sourceRef: WorkCaseSourceRef;
+      cycleRef: WorkCaseSourceRef | null;
+      executionRefs: WorkCaseSourceRef[];
+    };
+  };
+}
 
 export type WorkroomActivityKind =
   | "message"
@@ -32,14 +55,21 @@ export type WorkroomActivityKind =
   | "cycle-closed"
   | "cycle-carried-over";
 
-export type WorkroomParticipantRole =
-  | "accountable"
-  | "coordinator"
-  | "contributor"
-  | "specialist"
-  | "approver"
-  | "reviewer"
-  | "observer";
+export const WORKROOM_PARTICIPANT_ROLES = [
+  "accountable",
+  "coordinator",
+  "contributor",
+  "specialist",
+  "approver",
+  "reviewer",
+  "observer",
+] as const;
+
+export type WorkroomParticipantRole = (typeof WORKROOM_PARTICIPANT_ROLES)[number];
+
+export type WorkroomParticipantAssignmentSource = "explicit" | "legacy" | "conversation";
+
+export type WorkroomCoordinatorSource = "explicit" | "derived" | "none";
 
 export type WorkroomParticipantWorkState =
   | "working"
@@ -140,6 +170,14 @@ export interface WorkroomParticipantView {
   sponsorDisplayName?: string | null;
   authoritySummary: string;
   sourceRefs: WorkCaseSourceRef[];
+  /** How this principal entered the roster. Conversation overlay is never persisted. */
+  assignmentSource: WorkroomParticipantAssignmentSource;
+  /**
+   * Explicit = coordinator role was persisted. Derived = read-model default from
+   * the sole accountable. None = not coordinating. Only explicit qualifies a
+   * standing room for autonomous drive (BI-3913EB49).
+   */
+  coordinatorSource: WorkroomCoordinatorSource;
 }
 
 export interface WorkroomActivityView {
@@ -183,6 +221,7 @@ export interface WorkroomOutcomeView {
 export interface WorkroomView {
   roomKey: string;
   caseRef: WorkCaseRef;
+  identity: WorkroomIdentityView;
   title: string;
   purpose: string | null;
   mode: WorkroomMode;
@@ -214,6 +253,8 @@ export interface WorkroomView {
    * default: a surface must say "we don't know" rather than imply a decision.
    */
   posture: WorkroomPostureView | null;
+  /** Executable-shape reconciliation projected for the room at read time. */
+  processOverseer: WorkroomShapeConformance;
   projection: {
     confidence: WorkCaseProjectionConfidence;
     incompleteBoundary: boolean;

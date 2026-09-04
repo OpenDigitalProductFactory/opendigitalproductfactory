@@ -1,5 +1,6 @@
 "use server";
 
+import { coworkerBriefSpans } from "@/lib/tak/coworker-prompt-provenance";
 import { auth } from "@/lib/auth";
 import { prisma, DATA_MODEL_MIRROR_TASK_ID, SYSML_PROJECTION_TASK_ID, SELF_OPTIMIZATION_SWEEP_TASK_ID } from "@dpf/db";
 import {
@@ -19,7 +20,7 @@ import { computeNextCronRun, isOneShotCron } from "@/lib/operate/cron-next-run";
 import { extractScheduledTaskSummary } from "./agent-task-scheduler-summary";
 import {
   createTaskRunForScheduledTask,
-  detectScheduledRunInferenceFailure,
+  detectScheduledRunFailure,
   type ScheduledTaskRunRef,
 } from "@/lib/tak/scheduled-task-runs";
 import { createTaskMessage } from "@/lib/tak/task-records";
@@ -32,6 +33,7 @@ import {
 import { assertScheduledResearchCapability, resolveScheduledTurnExternalAccess } from "@/lib/tak/scheduled-external-access";
 import { resolveUserAwareProactivityPlan } from "@/lib/proactivity/proactivity-resolver.server";
 import { resolveDelegatedPosture } from "@/lib/proactivity/delegated-posture";
+import { resolveScheduledTickPlan } from "@/lib/scheduling/scheduled-work-posture.server";
 import { applyProviderRouteModelPreference } from "@/lib/ai-provider-route-context";
 import {
   isCoworkerSelfTaskId,
@@ -44,8 +46,9 @@ import { proposeProductIntelligenceWatch } from "@/lib/product-management/produc
 import {
   PRODUCT_MANAGEMENT_PLAYBOOK_TASK_KIND,
 } from "@/lib/product-management/product-management-playbook";
-import { BUSINESS_ANALYSIS_WATCH_TASK_KIND } from "@/lib/operate/scheduled-jobs/agent-task-kind";
+import { BUSINESS_ANALYSIS_WATCH_TASK_KIND, BOOKKEEPING_CYCLE_TASK_KIND } from "@/lib/operate/scheduled-jobs/agent-task-kind";
 import { executeBusinessAnalysisWatchRun } from "@/lib/performance/business-analysis-watch-run";
+import { executeBookkeepingCycleTask } from "@/lib/finance/bookkeeping/bookkeeping-cycle-task";
 import {
   completeProductManagementPlaybookRun,
   prepareProductManagementPlaybookRun,
@@ -238,6 +241,12 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
     return;
   }
 
+  // S-TRIG (BI-DC738330): the weekly books cadence — deterministic, off the LLM path.
+  if (task.taskKind === BOOKKEEPING_CYCLE_TASK_KIND) {
+    await executeBookkeepingCycleTask(task);
+    return;
+  }
+
   // EP-DATA-ARCH Phase 6: the data-model mirror is deterministic — run it
   // directly instead of through the LLM agentic loop.
   if (task.taskId === DATA_MODEL_MIRROR_TASK_ID) {
@@ -422,13 +431,15 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       },
     });
 
-    const proactivity = await resolveUserAwareProactivityPlan({
+    // BI-27C8484F: the identity ladder, then MOVED by the room's ladder when this
+    // job serves a Workroom — its declaration, the work's shape, and the
+    // obligation this tick races. A job serving no room resolves exactly as before.
+    const { plan: proactivity } = await resolveScheduledTickPlan({
       userId: task.ownerUserId,
-      input: {
-        activityFamily: "scheduled-task",
-        agentId: task.agentId,
-        routeContext: task.routeContext,
-      },
+      taskConfig: task.taskConfig,
+      agentId: task.agentId,
+      routeContext: task.routeContext,
+      now: new Date(),
     });
     resolvedPlan = proactivity;
 
@@ -540,6 +551,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
 
     const result = await executeAutonomousAgenticLoop({
       systemPrompt: agentInfo.systemPrompt,
+      systemPromptInstructionSpans: coworkerBriefSpans(agentInfo.systemPrompt),
       chatHistory,
       sensitivity: agentInfo.sensitivity ?? "internal",
       tools,
@@ -605,15 +617,10 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
     // TR-SCHED-B7151A4C). That run did no work — throw so the catch below
     // records status=failed and the BI-754C9E82 retry cadence takes over,
     // instead of completing quietly with a healthy lastStatus.
-    const inferenceFailure = detectScheduledRunInferenceFailure({
-      executedToolCount: executedTools.length,
-      content: result.content,
+    const runFailure = detectScheduledRunFailure({
+      prompt: task.prompt, authorizedTools: [...tools, ...deferredTools], executedTools, content: result.content,
     });
-    if (inferenceFailure) {
-      throw new Error(
-        `Scheduled run produced no work — AI endpoints failed (${inferenceFailure}). ${result.content ?? ""}`.trim(),
-      );
-    }
+    if (runFailure) throw new Error(`Scheduled run produced no governed work (${runFailure}). ${result.content ?? ""}`.trim());
 
     const scheduledSummary = extractScheduledTaskSummary(executedTools);
     const taskMessageContent = scheduledSummary?.compactStatus ?? result.content ?? "(No response)";

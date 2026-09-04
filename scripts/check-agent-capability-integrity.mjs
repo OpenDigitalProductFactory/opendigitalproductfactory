@@ -56,6 +56,163 @@ function readBaseline() {
   return JSON.parse(fs.readFileSync(BASELINE, "utf8"));
 }
 
+const CAPABILITY_PLANES = [
+  "identity",
+  "corpus",
+  "governance",
+  "shape",
+  "cadence",
+  "toolsAndSkills",
+  "evidence",
+];
+
+/**
+ * Enforce both halves of the completeness ratchet:
+ *   1. a newly declared identity must meet every plane floor; and
+ *   2. legacy debt may shrink but the open-gap count on no plane may grow.
+ *
+ * The grandfather list exists only for identities that predate the gate. A new
+ * complete identity needs no entry, so it remains protected if it later
+ * regresses. Existing identities fall out of the list as they reach all floors.
+ */
+export function findCompletenessRatchetFailures(report, baseline, options = {}) {
+  // `forUpdate` omits the two improvement-class checks below. --update exists to
+  // claim slack and drop earned exemptions, so refusing to run it BECAUSE slack
+  // exists is a deadlock: the failure tells you to run --update and --update
+  // refuses, quoting the same failure. It must still refuse growth.
+  const forUpdate = options.forUpdate === true;
+  const ratchet = baseline?.capabilityCompleteness;
+  if (!ratchet) {
+    return [
+      "capability-completeness ratchet is absent from scripts/agent-capability-baseline.json; "
+      + "run this check with --update after reviewing the measured floors",
+    ];
+  }
+
+  const floors = ratchet.planeFloors ?? {};
+  const grandfathered = new Set(ratchet.grandfatheredAgentIds ?? []);
+  const maximums = ratchet.maxOpenGapsByPlane ?? {};
+  const failures = [];
+
+  for (const agent of report.agents ?? []) {
+    // Canonical identity reconciliation changes the inventory key from a slug
+    // to AGT-* without creating a new actor. Preserve the existing actor's
+    // grandfather status through any handle carried on the joined identity.
+    if (grandfathered.has(agent.key) || (agent.handles ?? []).some((handle) => grandfathered.has(handle))) continue;
+    for (const plane of CAPABILITY_PLANES) {
+      const floor = Number(floors[plane]);
+      const level = Number(agent.planes?.[plane]?.level ?? 0);
+      if (Number.isFinite(floor) && level < floor) {
+        failures.push(
+          `new/non-grandfathered agent ${agent.key} is below the ${plane} plane floor: `
+          + `${level} < ${floor}`,
+        );
+      }
+    }
+  }
+
+  for (const plane of CAPABILITY_PLANES) {
+    const maximum = Number(maximums[plane]);
+    if (!Number.isFinite(maximum)) {
+      failures.push(`capability-completeness baseline has no open-gap maximum for ${plane}`);
+      continue;
+    }
+    const current = (report.agents ?? []).filter((agent) => {
+      const state = agent.planes?.[plane];
+      return state && Number(state.level) < Number(state.ceiling);
+    }).length;
+    if (current > maximum) {
+      failures.push(
+        `${plane} open gaps grew: ${current}, baseline maximum ${maximum}; `
+        + "complete the regressed/new identity rather than raising the baseline",
+      );
+    }
+    // Shrink-only was declared in the baseline note but never enforced: the
+    // check caught growth past the maximum and ignored slack beneath it. Slack
+    // is how a closed gap reopens silently — close 57 corpus gaps without
+    // re-running --update and the baseline still permits 57, so a later change
+    // may spend that headroom and this gate stays green. A ratchet that only
+    // resists growth is a limiter; refusing to leave the headroom unclaimed is
+    // what makes it a ratchet.
+    if (current < maximum && !forUpdate) {
+      failures.push(
+        `${plane} open gaps fell to ${current} but the baseline still allows ${maximum}; `
+        + "run: node scripts/check-agent-capability-integrity.mjs --update  "
+        + "— unclaimed slack lets these gaps reopen without failing this gate",
+      );
+    }
+  }
+
+  // The same staleness at identity granularity. A grandfathered agent is
+  // skipped entirely by the floor loop above, so one that has since reached
+  // every floor keeps a permanent exemption and may regress unnoticed.
+  // --update already drops such an agent from the list; this makes forgetting
+  // to run it a failure rather than a silent loss of coverage.
+  for (const agent of report.agents ?? []) {
+    const listed = grandfathered.has(agent.key)
+      || (agent.handles ?? []).some((handle) => grandfathered.has(handle));
+    if (!listed) continue;
+    const meetsEveryFloor = CAPABILITY_PLANES.every((plane) => {
+      const floor = Number(floors[plane]);
+      if (!Number.isFinite(floor)) return true;
+      return Number(agent.planes?.[plane]?.level ?? 0) >= floor;
+    });
+    if (meetsEveryFloor && !forUpdate) {
+      failures.push(
+        `${agent.key} now meets every plane floor but is still grandfathered; `
+        + "run: node scripts/check-agent-capability-integrity.mjs --update  "
+        + "— an earned exemption left in place is an agent that may quietly regress",
+      );
+    }
+  }
+
+  return failures;
+}
+
+function nextCompletenessRatchet(report, baseline) {
+  const prior = baseline?.capabilityCompleteness;
+  const measuredFloors = Object.fromEntries(
+    CAPABILITY_PLANES.map((plane) => [plane, Number(report.contract?.planes?.[plane]?.ceiling ?? 0)]),
+  );
+  const planeFloors = Object.fromEntries(
+    CAPABILITY_PLANES.map((plane) => [
+      plane,
+      Math.max(Number(prior?.planeFloors?.[plane] ?? 0), measuredFloors[plane]),
+    ]),
+  );
+  const priorGrandfathered = prior
+    ? new Set(prior.grandfatheredAgentIds ?? [])
+    : new Set((report.agents ?? []).map((agent) => agent.key));
+  const grandfatheredAgentIds = (report.agents ?? [])
+    .filter((agent) =>
+      priorGrandfathered.has(agent.key)
+      || (agent.handles ?? []).some((handle) => priorGrandfathered.has(handle)),
+    )
+    .filter((agent) => CAPABILITY_PLANES.some(
+      (plane) => Number(agent.planes?.[plane]?.level ?? 0) < planeFloors[plane],
+    ))
+    .map((agent) => agent.key)
+    .sort();
+  const maxOpenGapsByPlane = Object.fromEntries(
+    CAPABILITY_PLANES.map((plane) => [
+      plane,
+      (report.agents ?? []).filter((agent) => {
+        const state = agent.planes?.[plane];
+        return state && Number(state.level) < Number(state.ceiling);
+      }).length,
+    ]),
+  );
+
+  return {
+    note:
+      "New identities must meet every plane floor. Existing debt is grandfathered by stable identity, "
+      + "and per-plane open-gap counts are SHRINK-ONLY. --update may tighten this block, never admit an incomplete new identity.",
+    planeFloors,
+    grandfatheredAgentIds,
+    maxOpenGapsByPlane,
+  };
+}
+
 function main() {
   const update = process.argv.includes("--update");
 
@@ -92,12 +249,21 @@ function main() {
       console.error("\nRestore the missing `consequence` declaration(s) rather than lowering the floor.");
       process.exit(1);
     }
+    if (baseline?.capabilityCompleteness) {
+      const completenessFailures = findCompletenessRatchetFailures(report, baseline, { forUpdate: true });
+      if (completenessFailures.length > 0) {
+        console.error("[agent-capability-integrity] refusing --update: capability debt may only SHRINK.");
+        for (const failure of completenessFailures) console.error(`  ${failure}`);
+        process.exit(1);
+      }
+    }
     // Preserve the budget shape (owner + expiry). A baseline with neither turns
     // "debt we intend to burn down" into "debt we have accepted forever", which
     // is what scripts/check-no-expired-baseline-budgets.mjs exists to refuse.
     fs.writeFileSync(
       BASELINE,
       JSON.stringify({
+        ...(baseline ?? {}),
         owner: baseline?.owner ?? "platform-governance",
         expiry: baseline?.expiry ?? "2026-11-20",
         note:
@@ -112,6 +278,7 @@ function main() {
           coveragePct: Number(gate.coveragePct ?? 0),
           resolverInstalled: true,
         },
+        capabilityCompleteness: nextCompletenessRatchet(report, baseline),
       }, null, 2) + "\n",
     );
     console.log(
@@ -122,6 +289,8 @@ function main() {
   }
 
   const failures = [];
+
+  failures.push(...findCompletenessRatchetFailures(report, baseline));
 
   if (stranded.length > 0) {
     failures.push(
@@ -194,4 +363,6 @@ function main() {
   }
 }
 
-main();
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main();
+}

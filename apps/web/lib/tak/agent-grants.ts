@@ -3,6 +3,7 @@ import agentRegistryData from "../../../../packages/db/data/agent_registry.json"
 import { AUTHORIZED_SURFACE_TOOL_GRANTS } from "@/lib/coworker/authorized-surface-coworker-contract";
 import { PRODUCT_MANAGEMENT_TOOL_GRANTS } from "./product-management-tool-grants";
 import { INITIATIVE_READINESS_TOOL_GRANTS } from "./initiative-readiness-tool-grants";
+import { BANKING_TOOL_GRANTS } from "./banking-tool-grants";
 const agentRegistry = agentRegistryData as { agents: Array<Record<string, unknown>> };
 /**
  * Implications between agent grant categories. A grant on the left of the
@@ -527,6 +528,8 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // the estate-specialist (AGT-WS-INVENTORY) via agent_registry.json.
   enrich_digital_product: ["enrichment_write"],
   request_re_enrichment: ["enrichment_write"],
+  // Banking books loop (S-FIN) — extracted to banking-tool-grants.ts, spread below.
+  ...BANKING_TOOL_GRANTS,
   configure_gateway_scan: ["agent_control_read"],
 
   // UX / Page evaluation
@@ -686,6 +689,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   save_marketing_review:        ["marketing_write"],
   create_marketing_campaign_brief: ["marketing_write"],
   create_marketing_asset_task:   ["marketing_write"],
+  record_marketing_grounding:    ["marketing_write"],
   record_marketing_kpi_checkpoint: ["marketing_write"],
   create_marketing_automation_candidate: ["marketing_write"],
   draft_marketing_asset:         ["marketing_write"],
@@ -751,6 +755,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // out-of-band rather than waiting up to 10 minutes (BI-063BDF1B Phase 5).
   trigger_contributor_inventory_sync: ["admin_write"],
   request_self_upgrade: ["admin_write"],
+  issue_ux_verification_sign_in: ["sandbox_execute"], // BI-9369DEB5: UX verification sign-in; a development token already holds it
   // Governed self-heal for the "promoter image not built" self-upgrade skip.
   // Same admin_write scope as request_self_upgrade so the platform-engineer
   // ("AI Ops Engineer") coworker can build the promoter image on request.
@@ -760,7 +765,6 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // Design intelligence (read-only references)
   search_design_intelligence: ["file_read"],
   generate_design_system:     ["file_read"],
-
   // HR — query
   query_employees: ["consumer_read", "registry_read"],
 

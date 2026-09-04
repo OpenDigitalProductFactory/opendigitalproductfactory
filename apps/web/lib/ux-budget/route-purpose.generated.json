@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "generator": "apps/web/scripts/build-page-purpose.ts",
-  "pageRouteCount": 329,
-  "draftCount": 317,
-  "ratifiedCount": 12,
+  "pageRouteCount": 327,
+  "draftCount": 313,
+  "ratifiedCount": 14,
   "quarantinedCount": 0,
   "routes": [
     {
@@ -982,19 +982,6 @@
         "shell": "form",
         "confidence": "high",
         "sweepEligible": true
-      }
-    },
-    {
-      "schemaVersion": 1,
-      "status": "draft",
-      "routePath": "/customer-login",
-      "derived": {
-        "audience": "auth-setup",
-        "destinationKind": "section-home",
-        "shell": "form",
-        "confidence": "high",
-        "sweepEligible": false,
-        "sweepExclusionReason": "customer-session-required"
       }
     },
     {
@@ -2558,16 +2545,177 @@
     },
     {
       "schemaVersion": 1,
-      "status": "draft",
-      "routePath": "/ops/health",
+      "status": "intent-ratified",
+      "routePath": "/ops/installation",
       "derived": {
         "audience": "admin",
         "destinationKind": "advanced-diagnostic",
         "shell": "detail",
         "confidence": "high",
-        "sweepEligible": false,
-        "sweepExclusionReason": "redirects-to-dynamic-resource"
-      }
+        "sweepEligible": true
+      },
+      "intent": {
+        "primaryUser": "The HR-000 platform owner who runs more than one DPF installation and needs to know which one they are on.",
+        "triggeringNeed": "Identity used to occupy the top of the workspace home for every platform manager, and an operator still has to be able to read and correct it somewhere.",
+        "prerequisites": [
+          "Signed in with the manage_platform capability.",
+          "The installation has resolved an environment class, even the cautious default."
+        ],
+        "job": "Read what this installation is, see what its AI coworkers may and may not do here, and correct the declaration after reviewing the impact.",
+        "successOutcome": "The operator can state the installation's estate, role and purpose, knows which brakes apply to agents, and can change the declaration only after seeing what the change loosens.",
+        "findability": {
+          "parentArea": "Operations",
+          "entryPoints": [
+            "/ops",
+            "The installation badge in the header on any non-production installation"
+          ],
+          "navigationLayer": "Ops secondary nav, Runtime & Releases group",
+          "discoveryCue": "A few-word badge beside the logo naming the estate and role, linking here for the detail.",
+          "expectedPath": [
+            "/ops",
+            "/ops/installation"
+          ]
+        },
+        "contentRoles": {
+          "defaultVisibleKeys": [
+            "installation-identity-statement",
+            "confirmation-status",
+            "agent-stance-rows"
+          ],
+          "deferredRegions": [
+            {
+              "key": "identity-change-form",
+              "role": "The purpose, environment and pairing fields that redeclare what the installation is.",
+              "trigger": "Opened when the operator asks to change the declaration."
+            },
+            {
+              "key": "identity-change-impact",
+              "role": "What the change alters, which agent brakes loosen or tighten, and which recorded evidence goes stale.",
+              "trigger": "Rendered after the operator previews a material change and before it can be saved."
+            }
+          ]
+        },
+        "familyConsistency": {
+          "terminology": "Use installation, estate, environment class, purpose, stance and brake language shared with Teardown and Self-upgrade; never describe a stance as a permission.",
+          "actionLocation": "The identity statement and stance rows read together at the top; every mutating control stays inside the change disclosure.",
+          "feedbackPrimitive": "Inline status badges, an explicit impact preview and a confirm step; a material change cannot be saved from an unpreviewed form.",
+          "disclosurePattern": "The identity statement and the brakes are visible on arrival; the change form and its impact appear progressively.",
+          "returnBehavior": "Saving refreshes in place so the operator reads the identity now in force; the header badge updates on the next render."
+        }
+      },
+      "stateScenarios": {
+        "identity-confirmed": {
+          "statePredicate": "A readable operating intent exists and an operator has confirmed it.",
+          "stateSource": {
+            "oracleKey": "route-owned-read-model",
+            "sourceRef": "apps/web/lib/installation-journey/installation-identity-view.ts#loadInstallationIdentityView"
+          },
+          "essentialEvidenceKeys": [
+            "environment-class-in-force",
+            "primary-purpose",
+            "five-agent-stances"
+          ],
+          "primaryExperience": {
+            "kind": "informational",
+            "messageKey": "installation-identity.identity-confirmed"
+          },
+          "prohibitedActionKeys": [
+            "stance-as-permission",
+            "silent-identity-change"
+          ],
+          "completionSignal": "The operator can state the environment class, the purpose and every stance with the reason given for it.",
+          "errorCorrection": "The operator opens the change disclosure and previews a correction without mutating anything.",
+          "recovery": {
+            "actionKey": "return-to-operations",
+            "routePath": "/ops"
+          }
+        },
+        "environment-shadowed": {
+          "statePredicate": "A portal declaration exists but a higher precedence tier supplies the environment class in force.",
+          "stateSource": {
+            "oracleKey": "route-owned-read-model",
+            "sourceRef": "apps/web/lib/install/environment-class-contract.ts#resolveEnvironmentClassPrecedence"
+          },
+          "essentialEvidenceKeys": [
+            "declared-value",
+            "value-in-force",
+            "winning-authority"
+          ],
+          "primaryExperience": {
+            "kind": "informational",
+            "messageKey": "installation-identity.environment-shadowed"
+          },
+          "prohibitedActionKeys": [
+            "portal-overrides-installer",
+            "discard-declaration-silently"
+          ],
+          "completionSignal": "The operator is told their saved choice is not the one in force and which authority supplied the winner.",
+          "errorCorrection": "The operator reruns the installer with an explicit environment flag rather than editing the portal record again.",
+          "recovery": {
+            "actionKey": "return-to-operations",
+            "routePath": "/ops"
+          }
+        },
+        "identity-unreadable": {
+          "statePredicate": "The stored operating intent is missing or cannot be parsed.",
+          "stateSource": {
+            "oracleKey": "route-owned-read-model",
+            "sourceRef": "apps/web/lib/installation-journey/installation-identity-view.ts#loadInstallationIdentityView"
+          },
+          "essentialEvidenceKeys": [
+            "record-unreadable",
+            "cautious-default-applied",
+            "redeclare-path"
+          ],
+          "primaryExperience": {
+            "kind": "informational",
+            "messageKey": "installation-identity.identity-unreadable"
+          },
+          "prohibitedActionKeys": [
+            "guess-identity",
+            "assume-development"
+          ],
+          "completionSignal": "The page says the record could not be read, applies the cautious default, and offers to replace it.",
+          "errorCorrection": "The operator redeclares the identity, replacing the unreadable record.",
+          "recovery": {
+            "actionKey": "return-to-operations",
+            "routePath": "/ops"
+          }
+        }
+      },
+      "taskProtocol": {
+        "startRoute": "/ops/installation",
+        "taskPrompt": "Find out what this installation is, what your AI coworkers may do on it, and correct its declared purpose.",
+        "completionOracle": "The operator states the environment class and purpose in force, names at least one agent brake and its reason, and reaches a saved change only after seeing its impact.",
+        "falseSuccessConditions": [
+          "The identity is presented as a permission granted to agents rather than as a brake applied to them.",
+          "A material change saves without the operator seeing what it loosens.",
+          "A production installation is described using a development installation's stances."
+        ],
+        "acceptanceThresholds": [
+          "The page is reachable from Operations and from the header badge on a non-production installation.",
+          "Every stance row carries the resolver's own reason, not copy invented by the page.",
+          "The environment class shown is the one the precedence chain resolved, matching the header badge exactly.",
+          "No mutating control exists outside the change disclosure."
+        ]
+      },
+      "ratifiedBy": {
+        "role": "owner",
+        "ref": "BI-7626A660"
+      },
+      "reviewRef": "BI-7626A660",
+      "intentEvidenceRefs": [
+        {
+          "kind": "operator-request",
+          "ref": "BI-7626A660",
+          "summary": "Owner reported the identity panel taking the top of the workspace home and asked for a few-word non-production indicator beside the logo instead."
+        },
+        {
+          "kind": "design-review",
+          "ref": "docs/superpowers/specs/2026-08-25-installation-estate-identity-design.md",
+          "summary": "The design fixes the estate/role split, the badge-only-on-non-production rule, and the single-resolver requirement that keeps this page and the header from disagreeing."
+        }
+      ]
     },
     {
       "schemaVersion": 1,
@@ -2629,151 +2777,6 @@
         "sweepEligible": false,
         "sweepExclusionReason": "wall-clock-collection"
       }
-    },
-    {
-      "schemaVersion": 1,
-      "status": "intent-ratified",
-      "routePath": "/ops/stack-currency",
-      "derived": {
-        "audience": "admin",
-        "destinationKind": "advanced-diagnostic",
-        "shell": "detail",
-        "confidence": "high",
-        "sweepEligible": false,
-        "sweepExclusionReason": "wall-clock-collection"
-      },
-      "intent": {
-        "primaryUser": "A platform operator or founder checking the currency of the platform's own technology stack.",
-        "triggeringNeed": "Seeing which of our own runtimes and frameworks are current, approaching end of life, or unsupported — without reading manifests or chasing vendor EOL schedules — and distinct from the discovered customer estate.",
-        "prerequisites": [
-          "Signed in with access to the Operations Runtime & Releases family.",
-          "The curated platform-stack definition is maintained in apps/web/lib/ops/platform-stack.ts."
-        ],
-        "job": "Scan the platform's own key components, read each one's currency status on the canonical Currency axis, and see which components need an upgrade path.",
-        "successOutcome": "The operator can name any component's current version and currency status, and identify which components are approaching or past end of life (or lack a recorded EOL date) for the upgrade roadmap.",
-        "findability": {
-          "parentArea": "Operations",
-          "entryPoints": [
-            "/ops",
-            "Operations > Runtime & Releases > Stack Currency"
-          ],
-          "navigationLayer": "Ops secondary nav, Runtime & Releases group",
-          "discoveryCue": "A 'Stack Currency' tab in the Runtime & Releases group next to Patches.",
-          "expectedPath": [
-            "/ops",
-            "/ops/stack-currency"
-          ]
-        },
-        "contentRoles": {
-          "defaultVisibleKeys": [
-            "lead-summary",
-            "stack-currency-table"
-          ],
-          "deferredRegions": [
-            {
-              "key": "upgrade-actionable-notice",
-              "role": "A notice counting components that are approaching or past end of life and need an upgrade path.",
-              "trigger": "Rendered only when at least one component is in an actionable currency state."
-            },
-            {
-              "key": "unsourced-notice",
-              "role": "A prompt to record support/EOL dates for components whose currency cannot yet be computed.",
-              "trigger": "Rendered only when at least one component has no recorded EOL date."
-            }
-          ]
-        },
-        "familyConsistency": {
-          "terminology": "Use the canonical Currency-axis names (current / approaching-eol / unsupported / end-of-life) and 'EOL not sourced' for undated components; speak in currency and upgrade-path language.",
-          "actionLocation": "Navigation stays in the Ops Runtime & Releases tab row; the page itself is read-only and table-oriented.",
-          "feedbackPrimitive": "Inline report badges and notices communicate currency status; there are no dialogs or destructive actions.",
-          "disclosurePattern": "Lead summary and the currency table are visible on arrival; the actionable-upgrade and unsourced notices appear only when their condition holds.",
-          "returnBehavior": "The operator returns to the discovered-estate view through the sibling Patches tab in the same Runtime & Releases family."
-        }
-      },
-      "stateScenarios": {
-        "stack-readable": {
-          "statePredicate": "The curated platform-stack definition contains component records.",
-          "stateSource": {
-            "oracleKey": "route-owned-read-model",
-            "sourceRef": "apps/web/lib/ops/platform-stack.ts#PLATFORM_STACK"
-          },
-          "essentialEvidenceKeys": [
-            "component-count",
-            "currency-status",
-            "stack-currency-table"
-          ],
-          "primaryExperience": {
-            "kind": "informational",
-            "messageKey": "stack-currency.stack-readable"
-          },
-          "prohibitedActionKeys": [
-            "edit-currency-status"
-          ],
-          "completionSignal": "Every curated component appears with a current version and a resolved currency status (including 'EOL not sourced').",
-          "errorCorrection": "Stale versions or missing EOL dates are corrected in the curated platform-stack source, not copied into the page.",
-          "recovery": {
-            "actionKey": "open-patches",
-            "routePath": "/ops/patches"
-          }
-        },
-        "upgrade-needed": {
-          "statePredicate": "At least one component is approaching-eol, unsupported, or end-of-life.",
-          "stateSource": {
-            "oracleKey": "route-owned-read-model",
-            "sourceRef": "apps/web/lib/ops/platform-stack.ts#assessPlatformStack"
-          },
-          "essentialEvidenceKeys": [
-            "actionable-count",
-            "currency-status",
-            "support-ends-date"
-          ],
-          "primaryExperience": {
-            "kind": "informational",
-            "messageKey": "stack-currency.upgrade-needed"
-          },
-          "prohibitedActionKeys": [
-            "auto-upgrade-component"
-          ],
-          "completionSignal": "Components needing an upgrade path are visibly flagged with their currency status and support-end date.",
-          "errorCorrection": "The operator follows the flagged component to the upgrade roadmap; the board never mutates the stack itself.",
-          "recovery": {
-            "actionKey": "open-patches",
-            "routePath": "/ops/patches"
-          }
-        }
-      },
-      "taskProtocol": {
-        "startRoute": "/ops/stack-currency",
-        "taskPrompt": "Find whether any platform component is approaching or past end of life, and name one that lacks a recorded EOL date.",
-        "completionOracle": "The currency table shows each component's status, with actionable components flagged and undated ones shown as 'EOL not sourced'.",
-        "falseSuccessConditions": [
-          "The operator reports a component as current when its status is 'EOL not sourced' (no date recorded).",
-          "A customer-estate patch finding is described as part of the platform's own stack.",
-          "The page renders component names but no currency status per component."
-        ],
-        "acceptanceThresholds": [
-          "The board is found from the Ops Runtime & Releases navigation path.",
-          "The cited currency status matches the assessPlatformStack result for that component.",
-          "The distinction between our own stack and the discovered customer estate (Patches) is preserved."
-        ]
-      },
-      "ratifiedBy": {
-        "role": "owner",
-        "ref": "operator-request:ep-vsl-surface-2026-08-15"
-      },
-      "reviewRef": "BI-6328BCA6",
-      "intentEvidenceRefs": [
-        {
-          "kind": "operator-request",
-          "ref": "EP-VSL-SURFACE",
-          "summary": "Owner asked to surface the tech-stack lifecycle the platform is subject to as a live board off the canonical Currency axis."
-        },
-        {
-          "kind": "existing-behavior",
-          "ref": "apps/web/lib/lifecycle.ts#deriveCurrency",
-          "summary": "The Currency axis and deriveCurrency already exist as the canonical substrate; this board is their operator-facing own-stack consumer."
-        }
-      ]
     },
     {
       "schemaVersion": 1,
@@ -3368,6 +3371,7 @@
           "defaultVisibleKeys": [
             "workforce-pulse",
             "working-now-list",
+            "platform-work-list",
             "quiet-list"
           ],
           "deferredRegions": [
@@ -3910,19 +3914,6 @@
         "shell": "detail",
         "confidence": "high",
         "sweepEligible": true
-      }
-    },
-    {
-      "schemaVersion": 1,
-      "status": "draft",
-      "routePath": "/platform/services/[serverId]",
-      "derived": {
-        "audience": "admin",
-        "destinationKind": "detail",
-        "shell": "detail",
-        "confidence": "high",
-        "sweepEligible": false,
-        "sweepExclusionReason": "dynamic-fixture-required"
       }
     },
     {
@@ -4756,19 +4747,6 @@
     {
       "schemaVersion": 1,
       "status": "draft",
-      "routePath": "/portfolio/product/[id]/supply-chain",
-      "derived": {
-        "audience": "owner",
-        "destinationKind": "detail",
-        "shell": "detail",
-        "confidence": "high",
-        "sweepEligible": false,
-        "sweepExclusionReason": "dynamic-fixture-required"
-      }
-    },
-    {
-      "schemaVersion": 1,
-      "status": "draft",
       "routePath": "/portfolio/product/[id]/team",
       "derived": {
         "audience": "owner",
@@ -5142,6 +5120,182 @@
     },
     {
       "schemaVersion": 1,
+      "status": "intent-ratified",
+      "routePath": "/storefront/animals/waiting",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      },
+      "intent": {
+        "primaryUser": "A rescue's owner or staff member putting together the newsletter, choosing which animals to feature.",
+        "triggeringNeed": "Knowing which listed animals have waited longest, without scrolling the admin list and doing date arithmetic by hand.",
+        "prerequisites": [
+          "Signed in with a staff account that can view the storefront.",
+          "A storefront exists and animals have been listed on the Animals page."
+        ],
+        "job": "Read every animal currently listed for adoption, longest wait first, with the whole days each has waited.",
+        "successOutcome": "The reader sees the full list in wait order on one page, spots the longest-waiting animals at the top, and knows which rows have a bad or missing listing date.",
+        "findability": {
+          "parentArea": "Storefront",
+          "entryPoints": [
+            "/storefront/animals",
+            "Storefront > Animals > Waiting list"
+          ],
+          "navigationLayer": "Storefront admin tab nav (Animals tab), link at the top of the Animals page",
+          "discoveryCue": "A 'Waiting list' link beside the Adoptable animals heading.",
+          "expectedPath": [
+            "/storefront",
+            "/storefront/animals",
+            "/storefront/animals/waiting"
+          ]
+        },
+        "contentRoles": {
+          "defaultVisibleKeys": [
+            "listed-count",
+            "waiting-table"
+          ],
+          "deferredRegions": [
+            {
+              "key": "rest-of-list",
+              "role": "Rows past the twenty-five longest-waiting, still in wait order on the same page.",
+              "trigger": "Reader opens 'Show the other N animals'."
+            }
+          ]
+        },
+        "familyConsistency": {
+          "terminology": "Plain rescue words — listed, waiting, days, species. Never status codes, ids or timestamps.",
+          "actionLocation": "There is no action on this page; the one link points back to the Animals page to fix a date.",
+          "feedbackPrimitive": "None — the page is read-only and re-reads on every visit.",
+          "disclosurePattern": "The twenty-five longest-waiting rows are open on arrival; the rest of the list sits on the same page inside one disclosure, in order.",
+          "returnBehavior": "Nothing navigates away; the reader leaves via the Storefront tabs."
+        }
+      },
+      "stateScenarios": {
+        "no-storefront": {
+          "statePredicate": "No StorefrontConfig row exists.",
+          "stateSource": {
+            "oracleKey": "route-owned-read-model",
+            "sourceRef": "apps/web/app/(shell)/storefront/animals/waiting/page.tsx"
+          },
+          "essentialEvidenceKeys": [
+            "listed-count"
+          ],
+          "primaryExperience": {
+            "kind": "informational",
+            "messageKey": "adoption-waiting.no-storefront"
+          },
+          "prohibitedActionKeys": [],
+          "completionSignal": "The lead says there is no storefront yet and links to setup.",
+          "errorCorrection": "This is distinguished from having no animals listed — no storefront is a setup problem, not an empty list.",
+          "recovery": {
+            "actionKey": "set-up-storefront",
+            "routePath": "/storefront/setup"
+          }
+        },
+        "no-listed-animals": {
+          "statePredicate": "The storefront has no AdoptableAnimal with status 'available'.",
+          "stateSource": {
+            "oracleKey": "route-owned-read-model",
+            "sourceRef": "apps/web/app/(shell)/storefront/animals/waiting/page.tsx"
+          },
+          "essentialEvidenceKeys": [
+            "listed-count"
+          ],
+          "primaryExperience": {
+            "kind": "informational",
+            "messageKey": "adoption-waiting.empty"
+          },
+          "prohibitedActionKeys": [],
+          "completionSignal": "An empty state says no animals are listed right now and points at the Animals page.",
+          "errorCorrection": "Animals on hold, pending or adopted are not waiting; the reader learns the list counts only listed animals.",
+          "recovery": {
+            "actionKey": "open-animals",
+            "routePath": "/storefront/animals"
+          }
+        },
+        "animals-waiting": {
+          "statePredicate": "At least one AdoptableAnimal is 'available' with a listing date in the past.",
+          "stateSource": {
+            "oracleKey": "route-owned-read-model",
+            "sourceRef": "apps/web/lib/storefront/adoption-waiting-list.ts"
+          },
+          "essentialEvidenceKeys": [
+            "listed-count",
+            "waiting-table"
+          ],
+          "primaryExperience": {
+            "kind": "informational",
+            "messageKey": "adoption-waiting.list"
+          },
+          "prohibitedActionKeys": [],
+          "completionSignal": "Rows read longest wait first with whole days waited; the count of listed animals sits above the table.",
+          "errorCorrection": "A future listing date is shown as such with no day count and sorted after every dated row, never as a negative number; a missing date sorts last rather than hiding the animal.",
+          "recovery": {
+            "actionKey": "open-animals",
+            "routePath": "/storefront/animals"
+          }
+        },
+        "cap-reached": {
+          "statePredicate": "More than one hundred animals are 'available'.",
+          "stateSource": {
+            "oracleKey": "route-owned-read-model",
+            "sourceRef": "apps/web/lib/storefront/adoption-waiting-list.ts"
+          },
+          "essentialEvidenceKeys": [
+            "listed-count",
+            "waiting-table"
+          ],
+          "primaryExperience": {
+            "kind": "informational",
+            "messageKey": "adoption-waiting.capped"
+          },
+          "prohibitedActionKeys": [],
+          "completionSignal": "The page shows the one hundred longest-waiting and says so at the bottom with the full listed count.",
+          "errorCorrection": "The reader knows the list is cut, and knows the cut is at the newest end, so nothing long-waiting is missing.",
+          "recovery": {
+            "actionKey": "open-animals",
+            "routePath": "/storefront/animals"
+          }
+        }
+      },
+      "taskProtocol": {
+        "startRoute": "/storefront/animals/waiting",
+        "taskPrompt": "Which three animals have waited longest for adoption, and how many days each?",
+        "completionOracle": "The first three rows name the three longest-waiting listed animals and their day counts match the listing dates.",
+        "falseSuccessConditions": [
+          "An animal on hold or already adopted is read as waiting.",
+          "A future-dated animal is read as the longest wait because of a negative or huge number.",
+          "A rabbit or other species that has waited longest is missed because the reader expected only dogs and cats."
+        ],
+        "acceptanceThresholds": [
+          "The longest wait is the first row on arrival, with no click.",
+          "Every listed animal is on the page; nothing needs a second page.",
+          "A missing or future date is visible as such and never produces a day count."
+        ]
+      },
+      "ratifiedBy": {
+        "role": "owner",
+        "ref": "operator-request:BI-899D7F00"
+      },
+      "reviewRef": "BI-899D7F00",
+      "intentEvidenceRefs": [
+        {
+          "kind": "operator-request",
+          "ref": "BI-899D7F00",
+          "summary": "The owner filed the same request five times in three days with a decided-scope block: staff-only, no pagination, cap at 100 and say so, future dates out of the ordering, missing dates last, read-only over the stored listing date."
+        },
+        {
+          "kind": "existing-behavior",
+          "ref": "apps/web/app/(shell)/storefront/animals/page.tsx",
+          "summary": "The Animals admin page already lists every AdoptableAnimal with its status; publishedAt is the listing date it stores. This page reads the same rows in wait order and adds nothing to the model."
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
       "status": "draft",
       "routePath": "/storefront/dispatch",
       "derived": {
@@ -5287,7 +5441,8 @@
         "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
-        "sweepEligible": true
+        "sweepEligible": false,
+        "sweepExclusionReason": "setup-phase-only"
       }
     },
     {
@@ -5681,8 +5836,7 @@
         "destinationKind": "detail",
         "shell": "detail",
         "confidence": "high",
-        "sweepEligible": false,
-        "sweepExclusionReason": "dynamic-fixture-required"
+        "sweepEligible": true
       }
     },
     {
@@ -5733,6 +5887,169 @@
         "confidence": "high",
         "sweepEligible": true
       }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "intent-ratified",
+      "routePath": "/workspace/ward",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      },
+      "intent": {
+        "primaryUser": "A kennel technician or shelter manager walking the wards, often on a tablet held one-handed.",
+        "triggeringNeed": "Finding where an animal sleeps, and how much room is left, without asking a colleague or reading a whiteboard.",
+        "prerequisites": [
+          "Signed in with access to the Operations family.",
+          "The shelter has recorded its housing units as kennel resources."
+        ],
+        "job": "See every unit in the wards, who is in it, and which units are free.",
+        "successOutcome": "The worker can name the unit an animal is in, and say how many units are free, without counting rows.",
+        "findability": {
+          "parentArea": "Operations",
+          "entryPoints": [
+            "/workspace",
+            "Operations > Ward"
+          ],
+          "navigationLayer": "Workspace primary nav, Operations family",
+          "discoveryCue": "A 'Ward' item in the Operations family beside Calendar and Documents.",
+          "expectedPath": [
+            "/workspace",
+            "/workspace/ward"
+          ]
+        },
+        "contentRoles": {
+          "defaultVisibleKeys": [
+            "lead-summary",
+            "open-ward-map"
+          ],
+          "deferredRegions": [
+            {
+              "key": "ward-list",
+              "role": "The same units as a table, adding area and state per row.",
+              "trigger": "Worker chooses List."
+            }
+          ]
+        },
+        "familyConsistency": {
+          "terminology": "Speak the shelter's own words: wards, kennels, units, free. Never items, inventory, or slots.",
+          "actionLocation": "The map and list views switch from one control beside the occupancy count; the page itself is read-only.",
+          "feedbackPrimitive": "Occupancy is read from the drawn units and a stated free count; there are no dialogs or destructive actions.",
+          "disclosurePattern": "Occupied of total and free lead the page, then the map. The list is one control away so reading grade and word budgets pass with workspace chrome included.",
+          "returnBehavior": "The worker returns to Operations through the same workspace navigation family."
+        }
+      },
+      "stateScenarios": {
+        "housing-recorded": {
+          "statePredicate": "The organization has at least one active kennel resource.",
+          "stateSource": {
+            "oracleKey": "route-owned-read-model",
+            "sourceRef": "apps/web/lib/ward/ward-store.ts#loadWardBoard"
+          },
+          "essentialEvidenceKeys": [
+            "occupied-of-total",
+            "free-count",
+            "unit-occupant"
+          ],
+          "primaryExperience": {
+            "kind": "informational",
+            "messageKey": "ward.housing-recorded"
+          },
+          "prohibitedActionKeys": [
+            "delete-kennel"
+          ],
+          "completionSignal": "Every unit shows either its occupant or that it is free, and the free count matches the units drawn as free.",
+          "errorCorrection": "A wrong occupant is corrected by moving the animal, which closes its stay rather than deleting the record.",
+          "recovery": {
+            "actionKey": "open-workspace",
+            "routePath": "/workspace"
+          }
+        },
+        "no-housing-recorded": {
+          "statePredicate": "The organization has no active kennel resource.",
+          "stateSource": {
+            "oracleKey": "route-owned-read-model",
+            "sourceRef": "apps/web/lib/ward/ward-store.ts#loadWardBoard"
+          },
+          "essentialEvidenceKeys": [
+            "no-housing-notice"
+          ],
+          "primaryExperience": {
+            "kind": "informational",
+            "messageKey": "ward.no-housing-recorded"
+          },
+          "prohibitedActionKeys": [
+            "show-zero-free"
+          ],
+          "completionSignal": "The page says no housing is recorded and does not state a free count at all.",
+          "errorCorrection": "The shelter records its kennels; the page does not invent a roster on its behalf.",
+          "recovery": {
+            "actionKey": "open-workspace",
+            "routePath": "/workspace"
+          }
+        },
+        "animals-without-a-unit": {
+          "statePredicate": "The organization holds animals in care that have no open kennel stay.",
+          "stateSource": {
+            "oracleKey": "route-owned-read-model",
+            "sourceRef": "apps/web/lib/ward/ward-occupancy.ts#buildWardBoard"
+          },
+          "essentialEvidenceKeys": [
+            "unplaced-notice",
+            "free-count"
+          ],
+          "primaryExperience": {
+            "kind": "informational",
+            "messageKey": "ward.animals-without-a-unit"
+          },
+          "prohibitedActionKeys": [
+            "hide-unplaced-animals"
+          ],
+          "completionSignal": "Every unplaced animal is named, and the page states that the free count is only true for the animals it can place.",
+          "errorCorrection": "The worker places the named animals, which is what makes the free count whole.",
+          "recovery": {
+            "actionKey": "open-workspace",
+            "routePath": "/workspace"
+          }
+        }
+      },
+      "taskProtocol": {
+        "startRoute": "/workspace/ward",
+        "taskPrompt": "Find out where an animal is sleeping, and how many kennels are free.",
+        "completionOracle": "The worker names the unit an animal is in and states the free count, without counting rows and without asking a colleague.",
+        "falseSuccessConditions": [
+          "A shelter that has recorded no kennels is shown a free count, which reads as a full or empty building it never reported.",
+          "Animals in care with no kennel recorded are omitted, so the free count implies a completeness the board does not have.",
+          "A unit held out of service for cleaning or repair is counted as free.",
+          "A released stay still shows its animal, so an old occupant hides a free run."
+        ],
+        "acceptanceThresholds": [
+          "Occupied-of-total and free are stated before the map.",
+          "Every unit renders either its occupant or that it is free.",
+          "Unplaced animals are named, with the free count qualified.",
+          "The list flip carries the same units as the map and no fewer."
+        ]
+      },
+      "ratifiedBy": {
+        "role": "owner",
+        "ref": "BI-F91D0685"
+      },
+      "reviewRef": "BI-F91D0685",
+      "intentEvidenceRefs": [
+        {
+          "kind": "operator-request",
+          "ref": "BI-E54F7F87",
+          "summary": "Owner, looking at the running portal: no notion of the pets currently in the shelter, and asked to know where they are, like a restaurant layout."
+        },
+        {
+          "kind": "design-review",
+          "ref": "docs/superpowers/plans/2026-09-02-ward-board-housing-and-occupancy.md",
+          "summary": "The plan records the substrate verification behind this route and the four-phase order; the surface shape was scored through principle_decide DI-6E711DA68A9B against list-only and map-only."
+        }
+      ]
     }
   ]
 }

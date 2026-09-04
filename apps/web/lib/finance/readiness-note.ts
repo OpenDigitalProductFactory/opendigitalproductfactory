@@ -16,7 +16,7 @@
 import type {
   FinanceMetricKey,
   FinanceMoneyJob,
-  FoodHospitalitySubtype,
+  FinanceSurfaceSubtype,
 } from "./finance-surface";
 
 export type ReadinessMetricValue = {
@@ -25,11 +25,12 @@ export type ReadinessMetricValue = {
   hint?: string;
 };
 
-const BUSINESS_LABEL: Record<FoodHospitalitySubtype, string> = {
+const BUSINESS_LABEL: Record<FinanceSurfaceSubtype, string> = {
   restaurant: "restaurant",
   catering: "catering business",
   bakery: "bakery",
   generic: "food and drink business",
+  "pet-rescue": "animal rescue",
 };
 
 /**
@@ -40,7 +41,7 @@ const BUSINESS_LABEL: Record<FoodHospitalitySubtype, string> = {
  * never handed a number that does not exist.
  */
 export function buildFinanceReadinessNotePrompt(input: {
-  subtype: FoodHospitalitySubtype;
+  subtype: FinanceSurfaceSubtype;
   moneyJobs: FinanceMoneyJob[];
   metrics: Partial<Record<FinanceMetricKey, ReadinessMetricValue>>;
 }): string {

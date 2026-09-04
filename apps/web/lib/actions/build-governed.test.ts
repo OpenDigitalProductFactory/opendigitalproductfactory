@@ -131,9 +131,17 @@ vi.mock("@/lib/build/decision-service", () => ({
   evaluateBuildStudioDecision: mockEvaluateBuildStudioDecision,
 }));
 
+const mockGetBuildStudioConfig = vi.fn(async () => ({
+  selection: { status: "selected", selected: { engine: "opencode" }, reason: "ok", action: null },
+}));
+vi.mock("@/lib/build/build-studio-config", () => ({
+  getBuildStudioConfig: (...args: unknown[]) => mockGetBuildStudioConfig(...(args as [])),
+}));
+
 vi.mock("@/lib/build/build-entry-gate", () => ({
   enforceBuildInitiativeReadiness: mockEnforceBuildInitiativeReadiness,
   assertBuildPhaseInitiativeReadiness: mockEnforceBuildInitiativeReadiness,
+  checkBuildPhaseInitiativeReadiness: async (a: unknown) => { try { await mockEnforceBuildInitiativeReadiness(a); return null; } catch (e) { return e instanceof Error && e.message ? e.message : "refused"; } }, // BI-C5D978E9
 }));
 vi.mock("@/lib/backlog/initiative-readiness/build-terminal-transition", () => ({ assertFeatureBuildCompletion: mockAssertFeatureBuildCompletion }));
 
@@ -176,7 +184,7 @@ vi.mock("@/lib/self-upgrade/quiescence", () => ({
 }));
 
 import { revalidatePath } from "next/cache";
-import { approveBuildStart, advanceBuildPhase, completeBuild, createFeatureBuild, recordBuildAcceptance, resumeBuildImplementation, runBuildReviewVerification, updateBusinessBuildBrief, updateFeatureBrief } from "./build";
+import { approveBuildStart, advanceBuildPhase, completeBuild, createFeatureBuild, recordBuildAcceptance, resumeBuildImplementation, runBuildReviewVerification, updateBusinessBuildBrief } from "./build";
 
 describe("governed build start approvals", () => {
   beforeEach(() => {
@@ -342,55 +350,6 @@ describe("governed build start approvals", () => {
     expect(mockPrisma.workroom.create).not.toHaveBeenCalled();
   });
 
-  it("updateFeatureBrief writes the legacy brief and backfills the BusinessBuildBrief contract", async () => {
-    mockPrisma.featureBuild.findUnique.mockResolvedValue({
-      id: "feature-build-row-1",
-      buildId: "FB-123",
-      title: "Improve Build Studio intake",
-      createdById: "user-1",
-      phase: "ideate",
-    });
-    mockPrisma.featureBuild.update.mockResolvedValue({});
-
-    const brief = {
-      title: "Improve Build Studio intake",
-      description: "Build Studio should turn business-language requests into a brief.",
-      portfolioContext: "Build Studio",
-      targetRoles: ["Operations lead"],
-      inputs: ["Reviewed plan"],
-      dataNeeds: "Business outcome, evidence, success signals",
-      acceptanceCriteria: ["A non-developer can review the generated brief."],
-    };
-
-    await updateFeatureBrief("FB-123", brief);
-
-    expect(mockPrisma.$transaction).toHaveBeenCalledWith(expect.any(Function));
-    expect(mockPrisma.featureBuild.update).toHaveBeenCalledWith({
-      where: { buildId: "FB-123" },
-      data: { brief },
-    });
-    expect(mockPrisma.businessBuildBrief.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { featureBuildId: "feature-build-row-1" },
-        create: expect.objectContaining({
-          briefId: "BBB-FB-123",
-          orgId: "org-1",
-          featureBuildId: "feature-build-row-1",
-          capabilityPackId: "build_studio_self_development",
-          status: "accepted",
-          acceptedByUserId: "user-1",
-          acceptedAt: expect.any(Date),
-        }),
-        update: expect.objectContaining({
-          businessOutcome: brief.description,
-          confidence: "high",
-          acceptedByUserId: "user-1",
-          acceptedAt: expect.any(Date),
-        }),
-      }),
-    );
-  });
-
   it("updateBusinessBuildBrief persists business edits and accepts a complete brief", async () => {
     mockPrisma.businessBuildBrief.findUnique.mockResolvedValue({
       id: "business-brief-row-1",
@@ -479,9 +438,9 @@ describe("governed build start approvals", () => {
       status: "awaiting_clarification",
     });
 
-    await expect(advanceBuildPhase("FB-123", "plan")).rejects.toThrow(
-      "Accept the business build brief before moving into planning.",
-    );
+    // BI-04B112CA — a refusal is a value the owner can read, not a digest.
+    await expect(advanceBuildPhase("FB-123", "plan")).resolves.toEqual({ ok: false,
+      message: "Accept the business build brief before moving into planning." });
     expect(mockPrisma.featureBuild.update).not.toHaveBeenCalled();
   });
 
@@ -501,13 +460,47 @@ describe("governed build start approvals", () => {
 
     const result = await approveBuildStart("FB-123");
 
-    expect(result.approvedAt).toBeInstanceOf(Date);
+    expect(result.ok).toBe(true);
+    expect(result.ok && result.data.approvedAt).toBeInstanceOf(Date);
     expect(mockPrisma.featureBuild.update).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { buildId: "FB-123" },
         data: expect.objectContaining({
           draftApprovedAt: expect.any(Date),
         }),
+      }),
+    );
+  });
+
+  // BI-CE1AB982 — approval used to succeed unconditionally, so an owner
+  // approved a start that silently never dispatched and the panel then reported
+  // "working" indefinitely.
+  it("approveBuildStart refuses and does not stamp approval when no engine can run the build", async () => {
+    mockPrisma.featureBuild.findUnique.mockResolvedValue({
+      createdById: "user-1",
+      phase: "ideate",
+      originatingBacklogItemId: "backlog-row-1",
+      draftApprovedAt: null,
+    });
+    mockPrisma.platformDevConfig.findUnique.mockResolvedValue({ governedBacklogEnabled: true });
+    mockGetBuildStudioConfig.mockResolvedValueOnce({
+      selection: {
+        status: "blocked",
+        selected: null,
+        reason: "No eligible endpoints for task type 'code-gen'.",
+        action: "Connect, provision, or wait for one allowed Build Studio engine, then retry.",
+      },
+    } as never);
+
+    const result = await approveBuildStart("FB-123");
+
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.error).toContain("Connect, provision, or wait for one allowed Build Studio engine");
+    // The owner's approval must not be recorded for work that cannot start.
+    expect(mockPrisma.featureBuild.update).not.toHaveBeenCalled();
+    expect(mockPrisma.buildActivity.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ tool: "dispatch_blocked" }),
       }),
     );
   });
@@ -535,9 +528,8 @@ describe("governed build start approvals", () => {
       governedBacklogEnabled: true,
     });
 
-    await expect(advanceBuildPhase("FB-123", "plan")).rejects.toThrow(
-      "Approve Start before moving this governed backlog draft into planning.",
-    );
+    await expect(advanceBuildPhase("FB-123", "plan")).resolves.toEqual({ ok: false,
+      message: "Approve Start before moving this governed backlog draft into planning." });
     expect(mockPrisma.featureBuild.update).not.toHaveBeenCalled();
   });
 
@@ -866,8 +858,7 @@ describe("governed build start approvals", () => {
 
     expect(mockEvaluateBuildStudioPlanAdvancementGate).not.toHaveBeenCalled();
     expect(mockPrisma.featureBuild.update).not.toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { buildId: "FB-USAGE" },
+      expect.objectContaining({ where: { buildId: "FB-USAGE" },
         data: expect.objectContaining({ phase: "build" }),
       }),
     );

@@ -148,3 +148,79 @@ describe("classifyOwnerAttentionLane", () => {
     });
   });
 });
+
+// Running Second Chance Animal Rescue for a day found 40 items in the owner's
+// inbox, of which 34 were paused platform task runs — "spec-approval for
+// BI-7D2C4F02", "Record the research gate for BI-2DB7254B" — and exactly ONE
+// was the rescue's own business. Every one of the 34 carried the placeholder
+// blast radius "a coworker task" and the platform's own advice to keep it with
+// the specialist (BI-79E207B9).
+describe("work the platform already knows is not the owner's", () => {
+  const pausedPlatformRun = () =>
+    item("paused-ai", {
+      title: "spec-approval for BI-7D2C4F02 at 5f4d8aacb8fc",
+      triage: {
+        timeToAct: "none",
+        residueReason: "input-required",
+        blastRadius: "a coworker task",
+        decideEffort: "judgment",
+        irreversible: false,
+      },
+    });
+
+  it("leaves the owner's count when nothing concrete is blocked", () => {
+    expect(classifyOwnerAttentionLane(pausedPlatformRun()).lane).toBe("custodian");
+  });
+
+  it("comes back the moment the run names what it is actually holding up", () => {
+    const namesIt = item("paused-ai", {
+      triage: {
+        timeToAct: "none",
+        residueReason: "input-required",
+        blastRadius: "the Vasquez adoption enquiry",
+        decideEffort: "judgment",
+        irreversible: false,
+      },
+    });
+
+    expect(classifyOwnerAttentionLane(namesIt).lane).toBe("needs-you-now");
+  });
+
+  it("treats a blank blast radius the same as a placeholder one", () => {
+    const blank = item("agent-proposal", {
+      triage: {
+        timeToAct: "none",
+        residueReason: "input-required",
+        decideEffort: "judgment",
+        irreversible: false,
+      },
+    });
+
+    expect(classifyOwnerAttentionLane(blank).lane).toBe("custodian");
+  });
+
+  it("never demotes a hard floor, however vague the blast radius", () => {
+    const vagueTriage = {
+      timeToAct: "none" as const,
+      residueReason: "policy-approval" as const,
+      blastRadius: "a coworker task",
+      decideEffort: "review" as const,
+      irreversible: false,
+    };
+    const hardFloors: AttentionSource[] = [
+      "approval-bill",
+      "approval-expense",
+      "approval-outbound",
+      "compliance-submission",
+      "reservation-exception",
+      "storefront-inquiry",
+      "coworker-envelope",
+    ];
+
+    for (const source of hardFloors) {
+      const decision = classifyOwnerAttentionLane(item(source, { triage: vagueTriage }));
+      expect(decision.lane, `${source} was demoted`).toBe("needs-you-now");
+      expect(decision.hardFloor, `${source} lost its hard floor`).toBe(true);
+    }
+  });
+});

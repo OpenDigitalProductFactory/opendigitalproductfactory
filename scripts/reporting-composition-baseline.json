@@ -68,7 +68,6 @@
   "apps/web/components/platform/federation-links/FederationLinksAdminClient.tsx": 1,
   "apps/web/components/platform/federation-proposals/FederationProposalsClient.tsx": 1,
   "apps/web/components/portfolio/DigitalProductDetail.tsx": 1,
-  "apps/web/components/product/ProductSupplyChainPanel.tsx": 1,
   "apps/web/components/storefront/sections/LoanCalculatorSection.tsx": 1,
   "apps/web/components/wiki/WikiPageViewer.tsx": 1,
   "apps/web/components/workbooks/GridPanels.tsx": 2,

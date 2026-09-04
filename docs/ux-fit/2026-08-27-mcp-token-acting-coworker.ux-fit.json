@@ -1,0 +1,19 @@
+{
+  "version": "1",
+  "decidedOption": "explicit-coworker-select",
+  "decisionInteractionId": "DI-D55ECEB2DA17",
+  "scope": {
+    "files": [
+      "apps/web/components/admin/McpTokenManager.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "explicit-coworker-select",
+      "auto-bind-by-template",
+      "room-access-toggle"
+    ],
+    "note": "Every McpApiToken row on this install has agentId = NULL, and every Work Room handler resolves its caller from context.agentId and refuses without one (invalid_caller, 'requires an acting coworker'). So no external CLI agent has ever been able to join, post to, or read a room. Measured consequence: 6 WorkItemMessage rows in total against 604 TaskMessage rows, and a single Codex thread that sent 235 of its ~284 coordination messages through its vendor's task bus because the room was closed to it. Three ways to let an operator bind the identity were scored. explicit-coworker-select adds one select to the issue form, defaulting to 'None - cannot join Work Rooms', listing only coworkers holding work_room_write. auto-bind-by-template adds no control and infers the identity from the template plus the requesting CLI surface: lowest cognitive load, but it grants a room-capable identity without the operator ever seeing it, which is a silent privilege change and scores badly on blast radius. room-access-toggle sits between the two and hides WHICH coworker the token speaks as, so the audit trail on WorkItemMessage.senderAgentId becomes unreadable. HONEST KERNEL RESULT: principle_decide returned composite 1.630 with margin 0.000 for all three options, confidence low, verdict uncertain, autonomyEligible false ('confidence_not_high'), no commandment conflict. The scorer did not discriminate between the options, so this is a reviewable choice and NOT a ratified one; it is recorded here as such rather than presented as a green. explicit-coworker-select was taken as the most conservative of the three: it is the only option where a room-capable identity cannot be granted without the operator seeing and choosing it, which keeps 'Least privilege, deny by default' and 'Outbound and irreversible actions require explicit go' satisfied by construction. Cognitive load is bounded by defaulting to None and by filtering the list to room-capable coworkers rather than all 102 registry agents. Reviewers should feel free to overrule toward auto-bind-by-template if the operator burden proves real; the server action and the binding are unchanged by that choice, only the control is."
+  }
+}

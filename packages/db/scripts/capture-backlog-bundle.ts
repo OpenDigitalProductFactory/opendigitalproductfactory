@@ -64,6 +64,17 @@ function bundleFileName(epicId: string): string {
   return `${epicId.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.json`;
 }
 
+/**
+ * The description the bundle contract requires, or the title when the epic has none.
+ *
+ * `parseBacklogRecoveryBundle` rejects an empty description, and capture round-trips
+ * through it, so a single description-less epic would otherwise fail the whole run.
+ */
+function epicDescription(epic: { description?: string | null; title: string }): string {
+  const described = epic.description?.trim();
+  return described && described !== "" ? described : epic.title;
+}
+
 /** Files in the output directory that are records, not single-epic bundles. */
 const NON_BUNDLE_FILES = new Set(["manifest.json", "unassigned-items.json"]);
 
@@ -188,7 +199,12 @@ async function main(): Promise<void> {
       repository: "OpenDigitalProductFactory/opendigitalproductfactory",
       planPath:
         prior?.planPath || "docs/superpowers/plans/2026-08-22-instance-identity-and-purpose.md",
-      epic: { ...epic, epicId: epic.epicId } as never,
+      // The bundle contract requires a non-empty epic description, but Build
+      // Studio mints epics from a build title with no description at all. One
+      // such epic used to abort the ENTIRE capture — every other epic's work
+      // lost with it — so fall back to the title, which describes the epic as
+      // truthfully as anything available, rather than refusing to back up.
+      epic: { ...epic, epicId: epic.epicId, description: epicDescription(epic) } as never,
       items,
     });
     skipped.push(...result.skipped);

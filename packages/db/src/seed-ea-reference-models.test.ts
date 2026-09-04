@@ -57,6 +57,12 @@ vi.mock("./client.js", () => ({
     eaReferenceModel: { upsert: vi.fn() },
     eaReferenceModelArtifact: { upsert: vi.fn() },
     eaReferenceModelElement: { upsert: vi.fn(), count: vi.fn() },
+    // BI-DDB48B04 follow-on: the seed now resolves the install's archetype to
+    // decide whether an industry-specific reference model applies. A mock that
+    // omits these throws "Cannot read properties of undefined" from inside the
+    // seed, which reads as a seed bug rather than a stale fixture.
+    storefrontConfig: { findFirst: vi.fn() },
+    storefrontArchetype: { findUnique: vi.fn() },
   },
 }));
 
@@ -89,7 +95,21 @@ const mockPrisma = prisma as unknown as {
   eaReferenceModel: { upsert: ReturnType<typeof vi.fn> };
   eaReferenceModelArtifact: { upsert: ReturnType<typeof vi.fn> };
   eaReferenceModelElement: { upsert: ReturnType<typeof vi.fn>; count: ReturnType<typeof vi.fn> };
+  storefrontConfig: { findFirst: ReturnType<typeof vi.fn> };
+  storefrontArchetype: { findUnique: ReturnType<typeof vi.fn> };
 };
+
+/** Declare the install's setup-chosen archetype for a test. */
+function givenInstallArchetype(archetype: { archetypeId: string; category: string } | null): void {
+  mockPrisma.storefrontConfig.findFirst.mockResolvedValue(
+    archetype ? { archetypeId: "storefront-config-cuid" } : null,
+  );
+  mockPrisma.storefrontArchetype.findUnique.mockResolvedValue(archetype);
+}
+
+/** Distinct mocked model ids — see the fixture note in beforeEach. */
+const IT4IT_MODEL_ID = "it4it-model";
+const BIAN_MODEL_ID = "bian-model";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -100,7 +120,17 @@ beforeEach(() => {
     { id: "p4", slug: "products_and_services_sold", name: "Products and Services Sold" },
   ]);
   mockPrisma.eaAssessmentScope.upsert.mockResolvedValue({});
-  mockPrisma.eaReferenceModel.upsert.mockResolvedValue({ id: "model-1" });
+  // Distinct ids per model. This fixture used to resolve BOTH models to
+  // "model-1", which silently made every per-model assertion vacuous — a test
+  // asserting "BIAN was not imported" passed even when it was. Two tests were
+  // written against that fixture and confirmed passing against a REVERTED fix
+  // before the id collision was spotted. Key on the slug so the wrong model can
+  // never satisfy the right assertion.
+  mockPrisma.eaReferenceModel.upsert.mockImplementation(
+    async (args: { where: { slug: string } }) => ({
+      id: args.where.slug.startsWith("bian") ? BIAN_MODEL_ID : IT4IT_MODEL_ID,
+    }),
+  );
   mockPrisma.eaReferenceModelArtifact.upsert.mockResolvedValue({});
   mockPrisma.eaReferenceModelElement.upsert.mockImplementation(async (args: { where: { modelId_slug: { slug: string } } }) => ({
     id: `el-${args.where.modelId_slug.slug}`,
@@ -110,6 +140,10 @@ beforeEach(() => {
   // existing tests don't need to know about the assertion unless they're
   // specifically exercising it.
   mockPrisma.eaReferenceModelElement.count.mockResolvedValue(1);
+  // These cases assert the BIAN hierarchy IS imported, so they describe a
+  // banking install. Non-banking scoping is covered in
+  // ea-reference-model-applicability.test.ts and by the case at the end here.
+  givenInstallArchetype({ archetypeId: "community-bank", category: "banking-financial-services" });
 
   mockReadWorkbook.mockResolvedValue([
     {
@@ -209,13 +243,12 @@ describe("seedEaReferenceModels", () => {
   });
 
   it("throws when the BIAN JSON import produces zero elements (BI-98D19DF2)", async () => {
-    // Both models resolve to the same mocked id ("model-1") in this fixture,
-    // so distinguish by call order: first count() is IT4IT, second is BIAN.
-    let call = 0;
-    mockPrisma.eaReferenceModelElement.count.mockImplementation(async () => {
-      call += 1;
-      return call === 1 ? 1 : 0;
-    });
+    // Key on the model id, not call order: order-dependent fixtures break
+    // silently the moment the seed reorders its counts.
+    mockPrisma.eaReferenceModelElement.count.mockImplementation(
+      async (args: { where: { modelId: string } }) =>
+        args.where.modelId === IT4IT_MODEL_ID ? 1 : 0,
+    );
 
     await expect(seedEaReferenceModels()).rejects.toThrow(/BIAN Service Landscape reference model imported zero elements/);
   });
@@ -233,5 +266,92 @@ describe("seedEaReferenceModels", () => {
     // tags like @v7.0.0 (#2251). Match any tag version (major or exact) so bumps
     // stay green while the LFS wiring stays enforced.
     expect(workflow).toMatch(/uses:\s*actions\/checkout@v[\d.]+\s*\n\s*with:\s*\n(?:\s*#.*\n)*\s*lfs:\s*true/);
+  });
+});
+
+// BI-DDB48B04 follow-on — the reported defect, end to end through the seed.
+//
+// The eaReferenceModels step imported the BIAN Service Landscape and then
+// asserted a non-zero element count for it on EVERY install. seed.ts `step()`
+// catches and logs rather than aborting, so on a software-platform install the
+// step threw and failed silently on every boot and every upgrade — the same
+// "reports success while importing nothing" shape the assertion exists to
+// prevent, inverted into an assertion asserting the wrong thing.
+describe("industry scoping of reference models", () => {
+  const IT4IT_ID = IT4IT_MODEL_ID;
+  const BIAN_ID = BIAN_MODEL_ID;
+
+  function givenDistinctModelIds(): void {
+    mockPrisma.eaReferenceModel.upsert.mockImplementation(
+      async (args: { where: { slug: string } }) => ({
+        id: args.where.slug.startsWith("bian") ? BIAN_ID : IT4IT_ID,
+      }),
+    );
+    // IT4IT imported rows; BIAN has none because it was never imported.
+    mockPrisma.eaReferenceModelElement.count.mockImplementation(
+      async (args: { where: { modelId: string } }) => (args.where.modelId === IT4IT_ID ? 1 : 0),
+    );
+  }
+
+  /** Element rows written against the BIAN model id. */
+  function bianElementUpserts(): unknown[] {
+    return mockPrisma.eaReferenceModelElement.upsert.mock.calls.filter((call: unknown[]) => {
+      const args = call[0] as { where: { modelId_slug: { modelId: string } } };
+      return args.where.modelId_slug.modelId === BIAN_ID;
+    });
+  }
+
+  it("does not import or assert BIAN on a software-platform install", async () => {
+    givenInstallArchetype({ archetypeId: "software-platform", category: "software-platform" });
+    givenDistinctModelIds();
+
+    // Under the old unconditional assertion, a zero BIAN count threw here.
+    await expect(seedEaReferenceModels()).resolves.not.toThrow();
+    expect(bianElementUpserts()).toHaveLength(0);
+  });
+
+  it("imports BIAN on a banking install", async () => {
+    givenInstallArchetype({ archetypeId: "community-bank", category: "banking-financial-services" });
+    mockPrisma.eaReferenceModel.upsert.mockImplementation(
+      async (args: { where: { slug: string } }) => ({
+        id: args.where.slug.startsWith("bian") ? BIAN_ID : IT4IT_ID,
+      }),
+    );
+    mockPrisma.eaReferenceModelElement.count.mockResolvedValue(1);
+
+    await seedEaReferenceModels();
+    expect(bianElementUpserts().length).toBeGreaterThan(0);
+  });
+
+  it("still catches a genuinely empty BIAN import on a banking install", async () => {
+    givenInstallArchetype({ archetypeId: "community-bank", category: "banking-financial-services" });
+    mockPrisma.eaReferenceModel.upsert.mockImplementation(
+      async (args: { where: { slug: string } }) => ({
+        id: args.where.slug.startsWith("bian") ? BIAN_ID : IT4IT_ID,
+      }),
+    );
+    // IT4IT fine, BIAN empty — the case the assertion exists for must still fire.
+    mockPrisma.eaReferenceModelElement.count.mockImplementation(
+      async (args: { where: { modelId: string } }) => (args.where.modelId === IT4IT_ID ? 1 : 0),
+    );
+
+    await expect(seedEaReferenceModels()).rejects.toThrow(/BIAN Service Landscape reference model imported zero/);
+  });
+
+  // The catalogue row is always upserted, so a non-banking install can still
+  // see that BIAN exists and what industry it serves — matching how
+  // seed-banking-compliance.ts seeds banking regulations everywhere and scopes
+  // them at consumption. Only the element payload is gated.
+  it("still records the BIAN catalogue entry on a non-banking install", async () => {
+    givenInstallArchetype({ archetypeId: "software-platform", category: "software-platform" });
+    givenDistinctModelIds();
+
+    await seedEaReferenceModels();
+
+    const seededBianCatalogue = mockPrisma.eaReferenceModel.upsert.mock.calls.some((call: unknown[]) => {
+      const args = call[0] as { create?: { primaryIndustry?: string } };
+      return args.create?.primaryIndustry === "banking-financial-services";
+    });
+    expect(seededBianCatalogue).toBe(true);
   });
 });

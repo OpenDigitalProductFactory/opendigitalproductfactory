@@ -1,0 +1,25 @@
+{
+  "version": "1",
+  "decidedOption": "bounded-archetype-presentation",
+  "decisionInteractionId": "DI-BDD2020D5909",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/customer/(crm)/page.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "decisionInteractionId": "DI-BDD2020D5909",
+    "consideredOptions": [
+      "bounded-archetype-presentation",
+      "generic-commercial-surface",
+      "new-pet-rescue-dashboard"
+    ]
+  },
+  "rationale": {
+    "bounded-archetype-presentation": "CHOSEN. Kernel composite 7.835 with a 3.170 margin and high confidence. It keeps the existing Customer and Finance route families and data models while replacing irrelevant commercial vocabulary only for Pet Rescue and animal-shelter organizations.",
+    "generic-commercial-surface": "REJECTED. Kernel composite 4.665. It has the smallest code delta but forces a donor-funded rescue to translate sales-pipeline language into adoption, supporter, and stewardship work on every visit.",
+    "new-pet-rescue-dashboard": "REJECTED. Kernel composite 0.516. Separate routes and components would duplicate navigation and status truth instead of extending the shared archetype presentation seam."
+  },
+  "notes": "The Customer action remains the single existing create action and opens the unchanged account creation flow. No new route, prompt send, form field, reporting primitive, or permission boundary is introduced. Focused route and resolver tests cover Pet Rescue and generic behavior; live verification is required after the canonical release."
+}

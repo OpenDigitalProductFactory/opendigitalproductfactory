@@ -3,7 +3,7 @@
   "bundleId": "purpose-aware-installation-ecosystem-productivity",
   "description": "Operator-invoked recovery input for the approved purpose-aware installation epic, umbrella for install identity and ecosystem productivity work.",
   "source": {
-    "capturedAt": "2026-08-23T02:00:56.767Z",
+    "capturedAt": "2026-08-26T03:57:53.481Z",
     "repository": "OpenDigitalProductFactory/opendigitalproductfactory",
     "planPath": "docs/superpowers/plans/2026-08-08-purpose-aware-installation-ecosystem-productivity.md"
   },
@@ -19,20 +19,56 @@
   },
   "items": [
     {
+      "itemId": "BI-06005FE0",
+      "epicId": "EP-1FABA22D",
+      "title": "Portal and doc prose reads as telegraphic self-declaration because the readability gate rewards fragments",
+      "body": "Reported by the founder 2026-08-25: \"this self-declarative language on any page, help document etc. is also odd, and should be altered. The 'this is a' is a weird way to start an explanation that no one really uses.\"\n\nCONCRETE INSTANCE: `apps/web/lib/installation-journey/installation-identity-view.ts:64` `buildIdentityHeadline()` emits `A development installation. Its job: safely improve another dpf.` The panel heading above it is `What this installation is`. Nobody talks like that.\n\nROOT CAUSE — this is not one bad string, it is what the gate selects for. `apps/web/lib/ux-budget/measure.ts:106` measures `readingGradeLevel` as the Flesch-Kincaid grade of the route's default-visible copy, flattened to one utterance stream over the WHOLE page including nav, and `budgets.ts` caps most tiers at grade 9. FK is (words/sentence) + (syllables/word). The cheapest way to pass it is to cut sentences into fragments and drop connectives. Authors did exactly that, correctly, and the result is prose no human would speak. Nothing in the gate measures naturalness, so the fragment style is the local optimum.\n\nEXPECTED: copy that a person would actually say, still inside the grade cap. \"This installation is set up for development work. Its job is to safely improve another DPF.\" is natural AND scores lower on FK than the fragment version, because FK rewards short common words as much as short sentences. The style rule to write down is: prefer plain verbs and full clauses; do not begin an explanation by declaring the page's own category.\n\nSCOPE:\n1. Rewrite the installation-identity copy (heading, headline, detail, stance rationales in `packages/db/src/installation-instance-stance.ts`) — note the stance rationales are reused verbatim in the MCP agent briefing, so the same strings serve two audiences.\n2. Sweep for the same pattern elsewhere. Grep candidates: headings of the form \"What this X is\", sentences opening \"A <adjective> <noun>.\" as a standalone fragment, and \"Its job:\" / \"Its <noun>:\" colon-fragments.\n3. Decide whether the prose-lint gate (`scripts/check-prose-lint.ts` + `prose-lint-baseline.json`) should carry a rule against sentence fragments in body copy, so the readability cap stops being satisfiable by telegraphese. A rule here is the only thing that stops the style regrowing.\n\nTRAP for the implementer: `--update` on the prose-lint baseline retightens roughly 40 untouched files. Splice only the routes you changed.",
+      "status": "triaging",
+      "type": "product",
+      "workType": "bug",
+      "source": "user-request",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [],
+      "scopeRationale": "Copy style and the readability gate that shapes it apply to every route, every archetype and the docs surface.",
+      "createdAt": "2026-08-25T22:46:24.696Z"
+    },
+    {
       "itemId": "BI-0A40E66A",
       "epicId": "EP-1FABA22D",
       "title": "Compile archetype and GTM operating context into executable external-agent work",
       "body": "Project existing archetype value streams, operating profiles, WorkUnit definitions, work shapes, outcomes, measures, evidence, and exceptions into Work Packets and Authorized Surface entry references. Add GTM work context for offer, audience, channel, lifecycle stage, constraints, and success measures while keeping product/marketing/sales/partner records canonical. Prove at least one end-to-end value stream per supported archetype family; vocabulary-only overlays do not pass. Do not clone workflow or authority substrate per vertical.",
-      "status": "open",
+      "status": "deferred",
       "type": "product",
       "workType": "feature",
       "source": "user-request",
       "scopeKind": "platform",
       "dependsOn": [],
       "externalDependencies": [],
-      "activities": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-0a40e66a-cmt7zbm8d0fa601mg3zlxl72o",
+          "kind": "status_change",
+          "summary": "Retired BI-0A40E66A as defer",
+          "recordedAt": "2026-08-25T01:21:29.677Z",
+          "payload": {
+            "to": "deferred",
+            "from": "open",
+            "reason": "Executable archetype and GTM work context crosses value streams, WorkUnits, work shapes, outcomes, evidence, exceptions, and canonical commercial records.",
+            "outcome": "defer",
+            "deferral": {
+              "reason": "Executable archetype and GTM work context crosses value streams, WorkUnits, work shapes, outcomes, evidence, exceptions, and canonical commercial records.",
+              "trigger": "Resume after the external-agent Work Packet contract is stable and the first purpose-aware journey is proven; fund one archetype-family vertical slice with no cloned workflow or authority substrate.",
+              "reviewAt": "2026-09-22T20:00:00.000Z"
+            },
+            "rationale": "Valid, architecture-approved program demand, but the canonical plan requires independently shippable, ordered slices. The pre-reinstall drain must preserve those boundaries rather than collapse the program into one unsafe PR.",
+            "duplicateOfId": null
+          }
+        }
+      ],
       "effortSize": "xlarge",
-      "triageOutcome": "build",
+      "triageOutcome": "defer",
       "scopeRationale": "Universal DPF external-agent operating substrate reused across installations, archetypes, and business portfolios.",
       "createdAt": "2026-08-22T14:32:06.451Z"
     },
@@ -40,35 +76,93 @@
       "itemId": "BI-1E91D091",
       "epicId": "EP-1FABA22D",
       "title": "Deliver the Workspace purpose and milestone journey companion",
-      "body": "## Outcome\nWorkspace becomes the canonical authenticated home for purpose confirmation and milestone progress, without a new navigation area or dashboard.\n\n## Acceptance\n- Operators see a bounded purpose recommendation, rationale, correction path, and consequence preview.\n- A compact journey companion supports pause/resume and contextual milestones.\n- Selection writes intent only; it does not prompt a coworker automatically.\n- Error, permission, empty, narrow viewport, keyboard, theme, and branding states are verified.\n- The legacy experience remains recoverable during rollout.\n\nBlocked by: BI-A9F60372, BI-91EF130B, BI-4FCBA4B2.\nPlan §8: docs/superpowers/plans/2026-08-08-purpose-aware-installation-ecosystem-productivity.md",
-      "status": "open",
+      "body": "## Outcome\r\nWorkspace becomes the canonical authenticated home for purpose confirmation and milestone progress, without a new navigation area or dashboard.\r\n\r\n## Acceptance\r\n- Operators see a bounded purpose recommendation, rationale, correction path, and consequence preview.\r\n- A compact journey companion supports pause/resume and contextual milestones.\r\n- Selection writes intent only; it does not prompt a coworker automatically.\r\n- Error, permission, empty, narrow viewport, keyboard, theme, and branding states are verified.\r\n- The legacy experience remains recoverable during rollout.\r\n\r\nBlocked by: BI-A9F60372, BI-91EF130B, BI-4FCBA4B2.\r\nPlan §8: docs/superpowers/plans/2026-08-08-purpose-aware-installation-ecosystem-productivity.md",
+      "status": "deferred",
       "type": "product",
       "workType": "feature",
       "source": "user-request",
       "scopeKind": "platform",
       "dependsOn": [],
       "externalDependencies": [],
-      "activities": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-1e91d091-cmt7zblue0f9u01mg9kkzw430",
+          "kind": "status_change",
+          "summary": "Retired BI-1E91D091 as defer",
+          "recordedAt": "2026-08-25T01:21:29.174Z",
+          "payload": {
+            "to": "deferred",
+            "from": "open",
+            "reason": "The Workspace purpose/milestone UX depends on the compiler and convergence slices; building UI first would embed unstable state and duplicate orchestration.",
+            "outcome": "defer",
+            "deferral": {
+              "reason": "The Workspace purpose/milestone UX depends on the compiler and convergence slices; building UI first would embed unstable state and duplicate orchestration.",
+              "trigger": "Resume after P1 and R1 ship; fund P2 with first-viewport, pause/resume, correction, permission, empty/error, mobile, keyboard, theme, and branding verification.",
+              "reviewAt": "2026-09-22T20:00:00.000Z"
+            },
+            "rationale": "Valid, architecture-approved program demand, but the canonical plan requires independently shippable, ordered slices. The pre-reinstall drain must preserve those boundaries rather than collapse the program into one unsafe PR.",
+            "duplicateOfId": null
+          }
+        }
+      ],
       "effortSize": "large",
-      "triageOutcome": "build",
+      "triageOutcome": "defer",
       "scopeRationale": "DPF platform installation-to-ecosystem-productivity program.",
       "createdAt": "2026-08-22T04:02:37.555Z"
+    },
+    {
+      "itemId": "BI-2EC8906A",
+      "epicId": "EP-1FABA22D",
+      "title": "Edge nodes are fully documented and fully unreachable: no nav entry, and the install guide never mentions them",
+      "body": "Reported by the founder 2026-08-25: \"what's the procedure for installing more edge nodes? I don't remember seeing this documented anywhere. this is prolific in the MSP archetype for example. And businesses that have multiple locations with systems too.\"\n\nTHE DOCUMENTATION EXISTS AND IS GOOD. Six documents:\n- `docs/edge-node/deployment-topology.md` — the operator front door: co-located vs remote vs fleet, the opt-in model, and the separation of \"deploy\" from \"trust\".\n- `docs/edge-node/fleet-operations.md` — running MANY nodes against one Authority Core: rollout, versioning, rotation, quarantine, decommission, and the health signals that stop a fleet swamping the portal. This is precisely the MSP runbook.\n- `docs/install/edge-node-multi-host.md` — Authority on host A, node on host B, step by step.\n- `docs/install/edge-node-air-gapped.md`, `docs/edge-node/macvlan-deployment.md`, `docs/edge-node/security-and-sovereignty.md`.\n\nThe portal route exists too: `apps/web/app/(shell)/platform/edge-nodes`, with the documented flow \"Platform → Edge Nodes → Add an edge node here\".\n\nTHE DEFECT IS THAT NONE OF IT IS REACHABLE.\n\n1. **`/platform/edge-nodes` is not in the shell navigation.** A repository-wide search finds exactly one in-product link to it, from `FederationLinksAdminClient.tsx:428` — a page an operator only reaches if they are already setting up federation. There is no Platform nav entry. The documented path \"Platform → Edge Nodes\" does not exist as a navigable path.\n2. **`docs/operations/install.md` never says the word \"edge\".** Zero occurrences. The main install guide gives an operator no reason to believe edge nodes exist.\n3. The six edge documents cross-link to each other well and are linked to from almost nothing else, so they are findable only if you already know they are there.\n\nThe founder is a superuser who has been running this platform daily and did not know the procedure existed. That is the measurement: the capability is complete and the discovery path is absent.\n\nWHY IT MATTERS MORE THAN A NAV ENTRY: the MSP archetype and multi-location businesses are exactly the shapes where the node count is greater than one, and they are the shapes where an operator most needs to find this without reading the repository. `EP-24741BBF`-adjacent identity work (BI-7626A660) just introduced an estate concept whose entire purpose is one operator holding several installations; edge fleet operations is the sibling capability for one installation holding several sites.\n\nSCOPE:\n1. Add Edge Nodes to the Platform navigation under the same authority the route already enforces.\n2. Reference edge nodes from `docs/operations/install.md` with a one-line pointer to the topology guide, so the front door mentions the room.\n3. Check the same class of defect on neighbouring routes — a documented \"X → Y\" path that no navigation provides is a repeatable failure, not a one-off. `/ops/installation` added in this same branch is a candidate.\n4. Consider surfacing edge fleet posture where an MSP would look for it rather than only under Platform.\n\nNOTE for whoever picks this up: `docs/install/edge-node-multi-host.md` states the remote host must run native Docker Engine, NOT Docker Desktop, because a Docker Desktop container cannot see the real LAN. That constraint is load-bearing for the MSP case and belongs wherever the flow is surfaced, not only in the developer runbook.",
+      "status": "open",
+      "type": "product",
+      "workType": "bug",
+      "source": "user-request",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [],
+      "effortSize": "small",
+      "triageOutcome": "build",
+      "scopeRationale": "Edge node deployment is universal platform substrate and is load-bearing for the MSP archetype and any multi-location business.",
+      "createdAt": "2026-08-26T00:42:38.635Z"
     },
     {
       "itemId": "BI-34667080",
       "epicId": "EP-1FABA22D",
       "title": "Deliver purpose-aware installation to ecosystem productivity",
-      "body": "## Problem\nDPF setup currently treats installations alike even though production, development-companion, managed-service, channel, and community purposes require different federation shapes and paths to value.\n\n## Scope\nCoordinate the seven independently shippable slices in the approved design and plan. P0 is complete; P1, R1, P2, P3, P4, and P5 remain.\n\n## Acceptance\n- Every child slice ships through its own PR.\n- The profile-specific installation journey proves first value and honest ecosystem productivity.\n- Existing trust, authority, identity, qualification, and contribution boundaries remain canonical.\n- The completion audit in the implementation plan is satisfied.\n\n## Children\nBI-A9F60372, BI-91EF130B, BI-4FCBA4B2, BI-1E91D091, BI-AE128860, BI-3E99ACFA, BI-669D2B04.\n\nPlan: docs/superpowers/plans/2026-08-08-purpose-aware-installation-ecosystem-productivity.md",
-      "status": "in-progress",
+      "body": "## Problem\r\nDPF setup currently treats installations alike even though production, development-companion, managed-service, channel, and community purposes require different federation shapes and paths to value.\r\n\r\n## Scope\r\nCoordinate the seven independently shippable slices in the approved design and plan. P0 is complete; P1, R1, P2, P3, P4, and P5 remain.\r\n\r\n## Acceptance\r\n- Every child slice ships through its own PR.\r\n- The profile-specific installation journey proves first value and honest ecosystem productivity.\r\n- Existing trust, authority, identity, qualification, and contribution boundaries remain canonical.\r\n- The completion audit in the implementation plan is satisfied.\r\n\r\n## Children\r\nBI-A9F60372, BI-91EF130B, BI-4FCBA4B2, BI-1E91D091, BI-AE128860, BI-3E99ACFA, BI-669D2B04.\r\n\r\nPlan: docs/superpowers/plans/2026-08-08-purpose-aware-installation-ecosystem-productivity.md",
+      "status": "deferred",
       "type": "portfolio",
       "workType": "feature",
       "source": "user-request",
       "scopeKind": "platform",
       "dependsOn": [],
       "externalDependencies": [],
-      "activities": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-34667080-cmt7zblbd0f9j01mgvj54n1st",
+          "kind": "status_change",
+          "summary": "Retired BI-34667080 as defer",
+          "recordedAt": "2026-08-25T01:21:28.489Z",
+          "payload": {
+            "to": "deferred",
+            "from": "in-progress",
+            "reason": "The umbrella is partially delivered: P0 typed installation intent shipped, while P1/R1/P2/P3/P4/P5 remain six independently reviewable slices. Completing them in one drain PR would violate the approved release graph.",
+            "outcome": "defer",
+            "deferral": {
+              "reason": "The umbrella is partially delivered: P0 typed installation intent shipped, while P1/R1/P2/P3/P4/P5 remain six independently reviewable slices. Completing them in one drain PR would violate the approved release graph.",
+              "trigger": "Resume after reinstall when the purpose-aware program is funded for the next independent slice; start with P1 compiler, preserve P0 compatibility, and require each remaining slice's existing gates.",
+              "reviewAt": "2026-09-22T20:00:00.000Z"
+            },
+            "rationale": "Valid, architecture-approved program demand, but the canonical plan requires independently shippable, ordered slices. The pre-reinstall drain must preserve those boundaries rather than collapse the program into one unsafe PR.",
+            "duplicateOfId": null
+          }
+        }
+      ],
       "effortSize": "xlarge",
-      "triageOutcome": "build",
+      "triageOutcome": "defer",
       "scopeRationale": "DPF platform installation-to-ecosystem-productivity program.",
       "createdAt": "2026-08-22T04:02:36.845Z"
     },
@@ -76,17 +170,37 @@
       "itemId": "BI-3E99ACFA",
       "epicId": "EP-1FABA22D",
       "title": "Prove profile first value and A2A, GAID, TAK, and JSI readiness",
-      "body": "## Outcome\nEach profile proves its first real outcome with honest separation between local A2A readiness, link-scoped same-organization A2A, GAID/AIDoc assurance, TAK, and actual TAK-JSI evidence.\n\n## Acceptance\n- Five profile fixtures remain non-productive without their domain outcome and governance receipt.\n- Public/general cross-organization assurance is never overclaimed.\n- Setup completion alone never implies assessed or qualified.\n- TAK/JSI authority ceilings remain fail-closed.\n- Unsupported qualification returns required-unavailable with a supervised fallback, not synthetic success.\n\nBlocked by: BI-91EF130B, BI-1E91D091, BI-AE128860.\nCapability dependency: BI-BE0E14E0.\nPlan §10: docs/superpowers/plans/2026-08-08-purpose-aware-installation-ecosystem-productivity.md",
-      "status": "open",
+      "body": "## Outcome\r\nEach profile proves its first real outcome with honest separation between local A2A readiness, link-scoped same-organization A2A, GAID/AIDoc assurance, TAK, and actual TAK-JSI evidence.\r\n\r\n## Acceptance\r\n- Five profile fixtures remain non-productive without their domain outcome and governance receipt.\r\n- Public/general cross-organization assurance is never overclaimed.\r\n- Setup completion alone never implies assessed or qualified.\r\n- TAK/JSI authority ceilings remain fail-closed.\r\n- Unsupported qualification returns required-unavailable with a supervised fallback, not synthetic success.\r\n\r\nBlocked by: BI-91EF130B, BI-1E91D091, BI-AE128860.\r\nCapability dependency: BI-BE0E14E0.\r\nPlan §10: docs/superpowers/plans/2026-08-08-purpose-aware-installation-ecosystem-productivity.md",
+      "status": "deferred",
       "type": "product",
       "workType": "feature",
       "source": "user-request",
       "scopeKind": "platform",
       "dependsOn": [],
       "externalDependencies": [],
-      "activities": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-3e99acfa-cmt7zbm1e0fa001mgqbidlslw",
+          "kind": "status_change",
+          "summary": "Retired BI-3E99ACFA as defer",
+          "recordedAt": "2026-08-25T01:21:29.426Z",
+          "payload": {
+            "to": "deferred",
+            "from": "open",
+            "reason": "First-value and A2A/GAID/TAK/JSI proof depends on stable profile journeys, topology, and bounded qualification semantics.",
+            "outcome": "defer",
+            "deferral": {
+              "reason": "First-value and A2A/GAID/TAK/JSI proof depends on stable profile journeys, topology, and bounded qualification semantics.",
+              "trigger": "Resume after P1-P3 ship; fund P4 with five profile fixtures, real domain outcomes, fail-closed qualification, and explicit local/link/cross-organization assurance boundaries.",
+              "reviewAt": "2026-09-22T20:00:00.000Z"
+            },
+            "rationale": "Valid, architecture-approved program demand, but the canonical plan requires independently shippable, ordered slices. The pre-reinstall drain must preserve those boundaries rather than collapse the program into one unsafe PR.",
+            "duplicateOfId": null
+          }
+        }
+      ],
       "effortSize": "large",
-      "triageOutcome": "build",
+      "triageOutcome": "defer",
       "scopeRationale": "DPF platform installation-to-ecosystem-productivity program.",
       "createdAt": "2026-08-22T04:02:38.034Z"
     },
@@ -102,22 +216,7 @@
       "scopeKind": "platform",
       "dependsOn": [],
       "externalDependencies": [],
-      "activities": [
-        {
-          "recoveryKey": "bi-4b171ff0-cmt4hj9bo0iwv01pkdc43lfot",
-          "kind": "status_change",
-          "summary": "Retired BI-4B171FF0 as duplicate",
-          "recordedAt": "2026-08-22T14:40:14.580Z",
-          "payload": {
-            "to": "retired",
-            "from": "open",
-            "reason": null,
-            "outcome": "duplicate",
-            "rationale": "BI-11D611B3 already owns the source-free orientation/profile/pointer slice and has an active Workroom. The broader design is now coordinated by BI-9549EE48.",
-            "duplicateOfId": "BI-11D611B3"
-          }
-        }
-      ],
+      "activities": [],
       "effortSize": "large",
       "triageOutcome": "duplicate",
       "scopeRationale": "Universal DPF external-agent operating substrate reused across installations, archetypes, and business portfolios.",
@@ -127,25 +226,658 @@
       "itemId": "BI-4FCBA4B2",
       "epicId": "EP-1FABA22D",
       "title": "Converge static setup and readiness orchestration",
-      "body": "## Outcome\nOne activation/journey package, one setup-progress service, one environment vocabulary, and adapters over existing domain actions.\n\n## Capacity contract\nThis independently reviewable refactor represents roughly 20% of epic implementation capacity. It removes duplicated orchestration before the UI migration and is not a broad rewrite.\n\n## Acceptance\n- Static list-index sequencing is replaced by stable compiler milestones behind a rollback adapter.\n- JSON decoding moves into the typed projection service.\n- Environment parsing converges on the shared contract.\n- Dead setup helpers are removed only after reference and regression proof.\n- The diff demonstrates convergence and deletions, not only wrappers.\n\nBlocked by: BI-A9F60372, BI-91EF130B.\nPlan §7: docs/superpowers/plans/2026-08-08-purpose-aware-installation-ecosystem-productivity.md",
-      "status": "open",
+      "body": "## Outcome\r\nOne activation/journey package, one setup-progress service, one environment vocabulary, and adapters over existing domain actions.\r\n\r\n## Capacity contract\r\nThis independently reviewable refactor represents roughly 20% of epic implementation capacity. It removes duplicated orchestration before the UI migration and is not a broad rewrite.\r\n\r\n## Acceptance\r\n- Static list-index sequencing is replaced by stable compiler milestones behind a rollback adapter.\r\n- JSON decoding moves into the typed projection service.\r\n- Environment parsing converges on the shared contract.\r\n- Dead setup helpers are removed only after reference and regression proof.\r\n- The diff demonstrates convergence and deletions, not only wrappers.\r\n\r\nBlocked by: BI-A9F60372, BI-91EF130B.\r\nPlan §7: docs/superpowers/plans/2026-08-08-purpose-aware-installation-ecosystem-productivity.md",
+      "status": "deferred",
       "type": "product",
       "workType": "refactor",
       "source": "user-request",
       "scopeKind": "platform",
       "dependsOn": [],
       "externalDependencies": [],
-      "activities": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-4fcba4b2-cmt7zblqw0f9r01mgxtk1sxqd",
+          "kind": "status_change",
+          "summary": "Retired BI-4FCBA4B2 as defer",
+          "recordedAt": "2026-08-25T01:21:29.048Z",
+          "payload": {
+            "to": "deferred",
+            "from": "open",
+            "reason": "This is the approved 20% convergence stream over activation, setup progress, environment vocabulary, and JSON projection, intentionally sequenced before UI migration.",
+            "outcome": "defer",
+            "deferral": {
+              "reason": "This is the approved 20% convergence stream over activation, setup progress, environment vocabulary, and JSON projection, intentionally sequenced before UI migration.",
+              "trigger": "Resume after the P1 compiler contract is stable; fund the bounded refactor as its own PR with parity tests, rollback adapter, and measured deletion of duplicate orchestration.",
+              "reviewAt": "2026-09-22T20:00:00.000Z"
+            },
+            "rationale": "Valid, architecture-approved program demand, but the canonical plan requires independently shippable, ordered slices. The pre-reinstall drain must preserve those boundaries rather than collapse the program into one unsafe PR.",
+            "duplicateOfId": null
+          }
+        }
+      ],
       "effortSize": "large",
-      "triageOutcome": "build",
+      "triageOutcome": "defer",
       "scopeRationale": "DPF platform installation-to-ecosystem-productivity program.",
       "createdAt": "2026-08-22T04:02:37.414Z"
+    },
+    {
+      "itemId": "BI-54F7B1E0",
+      "epicId": "EP-1FABA22D",
+      "title": "Latent fail-open in the stance resolver: resolveInstanceStance defaults holdsIrreplaceableWork to false, so a caller that omits it is told teardown is permitted",
+      "body": "## Latent, not live — recorded for defence in depth\n\nSeverity is **low today** and the item is filed because it is the same defect class as\n`BI-9CE1A6C8`, in the same call path, one character from being wrong again.\n\n`packages/db/src/installation-instance-stance.ts:220`:\n\n```ts\nexport function resolveInstanceStance(\n  snapshot: InstallationOperatingProfileSnapshot,\n  host: InstanceStanceHostFacts,\n  options: { holdsIrreplaceableWork?: boolean } = {},\n): InstanceStanceProfile {\n  const holdsIrreplaceableWork = options.holdsIrreplaceableWork ?? false;\n```\n\n`false` means \"this installation holds nothing that exists only here\", which resolves teardown to\n**permitted**. A caller that forgets the option is therefore told teardown is routine.\n\n## Why it is not live\n\nBoth production callers pass it:\n\n- `apps/web/lib/install/instance-stance.ts:206` — the composer used by the workspace panel and\n  the MCP handshake\n- `apps/web/lib/installation-journey/identity-change-impact.ts:136`\n\nOnly the test helper omits it. So nothing today reaches the permissive default.\n\n## Why it is still worth changing\n\nThe two halves of this feature disagree about which way to fail. The composer states its contract\nexplicitly at the top of `apps/web/lib/install/instance-stance.ts`:\n\n> \"Every read fails open to the *most cautious* answer. An installation that cannot prove it is\n> disposable is treated as production.\"\n\nThe resolver it delegates to does the opposite for the one input that governs a destructive\naction. `BI-9CE1A6C8` has just demonstrated what happens when this particular signal is wrong in\nthe permissive direction — the operator and every AI coworker are told teardown is routine over\nwork that exists nowhere else.\n\nA future caller — a new surface, a CLI, an agent tool — that composes a stance without wiring the\ncapture check gets the dangerous answer silently, with no type error and no test failure.\n\n## Suggested change\n\nDefault to the cautious answer:\n\n```ts\nconst holdsIrreplaceableWork = options.holdsIrreplaceableWork ?? true;\n```\n\nAn installation that cannot prove its work is captured is treated as holding uncaptured work,\nmatching the composer's stated contract and this module's own framing that *\"a permissive stance\nis the absence of an extra brake\"* — a brake should not be removed by omission.\n\nThe test helper at `packages/db/src/installation-instance-stance.test.ts:47` will need to pass\n`false` explicitly where it is asserting the permitted path, which is the right shape: a test\nthat wants the permissive answer should have to ask for it.\n\nWorth pairing with a small assertion that every production caller supplies the option, so the\ndefault is genuinely unreachable rather than merely unused.\n\nFollow-up to BI-9CE1A6C8 / PR #4678. Found during dogfood reset cycle 4 while checking whether\nthat defect class appeared elsewhere.",
+      "status": "triaging",
+      "type": "portfolio",
+      "workType": "bug",
+      "source": "automated-detection",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-54f7b1e0-cmt9kbclk05wz01qvp4x0ei8b",
+          "kind": "epic_link",
+          "summary": "(no epic) → EP-1FABA22D",
+          "recordedAt": "2026-08-26T03:56:55.304Z",
+          "payload": {
+            "toEpicId": "EP-1FABA22D",
+            "fromEpicId": null
+          }
+        }
+      ],
+      "createdAt": "2026-08-26T03:18:50.742Z"
+    },
+    {
+      "itemId": "BI-5C203662",
+      "epicId": "EP-1FABA22D",
+      "title": "Publish current customer hardware profiles and available-machine guidance",
+      "body": "## Problem\n\nDPF's public site contains a brief hardware table that no longer reflects measured local-inference memory behavior, the separation between customer operations and contributor development, current NVIDIA systems, or Apple unified-memory options. Prospective customers cannot translate deployment choice into a purchasable machine.\n\n## Scope\n\nIn:\n- Research currently available Windows/NVIDIA workstations and Apple unified-memory systems suitable for DPF.\n- Publish dated customer hardware profiles for provider-assisted and local-first deployment.\n- Separate day-to-day operational sizing from contributor/development sizing.\n- Explain unified memory versus discrete VRAM and the effect on context, concurrency, speech, and model choice.\n- Add the guide to the public-site navigation or pre-install path.\n\nOut:\n- Vendor sponsorship or exclusive endorsement.\n- A continuously scraped price catalog.\n- Making Build Studio or coding-model capacity a customer requirement.\n- Changing runtime detection or installer behavior.\n\n## Acceptance criteria\n\n- [ ] Public guidance names at least two currently orderable representative machines for each relevant local-first hardware family where the market offers them.\n- [ ] Every volatile price/configuration claim is dated and linked to a primary manufacturer source.\n- [ ] Provider-assisted, local-first operational, and contributor/development profiles are visibly distinct.\n- [ ] The guide explains why system RAM remains necessary with discrete VRAM and how Apple unified memory differs.\n- [ ] The recommended operational model posture prioritizes tool use and excludes coding from the customer baseline.\n- [ ] Public-site entry points link to the new guidance and all documentation checks pass.\n\nDependencies: independent; extends the existing purpose-aware installation and public documentation surfaces.",
+      "status": "open",
+      "type": "product",
+      "workType": "doc",
+      "source": "user-request",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [],
+      "effortSize": "medium",
+      "triageOutcome": "build",
+      "scopeRationale": "Public pre-install guidance for all DPF customers choosing provider-assisted, NVIDIA local-first, or Apple unified-memory hardware.",
+      "createdAt": "2026-08-24T15:33:50.533Z"
+    },
+    {
+      "itemId": "BI-6052C2C2",
+      "epicId": "EP-1FABA22D",
+      "title": "Peer auto-discovery is built but inert: no Edge Node, so pairing falls back to typed URLs and copied tokens",
+      "body": "Reported by the founder 2026-08-25: \"This is currently requiring clunky copying of tokens and pasting them in, with URLs manually typed... when we have a built in discovery system, why can't we discover other instances automatically?\"\n\nThe founder is right that the capability exists. It is specced, built, and switched off.\n\nWHAT IS ALREADY BUILT:\n- mDNS/DNS-SD advertise + browse on `_dpf-federation._tcp.local.` — `services/edge-node-go/internal/federation/zeroconf.go` and `discovery.go`.\n- Nearby candidates, pairing service, rate limiting — `apps/web/lib/federation/nearby-candidates.ts`, `nearby-pairing-service.ts`, `nearby-pairing-rate-limit.ts`.\n- SAS pairing state — migration `20260808200000_federation_sas_pairing_state`.\n- Portal UI that lists nearby installs and drives start/approve/confirm/deny — `FederationLinksAdminClient.tsx` (`selectNearbyCandidate`, `startNearbyPairingAction`, `confirmNearbyPairingAction`, nearby discovery health with an enable/pause control).\n- Stable cryptographic device identity — `apps/web/lib/federation/instance-identity.ts`.\n- Evidence-gated same-organization AUTO-ENROLMENT (no human approval) — `packages/db/src/organization-federation-enrollment.ts`, per binding spec `docs/superpowers/specs/2026-08-23-zero-touch-organization-federation-design.md`.\n\nWHY IT DOES NOTHING HERE (live evidence, this install, 2026-08-25):\n- `select count(*) from \"EdgeNode\"` = 0. `EdgeNodeCapability` = 0 rows.\n- `docker compose ps` shows dev-postgres, inngest, portal, postgres, redis, sandbox, sandbox-postgres. There is no edge node service in the running project; `docker-compose.edge.yml` is present on disk but not composed in.\n- `FederationLink` = 0, `FederationPairingSession` = 0, `FederationIntroductionCandidate` = 0.\n- `PlatformConfig` has no `federation.identity` row, so this install has never even minted its device ID.\n\nmDNS discovery lives in the Edge Node. With no Edge Node there are no nearby candidates, the portal shows the empty state, and the only path left is the manual invitation/paste-URL recovery flow the founder hit. `docs/superpowers/specs/2026-08-06-federation-zero-shell-autodiscovery-increment.md` §3.7 already called this out as an observed gap (\"every install's Edge Node must carry `federation.discovery` by default\"); the gap is now total rather than partial.\n\nEXPECTED (the spec's own \"plumber test\", §2 of the same doc): two installs on one LAN see each other with zero typing, the operator taps Connect, both screens show the same 6-digit SAS code, and a same-organization link auto-enrols from the shared organization CA root with no approval ritual.\n\nNOTE ON THE OTHER DISCOVERY SYSTEM: the founder may be thinking of Estate Discovery (`configure_and_test_discovery_connection`, ARP/UniFi/SNMP network scan). That is a different subsystem — it inventories network devices, not DPF peers. Worth deciding whether an ARP/UniFi sweep should feed federation candidates as a fallback where mDNS is blocked, but it is not the primary path.\n\nScope: provision and start the Edge Node with `federation.discovery` by default on every install; mint `federation.identity` at install rather than lazily on first federation read; verify the nearby -> SAS -> auto-enrol path end to end against a second install.",
+      "status": "open",
+      "type": "product",
+      "workType": "bug",
+      "source": "user-request",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [],
+      "effortSize": "medium",
+      "triageOutcome": "build",
+      "scopeRationale": "Installation-to-installation discovery and pairing is universal platform substrate for dev pairs, MSP fleets and channel topologies.",
+      "createdAt": "2026-08-25T22:46:07.226Z"
+    },
+    {
+      "itemId": "BI-649C1F7E",
+      "epicId": "EP-1FABA22D",
+      "title": "Consumer-install AGENTS.md never tells an agent to read the source rulebook",
+      "body": "## Defect\n\n`config/consumer-install/agent-pointer.md` ships byte-identical as `AGENTS.md` to every consumer install. It says:\n\n> For code changes, use a separate DPF source checkout and governed worktree.\n\nIt never says that the source checkout's own `AGENTS.md` is the canonical operating contract, must be read in full, and **will not load automatically** from an install-anchored session.\n\n## Why that gap is load-bearing\n\nAgent clients auto-load `CLAUDE.md` from the working-directory tree. Verified on this host 2026-08-23:\n\n- `D:\\DPF\\CLAUDE.md` — does not exist.\n- `D:\\DPF\\AGENTS.md` — the 490-byte shipped pointer above.\n- `D:\\DPF-source-root\\AGENTS.md` — the real ~24KB rulebook, §1–§12.\n- `D:\\DPF-source-root\\CLAUDE.md` — `@AGENTS.md`, the import that would load it, **outside the install's tree**.\n\nSo a session anchored to an install has the contract absent from context, and nothing signals the absence. The install pointer is the one surface positioned to close it, and it is silent.\n\n## Observed cost\n\nAn external coding agent worked a full feature (PR #4483) without ever loading the rulebook, producing three separate violations from that single omission:\n\n1. §3 \"All changes land via PR against `main`\" — opened a PR stacked on a feature branch. `ci.yml` is `pull_request: branches: [main]`, so ~30 checks never ran while `mergeStateStatus` still read `CLEAN`.\n2. §4.2 \"Production build — `pnpm --filter web build`. TypeScript errors surface only here, not in `vitest` or IDE checks\" — skipped, and shipped exactly that: `node:fs/promises` in the client bundle, invisible to typecheck and 24,321 passing unit tests.\n3. §12 \"route work-scope decisions through `principle_decide`; 'Option 1/2/3, you pick' without a ledger is the anti-pattern\" — put a cost tradeoff to the founder as a menu that §3 and §4 already answered.\n\n## Proposed fix\n\nExtend the shipped pointer to name the source rulebook as required reading and state that it does not auto-load. Pointer only — no rule text copied into the install, so `single-source-of-truth` holds.\n\n## Constraints\n\n- `plan-before-install-paths` (ring-4): this is a shared template that ripples to every install — design spec before code.\n- `single-source-of-truth` (commandment): pointer, never a copy.\n- Scope decision routed through `principle_decide` → `full-spec-then-fix`, high confidence, margin 1.225, ledger `DI-DD513E6FD1F9`.",
+      "status": "triaging",
+      "type": "portfolio",
+      "workType": "doc",
+      "source": "automated-detection",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [],
+      "scopeRationale": "config/consumer-install/agent-pointer.md ships byte-identical as AGENTS.md to every install, so the defect and the fix are platform-wide, not archetype-specific.",
+      "createdAt": "2026-08-26T02:51:12.389Z"
     },
     {
       "itemId": "BI-669D2B04",
       "epicId": "EP-1FABA22D",
       "title": "Add Hive participation, drift repair, and profile productivity metrics",
-      "body": "## Outcome\nAfter first value, the installation proves an appropriate learning/participation loop, detects readiness drift, and measures time-to-value by confirmed profile.\n\n## Acceptance\n- Contributions reuse existing review, egress, dispatch, result-store, and Hive boundaries.\n- Sensitive or non-generalizable findings remain explicitly local-only.\n- Evidence drift creates one bounded, actionable repair without resetting onboarding.\n- Reconciliation is idempotent and bounded.\n- Metrics preserve facets and contain no secrets, raw business values, or peer tokens.\n\nBlocked by: BI-3E99ACFA.\nPlan §11: docs/superpowers/plans/2026-08-08-purpose-aware-installation-ecosystem-productivity.md",
+      "body": "## Outcome\r\nAfter first value, the installation proves an appropriate learning/participation loop, detects readiness drift, and measures time-to-value by confirmed profile.\r\n\r\n## Acceptance\r\n- Contributions reuse existing review, egress, dispatch, result-store, and Hive boundaries.\r\n- Sensitive or non-generalizable findings remain explicitly local-only.\r\n- Evidence drift creates one bounded, actionable repair without resetting onboarding.\r\n- Reconciliation is idempotent and bounded.\r\n- Metrics preserve facets and contain no secrets, raw business values, or peer tokens.\r\n\r\nBlocked by: BI-3E99ACFA.\r\nPlan §11: docs/superpowers/plans/2026-08-08-purpose-aware-installation-ecosystem-productivity.md",
+      "status": "deferred",
+      "type": "product",
+      "workType": "feature",
+      "source": "user-request",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-669d2b04-cmt7zbm4t0fa301mg5uk4m9mx",
+          "kind": "status_change",
+          "summary": "Retired BI-669D2B04 as defer",
+          "recordedAt": "2026-08-25T01:21:29.549Z",
+          "payload": {
+            "to": "deferred",
+            "from": "open",
+            "reason": "Hive participation, drift repair, and productivity telemetry are the final program slice and depend on proven first-value evidence and stable profile semantics.",
+            "outcome": "defer",
+            "deferral": {
+              "reason": "Hive participation, drift repair, and productivity telemetry are the final program slice and depend on proven first-value evidence and stable profile semantics.",
+              "trigger": "Resume after P4 is live; fund P5 with egress/review boundaries, local-only handling, bounded idempotent repair, privacy-safe metrics, and rollback.",
+              "reviewAt": "2026-09-22T20:00:00.000Z"
+            },
+            "rationale": "Valid, architecture-approved program demand, but the canonical plan requires independently shippable, ordered slices. The pre-reinstall drain must preserve those boundaries rather than collapse the program into one unsafe PR.",
+            "duplicateOfId": null
+          }
+        }
+      ],
+      "effortSize": "large",
+      "triageOutcome": "defer",
+      "scopeRationale": "DPF platform installation-to-ecosystem-productivity program.",
+      "createdAt": "2026-08-22T04:02:38.173Z"
+    },
+    {
+      "itemId": "BI-7626A660",
+      "epicId": "EP-1FABA22D",
+      "title": "Demote installation identity from the workspace front page to a header badge",
+      "body": "Reported by the founder 2026-08-25 with a screenshot of `/workspace`.\n\nEXPECTED: a non-production installation shows a few-word indicator on the header line next to the logo (e.g. `DEV`, ideally `<install name> DEV`). A production installation shows nothing. Full identity detail, stances and the change form live on an operations page, reachable but not on arrival.\n\nACTUAL: `apps/web/app/(shell)/workspace/page.tsx` renders `InstallationIdentityPanel` as the FIRST element of the workspace home for anyone with `manage_platform`. The panel occupies roughly the top third of the first viewport: an h2 \"What this installation is\", a subtitle, a confirmation badge, the headline sentence, an h3 \"What agents may do here\", five stance cards with rationales, a brake disclaimer, and a disclosure card for changing identity. The operator's actual work (cockpit, twin hero) is pushed below it.\n\nTwo further defects fall out of the same reading:\n1. There is no installation NAME anywhere. `PlatformConfig` on the live install holds `installation.environment-class.v1` and `installation.operating-intent.v1`, and neither carries a name; `pairedProductionInstallationRef` is free text naming the OTHER install. The operator's intended name (an org label plus an environment class, e.g. \"<Org> DEV\") cannot be rendered because the first half of it does not exist as a concept. The host name is not it either (the machine hostname is not an installation name).\n2. The badge must be derived from the SAME environment-class precedence chain the panel uses (`loadEnvironmentClassResolution`: process override -> installer state -> portal projection -> default), never re-derived in the header, or the header and the ops page can disagree.\n\nSCOPE NOTE: the header is a `\"use client\"` component, so the badge value must arrive as a prop resolved on the server. Importing the resolver into `Header.tsx` drags `node:fs/promises` into the client chunk - the exact failure documented at the top of `apps/web/lib/installation-journey/identity-presentation.ts`.\n\nFiles: `apps/web/app/(shell)/workspace/page.tsx:96`, `apps/web/components/workspace/InstallationIdentityPanel.tsx`, `apps/web/components/shell/Header.tsx:100`, `apps/web/lib/installation-journey/installation-identity-view.ts`.",
+      "status": "triaging",
+      "type": "product",
+      "workType": "bug",
+      "source": "user-request",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-7626a660-cmt99jhp600j601p7pmk7zwo6",
+          "kind": "initiative_readiness_decision",
+          "summary": "implementation readiness: input-required",
+          "recordedAt": "2026-08-25T22:55:19.386Z",
+          "payload": {
+            "unmet": [
+              {
+                "code": "RESEARCH_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-author"
+              },
+              {
+                "code": "PLAN_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "implementation-planner"
+              }
+            ],
+            "target": "implementation",
+            "profile": "fix",
+            "subject": {
+              "id": "BI-7626A660",
+              "kind": "backlog-item"
+            },
+            "verdict": "input-required",
+            "blockers": [],
+            "authority": {
+              "actionKey": "claim_backlog_item_for_work",
+              "enforcementState": "enforced"
+            },
+            "satisfied": [
+              {
+                "code": "CLASSIFICATION_REQUIRED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "product-owner"
+              },
+              {
+                "code": "AUTHORIZATION_DENIED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "platform-governance"
+              },
+              {
+                "code": "DEPENDENCY_UNRESOLVED",
+                "state": "not-applicable",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              },
+              {
+                "code": "CAPSULE_IDENTITY_MISMATCH",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "delivery-coordinator"
+              }
+            ],
+            "decisionId": "IRD-9E937A47B543",
+            "workIntent": "implementation",
+            "evaluatedAt": "2026-08-25T22:55:19.362Z",
+            "factsDigest": "0910934a5a8ad4c6ed8a6902faed3b36203e90739af5b50773b72ece38e77c48",
+            "stableCodes": {
+              "unmet": [
+                "RESEARCH_REQUIRED",
+                "PLAN_REQUIRED"
+              ],
+              "blockers": [],
+              "satisfied": [
+                "CLASSIFICATION_REQUIRED",
+                "AUTHORIZATION_DENIED",
+                "DEPENDENCY_UNRESOLVED",
+                "CAPSULE_IDENTITY_MISMATCH"
+              ]
+            },
+            "policyVersion": "initiative-readiness.v2",
+            "schemaVersion": 1,
+            "transitionObject": {
+              "id": "OpenDigitalProductFactory/opendigitalproductfactory#feat/installation-estate-identity-header-badge-mcp-se",
+              "kind": "work-capsule",
+              "targetState": "implementation",
+              "expectedVersion": "claim.v1"
+            }
+          }
+        },
+        {
+          "recoveryKey": "bi-7626a660-cmt99jnz000jc01p797vygn4r",
+          "kind": "initiative_readiness_decision",
+          "summary": "design readiness: allowed",
+          "recordedAt": "2026-08-25T22:55:27.516Z",
+          "payload": {
+            "unmet": [],
+            "target": "design",
+            "profile": "fix",
+            "subject": {
+              "id": "BI-7626A660",
+              "kind": "backlog-item"
+            },
+            "verdict": "allowed",
+            "blockers": [],
+            "authority": {
+              "actionKey": "claim_backlog_item_for_work",
+              "enforcementState": "enforced"
+            },
+            "satisfied": [
+              {
+                "code": "CLASSIFICATION_REQUIRED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "product-owner"
+              },
+              {
+                "code": "AUTHORIZATION_DENIED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "platform-governance"
+              }
+            ],
+            "decisionId": "IRD-390269C5B098",
+            "workIntent": "design",
+            "evaluatedAt": "2026-08-25T22:55:27.496Z",
+            "factsDigest": "0116437213f9e7fd34ec7ebabcaab4c9a535650d182586c63e057d537b7755b2",
+            "stableCodes": {
+              "unmet": [],
+              "blockers": [],
+              "satisfied": [
+                "CLASSIFICATION_REQUIRED",
+                "AUTHORIZATION_DENIED"
+              ]
+            },
+            "policyVersion": "initiative-readiness.v2",
+            "schemaVersion": 1,
+            "transitionObject": {
+              "id": "OpenDigitalProductFactory/opendigitalproductfactory#feat/installation-estate-identity-header-badge-mcp-se",
+              "kind": "work-capsule",
+              "targetState": "design",
+              "expectedVersion": "claim.v1"
+            }
+          }
+        },
+        {
+          "recoveryKey": "bi-7626a660-cmt99t3uq00kq01p7bqqicmne",
+          "kind": "initiative_readiness_decision",
+          "summary": "implementation readiness: input-required",
+          "recordedAt": "2026-08-25T23:02:48.002Z",
+          "payload": {
+            "unmet": [
+              {
+                "code": "RESEARCH_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-author"
+              },
+              {
+                "code": "PLAN_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "implementation-planner"
+              }
+            ],
+            "target": "implementation",
+            "profile": "fix",
+            "subject": {
+              "id": "BI-7626A660",
+              "kind": "backlog-item"
+            },
+            "verdict": "input-required",
+            "blockers": [],
+            "authority": {
+              "actionKey": "claim_backlog_item_for_work",
+              "enforcementState": "enforced"
+            },
+            "satisfied": [
+              {
+                "code": "CLASSIFICATION_REQUIRED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "product-owner"
+              },
+              {
+                "code": "AUTHORIZATION_DENIED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "platform-governance"
+              },
+              {
+                "code": "DEPENDENCY_UNRESOLVED",
+                "state": "not-applicable",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              },
+              {
+                "code": "CAPSULE_IDENTITY_MISMATCH",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "delivery-coordinator"
+              }
+            ],
+            "decisionId": "IRD-5A85CC5633D1",
+            "workIntent": "implementation",
+            "evaluatedAt": "2026-08-25T23:02:47.995Z",
+            "factsDigest": "0910934a5a8ad4c6ed8a6902faed3b36203e90739af5b50773b72ece38e77c48",
+            "stableCodes": {
+              "unmet": [
+                "RESEARCH_REQUIRED",
+                "PLAN_REQUIRED"
+              ],
+              "blockers": [],
+              "satisfied": [
+                "CLASSIFICATION_REQUIRED",
+                "AUTHORIZATION_DENIED",
+                "DEPENDENCY_UNRESOLVED",
+                "CAPSULE_IDENTITY_MISMATCH"
+              ]
+            },
+            "policyVersion": "initiative-readiness.v2",
+            "schemaVersion": 1,
+            "transitionObject": {
+              "id": "OpenDigitalProductFactory/opendigitalproductfactory#feat/installation-estate-identity-header-badge-mcp-se",
+              "kind": "work-capsule",
+              "targetState": "implementation",
+              "expectedVersion": "claim.v1"
+            }
+          }
+        },
+        {
+          "recoveryKey": "bi-7626a660-cmt99v84100ls01p7xv4nb7hn",
+          "kind": "initiative_readiness_decision",
+          "summary": "implementation readiness: input-required",
+          "recordedAt": "2026-08-25T23:04:26.833Z",
+          "payload": {
+            "unmet": [
+              {
+                "code": "RESEARCH_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-author"
+              },
+              {
+                "code": "PLAN_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "implementation-planner"
+              }
+            ],
+            "target": "implementation",
+            "profile": "fix",
+            "subject": {
+              "id": "BI-7626A660",
+              "kind": "backlog-item"
+            },
+            "verdict": "input-required",
+            "blockers": [],
+            "authority": {
+              "actionKey": "claim_backlog_item_for_work",
+              "enforcementState": "enforced"
+            },
+            "satisfied": [
+              {
+                "code": "CLASSIFICATION_REQUIRED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "product-owner"
+              },
+              {
+                "code": "AUTHORIZATION_DENIED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "platform-governance"
+              },
+              {
+                "code": "DEPENDENCY_UNRESOLVED",
+                "state": "not-applicable",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              },
+              {
+                "code": "CAPSULE_IDENTITY_MISMATCH",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "delivery-coordinator"
+              }
+            ],
+            "decisionId": "IRD-00D1A641019E",
+            "workIntent": "implementation",
+            "evaluatedAt": "2026-08-25T23:04:26.828Z",
+            "factsDigest": "0910934a5a8ad4c6ed8a6902faed3b36203e90739af5b50773b72ece38e77c48",
+            "stableCodes": {
+              "unmet": [
+                "RESEARCH_REQUIRED",
+                "PLAN_REQUIRED"
+              ],
+              "blockers": [],
+              "satisfied": [
+                "CLASSIFICATION_REQUIRED",
+                "AUTHORIZATION_DENIED",
+                "DEPENDENCY_UNRESOLVED",
+                "CAPSULE_IDENTITY_MISMATCH"
+              ]
+            },
+            "policyVersion": "initiative-readiness.v2",
+            "schemaVersion": 1,
+            "transitionObject": {
+              "id": "OpenDigitalProductFactory/opendigitalproductfactory#feat/installation-estate-identity-header-badge-mcp-se",
+              "kind": "work-capsule",
+              "targetState": "implementation",
+              "expectedVersion": "claim.v1"
+            }
+          }
+        },
+        {
+          "recoveryKey": "bi-7626a660-cmt9ahkb100qy01p7ueaoaeyw",
+          "kind": "initiative_readiness_decision",
+          "summary": "implementation readiness: input-required",
+          "recordedAt": "2026-08-25T23:21:49.069Z",
+          "payload": {
+            "unmet": [
+              {
+                "code": "RESEARCH_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-author"
+              },
+              {
+                "code": "PLAN_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "implementation-planner"
+              }
+            ],
+            "target": "implementation",
+            "profile": "fix",
+            "subject": {
+              "id": "BI-7626A660",
+              "kind": "backlog-item"
+            },
+            "verdict": "input-required",
+            "blockers": [],
+            "authority": {
+              "actionKey": "claim_backlog_item_for_work",
+              "enforcementState": "enforced"
+            },
+            "satisfied": [
+              {
+                "code": "CLASSIFICATION_REQUIRED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "product-owner"
+              },
+              {
+                "code": "AUTHORIZATION_DENIED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "platform-governance"
+              },
+              {
+                "code": "DEPENDENCY_UNRESOLVED",
+                "state": "not-applicable",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              },
+              {
+                "code": "CAPSULE_IDENTITY_MISMATCH",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "delivery-coordinator"
+              }
+            ],
+            "decisionId": "IRD-96A3E8D81770",
+            "workIntent": "implementation",
+            "evaluatedAt": "2026-08-25T23:21:49.060Z",
+            "factsDigest": "0910934a5a8ad4c6ed8a6902faed3b36203e90739af5b50773b72ece38e77c48",
+            "stableCodes": {
+              "unmet": [
+                "RESEARCH_REQUIRED",
+                "PLAN_REQUIRED"
+              ],
+              "blockers": [],
+              "satisfied": [
+                "CLASSIFICATION_REQUIRED",
+                "AUTHORIZATION_DENIED",
+                "DEPENDENCY_UNRESOLVED",
+                "CAPSULE_IDENTITY_MISMATCH"
+              ]
+            },
+            "policyVersion": "initiative-readiness.v2",
+            "schemaVersion": 1,
+            "transitionObject": {
+              "id": "OpenDigitalProductFactory/opendigitalproductfactory#feat/installation-estate-identity-header-badge-mcp-se",
+              "kind": "work-capsule",
+              "targetState": "implementation",
+              "expectedVersion": "claim.v1"
+            }
+          }
+        },
+        {
+          "recoveryKey": "bi-7626a660-cmt9ai0mu00ra01p7qqxynulg",
+          "kind": "initiative_readiness_decision",
+          "summary": "implementation readiness: input-required",
+          "recordedAt": "2026-08-25T23:22:10.230Z",
+          "payload": {
+            "unmet": [
+              {
+                "code": "RESEARCH_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-author"
+              },
+              {
+                "code": "PLAN_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "implementation-planner"
+              }
+            ],
+            "target": "implementation",
+            "profile": "fix",
+            "subject": {
+              "id": "BI-7626A660",
+              "kind": "backlog-item"
+            },
+            "verdict": "input-required",
+            "blockers": [],
+            "authority": {
+              "actionKey": "claim_backlog_item_for_work",
+              "enforcementState": "enforced"
+            },
+            "satisfied": [
+              {
+                "code": "CLASSIFICATION_REQUIRED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "product-owner"
+              },
+              {
+                "code": "AUTHORIZATION_DENIED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "platform-governance"
+              },
+              {
+                "code": "DEPENDENCY_UNRESOLVED",
+                "state": "not-applicable",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              },
+              {
+                "code": "CAPSULE_IDENTITY_MISMATCH",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "delivery-coordinator"
+              }
+            ],
+            "decisionId": "IRD-E707D0369C23",
+            "workIntent": "implementation",
+            "evaluatedAt": "2026-08-25T23:22:10.224Z",
+            "factsDigest": "0910934a5a8ad4c6ed8a6902faed3b36203e90739af5b50773b72ece38e77c48",
+            "stableCodes": {
+              "unmet": [
+                "RESEARCH_REQUIRED",
+                "PLAN_REQUIRED"
+              ],
+              "blockers": [],
+              "satisfied": [
+                "CLASSIFICATION_REQUIRED",
+                "AUTHORIZATION_DENIED",
+                "DEPENDENCY_UNRESOLVED",
+                "CAPSULE_IDENTITY_MISMATCH"
+              ]
+            },
+            "policyVersion": "initiative-readiness.v2",
+            "schemaVersion": 1,
+            "transitionObject": {
+              "id": "OpenDigitalProductFactory/opendigitalproductfactory#feat/installation-estate-identity-header-badge-mcp-se",
+              "kind": "work-capsule",
+              "targetState": "implementation",
+              "expectedVersion": "claim.v1"
+            }
+          }
+        }
+      ],
+      "scopeRationale": "Workspace shell chrome and installation identity presentation apply to every install and archetype.",
+      "createdAt": "2026-08-25T22:45:27.176Z"
+    },
+    {
+      "itemId": "BI-80BECE1E",
+      "epicId": "EP-1FABA22D",
+      "title": "Project Workroom definition and occurrence identity through the existing adapter",
+      "body": "## Problem\n\nThe architecture now distinguishes reusable Workroom definitions from actual Workroom instances, but the runtime adapters still present coding-capsule identity as though it were the whole Workroom. Consumers cannot reliably trace an instance to the exact definition projection or distinguish business context from development-only evidence.\n\n## Scope\n\nRefactor one existing Workroom projection path so its compact summary carries definition identity/version and occurrence trace, with deeper governance and development evidence available through progressive disclosure. Reuse WorkUnitDefinition, WorkOccurrence, WorkCase, source-registry, cycle, evidence, and current Workroom records.\n\nOut of scope: new Prisma models or migrations; a second room/template/occurrence API; new top-level routes; the broader portable Work Packet, lease, dependency, conflict, and multi-agent program in BI-D4C110BC.\n\n## Acceptance criteria\n\n- A canonical adapter returns a stable definition reference with identity and version plus an instance occurrence trace.\n- Business instances can omit repository, worktree, PR, commit, and CI evidence without losing definition/occurrence identity.\n- Development evidence remains available in the same projection but is excluded from the default compact view.\n- Progressive disclosure is explicit and tested: compact reads omit detailed execution/governance evidence; an explicit detail request reveals it.\n- Existing Workroom consumers use the consolidated adapter rather than adding another route, page, or parallel API.\n- Targeted contract tests fail before the adapter change and pass afterward.\n- Architecture documentation points to the implemented adapter without duplicating its contract.\n\n## Dependencies\n\nImplements the first independently shippable slice of BI-D4C110BC. It does not complete that umbrella.",
       "status": "open",
       "type": "product",
       "workType": "feature",
@@ -155,54 +887,738 @@
       "externalDependencies": [],
       "activities": [
         {
-          "recoveryKey": "bi-669d2b04-cmt3uralb0h4d01pep6r76un8",
-          "kind": "intake_origin",
-          "summary": "Possible existing implementation: packages/db/prisma/migrations/20260720190000_repair_collation_drift_index_rebuild/migration.sql",
-          "recordedAt": "2026-08-22T04:02:38.303Z",
+          "recoveryKey": "bi-80bece1e-cmt818a0a0gfp01mgcypnvbjq",
+          "kind": "initiative_readiness_decision",
+          "summary": "implementation readiness: input-required",
+          "recordedAt": "2026-08-25T02:14:53.098Z",
           "payload": {
-            "advisory": true,
-            "createdBy": "implementation-scan",
-            "candidates": [
+            "unmet": [
               {
-                "path": "packages/db/prisma/migrations/20260720190000_repair_collation_drift_index_rebuild/migration.sql",
-                "score": 3,
-                "matchedTerms": [
-                  "drift",
-                  "repair"
-                ]
+                "code": "CLASSIFICATION_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "product-owner"
+              }
+            ],
+            "target": "implementation",
+            "profile": "doc-only",
+            "subject": {
+              "id": "BI-80BECE1E",
+              "kind": "backlog-item"
+            },
+            "verdict": "input-required",
+            "blockers": [],
+            "authority": {
+              "actionKey": "claim_backlog_item_for_work",
+              "enforcementState": "enforced"
+            },
+            "satisfied": [
+              {
+                "code": "AUTHORIZATION_DENIED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "platform-governance"
+              }
+            ],
+            "decisionId": "IRD-BB63F38AFA88",
+            "workIntent": "implementation",
+            "evaluatedAt": "2026-08-25T02:14:53.085Z",
+            "factsDigest": "c54b17063fcfc8233d68f2a5bb454dcfa1c84db8bc051fe1e1fe5369a1b74d74",
+            "stableCodes": {
+              "unmet": [
+                "CLASSIFICATION_REQUIRED"
+              ],
+              "blockers": [],
+              "satisfied": [
+                "AUTHORIZATION_DENIED"
+              ]
+            },
+            "policyVersion": "initiative-readiness.v2",
+            "schemaVersion": 1,
+            "transitionObject": {
+              "id": "OpenDigitalProductFactory/opendigitalproductfactory#refactor/workroom-definition-projection",
+              "kind": "work-capsule",
+              "targetState": "implementation",
+              "expectedVersion": "claim.v1"
+            }
+          }
+        },
+        {
+          "recoveryKey": "bi-80bece1e-cmt818k740ggc01mgwnw1773m",
+          "kind": "demand_stage_transition",
+          "summary": "unclassified → raw",
+          "recordedAt": "2026-08-25T02:15:06.304Z",
+          "payload": {
+            "to": "raw",
+            "from": "unclassified",
+            "score": null,
+            "inputs": {},
+            "missing": [
+              "impact",
+              "confidence"
+            ],
+            "framework": "rice",
+            "rationale": null,
+            "confidence": null,
+            "provisional": false,
+            "evidenceCount": 0,
+            "estimateSource": null,
+            "effectiveJobSize": 3,
+            "investmentBucket": null
+          }
+        },
+        {
+          "recoveryKey": "bi-80bece1e-cmt818s050gha01mgn2adixm7",
+          "kind": "initiative_readiness_decision",
+          "summary": "implementation readiness: input-required",
+          "recordedAt": "2026-08-25T02:15:16.421Z",
+          "payload": {
+            "unmet": [
+              {
+                "code": "CLASSIFICATION_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "product-owner"
+              }
+            ],
+            "target": "implementation",
+            "profile": "doc-only",
+            "subject": {
+              "id": "BI-80BECE1E",
+              "kind": "backlog-item"
+            },
+            "verdict": "input-required",
+            "blockers": [],
+            "authority": {
+              "actionKey": "claim_backlog_item_for_work",
+              "enforcementState": "enforced"
+            },
+            "satisfied": [
+              {
+                "code": "AUTHORIZATION_DENIED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "platform-governance"
+              }
+            ],
+            "decisionId": "IRD-522C78774D40",
+            "workIntent": "implementation",
+            "evaluatedAt": "2026-08-25T02:15:16.413Z",
+            "factsDigest": "c54b17063fcfc8233d68f2a5bb454dcfa1c84db8bc051fe1e1fe5369a1b74d74",
+            "stableCodes": {
+              "unmet": [
+                "CLASSIFICATION_REQUIRED"
+              ],
+              "blockers": [],
+              "satisfied": [
+                "AUTHORIZATION_DENIED"
+              ]
+            },
+            "policyVersion": "initiative-readiness.v2",
+            "schemaVersion": 1,
+            "transitionObject": {
+              "id": "OpenDigitalProductFactory/opendigitalproductfactory#refactor/workroom-definition-projection",
+              "kind": "work-capsule",
+              "targetState": "implementation",
+              "expectedVersion": "claim.v1"
+            }
+          }
+        },
+        {
+          "recoveryKey": "bi-80bece1e-initiative-979da81f-0438-4977-94a9-7ad6a55a2416",
+          "kind": "initiative_gate_receipt",
+          "summary": "spec-approval: pass",
+          "recordedAt": "2026-08-25T08:20:24.232Z",
+          "payload": {
+            "gate": "spec-approval",
+            "reason": "Spec (BI-80BECE1E) states one objective, OBJ-WR-001, to distinguish reusable Workroom definitions from occurrences without development evidence or a parallel surface, and all five acceptance criteria trace to it. AC-WR-001/002 define the definition key/version and the WorkroomView definition+occurrence shape (tests); AC-WR-003 keeps development evidence optional with unknown definitions null (test); AC-WR-004 mandates progressive disclosure, overview default with Details revealing work, evidence, and raw refs (test); AC-WR-005 is a gate prohibiting any new schema, route, API, queue, or parallel registry, so the change reuses the existing Work Case projection and Workspace route. Each AC has an assigned evidence lane, scope is tightly bounded, and the design preserves architecture and UX fit. No critical or important findings.",
+            "subject": {
+              "id": "BI-80BECE1E",
+              "kind": "backlog-item"
+            },
+            "decision": "pass",
+            "receiptId": "initiative-979da81f-0438-4977-94a9-7ad6a55a2416",
+            "artifactRef": {
+              "kind": "repo-blob-at-commit",
+              "path": "docs/superpowers/specs/2026-08-24-workroom-definition-projection.md",
+              "commitSha": "b2787270722c7447b8ca74d2910a33c8d816fda3",
+              "providerBlobId": "069c07201f2191288d593f28753507c593b5f621",
+              "repositoryFullName": "OpenDigitalProductFactory/opendigitalproductfactory"
+            },
+            "findingRefs": [],
+            "policyVersion": "initiative-readiness.v1",
+            "schemaVersion": 1,
+            "artifactDigest": "sha256:9953616964a66a8c356e58d6f09d87cab727f3c54de33c1945e7cf67fab7afe5",
+            "artifactAuthorRef": "principal:cmt6ejt2909n76mnw1x58fqj1|agent:null",
+            "authoritySnapshot": {
+              "decision": "allow",
+              "actionKey": "record_initiative_design_review",
+              "policyVersion": "coworker-authority-v1",
+              "organizationId": "platform",
+              "effectiveAgentGrant": "initiative_design_review",
+              "effectiveHumanCapability": "manage_backlog"
+            },
+            "authorityDecisionId": "AUTH-2cbb47d2-3335-47de-9601-596a4d4384df",
+            "resolvedFindingRefs": []
+          }
+        },
+        {
+          "recoveryKey": "bi-80bece1e-initiative-00839ea1-4eac-4569-823d-7c597e349527",
+          "kind": "initiative_scope_baseline",
+          "summary": "Canonical initiative scope baseline baseline-c808c1c3-ca5b-4bc7-a240-e60fa2f8bd97",
+          "recordedAt": "2026-08-25T08:20:24.235Z",
+          "payload": {
+            "profile": "feature",
+            "subject": {
+              "id": "BI-80BECE1E",
+              "kind": "backlog-item"
+            },
+            "baselineId": "baseline-c808c1c3-ca5b-4bc7-a240-e60fa2f8bd97",
+            "artifactRef": {
+              "kind": "repo-blob-at-commit",
+              "path": "docs/superpowers/specs/2026-08-24-workroom-definition-projection.md",
+              "commitSha": "b2787270722c7447b8ca74d2910a33c8d816fda3",
+              "providerBlobId": "069c07201f2191288d593f28753507c593b5f621",
+              "repositoryFullName": "OpenDigitalProductFactory/opendigitalproductfactory"
+            },
+            "artifactRole": "design-spec",
+            "schemaVersion": 1,
+            "artifactDigest": "sha256:9953616964a66a8c356e58d6f09d87cab727f3c54de33c1945e7cf67fab7afe5",
+            "approvalReceiptId": "initiative-979da81f-0438-4977-94a9-7ad6a55a2416",
+            "authoritySnapshot": {
+              "decision": "allow",
+              "actionKey": "record_initiative_design_review",
+              "policyVersion": "coworker-authority-v1",
+              "organizationId": "platform",
+              "effectiveAgentGrant": "initiative_design_review",
+              "effectiveHumanCapability": "manage_backlog"
+            },
+            "objectiveStatements": [
+              {
+                "objectiveId": "OBJ-WR-001",
+                "artifactAnchor": "line:22",
+                "statementDigest": "sha256:0bde9bcb7c1491f2b431095c4dc149421e1d317b3b4355bcf47b757faa800070"
+              }
+            ],
+            "acceptanceStatements": [
+              {
+                "acceptanceId": "AC-WR-001",
+                "objectiveIds": [
+                  "OBJ-WR-001"
+                ],
+                "artifactAnchor": "line:28",
+                "statementDigest": "sha256:a53bcd4f374afcb3dc47fefb04b2d4b3ad7910db001bea43f6b5fbc98e6d93c0"
               },
               {
-                "path": "packages/db/prisma/migrations/20260721180000_repair_collation_drift_index_rebuild_reporting/migration.sql",
-                "score": 3,
-                "matchedTerms": [
-                  "drift",
-                  "repair"
-                ]
+                "acceptanceId": "AC-WR-002",
+                "objectiveIds": [
+                  "OBJ-WR-001"
+                ],
+                "artifactAnchor": "line:29",
+                "statementDigest": "sha256:3e20f091fbca499a44dfab3094acfd9863ca0a2c47f0dc65ceb93dd924d0450f"
+              },
+              {
+                "acceptanceId": "AC-WR-003",
+                "objectiveIds": [
+                  "OBJ-WR-001"
+                ],
+                "artifactAnchor": "line:30",
+                "statementDigest": "sha256:1e4a1ff09940ddb2d59b397b06e50624115561462f3cc1b932a33421187ee524"
+              },
+              {
+                "acceptanceId": "AC-WR-004",
+                "objectiveIds": [
+                  "OBJ-WR-001"
+                ],
+                "artifactAnchor": "line:31",
+                "statementDigest": "sha256:8abcdc71f0fbb9bd6b16394860f7f62b6816bb8c520cdbb7ebb17d15bbfb36b3"
+              },
+              {
+                "acceptanceId": "AC-WR-005",
+                "objectiveIds": [
+                  "OBJ-WR-001"
+                ],
+                "artifactAnchor": "line:32",
+                "statementDigest": "sha256:8c715b256eb41e3341feb4296238934e53b79ecf69f7d8f87ecde4fea2ebf540"
               }
-            ]
+            ],
+            "supersedesBaselineId": null,
+            "supersessionDispositions": []
+          }
+        },
+        {
+          "recoveryKey": "bi-80bece1e-cmt8evhbb0p4d01mg1ijx4m6x",
+          "kind": "plan_backlog_coverage",
+          "summary": "Plan coverage accepted as atomic with operator rationale.",
+          "recordedAt": "2026-08-25T08:36:50.663Z",
+          "payload": {
+            "decision": "atomic",
+            "planPath": "docs/superpowers/plans/2026-08-24-workroom-definition-projection.md",
+            "rationale": "One tightly scoped refactor of the existing Work Case/Workspace surface. All four deliverables are facets of a single independently valuable outcome and are intentionally not split into new routes, schemas, APIs, queues, or registries.",
+            "recordedAt": "2026-08-25T08:36:50.663Z",
+            "deliverables": [
+              {
+                "key": "D1-definition-registry",
+                "title": "Canonical reusable Workroom definition projection",
+                "flowRefs": [
+                  "source-registry -> definition lookup -> Workroom read model"
+                ],
+                "dependsOn": [],
+                "contractRefs": [
+                  "workroom-source-registry"
+                ],
+                "backlogItemId": "BI-80BECE1E",
+                "requirementRefs": [
+                  "OBJ-WR-001"
+                ],
+                "verificationRefs": [
+                  "AC-WR-001"
+                ],
+                "independentlyShippable": false
+              },
+              {
+                "key": "D2-occurrence-view",
+                "title": "Definition and occurrence trace in the existing Workroom read model",
+                "flowRefs": [
+                  "WorkCaseDetail -> buildWorkroomView -> WorkroomView"
+                ],
+                "dependsOn": [
+                  "D1-definition-registry"
+                ],
+                "contractRefs": [
+                  "WorkCaseDetail",
+                  "WorkroomView"
+                ],
+                "backlogItemId": "BI-80BECE1E",
+                "requirementRefs": [
+                  "OBJ-WR-001"
+                ],
+                "verificationRefs": [
+                  "AC-WR-002",
+                  "AC-WR-003"
+                ],
+                "independentlyShippable": false
+              },
+              {
+                "key": "D3-progressive-disclosure",
+                "title": "Business-first Overview and disclosed Details on the existing Workroom surface",
+                "flowRefs": [
+                  "WorkroomView -> WorkroomBody -> Overview/Details"
+                ],
+                "dependsOn": [
+                  "D2-occurrence-view"
+                ],
+                "contractRefs": [
+                  "WorkroomBody"
+                ],
+                "backlogItemId": "BI-80BECE1E",
+                "requirementRefs": [
+                  "OBJ-WR-001"
+                ],
+                "verificationRefs": [
+                  "AC-WR-004"
+                ],
+                "independentlyShippable": false
+              },
+              {
+                "key": "D4-conformance-evidence",
+                "title": "Architecture and UX conformance evidence for the consolidated surface",
+                "flowRefs": [
+                  "implementation -> architecture review -> served UX evidence"
+                ],
+                "dependsOn": [
+                  "D3-progressive-disclosure"
+                ],
+                "contractRefs": [
+                  "architecture-conformance",
+                  "ux-fit-manifest"
+                ],
+                "backlogItemId": "BI-80BECE1E",
+                "requirementRefs": [
+                  "OBJ-WR-001"
+                ],
+                "verificationRefs": [
+                  "AC-WR-005"
+                ],
+                "independentlyShippable": false
+              }
+            ],
+            "mappedItemIds": [],
+            "schemaVersion": 2,
+            "planArtifactRef": {
+              "kind": "repo-blob-at-commit",
+              "path": "docs/superpowers/plans/2026-08-24-workroom-definition-projection.md",
+              "commitSha": "268e65fcfada0b2a423193bcbcb3196f98936e52",
+              "providerBlobId": "a153007089d3a3c400ce12fa180fe81907129ba9",
+              "repositoryFullName": "OpenDigitalProductFactory/opendigitalproductfactory"
+            },
+            "scopeBaselineId": "baseline-c808c1c3-ca5b-4bc7-a240-e60fa2f8bd97",
+            "planArtifactDigest": "sha256:269add5afb47e67ba03dc8f98a1418fbdd6146c5c269943fccf47a88985015e4",
+            "scopeBaselineArtifactDigest": "sha256:9953616964a66a8c356e58d6f09d87cab727f3c54de33c1945e7cf67fab7afe5"
+          }
+        },
+        {
+          "recoveryKey": "bi-80bece1e-initiative-d6745970-6b25-4b9d-baa2-871a4cd0aa9e",
+          "kind": "initiative_gate_receipt",
+          "summary": "research: pass",
+          "recordedAt": "2026-08-25T08:45:15.576Z",
+          "payload": {
+            "gate": "research",
+            "reason": "The Research & Benchmarking section cites FPAW section 20's CMMN/PROV-O comparison and adopts their definition/occurrence and trace boundaries, grounding all three required claims: definition-vs-occurrence identity (explicit, enforced by AC-WR-001/002), optional development evidence (via the adopted trace boundary, AC-WR-003), and reuse of the existing surface (parallel agent task bus rejected; AC-WR-005 gate forbids new schema/route/API/queue/registry). Justification is concise and internally consistent.",
+            "subject": {
+              "id": "BI-80BECE1E",
+              "kind": "backlog-item"
+            },
+            "decision": "pass",
+            "receiptId": "initiative-d6745970-6b25-4b9d-baa2-871a4cd0aa9e",
+            "artifactRef": {
+              "kind": "repo-blob-at-commit",
+              "path": "docs/superpowers/specs/2026-08-24-workroom-definition-projection.md",
+              "commitSha": "268e65fcfada0b2a423193bcbcb3196f98936e52",
+              "providerBlobId": "069c07201f2191288d593f28753507c593b5f621",
+              "repositoryFullName": "OpenDigitalProductFactory/opendigitalproductfactory"
+            },
+            "findingRefs": [],
+            "policyVersion": "initiative-readiness.v1",
+            "schemaVersion": 1,
+            "artifactDigest": "sha256:9953616964a66a8c356e58d6f09d87cab727f3c54de33c1945e7cf67fab7afe5",
+            "artifactAuthorRef": "principal:cmt6ejt2909n76mnw1x58fqj1|agent:null",
+            "authoritySnapshot": {
+              "decision": "allow",
+              "actionKey": "record_initiative_evidence",
+              "policyVersion": "coworker-authority-v1",
+              "organizationId": "platform",
+              "effectiveAgentGrant": "initiative_evidence_write",
+              "effectiveHumanCapability": "manage_backlog"
+            },
+            "authorityDecisionId": "AUTH-aa8973f0-5c79-4ae0-b964-f99a2aafe963",
+            "resolvedFindingRefs": []
+          }
+        },
+        {
+          "recoveryKey": "bi-80bece1e-initiative-809b526c-fd61-472b-84f8-da8a0ed3e201",
+          "kind": "initiative_gate_receipt",
+          "summary": "architecture-review: pass",
+          "recordedAt": "2026-08-25T08:46:19.683Z",
+          "payload": {
+            "gate": "architecture-review",
+            "reason": "Spec (BI-80BECE1E) conforms to the canonical definition/instance boundary: AC-WR-001 keeps definition identity and positive version owned by the source registry; AC-WR-002 projects occurrence source, cycle, and carriers through the existing Work Case projection (read view, no new writer); AC-WR-005 gate-evidences that no schema, route, API, queue, or parallel registry is added; AC-WR-004 keeps progressive disclosure (Overview default, Details reveal) on the existing Workspace surface. No parallel authority is created; no findings.",
+            "subject": {
+              "id": "BI-80BECE1E",
+              "kind": "backlog-item"
+            },
+            "decision": "pass",
+            "receiptId": "initiative-809b526c-fd61-472b-84f8-da8a0ed3e201",
+            "artifactRef": {
+              "kind": "repo-blob-at-commit",
+              "path": "docs/superpowers/specs/2026-08-24-workroom-definition-projection.md",
+              "commitSha": "268e65fcfada0b2a423193bcbcb3196f98936e52",
+              "providerBlobId": "069c07201f2191288d593f28753507c593b5f621",
+              "repositoryFullName": "OpenDigitalProductFactory/opendigitalproductfactory"
+            },
+            "findingRefs": [],
+            "policyVersion": "initiative-readiness.v1",
+            "schemaVersion": 1,
+            "artifactDigest": "sha256:9953616964a66a8c356e58d6f09d87cab727f3c54de33c1945e7cf67fab7afe5",
+            "artifactAuthorRef": "principal:cmt6ejt2909n76mnw1x58fqj1|agent:null",
+            "authoritySnapshot": {
+              "decision": "allow",
+              "actionKey": "record_initiative_architecture_review",
+              "policyVersion": "coworker-authority-v1",
+              "organizationId": "platform",
+              "effectiveAgentGrant": "initiative_architecture_review",
+              "effectiveHumanCapability": "manage_ea_model"
+            },
+            "authorityDecisionId": "AUTH-e92d4b00-9e05-487c-988a-8f24611434a1",
+            "resolvedFindingRefs": []
+          }
+        },
+        {
+          "recoveryKey": "bi-80bece1e-initiative-6baa3f88-bffe-4572-9adc-e7b036832038",
+          "kind": "initiative_gate_receipt",
+          "summary": "plan-review: pass",
+          "recordedAt": "2026-08-25T09:15:03.648Z",
+          "payload": {
+            "gate": "plan-review",
+            "reason": "Plan docs/superpowers/plans/2026-08-24-workroom-definition-projection.md at 268e65fc maps D1–D4 (definition registry, occurrence view, progressive disclosure, conformance evidence) each to OBJ-WR-001 (L93/100/108/116); D4 verifies AC-WR-005 (L117) with flow \"implementation -> architecture review -> served UX evidence\" (L119), covering architecture/UX conformance and served-UX evidence. Work stays on the existing Workroom surface (\"existing Workroom read model\", \"existing Workroom surface\", \"consolidated surface\"), preserving the no-new-surface constraint. Dependencies form a clean linear chain (item 2→D1, 3→D2, 4→D3) with no unresolved dependencies or sequencing gaps.",
+            "subject": {
+              "id": "BI-80BECE1E",
+              "kind": "backlog-item"
+            },
+            "decision": "pass",
+            "receiptId": "initiative-6baa3f88-bffe-4572-9adc-e7b036832038",
+            "artifactRef": {
+              "kind": "repo-blob-at-commit",
+              "path": "docs/superpowers/plans/2026-08-24-workroom-definition-projection.md",
+              "commitSha": "268e65fcfada0b2a423193bcbcb3196f98936e52",
+              "providerBlobId": "a153007089d3a3c400ce12fa180fe81907129ba9",
+              "repositoryFullName": "OpenDigitalProductFactory/opendigitalproductfactory"
+            },
+            "findingRefs": [],
+            "policyVersion": "initiative-readiness.v1",
+            "schemaVersion": 1,
+            "artifactDigest": "sha256:269add5afb47e67ba03dc8f98a1418fbdd6146c5c269943fccf47a88985015e4",
+            "artifactAuthorRef": "principal:cmt6ejt2909n76mnw1x58fqj1|agent:null",
+            "authoritySnapshot": {
+              "decision": "allow",
+              "actionKey": "record_initiative_design_review",
+              "policyVersion": "coworker-authority-v1",
+              "organizationId": "platform",
+              "effectiveAgentGrant": "initiative_design_review",
+              "effectiveHumanCapability": "manage_backlog"
+            },
+            "authorityDecisionId": "AUTH-f13407d8-0c18-4c03-b301-d2e6d035efef",
+            "resolvedFindingRefs": []
+          }
+        },
+        {
+          "recoveryKey": "bi-80bece1e-cmt8i8qw30qef01mga3e7wdro",
+          "kind": "evidence",
+          "summary": "PR #4648 merged to main",
+          "recordedAt": "2026-08-25T10:11:08.451Z",
+          "payload": {
+            "url": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/4648",
+            "body": "The single consolidated PR landed from head 5436b31ddd390dcc07506ff7c07f9fd52ea75041 as merge-group commit 5266121eec152eb034e702671611ef5e29d1b5ff. The PR had zero unresolved review threads and no review comments.",
+            "evidenceKind": "source_verified",
+            "toolExecutionId": null
+          }
+        },
+        {
+          "recoveryKey": "bi-80bece1e-cmt8i8qwz0qeh01mg07vmyny6",
+          "kind": "evidence",
+          "summary": "Exact-tree local CI and merge-queue CI passed",
+          "recordedAt": "2026-08-25T10:11:08.483Z",
+          "payload": {
+            "url": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/actions/runs/32834888920",
+            "body": "Governed local integration lease NPEL-7A32A00094 passed for branch head 5436b31ddd390dcc07506ff7c07f9fd52ea75041 (activity cmt8hb86y0q1k01mgxgz1d7d1). GitHub merge-group CI passed on 5266121eec152eb034e702671611ef5e29d1b5ff, including production build, typecheck, all test shards, policy guards, CodeQL, and merge readiness.",
+            "evidenceKind": "build_pass",
+            "toolExecutionId": null
+          }
+        },
+        {
+          "recoveryKey": "bi-80bece1e-cmt8i8qxr0qej01mg8g6x00gw",
+          "kind": "evidence",
+          "summary": "Workroom progressive disclosure verified on served desktop and narrow layouts",
+          "recordedAt": "2026-08-25T10:11:08.511Z",
+          "payload": {
+            "url": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/4648",
+            "body": "The existing Workspace Workroom surface opens on business-first Overview. Details explicitly reveals work, evidence, and raw references. Definition and occurrence remain related without adding a route or parallel surface. Served desktop and narrow-layout verification found no overflow; the hosted UX Route Sweep Runtime and route-budget sweep also passed.",
+            "evidenceKind": "ux_verified",
+            "toolExecutionId": null
+          }
+        },
+        {
+          "recoveryKey": "bi-80bece1e-cmt8i8wnj0qem01mg2lx7j9tp",
+          "kind": "initiative_readiness_decision",
+          "summary": "completion readiness: input-required",
+          "recordedAt": "2026-08-25T10:11:15.919Z",
+          "payload": {
+            "unmet": [
+              {
+                "code": "PLAN_REVIEW_REQUIRED",
+                "state": "stale",
+                "evidenceRefs": [],
+                "accountableRole": "plan-reviewer"
+              },
+              {
+                "code": "DELIVERY_EVIDENCE_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [
+                  "cmt8i8qw30qef01mga3e7wdro",
+                  "cmt8i8qwz0qeh01mg07vmyny6",
+                  "cmt8i8qxr0qej01mg8g6x00gw"
+                ],
+                "accountableRole": "delivery-coordinator"
+              },
+              {
+                "code": "ACCEPTANCE_EVIDENCE_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "acceptance-reviewer"
+              },
+              {
+                "code": "OBJECTIVE_RECONCILIATION_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "acceptance-reviewer"
+              }
+            ],
+            "target": "completion",
+            "profile": "feature",
+            "subject": {
+              "id": "BI-80BECE1E",
+              "kind": "backlog-item"
+            },
+            "verdict": "input-required",
+            "blockers": [],
+            "satisfied": [
+              {
+                "code": "CLASSIFICATION_REQUIRED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "product-owner"
+              },
+              {
+                "code": "AUTHORIZATION_DENIED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "platform-governance"
+              },
+              {
+                "code": "RESEARCH_REQUIRED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "design-author"
+              },
+              {
+                "code": "CANONICAL_DESIGN_REQUIRED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "design-checklist-reviewer"
+              },
+              {
+                "code": "SPEC_APPROVAL_REQUIRED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "design-checklist-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "architecture-reviewer"
+              },
+              {
+                "code": "OBJECTIVE_BASELINE_REQUIRED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "design-checklist-reviewer"
+              },
+              {
+                "code": "ARTIFACT_AUTHOR_REQUIRED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "artifact-resolver"
+              },
+              {
+                "code": "PLAN_REQUIRED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "implementation-planner"
+              },
+              {
+                "code": "DEPENDENCY_UNRESOLVED",
+                "state": "not-applicable",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              },
+              {
+                "code": "CAPSULE_IDENTITY_MISMATCH",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "delivery-coordinator"
+              },
+              {
+                "code": "PLAN_COVERAGE_REQUIRED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              },
+              {
+                "code": "TRACEABILITY_INCOMPLETE",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              }
+            ],
+            "decisionId": "IRD-B59914926DE9",
+            "evaluatedAt": "2026-08-25T10:11:15.910Z",
+            "factsDigest": "sha256:8aaccc0aa5296e97bfb801f0801c86b7623757ec84cc311da8b6171fe22ff69b",
+            "stableCodes": [
+              "PLAN_REVIEW_REQUIRED",
+              "DELIVERY_EVIDENCE_REQUIRED",
+              "ACCEPTANCE_EVIDENCE_REQUIRED",
+              "OBJECTIVE_RECONCILIATION_REQUIRED"
+            ],
+            "policyVersion": "initiative-readiness.v2",
+            "schemaVersion": 1,
+            "enforcementState": "enforced",
+            "transitionObject": {
+              "id": "cmt81857c0gfg01mg7gqxnqzn",
+              "kind": "backlog-item",
+              "targetState": "done",
+              "expectedVersion": "open"
+            },
+            "authoritySnapshot": {
+              "decision": "allow",
+              "actionKey": "update_backlog_item_status",
+              "policyVersion": "coworker-authority.v1",
+              "organizationId": "platform",
+              "effectiveAgentGrant": "backlog_write",
+              "effectiveHumanCapability": "manage_backlog"
+            },
+            "authorityDecisionId": "DI-9133C5290E3F"
           }
         }
       ],
-      "effortSize": "large",
+      "effortSize": "medium",
       "triageOutcome": "build",
-      "scopeRationale": "DPF platform installation-to-ecosystem-productivity program.",
-      "createdAt": "2026-08-22T04:02:38.173Z"
+      "scopeRationale": "Cross-installation Workroom projection contract used by business and development interaction shapes.",
+      "priority": 1,
+      "createdAt": "2026-08-25T02:14:46.872Z"
+    },
+    {
+      "itemId": "BI-8239CD30",
+      "epicId": "EP-1FABA22D",
+      "title": "The approval decision point must carry agent assurance, contract version, and a deferral clock",
+      "body": "## Thesis\n\n`WWMD`/`WWWD`/`WSID` approval-by-policy-deferral is the evolution `TAK` did not originally carry: an agent's important actions are gated, and authority is established by vector-weighted decision against a principle and policy corpus rather than hard-coded into the agent. The mechanism for that already exists and works. What is missing sits at one place — **the moment a human exercises the deferred authority**.\n\nThree gaps converge there. They are filed as one item because splitting them loses the argument: each alone reads as a nice-to-have, and together they are the difference between a traceable authority chain and a plausible-looking one.\n\nSubstrate reviewed: `CoworkerActionEnvelope` (`packages/db/prisma/schema/ai-coworker.prisma`), `lib/coworker/authority-approval-envelope.ts`, `lib/govern/authority/coworker-authority-decision.ts`, `lib/attention/sources/coworker-envelope.ts`, `components/attention/CoworkerEnvelopeApproval.tsx`, `docs/architecture/GAID.md`, `docs/superpowers/specs/2026-08-22-external-agent-operating-contract-design.md`.\n\n## What already works\n\n`principle_decide` returns a per-principle contribution ledger with tier, weight, alignment, contribution, plus `sensitivity` and `autonomyEligible`/`autonomyBlockers`, and persists it (observed: `DI-F3A40C33D927`, 41 principles applied). `CoworkerAuthorityDecision` is typed as exactly the three outcomes — `allow` | `deny` | `require-approval` — and `require-approval` carries an `approvalBinding`. The envelope keeps `authorityDecisionId → AuthorizationDecisionLog`, so an action points back at the weighted decision that authorized it, and `decisionVersionFingerprint` pins which corpus version decided, with `policy-version-stale` as a first-class reason code.\n\nThat is the federated, traceable core. The gaps below are about what the accountable human can see and rely on when the chain defers to them.\n\n## Gap 1 — Deferral has no liveness guarantee against the authority TTL (MEASURED)\n\n`APPROVAL_TTL_MS` is 15 minutes. On this installation on 2026-08-25, `CoworkerActionEnvelope` held 16 rows in `status=proposed` for one `delegatingUserId`. Projected through the real projector at a probe time of 20:40Z, **exactly 1 was still actionable; the other 15 had expired unanswered.**\n\nUntil BI-7CB2CCDE no surface rendered any of them, so every deferral was resolving as denial-by-timeout while durable state reported \"awaiting employee approval\". The record said something untrue.\n\nThis is the empirical answer to §2 question 8 of the operating-contract spec — *\"What happens after a timeout, policy change, revocation, model failure, or installation outage?\"* — for the timeout case. The design question is already posed; this is the measurement.\n\nThe structural rule it implies: **policy deferral to a human is only sound when the human channel's latency budget is shorter than the authority TTL.** Otherwise deferral is not a third outcome, it is a slow deny wearing an approval's label. An unanswered deferral must be distinguishable from a pending one, the way a gate's `pending` must never be indistinguishable from `failed`.\n\n## Gap 2 — GAID identity is present at the decision point; GAID assurance is not\n\n`GAID.md` §1 scopes badging and assurance claims, the `AIDoc`, portable authorization classes, chain-of-custody and action receipt records, and public validation and revocation controls.\n\nThe envelope carries the identity and custody half: `coworkerAgentId`, `delegatingUserId`, `delegationChainId`, `authorityDecisionId`, `inputFingerprint`, `approvalBindingFingerprint`, `expiresAt`, and `toolExecutions → ToolExecutionReceipt`.\n\nThe approval card renders near-perfect **what** — subject, gate, repository, commit, path, blob — and almost nothing about **who**. The human sees the literal string `AGT-WS-PORTFOLIO` and a rationale the agent wrote about itself. No `AIDoc` resolution, no badging or assurance claims, no qualification status, no revocation state. The presentation contract for honest attribution already exists (`attentionAuthorForAgent`, role-label-over-persona, BI-AB12B3D3); it simply carries no assurance yet.\n\nAn approval screen is the one moment a human exercises delegated authority. It is the natural rendering point for GAID assurance, and currently the weakest.\n\n## Gap 3 — The operating contract the agent was running under is unpinned\n\nThe operating-contract spec makes the internal contract *\"a runtime projection over existing DPF authorities\"*, with the install-local `AGENTS.md`/README demoted to a discovery pointer. A runtime projection is versioned.\n\n`decisionVersionFingerprint` pins the **policy** corpus version. Nothing pins the **operating contract** version. A receipt therefore cannot answer \"would this action be authorized under today's contract?\" — which is precisely what the revocation and policy-change limbs of §2 question 8 turn on. Contract drift is currently invisible to audit in a way policy drift is not.\n\nNote the two contracts are distinct corpora and neither inherits the other's authority: the contributor `AGENTS.md` is the platform-development (WWMD) contract; the external-agent operating contract is the business-operation (WWWD) one. Both need version pinning; they do not merge.\n\n## Scope\n\nMake the approval decision point carry the full authority picture: who is asking and at what assurance, under which operating contract, and how long the deferred authority remains real.\n\nExplicitly out of scope: changing the weighted-decision mechanism, introducing a second authority corpus, per-surface re-derivation of grants, or auto-approving anything on a human's behalf.\n\n## Acceptance criteria\n\n- An unanswered deferral is distinguishable in durable state from a pending one; expiry-without-answer is recorded as its own resolution, not left implying an approval is still awaited.\n- The deferral clock is legible to the human at the decision point, in a unit that does not overstate the time remaining.\n- A deferral whose human channel cannot meet the authority TTL is surfaced as a policy problem rather than failing silently.\n- The approval surface renders resolvable agent assurance — identity, badging/qualification status, and revocation state — alongside the requested action, using the existing role-label attribution contract and never a persona name.\n- The operating-contract version in force is pinned on the authority decision and carried into the receipt, so an action can be re-evaluated against a later contract.\n- A receipt can answer, from durable state alone: which agent, at what assurance, under which policy version, under which operating-contract version, authorized by which human, within which window.\n- Regression coverage for expiry-without-answer, assurance rendering, and contract-version pinning.\n\n## Provenance\n\nFound while delivering BI-7CB2CCDE (the missing approval surface) and verifying it on the live install. Related: BI-9549EE48 (operating-contract umbrella), BI-11D611B3, decision records DI-A60C7D8F35B1 / DI-C75C83499B57, and the GAID/TAK/TAK-JSI split in `docs/architecture/GAID.md` and the 2026-04-18 trusted-agent-governance white paper.",
+      "status": "triaging",
+      "type": "product",
+      "workType": "feature",
+      "source": "automated-detection",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [],
+      "effortSize": "large",
+      "scopeRationale": "The human decision point is where GAID identity, the TAK runtime, and the external-agent operating contract meet; it governs every delegated agent action on every installation, not one archetype.",
+      "createdAt": "2026-08-26T00:58:34.875Z"
     },
     {
       "itemId": "BI-91EF130B",
       "epicId": "EP-1FABA22D",
       "title": "Build the deterministic journey compiler and productivity projection",
-      "body": "## Outcome\nGeneralize the existing activation orchestrator into the single deterministic journey compiler, with profile-specific first-value mission descriptors and evidence-backed readiness.\n\n## Acceptance\n- Five purposes × three environment classes compile deterministically.\n- Milestones resolve canonical evidence as satisfied, attention, blocked, deferred, or not-applicable.\n- Existing activation plans and legacy setup progress remain compatible.\n- Productive cannot be returned without the profile's first-value receipt.\n- No sibling orchestration substrate is introduced.\n\nBlocked by: BI-A9F60372.\nPlan §6: docs/superpowers/plans/2026-08-08-purpose-aware-installation-ecosystem-productivity.md",
-      "status": "open",
+      "body": "## Outcome\r\nGeneralize the existing activation orchestrator into the single deterministic journey compiler, with profile-specific first-value mission descriptors and evidence-backed readiness.\r\n\r\n## Acceptance\r\n- Five purposes × three environment classes compile deterministically.\r\n- Milestones resolve canonical evidence as satisfied, attention, blocked, deferred, or not-applicable.\r\n- Existing activation plans and legacy setup progress remain compatible.\r\n- Productive cannot be returned without the profile's first-value receipt.\r\n- No sibling orchestration substrate is introduced.\r\n\r\nBlocked by: BI-A9F60372.\r\nPlan §6: docs/superpowers/plans/2026-08-08-purpose-aware-installation-ecosystem-productivity.md",
+      "status": "deferred",
       "type": "product",
       "workType": "feature",
       "source": "user-request",
       "scopeKind": "platform",
       "dependsOn": [],
       "externalDependencies": [],
-      "activities": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-91ef130b-cmt7zblh70f9o01mgnrr1dp5u",
+          "kind": "status_change",
+          "summary": "Retired BI-91EF130B as defer",
+          "recordedAt": "2026-08-25T01:21:28.699Z",
+          "payload": {
+            "to": "deferred",
+            "from": "open",
+            "reason": "The deterministic journey compiler is the architectural next slice and touches activation, profile matrices, milestone evidence, compatibility, and rollback.",
+            "outcome": "defer",
+            "deferral": {
+              "reason": "The deterministic journey compiler is the architectural next slice and touches activation, profile matrices, milestone evidence, compatibility, and rollback.",
+              "trigger": "Resume after reinstall when P1 is funded as its own PR with five-purpose × three-environment fixtures and compatibility evidence for existing activation/setup clients.",
+              "reviewAt": "2026-09-22T20:00:00.000Z"
+            },
+            "rationale": "Valid, architecture-approved program demand, but the canonical plan requires independently shippable, ordered slices. The pre-reinstall drain must preserve those boundaries rather than collapse the program into one unsafe PR.",
+            "duplicateOfId": null
+          }
+        }
+      ],
       "effortSize": "large",
-      "triageOutcome": "build",
+      "triageOutcome": "defer",
       "scopeRationale": "DPF platform installation-to-ecosystem-productivity program.",
       "createdAt": "2026-08-22T04:02:37.229Z"
     },
@@ -210,7 +1626,7 @@
       "itemId": "BI-9549EE48",
       "epicId": "EP-1FABA22D",
       "title": "Deliver the source-free external-agent operating contract",
-      "body": "Design and delivery umbrella for the canonical source-free external-agent interaction architecture across DPF installations.\n\nThe program composes existing installation intent, dual-principal identity, Authorized Surface, Work Case/WorkUnit/TaskRun, governed actions and receipts, A2A/GAID/federation, archetype value streams, GTM context, and Hive. It must support local and remote agents, multiple simultaneous agents, managed and sovereign topologies, and production business operation without making source, chat, prompts, static files, or a generic agent mesh the system of record.\n\nArtifacts:\n- docs/superpowers/specs/2026-08-22-external-agent-operating-contract-design.md\n- docs/superpowers/plans/2026-08-22-external-agent-operating-contract.md\n\nKernel decisions: DI-A60C7D8F35B1 and DI-C75C83499B57.\n\nThe existing consumer-orientation BI-11D611B3 remains an independently owned child slice. This umbrella must not compete with its active Workroom.",
+      "body": "Design and delivery umbrella for the canonical source-free external-agent interaction architecture across DPF installations.\r\n\r\nThe program composes existing installation intent, dual-principal identity, Authorized Surface, Work Case/WorkUnit/TaskRun, governed actions and receipts, A2A/GAID/federation, archetype value streams, GTM context, and Hive. It must support local and remote agents, multiple simultaneous agents, managed and sovereign topologies, and production business operation without making source, chat, prompts, static files, or a generic agent mesh the system of record.\r\n\r\nArtifacts:\r\n- docs/superpowers/specs/2026-08-22-external-agent-operating-contract-design.md\r\n- docs/superpowers/plans/2026-08-22-external-agent-operating-contract.md\r\n\r\nKernel decisions: DI-A60C7D8F35B1 and DI-C75C83499B57.\r\n\r\nThe existing consumer-orientation BI-11D611B3 remains an independently owned child slice. This umbrella must not compete with its active Workroom.\n\n## Two external-agent use shapes — 2026-08-24\n\nThe program supports two alternate use shapes over one identity, Workroom, WorkUnit, Work Case, evidence, and receipt substrate.\n\n1. **Business operations** is the customer default. It starts from business purpose and Work Cases, routes organization choices to WWWD and profession craft to WSID, writes canonical business records through domain actions, and uses Workspace/My Queue/Inbox/Case UX.\n2. **Platform development** is explicit. It is available only when `evolve-dpf` is a confirmed primary or secondary installation purpose, routes platform choices to WWMD and craft to WSID, and binds Workrooms to backlog/source/worktree/PR/gate evidence. A source-free runtime remains coordination plane; edits happen in a separate governed checkout.\n\nPurpose, environment class, source capability, and authority are independent. Purpose selects context but grants nothing. Topology is a separate axis that can apply to either use shape.",
       "status": "open",
       "type": "portfolio",
       "workType": "feature",
@@ -218,7 +1634,20 @@
       "scopeKind": "platform",
       "dependsOn": [],
       "externalDependencies": [],
-      "activities": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-9549ee48-cmt7f0ysg0pyt01mxtghrzv6o",
+          "kind": "evidence",
+          "summary": "Aligned the umbrella design to business-operations and platform-development use shapes",
+          "recordedAt": "2026-08-24T15:53:20.416Z",
+          "payload": {
+            "url": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/commit/9829230b795b4fa36e21e08ca1681c9f5b5d0623",
+            "body": "The umbrella and binding consumer-host designs now distinguish two interaction shapes over one installation topology and one Workroom substrate. business-operations routes organizational decisions to WWWD and craft decisions to WSID; platform-development routes platform decisions to WWMD and craft decisions to WSID. Environment class sets caution, purpose selects the default shape, source availability selects development location, and grants bound authority. Mixed-scope work decomposes into linked single-scope WorkUnits.",
+            "evidenceKind": "source_verified",
+            "toolExecutionId": null
+          }
+        }
+      ],
       "effortSize": "xlarge",
       "triageOutcome": "build",
       "scopeRationale": "Universal DPF external-agent interaction and governance architecture across all installations, archetypes, portfolios, and ecosystem topologies.",
@@ -228,26 +1657,8 @@
       "itemId": "BI-AE128860",
       "epicId": "EP-1FABA22D",
       "title": "Shape topology and federation orchestration from installation purpose",
-      "body": "## Outcome\nJourney adapters compile appropriate development, managed-service, channel, and community relationship plans while existing federation and partner domains remain the only writers.\n\n## Acceptance\n- Profile confirmation changes no link approval, token, grant, contract, or authority field.\n- Development companions cannot mutate production directly.\n- Managed-estate, sovereign-peer, channel, and community shapes use shared relationship contracts.\n- Discovery remains only a candidate until canonical trust and identity evidence exists.\n- A2A readiness is consumed from its owning capability rather than synthesized.\n\nBlocked by: BI-A9F60372, BI-91EF130B.\nCapability dependencies: BI-BE0E14E0, BI-E2398997.\nPlan §9: docs/superpowers/plans/2026-08-08-purpose-aware-installation-ecosystem-productivity.md",
-      "status": "open",
-      "type": "product",
-      "workType": "feature",
-      "source": "user-request",
-      "scopeKind": "platform",
-      "dependsOn": [],
-      "externalDependencies": [],
-      "activities": [],
-      "effortSize": "large",
-      "triageOutcome": "build",
-      "scopeRationale": "DPF platform installation-to-ecosystem-productivity program.",
-      "createdAt": "2026-08-22T04:02:37.823Z"
-    },
-    {
-      "itemId": "BI-AF8A8173",
-      "epicId": "EP-1FABA22D",
-      "title": "Expose external-agent work, leases, and intervention needs in existing operator surfaces",
-      "body": "Add the human control surface described by BI-11D611B3 using existing Workspace, Work/Case, Attention, and platform/federation administration navigation. Show outcome, state, sponsor, agents, leases, blockers, consequence, evidence, receipts, compatibility, health, and revocation with progressive disclosure. Chat links to canonical work and receipts. Do not add a global AI command-center dashboard.",
-      "status": "open",
+      "body": "## Outcome\r\nJourney adapters compile appropriate development, managed-service, channel, and community relationship plans while existing federation and partner domains remain the only writers.\r\n\r\n## Acceptance\r\n- Profile confirmation changes no link approval, token, grant, contract, or authority field.\r\n- Development companions cannot mutate production directly.\r\n- Managed-estate, sovereign-peer, channel, and community shapes use shared relationship contracts.\r\n- Discovery remains only a candidate until canonical trust and identity evidence exists.\r\n- A2A readiness is consumed from its owning capability rather than synthesized.\r\n\r\nBlocked by: BI-A9F60372, BI-91EF130B.\r\nCapability dependencies: BI-BE0E14E0, BI-E2398997.\r\nPlan §9: docs/superpowers/plans/2026-08-08-purpose-aware-installation-ecosystem-productivity.md",
+      "status": "deferred",
       "type": "product",
       "workType": "feature",
       "source": "user-request",
@@ -256,52 +1667,107 @@
       "externalDependencies": [],
       "activities": [
         {
-          "recoveryKey": "bi-af8a8173-cmt4h8syh0iph01pk6hrsl44u",
-          "kind": "intake_origin",
-          "summary": "Possible existing implementation: apps/web/components/agent/agent-external-access-session.ts",
-          "recordedAt": "2026-08-22T14:32:06.809Z",
+          "recoveryKey": "bi-ae128860-cmt7zblxw0f9x01mgv2qcihtp",
+          "kind": "status_change",
+          "summary": "Retired BI-AE128860 as defer",
+          "recordedAt": "2026-08-25T01:21:29.300Z",
           "payload": {
-            "advisory": true,
-            "createdBy": "implementation-scan",
-            "candidates": [
-              {
-                "path": "apps/web/components/agent/agent-external-access-session.ts",
-                "score": 5,
-                "matchedTerms": [
-                  "external",
-                  "agent"
-                ]
-              },
-              {
-                "path": "apps/web/lib/agent-external-access-permission.ts",
-                "score": 5,
-                "matchedTerms": [
-                  "external",
-                  "agent"
-                ]
-              },
-              {
-                "path": "packages/db/prisma/migrations/20260721210000_add_agent_surface_readiness/migration.sql",
-                "score": 3,
-                "matchedTerms": [
-                  "agent",
-                  "surface"
-                ]
-              }
-            ]
+            "to": "deferred",
+            "from": "open",
+            "reason": "Topology/federation orchestration depends on confirmed purpose and journey adapters while federation/partner domains remain authoritative writers.",
+            "outcome": "defer",
+            "deferral": {
+              "reason": "Topology/federation orchestration depends on confirmed purpose and journey adapters while federation/partner domains remain authoritative writers.",
+              "trigger": "Resume after P1/P2 establish validated purpose projection; fund P3 with relationship-plan fixtures, authority-denial tests, compatibility, and rollback evidence.",
+              "reviewAt": "2026-09-22T20:00:00.000Z"
+            },
+            "rationale": "Valid, architecture-approved program demand, but the canonical plan requires independently shippable, ordered slices. The pre-reinstall drain must preserve those boundaries rather than collapse the program into one unsafe PR.",
+            "duplicateOfId": null
           }
         }
       ],
       "effortSize": "large",
-      "triageOutcome": "build",
+      "triageOutcome": "defer",
+      "scopeRationale": "DPF platform installation-to-ecosystem-productivity program.",
+      "createdAt": "2026-08-22T04:02:37.823Z"
+    },
+    {
+      "itemId": "BI-AF8A8173",
+      "epicId": "EP-1FABA22D",
+      "title": "Expose external-agent work, leases, and intervention needs in existing operator surfaces",
+      "body": "Add the human control surface described by BI-11D611B3 using existing Workspace, Work/Case, Attention, and platform/federation administration navigation. Show outcome, state, sponsor, agents, leases, blockers, consequence, evidence, receipts, compatibility, health, and revocation with progressive disclosure. Chat links to canonical work and receipts. Do not add a global AI command-center dashboard.",
+      "status": "deferred",
+      "type": "product",
+      "workType": "feature",
+      "source": "user-request",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-af8a8173-cmt7zbmfi0fac01mgw0wwf0dk",
+          "kind": "status_change",
+          "summary": "Retired BI-AF8A8173 as defer",
+          "recordedAt": "2026-08-25T01:21:29.934Z",
+          "payload": {
+            "to": "deferred",
+            "from": "open",
+            "reason": "The external-agent operator surface depends on stable Work Packet, lease, receipt, completion, health, and revocation projections; UI-first delivery would create another control plane.",
+            "outcome": "defer",
+            "deferral": {
+              "reason": "The external-agent operator surface depends on stable Work Packet, lease, receipt, completion, health, and revocation projections; UI-first delivery would create another control plane.",
+              "trigger": "Resume after BI-D4C110BC establishes the canonical projection; fund the existing-surface UX slice with first-viewport hierarchy, progressive disclosure, accessibility, and denial/recovery evidence.",
+              "reviewAt": "2026-09-22T20:00:00.000Z"
+            },
+            "rationale": "Valid, architecture-approved program demand, but the canonical plan requires independently shippable, ordered slices. The pre-reinstall drain must preserve those boundaries rather than collapse the program into one unsafe PR.",
+            "duplicateOfId": null
+          }
+        }
+      ],
+      "effortSize": "large",
+      "triageOutcome": "defer",
       "scopeRationale": "Universal DPF external-agent operating substrate reused across installations, archetypes, and business portfolios.",
       "createdAt": "2026-08-22T14:32:06.631Z"
     },
     {
-      "itemId": "BI-D4C110BC",
+      "itemId": "BI-BB919901",
       "epicId": "EP-1FABA22D",
-      "title": "Bind external-agent Work Packets, leases, and multi-agent collaboration to Work Cases",
-      "body": "Extend the existing Work Case/WorkUnit/TaskRun substrate for external-agent assignment and simultaneous-agent collaboration. Define the portable Work Packet projection, bounded claim/lease semantics, dependency and handoff rules, independent review constraints, evidence requirements, typed conflicts/expiry, and durable resume. Re-enter existing policy/action/receipt/completion boundaries; do not add a shadow task bus, shared agent memory, or agent-granted authority.",
+      "title": "The edge node installable is published but the portal refuses to offer it, and a node that cannot connect says nothing useful",
+      "body": "Requested by the founder 2026-08-25: \"we need a mechanism to get to the installable and to do that. Perhaps with the right packaging and authentication for the node to work immediately when installed, and some level of diagnostic if it can't connect.\"\n\nMost of this already exists. The gap is a stale gate, an incomplete publish matrix, and a missing diagnostic.\n\nWHAT IS ALREADY BUILT AND WORKING:\n- `apps/web/lib/edge-node/remote-provisioning.ts` renders a ready-to-run install command with the Authority URL and a one-time bootstrap token already substituted — no repo clone, no file edit. It also classifies the Authority URL (`missing` / `loopback` / `insecure-http`), so it refuses to hand out a command pointing at localhost.\n- Authentication is solved end to end: the token is issued by the portal, baked into the command, and the node lands `pending` until an operator approves it. `deployment-topology.md` separates deploy from trust deliberately.\n- `services/edge-node-go/Makefile` cross-compiles SIX targets: linux-amd64, linux-arm64, darwin-amd64, darwin-arm64, windows-amd64, windows-arm64.\n- `publish-release.yml` builds and uploads native binaries with a `sha256` checksum file.\n\nDEFECT 1 — the portal will not offer a binary that exists. `remote-provisioning.ts` states in its header comment: \"The signed, downloadable native Go binary (Mode 4, the full-LAN-fidelity path on Windows/macOS) is not published for download yet; it is surfaced as a note, not a runnable command, so we never hand the operator a command that 404s.\"\n\nThat was true once and is not true now. Verified against the live GitHub releases: `v2026.08.25-consumer-self-upgrade.2`, `.1`, `v2026.08.25`, and `v2026.08.24-consumer-self-upgrade.7` EACH carry `dpf-edge-node-darwin-arm64`, `dpf-edge-node-windows-amd64.exe`, and `dpf-edge-node-checksums.sha256`.\n\nSo on Windows and macOS the operator is offered only the Docker path — which `deployment-topology.md` and `wsl-mirrored-note.md` both say cannot see the real LAN on Docker Desktop. The full-fidelity native path is built, signed, uploaded, checksummed, and hidden. A branch office box is very often Windows, so this is the common case, not the edge case.\n\nDEFECT 2 — the publish matrix is narrower than the build matrix, and fails quietly. The release job builds only `darwin-arm64` and `windows-amd64`. Not published: linux-amd64, linux-arm64, darwin-amd64 (Intel Macs), windows-arm64. Worse, the whole step sits inside an `if`, and the failure branch emits `::warning::Edge binary build failed ...; published a source-only Release.` A release with no edge assets therefore looks successful. Given the fleet case is one node per site, a missing linux-amd64 binary is a real omission even though Linux hosts can use the container path with host networking.\n\nDEFECT 3 — no connect diagnostic. `enrollOnce` in `cmd/dpf-edge-node/main.go` returns the raw wrapped error (`fmt.Errorf(\"enrollment: %w\", err)`). There is no preflight and no classification. The known failure modes are documented in prose and detected by nothing:\n- Authority URL unreachable from this host (the single most likely one; the portal-side classifier catches loopback at ISSUE time but nothing checks it at RUN time).\n- DNS does not resolve the Authority host.\n- Bootstrap token expired or already consumed.\n- Node enrolled but still `pending`, so it submits and is refused — looks identical to a broken node from the operator's chair.\n- Clock skew. `edge-node-multi-host.md` states the Authority's freshness window rejects submissions whose `observedAt` drifts too far from server time, and that fresh VMs without NTP drift tens of seconds. That is a silent, confusing failure with an obvious diagnostic.\n- Docker Desktop degraded LAN visibility — the node enrolls fine and then reports nothing useful, which is the worst shape of failure because everything looks healthy.\n\nPROPOSED SHAPE (not yet ratified):\n1. Delete the stale gate. Render the native download-and-run command for macOS and Windows from the CURRENT release tag, with the checksum inline so the operator can verify what they ran. Keep `worksToday` as the mechanism, but drive it from whether the asset actually exists rather than from a hardcoded belief.\n2. Publish the full matrix, and make a missing asset FAIL the release rather than warn. An installable that is sometimes absent is not an installable.\n3. Add `dpf-edge-node --preflight`: resolve the Authority URL, open the connection, validate the token, report clock skew against the Authority's clock, report the LAN interfaces it can actually see, and exit non-zero with ONE named cause. Run it automatically before enrollment and print the same named cause on failure.\n4. Surface the same diagnosis Authority-side on the pending node, so the operator watching the portal sees why a node has not checked in without going to that machine.\n\nDEPENDENCY: BI-2EC8906A. None of this is reachable while `/platform/edge-nodes` is absent from the navigation.\n\nDO NOT fold in the mDNS discovery pre-fill from BI-6052C2C2. That is peer discovery between Authority Cores; this is provisioning a client node, and they only look similar.",
+      "status": "triaging",
+      "type": "product",
+      "workType": "feature",
+      "source": "user-request",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [],
+      "scopeRationale": "Edge node provisioning is universal platform substrate and load-bearing for the MSP archetype and multi-location businesses, where node count is always greater than one.",
+      "createdAt": "2026-08-26T00:53:58.594Z"
+    },
+    {
+      "itemId": "BI-C7151B1B",
+      "epicId": "EP-1FABA22D",
+      "title": "MCP handshake never names which installation an agent is connected to",
+      "body": "Reported by the founder 2026-08-25: \"can I connect this MCP client to both installations and have each one self-identify so we can make sure we interact appropriately\".\n\nACTUAL: no. `apps/web/lib/mcp/initialize.ts:82` returns a hardcoded `serverInfo: { name: \"dpf-platform\", version: \"1.0.0\" }` — byte-identical on every installation on earth. The `instructions` block (`buildAgentHostInstructions` + `formatInstanceStanceBriefing`) does carry environment class, primary purpose and the five stances, and the org-context bundle carries the organization name. What it does NOT carry is anything that distinguishes two installs of the SAME organization, which is exactly the dev/prod pair the founder is describing. Nothing in a tool RESULT carries an installation marker at all, so an agent mid-session has no way to re-check which box it just wrote to.\n\nEXPECTED: the handshake states the installation. Minimum viable discriminator set, all of which already exist or are one field away:\n- `serverInfo.name` — per-install, e.g. `dpf-<installName>` or `dpf-<environmentClass>`, so a client listing two connectors shows two names.\n- installation name (see BI-7626A660 — the concept does not exist yet and is the shared dependency).\n- `deviceId` — the stable Ed25519 fingerprint (`did_<64 hex>`) already implemented in `apps/web/lib/federation/instance-identity.ts` with a `shortDeviceId()` display helper. This is the unforgeable discriminator and needs no new substrate. NOTE: it is materialised lazily by `demand-identity.ts` on first federation read; the live install has no `federation.identity` PlatformConfig row yet, so identity must be resolvable without waiting for a federation call.\n- environment class + purpose (already present).\n\nDOWNSTREAM CONSUMERS the founder named, each of which needs the same discriminator: backlog sync between installs (see `2026-08-23-zero-touch-organization-federation-design.md` §5.2, which adds `backlog-item` and `epic` as federated record types), A2A, and MSP archetypes where one operator runs many customer installs.\n\nFiles: `apps/web/lib/mcp/initialize.ts`, `apps/web/lib/mcp/agent-host-instructions.ts`, `packages/db/src/installation-instance-stance.ts:238` (`formatInstanceStanceBriefing`), `apps/web/lib/federation/instance-identity.ts`.",
+      "status": "open",
+      "type": "product",
+      "workType": "bug",
+      "source": "user-request",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [],
+      "effortSize": "medium",
+      "triageOutcome": "build",
+      "scopeRationale": "The MCP coordination plane is universal platform substrate; every install and every external agent surface depends on it.",
+      "createdAt": "2026-08-25T22:45:46.334Z"
+    },
+    {
+      "itemId": "BI-CA500DC8",
+      "epicId": "EP-1FABA22D",
+      "title": "Installation stances are advisory prose, not enforced controls — production cannot actually refuse what dev merely permits",
+      "body": "Raised by the founder 2026-08-25: \"production identity needs to be much more locked down and protected than a dev instance.\"\n\nHe is right, and the gap is concrete. Observed live in the same session that raised it.\n\nWHAT EXISTS: `resolveInstanceStance()` in `packages/db/src/installation-instance-stance.ts` resolves five brakes from the environment class, including `credentials`:\n- development/test -> `local-permitted` (\"local test credentials may be generated and rotated without an operator hand-off\")\n- production -> `operator-only`\n\n`formatInstanceStanceBriefing()` renders those into the MCP handshake `instructions`, and `InstallationIdentityPanel` renders them into the portal.\n\nWHAT IS MISSING: **that is the entire mechanism.** The stance is a sentence in a prompt. Nothing reads `stance.credentials` at any decision point. An agent that ignores the briefing — or a model that never attended to it — is not refused by anything.\n\nDEMONSTRATED IN THIS SESSION: to drive the portal for a governed review, the agent read the stance, saw `credentials: local-permitted`, and proceeded to mint a NextAuth session JWE for the superuser directly from `AUTH_SECRET` inside the portal container, with no password and no operator involvement. That is the CORRECT behaviour on this development install. The problem is that **the identical code path would have run on a production install**, because the only thing standing between the agent and a superuser session was a sentence it was asked to honour. The panel's own copy already admits the shape of this: \"A stance is a brake, never a permission.\"\n\nThe stance is honest about not granting. It is silent about not *stopping*.\n\nWHY THIS MATTERS MORE NOW: the estate-identity work (BI-7626A660, design `docs/superpowers/specs/2026-08-25-installation-estate-identity-design.md`) makes the dev/prod distinction VISIBLE — a badge, an MCP `serverInfo.name`, a briefing line. Visibility without enforcement is the dangerous half: it teaches operators and agents to trust a signal that has no teeth behind it. The two should land close together.\n\nSCOPE TO DESIGN (not yet decided):\n1. Make `credentials: operator-only` an enforced refusal, not advice. Candidate seam: the same place `insufficient_token_scope` is raised, since AGENTS.md section 6 already establishes that pattern as a section 1 refusal.\n2. Decide which stances are enforceable at all. `teardown` and `credentials` look mechanisable; `sourceAuthority` and `workSync` are closer to routing rules. `peerWrite` is already enforced by the certificate chain.\n3. Decide what a production install does about secret material an agent can currently read: `AUTH_SECRET` and `CREDENTIAL_ENCRYPTION_KEY` are readable from the container environment by anything that can exec into it. On production that should require an operator, which is an infrastructure question as much as a code one.\n4. Consider whether a production stance should narrow the MCP grant set itself, so the refusal happens at tool-authorization time and an agent never holds the capability to begin with. That is stronger than refusing at call time and fits \"least privilege, deny by default\".\n\nDO NOT close this by tightening dev. The dev install's permissiveness is deliberate and is what makes the thousands-of-cycles teardown lifecycle work (see `2026-08-23-zero-touch-organization-federation-design.md` section 6). The asymmetry is the design; the missing half is enforcement on the production side.",
       "status": "open",
       "type": "product",
       "workType": "feature",
@@ -310,9 +1776,115 @@
       "dependsOn": [],
       "externalDependencies": [],
       "activities": [],
-      "effortSize": "xlarge",
+      "effortSize": "medium",
       "triageOutcome": "build",
+      "scopeRationale": "Installation stance enforcement is universal platform safety substrate; it governs what any agent may do on any install of any archetype.",
+      "createdAt": "2026-08-25T23:10:51.765Z"
+    },
+    {
+      "itemId": "BI-D4C110BC",
+      "epicId": "EP-1FABA22D",
+      "title": "Bind external-agent Work Packets, leases, and multi-agent collaboration to Work Cases",
+      "body": "Extend the existing Work Case/WorkUnit/TaskRun substrate for external-agent assignment and simultaneous-agent collaboration. Define the portable Work Packet projection, bounded claim/lease semantics, dependency and handoff rules, independent review constraints, evidence requirements, typed conflicts/expiry, and durable resume. Re-enter existing policy/action/receipt/completion boundaries; do not add a shadow task bus, shared agent memory, or agent-granted authority.\n\n## Business-first Workroom requirements — 2026-08-24\n\nReuse the generalized `Workroom`, WorkUnit, and Work Case substrate for both interaction shapes; do not create a second business-room or task system.\n\n- Business Workrooms anchor to a Work Case or canonical business outcome, normally omit repository/worktree/PR fields, use WWWD for business decisions and WSID for craft judgment, and appear in Workspace/My Queue/Inbox/Case surfaces.\n- Development Workrooms anchor to backlog/source change, use WWMD for platform decisions and WSID for engineering craft, and carry the existing source/review/gate evidence.\n- A room has one owning decision scope. Mixed work decomposes into linked WorkUnits/rooms with explicit handoff evidence.\n- Business convening must not require granting an employee agent `manage_backlog`; enter through a domain/case authority facade or a reviewed context-aware collaboration capability.\n- Extend the Workroom→WorkUnit adapter to preserve decision scope, accountability/contributors, outcome summary, and receipt requirement instead of treating every room as a coding capsule with null governance.\n- Ordinary read-only conversation does not require a synthetic Workroom; create one when durable coordination, lease, handoff, review, evidence, or recovery is needed.\n\n## Definition/instance convergence — 2026-08-24\n\nRefactor the existing source registry, Workroom read model, WorkItem/cycle carriers, and evidence links into the canonical Architecture/FPAW bridge. Do not create a separate room-template, occurrence, agent-task, asset, or portfolio ledger.\n\n- A Workroom definition is the business projection of versioned WorkUnitDefinition, OperatingFlow/Stage, archetype/Profile, and convening policy.\n- A Workroom instance is the actual WorkOccurrence projected through its domain or coordination WorkCase. It references the exact definition version and preserves approved tailoring.\n- Standing instances contain bounded cycles; finite instances seal at acceptance. Event/schedule/exception triggers may spawn sub-rooms with independent objectives or control boundaries.\n- Preserve distinct coordination relations for contains, spawned-from, depends-on, blocks, and contributes-to; do not flatten all relationships into parent/child.\n- Definition estimates, targets, controls, measures, and evidence policy remain distinct from instance actuals, receipts, exceptions, costs, token/tool use, and outcomes.\n- Repository, worktree, commit, PR, and CI links are development-instance evidence, not requirements for business instances.\n- Four-portfolio placement remains aspect-based and directional. Workrooms reference canonical portfolio-managed things and dependencies; they do not duplicate them.\n- Teardown removes temporary execution resources only. Definition/instance identity, actions, receipts, outcome packets, estimates versus actuals, and retained metrics remain queryable.\n\nThe first implementation slice should add definition identity/version and occurrence trace to the existing adapters before considering schema. A schema change is justified only by a consumer workflow that cannot be represented by existing Workroom, WorkItem, source-registry, cycle, evidence, and domain records.",
+      "status": "deferred",
+      "type": "product",
+      "workType": "refactor",
+      "source": "user-request",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-d4c110bc-cmt7f0yrm0pyr01mxbq17oyjr",
+          "kind": "evidence",
+          "summary": "Specified business-first Workroom behavior over the existing substrate",
+          "recordedAt": "2026-08-24T15:53:20.386Z",
+          "payload": {
+            "url": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/commit/9829230b795b4fa36e21e08ca1681c9f5b5d0623",
+            "body": "The revised design reuses the generalized Workroom and WorkUnit substrate rather than introducing a business-room model. It identifies two P1 corrections: ordinary customer business agents need a Workroom-convening authority surface outside the manage_backlog capability boundary, and the capsule-to-WorkUnit adapter must preserve decision scope, accountability, outcome anchor, and receipt requirement. Business UI defaults to Workspace, My Queue, Inbox, and Case views; repo/worktree/PR/CI/Build Studio surfaces remain progressive and development-only.",
+            "evidenceKind": "source_verified",
+            "toolExecutionId": null
+          }
+        },
+        {
+          "recoveryKey": "bi-d4c110bc-cmt7ynh9a0epo01mg8xesy45p",
+          "kind": "initiative_readiness_decision",
+          "summary": "design readiness: allowed",
+          "recordedAt": "2026-08-25T01:02:43.486Z",
+          "payload": {
+            "unmet": [],
+            "target": "design",
+            "profile": "feature",
+            "subject": {
+              "id": "BI-D4C110BC",
+              "kind": "backlog-item"
+            },
+            "verdict": "allowed",
+            "blockers": [],
+            "authority": {
+              "actionKey": "claim_backlog_item_for_work",
+              "enforcementState": "enforced"
+            },
+            "satisfied": [
+              {
+                "code": "CLASSIFICATION_REQUIRED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "product-owner"
+              },
+              {
+                "code": "AUTHORIZATION_DENIED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "platform-governance"
+              }
+            ],
+            "decisionId": "IRD-D466F87B958C",
+            "workIntent": "design",
+            "evaluatedAt": "2026-08-25T01:02:43.471Z",
+            "factsDigest": "9b6a76c285cca4c6df0b8faad91948dc95b8525ec276bca6b495d23021dc46dd",
+            "stableCodes": {
+              "unmet": [],
+              "blockers": [],
+              "satisfied": [
+                "CLASSIFICATION_REQUIRED",
+                "AUTHORIZATION_DENIED"
+              ]
+            },
+            "policyVersion": "initiative-readiness.v2",
+            "schemaVersion": 1,
+            "transitionObject": {
+              "id": "OpenDigitalProductFactory/opendigitalproductfactory#feat/workroom-definition-instance-bridge",
+              "kind": "work-capsule",
+              "targetState": "design",
+              "expectedVersion": "claim.v1"
+            }
+          }
+        },
+        {
+          "recoveryKey": "bi-d4c110bc-cmt7zbmc00fa901mg5goetzsx",
+          "kind": "status_change",
+          "summary": "Retired BI-D4C110BC as defer",
+          "recordedAt": "2026-08-25T01:21:29.808Z",
+          "payload": {
+            "to": "deferred",
+            "from": "open",
+            "reason": "Portable Work Packets, leases, dependencies, handoffs, conflicts, receipts, completion, and multi-agent collaboration extend the canonical Work Case/WorkUnit spine and cannot be safely fragmented.",
+            "outcome": "defer",
+            "deferral": {
+              "reason": "Portable Work Packets, leases, dependencies, handoffs, conflicts, receipts, completion, and multi-agent collaboration extend the canonical Work Case/WorkUnit spine and cannot be safely fragmented.",
+              "trigger": "Resume after reinstall when the external-agent operating-contract plan is approved for an independent Work Packet/lease slice with concurrency, expiry, review, and durable-resume gates.",
+              "reviewAt": "2026-09-22T20:00:00.000Z"
+            },
+            "rationale": "Valid, architecture-approved program demand, but the canonical plan requires independently shippable, ordered slices. The pre-reinstall drain must preserve those boundaries rather than collapse the program into one unsafe PR.",
+            "duplicateOfId": null
+          }
+        }
+      ],
+      "effortSize": "xlarge",
+      "triageOutcome": "defer",
       "scopeRationale": "Universal DPF external-agent operating substrate reused across installations, archetypes, and business portfolios.",
+      "priority": 1,
       "createdAt": "2026-08-22T14:32:06.252Z"
     },
     {
@@ -320,16 +1892,36 @@
       "epicId": "EP-1FABA22D",
       "title": "Converge external-agent ingress, session, work, and completion adapters",
       "body": "Reserve the external-agent program's independent convergence stream. Unify MCP connect instructions, generated pointer, and A2A capability metadata on one profile compiler; converge embedded/external dual-principal sessions; route Workroom/WorkItem/TaskRun collaboration through WorkUnit/Work Case; centralize lease/completion/receipt projection; and retire browser/chat/broad-tool shortcuts only after parity evidence. Keep this bounded to touched seams and target roughly 20% of program delivery capacity.",
-      "status": "open",
+      "status": "deferred",
       "type": "product",
       "workType": "refactor",
       "source": "user-request",
       "scopeKind": "platform",
       "dependsOn": [],
       "externalDependencies": [],
-      "activities": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-f509cc59-cmt7zbmiw0faf01mgny5bciqc",
+          "kind": "status_change",
+          "summary": "Retired BI-F509CC59 as defer",
+          "recordedAt": "2026-08-25T01:21:30.056Z",
+          "payload": {
+            "to": "deferred",
+            "from": "open",
+            "reason": "The external-agent convergence stream is the program's bounded 20% refactor and spans ingress, profiles, principals, sessions, work, leases, receipts, completion, and removal of shortcuts after parity.",
+            "outcome": "defer",
+            "deferral": {
+              "reason": "The external-agent convergence stream is the program's bounded 20% refactor and spans ingress, profiles, principals, sessions, work, leases, receipts, completion, and removal of shortcuts after parity.",
+              "trigger": "Resume once the first external-agent vertical slice is stable; fund this refactor independently with seam inventory, parity tests, compatibility, rollback, and explicit deletion criteria.",
+              "reviewAt": "2026-09-22T20:00:00.000Z"
+            },
+            "rationale": "Valid, architecture-approved program demand, but the canonical plan requires independently shippable, ordered slices. The pre-reinstall drain must preserve those boundaries rather than collapse the program into one unsafe PR.",
+            "duplicateOfId": null
+          }
+        }
+      ],
       "effortSize": "large",
-      "triageOutcome": "build",
+      "triageOutcome": "defer",
       "scopeRationale": "Universal DPF external-agent operating substrate reused across installations, archetypes, and business portfolios.",
       "createdAt": "2026-08-22T14:32:06.849Z"
     }

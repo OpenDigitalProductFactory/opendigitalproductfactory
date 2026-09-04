@@ -72,6 +72,29 @@ for existing rows. A regression test pins it before the move.
 **Verification:** unit tests for refusal and grammar stability; a query returning
 zero owner-less service principals.
 
+### Delivered (`BI-3181909E`)
+
+`apps/web/lib/identity/service-account.ts` is the shared primitive.
+`buildServiceAccountPrincipalId(namespace, segments)` owns the grammar;
+`resolveServiceAccountPrincipal()` mints only against a resolved accountable owner
+and refuses otherwise; `findOwnerlessServiceAccounts()` is the invariant guard.
+`browser-drive/identity.ts` keeps only its namespace (`browser-svc`) and issuer.
+
+Two decisions worth carrying forward:
+
+- **Repair-forward over one-shot backfill.** An account predating the rule gains
+  its sponsor the next time it is touched, so the invariant converges rather than
+  depending on a migration being exhaustive. The guard query is what proves it.
+- **The id grammar is pinned by test, not by convention.** Browser-session
+  integration ids embed the whole `browser-svc:<site>:<account>` string, so a
+  change orphans existing credentials and bindings. `drive.ts` consumes only the
+  id builder and was deliberately left untouched.
+
+**Follow-up, not done here:** `findOwnerlessServiceAccounts()` exists but nothing
+runs it on a cadence. Wiring it into a steward sweep so an orphan surfaces without
+someone asking is a separate concern — an invariant nobody evaluates is not yet a
+guard.
+
 ## Phase 2 — The projection contract (`BI-DCE49BA9`)
 
 Extract the DN projection from `apps/web/app/(shell)/platform/identity/directory/page.tsx`
@@ -135,6 +158,42 @@ end-to-end against the running portal; an install with an upstream still works w
 tested precedence; no auth check weakened anywhere; seeded personas at real
 privilege levels.
 
+### Delivered — Phases 2, 3 and 4
+
+**Phase 2 (`BI-DCE49BA9`)** — `apps/web/lib/directory/`. `dn.ts` derives the base
+DN from `Organization` (website host, else the slug under a reserved `internal`
+domain that cannot collide with a real one) and escapes RDNs per RFC 4514.
+`schema.ts` holds the object classes and the publication **allowlist**, with each
+withheld field carrying its reason. `projection.ts` builds the read-only,
+fingerprinted tree. The admin route no longer computes a tree or carries a
+hardcoded `dc=dpf,dc=internal`; it renders exactly what a client would see.
+
+**Phase 3 (`BI-F7317D65`)** — `apps/web/lib/directory/ldap/`. BER codec, filter
+layer, protocol layer, TLS loader and listener. Written against RFC 4511 because
+no maintained Node LDAP *server* exists. Read-only by construction: writes are
+refused with `unwillingToPerform`, not merely unimplemented.
+
+**Phase 4 (`BI-CEACBD0D`)** — `apps/web/lib/identity/authentication.ts`.
+`govern/auth.ts` now consults the spine, so an inactive `Principal` cannot log in
+even when its `User` row still says active. Deactivation is one transaction
+across principal and credentials. Local-vs-upstream precedence resolves to the
+install and **surfaces** an overlap rather than resolving it silently.
+
+**Verification.** 67 directory tests, 11 authentication tests, 142 across the
+affected surface, and `tsc` clean. Six of those exercise a **real `ldapsearch`
+client** against the running listener — bind over TLS, all three identity shapes
+returned, group membership resolved by filter, wrong password rejected,
+anonymous refused, and withheld attributes absent when requested by name.
+
+Two findings worth carrying: the functional test initially deadlocked because
+`spawnSync` blocks the event loop the listener runs on, and `tsc` caught two type
+errors (Node's generic `Buffer`, and a certificate CN that may be an array) that
+67 passing tests did not.
+
+**Still open after this build:** the `User` schema demotion (design Q2), SCIM and
+OIDC, multi-organization base DNs (Q3), and running
+`findOwnerlessServiceAccounts()` on a cadence.
+
 ## Phase 5 — Retire the superseded stance (`BI-5167932D`)
 
 Audit all 111 tasks in the 2026-04-22 plan and record a disposition for each:
@@ -146,6 +205,29 @@ implies the adopt stance. Update the stated 80/20 allocation wherever touched.
 **Verification:** `scripts/check-plan-backlog-coverage.mjs` passes; no document
 implies DPF adopts authentik as a runtime service; every one of the 111 tasks has a
 recorded disposition.
+
+## Phase 6 — Serve it (`BI-A91004A7`)
+
+Phase 3 delivered the protocol and no install served it: `createLdapServer` was
+exported and never invoked outside tests. Phase 6 is the entrypoint that turns a
+built listener into a served one — `startLdapListener` composing
+`buildDirectoryProjection` with `createBindVerifier`, the `DPF_LDAP_ENABLED` gate,
+the three-state operator surface (disabled / listening / refused), the published
+compose port, and org-PKI material read through the existing `DPF_STATE_DIR` mount
+rather than a second certificate or a second mount.
+
+This phase was not in the original sequence. It exists because "no deliverable in
+this design exists only as a checkbox" has to mean *running*, not *merged* — the
+epic's own verification passed 78 unit tests and six real-`ldapsearch` runs while
+no install served LDAP, because every one of those tests starts the listener itself.
+
+**Verification:** `ldapsearch` against the **running install**, not a test-spawned
+server. Satisfied 2026-08-29 on the canonical runtime: portal log
+`[ldap] Serving the directory over LDAPS on port 636`, `:::636` bound in-container,
+TLS chain verified to the organization CA (`Verify return code: 0`), and a real
+OpenLDAP client receiving the bind verifier's own diagnostic. Survived a subsequent
+self-upgrade. A successful bind returning entries is **not** demonstrated: that
+needs a credential for a production principal, which was deliberately not minted.
 
 ## Cross-cutting verification
 
@@ -177,6 +259,7 @@ deliverable maps to a live backlog item — none is stored as a checkbox.
 | 3 | LDAP listener over org-PKI TLS | yes | `BI-F7317D65` | 2 |
 | 4 | Principal becomes the authentication root | yes | `BI-CEACBD0D` | 2 |
 | 5 | Supersede the 2026-04-22 plan across 10 documents | yes | `BI-5167932D` | 0 |
+| 6 | Serve the listener: runtime entrypoint, config, operator surface, org-PKI wiring | yes | `BI-A91004A7` | 3 |
 
 **Governed coverage receipt: blocked by `BI-72F368BC`.**
 
@@ -190,12 +273,24 @@ and refused:
 | 2 | `plan-artifact-invalid` — "…has no recorded head" | branch claimed via `claim_backlog_item_for_work`; capsule bound to the repo but `headSha` unset |
 | 3 | `traceability-incomplete` — "BacklogItem BI-C7362CA5 has no initiative scope baseline" | `headSha` synced to `58126dce0` via `adopt_worktree`; plan blob `77e1faf42f` pushed and confirmed on the remote |
 
-Failure 3 is the live blocker and is not surface-specific: per `BI-72F368BC`,
-**zero `initiative_scope_baseline` activities exist install-wide**, and the only
-writer (`approveInitiativeBaseline`, reachable through `record_initiative_design_review`
-gate `spec-approval`) hard-codes `requiresIndependentReviewer: true`. This install
-has one human principal, so the author can never be independent of the reviewer and
-the baseline can never be written — by any surface, Build Studio included.
+Failure 3 **was** the live blocker, and as of 2026-09-01 it no longer holds. The
+mechanism is unchanged — `approveInitiativeBaseline` (reachable through
+`record_initiative_design_review` gate `spec-approval`) still hard-codes
+`requiresIndependentReviewer: true` at `baseline-repository.ts:440` — but the two
+facts that made it unsatisfiable have both moved:
+
+| Claim when this was written | Measured 2026-09-01 |
+|---|---|
+| zero `initiative_scope_baseline` activities install-wide | **7**, minted 2026-08-31 and 2026-09-01 |
+| one human principal, so no reviewer can be independent | **3 active human principals** |
+
+So the baseline *can* now be written on this install, and has been — for other
+items. None of the seven belongs to this epic, which is why every `EP-24741BBF`
+item still reads unbaselined. The remaining work is to route this plan's gates to
+an eligible independent reviewer, not to wait on a platform fix.
+
+Do not re-derive the old conclusion from this section: it is retained because the
+sequencing lessons below are still true, not because the blocker still stands.
 
 Failures 1 and 2 were self-inflicted sequencing and are recorded because the
 ordering is not obvious: a workroom must be **repository-bound and head-synced**
@@ -206,4 +301,5 @@ before a receipt is attempted, and `create_workroom` alone does neither.
 > `BI-B9403248` was closed 2026-08-21 by PR #4422. The live blocker is
 > `BI-72F368BC`. The message should be repointed when the gate is fixed.
 
-Restore the governed receipt on this plan when `BI-72F368BC` ships.
+Restore the governed receipt on this plan by routing gate `spec-approval` to an
+eligible independent reviewer; it is no longer gated on `BI-72F368BC` shipping.

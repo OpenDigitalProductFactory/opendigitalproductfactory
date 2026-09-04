@@ -124,3 +124,96 @@ test("evaluateGateRecord expired passed gate is not ok", () => {
   assert.equal(r.ok, false);
   assert.match(r.reason, /expired/i);
 });
+
+// BI-5529B5AC: gate state is written PER SLOT (dpf-local-ci-gate.json for
+// slot-0, dpf-local-ci-gate-slot-1.json for slot-1). A stale slot-0 record must
+// never shadow a PASS earned on slot-1 for the same SHA — the exact shape that
+// refused `fix/classify-ignored-builds@f8c38b9cac` on 2026-09-02 until an
+// operator-emergency override was written over the top of it.
+function headWithSlotRecords(records) {
+  const dir = mkdtempSync(join(tmpdir(), "dpf-pregate-slots-"));
+  const gitDir = join(dir, ".git");
+  mkdirSync(gitDir);
+  for (const [name, rec] of Object.entries(records)) {
+    writeFileSync(join(gitDir, name), JSON.stringify(rec));
+  }
+  return {
+    branch: "feat/x",
+    sha: HEAD,
+    statePath: join(gitDir, "dpf-local-ci-gate.json"),
+    topLevel: dir,
+  };
+}
+
+test("slot-1 PASS for HEAD is honoured when slot-0 holds a stale queued record for the same SHA", () => {
+  const head = headWithSlotRecords({
+    "dpf-local-ci-gate.json": { sha: HEAD, gatePassed: false, status: "queued" },
+    "dpf-local-ci-gate-slot-1.json": {
+      sha: HEAD,
+      gatePassed: true,
+      status: "passed",
+      expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+    },
+  });
+  assert.equal(decide("git push", {}, { head }).block, false);
+});
+
+test("slot-1 PASS for a DIFFERENT SHA does not rescue a slot-0 miss", () => {
+  const head = headWithSlotRecords({
+    "dpf-local-ci-gate.json": { sha: HEAD, gatePassed: false, status: "failed" },
+    "dpf-local-ci-gate-slot-1.json": {
+      sha: "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+      gatePassed: true,
+      status: "passed",
+      expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+    },
+  });
+  const verdict = decide("git push", {}, { head });
+  assert.equal(verdict.block, true);
+  assert.match(verdict.reason, /not passed|re-run pregate/i);
+});
+
+test("the checked-in reader (scripts/pregate-status.mjs) is the verdict when it is present", () => {
+  const head = headWithSlotRecords({
+    // No record that this hook could read as a pass on its own...
+    "dpf-local-ci-gate.json": { sha: HEAD, gatePassed: false, status: "queued" },
+  });
+  mkdirSync(join(head.topLevel, "scripts"));
+  // ...but the canonical reader says PASS for this HEAD, so the hook defers.
+  writeFileSync(
+    join(head.topLevel, "scripts", "pregate-status.mjs"),
+    `process.stdout.write(JSON.stringify({ verdict: "PASS", headSha: ${JSON.stringify(HEAD)} }));\n`,
+  );
+  assert.equal(decide("git push", {}, { head }).block, false);
+});
+
+test("a reader verdict other than PASS still lets an allowlisted recorded override through", () => {
+  const head = headWithSlotRecords({
+    "dpf-local-ci-gate.json": {
+      sha: HEAD,
+      gatePassed: false,
+      skipped: true,
+      skipReason: "external-contribution-no-install: source-only worktree",
+    },
+  });
+  mkdirSync(join(head.topLevel, "scripts"));
+  writeFileSync(
+    join(head.topLevel, "scripts", "pregate-status.mjs"),
+    `process.stdout.write(JSON.stringify({ verdict: "FAIL", reason: "gate record status unknown" })); process.exit(1);\n`,
+  );
+  assert.equal(decide("git push", {}, { head }).block, false);
+});
+
+test("a reader verdict other than PASS with no override blocks and quotes the reader's reason", () => {
+  const head = headWithSlotRecords({
+    "dpf-local-ci-gate.json": { sha: HEAD, gatePassed: false, status: "failed" },
+  });
+  mkdirSync(join(head.topLevel, "scripts"));
+  writeFileSync(
+    join(head.topLevel, "scripts", "pregate-status.mjs"),
+    `process.stdout.write(JSON.stringify({ verdict: "FAIL", reason: "vitest stage failed on slot-0" })); process.exit(1);\n`,
+  );
+  const verdict = decide("git push", {}, { head });
+  assert.equal(verdict.block, true);
+  assert.match(verdict.reason, /vitest stage failed on slot-0/);
+});

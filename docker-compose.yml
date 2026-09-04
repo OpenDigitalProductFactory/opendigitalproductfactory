@@ -129,6 +129,11 @@ services:
     ports:
       - "3000:3000"
       - "1455:3000"  # OpenAI Codex OAuth callback (shared client requires this port)
+      # The directory listener (EP-24741BBF · BI-A91004A7). Loopback by default,
+      # matching the step-ca overlay: an organization directory that other hosts
+      # bind to is a deliberate choice, not a default. Nothing listens inside the
+      # container until DPF_LDAP_ENABLED=1, so this mapping is inert until then.
+      - "${DPF_LDAP_BIND_ADDRESS:-127.0.0.1}:${DPF_LDAP_PORT:-636}:${DPF_LDAP_PORT:-636}"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - dpf-source-code:/workspace
@@ -154,6 +159,16 @@ services:
       # directory at token generation time. Requires DPF_HOST_INSTALL_PATH
       # to be set in .env (done by the installer at setup time).
       - ${DPF_HOST_INSTALL_PATH:-.}:/host-dpf
+      # The platform's own worktree base, so the server-side worktree janitor can
+      # SEE what it is responsible for. Without this the job scans nothing, finds
+      # nothing, and reports success — which is how 528 GB accumulated behind a
+      # feature that was written, shipped and defaulted off (BI-99395B29).
+      #
+      # The base is a SIBLING of the install root, so /host-dpf does not contain
+      # it. Resolution is platform-owned (scripts/lib/worktree-base.mjs); the
+      # default here reproduces that module's derived default so an install that
+      # sets nothing behaves exactly as it does today.
+      - ${DPF_WORKTREE_BASE:-${DPF_HOST_INSTALL_PATH:-.}-worktrees}:/host-worktrees
       # Signed transition receipts are host-owned; portal verifies read-only.
       # DPF_STATE_DIR MUST be an absolute, Docker-Desktop-shared host path (the
       # installer writes ~/.dpf). The ${HOME} fallback is a dev-only last resort:
@@ -161,6 +176,11 @@ services:
       # DPF_STATE_DIR would resolve to the unshareable /root/.dpf and fail the
       # migrate step with "mounts denied" (#3262). Guarded by check-compose-env-contract.
       - ${DPF_STATE_DIR:-${HOME}/.dpf}:/dpf-state:ro
+      # Portal-owned, teardown-surviving federation state (identity + peer
+      # ledger). The one read-write slice of the state directory, so a reinstall
+      # that keeps DPF_STATE_DIR keeps the identity its peers trust
+      # (EP-ZERO-CONFIG-FEDERATION §5.1-5.2).
+      - ${DPF_STATE_DIR:-${HOME}/.dpf}/federation:/dpf-federation
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://dpf:dpf_dev@postgres:5432/dpf}
       AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET must be set - run scripts/setup.ps1 or scripts/setup.sh first}
@@ -204,12 +224,38 @@ services:
       DPF_HOST_INSTALL_PATH: ${DPF_HOST_INSTALL_PATH:-}
       DPF_HOST_PLATFORM: ${DPF_HOST_PLATFORM:-}
       DPF_HOST_ARCH: ${DPF_HOST_ARCH:-}
+      # Installation identity process-override tier (BI-7626A660 / BI-10BF6206).
+      # `environment-class-contract` and `estate-identity-contract` both document
+      # a highest-precedence process override, and neither variable was listed
+      # here — so on a consumer install, where this allow-list is the ONLY way an
+      # env var reaches the portal, the documented top tier could never be set.
+      # A precedence chain whose first rung is unreachable is not a precedence
+      # chain. Empty default keeps the tier silent unless an operator sets it.
+      DPF_ENVIRONMENT_CLASS: ${DPF_ENVIRONMENT_CLASS:-}
+      DPF_ESTATE_NAME: ${DPF_ESTATE_NAME:-}
       # Authoritative installer opt-in state for the main installation's
       # supervised host Edge service. The portal combines this intent with
       # live enrollment/heartbeat evidence; it never treats the flag as health.
       DPF_EDGE_ENABLED: ${DPF_INCLUDE_EDGE:-0}
       DPF_STATE_DIR_HOST: ${DPF_STATE_DIR:-${HOME}/.dpf}
       DPF_RUNTIME_TRANSITION_SECRET_FILE_HOST: ${DPF_STATE_DIR:-${HOME}/.dpf}/runtime-transition.secret
+      # The directory listener (EP-24741BBF · BI-A91004A7). Off unless the
+      # operator sets DPF_LDAP_ENABLED=1 — an install does not start serving
+      # an identity protocol because it was upgraded.
+      DPF_LDAP_ENABLED: ${DPF_LDAP_ENABLED:-0}
+      DPF_LDAP_PORT: ${DPF_LDAP_PORT:-636}
+      DPF_LDAP_REQUIRE_CLIENT_CERTIFICATE: ${DPF_LDAP_REQUIRE_CLIENT_CERTIFICATE:-0}
+      # LDAPS material comes from the organization CA that
+      # scripts/bootstrap-organization-pki.sh already issues. Its default output
+      # directory ($HOME/.dpf/pki) sits inside DPF_STATE_DIR, which is already
+      # mounted read-only at /dpf-state — so the listener reuses the portal's
+      # own issued identity rather than needing a second mount or a second cert.
+      # An operator who moved DPF_PKI_DIR outside DPF_STATE_DIR must set these
+      # three paths explicitly; the listener refuses to start rather than
+      # falling back to a self-signed certificate.
+      DPF_LDAP_TLS_CERT_PATH: ${DPF_LDAP_TLS_CERT_PATH:-/dpf-state/pki/authority.crt}
+      DPF_LDAP_TLS_KEY_PATH: ${DPF_LDAP_TLS_KEY_PATH:-/dpf-state/pki/authority.key}
+      DPF_LDAP_TLS_CA_PATH: ${DPF_LDAP_TLS_CA_PATH:-/dpf-state/pki/root_ca.crt}
       # Portal-side live-readiness checks run inside the container, where
       # process.cwd() is /app and not the host Git clone. Point git ancestry
       # helpers at the mounted host source so verify_live_install_readiness can
@@ -267,14 +313,10 @@ services:
       # jobs are registered only when this flag is on. Library defaults stay
       # off for tests and ad-hoc imports; compose is the deployment contract.
       DPF_SCHEDULED_INNGEST_FUNCTIONS_ENABLED: ${DPF_SCHEDULED_INNGEST_FUNCTIONS_ENABLED:-1}
-      # Federation dark-launch flags (default OFF; founder enables per the
-      # federated-demand plan's two-instance verification gate). These MUST be
-      # base-compose passthroughs so an operator opt-in lives in the install's
-      # .env and survives the BASE-ONLY portal recreate that promote.sh falls
-      # back to when install-state composeFiles is empty (which otherwise drops
-      # docker-compose.override.yml and silently disables the exchange surface
-      # on every self-upgrade). See BI-8C1F0A2E.
-      DPF_FEDERATION_EXCHANGE_ENABLED: ${DPF_FEDERATION_EXCHANGE_ENABLED:-0}
+      # RETIRED (EP-ZERO-CONFIG-FEDERATION §5.4): federation exchange is always
+      # on; a trusted link is the only switch. The passthrough stays one release
+      # so an existing .env that sets it still interpolates, then goes.
+      DPF_FEDERATION_EXCHANGE_ENABLED: ${DPF_FEDERATION_EXCHANGE_ENABLED:-1}
       DPF_EDGE_INCIDENT_CORRELATION_ENABLED: ${DPF_EDGE_INCIDENT_CORRELATION_ENABLED:-0}
       # Allow outbound federation enroll/exchange to http:// and private/LAN-IP
       # peers (default OFF = https-only + SSRF block). Same-organization installs
@@ -947,7 +989,7 @@ services:
   dpf-stt:
     profiles: ["runtime-local-speech", "tts"]
     # Pinned to the multi-arch index digest for hwdsl2/whisper-server:latest
-    # resolved on 2026-08-15 (the prior 0b03ecb5… digest was deleted from the
+    # resolved on 2026-09-03 (the prior 8f76c4f9… digest was deleted from the
     # registry — Release Image Manifest Guard caught it again). The registry
     # owner re-pushes :latest periodically and prunes the previous index, so
     # this digest must be re-resolved every time the guard fails. Bump
@@ -957,7 +999,7 @@ services:
     # the sidecar won't start, set DPF_STT_IMAGE in .env to a reachable ref
     # (e.g. hwdsl2/whisper-server:latest) then `docker compose up -d dpf-stt`,
     # and open a PR re-resolving the digest here (this is that PR's pattern).
-    image: ${DPF_STT_IMAGE:-hwdsl2/whisper-server@sha256:166a8c04e2687608a116372e92f11bfda3e963f3c1dbf390a7c820db0f45887b}
+    image: ${DPF_STT_IMAGE:-hwdsl2/whisper-server@sha256:29d01f2e47e4f72b5475ce36fc987bb369f53fa5e5cf6b5a924ada69e1820b3f}
     restart: unless-stopped
     logging: *default-logging
     environment:

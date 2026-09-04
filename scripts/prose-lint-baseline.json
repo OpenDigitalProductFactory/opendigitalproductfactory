@@ -359,21 +359,29 @@
     "longSentences": 0,
     "textMass": 26
   },
+  "apps/web/app/(shell)/admin/scheduled-jobs/EditScheduleDialog.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 120
+  },
+  "apps/web/app/(shell)/admin/scheduled-jobs/ScheduleWindowChart.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 22
+  },
   "apps/web/app/(shell)/admin/scheduled-jobs/ScheduledJobsClient.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 85
-  },
-  "apps/web/app/(shell)/admin/scheduled-jobs/SchedulingTimeline.tsx": {
-    "vocabulary": 0,
-    "retiredVocabulary": 0,
-    "genericLabels": 0,
-    "readability": 0,
-    "longSentences": 0,
-    "textMass": 38
+    "textMass": 140
   },
   "apps/web/app/(shell)/admin/scheduled-jobs/page.tsx": {
     "vocabulary": 0,
@@ -381,7 +389,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 27
+    "textMass": 15
   },
   "apps/web/app/(shell)/admin/settings/page.tsx": {
     "vocabulary": 0,
@@ -965,7 +973,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 70
+    "textMass": 69
   },
   "apps/web/app/(shell)/employee/page.tsx": {
     "vocabulary": 0,
@@ -1575,14 +1583,6 @@
     "longSentences": 0,
     "textMass": 8
   },
-  "apps/web/app/(shell)/ops/stack-currency/page.tsx": {
-    "vocabulary": 0,
-    "retiredVocabulary": 0,
-    "genericLabels": 0,
-    "readability": 0,
-    "longSentences": 0,
-    "textMass": 18
-  },
   "apps/web/app/(shell)/ops/teardown/page.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
@@ -1637,7 +1637,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 110
+    "textMass": 115
   },
   "apps/web/app/(shell)/platform/ai/browser-sessions/BrowserSessionLedgerTable.tsx": {
     "vocabulary": 0,
@@ -1829,7 +1829,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 77
+    "textMass": 63
   },
   "apps/web/app/(shell)/platform/audit/operations/page.tsx": {
     "vocabulary": 0,
@@ -2236,8 +2236,8 @@
     "retiredVocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
-    "longSentences": 1,
-    "textMass": 69
+    "longSentences": 0,
+    "textMass": 75
   },
   "apps/web/app/(shell)/portfolio/product/[id]/knowledge/page.tsx": {
     "vocabulary": 0,
@@ -2413,7 +2413,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 23
+    "textMass": 20
   },
   "apps/web/app/(shell)/workspace/calendar/page.tsx": {
     "vocabulary": 0,
@@ -2454,6 +2454,14 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 6
+  },
+  "apps/web/app/(shell)/workspace/ward/page.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 26
   },
   "apps/web/app/(storefront)/error.tsx": {
     "vocabulary": 0,
@@ -2671,6 +2679,14 @@
     "longSentences": 0,
     "textMass": 11
   },
+  "apps/web/app/.well-known/dpf-federation.json/route.ts": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 7
+  },
   "apps/web/app/.well-known/dpf-instance.json/route.ts": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
@@ -2725,7 +2741,15 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 29
+    "textMass": 31
+  },
+  "apps/web/app/api/oauth/token/route.ts": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 19
   },
   "apps/web/app/api/onboarding/business-document/route.ts": {
     "vocabulary": 0,
@@ -4382,6 +4406,14 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 31
+  },
+  "apps/web/components/attention/CoworkerEnvelopeApproval.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 30
   },
   "apps/web/components/attention/CoworkerProposalActions.tsx": {
     "vocabulary": 0,
@@ -6375,6 +6407,14 @@
     "longSentences": 0,
     "textMass": 11
   },
+  "apps/web/components/golden-triangle/WorkroomDefaultControl.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 72
+  },
   "apps/web/components/golden-triangle/posture-display.ts": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
@@ -7103,6 +7143,14 @@
     "longSentences": 1,
     "textMass": 78
   },
+  "apps/web/components/ops/WorkSyncPanel.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 30
+  },
   "apps/web/components/ops/backlog-form-assist.ts": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
@@ -7125,7 +7173,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 48
+    "textMass": 37
   },
   "apps/web/components/owner-first/OwnerFirstSummary.tsx": {
     "vocabulary": 0,
@@ -7927,13 +7975,13 @@
     "longSentences": 0,
     "textMass": 7
   },
-  "apps/web/components/platform/coworker-record/CoworkerProactivitySetting.tsx": {
+  "apps/web/components/platform/coworker-record/CoworkerProactivityNote.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 6
+    "textMass": 32
   },
   "apps/web/components/platform/coworker-record/CoworkerRecordTabs.tsx": {
     "vocabulary": 0,
@@ -8495,13 +8543,21 @@
     "longSentences": 0,
     "textMass": 15
   },
-  "apps/web/components/product/ProductSupplyChainPanel.tsx": {
+  "apps/web/components/product/ProductRelationshipsSection.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 49
+    "textMass": 29
+  },
+  "apps/web/components/product/ProductSoftwareCompositionPanel.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 37
   },
   "apps/web/components/product/ProductTabNav.tsx": {
     "vocabulary": 0,
@@ -9149,7 +9205,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 2
+    "textMass": 13
   },
   "apps/web/components/twin/WorkItem.tsx": {
     "vocabulary": 0,
@@ -9607,6 +9663,14 @@
     "longSentences": 0,
     "textMass": 21
   },
+  "apps/web/components/workspace-home/CloudProviderUnclearedNotice.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 29
+  },
   "apps/web/components/workspace-home/LocalOnlyProviderNotice.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
@@ -9719,13 +9783,21 @@
     "longSentences": 0,
     "textMass": 29
   },
+  "apps/web/components/workspace/EstateNameField.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 55
+  },
   "apps/web/components/workspace/InstallationIdentityPanel.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 157
+    "textMass": 160
   },
   "apps/web/components/workspace/PlatformReadinessMatrix.tsx": {
     "vocabulary": 0,
@@ -9808,6 +9880,22 @@
     "textMass": 31
   },
   "apps/web/components/workspace/workroom/WorkroomPosture.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 16
+  },
+  "apps/web/components/workspace/workroom/WorkroomPostureControl.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 84
+  },
+  "apps/web/components/workspace/workroom/WorkroomPostureProvenance.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
     "genericLabels": 0,
@@ -9934,5 +10022,21 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 0
+  },
+  "apps/web/components/workspace/workroom/WorkroomProcessOverseer.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 13
+  },
+  "apps/web/app/(shell)/storefront/animals/waiting/page.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 55
   }
 }

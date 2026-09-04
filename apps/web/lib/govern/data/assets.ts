@@ -24,6 +24,7 @@ import {
   type ResidencyClassKey,
   type SubjectLocator,
 } from "./taxonomy";
+import { AI_PROVIDER_GOVERNANCE_ASSETS } from "./ai-provider-governance-assets";
 import { PROCESSING_GOVERNANCE_ASSETS } from "./processing-governance-assets";
 import { BUSINESS_PRODUCT_PORTFOLIO_ASSETS } from "./business-product-portfolio-assets";
 import { HOSPITALITY_CAPACITY_ASSETS } from "./hospitality-capacity-assets";
@@ -33,8 +34,12 @@ import { LIFECYCLE_GOVERNANCE_ASSETS } from "./lifecycle-governance-assets";
 import { STOCK_COVERAGE_ASSETS } from "./stock-coverage-assets";
 import { FINANCE_INVOICE_DOCUMENT_ASSETS } from "./finance-invoice-document-assets";
 import { RECRUITING_ASSETS } from "./recruiting-assets";
+import { WORKER_CLASSIFICATION_ASSETS } from "./worker-classification-assets";
 import { DECISION_TRUST_ENVELOPE_ASSETS } from "./decision-trust-envelope-assets";
+import { MCP_OAUTH_ASSETS } from "./mcp-oauth-assets";
 import { MCP_ASSETS } from "./mcp-assets";
+import { WORKROOM_PARTICIPANT_ASSETS } from "./workroom-participant-assets";
+import { WORKROOM_RELATION_ASSETS } from "./workroom-relation-assets";
 import { INITIATIVE_GOVERNANCE_ASSETS } from "./initiative-governance-assets";
 import { FEDERATION_INTRODUCTION_ASSETS } from "./federation-introduction-assets";
 import { BUSINESS_PERFORMANCE_ASSETS } from "./business-performance-assets";
@@ -647,25 +652,7 @@ const SEED_ASSETS: readonly DataAssetDefinition[] = [
     classification: { state: "confirmed", source: "manual", effectiveFrom: "2026-07-24" },
     fields: [],
   },
-  {
-    id: "data:ai-provider-connection",
-    physical: { prismaModel: "AiProviderConnection" },
-    domain: "ai-provider-governance",
-    ownerRole: "platform-owner",
-    stewardRole: "data-steward",
-    categories: ["configuration", "authorization", "security-audit"],
-    sensitivity: "confidential",
-    criticality: "mission-critical",
-    subjectLocators: [
-      { role: "organization", fieldPath: "organization" },
-    ],
-    lifecycleClass: "legal-evidence",
-    purposeCapabilities: ["platform-operations", "compliance-and-legal", "coworker-assistance"],
-    residencyClass: "local-only",
-    projectionClass: "metadata",
-    classification: { state: "confirmed", source: "manual", effectiveFrom: "2026-07-19" },
-    fields: [],
-  },
+  ...AI_PROVIDER_GOVERNANCE_ASSETS,
   {
     // Per-customer incumbent coverage verdict (BI-548060D5). Operational — the
     // instantiated verdict for a customer's incumbent app, defaulted from the
@@ -730,8 +717,12 @@ const SEED_ASSETS: readonly DataAssetDefinition[] = [
   ...FINANCE_INVOICE_DOCUMENT_ASSETS, ...BUSINESS_PERFORMANCE_ASSETS,
   ...PROCESSING_GOVERNANCE_ASSETS,
   ...RECRUITING_ASSETS,
+  ...WORKER_CLASSIFICATION_ASSETS,
   ...DECISION_TRUST_ENVELOPE_ASSETS,
+  ...MCP_OAUTH_ASSETS,
   ...MCP_ASSETS,
+  ...WORKROOM_PARTICIPANT_ASSETS,
+  ...WORKROOM_RELATION_ASSETS,
   ...INITIATIVE_GOVERNANCE_ASSETS,
   ...FEDERATION_INTRODUCTION_ASSETS,
   ...EXTERNAL_CHANNEL_ASSETS,

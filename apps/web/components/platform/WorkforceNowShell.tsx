@@ -10,9 +10,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { Spinner } from "@/components/ui/Spinner";
+import { Surface } from "@/components/ui/Surface";
 import type {
   WorkforceActivity,
   WorkforceCoworker,
+  WorkforcePlatformRun,
 } from "@/lib/platform-runtime/workforce-activity";
 
 const REFRESH_INTERVAL_MS = 12_000;
@@ -26,6 +28,14 @@ function fmtCost(n: number): string {
   if (n <= 0) return "$0.00";
   if (n < 0.01) return "<$0.01";
   return `$${n.toFixed(2)}`;
+}
+function runningFor(iso: string): string {
+  const mins = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 60_000));
+  if (mins < 1) return "just started";
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 48) return `${hours}h ${mins % 60}m`;
+  return `${Math.floor(hours / 24)}d`;
 }
 function daysSince(iso: string | null): string {
   if (!iso) return "never engaged";
@@ -108,7 +118,16 @@ export function WorkforceNowShell({ initialData }: { initialData: WorkforceActiv
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Kpi label="Working now" value={`${pulse.workingCount} / ${pulse.totalCount}`} />
         <Kpi label="Actions today" value={String(pulse.actionsToday)} />
-        <Kpi label="Tokens today" value={fmtTokens(pulse.tokensToday)} sub={`~${fmtCost(pulse.costToday)}`} />
+        <Kpi
+          label="Tokens today"
+          value={fmtTokens(pulse.tokensToday)}
+          sub={
+            pulse.tokensUnattributed > 0
+              ? `~${fmtCost(pulse.costToday)} · ${fmtTokens(pulse.tokensUnattributed)} unattributed`
+              : `~${fmtCost(pulse.costToday)}`
+          }
+          flag={pulse.tokensUnattributed > 0}
+        />
         <Kpi
           label="Governance"
           value={`${pulse.quietOverThresholdCount + pulse.coworkersWithoutOwnerCount}`}
@@ -119,7 +138,11 @@ export function WorkforceNowShell({ initialData }: { initialData: WorkforceActiv
 
       <SectionHead title="Working now" hint="what they're on · what they got done today" />
       {data.working.length === 0 ? (
-        <Empty>No coworkers are actively working right now.</Empty>
+        <Empty>
+          {data.platformWork.length > 0
+            ? "No coworker owns a live task right now — the platform work below is what is running."
+            : "No coworkers are actively working right now."}
+        </Empty>
       ) : (
         <ul className="space-y-2">
           {data.working.map((c) => (
@@ -127,6 +150,20 @@ export function WorkforceNowShell({ initialData }: { initialData: WorkforceActiv
           ))}
         </ul>
       )}
+
+      {data.platformWork.length > 0 ? (
+        <>
+          <SectionHead
+            title="Platform work in flight"
+            hint="live runs no coworker owns — this is what is on the model runner"
+          />
+          <ul className="space-y-1.5">
+            {data.platformWork.map((run) => (
+              <PlatformRunRow key={run.taskRunId} run={run} />
+            ))}
+          </ul>
+        </>
+      ) : null}
 
       <SectionHead title="Quiet — no activity is also a signal" hint="expected, or a gap worth a look?" />
       {data.quiet.length === 0 ? (
@@ -312,6 +349,34 @@ function CoworkerRow({
         </button>
       </div>
     </li>
+  );
+}
+
+function PlatformRunRow({ run }: { run: WorkforcePlatformRun }) {
+  const target = run.buildId ? `/build?buildId=${encodeURIComponent(run.buildId)}` : null;
+  return (
+    <Surface as="li" level={1} padding="none" rounded="lg" className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-dpf-body">
+      <span className="h-1.5 w-1.5 rounded-full" style={{ background: "var(--dpf-warning)" }} />
+      <span className="font-semibold text-[var(--dpf-text)]">{run.title}</span>
+      <span className="rounded border border-[var(--dpf-border)] px-1.5 py-0.5 font-mono text-dpf-caption uppercase text-[var(--dpf-muted)]">
+        {run.status}
+      </span>
+      {run.source ? (
+        <span className="text-dpf-caption text-[var(--dpf-muted)]">source: {run.source}</span>
+      ) : null}
+      {run.buildId ? (
+        target ? (
+          <a className="text-dpf-caption text-[var(--dpf-accent)] underline" href={target}>
+            {run.buildId}
+          </a>
+        ) : (
+          <span className="text-dpf-caption text-[var(--dpf-muted)]">{run.buildId}</span>
+        )
+      ) : null}
+      <span className="ml-auto font-mono text-dpf-caption text-[var(--dpf-muted)]" title={`started ${run.startedAt}`}>
+        running {runningFor(run.startedAt)}
+      </span>
+    </Surface>
   );
 }
 

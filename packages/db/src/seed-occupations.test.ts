@@ -120,3 +120,66 @@ describe("base access profile binding", () => {
     expect(resolveBaseAccessRole("unknown-profile")).toBeNull();
   });
 });
+
+// Running the rescue for a day found the occupation registry held thirteen
+// entries across healthcare, trades, agriculture and manufacturing and NONE for
+// nonprofit-community, so the only role vocabulary a rescue manager saw was
+// DPF's own HR-000..HR-600 ladder — its IT roles (BI-A30152B6). §5b of
+// docs/architecture/archetypes/pet-rescue-operating-model.md names the eight
+// roles the day needs, each traced to a step of §1.
+describe("the roles a rescue's day requires", () => {
+  const RESCUE_ROLES = [
+    "kennel-technician",
+    "animal-intake-officer",
+    "veterinary-technician",
+    "adoption-counsellor",
+    "foster-coordinator",
+    "volunteer-coordinator",
+    "shelter-manager",
+    "animal-transport-driver",
+  ];
+
+  it("offers every one of the eight §5b roles", () => {
+    const keys = new Set(OCCUPATION_SEED_DATA.map((o) => o.occupationKey));
+    for (const role of RESCUE_ROLES) {
+      expect(keys.has(role), `${role} is missing`).toBe(true);
+    }
+  });
+
+  it("reaches both animal-welfare archetypes and no others by id", () => {
+    for (const role of RESCUE_ROLES) {
+      const occ = OCCUPATION_SEED_DATA.find((o) => o.occupationKey === role)!;
+      expect(occ.archetypeCategories).toEqual(["nonprofit-community"]);
+      expect([...(occ.archetypeIds ?? [])].sort()).toEqual(["animal-shelter", "pet-rescue"]);
+    }
+  });
+
+  it("gives each role a coworker it can summon", () => {
+    for (const role of RESCUE_ROLES) {
+      const occ = OCCUPATION_SEED_DATA.find((o) => o.occupationKey === role)!;
+      const summonable = occ.coworkerRoster.filter((g) => g.interaction === "summon");
+      expect(summonable.length, `${role} has nobody to summon`).toBeGreaterThan(0);
+    }
+  });
+
+  // No animal-welfare specialist exists to roster yet: a coworker needs a
+  // profession corpus and a model-tier floor before it can be defined, which is
+  // its own piece of work (BI-DC11C687). Until then these roles summon the
+  // general coworkers, and this asserts we did not quietly roster a ghost.
+  it("rosters only coworkers that actually exist", () => {
+    const known = knownCoworkerSlugs();
+    for (const role of RESCUE_ROLES) {
+      const occ = OCCUPATION_SEED_DATA.find((o) => o.occupationKey === role)!;
+      for (const grant of occ.coworkerRoster) {
+        expect(known.has(grant.agentSlug), `${role} rosters unknown ${grant.agentSlug}`).toBe(true);
+      }
+    }
+  });
+
+  it("leaves nonprofit-community no longer unserved", () => {
+    const served = OCCUPATION_SEED_DATA.filter((o) =>
+      o.archetypeCategories.includes("nonprofit-community"),
+    );
+    expect(served.length).toBeGreaterThanOrEqual(RESCUE_ROLES.length);
+  });
+});

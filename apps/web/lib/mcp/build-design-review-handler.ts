@@ -42,13 +42,14 @@ export async function reviewDesignDoc(params: Record<string, unknown>, userId: s
       // trajectory in the operator-facing gate reason (mirror of BI-4396EFEC
       // for the plan path). Live repro: FB-5E20E793 oscillated on the same
       // "missing accessibility" complaint round after round.
-      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { designDoc: true, designReview: true, kind: true, brief: true, plan: true } });
+      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { designDoc: true, designReview: true, kind: true, brief: true, plan: true, title: true, description: true } });
 
       // Fix flow: a fix build has no feature design doc — it carries a structured
       // diagnosis (fixContext) on its brief. Review the diagnosis for completeness
       // and advance ideate → plan, instead of running the feature design reviewers.
       if (build?.kind === "fix") {
-        const { isFixContextComplete, checkPhaseGate } = await import("@/lib/feature-build-types");
+        const { isFixContextComplete } = await import("@/lib/feature-build-types");
+        const { checkBuildPhaseGate } = await import("@/lib/work-posture/verification-depth-gate");
         const fixBrief = (build.brief ?? null) as import("@/lib/feature-build-types").FeatureBrief | null;
         const fixProcessSize = ((build.plan as Record<string, unknown> | null)?.processSize as string | undefined) ?? "medium";
         const fc = fixBrief?.fixContext;
@@ -67,7 +68,12 @@ export async function reviewDesignDoc(params: Record<string, unknown>, userId: s
         let fixPhaseGateBlocker: string | null = null;
         try {
           const fixPlan = (build.plan as Record<string, unknown> | null);
-          const gate = checkPhaseGate("ideate", "plan", { kind: "fix", processSize: fixProcessSize, deliverableSensitivity: fixPlan?.deliverableSensitivity, qualityFirst: fixPlan?.qualityFirst === true, fixContext: fc, designReview: review });
+          const gate = await checkBuildPhaseGate({
+            buildId,
+            from: "ideate",
+            to: "plan",
+            evidence: { kind: "fix", processSize: fixProcessSize, deliverableSensitivity: fixPlan?.deliverableSensitivity, qualityFirst: fixPlan?.qualityFirst === true, fixContext: fc, designReview: review },
+          });
           const readiness = gate.allowed
             ? await enforceBuildInitiativeReadiness({ buildId, target: "plan", targetPhase: "plan", expectedPhase: "ideate" })
             : null;
@@ -98,6 +104,7 @@ export async function reviewDesignDoc(params: Record<string, unknown>, userId: s
 
       if (!build?.designDoc) return { success: false, error: "No design document saved yet.", message: "Save designDoc first." };
       const { buildDesignReviewPrompt, buildArchitectureReviewPrompt, finalizeArchitectureAdvisory, parseReviewResponse, mergeReviews, collectReviewerVerdicts } = await import("@/lib/build-reviewers");
+      const { ownerAskContext } = await import("@/lib/build/owner-ask-context");
       const designDocTyped = build.designDoc as Parameters<typeof buildDesignReviewPrompt>[0];
       // BI-CE49D82E — Compute the iteration context up front so we can
       // (a) feed prior issues into the reviewer prompt and (b) populate
@@ -118,8 +125,22 @@ export async function reviewDesignDoc(params: Record<string, unknown>, userId: s
       const priorContext = priorIssues.length > 0
         ? { round: priorRound, issues: priorIssues }
         : null;
-      const prompt = buildDesignReviewPrompt(designDocTyped, "", priorContext);
-      const archPrompt = buildArchitectureReviewPrompt({ kind: "design", doc: designDocTyped }, "");
+      // BI-82E41B79 — the reviewer must see what was ASKED FOR, not only what
+      // was designed. This handler passed "" as project context, so the review
+      // ran against the design alone. The design rewrites the ask into its own
+      // `problemStatement`, and constraints do not survive that rewrite: an
+      // owner who wrote "no settings, no filters, no configuration" got a
+      // design with URL-parameter filtering, and the review then failed the
+      // build on the FILTER's edge cases — twice, until the build was
+      // abandoned. A reviewer that cannot see the ask cannot catch a design
+      // that exceeds it; it can only harden the overreach.
+      //
+      // The server-action path (lib/actions/build.ts) already passed
+      // `Build: <title>. <description>`. This is the same context, on the path
+      // the pipeline actually uses.
+      const ownerContext = ownerAskContext(build.title, build.description);
+      const prompt = buildDesignReviewPrompt(designDocTyped, ownerContext, priorContext);
+      const archPrompt = buildArchitectureReviewPrompt({ kind: "design", doc: designDocTyped }, ownerContext);
       const { routeAndCall } = await import("@/lib/routed-inference");
       const messages = [{ role: "user" as const, content: prompt }];
       // Run the two checklist reviewers PLUS the advisory architecture reviewer
@@ -128,19 +149,28 @@ export async function reviewDesignDoc(params: Record<string, unknown>, userId: s
       // it joins the deliberation trail as the `architect` branch and rides
       // along on review.architectureAdvisory so the coworker can fold concerns
       // into the spec, but it cannot gate pass/fail.
+      // BI-B3AB7FC9: every reviewer call carries who asked and which build it
+      // is for. Without this the three calls metered as agentId "unknown" /
+      // contextKey "routed-call" — 30% of a day's spend that no screen could
+      // name while the local model runner sat at 100%.
+      const attribution = {
+        ...(context?.agentId ? { agentId: context.agentId } : {}),
+        ...(context?.threadId ? { threadId: context.threadId } : {}),
+        buildId,
+      };
       const [r1settled, r2settled, archSettled] = await Promise.allSettled([
-        routeAndCall(messages, "You are a design reviewer.", "internal"),
+        routeAndCall(messages, "You are a design reviewer.", "internal", attribution),
         routeAndCall(
           messages,
           "You are an independent design reviewer. Focus especially on security, data integrity, edge cases, and accessibility gaps the primary reviewer may have missed.",
           "internal",
-          { budgetClass: "minimize_cost" },
+          { ...attribution, budgetClass: "minimize_cost" },
         ),
         routeAndCall(
           [{ role: "user" as const, content: archPrompt }],
           `You are the ${ENTERPRISE_ARCHITECT_DISPLAY_NAME} (DPF chief-architect lens) reviewing for architectural alignment. Advisory only — surface concerns and concrete spec edits, never block the gate.`,
           "internal",
-          { budgetClass: "minimize_cost" },
+          { ...attribution, budgetClass: "minimize_cost" },
         ),
       ]);
       const r1 = r1settled.status === "fulfilled" ? parseReviewResponse(r1settled.value.content) : null;
@@ -151,6 +181,10 @@ export async function reviewDesignDoc(params: Record<string, unknown>, userId: s
         decision: "fail" as const,
         issues: [{ severity: "critical" as const, description: "Both review agents failed to respond" }],
         summary: "Review could not be completed — retry.",
+        // BI-D33F968A: nobody read the work. `fail` is the safe default, not a
+        // verdict — mark it so a repair loop does not spend rounds "fixing"
+        // something no reviewer looked at.
+        reviewIncomplete: true,
       };
       // BI-CE49D82E — Compute the iteration delta against the prior round and
       // attach to the ReviewResult. computeReviewDelta + isOscillating live in
@@ -257,6 +291,7 @@ export async function reviewDesignDoc(params: Record<string, unknown>, userId: s
             phase: "ideate",
             reviewerBranches,
             ...(context?.threadId ? { threadId: context.threadId } : {}),
+            ...(context?.agentId ? { agentId: context.agentId } : {}),
           });
         }
       } catch (err) {
@@ -307,7 +342,8 @@ export async function reviewDesignDoc(params: Record<string, unknown>, userId: s
       //   3. Pass happyPathState to checkPhaseGate so the full intake
       //      check actually runs.
       try {
-        const { checkPhaseGate, canTransitionPhase, normalizeHappyPathState, deriveIntakeTaxonomyAnchor } = await import("@/lib/feature-build-types");
+        const { canTransitionPhase, normalizeHappyPathState, deriveIntakeTaxonomyAnchor } = await import("@/lib/feature-build-types");
+        const { checkBuildPhaseGate } = await import("@/lib/work-posture/verification-depth-gate");
         const updatedBuild = await prisma.featureBuild.findUnique({
           where: { buildId },
           select: {
@@ -553,14 +589,18 @@ export async function reviewDesignDoc(params: Record<string, unknown>, userId: s
           }
 
           const idpPlan = (updatedBuild.plan as Record<string, unknown> | null);
-          const gate = checkPhaseGate("ideate", "plan", {
-            kind: updatedBuild.kind,
+          const gate = await checkBuildPhaseGate({
+            buildId,
+            from: "ideate",
+            to: "plan",
+            evidence: { kind: updatedBuild.kind,
             processSize: (idpPlan?.processSize as string | undefined) ?? "medium",
             deliverableSensitivity: idpPlan?.deliverableSensitivity,
             qualityFirst: idpPlan?.qualityFirst === true,
             designDoc: updatedBuild.designDoc,
             designReview: updatedBuild.designReview,
-            happyPathState,
+              happyPathState,
+            },
           });
           const readiness = gate.allowed
             ? await enforceBuildInitiativeReadiness({ buildId, target: "plan", targetPhase: "plan", expectedPhase: "ideate" })

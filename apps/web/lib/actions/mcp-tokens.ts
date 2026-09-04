@@ -27,6 +27,7 @@ import {
   type McpTokenTemplateId,
 } from "@/lib/mcp-token-scopes";
 import { getToolGrantMapping } from "@/lib/tak/agent-grants";
+import { prisma } from "@dpf/db";
 
 /**
  * Returns the set of distinct grant keys this user could possibly include
@@ -90,6 +91,11 @@ export async function listMyMcpTokens() {
       // lifecycle-managed rows.
       kind: t.kind,
       buildId: t.buildId,
+      // The acting coworker this token speaks as (BI-B986A18B). Null means the
+      // token is anonymous, which is invisible in the UI today and is exactly
+      // why every Work Room tool refused every external agent: room handlers
+      // resolve the caller from this and fail closed without it.
+      agentId: t.agentId ?? null,
       lastUsedAt: t.lastUsedAt?.toISOString() ?? null,
       // Idle days only meaningful for active tokens. Revoked / expired rows
       // get null so the UI can show "—" instead of an ever-growing number.
@@ -215,10 +221,56 @@ export async function listMcpTokenTemplates(): Promise<{
   return { templates };
 }
 
+export type ActingCoworkerOption = {
+  agentId: string;
+  label: string;
+};
+
+/**
+ * Coworkers a token may be issued to act as (BI-B986A18B).
+ *
+ * Restricted to agents holding `work_room_write`, because acting-as is only
+ * meaningful for identities that can participate in a Work Room. Binding grants
+ * the token an identity; it does NOT admit that identity to any room —
+ * admission stays outcome-scoped and invite-driven per
+ * `authorizeWorkRoomAccess`.
+ */
+export async function listActingCoworkerOptions(): Promise<{
+  options: ActingCoworkerOption[];
+}> {
+  const session = await auth();
+  if (!session?.user?.id) return { options: [] };
+
+  const grants = await prisma.agentToolGrant.findMany({
+    where: { grantKey: "work_room_write" },
+    select: { agent: { select: { agentId: true, name: true, displayName: true, status: true } } },
+  });
+
+  const seen = new Set<string>();
+  const options: ActingCoworkerOption[] = [];
+  for (const grant of grants) {
+    const agent = grant.agent;
+    if (!agent || agent.status !== "active") continue;
+    if (seen.has(agent.agentId)) continue;
+    seen.add(agent.agentId);
+    const name = agent.displayName?.trim() || agent.name?.trim() || agent.agentId;
+    options.push({ agentId: agent.agentId, label: `${name} (${agent.agentId})` });
+  }
+  options.sort((a, b) => a.label.localeCompare(b.label));
+  return { options };
+}
+
 export async function issueMyTemplateMcpToken(input: {
   templateId: McpTokenTemplateId;
   name: string;
   expiresInDays: number | null;
+  /**
+   * Bind the token to an acting coworker identity (BI-B986A18B). Work Room
+   * tools resolve `context.agentId` from here; a token issued without one can
+   * never join, post to, or read a room, because every room handler refuses
+   * with `invalid_caller — requires an acting coworker`.
+   */
+  agentId?: string | null;
   baseUrl: string;
 }): Promise<IssueTokenActionResult> {
   const session = await auth();
@@ -255,7 +307,7 @@ export async function issueMyTemplateMcpToken(input: {
     scope: template.tier,
     scopes,
     expiresInDays: input.expiresInDays,
-    agentId: null,
+    agentId: input.agentId ?? null,
   });
   if (!result.ok) {
     return { ok: false, error: result.error, message: result.message };
@@ -355,7 +407,11 @@ export async function rotateMyMcpTokenWithEdit(input: {
     scope: input.scope,
     scopes: input.scopes,
     expiresInDays: input.expiresInDays,
-    agentId: null,
+    // Rotation changes the secret, never the identity (BI-B986A18B). Dropping
+    // the binding here silently demoted a room-capable token to an anonymous
+    // one, so the coworker fell out of every room it had joined on the next
+    // rotation with no error anywhere.
+    agentId: owned.agentId ?? null,
   });
   if (!issueResult.ok) {
     return { ok: false, error: issueResult.error, message: issueResult.message };

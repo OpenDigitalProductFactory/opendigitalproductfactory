@@ -51,7 +51,19 @@ export type StepStatus = "pending" | "completed" | "skipped";
 export type SetupContext = {
   orgName?: string;
   industry?: string;
-  hasCloudProvider?: boolean;
+  /**
+   * Whether a cloud provider can actually take work (BI-575F0046 Slice 2).
+   *
+   * Replaces `hasCloudProvider`, which was declared, read by the onboarding
+   * prompt, and never written by anything — so the COO's setup guidance always
+   * said "no". It was also the wrong question: a connected provider is granted
+   * `["public"]` until its trust evidence is reviewed, and no route is ever
+   * public, so "has a provider" and "can use a provider" are different facts.
+   *
+   * Computed live in getSetupContext rather than stored, because a stored
+   * boolean goes stale the moment the owner connects or attests one.
+   */
+  cloudProviderReadiness?: "none" | "public-only" | "ready";
   cooConversationalName?: string;
   skippedSteps?: string[];
   // Populated by importBrandFromUrl during the branding step

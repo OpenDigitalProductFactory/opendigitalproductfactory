@@ -10,9 +10,11 @@ export function ProviderAccountPostureForm({
   providerId,
   canWrite,
   initial,
+  requiredRegions = [],
 }: {
   providerId: string;
   canWrite: boolean;
+  requiredRegions?: string[];
   initial: {
     accountClass: string;
     noTraining: boolean | null;
@@ -30,9 +32,13 @@ export function ProviderAccountPostureForm({
       : "unknown",
   );
   const [noTraining, setNoTraining] = useState(initial?.noTraining == null ? "unknown" : initial.noTraining ? "yes" : "no");
-  const [regions, setRegions] = useState((initial?.enabledRegions ?? []).join(", "));
   const [zeroRetention, setZeroRetention] = useState(initial?.zeroRetention == null ? "unknown" : initial.zeroRetention ? "yes" : "no");
-  const [regionalProcessing, setRegionalProcessing] = useState(initial?.regionalProcessing == null ? "unknown" : initial.regionalProcessing ? "yes" : "no");
+  const coversRequiredRegions = requiredRegions.length > 0
+    && initial?.regionalProcessing === true
+    && requiredRegions.every((region) => initial.enabledRegions.includes(region));
+  const [regionalProcessing, setRegionalProcessing] = useState(
+    initial?.regionalProcessing == null ? "unknown" : coversRequiredRegions ? "yes" : "no",
+  );
   const [approvedProviders, setApprovedProviders] = useState((initial?.approvedUnderlyingProviderSlugs ?? []).join(", "));
   const [message, setMessage] = useState<string | null>(null);
 
@@ -56,9 +62,17 @@ export function ProviderAccountPostureForm({
             <option value="no">No / opt-in only</option>
           </select>
         </label>
-        <label className="text-xs text-[var(--dpf-muted)]">Enabled processing regions
-          <input className="mt-1 w-full rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-2 text-[var(--dpf-text)]" value={regions} disabled={!canWrite || pending} placeholder="eu, uk" onChange={(event) => setRegions(event.target.value)} />
-        </label>
+        {requiredRegions.length > 0 && (
+          <label className="text-xs text-[var(--dpf-muted)]">
+            Can this connected account guarantee processing in {requiredRegions.map((region) => region.toUpperCase()).join(", ")}?
+            <select className="mt-1 w-full rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-2 text-[var(--dpf-text)]" value={regionalProcessing} disabled={!canWrite || pending} onChange={(event) => setRegionalProcessing(event.target.value)}>
+              <option value="unknown">Not verified</option>
+              <option value="yes">Yes, for every required region</option>
+              <option value="no">No</option>
+            </select>
+            <span className="mt-1 block">Required by the organization&apos;s data-residency setup. Location alone does not prove account entitlement.</span>
+          </label>
+        )}
       </div>
       {providerId === "openrouter" && (
         <div className="mt-4 rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3">
@@ -69,13 +83,6 @@ export function ProviderAccountPostureForm({
           <div className="mt-3 grid gap-3 md:grid-cols-3">
             <label className="text-xs text-[var(--dpf-muted)]">Zero Data Retention enabled
               <select className="mt-1 w-full rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-2 text-[var(--dpf-text)]" value={zeroRetention} disabled={!canWrite || pending} onChange={(event) => setZeroRetention(event.target.value)}>
-                <option value="unknown">Not verified</option>
-                <option value="yes">Enabled for this account</option>
-                <option value="no">No</option>
-              </select>
-            </label>
-            <label className="text-xs text-[var(--dpf-muted)]">Regional processing enabled
-              <select className="mt-1 w-full rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-2 text-[var(--dpf-text)]" value={regionalProcessing} disabled={!canWrite || pending} onChange={(event) => setRegionalProcessing(event.target.value)}>
                 <option value="unknown">Not verified</option>
                 <option value="yes">Enabled for this account</option>
                 <option value="no">No</option>
@@ -94,10 +101,12 @@ export function ProviderAccountPostureForm({
             providerId,
             accountClass,
             noTraining: noTraining === "unknown" ? null : noTraining === "yes",
-            enabledRegions: regions.split(","),
+            ...(requiredRegions.length > 0 ? {
+              enabledRegions: regionalProcessing === "yes" ? requiredRegions : [],
+              regionalProcessing: regionalProcessing === "unknown" ? null : regionalProcessing === "yes",
+            } : {}),
             ...(providerId === "openrouter" ? {
               zeroRetention: zeroRetention === "unknown" ? null : zeroRetention === "yes",
-              regionalProcessing: regionalProcessing === "unknown" ? null : regionalProcessing === "yes",
               approvedUnderlyingProviderSlugs: approvedProviders.split(","),
             } : {}),
           });

@@ -3,7 +3,7 @@
 **Backlog item:** `BI-C2C16582`
 **Epic:** `EP-WORK-CONVERGENCE`
 **Status:** Current
-**Definition/instance realization:** `BI-D4C110BC` under `EP-1FABA22D`
+**Definition/instance realization:** shipped in PR #4648 under `EP-WORK-CONVERGENCE`; design and plan in [the workroom definition projection spec](../superpowers/specs/2026-08-24-workroom-definition-projection.md)
 
 Founder-directed 2026-08-15: **Workroom** is the canonical name for what we claim
 and how we work. This page is the single place that says what the word means at
@@ -36,6 +36,26 @@ canonical word `Workroom`; `WorkUnitDefinition` and `WorkOccurrence` remain the
 formal exchange terms. The source registry is the present runtime definition
 projection. It must be refactored toward the complete definition contract rather
 than copied into a second registry or a new template subsystem.
+
+### Implemented projection seam
+
+The Workspace adapter now realizes the first definition/instance slice without
+adding another work ledger or route:
+
+- `WORK_CASE_SOURCE_REGISTRY` owns each source definition's stable key, positive
+  version, label, finite or standing mode, and decision scope;
+- `buildWorkroomView` projects that definition identity together with one
+  Work Case-derived instance identity and occurrence trace;
+- the occurrence trace links the primary source, current cycle, and active work
+  carriers when they exist; repository, worktree, and PR evidence remains
+  optional; and
+- `/workspace/cases/[caseKey]` shows the definition and occurrence posture in
+  Overview, while Details reveals activity, participants, evidence, receipts,
+  and technical references.
+
+This is an adapter seam, not the complete definition contract below. Later
+refactoring should deepen the same registry and read model rather than create a
+parallel Workroom-definition surface.
 
 A Workroom definition has a stable key and version. At minimum it declares:
 

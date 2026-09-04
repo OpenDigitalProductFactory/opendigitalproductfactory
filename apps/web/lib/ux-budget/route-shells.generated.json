@@ -1,13 +1,13 @@
 {
   "generator": "apps/web/scripts/build-route-shells.ts",
-  "pageRouteCount": 329,
+  "pageRouteCount": 327,
   "migratedCount": 1,
   "summary": {
     "cockpit": 17,
     "list": 6,
-    "detail": 255,
+    "detail": 254,
     "settings": 12,
-    "form": 18,
+    "form": 17,
     "public": 21,
     "unclassified": 0
   },
@@ -833,19 +833,6 @@
         "lead-band"
       ],
       "sweepEligible": true,
-      "confidence": "high"
-    },
-    {
-      "routePath": "/customer-login",
-      "shell": "form",
-      "audience": "auth-setup",
-      "migrated": false,
-      "exemptChecks": [
-        "next-action-marker",
-        "lead-band"
-      ],
-      "sweepEligible": false,
-      "sweepExclusionReason": "customer-session-required",
       "confidence": "high"
     },
     {
@@ -1987,7 +1974,7 @@
       "confidence": "high"
     },
     {
-      "routePath": "/ops/health",
+      "routePath": "/ops/installation",
       "shell": "detail",
       "audience": "admin",
       "migrated": false,
@@ -1995,8 +1982,7 @@
         "next-action-marker",
         "lead-band"
       ],
-      "sweepEligible": false,
-      "sweepExclusionReason": "redirects-to-dynamic-resource",
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -2049,19 +2035,6 @@
     },
     {
       "routePath": "/ops/self-upgrade",
-      "shell": "detail",
-      "audience": "admin",
-      "migrated": false,
-      "exemptChecks": [
-        "next-action-marker",
-        "lead-band"
-      ],
-      "sweepEligible": false,
-      "sweepExclusionReason": "wall-clock-collection",
-      "confidence": "high"
-    },
-    {
-      "routePath": "/ops/stack-currency",
       "shell": "detail",
       "audience": "admin",
       "migrated": false,
@@ -2666,19 +2639,6 @@
         "lead-band"
       ],
       "sweepEligible": true,
-      "confidence": "high"
-    },
-    {
-      "routePath": "/platform/services/[serverId]",
-      "shell": "detail",
-      "audience": "admin",
-      "migrated": false,
-      "exemptChecks": [
-        "next-action-marker",
-        "lead-band"
-      ],
-      "sweepEligible": false,
-      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -3331,19 +3291,6 @@
       "confidence": "high"
     },
     {
-      "routePath": "/portfolio/product/[id]/supply-chain",
-      "shell": "detail",
-      "audience": "owner",
-      "migrated": false,
-      "exemptChecks": [
-        "next-action-marker",
-        "lead-band"
-      ],
-      "sweepEligible": false,
-      "sweepExclusionReason": "dynamic-fixture-required",
-      "confidence": "high"
-    },
-    {
       "routePath": "/portfolio/product/[id]/team",
       "shell": "detail",
       "audience": "owner",
@@ -3718,6 +3665,18 @@
       "confidence": "high"
     },
     {
+      "routePath": "/storefront/animals/waiting",
+      "shell": "detail",
+      "audience": "owner",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "sweepEligible": true,
+      "confidence": "high"
+    },
+    {
       "routePath": "/storefront/dispatch",
       "shell": "detail",
       "audience": "owner",
@@ -3864,7 +3823,8 @@
         "next-action-marker",
         "lead-band"
       ],
-      "sweepEligible": true,
+      "sweepEligible": false,
+      "sweepExclusionReason": "setup-phase-only",
       "confidence": "high"
     },
     {
@@ -4029,8 +3989,7 @@
         "next-action-marker",
         "lead-band"
       ],
-      "sweepEligible": false,
-      "sweepExclusionReason": "dynamic-fixture-required",
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -4074,6 +4033,18 @@
       "routePath": "/workspace/my-queue",
       "shell": "detail",
       "audience": "worker",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "sweepEligible": true,
+      "confidence": "high"
+    },
+    {
+      "routePath": "/workspace/ward",
+      "shell": "detail",
+      "audience": "owner",
       "migrated": false,
       "exemptChecks": [
         "next-action-marker",

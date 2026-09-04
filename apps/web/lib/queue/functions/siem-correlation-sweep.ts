@@ -246,6 +246,32 @@ export async function runCorrelationSweep(opts?: {
 }
 
 /**
+ * Resolve a detection's entity to a human label when it is an actor principal.
+ * BI-7D1EC4B9: an internal-authorization detection's entity is the actor's id —
+ * an agent slug (already readable) or a bare User cuid (which rendered as an
+ * unresolvable machine id on the console). Returns null for a non-actor entity
+ * (hostname/asset) or one that resolves to neither, so the caller keeps the raw
+ * key rather than inventing a name.
+ */
+async function resolveEntityActorLabel(
+  prisma: typeof import("@dpf/db").prisma,
+  entityKey: string,
+): Promise<string | null> {
+  if (!entityKey || entityKey === "unknown") return null;
+  const agent = await prisma.agent.findFirst({
+    where: { OR: [{ agentId: entityKey }, { id: entityKey }] },
+    select: { displayName: true, name: true, agentId: true },
+  });
+  if (agent) return agent.displayName || agent.name || agent.agentId;
+  const user = await prisma.user.findUnique({
+    where: { id: entityKey },
+    select: { email: true },
+  });
+  if (user) return user.email;
+  return null;
+}
+
+/**
  * Group every OPEN, un-cased Detection into a SecurityCase. Detections already
  * linked to a case (securityCaseId set) are excluded, so each detection is
  * grouped exactly once; an existing case absorbs new same-key detections and
@@ -291,16 +317,34 @@ async function groupOpenDetectionsIntoCases(
         await prisma.securityCase.update({ where: { id: caseId }, data: { severity: merged } });
       }
     } else {
+      // BI-7D1EC4B9: resolve an actor entity (a User id rendered as a raw cuid,
+      // or an agent principal) to a human label so the title answers "who" with
+      // a name, not a machine id. A non-actor entity (hostname/asset) or an
+      // unresolvable key keeps the composed title unchanged.
+      const actorLabel = await resolveEntityActorLabel(prisma, cand.entityKey);
+      const title =
+        actorLabel && cand.entityKey !== "unknown"
+          ? `${cand.ruleName} — ${actorLabel}`
+          : cand.title;
       const created = await prisma.securityCase.create({
         data: {
           caseKey: cand.caseKey,
           scopeKey: cand.scopeKey,
           customerAccountId: cand.customerAccountId,
           customerSiteId: cand.customerSiteId,
-          title: cand.title,
+          title,
           severity: cand.severity,
           status: "new",
           verdict: "unknown",
+          // BI-7D1EC4B9: a case that demands a decision must carry the detections
+          // it was opened from, not an empty {}. The detection rows are also
+          // linked by securityCaseId below; these keys make them reachable from
+          // the case itself.
+          evidence: {
+            openedBy: "correlation-sweep",
+            detectionKeys: cand.detectionKeys,
+            detectionCount: cand.detectionKeys.length,
+          } as object,
           timeline: [
             {
               at: now.toISOString(),

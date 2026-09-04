@@ -7,20 +7,40 @@
 // (which speaks its own contract, not MCP); this route is what an MCP
 // client points at.
 //
-// Auth: Authorization: Bearer dpfmcp_<token>. Tokens are issued from
-// /admin/platform-development. We do NOT implement OAuth 2.1 resource-
-// server discovery (the GitHub-PAT pattern, intentionally) but we still
-// return a WWW-Authenticate header on 401 so clients that perform
-// discovery don't fail mysteriously.
+// Auth: ONE authorization server, two grant types — not two credential
+// systems (design 2026-08-26 §2.1).
+//
+//   authorization_code + PKCE  anything with a browser. The client discovers
+//                              the AS from the 401's `resource_metadata`, a
+//                              human consents once, and the client refreshes
+//                              silently thereafter. This is the default door.
+//   client_credentials         headless callers — CI, cron, containers. Same
+//                              AS, same scope vocabulary, same revocation
+//                              surface. A grant type, not a side door.
+//
+// This file previously read: "We do NOT implement OAuth 2.1 resource-server
+// discovery (the GitHub-PAT pattern, intentionally)." That was right for a
+// single-operator loopback surface and stopped being right once (a) five
+// external clients connect and all of them perform RFC 9728 discovery,
+// (b) `2025-11-25` made Protected Resource Metadata a server MUST while we
+// advertise that revision on the wire, and (c) consumer installs have no
+// operator with a portal habit to mint a token by hand.
+//
+// The `dpfmcp_` PAT still resolves, and every configured client keeps working.
+// It is on a deprecation horizon: issuance closes first, resolution survives
+// until the operator sets the horizon (DPF_MCP_PAT_RESOLUTION_DISABLED). Two
+// permanent credential systems would mean two resolution paths, two revocation
+// surfaces and two audit shapes — and the second is the one nobody keeps
+// current.
 import {
-  resolveMcpApiToken,
   type McpTokenCapability,
   type McpTokenScope,
   type ResolvedMcpToken,
 } from "@/lib/auth/mcp-api-token";
 import { deriveCallerClient } from "@/lib/mcp/caller-client";
 import { buildMcpInitializeResult } from "@/lib/mcp/initialize";
-import { verifyMcpSessionToken } from "@/lib/mcp/session-token";
+import { resolveResourceOrigin } from "@/lib/auth/oauth-metadata";
+import { buildStepUpChallenge, type StepUpContext } from "@/lib/auth/oauth-step-up";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import { PLATFORM_TOOLS, resolveAnnotations, type ToolDefinition } from "@/lib/mcp-tools";
 import { submitRemoteCoworkerTask } from "@/lib/mcp-task-submit";
@@ -50,20 +70,14 @@ import {
   handleTasksCancel,
   type TaskLifecycleResult,
 } from "@/lib/mcp/tasks-lifecycle";
+import {
+  authenticateMcpRequest,
+  type ResolvedMcpTransportAuth as ResolvedAuth,
+} from "@/lib/mcp/transport-auth";
+import { openMcpTaskStatusStream } from "@/lib/mcp/task-status-stream";
 import { LOAD_TOOLS_LISTED, buildLoadToolsResult, buildUnknownToolResult, loadToolsSseResponse } from "@/lib/mcp/load-tools";
 import { can, type CapabilityKey, type UserContext } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
-
-/** Resolved auth — either a persistent PAT or a short-lived internal session.
- * The route-side handlers consume this single shape; the only difference is
- * what `threadId`/`routeContext` populate audit rows with. */
-type ResolvedAuth = ResolvedMcpToken & {
-  threadId?: string | null;
-  routeContext?: string | null;
-  /** Where the auth came from — populates `ToolExecution.executionMode` so we can
-   *  tell internal cli-adapter calls from external coding-agent calls. */
-  source: "pat" | "session-jwt";
-};
 
 // Protocol revisions: the governed N/N-1 window + grandfathered set, declared
 // ONLY in @/lib/mcp/protocol-versions.ts (W12, BI-EE64547B; guard-enforced).
@@ -136,94 +150,6 @@ function normalizeTokenScope(token: Pick<ResolvedMcpToken, "scope" | "capability
     return token.scope;
   }
   return token.capability === "write" ? "write" : "read";
-}
-
-function unauthorizedResponse(detail: string): Response {
-  return new Response(
-    JSON.stringify({
-      jsonrpc: "2.0",
-      id: null,
-      error: { code: JSONRPC_INVALID_REQUEST, message: `unauthorized: ${detail}` },
-    }),
-    {
-      status: 401,
-      headers: {
-        "Content-Type": "application/json",
-        "WWW-Authenticate": `Bearer realm="DPF MCP", error="invalid_token", error_description="${detail}"`,
-      },
-    },
-  );
-}
-
-function forbiddenResponse(detail: string, host: string | null): Response {
-  return new Response(
-    JSON.stringify({
-      jsonrpc: "2.0",
-      id: null,
-      error: { code: JSONRPC_INVALID_REQUEST, message: `forbidden: ${detail}` },
-    }),
-    {
-      status: 403,
-      headers: { "Content-Type": "application/json" },
-    },
-  );
-}
-
-// Spec MUST: validate Origin header to prevent DNS rebinding attacks.
-function isOriginAllowed(origin: string | null): boolean {
-  if (!origin) return true; // non-browser clients (Claude Code, Codex CLI) don't send Origin
-  try {
-    const url = new URL(origin);
-    const host = url.hostname.toLowerCase();
-    if (host === "localhost" || host === "127.0.0.1" || host === "::1") return true;
-    // Same-host as the portal (when a browser-based MCP client is on the same domain).
-    if (process.env.MCP_ALLOWED_ORIGIN_HOSTS) {
-      const allowed = process.env.MCP_ALLOWED_ORIGIN_HOSTS.split(",").map((h) => h.trim().toLowerCase());
-      if (allowed.includes(host)) return true;
-    }
-    return false;
-  } catch {
-    return false;
-  }
-}
-
-// Spec safety: refuse non-TLS requests except for localhost (Mode 1 / dev).
-//
-// When the portal runs behind a proxy or inside a container, `request.url`
-// reflects the *internal* bind address (e.g. 0.0.0.0) and protocol, not what
-// the client actually connected to. We trust X-Forwarded-Proto only for the
-// proxy's TLS termination signal. Host authorization for plain HTTP must use
-// the actual Host/request URL because X-Forwarded-Host is caller-controlled in
-// direct CLI/container traffic.
-//
-// MCP_INSECURE_INTERNAL_HOSTS — comma-separated hostnames that are trusted
-// to call the MCP transport over plain HTTP. Required for sandbox→portal
-// MCP traffic on the internal Docker bridge (`portal`, `host.docker.internal`,
-// etc.) where TLS termination is not available. Operator opt-in: empty/unset
-// means localhost-only. Bearer-token auth, origin check, scope/grant checks
-// are all still enforced — this only relaxes the transport-layer TLS gate.
-function isTransportAllowed(request: Request): boolean {
-  const xfProto = request.headers.get("x-forwarded-proto");
-  const url = new URL(request.url);
-  const proto = (xfProto?.split(",")[0]?.trim() || url.protocol.replace(/:$/, "")).toLowerCase();
-  if (proto === "https") return true;
-
-  const hostHeader = request.headers.get("host");
-  const rawHost = (hostHeader || url.host).toLowerCase();
-  // Strip port; bracketed IPv6 retains brackets after URL.host parsing.
-  const hostname = rawHost.replace(/^\[(.+)\]:?\d*$/, "$1").replace(/:\d+$/, "");
-  if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1") {
-    return true;
-  }
-  const internalAllowlist = process.env.MCP_INSECURE_INTERNAL_HOSTS;
-  if (internalAllowlist) {
-    const allowed = internalAllowlist
-      .split(",")
-      .map((h) => h.trim().toLowerCase())
-      .filter((h) => h.length > 0);
-    if (allowed.includes(hostname)) return true;
-  }
-  return false;
 }
 
 async function loadUserContext(userId: string): Promise<UserContext> {
@@ -551,6 +477,7 @@ async function handleToolsCall(
   params: Record<string, unknown> | undefined,
   callerClient?: string,
   acceptsEventStream: boolean = false,
+  stepUp?: StepUpContext,
 ): Promise<Response> {
   if (!params || typeof params["name"] !== "string") {
     return jsonRpcError(id, JSONRPC_INVALID_PARAMS, "tools/call requires params.name (string)");
@@ -578,6 +505,33 @@ async function handleToolsCall(
   const tokenScope = normalizeTokenScope(token);
   const requiredScope = requiredTokenScopeForTool(toolDef, required);
   if (!tokenScopeSatisfies(tokenScope, requiredScope)) {
+    const challenge = buildStepUpChallenge(stepUp, required, toolName, requiredScope);
+    if (challenge) {
+      // OAuth caller: a 403 carrying `error="insufficient_scope"` and the
+      // scope set needed is a FLOW, not a halt — the client re-authorizes,
+      // the human approves exactly the named additional authority, and the
+      // call is retried. This is the moment the scope-escalation rule stops
+      // being a human interrupt.
+      return new Response(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id,
+          error: {
+            code: JSONRPC_INVALID_REQUEST,
+            message: `insufficient_scope: ${toolName} requires ${requiredScope}`,
+            data: challenge.data,
+          },
+        }),
+        {
+          status: 403,
+          headers: { "Content-Type": "application/json", "WWW-Authenticate": challenge.header },
+        },
+      );
+    }
+    // PAT and session-JWT callers keep the pre-existing contract byte-for-byte:
+    // HTTP 200 with an isError tool result carrying
+    // structuredContent.error = "insufficient_token_scope". Anything reading
+    // that contract must not break while the PAT is still resolvable.
     return jsonRpcOk(
       id,
       insufficientScopeResult(toolName, tokenScope, requiredScope, required),
@@ -684,57 +638,9 @@ async function handleToolsCall(
 }
 
 export async function POST(request: Request): Promise<Response> {
-  // Transport guards
-  if (!isTransportAllowed(request)) {
-    return forbiddenResponse(
-      "TLS required (HTTPS only outside localhost)",
-      new URL(request.url).hostname,
-    );
-  }
-  const origin = request.headers.get("origin");
-  if (!isOriginAllowed(origin)) {
-    return forbiddenResponse(`Origin ${origin} not allowed`, origin);
-  }
-
-  // Auth — two paths:
-  //   X-MCP-Session: <jwt>      — short-lived internal session (Claude CLI
-  //                                adapter, future internal callers). JWT
-  //                                carries userId/agentId/threadId/scopes.
-  //   Authorization: Bearer ... — persistent dpfmcp_* PAT for external
-  //                                coding agents (Mark's laptop, VS Code).
-  // Session JWT wins when both are present so the adapter's narrow per-call
-  // scope cannot accidentally be widened by a stale operator PAT in the same
-  // sandbox shell environment.
-  const sessionHeader = request.headers.get("x-mcp-session");
-  let token: ResolvedAuth;
-  if (sessionHeader) {
-    const session = await verifyMcpSessionToken(sessionHeader.trim());
-    if (!session) {
-      return unauthorizedResponse("invalid or expired MCP session");
-    }
-    token = {
-      tokenId: `session:${session.userId}:${session.agentId ?? "no-agent"}`,
-      userId: session.userId,
-      agentId: session.agentId ?? null,
-      scopes: session.scopes,
-      scope: session.capability === "write" ? "write" : "read",
-      capability: session.capability,
-      threadId: session.threadId ?? null,
-      routeContext: session.routeContext ?? null,
-      source: "session-jwt",
-    };
-  } else {
-    const authHeader = request.headers.get("authorization");
-    if (!authHeader || !authHeader.toLowerCase().startsWith("bearer ")) {
-      return unauthorizedResponse("missing Bearer token or X-MCP-Session header");
-    }
-    const plaintext = authHeader.slice("bearer ".length).trim();
-    const pat = await resolveMcpApiToken(plaintext);
-    if (!pat) {
-      return unauthorizedResponse("invalid or expired token");
-    }
-    token = { ...pat, source: "pat" };
-  }
+  const authentication = await authenticateMcpRequest(request);
+  if (!authentication.ok) return authentication.response;
+  const { token, oauthGrantedScopes } = authentication;
 
   // Parse JSON-RPC envelope
   let body: JsonRpcRequest;
@@ -808,6 +714,9 @@ export async function POST(request: Request): Promise<Response> {
           body.params,
           deriveCallerClient(request.headers.get("user-agent")),
           (request.headers.get("accept") ?? "").includes("text/event-stream"),
+          token.source === "oauth"
+            ? { granted: oauthGrantedScopes, origin: resolveResourceOrigin(request) }
+            : undefined,
         );
 
       case "tasks/submit":
@@ -848,12 +757,13 @@ export async function POST(request: Request): Promise<Response> {
   }
 }
 
-// GET on the MCP endpoint is reserved for SSE in the Streamable HTTP spec.
-// We don't implement SSE (single-POST flow is sufficient for tool calls);
-// clients that try GET should get a clean 405.
-export function GET(): Response {
-  return new Response("Method Not Allowed — use POST", {
-    status: 405,
-    headers: { Allow: "POST" },
-  });
+/**
+ * Streamable HTTP server-to-client lane. A notification is only a wake-up:
+ * each frame carries the complete current Task projection, while TaskRun and
+ * tasks/get/list remain the durable reconciliation path after disconnects.
+ */
+export async function GET(request: Request): Promise<Response> {
+  const authentication = await authenticateMcpRequest(request);
+  if (!authentication.ok) return authentication.response;
+  return openMcpTaskStatusStream(request, authentication.token);
 }

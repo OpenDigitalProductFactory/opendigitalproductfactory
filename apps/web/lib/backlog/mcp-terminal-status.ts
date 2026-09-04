@@ -1,5 +1,6 @@
 import type { ToolResult } from "@/lib/mcp-tools";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { resolveTerminalInitiativeRecovery } from "@/lib/backlog/initiative-readiness/terminal-recovery";
 
 type TerminalBacklogItem = {
   status: string;
@@ -51,11 +52,16 @@ export async function completeBacklogItemTransitionTool(args: {
   });
   if (!terminal.ok) {
     const codes = [...terminal.decision.blockers, ...terminal.decision.unmet].map((entry) => entry.code);
+    const recovery = await resolveTerminalInitiativeRecovery({
+      decision: terminal.decision,
+      currentAgentId: args.agentId ?? null,
+      refusedWorkroomId: null,
+    });
     return {
       success: false,
       error: "initiative_not_ready",
       message: `Cannot complete ${args.itemId}: ${codes.join(", ")}.`,
-      data: { stableCode: terminal.code, readiness: terminal.decision },
+      data: { stableCode: terminal.code, readiness: terminal.decision, recovery },
     };
   }
 

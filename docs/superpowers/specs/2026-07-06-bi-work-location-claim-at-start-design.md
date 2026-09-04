@@ -1,8 +1,11 @@
+---
+status: binding
+---
+
 # Claim-at-start BI ↔ work-location binding
 
 - BI: BI-7D20BFDF
 - Date: 2026-07-06
-- Status: implemented (this branch)
 
 ## Problem
 
@@ -108,3 +111,66 @@ capsule carries the location too; otherwise it binds the BI on the
 claim stamps the BI; non-blocking conflict when the BI is freshly claimed by
 another agent; stale (>12h) reclaim; a second capsule on a different branch for
 the same BI without a blocking claim conflict; and idempotent branch reuse.
+
+## 2026-08-31 hardening — single live owner by default
+
+`BI-BFBF1BBB` supersedes only the soft-conflict portion of this design. Live
+evidence showed that `get_backlog_item` could report no active build while a
+different Workroom was already delivering the BI. The advisory response was
+therefore too late: it created the duplicate Workroom before disclosing the
+conflict.
+
+WWMD decision `DI-ABFED7DDB995` selected **refuse by default with an audited
+override** (composite 9.0006, margin 1.7066, high confidence). An absolute lock
+was rejected because deliberate recovery and scoped co-delivery remain valid;
+the old silent-success default was rejected because it makes duplicate effort
+the normal path.
+
+### Governed objectives
+
+**OBJ-BIWO-001:** A normal claim against a BacklogItem with a different live
+Workroom is refused before any second Workroom is created, bound, or used to
+replace the canonical BI claim.
+
+**OBJ-BIWO-002:** Claim admission remains race-safe and backward-compatible:
+concurrent first claims produce one winner, the same Workroom/session replay is
+idempotent, and terminal or genuinely dead Workrooms do not prevent reclaim.
+
+**OBJ-BIWO-003:** Deliberate parallel delivery is an explicit audited exception
+that requires both `force=true` and a non-empty reason identifying who
+overrode which live ownership and why.
+
+**OBJ-BIWO-004:** The canonical backlog-item read model and owner-facing backlog
+row expose the same active Workroom ownership facts used by claim admission,
+including Workroom link, status, executor, branch, and true liveness, without
+displaying filesystem, session, principal, or lease internals by default.
+
+The hardened contract is:
+
+1. Lock the canonical `BacklogItem` row inside the existing governed claim
+   transaction so two first claims cannot both observe an empty state.
+2. Read every non-archived Workroom bound to the BI and classify it with the
+   existing Workroom liveness contract. A live room on the same repository and
+   branch is an idempotent readback; any other live room refuses the claim before
+   adoption with `backlog_item_already_claimed`.
+3. Permit a deliberate co-claim only with `force=true` and a non-empty
+   `overrideReason`. Record the reason, actor, and displaced live Workroom
+   summaries in `WorkroomActivity`.
+4. Project all bound Workrooms, including their liveness verdicts, from
+   `get_backlog_item`, so selection and claim use the same ownership facts.
+5. Retain the legacy BI claim fields for compatibility, but do not use their
+   12-hour age as the source of Workroom liveness.
+
+No table, migration, new status vocabulary, or second liveness engine is added.
+The source of truth remains `Workroom.backlogItemId` plus
+`classifyWorkCapsuleLiveness`.
+
+### Hardening acceptance mapping
+
+| Acceptance ID | Objective IDs | Required evidence |
+| --- | --- | --- |
+| AC-BIWO-001 | OBJ-BIWO-001 | A different live Workroom returns `backlog_item_already_claimed`, and an immediate read proves no second Workroom or BI-claim mutation occurred. |
+| AC-BIWO-002 | OBJ-BIWO-002 | Tests prove serialized concurrent claims, same-room idempotency, and reclaim after terminal or dead ownership. |
+| AC-BIWO-003 | OBJ-BIWO-003 | Tests prove a missing override reason is refused and a reasoned override records actor, reason, and displaced Workroom summaries. |
+| AC-BIWO-004 | OBJ-BIWO-004 | `get_backlog_item` and `/ops` show the canonical owner facts; desktop and narrow verification show no empty chrome, leaked internals, or horizontal overflow. |
+| AC-BIWO-005 | OBJ-BIWO-001, OBJ-BIWO-002, OBJ-BIWO-003, OBJ-BIWO-004 | Focused tests, production build, PR/merge-group checks, exact-SHA live readiness, and canonical functional acceptance pass. |
