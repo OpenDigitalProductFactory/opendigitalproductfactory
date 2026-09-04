@@ -1,4 +1,3 @@
-import { notFound } from "next/navigation";
 import { prisma } from "@dpf/db";
 import {
   loadDocPage,
@@ -16,6 +15,8 @@ import { ContextualQuickHelp } from "@/components/docs/ContextualQuickHelp";
 import { resolveQuickHelp, type QuickHelp } from "@/lib/docs-quick-help";
 import { getVocabulary } from "@/lib/storefront/archetype-vocabulary";
 import { resolveVocabularyKey } from "@/lib/storefront/resolve-vocabulary";
+import { resolvePackagedDocsDestination } from "@/lib/docs-route-map.server";
+import { Notice } from "@/components/ui/report-kit";
 
 type Props = {
   params: Promise<{ slug?: string[] }>;
@@ -105,8 +106,15 @@ export default async function DocsPage({ params, searchParams }: Props) {
   }
 
   const docSlug = slug.join("/");
-  const doc = loadDocPage(docSlug);
-  if (!doc) return notFound();
+  const destination = resolvePackagedDocsDestination(`/docs/${docSlug}`);
+  const doc = loadDocPage(destination.resolvedKey) ?? loadDocPage("index");
+  if (!doc) {
+    return (
+      <DocsLayout index={sidebarIndex} currentSlug="" searchItems={searchItems} collapseCatalog={contextual}>
+        <DocsHome index={index} sourceRoute={sourceRoute} quickHelp={quickHelp} />
+      </DocsLayout>
+    );
+  }
 
   // Extract headings server-side — pass structured data, not raw markdown
   const tocHeadings = extractHeadings(doc.content);
@@ -114,11 +122,16 @@ export default async function DocsPage({ params, searchParams }: Props) {
   return (
     <DocsLayout
       index={sidebarIndex}
-      currentSlug={docSlug}
+      currentSlug={destination.resolvedKey}
       searchItems={searchItems}
       headings={tocHeadings}
       collapseCatalog={contextual}
     >
+      {destination.recoveryKind !== "exact" ? (
+        <Notice variant="info" title="That help page moved">
+          We opened the closest available guide. You can also search the documentation catalog.
+        </Notice>
+      ) : null}
       <DocContent doc={doc} sourceRoute={sourceRoute} quickHelp={quickHelp} />
     </DocsLayout>
   );

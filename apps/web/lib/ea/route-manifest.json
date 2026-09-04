@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 650,
+  "routeCount": 656,
   "routes": [
     {
       "routePath": "/",
@@ -7741,6 +7741,71 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/workspace/my-queue/page.tsx"
+    },
+    {
+      "routePath": "/workspace/rescue",
+      "kind": "page",
+      "segments": [
+        "workspace",
+        "rescue"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/workspace/rescue/page.tsx"
+    },
+    {
+      "routePath": "/workspace/rescue/adoptions",
+      "kind": "page",
+      "segments": [
+        "workspace",
+        "rescue",
+        "adoptions"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/workspace/rescue/adoptions/page.tsx"
+    },
+    {
+      "routePath": "/workspace/rescue/animals",
+      "kind": "page",
+      "segments": [
+        "workspace",
+        "rescue",
+        "animals"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/workspace/rescue/animals/page.tsx"
+    },
+    {
+      "routePath": "/workspace/rescue/care",
+      "kind": "page",
+      "segments": [
+        "workspace",
+        "rescue",
+        "care"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/workspace/rescue/care/page.tsx"
+    },
+    {
+      "routePath": "/workspace/rescue/intake",
+      "kind": "page",
+      "segments": [
+        "workspace",
+        "rescue",
+        "intake"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/workspace/rescue/intake/page.tsx"
+    },
+    {
+      "routePath": "/workspace/rescue/stewardship",
+      "kind": "page",
+      "segments": [
+        "workspace",
+        "rescue",
+        "stewardship"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/workspace/rescue/stewardship/page.tsx"
     },
     {
       "routePath": "/workspace/ward",

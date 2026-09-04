@@ -30,6 +30,46 @@ function args(fetchImpl: typeof fetch) {
 }
 
 describe("canonical design artifact discovery", () => {
+  it("uses and closes the isolated production transport when no fetch is injected", async () => {
+    const frameworkFetch = vi.fn().mockRejectedValue(new Error("framework context unavailable"));
+    vi.stubGlobal("fetch", frameworkFetch);
+    const isolatedFetch = vi.fn().mockResolvedValue(compareResponse([
+      { filename: "docs/superpowers/specs/2026-08-25-a-design.md", sha: BLOB_SHA, status: "added" },
+    ]));
+    const close = vi.fn().mockResolvedValue(undefined);
+
+    try {
+      const result = await discoverCanonicalDesignArtifact({
+        repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+        baseSha: BASE_SHA,
+        headSha: HEAD_SHA,
+        db,
+        transportFactory: () => ({ fetch: isolatedFetch as unknown as typeof fetch, close }),
+      } as never);
+
+      expect(result).toMatchObject({ resolved: true, artifact: { providerBlobId: BLOB_SHA } });
+      expect(isolatedFetch).toHaveBeenCalledTimes(1);
+      expect(frameworkFetch).not.toHaveBeenCalled();
+      expect(close).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("maps production transport construction failure to provider-unavailable", async () => {
+    const result = await discoverCanonicalDesignArtifact({
+      repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+      baseSha: BASE_SHA,
+      headSha: HEAD_SHA,
+      db,
+      transportFactory: () => {
+        throw new Error("dispatcher unavailable");
+      },
+    });
+
+    expect(result).toMatchObject({ resolved: false, code: "provider-unavailable" });
+  });
+
   it("binds the single spec changed across the branch range, taking the blob id from the provider", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(compareResponse([
       { filename: "apps/web/lib/thing.ts", sha: OTHER_BLOB_SHA, status: "modified" },
@@ -95,10 +135,16 @@ describe("canonical design artifact discovery", () => {
   });
 
   it("reports provider unavailability rather than guessing when the compare fails", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue({ ok: false } as unknown as Response);
+    const cancel = vi.fn().mockResolvedValue(undefined);
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 503,
+      body: { cancel },
+    } as unknown as Response);
 
     const result = await discoverCanonicalDesignArtifact(args(fetchImpl as unknown as typeof fetch));
 
     expect(result).toMatchObject({ resolved: false, code: "provider-unavailable" });
+    expect(cancel).toHaveBeenCalledTimes(1);
   });
 });

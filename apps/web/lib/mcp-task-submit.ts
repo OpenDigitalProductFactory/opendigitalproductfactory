@@ -504,7 +504,7 @@ export async function submitRemoteCoworkerTask(input: {
     ) return replay;
     if (
       storedRequestDigest(existing) === requestDigest
-      && existing.status === "input-required"
+      && (existing.status === "input-required" || (existing.status === "completed" && terminalToolPolicy))
     ) {
       const resumed = await resumeApprovedRemoteTask({
         existing,

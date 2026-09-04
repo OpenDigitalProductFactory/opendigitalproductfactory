@@ -27,6 +27,12 @@
       "expiry": "2026-11-16"
     },
     {
+      "model": "AnimalCustodyEvent",
+      "reason": "Standing domain-lifecycle-managed stewardship exemption (scripts/stewardship-exemptions.txt): append-only custody evidence follows its episode and legal hold; independent aging would break transfer and placement accountability.",
+      "owner": "animal-welfare-operations",
+      "expiry": "2026-12-03"
+    },
+    {
       "model": "ProductOutcomeObservation",
       "reason": "Governance evidence for product objectives; corrections supersede rather than delete (correct_product_outcome_observation flow). Deliberately kept, pending an owner decision on a long-window archive policy.",
       "owner": "platform-architecture",

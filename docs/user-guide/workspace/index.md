@@ -107,6 +107,31 @@ home with three approved places contributes three; blocked and retired housing
 contributes none. The same source feeds the Operations summary, so the number
 used in a capacity conversation is the number the Ward is drawing.
 
+## Rescue operations
+
+A Pet Rescue installation opens **Operations > Rescue operations** for the
+animal journey as a whole. The workspace follows three connected value streams:
+
+1. **Intake and protect** records the animal's durable identity, admission,
+   legal hold, and safe housing decision.
+2. **Maintain health and welfare** brings daily work, appointments, medical and
+   welfare facts, corrections, and exceptions together around that same animal.
+3. **Place and support** tracks adoption applications, placements, returns, and
+   the funding used for care.
+
+Use **Animals**, **Intake**, **Housing**, **Daily care**, **Adoptions**, and
+**Stewardship** to move between those perspectives. Housing opens the existing
+Ward board; it is not a second capacity record.
+
+Every summary identifies its source state. **Current** means the source was
+read, **No records yet** means it was read and contained no relevant facts, and
+**Unavailable** means it could not be read. The workspace never turns an
+unavailable source into a reassuring zero.
+
+The public adoption listing is optional. It presents an animal to prospective
+adopters, but it is not the animal's operational identity. Removing or changing
+a listing therefore does not erase custody, care, placement, or cost history.
+
 ## Confirming an operational suggestion
 
 An AI coworker can suggest an assignment, but the suggestion is not a completed

@@ -43,6 +43,15 @@ function remoteTaskContent(text: string) {
   return [{ type: "text", text }];
 }
 
+function approvalRequiredEnvelopeId(value: unknown): string | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const result = value as Record<string, unknown>;
+  if (result["success"] !== false || result["error"] !== "approval_required") return null;
+  const data = result["data"];
+  if (!data || typeof data !== "object" || Array.isArray(data)) return null;
+  return optionalString((data as Record<string, unknown>)["envelopeId"]);
+}
+
 export function remoteTaskConversation(input: {
   systemPrompt: string;
   prompt: string;
@@ -192,7 +201,7 @@ export async function executeRemoteTaskAttempt(input: {
       ? null
       : await prisma.taskRun.findUnique({
           where: { taskRunId: run.taskRunId },
-          select: { status: true },
+          select: { status: true, progressPayload: true },
         });
     // The loop is not trusted to self-report a missing writer: main enforces this
     // at the completion boundary (#4925, #4930) so a review cannot pass without
@@ -202,6 +211,12 @@ export async function executeRemoteTaskAttempt(input: {
       ? (result.executedTools ?? []).some((tool) => tool.name === terminalToolPolicy.writerToolName)
         || result.proposal?.name === terminalToolPolicy.writerToolName
       : false;
+    const terminalWriterApprovalEnvelopeId = terminalToolPolicy
+      ? (result.executedTools ?? [])
+          .filter((tool) => tool.name === terminalToolPolicy.writerToolName)
+          .map((tool) => approvalRequiredEnvelopeId(tool.result))
+          .find((envelopeId): envelopeId is string => envelopeId !== null) ?? null
+      : null;
     const terminalWriterMissing = terminalToolPolicy !== null && !terminalWriterWasAttempted;
     // BI-8B8731EE: a resource wait is NOT a writer-contract failure, and this
     // branch would otherwise swallow it. `terminalWriterMissing` is true for any
@@ -210,6 +225,42 @@ export async function executeRemoteTaskAttempt(input: {
     // unreachable and every deferral was reported as a missing receipt writer.
     // Let the resource wait win; it resumes on the same TaskRun either way.
     const resourceWaitOwnsThisTurn = preInferenceResourceWait(result) !== null;
+    if (terminalWriterApprovalEnvelopeId && terminalToolPolicy) {
+      const priorProgress = currentRun?.progressPayload
+        && typeof currentRun.progressPayload === "object"
+        && !Array.isArray(currentRun.progressPayload)
+        ? currentRun.progressPayload as Record<string, unknown>
+        : {};
+      await prisma.taskRun.update({
+        where: { taskRunId: run.taskRunId },
+        data: {
+          status: "input-required",
+          completedAt: null,
+          progressPayload: {
+            ...priorProgress,
+            summary: result.content,
+            riskClass: parsed.riskClass,
+            executedToolCount: result.executedTools?.length ?? 0,
+            requiresApproval: true,
+            approvalEnvelopeId: terminalWriterApprovalEnvelopeId,
+            ...resumedFlag,
+          },
+        },
+      });
+      return {
+        kind: "result",
+        result: await withTaskRunApprovalLocation({
+          taskRunId: run.taskRunId,
+          status: "input-required",
+          idempotentReplay: input.idempotentReplay,
+          ...resumedFlag,
+          requiresApproval: true,
+          content: remoteTaskContent(result.content),
+          executedToolCount: result.executedTools?.length ?? 0,
+          isError: false,
+        }, { taskRunId: run.taskRunId, callerUserId: token.userId }),
+      };
+    }
     if (
       !resourceWaitOwnsThisTurn
       && (result.failure?.kind === "terminal-writer-missing" || terminalWriterMissing)
