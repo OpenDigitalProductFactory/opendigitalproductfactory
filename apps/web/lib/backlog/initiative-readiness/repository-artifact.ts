@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { prisma } from "@dpf/db";
 
 import {
+  cancelGithubResponseBody,
   createGithubReadTransport,
   resolveGithubToken,
   resolveRepoIdentity,
@@ -126,6 +127,7 @@ async function fetchGithubJson(args: {
       return { ok: false, kind: "transport", attempts: attempt };
     }
     if (!response.ok) {
+      await cancelGithubResponseBody(response);
       if (attempt < MAX_PROVIDER_ATTEMPTS && RETRYABLE_PROVIDER_STATUSES.has(response.status)) continue;
       return { ok: false, kind: "http", attempts: attempt, status: response.status };
     }
@@ -215,9 +217,18 @@ export async function readRepositoryProviderBlob(args: {
   if (`${repo.owner}/${repo.name}`.toLocaleLowerCase("en-US") !== args.repositoryFullName.toLocaleLowerCase("en-US")) {
     return { ok: false, code: "CANONICAL_REPOSITORY_REQUIRED", error: "Requested repository is not this installation's canonical repository." };
   }
-  const transport = args.fetchImpl
-    ? null
-    : (args.transportFactory ?? createGithubReadTransport)();
+  let transport: GithubReadTransport | null = null;
+  if (!args.fetchImpl) {
+    try {
+      transport = (args.transportFactory ?? createGithubReadTransport)();
+    } catch {
+      return {
+        ok: false,
+        code: "IMMUTABLE_SOURCE_UNAVAILABLE",
+        error: "Repository provider transport is unavailable.",
+      };
+    }
+  }
   try {
     return await fetchRepositoryProviderBlob({
       owner: repo.owner,
@@ -343,9 +354,18 @@ export async function resolveRepositoryArtifact(args: {
   } catch {
     return { ok: false, code: "CANONICAL_DESIGN_REQUIRED", error: "Repository provider credentials are unavailable." };
   }
-  const transport = args.fetchImpl
-    ? null
-    : (args.transportFactory ?? createGithubReadTransport)();
+  let transport: GithubReadTransport | null = null;
+  if (!args.fetchImpl) {
+    try {
+      transport = (args.transportFactory ?? createGithubReadTransport)();
+    } catch {
+      return {
+        ok: false,
+        code: "CANONICAL_DESIGN_REQUIRED",
+        error: "Repository provider transport is unavailable.",
+      };
+    }
+  }
   const fetchImpl = args.fetchImpl ?? transport!.fetch;
   try {
     const commitResult = await fetchGithubJson({

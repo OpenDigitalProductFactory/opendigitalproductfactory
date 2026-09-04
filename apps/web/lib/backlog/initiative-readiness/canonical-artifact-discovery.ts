@@ -1,6 +1,7 @@
 import { prisma } from "@dpf/db";
 
 import {
+  cancelGithubResponseBody,
   createGithubReadTransport,
   resolveGithubToken,
   resolveRepoIdentity,
@@ -111,9 +112,18 @@ export async function discoverCanonicalDesignArtifact(args: {
     };
   }
 
-  const transport = args.fetchImpl
-    ? null
-    : (args.transportFactory ?? createGithubReadTransport)();
+  let transport: GithubReadTransport | null = null;
+  if (!args.fetchImpl) {
+    try {
+      transport = (args.transportFactory ?? createGithubReadTransport)();
+    } catch {
+      return {
+        resolved: false,
+        code: "provider-unavailable",
+        nextAction: "Repository provider transport is unavailable. Restore the server network client, then retry.",
+      };
+    }
+  }
   const fetchImpl = args.fetchImpl ?? transport!.fetch;
   try {
     return await discoverCanonicalDesignArtifactWithFetch(args, repo, token, fetchImpl);
@@ -149,6 +159,7 @@ async function discoverCanonicalDesignArtifactWithFetch(
     };
   }
   if (!response.ok) {
+    await cancelGithubResponseBody(response);
     return {
       resolved: false,
       code: "provider-unavailable",

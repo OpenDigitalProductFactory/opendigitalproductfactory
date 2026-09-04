@@ -56,6 +56,20 @@ describe("canonical design artifact discovery", () => {
     }
   });
 
+  it("maps production transport construction failure to provider-unavailable", async () => {
+    const result = await discoverCanonicalDesignArtifact({
+      repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+      baseSha: BASE_SHA,
+      headSha: HEAD_SHA,
+      db,
+      transportFactory: () => {
+        throw new Error("dispatcher unavailable");
+      },
+    });
+
+    expect(result).toMatchObject({ resolved: false, code: "provider-unavailable" });
+  });
+
   it("binds the single spec changed across the branch range, taking the blob id from the provider", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(compareResponse([
       { filename: "apps/web/lib/thing.ts", sha: OTHER_BLOB_SHA, status: "modified" },
@@ -121,10 +135,16 @@ describe("canonical design artifact discovery", () => {
   });
 
   it("reports provider unavailability rather than guessing when the compare fails", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue({ ok: false } as unknown as Response);
+    const cancel = vi.fn().mockResolvedValue(undefined);
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 503,
+      body: { cancel },
+    } as unknown as Response);
 
     const result = await discoverCanonicalDesignArtifact(args(fetchImpl as unknown as typeof fetch));
 
     expect(result).toMatchObject({ resolved: false, code: "provider-unavailable" });
+    expect(cancel).toHaveBeenCalledTimes(1);
   });
 });

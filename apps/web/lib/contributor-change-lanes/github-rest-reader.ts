@@ -77,6 +77,15 @@ export function createGithubReadTransport(): GithubReadTransport {
   };
 }
 
+/** Release an unconsumed provider response before retrying or closing its dispatcher. */
+export async function cancelGithubResponseBody(response: Response): Promise<void> {
+  try {
+    await response.body?.cancel();
+  } catch {
+    // Cleanup cannot change the typed provider verdict already established.
+  }
+}
+
 /**
  * Production GitHub PR reader. Returns the rows for the open-PR list,
  * tagged with sourceKey = PR number as string. The pure runner in

@@ -99,6 +99,34 @@ describe("resolveRepositoryArtifact", () => {
     }
   });
 
+  it("maps production transport construction failure to an immutable-source refusal", async () => {
+    const result = await readRepositoryProviderBlob({
+      repositoryFullName: locator.repositoryFullName,
+      commitSha: locator.commitSha,
+      path: locator.path,
+      expectedBlobId: locator.providerBlobId,
+      db: db() as never,
+      transportFactory: () => {
+        throw new Error("dispatcher unavailable");
+      },
+    });
+
+    expect(result).toMatchObject({ ok: false, code: "IMMUTABLE_SOURCE_UNAVAILABLE" });
+  });
+
+  it("maps repository-resolution transport construction failure to a canonical-design refusal", async () => {
+    const result = await resolveRepositoryArtifact({
+      locator,
+      subject: { kind: "backlog-item", id: "BI-TEST" },
+      db: db() as never,
+      transportFactory: () => {
+        throw new Error("dispatcher unavailable");
+      },
+    });
+
+    expect(result).toMatchObject({ ok: false, code: "CANONICAL_DESIGN_REQUIRED" });
+  });
+
   it("reuses one isolated transport for commit provenance and blob verification", async () => {
     const frameworkFetch = vi.fn().mockRejectedValue(new Error("framework context unavailable"));
     vi.stubGlobal("fetch", frameworkFetch);
@@ -144,8 +172,9 @@ describe("resolveRepositoryArtifact", () => {
   });
 
   it.each([408, 429, 500, 502, 503, 504])("retries retryable blob HTTP %i once", async (status) => {
+    const cancel = vi.fn().mockResolvedValue(undefined);
     const transient = vi.fn()
-      .mockResolvedValueOnce(new Response("temporarily unavailable", { status }))
+      .mockResolvedValueOnce({ ok: false, status, body: { cancel } } as unknown as Response)
       .mockResolvedValueOnce(new Response(JSON.stringify({
         type: "file",
         sha: locator.providerBlobId,
@@ -161,6 +190,7 @@ describe("resolveRepositoryArtifact", () => {
       fetchImpl: transient as typeof fetch,
     })).resolves.toEqual({ ok: true, data: bytes });
     expect(transient).toHaveBeenCalledTimes(2);
+    expect(cancel).toHaveBeenCalledTimes(1);
   });
 
   it("refuses a permanent blob status immediately without exposing its body", async () => {
