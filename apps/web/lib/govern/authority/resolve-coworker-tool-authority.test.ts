@@ -208,6 +208,14 @@ describe("deriveCoworkerApprovalPolicy", () => {
     })).toBe("none");
   });
 
+  it("treats the exact server-bound review as the approval even for a tier-1 reviewer", () => {
+    expect(deriveCoworkerApprovalPolicy({
+      hitlTierDefault: 1,
+      hitlPolicy: "side-effects",
+      serverBoundIndependentReview: true,
+    })).toBe("none");
+  });
+
   it("keeps ordinary side effects behind the coworker's configured approval policy", () => {
     expect(deriveCoworkerApprovalPolicy({
       hitlTierDefault: 2,
