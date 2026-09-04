@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
   getLocalOnlyInference: vi.fn(),
   resolveDispatchPosture: vi.fn(),
   logTokenUsage: vi.fn(),
-  createAsyncOperation: vi.fn(),
+  admitDurableAsyncOperation: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({
@@ -48,8 +48,8 @@ vi.mock("@/lib/golden-triangle/dispatch", () => ({
   resolveDispatchPosture: mocks.resolveDispatchPosture,
 }));
 
-vi.mock("@/lib/async-inference", () => ({
-  createAsyncOperation: mocks.createAsyncOperation,
+vi.mock("@/lib/inference/async-operation-runtime", () => ({
+  admitPrismaDurableAsyncOperation: mocks.admitDurableAsyncOperation,
 }));
 
 vi.mock("@/lib/ai-inference", () => ({
@@ -134,10 +134,28 @@ describe("routeAndCall background starts", () => {
         providerOperationId: "interaction-provider-op-1",
       },
     });
-    mocks.createAsyncOperation.mockResolvedValue("async-op-row-1");
+    mocks.admitDurableAsyncOperation.mockResolvedValue({
+      operationId: "async-op-row-1",
+      replayed: false,
+    });
   });
 
-  it("persists the typed provider handle, dispatch audit, and exact downgrade reason", async () => {
+  const durableAuthority = {
+    request: {
+      kind: "task-run" as const,
+      taskRunId: "TR-BACKGROUND-1",
+      requestKey: "research:background:1",
+      requestDigest: "d".repeat(64),
+    },
+    actor: {
+      userId: "user-1",
+      agentId: null,
+      principalId: null,
+      isSuperuser: true,
+    },
+  };
+
+  it("admits the platform operation before provider POST and returns its durable identity", async () => {
     const result = await routeAndCall(
       [{ role: "user", content: "Research this topic." }],
       "You research.",
@@ -148,18 +166,25 @@ describe("routeAndCall background starts", () => {
         threadId: "thread-1",
         maxDurationMs: 60_000,
         persistDecision: false,
+        durableAsyncOperation: durableAuthority,
       },
     );
 
-    expect(mocks.createAsyncOperation).toHaveBeenCalledWith({
+    expect(mocks.admitDurableAsyncOperation).toHaveBeenCalledWith(expect.objectContaining({
       providerId: "gemini",
       modelId: "model-under-test",
-      operationId: "interaction-provider-op-1",
       contractFamily: "background.research",
-      requestContext: { taskType: "research", sensitivity: "internal", messages: 1 },
-      threadId: "thread-1",
-      maxDurationMs: 60_000,
-    });
+      screenedRequestDigest: expect.stringMatching(/^[a-f0-9]{64}$/u),
+      screenedRequestContext: expect.objectContaining({
+        version: 1,
+        messages: [{ role: "user", content: "Research this topic." }],
+        systemPrompt: "You research.",
+        executionPlan: expect.objectContaining({ executionAdapter: "async" }),
+      }),
+      request: durableAuthority.request,
+      actor: durableAuthority.actor,
+    }));
+    expect(mocks.callWithFallbackChain).not.toHaveBeenCalled();
     expect(mocks.logTokenUsage).toHaveBeenCalledWith({
       traceId: expect.any(String),
       agentId: "unknown",
@@ -167,17 +192,17 @@ describe("routeAndCall background starts", () => {
       contextKey: "thread-1",
       inputTokens: 0,
       outputTokens: 0,
-      inferenceMs: 25,
+      inferenceMs: 0,
     });
     expect(result).toMatchObject({
       asyncOperationId: "async-op-row-1",
-      downgraded: true,
-      downgradeMessage: "Preferred model is ineligible; using Gemini.",
-      downgradeReason: "not-eligible",
+      downgraded: false,
+      downgradeMessage: null,
+      downgradeReason: null,
     });
   });
 
-  it("persists the durable operation before audit settlement and waits before returning accepted", async () => {
+  it("persists the durable admission before audit settlement and waits before returning accepted", async () => {
     let releaseAudit!: () => void;
     let outwardSettled = false;
     mocks.logTokenUsage.mockReturnValueOnce(new Promise<void>((resolve) => {
@@ -194,14 +219,15 @@ describe("routeAndCall background starts", () => {
         threadId: "thread-1",
         maxDurationMs: 60_000,
         persistDecision: false,
+        durableAsyncOperation: durableAuthority,
       },
     ).finally(() => {
       outwardSettled = true;
     });
 
     await vi.waitFor(() => expect(mocks.logTokenUsage).toHaveBeenCalledOnce());
-    expect(mocks.createAsyncOperation).toHaveBeenCalledOnce();
-    expect(mocks.createAsyncOperation.mock.invocationCallOrder[0])
+    expect(mocks.admitDurableAsyncOperation).toHaveBeenCalledOnce();
+    expect(mocks.admitDurableAsyncOperation.mock.invocationCallOrder[0])
       .toBeLessThan(mocks.logTokenUsage.mock.invocationCallOrder[0]);
     expect(outwardSettled).toBe(false);
 
@@ -222,12 +248,110 @@ describe("routeAndCall background starts", () => {
         threadId: "thread-1",
         maxDurationMs: 60_000,
         persistDecision: false,
+        durableAsyncOperation: durableAuthority,
       },
     );
 
     await expect(pending).rejects.toThrow("token audit unavailable");
-    expect(mocks.createAsyncOperation).toHaveBeenCalledOnce();
-    expect(mocks.createAsyncOperation.mock.invocationCallOrder[0])
+    expect(mocks.admitDurableAsyncOperation).toHaveBeenCalledOnce();
+    expect(mocks.admitDurableAsyncOperation.mock.invocationCallOrder[0])
       .toBeLessThan(mocks.logTokenUsage.mock.invocationCallOrder[0]);
+  });
+
+  it("fails closed before provider dispatch when an async route lacks durable authority", async () => {
+    await expect(routeAndCall(
+      [{ role: "user", content: "Research this topic." }],
+      "You research.",
+      "internal",
+      {
+        taskType: "research",
+        interactionMode: "background",
+        persistDecision: false,
+      },
+    )).rejects.toThrow("ASYNC_OPERATION_AUTHORITY_REQUIRED");
+
+    expect(mocks.admitDurableAsyncOperation).not.toHaveBeenCalled();
+    expect(mocks.callWithFallbackChain).not.toHaveBeenCalled();
+  });
+
+  it("refuses an unsupported async protocol before durable admission", async () => {
+    const selected = await mocks.routeEndpointV2();
+    mocks.routeEndpointV2.mockResolvedValueOnce({
+      ...selected,
+      selectedEndpoint: "other:model-under-test",
+      selectedModelId: "model-under-test",
+      fallbackChain: ["other:model-under-test"],
+      executionPlan: {
+        ...selected.executionPlan,
+        providerId: "other",
+        executionAdapter: "async",
+      },
+    });
+
+    await expect(routeAndCall(
+      [{ role: "user", content: "Research this topic." }],
+      "You research.",
+      "internal",
+      {
+        taskType: "research",
+        interactionMode: "background",
+        persistDecision: false,
+        durableAsyncOperation: durableAuthority,
+      },
+    )).rejects.toThrow("ASYNC_OPERATION_PROTOCOL_UNSUPPORTED");
+
+    expect(mocks.admitDurableAsyncOperation).not.toHaveBeenCalled();
+    expect(mocks.callWithFallbackChain).not.toHaveBeenCalled();
+  });
+
+  it("refuses an async execution plan outside background mode before provider dispatch", async () => {
+    await expect(routeAndCall(
+      [{ role: "user", content: "Research this topic." }],
+      "You research.",
+      "internal",
+      {
+        taskType: "research",
+        interactionMode: "sync",
+        persistDecision: false,
+      },
+    )).rejects.toThrow("ASYNC_OPERATION_BACKGROUND_REQUIRED");
+
+    expect(mocks.admitDurableAsyncOperation).not.toHaveBeenCalled();
+    expect(mocks.callWithFallbackChain).not.toHaveBeenCalled();
+  });
+
+  it("preserves background non-async dispatch behavior", async () => {
+    mocks.routeEndpointV2.mockResolvedValueOnce({
+      ...await mocks.routeEndpointV2(),
+      executionPlan: {
+        ...(await mocks.routeEndpointV2()).executionPlan,
+        executionAdapter: "chat",
+      },
+    });
+    mocks.callWithFallbackChain.mockResolvedValueOnce({
+      providerId: "gemini",
+      modelId: "model-under-test",
+      content: "Done synchronously.",
+      toolCalls: [],
+      tokenUsage: { inputTokens: 2, outputTokens: 3 },
+      inferenceMs: 25,
+      downgraded: false,
+      downgradeMessage: null,
+      downgradeReason: null,
+    });
+
+    await expect(routeAndCall(
+      [{ role: "user", content: "Research this topic." }],
+      "You research.",
+      "internal",
+      {
+        taskType: "research",
+        interactionMode: "background",
+        persistDecision: false,
+      },
+    )).resolves.toMatchObject({ content: "Done synchronously." });
+
+    expect(mocks.callWithFallbackChain).toHaveBeenCalledOnce();
+    expect(mocks.admitDurableAsyncOperation).not.toHaveBeenCalled();
   });
 });

@@ -129,20 +129,6 @@ export const asyncAdapter: ExecutionAdapterHandler = {
         providerId,
       );
     }
-    if (interactionStatus === "requires_action") {
-      throw new InferenceError(
-        "Gemini async start returned requires_action, but no continuation path is available",
-        "provider_error",
-        providerId,
-      );
-    }
-    if (terminalInteractionStatuses.has(interactionStatus ?? "")) {
-      throw new InferenceError(
-        `Gemini async start returned terminal interaction status ${interactionStatus}`,
-        "provider_error",
-        providerId,
-      );
-    }
     operationId = typeof data.id === "string"
       && data.id.trim().length > 0
       && data.id.trim() === data.id

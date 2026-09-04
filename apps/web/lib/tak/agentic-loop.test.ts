@@ -1054,7 +1054,6 @@ describe("runAgenticLoop", () => {
       success: true,
       message: "Found files",
     });
-
     await runAgenticLoop({
       ...baseParams,
       taskRunId: "TR-SCHED-TESTRUN",
@@ -1097,13 +1096,14 @@ describe("runAgenticLoop", () => {
       ...baseParams,
       taskRunId: "TR-MCP-TESTRUN",
       apiTokenId: "tok_remote",
+      tokenScope: "write",
     });
-
     expect(governedExecuteTool).toHaveBeenCalledWith(
       expect.objectContaining({
         context: expect.objectContaining({
           taskRunId: "TR-MCP-TESTRUN",
           apiTokenId: "tok_remote",
+          tokenScope: "write",
         }),
       }),
     );

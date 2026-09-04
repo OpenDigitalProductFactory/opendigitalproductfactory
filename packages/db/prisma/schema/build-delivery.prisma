@@ -1082,6 +1082,7 @@ model TaskRun {
   stallEvents          StallEvent[]
   actionEnvelopes      CoworkerActionEnvelope[]
   workrooms            Workroom[]               @relation("WorkroomTaskRun")
+  asyncInferenceOps    AsyncInferenceOp[]        @relation("TaskRunAsyncInferenceOperations")
 
   @@index([userId, status])
   @@index([threadId])

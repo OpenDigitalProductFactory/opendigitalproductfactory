@@ -1,0 +1,30 @@
+{
+  "version": "1",
+  "decidedOption": "catalog-visible-core-recovery-jobs",
+  "scope": {
+    "files": [
+      "apps/web/lib/inference/async-operation-constants.ts",
+      "apps/web/lib/operate/scheduled-jobs/catalog-flow.ts",
+      "apps/web/lib/queue/functions/async-inference-operation.ts"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "uncatalogued-background-crons",
+      "catalog-visible-core-recovery-jobs",
+      "operator-editable-recovery-jobs"
+    ],
+    "fitDecision": "fits-with-guardrails",
+    "owningArea": "Platform",
+    "routeFamily": "/admin/scheduled-jobs",
+    "primaryPersona": "platform operator diagnosing whether durable async recovery and transition delivery are alive",
+    "navigationLayer": "existing Scheduled Jobs inventory",
+    "reuseConvergence": "adds two entries to the existing scheduled-job catalog and uses its established core-job presentation; no new route or UI component",
+    "sourceTruth": "the catalog entries share constants with the registered Inngest functions and are protected by exact registry parity tests",
+    "emptyFailureBehavior": "a missing catalog entry fails the parity guard instead of leaving an invisible cron; disabled worker execution reports an explicit durable disposition",
+    "aiBoundary": "the jobs reconcile persisted lifecycle truth and never infer provider completion",
+    "accessibility": "existing Scheduled Jobs table names each job and explains its purpose in text",
+    "responsive": "the existing Scheduled Jobs table/card behavior is unchanged; no new control width or interaction is introduced"
+  }
+}

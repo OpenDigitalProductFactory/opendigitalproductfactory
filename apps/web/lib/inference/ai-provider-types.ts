@@ -1,5 +1,6 @@
 // apps/web/lib/ai-provider-types.ts
 import type { DataSourceProvenance } from "@/lib/surface-data-provenance";
+import type { AsyncInferenceOperationStatus } from "./async-operation-contract";
 
 // ─── Schedule helpers ─────────────────────────────────────────────────────────
 
@@ -402,7 +403,7 @@ export type AsyncOpRow = {
   providerId: string;
   modelId: string;
   contractFamily: string;
-  status: string;
+  status: AsyncInferenceOperationStatus;
   progressPct: number | null;
   progressMessage: string | null;
   errorMessage: string | null;
