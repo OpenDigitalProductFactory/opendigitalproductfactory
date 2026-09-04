@@ -4,6 +4,7 @@
   "decisionInteractionId": "DI-F289DBB51DCB",
   "scope": {
     "files": [
+      "apps/web/app/(shell)/workspace/ward/page.tsx",
       "apps/web/components/ward/WardOperations.tsx"
     ]
   },
