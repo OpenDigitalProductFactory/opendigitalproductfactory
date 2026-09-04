@@ -74,12 +74,15 @@ The defect was reproduced on branch `fix/deliver-bi-2c50f548-owner-attention-bri
 - `apps/web/lib/agent/opening-briefing.ts:112-122` derives the overflow count from the raw array and labels it owner review work.
 - `apps/web/components/workspace-home/OperatorCockpit.tsx:101` uses `buildOwnerAttentionProjection`, ruling out the Workspace projection as the source of the contradiction.
 - `node node_modules/vitest/vitest.mjs run --root apps/web lib/agent/opening-briefing-loader.test.ts` failed two regression cases before the fix: 51 platform-health items produced “Most pressing” plus “50 more items,” and one genuine approval plus 50 platform-health items produced an inflated overflow count.
+- A reversible research spike then routed the same feed through `buildOwnerAttentionProjection`; `node node_modules/vitest/vitest.mjs run --root apps/web lib/agent/opening-briefing-loader.test.ts lib/agent/opening-briefing.test.ts lib/attention/owner-projection.test.ts` passed all 17 tests. The loader was restored to the pre-fix state after the run so implementation still begins only after readiness is granted.
 
 Candidate causes ruled out by execution and direct comparison:
 
 - The pure composer is not responsible for classifying ownership; its focused tests demonstrate it presents the array it receives.
 - The Workspace count is not dropping data accidentally; owner-projection tests classify `platform-health` into `custodian` and keep genuine approvals in `needsYouNow`.
 - Audience filtering alone is insufficient; the failing loader test keeps all fixtures operator-visible and still reproduces the exact contradiction.
+
+**Research gate conclusion: pass.** The defect is reproduced on a named current ref, the exact one-seam candidate fix turns the new regression from red to green without breaking the existing composer or projection suites, and the competing loader/composer/Workspace causes above were exercised rather than inferred.
 
 ## Ordered fix sequence
 
