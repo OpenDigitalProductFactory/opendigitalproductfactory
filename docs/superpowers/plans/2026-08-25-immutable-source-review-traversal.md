@@ -127,6 +127,13 @@ This phase was added after the repaired live reader completed five exact immutab
 
 This phase implements the accepted `2026-09-04-initiative-review-complete-pagination-amendment.md` after BI-7111AF0C reproduced a reviewer treating page 1 of 6 as complete evidence.
 
+Traceability for the atomic deliverable:
+
+- Requirement: `OBJ-REVIEW-COMPLETE`
+- Contracts: `terminal-progress-metadata`, `terminal-writer-admission`
+- Flow: `complete-immutable-traversal`
+- Verification: `AC-PARTIAL`, `AC-COMPLETE`, `AC-FAIL-CLOSED`, `AC-COMPAT`
+
 1. Add RED policy tests for partial `hasMore=true` reads, cursor continuation, a contiguous terminal page, a premature writer, gaps, identity conflicts, and exhausted pagination.
 2. Carry only bounded pagination/identity metadata from successful immutable-reader results into terminal progress; do not expose source bytes or weaken persisted audit redaction.
 3. Keep the bound reader available and withhold/refuse the writer until an ordered attempt begins at the artifact start and reaches `hasMore=false`.
