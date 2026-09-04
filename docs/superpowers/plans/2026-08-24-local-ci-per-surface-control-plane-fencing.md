@@ -37,6 +37,18 @@ surfaces while retaining stricter process-local infrastructure boundaries.
 
 ## Required behavior
 
+This ordered fix sequence traces the immutable objective baseline directly:
+
+- `OBJ-REQUEST-RECOVERY`: implement `CONTRACT-PER-SURFACE-HYSTERESIS` in
+  `FLOW-BUILD-WATCHDOG` so portal and MCP tolerate two bounded consecutive
+  request misses and fence on the third.
+- `OBJ-STRICT-FENCE`: retain `CONTRACT-STRICT-PREFLIGHT` and the existing
+  two-miss Docker/PostgreSQL fail-closed boundary in `FLOW-BUILD-WATCHDOG`.
+- `OBJ-EVIDENCE`: include each effective surface limit beside the corresponding
+  counter in every `FLOW-BUILD-WATCHDOG` sample.
+- `OBJ-SCOPE`: change only watchdog hysteresis and its focused tests; keep probe
+  cadence, request timeout, product gates, lease lifecycle, and runtime intact.
+
 - Keep the strict preflight invariant: all four surfaces must be healthy before build work starts.
 - Track consecutive misses independently for portal, MCP, Docker, and PostgreSQL during the build watchdog.
 - Reset only the counter for a surface that recovers.
@@ -78,7 +90,17 @@ surfaces while retaining stricter process-local infrastructure boundaries.
 
 ## Acceptance
 
-The repair is accepted only when focused tests prove alternating-surface
-tolerance, the MCP-specific recovery window, and same-surface fail-closed
-behavior; semantic review covers the committed tree; and one unchanged-SHA
-local-CI rerun completes without a false control-plane fence.
+The repair is accepted only when focused tests and delivery evidence satisfy
+the complete baseline:
+
+- `AC-REQUEST-RECOVERY`: portal and MCP each recover after two bounded misses,
+  while a third consecutive miss fences.
+- `AC-STRICT-SURFACES`: Docker and PostgreSQL still fence after two consecutive
+  misses.
+- `AC-PREFLIGHT`: strict all-surface health remains mandatory before BuildKit.
+- `AC-LIMIT-EVIDENCE`: each sample records the effective per-surface limits.
+- `AC-NO-BROADEN`: cadence, the 15-second request timeout, product tests, build
+  semantics, lease lifecycle, and installed runtime remain unchanged.
+
+Semantic review must cover the committed tree, and one unchanged-SHA local-CI
+rerun must complete without a false control-plane fence.
