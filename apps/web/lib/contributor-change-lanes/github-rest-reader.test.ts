@@ -34,7 +34,18 @@ vi.mock("@/lib/credential-crypto", () => ({
   decryptSecret: mocks.decryptSecret,
 }));
 
-import { parseRepoFromUrl, readGithubPullRequests, resolveGithubToken } from "./github-rest-reader";
+import {
+  createGithubReadTransport,
+  parseRepoFromUrl,
+  readGithubPullRequests,
+  resolveGithubToken,
+} from "./github-rest-reader";
+
+it("creates a GitHub transport isolated from the framework-global fetch", async () => {
+  const transport = createGithubReadTransport();
+  expect(transport.fetch).not.toBe(globalThis.fetch);
+  await expect(transport.close()).resolves.toBeUndefined();
+});
 
 beforeEach(() => {
   vi.clearAllMocks();

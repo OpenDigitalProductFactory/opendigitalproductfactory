@@ -507,8 +507,9 @@ describe("generated route-shell registry", () => {
     // exclusions were waiting for. Its siblings keep their exclusion until each gets its own.
     // 207 -> 206: /storefront/setup joins setup-phase-only in the same PR — once the
     // fixture provisions a storefront the wizard navigates away and cannot be measured.
-    // Net: 206 base + /workspace/ward + /storefront/animals/waiting - /storefront/setup = 207.
-    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(207);
+    // Net: 206 base + /workspace/ward + /storefront/animals/waiting - /storefront/setup
+    // + six deterministic Pet Rescue operating routes = 213.
+    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(213);
     // 110 -> 113: the three exclusions above. Product Direction then adds seven
     // explicitly classified dynamic routes, bringing the combined total to 120.
     // 120 -> 121: /platform/ai/operations-map.

@@ -1,23 +1,23 @@
 model ModelProvider {
-  id                       String                    @id @default(cuid())
-  providerId               String                    @unique
+  id                       String                      @id @default(cuid())
+  providerId               String                      @unique
   name                     String
   families                 Json
-  status                   String                    @default("unconfigured")
-  updatedAt                DateTime                  @updatedAt
+  status                   String                      @default("unconfigured")
+  updatedAt                DateTime                    @updatedAt
   authHeader               String?
   computeWatts             Float?
   cliEngine                String? // "claude" | "codex" | "grok" | "opencode" — which CLI dispatch engine this provider works with (null = not CLI-dispatchable). "opencode" = local OpenAI-compatible endpoint (Docker Model Runner / Ollama).
-  costModel                String                    @default("token")
+  costModel                String                      @default("token")
   electricityRateKwh       Float?
-  enabledFamilies          Json                      @default("[]")
+  enabledFamilies          Json                        @default("[]")
   endpoint                 String?
   inputPricePerMToken      Float?
   outputPricePerMToken     Float?
-  category                 String                    @default("direct")
+  category                 String                      @default("direct")
   baseUrl                  String?
-  authMethod               String                    @default("api_key")
-  supportedAuthMethods     Json                      @default("[\"api_key\"]")
+  authMethod               String                      @default("api_key")
+  supportedAuthMethods     Json                        @default("[\"api_key\"]")
   consoleUrl               String?
   docsUrl                  String?
   billingLabel             String?
@@ -26,34 +26,34 @@ model ModelProvider {
   oauthClientId            String?
   oauthRedirectUri         String?
   costPerformanceNotes     String?
-  endpointType             String                    @default("llm")
+  endpointType             String                      @default("llm")
   serviceKind              String?
-  sensitivityClearance     String[]                  @default([])
-  capabilityTier           String                    @default("basic")
-  costBand                 String                    @default("free")
-  taskTags                 String[]                  @default([])
+  sensitivityClearance     String[]                    @default([])
+  capabilityTier           String                      @default("basic")
+  costBand                 String                      @default("free")
+  taskTags                 String[]                    @default([])
   mcpTransport             String?
   maxConcurrency           Int?
-  catalogVisibility        String                    @default("visible")
+  catalogVisibility        String                      @default("visible")
   catalogEntry             Json?
   avgLatencyMs             Float?
-  codegen                  Int                       @default(50)
-  contextRetention         Int                       @default(50)
-  conversational           Int                       @default(50)
-  instructionFollowing     Int                       @default(50)
+  codegen                  Int                         @default(50)
+  contextRetention         Int                         @default(50)
+  conversational           Int                         @default(50)
+  instructionFollowing     Int                         @default(50)
   maxContextTokens         Int?
   maxOutputTokens          Int?
-  modelRestrictions        String[]                  @default([])
-  profileSource            String                    @default("seed")
-  reasoning                Int                       @default(50)
-  recentFailureRate        Float                     @default(0)
+  modelRestrictions        String[]                    @default([])
+  profileSource            String                      @default("seed")
+  reasoning                Int                         @default(50)
+  recentFailureRate        Float                       @default(0)
   retiredAt                DateTime?
   retiredReason            String?
-  structuredOutput         Int                       @default(50)
-  supportsStreaming        Boolean                   @default(true)
-  supportsStructuredOutput Boolean                   @default(false)
-  supportsToolUse          Boolean                   @default(false)
-  toolFidelity             Int                       @default(50)
+  structuredOutput         Int                         @default(50)
+  supportsStreaming        Boolean                     @default(true)
+  supportsStructuredOutput Boolean                     @default(false)
+  supportsToolUse          Boolean                     @default(false)
+  toolFidelity             Int                         @default(50)
   userFacingDescription    Json?
   authMode                 String?
   credentialOwnerMode      String?

@@ -26,6 +26,12 @@ before any success claim, and `dpf-pr-with-dco` for handoff.
   projected as `resumable`; identical replay nevertheless returns the cached
   failure. Its earlier writer arguments were rejected after a prerequisite
   schema defect that is now fixed and deployed.
+- A later replay reached the bound writer and created approval envelope
+  `cmtmgbxy603kd01qid8kg6261`, but the executor persisted the TaskRun as
+  `completed` after receiving `approval_required`. Approval then could not be
+  consumed because replay admitted approved envelopes only from
+  `input-required`. This is the AC-E2B-003 completion-leakage case, not a new
+  approval model or backlog item.
 - The fix extends the existing reservation and terminal-writer attempt budget.
   It adds no TaskRun, writer, receipt, approval bypass, or alternate evidence
   path.
@@ -66,6 +72,15 @@ Change only `reserveTerminalWriterReplay` and its small parsing predicates in
   bounded writer-only turn, while preserving proposal-envelope recovery as the
   authority for actual pending approvals;
 - preserve ordinary TaskRun terminal semantics.
+
+The live acceptance path added one necessary continuation to this phase:
+
+- in `mcp-task-execution.ts`, project the bound writer's explicit
+  `approval_required` result as `input-required` even if the tool path did not
+  update TaskRun state;
+- in the existing approval-resume adapter, admit a historical `completed`
+  projection only for an exact initiative-review binding whose approved
+  envelope names the same writer; preserve generic completed-task finality.
 
 Update the governing design with the live evidence and exact eligibility rule.
 
@@ -134,3 +149,8 @@ extends that contract; it does not replace or narrow the original safeguards.
 - The focused RED failed because the marked stalled TaskRun made zero
   compare-and-set reservation calls. After the eligibility correction, the new
   seven-case regression and all six graph-linked suites pass: 54 tests total.
+- Live acceptance then exposed the approval projection dependency. Two new
+  regressions failed on the pre-fix tree: a fresh bound writer proposal was
+  persisted as `completed`, and the same-packet replay of an approved historical
+  projection executed no writer. Both pass after the bounded projection and
+  exact-completed recovery changes (22/22 focused tests).

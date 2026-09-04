@@ -97,48 +97,109 @@ describe("asyncAdapter", () => {
     expect(asyncAdapter.type).toBe("async");
   });
 
-  it("Gemini: calls startInteraction endpoint", async () => {
+  it("Gemini: starts a background interaction through the current Interactions API", async () => {
     stubFetchOk({
-      name: "operations/abc123",
-      done: false,
-      metadata: {},
+      id: "interaction-abc123",
+      object: "interaction",
+      status: "in_progress",
     });
 
     await asyncAdapter.execute(makeRequest());
 
-    const [url] = mockFetch.mock.calls[0];
-    expect(url).toBe(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-thinking-exp:startInteraction",
-    );
+    const [url, init] = mockFetch.mock.calls[0];
+    expect(url).toBe("https://generativelanguage.googleapis.com/v1beta/interactions");
+    expect(JSON.parse(init.body)).toEqual({
+      model: "gemini-2.0-flash-thinking-exp",
+      input: "Research the history of quantum computing",
+      background: true,
+    });
   });
 
-  it("Gemini: extracts operation ID from response", async () => {
+  it("Gemini: returns a typed async-operation start result", async () => {
     stubFetchOk({
-      name: "operations/deep-research-xyz",
-      done: false,
+      id: "interaction-deep-research-xyz",
+      object: "interaction",
+      status: "in_progress",
     });
 
     const result = await asyncAdapter.execute(makeRequest());
 
     expect(result.text).toBe(""); // no result yet
     expect(result.toolCalls).toEqual([]);
-    expect(result.raw?.operationId).toBe("operations/deep-research-xyz");
-    expect(result.raw?.asyncStatus).toBe("accepted");
+    expect(result.asyncOperation).toEqual({
+      status: "accepted",
+      providerOperationId: "interaction-deep-research-xyz",
+    });
   });
 
-  it("Gemini: sends user prompt in contents", async () => {
-    stubFetchOk({ name: "operations/op1", done: false });
+  it("Gemini: accepts a queued interaction as a nonterminal async start", async () => {
+    stubFetchOk({
+      id: "interaction-queued-xyz",
+      object: "interaction",
+      status: "queued",
+    });
 
-    await asyncAdapter.execute(makeRequest());
+    await expect(asyncAdapter.execute(makeRequest())).resolves.toMatchObject({
+      asyncOperation: {
+        status: "accepted",
+        providerOperationId: "interaction-queued-xyz",
+      },
+    });
+  });
+
+  it("Gemini: refuses requires_action because this adapter has no continuation path", async () => {
+    stubFetchOk({
+      id: "interaction-action-required",
+      object: "interaction",
+      status: "requires_action",
+    });
+
+    await expect(asyncAdapter.execute(makeRequest())).rejects.toMatchObject({
+      code: "provider_error",
+      message: expect.stringMatching(/requires_action.*continuation/i),
+    });
+  });
+
+  it.each([
+    "completed",
+    "incomplete",
+    "failed",
+    "cancelled",
+    "budget_exceeded",
+  ])("Gemini: refuses terminal create status %s", async (status) => {
+    stubFetchOk({
+      id: `interaction-${status}`,
+      object: "interaction",
+      status,
+    });
+
+    await expect(asyncAdapter.execute(makeRequest())).rejects.toMatchObject({
+      code: "provider_error",
+      message: expect.stringContaining(`terminal interaction status ${status}`),
+    });
+  });
+
+  it("Gemini: uses the agent field for a managed Deep Research agent", async () => {
+    // The provider schema permits omission of the optional object discriminator.
+    stubFetchOk({ id: "interaction-op1", status: "in_progress" });
+
+    await asyncAdapter.execute(makeRequest({
+      modelId: "deep-research-pro-preview-12-2025",
+      plan: makePlan({ modelId: "deep-research-pro-preview-12-2025" }),
+      systemPrompt: "Return cited primary sources.",
+    }));
 
     const body = JSON.parse(mockFetch.mock.calls[0][1].body);
-    expect(body.contents).toEqual([
-      { role: "user", parts: [{ text: "Research the history of quantum computing" }] },
-    ]);
+    expect(body).toEqual({
+      agent: "deep-research-pro-preview-12-2025",
+      input: "Research the history of quantum computing",
+      system_instruction: "Return cited primary sources.",
+      background: true,
+    });
   });
 
   it("throws when no operation ID in response", async () => {
-    stubFetchOk({ done: false }); // no name field
+    stubFetchOk({ object: "interaction", status: "in_progress" }); // no id field
 
     try {
       await asyncAdapter.execute(makeRequest());
@@ -172,9 +233,7 @@ describe("asyncAdapter", () => {
     }
   });
 
-  it("generic provider: uses chat/completions URL", async () => {
-    stubFetchOk({ id: "op-generic-123" });
-
+  it("rejects a provider without an explicit long-running-operation protocol", async () => {
     const req = makeRequest({
       providerId: "openai",
       provider: {
@@ -182,15 +241,38 @@ describe("asyncAdapter", () => {
         headers: { Authorization: "Bearer sk-test" },
       },
     });
-    const result = await asyncAdapter.execute(req);
 
-    const [url] = mockFetch.mock.calls[0];
-    expect(url).toBe("https://api.openai.com/v1/chat/completions");
-    expect(result.raw?.operationId).toBe("op-generic-123");
+    await expect(asyncAdapter.execute(req)).rejects.toMatchObject({
+      code: "provider_error",
+      message: expect.stringContaining("does not support"),
+    });
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it("rejects a non-string Gemini operation ID", async () => {
+    stubFetchOk({ id: 42, object: "interaction", status: "in_progress" });
+
+    await expect(asyncAdapter.execute(makeRequest())).rejects.toMatchObject({
+      code: "provider_error",
+      message: expect.stringContaining("No operation ID"),
+    });
+  });
+
+  it("rejects a response with a conflicting object discriminator", async () => {
+    stubFetchOk({
+      id: "interaction-op1",
+      object: "chat.completion",
+      status: "in_progress",
+    });
+
+    await expect(asyncAdapter.execute(makeRequest())).rejects.toMatchObject({
+      code: "provider_error",
+      message: expect.stringContaining("invalid interaction response"),
+    });
   });
 
   it("extracts prompt from last user message", async () => {
-    stubFetchOk({ name: "operations/op1", done: false });
+    stubFetchOk({ id: "interaction-op1", object: "interaction", status: "in_progress" });
 
     const req = makeRequest({
       messages: [
@@ -202,11 +284,11 @@ describe("asyncAdapter", () => {
     await asyncAdapter.execute(req);
 
     const body = JSON.parse(mockFetch.mock.calls[0][1].body);
-    expect(body.contents[0].parts[0].text).toBe("Deep research on AI safety");
+    expect(body.input).toBe("Deep research on AI safety");
   });
 
   it("returns timing info", async () => {
-    stubFetchOk({ name: "operations/op1", done: false });
+    stubFetchOk({ id: "interaction-op1", object: "interaction", status: "in_progress" });
 
     const result = await asyncAdapter.execute(makeRequest());
 

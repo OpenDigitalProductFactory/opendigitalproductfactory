@@ -454,20 +454,20 @@ model WorkroomActivity {
 // Explicit vs legacy is assignment provenance; derived coordinators stay
 // read-model only. Table name matches WorkCapsule mapping.
 model WorkroomParticipant {
-  id                    String                               @id @default(cuid())
-  workroomId            String
-  workroom              Workroom                             @relation("WorkroomParticipants", fields: [workroomId], references: [id], onDelete: Cascade)
-  principalId           String
-  principal             Principal                            @relation("WorkroomParticipantPrincipal", fields: [principalId], references: [id], onDelete: Restrict)
-  roles                 WorkroomParticipantRole[]
-  assignmentSource      WorkroomParticipantAssignmentSource
-  enteredReason         String?
-  currentWorkSummary    String?
-  lifecycle             RecordLifecycle                      @default(active)
-  lifecycleAt           DateTime?
-  lifecycleReason       String?
-  createdAt             DateTime                             @default(now())
-  updatedAt             DateTime                             @updatedAt
+  id                 String                              @id @default(cuid())
+  workroomId         String
+  workroom           Workroom                            @relation("WorkroomParticipants", fields: [workroomId], references: [id], onDelete: Cascade)
+  principalId        String
+  principal          Principal                           @relation("WorkroomParticipantPrincipal", fields: [principalId], references: [id], onDelete: Restrict)
+  roles              WorkroomParticipantRole[]
+  assignmentSource   WorkroomParticipantAssignmentSource
+  enteredReason      String?
+  currentWorkSummary String?
+  lifecycle          RecordLifecycle                     @default(active)
+  lifecycleAt        DateTime?
+  lifecycleReason    String?
+  createdAt          DateTime                            @default(now())
+  updatedAt          DateTime                            @updatedAt
 
   @@unique([workroomId, principalId])
   @@index([principalId])
@@ -481,20 +481,20 @@ model WorkroomParticipant {
 // Portfolio dependencies stay on Workroom.dependsOnPortfolioRoles.
 enum WorkroomRelationKind {
   contains
-  spawned_from    @map("spawned-from")
-  depends_on      @map("depends-on")
+  spawned_from   @map("spawned-from")
+  depends_on     @map("depends-on")
   blocks
-  contributes_to  @map("contributes-to")
+  contributes_to @map("contributes-to")
 }
 
 model WorkroomRelation {
-  id              String               @id @default(cuid())
-  fromWorkroomId  String
-  toWorkroomId    String
-  relation        WorkroomRelationKind
-  createdAt       DateTime             @default(now())
-  fromWorkroom    Workroom             @relation("WorkroomRelationFrom", fields: [fromWorkroomId], references: [id], onDelete: Cascade)
-  toWorkroom      Workroom             @relation("WorkroomRelationTo", fields: [toWorkroomId], references: [id], onDelete: Cascade)
+  id             String               @id @default(cuid())
+  fromWorkroomId String
+  toWorkroomId   String
+  relation       WorkroomRelationKind
+  createdAt      DateTime             @default(now())
+  fromWorkroom   Workroom             @relation("WorkroomRelationFrom", fields: [fromWorkroomId], references: [id], onDelete: Cascade)
+  toWorkroom     Workroom             @relation("WorkroomRelationTo", fields: [toWorkroomId], references: [id], onDelete: Cascade)
 
   @@unique([fromWorkroomId, toWorkroomId, relation])
   @@index([toWorkroomId, relation])
