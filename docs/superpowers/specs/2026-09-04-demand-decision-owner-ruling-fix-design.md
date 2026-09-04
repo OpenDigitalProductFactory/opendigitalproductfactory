@@ -20,6 +20,15 @@ The regression test imports the intended canonical predicate before it exists an
 - The resolution control is not the cause: `OrgDecisionCaptureList` already supplies the answer path for selected rows.
 - The queue query is the cause: its route equality excludes the existing `/ops/demand` row before presentation.
 
+## Research verification evidence
+
+The regression was executed against the named pre-fix ref and the immutable fix head:
+
+- Red — detached worktree at `fdbff30390b22e6166e01c1335d791d4619cb685`, with only `organization-decision-inbox.test.ts` added: `/Users/markbodman/dpf/apps/web/node_modules/.bin/vitest run apps/web/lib/decision/organization-decision-inbox.test.ts` exited 1 because `./organization-decision-inbox` did not exist. This proves the canonical organization-profile predicate and its route-independent behavior were absent before the fix.
+- Green — branch head `97234893246ca7472da27496de1aae01b9e6bdcd`: `pnpm --filter web exec vitest run lib/decision/organization-decision-inbox.test.ts` exited 0 with 1 file and 2 tests passed. The tests prove `/ops/demand` no longer depends on route equality and that a missing organization profile fails closed.
+
+The live unresolved `DecisionInteraction` and passing decision-creation path rule out creation and funding authority. The existing `OrgDecisionCaptureList` rules out the resolution control. The red/green predicate test isolates the remaining cause to the queue selection boundary.
+
 ## Design grounding
 
 The existing organization `DecisionPerspectiveProfile.profileId` is the source of truth for WWWD ownership. The queue will select unresolved, unanswered decisions on that profile, independent of which business surface originated them. It will continue to exclude build-bound, task-bound, profession-gate, kernel-consult, empty-question, and `mcp:principle_decide` interactions. This extends the existing Review & adjust queue and capture control; it adds no model, enum, route, or approval surface.
