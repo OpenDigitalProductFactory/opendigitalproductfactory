@@ -29,7 +29,9 @@ status: draft
 - **Rationale:** the pure projection, bounded source adapter, and operator screen are one
   observable contract. Projection-only code does not satisfy the operator outcome;
   presentation without the projection would create a second calculation authority.
-- **Receipt:** `PENDING-IMMUTABLE-PLAN-RECEIPT`.
+- **Coverage state:** blocked on the condition `no initiative scope baseline exists for
+  BI-69803ACC`; replace this line with the immutable coverage receipt after an independent
+  spec-approval mints that baseline.
 - **Dependencies:** Phase 1 baseline from `BI-7C1F43E3`; no unfinished source change is
   required. The separate seven-day observation may populate later cohorts but does not
   block the scorecard contract.
@@ -121,4 +123,3 @@ theme tokens, no motion, no client polling, and no local calculation fork.
 
 Revert the single PR. The query adapter and UI disappear; existing source records are
 unchanged because there is no migration or scorecard writer.
-
