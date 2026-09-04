@@ -7,6 +7,9 @@ import {
   reconcileDeliveryTaskNotifications,
 } from "./delivery-task-notifications";
 
+const fixtureNow = new Date("2026-09-04T12:00:00.000Z");
+const minutesFromFixture = (minutes: number) => new Date(fixtureNow.getTime() + minutes * 60_000);
+
 describe("delivery task notifications", () => {
   it.each([
     ["complete", "completed"],
@@ -34,10 +37,10 @@ describe("delivery task notifications", () => {
   });
 
   it.each([
-    [{ status: "working", leaseExpiresAt: new Date("2026-09-04T11:59:00.000Z"), taskRun: null }, "takeover-ready"],
-    [{ status: "working", leaseExpiresAt: null, taskRun: { taskRunId: "TR-1", status: "input-required", updatedAt: new Date("2026-09-04T12:00:00.000Z"), actionEnvelopes: [{ id: "CAE-1", status: "proposed", expiresAt: new Date("2026-09-04T12:10:00.000Z") }] } }, "approval-required"],
-    [{ status: "working", leaseExpiresAt: null, taskRun: { taskRunId: "TR-1", status: "input-required", updatedAt: new Date("2026-09-04T12:00:00.000Z"), actionEnvelopes: [{ id: "CAE-APPROVED", status: "approved", expiresAt: new Date("2026-09-04T12:10:00.000Z") }] } }, "input-required"],
-    [{ status: "working", leaseExpiresAt: null, taskRun: { taskRunId: "TR-1", status: "input-required", updatedAt: new Date("2026-09-04T12:00:00.000Z"), actionEnvelopes: [{ id: "CAE-OLD", status: "proposed", expiresAt: new Date("2026-09-04T11:59:00.000Z") }] } }, "approval-expired"],
+    [{ status: "working", leaseExpiresAt: minutesFromFixture(-1), taskRun: null }, "takeover-ready"],
+    [{ status: "working", leaseExpiresAt: null, taskRun: { taskRunId: "TR-1", status: "input-required", updatedAt: fixtureNow, actionEnvelopes: [{ id: "CAE-1", status: "proposed", expiresAt: minutesFromFixture(10) }] } }, "approval-required"],
+    [{ status: "working", leaseExpiresAt: null, taskRun: { taskRunId: "TR-1", status: "input-required", updatedAt: fixtureNow, actionEnvelopes: [{ id: "CAE-APPROVED", status: "approved", expiresAt: minutesFromFixture(10) }] } }, "input-required"],
+    [{ status: "working", leaseExpiresAt: null, taskRun: { taskRunId: "TR-1", status: "input-required", updatedAt: fixtureNow, actionEnvelopes: [{ id: "CAE-OLD", status: "proposed", expiresAt: minutesFromFixture(-1) }] } }, "approval-expired"],
     [{ status: "working", leaseExpiresAt: null, taskRun: { taskRunId: "TR-1", status: "input-required", updatedAt: new Date("2026-09-04T12:00:00.000Z"), actionEnvelopes: [] } }, "input-required"],
   ] as const)("projects operator attention as %s", (overrides, kind) => {
     expect(projectDeliveryNotificationCandidate({
@@ -51,7 +54,7 @@ describe("delivery task notifications", () => {
   it.each([
     [{
       updatedAt: new Date("2026-09-04T09:00:00.000Z"),
-      leaseExpiresAt: new Date("2026-09-04T11:59:00.000Z"),
+      leaseExpiresAt: minutesFromFixture(-1),
       taskRun: null,
     }, "takeover-ready"],
     [{
@@ -64,7 +67,7 @@ describe("delivery task notifications", () => {
         actionEnvelopes: [{
           id: "CAE-RECENTLY-EXPIRED",
           status: "proposed",
-          expiresAt: new Date("2026-09-04T11:59:00.000Z"),
+          expiresAt: minutesFromFixture(-1),
         }],
       },
     }, "approval-expired"],

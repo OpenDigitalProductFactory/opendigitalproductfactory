@@ -17,6 +17,14 @@ Replace the implementation-only live Workroom table with one bounded, live deliv
 
 **Coverage decision: atomic.** The read projection without a visible page, the page without event recovery, or notifications without semantic deep links do not independently deliver the operator outcome. They land in one PR and roll back together. Tests and files are phased for review, not separate release units.
 
+## Backlog coverage
+
+- Decision: atomic
+- Parent: `BI-05D7A0DC`
+- Rationale: The authorized read projection, live reconciliation, action destinations, and semantic notifications only deliver the promised operator outcome together and roll back as one unit.
+- Dependencies: `BI-801313EB` supplies the durable async lifecycle consumed by this delivery.
+- Receipt: `cmtnan2cu02zq01p5a1jlbg68`
+
 ## Phase 0 — immutable design and traceability
 
 1. Commit this design and plan before production changes.
@@ -76,6 +84,8 @@ Add/refactor:
 
 - `apps/web/components/build/work-control/DeliveryTaskHub.tsx`
 - `apps/web/components/build/work-control/DeliveryTaskHub.test.tsx`
+- `apps/web/components/work-capsules/DeliveryTaskCard.tsx`
+- `apps/web/lib/work-capsules/use-delivery-task-hub.ts`
 - `apps/web/components/build/work-control/WorkControlPanel.tsx`
 - `apps/web/lib/actions/work-capsules.ts`
 - `apps/web/app/(shell)/build/work/page.tsx`

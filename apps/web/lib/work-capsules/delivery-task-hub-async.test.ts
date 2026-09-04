@@ -12,6 +12,8 @@ const actor = {
   isSuperuser: false,
 };
 
+const fixtureTime = (offsetMs = 0) => new Date(Date.parse("2026-09-04T11:00:00.000Z") + offsetMs);
+
 function operation(overrides: Record<string, unknown> = {}) {
   return {
     operationId: "private-op-id",
@@ -33,7 +35,7 @@ function operation(overrides: Record<string, unknown> = {}) {
     updatedAt: new Date("2026-09-04T12:00:00.000Z"),
     startedAt: new Date("2026-09-04T11:01:00.000Z"),
     completedAt: null,
-    expiresAt: new Date("2026-09-05T11:00:00.000Z"),
+    expiresAt: fixtureTime(24 * 60 * 60_000),
     ...overrides,
   };
 }

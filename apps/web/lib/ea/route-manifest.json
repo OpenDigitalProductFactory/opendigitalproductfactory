@@ -4056,7 +4056,8 @@
         "delivery-page"
       ],
       "dynamicParams": [],
-      "file": "apps/web/app/api/work-capsules/delivery-page/route.ts"
+      "file": "apps/web/app/api/work-capsules/delivery-page/route.ts",
+      "exposure": "authenticated"
     },
     {
       "routePath": "/api/work-capsules/delivery-stream",
@@ -4067,7 +4068,8 @@
         "delivery-stream"
       ],
       "dynamicParams": [],
-      "file": "apps/web/app/api/work-capsules/delivery-stream/route.ts"
+      "file": "apps/web/app/api/work-capsules/delivery-stream/route.ts",
+      "exposure": "authenticated"
     },
     {
       "routePath": "/auth/callback",

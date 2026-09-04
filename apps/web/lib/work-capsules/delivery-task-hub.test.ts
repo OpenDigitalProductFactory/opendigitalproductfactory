@@ -7,6 +7,7 @@ import {
 } from "./delivery-task-hub";
 
 const now = new Date("2026-09-04T12:00:00.000Z");
+const minutesFromNow = (minutes: number) => new Date(now.getTime() + minutes * 60_000);
 
 function source(overrides: Partial<DeliveryTaskHubSource> = {}): DeliveryTaskHubSource {
   return {
@@ -81,7 +82,7 @@ describe("delivery task hub projection", () => {
             id: "env-1",
             status: "proposed",
             createdAt: new Date("2026-09-04T11:59:00.000Z"),
-            expiresAt: new Date("2026-09-04T12:10:00.000Z"),
+            expiresAt: minutesFromNow(10),
           }],
         },
       }),
@@ -135,7 +136,7 @@ describe("delivery task hub projection", () => {
             id: "env-approved",
             status: "approved",
             createdAt: new Date("2026-09-04T11:58:00.000Z"),
-            expiresAt: new Date("2026-09-04T12:10:00.000Z"),
+            expiresAt: minutesFromNow(10),
           }],
         },
       }),

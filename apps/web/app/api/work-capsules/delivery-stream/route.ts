@@ -1,3 +1,4 @@
+// @exposure authenticated — view_platform session required unconditionally.
 import { prisma } from "@dpf/db";
 
 import { auth } from "@/lib/auth";
