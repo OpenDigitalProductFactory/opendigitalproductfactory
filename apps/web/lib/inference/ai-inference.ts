@@ -110,12 +110,12 @@ export type ChatMessage = {
   /** For role=tool messages: which tool call this result responds to */
   toolCallId?: string;
 };
-
 export type InferenceResult = {
   content: string;
   inputTokens: number;
   outputTokens: number;
   inferenceMs: number;
+  asyncOperation?: import("../routing/adapter-types").AsyncOperationStartResult;
   toolCalls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
   /** Responses API: chain subsequent calls with this ID for conversation state. */
   responseId?: string;
@@ -738,6 +738,7 @@ export async function callProvider(
     inputTokens: result.usage.inputTokens,
     outputTokens: result.usage.outputTokens,
     inferenceMs: result.inferenceMs,
+    asyncOperation: result.asyncOperation,
     ...(result.toolCalls.length > 0 && { toolCalls: result.toolCalls }),
     responseId: result.responseId,
     truncated: result.truncated ?? false,

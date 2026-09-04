@@ -53,6 +53,17 @@ export interface AdapterRequest {
   mcpSession?: AdapterMcpSession;
 }
 
+/**
+ * Provider-owned identity returned when an adapter accepts a long-running
+ * operation. The platform creates its own durable AsyncInferenceOp identity
+ * from this value; keeping the two names distinct prevents callers from
+ * accidentally treating a provider handle as the platform record id.
+ */
+export interface AsyncOperationStartResult {
+  status: "accepted";
+  providerOperationId: string;
+}
+
 /** Normalized output from an execution adapter */
 export interface AdapterResult {
   text: string;
@@ -66,6 +77,8 @@ export interface AdapterResult {
     cacheReadInputTokens?: number;
   };
   inferenceMs: number;
+  /** Present only when this dispatch started a provider-side async operation. */
+  asyncOperation?: AsyncOperationStartResult;
   raw?: Record<string, unknown>;
   /** Responses API: the response ID for chaining subsequent calls. */
   responseId?: string;

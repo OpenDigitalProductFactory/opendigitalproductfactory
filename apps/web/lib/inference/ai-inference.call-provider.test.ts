@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   mockPrisma,
+  mockGetDecryptedCredential,
   mockGetProviderBearerToken,
   mockAdapterExecute,
   mockStartTimer,
@@ -13,6 +14,7 @@ const {
       findUnique: vi.fn(),
     },
   },
+  mockGetDecryptedCredential: vi.fn(),
   mockGetProviderBearerToken: vi.fn(),
   mockAdapterExecute: vi.fn(),
   mockStartTimer: vi.fn(),
@@ -25,7 +27,7 @@ vi.mock("@dpf/db", () => ({
 }));
 
 vi.mock("@/lib/ai-provider-internals", () => ({
-  getDecryptedCredential: vi.fn(),
+  getDecryptedCredential: mockGetDecryptedCredential,
   getProviderExtraHeaders: vi.fn(() => ({})),
   getProviderBearerToken: mockGetProviderBearerToken,
   isAnthropicProvider: vi.fn(() => false),
@@ -120,6 +122,51 @@ describe("callProvider", () => {
         }),
       }),
     );
+  });
+
+  it("projects typed async-operation start metadata from the adapter", async () => {
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({
+      providerId: "gemini",
+      authMethod: "api_key",
+      authHeader: "x-goog-api-key",
+      baseUrl: "https://generativelanguage.googleapis.com/v1beta",
+      endpoint: null,
+    });
+    mockGetDecryptedCredential.mockResolvedValueOnce({ secretRef: "test-key" });
+    mockAdapterExecute.mockResolvedValueOnce({
+      text: "",
+      toolCalls: [],
+      usage: { inputTokens: 0, outputTokens: 0 },
+      inferenceMs: 12,
+      asyncOperation: {
+        status: "accepted",
+        providerOperationId: "operations/provider-op-1",
+      },
+    });
+
+    const result = await callProvider(
+      "gemini",
+      "model-under-test",
+      [{ role: "user", content: "Research this" }],
+      "You research.",
+      undefined,
+      {
+        providerId: "gemini",
+        modelId: "model-under-test",
+        recipeId: null,
+        contractFamily: "background.research",
+        executionAdapter: "async",
+        maxTokens: 0,
+        providerSettings: {},
+        toolPolicy: {},
+        responsePolicy: {},
+      },
+    );
+
+    expect(result.asyncOperation).toEqual({
+      status: "accepted",
+      providerOperationId: "operations/provider-op-1",
+    });
   });
 
   it("forwards attribution.agentMessageId into AdapterRunTelemetry on the success path", async () => {

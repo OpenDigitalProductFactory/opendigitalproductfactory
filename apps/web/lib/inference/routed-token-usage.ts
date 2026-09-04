@@ -44,15 +44,19 @@ export async function persistRoutedTokenUsage(input: {
   // `compute` cost model can fire — it is the cost signal for a fully-local
   // install, and was previously dropped here, leaving inferenceMs ~99% empty.
   inferenceMs?: number;
+  /** Record an accepted provider dispatch even when completion usage is not yet known. */
+  recordZeroUsage?: boolean;
 }): Promise<void> {
-  // Skip rows with zero tokens both ways. A successful call always reports at
-  // least the input prompt tokens; zero/zero usually means the adapter
-  // returned an error or stub. The audit row would be misleading.
-  if (input.inputTokens === 0 && input.outputTokens === 0) {
+  // Skip rows with zero tokens both ways unless this is an accepted background
+  // start whose completion usage is not available yet. Other zero/zero results
+  // usually mean the adapter returned an error or stub, so recording them would
+  // be misleading.
+  if (input.inputTokens === 0 && input.outputTokens === 0 && !input.recordZeroUsage) {
     return;
   }
   try {
-    await logTokenUsage(input);
+    const { recordZeroUsage: _recordZeroUsage, ...usage } = input;
+    await logTokenUsage(usage);
   } catch (err) {
     console.error(
       `[routed-inference] token usage persistence failed: provider=${input.providerId} ` +

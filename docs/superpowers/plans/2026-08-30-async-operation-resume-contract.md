@@ -11,18 +11,26 @@ For agentic workers: execute this plan one independently reviewable backlog item
 
 ## Deliverables
 
-1. **Identity and checkpoint contract** — extend `AsyncInferenceOp` with a canonical request digest, checkpoint sequence, and lease fields; add additive migration and CAS helpers. Verify duplicate starts, digest conflicts, and concurrent claims.
+0. **Typed provider-start boundary (`BI-2B619BC9`)** — replace the broken raw-payload lookup with an explicit `AsyncOperationStartResult` propagated through adapter, inference, and fallback results. Persist the existing platform tracking row from that typed provider handle; keep sync result shapes unchanged and never expose raw provider data as authority.
+1. **Identity and checkpoint contract** — extend `AsyncInferenceOp` with a caller/TaskRun-scoped request key, canonical request digest, checkpoint sequence, transition outbox, and lease fields; add additive migration and CAS helpers. Verify duplicate starts, cross-caller isolation, digest conflicts, and concurrent claims.
 2. **Durable worker/resume path** — add an Inngest-triggered worker that claims pending/running operations, resumes from the checkpoint, applies bounded retry/expiry/cancel rules, and emits transition events. Verify restart and provider-failure matrices.
 3. **Read/reconcile API** — expose cursor-bounded operation listing and idempotent result retrieval for a task/workroom. Verify event loss/reconnect reconciliation and provenance.
 
-Deliverables 1–3 are sequential parts of one atomic contract: none is independently safe to ship because exposing a worker without identity/checkpoint semantics can duplicate provider calls, and exposing a read API without durable transitions cannot provide truthful state. The notification UX remains independently shippable under BI-05D7A0DC after this contract is live.
+Deliverable 0 is a safe enabling repair owned by BI-2B619BC9 and may ship first, but it is not a complete asynchronous lifecycle and does not close BI-801313EB. Deliverables 1–3 are sequential parts of one atomic BI-801313EB functional contract: none is independently safe to expose as a completed capability because a worker without identity/checkpoint semantics can duplicate provider calls, and a read API without durable transitions cannot provide truthful state. The notification UX remains independently shippable under BI-05D7A0DC after this contract is live.
 
 ## Ordered execution
+
+### Phase 0 — typed start identity (RED → GREEN)
+
+- Add failing propagation tests proving an accepted provider handle survives the adapter → inference → fallback path and reaches routed persistence.
+- Replace downstream inspection of provider `raw` metadata with `AsyncOperationStartResult`; keep provider and platform identities explicitly named and distinct.
+- Verify sync adapters return no async handle, raw provider payloads remain opaque, the existing `createAsyncOperation` call receives the exact provider handle, and providers without an explicit long-running-operation protocol are refused before dispatch.
+- Run the four focused suites, the adjacent routing/inference graph, and web typecheck. This phase may merge as an enabling repair, but record BI readiness as incomplete until Phases 1–3 pass.
 
 ### Phase 1 — schema and contract (RED → GREEN)
 
 - Resolve impact paths and existing tests before editing.
-- Add failing tests for duplicate start, conflicting digest, CAS lease loss, and checkpoint monotonicity.
+- Add failing tests for same-scope duplicate start, different-scope equal payloads, conflicting digest, ambiguous provider-start timeout, CAS lease loss, and checkpoint monotonicity.
 - Implement additive fields/helpers; run affected Vitest and typecheck.
 
 ### Phase 2 — worker and lifecycle (RED → GREEN)
@@ -52,4 +60,4 @@ Deliverables 1–3 are sequential parts of one atomic contract: none is independ
 
 ## Backlog coverage
 
-This plan is atomic for BI-801313EB: the three phases are not independently shippable without violating the identity/checkpoint safety contract. Coverage receipt is recorded in the DPF MCP before implementation begins and must be copied here verbatim before PR creation.
+This plan is decomposed. Phase 0 is independently shippable under BI-2B619BC9 and restores the pre-existing provider-handle tracking path without a standalone lifecycle claim. Phases 1–3 remain one atomic BI-801313EB functional acceptance unit and are not independently complete. BI-05D7A0DC owns the later notification UX. A decomposed coverage receipt for the current immutable plan is recorded in the DPF MCP before implementation begins and must be copied here verbatim before PR creation.

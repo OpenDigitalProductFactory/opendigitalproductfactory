@@ -611,14 +611,29 @@ async function routeAndCallAttempt(
     );
     applyObservedRouterEvidence(decision, result.routingEvidence, routeDecisionLogId);
 
-    // If the adapter returned an operation ID (async adapter), create tracking record
-    const operationId = (result as any).raw?.operationId as string | undefined;
-    if (operationId) {
+    // A provider operation handle is distinct from the durable platform id
+    // returned below. The typed boundary prevents fallback projection from
+    // silently dropping the provider handle (the former `raw` path did).
+    if (result.asyncOperation?.status === "accepted") {
+      // The async start is a real provider dispatch even though its eventual
+      // completion usage is not available yet. Persist the zero-token start
+      // row before the early return; the durable lifecycle will append final
+      // usage when the provider operation completes.
+      void persistRoutedTokenUsage({
+        traceId,
+        agentId: options?.agentId ?? "unknown",
+        providerId: result.providerId,
+        contextKey: routedContextKey(options),
+        inputTokens: result.tokenUsage?.inputTokens ?? 0,
+        outputTokens: result.tokenUsage?.outputTokens ?? 0,
+        inferenceMs: result.inferenceMs,
+        recordZeroUsage: true,
+      });
       const { createAsyncOperation } = await import("@/lib/async-inference");
       const asyncOpId = await createAsyncOperation({
         providerId: result.providerId,
         modelId: result.modelId,
-        operationId,
+        operationId: result.asyncOperation.providerOperationId,
         contractFamily: contract.contractFamily,
         requestContext: { taskType, sensitivity, messages: messages.length },
         threadId: options?.threadId,
@@ -632,9 +647,10 @@ async function routeAndCallAttempt(
         toolCalls: [],
         inputTokens: 0,
         outputTokens: 0,
-        downgraded: false,
-        downgradeMessage: null,
-        downgradeReason: null,
+        downgraded: result.downgraded,
+        downgradeMessage: result.downgradeMessage,
+        downgradeReason: result.downgradeReason
+          ?? (result.downgraded ? "provider-unavailable" : null),
         toolsStripped,
         routeDecision: decision,
         asyncOperationId: asyncOpId,
@@ -663,7 +679,8 @@ async function routeAndCallAttempt(
       downgraded: result.downgraded,
       downgradeMessage: result.downgradeMessage,
       // Background path: only a real dispatch failure downgrades here.
-      downgradeReason: result.downgraded ? "provider-unavailable" : null,
+      downgradeReason: result.downgradeReason
+        ?? (result.downgraded ? "provider-unavailable" : null),
       toolsStripped,
       truncated: result.truncated ?? false,
       routeDecision: decision,
@@ -739,11 +756,12 @@ async function routeAndCallAttempt(
     downgraded: result.downgraded || fellToLocal,
     downgradeMessage: result.downgradeMessage ?? localFallbackBanner,
     // Opposite causes; never both for one turn (BI-F4D3B9E9d).
-    downgradeReason: result.downgraded
-      ? "provider-unavailable"
-      : fellToLocal
-        ? "not-eligible"
-        : null,
+    downgradeReason: result.downgradeReason
+      ?? (result.downgraded
+        ? "provider-unavailable"
+        : fellToLocal
+          ? "not-eligible"
+          : null),
     downgradeCause: localFallback?.cause ?? null,
     toolsStripped,
     truncated: result.truncated ?? false,
@@ -753,4 +771,3 @@ async function routeAndCallAttempt(
     ...routedRehydrationHandle(prepared.rehydrationHandle),
   };
 }
-
