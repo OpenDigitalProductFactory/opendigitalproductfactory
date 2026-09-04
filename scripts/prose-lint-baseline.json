@@ -2399,6 +2399,14 @@
     "longSentences": 0,
     "textMass": 3
   },
+  "apps/web/app/(shell)/workspace/ward/actions.ts": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 9
+  },
   "apps/web/app/(shell)/workspace/ward/page.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
@@ -2742,6 +2750,30 @@
     "readability": 1,
     "longSentences": 0,
     "textMass": 10
+  },
+  "apps/web/app/api/storefront/admin/resource-occupancies/route.ts": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 1,
+    "longSentences": 0,
+    "textMass": 22
+  },
+  "apps/web/app/api/storefront/admin/resources/[id]/route.ts": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/app/api/storefront/admin/resources/route.ts": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 8
   },
   "apps/web/app/api/storefront/admin/setup/route.ts": {
     "vocabulary": 0,
@@ -8918,6 +8950,14 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 9
+  },
+  "apps/web/components/ward/WardOperations.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 63
   },
   "apps/web/components/wiki/BusinessStanceForm.tsx": {
     "vocabulary": 0,
