@@ -8,8 +8,8 @@ status: active
 | --- | --- |
 | Backlog item | `BI-D2A51B36` |
 | Epic | `EP-5102F494` |
-| Workroom | `WC-B0DD2B2F` |
-| Branch | `feat/bi-d2a51b36-resource-occupancy` |
+| Workroom | `WC-19B43FAC` |
+| Branch | `feat/bi-d2a51b36-resource-occupancy-delivery` |
 | Design | `docs/superpowers/specs/2026-08-23-bi-d2a51b36-canonical-resource-occupancy-design.md` |
 
 ## Outcome
