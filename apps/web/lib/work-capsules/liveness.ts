@@ -32,6 +32,15 @@ const TERMINAL_STATUSES = new Set(["complete", "abandoned", "archived"]);
 /** Linked FeatureBuild phases that mean the build is closed out. */
 const TERMINAL_BUILD_PHASES = new Set(["complete", "failed", "abandoned"]);
 
+/** Durable TaskRun states that prove the authoring turn can no longer advance. */
+const TERMINAL_TASK_RUN_STATUSES = new Set([
+  "completed",
+  "failed",
+  "canceled",
+  "rejected",
+  "archived",
+]);
+
 export type WorkCapsuleLiveness =
   /** Demonstrably live: valid lease, open PR, or recent real activity. */
   | "live"
@@ -51,6 +60,10 @@ export type WorkCapsuleLiveness =
   | "lease-expired"
   /** Linked Build Studio build is complete/failed/abandoned — nothing to do. */
   | "build-terminal"
+  /** Linked TaskRun/turn is terminal while stale session state still claims activity. */
+  | "execution-terminal"
+  /** Independently durable facts contradict; preserve the room for reconciliation. */
+  | "recovery-required"
   /** No live signal and older than the idle floor (the frozen-14:00 case). */
   | "idle-stale"
   /** Capsule status is already terminal (complete/abandoned/archived). */
@@ -73,6 +86,7 @@ const REAPABLE_LIVENESS = new Set<WorkCapsuleLiveness>([
   "delivered",
   "lease-expired",
   "build-terminal",
+  "execution-terminal",
   "idle-stale",
 ]);
 
@@ -97,6 +111,8 @@ export type CapsuleLivenessInput = {
    * null-lease capsule has. Absent/null for non-BS capsules or when not loaded.
    */
   featureBuild?: { phase: string | null; lastActivityAt: Date | null } | null;
+  /** Independent durable execution state; provider/session flags cannot override it. */
+  taskRun?: { status: string | null; updatedAt: Date | null } | null;
   durableWait?: { state: "queued" | "active"; signaledAt: Date | null } | null;
   /**
    * Whether this capsule's work is DELIVERED, computed by the caller from LOCAL
@@ -202,6 +218,25 @@ export function classifyWorkCapsuleLiveness(
   if (hasOpenPr(input)) {
     const label = input.pullRequestNumber ? `PR #${input.pullRequestNumber}` : "an open PR";
     return verdict("live", `Parked in review as ${label}.`, input.lastSyncedAt ?? null);
+  }
+
+  const taskRun = input.taskRun ?? null;
+  const taskRunTerminal = Boolean(
+    taskRun?.status && TERMINAL_TASK_RUN_STATUSES.has(taskRun.status),
+  );
+  if (taskRunTerminal && input.durableWait) {
+    return verdict(
+      "recovery-required",
+      `TaskRun is ${taskRun?.status} but a durable nonproduction wait remains active; reconcile the stale fact before reaping or resuming.`,
+      taskRun?.updatedAt ?? input.durableWait.signaledAt,
+    );
+  }
+  if (taskRunTerminal) {
+    return verdict(
+      "execution-terminal",
+      `TaskRun is ${taskRun?.status}; stale provider-session or lease state cannot keep the Workroom active.`,
+      taskRun?.updatedAt ?? null,
+    );
   }
 
   if (input.durableWait) {
