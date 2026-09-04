@@ -415,7 +415,10 @@ test("pregate-preflight.mjs --plan emits the JSON plan without running guards", 
   assert.equal(result.status, 0, result.stderr);
   const plan = JSON.parse(result.stdout);
   assert.ok(plan.length > 0);
-  assert.ok(plan.some((entry) => entry.id === "module-size-guard"));
+  // BI-7E0812E0: --plan is scoped to the current diff. A docs-only branch
+  // correctly omits module-size-guard, so pin a guard that applies in every
+  // scope instead of making this CLI smoke test branch-dependent.
+  assert.ok(plan.some((entry) => entry.id === "docs-link-integrity"));
   // The rendered plan flattens each command to a string, so the conformance mark
   // is not visible here. Assert against the registry instead: every `node --test`
   // line the plan shows must be one the registry marked (BI-7B249AFE).

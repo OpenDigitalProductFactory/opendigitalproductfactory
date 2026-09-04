@@ -301,6 +301,7 @@ blast-radius report and migration/rollback plan for its own bounded seam before 
 | `BI-1CB9D97B` | Dependency-aware Build Studio campaigns across local installations | `EP-ABB3AC9D` |
 | `BI-69803ACC` | Delivery outcome scorecard | `EP-ABB3AC9D` |
 | `BI-A472354E` | Versioned model/prompt execution-profile evaluation | `EP-ABB3AC9D` |
+| `BI-7E0812E0` | Repair the docs-only `pregate --plan` self-test uncovered while verifying this design | `EP-ABB3AC9D` |
 
 No new epic is required. `EP-ABB3AC9D` owns the throughput investment; `EP-WORK-CONVERGENCE` owns the canonical projection and UX; `EP-056D2A5E` owns safe local capacity. The spec path and these responsibilities are recorded on all three.
 
