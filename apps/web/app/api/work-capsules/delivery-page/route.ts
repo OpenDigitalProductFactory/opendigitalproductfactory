@@ -3,6 +3,7 @@ import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { loadDeliveryTaskHubPage } from "@/lib/work-capsules/delivery-task-hub-store";
+import { createDeliveryTaskHubAsyncProjectionLoader } from "@/lib/work-capsules/delivery-task-hub-async";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,11 @@ export async function GET(request: Request): Promise<Response> {
   }
   const cursor = new URL(request.url).searchParams.get("cursor");
   try {
-    return Response.json(await loadDeliveryTaskHubPage(prisma, { cursor }));
+    const loadAsyncOperation = await createDeliveryTaskHubAsyncProjectionLoader({
+      id: user.id,
+      isSuperuser: user.isSuperuser,
+    });
+    return Response.json(await loadDeliveryTaskHubPage(prisma, { cursor, loadAsyncOperation }));
   } catch (error) {
     if (error instanceof Error && /cursor/i.test(error.message)) {
       return Response.json({ error: "invalid_cursor" }, { status: 400 });

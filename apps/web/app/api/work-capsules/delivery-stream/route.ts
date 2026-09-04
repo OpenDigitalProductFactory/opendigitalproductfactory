@@ -6,6 +6,7 @@ import { createSseResponse } from "@/lib/sse/sse-stream";
 import { subscribeToWorkCapsuleActivityEvents } from "@/lib/work-capsules/activity-events";
 import { loadDeliveryTaskHubPage, loadDeliveryTaskHubRow } from "@/lib/work-capsules/delivery-task-hub-store";
 import { DELIVERY_TASK_HUB_EVENT, startDeliveryTaskHubSession } from "@/lib/work-capsules/delivery-task-stream";
+import { createDeliveryTaskHubAsyncProjectionLoader } from "@/lib/work-capsules/delivery-task-hub-async";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,10 @@ export async function GET(request: Request): Promise<Response> {
   if (!user?.id || !can({ platformRole: user.platformRole, isSuperuser: user.isSuperuser }, "view_platform")) {
     return new Response("Unauthorized", { status: 401 });
   }
+  const loadAsyncOperation = await createDeliveryTaskHubAsyncProjectionLoader({
+    id: user.id,
+    isSuperuser: user.isSuperuser,
+  });
 
   return createSseResponse({
     signal: request.signal,
@@ -23,8 +28,8 @@ export async function GET(request: Request): Promise<Response> {
       let dispose: (() => void) | null = null;
       void startDeliveryTaskHubSession({
         send: (event) => controller.sendNamed(DELIVERY_TASK_HUB_EVENT, event),
-        loadSnapshot: () => loadDeliveryTaskHubPage(prisma),
-        loadRow: (workroomId) => loadDeliveryTaskHubRow(prisma, workroomId),
+        loadSnapshot: () => loadDeliveryTaskHubPage(prisma, { loadAsyncOperation }),
+        loadRow: (workroomId) => loadDeliveryTaskHubRow(prisma, workroomId, { loadAsyncOperation }),
         subscribe: subscribeToWorkCapsuleActivityEvents,
       }).then((cleanup) => {
         if (stopped) cleanup();

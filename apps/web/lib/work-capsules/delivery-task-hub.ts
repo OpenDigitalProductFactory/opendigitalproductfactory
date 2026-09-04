@@ -61,6 +61,17 @@ export type DeliveryTaskHubSource = {
   }>;
 };
 
+export type DeliveryTaskAsyncOperation =
+  | { coreHandleAvailable: false }
+  | {
+      coreHandleAvailable: true;
+      operationId: string;
+      status: "pending" | "start_indeterminate" | "running" | "completed" | "failed" | "cancelled" | "expired";
+      observedAt: string;
+      progressPct?: number;
+      progressMessage?: string;
+    };
+
 export type DeliveryTaskHubRow = {
   capsuleId: string;
   title: string;
@@ -86,7 +97,7 @@ export type DeliveryTaskHubRow = {
   pullRequestHref: string | null;
   primaryAction: { label: string; href: string };
   secondaryActions: Array<{ label: string; href: string }>;
-  asyncOperation: { coreHandleAvailable: false };
+  asyncOperation: DeliveryTaskAsyncOperation;
 };
 
 const ACTIVE_WORKROOM = new Set(["working", "verifying"]);
@@ -187,9 +198,9 @@ function newestSourceTime(source: DeliveryTaskHubSource): Date {
   return new Date(Math.max(...times.map((value) => value.getTime())));
 }
 
-function hasLiveApproval(source: DeliveryTaskHubSource, now: Date): boolean {
+function hasPendingApproval(source: DeliveryTaskHubSource, now: Date): boolean {
   return Boolean(source.taskRun?.actionEnvelopes.some((envelope) =>
-    ["proposed", "approved"].includes(envelope.status)
+    envelope.status === "proposed"
       && (!envelope.expiresAt || envelope.expiresAt.getTime() > now.getTime())));
 }
 
@@ -210,7 +221,7 @@ function resolveGroup(source: DeliveryTaskHubSource, now: Date): DeliveryTaskGro
   const leaseExpired = ACTIVE_WORKROOM.has(source.status)
     && source.leaseExpiresAt != null
     && source.leaseExpiresAt.getTime() <= now.getTime();
-  if (source.status === "blocked" || FAILURE_TASK.has(taskStatus ?? "") || hasLiveApproval(source, now)
+  if (source.status === "blocked" || FAILURE_TASK.has(taskStatus ?? "") || hasPendingApproval(source, now)
     || hasExpiredApproval(source, now) || leaseExpired || isSourceConflict(source)) return "needs-attention";
   if (taskStatus === "input-required" || WAITING_TASK.has(taskStatus ?? "") || WAITING_WORKROOM.has(source.status)) return "waiting";
   if (WORKING_TASK.has(taskStatus ?? "") || ACTIVE_WORKROOM.has(source.status)) return "working";
@@ -231,6 +242,7 @@ function label(value: string): string {
 }
 
 function verifiedResult(source: DeliveryTaskHubSource): string | null {
+  if (isSourceConflict(source)) return null;
   const verification = source.runtimeVerifications[0];
   if (verification && AFFIRMATIVE_VERIFICATION.has(verification.status.trim().toLowerCase())) {
     return `${label(verification.kind)} verified`;
@@ -240,7 +252,7 @@ function verifiedResult(source: DeliveryTaskHubSource): string | null {
 
 function primaryActionFor(source: DeliveryTaskHubSource, group: DeliveryTaskGroup, now: Date): { label: string; href: string } {
   const inspectHref = `/build/work/${encodeURIComponent(source.capsuleId)}`;
-  if (hasLiveApproval(source, now)) return { label: "Review request", href: "/workspace/inbox" };
+  if (hasPendingApproval(source, now)) return { label: "Review request", href: "/workspace/inbox" };
   if (ACTIVE_WORKROOM.has(source.status) && source.leaseExpiresAt && source.leaseExpiresAt <= now) {
     return { label: "Take over", href: `${inspectHref}#handoff` };
   }

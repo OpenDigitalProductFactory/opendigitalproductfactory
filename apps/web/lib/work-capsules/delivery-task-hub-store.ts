@@ -1,10 +1,18 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 import { canonicalJson } from "@/lib/shared/canonical-json";
-import { projectDeliveryTaskHubRow, type DeliveryTaskHubRow, type DeliveryTaskHubSource } from "./delivery-task-hub";
+import {
+  projectDeliveryTaskHubRow,
+  type DeliveryTaskAsyncOperation,
+  type DeliveryTaskHubRow,
+  type DeliveryTaskHubSource,
+} from "./delivery-task-hub";
+import type { DeliveryTaskAsyncTarget } from "./delivery-task-hub-async";
 
 export const DELIVERY_TASK_PAGE_SIZE = 40;
 export const DELIVERY_TASK_WINDOW_DAYS = 30;
+const DELIVERY_TASK_CURSOR_MAX_AGE_DAYS = DELIVERY_TASK_WINDOW_DAYS + 1;
+const ASYNC_PROJECTION_CONCURRENCY = 8;
 
 type DeliveryTaskCursor = { id: string; updatedAt: string; windowStart: string };
 type DeliveryTaskDb = {
@@ -19,6 +27,10 @@ export type DeliveryTaskHubPage = {
   nextCursor: string | null;
   observedAt: string;
 };
+
+export type DeliveryTaskAsyncProjectionLoader = (
+  target: DeliveryTaskAsyncTarget,
+) => Promise<DeliveryTaskAsyncOperation>;
 
 const HUB_SELECT = {
   id: true,
@@ -116,12 +128,70 @@ function asSource(value: unknown): DeliveryTaskHubSource {
   return value as DeliveryTaskHubSource;
 }
 
+function asyncTarget(source: DeliveryTaskHubSource): DeliveryTaskAsyncTarget {
+  return {
+    capsuleId: source.capsuleId,
+    taskRunId: source.taskRun?.taskRunId ?? null,
+  };
+}
+
+async function projectRows(
+  sources: DeliveryTaskHubSource[],
+  now: Date,
+  loadAsyncOperation?: DeliveryTaskAsyncProjectionLoader,
+): Promise<DeliveryTaskHubRow[]> {
+  const rows = sources.map((source) => projectDeliveryTaskHubRow(source, now));
+  if (!loadAsyncOperation || sources.length === 0) return rows;
+  let nextIndex = 0;
+  const workers = Array.from(
+    { length: Math.min(ASYNC_PROJECTION_CONCURRENCY, sources.length) },
+    async () => {
+      while (nextIndex < sources.length) {
+        const index = nextIndex;
+        nextIndex += 1;
+        const source = sources[index];
+        if (!source) continue;
+        try {
+          const asyncOperation = await loadAsyncOperation(asyncTarget(source));
+          const asyncObservedAt = asyncOperation.coreHandleAvailable
+            ? Date.parse(asyncOperation.observedAt)
+            : Number.NaN;
+          const rowObservedAt = Date.parse(rows[index]!.observedAt);
+          rows[index] = {
+            ...rows[index]!,
+            observedAt: Number.isFinite(asyncObservedAt) && asyncObservedAt > rowObservedAt
+              ? new Date(asyncObservedAt).toISOString()
+              : rows[index]!.observedAt,
+            asyncOperation,
+          };
+        } catch {
+          rows[index] = { ...rows[index]!, asyncOperation: { coreHandleAvailable: false } };
+        }
+      }
+    },
+  );
+  await Promise.all(workers);
+  return rows;
+}
+
 export async function loadDeliveryTaskHubPage(
   db: DeliveryTaskDb,
-  options: { now?: Date; cursor?: string | null; cursorSecret?: string } = {},
+  options: {
+    now?: Date;
+    cursor?: string | null;
+    cursorSecret?: string;
+    loadAsyncOperation?: DeliveryTaskAsyncProjectionLoader;
+  } = {},
 ): Promise<DeliveryTaskHubPage> {
   const now = options.now ?? new Date();
   const decoded = options.cursor ? decodeDeliveryTaskCursor(options.cursor, { secret: options.cursorSecret }) : null;
+  if (decoded) {
+    const cursorWindowStart = new Date(decoded.windowStart);
+    const earliestAllowed = new Date(now.getTime() - DELIVERY_TASK_CURSOR_MAX_AGE_DAYS * 24 * 60 * 60 * 1_000);
+    if (cursorWindowStart < earliestAllowed || cursorWindowStart > now) {
+      throw new Error("Invalid delivery task cursor");
+    }
+  }
   const windowStart = decoded
     ? new Date(decoded.windowStart)
     : new Date(now.getTime() - DELIVERY_TASK_WINDOW_DAYS * 24 * 60 * 60 * 1_000);
@@ -142,7 +212,7 @@ export async function loadDeliveryTaskHubPage(
   const page = found.slice(0, DELIVERY_TASK_PAGE_SIZE).map(asSource);
   const last = page.at(-1);
   return {
-    rows: page.map((row) => projectDeliveryTaskHubRow(row, now)),
+    rows: await projectRows(page, now, options.loadAsyncOperation),
     nextCursor: found.length > DELIVERY_TASK_PAGE_SIZE && last
       ? encodeDeliveryTaskCursor({ id: last.id, updatedAt: last.updatedAt.toISOString(), windowStart: windowStart.toISOString() }, { secret: options.cursorSecret })
       : null,
@@ -153,12 +223,15 @@ export async function loadDeliveryTaskHubPage(
 export async function loadDeliveryTaskHubRow(
   db: DeliveryTaskDb,
   workroomId: string,
-  options: { now?: Date } = {},
+  options: { now?: Date; loadAsyncOperation?: DeliveryTaskAsyncProjectionLoader } = {},
 ): Promise<{ capsuleId: string; row: DeliveryTaskHubRow | null } | null> {
   const now = options.now ?? new Date();
   const value = await db.workroom.findUnique({ where: { id: workroomId }, select: HUB_SELECT });
   if (!value) return null;
   const source = asSource(value);
   if ((value as { archivedAt?: Date | null }).archivedAt) return { capsuleId: source.capsuleId, row: null };
-  return { capsuleId: source.capsuleId, row: projectDeliveryTaskHubRow(source, now) };
+  const windowStart = new Date(now.getTime() - DELIVERY_TASK_WINDOW_DAYS * 24 * 60 * 60 * 1_000);
+  if (source.updatedAt < windowStart) return { capsuleId: source.capsuleId, row: null };
+  const [row] = await projectRows([source], now, options.loadAsyncOperation);
+  return { capsuleId: source.capsuleId, row: row ?? null };
 }

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import axe from "axe-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -69,7 +69,14 @@ function page(rows: DeliveryTaskHubRow[], nextCursor: string | null = null): Del
 describe("DeliveryTaskHub", () => {
   it("renders grouped accessible cards with the operator facts and actions", () => {
     render(<DeliveryTaskHub initialPage={page([
-      row(),
+      row({ asyncOperation: {
+        coreHandleAvailable: true,
+        operationId: "op-authorized-1",
+        status: "running",
+        observedAt: "2026-09-04T12:00:00.000Z",
+        progressPct: 45,
+        progressMessage: "Generating result",
+      } }),
       row({ capsuleId: "WC-2", group: "needs-attention", status: "failed", statusIntent: "danger", title: "Repair reviewer", primaryAction: { label: "Inspect", href: "/build/work/WC-2" }, nextAction: "Inspect" }),
     ])} />);
 
@@ -81,6 +88,8 @@ describe("DeliveryTaskHub", () => {
     expect(screen.getAllByText("Now")).toHaveLength(2);
     expect(screen.getAllByText("Implementation started")).toHaveLength(2);
     expect(screen.getAllByText("2 of 5")).toHaveLength(2);
+    expect(screen.getByText("Async running")).toBeTruthy();
+    expect(screen.getByText("op-authorized-1")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Resume Ship the task hub" }).getAttribute("href")).toBe("/build");
     expect(screen.getByRole("link", { name: "Handoff Ship the task hub" }).className).toContain("min-h-11");
   });
@@ -100,6 +109,67 @@ describe("DeliveryTaskHub", () => {
     rerender(<DeliveryTaskHub initialPage={page([row()])} />);
     expect(screen.getByText("Ship the task hub")).toBeTruthy();
     expect(screen.getByText(/could not refresh/)).toBeTruthy();
+  });
+
+  it("drops separately paged stale rows when a reconnect snapshot becomes authoritative", async () => {
+    const fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => page([row({ capsuleId: "WC-OLDER", title: "Older stale task" })]),
+    });
+    vi.stubGlobal("fetch", fetch);
+    render(<DeliveryTaskHub initialPage={page([row()], "opaque-cursor")} />);
+    fireEvent.click(screen.getByRole("button", { name: "Load older delivery tasks" }));
+    expect(await screen.findByText("Older stale task")).toBeTruthy();
+
+    act(() => {
+      hook.named[DELIVERY_TASK_HUB_EVENT]?.(new MessageEvent("message", {
+        data: JSON.stringify({
+          type: "snapshot",
+          rows: [row({ capsuleId: "WC-NEW", title: "Reconciled task" })],
+          nextCursor: null,
+          observedAt: "2026-09-04T12:05:00.000Z",
+        }),
+      }));
+    });
+
+    expect(screen.queryByText("Older stale task")).toBeNull();
+    expect(screen.getByText("Reconciled task")).toBeTruthy();
+  });
+
+  it("discards an older page that resolves after a reconnect snapshot", async () => {
+    let resolvePage: ((value: DeliveryTaskHubPage) => void) | undefined;
+    const deferredPage = new Promise<DeliveryTaskHubPage>((resolve) => {
+      resolvePage = resolve;
+    });
+    const fetch = vi.fn().mockResolvedValue({ ok: true, json: () => deferredPage });
+    vi.stubGlobal("fetch", fetch);
+    render(<DeliveryTaskHub initialPage={page([row()], "opaque-cursor")} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Load older delivery tasks" }));
+    await waitFor(() => expect(fetch).toHaveBeenCalledOnce());
+    const requestSignal = fetch.mock.calls[0]?.[1]?.signal as AbortSignal;
+
+    act(() => {
+      hook.named[DELIVERY_TASK_HUB_EVENT]?.(new MessageEvent("message", {
+        data: JSON.stringify({
+          type: "snapshot",
+          rows: [row({ capsuleId: "WC-NEW", title: "Reconciled task" })],
+          nextCursor: null,
+          observedAt: "2026-09-04T12:05:00.000Z",
+        }),
+      }));
+    });
+    await act(async () => {
+      resolvePage?.(page([
+        row({ capsuleId: "WC-STALE", title: "Stale deferred task" }),
+      ], "stale-cursor"));
+      await deferredPage;
+    });
+
+    expect(requestSignal.aborted).toBe(true);
+    expect(screen.queryByText("Stale deferred task")).toBeNull();
+    expect(screen.getByText("Reconciled task")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Load older delivery tasks" })).toBeNull();
   });
 
   it("distinguishes a true empty window and loads an older bounded cursor page", async () => {

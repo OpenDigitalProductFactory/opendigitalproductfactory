@@ -6,10 +6,10 @@ status: active
 
 **Backlog item:** `BI-05D7A0DC`
 
-**Workroom:** `WC-1D24739C`
+**Workroom:** `WC-59101F34`
 
 **Design:** [`2026-09-04-async-delivery-task-hub-design.md`](../specs/2026-09-04-async-delivery-task-hub-design.md)
-**Dependency:** `BI-801313EB` durable async lifecycle; integrate through one adapter seam and do not edit its persistence or queue registry.
+**Dependency:** `BI-801313EB` durable async lifecycle; consume its authorized read API and published transition event without editing its persistence, lifecycle, or workers. Register only the narrow Task Hub projection consumer.
 
 ## Outcome and delivery boundary
 
@@ -42,7 +42,8 @@ Red first:
 5. stale/partial/conflicting sources never become success;
 6. page size, 30-day window, `(updatedAt,id)` cursor, and five-activity include are fixed and validated;
 7. a single-Workroom reload returns an upsert/remove projection without scanning the corpus;
-8. the async core adapter may be absent without changing TaskRun truth.
+8. the authorized async-core adapter reads both legal semantic scopes at `limit: 1`, exposes no provider/raw result material, and contains denial/unavailability per row without changing TaskRun truth;
+9. signed cursors expire, and single-row reloads remove Workrooms outside the fixed 30-day window.
 
 Then implement the smallest pure projector and database adapter that make those tests pass. Refactor the legacy Workroom table's duplicate labels/grouping into the shared projector rather than maintaining two interpretations.
 
@@ -63,7 +64,9 @@ Red first:
 4. duplicate/out-of-order activity cannot regress a newer row;
 5. a database or subscription error emits an explicit partial/error state while confirmed content remains client-side;
 6. abort/unmount releases the PostgreSQL listener;
-7. no per-row subscriptions and no timer polling exist.
+7. distinct pending row wakes remain memory-bounded and overflow repairs through a canonical snapshot without dropping durable transitions;
+8. reconnect snapshots replace separately paged stale rows;
+9. no per-row subscriptions and no timer polling exist.
 
 Use the existing activity `LISTEN/NOTIFY` channel only as a wake-up. Keep the source of truth in the bounded store query.
 
@@ -95,8 +98,10 @@ Add:
 
 - `apps/web/lib/work-capsules/delivery-task-notifications.ts`
 - `apps/web/lib/work-capsules/delivery-task-notifications.test.ts`
+- `apps/web/lib/queue/functions/async-operation-task-hub.ts`
+- one narrow `eventFunctions` registration in `apps/web/lib/queue/functions/index.ts`
 
-Integrate through the existing `runWorkroomDriveJob` reconciliation point; do not register another Inngest function and do not modify the async-core queue registry.
+Keep the existing `runWorkroomDriveJob` reconciliation point for Workroom-owned approval, review, lease, and terminal facts. Add one standalone event-only consumer for `inference/async-operation.transitioned`; do not add a scheduler or modify the async-core worker functions.
 
 Red first:
 
@@ -105,7 +110,10 @@ Red first:
 3. a transition already represented by any Notification row is never recreated after read/dismiss;
 4. keys are Workroom + transition + durable source id/time, not display copy;
 5. links are server-built `/build/work/<capsuleId>` destinations;
-6. query window and `take` are fixed; notification failure is best effort and cannot fail the drive.
+6. query window and `take` are fixed; notification failure is best effort and cannot fail the drive;
+7. the event payload supplies only `(operationId,sequence)` locators; status/checkpoint/time and Workroom/recipient are re-read from canonical server records;
+8. identity-version-1 binding, exactly-one live TaskRun-linked Workroom, deterministic `WorkroomActivity`, SSE wake, and `async:<operationId>:<sequence>` notification keys are enforced;
+9. pending/running/cancelled transitions update the row without attention, while completed/failed/expired and indeterminate-start transitions receive explicit semantic treatment.
 
 The implementation uses the existing Notification table and realtime attention bus. It must not create a delivery ledger.
 
@@ -113,17 +121,17 @@ The implementation uses the existing Notification table and realtime attention b
 
 1. Run focused projector/store/stream/component/notification tests and `apps/web` typecheck.
 2. Run module-size, style, diff, route-budget, and affected blast-radius guards.
-3. Produce `docs/ux-fit/2026-09-04-async-delivery-task-hub-ux-fit.json` with measured desktop/mobile, light/dark, keyboard/focus, overflow, loading/reconnect/partial/error, and route-budget evidence.
+3. Produce `docs/ux-fit/2026-09-04-async-delivery-task-hub.ux-fit.json` with measured desktop/mobile, light/dark, keyboard/focus, overflow, loading/reconnect/partial/error, and route-budget evidence.
 4. Run exact-tree semantic review and local CI when admitted. If either lane is occupied, unavailable, or underperforming, record it as **INCONCLUSIVE** with focused/typecheck/guard compensation; infer no PASS and keep protected CI mandatory.
 5. DCO-sign the implementation commit, push normally, open one protected PR, and arm normal protected auto-merge only after readiness.
-6. Require every protected PR and merge-group check. Publish one canonical release from the protected merge and perform one governed live upgrade.
-7. Verify exact served SHA/CAN-TEST and authenticated `/build/work` acceptance: bounded initial page, event-first row update, reconnect reconciliation, semantic deep links, responsive/a11y states, and one deduplicated notification for a controlled durable transition.
+6. Require every protected PR and merge-group check and stop at the protected merge result. This task does not publish a release, deploy, or upgrade an install.
+7. Preserve the live-install acceptance script for a separately authorized delivery task: exact served SHA/CAN-TEST and authenticated `/build/work` acceptance covering bounded initial page, event-first row update, reconnect reconciliation, semantic deep links, responsive/a11y states, and one deduplicated notification for a controlled durable transition.
 
 ## Atomic traceability
 
 | Deliverable key | Requirements | Flows | Contracts | Verification |
 | --- | --- | --- | --- | --- |
-| `delivery-task-hub` | OBJ-DTH-001, OBJ-DTH-002, OBJ-DTH-003, OBJ-DTH-004, OBJ-DTH-005, OBJ-DTH-006, OBJ-DTH-007; AC-DTH-001, AC-DTH-002, AC-DTH-003, AC-DTH-004, AC-DTH-005, AC-DTH-006, AC-DTH-007 | `workroom-list→bounded-snapshot→event-upsert→reconnect-snapshot`; `durable-transition→dedupe→notification→semantic-link`; `inspect/resume/review/handoff→canonical-owner-surface` | Workroom identity, TaskRun status, Workroom activity bus, Notification/attention bus, async adapter seam, `view_platform` | pure projection/store/stream/notification tests; component/a11y tests; typecheck/guards; UX-fit; protected CI; exact-SHA live acceptance |
+| `delivery-task-hub` | OBJ-DTH-001, OBJ-DTH-002, OBJ-DTH-003, OBJ-DTH-004, OBJ-DTH-005, OBJ-DTH-006, OBJ-DTH-007; AC-DTH-001, AC-DTH-002, AC-DTH-003, AC-DTH-004, AC-DTH-005, AC-DTH-006, AC-DTH-007 | `workroom-list→bounded-snapshot→event-upsert→reconnect-snapshot`; `inference/async-operation.transitioned→canonical-transition-read→bounded-server-owned-Workroom-wake→deduplicated-semantic-notification`; `inspect/resume/review/handoff→canonical-owner-surface` | Workroom identity, TaskRun status, authorized async-operation read model, canonical async transition and binding, existing Workroom activity ledger/bus, Notification/attention bus, `view_platform` | pure projection/store/stream/notification/transition-consumer tests; component/a11y tests; typecheck/guards; UX-fit; protected CI |
 
 ## Refactoring allocation
 

@@ -23,21 +23,24 @@ import {
 } from "@/lib/work-capsules/work-capsule-store";
 import { loadCapsuleLivenessInventory } from "@/lib/work-capsules/liveness-inventory";
 import { loadDeliveryTaskHubPage } from "@/lib/work-capsules/delivery-task-hub-store";
+import { createDeliveryTaskHubAsyncProjectionLoader } from "@/lib/work-capsules/delivery-task-hub-async";
 
-async function requireCapability(capability: "view_platform" | "manage_backlog"): Promise<string> {
+type AuthorizedWorkUser = { id: string; isSuperuser: boolean };
+
+async function requireCapability(capability: "view_platform" | "manage_backlog"): Promise<AuthorizedWorkUser> {
   const session = await auth();
   const user = session?.user;
   if (!user?.id || !can({ platformRole: user.platformRole, isSuperuser: user.isSuperuser }, capability)) {
     throw new Error("Unauthorized");
   }
-  return user.id;
+  return { id: user.id, isSuperuser: user.isSuperuser === true };
 }
 
-async function requireBuildAccess(): Promise<string> {
+async function requireBuildAccess(): Promise<AuthorizedWorkUser> {
   return requireCapability("view_platform");
 }
 
-async function requireGovernedWorkWriteAccess(): Promise<string> {
+async function requireGovernedWorkWriteAccess(): Promise<AuthorizedWorkUser> {
   return requireCapability("manage_backlog");
 }
 
@@ -92,7 +95,8 @@ async function loadAdoptableRows(repoRoot: string, adoptedBranches: Set<string>)
 }
 
 export async function getWorkControlData() {
-  await requireBuildAccess();
+  const user = await requireBuildAccess();
+  const loadAsyncOperation = await createDeliveryTaskHubAsyncProjectionLoader(user);
 
   const [inventory, deliveryHub] = await Promise.all([
     loadCapsuleLivenessInventory(prisma, {
@@ -105,7 +109,7 @@ export async function getWorkControlData() {
       },
       take: 100,
     }),
-    loadDeliveryTaskHubPage(prisma),
+    loadDeliveryTaskHubPage(prisma, { loadAsyncOperation }),
   ]);
   const capsules = inventory.capsulesAll;
 
@@ -127,7 +131,7 @@ export async function createGovernedWorkAction(input: {
   taxonomy: WorkCapsuleBranchTaxonomy;
   idempotencyKey: string;
 }) {
-  const userId = await requireGovernedWorkWriteAccess();
+  const { id: userId } = await requireGovernedWorkWriteAccess();
   if (!isWorkCapsuleBranchTaxonomy(input.taxonomy)) {
     throw new Error("Invalid taxonomy");
   }

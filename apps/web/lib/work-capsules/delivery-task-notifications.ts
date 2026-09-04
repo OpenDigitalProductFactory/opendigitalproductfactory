@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-export type DeliveryNotificationKind = "completed" | "failed" | "approval-required" | "approval-expired" | "input-required" | "review-required" | "takeover-ready";
+export type DeliveryNotificationKind = "completed" | "failed" | "expired" | "reconciliation-required" | "approval-required" | "approval-expired" | "input-required" | "review-required" | "takeover-ready";
 
 export type DeliveryNotificationCandidate = {
   capsuleId: string;
@@ -26,59 +26,94 @@ export type DeliveryNotificationSource = {
   };
 };
 
-const NOTIFICATION_WINDOW_MS = 30 * 60 * 1_000;
+export const DELIVERY_NOTIFICATION_WINDOW_MS = 30 * 60 * 1_000;
+
+export function isDeliveryNotificationTransitionRecent(sourceAt: Date, now: Date): boolean {
+  const ageMs = now.getTime() - sourceAt.getTime();
+  return ageMs >= -60_000 && ageMs <= DELIVERY_NOTIFICATION_WINDOW_MS;
+}
 
 function transition(input: DeliveryNotificationSource, now: Date): Omit<DeliveryNotificationCandidate, "capsuleId" | "title"> | null {
   const detail = `/build/work/${encodeURIComponent(input.capsuleId)}`;
   const task = input.taskRun;
-  const sourceAt = task?.updatedAt ?? input.updatedAt;
-  if (now.getTime() - sourceAt.getTime() > NOTIFICATION_WINDOW_MS || sourceAt.getTime() > now.getTime() + 60_000) return null;
-  const liveEnvelope = task?.actionEnvelopes?.find((item) =>
-    ["proposed", "approved"].includes(item.status) && (!item.expiresAt || item.expiresAt > now));
-  if (liveEnvelope) return {
-    kind: "approval-required",
-    sourceKey: liveEnvelope.id,
-    body: "A governed action is waiting for review.",
-    deepLink: `${detail}#review`,
-  };
+  const pendingEnvelope = task?.actionEnvelopes?.find((item) =>
+    item.status === "proposed" && (!item.expiresAt || item.expiresAt > now));
+  if (pendingEnvelope) {
+    if (!isDeliveryNotificationTransitionRecent(task!.updatedAt, now)) return null;
+    return {
+      kind: "approval-required",
+      sourceKey: pendingEnvelope.id,
+      body: "A governed action is waiting for review.",
+      deepLink: `${detail}#review`,
+    };
+  }
   const expiredEnvelope = task?.actionEnvelopes?.find((item) =>
     ["proposed", "approved"].includes(item.status) && item.expiresAt != null && item.expiresAt <= now);
-  if (expiredEnvelope) return {
-    kind: "approval-expired",
-    sourceKey: expiredEnvelope.id,
-    body: "A governed approval expired before delivery could resume.",
-    deepLink: `${detail}#review`,
-  };
-  if (task?.status === "input-required") return {
-    kind: "input-required",
-    sourceKey: `${task.taskRunId}:${task.updatedAt.toISOString()}`,
-    body: "Delivery is waiting for operator input.",
-    deepLink: `${detail}#activity`,
-  };
-  if (["failed", "rejected", "canceled", "stalled", "auth-required"].includes(task?.status ?? "") || input.status === "blocked") return {
-    kind: "failed",
-    sourceKey: `${task?.taskRunId ?? input.capsuleId}:${sourceAt.toISOString()}`,
-    body: "Delivery needs attention before it can continue.",
-    deepLink: `${detail}#activity`,
-  };
-  if (input.status === "ready-for-review" || input.status === "ready-for-promotion") return {
-    kind: "review-required",
-    sourceKey: input.updatedAt.toISOString(),
-    body: "Delivery is ready for its governed review.",
-    deepLink: `${detail}#review`,
-  };
-  if (input.status === "working" && input.leaseExpiresAt && input.leaseExpiresAt <= now) return {
-    kind: "takeover-ready",
-    sourceKey: input.leaseExpiresAt.toISOString(),
-    body: "The Workroom lease expired and is ready for governed takeover.",
-    deepLink: `${detail}#handoff`,
-  };
-  if (input.status === "complete" && (!task || task.status === "completed" || task.status === "archived")) return {
-    kind: "completed",
-    sourceKey: sourceAt.toISOString(),
-    body: "Delivery completed. Open the Workroom for the verified result.",
-    deepLink: `${detail}#result`,
-  };
+  if (expiredEnvelope) {
+    if (!isDeliveryNotificationTransitionRecent(expiredEnvelope.expiresAt!, now)) return null;
+    return {
+      kind: "approval-expired",
+      sourceKey: expiredEnvelope.id,
+      body: "A governed approval expired before delivery could resume.",
+      deepLink: `${detail}#review`,
+    };
+  }
+  const taskFailed = ["failed", "rejected", "canceled", "stalled", "auth-required"].includes(task?.status ?? "");
+  if (taskFailed) {
+    if (!isDeliveryNotificationTransitionRecent(task!.updatedAt, now)) return null;
+    return {
+      kind: "failed",
+      sourceKey: `${task!.taskRunId}:${task!.updatedAt.toISOString()}`,
+      body: "Delivery needs attention before it can continue.",
+      deepLink: `${detail}#activity`,
+    };
+  }
+  if (input.status === "blocked") {
+    if (!isDeliveryNotificationTransitionRecent(input.updatedAt, now)) return null;
+    return {
+      kind: "failed",
+      sourceKey: `${input.capsuleId}:${input.updatedAt.toISOString()}`,
+      body: "Delivery needs attention before it can continue.",
+      deepLink: `${detail}#activity`,
+    };
+  }
+  if (input.status === "working" && input.leaseExpiresAt && input.leaseExpiresAt <= now) {
+    if (!isDeliveryNotificationTransitionRecent(input.leaseExpiresAt, now)) return null;
+    return {
+      kind: "takeover-ready",
+      sourceKey: input.leaseExpiresAt.toISOString(),
+      body: "The Workroom lease expired and is ready for governed takeover.",
+      deepLink: `${detail}#handoff`,
+    };
+  }
+  if (task?.status === "input-required") {
+    if (!isDeliveryNotificationTransitionRecent(task.updatedAt, now)) return null;
+    return {
+      kind: "input-required",
+      sourceKey: `${task.taskRunId}:${task.updatedAt.toISOString()}`,
+      body: "Delivery is waiting for operator input.",
+      deepLink: `${detail}#activity`,
+    };
+  }
+  if (input.status === "ready-for-review" || input.status === "ready-for-promotion") {
+    if (!isDeliveryNotificationTransitionRecent(input.updatedAt, now)) return null;
+    return {
+      kind: "review-required",
+      sourceKey: input.updatedAt.toISOString(),
+      body: "Delivery is ready for its governed review.",
+      deepLink: `${detail}#review`,
+    };
+  }
+  if (input.status === "complete" && (!task || task.status === "completed" || task.status === "archived")) {
+    const completedAt = task?.updatedAt ?? input.updatedAt;
+    if (!isDeliveryNotificationTransitionRecent(completedAt, now)) return null;
+    return {
+      kind: "completed",
+      sourceKey: completedAt.toISOString(),
+      body: "Delivery completed. Open the Workroom for the verified result.",
+      deepLink: `${detail}#result`,
+    };
+  }
   return null;
 }
 
@@ -131,7 +166,7 @@ export async function reconcileDeliveryTaskNotifications(
 ): Promise<{ scanned: number; created: number; failed: number }> {
   let sources: DeliveryNotificationSource[];
   try {
-    sources = await deps.listRecent({ since: new Date(now.getTime() - NOTIFICATION_WINDOW_MS), take: 100 });
+    sources = await deps.listRecent({ since: new Date(now.getTime() - DELIVERY_NOTIFICATION_WINDOW_MS), take: 100 });
   } catch {
     return { scanned: 0, created: 0, failed: 1 };
   }

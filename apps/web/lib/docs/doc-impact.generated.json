@@ -911,6 +911,9 @@
     "apps/web/lib/queue/functions/alert-delivery-bridge.ts": [
       "docs/operations/observability-coverage.md"
     ],
+    "apps/web/lib/queue/functions/async-operation-task-hub.ts": [
+      "docs/user-guide/build-studio/index.md"
+    ],
     "apps/web/lib/queue/functions/build-review-verification.ts": [
       "docs/architecture/build-gate-runbook.md"
     ],
@@ -1138,6 +1141,9 @@
     ],
     "apps/web/lib/work-capsules.ts": [
       "docs/architecture/work-shapes-and-the-decision-gate.md"
+    ],
+    "apps/web/lib/work-capsules/delivery-task-hub.ts": [
+      "docs/user-guide/build-studio/index.md"
     ],
     "apps/web/lib/work-management/autonomy-envelope.ts": [
       "docs/architecture/work-shapes-and-the-decision-gate.md",
@@ -3107,7 +3113,9 @@
       "apps/web/lib/routing/provider-suitability/workload-profile.ts"
     ],
     "docs/user-guide/build-studio/index.md": [
-      "apps/web/lib/build/build-orchestrator.ts"
+      "apps/web/lib/build/build-orchestrator.ts",
+      "apps/web/lib/queue/functions/async-operation-task-hub.ts",
+      "apps/web/lib/work-capsules/delivery-task-hub.ts"
     ],
     "docs/user-guide/contributing/agent-dev-environments.md": [
       "apps/web/lib/nonprod/host-resource-policy.ts",

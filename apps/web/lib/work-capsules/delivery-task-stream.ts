@@ -3,6 +3,7 @@ import type { DeliveryTaskHubPage } from "./delivery-task-hub-store";
 import type { DeliveryTaskHubRow } from "./delivery-task-hub";
 
 export const DELIVERY_TASK_HUB_EVENT = "delivery-task-hub";
+const MAX_PENDING_WORKROOM_RELOADS = 40;
 
 export type DeliveryTaskHubEvent =
   | ({ type: "snapshot" } & DeliveryTaskHubPage)
@@ -42,6 +43,7 @@ export async function startDeliveryTaskHubSession(input: {
   let active = true;
   let snapshotSent = false;
   const pendingWorkroomIds = new Set<string>();
+  let snapshotReconcilePending = false;
   let drainPromise: Promise<void> | null = null;
 
   const reload = async (workroomId: string) => {
@@ -67,6 +69,15 @@ export async function startDeliveryTaskHubSession(input: {
         pendingWorkroomIds.delete(workroomId);
         await reload(workroomId);
       }
+      if (active && snapshotSent && snapshotReconcilePending) {
+        snapshotReconcilePending = false;
+        try {
+          const snapshot = await input.loadSnapshot();
+          if (active) input.send({ type: "snapshot", ...snapshot });
+        } catch {
+          if (active) input.send({ type: "error", error: "snapshot_failed", observedAt: new Date().toISOString() });
+        }
+      }
     })().finally(() => {
       drainPromise = null;
       if (active && snapshotSent && pendingWorkroomIds.size > 0) void drainPendingWorkrooms();
@@ -76,7 +87,15 @@ export async function startDeliveryTaskHubSession(input: {
 
   const unsubscribe = await input.subscribe((event) => {
     if (!active) return;
-    pendingWorkroomIds.add(event.workCapsuleId);
+    if (pendingWorkroomIds.has(event.workCapsuleId)) {
+      // A committed row reload observes every durable activity for this room.
+    } else if (pendingWorkroomIds.size < MAX_PENDING_WORKROOM_RELOADS) {
+      pendingWorkroomIds.add(event.workCapsuleId);
+    } else {
+      // Never grow attacker/event-driven memory without bound. A bounded
+      // canonical snapshot repairs every overflowed wake without trusting it.
+      snapshotReconcilePending = true;
+    }
     if (!snapshotSent) {
       return;
     }
@@ -102,6 +121,7 @@ export async function startDeliveryTaskHubSession(input: {
     if (!active) return;
     active = false;
     pendingWorkroomIds.clear();
+    snapshotReconcilePending = false;
     unsubscribe();
   };
 }

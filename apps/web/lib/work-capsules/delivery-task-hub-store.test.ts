@@ -72,6 +72,22 @@ describe("delivery task hub store", () => {
     }));
   });
 
+  it("expires a previously valid signed cursor after its bounded observation window", async () => {
+    const fake = db([]);
+    const cursor = encodeDeliveryTaskCursor({
+      id: "row-40",
+      updatedAt: "2026-09-01T12:00:00.000Z",
+      windowStart: "2026-08-05T12:00:00.000Z",
+    }, { secret: cursorSecret });
+
+    await expect(loadDeliveryTaskHubPage(fake, {
+      now: new Date("2026-09-05T12:00:00.001Z"),
+      cursor,
+      cursorSecret,
+    })).rejects.toThrow(/cursor/i);
+    expect(fake.workroom.findMany).not.toHaveBeenCalled();
+  });
+
   it("reloads one internal Workroom id without scanning the corpus", async () => {
     const fake = db([]);
     fake.workroom.findUnique.mockResolvedValue({ id: "row-1", capsuleId: "WC-1", archivedAt: new Date() });
@@ -79,5 +95,103 @@ describe("delivery task hub store", () => {
     await expect(loadDeliveryTaskHubRow(fake, "row-1", { now })).resolves.toEqual({ capsuleId: "WC-1", row: null });
     expect(fake.workroom.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "row-1" } }));
     expect(fake.workroom.findMany).not.toHaveBeenCalled();
+  });
+
+  it("removes a signalled Workroom that is outside the fixed 30-day live window", async () => {
+    const fake = db([]);
+    fake.workroom.findUnique.mockResolvedValue({
+      id: "row-1",
+      capsuleId: "WC-1",
+      archivedAt: null,
+      updatedAt: new Date("2026-08-05T11:59:59.999Z"),
+    });
+
+    await expect(loadDeliveryTaskHubRow(fake, "row-1", { now })).resolves.toEqual({
+      capsuleId: "WC-1",
+      row: null,
+    });
+  });
+
+  it("enriches only the bounded page and contains an async read failure per row", async () => {
+    const source = (id: string) => ({
+      id,
+      capsuleId: `WC-${id}`,
+      title: id,
+      objective: "Bounded delivery",
+      status: "working",
+      source: "build-studio",
+      executorKind: null,
+      executorRef: null,
+      backlogItemId: null,
+      repositoryFullName: null,
+      headBranch: null,
+      pullRequestUrl: null,
+      leaseExpiresAt: null,
+      updatedAt: now,
+      lastSyncedAt: null,
+      taskRun: null,
+      activities: [],
+      runtimeVerifications: [],
+    });
+    const fake = db([source("1"), source("2")]);
+    const loadAsyncOperation = vi.fn()
+      .mockResolvedValueOnce({
+        coreHandleAvailable: true,
+        status: "running",
+        observedAt: now.toISOString(),
+        progressPct: 25,
+        progressMessage: "Working",
+      })
+      .mockRejectedValueOnce(new Error("denied"));
+
+    const result = await loadDeliveryTaskHubPage(fake, { now, loadAsyncOperation });
+
+    expect(loadAsyncOperation).toHaveBeenCalledTimes(2);
+    expect(loadAsyncOperation).toHaveBeenNthCalledWith(1, { capsuleId: "WC-1", taskRunId: null });
+    expect(result.rows[0]?.asyncOperation).toEqual(expect.objectContaining({
+      coreHandleAvailable: true,
+      status: "running",
+    }));
+    expect(result.rows[1]?.asyncOperation).toEqual({ coreHandleAvailable: false });
+  });
+
+  it("advances a row observation when its authorized async operation changes later", async () => {
+    const fake = db([{
+      id: "1",
+      capsuleId: "WC-1",
+      title: "Async delivery",
+      objective: "Observe the canonical async state",
+      status: "working",
+      source: "build-studio",
+      executorKind: null,
+      executorRef: null,
+      backlogItemId: null,
+      repositoryFullName: null,
+      headBranch: null,
+      pullRequestUrl: null,
+      leaseExpiresAt: null,
+      updatedAt: new Date("2026-09-04T12:00:00.000Z"),
+      lastSyncedAt: null,
+      taskRun: null,
+      activities: [],
+      runtimeVerifications: [],
+    }]);
+
+    const result = await loadDeliveryTaskHubPage(fake, {
+      now: new Date("2026-09-04T12:10:00.000Z"),
+      loadAsyncOperation: vi.fn().mockResolvedValue({
+        coreHandleAvailable: true,
+        operationId: "operation-1",
+        status: "completed",
+        observedAt: "2026-09-04T12:05:00.000Z",
+        progressPct: 100,
+        progressMessage: "Complete",
+      }),
+    });
+
+    expect(result.rows[0]).toMatchObject({
+      observedAt: "2026-09-04T12:05:00.000Z",
+      asyncOperation: { status: "completed" },
+    });
   });
 });

@@ -3,7 +3,8 @@
   "decidedOption": "workroom-event-hub",
   "scope": {
     "files": [
-      "apps/web/components/build/work-control/DeliveryTaskHub.tsx"
+      "apps/web/components/build/work-control/DeliveryTaskHub.tsx",
+      "apps/web/app/(shell)/build/work/[capsuleId]/page.tsx"
     ]
   },
   "evidence": {
@@ -32,9 +33,10 @@
         "reconnecting-with-confirmed-rows",
         "partial",
         "error-with-confirmed-rows",
-        "older-page-loading"
+        "older-page-loading",
+        "semantic-review-and-result-destinations"
       ],
-      "test": "apps/web/components/build/work-control/DeliveryTaskHub.test.tsx"
+      "test": "apps/web/components/build/work-control/DeliveryTaskHub.test.tsx; apps/web/app/(shell)/build/work/[capsuleId]/page.test.tsx"
     }
   }
 }

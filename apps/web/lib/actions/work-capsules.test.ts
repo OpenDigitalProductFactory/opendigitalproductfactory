@@ -5,6 +5,7 @@ const {
   mockCan,
   mockCreateWorkCapsule,
   mockGetWorktreeDirtySummary,
+  mockCreateDeliveryTaskHubAsyncProjectionLoader,
   mockListLocalBranches,
   mockLoadDeliveryTaskHubPage,
   mockPlanCapsuleWorkspace,
@@ -15,6 +16,7 @@ const {
   mockCan: vi.fn(),
   mockCreateWorkCapsule: vi.fn(),
   mockGetWorktreeDirtySummary: vi.fn(),
+  mockCreateDeliveryTaskHubAsyncProjectionLoader: vi.fn(),
   mockListLocalBranches: vi.fn(),
   mockLoadDeliveryTaskHubPage: vi.fn(),
   mockPlanCapsuleWorkspace: vi.fn(),
@@ -43,6 +45,9 @@ vi.mock("@/lib/work-capsules/work-capsule-store", () => ({
 vi.mock("@/lib/work-capsules/delivery-task-hub-store", () => ({
   loadDeliveryTaskHubPage: mockLoadDeliveryTaskHubPage,
 }));
+vi.mock("@/lib/work-capsules/delivery-task-hub-async", () => ({
+  createDeliveryTaskHubAsyncProjectionLoader: mockCreateDeliveryTaskHubAsyncProjectionLoader,
+}));
 
 afterEach(() => {
   delete process.env.DPF_WORK_CONTROL_REPO_ROOT;
@@ -63,6 +68,7 @@ describe("getWorkControlData", () => {
       nextCursor: null,
       observedAt: "2026-09-04T12:00:00.000Z",
     });
+    mockCreateDeliveryTaskHubAsyncProjectionLoader.mockResolvedValue(vi.fn());
     mockScanGitWorktrees.mockResolvedValue([]);
     mockGetWorktreeDirtySummary.mockResolvedValue({ modifiedCount: 0, untrackedCount: 0 });
   });
@@ -116,7 +122,14 @@ describe("getWorkControlData", () => {
       }),
     ]);
     expect(mockGetWorktreeDirtySummary).toHaveBeenCalledWith("D:/DPF-orphan");
-    expect(mockLoadDeliveryTaskHubPage).toHaveBeenCalledWith(mockPrisma);
+    const asyncLoader = await mockCreateDeliveryTaskHubAsyncProjectionLoader.mock.results[0]?.value;
+    expect(mockCreateDeliveryTaskHubAsyncProjectionLoader).toHaveBeenCalledWith({
+      id: "user-1",
+      isSuperuser: true,
+    });
+    expect(mockLoadDeliveryTaskHubPage).toHaveBeenCalledWith(mockPrisma, {
+      loadAsyncOperation: asyncLoader,
+    });
     expect(mockPrisma.workroom.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({
         OR: expect.any(Array),

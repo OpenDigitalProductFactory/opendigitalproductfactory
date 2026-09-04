@@ -36,6 +36,7 @@ describe("delivery task notifications", () => {
   it.each([
     [{ status: "working", leaseExpiresAt: new Date("2026-09-04T11:59:00.000Z"), taskRun: null }, "takeover-ready"],
     [{ status: "working", leaseExpiresAt: null, taskRun: { taskRunId: "TR-1", status: "input-required", updatedAt: new Date("2026-09-04T12:00:00.000Z"), actionEnvelopes: [{ id: "CAE-1", status: "proposed", expiresAt: new Date("2026-09-04T12:10:00.000Z") }] } }, "approval-required"],
+    [{ status: "working", leaseExpiresAt: null, taskRun: { taskRunId: "TR-1", status: "input-required", updatedAt: new Date("2026-09-04T12:00:00.000Z"), actionEnvelopes: [{ id: "CAE-APPROVED", status: "approved", expiresAt: new Date("2026-09-04T12:10:00.000Z") }] } }, "input-required"],
     [{ status: "working", leaseExpiresAt: null, taskRun: { taskRunId: "TR-1", status: "input-required", updatedAt: new Date("2026-09-04T12:00:00.000Z"), actionEnvelopes: [{ id: "CAE-OLD", status: "proposed", expiresAt: new Date("2026-09-04T11:59:00.000Z") }] } }, "approval-expired"],
     [{ status: "working", leaseExpiresAt: null, taskRun: { taskRunId: "TR-1", status: "input-required", updatedAt: new Date("2026-09-04T12:00:00.000Z"), actionEnvelopes: [] } }, "input-required"],
   ] as const)("projects operator attention as %s", (overrides, kind) => {
@@ -43,6 +44,35 @@ describe("delivery task notifications", () => {
       capsuleId: "WC-1",
       title: "Deliver outcome",
       updatedAt: new Date("2026-09-04T12:00:00.000Z"),
+      ...overrides,
+    }, new Date("2026-09-04T12:01:00.000Z"))).toMatchObject({ kind });
+  });
+
+  it.each([
+    [{
+      updatedAt: new Date("2026-09-04T09:00:00.000Z"),
+      leaseExpiresAt: new Date("2026-09-04T11:59:00.000Z"),
+      taskRun: null,
+    }, "takeover-ready"],
+    [{
+      updatedAt: new Date("2026-09-04T09:00:00.000Z"),
+      leaseExpiresAt: null,
+      taskRun: {
+        taskRunId: "TR-OLD",
+        status: "input-required",
+        updatedAt: new Date("2026-09-04T09:00:00.000Z"),
+        actionEnvelopes: [{
+          id: "CAE-RECENTLY-EXPIRED",
+          status: "proposed",
+          expiresAt: new Date("2026-09-04T11:59:00.000Z"),
+        }],
+      },
+    }, "approval-expired"],
+  ] as const)("uses the semantic transition time for old rows that just became %s", (overrides, kind) => {
+    expect(projectDeliveryNotificationCandidate({
+      capsuleId: "WC-1",
+      title: "Deliver outcome",
+      status: "working",
       ...overrides,
     }, new Date("2026-09-04T12:01:00.000Z"))).toMatchObject({ kind });
   });

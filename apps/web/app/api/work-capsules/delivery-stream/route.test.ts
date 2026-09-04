@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
   can: vi.fn(),
   createSseResponse: vi.fn(),
+  createAsyncLoader: vi.fn(),
   loadPage: vi.fn(),
   loadRow: vi.fn(),
   start: vi.fn(),
@@ -18,6 +19,9 @@ vi.mock("@/lib/work-capsules/delivery-task-hub-store", () => ({
   loadDeliveryTaskHubPage: mocks.loadPage,
   loadDeliveryTaskHubRow: mocks.loadRow,
 }));
+vi.mock("@/lib/work-capsules/delivery-task-hub-async", () => ({
+  createDeliveryTaskHubAsyncProjectionLoader: mocks.createAsyncLoader,
+}));
 vi.mock("@/lib/work-capsules/delivery-task-stream", () => ({
   DELIVERY_TASK_HUB_EVENT: "delivery-task-hub",
   startDeliveryTaskHubSession: mocks.start,
@@ -29,6 +33,7 @@ describe("GET /api/work-capsules/delivery-stream", () => {
     vi.clearAllMocks();
     mocks.createSseResponse.mockReturnValue(new Response("stream", { status: 200 }));
     mocks.start.mockResolvedValue(vi.fn());
+    mocks.createAsyncLoader.mockResolvedValue(vi.fn());
   });
 
   it("returns 401 before opening a stream for a caller without view_platform", async () => {
@@ -52,10 +57,17 @@ describe("GET /api/work-capsules/delivery-stream", () => {
     const sendNamed = vi.fn();
     options.start({ sendNamed, closed: false });
     await vi.waitFor(() => expect(mocks.start).toHaveBeenCalledTimes(1));
+    const asyncLoader = await mocks.createAsyncLoader.mock.results[0]?.value;
+    expect(mocks.createAsyncLoader).toHaveBeenCalledWith({ id: "user-1", isSuperuser: false });
     expect(mocks.start).toHaveBeenCalledWith(expect.objectContaining({
       loadSnapshot: expect.any(Function),
       loadRow: expect.any(Function),
       subscribe: mocks.subscribe,
     }));
+    const session = mocks.start.mock.calls[0]?.[0];
+    await session.loadSnapshot();
+    await session.loadRow("workroom-row-1");
+    expect(mocks.loadPage).toHaveBeenCalledWith(expect.anything(), { loadAsyncOperation: asyncLoader });
+    expect(mocks.loadRow).toHaveBeenCalledWith(expect.anything(), "workroom-row-1", { loadAsyncOperation: asyncLoader });
   });
 });

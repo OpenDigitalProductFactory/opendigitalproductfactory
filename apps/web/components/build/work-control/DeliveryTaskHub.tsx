@@ -1,11 +1,12 @@
 "use client";
 
-import Link from "next/link";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { Button, ButtonLink } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/report-kit/EmptyState";
 import { Notice } from "@/components/ui/report-kit/Notice";
 import { StatusBadge } from "@/components/ui/report-kit/StatusBadge";
+import { Surface } from "@/components/ui/Surface";
 import { useResilientEventSource } from "@/lib/hooks/useResilientEventSource";
 import {
   DELIVERY_TASK_HUB_EVENT,
@@ -58,20 +59,22 @@ function ActionLink({ action, title, primary = false, pageNextAction = false }: 
   primary?: boolean;
   pageNextAction?: boolean;
 }) {
-  const className = [
-    "inline-flex min-h-11 items-center justify-center rounded-md border px-3 py-2 text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]",
-    primary
-      ? "border-[var(--dpf-accent)] bg-[var(--dpf-accent)] text-[var(--dpf-surface-1)]"
-      : "border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)]",
-  ].join(" ");
   const ariaLabel = `${action.label} ${title}`;
   const actionMarkers = pageNextAction
     ? { "data-dpf-primary-action": "", "data-owner-first-next-action": "delivery-task" }
     : {};
-  if (/^https:\/\//.test(action.href)) {
-    return <a className={className} href={action.href} aria-label={ariaLabel} rel="noreferrer" {...actionMarkers}>{action.label}</a>;
-  }
-  return <Link className={className} href={action.href} aria-label={ariaLabel} {...actionMarkers}>{action.label}</Link>;
+  return (
+    <ButtonLink
+      variant={primary ? "primary" : "secondary"}
+      className="min-h-11"
+      href={action.href}
+      aria-label={ariaLabel}
+      {...(/^https:\/\//.test(action.href) ? { rel: "noreferrer" } : {})}
+      {...actionMarkers}
+    >
+      {action.label}
+    </ButtonLink>
+  );
 }
 
 function Progress({ row }: { row: DeliveryTaskHubRow }) {
@@ -96,9 +99,23 @@ function Progress({ row }: { row: DeliveryTaskHubRow }) {
   );
 }
 
+function AsyncOperation({ row }: { row: DeliveryTaskHubRow }) {
+  const operation = row.asyncOperation;
+  if (!operation.coreHandleAvailable) return null;
+  const status = operation.status.replaceAll("_", " ");
+  return (
+    <p className="min-w-0 text-xs text-[var(--dpf-muted)]">
+      <span className="font-medium text-[var(--dpf-text)]">Async {status}</span>
+      {operation.progressPct != null ? ` · ${operation.progressPct}%` : ""}
+      {operation.progressMessage ? ` · ${operation.progressMessage}` : ""}
+      <span className="block truncate font-mono" title={operation.operationId}>{operation.operationId}</span>
+    </p>
+  );
+}
+
 function DeliveryTaskCard({ row, observationTime, pageNextAction = false }: { row: DeliveryTaskHubRow; observationTime: string; pageNextAction?: boolean }) {
   return (
-    <article className="flex h-full min-w-0 flex-col gap-3 rounded-xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4 shadow-sm">
+    <Surface as="article" rounded="xl" className="flex h-full min-w-0 flex-col gap-3 shadow-sm">
       <header className="flex min-w-0 items-start justify-between gap-3">
         <div className="min-w-0">
           <h4 className="truncate font-semibold text-[var(--dpf-text)]">{row.title}</h4>
@@ -114,6 +131,7 @@ function DeliveryTaskCard({ row, observationTime, pageNextAction = false }: { ro
       </dl>
 
       <Progress row={row} />
+      <AsyncOperation row={row} />
       {row.latestTransition ? (
         <p className="rounded-md bg-[var(--dpf-surface-2)] px-3 py-2 text-sm text-[var(--dpf-text)]">
           <span className="font-medium">Latest:</span> {row.latestTransition.summary}
@@ -130,7 +148,7 @@ function DeliveryTaskCard({ row, observationTime, pageNextAction = false }: { ro
         {row.secondaryActions.map((action) => <ActionLink key={`${action.label}:${action.href}`} action={action} title={row.title} />)}
       </footer>
       <p className="select-all font-mono text-dpf-caption text-[var(--dpf-muted)]">{row.capsuleId}{row.taskRunId ? ` · ${row.taskRunId}` : ""}</p>
-    </article>
+    </Surface>
   );
 }
 
@@ -140,12 +158,24 @@ export function DeliveryTaskHub({ initialPage }: { initialPage: DeliveryTaskHubP
   const [olderCursor, setOlderCursor] = useState(initialPage.nextCursor);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [olderError, setOlderError] = useState<string | null>(null);
+  const pagingGenerationRef = useRef(0);
+  const pagingAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => () => pagingAbortRef.current?.abort(), []);
 
   const onStreamEvent = useCallback((message: MessageEvent) => {
     const event = parseEvent(message);
     if (!event) return;
     setLive((current) => mergeDeliveryTaskHubEvent(current, event));
-    if (event.type === "snapshot") setOlderCursor(event.nextCursor);
+    if (event.type === "snapshot") {
+      pagingGenerationRef.current += 1;
+      pagingAbortRef.current?.abort();
+      pagingAbortRef.current = null;
+      setLoadingOlder(false);
+      setOlderError(null);
+      setOlderCursor(event.nextCursor);
+      setOlderRows([]);
+    }
     if (event.type === "upsert" || event.type === "remove") {
       const capsuleId = event.type === "upsert" ? event.row.capsuleId : event.capsuleId;
       setOlderRows((rows) => rows.filter((row) => row.capsuleId !== capsuleId));
@@ -164,23 +194,30 @@ export function DeliveryTaskHub({ initialPage }: { initialPage: DeliveryTaskHubP
   const counts = useMemo(() => Object.fromEntries(GROUPS.map(({ key }) => [key, rows.filter((row) => row.group === key).length])), [rows]);
 
   const loadOlder = async () => {
-    if (!olderCursor || loadingOlder) return;
+    if (!olderCursor || loadingOlder || pagingAbortRef.current) return;
+    const generation = pagingGenerationRef.current;
     const controller = new AbortController();
+    pagingAbortRef.current = controller;
     setLoadingOlder(true);
     setOlderError(null);
     try {
       const response = await fetch(`/api/work-capsules/delivery-page?cursor=${encodeURIComponent(olderCursor)}`, { signal: controller.signal });
       if (!response.ok) throw new Error("page_failed");
       const page = await response.json() as DeliveryTaskHubPage;
+      if (controller.signal.aborted || generation !== pagingGenerationRef.current) return;
       setOlderRows((current) => {
         const existing = new Set(current.map((row) => row.capsuleId));
         return [...current, ...page.rows.filter((row) => !existing.has(row.capsuleId))];
       });
       setOlderCursor(page.nextCursor);
     } catch {
+      if (controller.signal.aborted || generation !== pagingGenerationRef.current) return;
       setOlderError("Older delivery tasks could not be loaded.");
     } finally {
-      setLoadingOlder(false);
+      if (pagingAbortRef.current === controller) {
+        pagingAbortRef.current = null;
+        setLoadingOlder(false);
+      }
     }
   };
 
@@ -198,10 +235,10 @@ export function DeliveryTaskHub({ initialPage }: { initialPage: DeliveryTaskHubP
 
       <dl aria-label="Delivery task counts" className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
         {GROUPS.map(({ key, label }) => (
-          <div key={key} className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-2">
+          <Surface key={key} padding="sm">
             <dt className="text-xs text-[var(--dpf-muted)]">{label}</dt>
             <dd className="text-lg font-semibold text-[var(--dpf-text)]">{counts[key] ?? 0}</dd>
-          </div>
+          </Surface>
         ))}
       </dl>
 
@@ -222,14 +259,16 @@ export function DeliveryTaskHub({ initialPage }: { initialPage: DeliveryTaskHubP
               {groupRows.slice(0, 2).map((item) => <DeliveryTaskCard key={item.capsuleId} row={item} observationTime={live.observedAt} pageNextAction={item.capsuleId === pageNextCapsuleId} />)}
             </div>
             {groupRows.length > 2 ? (
-              <details data-dpf-disclosure className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3">
-                <summary className="flex min-h-11 cursor-pointer items-center text-sm font-medium text-[var(--dpf-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]">
-                  Show {groupRows.length - 2} more {label.toLowerCase()} tasks
-                </summary>
-                <div className="grid gap-3 pb-3 lg:grid-cols-2">
-                  {groupRows.slice(2).map((item) => <DeliveryTaskCard key={item.capsuleId} row={item} observationTime={live.observedAt} />)}
-                </div>
-              </details>
+              <Surface padding="none">
+                <details data-dpf-disclosure className="px-3">
+                  <summary className="flex min-h-11 cursor-pointer items-center text-sm font-medium text-[var(--dpf-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]">
+                    Show {groupRows.length - 2} more {label.toLowerCase()} tasks
+                  </summary>
+                  <div className="grid gap-3 pb-3 lg:grid-cols-2">
+                    {groupRows.slice(2).map((item) => <DeliveryTaskCard key={item.capsuleId} row={item} observationTime={live.observedAt} />)}
+                  </div>
+                </details>
+              </Surface>
             ) : null}
           </section>
         ) : null;
@@ -237,15 +276,15 @@ export function DeliveryTaskHub({ initialPage }: { initialPage: DeliveryTaskHubP
 
       {olderError ? <Notice variant="warn">{olderError}</Notice> : null}
       {olderCursor ? (
-        <button
-          type="button"
-          className="min-h-11 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-4 py-2 text-sm font-medium text-[var(--dpf-text)] disabled:opacity-60"
+        <Button
+          variant="secondary"
+          className="min-h-11"
           onClick={() => void loadOlder()}
           disabled={loadingOlder}
           aria-label="Load older delivery tasks"
         >
           {loadingOlder ? "Loading older tasks…" : "Load older tasks"}
-        </button>
+        </Button>
       ) : rows.length > 0 ? <p className="text-xs text-[var(--dpf-muted)]">No more delivery tasks in this window.</p> : null}
     </section>
   );

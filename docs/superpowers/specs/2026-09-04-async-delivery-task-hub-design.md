@@ -5,7 +5,7 @@ status: active
 # Async completion and Workroom-aware delivery task hub
 
 - **Backlog item:** `BI-05D7A0DC`
-- **Workroom:** `WC-1D24739C`
+- **Workroom:** `WC-59101F34`
 - **Profile:** feature
 - **Parent design:** [`2026-09-03-local-first-agentic-delivery-throughput-design.md`](2026-09-03-local-first-agentic-delivery-throughput-design.md), especially §§6–7
 - **Dependency:** `BI-801313EB` supplies the durable async-operation lifecycle; this slice consumes its public projection without owning that persistence.
@@ -28,7 +28,7 @@ This feature is a read model and notification projection over existing authority
 | Human attention | `Notification` plus the attention realtime bus | Emit one deduplicated semantic notification for a durable actionable/terminal transition. |
 | Branch and review navigation | Workroom branch/PR fields | Render secure same-origin or validated provider links; never reconstruct Git authority. |
 
-`BI-801313EB` owns operation persistence, resume/cancel semantics, and queue integration. This slice does not modify its schema, Inngest registration, or inference workers. Until its public query contract is present, the hub reads Workroom's currently linked TaskRun and exposes one typed `asyncOperation` projection seam. Integrating a richer core handle later replaces only that adapter, not the page or notification model.
+`BI-801313EB` owns operation persistence, resume/cancel semantics, and worker integration. This slice does not modify its schema, lifecycle, or inference workers. It consumes the core's authorized `listPrismaAuthorizedAsyncOperations` query through public TaskRun/Workroom identities and adds one narrow consumer for the core's already-published `inference/async-operation.transitioned` event. The consumer is a projection accelerator only: it re-reads the canonical transition and server-owned binding before changing the existing Workroom/Notification projections.
 
 This task-hub slice neither defines nor replaces a queue, worker, retry policy, or dead-letter mechanism. Those reliability and idempotency contracts remain entirely in the async-operation core; the hub consumes only its authorized read model alongside existing Workroom facts.
 
@@ -125,7 +125,7 @@ The cursor is an opaque base64url payload carrying only `(updatedAt,id,windowSta
 
 ## Notification contract
 
-Notification generation is a bounded reconciliation over recently transitioned Workrooms, invoked from the existing standing Workroom drive rather than registered as another scheduler. It uses `Notification` and the attention realtime bus; no delivery-notification table is created.
+Notification generation has two bounded inputs. The existing standing Workroom drive reconciles Workroom-owned approval, review, lease, and completion facts without another scheduler. A standalone, event-only Inngest consumer handles the core's `inference/async-operation.transitioned` event: `(operationId, sequence)` is only a locator, the canonical transition and identity-version-1 binding are re-read, TaskRun-to-Workroom cardinality fails closed unless exactly one live Workroom exists, and one deterministic existing-ledger `WorkroomActivity` is persisted before its SSE wake. Both paths use `Notification` and the attention realtime bus; no delivery-notification table is created.
 
 Each semantic transition gets a stable item key:
 
@@ -134,6 +134,7 @@ Each semantic transition gets a stable item key:
 The full `Notification.type` is the idempotency key. The producer checks for any prior row of that type, including read notifications, before writing, so reconciliation cannot recreate a dismissed/read transition. The transition kinds are:
 
 - `completed` and `failed`;
+- async `expired` and `reconciliation-required` (`start_indeterminate`);
 - `approval-required` and actionable `input-required`;
 - `lease-expired` / takeover-ready;
 - `review-required`.
@@ -163,7 +164,7 @@ The create/adopt controls remain below the operational overview and preserve the
 - Database/listener/provider failure marks the view partial or reconnecting. It never clears confirmed rows or emits completion.
 - A missing TaskRun is a valid Workroom state and remains Ready/Working according to Workroom facts; it is not an error.
 - Duplicate/out-of-order activity events are harmless because upserts are keyed by Workroom and carry observed timestamps; older row updates are ignored client-side.
-- The core async adapter may be absent. The hub shows the existing TaskRun lifecycle and an explicit `coreHandleAvailable=false`; it does not invent resume/cancel authority.
+- The core async adapter returns only a per-row authorized platform handle, canonical status, bounded progress, and observation time. A denied, absent, malformed, or unavailable scope projects `coreHandleAvailable=false`; it does not fail the page, reveal another scope, or invent resume/cancel authority.
 
 ## Acceptance mapping
 
@@ -171,11 +172,11 @@ The create/adopt controls remain below the operational overview and preserve the
 | --- | --- | --- |
 | AC-DTH-001 | OBJ-DTH-001, OBJ-DTH-002 | Pure projection tests cover every group, owner/stage/progress, branch/PR, latest transition, and stable Workroom identity. |
 | AC-DTH-002 | OBJ-DTH-003, OBJ-DTH-005 | Store tests prove fixed `take`, server-owned time window, cursor validation/order, bounded activity include, snapshot/upsert/remove, stale-event rejection, and listener cleanup. |
-| AC-DTH-003 | OBJ-DTH-004 | Notification tests prove exactly-once behavior across reruns and read/dismiss state, semantic deep links, bounded recency, and no progress-only notification. |
+| AC-DTH-003 | OBJ-DTH-004 | Notification and event-consumer tests prove canonical `(operationId,sequence)` re-read, deterministic existing-ledger activity and dedupe identity, fail-closed Workroom resolution, semantic deep links, bounded recency, and no progress-only notification. |
 | AC-DTH-004 | OBJ-DTH-001, OBJ-DTH-002, OBJ-DTH-006 | Component tests cover grouped rows, loading/reconnecting/partial/empty/error, semantic actions, accessible names, and retained confirmed content. |
 | AC-DTH-005 | OBJ-DTH-006 | Measured UX-fit manifest covers desktop/mobile, light/dark, keyboard/focus, overflow, and route budget. |
 | AC-DTH-006 | OBJ-DTH-007 | Legacy Workroom grouping/presentation is removed from the table and shared by page, stream, and notifications; module-size and duplication guards pass. |
-| AC-DTH-007 | OBJ-DTH-001, OBJ-DTH-002, OBJ-DTH-003, OBJ-DTH-004, OBJ-DTH-005, OBJ-DTH-006, OBJ-DTH-007 | DCO, protected PR/merge-group checks, canonical release, exact-SHA live readiness, and authenticated live hub/reconnect/notification acceptance pass. |
+| AC-DTH-007 | OBJ-DTH-001, OBJ-DTH-002, OBJ-DTH-003, OBJ-DTH-004, OBJ-DTH-005, OBJ-DTH-006, OBJ-DTH-007 | DCO, protected PR/merge-group checks, and exact-head readiness evidence pass. Release, deployment, and live-install acceptance are explicitly outside this delivery task. |
 
 ## Rollback
 

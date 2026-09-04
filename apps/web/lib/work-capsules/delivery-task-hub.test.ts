@@ -110,8 +110,42 @@ describe("delivery task hub projection", () => {
     );
 
     expect(approval).toMatchObject({ group: "needs-attention", primaryAction: { label: "Review request" } });
-    expect(conflict).toMatchObject({ group: "needs-attention", freshness: "partial" });
+    expect(conflict).toMatchObject({
+      group: "needs-attention",
+      freshness: "partial",
+      verifiedResult: null,
+    });
     expect(expiredLease).toMatchObject({ group: "needs-attention", primaryAction: { label: "Take over" } });
+  });
+
+  it("routes an approved envelope back to actionable input instead of asking for approval again", () => {
+    const approved = projectDeliveryTaskHubRow(
+      source({
+        status: "working",
+        taskRun: {
+          taskRunId: "TR-APPROVED",
+          title: "Resume approved work",
+          status: "input-required",
+          routeContext: "/build?taskRunId=TR-APPROVED",
+          progressPayload: { waitReason: "input-required" },
+          startedAt: new Date("2026-09-04T11:00:00.000Z"),
+          completedAt: null,
+          updatedAt: new Date("2026-09-04T11:59:00.000Z"),
+          actionEnvelopes: [{
+            id: "env-approved",
+            status: "approved",
+            createdAt: new Date("2026-09-04T11:58:00.000Z"),
+            expiresAt: new Date("2026-09-04T12:10:00.000Z"),
+          }],
+        },
+      }),
+      now,
+    );
+
+    expect(approved).toMatchObject({
+      group: "waiting",
+      primaryAction: { label: "Resume", href: "/build?taskRunId=TR-APPROVED" },
+    });
   });
 
   it("selects meaningful activity, safe links, owner, and an absent async-core seam", () => {
