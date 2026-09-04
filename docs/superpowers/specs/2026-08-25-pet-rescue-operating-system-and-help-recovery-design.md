@@ -394,6 +394,28 @@ rescue mutations fail closed. Authentication, cross-organization isolation,
 capability denial, field redaction, and consequential-action approval each need
 negative tests.
 
+### 6.4 Organization and regional configuration
+
+Regional behavior is resolved once through the existing organization settings
+spine, not scattered across route constants or environment variables.
+`OrgSettings` remains authoritative for locale, country, and base currency;
+the existing organization/storefront time-zone setting remains authoritative
+for local-day scheduling. Pet Rescue policy values such as long-stay threshold,
+intake categories, contribution labels, and care-round cutoffs are
+organization-scoped, versioned configuration records with effective dates,
+provenance, and an audited admin change path. The application reads one typed
+`PetRescueOperatingPolicy` projection assembled from those sources and carries
+its version into commands and telemetry.
+
+Defaults are archetype starter values, never silent regional rules. Unsupported
+locale, currency, time-zone, or policy versions fail closed with a setup notice.
+Stored timestamps remain UTC instants plus their originating IANA time zone and
+local-date context where scheduling requires it; money is stored with ISO
+currency. Tests cover at least two locales/currencies, daylight-saving
+boundaries, policy-version rollover, and the absence of configuration. This
+keeps regional variation centrally governed while allowing each rescue to set
+operating policy without forking code.
+
 ## 7. Pet Rescue user experience
 
 ### 7.1 Navigation
@@ -662,6 +684,10 @@ design approval:
   - No `person-service` is proposed. Section 5.0 explicitly keeps people,
     customer, employee, and volunteer identity in their existing bounded
     contexts and permits Pet Rescue modules to reference them only.
+  - Regional configuration could otherwise drift into route constants; §6.4
+    binds locale, currency, time zone, and versioned Pet Rescue policy to the
+    existing organization settings spine with an audited admin path and
+    multi-region boundary tests.
 - **Standards researched:** ASM, RefuPet, Shelter Hub, ASV 2022, and Shelter
   Animals Count; adopted/rejected details are in §3.
 - **Escalated decisions:** canonical animal boundary, resolved by
