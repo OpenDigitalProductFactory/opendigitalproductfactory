@@ -1,5 +1,5 @@
 ---
-status: draft
+status: active
 ---
 
 # Owner-attention briefing convergence
@@ -24,7 +24,7 @@ The briefing is deterministic, not model-generated. `loadOpeningBriefingPayload`
 
 **OBJ-2:** Keep proactive coworker copy concise and honest: genuine owner decisions may interrupt; custodian and weekly-digest work must never be relabelled as waiting for owner review.
 
-**OBJ-3:** Prove the fresh-install regression is closed without weakening genuine approval, escalation, or assertive all-clear behavior.
+**OBJ-3:** Prove the fresh-install regression is closed without weakening genuine approval or escalation behavior.
 
 ## Design grounding
 
@@ -48,17 +48,15 @@ No external protocol, dependency, schema, or industry-specific workflow is intro
 
 ### 1. Project once, then compose the briefing
 
-`loadOpeningBriefingPayload` will build `OwnerAttentionProjection` from the operator-visible attention items using the same fallback proactivity level, timestamp, and operator audience used by Workspace. It will pass only `projection.needsYouNow.map(entry => entry.item)` to the existing briefing composer.
+`loadOpeningBriefingPayload` will build `OwnerAttentionProjection` from the operator-visible attention items using the same `balanced` fallback, current timestamp, and `operator` audience used by Workspace. It will pass only `projection.needsYouNow.map(entry => entry.item)` to the existing briefing composer.
 
-This keeps `composeOpeningBriefing` focused on presentation and preserves its surface-local headline selection, quiet/balanced/assertive semantics, link rendering, and detail de-duplication. The loader owns routing because it already owns the read-model fan-out and user/proactivity context.
+This keeps `composeOpeningBriefing` focused on presentation and preserves its surface-local headline selection, link rendering, and detail de-duplication. The loader owns routing because it already owns the read-model fan-out and audience context.
 
-### 2. Preserve the assertive all-clear
+### 2. Follow the current unroomed-posture contract
 
-When raw attention exists but `needsYouNow` is empty:
+`BI-87C9C91C` removed identity-owned coworker proactivity. The interactive, unroomed opening briefing now uses the platform default (`balanced`), while outcome-specific proactive work takes its posture from a Workroom. This fix therefore does not recreate a per-coworker proactivity read or an assertive loader path.
 
-- `balanced` remains silent, because no owner decision exists.
-- `assertive` receives an empty owner-decision list and emits the existing deterministic all-clear.
-- Team-held work remains visible in the Workspace `DigitalTeamHandlingStrip`; the coworker does not repeat or dump it.
+When raw attention exists but `needsYouNow` is empty, the balanced opening briefing remains silent because no owner decision exists. Team-held work remains visible in the Workspace `DigitalTeamHandlingStrip`; the coworker does not repeat or dump it. The pure composer retains its assertive all-clear behavior for any future room-scoped caller, but that is outside this loader's current contract.
 
 ### 3. Bound the presentation by owner decisions
 
@@ -67,6 +65,31 @@ The “N more items are waiting for your review” line is retained only for gen
 ### 4. Regression-first verification
 
 Add loader-level tests that mock 51 raw attention items classified into custodian/digest lanes and assert the composer receives an empty owner list. Keep pure composer tests for genuine owner items. The test must fail on the current raw-array path before implementation.
+
+## Reproduction evidence on the current tree
+
+The defect was reproduced on branch `fix/deliver-bi-2c50f548-owner-attention-briefing-con` at commit `1b54416aa5befa72a4e85d2add3fbd0a8c1de215`:
+
+- `apps/web/lib/agent/opening-briefing-loader.ts:45-51` filters only by audience and passes all visible items to the composer.
+- `apps/web/lib/agent/opening-briefing.ts:112-122` derives the overflow count from the raw array and labels it owner review work.
+- `apps/web/components/workspace-home/OperatorCockpit.tsx:101` uses `buildOwnerAttentionProjection`, ruling out the Workspace projection as the source of the contradiction.
+- `node node_modules/vitest/vitest.mjs run --root apps/web lib/agent/opening-briefing-loader.test.ts` failed two regression cases before the fix: 51 platform-health items produced “Most pressing” plus “50 more items,” and one genuine approval plus 50 platform-health items produced an inflated overflow count.
+
+Candidate causes ruled out by execution and direct comparison:
+
+- The pure composer is not responsible for classifying ownership; its focused tests demonstrate it presents the array it receives.
+- The Workspace count is not dropping data accidentally; owner-projection tests classify `platform-health` into `custodian` and keep genuine approvals in `needsYouNow`.
+- Audience filtering alone is insufficient; the failing loader test keeps all fixtures operator-visible and still reproduces the exact contradiction.
+
+## Ordered fix sequence
+
+1. Add the loader-level 51-raw/0-owner regression and observe it fail with the exact false owner-review copy.
+2. Route the audience-filtered feed through `buildOwnerAttentionProjection` in `loadOpeningBriefingPayload`, then give the composer only `needsYouNow` items.
+3. Prove the negative case is silent and the positive case preserves one genuine owner decision without counting 50 team-held items.
+4. Run the focused attention/briefing suites, source-local typecheck, style-drift guard, preflight and governed exact-tree gate.
+5. Review the final diff for architecture, blast radius, and UX fit; then verify the fresh-install path on a governed nonproduction runtime before completion.
+
+This is deliberately atomic: the regression test and the one loader seam describe a single behavior change and neither is independently shippable. No schema, migration, route, adapter, or new projection is involved.
 
 ## UX fit review
 
@@ -77,7 +100,7 @@ Add loader-level tests that mock 51 raw attention items classified into custodia
 - Navigation layer: contextual coworker action only.
 - Reuse/convergence: `buildOwnerAttentionProjection`; no new status or count primitive.
 - Source truth: attention aggregate plus canonical owner-routing projection.
-- Empty/failure behavior: balanced stays silent at zero owner decisions; assertive gives an honest all-clear; existing failed-source disclosure remains owned by Workspace/inbox.
+- Empty/failure behavior: the unroomed balanced briefing stays silent at zero owner decisions; the pure composer keeps its existing assertive all-clear contract; failed-source disclosure remains owned by Workspace/inbox.
 - AI boundary: deterministic, read-only opening bubble; no prompt send or mutation.
 
 ## Data, security, compliance, and scale
@@ -106,7 +129,7 @@ Add loader-level tests that mock 51 raw attention items classified into custodia
 | AC-1 | OBJ-1 | With 51 raw custodian/digest items and zero `needsYouNow` entries, the coworker opening briefing does not claim any item is waiting for owner review and does not link to the Needs-you inbox as if it contains work. |
 | AC-2 | OBJ-1 | Workspace, `/workspace/inbox`, and the coworker briefing derive owner-review counts from `buildOwnerAttentionProjection`; no parallel classification or source-name filter is added. |
 | AC-3 | OBJ-2 | A balanced coworker stays silent when the owner projection is empty, even if the digital team is handling raw attention items. |
-| AC-4 | OBJ-2 | An assertive coworker gives the existing honest all-clear when the owner projection is empty. |
+| AC-4 | OBJ-2 | The loader follows the current unroomed platform-default posture and does not reintroduce identity-owned proactivity; the pure composer keeps its existing assertive all-clear test. |
 | AC-5 | OBJ-2 | Genuine owner decisions retain the most-pressing headline, overflow count, deep links, and surface-local preference. |
 | AC-6 | OBJ-2 | The opening bubble does not render an unbounded comma-separated list of technical coworker names through team-held attention. |
 | AC-7 | OBJ-3 | A regression test reproduces the 51-raw/0-owner contradiction and is observed failing before the fix and passing after it. |
