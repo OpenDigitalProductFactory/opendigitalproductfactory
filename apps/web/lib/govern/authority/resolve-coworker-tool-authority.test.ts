@@ -199,4 +199,28 @@ describe("deriveCoworkerApprovalPolicy", () => {
   ] as const)("maps %j to %s", (input, expected) => {
     expect(deriveCoworkerApprovalPolicy(input)).toBe(expected);
   });
+
+  it("does not add a second human approval to an exact server-bound independent review", () => {
+    expect(deriveCoworkerApprovalPolicy({
+      hitlTierDefault: 2,
+      hitlPolicy: "side-effects",
+      serverBoundIndependentReview: true,
+    })).toBe("none");
+  });
+
+  it("keeps ordinary side effects behind the coworker's configured approval policy", () => {
+    expect(deriveCoworkerApprovalPolicy({
+      hitlTierDefault: 2,
+      hitlPolicy: "side-effects",
+      serverBoundIndependentReview: false,
+    })).toBe("side-effects");
+  });
+
+  it("does not override an explicit always-approve reviewer policy", () => {
+    expect(deriveCoworkerApprovalPolicy({
+      hitlTierDefault: 1,
+      hitlPolicy: "always",
+      serverBoundIndependentReview: true,
+    })).toBe("all");
+  });
 });
