@@ -1,5 +1,5 @@
 ---
-status: draft
+status: proposed
 ---
 
 # Pet Rescue operating system and resilient Help design
@@ -26,11 +26,12 @@ operating system for the three value streams already defined in Architecture:
 It also repairs global Help so a renamed, removed, or unseeded document cannot
 strand an operator on a 404.
 
-This is one umbrella design and one coordinated publication train, not one
-implementation PR. Each independently reviewable slice retains its existing
-backlog item, governed Workroom, branch, acceptance evidence, and clean-revert
-PR. A shared nonproduction lease may verify the assembled train, but it does not
-collapse ownership or let the integration item hide partial delivery.
+This is one umbrella design and one coordinated implementation PR, matching the
+operator's explicit constraint to use one source sandbox and one publication
+event. Each independently reviewable slice retains its existing backlog item,
+acceptance evidence, verification seam, and clean-revert commit inside the
+shared governed Workroom and branch. A shared nonproduction lease verifies the
+assembled change without letting the integration item hide partial delivery.
 
 ## 2. Outcomes and objective baseline
 
@@ -571,9 +572,10 @@ production-rollout risk, not an implied capability of this scope.
 | Pet Rescue home | `BI-7A38F667` | partial-result aggregation tests, responsive/themed cockpit verification |
 
 The delivery decision is `decomposed`: each row is independently shippable and
-uses its own BI, Workroom, branch, test-first evidence, and PR. The root plan
-records dependencies and objective coverage across the train; it does not grant
-one branch authority to edit every slice.
+retains its own BI and test-first evidence, while the operator-directed packaging
+uses one shared Workroom, branch, nonproduction lease, and PR. The root plan
+records dependencies and objective coverage across that coordinated delivery;
+scope is claimed explicitly for every implementation path before editing.
 
 ## 13. Verification contract
 
