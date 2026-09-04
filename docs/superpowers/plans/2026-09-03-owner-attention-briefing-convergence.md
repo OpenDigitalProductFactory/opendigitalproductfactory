@@ -23,9 +23,10 @@ fix sequence; this plan does not introduce a second design or delivery phase.
 - Flow: follow the design's **Ordered fix sequence**—retain the observed failing
   loader regression, change the one loader seam, prove zero-owner and genuine-
   owner cases, then run the governed delivery gates.
-- Verification: `AC-1` through `AC-8`, including the focused briefing/projection
-  suites, source-local typecheck, style-drift guard, exact-tree pregate, and a
-  fresh-install browser exercise.
+- Verification: `AC-1`, `AC-2`, `AC-3`, `AC-4`, `AC-5`, `AC-6`, `AC-7`, and
+  `AC-8`, including the focused briefing/projection suites, source-local
+  typecheck, style-drift guard, exact-tree pregate, and a fresh-install browser
+  exercise.
 - Dependencies: none.
 - Independently shippable: no. The regression test and loader change express
   one behavior correction; shipping either alone would not deliver the outcome.
