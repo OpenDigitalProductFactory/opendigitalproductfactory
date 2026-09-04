@@ -4,6 +4,8 @@ area: build-studio
 order: 1
 relatedCode:
   - apps/web/lib/build/build-orchestrator.ts
+  - apps/web/lib/work-capsules/delivery-task-hub.ts
+  - apps/web/lib/queue/functions/async-operation-task-hub.ts
 ---
 
 ## Overview
@@ -14,7 +16,9 @@ Build Studio is not a separate code universe. It works from the install's shared
 
 ### Development Workrooms
 
-Open `/build/work` when you need the engineering context behind Build Studio: live development Workrooms, adoptable worktrees, branches, and the governed work-planning form. Its live count only includes rooms with current execution evidence. Use **Operations > Workrooms** for every live room plus retained history, and **Architecture > Workrooms** for reusable definitions, participants, queues, and human triggers.
+Open `/build/work` when you need the engineering context behind Build Studio. The **Delivery task hub** groups recent Workrooms as Ready, Working, Waiting, Needs attention, or Complete and keeps the outcome, owner, current stage, age, progress, branch, and next action together. A card may also show the authorized durable async-operation status and platform handle; provider handles, prompts, raw results, and private failure detail stay out of this view.
+
+The hub refreshes through one live connection and retains confirmed cards while reconnecting. **Inspect** opens the canonical Workroom, while **Resume**, **Review**, **Handoff**, and pull-request links appear only when the recorded Workroom facts support them. Use **Load older tasks** for the next signed, bounded page. Completion, failure, expiry, approval, review, and takeover attention link back to the same Workroom and are deduplicated, so reading or dismissing a notification does not recreate it. Create/adopt controls remain below the hub. Use **Operations > Workrooms** for every live room plus retained history, and **Architecture > Workrooms** for reusable definitions, participants, queues, and human triggers.
 
 ## The operator workspace
 

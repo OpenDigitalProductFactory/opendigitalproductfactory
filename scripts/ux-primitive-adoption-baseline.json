@@ -454,7 +454,6 @@
     "apps/web/components/build/work-control/AdoptableWorktreeTable.tsx": 1,
     "apps/web/components/build/work-control/CreateGovernedWorkForm.tsx": 1,
     "apps/web/components/build/work-control/WorkCapsuleLaunchPanel.tsx": 2,
-    "apps/web/components/build/work-control/WorkCapsuleTable.tsx": 1,
     "apps/web/components/build/work-control/WorkControlPanel.tsx": 1,
     "apps/web/components/civic/CivicMeetingsPanel.tsx": 2,
     "apps/web/components/civic/FundBudgetPanel.tsx": 2,

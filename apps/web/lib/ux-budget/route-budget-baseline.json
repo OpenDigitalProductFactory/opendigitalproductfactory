@@ -223,15 +223,15 @@
       "ariaSnapshot": "- link\n- banner\n  - link\n    - text\n    - paragraph\n      - text\n  - link\n  - button\n  - text\n  - button\n- complementary\n  - navigation\n    - group\n      - button\n      - button [pressed]\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n- main\n  - button [expanded]\n    - text\n  - text\n  - textbox\n  - group\n    - button\n    - text\n    - combobox\n      - option [selected]\n      - option\n  - text\n  - button [disabled]\n  - text\n  - paragraph\n    - text\n  - heading [level=2]\n  - paragraph\n    - text\n  - text"
     },
     "/build/work": {
-      "defaultVisibleWords": 179,
-      "leadBandWords": 0,
-      "primaryActions": 2,
+      "defaultVisibleWords": 237,
+      "leadBandWords": 14,
+      "primaryActions": 1,
       "visibleFields": 3,
       "maxChoicesPerControl": 5,
       "subLegibleControls": 0,
       "buriedPrimaryAction": 0,
       "axeViolations": 2,
-      "ariaSnapshot": "- link\n- banner\n  - link\n    - text\n    - paragraph\n      - text\n  - link\n  - button\n  - text\n  - button\n- complementary\n  - navigation\n    - group\n      - button\n      - button [pressed]\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n- main\n  - navigation\n    - link\n    - text\n  - heading [level=1]\n  - paragraph\n    - text\n    - link\n    - text\n  - text\n  - link\n  - button\n  - link\n    - paragraph\n      - text\n  - paragraph\n    - text\n  - link\n    - paragraph\n      - text\n  - heading [level=2]\n  - text\n  - textbox\n  - text\n  - combobox\n    - option [selected]\n    - option\n  - text\n  - textbox\n  - button\n  - region\n    - heading [level=2]\n    - text\n  - region\n    - heading [level=2]\n    - table\n      - rowgroup\n        - row\n          - columnheader\n      - rowgroup\n        - row\n          - cell\n            - text"
+      "ariaSnapshot": "- link\n- banner\n  - link\n    - text\n    - paragraph\n      - text\n  - link\n  - button\n  - text\n  - button\n- complementary\n  - navigation\n    - group\n      - button\n      - button [pressed]\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n- main\n  - navigation\n    - link\n    - text\n  - heading [level=1]\n  - paragraph\n    - text\n    - link\n    - text\n  - text\n  - link\n  - button\n  - link\n    - paragraph\n      - text\n  - paragraph\n    - text\n  - link\n    - paragraph\n      - text\n  - region\n    - heading [level=2]\n    - paragraph\n      - text\n    - text\n    - region\n      - heading [level=3]\n      - text\n      - heading [level=4]\n      - paragraph\n        - text\n      - text\n      - link\n      - paragraph\n        - text\n    - paragraph\n      - text\n  - heading [level=2]\n  - text\n  - textbox\n  - text\n  - combobox\n    - option [selected]\n    - option\n  - text\n  - textbox\n  - button\n  - region\n    - heading [level=2]\n    - table\n      - rowgroup\n        - row\n          - columnheader\n      - rowgroup\n        - row\n          - cell\n            - text"
     },
     "/complaints": {
       "defaultVisibleWords": 107,

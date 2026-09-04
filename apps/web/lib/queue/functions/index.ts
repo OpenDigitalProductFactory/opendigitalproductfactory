@@ -137,6 +137,7 @@ import {
   asyncInferenceOperationRun,
   asyncInferenceOperationTaskRunTransition,
 } from "./async-inference-operation";
+import { asyncOperationTaskHub } from "./async-operation-task-hub";
 
 export const scheduledFunctions = [
   prometheusPoll,
@@ -256,6 +257,7 @@ export const eventFunctions = [
   mcpTaskRunExecute,
   asyncInferenceOperationRun,
   asyncInferenceOperationTaskRunTransition,
+  asyncOperationTaskHub,
 ];
 
 export const allFunctions = [...scheduledFunctions, ...eventFunctions];
