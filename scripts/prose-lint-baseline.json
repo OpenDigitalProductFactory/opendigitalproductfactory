@@ -447,6 +447,14 @@
     "longSentences": 0,
     "textMass": 37
   },
+  "apps/web/app/(shell)/build/work/[capsuleId]/page.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 20
+  },
   "apps/web/app/(shell)/complaints/ComplaintsClient.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
@@ -4759,6 +4767,14 @@
     "longSentences": 0,
     "textMass": 8
   },
+  "apps/web/components/build/work-control/DeliveryTaskHub.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 65
+  },
   "apps/web/components/build/work-control/WorkCapsuleLaunchPanel.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
@@ -4766,14 +4782,6 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 9
-  },
-  "apps/web/components/build/work-control/WorkCapsuleTable.tsx": {
-    "vocabulary": 0,
-    "retiredVocabulary": 0,
-    "genericLabels": 0,
-    "readability": 0,
-    "longSentences": 0,
-    "textMass": 5
   },
   "apps/web/components/build/work-control/WorkControlPanel.tsx": {
     "vocabulary": 0,

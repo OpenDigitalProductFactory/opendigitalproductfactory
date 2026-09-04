@@ -231,6 +231,7 @@ export async function runWorkroomDriveJob(
   deps?: {
     listRooms?: () => Promise<WorkroomDriveRoom[]>;
     effects?: WorkroomDriveEffects;
+    reconcileNotifications?: () => Promise<void>;
   },
 ): Promise<WorkroomDriveResult> {
   const rooms = deps?.listRooms ? await deps.listRooms() : await loadStandingRooms();
@@ -274,6 +275,18 @@ export async function runWorkroomDriveJob(
     else if (outcome === "attention") attention += 1;
     else if (outcome === "stopped") stopped += 1;
     else skipped += 1;
+  }
+
+  try {
+    if (deps?.reconcileNotifications) {
+      await deps.reconcileNotifications();
+    } else if (!deps) {
+      const { reconcileDeliveryTaskNotificationsLive } = await import("@/lib/work-capsules/delivery-task-notifications-live");
+      await reconcileDeliveryTaskNotificationsLive(now);
+    }
+  } catch {
+    // Notification projection is advisory. Delivery state was already persisted
+    // and must not be rolled back when the inbox or realtime bus is unavailable.
   }
 
   return {
@@ -409,7 +422,7 @@ function liveEffects(): WorkroomDriveEffects {
         where: { id: input.roomId },
         data: { workspaceState: { ...existing, workroomDrive: input.snapshot } as object },
       });
-      await prisma.workroomActivity.create({
+      const activity = await prisma.workroomActivity.create({
         data: {
           workCapsuleId: input.roomId,
           kind: input.activityKind,
@@ -417,6 +430,8 @@ function liveEffects(): WorkroomDriveEffects {
           payload: input.payload as object,
         },
       });
+      const { publishRecordedWorkCapsuleActivity } = await import("@/lib/work-capsules/activity-events");
+      publishRecordedWorkCapsuleActivity(input.roomId, activity.id);
     },
     async acquireLease(input) {
       if (input.currentExpiresAt && input.currentExpiresAt.getTime() > input.now.getTime()) {

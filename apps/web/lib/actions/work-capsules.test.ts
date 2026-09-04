@@ -5,7 +5,9 @@ const {
   mockCan,
   mockCreateWorkCapsule,
   mockGetWorktreeDirtySummary,
+  mockCreateDeliveryTaskHubAsyncProjectionLoader,
   mockListLocalBranches,
+  mockLoadDeliveryTaskHubPage,
   mockPlanCapsuleWorkspace,
   mockPrisma,
   mockScanGitWorktrees,
@@ -14,7 +16,9 @@ const {
   mockCan: vi.fn(),
   mockCreateWorkCapsule: vi.fn(),
   mockGetWorktreeDirtySummary: vi.fn(),
+  mockCreateDeliveryTaskHubAsyncProjectionLoader: vi.fn(),
   mockListLocalBranches: vi.fn(),
+  mockLoadDeliveryTaskHubPage: vi.fn(),
   mockPlanCapsuleWorkspace: vi.fn(),
   mockPrisma: {
     workroom: {
@@ -38,6 +42,12 @@ vi.mock("@/lib/work-capsules/work-capsule-store", () => ({
   createWorkCapsule: mockCreateWorkCapsule,
   planCapsuleWorkspace: mockPlanCapsuleWorkspace,
 }));
+vi.mock("@/lib/work-capsules/delivery-task-hub-store", () => ({
+  loadDeliveryTaskHubPage: mockLoadDeliveryTaskHubPage,
+}));
+vi.mock("@/lib/work-capsules/delivery-task-hub-async", () => ({
+  createDeliveryTaskHubAsyncProjectionLoader: mockCreateDeliveryTaskHubAsyncProjectionLoader,
+}));
 
 afterEach(() => {
   delete process.env.DPF_WORK_CONTROL_REPO_ROOT;
@@ -53,6 +63,12 @@ describe("getWorkControlData", () => {
     mockCan.mockReturnValue(true);
     mockPrisma.workroom.findMany.mockResolvedValue([]);
     mockPrisma.featureBuild.findMany.mockResolvedValue([]);
+    mockLoadDeliveryTaskHubPage.mockResolvedValue({
+      rows: [],
+      nextCursor: null,
+      observedAt: "2026-09-04T12:00:00.000Z",
+    });
+    mockCreateDeliveryTaskHubAsyncProjectionLoader.mockResolvedValue(vi.fn());
     mockScanGitWorktrees.mockResolvedValue([]);
     mockGetWorktreeDirtySummary.mockResolvedValue({ modifiedCount: 0, untrackedCount: 0 });
   });
@@ -97,16 +113,7 @@ describe("getWorkControlData", () => {
     const { getWorkControlData } = await import("./work-capsules");
     const data = await getWorkControlData();
 
-    expect(data.capsules).toEqual([
-      expect.objectContaining({
-        capsuleId: "WC-1",
-        branch: "feat/already-adopted",
-        scope: expect.objectContaining({
-          decisionScopeLabel: "WWMD",
-          portfolioRoleLabel: "Manufacture & Deliver",
-        }),
-      }),
-    ]);
+    expect(data.deliveryHub).toEqual(expect.objectContaining({ rows: [] }));
     expect(data.adoptable).toEqual([
       expect.objectContaining({
         branch: "fix/orphan",
@@ -115,6 +122,14 @@ describe("getWorkControlData", () => {
       }),
     ]);
     expect(mockGetWorktreeDirtySummary).toHaveBeenCalledWith("D:/DPF-orphan");
+    const asyncLoader = await mockCreateDeliveryTaskHubAsyncProjectionLoader.mock.results[0]?.value;
+    expect(mockCreateDeliveryTaskHubAsyncProjectionLoader).toHaveBeenCalledWith({
+      id: "user-1",
+      isSuperuser: true,
+    });
+    expect(mockLoadDeliveryTaskHubPage).toHaveBeenCalledWith(mockPrisma, {
+      loadAsyncOperation: asyncLoader,
+    });
     expect(mockPrisma.workroom.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({
         OR: expect.any(Array),
@@ -158,7 +173,6 @@ describe("getWorkControlData", () => {
     const { getWorkControlData } = await import("./work-capsules");
     const data = await getWorkControlData();
 
-    expect(data.capsules.map((row) => row.capsuleId)).toEqual(["WC-LIVE"]);
     expect(data.livenessSummary).toEqual(expect.objectContaining({ scanned: 2, live: 1, reapable: 1 }));
   });
 
