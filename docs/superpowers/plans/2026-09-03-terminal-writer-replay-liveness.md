@@ -100,6 +100,7 @@ no schema changes.
 
 - Decision: atomic
 - Parent: `BI-E2B632D2`
+- Dependencies: none
 - Design baseline: `baseline-f49b4926-7e2b-4511-8cdb-0e2fb903637e`
 - Receipt: `cmtmd9eri7nj001miwklshlsr`
 - Rationale: stalled/failed admission, reservation checks, regressions, and live
