@@ -1,8 +1,11 @@
 import { prisma } from "@dpf/db";
 
 import {
+  cancelGithubResponseBody,
+  createGithubReadTransport,
   resolveGithubToken,
   resolveRepoIdentity,
+  type GithubReadTransport,
 } from "@/lib/contributor-change-lanes/github-rest-reader";
 
 /**
@@ -77,6 +80,7 @@ export async function discoverCanonicalDesignArtifact(args: {
   headSha: string;
   db?: CanonicalArtifactDb;
   fetchImpl?: typeof fetch;
+  transportFactory?: () => GithubReadTransport;
 }): Promise<CanonicalArtifactDiscoveryResult> {
   const db = args.db ?? (prisma as unknown as CanonicalArtifactDb);
   if (!/^[a-f0-9]{40}$/i.test(args.baseSha) || !/^[a-f0-9]{40}$/i.test(args.headSha)) {
@@ -108,9 +112,35 @@ export async function discoverCanonicalDesignArtifact(args: {
     };
   }
 
+  let transport: GithubReadTransport | null = null;
+  if (!args.fetchImpl) {
+    try {
+      transport = (args.transportFactory ?? createGithubReadTransport)();
+    } catch {
+      return {
+        resolved: false,
+        code: "provider-unavailable",
+        nextAction: "Repository provider transport is unavailable. Restore the server network client, then retry.",
+      };
+    }
+  }
+  const fetchImpl = args.fetchImpl ?? transport!.fetch;
+  try {
+    return await discoverCanonicalDesignArtifactWithFetch(args, repo, token, fetchImpl);
+  } finally {
+    await transport?.close().catch(() => {});
+  }
+}
+
+async function discoverCanonicalDesignArtifactWithFetch(
+  args: { repositoryFullName: string; baseSha: string; headSha: string },
+  repo: { owner: string; name: string },
+  token: string | null,
+  fetchImpl: typeof fetch,
+): Promise<CanonicalArtifactDiscoveryResult> {
   let response: Response;
   try {
-    response = await (args.fetchImpl ?? fetch)(
+    response = await fetchImpl(
       `https://api.github.com/repos/${encodeURIComponent(repo.owner)}/${encodeURIComponent(repo.name)}/compare/${encodeURIComponent(args.baseSha)}...${encodeURIComponent(args.headSha)}`,
       {
         headers: {
@@ -129,6 +159,7 @@ export async function discoverCanonicalDesignArtifact(args: {
     };
   }
   if (!response.ok) {
+    await cancelGithubResponseBody(response);
     return {
       resolved: false,
       code: "provider-unavailable",

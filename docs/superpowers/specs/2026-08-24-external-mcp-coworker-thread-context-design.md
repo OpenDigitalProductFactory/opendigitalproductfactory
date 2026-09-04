@@ -437,6 +437,54 @@ verbatim. The caller does not hand-author reviewer identity or artifact scope.
   envelope `cmtme5f140ire01nvd0n5jeo4`. No self-approval, fabricated receipt,
   direct database write, or weakened independence check was used.
 
+### 2026-09-04 deployed follow-up: tier default is not an explicit veto
+
+Release `v2026.09.04-readiness-worktype-classification.1` deployed the first
+repair at served commit `11b2a11bc400ba540e733eeccc57a2c221218323`.
+`claim_backlog_item_for_work` then returned the reachable, server-authored
+`AGT-WS-REVIEW` packet for `BI-B131F357` with the exact design blob and no
+nonexistent blocker citation. A fresh `summon_coworker` call created TaskRun
+`TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-B910BE33643C`, carrying only the
+subject scope plus `record_initiative_design_review` and
+`read_source_at_version`; dispatch itself required no approval.
+
+The reviewer read the immutable design and attempted a passing receipt, but
+the writer still returned `approval_required`. The remaining cause was policy
+precedence: `AGT-WS-REVIEW` has the registry's generic
+`hitl_tier_default: 1`, and the resolver applied that default before the exact
+server-bound independent-review exception. The architecture decision is that
+an operator-authored `hitlPolicy: "always"` remains an explicit veto, while a
+numeric tier is only a default and cannot add a human proxy gate to the exact
+review boundary. Unbound calls, ordinary side effects, and the downstream
+principal-level author/reviewer collision check remain unchanged.
+
+### 2026-09-04 live-acceptance amendment: preserve token scope through execution
+
+After the tier-policy repair shipped, governed self-upgrade
+`SUR-071C4319` installed release
+`v2026.09.04-initiative-canonical-discovery-transport.1`. The installed image
+served byte identity `c9a729fe3a562a263d648de1474c2a28f6fd3328`, which is a
+descendant of release target `90c65d227b3b42cd688235147115d2d88fdc7a9b`.
+The external Workroom then created fresh independent reviewer TaskRun
+`TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-703AB1AD13D8` with the exact
+subject, writer, and immutable design locator. Dispatch required no approval.
+
+That TaskRun exposed the next bounded transport defect. The autonomous loop
+received the submitting token id but not its server-resolved capability. Its
+writer therefore reached the receipt repository with a reviewer and an allow
+decision, but with `tokenScope=null`, and failed closed with
+`AUTHORIZATION_DENIED`. Retrying model arguments cannot repair server-owned
+authentication context.
+
+The architecture decision is to carry the already-authenticated token
+capability alongside the token id from `executeRemoteTaskAttempt`, through the
+shared autonomous execution seam, into `governedExecuteTool`. The capability is
+never accepted from model output or coworker request arguments. Direct portal
+and non-MCP autonomous runs continue to omit it, while replay and terminal
+writer recovery retain their existing explicit token projection. This keeps
+the receipt repository's three-part requirement intact: independent reviewer,
+recorded authority decision, and authenticated write/admin token scope.
+
 ## Acceptance criteria traceability
 
 | BI acceptance criterion | Design coverage |

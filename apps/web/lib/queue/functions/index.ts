@@ -131,6 +131,11 @@ import {
   mcpTaskRunDispatchReconciliation,
   mcpTaskRunExecute,
 } from "./mcp-task-run-execute";
+import {
+  asyncInferenceOperationOutbox,
+  asyncInferenceOperationReconciliation,
+  asyncInferenceOperationRun,
+} from "./async-inference-operation";
 
 export const scheduledFunctions = [
   prometheusPoll,
@@ -201,6 +206,8 @@ export const scheduledFunctions = [
   postmarkCallbackDispatchSweep,
   nonprodLeaseWaitReconciliation,
   mcpTaskRunDispatchReconciliation,
+  asyncInferenceOperationReconciliation,
+  asyncInferenceOperationOutbox,
 ];
 
 export const eventFunctions = [
@@ -246,6 +253,7 @@ export const eventFunctions = [
   dataControlOperationRecoveryRequested,
   nonprodCapacityAvailable,
   mcpTaskRunExecute,
+  asyncInferenceOperationRun,
 ];
 
 export const allFunctions = [...scheduledFunctions, ...eventFunctions];

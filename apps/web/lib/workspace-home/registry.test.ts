@@ -59,6 +59,23 @@ function makeContribution(
 }
 
 describe("workspace home contribution registry", () => {
+  it("selects the Pet Rescue operating home before the nonprofit category home", () => {
+    const resolution = resolveWorkspaceHomeContribution({
+      storefrontConfig: {
+        archetype: {
+          archetypeId: "pet-rescue",
+          category: "nonprofit-community",
+          name: "Pet Rescue",
+        },
+      },
+    });
+
+    expect(resolution.match).toBe("exact");
+    expect(resolution.contribution?.id).toBe("home-pet-rescue");
+    expect(resolution.contribution?.primaryOperatingQuestion).toBe(
+      "which animal or care commitment needs attention now?",
+    );
+  });
   it("requires every contribution to honor the baseline workspace slot covenant", () => {
     const contribution = makeContribution({
       slots: [

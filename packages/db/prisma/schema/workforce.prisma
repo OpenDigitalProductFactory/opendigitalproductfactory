@@ -1,7 +1,7 @@
 model EmployeeProfile {
-  id                           String                        @id @default(cuid())
-  employeeId                   String                        @unique
-  userId                       String?                       @unique
+  id                           String                              @id @default(cuid())
+  employeeId                   String                              @unique
+  userId                       String?                             @unique
   firstName                    String
   middleName                   String?
   lastName                     String
@@ -9,7 +9,7 @@ model EmployeeProfile {
   workEmail                    String?
   personalEmail                String?
   phoneWork                    String?
-  status                       String                        @default("onboarding")
+  status                       String                              @default("onboarding")
   employmentTypeId             String?
   departmentId                 String?
   positionId                   String?
@@ -20,81 +20,81 @@ model EmployeeProfile {
   startDate                    DateTime?
   confirmationDate             DateTime?
   endDate                      DateTime?
-  createdAt                    DateTime                      @default(now())
-  updatedAt                    DateTime                      @updatedAt
+  createdAt                    DateTime                            @default(now())
+  updatedAt                    DateTime                            @updatedAt
   phoneMobile                  String?
   phoneEmergency               String?
   payType                      String?
   hourlyRate                   Decimal?
   annualSalary                 Decimal?
   standardAnnualHours          Int?
-  accountableItems             BacklogItem[]                 @relation("ItemAccountable")
-  requisitionsAsHiringManager  JobRequisition[]              @relation("ReqHiringManager") // BI-7ACC38CE
-  requisitionsAsRecruiter      JobRequisition[]              @relation("ReqRecruiter") // BI-7ACC38CE
-  scorecardsSubmitted          Scorecard[]                   @relation("ScorecardSubmitter") // BI-7ACC38CE
+  accountableItems             BacklogItem[]                       @relation("ItemAccountable")
+  requisitionsAsHiringManager  JobRequisition[]                    @relation("ReqHiringManager") // BI-7ACC38CE
+  requisitionsAsRecruiter      JobRequisition[]                    @relation("ReqRecruiter") // BI-7ACC38CE
+  scorecardsSubmitted          Scorecard[]                         @relation("ScorecardSubmitter") // BI-7ACC38CE
   calendarEvents               CalendarEvent[]
   calendarSyncs                CalendarSync[]
   communicationChannelBindings CommunicationChannelBinding[]
-  auditsPerformed              ComplianceAudit[]             @relation("AuditAuditor")
-  complianceAuditLogs          ComplianceAuditLog[]          @relation("ComplianceAuditLogActor")
-  evidenceCollected            ComplianceEvidence[]          @relation("EvidenceCollector")
-  incidentsReported            ComplianceIncident[]          @relation("IncidentReporter")
-  controlOwnership             Control[]                     @relation("ControlOwner")
-  correctiveActionsOwned       CorrectiveAction[]            @relation("CorrectiveActionOwner")
-  correctiveActionsVerified    CorrectiveAction[]            @relation("CorrectiveActionVerifier")
-  headedDepartments            Department[]                  @relation("DepartmentHead")
+  auditsPerformed              ComplianceAudit[]                   @relation("AuditAuditor")
+  complianceAuditLogs          ComplianceAuditLog[]                @relation("ComplianceAuditLogActor")
+  evidenceCollected            ComplianceEvidence[]                @relation("EvidenceCollector")
+  incidentsReported            ComplianceIncident[]                @relation("IncidentReporter")
+  controlOwnership             Control[]                           @relation("ControlOwner")
+  correctiveActionsOwned       CorrectiveAction[]                  @relation("CorrectiveActionOwner")
+  correctiveActionsVerified    CorrectiveAction[]                  @relation("CorrectiveActionVerifier")
+  headedDepartments            Department[]                        @relation("DepartmentHead")
   addresses                    EmployeeAddress[]
-  department                   Department?                   @relation("DepartmentEmployees", fields: [departmentId], references: [id])
-  dottedLineManager            EmployeeProfile?              @relation("EmployeeDottedManager", fields: [dottedLineManagerId], references: [id])
-  dottedLineReports            EmployeeProfile[]             @relation("EmployeeDottedManager")
-  employmentType               EmploymentType?               @relation(fields: [employmentTypeId], references: [id])
-  manager                      EmployeeProfile?              @relation("EmployeeManager", fields: [managerEmployeeId], references: [id])
-  directReports                EmployeeProfile[]             @relation("EmployeeManager")
-  position                     Position?                     @relation(fields: [positionId], references: [id])
-  user                         User?                         @relation(fields: [userId], references: [id])
-  workLocation                 WorkLocation?                 @relation(fields: [workLocationId], references: [id])
+  department                   Department?                         @relation("DepartmentEmployees", fields: [departmentId], references: [id])
+  dottedLineManager            EmployeeProfile?                    @relation("EmployeeDottedManager", fields: [dottedLineManagerId], references: [id])
+  dottedLineReports            EmployeeProfile[]                   @relation("EmployeeDottedManager")
+  employmentType               EmploymentType?                     @relation(fields: [employmentTypeId], references: [id])
+  manager                      EmployeeProfile?                    @relation("EmployeeManager", fields: [managerEmployeeId], references: [id])
+  directReports                EmployeeProfile[]                   @relation("EmployeeManager")
+  position                     Position?                           @relation(fields: [positionId], references: [id])
+  user                         User?                               @relation(fields: [userId], references: [id])
+  workLocation                 WorkLocation?                       @relation(fields: [workLocationId], references: [id])
   employmentEvents             EmploymentEvent[]
-  accountableEpics             Epic[]                        @relation("EpicAccountable")
-  accountableBuilds            FeatureBuild[]                @relation("BuildAccountable")
-  feedbackGiven                FeedbackNote[]                @relation("FeedbackFrom")
-  feedbackReceived             FeedbackNote[]                @relation("FeedbackTo")
+  accountableEpics             Epic[]                              @relation("EpicAccountable")
+  accountableBuilds            FeatureBuild[]                      @relation("BuildAccountable")
+  feedbackGiven                FeedbackNote[]                      @relation("FeedbackFrom")
+  feedbackReceived             FeedbackNote[]                      @relation("FeedbackTo")
   leaveBalances                LeaveBalance[]
-  leaveApprovals               LeaveRequest[]                @relation("LeaveApprovals")
+  leaveApprovals               LeaveRequest[]                      @relation("LeaveApprovals")
   leaveRequests                LeaveRequest[]
-  obligationOwnership          Obligation[]                  @relation("ObligationOwner")
+  obligationOwnership          Obligation[]                        @relation("ObligationOwner")
   onboardingTasks              OnboardingTask[]
-  policiesApproved             Policy[]                      @relation("PolicyApprover")
-  policiesOwned                Policy[]                      @relation("PolicyOwner")
-  policyAcknowledgments        PolicyAcknowledgment[]        @relation("PolicyAcknowledgments")
-  alertsReviewed               RegulatoryAlert[]             @relation("AlertReviewer")
-  scansTriggered               RegulatoryMonitorScan[]       @relation("ScanTriggerer")
-  regulatorySubmissions        RegulatorySubmission[]        @relation("SubmissionSubmitter")
-  requirementCompletions       RequirementCompletion[]       @relation("RequirementCompletions")
-  reviewInstances              ReviewInstance[]              @relation("ReviewsAsEmployee")
-  reviewsAsReviewer            ReviewInstance[]              @relation("ReviewsAsReviewer")
-  riskAssessments              RiskAssessment[]              @relation("RiskAssessor")
+  policiesApproved             Policy[]                            @relation("PolicyApprover")
+  policiesOwned                Policy[]                            @relation("PolicyOwner")
+  policyAcknowledgments        PolicyAcknowledgment[]              @relation("PolicyAcknowledgments")
+  alertsReviewed               RegulatoryAlert[]                   @relation("AlertReviewer")
+  scansTriggered               RegulatoryMonitorScan[]             @relation("ScanTriggerer")
+  regulatorySubmissions        RegulatorySubmission[]              @relation("SubmissionSubmitter")
+  requirementCompletions       RequirementCompletion[]             @relation("RequirementCompletions")
+  reviewInstances              ReviewInstance[]                    @relation("ReviewsAsEmployee")
+  reviewsAsReviewer            ReviewInstance[]                    @relation("ReviewsAsReviewer")
+  riskAssessments              RiskAssessment[]                    @relation("RiskAssessor")
   terminationRecord            TerminationRecord?
-  timesheetApprovals           TimesheetPeriod[]             @relation("TimesheetApprovals")
+  timesheetApprovals           TimesheetPeriod[]                   @relation("TimesheetApprovals")
   timesheets                   TimesheetPeriod[]
   payslips                     Payslip[]
-  expenseClaims                ExpenseClaim[]                @relation("ExpenseClaims")
+  expenseClaims                ExpenseClaim[]                      @relation("ExpenseClaims")
   serviceProviders             ServiceProvider[]
-  aiProviderContracts          SupplierContract[]            @relation("AiContractOwner")
-  aiFinanceWorkItems           FinanceWorkItem[]             @relation("AiFinanceWorkItemOwner")
-  changeRequestsRequested      ChangeRequest[]               @relation("ChangeRequestedBy")
-  changeRequestsAssessed       ChangeRequest[]               @relation("ChangeAssessedBy")
-  changeRequestsApproved       ChangeRequest[]               @relation("ChangeApprovedBy")
-  changeRequestsExecuted       ChangeRequest[]               @relation("ChangeExecutedBy")
-  standardChangesApproved      StandardChangeCatalog[]       @relation("StandardChangeApprover")
-  deductionElections           EmployeeDeductionElection[]   @relation("EmployeeDeductionElections")
-  vehicles                     Vehicle[]                     @relation("VehicleDriver")
-  trips                        Trip[]                        @relation("TripDriver")
-  tripClassificationRules      TripClassificationRule[]      @relation("TripRuleDriver")
-  driverLocationConsents       DriverLocationConsent[]       @relation("DriverConsentDriver")
+  aiProviderContracts          SupplierContract[]                  @relation("AiContractOwner")
+  aiFinanceWorkItems           FinanceWorkItem[]                   @relation("AiFinanceWorkItemOwner")
+  changeRequestsRequested      ChangeRequest[]                     @relation("ChangeRequestedBy")
+  changeRequestsAssessed       ChangeRequest[]                     @relation("ChangeAssessedBy")
+  changeRequestsApproved       ChangeRequest[]                     @relation("ChangeApprovedBy")
+  changeRequestsExecuted       ChangeRequest[]                     @relation("ChangeExecutedBy")
+  standardChangesApproved      StandardChangeCatalog[]             @relation("StandardChangeApprover")
+  deductionElections           EmployeeDeductionElection[]         @relation("EmployeeDeductionElections")
+  vehicles                     Vehicle[]                           @relation("VehicleDriver")
+  trips                        Trip[]                              @relation("TripDriver")
+  tripClassificationRules      TripClassificationRule[]            @relation("TripRuleDriver")
+  driverLocationConsents       DriverLocationConsent[]             @relation("DriverConsentDriver")
   classificationDeterminations WorkerClassificationDetermination[]
   engagementTerms              WorkerEngagementTerm[]
 
-  referredApplications         Application[]                 @relation("ApplicationReferrer")
+  referredApplications Application[] @relation("ApplicationReferrer")
 
   @@index([status])
   @@index([departmentId])
@@ -248,32 +248,32 @@ model EmploymentType {
 /// extended, direction increased, exclusivity emerged), and the history of what
 /// was determined when, on what evidence, is the audit trail.
 model WorkerClassificationDetermination {
-  id                 String               @id @default(cuid())
-  workerClassificationDeterminationId    String               @unique
-  employeeProfileId  String
-  classification     WorkerClassification
+  id                                  String               @id @default(cuid())
+  workerClassificationDeterminationId String               @unique
+  employeeProfileId                   String
+  classification                      WorkerClassification
   /// The human who made the call. Required - see the model note.
-  determinedByUserId String
+  determinedByUserId                  String
   /// Which employment jurisdiction the determination was made under, when known.
   /// Resolved by BI-9252B9EA; null until that lands.
-  jurisdictionSlug   String?
+  jurisdictionSlug                    String?
   /// What the determination rested on: engagement facts, contract references,
   /// the factors weighed. Free-shaped because the tests differ by jurisdiction.
-  evidence           Json?
-  rationale          String?              @db.Text
-  determinedAt       DateTime             @default(now())
+  evidence                            Json?
+  rationale                           String?              @db.Text
+  determinedAt                        DateTime             @default(now())
   /// The one record-lifecycle convention (BI-C357FA5A). A determination is
   /// `superseded` when a later one replaces it; the current determination for a
   /// worker is the `active` row with the newest `determinedAt`. No self-link,
   /// because the convention already answers "is this still the one".
-  lifecycle          RecordLifecycle      @default(active)
-  lifecycleAt        DateTime?
-  lifecycleReason    String?
-  createdAt          DateTime             @default(now())
-  updatedAt          DateTime             @updatedAt
+  lifecycle                           RecordLifecycle      @default(active)
+  lifecycleAt                         DateTime?
+  lifecycleReason                     String?
+  createdAt                           DateTime             @default(now())
+  updatedAt                           DateTime             @updatedAt
 
-  employeeProfile    EmployeeProfile      @relation(fields: [employeeProfileId], references: [id], onDelete: Cascade)
-  determinedBy       User                 @relation("ClassificationDeterminedBy", fields: [determinedByUserId], references: [id])
+  employeeProfile EmployeeProfile @relation(fields: [employeeProfileId], references: [id], onDelete: Cascade)
+  determinedBy    User            @relation("ClassificationDeterminedBy", fields: [determinedByUserId], references: [id])
 
   @@index([employeeProfileId, determinedAt(sort: Desc)])
   @@index([classification])
@@ -290,24 +290,24 @@ model WorkerClassificationDetermination {
 /// the drift stays visible and reads as a re-determination trigger rather than a
 /// silent continuation.
 model WorkerEngagementTerm {
-  id                String    @id @default(cuid())
-  workerEngagementTermId            String    @unique
-  employeeProfileId String
-  startsOn          DateTime
+  id                     String          @id @default(cuid())
+  workerEngagementTermId String          @unique
+  employeeProfileId      String
+  startsOn               DateTime
   /// The agreed end. Required - an engagement with no end date is not a term,
   /// and recording one as though it were is how an indefinite engagement hides.
-  endsOn            DateTime
+  endsOn                 DateTime
   /// The one record-lifecycle convention (BI-C357FA5A). An extension marks the
   /// prior term `superseded` and records a new `active` one, so the drift stays
   /// visible. `lifecycleReason` carries why it changed, for the
   /// re-determination trail.
-  lifecycle         RecordLifecycle @default(active)
-  lifecycleAt       DateTime?
-  lifecycleReason   String?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  lifecycle              RecordLifecycle @default(active)
+  lifecycleAt            DateTime?
+  lifecycleReason        String?
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
 
-  employeeProfile   EmployeeProfile @relation(fields: [employeeProfileId], references: [id], onDelete: Cascade)
+  employeeProfile EmployeeProfile @relation(fields: [employeeProfileId], references: [id], onDelete: Cascade)
 
   @@index([employeeProfileId, startsOn(sort: Desc)])
   @@index([endsOn])
@@ -315,11 +315,11 @@ model WorkerEngagementTerm {
 }
 
 model WorkLocation {
-  id           String            @id @default(cuid())
-  locationId   String            @unique
-  name         String
-  locationType String
-  timezone     String?
+  id               String            @id @default(cuid())
+  locationId       String            @unique
+  name             String
+  locationType     String
+  timezone         String?
   /// Which employment jurisdiction governs work done at this location
   /// (BI-9252B9EA). Holds a PROFESSION_JURISDICTIONS slug - the same closed
   /// vocabulary BusinessContext.employsIn already carries - so the value is
@@ -338,13 +338,13 @@ model WorkLocation {
   /// the organisation's first employsIn entry - a guess here produces a
   /// confidently wrong legal answer, which is worse than no answer.
   jurisdictionSlug String?
-  status       String            @default("active")
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
-  addressId    String?
-  employees    EmployeeProfile[]
-  address      Address?          @relation(fields: [addressId], references: [id])
-  requisitions JobRequisition[] // BI-7ACC38CE
+  status           String            @default("active")
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  addressId        String?
+  employees        EmployeeProfile[]
+  address          Address?          @relation(fields: [addressId], references: [id])
+  requisitions     JobRequisition[] // BI-7ACC38CE
 
   @@index([status])
   @@index([addressId])
@@ -1280,13 +1280,13 @@ model PipelineStage {
 }
 
 model Application {
-  id                  String    @id @default(cuid())
-  applicationId       String    @unique
-  candidateId         String
-  requisitionId       String?
-  status              String    @default("active") // active|rejected|hired|withdrawn|converted
-  currentStageId      String?
-  sourceId            String?
+  id                          String    @id @default(cuid())
+  applicationId               String    @unique
+  candidateId                 String
+  requisitionId               String?
+  status                      String    @default("active") // active|rejected|hired|withdrawn|converted
+  currentStageId              String?
+  sourceId                    String?
   /// WHO referred this candidate (BI-D78DC392), distinct from sourceId, which
   /// records the CATEGORY the application came through ("referral", "job board").
   /// A category cannot be excluded from an approval chain; a person can.
@@ -1302,11 +1302,11 @@ model Application {
   /// the adverse impact that rail exists to measure - so the relationship must
   /// never become a scoring input, and must not share a foreign key with one.
   referredByEmployeeProfileId String?
-  dispositionReasonId String?
-  appliedAt           DateTime?
-  rejectedAt          DateTime?
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  dispositionReasonId         String?
+  appliedAt                   DateTime?
+  rejectedAt                  DateTime?
+  createdAt                   DateTime  @default(now())
+  updatedAt                   DateTime  @updatedAt
 
   candidate            Candidate             @relation(fields: [candidateId], references: [id], onDelete: Cascade)
   requisition          JobRequisition?       @relation(fields: [requisitionId], references: [id], onDelete: SetNull)
@@ -1624,13 +1624,13 @@ model Trip {
   createdAt            DateTime               @default(now())
   updatedAt            DateTime               @updatedAt
 
-  organization       Organization           @relation("TripOrganization", fields: [organizationId], references: [id], onDelete: Restrict)
-  employeeProfile    EmployeeProfile        @relation("TripDriver", fields: [employeeProfileId], references: [id], onDelete: Cascade)
-  vehicle            Vehicle?               @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  organization       Organization            @relation("TripOrganization", fields: [organizationId], references: [id], onDelete: Restrict)
+  employeeProfile    EmployeeProfile         @relation("TripDriver", fields: [employeeProfileId], references: [id], onDelete: Cascade)
+  vehicle            Vehicle?                @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
   classificationRule TripClassificationRule? @relation(fields: [classificationRuleId], references: [id], onDelete: SetNull)
-  customerAccount    CustomerAccount?       @relation("TripCustomerAccount", fields: [customerAccountId], references: [id], onDelete: SetNull)
-  mileageRate        MileageRate?           @relation("TripMileageRate", fields: [mileageRateId], references: [id], onDelete: Restrict)
-  expenseItem        ExpenseItem?           @relation("TripExpenseItem", fields: [expenseItemId], references: [id], onDelete: SetNull)
+  customerAccount    CustomerAccount?        @relation("TripCustomerAccount", fields: [customerAccountId], references: [id], onDelete: SetNull)
+  mileageRate        MileageRate?            @relation("TripMileageRate", fields: [mileageRateId], references: [id], onDelete: Restrict)
+  expenseItem        ExpenseItem?            @relation("TripExpenseItem", fields: [expenseItemId], references: [id], onDelete: SetNull)
 
   // FK-leading (employeeProfileId): the driver's own trip list, newest first.
   @@index([employeeProfileId, startedAt])
@@ -1650,20 +1650,20 @@ model Trip {
 /// (repeated route, work hours, commute exclusion) because they differ only in
 /// predicate, not in shape. Scope widens driver -> team -> organization.
 model TripClassificationRule {
-  id                 String                 @id @default(cuid())
-  tripClassificationRuleId             String                 @unique
-  organizationId     String
-  employeeProfileId  String?
-  ruleKind           MileageRuleKind
-  scopeKind          MileageRuleScopeKind
-  resultClassification TripClassificationKind
-  predicate          Json
-  priority           Int                    @default(100)
-  lifecycle          RecordLifecycle        @default(active)
-  lifecycleAt        DateTime?
-  lifecycleReason    String?
-  createdAt          DateTime               @default(now())
-  updatedAt          DateTime               @updatedAt
+  id                       String                 @id @default(cuid())
+  tripClassificationRuleId String                 @unique
+  organizationId           String
+  employeeProfileId        String?
+  ruleKind                 MileageRuleKind
+  scopeKind                MileageRuleScopeKind
+  resultClassification     TripClassificationKind
+  predicate                Json
+  priority                 Int                    @default(100)
+  lifecycle                RecordLifecycle        @default(active)
+  lifecycleAt              DateTime?
+  lifecycleReason          String?
+  createdAt                DateTime               @default(now())
+  updatedAt                DateTime               @updatedAt
 
   organization    Organization     @relation("TripRuleOrganization", fields: [organizationId], references: [id], onDelete: Cascade)
   employeeProfile EmployeeProfile? @relation("TripRuleDriver", fields: [employeeProfileId], references: [id], onDelete: Cascade)
@@ -1679,17 +1679,17 @@ model TripClassificationRule {
 /// fix may be recorded without a granted row; revocation stops capture and is
 /// retained so the consent history itself is auditable.
 model DriverLocationConsent {
-  id                 String                      @id @default(cuid())
-  driverLocationConsentId          String                      @unique
-  organizationId     String
-  employeeProfileId  String
-  consentStatus      DriverLocationConsentStatus @default(pending)
-  grantedAt          DateTime?
-  revokedAt          DateTime?
-  retentionDays      Int                         @default(365)
-  policyVersion      String
-  createdAt          DateTime                    @default(now())
-  updatedAt          DateTime                    @updatedAt
+  id                      String                      @id @default(cuid())
+  driverLocationConsentId String                      @unique
+  organizationId          String
+  employeeProfileId       String
+  consentStatus           DriverLocationConsentStatus @default(pending)
+  grantedAt               DateTime?
+  revokedAt               DateTime?
+  retentionDays           Int                         @default(365)
+  policyVersion           String
+  createdAt               DateTime                    @default(now())
+  updatedAt               DateTime                    @updatedAt
 
   organization    Organization    @relation("DriverConsentOrganization", fields: [organizationId], references: [id], onDelete: Cascade)
   employeeProfile EmployeeProfile @relation("DriverConsentDriver", fields: [employeeProfileId], references: [id], onDelete: Cascade)

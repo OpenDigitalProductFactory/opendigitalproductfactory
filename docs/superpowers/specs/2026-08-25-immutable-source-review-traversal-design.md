@@ -301,3 +301,30 @@ state and returns the cached terminal result.
 This is an orchestration-liveness correction, not a second evidence or approval
 model. The prior failed attempts remain immutable audit history. Rollback is the
 single eligibility change and its tests; no schema or stored contract changes.
+
+### Approval projection is part of the same replay contract (2026-09-03)
+
+Canonical acceptance replay for BI-BFBF1BBB reached
+`record_initiative_evidence`, persisted proposal execution
+`cmtmgbxya03ke01qisordc4tb`, and created exact-bound envelope
+`cmtmgbxy603kd01qid8kg6261`. The tool result was
+`approval_required`, but the remote executor then overwrote the TaskRun as
+`completed`. After the envelope was approved, identical replay returned that
+cached completion and never executed the writer. The TaskRun therefore held an
+approved, unconsumed exact writer and no objective-mapping receipt.
+
+The executor must treat an `approval_required` result from the bound terminal
+writer as an explicit `input-required` projection even when the lower tool path
+did not mutate TaskRun state. It records the envelope id, clears `completedAt`,
+and returns the existing approval location. For already-persisted historical
+misprojections, replay may recover a `completed` TaskRun only when the current
+request digest matches, the server reconstructs an initiative-review terminal
+policy, an unexpired approved envelope belongs to that same TaskRun and user,
+and its action is the exact bound writer. The existing proposal execution
+remains the sole source of writer arguments. Generic completed tasks and writer
+mismatches remain terminal.
+
+This correction realizes AC-E2B-003 rather than weakening it: approval recovery
+continues to own live proposals, inference is not rerun, stored arguments are
+not synthesized, and the writer still passes through its ordinary authority and
+receipt validators.

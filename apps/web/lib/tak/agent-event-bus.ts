@@ -63,6 +63,7 @@ export type AgentEvent =
   | { type: "async:started"; operationId: string; providerId: string; modelId: string }
   | { type: "async:progress"; operationId: string; progressPct: number; message: string }
   | { type: "async:complete"; operationId: string }
+  | { type: "async:cancelled"; operationId: string }
   | { type: "async:failed"; operationId: string; error: string }
   | { type: "async:expired"; operationId: string }
   // EP-BUILD-ORCHESTRATOR: orchestrator progress events

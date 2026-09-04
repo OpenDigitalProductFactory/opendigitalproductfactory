@@ -150,7 +150,14 @@ export { selectRecipeWithExploration, evaluatePromotions, promoteChallenger } fr
 export { shouldRunGoldenTests } from "./golden-realignment";
 
 // EP-INF-008a: Execution adapter framework
-export type { ExecutionAdapterHandler, AdapterRequest, AdapterResult, ResolvedProvider, ToolCallEntry } from "./adapter-types";
+export type {
+  ExecutionAdapterHandler,
+  AdapterRequest,
+  AdapterResult,
+  AsyncOperationStartResult,
+  ResolvedProvider,
+  ToolCallEntry,
+} from "./adapter-types";
 export { registerExecutionAdapter, getExecutionAdapter } from "./execution-adapter-registry";
 export { chatAdapter } from "./chat-adapter";
 

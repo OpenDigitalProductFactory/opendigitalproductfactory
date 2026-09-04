@@ -8,13 +8,12 @@
  * Does NOT wait for completion — the caller polls via pollAsyncOperation().
  *
  * Currently supports:
- *   1. Google Gemini — startInteraction / operations polling
+ *   1. Google Gemini — Interactions API create/get
  */
 
 import type { AdapterRequest, AdapterResult, ExecutionAdapterHandler } from "./adapter-types";
 import { InferenceError, classifyHttpError } from "@/lib/ai-inference";
 import { registerExecutionAdapter } from "./execution-adapter-registry";
-import { resolveOpenAiCompatibleApiBase } from "./openai-base";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -31,39 +30,50 @@ function extractPrompt(request: AdapterRequest): string {
   return request.systemPrompt || "Research this topic";
 }
 
+function isManagedInteractionsAgent(modelId: string): boolean {
+  // Antigravity interactions additionally require a remote environment. Keep
+  // this slice limited to the configured Deep Research agent family rather
+  // than dispatching an incomplete Antigravity request.
+  return modelId.startsWith("deep-research-");
+}
+
+function normalizeInteractionsBaseUrl(baseUrl: string): string {
+  return baseUrl.replace(/\/+$/, "");
+}
+
 // ── Async Adapter ───────────────────────────────────────────────────────────
 
 export const asyncAdapter: ExecutionAdapterHandler = {
   type: "async",
 
   async execute(request: AdapterRequest): Promise<AdapterResult> {
-    const { providerId, modelId, plan, provider } = request;
+    const { providerId, modelId, provider } = request;
     const { baseUrl, headers } = provider;
     const prompt = extractPrompt(request);
-    const settings = plan.providerSettings ?? {};
-
-    let url: string;
-    let body: Record<string, unknown>;
-
-    if (providerId === "gemini") {
-      // ── Google Interactions API (Deep Research) ─────────────────────
-      url = `${baseUrl}/models/${modelId}:startInteraction`;
-      body = {
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        ...(settings.config ? { config: settings.config } : {}),
-      };
-    } else {
-      // ── Generic async start — future providers ─────────────────────
-      // Fallback: try standard endpoint with async flag
-      const apiBase = resolveOpenAiCompatibleApiBase(baseUrl);
-      url = `${apiBase}/chat/completions`;
-      body = {
-        model: modelId,
-        messages: [{ role: "user", content: prompt }],
-        stream: false,
-        ...(settings.async_mode ? { async_mode: settings.async_mode } : {}),
-      };
+    if (providerId !== "gemini") {
+      throw new InferenceError(
+        `Provider ${providerId} does not support the async execution adapter`,
+        "provider_error",
+        providerId,
+      );
     }
+
+    // ── Google Interactions API (models and managed agents) ───────────
+    // The returned Interaction.id is an opaque poll handle. It is not a
+    // Google long-running-operation name and must never be interpreted as a
+    // URL by the poller.
+    const url = `${normalizeInteractionsBaseUrl(baseUrl)}/interactions`;
+    const modelOrAgent = isManagedInteractionsAgent(modelId)
+      ? { agent: modelId }
+      : { model: modelId.replace(/^models\//, "") };
+    const body: Record<string, unknown> = {
+      ...modelOrAgent,
+      input: prompt,
+      ...(request.systemPrompt.trim().length > 0
+        ? { system_instruction: request.systemPrompt }
+        : {}),
+      background: true,
+    };
 
     // ── Dispatch start request ────────────────────────────────────────
     const startMs = Date.now();
@@ -94,13 +104,36 @@ export const asyncAdapter: ExecutionAdapterHandler = {
     // ── Extract operation ID ──────────────────────────────────────────
     let operationId: string | null = null;
 
-    if (providerId === "gemini") {
-      // Google LRO pattern: { name: "operations/{id}", done: false }
-      operationId = typeof data.name === "string" ? data.name : null;
-    } else {
-      // Generic: look for id or operation_id
-      operationId = (data.id ?? data.operation_id ?? null) as string | null;
+    // Interactions API pattern: { id, object: "interaction", status }. Require
+    // the resource discriminator and a documented status so a generic response
+    // ID can never become durable polling authority.
+    const nonterminalInteractionStatuses = new Set([
+      "in_progress",
+      "queued",
+    ]);
+    const terminalInteractionStatuses = new Set([
+      "completed",
+      "failed",
+      "cancelled",
+      "incomplete",
+      "budget_exceeded",
+    ]);
+    const interactionStatus = typeof data.status === "string" ? data.status : null;
+    if ((data.object !== undefined && data.object !== "interaction")
+      || (interactionStatus !== "requires_action"
+        && !nonterminalInteractionStatuses.has(interactionStatus ?? "")
+        && !terminalInteractionStatuses.has(interactionStatus ?? ""))) {
+      throw new InferenceError(
+        `Gemini returned an invalid interaction response`,
+        "provider_error",
+        providerId,
+      );
     }
+    operationId = typeof data.id === "string"
+      && data.id.trim().length > 0
+      && data.id.trim() === data.id
+      ? data.id
+      : null;
 
     if (!operationId) {
       throw new InferenceError(
@@ -115,9 +148,11 @@ export const asyncAdapter: ExecutionAdapterHandler = {
       toolCalls: [],
       usage: { inputTokens: 0, outputTokens: 0 },
       inferenceMs,
+      asyncOperation: {
+        status: "accepted",
+        providerOperationId: operationId,
+      },
       raw: {
-        operationId,
-        asyncStatus: "accepted",
         providerResponse: data,
       },
     };
