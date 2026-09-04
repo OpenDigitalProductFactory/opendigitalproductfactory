@@ -44,6 +44,25 @@ people, care scheduling, recurring work, and AI-coworker substrate. The gap is
 that those generic capabilities are not yet composed into the rescue operator's
 intake-to-placement work.
 
+The governing architecture contract is:
+
+- **Topology:** the existing DPF modular monolith—one Next.js application and
+  one PostgreSQL database per install; no distributed services.
+- **Boundaries:** custody, Resource capacity, care, recurring work, adoption,
+  finance, and storefront keep ownership; versioned in-process TypeScript
+  commands and transaction/outbox projections are the only integration paths.
+- **Security:** authenticated server context supplies organization and explicit
+  capability; every repository repeats organization scope; applicant,
+  volunteer, foster, clinical, legal-hold, donor, and finance PII is split into
+  least-privilege projections; consequential actions remain human-approved.
+- **Reporting:** the workspace uses bounded, indexed operational read models
+  with per-source availability and `asOf`; it does not run an unbounded
+  warehouse-style query on the transaction path. A replica or warehouse is a
+  later cross-install analytics decision, not an undeclared dependency.
+- **Operations:** structured PII-redacted logs, metrics, and trace correlation
+  cover commands, transactions, projections, authorization denials, and Help
+  fallback behavior.
+
 This PR adds no second application, deployment, identity store, workflow engine,
 ledger, scheduler, design system, MongoDB datastore, message broker, or
 geospatial/location-tracking subsystem. It uses the existing PostgreSQL database
