@@ -23,6 +23,10 @@ status: active
   through two same-SHA freezes, conservative merge, focused checks, and protected
   merge.
 - Verification: `AC-1` through `AC-7`.
+- Calibration evidence: protected runs `33842857763` and `33843669436` at the
+  same SHA both produced the exact 686-word tax record. The whole-file merge
+  refusal for five unrelated nondeterministic routes is retained; only the
+  reproducible affected row is eligible for this atomic patch.
 - Dependencies: none.
 - Independently shippable: no. Both halves are required to restore the gate and
   prevent the same drift from being introduced again.

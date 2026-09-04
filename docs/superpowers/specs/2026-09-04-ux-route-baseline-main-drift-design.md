@@ -60,6 +60,14 @@ The baseline repair is evidence-derived: dispatch two independent
 canonical reproducibility tool, and splice only reproducible affected rows. A
 non-reproducing route is never frozen from one observation.
 
+The two protected calibration runs are `33842857763` and `33843669436`, both at
+`3345e08acbfee8cb03df8e339b376ac9e6e5d3e2`. Their complete tax-route records
+are byte-for-byte identical at 686 default-visible words. The canonical
+whole-file merge correctly refused five unrelated nondeterministic route rows;
+that refusal is preserved as evidence and does not authorize changing them.
+The repair therefore applies the canonical merge rule at the affected-row
+boundary and splices only the independently reproducible tax record.
+
 ## Ordered fix sequence
 
 1. Preserve the exact protected reports and reproduce the missing visible-copy

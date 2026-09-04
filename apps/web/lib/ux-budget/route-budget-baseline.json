@@ -1158,7 +1158,7 @@
       "ariaSnapshot": "- link\n- banner\n  - link\n    - text\n    - paragraph\n      - text\n  - link\n  - button\n  - text\n  - button\n- complementary\n  - navigation\n    - group\n      - button\n      - button [pressed]\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n- main\n  - navigation\n    - link\n    - text\n  - link\n  - text\n  - link\n  - text\n  - heading [level=1]\n  - paragraph\n    - text\n  - link\n  - paragraph\n    - text\n  - link\n  - heading [level=2]\n  - text\n  - button\n  - text\n  - combobox\n    - option\n    - option [selected]\n    - option\n  - button\n  - complementary\n    - paragraph\n      - text"
     },
     "/finance/settings/tax": {
-      "defaultVisibleWords": 684,
+      "defaultVisibleWords": 686,
       "leadBandWords": 0,
       "primaryActions": 3,
       "visibleFields": 17,
