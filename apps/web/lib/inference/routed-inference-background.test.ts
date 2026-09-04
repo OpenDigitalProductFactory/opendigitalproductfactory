@@ -354,4 +354,30 @@ describe("routeAndCall background starts", () => {
     expect(mocks.callWithFallbackChain).toHaveBeenCalledOnce();
     expect(mocks.admitDurableAsyncOperation).not.toHaveBeenCalled();
   });
+
+  it("never lets a durable-authority request fall through to direct background dispatch", async () => {
+    const selected = await mocks.routeEndpointV2();
+    mocks.routeEndpointV2.mockResolvedValueOnce({
+      ...selected,
+      executionPlan: {
+        ...selected.executionPlan,
+        executionAdapter: "chat",
+      },
+    });
+
+    await expect(routeAndCall(
+      [{ role: "user", content: "Research this topic." }],
+      "You research.",
+      "internal",
+      {
+        taskType: "research",
+        interactionMode: "background",
+        persistDecision: false,
+        durableAsyncOperation: durableAuthority,
+      },
+    )).rejects.toThrow("ASYNC_OPERATION_EXECUTION_PLAN_REQUIRED");
+
+    expect(mocks.callWithFallbackChain).not.toHaveBeenCalled();
+    expect(mocks.admitDurableAsyncOperation).not.toHaveBeenCalled();
+  });
 });

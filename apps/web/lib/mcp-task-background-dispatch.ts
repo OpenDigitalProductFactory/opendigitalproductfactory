@@ -6,6 +6,11 @@ import {
   sendMcpTaskRunExecutionEvent,
 } from "@/lib/queue/mcp-task-run-events";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import {
+  DURABLE_INFERENCE_TASK_RECIPE_ID,
+  parseDurableInferenceProgress,
+  parseDurableInferenceTaskMetadata,
+} from "./mcp-task-durable-inference-contract";
 import { mcpTaskNotificationBus } from "./mcp-task-notification-bus";
 
 export { REMOTE_TASK_EXECUTION_EVENT };
@@ -148,18 +153,51 @@ const MAX_DISPATCH_ATTEMPTS = 5;
 export async function reconcilePersistedRemoteTaskDispatches(input?: {
   now?: Date;
   limit?: number;
+  includeOrdinary?: boolean;
 }): Promise<{ scanned: number; enqueued: number; exhausted: number; raced: number }> {
   const now = input?.now ?? new Date();
   const cutoff = new Date(now.getTime() - DISPATCH_STALE_MS);
+  const durableSubmitted: Prisma.TaskRunWhereInput = {
+    status: "submitted",
+    a2aMetadata: {
+      path: ["durableInference", "recipeId"],
+      equals: DURABLE_INFERENCE_TASK_RECIPE_ID,
+    },
+  };
+  const durableAdmitting: Prisma.TaskRunWhereInput = {
+    status: { in: ["working", "quiescing"] },
+    a2aMetadata: {
+      path: ["durableInference", "recipeId"],
+      equals: DURABLE_INFERENCE_TASK_RECIPE_ID,
+    },
+    progressPayload: {
+      path: ["durableInference", "state"],
+      equals: "admitting",
+    },
+  };
+  const ordinarySubmitted: Prisma.TaskRunWhereInput = {
+    status: "submitted",
+    a2aMetadata: { path: ["trigger"], equals: "external-mcp" },
+  };
   const rows = await prisma.taskRun.findMany({
     where: {
-      status: "submitted",
       updatedAt: { lt: cutoff },
-      a2aMetadata: { path: ["trigger"], equals: "external-mcp" },
+      OR: [
+        durableSubmitted,
+        durableAdmitting,
+        ...(input?.includeOrdinary === false ? [] : [ordinarySubmitted]),
+      ],
     },
     orderBy: { updatedAt: "asc" },
     take: Math.min(Math.max(input?.limit ?? 25, 1), 100),
-    select: { taskRunId: true, updatedAt: true, progressPayload: true, a2aMetadata: true },
+    select: {
+      id: true,
+      taskRunId: true,
+      status: true,
+      updatedAt: true,
+      progressPayload: true,
+      a2aMetadata: true,
+    },
   });
 
   let enqueued = 0;
@@ -167,12 +205,38 @@ export async function reconcilePersistedRemoteTaskDispatches(input?: {
   let raced = 0;
   for (const row of rows) {
     const progress = record(row.progressPayload) ?? {};
+    const metadata = record(row.a2aMetadata);
+    const durableMetadata = parseDurableInferenceTaskMetadata(metadata?.["durableInference"]);
+    const durableProgress = parseDurableInferenceProgress(progress["durableInference"]);
+    const isDurableCandidate = Boolean(
+      durableMetadata
+      && (row.status === "submitted"
+        || (["working", "quiescing"].includes(row.status)
+          && durableProgress?.state === "admitting")),
+    );
+    const isOrdinaryCandidate = input?.includeOrdinary !== false
+      && row.status === "submitted"
+      && metadata?.["trigger"] === "external-mcp";
+    if (!isDurableCandidate && !isOrdinaryCandidate) {
+      raced += 1;
+      continue;
+    }
     const previous = priorDispatch(row.progressPayload);
     const previousAttempt = Number.isInteger(previous.attempt) ? Number(previous.attempt) : 0;
     const attempt = previousAttempt + 1;
     if (attempt > MAX_DISPATCH_ATTEMPTS) {
+      if (isDurableCandidate && row.status !== "submitted") {
+        const operationExists = await prisma.asyncInferenceOp.findFirst({
+          where: { taskRunId: row.id, identityVersion: 1 },
+          select: { id: true },
+        });
+        if (operationExists) {
+          raced += 1;
+          continue;
+        }
+      }
       const settled = await prisma.taskRun.updateMany({
-        where: { taskRunId: row.taskRunId, status: "submitted", updatedAt: row.updatedAt },
+        where: { taskRunId: row.taskRunId, status: row.status, updatedAt: row.updatedAt },
         data: {
           status: "failed",
           completedAt: now,
@@ -213,7 +277,7 @@ export async function reconcilePersistedRemoteTaskDispatches(input?: {
       requestedAt: now.toISOString(),
     };
     const reserved = await prisma.taskRun.updateMany({
-      where: { taskRunId: row.taskRunId, status: "submitted", updatedAt: row.updatedAt },
+      where: { taskRunId: row.taskRunId, status: row.status, updatedAt: row.updatedAt },
       data: {
         progressPayload: { ...progress, dispatch: pending } as Prisma.InputJsonValue,
       },
@@ -226,7 +290,7 @@ export async function reconcilePersistedRemoteTaskDispatches(input?: {
     try {
       await sendDispatchEvent(row.taskRunId, eventId);
       await prisma.taskRun.updateMany({
-        where: { taskRunId: row.taskRunId, status: "submitted" },
+        where: { taskRunId: row.taskRunId, status: row.status },
         data: {
           progressPayload: {
             ...progress,
@@ -237,7 +301,7 @@ export async function reconcilePersistedRemoteTaskDispatches(input?: {
       enqueued += 1;
     } catch (error) {
       await prisma.taskRun.updateMany({
-        where: { taskRunId: row.taskRunId, status: "submitted" },
+        where: { taskRunId: row.taskRunId, status: row.status },
         data: {
           progressPayload: {
             ...progress,

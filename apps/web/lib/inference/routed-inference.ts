@@ -607,6 +607,12 @@ async function routeAndCallAttempt(
     && options?.interactionMode !== "background") {
     throw new Error("ASYNC_OPERATION_BACKGROUND_REQUIRED");
   }
+  // Supplying durable authority is an explicit at-most-once provider boundary,
+  // not a hint. A missing/mis-seeded async recipe must fail before the generic
+  // background branch can call a provider directly and discard its handle.
+  if (options?.durableAsyncOperation && !routeUsesDurableAsyncAdapter(decision)) {
+    throw new Error("ASYNC_OPERATION_EXECUTION_PLAN_REQUIRED");
+  }
   if (options?.interactionMode === "background") {
     if (routeUsesDurableAsyncAdapter(decision)) {
       const admitted = await admitRoutedAsyncOperation({

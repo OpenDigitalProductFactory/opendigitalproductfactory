@@ -3,10 +3,19 @@ import type { Prisma } from "@dpf/db";
 import { agentEventBus } from "@/lib/tak/agent-event-bus";
 import type { TaskState } from "@/lib/tak/task-states";
 import { MCP_TASK_SELECT } from "@/lib/mcp/tasks-lifecycle";
-import { reserveSubmittedTaskRunWorking } from "@/lib/observability/heartbeat";
+import {
+  reserveSubmittedTaskRunWorking,
+  reserveTaskRunGenerationWorking,
+} from "@/lib/observability/heartbeat";
 import { ok, type ActionSuccess } from "@/lib/shared/action-result";
 import { mcpTaskNotificationBus } from "./mcp-task-notification-bus";
 import { remoteTaskRequestDigest } from "./mcp-task-capacity-contract";
+import {
+  DURABLE_INFERENCE_TASK_RECIPE_ID,
+  parseDurableInferenceProgress,
+  parseDurableInferenceTaskMetadata,
+} from "./mcp-task-durable-inference-contract";
+import { admitDurableInferenceTask } from "./mcp-task-durable-inference-runtime";
 import { parseInitiativeReviewBinding } from "./mcp-task-review-contract";
 import { executeRemoteTaskAttempt } from "./mcp-task-execution";
 import type {
@@ -100,6 +109,9 @@ function taskState(value: unknown): TaskState {
   }
 }
 
+const DURABLE_TASK_WORKING_STATUS = "working" as const;
+const DURABLE_RECOVERABLE_ADMISSION_STATES = new Set(["working", "quiescing"]);
+
 async function publishMcpTaskStatus(taskRunId: string, apiTokenId: string): Promise<void> {
   const task = await prisma.taskRun.findUnique({
     where: { taskRunId },
@@ -165,6 +177,24 @@ export function reconstructPersistedRemoteTask(
       message: "Persisted initiative review binding is invalid.",
     };
   }
+  const rawDurableInference = metadata?.["durableInference"];
+  const durableInference = rawDurableInference === undefined
+    ? null
+    : parseDurableInferenceTaskMetadata(rawDurableInference);
+  if (rawDurableInference !== undefined && !durableInference) {
+    return {
+      ok: false,
+      code: "persisted_request_invalid",
+      message: "Persisted durable inference recipe binding is invalid.",
+    };
+  }
+  if (durableInference && (riskClass !== "read" || initiativeReviewBinding)) {
+    return {
+      ok: false,
+      code: "persisted_request_invalid",
+      message: "Persisted durable inference authorization is outside the closed read-only mode.",
+    };
+  }
   const requestedThreadId = string(metadata?.["requestedThreadId"]);
   const collaboration = string(metadata?.["collaborationKind"]);
   const collaborationKind = collaboration === "handoff" || collaboration === "summon"
@@ -182,6 +212,7 @@ export function reconstructPersistedRemoteTask(
     authorityScope,
     ...(collaborationKind ? { collaborationKind } : {}),
     ...(initiativeReviewBinding ? { initiativeReviewBinding } : {}),
+    ...(durableInference ? { recipeId: durableInference.recipeId } : {}),
   };
 
   if (remoteTaskRequestDigest(parsed) !== requestDigest) {
@@ -308,18 +339,90 @@ export async function executePersistedRemoteTask(input: {
   const progress = record(row.progressPayload) ?? {};
   const dispatch = record(progress["dispatch"]) ?? {};
   const claimedAt = new Date();
-  const claimed = await reserveSubmittedTaskRunWorking({
-    taskRunId: row.taskRunId,
-    updatedAt: row.updatedAt,
-    progressPayload: {
-      ...progress,
-      dispatch: {
-        ...dispatch,
-        state: "claimed",
-        claimedAt: claimedAt.toISOString(),
+  const durableRecipeId = reconstructed.data.parsed.recipeId;
+  const existingDurableProgress = parseDurableInferenceProgress(progress["durableInference"]);
+  if (
+    durableRecipeId
+    && DURABLE_RECOVERABLE_ADMISSION_STATES.has(row.status)
+    && existingDurableProgress?.state === "admitting"
+    && existingDurableProgress.cancellationRequestedAt
+  ) {
+    const canceledAt = new Date();
+    const canceled = await prisma.taskRun.updateMany({
+      where: {
+        taskRunId: row.taskRunId,
+        status: row.status,
+        updatedAt: row.updatedAt,
       },
-    } as Prisma.InputJsonValue,
-  });
+      data: {
+        status: "canceled",
+        completedAt: canceledAt,
+        lastHeartbeatAt: canceledAt,
+        progressPayload: {
+          ...progress,
+          durableInference: {
+            ...existingDurableProgress,
+            state: "cancelled-before-admission",
+            canceledAt: canceledAt.toISOString(),
+          },
+        } as Prisma.InputJsonValue,
+      },
+    });
+    if (canceled.count === 1) {
+      await publishMcpTaskStatus(row.taskRunId, reconstructed.data.token.tokenId);
+      return { status: "canceled", taskRunId: row.taskRunId };
+    }
+    return { status: "duplicate", taskRunId: row.taskRunId };
+  }
+  if (
+    durableRecipeId
+    && DURABLE_RECOVERABLE_ADMISSION_STATES.has(row.status)
+    && existingDurableProgress?.state === "admitted"
+    && existingDurableProgress.asyncOperationId
+  ) {
+    return {
+      status: row.status,
+      taskRunId: row.taskRunId,
+      asyncOperationId: existingDurableProgress.asyncOperationId,
+      idempotentReplay: true,
+    };
+  }
+  const durableAttempt = durableRecipeId
+    ? (existingDurableProgress?.attempt ?? 0) + 1
+    : null;
+  const claimedProgressObject = {
+    ...progress,
+    dispatch: {
+      ...dispatch,
+      state: "claimed",
+      claimedAt: claimedAt.toISOString(),
+    },
+    ...(durableRecipeId ? {
+      durableInference: {
+        schemaVersion: 1,
+        recipeId: durableRecipeId,
+        state: "admitting",
+        attempt: durableAttempt,
+      },
+    } : {}),
+  };
+  const claimedProgress = claimedProgressObject as Prisma.InputJsonValue;
+  const claimed = row.status === "submitted"
+    ? await reserveSubmittedTaskRunWorking({
+        taskRunId: row.taskRunId,
+        updatedAt: row.updatedAt,
+        progressPayload: claimedProgress,
+      })
+    : durableRecipeId
+        && DURABLE_RECOVERABLE_ADMISSION_STATES.has(row.status)
+        && existingDurableProgress?.state === "admitting"
+      ? await reserveTaskRunGenerationWorking({
+          taskRunId: row.taskRunId,
+          expectedStatus: row.status,
+          updatedAt: row.updatedAt,
+          progressPayload: claimedProgress,
+        })
+      : false;
   if (!claimed) {
     return { status: "duplicate", taskRunId: row.taskRunId };
   }
@@ -332,6 +435,53 @@ export async function executePersistedRemoteTask(input: {
     sourceEvent: "mcp/task-run.execute",
   });
   await publishMcpTaskStatus(row.taskRunId, reconstructed.data.token.tokenId);
+
+  if (durableRecipeId) {
+    const admitted = await admitDurableInferenceTask({
+      taskRunId: row.taskRunId,
+      requestKey: reconstructed.data.parsed.idempotencyKey,
+      requestDigest: remoteTaskRequestDigest(reconstructed.data.parsed),
+      prompt: reconstructed.data.parsed.prompt,
+      userId: reconstructed.data.token.userId,
+      agentId: reconstructed.data.parsed.agentId,
+      threadId: reconstructed.data.threadId,
+      routeContext: reconstructed.data.parsed.routeContext,
+      recipeId: durableRecipeId,
+    });
+    const persisted = await prisma.taskRun.updateMany({
+      where: { taskRunId: row.taskRunId, status: DURABLE_TASK_WORKING_STATUS },
+      data: {
+        completedAt: null,
+        lastHeartbeatAt: new Date(),
+        progressPayload: {
+          ...progress,
+          dispatch: claimedProgressObject.dispatch,
+          durableInference: {
+            schemaVersion: 1,
+            recipeId: durableRecipeId,
+            state: "admitted",
+            attempt: durableAttempt,
+            asyncOperationId: admitted.asyncOperationId,
+            routingRecipeId: admitted.recipeId,
+            admittedAt: new Date().toISOString(),
+          },
+        } as Prisma.InputJsonValue,
+      },
+    });
+    if (persisted.count !== 1) {
+      return {
+        status: "duplicate",
+        taskRunId: row.taskRunId,
+        asyncOperationId: admitted.asyncOperationId,
+      };
+    }
+    await publishMcpTaskStatus(row.taskRunId, reconstructed.data.token.tokenId);
+    return {
+      status: DURABLE_TASK_WORKING_STATUS,
+      taskRunId: row.taskRunId,
+      asyncOperationId: admitted.asyncOperationId,
+    };
+  }
 
   const outcome = await executeRemoteTaskAttempt({
     ...reconstructed.data,

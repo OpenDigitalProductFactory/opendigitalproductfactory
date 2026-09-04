@@ -135,6 +135,7 @@ import {
   asyncInferenceOperationOutbox,
   asyncInferenceOperationReconciliation,
   asyncInferenceOperationRun,
+  asyncInferenceOperationTaskRunTransition,
 } from "./async-inference-operation";
 
 export const scheduledFunctions = [
@@ -254,6 +255,7 @@ export const eventFunctions = [
   nonprodCapacityAvailable,
   mcpTaskRunExecute,
   asyncInferenceOperationRun,
+  asyncInferenceOperationTaskRunTransition,
 ];
 
 export const allFunctions = [...scheduledFunctions, ...eventFunctions];

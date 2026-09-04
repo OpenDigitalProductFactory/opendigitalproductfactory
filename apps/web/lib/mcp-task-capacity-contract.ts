@@ -71,6 +71,7 @@ export function remoteTaskRequestDigest(parsed: RemoteTaskSubmitParams): string 
     ...(parsed.initiativeReviewBinding
       ? { initiativeReviewBinding: parsed.initiativeReviewBinding }
       : {}),
+    ...(parsed.recipeId ? { recipeId: parsed.recipeId } : {}),
   };
   return createHash("sha256").update(JSON.stringify(packet)).digest("hex");
 }

@@ -45,7 +45,7 @@ import {
   terminalWriterEscalationStructuredContent,
   terminalWriterEscalationWaitReason,
 } from "./mcp-task-terminal-writer-escalation";
-
+import { durableInferenceTaskMetadata, parseDurableInferenceTaskRecipeId, type DurableInferenceTaskRecipeId } from "./mcp-task-durable-inference-contract";
 export {
   parseInitiativeReviewBinding,
   validateInitiativeReviewAuthorityScope,
@@ -87,6 +87,7 @@ export type RemoteTaskSubmitParams = {
   authorityScope?: string[];
   collaborationKind?: "handoff" | "summon";
   initiativeReviewBinding?: InitiativeReviewBinding;
+  recipeId?: DurableInferenceTaskRecipeId;
 };
 
 export type RemoteTaskSubmitAuth = {
@@ -116,15 +117,16 @@ export function parseRemoteTaskSubmitParams(params: Record<string, unknown> | un
   const prompt = optionalString(params["prompt"]);
   const idempotencyKey = optionalString(params["idempotencyKey"]);
   const riskClass = optionalString(params["riskClass"]);
-
+  const durableRecipe = parseDurableInferenceTaskRecipeId(params["recipeId"]);
   if (!agentId) return "tasks/submit requires params.agentId (string)";
   if (!routeContext) return "tasks/submit requires params.routeContext (string)";
   if (!objective) return "tasks/submit requires params.objective (string)";
   if (!prompt) return "tasks/submit requires params.prompt (string)";
   if (!idempotencyKey) return "tasks/submit requires params.idempotencyKey (string)";
-  if (!riskClass || !REMOTE_RISK_CLASSES.includes(riskClass as RemoteRiskClass)) {
-    return `tasks/submit requires params.riskClass (${REMOTE_RISK_CLASSES.join(" | ")})`;
-  }
+  if (!riskClass || !REMOTE_RISK_CLASSES.includes(riskClass as RemoteRiskClass)) return `tasks/submit requires params.riskClass (${REMOTE_RISK_CLASSES.join(" | ")})`;
+  if (!durableRecipe.ok) return durableRecipe.error;
+  const durableRecipeId = durableRecipe.data.recipeId;
+  if (durableRecipeId && riskClass !== "read") return "tasks/submit durable-inference recipe requires params.riskClass read";
 
   const authorityScope = Array.isArray(params["authorityScope"])
     ? params["authorityScope"].filter((value): value is string => typeof value === "string" && value.trim().length > 0)
@@ -132,9 +134,8 @@ export function parseRemoteTaskSubmitParams(params: Record<string, unknown> | un
   const initiativeReviewBinding = params["initiativeReviewBinding"] === undefined
     ? undefined
     : parseInitiativeReviewBinding(params["initiativeReviewBinding"]);
-  if (params["initiativeReviewBinding"] !== undefined && !initiativeReviewBinding) {
-    return "tasks/submit requires a valid immutable initiativeReviewBinding";
-  }
+  if (params["initiativeReviewBinding"] !== undefined && !initiativeReviewBinding) return "tasks/submit requires a valid immutable initiativeReviewBinding";
+  if (durableRecipeId && (initiativeReviewBinding || (authorityScope?.length ?? 0) > 0)) return "tasks/submit durable-inference recipe does not accept tool authority or initiative review bindings";
   if (initiativeReviewBinding) {
     const scopeError = validateInitiativeReviewAuthorityScope(initiativeReviewBinding, authorityScope);
     if (scopeError) return `tasks/submit ${scopeError}`;
@@ -154,6 +155,7 @@ export function parseRemoteTaskSubmitParams(params: Record<string, unknown> | un
     collaborationKind: params["collaborationKind"] === "handoff" || params["collaborationKind"] === "summon"
       ? params["collaborationKind"]
       : undefined,
+    ...(durableRecipeId ? { recipeId: durableRecipeId } : {}),
   };
 }
 
@@ -729,6 +731,7 @@ export async function submitRemoteCoworkerTask(input: {
         requestedAgentId: parsed.agentId,
         requestedThreadId: parsed.threadId ?? null,
         initiativeReviewBinding: parsed.initiativeReviewBinding ?? null,
+        ...(parsed.recipeId ? { durableInference: durableInferenceTaskMetadata(parsed.recipeId) } : {}),
       },
     });
   } catch (error) {
@@ -779,7 +782,7 @@ export async function submitRemoteCoworkerTask(input: {
     };
   }
 
-  if (externalMcpTaskAsyncEnabled()) {
+  if (parsed.recipeId || externalMcpTaskAsyncEnabled()) {
     return { kind: "result", result: await enqueuePersistedRemoteTaskSubmission(run.taskRunId) };
   }
 

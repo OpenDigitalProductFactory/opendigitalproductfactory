@@ -6,6 +6,7 @@ const runtime = vi.hoisted(() => ({
   reconcile: vi.fn(),
   publish: vi.fn(),
 }));
+const taskTransition = vi.hoisted(() => ({ settle: vi.fn() }));
 const quiescence = vi.hoisted(() => ({
   between: vi.fn(),
   atEntry: vi.fn(),
@@ -19,6 +20,9 @@ vi.mock("@/lib/inference/async-operation-runtime", () => ({
   reconcilePrismaAsyncOperationWakes: (...args: unknown[]) => runtime.reconcile(...args),
   publishPrismaAsyncOperationTransitions: (...args: unknown[]) => runtime.publish(...args),
 }));
+vi.mock("@/lib/mcp-task-durable-inference-transition", () => ({
+  settleDurableInferenceTaskTransition: (...args: unknown[]) => taskTransition.settle(...args),
+}));
 vi.mock("../quiescence-gates", () => ({
   gateBetweenSteps: (...args: unknown[]) => quiescence.between(...args),
   gateAtEntry: (...args: unknown[]) => quiescence.atEntry(...args),
@@ -31,6 +35,7 @@ beforeEach(() => {
   runtime.runWake.mockResolvedValue({ status: "running", disposition: "progress" });
   runtime.reconcile.mockResolvedValue({ inspected: 1, enqueued: 1 });
   runtime.publish.mockResolvedValue({ delivered: 1 });
+  taskTransition.settle.mockResolvedValue({ status: "completed", taskRunId: "TR-1", settled: true });
   quiescence.between.mockResolvedValue({ resumedAfterWait: false });
   quiescence.atEntry.mockResolvedValue({ proceed: true });
 });
@@ -144,6 +149,56 @@ describe("durable async inference Inngest ownership", () => {
     });
     await registered.handler({ step });
     expect(runtime.publish).toHaveBeenCalledWith({ limit: 50 });
+  });
+
+  it("settles a bound MCP TaskRun from the transition event through its scoped consumer", async () => {
+    vi.resetModules();
+    const module = await import("./async-inference-operation");
+    const registered = module.asyncInferenceOperationTaskRunTransition as unknown as {
+      config: Record<string, unknown>;
+      handler(input: {
+        event: { data: { operationId: string; sequence: number; status: string } };
+        step: Step;
+      }): Promise<unknown>;
+    };
+
+    expect(registered.config).toMatchObject({
+      id: "mcp/task-run-durable-inference-transition",
+      triggers: [{ event: "inference/async-operation.transitioned" }],
+      concurrency: [{ key: "event.data.operationId", limit: 1 }],
+    });
+    await registered.handler({
+      event: { data: { operationId: "op-1", sequence: 3, status: "completed" } },
+      step,
+    });
+    expect(taskTransition.settle).toHaveBeenCalledWith({
+      operationId: "op-1",
+      sequence: 3,
+      status: "completed",
+    });
+  });
+
+  it("does not settle a TaskRun while the transition consumer remains quiesced", async () => {
+    quiescence.between.mockResolvedValueOnce({
+      resumedAfterWait: false,
+      reason: "timed-out-waiting-for-cleared",
+    });
+    vi.resetModules();
+    const module = await import("./async-inference-operation");
+    const registered = module.asyncInferenceOperationTaskRunTransition as unknown as {
+      handler(input: {
+        event: { data: { operationId: string; sequence: number; status: string } };
+        step: Step;
+      }): Promise<unknown>;
+    };
+
+    await expect(registered.handler({
+      event: { data: { operationId: "op-1", sequence: 3, status: "completed" } },
+      step,
+    })).rejects.toThrow(
+      "Durable TaskRun transition remained quiesced: timed-out-waiting-for-cleared",
+    );
+    expect(taskTransition.settle).not.toHaveBeenCalled();
   });
 
   it("keeps durable rows intact while the worker and wake recovery are disabled", async () => {
