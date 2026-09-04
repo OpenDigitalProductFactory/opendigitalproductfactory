@@ -41,6 +41,18 @@ not shorten that window or infer its result.
 |---|---|---|---|---|
 | Phase 1 adversarial control-plane fixture pack and minimal owning corrections | OBJ-FEAF-BINDING; OBJ-FEAF-LIVENESS; OBJ-FEAF-EVENTS; OBJ-FEAF-RESUME; OBJ-FEAF-BASELINE; AC-FEAF-001..008 | BI-7C1F43E3 | merged pilot PR #5029 and classification repair PR #5035 | No — partial coverage cannot establish concurrency readiness |
 
+The atomic deliverable has four-way traceability:
+
+- Requirements: OBJ-FEAF-BINDING; OBJ-FEAF-LIVENESS; OBJ-FEAF-EVENTS;
+  OBJ-FEAF-RESUME; OBJ-FEAF-BASELINE.
+- Contracts: CT-FEAF-BINDING-OWNERSHIP; CT-FEAF-LIVENESS-PRECEDENCE;
+  CT-FEAF-EVENT-FAIRNESS; CT-FEAF-CURSOR-CONTINUITY;
+  CT-FEAF-RESUME-BOUND; CT-FEAF-BASELINE-TRUTH.
+- Flows: FLOW-FEAF-PHASE-1; FLOW-FEAF-PHASE-2; FLOW-FEAF-PHASE-3;
+  FLOW-FEAF-PHASE-4; FLOW-FEAF-PHASE-5.
+- Verification: AC-FEAF-001; AC-FEAF-002; AC-FEAF-003; AC-FEAF-004;
+  AC-FEAF-005; AC-FEAF-006; AC-FEAF-007; AC-FEAF-008.
+
 Downstream `BI-69803ACC` consumes the deterministic baseline but does not own or block
 this implementation. The later BIs remain dependency-ordered exactly as the local-first
 design specifies; this branch does not absorb their product work.
