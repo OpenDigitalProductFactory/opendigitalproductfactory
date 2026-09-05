@@ -9,6 +9,7 @@ const {
   mockConfirm,
   mockDownload,
   mockImport,
+  mockIssue,
   mockQueue,
   mockStatus,
 } = vi.hoisted(() => ({
@@ -17,6 +18,7 @@ const {
   mockConfirm: vi.fn(),
   mockDownload: vi.fn(),
   mockImport: vi.fn(),
+  mockIssue: vi.fn(),
   mockQueue: vi.fn(),
   mockStatus: vi.fn(),
 }));
@@ -28,6 +30,7 @@ vi.mock("@/lib/actions/organization-join", () => ({
   downloadIssuedJoinPackageAction: mockDownload,
   getOrganizationJoinActionStatusAction: mockStatus,
   importOrganizationJoinFileAction: mockImport,
+  issueOrganizationJoinFileAction: mockIssue,
   queueOrganizationJoinActionAction: mockQueue,
 }));
 
@@ -84,6 +87,10 @@ beforeEach(() => {
   mockConfirm.mockResolvedValue(true);
   mockAuthorize.mockResolvedValue({ ok: true });
   mockQueue.mockResolvedValue({ ok: true, actionKey: "ra-join-1" });
+  mockIssue.mockResolvedValue({ ok: true, data: { fileName: "organization-join-windows-dev.local-abcd1234.dpfjoin", content: "DPF_ORGANIZATION_JOIN_V2\n", intendedPeer: "windows-dev.local", expiresAt: new Date(Date.now() + 30 * 60_000).toISOString() } });
+  Object.defineProperty(URL, "createObjectURL", { configurable: true, value: vi.fn(() => "blob:join") });
+  Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: vi.fn() });
+  HTMLAnchorElement.prototype.click = vi.fn();
   mockImport.mockResolvedValue({ ok: true, data: { authorityUrl: "http://founder-hub.local:3000", intendedPeer: "windows-dev.local", message: "Joined the organization at founder-hub.local:3000." } });
   mockStatus.mockResolvedValue({
     ok: true,
@@ -124,20 +131,31 @@ describe("OrganizationJoinPanel", () => {
     }));
   });
 
-  it("queues a short-lived authority issue only after local confirmation", async () => {
-    render(<OrganizationJoinPanel nodes={[authority]} />);
+  it("issues the file through the portal for a chosen trusted installation and downloads it once", async () => {
+    render(<OrganizationJoinPanel nodes={[]} candidates={[{ hostname: "windows-dev.local", displayName: "Windows test installation" }]} />);
     fireEvent.click(screen.getByRole("button", { name: "Create join file" }));
-    fireEvent.change(screen.getByLabelText(/^Installation name/), { target: { value: "windows-dev.local" } });
-    fireEvent.change(screen.getByLabelText(/^Join file expiry/), { target: { value: "600" } });
+    expect(screen.queryByText(/No installation has reported/)).toBeNull();
+    expect(screen.queryByLabelText(/^Join file expiry/)).toBeNull();
+    expect((screen.getByLabelText(/^Installation that will join/) as HTMLSelectElement).value).toBe("windows-dev.local");
     fireEvent.click(screen.getByLabelText(/I confirm this file is for windows-dev.local/));
     fireEvent.click(screen.getByRole("button", { name: "Create one-time file" }));
 
-    await waitFor(() => expect(mockQueue).toHaveBeenCalledWith({
-      actionType: "organization.join.issue",
-      edgeNodeId: "edge-authority",
-      parameters: { intendedPeer: "windows-dev.local", ttlSeconds: 600 },
-      operatorConfirmed: true,
-    }));
+    await waitFor(() => expect(mockIssue).toHaveBeenCalledWith({ intendedPeer: "windows-dev.local" }));
+    expect(mockQueue).not.toHaveBeenCalled();
+    await waitFor(() => expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled());
+    expect((await screen.findByRole("status")).textContent).toMatch(/downloaded once/i);
+  });
+
+  it("lets the operator name another installation when it is not a trusted peer yet", async () => {
+    render(<OrganizationJoinPanel nodes={[]} candidates={[]} />);
+    fireEvent.click(screen.getByRole("button", { name: "Create join file" }));
+    expect((screen.getByLabelText(/^Installation that will join/) as HTMLSelectElement).value).toBe("__other__");
+    fireEvent.change(screen.getByLabelText(/^Installation name/), { target: { value: "192.168.0.200" } });
+    fireEvent.click(screen.getByLabelText(/I confirm this file is for 192.168.0.200/));
+    mockIssue.mockResolvedValueOnce({ ok: false, error: "not_ready", message: "Only the organization installation can create join files" });
+    fireEvent.click(screen.getByRole("button", { name: "Create one-time file" }));
+    await waitFor(() => expect(mockIssue).toHaveBeenCalledWith({ intendedPeer: "192.168.0.200" }));
+    expect((await screen.findByRole("alert")).textContent).toMatch(/Only the organization installation/);
   });
 
   it("previews a valid file without rendering either enrollment token", async () => {
@@ -203,7 +221,7 @@ describe("OrganizationJoinPanel", () => {
     expect(screen.getByRole("button", { name: "Cancel request" })).toBeTruthy();
   });
 
-  it("offers a fresh request after a failed host action", () => {
+  it("keeps a failed host action visible and still offers the portal-native request", () => {
     render(<OrganizationJoinPanel nodes={[{
       ...authority,
       latestAction: {
@@ -217,8 +235,8 @@ describe("OrganizationJoinPanel", () => {
       },
     }]} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Create join file" }));
-    expect(screen.getByLabelText(/^Installation name/)).toBeTruthy();
     expect(screen.getByText(/restored its previous settings/i)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Create join file" }));
+    expect(screen.getByLabelText(/^Installation that will join/)).toBeTruthy();
   });
 });

@@ -28,6 +28,7 @@ export type WorkroomDurableTaskRunInput = {
   requestKey: string;
   requestDigest: string;
   routingRecipeId: string;
+  now: Date;
   workroom: AuthorizedWorkroomDurableTask;
 };
 
@@ -163,6 +164,7 @@ export async function admitWorkroomBoundDurableTaskOperation(
   input: WorkroomDurableTaskAdmissionInput,
   dependencies: WorkroomDurableTaskAdmissionDependencies,
 ): Promise<{ operationId: string; taskRunId: string; replayed: boolean }> {
+  const now = input.now ?? new Date();
   const identity = contextIdentity(input);
   const workroom = await dependencies.resolveWorkroom({
     request: input.request,
@@ -178,6 +180,7 @@ export async function admitWorkroomBoundDurableTaskOperation(
     ...identity,
     requestKey: input.request.requestKey,
     requestDigest: input.request.requestDigest,
+    now,
     workroom,
   });
   if (task.taskRunId !== taskRunId) {
@@ -206,7 +209,7 @@ export async function admitWorkroomBoundDurableTaskOperation(
     requestDigest: input.request.requestDigest,
     operationId: admitted.operationId,
     routingRecipeId: identity.routingRecipeId,
-    now: input.now ?? new Date(),
+    now,
   });
   if (projection.shouldEnqueue) await dependencies.enqueue(admitted.operationId);
 

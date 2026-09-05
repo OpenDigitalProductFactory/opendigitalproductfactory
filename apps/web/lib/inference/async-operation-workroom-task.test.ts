@@ -33,7 +33,7 @@ const input = {
       threadId: "thread-1",
     },
   },
-  expiresAt: new Date("2026-09-05T12:15:00.000Z"),
+  expiresAt: new Date(Date.now() + 15 * 60_000),
   request: {
     kind: "workroom" as const,
     workroomId: "WC-TASK-HUB",

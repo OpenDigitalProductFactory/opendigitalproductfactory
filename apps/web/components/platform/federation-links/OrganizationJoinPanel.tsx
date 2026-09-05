@@ -1,7 +1,7 @@
 "use client";
 
 import { parseOrganizationJoinPackage, type OrganizationJoinActionType, type OrganizationJoinPackagePreview } from "@dpf/db/organization-join-action";
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 
 import { confirmDialog } from "@/components/ui/Dialog";
 import { InlineBusy } from "@/components/ui/InlineBusy";
@@ -19,7 +19,7 @@ import {
   downloadIssuedJoinPackageAction,
   getOrganizationJoinActionStatusAction,
   importOrganizationJoinFileAction,
-  queueOrganizationJoinActionAction,
+  issueOrganizationJoinFileAction,
   type OrganizationJoinNodeSummary,
 } from "@/lib/actions/organization-join";
 
@@ -28,13 +28,6 @@ type Notice = { kind: "success" | "error"; text: string } | null;
 type ActionState = NonNullable<OrganizationJoinNodeSummary["latestAction"]>;
 
 const TERMINAL_STATUSES = new Set(["succeeded", "failed", "cancelled", "timed-out"]);
-
-function blocksNewRequest(action: ActionState | undefined): boolean {
-  if (!action) return false;
-  if (!TERMINAL_STATUSES.has(action.status)) return true;
-  if (action.status !== "succeeded") return false;
-  return action.actionType === "organization.join.import" || action.packageReady;
-}
 
 function safeEvidenceText(evidence: Record<string, unknown>, key: string): string | null {
   return typeof evidence[key] === "string" ? evidence[key] : null;
@@ -122,11 +115,30 @@ function ActionProgress({
   );
 }
 
-export function OrganizationJoinPanel({ nodes }: { nodes: OrganizationJoinNodeSummary[] }) {
+/** A trusted same-organization installation the authority may issue a join file for. */
+export interface OrganizationJoinCandidate {
+  hostname: string;
+  displayName: string;
+}
+
+const OTHER_INSTALLATION = "__other__";
+
+function downloadText(fileName: string, content: string) {
+  const blob = new Blob([content], { type: "application/octet-stream" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+export function OrganizationJoinPanel({ nodes, candidates = [] }: { nodes: OrganizationJoinNodeSummary[]; candidates?: OrganizationJoinCandidate[] }) {
   const [mode, setMode] = useState<PanelMode>("overview");
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [candidateChoice, setCandidateChoice] = useState<string>(candidates[0]?.hostname ?? OTHER_INSTALLATION);
   const [intendedPeer, setIntendedPeer] = useState("");
-  const [ttlSeconds, setTtlSeconds] = useState(600);
   const [issueConfirmed, setIssueConfirmed] = useState(false);
   const [joinPackage, setJoinPackage] = useState<string | null>(null);
   const [packagePreview, setPackagePreview] = useState<OrganizationJoinPackagePreview | null>(null);
@@ -138,8 +150,7 @@ export function OrganizationJoinPanel({ nodes }: { nodes: OrganizationJoinNodeSu
   const [isPending, startTransition] = useTransition();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const authorityNodes = useMemo(() => nodes.filter((node) => node.role === "authority"), [nodes]);
-  const selectedNode = nodes.find((node) => node.edgeNodeId === selectedNodeId) ?? null;
+  const chosenPeer = candidateChoice === OTHER_INSTALLATION ? intendedPeer.trim() : candidateChoice;
 
   useEffect(() => {
     const active = Object.entries(actions).find(([, action]) => !TERMINAL_STATUSES.has(action.status));
@@ -168,11 +179,9 @@ export function OrganizationJoinPanel({ nodes }: { nodes: OrganizationJoinNodeSu
   }, [actions]);
 
   function openMode(nextMode: "issue" | "import") {
-    // Joining is portal-mediated: choosing the file is the whole act, so the
-    // import side selects no installation. Issuing still runs on the authority's
-    // host action until that side is portal-mediated too.
+    // Both sides are portal-mediated: the authority mints the file itself and
+    // the member imports it itself, so neither mode selects an edge node.
     setMode(nextMode);
-    setSelectedNodeId(nextMode === "issue" ? authorityNodes[0]?.edgeNodeId ?? null : null);
     setNotice(null);
   }
 
@@ -199,32 +208,17 @@ export function OrganizationJoinPanel({ nodes }: { nodes: OrganizationJoinNodeSu
     });
   }
 
-  function queueIssue() {
-    if (!selectedNode || !issueConfirmed || !intendedPeer.trim()) return;
+  function issueJoinFile() {
+    if (!issueConfirmed || !chosenPeer) return;
     startTransition(async () => {
-      const result = await queueOrganizationJoinActionAction({
-        actionType: "organization.join.issue",
-        edgeNodeId: selectedNode.edgeNodeId,
-        parameters: { intendedPeer: intendedPeer.trim(), ttlSeconds },
-        operatorConfirmed: true,
-      });
+      const result = await issueOrganizationJoinFileAction({ intendedPeer: chosenPeer });
+      setIssueConfirmed(false);
       if (!result.ok) {
         setNotice({ kind: "error", text: result.message });
         return;
       }
-      setActions((current) => ({
-        ...current,
-        [selectedNode.edgeNodeId]: {
-          actionKey: result.actionKey,
-          actionType: "organization.join.issue",
-          status: "queued",
-          approvalState: "approved",
-          packageReady: false,
-          evidence: { intendedPeer: intendedPeer.trim() },
-          createdAt: new Date().toISOString(),
-        },
-      }));
-      setNotice({ kind: "success", text: "Join file request approved. The installation will create it shortly." });
+      downloadText(result.data.fileName, result.data.content);
+      setNotice({ kind: "success", text: `Join file for ${result.data.intendedPeer} downloaded once. Choose it on that installation within 30 minutes.` });
     });
   }
 
@@ -290,7 +284,6 @@ export function OrganizationJoinPanel({ nodes }: { nodes: OrganizationJoinNodeSu
     });
   }
 
-  const visibleNodes = mode === "issue" ? authorityNodes : mode === "import" ? [] : nodes;
 
   return (
     <section className="rounded-xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-5" aria-labelledby="organization-join-heading">
@@ -344,61 +337,40 @@ export function OrganizationJoinPanel({ nodes }: { nodes: OrganizationJoinNodeSu
 
       {mode !== "overview" ? (
         <div className="mt-5 space-y-4">
-          {visibleNodes.length > 1 ? (
-            <SelectField
-              name="organization-join-installation"
-              label="Installation"
-              value={selectedNodeId ?? ""}
-              onValueChange={setSelectedNodeId}
-              options={visibleNodes.map((node) => ({ value: node.edgeNodeId, label: node.displayName }))}
-              required
-            />
-          ) : null}
-          {mode === "issue" && !selectedNode ? <p className="text-sm text-[var(--dpf-muted)]">No installation has reported the required organization role yet.</p> : null}
-          {selectedNode && !selectedNode.ready ? (
-            <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-4">
-              <p className="text-sm text-[var(--dpf-text)]">{selectedNode.readinessMessage}</p>
-              {selectedNode.trustState === "trusted" && selectedNode.actionType ? (
-                <button type="button" className="mt-3 rounded-md bg-[var(--dpf-accent)] px-3 py-2 text-sm font-medium text-[var(--dpf-bg)]" disabled={isPending} onClick={() => void authorize(selectedNode)}>
-                  {isPending ? <InlineBusy label="Enabling…" tone="current" /> : "Enable secure setup"}
-                </button>
-              ) : null}
-            </div>
-          ) : null}
-          {selectedNode && actions[selectedNode.edgeNodeId] ? (
-            <ActionProgress action={actions[selectedNode.edgeNodeId]} node={selectedNode} busy={isPending} onCancel={() => cancel(selectedNode, actions[selectedNode.edgeNodeId])} onDownload={() => download(selectedNode, actions[selectedNode.edgeNodeId])} />
-          ) : null}
-
-          {mode === "issue" && selectedNode?.ready && !blocksNewRequest(actions[selectedNode.edgeNodeId]) ? (
-            <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); queueIssue(); }}>
-              <TextField
+          {mode === "issue" ? (
+            <form className="space-y-4" noValidate onSubmit={(event) => { event.preventDefault(); issueJoinFile(); }}>
+              <SelectField
                 name="intended-installation"
-                label="Installation name"
+                label="Installation that will join"
                 required
-                autoComplete="off"
-                value={intendedPeer}
+                value={candidateChoice}
                 onValueChange={(value) => {
-                  setIntendedPeer(value);
+                  setCandidateChoice(value);
                   setIssueConfirmed(false);
                 }}
-                placeholder="windows-office.local"
-              />
-              <SelectField
-                name="join-file-expiry"
-                label="Join file expiry"
-                required
-                value={String(ttlSeconds)}
-                onValueChange={(value) => setTtlSeconds(Number(value))}
                 options={[
-                  { value: "300", label: "5 minutes" },
-                  { value: "600", label: "10 minutes" },
-                  { value: "900", label: "15 minutes" },
+                  ...candidates.map((candidate) => ({ value: candidate.hostname, label: `${candidate.displayName} (${candidate.hostname})` })),
+                  { value: OTHER_INSTALLATION, label: "Another installation…" },
                 ]}
               />
-              {intendedPeer.trim() ? (
+              {candidateChoice === OTHER_INSTALLATION ? (
+                <TextField
+                  name="intended-installation-name"
+                  label="Installation name"
+                  required
+                  autoComplete="off"
+                  value={intendedPeer}
+                  onValueChange={(value) => {
+                    setIntendedPeer(value);
+                    setIssueConfirmed(false);
+                  }}
+                  placeholder="192.168.0.200"
+                />
+              ) : null}
+              {chosenPeer ? (
                 <CheckboxField
                   name="confirm-intended-installation"
-                  label={<>I confirm this file is for {intendedPeer.trim()}</>}
+                  label={<>I confirm this file is for {chosenPeer}</>}
                   checked={issueConfirmed}
                   onCheckedChange={setIssueConfirmed}
                 />
@@ -407,7 +379,7 @@ export function OrganizationJoinPanel({ nodes }: { nodes: OrganizationJoinNodeSu
                 <SubmitButton
                   pending={isPending}
                   pendingLabel="Creating…"
-                  disabled={!issueConfirmed || !intendedPeer.trim()}
+                  disabled={!issueConfirmed || !chosenPeer}
                   data-dpf-primary-action
                 >
                   Create one-time file

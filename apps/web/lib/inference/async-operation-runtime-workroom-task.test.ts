@@ -64,7 +64,7 @@ const input = {
       threadId: "thread-1",
     },
   },
-  expiresAt: new Date("2026-09-05T12:15:00.000Z"),
+  expiresAt: new Date(Date.now() + 15 * 60_000),
   request: {
     kind: "workroom" as const,
     workroomId: "WC-TASK-HUB",
@@ -156,6 +156,12 @@ describe("Prisma Workroom-bound durable task admission", () => {
       "task-run:proactive",
     );
     expect(mocks.tx.taskRun.create).toHaveBeenCalledOnce();
+    expect(mocks.tx.taskRun.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        status: "working",
+        lastHeartbeatAt: expect.any(Date),
+      }),
+    }));
     expect(mocks.tx.workroom.updateMany).toHaveBeenCalledOnce();
     expect(mocks.admitDurableOperation).toHaveBeenCalledWith(
       expect.objectContaining({

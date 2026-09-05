@@ -131,6 +131,7 @@ async function createOrReplayPrismaWorkroomDurableTaskRun(
           objective: input.workroom.objective.slice(0, 1000),
           source: "proactive",
           status: "working",
+          lastHeartbeatAt: input.now,
           authorityScope: [`workroom:${input.workroom.capsuleId}`],
           a2aMetadata: {
             trigger: "system-recovery",

@@ -15,6 +15,34 @@ import type { ToolPack } from "../tool-pack";
 
 const definitions: ToolDefinition[] = [
   {
+    name: "issue_organization_join_file",
+    description:
+      "Create a one-time organization join file (.dpfjoin) on THIS installation, which must be the organization authority (it holds the organization's certificate authority). Pass the joining installation's host name or address as intendedPeer — one of the addresses it answers to, such as the address you open it at. The platform mints the file itself: no edge node, no host script. Returns the file text; carry it to the joining installation and pass it to import_organization_join_file there (or choose it on its Connections page) within 30 minutes. The organization CA honours the file once.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        intendedPeer: {
+          type: "string",
+          description: "Host name or IP address of the installation that will join, e.g. 192.168.0.200.",
+        },
+        extraSans: {
+          type: "array",
+          items: { type: "string" },
+          description: "Optional additional names the joining installation answers to.",
+        },
+        reason: {
+          type: "string",
+          description: "Short audit tag for why the file is being issued.",
+        },
+      },
+      required: ["intendedPeer"],
+    },
+    requiredCapability: "manage_platform",
+    executionMode: "immediate",
+    sideEffect: true,
+    consequence: "authority",
+  },
+  {
     name: "import_organization_join_file",
     description:
       "Join this installation to its organization by importing a .dpfjoin file issued on the organization installation. Pass the file's text. The platform validates it (version, expiry, that it was issued for one of this installation's own addresses), generates a key here, has the organization CA sign it through the organization installation's portal, stores the material under the federation state directory, and the next federation tick (within five minutes) records the connection trusted on both sides with no approval. Refuses a tampered, expired or wrong-host file before any network call.",
@@ -74,15 +102,51 @@ async function importOrganizationJoinFileTool(
   };
 }
 
+async function issueOrganizationJoinFileTool(
+  params: Record<string, unknown>,
+  _userId: string,
+  context?: { agentId?: string },
+): Promise<ToolResult> {
+  const { issueOrganizationJoinFile } = await import("@/lib/federation/organization-join-issue");
+  const { resolveLocalFederationAuthorityUrl } = await import("@/lib/federation/self-authority");
+  const intendedPeer = typeof params["intendedPeer"] === "string" ? params["intendedPeer"].trim() : "";
+  if (!intendedPeer) return { success: false, message: "intendedPeer is required.", data: { reason: "invalid-intended-peer" } };
+  const extraSans = Array.isArray(params["extraSans"]) ? params["extraSans"].filter((v): v is string => typeof v === "string") : [];
+  const reason = typeof params["reason"] === "string" ? params["reason"].trim().slice(0, 80) : "";
+  console.log(`[federation] join file issue requested by mcp:${context?.agentId?.trim() || "agent"}${reason ? `:${reason}` : ""} for ${intendedPeer}`);
+  const requestHost = await resolveLocalFederationAuthorityUrl();
+  const result = await issueOrganizationJoinFile({ intendedPeer, extraSans, requestHost });
+  if (!result.issued) {
+    return {
+      success: false,
+      message: `Join file not issued: ${result.reason}${result.detail ? ` (${result.detail})` : ""}`,
+      data: { reason: result.reason, ...(result.detail ? { detail: result.detail } : {}) },
+    };
+  }
+  return {
+    success: true,
+    message: `Issued ${result.fileName} for ${result.intendedPeer}; it expires at ${result.expiresAt}. Pass joinFileText to import_organization_join_file on that installation.`,
+    data: {
+      fileName: result.fileName,
+      joinFileText: result.packageText,
+      intendedPeer: result.intendedPeer,
+      caUrl: result.caUrl,
+      expiresAt: result.expiresAt,
+    },
+  };
+}
+
 export const federationMembershipPack: ToolPack = {
   packId: "federation-membership",
   definitions,
   handlers: {
+    issue_organization_join_file: issueOrganizationJoinFileTool,
     import_organization_join_file: importOrganizationJoinFileTool,
   },
   grants: {
     // The same grant the UX-verification sign-in carries: pairing the
     // installations an agent tests is part of the same automation job.
     import_organization_join_file: ["sandbox_execute"],
+    issue_organization_join_file: ["sandbox_execute"],
   },
 };

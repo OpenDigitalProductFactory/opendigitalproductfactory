@@ -22,14 +22,13 @@
 
 import { createHash } from "node:crypto";
 import { access } from "node:fs/promises";
-import { request as httpsRequest } from "node:https";
-import { checkServerIdentity as tlsCheckServerIdentity, type PeerCertificate } from "node:tls";
 
 import { prisma } from "@dpf/db";
 
 import { isRecord } from "@/lib/shared/coerce";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 
+import { caInternalUrl, caRequest, type CaResponse } from "./ca-client";
 import { looksLikeCertificateSigningRequest } from "./csr";
 import { splitPemChain, verifyMembershipChain } from "./membership-proof";
 import { readPinnedRoot } from "./membership-material";
@@ -37,13 +36,11 @@ import { checkNearbyPairingRateLimit } from "./nearby-pairing-rate-limit";
 
 export const MEMBERSHIP_SIGN_PATH = "/api/v1/federation/membership/sign";
 export const MEMBERSHIP_SIGN_SPEC = "dpf.membership-sign/1" as const;
-export const DEFAULT_CA_INTERNAL_URL = "https://step-ca:9000";
 /** PlatformConfig key of the bounded audit ring. */
 export const MEMBERSHIP_RELAY_AUDIT_KEY = "federation.membership.relay.v1";
 const AUDIT_RING_SIZE = 50;
 const RELAY_MAX_PER_MINUTE = 6;
 const SAFE_TOKEN = /^[A-Za-z0-9._-]{1,4096}$/;
-const CA_TIMEOUT_MS = 15_000;
 
 export interface MembershipSignRequest {
   spec: typeof MEMBERSHIP_SIGN_SPEC;
@@ -78,9 +75,7 @@ export function tokenIdHash(enrollmentToken: string): string {
   return createHash("sha256").update(enrollmentToken).digest("hex").slice(0, 16);
 }
 
-export function caInternalUrl(env: Record<string, string | undefined> = process.env): string {
-  return env.DPF_ORGANIZATION_CA_INTERNAL_URL?.trim().replace(/\/+$/, "") || DEFAULT_CA_INTERNAL_URL;
-}
+export { caInternalUrl, DEFAULT_CA_INTERNAL_URL } from "./ca-client";
 
 /**
  * Whether this installation can relay at all: it pins the organization root
@@ -104,18 +99,9 @@ export async function membershipRelayAvailable(
   return { available: false, reason: "not-the-authority" };
 }
 
-export interface CaSignResponse {
-  status: number;
-  body: unknown;
-}
+export type CaSignResponse = CaResponse;
 
-/**
- * POST to step-ca's sign API over TLS pinned to the organization root. The
- * CA's own certificate names the hostnames the authority was bootstrapped
- * with (localhost and 127.0.0.1 always among them), not the compose service
- * name, so identity is checked against the URL host first and those two
- * bootstrap names second; the chain must still verify to the pinned root.
- */
+/** POST to step-ca's sign API over TLS pinned to the organization root (ca-client.ts). */
 export async function postToCaSign(input: {
   caUrl: string;
   rootPem: string;
@@ -123,46 +109,7 @@ export async function postToCaSign(input: {
   enrollmentToken: string;
   timeoutMs?: number;
 }): Promise<CaSignResponse> {
-  const url = new URL(`${input.caUrl}/1.0/sign`);
-  const body = JSON.stringify({ csr: input.csrPem, ott: input.enrollmentToken });
-  const candidates = [url.hostname, "localhost", "127.0.0.1"];
-  return new Promise<CaSignResponse>((resolve, reject) => {
-    const req = httpsRequest(
-      {
-        protocol: url.protocol,
-        hostname: url.hostname,
-        port: url.port || 443,
-        path: url.pathname,
-        method: "POST",
-        headers: { "content-type": "application/json", "content-length": Buffer.byteLength(body) },
-        ca: input.rootPem,
-        servername: url.hostname,
-        checkServerIdentity: (_host: string, cert: PeerCertificate) => {
-          let last: Error | undefined;
-          for (const candidate of candidates) {
-            const failure = tlsCheckServerIdentity(candidate, cert);
-            if (!failure) return undefined;
-            last = failure;
-          }
-          return last;
-        },
-        timeout: input.timeoutMs ?? CA_TIMEOUT_MS,
-      },
-      (res) => {
-        const chunks: Buffer[] = [];
-        res.on("data", (chunk: Buffer) => chunks.push(chunk));
-        res.on("end", () => {
-          const text = Buffer.concat(chunks).toString("utf8");
-          let parsed: unknown = null;
-          try { parsed = JSON.parse(text); } catch { parsed = { raw: text.slice(0, 500) }; }
-          resolve({ status: res.statusCode ?? 0, body: parsed });
-        });
-      },
-    );
-    req.on("timeout", () => req.destroy(new Error("CA request timed out")));
-    req.on("error", reject);
-    req.end(body);
-  });
+  return caRequest({ caUrl: input.caUrl, rootPem: input.rootPem, method: "POST", path: "/1.0/sign", body: { csr: input.csrPem, ott: input.enrollmentToken }, timeoutMs: input.timeoutMs });
 }
 
 export interface RelayDb {
