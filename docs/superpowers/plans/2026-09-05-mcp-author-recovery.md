@@ -9,6 +9,10 @@ Canonical design: [recovery design](../specs/2026-09-05-mcp-author-recovery-desi
 
 Execute one independently reviewable BI, branch and PR. Use dpf-tdd for the failing boundary tests, dpf-local-merge-ci-before-push for verification and dpf-pr-with-dco for handoff. This plan does not authorize implementation before independent design/plan review and validated coverage.
 
+## Operator-directed source preparation, 2026-09-05
+
+The operator explicitly instructed this task to "bypass it and fix it" after the review recovery workflow stalled. This authorizes preparing a reviewable source patch now; it does not supply independent review receipts, grant reviewer authority, or authorize bypassing PR, DCO, test or deployment controls. Research/spec/plan review and coverage remain outstanding, not passed. The server accepted the four source/test path claims for the initial identity-repair correction. This first patch corrects both incomplete adoption instructions and adds regression cases; it does not resolve the inbox or reviewer dispatch failure or complete the wider recovery contract.
+
 ## Backlog coverage
 
 Proposed decision: atomic. Receipt pending validation against the approved scope baseline and this immutable plan. All steps implement one recovery contract across its existing writers and readers. Shipping the projector without its adoption, readiness and Workroom consumers would preserve contradictory next actions. They therefore share one acceptance boundary and one revert. No independent metrics, pagination or hook work is included.
