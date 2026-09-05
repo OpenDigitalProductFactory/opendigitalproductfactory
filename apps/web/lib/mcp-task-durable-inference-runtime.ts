@@ -2,6 +2,7 @@ import { prisma } from "@dpf/db";
 import { routeAndCall } from "@/lib/inference/routed-inference";
 
 import {
+  DURABLE_INFERENCE_TASK_BACKGROUND_MODEL_ID,
   DURABLE_INFERENCE_TASK_CONTRACT_FAMILY,
   DURABLE_INFERENCE_TASK_RECIPE,
   DURABLE_INFERENCE_TASK_RECIPE_ID,
@@ -60,9 +61,9 @@ function validateRecipe(recipe: RecipeRow | null, modelId: string): RecipeRow {
 }
 
 /**
- * Seed the closed recipe for every routable Gemini text model. This runtime
- * reconciliation covers upgrades where provider discovery happened before the
- * recipe existed; provider activation still runs the ordinary recipe seeder.
+ * Seed the closed recipe only for the server-certified Gemini background
+ * model. A general chat/reasoning profile is not evidence that the model
+ * supports the Interactions API's background mode.
  */
 export async function ensureDurableInferenceTaskRecipes(): Promise<{
   seeded: number;
@@ -73,6 +74,7 @@ export async function ensureDurableInferenceTaskRecipes(): Promise<{
   const profiles = await prisma.modelProfile.findMany({
     where: {
       providerId: DURABLE_INFERENCE_TASK_RECIPE.providerId,
+      modelId: DURABLE_INFERENCE_TASK_BACKGROUND_MODEL_ID,
       modelStatus: { in: ["active", "degraded"] },
       modelClass: { in: ["chat", "reasoning"] },
     },
@@ -83,7 +85,7 @@ export async function ensureDurableInferenceTaskRecipes(): Promise<{
   const recipeIds: string[] = [];
   const recipes: Array<{ id: string; modelId: string }> = [];
   for (const profile of profiles.filter((candidate) =>
-    !candidate.modelId.startsWith("deep-research-"))) {
+    candidate.modelId === DURABLE_INFERENCE_TASK_BACKGROUND_MODEL_ID)) {
     let recipe = await prisma.executionRecipe.findFirst({
       where: {
         providerId: DURABLE_INFERENCE_TASK_RECIPE.providerId,
@@ -146,6 +148,12 @@ export async function admitDurableInferenceTask(input: {
     throw new Error("DURABLE_INFERENCE_TASK_RECIPE_INVALID");
   }
   const seeded = await ensureDurableInferenceTaskRecipes();
+  if (
+    seeded.recipes.length !== 1
+    || seeded.recipes[0]?.modelId !== DURABLE_INFERENCE_TASK_BACKGROUND_MODEL_ID
+  ) {
+    throw new Error("DURABLE_INFERENCE_BACKGROUND_MODEL_UNAVAILABLE");
+  }
   const result = await routeAndCall(
     [{ role: "user", content: input.prompt }],
     DURABLE_INFERENCE_TASK_RECIPE.systemPrompt,
@@ -159,6 +167,7 @@ export async function admitDurableInferenceTask(input: {
       requireTools: false,
       allowedProviders: [DURABLE_INFERENCE_TASK_RECIPE.providerId],
       preferredProviderId: DURABLE_INFERENCE_TASK_RECIPE.providerId,
+      preferredModelId: DURABLE_INFERENCE_TASK_BACKGROUND_MODEL_ID,
       budgetClass: "quality_first",
       messageOrigins: ["turn"],
       systemPromptInstructionSpans: [DURABLE_INFERENCE_TASK_RECIPE.systemPrompt],

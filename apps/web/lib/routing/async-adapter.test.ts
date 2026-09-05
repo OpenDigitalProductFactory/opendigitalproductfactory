@@ -55,6 +55,7 @@ function makeRequest(overrides: Partial<AdapterRequest> = {}): AdapterRequest {
       baseUrl: "https://generativelanguage.googleapis.com/v1beta",
       headers: { "Content-Type": "application/json" },
     },
+    fetchImpl: globalThis.fetch,
     messages: [{ role: "user", content: "Research the history of quantum computing" }],
     systemPrompt: "",
     ...overrides,
@@ -108,12 +109,60 @@ describe("asyncAdapter", () => {
 
     const [url, init] = mockFetch.mock.calls[0];
     expect(url).toBe("https://generativelanguage.googleapis.com/v1beta/interactions");
+    expect(init.headers).toMatchObject({
+      "Api-Revision": "2026-05-20",
+    });
     expect(JSON.parse(init.body)).toEqual({
       model: "gemini-2.0-flash-thinking-exp",
       input: "Research the history of quantum computing",
       generation_config: { max_output_tokens: 4096 },
       background: true,
     });
+  });
+
+  it("Gemini: starts through the server-injected provider transport", async () => {
+    mockFetch.mockRejectedValueOnce(new Error("poisoned process-global fetch"));
+    const providerFetch = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        id: "interaction-off-threadpool",
+        object: "interaction",
+        status: "in_progress",
+      }),
+      headers: new Headers(),
+    } as Response);
+    const req = makeRequest({ fetchImpl: providerFetch as typeof fetch });
+
+    await expect(asyncAdapter.execute(req)).resolves.toMatchObject({
+      asyncOperation: {
+        status: "accepted",
+        providerOperationId: "interaction-off-threadpool",
+      },
+    });
+    expect(providerFetch).toHaveBeenCalledOnce();
+    expect(mockFetch).not.toHaveBeenCalled();
+    expect(providerFetch.mock.calls[0]?.[1]).toEqual(expect.objectContaining({
+      signal: expect.any(AbortSignal),
+    }));
+  });
+
+  it("Gemini: replaces a case-insensitive caller revision with the server-owned revision", async () => {
+    stubFetchOk({
+      id: "interaction-current-revision",
+      object: "interaction",
+      status: "in_progress",
+    });
+
+    await asyncAdapter.execute(makeRequest({
+      provider: {
+        baseUrl: "https://generativelanguage.googleapis.com/v1beta",
+        headers: { "api-revision": "stale-client-value" },
+      },
+    }));
+
+    const sentHeaders = new Headers(mockFetch.mock.calls[0][1].headers);
+    expect(sentHeaders.get("Api-Revision")).toBe("2026-05-20");
   });
 
   it("Gemini: returns a typed async-operation start result", async () => {

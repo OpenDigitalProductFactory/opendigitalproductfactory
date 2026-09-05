@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   updateOperation: vi.fn(),
   findProvider: vi.fn(),
   emit: vi.fn(),
+  providerFetch: vi.fn((...args: Parameters<typeof fetch>) => globalThis.fetch(...args)),
 }));
 
 vi.mock("@dpf/db", () => ({
@@ -21,6 +22,10 @@ vi.mock("@dpf/db", () => ({
 
 vi.mock("@/lib/agent-event-bus", () => ({
   agentEventBus: { emit: mocks.emit },
+}));
+
+vi.mock("./provider-inference-transport", () => ({
+  providerInferenceFetch: mocks.providerFetch,
 }));
 
 vi.mock("@/lib/ai-provider-internals", () => ({
@@ -75,7 +80,12 @@ describe("pollAsyncOperation Gemini Interactions API", () => {
     await expect(pollAsyncOperation("async-op-1")).resolves.toBe("running");
     expect(fetchMock).toHaveBeenCalledWith(
       "https://generativelanguage.googleapis.com/v1beta/interactions/interaction%2Fid%20with%20spaces",
-      expect.objectContaining({ method: "GET" }),
+      expect.objectContaining({
+        method: "GET",
+        headers: expect.objectContaining({
+          "Api-Revision": "2026-05-20",
+        }),
+      }),
     );
     expect(mocks.updateOperation).toHaveBeenCalledWith({
       where: { id: "async-op-1" },
@@ -84,6 +94,27 @@ describe("pollAsyncOperation Gemini Interactions API", () => {
         progressMessage: "in_progress",
       },
     });
+  });
+
+  it("polls through the injected provider transport instead of global fetch", async () => {
+    const globalFetch = vi.fn().mockRejectedValue(new Error("poisoned process-global fetch"));
+    const providerFetch = vi.fn().mockResolvedValue(response({
+      id: "interaction/id with spaces",
+      object: "interaction",
+      status: "in_progress",
+    }));
+    vi.stubGlobal("fetch", globalFetch);
+
+    await expect(pollAsyncProviderOperation(
+      "gemini",
+      "interaction/id with spaces",
+      providerFetch as typeof fetch,
+    )).resolves.toMatchObject({
+      done: false,
+      progressMessage: "in_progress",
+    });
+    expect(providerFetch).toHaveBeenCalledOnce();
+    expect(globalFetch).not.toHaveBeenCalled();
   });
 
   it("stores completed interaction text and normalized token usage", async () => {

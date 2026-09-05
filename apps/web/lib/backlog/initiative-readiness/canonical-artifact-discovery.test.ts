@@ -121,17 +121,19 @@ describe("canonical design artifact discovery", () => {
     expect(result).toMatchObject({ resolved: true, artifact: { providerBlobId: BLOB_SHA } });
   });
 
-  it("does not call the provider when the workroom records no immutable base", async () => {
+  it.each(["baseSha", "headSha"] as const)("names %s and supplies both identity fields in adoption repair", async (field) => {
     const fetchImpl = vi.fn();
 
     const result = await discoverCanonicalDesignArtifact({
       ...args(fetchImpl as unknown as typeof fetch),
-      baseSha: "",
+      [field]: "",
     });
 
     expect(fetchImpl).not.toHaveBeenCalled();
     expect(result).toMatchObject({ resolved: false, code: "provider-unavailable" });
     expect(result.resolved === false && result.nextAction).toContain("adopt_worktree");
+    expect(result.resolved === false && result.nextAction).toContain(field);
+    expect(result.resolved === false && result.nextAction).toContain("adopt_worktree(headBranch, baseSha, headSha)");
   });
 
   it("reports provider unavailability rather than guessing when the compare fails", async () => {

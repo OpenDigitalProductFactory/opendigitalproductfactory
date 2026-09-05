@@ -5,6 +5,7 @@ export type InitiativeReviewBinding = {
   itemId: string;
   gate: string;
   expectedCurrentBaselineId?: string | null;
+  eligibleEvidenceActivityIds?: string[];
   artifactRef: {
     kind: "repo-blob-at-commit";
     repositoryFullName: string;
@@ -14,8 +15,18 @@ export type InitiativeReviewBinding = {
   };
 };
 
+const MAX_ELIGIBLE_EVIDENCE_ACTIVITY_IDS = 500;
+
 function optionalString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function boundedUniqueStrings(value: unknown): string[] | null {
+  if (!Array.isArray(value) || value.length === 0 || value.length > MAX_ELIGIBLE_EVIDENCE_ACTIVITY_IDS) return null;
+  const values = value.map(optionalString);
+  if (values.some((entry) => !entry)) return null;
+  const normalized = values as string[];
+  return new Set(normalized).size === normalized.length ? normalized : null;
 }
 
 export function requiredToolNames(authorityScope: readonly string[] | undefined): string[] {
@@ -56,6 +67,10 @@ export function parseInitiativeReviewBinding(value: unknown): InitiativeReviewBi
   const path = optionalString(artifactRef["path"]);
   const providerBlobId = optionalString(artifactRef["providerBlobId"]);
   const expectedCurrentBaselineId = binding["expectedCurrentBaselineId"];
+  const rawEligibleEvidenceActivityIds = binding["eligibleEvidenceActivityIds"];
+  const eligibleEvidenceActivityIds = rawEligibleEvidenceActivityIds === undefined
+    ? undefined
+    : boundedUniqueStrings(rawEligibleEvidenceActivityIds);
   if (
     !writerToolName?.startsWith("record_initiative_")
     || !itemId?.startsWith("BI-")
@@ -68,6 +83,8 @@ export function parseInitiativeReviewBinding(value: unknown): InitiativeReviewBi
     || (expectedCurrentBaselineId !== undefined
       && expectedCurrentBaselineId !== null
       && typeof expectedCurrentBaselineId !== "string")
+    || (rawEligibleEvidenceActivityIds !== undefined && !eligibleEvidenceActivityIds)
+    || (gate === "objective-mapping" && !eligibleEvidenceActivityIds)
   ) return null;
   return {
     writerToolName,
@@ -76,6 +93,7 @@ export function parseInitiativeReviewBinding(value: unknown): InitiativeReviewBi
     ...(expectedCurrentBaselineId !== undefined
       ? { expectedCurrentBaselineId: expectedCurrentBaselineId as string | null }
       : {}),
+    ...(eligibleEvidenceActivityIds ? { eligibleEvidenceActivityIds } : {}),
     artifactRef: {
       kind: "repo-blob-at-commit",
       repositoryFullName,
@@ -113,6 +131,7 @@ export function narrowInitiativeReviewTools<T extends {
   if (!binding) return input;
   const exactNames = new Set(requiredNames);
   const currentBaselineId = optionalString(binding.expectedCurrentBaselineId);
+  const eligibleEvidenceActivityIds = binding.eligibleEvidenceActivityIds ?? [];
   const compactResearchReceipt = binding.gate === "research"
     && binding.writerToolName === "record_initiative_evidence";
   const objectiveMappingProposal = binding.writerToolName === "record_initiative_evidence"
@@ -147,6 +166,22 @@ export function narrowInitiativeReviewTools<T extends {
     const narrowedProperties = Object.fromEntries(
       writerPropertyNames.flatMap((name) => name in properties ? [[name, properties[name]]] : []),
     );
+    const objectiveMappings = narrowedProperties["objectiveMappings"];
+    const objectiveMappingsSchema = objectiveMappings && typeof objectiveMappings === "object" && !Array.isArray(objectiveMappings)
+      ? objectiveMappings as Record<string, unknown>
+      : {};
+    const mappingItems = objectiveMappingsSchema["items"] && typeof objectiveMappingsSchema["items"] === "object"
+      && !Array.isArray(objectiveMappingsSchema["items"])
+      ? objectiveMappingsSchema["items"] as Record<string, unknown>
+      : {};
+    const mappingProperties = mappingItems["properties"] && typeof mappingItems["properties"] === "object"
+      && !Array.isArray(mappingItems["properties"])
+      ? mappingItems["properties"] as Record<string, unknown>
+      : {};
+    const evidenceRefs = mappingProperties["evidenceRefs"] && typeof mappingProperties["evidenceRefs"] === "object"
+      && !Array.isArray(mappingProperties["evidenceRefs"])
+      ? mappingProperties["evidenceRefs"] as Record<string, unknown>
+      : {};
     return {
       type: "object",
       properties: objectiveMappingProposal
@@ -154,6 +189,21 @@ export function narrowInitiativeReviewTools<T extends {
             ...narrowedProperties,
             operation: { type: "string", enum: ["objective-mapping"] },
             baselineId: { type: "string", enum: [currentBaselineId] },
+            objectiveMappings: {
+              ...objectiveMappingsSchema,
+              items: {
+                ...mappingItems,
+                properties: {
+                  ...mappingProperties,
+                  evidenceRefs: {
+                    ...evidenceRefs,
+                    items: { type: "string", enum: eligibleEvidenceActivityIds },
+                    minItems: 1,
+                    uniqueItems: true,
+                  },
+                },
+              },
+            },
           }
         : narrowedProperties,
       required: requiredWriterNames,

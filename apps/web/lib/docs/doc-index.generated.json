@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 696,
+  "pageCount": 697,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -5146,6 +5146,7 @@
         "contributor-separate-dev-workspace-from-install-recommended-bi-0856a4ce-phase-1",
         "what-the-installer-does",
         "login",
+        "network-exposure-after-install",
         "day-to-day",
         "edge-node-whats-running-and-why",
         "llm-provider",
@@ -5173,6 +5174,7 @@
         "contributor-separate-dev-workspace-from-install-recommended-bi-0856a4ce-phase-1",
         "what-the-installer-does",
         "login",
+        "network-exposure-after-install",
         "day-to-day",
         "llm-provider",
         "voice-stt-tts",
@@ -5279,6 +5281,7 @@
         "quick-start",
         "what-the-installer-does",
         "login",
+        "network-exposure-after-install",
         "day-to-day",
         "declare-what-the-installation-is-for",
         "work-created-on-an-installation-lives-only-there",
@@ -8827,6 +8830,20 @@
         "related"
       ]
     },
+    "docs/runbooks/2026-09-05-security-sweep-credential.md": {
+      "publicHref": "/runbooks/2026-09-05-security-sweep-credential/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "security-sweep-credential-read-all-three-alert-surfaces",
+        "symptom",
+        "credential-order-what-the-workflows-try",
+        "operator-step-once-by-a-repository-admin",
+        "verify-the-sweep-is-complete",
+        "rollback"
+      ]
+    },
     "docs/runbooks/bet5-windows-self-upgrade.md": {
       "publicHref": "/runbooks/bet5-windows-self-upgrade/",
       "portalHref": null,
@@ -12293,6 +12310,7 @@
         "spatial-operations-for-tables-and-rooms",
         "the-ward-for-a-shelter",
         "rescue-operations",
+        "when-the-ward-is-full",
         "confirming-an-operational-suggestion",
         "which-installation-you-are-on",
         "correcting-the-identity",

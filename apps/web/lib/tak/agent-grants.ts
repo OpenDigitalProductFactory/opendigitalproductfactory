@@ -756,6 +756,8 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   trigger_contributor_inventory_sync: ["admin_write"],
   request_self_upgrade: ["admin_write"],
   issue_ux_verification_sign_in: ["sandbox_execute"], // BI-9369DEB5: UX verification sign-in; a development token already holds it
+  import_organization_join_file: ["sandbox_execute"], // BI-4DD1E739: portal-mediated organization join; the same automation grant
+  issue_organization_join_file: ["sandbox_execute"], // BI-AC7BCC58: the authority portal issues the join file itself
   // Governed self-heal for the "promoter image not built" self-upgrade skip.
   // Same admin_write scope as request_self_upgrade so the platform-engineer
   // ("AI Ops Engineer") coworker can build the promoter image on request.
@@ -767,10 +769,8 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   generate_design_system:     ["file_read"],
   // HR — query
   query_employees: ["consumer_read", "registry_read"],
-
   // Recruiting pipeline lens (BI-E64D11AE) — unified native + Greenhouse funnel.
   get_recruiting_pipeline: ["consumer_read", "registry_read"],
-
   // Workforce staffing + propose-only leave-decision surfaces.
   list_staffing_demand: ["registry_read"],
   get_staffing_coverage: ["registry_read"],

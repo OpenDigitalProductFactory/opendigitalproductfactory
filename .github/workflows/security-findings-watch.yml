@@ -55,13 +55,30 @@ jobs:
 
       # The default GITHUB_TOKEN can read Code Scanning but NOT Dependabot or
       # Secret Scanning alerts — both 403 even with `security-events: read`.
-      # DEPENDABOT_ALERTS_TOKEN (a token with the security_events scope) is the
-      # existing convention from audit-stale-overrides.yml. Until that secret is
-      # set, the sweep reports those two surfaces as UNREADABLE rather than zero,
-      # which is the intended degradation: incomplete, and visibly so.
+      # Credential order (BI-3E6AFF04): a GitHub App installation token minted
+      # per run from SECURITY_SWEEP_APP_ID + SECURITY_SWEEP_APP_PRIVATE_KEY (no
+      # expiry cliff; the App needs "Dependabot alerts: read" and "Secret
+      # scanning alerts: read"), else DEPENDABOT_ALERTS_TOKEN (a fine-grained
+      # PAT with the same two permissions), else GITHUB_TOKEN. Until one of the
+      # first two exists, the sweep reports those two surfaces as UNREADABLE
+      # rather than zero, which is the intended degradation: incomplete, and
+      # visibly so.
+      - name: Mint a GitHub App token for the alert surfaces
+        id: app-token
+        env:
+          APP_ID: ${{ secrets.SECURITY_SWEEP_APP_ID }}
+        if: env.APP_ID != ''
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.SECURITY_SWEEP_APP_ID }}
+          private-key: ${{ secrets.SECURITY_SWEEP_APP_PRIVATE_KEY }}
+          permission-dependabot-alerts: read
+          permission-secret-scanning-alerts: read
+          permission-security-events: read
+
       - name: Sweep all three security surfaces
         env:
-          GITHUB_TOKEN: ${{ secrets.DEPENDABOT_ALERTS_TOKEN || secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token || secrets.DEPENDABOT_ALERTS_TOKEN || secrets.GITHUB_TOKEN }}
         run: node scripts/sbom/sweep-security-surfaces.mjs --json sbom/security-sweep.json --md sbom/security-sweep.md
 
       - name: Publish sweep to the run summary

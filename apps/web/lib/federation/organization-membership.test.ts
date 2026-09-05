@@ -19,6 +19,7 @@ import {
   buildMembershipProof,
   deriveAuthorityPortalUrls,
   enrolWithOrganizationAuthority,
+  readJoinPackageFacts,
   readMembershipMaterial,
   reconcileOrganizationMembership,
   type MembershipDb,
@@ -143,6 +144,27 @@ describe("acceptOrganizationEnrolment", () => {
     expect(await acceptOrganizationEnrolment(authority.db, { envelope: built, localAuthorityUrl: "http://x", displayName: "P", now, readText: async () => { throw new Error("no pki"); } }))
       .toMatchObject({ accepted: false, status: 404, reason: "organization-trust-not-configured" });
     expect(authority.created).toHaveLength(0);
+  });
+});
+
+describe("readJoinPackageFacts", () => {
+  it("reads the portal-mediated facts row first and only then the script-era host action", async () => {
+    const facts = { schemaVersion: 1, caUrl: "https://192.168.0.152:9000", intendedPeer: "192.168.0.200", rootFingerprint, packageId: "b".repeat(32), joinedAt: now.toISOString() };
+    const remoteAction = { findFirst: vi.fn().mockResolvedValue(null) };
+    const db = {
+      platformConfig: { findUnique: vi.fn(async (args: { where: { key: string } }) => (args.where.key === "federation.membership.v1" ? { value: facts } : null)) },
+      federationLink: { findMany: vi.fn().mockResolvedValue([]) },
+      remoteAction,
+      $transaction: vi.fn(),
+    } as unknown as MembershipDb;
+    expect(await readJoinPackageFacts(db, () => null, { readText: async () => { throw new Error("ENOENT"); } })).toEqual({
+      caUrl: "https://192.168.0.152:9000", intendedPeer: "192.168.0.200", rootFingerprint,
+    });
+    expect(remoteAction.findFirst).not.toHaveBeenCalled();
+
+    const empty = { ...db, platformConfig: { findUnique: vi.fn().mockResolvedValue(null) } } as unknown as MembershipDb;
+    expect(await readJoinPackageFacts(empty, () => null, { readText: async () => { throw new Error("ENOENT"); } })).toBeNull();
+    expect(remoteAction.findFirst).toHaveBeenCalledTimes(1);
   });
 });
 

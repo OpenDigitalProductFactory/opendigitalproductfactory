@@ -313,6 +313,13 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("compose-env-contract-guard", "Compose Env Contract Guard", [
       node("scripts/check-compose-env-contract.mjs"),
     ], { inputs: ["code"] }),
+    // BI-FEE77B68: every host-published port binds through DPF_HOST_BIND_ADDRESS
+    // (loopback by default). Short syntax put the admin login, postgres and
+    // redis on the LAN of every install (#4337).
+    guard("compose-bind-posture-guard", "Compose Bind Posture Guard", [
+      conformanceTest("scripts/check-compose-bind-posture.test.mjs"),
+      node("scripts/check-compose-bind-posture.mjs"),
+    ], { inputs: ["code"] }),
     guard("compose-resource-budgets-guard", "Compose Resource Budgets Guard", [
       node("--test", "scripts/check-compose-resource-budgets.test.mjs"),
       node("scripts/check-compose-resource-budgets.mjs"),

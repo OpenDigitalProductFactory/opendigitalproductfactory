@@ -1,5 +1,6 @@
 import { prisma } from "@dpf/db";
 
+import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 import {
   resolveInitiativeReviewerRecovery,
   type InitiativeReviewerRecovery,
@@ -8,6 +9,10 @@ import { loadCapsuleLivenessInventory } from "@/lib/work-capsules/liveness-inven
 
 import { validateInitiativeBaselineChainHead } from "./baseline-repository";
 import { discoverCanonicalDesignArtifact } from "./canonical-artifact-discovery";
+import {
+  MAX_OBJECTIVE_MAPPING_EVIDENCE_ACTIVITIES,
+  selectEligibleObjectiveEvidenceActivityIds,
+} from "./objective-reconciliation";
 import type { InitiativeReadinessDecision } from "./types";
 
 export type TerminalRecoveryRoom = {
@@ -26,6 +31,8 @@ export type TerminalRecoveryEscalationReason =
   | "workroom-identity-incomplete"
   | "baseline-not-found"
   | "baseline-ambiguous"
+  | "eligible-evidence-not-found"
+  | "eligible-evidence-unbounded"
   | "canonical-artifact-unavailable";
 
 type TerminalEscalation = {
@@ -55,6 +62,10 @@ type BaselinePayload = {
 export type TerminalRecoveryPorts = {
   loadLiveRooms(args: { itemId: string; refusedWorkroomId: string | null }): Promise<TerminalRecoveryRoom[]>;
   loadBaselinePayloads(itemId: string): Promise<unknown[]>;
+  loadEligibleEvidenceActivityIds(args: {
+    itemId: string;
+    baselineId: string;
+  }): Promise<ActionResult<{ activityIds: string[] }>>;
   discoverArtifact(args: {
     repositoryFullName: string;
     baseSha: string;
@@ -161,9 +172,47 @@ async function defaultLoadBaselinePayloads(itemId: string): Promise<unknown[]> {
   return rows.map((row) => row.payload);
 }
 
+async function defaultLoadEligibleEvidenceActivityIds(args: {
+  itemId: string;
+  baselineId: string;
+}): Promise<ActionResult<{ activityIds: string[] }>> {
+  const item = await prisma.backlogItem.findFirst({
+    where: { OR: [{ itemId: args.itemId }, { id: args.itemId }] },
+    select: { id: true, itemId: true },
+  });
+  if (!item) return err("baseline-row-unavailable");
+  const baselines = await prisma.backlogItemActivity.findMany({
+    where: { backlogItemId: item.id, kind: "initiative_scope_baseline" },
+    orderBy: [{ recordedAt: "asc" }, { id: "asc" }],
+    select: { recordedAt: true, payload: true },
+  });
+  const matchingBaselines = baselines.filter((row) => {
+    if (!row.payload || typeof row.payload !== "object" || Array.isArray(row.payload)) return false;
+    return (row.payload as Record<string, unknown>).baselineId === args.baselineId;
+  });
+  if (matchingBaselines.length !== 1) return err("baseline-row-unavailable");
+  const evidence = await prisma.backlogItemActivity.findMany({
+    where: {
+      backlogItemId: item.id,
+      kind: "evidence",
+      recordedAt: { gte: matchingBaselines[0]!.recordedAt },
+    },
+    orderBy: [{ recordedAt: "asc" }, { id: "asc" }],
+    take: MAX_OBJECTIVE_MAPPING_EVIDENCE_ACTIVITIES + 1,
+    select: { id: true, backlogItemId: true, kind: true, recordedAt: true, payload: true },
+  });
+  return selectEligibleObjectiveEvidenceActivityIds({
+    itemId: item.itemId,
+    itemRowId: item.id,
+    baselineRecordedAt: matchingBaselines[0]!.recordedAt,
+    activities: evidence,
+  });
+}
+
 const DEFAULT_PORTS: TerminalRecoveryPorts = {
   loadLiveRooms: defaultLoadLiveRooms,
   loadBaselinePayloads: defaultLoadBaselinePayloads,
+  loadEligibleEvidenceActivityIds: defaultLoadEligibleEvidenceActivityIds,
   discoverArtifact: discoverCanonicalDesignArtifact,
   resolveRecovery: (args) => resolveInitiativeReviewerRecovery({ ...args, db: prisma as never }),
 };
@@ -201,6 +250,28 @@ export async function resolveTerminalInitiativeRecovery(args: {
     return escalation("baseline-ambiguous", "The objective baseline chain has no unique valid head. Reconcile or supersede the conflicting baseline before dispatch.");
   }
 
+  const needsObjectiveMapping = [...args.decision.blockers, ...args.decision.unmet]
+    .some((entry) => entry.code === "ACCEPTANCE_EVIDENCE_REQUIRED"
+      || entry.code === "OBJECTIVE_RECONCILIATION_REQUIRED");
+  const eligibleEvidence = needsObjectiveMapping
+    ? await ports.loadEligibleEvidenceActivityIds({
+        itemId: args.decision.subject.id,
+        baselineId: baseline.baselineId,
+      })
+    : ok({ activityIds: [] });
+  if (!eligibleEvidence.ok) {
+    return escalation(
+      "eligible-evidence-unbounded",
+      "The current post-baseline evidence set could not be bounded and validated. Reconcile the evidence inventory before dispatch; do not truncate or infer activity IDs.",
+    );
+  }
+  if (needsObjectiveMapping && eligibleEvidence.data.activityIds.length === 0) {
+    return escalation(
+      "eligible-evidence-not-found",
+      "No same-item passing evidence exists at or after the current objective baseline. Record delivery evidence, then retry objective mapping.",
+    );
+  }
+
   const baselineArtifact = baseline.artifactRef?.repositoryFullName.toLocaleLowerCase("en-US")
       === room.repositoryFullName.toLocaleLowerCase("en-US")
     ? {
@@ -234,5 +305,8 @@ export async function resolveTerminalInitiativeRecovery(args: {
     },
     canonicalArtifact: { resolved: true, ...artifact },
     expectedCurrentBaselineId: baseline.baselineId,
+    ...(needsObjectiveMapping
+      ? { eligibleEvidenceActivityIds: eligibleEvidence.data.activityIds }
+      : {}),
   });
 }

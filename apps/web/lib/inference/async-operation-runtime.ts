@@ -48,6 +48,7 @@ import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { DURABLE_INFERENCE_TASK_CONTRACT_FAMILY } from "@/lib/mcp-task-durable-inference-contract";
 import { assertDurableDispatchScreen } from "./durable-dispatch-screen";
 import { getLocalOnlyInferenceFresh } from "./local-only";
+import { admitPrismaWorkroomBoundDurableTaskOperation } from "./async-operation-workroom-runtime";
 
 function createStore(): PrismaAsyncOperationStore {
   return new PrismaAsyncOperationStore(prisma as unknown as AsyncOperationDatabase);
@@ -162,11 +163,7 @@ function authorityDatabase(): AsyncOperationAuthorityDatabase {
   return prisma as unknown as AsyncOperationAuthorityDatabase;
 }
 
-/**
- * Persist the exact TaskRun/Workroom-bound identity before advisory dispatch.
- * This is the only production admission boundary for identity-version 1 rows.
- */
-export async function admitPrismaDurableAsyncOperation(
+async function admitPrismaDurableAsyncOperationDirect(
   input: AdmitDurableAsyncOperationInput & DurableAsyncOperationAuthority,
 ): Promise<{ operationId: string; replayed: boolean }> {
   const store = createStore();
@@ -181,6 +178,28 @@ export async function admitPrismaDurableAsyncOperation(
       ? async () => undefined
       : (operationId) => enqueueWake({ operationId, notBefore: new Date() }),
   });
+}
+
+/**
+ * Persist the exact TaskRun/Workroom-bound identity before advisory dispatch.
+ * This is the only production admission boundary for identity-version 1 rows.
+ */
+export async function admitPrismaDurableAsyncOperation(
+  input: AdmitDurableAsyncOperationInput & DurableAsyncOperationAuthority,
+): Promise<{ operationId: string; replayed: boolean; taskRunId?: string }> {
+  if (
+    input.contractFamily === DURABLE_INFERENCE_TASK_CONTRACT_FAMILY
+    && input.request.kind === "workroom"
+  ) {
+    return admitPrismaWorkroomBoundDurableTaskOperation({
+      ...input,
+      request: input.request,
+    }, {
+      admitTaskRunOperation: admitPrismaDurableAsyncOperationDirect,
+      enqueue: enqueuePrismaAsyncOperationWake,
+    });
+  }
+  return admitPrismaDurableAsyncOperationDirect(input);
 }
 
 /** Enqueue a previously admitted operation after its owning TaskRun projection is durable. */

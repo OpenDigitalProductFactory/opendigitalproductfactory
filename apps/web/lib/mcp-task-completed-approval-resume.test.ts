@@ -53,6 +53,7 @@ it("consumes an approved exact-bound writer from a historically completed TaskRu
       itemId: "BI-BFBF1BBB",
       gate: "objective-mapping" as const,
       expectedCurrentBaselineId: "baseline-bi-bfbf1bbb",
+      eligibleEvidenceActivityIds: ["E-PASS"],
       artifactRef: {
         kind: "repo-blob-at-commit" as const,
         repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
@@ -97,6 +98,9 @@ it("consumes an approved exact-bound writer from a historically completed TaskRu
       backlogItemId: "BI-BFBF1BBB",
       operation: "objective-mapping",
       decision: "pass",
+      baselineId: "baseline-bi-bfbf1bbb",
+      objectiveMappings: [{ objectiveId: "OBJ-1", evidenceRefs: ["E-PASS"] }],
+      reason: "Map the current objective to the bound passing evidence.",
       _takAlignment: { verdict: "aligned" },
     },
   });
@@ -129,6 +133,9 @@ it("consumes an approved exact-bound writer from a historically completed TaskRu
       backlogItemId: "BI-BFBF1BBB",
       operation: "objective-mapping",
       decision: "pass",
+      baselineId: "baseline-bi-bfbf1bbb",
+      objectiveMappings: [{ objectiveId: "OBJ-1", evidenceRefs: ["E-PASS"] }],
+      reason: "Map the current objective to the bound passing evidence.",
     },
   }));
   expect(outcome).toMatchObject({
