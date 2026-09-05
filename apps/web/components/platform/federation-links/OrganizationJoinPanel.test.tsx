@@ -8,6 +8,7 @@ const {
   mockCancel,
   mockConfirm,
   mockDownload,
+  mockImport,
   mockQueue,
   mockStatus,
 } = vi.hoisted(() => ({
@@ -15,6 +16,7 @@ const {
   mockCancel: vi.fn(),
   mockConfirm: vi.fn(),
   mockDownload: vi.fn(),
+  mockImport: vi.fn(),
   mockQueue: vi.fn(),
   mockStatus: vi.fn(),
 }));
@@ -25,6 +27,7 @@ vi.mock("@/lib/actions/organization-join", () => ({
   cancelOrganizationJoinActionAction: mockCancel,
   downloadIssuedJoinPackageAction: mockDownload,
   getOrganizationJoinActionStatusAction: mockStatus,
+  importOrganizationJoinFileAction: mockImport,
   queueOrganizationJoinActionAction: mockQueue,
 }));
 
@@ -81,6 +84,7 @@ beforeEach(() => {
   mockConfirm.mockResolvedValue(true);
   mockAuthorize.mockResolvedValue({ ok: true });
   mockQueue.mockResolvedValue({ ok: true, actionKey: "ra-join-1" });
+  mockImport.mockResolvedValue({ ok: true, data: { authorityUrl: "http://founder-hub.local:3000", intendedPeer: "windows-dev.local", message: "Joined the organization at founder-hub.local:3000." } });
   mockStatus.mockResolvedValue({
     ok: true,
     actionKey: "ra-join-1",
@@ -143,19 +147,42 @@ describe("OrganizationJoinPanel", () => {
     fireEvent.change(screen.getByLabelText(/^Choose a \.dpfjoin file/), { target: { files: [file] } });
 
     expect(await screen.findByText("founder-hub.local:9000")).toBeTruthy();
-    expect(screen.getByText("windows-dev.local")).toBeTruthy();
+    expect(screen.getAllByText(/windows-dev\.local/).length).toBeGreaterThan(0);
     expect(document.body.textContent).not.toContain("must-never-render");
     expect(screen.getByRole("button", { name: "Join organization" }).hasAttribute("disabled")).toBe(true);
   });
 
-  it("rejects an expired or wrong-installation file before approval", async () => {
-    render(<OrganizationJoinPanel nodes={[member]} />);
+  it("joins through the portal with no installation selected and nothing typed", async () => {
+    render(<OrganizationJoinPanel nodes={[]} />);
     fireEvent.click(screen.getByRole("button", { name: "Join this installation" }));
-    const file = new File([joinPackage(new Date(Date.now() + 10 * 60_000), "another-host.local")], "wrong.dpfjoin");
-    fireEvent.change(screen.getByLabelText(/^Choose a \.dpfjoin file/), { target: { files: [file] } });
+    expect(screen.queryByText(/No installation has reported/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Enable secure setup" })).toBeNull();
+    const raw = joinPackage();
+    fireEvent.change(screen.getByLabelText(/^Choose a \.dpfjoin file/), { target: { files: [new File([raw], "join.dpfjoin")] } });
+    await screen.findByText("founder-hub.local:9000");
+    fireEvent.click(screen.getByLabelText(/I confirm this file is for windows-dev.local/));
+    fireEvent.click(screen.getByRole("button", { name: "Join organization" }));
 
-    expect((await screen.findByRole("alert")).textContent).toMatch(/created for another installation/i);
+    await waitFor(() => expect(mockImport).toHaveBeenCalledWith(raw));
     expect(mockQueue).not.toHaveBeenCalled();
+    expect((await screen.findByRole("status")).textContent).toMatch(/Joined the organization/);
+  });
+
+  it("rejects an expired file before approval and surfaces the server's wrong-host refusal", async () => {
+    render(<OrganizationJoinPanel nodes={[]} />);
+    fireEvent.click(screen.getByRole("button", { name: "Join this installation" }));
+    const expired = new File([joinPackage(new Date(Date.now() - 60_000))], "expired.dpfjoin");
+    fireEvent.change(screen.getByLabelText(/^Choose a \.dpfjoin file/), { target: { files: [expired] } });
+    expect((await screen.findByRole("alert")).textContent).toMatch(/expired/i);
+    expect(mockImport).not.toHaveBeenCalled();
+
+    mockImport.mockResolvedValueOnce({ ok: false, error: "invalid_input", message: "The join file was created for another installation" });
+    const raw = joinPackage(new Date(Date.now() + 10 * 60_000), "another-host.local");
+    fireEvent.change(screen.getByLabelText(/^Choose a \.dpfjoin file/), { target: { files: [new File([raw], "wrong.dpfjoin")] } });
+    await screen.findByText("founder-hub.local:9000");
+    fireEvent.click(screen.getByLabelText(/I confirm this file is for another-host.local/));
+    fireEvent.click(screen.getByRole("button", { name: "Join organization" }));
+    expect((await screen.findByRole("alert")).textContent).toMatch(/created for another installation/i);
   });
 
   it("resumes a queued action from server state after refresh", () => {

@@ -135,6 +135,7 @@ import {
   asyncInferenceOperationOutbox,
   asyncInferenceOperationReconciliation,
   asyncInferenceOperationRun,
+  asyncInferenceOperationTaskRunTransition,
 } from "./async-inference-operation";
 import { asyncOperationTaskHub } from "./async-operation-task-hub";
 
@@ -255,6 +256,7 @@ export const eventFunctions = [
   nonprodCapacityAvailable,
   mcpTaskRunExecute,
   asyncInferenceOperationRun,
+  asyncInferenceOperationTaskRunTransition,
   asyncOperationTaskHub,
 ];
 

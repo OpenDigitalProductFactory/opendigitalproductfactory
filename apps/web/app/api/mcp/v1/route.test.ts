@@ -37,7 +37,7 @@ vi.mock("@dpf/db", () => ({
   prisma: {
     user: { findUnique: vi.fn() },
     agent: { findFirst: vi.fn() },
-    taskRun: { findFirst: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
+    taskRun: { findFirst: vi.fn(), findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     agentThread: { upsert: vi.fn() },
     taskMessage: { create: vi.fn() },
     mcpToolSession: { findUnique: vi.fn(), deleteMany: vi.fn(), upsert: vi.fn() },

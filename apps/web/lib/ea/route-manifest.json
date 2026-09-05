@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 658,
+  "routeCount": 659,
   "routes": [
     {
       "routePath": "/",
@@ -2787,6 +2787,20 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/api/v1/federation/introductions/route.ts"
+    },
+    {
+      "routePath": "/api/v1/federation/membership/sign",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "federation",
+        "membership",
+        "sign"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/federation/membership/sign/route.ts",
+      "exposure": "private-mesh"
     },
     {
       "routePath": "/api/v1/federation/proposal",

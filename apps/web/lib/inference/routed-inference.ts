@@ -39,6 +39,7 @@ import {
   buildEffectiveRequestContract,
   buildInitialRouteContext,
 } from "@/lib/inference/route-contract-builder";
+import { assertDurableExecutionConstraint } from "./durable-execution-constraint";
 import { persistRoutedTokenUsage, routedContextKey } from "./routed-token-usage";
 import type { RouteAndCallOptions } from "./routed-inference-options";
 import { applyCallerExecutionPlanOverrides } from "./routed-inference-plan-overrides";
@@ -194,7 +195,14 @@ async function prepareRoute(
   // The calling coworker's own posture (if any) layers above org/platform, so a
   // per-coworker priority actually tunes that coworker's runs. Single-org install
   // → null org id; non-coworker runs pass null agentId (platform default).
-  const posture = await resolveDispatchPosture(options?.agentId ?? null, taskType);
+  // A durable caller that supplies an exact execution constraint has already
+  // closed every route-affecting policy. Saved Golden Triangle posture is an
+  // ambient preference, not authority to change that immutable plan. Keep the
+  // agent on the durable authority/audit binding, but do not let its saved (or
+  // inherited organization/platform) posture alter routing context or effort.
+  const posture = options?.durableAsyncOperation?.expectedExecution
+    ? null
+    : await resolveDispatchPosture(options?.agentId ?? null, taskType);
   const initialRouteContext = buildInitialRouteContext({
     sensitivity,
     options,
@@ -607,6 +615,14 @@ async function routeAndCallAttempt(
     && options?.interactionMode !== "background") {
     throw new Error("ASYNC_OPERATION_BACKGROUND_REQUIRED");
   }
+  // Supplying durable authority is an explicit at-most-once provider boundary,
+  // not a hint. A missing/mis-seeded async recipe must fail before the generic
+  // background branch can call a provider directly and discard its handle.
+  if (options?.durableAsyncOperation && !routeUsesDurableAsyncAdapter(decision)) {
+    throw new Error("ASYNC_OPERATION_EXECUTION_PLAN_REQUIRED");
+  }
+  const expectedExecution = options?.durableAsyncOperation?.expectedExecution;
+  if (expectedExecution) assertDurableExecutionConstraint(decision, expectedExecution);
   if (options?.interactionMode === "background") {
     if (routeUsesDurableAsyncAdapter(decision)) {
       const admitted = await admitRoutedAsyncOperation({
@@ -614,6 +630,7 @@ async function routeAndCallAttempt(
         messages,
         systemPrompt,
         tools: toolsStripped ? undefined : dispatchScreenInput.tools,
+        screeningInput: dispatchScreenInput,
         options,
         traceId,
       });

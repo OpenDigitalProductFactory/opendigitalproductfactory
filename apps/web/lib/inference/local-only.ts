@@ -26,6 +26,13 @@ type LocalOnlyConfigValue = { enabled?: boolean };
 let cached: { value: boolean; at: number } | null = null;
 const TTL_MS = 5_000;
 
+async function readLocalOnlyInference(): Promise<boolean> {
+  const row = await prisma.platformConfig.findUnique({
+    where: { key: LOCAL_ONLY_INFERENCE_CONFIG_KEY },
+  });
+  return !!(row?.value && typeof row.value === "object" && (row.value as LocalOnlyConfigValue).enabled === true);
+}
+
 /** Clear the in-memory cache (used by the setter and by tests). */
 export function invalidateLocalOnlyInferenceCache(): void {
   cached = null;
@@ -39,16 +46,23 @@ export function invalidateLocalOnlyInferenceCache(): void {
 export async function getLocalOnlyInference(now: number = Date.now()): Promise<boolean> {
   if (cached && now - cached.at < TTL_MS) return cached.value;
   try {
-    const row = await prisma.platformConfig.findUnique({
-      where: { key: LOCAL_ONLY_INFERENCE_CONFIG_KEY },
-    });
-    const value = !!(row?.value && typeof row.value === "object" && (row.value as LocalOnlyConfigValue).enabled === true);
+    const value = await readLocalOnlyInference();
     cached = { value, at: now };
     return value;
   } catch (err) {
     console.error("[local-only] failed to read inference-local-only config:", err);
     return false;
   }
+}
+
+/**
+ * Read the sovereignty switch without the hot-path cache. Provider workers use
+ * this fail-closed boundary immediately before an external async POST.
+ */
+export async function getLocalOnlyInferenceFresh(now: number = Date.now()): Promise<boolean> {
+  const value = await readLocalOnlyInference();
+  cached = { value, at: now };
+  return value;
 }
 
 /** Persist the local-only inference switch and invalidate the read cache. */

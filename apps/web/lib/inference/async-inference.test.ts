@@ -75,7 +75,12 @@ describe("pollAsyncOperation Gemini Interactions API", () => {
     await expect(pollAsyncOperation("async-op-1")).resolves.toBe("running");
     expect(fetchMock).toHaveBeenCalledWith(
       "https://generativelanguage.googleapis.com/v1beta/interactions/interaction%2Fid%20with%20spaces",
-      expect.objectContaining({ method: "GET" }),
+      expect.objectContaining({
+        method: "GET",
+        headers: expect.objectContaining({
+          "Api-Revision": "2026-05-20",
+        }),
+      }),
     );
     expect(mocks.updateOperation).toHaveBeenCalledWith({
       where: { id: "async-op-1" },

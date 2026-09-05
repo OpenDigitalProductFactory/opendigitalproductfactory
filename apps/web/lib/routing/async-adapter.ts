@@ -14,6 +14,7 @@
 import type { AdapterRequest, AdapterResult, ExecutionAdapterHandler } from "./adapter-types";
 import { InferenceError, classifyHttpError } from "@/lib/ai-inference";
 import { registerExecutionAdapter } from "./execution-adapter-registry";
+import { withGeminiInteractionsApiRevision } from "./gemini-interactions-contract";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -41,6 +42,18 @@ function normalizeInteractionsBaseUrl(baseUrl: string): string {
   return baseUrl.replace(/\/+$/, "");
 }
 
+function boundedModelGenerationConfig(request: AdapterRequest): Record<string, unknown> | null {
+  const maxTokens = request.plan.maxTokens;
+  if (!Number.isSafeInteger(maxTokens) || maxTokens <= 0) {
+    throw new InferenceError(
+      "Gemini model interactions require an enforceable positive output-token ceiling",
+      "provider_error",
+      request.providerId,
+    );
+  }
+  return { max_output_tokens: maxTokens };
+}
+
 // ── Async Adapter ───────────────────────────────────────────────────────────
 
 export const asyncAdapter: ExecutionAdapterHandler = {
@@ -66,11 +79,21 @@ export const asyncAdapter: ExecutionAdapterHandler = {
     const modelOrAgent = isManagedInteractionsAgent(modelId)
       ? { agent: modelId }
       : { model: modelId.replace(/^models\//, "") };
+    if (isManagedInteractionsAgent(modelId) && request.plan.maxTokens > 0) {
+      throw new InferenceError(
+        "Managed Interactions agents cannot enforce the requested output-token ceiling",
+        "provider_error",
+        providerId,
+      );
+    }
     const body: Record<string, unknown> = {
       ...modelOrAgent,
       input: prompt,
       ...(request.systemPrompt.trim().length > 0
         ? { system_instruction: request.systemPrompt }
+        : {}),
+      ...(!isManagedInteractionsAgent(modelId)
+        ? { generation_config: boundedModelGenerationConfig(request) }
         : {}),
       background: true,
     };
@@ -81,7 +104,10 @@ export const asyncAdapter: ExecutionAdapterHandler = {
     try {
       res = await fetch(url, {
         method: "POST",
-        headers: { ...headers, "Content-Type": "application/json" },
+        headers: withGeminiInteractionsApiRevision({
+          ...headers,
+          "Content-Type": "application/json",
+        }),
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(30_000), // start should be fast
       });

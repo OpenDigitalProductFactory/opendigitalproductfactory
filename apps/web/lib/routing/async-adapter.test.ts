@@ -38,7 +38,7 @@ function makePlan(overrides: Partial<RoutedExecutionPlan> = {}): RoutedExecution
     recipeId: null,
     contractFamily: "background.research",
     executionAdapter: "async",
-    maxTokens: 0,
+    maxTokens: 4096,
     providerSettings: {},
     toolPolicy: {},
     responsePolicy: {},
@@ -108,11 +108,33 @@ describe("asyncAdapter", () => {
 
     const [url, init] = mockFetch.mock.calls[0];
     expect(url).toBe("https://generativelanguage.googleapis.com/v1beta/interactions");
+    expect(init.headers).toMatchObject({
+      "Api-Revision": "2026-05-20",
+    });
     expect(JSON.parse(init.body)).toEqual({
       model: "gemini-2.0-flash-thinking-exp",
       input: "Research the history of quantum computing",
+      generation_config: { max_output_tokens: 4096 },
       background: true,
     });
+  });
+
+  it("Gemini: replaces a case-insensitive caller revision with the server-owned revision", async () => {
+    stubFetchOk({
+      id: "interaction-current-revision",
+      object: "interaction",
+      status: "in_progress",
+    });
+
+    await asyncAdapter.execute(makeRequest({
+      provider: {
+        baseUrl: "https://generativelanguage.googleapis.com/v1beta",
+        headers: { "api-revision": "stale-client-value" },
+      },
+    }));
+
+    const sentHeaders = new Headers(mockFetch.mock.calls[0][1].headers);
+    expect(sentHeaders.get("Api-Revision")).toBe("2026-05-20");
   });
 
   it("Gemini: returns a typed async-operation start result", async () => {
@@ -189,7 +211,7 @@ describe("asyncAdapter", () => {
 
     await asyncAdapter.execute(makeRequest({
       modelId: "deep-research-pro-preview-12-2025",
-      plan: makePlan({ modelId: "deep-research-pro-preview-12-2025" }),
+      plan: makePlan({ modelId: "deep-research-pro-preview-12-2025", maxTokens: 0 }),
       systemPrompt: "Return cited primary sources.",
     }));
 
@@ -200,6 +222,27 @@ describe("asyncAdapter", () => {
       system_instruction: "Return cited primary sources.",
       background: true,
     });
+  });
+
+  it("rejects a model interaction without an enforceable output-token ceiling", async () => {
+    await expect(asyncAdapter.execute(makeRequest({
+      plan: makePlan({ maxTokens: 0 }),
+    }))).rejects.toMatchObject({
+      code: "provider_error",
+      message: expect.stringContaining("positive output-token ceiling"),
+    });
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it("rejects a managed agent when a model-only token ceiling is requested", async () => {
+    await expect(asyncAdapter.execute(makeRequest({
+      modelId: "deep-research-pro-preview-12-2025",
+      plan: makePlan({ modelId: "deep-research-pro-preview-12-2025", maxTokens: 4096 }),
+    }))).rejects.toMatchObject({
+      code: "provider_error",
+      message: expect.stringContaining("cannot enforce"),
+    });
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 
   it("throws when no operation ID in response", async () => {

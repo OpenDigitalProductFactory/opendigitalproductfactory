@@ -13,10 +13,13 @@ import {
 } from "@dpf/db/organization-join-action";
 
 import { auth } from "@/lib/auth";
+import { importOrganizationJoinFile } from "@/lib/federation/organization-join-import";
+import { resolveLocalFederationAuthorityUrl } from "@/lib/federation/self-authority";
 import { makeRfcId } from "@/lib/change-management/lifecycle";
 import { assertEncryptionReadyForCredentialWrite } from "@/lib/govern/credential-crypto";
 import { syncUserPrincipal } from "@/lib/identity/principal-linking";
 import { can } from "@/lib/permissions";
+import { ok, type ActionSuccess } from "@/lib/shared/action-result";
 import { isRecord } from "@/lib/shared/coerce";
 import {
   cancelQueuedOrganizationJoinAction,
@@ -325,6 +328,43 @@ export async function queueOrganizationJoinActionAction(input: {
   }
 }
 
+const JOIN_FILE_MAX_BYTES = 64 * 1024;
+
+/**
+ * Portal-mediated join (EP-ZERO-CONFIG-FEDERATION): choosing the join file is
+ * the whole act. The portal generates a key, has the organization CA sign it
+ * through the authority's portal, keeps the material in the federation state
+ * directory, and the next federation tick records the link trusted on both
+ * sides. No edge node, no host script, nothing typed.
+ */
+export interface OrganizationJoinImported {
+  authorityUrl: string;
+  intendedPeer: string;
+  message: string;
+}
+
+export async function importOrganizationJoinFileAction(fileText: string): Promise<
+  ActionSuccess<OrganizationJoinImported> | OrganizationJoinActionFailure
+> {
+  const session = await auth();
+  if (!session?.user?.id) return { ok: false, error: "unauthorized", message: "Sign in required" };
+  if (!can({ platformRole: session.user.platformRole, isSuperuser: session.user.isSuperuser }, "manage_platform")) {
+    return { ok: false, error: "forbidden", message: "Platform management access is required" };
+  }
+  if (typeof fileText !== "string" || !fileText.trim() || Buffer.byteLength(fileText, "utf8") > JOIN_FILE_MAX_BYTES) {
+    return { ok: false, error: "invalid_input", message: "This is not a valid DPF organization join file" };
+  }
+  const requestHost = await resolveLocalFederationAuthorityUrl();
+  const result = await importOrganizationJoinFile({ fileText, requestHost });
+  if (!result.imported) return joinImportFailure(result.reason, result.detail);
+  revalidatePath(CONNECTIONS_PATH);
+  return ok({
+    authorityUrl: result.authorityUrl,
+    intendedPeer: result.intendedPeer,
+    message: `Joined the organization at ${new URL(result.authorityUrl).host}. The connection appears here trusted within a few minutes.`,
+  });
+}
+
 export async function getOrganizationJoinActionStatusAction(actionKey: string): Promise<
   | { ok: true; actionKey: string; actionType: string; status: string; approvalState: string; packageReady: boolean; evidence: Record<string, unknown> }
   | OrganizationJoinActionFailure
@@ -398,6 +438,25 @@ function actionFailure(reason: string): OrganizationJoinActionFailure {
       return { ok: false, error: "invalid_input", message: "The organization setup request is not valid" };
   }
 }
+function joinImportFailure(reason: string, detail?: string): OrganizationJoinActionFailure {
+  switch (reason) {
+    case "join-package-expired":
+      return { ok: false, error: "invalid_input", message: "The join file has expired. Create a new one on the organization installation" };
+    case "intended-for-another-host":
+      return { ok: false, error: "invalid_input", message: "The join file was created for another installation" };
+    case "authority-unreachable":
+      return { ok: false, error: "not_ready", message: `The organization installation could not be reached${detail ? ` (${detail})` : ""}` };
+    case "authority-refused":
+      return { ok: false, error: "conflict", message: `The organization installation refused the join file${detail ? ` (${detail})` : ""}. Create a new one and try again` };
+    case "chain-untrusted":
+      return { ok: false, error: "conflict", message: "The certificate the organization installation returned does not match the join file's trust fingerprint" };
+    case "material-not-writable":
+      return { ok: false, error: "not_ready", message: `This installation's state directory is not writable${detail ? ` (${detail})` : ""}` };
+    default:
+      return { ok: false, error: "invalid_input", message: "This is not a valid DPF organization join file" };
+  }
+}
+
 function edgeHostIdentity(value: unknown): string | null {
   if (!isRecord(value)) return null;
   if (typeof value.hostname === "string") return value.hostname;

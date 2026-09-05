@@ -8,6 +8,10 @@ import {
   type AsyncProviderStartReconciliation,
 } from "./async-operation-worker";
 import type { RoutedExecutionPlan } from "@/lib/routing/recipe-types";
+import {
+  parseDurableDispatchScreenEvidence,
+  type DurableDispatchScreenEvidence,
+} from "./durable-dispatch-screen";
 
 const MAX_SCREENED_CONTEXT_BYTES = 1_000_000;
 const CREDENTIAL_FIELD_NAMES = new Set([
@@ -43,6 +47,7 @@ export interface DurableAsyncProviderContext {
   systemPrompt: string;
   tools?: Array<Record<string, unknown>>;
   executionPlan: RoutedExecutionPlan;
+  dispatchScreen: DurableDispatchScreenEvidence;
   previousResponseId?: string;
   attribution?: Attribution;
 }
@@ -147,6 +152,7 @@ export function parseDurableAsyncProviderContextInput(inputIdentity: {
   if (executionPlan.contractFamily !== inputIdentity.contractFamily) {
     throw new Error("ASYNC_OPERATION_CONTEXT_CONTRACT_MISMATCH");
   }
+  const dispatchScreen = parseDurableDispatchScreenEvidence(input.dispatchScreen);
 
   return {
     version: 1,
@@ -156,6 +162,7 @@ export function parseDurableAsyncProviderContextInput(inputIdentity: {
       ? {}
       : { tools: input.tools as Array<Record<string, unknown>> }),
     executionPlan,
+    dispatchScreen,
     ...(optionalString(input.previousResponseId, "ASYNC_OPERATION_CONTEXT_RESPONSE_ID_INVALID")
       ? { previousResponseId: input.previousResponseId as string }
       : {}),
@@ -171,6 +178,11 @@ export function parseDurableAsyncProviderContext(
 }
 
 export interface DurableAsyncProviderIo {
+  authorizeDispatch?(input: {
+    operation: AsyncOperationRecord;
+    providerId: string;
+    context: DurableAsyncProviderContext;
+  }): Promise<void> | void;
   dispatch(input: {
     providerId: string;
     modelId: string;
@@ -231,6 +243,18 @@ export function createDurableAsyncProviderDependencies(
   return {
     async startProvider(operation) {
       const context = parseDurableAsyncProviderContext(operation);
+      try {
+        await io.authorizeDispatch?.({
+          operation,
+          providerId: operation.providerId,
+          context,
+        });
+      } catch {
+        throw new AsyncProviderStartError(
+          "ASYNC_OPERATION_DISPATCH_SCREEN_REJECTED",
+          "definite-rejection",
+        );
+      }
       try {
         const result = await io.dispatch({
           providerId: operation.providerId,
