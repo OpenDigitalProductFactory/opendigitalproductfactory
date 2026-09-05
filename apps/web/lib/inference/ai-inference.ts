@@ -51,9 +51,9 @@ import {
   engineKeyForProvider,
 } from "./inference-admission";
 import { assertProviderDispatchCapacity } from "@/lib/routing/local-provider-capacity";
+import { providerInferenceFetch } from "./provider-inference-transport";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
-
 /** Anthropic-style content blocks for structured tool-calling messages */
 export type ContentBlock =
   | { type: "text"; text: string }
@@ -642,6 +642,7 @@ export async function callProvider(
       modelId,
       plan: effectivePlan,
       provider: { baseUrl, headers },
+      fetchImpl: providerInferenceFetch,
       messages,
       systemPrompt,
       tools,
@@ -778,7 +779,6 @@ export async function logTokenUsage(input: {
       );
     }
   }
-
   // Record cost metric for Prometheus
   if (costUsd > 0) {
     aiInferenceCostUsd.inc({ provider: input.providerId }, costUsd);

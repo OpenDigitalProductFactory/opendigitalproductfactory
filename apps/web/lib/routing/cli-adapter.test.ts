@@ -118,6 +118,7 @@ function makeRequest(overrides?: Partial<AdapterRequest>): AdapterRequest {
     modelId: "claude-sonnet-4-6",
     plan: makePlan(),
     provider: { baseUrl: "cli://local", headers: {} },
+    fetchImpl: globalThis.fetch,
     messages: [{ role: "user", content: "Hello" }],
     systemPrompt: "You are a helpful assistant.",
     ...overrides,
