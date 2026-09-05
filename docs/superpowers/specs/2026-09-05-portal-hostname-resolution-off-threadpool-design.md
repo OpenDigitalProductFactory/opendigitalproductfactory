@@ -20,6 +20,10 @@ server-only transport owns the lookup adapter and an Undici dispatcher.
 GitHub immutable reads use an operation-scoped instance and close it in their
 existing lifecycle. The singleton Inngest client uses a process-lived instance
 because it sends events and registers functions for the lifetime of the portal.
+Provider inference uses a separate process-lived instance injected at the
+adapter boundary. Synchronous chat, Responses, embedding, image, transcription,
+and asynchronous start/poll traffic all use that one transport so a fallback or
+poll never returns to the poisoned process-global hostname path.
 
 This is transport hardening only. It does not weaken immutable blob checks,
 change authority, synthesize a receipt, retry a business operation, or turn a
@@ -56,6 +60,18 @@ systemic cause. The names that originally occupied the two workers remain
 unknown, so the repair removes known control-plane clients from that shared
 queue instead of depending on attribution of the first bad lookup.
 
+After the GitHub, Inngest, and step-ca slices were served at protected commit
+`4e48b40a727b9a1bf02b355c69a2c661ab4af275`, those three surfaces succeeded in
+the same long-lived portal process while every governed external reviewer still
+failed before inference. Portal logs recorded four consecutive
+`callWithFallbackChain` Gemini `fetch failed` outcomes followed by
+`All endpoints failed for external-mcp`. A fresh Node process inside the same
+portal container reached the Gemini HTTPS endpoint in 225 ms and received an
+ordinary HTTP response. The remaining HTTP-backed inference adapters and async
+poller still called process-global `fetch`, which isolates the residual defect
+to the provider-inference transport boundary rather than model behavior,
+credentials, routing, or the terminal-writer contract.
+
 ## Objectives
 
 **OBJ-DNS-1:** Inngest and GitHub control-plane calls from a long-lived portal
@@ -70,6 +86,10 @@ copying bespoke DNS behavior into each caller.
 **OBJ-DNS-4:** The step-ca slice and this shared-client slice compose on
 protected ancestry without duplicating source ownership.
 
+**OBJ-DNS-5:** Every external HTTP provider inference path, including async
+start and poll, resolves off the libuv worker pool without changing provider
+authorization, routing, timeout, streaming, tool-call, or fail-closed behavior.
+
 ## Acceptance criteria
 
 | Acceptance | Objective links | Observable evidence |
@@ -80,6 +100,9 @@ protected ancestry without duplicating source ownership.
 | `AC-DNS-4` | `OBJ-DNS-1`, `OBJ-DNS-3` | The singleton Inngest client receives the shared transport's fetch implementation, covering event sends and SDK function registration. |
 | `AC-DNS-5` | `OBJ-DNS-2` | Existing GitHub immutable-provider refusals, Inngest send behavior, and typed error paths remain green; no retry or readiness policy changes. |
 | `AC-DNS-6` | `OBJ-DNS-4` | Protected ancestry includes PR `#5061`, or the delivery record names it as a required protected predecessor for step-ca acceptance. |
+| `AC-DNS-7` | `OBJ-DNS-1`, `OBJ-DNS-3`, `OBJ-DNS-5` | The central inference caller injects one process-lived off-threadpool fetch into every HTTP adapter; a Gemini chat fixture proves the injected transport is used while preserving a schema-valid tool call. |
+| `AC-DNS-8` | `OBJ-DNS-1`, `OBJ-DNS-5` | Async interaction start and poll both use the provider transport while preserving provider API revision, opaque operation identity, timeout, and terminal-state handling. |
+| `AC-DNS-9` | `OBJ-DNS-2`, `OBJ-DNS-5` | Adjacent provider adapter, fallback-chain, streaming, and terminal-writer suites remain green; transport failure remains an explicit provider failure and never fabricates a model or writer result. |
 
 ## Architecture
 
@@ -106,6 +129,16 @@ transport and passes its fetch function through Inngest's supported `fetch`
 option. The Inngest SDK then uses that fetch for event API and registration
 traffic. The transport is not closed while the singleton remains reachable.
 
+`apps/web/lib/inference/provider-inference-transport.ts` owns a separate
+process-lived shared transport for provider calls. `callProvider` supplies its
+Fetch-compatible function through a required, server-owned `AdapterRequest`
+field. HTTP-backed adapters consume only that field; CLI adapters accept the
+common request shape but do not use the transport. The async poller consumes
+the same singleton as async start, so an operation cannot start off-threadpool
+and later poll through process-global hostname resolution. No adapter creates
+an Undici `Agent` per request, and the process-lived dispatcher is not closed
+while the portal can issue or resume inference.
+
 PRs `#5061` and `#5063` own the already-written step-ca lookup, request-agent,
 and timeout-diagnostic behavior. This change composes on both protected merge
 commits and moves only their lookup implementation onto the shared resolver.
@@ -125,6 +158,10 @@ lookup path without losing the step-ca diagnostics or connection lifecycle.
   mandatory on success and failure.
 - Provider tokens and response bodies are unchanged and are never included in
   DNS diagnostics.
+- Transport injection cannot alter provider selection, endpoint URLs, request
+  headers, credential material, retry/fallback budgets, abort signals,
+  streaming bodies, tool schemas, or response parsing. It changes only how the
+  already-authorized hostname is resolved and dispatched.
 
 ## Options rejected
 
@@ -157,6 +194,16 @@ lookup path without losing the step-ca diagnostics or connection lifecycle.
    check.
 6. After a separately governed release/deployment, verify long-lived Inngest,
    GitHub immutable reads, and step-ca calls without a portal restart.
+7. Add RED fixtures proving chat/tool-call dispatch, async interaction start,
+   and async poll use an injected provider transport even when process-global
+   `fetch` fails.
+8. Add the process-lived provider inference transport, require it at the
+   adapter boundary, and migrate every external HTTP inference dispatch and
+   poll without changing their protocol behavior.
+9. Run focused and adjacent provider, fallback, streaming, and terminal-writer
+   suites plus typecheck and guards; then deliver through protected CI and
+   verify one governed reviewer reaches its real terminal writer on the served
+   commit.
 
 ## Non-goals
 
@@ -164,3 +211,5 @@ lookup path without losing the step-ca diagnostics or connection lifecycle.
 - Recovering or mutating the stale admin-restart TaskRun.
 - Editing the installed runtime or deploying from this worktree.
 - Replacing application-wide DNS behavior or adding a DNS cache.
+- Changing model selection, provider fallback order, async protocol identity,
+  terminal-writer enforcement, or provider OAuth/discovery behavior.

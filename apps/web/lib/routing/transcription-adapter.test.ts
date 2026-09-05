@@ -58,6 +58,7 @@ function makeRequest(overrides: Partial<AdapterRequest> = {}): AdapterRequest {
       baseUrl: "https://api.openai.com/v1",
       headers: { Authorization: "Bearer sk-test", "Content-Type": "application/json" },
     },
+    fetchImpl: globalThis.fetch,
     messages: [{
       role: "user",
       content: [

@@ -8,6 +8,7 @@ const {
   mockStartTimer,
   mockAiInferenceTokensInc,
   mockAiInferenceErrorsInc,
+  mockProviderFetch,
 } = vi.hoisted(() => ({
   mockPrisma: {
     modelProvider: {
@@ -20,6 +21,7 @@ const {
   mockStartTimer: vi.fn(),
   mockAiInferenceTokensInc: vi.fn(),
   mockAiInferenceErrorsInc: vi.fn(),
+  mockProviderFetch: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({
@@ -52,6 +54,10 @@ vi.mock("../routing/image-gen-adapter", () => ({}));
 vi.mock("../routing/embedding-adapter", () => ({}));
 vi.mock("../routing/transcription-adapter", () => ({}));
 vi.mock("../routing/async-adapter", () => ({}));
+
+vi.mock("./provider-inference-transport", () => ({
+  providerInferenceFetch: mockProviderFetch,
+}));
 
 import { callProvider } from "./ai-inference";
 import { _setAdapterTelemetryWriteOverrideForTests } from "../routing/adapter-telemetry-writer";
@@ -87,6 +93,9 @@ describe("callProvider", () => {
     );
 
     expect(result).not.toHaveProperty("asyncOperation");
+    expect(mockAdapterExecute).toHaveBeenCalledWith(expect.objectContaining({
+      fetchImpl: mockProviderFetch,
+    }));
   });
 
   it("routes Codex OAuth execution through the ChatGPT backend", async () => {
