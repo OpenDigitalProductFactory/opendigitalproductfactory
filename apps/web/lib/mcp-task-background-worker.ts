@@ -140,6 +140,20 @@ export function reconstructPersistedRemoteTask(
   const routeContext = string(row.routeContext);
   const prompt = storedTextPart(row.messages[0]?.parts);
   const authorityScope = stringArray(row.authorityScope);
+  const hasRequestObjective = metadata !== null
+    && Object.prototype.hasOwnProperty.call(metadata, "requestObjective");
+  let requestObjective = row.objective;
+  if (hasRequestObjective) {
+    const storedRequestObjective = string(metadata?.["requestObjective"]);
+    if (!storedRequestObjective) {
+      return {
+        ok: false,
+        code: "persisted_request_invalid",
+        message: "Persisted remote task request objective is invalid.",
+      };
+    }
+    requestObjective = storedRequestObjective;
+  }
 
   if (
     !row.id
@@ -210,7 +224,7 @@ export function reconstructPersistedRemoteTask(
     agentId,
     routeContext,
     title: row.title,
-    objective: row.objective,
+    objective: requestObjective,
     prompt,
     idempotencyKey,
     riskClass,
