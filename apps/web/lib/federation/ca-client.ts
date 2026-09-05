@@ -27,7 +27,8 @@ const CA_TIMEOUT_MS = 15_000;
  */
 const caAgent = new HttpsAgent({ keepAlive: false, maxSockets: 8 });
 
-type LookupCallback = (error: NodeJS.ErrnoException | null, address: string, family: number) => void;
+/** net.connect calls lookup with `{ all: true }` (happy-eyeballs) and expects an array then; otherwise a single address. */
+type LookupCallback = (error: NodeJS.ErrnoException | null, address: string | LookupAddress[], family?: number) => void;
 
 /**
  * Resolve the CA host without the libuv thread pool. Node's default
@@ -58,10 +59,11 @@ export async function resolveCaHost(hostname: string, resolver: Pick<typeof dns,
   return resolver.lookup(hostname);
 }
 
-function offThreadpoolLookup(hostname: string, _options: unknown, callback: LookupCallback): void {
-  resolveCaHost(hostname).then(
-    (found) => callback(null, found.address, found.family),
-    (error: NodeJS.ErrnoException) => callback(error, "", 0),
+export function offThreadpoolLookup(hostname: string, options: unknown, callback: LookupCallback, resolver?: Pick<typeof dns, "resolve4" | "resolve6" | "lookup">): void {
+  const wantsAll = typeof options === "object" && options !== null && (options as { all?: boolean }).all === true;
+  resolveCaHost(hostname, resolver).then(
+    (found) => (wantsAll ? callback(null, [found]) : callback(null, found.address, found.family)),
+    (error: NodeJS.ErrnoException) => (wantsAll ? callback(error, []) : callback(error, "", 0)),
   );
 }
 

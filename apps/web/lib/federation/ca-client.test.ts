@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { caInternalUrl, resolveCaHost } from "./ca-client";
+import { caInternalUrl, offThreadpoolLookup, resolveCaHost } from "./ca-client";
 
 describe("resolveCaHost", () => {
   it("returns an IP literal untouched, without touching any resolver", async () => {
@@ -30,6 +30,20 @@ describe("resolveCaHost", () => {
     };
     expect(await resolveCaHost("host.docker.internal", resolver as never)).toEqual({ address: "127.0.0.1", family: 4 });
     expect(resolver.lookup).toHaveBeenCalledWith("host.docker.internal");
+  });
+});
+
+describe("offThreadpoolLookup", () => {
+  it("answers net.connect's { all: true } happy-eyeballs form with an array, and the plain form with address + family", async () => {
+    const resolver = { resolve4: vi.fn(async () => ["172.18.0.7"]), resolve6: vi.fn(), lookup: vi.fn() };
+    const all = await new Promise<unknown[]>((resolve) => offThreadpoolLookup("step-ca", { all: true }, (...args) => resolve(args), resolver as never));
+    expect(all).toEqual([null, [{ address: "172.18.0.7", family: 4 }]]);
+    const single = await new Promise<unknown[]>((resolve) => offThreadpoolLookup("step-ca", {}, (...args) => resolve(args), resolver as never));
+    expect(single).toEqual([null, "172.18.0.7", 4]);
+    const failing = { resolve4: vi.fn(async () => { throw new Error("x"); }), resolve6: vi.fn(async () => { throw new Error("x"); }), lookup: vi.fn(async () => { throw Object.assign(new Error("ENOTFOUND"), { code: "ENOTFOUND" }); }) };
+    const failed = await new Promise<unknown[]>((resolve) => offThreadpoolLookup("nosuch", { all: true }, (...args) => resolve(args), failing as never));
+    expect((failed[0] as Error).message).toBe("ENOTFOUND");
+    expect(failed[1]).toEqual([]);
   });
 });
 
