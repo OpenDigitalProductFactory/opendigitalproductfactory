@@ -200,11 +200,19 @@ describe("deriveCoworkerApprovalPolicy", () => {
     expect(deriveCoworkerApprovalPolicy(input)).toBe(expected);
   });
 
-  it("does not add a second human approval to an exact server-bound independent review", () => {
+  it("does not add a second human approval to an exact server-bound initiative review", () => {
     expect(deriveCoworkerApprovalPolicy({
       hitlTierDefault: 2,
       hitlPolicy: "side-effects",
-      serverBoundIndependentReview: true,
+      serverBoundInitiativeReview: true,
+    })).toBe("none");
+  });
+
+  it("does not ask the business owner to approve an exact bound research receipt", () => {
+    expect(deriveCoworkerApprovalPolicy({
+      hitlTierDefault: 1,
+      hitlPolicy: "side-effects",
+      serverBoundInitiativeReview: true,
     })).toBe("none");
   });
 
@@ -212,7 +220,7 @@ describe("deriveCoworkerApprovalPolicy", () => {
     expect(deriveCoworkerApprovalPolicy({
       hitlTierDefault: 1,
       hitlPolicy: "side-effects",
-      serverBoundIndependentReview: true,
+      serverBoundInitiativeReview: true,
     })).toBe("none");
   });
 
@@ -220,7 +228,7 @@ describe("deriveCoworkerApprovalPolicy", () => {
     expect(deriveCoworkerApprovalPolicy({
       hitlTierDefault: 2,
       hitlPolicy: "side-effects",
-      serverBoundIndependentReview: false,
+      serverBoundInitiativeReview: false,
     })).toBe("side-effects");
   });
 
@@ -228,7 +236,7 @@ describe("deriveCoworkerApprovalPolicy", () => {
     expect(deriveCoworkerApprovalPolicy({
       hitlTierDefault: 1,
       hitlPolicy: "always",
-      serverBoundIndependentReview: true,
+      serverBoundInitiativeReview: true,
     })).toBe("all");
   });
 });
