@@ -100,3 +100,50 @@ describe("summarizeDecisions", () => {
     assert.deepEqual(s.flaggedPaths, ["/d"]);
   });
 });
+
+// 2026-09-02: 132 worktrees classified reapable, 24 of them owned by active
+// Workrooms, because the only liveness signal was a Claude Code heartbeat that
+// Codex/Grok/Build Studio never write. These pin the platform-owned gate.
+describe("Workroom claims outrank a merged, clean tree", () => {
+  const merged = (extra) => ({
+    branch: "fix/topic",
+    isRoot: false,
+    pinned: false,
+    hasActiveLease: false,
+    hasOpenPr: false,
+    merged: true,
+    dirty: false,
+    ageDays: 30,
+    hasLiveSession: false,
+    midMerge: false,
+    ...extra,
+  });
+
+  it("KEEPS a merged clean worktree that an active Workroom claims", () => {
+    // The exact case that was lost: merged, clean, no heartbeat because the
+    // session was Codex — but the platform knew it was owned.
+    const v = classifyWorktree(merged({ hasActiveClaim: true }));
+    assert.equal(v.verdict, "KEEP");
+    assert.match(v.reason, /active Workroom/);
+  });
+
+  it("KEEPS everything when the claim record cannot be read", () => {
+    // Fail safe: no token, portal down, MCP error. "Nobody is working" is a
+    // guess, and it is the guess that cost 24 worktrees.
+    const v = classifyWorktree(merged({ claimSourceUnavailable: true, claimSourceReason: "no token" }));
+    assert.equal(v.verdict, "KEEP");
+    assert.match(v.reason, /refusing to reap on absent evidence/);
+  });
+
+  it("still reaps a merged clean worktree nobody claims", () => {
+    // The gate must not seize up entirely — an unclaimed, merged, clean tree is
+    // still the safe case the reaper exists for.
+    const v = classifyWorktree(merged({ hasActiveClaim: false, claimSourceUnavailable: false }));
+    assert.equal(v.verdict, "PRUNE_TIER_A");
+  });
+
+  it("prefers the claim over the heartbeat's absence, not the reverse", () => {
+    const v = classifyWorktree(merged({ hasActiveClaim: true, hasLiveSession: false }));
+    assert.equal(v.verdict, "KEEP");
+  });
+});
