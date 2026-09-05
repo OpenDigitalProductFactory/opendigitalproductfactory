@@ -79,6 +79,7 @@ type GithubJsonFailure = {
   kind: "transport" | "http" | "unreadable";
   attempts: number;
   status?: number;
+  transportCode?: string;
 };
 
 type GithubJsonResult =
@@ -87,6 +88,22 @@ type GithubJsonResult =
 
 const RETRYABLE_PROVIDER_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
 const MAX_PROVIDER_ATTEMPTS = 2;
+
+// Preserve useful transport evidence without returning messages, URLs, headers,
+// or arbitrary provider-defined codes that may contain credentials.
+const SAFE_TRANSPORT_CODES = new Set([
+  "UND_ERR_CONNECT_TIMEOUT", "UND_ERR_HEADERS_TIMEOUT", "UND_ERR_BODY_TIMEOUT",
+  "UND_ERR_SOCKET", "ENOTFOUND", "EAI_AGAIN", "ECONNRESET", "ECONNREFUSED", "ETIMEDOUT",
+]);
+
+function safeTransportCode(cause: unknown): string | undefined {
+  for (let depth = 0; depth < 4 && cause && typeof cause === "object"; depth += 1) {
+    const error = cause as { code?: unknown; cause?: unknown };
+    if (typeof error.code === "string" && SAFE_TRANSPORT_CODES.has(error.code)) return error.code;
+    cause = error.cause;
+  }
+  return undefined;
+}
 
 function providerAttemptLabel(attempts: number): string {
   return `${attempts} ${attempts === 1 ? "attempt" : "attempts"}`;
@@ -98,7 +115,7 @@ function providerFailureMessage(
 ): string {
   const attempts = providerAttemptLabel(failure.attempts);
   if (failure.kind === "transport") {
-    return `Repository provider could not resolve ${labels.unavailable} after ${attempts} (transport failure).`;
+    return `Repository provider could not resolve ${labels.unavailable} after ${attempts} (transport failure${failure.transportCode ? `: ${failure.transportCode}` : ""}).`;
   }
   if (failure.kind === "http") {
     return `Repository provider could not resolve ${labels.unavailable} after ${attempts} (HTTP ${failure.status}).`;
@@ -122,9 +139,9 @@ async function fetchGithubJson(args: {
         },
         cache: "no-store",
       });
-    } catch {
+    } catch (cause) {
       if (attempt < MAX_PROVIDER_ATTEMPTS) continue;
-      return { ok: false, kind: "transport", attempts: attempt };
+      return { ok: false, kind: "transport", attempts: attempt, transportCode: safeTransportCode(cause) };
     }
     if (!response.ok) {
       await cancelGithubResponseBody(response);

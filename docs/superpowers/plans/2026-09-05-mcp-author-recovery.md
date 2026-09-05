@@ -23,6 +23,12 @@ Proposed decision: atomic. Receipt pending validation against the approved scope
 
 ## 1. Resolve exact impact and establish failing behavior
 
+### Confirmed transport reproduction, 2026-09-05
+
+The deployed image at revision `76ef1adc8e0d64e30695684270c6df7f7563c11f` reproduces the immutable-reader failure. A read-only isolated process loaded its shipped Turbopack runtime and the MCP route's chunk registrations, instantiated only the bundled Undici module, and requested the exact GitHub contents locator. That client failed with `UND_ERR_CONNECT_TIMEOUT` after 10,515 ms. Native Node loading of Undici 8.10.0 and 7.29.0 in the same container returned HTTP 200 and the expected blob in 424 ms and 508 ms. The governed MCP reader also failed after two transport attempts. No live files, credentials, approvals or verification controls were changed by the probes.
+
+Keep Undici in Next's `serverExternalPackages`, using the [documented native Node loading mechanism](https://nextjs.org/docs/app/api-reference/config/next-config-js/serverExternalPackages). Preserve safe transport cause codes in the existing provider failure projection, without exception text or arbitrary codes. This repairs the demonstrated transport boundary; approval visibility and reviewer lifecycle remain separate acceptance cases. After the new production build, verify native Undici resolution in the standalone artifact and repeat the exact governed immutable read and reviewer journey. Unit tests alone do not verify this build-dependent correction.
+
 Claim exact implementation paths and consume every testImpact and guardObligation from the resulting Workroom changeImpactContract. The present docs-only contract has neither and does not cover runtime code. Resolve missing impact guidance before proceeding; use exhaustive checks while unresolved.
 
 Grounded candidate files under apps/web/lib: backlog/initiative-readiness/readiness-guidance.ts, canonical-artifact-discovery.ts and evaluate.ts in the same directory; tak/initiative-readiness-tool-grants.ts; work-capsules/governed-work-claim.ts; work-capsules/mcp-handlers.ts; mcp/packs/work-capsules-pack.ts; planning/plan-backlog-coverage.ts. Use their associated tests and existing workroom read/action adapters. Inspect the current registry and consumer graph before adding a helper.
