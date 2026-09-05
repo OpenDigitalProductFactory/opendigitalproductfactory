@@ -55,6 +55,7 @@ function makeRequest(overrides: Partial<AdapterRequest> = {}): AdapterRequest {
       baseUrl: "https://generativelanguage.googleapis.com/v1beta",
       headers: { "Content-Type": "application/json" },
     },
+    fetchImpl: globalThis.fetch,
     messages: [{ role: "user", content: "Research the history of quantum computing" }],
     systemPrompt: "",
     ...overrides,
@@ -117,6 +118,33 @@ describe("asyncAdapter", () => {
       generation_config: { max_output_tokens: 4096 },
       background: true,
     });
+  });
+
+  it("Gemini: starts through the server-injected provider transport", async () => {
+    mockFetch.mockRejectedValueOnce(new Error("poisoned process-global fetch"));
+    const providerFetch = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        id: "interaction-off-threadpool",
+        object: "interaction",
+        status: "in_progress",
+      }),
+      headers: new Headers(),
+    } as Response);
+    const req = makeRequest({ fetchImpl: providerFetch as typeof fetch });
+
+    await expect(asyncAdapter.execute(req)).resolves.toMatchObject({
+      asyncOperation: {
+        status: "accepted",
+        providerOperationId: "interaction-off-threadpool",
+      },
+    });
+    expect(providerFetch).toHaveBeenCalledOnce();
+    expect(mockFetch).not.toHaveBeenCalled();
+    expect(providerFetch.mock.calls[0]?.[1]).toEqual(expect.objectContaining({
+      signal: expect.any(AbortSignal),
+    }));
   });
 
   it("Gemini: replaces a case-insensitive caller revision with the server-owned revision", async () => {

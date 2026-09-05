@@ -290,7 +290,7 @@ export const responsesAdapter: ExecutionAdapterHandler = {
     const startMs = Date.now();
     let res: Response;
     try {
-      res = await fetch(responsesUrl, {
+      res = await request.fetchImpl(responsesUrl, {
         method: "POST",
         headers: provider.headers,
         body: JSON.stringify(body),

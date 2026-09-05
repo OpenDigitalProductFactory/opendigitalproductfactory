@@ -102,7 +102,7 @@ export const asyncAdapter: ExecutionAdapterHandler = {
     const startMs = Date.now();
     let res: Response;
     try {
-      res = await fetch(url, {
+      res = await request.fetchImpl(url, {
         method: "POST",
         headers: withGeminiInteractionsApiRevision({
           ...headers,
