@@ -482,12 +482,6 @@ export async function submitRemoteCoworkerTask(input: {
       });
       if (resumed) return resumed;
     }
-    // The retry budget limits reviewer inference, not execution of an exact
-    // call already approved by its owner. The normal writer still validates it.
-    if (
-      requestMatches
-      && recoverTerminalWriterEscalation(existing.progressPayload)
-    ) return replay;
     if (
       requestMatches
       && existing.status === "submitted"
@@ -512,6 +506,12 @@ export async function submitRemoteCoworkerTask(input: {
       });
       if (recovered) return recovered;
     }
+    // The retry budget limits inference, not exact approved execution or
+    // renewal requiring fresh owner approval through the existing authority path.
+    if (
+      requestMatches
+      && recoverTerminalWriterEscalation(existing.progressPayload)
+    ) return replay;
     const terminalWriterReservation = terminalToolPolicy
       ? await reserveTerminalWriterReplay({
           existing,

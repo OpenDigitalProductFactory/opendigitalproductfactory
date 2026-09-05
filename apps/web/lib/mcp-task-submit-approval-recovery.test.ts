@@ -164,7 +164,7 @@ describe("submitRemoteCoworkerTask approval recovery", () => {
     expect(db.createEnvelope).not.toHaveBeenCalled();
   });
 
-  it("recovers the same stale input-required review TaskRun into fresh exact approval without rerunning inference", async () => {
+  it.each([false, true])("renews stale approval without inference when reviewer retries are exhausted=%s", async (exhausted) => {
     const params = {
       agentId: "AGT-WS-PORTFOLIO",
       routeContext: "/build",
@@ -204,7 +204,11 @@ describe("submitRemoteCoworkerTask approval recovery", () => {
     const run = {
       id: "task-internal", taskRunId: approvalBinding.taskRunId, userId: "user-1",
       threadId: "thread-bi47", contextId: "thread-bi47", status: "input-required",
-      progressPayload: null,
+      progressPayload: exhausted ? { terminalWriterWait: {
+        schemaVersion: 1, kind: "missing-terminal-writer",
+        writerToolName: "record_initiative_evidence", resumeMode: "same-taskrun",
+        attempt: 3, observedAt: "2026-08-24T06:00:00.000Z",
+      } } : null,
       a2aMetadata: { idempotencyKey: params.idempotencyKey, apiTokenId: "PAT-BI47", requestDigest },
       lastHeartbeatAt: new Date(Date.now() - 20 * 60 * 1000),
       completedAt: new Date(Date.now() - 19 * 60 * 1000),
