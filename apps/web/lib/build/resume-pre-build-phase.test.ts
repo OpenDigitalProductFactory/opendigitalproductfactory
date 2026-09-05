@@ -11,11 +11,13 @@ const txUpdateMock = vi.fn();
 const txActivityCreateMock = vi.fn();
 const platformDevConfigFindUniqueMock = vi.fn();
 const autoResolveDecomposeMock = vi.fn();
+const buildActivityFindManyMock = vi.fn();
 
 vi.mock("@dpf/db", () => ({
   prisma: {
     featureBuild: { findUnique: (...args: unknown[]) => findUniqueMock(...args) },
     platformDevConfig: { findUnique: (...args: unknown[]) => platformDevConfigFindUniqueMock(...args) },
+    buildActivity: { findMany: (...args: unknown[]) => buildActivityFindManyMock(...args) },
     // abandonStrandedPreBuild wraps its work in a $transaction; run the callback
     // immediately with a tx exposing the row re-check + mutation methods.
     $transaction: (fn: (tx: unknown) => unknown) =>
@@ -54,6 +56,10 @@ import {
   isStrandedPreBuildAbandonable,
   abandonStrandedPreBuild,
   STRANDED_ABANDON_MS,
+  reviewIncompleteBackoff,
+  countReviewIncompleteStreak,
+  REVIEW_INCOMPLETE_BACKOFF_BASE_MS,
+  REVIEW_INCOMPLETE_BACKOFF_MAX_MS,
 } from "./resume-pre-build-phase";
 
 describe("resumePreBuildPhase (BI-9257CF19)", () => {
@@ -69,6 +75,7 @@ describe("resumePreBuildPhase (BI-9257CF19)", () => {
     platformDevConfigFindUniqueMock.mockReset().mockResolvedValue({ governedBacklogEnabled: false });
     autoResolveDecomposeMock.mockReset().mockResolvedValue({ action: "park" });
     performPlanToBuildTransitionMock.mockReset().mockResolvedValue({ kind: "advanced" });
+    buildActivityFindManyMock.mockReset().mockResolvedValue([]);
   });
 
   it("re-queues review verification for a stranded review-phase build", async () => {
@@ -375,6 +382,67 @@ describe("resumePreBuildPhase (BI-9257CF19)", () => {
   });
 
 
+  it("backs off a review-INCOMPLETE strand instead of re-entering the fix loop every tick (BI-96885B6B)", async () => {
+    const now = Date.now();
+    findUniqueMock.mockResolvedValue({
+      designDoc: { problemStatement: "p" },
+      buildPlan: null,
+      designReview: {
+        decision: "fail",
+        reviewIncomplete: true,
+        issues: [{ severity: "critical", description: "Both review agents failed to respond" }],
+      },
+    });
+    // Three consecutive incomplete outcomes, the latest 20 minutes ago: the
+    // streak-3 delay is 2h, so this tick must NOT spend inference.
+    buildActivityFindManyMock.mockResolvedValue([
+      { summary: "No reviewer could complete a design review, so nothing is known about this design. Leaving the build recoverable; the design is kept and untouched.", createdAt: new Date(now - 20 * 60_000) },
+      { summary: "Design review could not be completed — re-reviewing (attempt 2/2); the design is not at fault.", createdAt: new Date(now - 21 * 60_000) },
+      { summary: "Design review could not be completed — re-reviewing (attempt 1/2); the design is not at fault.", createdAt: new Date(now - 22 * 60_000) },
+      { summary: "No reviewer could complete a design review, so nothing is known about this design. Leaving the build recoverable; the design is kept and untouched.", createdAt: new Date(now - 50 * 60_000) },
+      { summary: "No reviewer could complete a design review, so nothing is known about this design. Leaving the build recoverable; the design is kept and untouched.", createdAt: new Date(now - 80 * 60_000) },
+    ]);
+    const out = await resumePreBuildPhase({ buildId: "FB-FCAC756D", phase: "ideate", userId: "u5" });
+    expect(dispatchDesignFixMock).not.toHaveBeenCalled();
+    expect(executeToolMock).not.toHaveBeenCalled();
+    expect(out.kind).toBe("skipped");
+    expect((out as { reason: string }).reason).toMatch(/could not be completed 3x in a row/);
+    expect((out as { reason: string }).reason).toMatch(/Backing off: next retry in 1h 40m/);
+    expect(buildActivityFindManyMock).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { buildId: "FB-FCAC756D", tool: "design_fix_loop" } }),
+    );
+  });
+
+  it("re-enters the fix loop for a review-INCOMPLETE strand once its backoff window has elapsed", async () => {
+    findUniqueMock.mockResolvedValue({
+      designDoc: { problemStatement: "p" },
+      buildPlan: null,
+      designReview: { decision: "fail", reviewIncomplete: true, issues: [] },
+    });
+    // One incomplete outcome, 31 minutes ago: base delay is 30m, so it is due.
+    buildActivityFindManyMock.mockResolvedValue([
+      { summary: "No reviewer could complete a design review, so nothing is known about this design.", createdAt: new Date(Date.now() - 31 * 60_000) },
+    ]);
+    const out = await resumePreBuildPhase({ buildId: "FB-5G", phase: "ideate", userId: "u5" });
+    expect(dispatchDesignFixMock).toHaveBeenCalledWith({ buildId: "FB-5G", userId: "u5" });
+    expect(out).toMatchObject({ kind: "resumed", via: "dispatchDesignReviewFixLoop" });
+  });
+
+  it("does not back off a REAL failed review — the fix loop regenerates as before", async () => {
+    findUniqueMock.mockResolvedValue({
+      designDoc: { problemStatement: "p" },
+      buildPlan: null,
+      designReview: { decision: "fail", issues: [{ severity: "critical", description: "fails to address security" }] },
+    });
+    buildActivityFindManyMock.mockResolvedValue([
+      { summary: "No reviewer could complete a design review, so nothing is known about this design.", createdAt: new Date() },
+    ]);
+    const out = await resumePreBuildPhase({ buildId: "FB-5H", phase: "ideate", userId: "u5" });
+    expect(buildActivityFindManyMock).not.toHaveBeenCalled();
+    expect(dispatchDesignFixMock).toHaveBeenCalled();
+    expect(out.kind).toBe("resumed");
+  });
+
   it("parks when design PASSed but persisted happyPath intake is still incomplete (BI-E212CAE2)", async () => {
     findUniqueMock.mockResolvedValue({
       designDoc: { problemStatement: "p" },
@@ -416,6 +484,67 @@ describe("resumePreBuildPhase (BI-9257CF19)", () => {
 });
 
 // ── Age-out cap (BI-A009313E) ───────────────────────────────────────────────
+describe("reviewIncompleteBackoff (BI-96885B6B)", () => {
+  const T0 = Date.UTC(2026, 8, 5, 12, 0, 0);
+  const min = (n: number) => n * 60_000;
+
+  it("is due when there is no streak", () => {
+    expect(reviewIncompleteBackoff({ streak: 0, lastAt: null, now: new Date(T0) })).toEqual({ due: true });
+    expect(reviewIncompleteBackoff({ streak: 3, lastAt: null, now: new Date(T0) })).toEqual({ due: true });
+  });
+
+  it("doubles per consecutive incomplete outcome: 30m, 1h, 2h, 4h", () => {
+    for (const [streak, expectedMin] of [[1, 30], [2, 60], [3, 120], [4, 240]] as const) {
+      const r = reviewIncompleteBackoff({ streak, lastAt: new Date(T0), now: new Date(T0 + min(1)) });
+      expect(r.due).toBe(false);
+      if (!r.due) expect(r.nextAt.getTime()).toBe(T0 + min(expectedMin));
+    }
+  });
+
+  it("caps at 6 hours so a long outage is still probed a few times a day", () => {
+    const r = reviewIncompleteBackoff({ streak: 12, lastAt: new Date(T0), now: new Date(T0 + min(1)) });
+    expect(r.due).toBe(false);
+    if (!r.due) expect(r.nextAt.getTime()).toBe(T0 + REVIEW_INCOMPLETE_BACKOFF_MAX_MS);
+    expect(REVIEW_INCOMPLETE_BACKOFF_BASE_MS).toBe(min(30));
+  });
+
+  it("is due once the window has elapsed", () => {
+    expect(reviewIncompleteBackoff({ streak: 2, lastAt: new Date(T0), now: new Date(T0 + min(60)) })).toEqual({ due: true });
+    expect(reviewIncompleteBackoff({ streak: 2, lastAt: new Date(T0), now: new Date(T0 + min(59)) }).due).toBe(false);
+  });
+});
+
+describe("countReviewIncompleteStreak (BI-96885B6B)", () => {
+  const INCOMPLETE = "No reviewer could complete a design review, so nothing is known about this design.";
+  const RETRY = "Design review could not be completed — re-reviewing (attempt 1/2); the design is not at fault.";
+  const at = (minsAgo: number) => new Date(Date.UTC(2026, 8, 5, 12, 0, 0) - minsAgo * 60_000);
+
+  it("counts consecutive incomplete outcomes, ignoring the intermediate retry lines", () => {
+    const r = countReviewIncompleteStreak([
+      { summary: INCOMPLETE, createdAt: at(1) },
+      { summary: RETRY, createdAt: at(2) },
+      { summary: INCOMPLETE, createdAt: at(31) },
+      { summary: INCOMPLETE, createdAt: at(61) },
+    ]);
+    expect(r).toEqual({ streak: 3, lastAt: at(1) });
+  });
+
+  it("stops at the first real fix-loop outcome (a regeneration, pass, or escalation)", () => {
+    const r = countReviewIncompleteStreak([
+      { summary: INCOMPLETE, createdAt: at(1) },
+      { summary: "Design review failed — regenerating (round 1/2) against 3 issue(s)", createdAt: at(40) },
+      { summary: INCOMPLETE, createdAt: at(70) },
+    ]);
+    expect(r).toEqual({ streak: 1, lastAt: at(1) });
+  });
+
+  it("is zero when the newest line is not an incomplete outcome", () => {
+    expect(countReviewIncompleteStreak([{ summary: "Design review passed after 1 fix round(s).", createdAt: at(1) }]))
+      .toEqual({ streak: 0, lastAt: null });
+    expect(countReviewIncompleteStreak([])).toEqual({ streak: 0, lastAt: null });
+  });
+});
+
 describe("isStrandedPreBuildAbandonable", () => {
   const now = new Date("2026-07-17T12:00:00Z");
   const old = new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000); // 10 days
