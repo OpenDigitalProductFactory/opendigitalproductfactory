@@ -56,17 +56,22 @@ page. On the organization installation, choose **Create join file**, enter the
 joining installation's reported host name, confirm it, and download the file
 when ready. Move the `.dpfjoin` file to the joining computer within its 5- to
 15-minute lifetime. On that installation, choose **Join this installation**,
-select the file, check the safe preview, and approve the join. No command line,
-certificate copying, CA password, or installer rerun is required.
+select the file, check the safe preview, and confirm. Choosing the file is the
+whole step: the joining installation checks the file, generates its own key,
+asks the organization installation to certify it, and keeps the result in its
+own state directory. No command line, certificate copying, CA password, Edge
+node, or installer rerun is required, and nothing is typed. Within a few
+minutes the connection appears on both Connections pages as trusted, with no
+approval to click. An automation agent can do the same through the
+`import_organization_join_file` tool.
 
 The file carries the public-root fingerprint and one-time enrollment authority;
 it never carries the organization's CA private key. It works only for the named
-installation and can be downloaded once. The native Edge host applies the trust
-settings, checks certificate trust, saved settings, portal health, and its secure
-heartbeat, and restores the prior settings if a check fails. The Connections
-page keeps showing progress after a refresh. This establishes machine trust
-only—it does not share backlog data. Demand sharing is a separate, explicit
-choice in Delivery Flow.
+installation, is honoured by the organization's certificate authority once, and
+can be downloaded once. The joining installation refuses a tampered or expired
+file, or one created for another installation, before contacting anyone. This
+establishes machine trust only—it does not share backlog data. Demand sharing
+is a separate, explicit choice in Delivery Flow.
 
 If the candidate uses HTTP, its certificate cannot be verified, or discovery is
 unavailable, use the invitation controls on the same page. Never bypass the TLS

@@ -3,14 +3,14 @@
   "selectionCliff": 15,
   "entries": {
     "registry.toolDefinitions": {
-      "value": 406,
-      "reason": "issue_ux_verification_sign_in (BI-9369DEB5): a fully automated installation is verified by agents with no person present, and most pages are session-gated. No existing tool can put the platform's own browser behind a session; this one mints a one-time link for the seeded automation persona so an agent can judge layout, type, colour and overrun in a real browser without typing a password or asking the operator.",
-      "recordedAt": "2026-09-03"
+      "value": 407,
+      "reason": "import_organization_join_file (BI-4DD1E739, EP-ZERO-CONFIG-FEDERATION): pairing two installations of one organization in the operator's absence was impossible — the only member-side import path was a host script behind an edge node no installer configures. This tool is the session-free twin of the Connections page's 'Join this installation': the portal validates the join file, generates its own key, has the organization CA sign it through the authority's portal, and the next tick records the link trusted on both sides. No existing tool touches organization membership.",
+      "recordedAt": "2026-09-05"
     },
     "registry.packFiles": {
-      "value": 99,
-      "reason": "New ux-verification-pack.ts: browser-verification sign-in is a delivery-surface concern distinct from self-upgrade, sandbox and admin packs, and a single-tool pack keeps the grant (sandbox_execute) and capability (manage_platform) visible next to the tool they govern.",
-      "recordedAt": "2026-09-03"
+      "value": 100,
+      "reason": "New federation-membership-pack.ts: organization membership (join-file import, and the issue side to follow in the next slice) is a federation-trust concern distinct from ux-verification, self-upgrade and admin packs; a dedicated pack keeps the grant (sandbox_execute) and capability (manage_platform) beside the tools they govern.",
+      "recordedAt": "2026-09-05"
     },
     "tier.coreToolNames": {
       "value": 30,

@@ -18,6 +18,7 @@ import {
   cancelOrganizationJoinActionAction,
   downloadIssuedJoinPackageAction,
   getOrganizationJoinActionStatusAction,
+  importOrganizationJoinFileAction,
   queueOrganizationJoinActionAction,
   type OrganizationJoinNodeSummary,
 } from "@/lib/actions/organization-join";
@@ -138,7 +139,6 @@ export function OrganizationJoinPanel({ nodes }: { nodes: OrganizationJoinNodeSu
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const authorityNodes = useMemo(() => nodes.filter((node) => node.role === "authority"), [nodes]);
-  const memberNodes = useMemo(() => nodes.filter((node) => node.role === "member"), [nodes]);
   const selectedNode = nodes.find((node) => node.edgeNodeId === selectedNodeId) ?? null;
 
   useEffect(() => {
@@ -168,9 +168,11 @@ export function OrganizationJoinPanel({ nodes }: { nodes: OrganizationJoinNodeSu
   }, [actions]);
 
   function openMode(nextMode: "issue" | "import") {
-    const candidates = nextMode === "issue" ? authorityNodes : memberNodes;
+    // Joining is portal-mediated: choosing the file is the whole act, so the
+    // import side selects no installation. Issuing still runs on the authority's
+    // host action until that side is portal-mediated too.
     setMode(nextMode);
-    setSelectedNodeId(candidates[0]?.edgeNodeId ?? null);
+    setSelectedNodeId(nextMode === "issue" ? authorityNodes[0]?.edgeNodeId ?? null : null);
     setNotice(null);
   }
 
@@ -242,23 +244,14 @@ export function OrganizationJoinPanel({ nodes }: { nodes: OrganizationJoinNodeSu
       setNotice({ kind: "error", text: parsed.reason === "join-package-expired" ? "This join file has expired. Create a new one." : "This is not a valid DPF organization join file." });
       return;
     }
-    if (!selectedNode?.hostIdentity || parsed.value.intendedPeer !== selectedNode.hostIdentity) {
-      setNotice({ kind: "error", text: "This join file was created for another installation." });
-      return;
-    }
     setJoinPackage(raw);
     setPackagePreview(parsed.value);
   }
 
-  function queueImport() {
-    if (!selectedNode || !joinPackage || !importConfirmed) return;
+  function importJoinFile() {
+    if (!joinPackage || !importConfirmed) return;
     startTransition(async () => {
-      const result = await queueOrganizationJoinActionAction({
-        actionType: "organization.join.import",
-        edgeNodeId: selectedNode.edgeNodeId,
-        parameters: { joinPackage },
-        operatorConfirmed: true,
-      });
+      const result = await importOrganizationJoinFileAction(joinPackage);
       setJoinPackage(null);
       setPackagePreview(null);
       setImportConfirmed(false);
@@ -267,19 +260,7 @@ export function OrganizationJoinPanel({ nodes }: { nodes: OrganizationJoinNodeSu
         setNotice({ kind: "error", text: result.message });
         return;
       }
-      setActions((current) => ({
-        ...current,
-        [selectedNode.edgeNodeId]: {
-          actionKey: result.actionKey,
-          actionType: "organization.join.import",
-          status: "queued",
-          approvalState: "approved",
-          packageReady: false,
-          evidence: {},
-          createdAt: new Date().toISOString(),
-        },
-      }));
-      setNotice({ kind: "success", text: "Organization join approved. The installation will apply and verify it shortly." });
+      setNotice({ kind: "success", text: result.data.message });
     });
   }
 
@@ -309,7 +290,7 @@ export function OrganizationJoinPanel({ nodes }: { nodes: OrganizationJoinNodeSu
     });
   }
 
-  const visibleNodes = mode === "issue" ? authorityNodes : mode === "import" ? memberNodes : nodes;
+  const visibleNodes = mode === "issue" ? authorityNodes : mode === "import" ? [] : nodes;
 
   return (
     <section className="rounded-xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-5" aria-labelledby="organization-join-heading">
@@ -373,7 +354,7 @@ export function OrganizationJoinPanel({ nodes }: { nodes: OrganizationJoinNodeSu
               required
             />
           ) : null}
-          {!selectedNode ? <p className="text-sm text-[var(--dpf-muted)]">No installation has reported the required organization role yet.</p> : null}
+          {mode === "issue" && !selectedNode ? <p className="text-sm text-[var(--dpf-muted)]">No installation has reported the required organization role yet.</p> : null}
           {selectedNode && !selectedNode.ready ? (
             <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-4">
               <p className="text-sm text-[var(--dpf-text)]">{selectedNode.readinessMessage}</p>
@@ -439,8 +420,8 @@ export function OrganizationJoinPanel({ nodes }: { nodes: OrganizationJoinNodeSu
             </form>
           ) : null}
 
-          {mode === "import" && selectedNode?.ready && !blocksNewRequest(actions[selectedNode.edgeNodeId]) ? (
-            <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); queueImport(); }}>
+          {mode === "import" ? (
+            <form className="space-y-4" noValidate onSubmit={(event) => { event.preventDefault(); importJoinFile(); }}>
               <FormField name="organization-join-file" label="Choose a .dpfjoin file" required>
                 {(control) => (
                   <input
@@ -467,7 +448,7 @@ export function OrganizationJoinPanel({ nodes }: { nodes: OrganizationJoinNodeSu
               {packagePreview ? (
                 <CheckboxField
                   name="confirm-organization-join"
-                  label={<>I confirm this file is for {selectedNode.hostIdentity} and I want this installation to join that organization.</>}
+                  label={<>I confirm this file is for {packagePreview.intendedPeer} and I want this installation to join that organization.</>}
                   checked={importConfirmed}
                   onCheckedChange={setImportConfirmed}
                 />
