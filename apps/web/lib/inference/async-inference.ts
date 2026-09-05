@@ -23,6 +23,7 @@ import {
 } from "@/lib/ai-provider-internals";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { resolveOpenAiCompatibleApiBase } from "@/lib/routing/openai-base";
+import { withGeminiInteractionsApiRevision } from "@/lib/routing/gemini-interactions-contract";
 import {
   parseAsyncInferenceOperationStatus,
   type AsyncInferenceOperationStatus,
@@ -300,7 +301,7 @@ async function pollGemini(
 
   const res = await fetch(url, {
     method: "GET",
-    headers,
+    headers: withGeminiInteractionsApiRevision(headers),
     signal: AbortSignal.timeout(POLL_TIMEOUT_MS),
   });
 

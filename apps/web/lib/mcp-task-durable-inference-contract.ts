@@ -3,6 +3,8 @@ import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 export const DURABLE_INFERENCE_TASK_RECIPE_ID = "durable-inference.one-shot.v1" as const;
 export const DURABLE_INFERENCE_TASK_CONTRACT_FAMILY =
   "background.mcp-durable-inference-one-shot" as const;
+export const DURABLE_INFERENCE_TASK_BACKGROUND_MODEL_ID =
+  "gemini-3.1-pro-preview" as const;
 
 export type DurableInferenceTaskRecipeId = typeof DURABLE_INFERENCE_TASK_RECIPE_ID;
 
