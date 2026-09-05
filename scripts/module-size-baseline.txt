@@ -18,7 +18,7 @@ apps/web/components/platform/edge-nodes/EdgeNodesAdminClient.tsx	923
 apps/web/components/storefront/SlotBookingFlow.tsx	1015
 apps/web/components/workbooks/Grid.tsx	1830
 apps/web/instrumentation.test.ts	943
-apps/web/instrumentation.ts	1472
+apps/web/instrumentation.ts	1467
 apps/web/lib/actions/agent-coworker-external.test.ts	889
 apps/web/lib/actions/agent-coworker.ts	2816
 apps/web/lib/actions/agent-task-scheduler.test.ts	1132
@@ -60,8 +60,6 @@ apps/web/lib/tak/agent-routing.ts	1191
 apps/web/lib/tak/agentic-loop.test.ts	2485
 apps/web/lib/tak/agentic-loop.ts	2681
 apps/web/lib/tak/route-context-map.ts	1440
-apps/web/lib/work-capsules/work-capsule-store.test.ts	1186
-apps/web/lib/work-capsules/work-capsule-store.ts	1028
 apps/web/lib/work-capsules/work-capsule-store.test.ts	1239
 apps/web/lib/work-capsules/work-capsule-store.ts	1037
 apps/web/lib/workbooks/platform-tables.ts	938
