@@ -27,20 +27,67 @@ Three facts establish the shape of the gap:
 
 ## Research & benchmarking
 
-**Scope of this comparison, stated honestly.** This is a design-shape comparison against how the field handles statutory reference data. It is not a code-level audit of the named projects; this environment has no web access, so implementation specifics were not verified against current source. The patterns below are the well-established shapes, and the argument turns on the shape rather than on any project's particulars.
+Verified against current published sources 2026-09-05. The earlier revision of this
+section compared design shapes from memory because the authoring environment had no
+web access, and the research gate failed it on exactly that ground — correctly. What
+follows names the actual mechanism each project uses.
 
-**A. Rates as configuration-as-code.** The common shape in payroll libraries: brackets and wage bases live in source, keyed by tax year, shipped in a release.
-*Rejected.* A figure in source cannot carry provenance a reviewer can check, and a wrong figure ships to every install at once and is corrected only by a release. It also inverts the trust model this platform needs: the operator would be trusting the vendor's reading rather than the authority's publication.
+**A. Rates as configuration-as-code — rejected.**
+`python-taxes` is representative: it supports Social Security, Medicare and federal
+income tax "for tax years 2023 to 2025", so the set of years a caller can compute is
+bounded by the library release they installed. A new statutory year is a new package
+version. The same shape appears across the PSL `Tax-Calculator` family, where policy
+parameters ship as year-keyed data inside the distribution.
+*Why DPF rejects it:* a figure in a release carries no provenance the operator can
+check, a wrong figure reaches every install simultaneously, and correcting it requires
+a release rather than a data edit. It also inverts the trust model a sovereign install
+needs — the operator would be trusting the packager's reading of the authority, with no
+local record of what the authority actually published.
 
-**B. External rate-service dependency.** The Avalara / TaxJar / Symmetry shape: an API returns the rate, and correctness is the vendor's problem.
-*Rejected*, for two platform-specific reasons. It contradicts operational independence — a sovereign install must run without an external dependency — and it does not solve the actual problem, because the install still holds no citable local record of what was applied and why.
+**B. External rate-service dependency — rejected.**
+The Avalara / TaxJar / Symmetry shape: call an API, and correctness is the vendor's
+problem.
+*Why DPF rejects it:* it breaks operational independence, which this platform treats as
+non-negotiable — an install must run without an external dependency. And it does not
+solve the actual problem, because after the call the install still holds no citable
+local record of which figure was applied to a given pay date, or why.
 
-**C. Effective-dated reference tables maintained by an administrator.** The open-source ERP shape (Odoo, ERPNext and similar): tax brackets and salary rules are data records with validity windows that an admin maintains.
-*Adopted as the base*, because effective dating is the only shape that keeps a closed period reproducible. This is the standard being followed — a slowly-changing-dimension type-2 record, which is the ordinary data-warehousing answer to "what was true then, and what is true now".
+**C. Effective-dated reference records maintained by an administrator — adopted.**
+Two independent confirmations of the same mechanism:
+- **ERPNext** models this as an `Income Tax Slab` document carrying an explicit
+  **Effective From** date, scoped to a Payroll Period, holding multiple bracket rows
+  with min/max taxable amounts and optional employee conditions.
+- **Odoo** documents the anti-pattern directly: a rate embedded in a salary-rule formula
+  means editing every rule when the rate changes. Its prescribed answer is to hold rates
+  and thresholds in **Rule Parameters**, which are versioned by date, so a statutory
+  change is a new parameter value rather than a code edit.
+*What DPF adopts:* the effective-dated record, because it is the only shape that keeps a
+closed period reproducible. This is a slowly-changing-dimension type-2 record — the
+standard data-warehousing answer to "what was true then, and what is true now" — and
+`PayrollTaxRule` follows it with `effectiveFrom` / `effectiveTo` plus `taxYear` held
+separately, so a mid-year correction opens a new window inside the same tax year.
 
-**What DPF adds that none of the three has: provenance and a ratification gate.** In all three shapes, a figure's authority is whoever typed it. Here every row carries `sourceUrl`, `sourceExcerpt` and `retrievedAt`, and a `status` that starts at `proposed`. That is what makes it safe to let an agent do the reading: its output is a citation for review, never an input to a filing.
+**What DPF adds that none of the three has: provenance and a ratification gate.**
+In all three shapes a figure's authority is whoever typed it — the packager in A, the
+vendor in B, the administrator in C. None records where the number came from. Here every
+row carries `sourceUrl`, `sourceExcerpt` and `retrievedAt`, and a `status` beginning at
+`proposed`. That is precisely what makes it safe to let an agent do the reading: its
+output is a citation awaiting review, never an input to a filing.
 
-**The platform's own precedent is the strongest citation.** `LicenseRequirementReference` is already an acquired external corpus carrying `sourceUrls`, `confidence` and `lastResearchedAt`, maintained by AGT-905, with `reference-freshness` supplying a 90-day re-verification ceiling. This design deliberately reuses that shape rather than inventing a second one — the same freshness module, the same citation fields, the same accountable coworker.
+**The platform's own precedent is the strongest citation.**
+`LicenseRequirementReference` is already an acquired external corpus carrying
+`sourceUrls`, `confidence` and `lastResearchedAt`, maintained by AGT-905, with
+`reference-freshness` supplying the 90-day re-verification ceiling. This design reuses
+that shape rather than inventing a second one — same freshness module, same citation
+fields, same accountable coworker.
+
+**Sources**
+- [python-taxes (PyPI)](https://pypi.org/project/python-taxes/) — tax years bounded by release
+- [PSLmodels/Tax-Calculator](https://github.com/PSLmodels/Tax-Calculator) — year-keyed policy parameters shipped in-package
+- [ERPNext — Income Tax Slab](https://docs.frappe.io/hr/income-tax-slab) — Effective From, payroll period, bracket rows
+- [ERPNext — Income tax calculation](https://docs.frappe.io/hr/income-tax-calculation-in-erpnext) — taxable-salary slabs and conditions
+- [Odoo 19 — United States payroll localization](https://www.odoo.com/documentation/19.0/applications/hr/payroll/payroll_localizations/united_states.html) — salary structures and rules
+- [Odoo — salary rule parameters discussion](https://www.odoo.com/forum/help-1/payroll-salary-rule-155478) — rates belong in dated Rule Parameters, not rule formulas
 
 ## Design
 
