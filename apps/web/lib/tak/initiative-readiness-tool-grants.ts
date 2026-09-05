@@ -63,6 +63,7 @@ export type InitiativeReviewBindingPacket = {
   itemId: string;
   gate: InitiativeRecoveryGate;
   expectedCurrentBaselineId: string | null;
+  eligibleEvidenceActivityIds?: string[];
   artifactRef: {
     kind: "repo-blob-at-commit";
     repositoryFullName: string;
@@ -124,7 +125,7 @@ export type InitiativeReviewerRecovery = {
      * caller hunting for missing grants instead of supplying what is actually
      * missing.
      */
-    reason: "no-eligible-reviewer" | "dispatch-context-required" | "no-canonical-artifact";
+    reason: "no-eligible-reviewer" | "dispatch-context-required" | "no-canonical-artifact" | "no-eligible-evidence";
     nextAction: string;
   }>;
   /**
@@ -180,6 +181,7 @@ export async function resolveInitiativeReviewerRecovery(input: {
   dispatchContext: InitiativeRecoveryDispatchContext | null;
   canonicalArtifact?: InitiativeRecoveryCanonicalArtifact | null;
   expectedCurrentBaselineId?: string | null;
+  eligibleEvidenceActivityIds?: readonly string[];
 }): Promise<InitiativeReviewerRecovery> {
   const requirements = [...input.decision.blockers, ...input.decision.unmet];
   const requested: Array<{
@@ -273,6 +275,19 @@ export async function resolveInitiativeReviewerRecovery(input: {
         });
         continue;
       }
+      const eligibleEvidenceActivityIds = entry.gate === "objective-mapping"
+        ? normalizeEligibleEvidenceActivityIds(input.eligibleEvidenceActivityIds)
+        : null;
+      if (entry.gate === "objective-mapping" && !eligibleEvidenceActivityIds) {
+        escalations.push({
+          accountableRole: entry.role,
+          toolName: entry.route.toolName,
+          grant: entry.route.lane.grant,
+          reason: "no-eligible-evidence",
+          nextAction: "Record bounded passing evidence for this backlog item after the current objective baseline, then retry objective mapping. Do not invent or infer activity IDs.",
+        });
+        continue;
+      }
       const packet = requestCoworkerPacket({
         decision: input.decision,
         gate: entry.gate,
@@ -282,6 +297,7 @@ export async function resolveInitiativeReviewerRecovery(input: {
         independent: entry.route.lane.independent,
         artifact: bindable && artifact?.resolved ? artifact : null,
         expectedCurrentBaselineId: input.expectedCurrentBaselineId ?? null,
+        eligibleEvidenceActivityIds,
       });
       reviewerRoutes.push({
         accountableRole: entry.role,
@@ -410,6 +426,14 @@ function recoveryGate(entry: ReadinessRequirementResult, lane: InitiativeReadine
  * the whole need and the broader search grant is not issued.
  */
 const IMMUTABLE_READER_TOOL = "read_source_at_version";
+const MAX_ELIGIBLE_EVIDENCE_ACTIVITY_IDS = 500;
+
+function normalizeEligibleEvidenceActivityIds(value: readonly string[] | undefined): string[] | null {
+  if (!value || value.length === 0 || value.length > MAX_ELIGIBLE_EVIDENCE_ACTIVITY_IDS) return null;
+  const normalized = value.map((entry) => entry.trim());
+  if (normalized.some((entry) => !entry) || new Set(normalized).size !== normalized.length) return null;
+  return [...normalized].sort();
+}
 
 function requestCoworkerPacket(args: {
   decision: InitiativeReadinessDecision;
@@ -421,11 +445,12 @@ function requestCoworkerPacket(args: {
   /** Null for a lane whose writer the binding contract does not cover. */
   artifact: { path: string; providerBlobId: string; commitSha?: string } | null;
   expectedCurrentBaselineId: string | null;
+  eligibleEvidenceActivityIds: string[] | null;
 }) {
   const reviewConstraint = args.independent ? "independently " : "";
   const reviewSha = args.artifact?.commitSha ?? args.dispatch.headSha;
   const mappingInstruction = args.gate === "objective-mapping"
-    ? " Map every current OBJ-* and AC-* statement to post-baseline evidence and submit the proposal with record_initiative_evidence(operation='objective-mapping')."
+    ? ` Map every current OBJ-* and AC-* statement to post-baseline evidence using only these eligible activity IDs: ${args.eligibleEvidenceActivityIds?.join(", ")}. Submit the proposal with record_initiative_evidence(operation='objective-mapping').`
     : "";
   const base = {
     targetAgent: args.targetAgentId,
@@ -450,6 +475,9 @@ function requestCoworkerPacket(args: {
       itemId: args.decision.subject.id,
       gate: args.gate,
       expectedCurrentBaselineId: args.expectedCurrentBaselineId,
+      ...(args.gate === "objective-mapping" && args.eligibleEvidenceActivityIds
+        ? { eligibleEvidenceActivityIds: args.eligibleEvidenceActivityIds }
+        : {}),
       artifactRef: {
         kind: "repo-blob-at-commit" as const,
         repositoryFullName: args.dispatch.repositoryFullName,

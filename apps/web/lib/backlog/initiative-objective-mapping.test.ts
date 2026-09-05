@@ -24,16 +24,28 @@ vi.mock("@dpf/db", () => ({
 import { recordInitiativeObjectiveMappingProposal } from "./initiative-readiness";
 
 function transactionDb() {
+  const baselineRecordedAt = new Date("2026-09-04T12:00:00.000Z");
   return {
     $queryRaw: vi.fn(async () => []),
     backlogItemActivity: {
-      findMany: vi.fn(async () => [{ payload: {
-        baselineId: "baseline-1",
-        supersedesBaselineId: null,
-        artifactDigest: "sha256:design",
-        objectiveStatements: [{ objectiveId: "OBJ-TEST-001" }],
-        acceptanceStatements: [{ acceptanceId: "ACCEPT-TEST-001" }],
-      } }]),
+      findMany: vi.fn(async (query: { where?: { kind?: string } }) => query.where?.kind === "evidence"
+        ? [{
+            id: "E-1",
+            backlogItemId: "row-1",
+            kind: "evidence",
+            recordedAt: new Date("2026-09-04T12:01:00.000Z"),
+            payload: { evidenceKind: "test_pass" },
+          }]
+        : [{
+            recordedAt: baselineRecordedAt,
+            payload: {
+              baselineId: "baseline-1",
+              supersedesBaselineId: null,
+              artifactDigest: "sha256:design",
+              objectiveStatements: [{ objectiveId: "OBJ-TEST-001" }],
+              acceptanceStatements: [{ acceptanceId: "ACCEPT-TEST-001" }],
+            },
+          }]),
       create: mocks.create.mockImplementation(async ({ data }) => data),
     },
   };
@@ -49,7 +61,11 @@ describe("recordInitiativeObjectiveMappingProposal", () => {
     const result = await recordInitiativeObjectiveMappingProposal({
       itemId: "BI-TEST",
       baselineId: "baseline-1",
-      mappings: [{ objectiveId: "OBJ-TEST-001", evidenceRefs: ["verification:unit-1"] }],
+      mappings: [
+        { objectiveId: "OBJ-TEST-001", evidenceRefs: ["E-1"] },
+        { objectiveId: "ACCEPT-TEST-001", evidenceRefs: ["E-1"] },
+      ],
+      eligibleEvidenceActivityIds: ["E-1"],
       reason: "Proposed evidence for independent terminal reconciliation.",
       proposerUserId: "user-1",
       proposerAgentId: "agent-1",
@@ -70,6 +86,7 @@ describe("recordInitiativeObjectiveMappingProposal", () => {
       itemId: "BI-TEST",
       baselineId: "baseline-1",
       mappings: [{ objectiveId: "OBJ-NOT-CURRENT", evidenceRefs: ["verification:unit-1"] }],
+      eligibleEvidenceActivityIds: ["verification:unit-1"],
       reason: "Attempted stale objective mapping.",
       proposerUserId: "user-1",
       proposerAgentId: "agent-1",
