@@ -212,7 +212,19 @@ describe("submitRemoteCoworkerTask idempotency", () => {
     });
   });
 
-  it("consumes an approved exact-call envelope on same-packet replay", async () => {
+  it.each(["none", "legacy", "explicit"])("consumes an approved exact-call envelope with %s retry exhaustion", async (exhaustion) => {
+    const retryProgress = exhaustion === "none" ? {} : {
+      terminalWriterWait: {
+        schemaVersion: 1, kind: "missing-terminal-writer",
+        writerToolName: "record_initiative_evidence", resumeMode: "same-taskrun",
+        attempt: 3, observedAt: "2026-08-24T06:00:00.000Z",
+      },
+      ...(exhaustion === "explicit" ? { terminalWriterEscalation: {
+        schemaVersion: 1, code: "terminal_writer_retry_exhausted",
+        writerToolName: "record_initiative_evidence", attempt: 3,
+        action: "select-different-reviewer-provider", observedAt: "2026-08-24T06:00:00.000Z",
+      } } : {}),
+    };
     const params = {
       agentId: "AGT-WS-BUILD",
       routeContext: "/build/work/WC-7FF8A505",
@@ -231,6 +243,7 @@ describe("submitRemoteCoworkerTask idempotency", () => {
       status: "input-required",
       updatedAt: new Date("2026-08-24T07:00:00.000Z"),
       progressPayload: {
+        ...retryProgress,
         requiresApproval: true,
         approvalRecovery: {
           schemaVersion: 1,
@@ -307,6 +320,7 @@ describe("submitRemoteCoworkerTask idempotency", () => {
       },
       data: {
         progressPayload: {
+          ...retryProgress,
           approvalRecovery: {
             schemaVersion: 1,
             kind: "expired-approved-envelope",
@@ -350,6 +364,10 @@ describe("submitRemoteCoworkerTask idempotency", () => {
     });
     expect(autonomous.create).not.toHaveBeenCalled();
     expect(autonomous.execute).not.toHaveBeenCalled();
+    const completed = db.update.mock.calls.find(([args]) => args.data.status === "completed")?.[0];
+    expect(completed.data.progressPayload.requiresApproval).toBe(false);
+    expect(completed.data.progressPayload.terminalWriterWait).toBeUndefined();
+    expect(completed.data.progressPayload.terminalWriterEscalation).toBeUndefined();
   });
 
   it("binds a deterministic TaskRun and immutable digest to token + requestKey", async () => {

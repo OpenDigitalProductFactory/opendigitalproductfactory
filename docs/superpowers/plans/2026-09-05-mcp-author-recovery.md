@@ -15,6 +15,12 @@ The operator explicitly instructed this task to "bypass it and fix it" after the
 
 ## Backlog coverage
 
+### Approved writer recovery correction, 2026-09-05
+
+Source inspection found that the replay path returned an exhausted reviewer state before checking for an exact-call approval. A first-failing regression reproduced this for both legacy attempt counters and explicit escalation records; it also exposed a stale `requiresApproval` flag after successful execution. Check for an approved writer through the existing owner, expiry, stored-argument and authorization path before applying the reviewer-inference retry ceiling. On successful completion, remove obsolete writer-wait/escalation fields and report approval as satisfied. Do not add inference retries or accept missing, expired, foreign or denied approvals. Seven related suites passed 58 tests after the correction. Live end-to-end confirmation still requires canonical deployment.
+
+The operator-authorized co-claim is recorded for the submit module shared with WC-42C01441. Its inspected concurrent diff adds requestObjective to new-task metadata; this correction changes existing-task approval replay in a different section. The earlier PR-readiness run was stopped as superseded when this additional regression was confirmed; it is unrun for the final tree, not passed.
+
 Proposed decision: atomic. Receipt pending validation against the approved scope baseline and this immutable plan. All steps implement one recovery contract across its existing writers and readers. Shipping the projector without its adoption, readiness and Workroom consumers would preserve contradictory next actions. They therefore share one acceptance boundary and one revert. No independent metrics, pagination or hook work is included.
 
 | Deliverable | Backlog | Requirements | Contract | Flow | Verification |

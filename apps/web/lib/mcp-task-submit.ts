@@ -472,10 +472,6 @@ export async function submitRemoteCoworkerTask(input: {
     const replay = replayOrConflict(existing, parsed);
     if (
       requestMatches
-      && recoverTerminalWriterEscalation(existing.progressPayload)
-    ) return replay;
-    if (
-      requestMatches
       && (existing.status === "input-required" || (existing.status === "completed" && terminalToolPolicy))
     ) {
       const resumed = await resumeApprovedRemoteTask({
@@ -486,6 +482,12 @@ export async function submitRemoteCoworkerTask(input: {
       });
       if (resumed) return resumed;
     }
+    // The retry budget limits reviewer inference, not execution of an exact
+    // call already approved by its owner. The normal writer still validates it.
+    if (
+      requestMatches
+      && recoverTerminalWriterEscalation(existing.progressPayload)
+    ) return replay;
     if (
       requestMatches
       && existing.status === "submitted"
