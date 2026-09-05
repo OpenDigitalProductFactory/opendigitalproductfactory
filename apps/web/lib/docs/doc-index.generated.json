@@ -3445,6 +3445,7 @@
         "the-descent-bound-how-far-the-directive-carries",
         "counterexample-the-58-hour-run-bi-980fe9f5",
         "what-still-requires-approval-even-under-autonomous-directives",
+        "direction-authority-and-recovery-are-different-questions",
         "what-the-agent-should-do-mid-autonomous-run",
         "anti-pattern",
         "related-principles"
@@ -3586,13 +3587,11 @@
       "publishedPortal": false,
       "anchors": [
         "rule",
-        "applies-to",
         "why",
         "how-to-apply",
-        "decision-dimensions",
+        "decision-dimensions-and-existing-enforcement",
         "examples",
-        "when-this-does-not-apply",
-        "see-also"
+        "related-principles"
       ]
     },
     "docs/founder-kernel/wiki/principles/consult-specs-first.md": {
@@ -3920,6 +3919,7 @@
       "publishedPortal": false,
       "anchors": [
         "governance-approves-evidence-not-provenance",
+        "evidence-must-serve-a-decision",
         "the-rule",
         "two-ways-this-gets-violated",
         "how-to-apply",
@@ -3938,11 +3938,10 @@
       "anchors": [
         "rule",
         "why",
-        "applies-to",
         "how-to-apply",
         "decision-dimensions",
         "examples",
-        "sources"
+        "related-principles"
       ]
     },
     "docs/founder-kernel/wiki/principles/image-identity-equals-bytes.md": {
