@@ -520,6 +520,18 @@ tool grants, author/reviewer separation, DCO, protected PR delivery, build
 gates, or canonical-runtime verification. It expires when this PR merges or
 the branch is abandoned.
 
+**OBJ-BTRA-1:** Let a qualified technical coworker record an exact,
+server-bound initiative-readiness receipt without asking the business owner to
+approve a judgment they cannot evaluate, while preserving every consequential
+human-control boundary.
+
+| Acceptance criterion | Objective | Statement |
+|---|---|---|
+| AC-BTRA-1 | OBJ-BTRA-1 | A valid server-bound research receipt executes under generic tier and side-effect defaults without creating a CoworkerActionEnvelope. |
+| AC-BTRA-2 | OBJ-BTRA-1 | Explicit `hitlPolicy: "always"`, unbound calls, malformed or mismatched bindings, missing grants, and wrong subjects retain their existing approval or denial behavior. |
+| AC-BTRA-3 | OBJ-BTRA-1 | Non-readiness mission, spend, destructive, external, legal, clinical, privacy, and safety actions receive no authority from this exception. |
+| AC-BTRA-4 | OBJ-BTRA-1 | Canonical-runtime replay completes the technical TaskRun, persists its receipt, and leaves no owner-facing approval envelope for that call. |
+
 Ordered fix sequence:
 
 1. Add a regression proving a bound `record_initiative_evidence` research
